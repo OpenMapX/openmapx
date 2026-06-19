@@ -43,13 +43,17 @@ import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
-import type { ChangeEvent } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DetailsView } from "@/components/panels/directions/DetailsView";
 import { FlightPanel } from "@/components/panels/directions/FlightPanel";
 import { MODES, ModeButton } from "@/components/panels/directions/ModeSelector";
 import { RouteCard } from "@/components/panels/directions/RouteCard";
 import { RouteOptions } from "@/components/panels/directions/RouteOptions";
+import {
+  type TimeMode,
+  TimeModePicker,
+  toDateTimeLocalString,
+} from "@/components/panels/directions/TimeModePicker";
 import { TransitDetailsView } from "@/components/panels/directions/TransitDetailsView";
 import { TransitItineraryCard } from "@/components/panels/directions/TransitRouteView";
 import { WaypointList } from "@/components/panels/directions/WaypointList";
@@ -60,11 +64,6 @@ import { shareCurrentUrl } from "@/lib/deepLink";
 import { TEAL } from "@/lib/theme";
 import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
-
-function toDateTimeLocalString(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 export function DirectionsPanelContent() {
   const t = useTranslations("directions");
@@ -117,6 +116,10 @@ export function DirectionsPanelContent() {
   const [transitDetailsIndex, setTransitDetailsIndex] = useState<number | null>(null);
   const [transitTimeMode, setTransitTimeMode] = useState<"now" | "depart" | "arrive">("now");
   const [timePickerOpen, setTimePickerOpen] = useState(false);
+  // Driving depart/arrive is kept independent of the transit time state so the
+  // two flows never interfere.
+  const [drivingTimeMode, setDrivingTimeMode] = useState<TimeMode>("now");
+  const [drivingTime, setDrivingTime] = useState<Date | null>(null);
   const [numItineraries, setNumItineraries] = useState(3);
   const [focusedField, setFocusedField] = useState<number | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
@@ -136,6 +139,8 @@ export function DirectionsPanelContent() {
 
   const isTransitMode = mode === "transit";
   const isFlightMode = mode === "flying";
+  // Time-aware road modes — Valhalla honors depart/arrive on these; OSRM ignores it.
+  const isDrivingTimeMode = mode === "driving" || mode === "motorcycle";
 
   // Collect all non-null coords for the route query
   const routeWaypoints = useMemo(
@@ -148,6 +153,19 @@ export function DirectionsPanelContent() {
   );
   const allWaypointsFilled = routeWaypoints.length === waypoints.length && waypoints.length >= 2;
 
+  // Road-mode depart/arrive → wall-clock strings for the time-aware engine
+  // (Valhalla; OSRM ignores them). Debounced so dragging the picker doesn't
+  // refetch per change. Driving + motorcycle only (transit has its own query).
+  const debouncedDrivingTime = useDebounce(drivingTime, 500);
+  const drivingDepartAtStr =
+    isDrivingTimeMode && drivingTimeMode === "depart" && debouncedDrivingTime instanceof Date
+      ? toDateTimeLocalString(debouncedDrivingTime)
+      : undefined;
+  const drivingArriveByStr =
+    isDrivingTimeMode && drivingTimeMode === "arrive" && debouncedDrivingTime instanceof Date
+      ? toDateTimeLocalString(debouncedDrivingTime)
+      : undefined;
+
   const { data, isLoading, isError } = useDirections({
     waypoints: isTransitMode || isFlightMode ? [] : allWaypointsFilled ? routeWaypoints : [],
     mode,
@@ -155,6 +173,8 @@ export function DirectionsPanelContent() {
     avoidTolls,
     avoidFerries,
     units,
+    departAt: drivingDepartAtStr,
+    arriveBy: drivingArriveByStr,
   });
 
   // Transit plan query
@@ -426,6 +446,47 @@ export function DirectionsPanelContent() {
     );
   }
 
+  // The depart/arrive picker is shared by transit and driving (driving uses
+  // local state; transit uses the store). `activeTime*` adapt the shared
+  // controlled picker to whichever flow is active.
+  const showTimePicker = isTransitMode || isDrivingTimeMode;
+  const activeTimeMode: TimeMode = isTransitMode ? transitTimeMode : drivingTimeMode;
+  const activeTimeValue: Date | null = isTransitMode
+    ? activeTimeMode === "depart"
+      ? transitDepartureTime instanceof Date
+        ? transitDepartureTime
+        : null
+      : activeTimeMode === "arrive"
+        ? transitArrivalTime instanceof Date
+          ? transitArrivalTime
+          : null
+        : null
+    : drivingTime;
+  const handleTimeModeChange = (m: TimeMode) => {
+    if (isTransitMode) {
+      setTransitTimeMode(m);
+      if (m === "now") {
+        setTransitDepartureTime("now");
+        setTransitArrivalTime(null);
+      } else if (m === "depart" && !(transitDepartureTime instanceof Date)) {
+        setTransitDepartureTime(new Date());
+      } else if (m === "arrive" && !transitArrivalTime) {
+        setTransitArrivalTime(new Date());
+      }
+    } else {
+      setDrivingTimeMode(m);
+      if (m !== "now" && !drivingTime) setDrivingTime(new Date());
+    }
+  };
+  const handleTimeValueChange = (d: Date) => {
+    if (isTransitMode) {
+      if (transitTimeMode === "depart") setTransitDepartureTime(d);
+      else setTransitArrivalTime(d);
+    } else {
+      setDrivingTime(d);
+    }
+  };
+
   return (
     <Box>
       {/* Top row: hamburger | mode buttons | close */}
@@ -565,12 +626,12 @@ export function DirectionsPanelContent() {
             sx={{
               display: "flex",
               alignItems: "center",
-              justifyContent: isTransitMode ? "space-between" : "flex-end",
+              justifyContent: showTimePicker ? "space-between" : "flex-end",
               px: 2,
               py: 1,
             }}
           >
-            {isTransitMode && (
+            {showTimePicker && (
               <Box
                 onClick={() => setTimePickerOpen((v) => !v)}
                 sx={{
@@ -580,32 +641,32 @@ export function DirectionsPanelContent() {
                   px: 1.75,
                   py: 0.75,
                   borderRadius: "12px",
-                  bgcolor: transitTimeMode !== "now" ? `${TEAL}18` : "action.hover",
+                  bgcolor: activeTimeMode !== "now" ? `${TEAL}18` : "action.hover",
                   cursor: "pointer",
                   "&:hover": {
-                    bgcolor: transitTimeMode !== "now" ? `${TEAL}28` : "action.selected",
+                    bgcolor: activeTimeMode !== "now" ? `${TEAL}28` : "action.selected",
                   },
                   transition: "background-color 0.15s",
                 }}
               >
                 <ScheduleIcon
-                  sx={{ fontSize: 18, color: transitTimeMode !== "now" ? TEAL : "text.primary" }}
+                  sx={{ fontSize: 18, color: activeTimeMode !== "now" ? TEAL : "text.primary" }}
                 />
                 <Typography
                   variant="body2"
-                  color={transitTimeMode !== "now" ? TEAL : "text.primary"}
+                  color={activeTimeMode !== "now" ? TEAL : "text.primary"}
                   sx={{
                     fontWeight: 500,
                   }}
                 >
-                  {transitTimeMode === "now"
+                  {activeTimeMode === "now"
                     ? t("departNow")
-                    : transitTimeMode === "depart"
-                      ? `${t("departAt")} ${transitDepartureTime instanceof Date ? fmt.time(transitDepartureTime) : ""}`
-                      : `${t("arriveBy")} ${transitArrivalTime instanceof Date ? fmt.time(transitArrivalTime) : ""}`}
+                    : activeTimeMode === "depart"
+                      ? `${t("departAt")} ${activeTimeValue ? fmt.time(activeTimeValue) : ""}`
+                      : `${t("arriveBy")} ${activeTimeValue ? fmt.time(activeTimeValue) : ""}`}
                 </Typography>
                 <ExpandMoreIcon
-                  sx={{ fontSize: 18, color: transitTimeMode !== "now" ? TEAL : "text.primary" }}
+                  sx={{ fontSize: 18, color: activeTimeMode !== "now" ? TEAL : "text.primary" }}
                 />
               </Box>
             )}
@@ -629,88 +690,14 @@ export function DirectionsPanelContent() {
           </Box>
         )}
 
-        {/* Transit time picker dropdown */}
-        {isTransitMode && timePickerOpen && (
-          <Box sx={{ px: 2, pb: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
-            <Box sx={{ display: "flex", gap: 0.5 }}>
-              {(["now", "depart", "arrive"] as const).map((m) => (
-                <Box
-                  key={m}
-                  onClick={() => {
-                    setTransitTimeMode(m);
-                    if (m === "now") {
-                      setTransitDepartureTime("now");
-                      setTransitArrivalTime(null);
-                    } else if (m === "depart" && !(transitDepartureTime instanceof Date)) {
-                      setTransitDepartureTime(new Date());
-                    } else if (m === "arrive" && !transitArrivalTime) {
-                      setTransitArrivalTime(new Date());
-                    }
-                  }}
-                  sx={{
-                    px: 1.5,
-                    py: 0.5,
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    bgcolor: transitTimeMode === m ? TEAL : "action.hover",
-                    "&:hover": { bgcolor: transitTimeMode === m ? TEAL : "action.selected" },
-                    transition: "background-color 0.15s",
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    color={transitTimeMode === m ? "#fff" : "text.primary"}
-                    sx={{
-                      fontWeight: 500,
-                    }}
-                  >
-                    {m === "now" ? t("departNow") : m === "depart" ? t("departAt") : t("arriveBy")}
-                  </Typography>
-                </Box>
-              ))}
-            </Box>
-            {transitTimeMode !== "now" && (
-              <Box
-                component="input"
-                type="datetime-local"
-                value={
-                  (transitTimeMode === "depart"
-                    ? transitDepartureTime
-                    : transitArrivalTime) instanceof Date
-                    ? toDateTimeLocalString(
-                        (transitTimeMode === "depart"
-                          ? transitDepartureTime
-                          : transitArrivalTime) as Date,
-                      )
-                    : ""
-                }
-                onChange={(e: ChangeEvent<HTMLInputElement>) => {
-                  const val = e.target.value;
-                  if (!val) return;
-                  const dt = new Date(val);
-                  if (transitTimeMode === "depart") setTransitDepartureTime(dt);
-                  else setTransitArrivalTime(dt);
-                }}
-                sx={{
-                  border: "1px solid",
-                  borderColor: "divider",
-                  borderRadius: "8px",
-                  px: 1.5,
-                  py: 0.75,
-                  fontSize: "0.875rem",
-                  fontFamily: "inherit",
-                  color: "text.primary",
-                  bgcolor: "background.paper",
-                  outline: "none",
-                  "&:focus": { borderColor: TEAL },
-                  width: "100%",
-                  boxSizing: "border-box",
-                }}
-              />
-            )}
-          </Box>
+        {/* Depart-at / arrive-by picker (shared by transit + driving) */}
+        {showTimePicker && timePickerOpen && (
+          <TimeModePicker
+            timeMode={activeTimeMode}
+            value={activeTimeValue}
+            onTimeModeChange={handleTimeModeChange}
+            onValueChange={handleTimeValueChange}
+          />
         )}
 
         {showOptions && !isFlightMode && <RouteOptions />}

@@ -18,9 +18,15 @@ describe("parseTravelMode", () => {
     expect(parseTravelMode(undefined)).toBe("driving");
   });
 
+  it("accepts motorcycle", () => {
+    expect(parseTravelMode("motorcycle")).toBe("motorcycle");
+  });
+
   it("throws on unknown modes with a list of accepted values", () => {
     expect(() => parseTravelMode("banana")).toThrow(/Invalid mode: "banana"/);
-    expect(() => parseTravelMode("banana")).toThrow(/driving, walking, cycling, transit/);
+    expect(() => parseTravelMode("banana")).toThrow(
+      /driving, walking, cycling, motorcycle, transit/,
+    );
   });
 
   it("throws on the empty string (not the same as undefined)", () => {

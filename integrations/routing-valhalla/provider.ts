@@ -46,6 +46,7 @@ const COSTING_MAP: Record<string, string> = {
   driving: "auto",
   walking: "pedestrian",
   cycling: "bicycle",
+  motorcycle: "motorcycle",
 };
 
 const ELEVATION_INTERVAL = 30; // metres between elevation samples
@@ -413,7 +414,7 @@ export function buildCostingOptions(options: RoutingOptions): Record<string, unk
 
 export const valhallaService: RoutingProvider = {
   id: "valhalla",
-  supportedModes: ["walking", "cycling", "driving"] as TravelMode[],
+  supportedModes: ["walking", "cycling", "driving", "motorcycle"] as TravelMode[],
   supportsTimeAware: true,
 
   async getRoute(

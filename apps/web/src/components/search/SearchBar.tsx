@@ -5,6 +5,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import DirectionsIcon from "@mui/icons-material/Directions";
 import HighlightOffIcon from "@mui/icons-material/HighlightOff";
 import MenuIcon from "@mui/icons-material/Menu";
+import MicIcon from "@mui/icons-material/Mic";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 import SearchIcon from "@mui/icons-material/Search";
 import Box from "@mui/material/Box";
@@ -149,6 +150,46 @@ const MODE_LABEL_KEYS: Record<string, string> = {
   walking: "walking",
 };
 
+interface SpeechRecognitionAlternativeLike {
+  readonly transcript: string;
+}
+interface SpeechRecognitionResultLike {
+  readonly isFinal: boolean;
+  readonly length: number;
+  readonly [index: number]: SpeechRecognitionAlternativeLike;
+}
+interface SpeechRecognitionResultListLike {
+  readonly length: number;
+  readonly [index: number]: SpeechRecognitionResultLike;
+}
+interface SpeechRecognitionEventLike {
+  readonly resultIndex: number;
+  readonly results: SpeechRecognitionResultListLike;
+}
+interface SpeechRecognitionLike {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  maxAlternatives: number;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: { readonly error: string }) => void) | null;
+  onend: (() => void) | null;
+}
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+
+/** Browser SpeechRecognition constructor, if available (incl. the webkit prefix). */
+function getSpeechRecognition(): SpeechRecognitionCtor | undefined {
+  if (typeof window === "undefined") return undefined;
+  const w = window as unknown as {
+    SpeechRecognition?: SpeechRecognitionCtor;
+    webkitSpeechRecognition?: SpeechRecognitionCtor;
+  };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition;
+}
+
 export function SearchBar() {
   const t = useTranslations("search");
   const tModes = useTranslations("searchModes");
@@ -216,6 +257,64 @@ export function SearchBar() {
   // inference), so it fires only when the user submits (Enter / search button),
   // never per keystroke. Any edit to the query resets this (see handleChange).
   const [nlpSubmitted, setNlpSubmitted] = useState(false);
+
+  // Voice search (Web Speech API). Feature-detected — the mic button only
+  // renders when the browser exposes SpeechRecognition. Dictation fills the
+  // input and, on a final result, runs through the normal submit path.
+  const speechCtor = useMemo(() => getSpeechRecognition(), []);
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const [voicePendingSubmit, setVoicePendingSubmit] = useState(false);
+
+  const startVoiceSearch = useCallback(() => {
+    if (!speechCtor) return;
+    recognitionRef.current?.abort();
+    const rec = new speechCtor();
+    rec.lang = locale;
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.maxAlternatives = 1;
+    rec.onresult = (event) => {
+      let transcript = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0]?.transcript ?? "";
+      }
+      transcript = transcript.trim();
+      if (!transcript) return;
+      setNlpSubmitted(false);
+      setQuery(transcript);
+      if (event.results[event.results.length - 1]?.isFinal) setVoicePendingSubmit(true);
+    };
+    rec.onerror = () => setListening(false);
+    rec.onend = () => setListening(false);
+    recognitionRef.current = rec;
+    setListening(true);
+    try {
+      rec.start();
+    } catch {
+      setListening(false);
+    }
+  }, [speechCtor, locale, setQuery]);
+
+  const toggleVoiceSearch = useCallback(() => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      setListening(false);
+    } else {
+      startVoiceSearch();
+    }
+  }, [listening, startVoiceSearch]);
+
+  // Once the final transcript has flushed into the query, run the existing
+  // submit path so voice and typed queries behave identically.
+  useEffect(() => {
+    if (!voicePendingSubmit) return;
+    setVoicePendingSubmit(false);
+    inputRef.current?.form?.requestSubmit();
+  }, [voicePendingSubmit]);
+
+  // Stop recognition if the component unmounts mid-listen.
+  useEffect(() => () => recognitionRef.current?.abort(), []);
 
   const { data: nlpData, isFetching: nlpFetching } = useNlpSearch(
     debouncedQuery,
@@ -991,6 +1090,19 @@ export function SearchBar() {
                 },
               }}
             />
+
+            {speechCtor && (
+              <IconButton
+                size="small"
+                onClick={toggleVoiceSearch}
+                onMouseDown={(e) => e.preventDefault()}
+                aria-label={t("voiceSearchAriaLabel")}
+              >
+                <MicIcon
+                  sx={{ fontSize: 22, color: listening ? "error.main" : "text.secondary" }}
+                />
+              </IconButton>
+            )}
 
             {fullScreen && query.length > 0 ? (
               <IconButton

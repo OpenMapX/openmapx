@@ -9,6 +9,7 @@ const ALLOWED_TRAVEL_MODES: readonly TravelMode[] = [
   "driving",
   "walking",
   "cycling",
+  "motorcycle",
   "transit",
 ] as const;
 
