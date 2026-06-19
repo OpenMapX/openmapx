@@ -75,6 +75,13 @@ export interface TripPlanRequest {
   directModes?: string[];
   /** Number of itineraries to request (MOTIS `numItineraries`); the provider default applies when unset. */
   numItineraries?: number;
+  /**
+   * Restrict results to Deutschlandticket-valid connections (regional/local
+   * transport only). Each provider applies this its own way — MOTIS intersects
+   * the mode allow-list with the covered set, db-vendo uses DB's native
+   * "Nur Deutschlandticket-Verbindungen" filter.
+   */
+  deutschlandticketOnly?: boolean;
 }
 
 // Re-exported so consumers of the framework barrel don't need a separate

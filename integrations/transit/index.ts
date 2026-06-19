@@ -447,6 +447,7 @@ export function setup(ctx: IntegrationContext): void {
       preTransitModes: parseModes(q.pre_modes),
       postTransitModes: parseModes(q.post_modes),
       directModes: parseModes(q.direct_modes),
+      deutschlandticketOnly: q.deutschlandticket === "true",
     });
     if (!planRes.data) {
       reply.status(503).send({

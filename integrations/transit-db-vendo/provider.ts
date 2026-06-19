@@ -349,7 +349,7 @@ export async function planJourney(
   time: string,
   arriveBy?: boolean,
   numItineraries?: number,
-  opts?: { modes?: string[] },
+  opts?: { modes?: string[]; deutschlandTicketOnly?: boolean },
 ): Promise<TripPlan | null> {
   try {
     const dt = new Date(`${date}T${time}Z`);
@@ -367,6 +367,9 @@ export async function planJourney(
         // Restrict vehicle categories when the caller passed a mode allow-list;
         // omitted entirely otherwise so DB returns all products.
         ...(products ? { products } : {}),
+        // DB's native "Nur Deutschlandticket-Verbindungen" filter — more accurate
+        // than the mode approximation as it honours IC Nahverkehrsfreigabe.
+        ...(opts?.deutschlandTicketOnly ? { deutschlandTicketConnectionsOnly: true } : {}),
         // polylines are not supported in journeys() for db-vendo-client; only
         // refreshJourney() accepts the option, but the DB vendo API no longer
         // returns polylineGroup data there either. We use stopover coordinates

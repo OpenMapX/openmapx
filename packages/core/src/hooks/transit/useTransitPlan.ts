@@ -27,6 +27,8 @@ interface UseTransitPlanParams {
   postTransitModes?: string[];
   /** MOTIS direct (door-to-door) modes; adds non-transit options to the result. */
   directModes?: string[];
+  /** Restrict results to Deutschlandticket-valid (regional/local) connections. */
+  deutschlandticketOnly?: boolean;
 }
 
 /** Floor a Date to the nearest minute so queries within the same minute share a cache key. */
@@ -46,6 +48,7 @@ export function useTransitPlan({
   preTransitModes,
   postTransitModes,
   directModes,
+  deutschlandticketOnly,
 }: UseTransitPlanParams): MobilityEnvelopeQueryResult<TripPlan> {
   // Stable, order-independent key for the modes allow-list so toggling the same
   // set in a different order reuses the cached query.
@@ -72,6 +75,7 @@ export function useTransitPlan({
       preKey,
       postKey,
       directKey,
+      !!deutschlandticketOnly,
     ],
     queryFn: () => {
       if (!origin || !destination) throw new Error("Origin and destination required");
@@ -105,6 +109,9 @@ export function useTransitPlan({
       }
       if (directKey) {
         params.direct_modes = directKey;
+      }
+      if (deutschlandticketOnly) {
+        params.deutschlandticket = "true";
       }
       return apiClient.get<MobilityEnvelope<TripPlan>>(API_ENDPOINTS.transitPlan, params);
     },

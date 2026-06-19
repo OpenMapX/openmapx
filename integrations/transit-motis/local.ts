@@ -1,4 +1,5 @@
 import { stops } from "@motis-project/motis-client";
+import { applyDeutschlandticketFilter } from "@openmapx/core";
 import type { AttributionIndexHandle, IntegrationContext } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
@@ -199,11 +200,17 @@ async function planWithInstance(
     postTransitModes?: string[];
     directModes?: string[];
     numItineraries?: number;
+    deutschlandticketOnly?: boolean;
   },
 ) {
   // Arrive-by when an arrival time is given; otherwise plan a departure.
   const arriveBy = params.arrivalTime != null;
   const { date, time } = resolveDateTime(arriveBy ? params.arrivalTime : params.departureTime);
+  // MOTIS has no native Deutschlandticket concept, so approximate it by
+  // intersecting the requested modes with the covered (regional/local) set.
+  const modes = params.deutschlandticketOnly
+    ? applyDeutschlandticketFilter(params.modes)
+    : params.modes;
   return motis.planTrip(
     instance,
     params.from.lat,
@@ -215,7 +222,7 @@ async function planWithInstance(
     arriveBy,
     params.numItineraries,
     {
-      modes: params.modes,
+      modes,
       wheelchair: params.wheelchair,
       preTransitModes: params.preTransitModes,
       postTransitModes: params.postTransitModes,

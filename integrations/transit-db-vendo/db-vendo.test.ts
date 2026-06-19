@@ -746,6 +746,28 @@ describe("planJourney", () => {
     const options = mockClient.journeys.mock.calls[0][2];
     expect(options).not.toHaveProperty("products");
   });
+
+  it("sets DB's native Deutschlandticket filter when requested", async () => {
+    mockClient.journeys.mockResolvedValue({ journeys: [] });
+
+    const { planJourney } = await loadModule();
+    await planJourney(52.5, 13.4, 52.51, 13.41, "2026-03-10", "10:00:00", false, 3, {
+      deutschlandTicketOnly: true,
+    });
+
+    const options = mockClient.journeys.mock.calls[0][2];
+    expect(options.deutschlandTicketConnectionsOnly).toBe(true);
+  });
+
+  it("omits the Deutschlandticket filter by default", async () => {
+    mockClient.journeys.mockResolvedValue({ journeys: [] });
+
+    const { planJourney } = await loadModule();
+    await planJourney(52.5, 13.4, 52.51, 13.41, "2026-03-10", "10:00:00");
+
+    const options = mockClient.journeys.mock.calls[0][2];
+    expect(options).not.toHaveProperty("deutschlandTicketConnectionsOnly");
+  });
 });
 
 describe("modesToDbProducts", () => {

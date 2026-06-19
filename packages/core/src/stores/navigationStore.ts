@@ -37,6 +37,7 @@ export interface TransitReplanOptions {
   preTransitModes?: string[];
   postTransitModes?: string[];
   directModes?: string[];
+  deutschlandticketOnly?: boolean;
 }
 
 interface NavigationState {

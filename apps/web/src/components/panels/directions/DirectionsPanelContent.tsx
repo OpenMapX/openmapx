@@ -20,7 +20,6 @@ import type {
   TravelMode,
 } from "@openmapx/core";
 import {
-  applyDeutschlandticketFilter,
   formatDistance,
   formatDuration,
   preferredModesToMotis,
@@ -207,10 +206,13 @@ export function DirectionsPanelContent() {
   );
   const deutschlandticketActive = isTransitMode && bothInGermany && deutschlandticketOnly;
 
-  const effectiveMotisModes = useMemo(() => {
-    const base = preferredModesToMotis(transitPreferredModes);
-    return deutschlandticketActive ? applyDeutschlandticketFilter(base) : base;
-  }, [transitPreferredModes, deutschlandticketActive]);
+  // Send the user's raw Prefer selection plus a Deutschlandticket flag; each
+  // transit provider applies the D-Ticket restriction its own (most accurate)
+  // way server-side (MOTIS intersects modes, db-vendo uses DB's native filter).
+  const effectiveMotisModes = useMemo(
+    () => preferredModesToMotis(transitPreferredModes),
+    [transitPreferredModes],
+  );
 
   const accessModes = TRANSIT_ACCESS_MOTIS_MODES[transitAccessMode];
 
@@ -223,8 +225,9 @@ export function DirectionsPanelContent() {
       preTransitModes: accessModes.preTransitModes,
       postTransitModes: accessModes.postTransitModes,
       directModes: accessModes.directModes,
+      deutschlandticketOnly: deutschlandticketActive,
     }),
-    [effectiveMotisModes, transitRoutePreference, accessModes],
+    [effectiveMotisModes, transitRoutePreference, accessModes, deutschlandticketActive],
   );
 
   const transitPlanQuery = useTransitPlan({
@@ -238,6 +241,7 @@ export function DirectionsPanelContent() {
     preTransitModes: accessModes.preTransitModes,
     postTransitModes: accessModes.postTransitModes,
     directModes: accessModes.directModes,
+    deutschlandticketOnly: deutschlandticketActive,
   });
   const {
     data: transitPlanData,

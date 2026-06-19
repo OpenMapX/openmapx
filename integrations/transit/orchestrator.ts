@@ -460,6 +460,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     postTransitModes?: string[];
     directModes?: string[];
     numItineraries?: number;
+    deutschlandticketOnly?: boolean;
   }): Promise<MobilityResult<TripPlan | null>> {
     const tripBbox: BBox = [
       Math.min(params.from.lng, params.to.lng) - 0.5,

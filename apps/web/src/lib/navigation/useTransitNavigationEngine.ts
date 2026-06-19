@@ -56,6 +56,7 @@ export function useTransitNavigationEngine(): void {
       if (opts?.preTransitModes?.length) params.pre_modes = opts.preTransitModes.join(",");
       if (opts?.postTransitModes?.length) params.post_modes = opts.postTransitModes.join(",");
       if (opts?.directModes?.length) params.direct_modes = opts.directModes.join(",");
+      if (opts?.deutschlandticketOnly) params.deutschlandticket = "true";
 
       const env = await apiClient.get<MobilityEnvelope<TripPlan>>(
         API_ENDPOINTS.transitPlan,

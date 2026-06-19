@@ -68,7 +68,7 @@ export function setup(ctx: IntegrationContext): void {
         time,
         arriveBy,
         params.numItineraries,
-        { modes: params.modes },
+        { modes: params.modes, deutschlandTicketOnly: params.deutschlandticketOnly },
       );
       return wrapRT(plan ? [plan] : []);
     },
