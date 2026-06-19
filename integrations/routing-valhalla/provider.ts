@@ -399,6 +399,18 @@ function transformMatchedPoint(point: ValhallaTraceMatchedPoint): MatchPoint {
   };
 }
 
+/**
+ * Build the per-mode Valhalla `costing_options` from the avoid flags. Each is a
+ * 0–1 weight where 0 means "avoid": `use_highways`, `use_tolls`, `use_ferry`.
+ */
+export function buildCostingOptions(options: RoutingOptions): Record<string, unknown> {
+  const costingOptions: Record<string, unknown> = {};
+  if (options.avoidHighways) costingOptions.use_highways = 0;
+  if (options.avoidTolls) costingOptions.use_tolls = 0;
+  if (options.avoidFerries) costingOptions.use_ferry = 0;
+  return costingOptions;
+}
+
 export const valhallaService: RoutingProvider = {
   id: "valhalla",
   supportedModes: ["walking", "cycling", "driving"] as TravelMode[],
@@ -409,9 +421,7 @@ export const valhallaService: RoutingProvider = {
     mode: TravelMode,
     options: RoutingOptions = {},
   ): Promise<DirectionsResult> {
-    const costingOptions: Record<string, unknown> = {};
-    if (options.avoidHighways) costingOptions.use_highways = 0;
-    if (options.avoidFerries) costingOptions.use_ferry = 0;
+    const costingOptions = buildCostingOptions(options);
 
     const locations = waypoints.map((wp) => ({ lon: wp[0], lat: wp[1], type: "break" as const }));
 
@@ -465,9 +475,7 @@ export const valhallaService: RoutingProvider = {
     mode: TravelMode,
     options: RoutingOptions = {},
   ): Promise<DirectionsResult> {
-    const costingOptions: Record<string, unknown> = {};
-    if (options.avoidHighways) costingOptions.use_highways = 0;
-    if (options.avoidFerries) costingOptions.use_ferry = 0;
+    const costingOptions = buildCostingOptions(options);
 
     const locations = waypoints.map((wp) => ({
       lon: wp[0],

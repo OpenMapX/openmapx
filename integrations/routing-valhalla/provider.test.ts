@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildCostingOptions,
   TRACE_ATTRIBUTE_FILTER,
   transformTraceEdge,
   valhallaLanes,
@@ -173,5 +174,21 @@ describe("valhallaSign", () => {
     expect(valhallaSign({ exit_toward_elements: [{ text: "Köln" }] })).toEqual({
       exitToward: ["Köln"],
     });
+  });
+});
+
+describe("buildCostingOptions", () => {
+  it("returns an empty object when no avoid flags are set", () => {
+    expect(buildCostingOptions({})).toEqual({});
+  });
+
+  it("sets use_tolls=0 when avoidTolls is set", () => {
+    expect(buildCostingOptions({ avoidTolls: true })).toEqual({ use_tolls: 0 });
+  });
+
+  it("maps every avoid flag to its Valhalla costing knob", () => {
+    expect(
+      buildCostingOptions({ avoidHighways: true, avoidTolls: true, avoidFerries: true }),
+    ).toEqual({ use_highways: 0, use_tolls: 0, use_ferry: 0 });
   });
 });
