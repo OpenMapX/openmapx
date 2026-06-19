@@ -614,34 +614,14 @@ export function SearchBar() {
 
   if (directionsOpen) return null;
 
-  // Activate an NLP search: the card was clicked. `activate()` already
-  // populates the opening-hours + facet stores from the intent, so we only
-  // need to kick off the existing category-search pipeline (active category +
-  // viewport bbox); those stores then narrow the rendered results/markers
-  // client-side, mirroring a normal category search.
-  // TODO: wire the server-side /filtered endpoint as an optimization so the
-  // backend pre-filters by attributes instead of relying on client narrowing.
   const handleActivateNlp = () => {
     if (!nlpData) return;
     const { intent, resolvedBbox, provider } = nlpData;
-    if (intent.categories.length === 0) return; // guarded by isPlausibleNlSearch
+    if (intent.filter.selectors.length === 0) return;
     useNlpSearchStore.getState().activate(intent, resolvedBbox, provider);
-    // TODO: multi-category — v1 activates only the first category.
-    const firstCategory = intent.categories[0];
-    // Data-source-backed categories (e.g. ev_charging, fuel) have no Overpass
-    // CATEGORY_FILTERS entry; routing them to the Overpass category panel would
-    // 400. Mirror the normal select path and dispatch them to the data-source
-    // panel instead. Detection reuses the same `dataSourceCategories` list.
-    const dsMatch = dataSourceCategories.find((ds) => ds.id === firstCategory);
-    if (dsMatch) {
-      clearCategory();
-      setActiveSource(dsMatch.id);
-      useSidebarStore.getState().openSidebar(PANEL.DATASOURCE);
-    } else {
-      setActiveCategory(firstCategory as Parameters<typeof setActiveCategory>[0]);
-      useCategorySearchStore.getState().setSearchBbox(resolvedBbox);
-      useSidebarStore.getState().openSidebar(PANEL.CATEGORY);
-    }
+    useCategorySearchStore.getState().setAdHocFilter(intent.filter, intent.explanation);
+    useCategorySearchStore.getState().setSearchBbox(resolvedBbox);
+    useSidebarStore.getState().openSidebar(PANEL.CATEGORY);
     setIsFocused(false);
     inputRef.current?.blur();
   };

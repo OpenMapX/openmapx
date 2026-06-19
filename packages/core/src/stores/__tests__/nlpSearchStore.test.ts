@@ -1,16 +1,24 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { BoundingBox } from "../../types/geometry";
 import type { SearchIntent } from "../../types/search";
+import type { OverpassFilter } from "../../utils/overpassFilter";
 import { useCategoryFacetStore } from "../categoryFacetStore";
+import { AD_HOC_CATEGORY_ID, useCategorySearchStore } from "../categorySearchStore";
 import { useNlpSearchStore } from "../nlpSearchStore";
 import { useOpeningHoursStore } from "../openingHoursStore";
 
 const bbox: BoundingBox = { west: 13.0, south: 52.0, east: 14.0, north: 53.0 };
 
+function makeFilter(overrides?: Partial<OverpassFilter>): OverpassFilter {
+  return {
+    selectors: [{ tags: [{ key: "amenity", op: "=", value: "restaurant" }] }],
+    ...overrides,
+  };
+}
+
 function makeIntent(overrides?: Partial<SearchIntent>): SearchIntent {
   return {
-    categories: ["restaurants"],
-    attributes: {},
+    filter: makeFilter(),
     spatial_constraint: null,
     time_constraint: null,
     sort_by: "relevance",
@@ -24,6 +32,7 @@ function makeIntent(overrides?: Partial<SearchIntent>): SearchIntent {
 describe("useNlpSearchStore", () => {
   beforeEach(() => {
     useNlpSearchStore.getState().clear();
+    useCategorySearchStore.getState().clearCategory();
     useOpeningHoursStore.getState().reset();
     useCategoryFacetStore.getState().reset();
   });
@@ -40,10 +49,16 @@ describe("useNlpSearchStore", () => {
       expect(s.error).toBeNull();
     });
 
-    it("stores intent.categories", () => {
-      const intent = makeIntent({ categories: ["cafes", "restaurants"] });
+    it("stores intent.filter", () => {
+      const filter = makeFilter({
+        selectors: [
+          { tags: [{ key: "amenity", op: "=", value: "cafe" }] },
+          { tags: [{ key: "amenity", op: "=", value: "restaurant" }] },
+        ],
+      });
+      const intent = makeIntent({ filter });
       useNlpSearchStore.getState().activate(intent, bbox, "openai");
-      expect(useNlpSearchStore.getState().intent?.categories).toEqual(["cafes", "restaurants"]);
+      expect(useNlpSearchStore.getState().intent?.filter).toBe(filter);
     });
 
     describe("time_constraint population", () => {
@@ -95,77 +110,97 @@ describe("useNlpSearchStore", () => {
         expect(useOpeningHoursStore.getState().openingHoursFilter).toBe("any");
       });
 
-      it("ignores a time_constraint for a category without an hours filter (e.g. schools)", () => {
-        // A hallucinated open_now on a schools search must NOT apply — schools
-        // carry no opening_hours, so the filter would drop every result.
+      it("applies time_constraint regardless of which selectors are present (no category gating)", () => {
+        // In ad-hoc filter mode, the model is trusted to only emit time_constraint
+        // when the user explicitly mentions time — we don't gate on category id.
         const intent = makeIntent({
-          categories: ["schools"],
+          filter: makeFilter({
+            selectors: [{ tags: [{ key: "amenity", op: "=", value: "school" }] }],
+          }),
           time_constraint: { type: "open_now" },
         });
         useNlpSearchStore.getState().activate(intent, bbox, "openai");
-        expect(useOpeningHoursStore.getState().openingHoursFilter).toBe("any");
+        expect(useOpeningHoursStore.getState().openingHoursFilter).toBe("open_now");
       });
     });
 
-    describe("facet population from attributes", () => {
-      it("wheelchair=yes → wheelchairAccessible toggle facet activated", () => {
-        const intent = makeIntent({ attributes: { wheelchair: "yes" } });
-        useNlpSearchStore.getState().activate(intent, bbox, "openai");
-        expect(useCategoryFacetStore.getState().selections.wheelchairAccessible).toEqual(["on"]);
-      });
-
-      it("outdoor_seating=yes → outdoorSeating toggle facet activated", () => {
-        const intent = makeIntent({ attributes: { outdoor_seating: "yes" } });
+    describe("facet population from filter.require", () => {
+      it("require [{key:'outdoor_seating',op:'=',value:'yes'}] → outdoorSeating facet activated", () => {
+        const intent = makeIntent({
+          filter: makeFilter({
+            require: [{ key: "outdoor_seating", op: "=", value: "yes" }],
+          }),
+        });
         useNlpSearchStore.getState().activate(intent, bbox, "openai");
         expect(useCategoryFacetStore.getState().selections.outdoorSeating).toEqual(["on"]);
       });
 
-      it("diet:vegan=yes → vegan toggle facet activated", () => {
-        const intent = makeIntent({ attributes: { "diet:vegan": "yes" } });
+      it("require [{key:'wheelchair',op:'=',value:'yes'}] → wheelchairAccessible toggle facet activated", () => {
+        const intent = makeIntent({
+          filter: makeFilter({
+            require: [{ key: "wheelchair", op: "=", value: "yes" }],
+          }),
+        });
+        useNlpSearchStore.getState().activate(intent, bbox, "openai");
+        expect(useCategoryFacetStore.getState().selections.wheelchairAccessible).toEqual(["on"]);
+      });
+
+      it("require [{key:'diet:vegan',op:'=',value:'yes'}] → vegan toggle facet activated", () => {
+        const intent = makeIntent({
+          filter: makeFilter({
+            require: [{ key: "diet:vegan", op: "=", value: "yes" }],
+          }),
+        });
         useNlpSearchStore.getState().activate(intent, bbox, "openai");
         expect(useCategoryFacetStore.getState().selections.vegan).toEqual(["on"]);
       });
 
-      it("cuisine=italian → cuisine multi facet set to ['italian']", () => {
-        const intent = makeIntent({ attributes: { cuisine: "italian" } });
+      it("require [{key:'cuisine',op:'~',value:'italian'}] → cuisine multi facet set to ['italian']", () => {
+        const intent = makeIntent({
+          filter: makeFilter({
+            require: [{ key: "cuisine", op: "~", value: "italian" }],
+          }),
+        });
         useNlpSearchStore.getState().activate(intent, bbox, "openai");
         expect(useCategoryFacetStore.getState().selections.cuisine).toEqual(["italian"]);
       });
 
-      it("unknown attribute key → no facet applied, no crash", () => {
-        const intent = makeIntent({ attributes: { unknown_key: "foo" } });
+      it("require with unknown key → no facet applied, no crash", () => {
+        const intent = makeIntent({
+          filter: makeFilter({
+            require: [{ key: "unknown_key", op: "=", value: "foo" }],
+          }),
+        });
         expect(() => useNlpSearchStore.getState().activate(intent, bbox, "openai")).not.toThrow();
         expect(Object.keys(useCategoryFacetStore.getState().selections)).toHaveLength(0);
       });
 
-      it("wheelchair=no → toggle not activated (value not in matchValues)", () => {
-        const intent = makeIntent({ attributes: { wheelchair: "no" } });
+      it("require [{key:'wheelchair',op:'=',value:'no'}] → toggle not activated (value not in matchValues)", () => {
+        const intent = makeIntent({
+          filter: makeFilter({
+            require: [{ key: "wheelchair", op: "=", value: "no" }],
+          }),
+        });
         useNlpSearchStore.getState().activate(intent, bbox, "openai");
         expect(useCategoryFacetStore.getState().selections.wheelchairAccessible).toBeUndefined();
       });
 
-      it("ignores facets not scoped to the active category (e.g. food attrs on a schools search)", () => {
-        // Reproduces the Aachen bug: a small model hallucinated a full attribute
-        // set for "Schulen in meiner Nähe"; none of these apply to schools, so
-        // no facet should be set and the schools results must not be filtered.
+      it("no require predicates → no facets applied", () => {
         const intent = makeIntent({
-          categories: ["schools"],
-          attributes: {
-            outdoor_seating: "no",
-            wheelchair: "limited",
-            internet_access: "wlan",
-            cuisine: "no",
-            "diet:vegan": "yes",
-          },
+          filter: makeFilter({ require: undefined }),
         });
         useNlpSearchStore.getState().activate(intent, bbox, "openai");
         expect(Object.keys(useCategoryFacetStore.getState().selections)).toHaveLength(0);
       });
 
-      it("skips a multi facet whose value is the model default 'no'", () => {
-        const intent = makeIntent({ categories: ["restaurants"], attributes: { cuisine: "no" } });
+      it("require with wheelchair=limited → wheelchairAccessible toggle activated (limited is a matchValue)", () => {
+        const intent = makeIntent({
+          filter: makeFilter({
+            require: [{ key: "wheelchair", op: "=", value: "limited" }],
+          }),
+        });
         useNlpSearchStore.getState().activate(intent, bbox, "openai");
-        expect(useCategoryFacetStore.getState().selections.cuisine).toBeUndefined();
+        expect(useCategoryFacetStore.getState().selections.wheelchairAccessible).toEqual(["on"]);
       });
     });
   });
@@ -202,10 +237,29 @@ describe("useNlpSearchStore", () => {
     });
 
     it("resets facet store selections", () => {
-      const intent = makeIntent({ attributes: { wheelchair: "yes" } });
+      const intent = makeIntent({
+        filter: makeFilter({ require: [{ key: "wheelchair", op: "=", value: "yes" }] }),
+      });
       useNlpSearchStore.getState().activate(intent, bbox, "openai");
       useNlpSearchStore.getState().clear();
       expect(Object.keys(useCategoryFacetStore.getState().selections)).toHaveLength(0);
     });
+  });
+});
+
+describe("activate→setAdHocFilter store seam", () => {
+  beforeEach(() => {
+    useCategorySearchStore.getState().clearCategory();
+  });
+
+  it("setAdHocFilter stores the filter and sets activeCategory to AD_HOC_CATEGORY_ID", () => {
+    const filter = makeFilter({
+      selectors: [{ tags: [{ key: "amenity", op: "=", value: "cafe" }] }],
+    });
+    useCategorySearchStore.getState().setAdHocFilter(filter, "Cafes near me");
+    const s = useCategorySearchStore.getState();
+    expect(s.adHocFilter).toBe(filter);
+    expect(s.adHocLabel).toBe("Cafes near me");
+    expect(s.activeCategory).toBe(AD_HOC_CATEGORY_ID);
   });
 });

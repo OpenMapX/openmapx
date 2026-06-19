@@ -1,3 +1,4 @@
+import { categoriesToFilter } from "@openmapx/core";
 import type { NlpProvider, ParseContext, SearchIntent } from "../types";
 
 const CATEGORY_KEYWORDS: Array<[RegExp, string]> = [
@@ -165,9 +166,9 @@ export const keywordProvider: NlpProvider = {
     const suppressed = looksLikeProperName(query);
     const confidence = hasMatch && !suppressed ? 0.6 : 0.2;
 
+    const effectiveCategories = suppressed ? [] : categories;
     return {
-      categories: suppressed ? [] : categories,
-      attributes,
+      filter: categoriesToFilter(effectiveCategories, attributes) ?? { selectors: [] },
       spatial_constraint: { type: "current_view" },
       time_constraint,
       sort_by,

@@ -16,9 +16,11 @@ import type { SxProps, Theme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import type { OpeningHoursFilter } from "@openmapx/core";
 import {
+  AD_HOC_CATEGORY_ID,
   facetsForCategory,
   cuisineOptions as getCuisineOptions,
   HOURS_FILTER_CATEGORY_IDS,
+  removeFilterPredicate,
   useCategoryFacetStore,
   useCategorySearchStore,
   useDataSourceStore,
@@ -95,6 +97,19 @@ const HOUR_OPTIONS: { value: number | null }[] = [
 // carries a dropdown affordance.
 const toggleChipSx = (active: boolean): SxProps<Theme> => floatingChipSx(active, "toggle");
 
+function predicateChipLabel(
+  pred: { key: string; op?: string; value?: string },
+  exclude: boolean,
+): string {
+  if (exclude) {
+    if (pred.op === "exists") return `no ${pred.key}`;
+    return `${pred.key}≠${pred.value ?? ""}`;
+  }
+  if (pred.op === "exists") return pred.key;
+  if (pred.op === "~") return `${pred.key}: ${pred.value ?? ""}`;
+  return `${pred.key}=${pred.value ?? ""}`;
+}
+
 function PickerButton({
   label,
   selected,
@@ -145,21 +160,32 @@ export function CategoryFilterBar() {
   // narrowing the results.
   const isNlpActive = useNlpSearchStore((s) => s.isNlpActive);
   const nlpRawUnmapped = useNlpSearchStore((s) => s.intent?.unmapped_attributes);
-  const nlpAttributes = useNlpSearchStore((s) => s.intent?.attributes);
+  const nlpIntentFilter = useNlpSearchStore((s) => s.intent?.filter);
   // Keep only genuine free-text qualities ("cozy", "best") — drop anything that
-  // is a recognized OSM tag key or already present in `attributes` (small models
-  // duplicate/echo the tag vocabulary here), and dedupe.
+  // is a recognized OSM tag key or already appears as a key/value in the
+  // structured filter predicates (small models duplicate/echo the tag vocabulary
+  // into unmapped_attributes), and dedupe.
   const nlpUnmapped = useMemo(() => {
     if (!nlpRawUnmapped) return [];
-    const attrKeys = new Set(Object.keys(nlpAttributes ?? {}));
+    const mappedTerms = new Set<string>();
+    for (const pred of [...(nlpIntentFilter?.require ?? []), ...(nlpIntentFilter?.exclude ?? [])]) {
+      mappedTerms.add(pred.key);
+      if (pred.value) mappedTerms.add(pred.value);
+    }
     return [
       ...new Set(
-        nlpRawUnmapped.filter((a) => !attrKeys.has(a) && !KNOWN_OSM_ATTRIBUTE_KEYS.has(a)),
+        nlpRawUnmapped.filter((a) => !mappedTerms.has(a) && !KNOWN_OSM_ATTRIBUTE_KEYS.has(a)),
       ),
     ];
-  }, [nlpRawUnmapped, nlpAttributes]);
+  }, [nlpRawUnmapped, nlpIntentFilter]);
   const unmappedNotice =
     isNlpActive && nlpUnmapped.length > 0 ? <NlpUnmappedNotice attributes={nlpUnmapped} /> : null;
+
+  const adHocFilter = useCategorySearchStore((s) => s.adHocFilter);
+  const adHocLabel = useCategorySearchStore((s) => s.adHocLabel);
+  const setAdHocFilter = useCategorySearchStore((s) => s.setAdHocFilter);
+  const isAdHocMode = activeCategory === AD_HOC_CATEGORY_ID;
+
   const { rawResults, dominantCategory } = useExploreResults();
   // In text mode there is no active category chip — reuse the facets of the
   // category that the results predominantly belong to (e.g. "McDonald's" →
@@ -209,6 +235,43 @@ export function CategoryFilterBar() {
           variant={isFiltered ? "filled" : "outlined"}
           sx={toggleChipSx(isFiltered)}
         />
+      </Box>
+    );
+  }
+
+  // Ad-hoc filter mode: show predicate chips (require + exclude) as removable
+  // chips so the user can refine the NLP-generated query. Normal facet controls
+  // (wheelchair, panel filters) are hidden — they don't apply to ad-hoc QL.
+  if (isAdHocMode && adHocFilter) {
+    const requireChips = (adHocFilter.require ?? []).map((pred, i) => (
+      <Chip
+        key={`require-${pred.key}-${pred.value ?? ""}`}
+        label={predicateChipLabel(pred, false)}
+        onDelete={() =>
+          setAdHocFilter(removeFilterPredicate(adHocFilter, "require", i), adHocLabel ?? "")
+        }
+        variant="filled"
+        sx={floatingChipSx(true, "toggle")}
+      />
+    ));
+    const excludeChips = (adHocFilter.exclude ?? []).map((pred, i) => (
+      <Chip
+        key={`exclude-${pred.key}-${pred.value ?? ""}`}
+        label={predicateChipLabel(pred, true)}
+        onDelete={() =>
+          setAdHocFilter(removeFilterPredicate(adHocFilter, "exclude", i), adHocLabel ?? "")
+        }
+        variant="filled"
+        sx={floatingChipSx(true, "toggle")}
+      />
+    ));
+    const hasChips = requireChips.length > 0 || excludeChips.length > 0;
+    if (!hasChips && !unmappedNotice) return null;
+    return (
+      <Box sx={{ ...floatingToolbarSx, gap: 1, flexWrap: "wrap", pointerEvents: "none" }}>
+        {requireChips}
+        {excludeChips}
+        {unmappedNotice && <Box sx={{ flexBasis: "100%" }}>{unmappedNotice}</Box>}
       </Box>
     );
   }

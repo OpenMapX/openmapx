@@ -128,11 +128,15 @@ describe("search-nlp setup / POST /parse", () => {
     const payload = reply.payload as {
       provider: string;
       cached: boolean;
-      intent: { categories: string[]; attributes: Record<string, string> };
+      intent: { filter: { selectors: { tags: { key: string; value?: string }[] }[] } };
       resolvedBbox: { south: number };
     };
     expect(payload.provider).toBe("keyword");
-    expect(payload.intent.categories).toContain("cafes");
+    expect(
+      payload.intent.filter.selectors.some((s) =>
+        s.tags.some((t) => t.key === "amenity" && t.value === "cafe"),
+      ),
+    ).toBe(true);
     expect(payload.cached).toBe(false);
     expect(payload.resolvedBbox.south).toBe(48.85);
   });

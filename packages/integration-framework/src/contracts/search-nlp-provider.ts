@@ -5,7 +5,7 @@ export type { SearchIntent, SpatialConstraint, TimeConstraint };
 export const NL_CONFIDENCE_FLOOR = 0.4;
 
 export function isPlausibleNlSearch(intent: SearchIntent): boolean {
-  return intent.confidence >= NL_CONFIDENCE_FLOOR && intent.categories.length > 0;
+  return intent.confidence >= NL_CONFIDENCE_FLOOR && intent.filter.selectors.length > 0;
 }
 
 export type NlpProviderId = "local" | "claude" | "openai" | "keyword";

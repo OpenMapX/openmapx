@@ -1,4 +1,5 @@
-import { OverpassTimeoutError } from "@openmapx/core";
+import { createHash } from "node:crypto";
+import { normalizeFilter, OverpassTimeoutError, validateOverpassFilter } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { getChipTranslations, suggestPresets } from "@openmapx/presets";
 import { createPoiSearchOrchestrator } from "./orchestrator.js";
@@ -216,5 +217,71 @@ export function setup(ctx: IntegrationContext): void {
     }));
     reply.header("Cache-Control", "public, max-age=3600");
     reply.send(result);
+  });
+
+  ctx.registerRoute("POST", "/filter", async (req, reply) => {
+    const body = req.body as
+      | {
+          filter?: unknown;
+          south?: number | string;
+          north?: number | string;
+          west?: number | string;
+          east?: number | string;
+          lang?: string;
+        }
+      | null
+      | undefined;
+
+    const v = validateOverpassFilter(body?.filter);
+    if (!v.ok) {
+      reply.status(400).send({ error: v.error });
+      return;
+    }
+
+    const bbox = {
+      south: Number(body?.south),
+      west: Number(body?.west),
+      north: Number(body?.north),
+      east: Number(body?.east),
+    };
+    for (const [key, val] of Object.entries(bbox)) {
+      if (!Number.isFinite(val)) {
+        reply.status(400).send({ error: `Invalid bbox parameter: ${key}` });
+        return;
+      }
+    }
+
+    const lang = typeof body?.lang === "string" ? body.lang : undefined;
+
+    const bboxRounded = {
+      east: round(bbox.east, 2),
+      north: round(bbox.north, 2),
+      south: round(bbox.south, 2),
+      west: round(bbox.west, 2),
+    };
+    const filterHash = createHash("sha256")
+      .update(JSON.stringify(normalizeFilter(v.filter)))
+      .digest("hex")
+      .slice(0, 16);
+    const cacheKey = `filter:${filterHash}:${bboxRounded.south},${bboxRounded.west},${bboxRounded.north},${bboxRounded.east}`;
+
+    try {
+      const result = await ctx.cache.withCache(cacheKey, 300, () =>
+        orchestrator.searchByFilter(v.filter, bbox, { lang }),
+      );
+      reply.header("Cache-Control", "public, max-age=300");
+      reply.send(result);
+    } catch (err) {
+      if (err instanceof OverpassTimeoutError) {
+        reply.status(422).send({ error: "area_too_large" });
+        return;
+      }
+      const e = err as { statusCode?: number; message: string };
+      if (e.statusCode === 400) {
+        reply.status(400).send({ error: e.message });
+        return;
+      }
+      throw err;
+    }
   });
 }

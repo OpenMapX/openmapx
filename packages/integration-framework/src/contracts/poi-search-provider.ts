@@ -1,4 +1,4 @@
-import type { BoundingBox, LngLat, OpeningHoursInfo, Place } from "@openmapx/core";
+import type { BoundingBox, LngLat, OpeningHoursInfo, OverpassFilter, Place } from "@openmapx/core";
 
 export interface PoiSearchResult {
   id: string;
@@ -44,6 +44,13 @@ export interface PoiSearchProvider {
   searchFiltered?(
     category: string,
     attributes: Record<string, string>,
+    bbox: BoundingBox,
+    options?: { lang?: string },
+  ): Promise<PoiSearchResult[]>;
+  /** Structured open tag-filter search (OR'd selectors + require/exclude). Optional —
+   *  providers backed by a general-purpose source (e.g. Overpass) implement it. */
+  searchByFilter?(
+    filter: OverpassFilter,
     bbox: BoundingBox,
     options?: { lang?: string },
   ): Promise<PoiSearchResult[]>;

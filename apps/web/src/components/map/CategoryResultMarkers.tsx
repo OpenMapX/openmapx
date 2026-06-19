@@ -2,10 +2,10 @@
 
 import type { CategoryPlace } from "@openmapx/core";
 import {
-  CATEGORY_DEFINITIONS,
   createPlace,
   idsFromPrimaryOrCoords,
   PANEL,
+  poiCategoryIconPath,
   resolveStopAsPlace,
   useCategorySearchStore,
   usePlaceStore,
@@ -238,8 +238,8 @@ export function CategoryResultMarkers() {
         return;
       }
 
-      const def = CATEGORY_DEFINITIONS.find((d) => d.id === activeCategory);
-      const iconPath = mode === "text" ? TEXT_MARKER_ICON_PATH : (def?.iconPath ?? "");
+      const iconPath =
+        mode === "text" ? TEXT_MARKER_ICON_PATH : poiCategoryIconPath(activeCategory ?? "");
       const imageId =
         mode === "text" ? "category-marker-text" : `category-marker-${activeCategory}`;
       const geojson = buildGeoJson(results, imageId);

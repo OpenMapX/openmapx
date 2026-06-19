@@ -30,6 +30,7 @@ export const API_ENDPOINTS = {
   textSearch: "/api/integrations/poi-search/text",
   presetSuggest: "/api/integrations/poi-search/preset-suggest",
   chipTranslations: "/api/integrations/poi-search/chip-translations",
+  poiFilter: "/api/integrations/poi-search/filter",
   fuelPricesDetail: "/api/fuel-prices/detail",
   transitStops: "/api/integrations/transit/stops",
   transitStopsNearby: "/api/integrations/transit/stops/nearby",

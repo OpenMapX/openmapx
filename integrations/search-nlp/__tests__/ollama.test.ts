@@ -8,8 +8,13 @@ const CTX: ParseContext = {
 };
 
 const INTENT = {
-  categories: ["museums"],
-  attributes: { wheelchair: "yes", fee: "no" },
+  filter: {
+    selectors: [{ tags: [{ key: "tourism", op: "=" as const, value: "museum" }] }],
+    require: [
+      { key: "wheelchair", op: "=" as const, value: "yes" },
+      { key: "fee", op: "=" as const, value: "no" },
+    ],
+  },
   spatial_constraint: { type: "near_place" as const, place_name: "train station" },
   time_constraint: null,
   sort_by: "distance" as const,

@@ -11,6 +11,7 @@ import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
 import type { CategoryPlace } from "@openmapx/core";
 import {
+  AD_HOC_CATEGORY_ID,
   categoryPlaceToPlace,
   isAreaTooLarge,
   PANEL,
@@ -165,6 +166,7 @@ export function CategoryResultsContent() {
     setHoveredCategoryPlaceId,
   } = useCategorySearchStore();
   const anchor = useCategorySearchStore((s) => s.anchor);
+  const adHocLabel = useCategorySearchStore((s) => s.adHocLabel);
   const mode = useCategorySearchStore((s) => s.mode);
   const autoRefresh = useCategorySearchStore((s) => s.autoRefresh);
   const setAutoRefresh = useCategorySearchStore((s) => s.setAutoRefresh);
@@ -357,6 +359,13 @@ export function CategoryResultsContent() {
       {/* Non-transit: results list */}
       {!isTransitCategory && !isLoading && results && results.length > 0 && (
         <>
+          {activeCategory === AD_HOC_CATEGORY_ID && (adHocLabel ?? null) !== null && (
+            <Box sx={{ px: 2, pt: 1.5, pb: 0 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                {adHocLabel}
+              </Typography>
+            </Box>
+          )}
           <Box sx={{ px: 2, pt: 1.5, pb: 0.5, display: "flex", alignItems: "center", gap: 1 }}>
             <Typography
               variant="body2"

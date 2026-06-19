@@ -1,4 +1,4 @@
-import type { BoundingBox } from "@openmapx/core";
+import type { BoundingBox, OverpassFilter } from "@openmapx/core";
 import { OverpassTimeoutError } from "@openmapx/core";
 import { buildOpeningHoursInfo } from "@openmapx/core/server";
 import { httpError, type IntegrationContext } from "@openmapx/integration-framework";
@@ -167,5 +167,40 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
     }
   }
 
-  return { search, searchText, searchFiltered, getProviders };
+  async function searchByFilter(
+    filter: OverpassFilter,
+    bbox: BoundingBox,
+    options?: { lang?: string },
+  ): Promise<{ results: PoiSearchResult[]; partial: boolean }> {
+    const provider = getProviders().find((p) => typeof p.searchByFilter === "function");
+    if (!provider?.searchByFilter) {
+      throw httpError(400, "No filter-search provider available");
+    }
+    const boundSearch = provider.searchByFilter.bind(provider);
+    let currentBbox = bbox;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const results = await boundSearch(filter, currentBbox, {
+          lang: options?.lang,
+        });
+        for (const r of results) {
+          if (r.openingHours && !r.openingHoursInfo) {
+            r.openingHoursInfo = buildOpeningHoursInfo(r.openingHours, {
+              lat: r.coordinates[1],
+              lon: r.coordinates[0],
+            });
+          }
+        }
+        return { results, partial: attempt > 0 };
+      } catch (err) {
+        if (err instanceof OverpassTimeoutError && attempt < MAX_SHRINK_RETRIES) {
+          currentBbox = shrinkBbox(currentBbox, SHRINK_FACTOR);
+          continue;
+        }
+        throw err;
+      }
+    }
+  }
+
+  return { search, searchText, searchFiltered, searchByFilter, getProviders };
 }

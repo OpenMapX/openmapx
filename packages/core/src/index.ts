@@ -326,7 +326,7 @@ export type { PanelDefinition, PanelLayer } from "./panels/types";
 export { configureStorage, getStorage, type StorageAdapter } from "./platform";
 export { useCategoryFacetStore } from "./stores/categoryFacetStore";
 // Core stores (platform-level, stay in packages/core)
-export { useCategorySearchStore } from "./stores/categorySearchStore";
+export { AD_HOC_CATEGORY_ID, useCategorySearchStore } from "./stores/categorySearchStore";
 export { useCommandPaletteStore } from "./stores/commandPaletteStore";
 export type { OverlayStoreBase } from "./stores/createOverlayStore";
 export {
@@ -564,6 +564,16 @@ export {
   searchByOsmTags,
   searchByText,
 } from "./utils/overpass.service";
+export type { FilterSelector, OverpassFilter, TagOp, TagPredicate } from "./utils/overpassFilter";
+export {
+  buildFilterQuery,
+  categoriesToFilter,
+  FILTER_LIMITS,
+  normalizeFilter,
+  removeFilterPredicate,
+  searchByFilter,
+  validateOverpassFilter,
+} from "./utils/overpassFilter";
 export {
   parseCoordinateInput,
   parseDMSCoordinateInput,
@@ -577,7 +587,7 @@ export {
   plusCodeUrl,
   shortenPlusCode,
 } from "./utils/plusCode";
-export { resolvePoiIconPath } from "./utils/poi-icon";
+export { AD_HOC_ICON_PATH, poiCategoryIconPath, resolvePoiIconPath } from "./utils/poi-icon";
 export { pointInIsochroneGeometry } from "./utils/pointInPolygon";
 export { decodePolyline, encodePolyline } from "./utils/polyline";
 export { sectionSlug } from "./utils/sectionSlug";

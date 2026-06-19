@@ -84,6 +84,24 @@ const CATEGORY_TO_ID: Readonly<Record<string, CategoryId>> = {
 };
 
 /**
+ * Generic filter/tune icon (MUI Tune, 24×24 viewBox). Used as the fallback
+ * marker icon for ad-hoc NLP filter searches and any other category id that
+ * has no entry in CATEGORY_DEFINITIONS.
+ */
+export const AD_HOC_ICON_PATH =
+  "M3 17v2h6v-2zM3 5v2h10V5zm10 16v-2h8v-2h-8v-2h-2v6zM7 9v2H3v2h4v2h2V9zm14 4v-2H11v2zm-6-4h2V7h4V5h-4V3h-2z";
+
+/**
+ * Resolves a CATEGORY_DEFINITIONS id to its SVG icon path.
+ *
+ * Returns AD_HOC_ICON_PATH for any id not found in CATEGORY_DEFINITIONS,
+ * including the "nlp:filter" sentinel used by ad-hoc filter searches.
+ */
+export function poiCategoryIconPath(categoryId: string): string {
+  return CATEGORY_DEFINITIONS.find((d) => d.id === categoryId)?.iconPath ?? AD_HOC_ICON_PATH;
+}
+
+/**
  * SVG `d` paths (24×24 Material Design viewBox) for common POI types not
  * covered by CATEGORY_DEFINITIONS.
  *

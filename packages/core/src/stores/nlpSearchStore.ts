@@ -1,4 +1,3 @@
-import { HOURS_FILTER_CATEGORY_IDS } from "@integrations/poi-search/types";
 import { create } from "zustand";
 import type { BoundingBox } from "../types/geometry";
 import type { SearchIntent } from "../types/search";
@@ -30,11 +29,6 @@ interface NlpSearchState {
 function applyTimeConstraint(intent: SearchIntent): void {
   const tc = intent.time_constraint;
   if (!tc) return;
-  // Only categories that support an opening-hours filter can be narrowed by
-  // time. Without this, a hallucinated "open_now" silently filters away every
-  // result for categories that carry no opening_hours (e.g. schools).
-  const activeCategory = intent.categories[0];
-  if (!activeCategory || !HOURS_FILTER_CATEGORY_IDS.has(activeCategory)) return;
   const oh = useOpeningHoursStore.getState();
   if (tc.type === "open_now") {
     oh.setOpeningHoursFilter("open_now");
@@ -49,25 +43,16 @@ function applyTimeConstraint(intent: SearchIntent): void {
 
 function applyFacets(intent: SearchIntent): void {
   const facets = useCategoryFacetStore.getState();
-  const attrs = intent.attributes;
-  // Only apply facets that actually belong to the category being searched.
-  // Models (especially small local ones) can emit attributes the user never
-  // asked for; without this scope a hallucinated food/dietary attribute would
-  // get applied to e.g. a "schools" search and filter every result away.
-  const activeCategory = intent.categories[0];
-  if (!activeCategory) return;
+  const requires = intent.filter.require ?? [];
   for (const facet of CATEGORY_FACETS) {
-    if (!facet.categoryIds.has(activeCategory)) continue;
-    const value = attrs[facet.tag];
-    if (value === undefined) continue;
+    const pred = requires.find((r) => r.key === facet.tag);
+    if (!pred || pred.value === undefined) continue;
     if (facet.type === "toggle") {
-      if ((facet.matchValues ?? []).includes(value)) {
+      if ((facet.matchValues ?? []).includes(pred.value)) {
         facets.setMultiFacet(facet.id, ["on"]);
       }
-    } else if (value !== "no") {
-      // Multi facets (e.g. cuisine) take the value verbatim — skip the model's
-      // default "no", which would filter to a nonexistent value (zero results).
-      facets.setMultiFacet(facet.id, [value]);
+    } else {
+      facets.setMultiFacet(facet.id, [pred.value]);
     }
   }
 }

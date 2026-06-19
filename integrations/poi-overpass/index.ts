@@ -3,6 +3,7 @@ import {
   CATEGORY_FILTERS,
   searchByCategory,
   searchByCategoryWithAttributes,
+  searchByFilter,
   searchByOsmTags,
   searchByText,
   setOverpassUrl,
@@ -12,7 +13,7 @@ import type { PoiSearchProvider, PoiSearchResult } from "@openmapx/integration-p
 
 const PRESET_SENTINEL = "__preset__";
 
-const overpassProvider: PoiSearchProvider = {
+export const overpassProvider: PoiSearchProvider = {
   id: "overpass",
   categories: [...Object.keys(CATEGORY_FILTERS), PRESET_SENTINEL],
   async search(
@@ -46,6 +47,12 @@ const overpassProvider: PoiSearchProvider = {
       throw Object.assign(new Error(`Unknown category: ${category}`), { statusCode: 400 });
     }
     return searchByCategoryWithAttributes(filters, attributes, bbox);
+  },
+  // Overpass tag queries are language-agnostic (results come straight from OSM
+  // tags), so the orchestrator's optional `lang` is intentionally not forwarded
+  // here — matching searchByCategoryWithAttributes above.
+  async searchByFilter(filter, bbox) {
+    return searchByFilter(filter, bbox);
   },
 };
 

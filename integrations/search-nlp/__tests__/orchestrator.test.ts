@@ -13,8 +13,9 @@ const ctx: ParseContext = {
 };
 
 const okIntent: SearchIntent = {
-  categories: ["cafes"],
-  attributes: {},
+  filter: {
+    selectors: [{ tags: [{ key: "amenity", op: "=", value: "cafe" }] }],
+  },
   spatial_constraint: { type: "current_view" },
   time_constraint: null,
   sort_by: "relevance",

@@ -6,22 +6,30 @@ const ctx = {
   mapBbox: { south: 48.85, west: 2.33, north: 48.87, east: 2.37 },
 };
 
+function selectorKeys(selectors: { tags: { key: string; value?: string }[] }[]): string[] {
+  return selectors.flatMap((s) => s.tags.map((t) => `${t.key}=${t.value}`));
+}
+
 describe("keywordProvider", () => {
   it("has id 'keyword' and requiresNetwork false", () => {
     expect(keywordProvider.id).toBe("keyword");
     expect(keywordProvider.requiresNetwork).toBe(false);
   });
 
-  it("'coffee with outdoor seating' → cafes, outdoor_seating yes, current_view", async () => {
+  it("'coffee with outdoor seating' → amenity=cafe selector, outdoor_seating require, current_view", async () => {
     const result = await keywordProvider.parseQuery("coffee with outdoor seating", ctx);
-    expect(result.categories).toContain("cafes");
-    expect(result.attributes.outdoor_seating).toBe("yes");
+    const keys = selectorKeys(result.filter.selectors);
+    expect(keys).toContain("amenity=cafe");
+    expect(result.filter.require).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: "outdoor_seating", value: "yes" })]),
+    );
     expect(result.spatial_constraint).toEqual({ type: "current_view" });
   });
 
-  it("'nearest pharmacy open now' → pharmacies, open_now, distance", async () => {
+  it("'nearest pharmacy open now' → amenity=pharmacy selector, open_now, distance", async () => {
     const result = await keywordProvider.parseQuery("nearest pharmacy open now", ctx);
-    expect(result.categories).toContain("pharmacies");
+    const keys = selectorKeys(result.filter.selectors);
+    expect(keys).toContain("amenity=pharmacy");
     expect(result.time_constraint).toEqual({ type: "open_now" });
     expect(result.sort_by).toBe("distance");
   });
@@ -31,71 +39,86 @@ describe("keywordProvider", () => {
     expect(result.sort_by).toBe("distance");
   });
 
-  it("'Cafe Central' → low confidence, empty categories (proper name suppressed)", async () => {
+  it("'Cafe Central' → low confidence, empty selectors (proper name suppressed)", async () => {
     const result = await keywordProvider.parseQuery("Cafe Central", ctx);
     expect(result.confidence).toBeLessThan(0.4);
-    expect(result.categories).toEqual([]);
+    expect(result.filter.selectors).toEqual([]);
   });
 
-  it("'Hotel Adlon' → low confidence, empty categories (proper name suppressed)", async () => {
+  it("'Hotel Adlon' → low confidence, empty selectors (proper name suppressed)", async () => {
     const result = await keywordProvider.parseQuery("Hotel Adlon", ctx);
     expect(result.confidence).toBeLessThan(0.4);
-    expect(result.categories).toEqual([]);
+    expect(result.filter.selectors).toEqual([]);
   });
 
-  it("'Coffee Shop' → cafes (generic noun, NOT suppressed)", async () => {
+  it("'Coffee Shop' → amenity=cafe selector (generic noun, NOT suppressed)", async () => {
     const result = await keywordProvider.parseQuery("Coffee Shop", ctx);
-    expect(result.categories).toContain("cafes");
+    const keys = selectorKeys(result.filter.selectors);
+    expect(keys).toContain("amenity=cafe");
     expect(result.confidence).toBe(0.6);
   });
 
-  it("'Gas Station' → fuel (generic noun, NOT suppressed)", async () => {
+  it("'Gas Station' → amenity=fuel selector (generic noun, NOT suppressed)", async () => {
     const result = await keywordProvider.parseQuery("Gas Station", ctx);
-    expect(result.categories).toContain("fuel");
+    const keys = selectorKeys(result.filter.selectors);
+    expect(keys).toContain("amenity=fuel");
     expect(result.confidence).toBe(0.6);
   });
 
-  it("'Parking Lot' → parking (generic noun, NOT suppressed)", async () => {
+  it("'Parking Lot' → amenity=parking selector (generic noun, NOT suppressed)", async () => {
     const result = await keywordProvider.parseQuery("Parking Lot", ctx);
-    expect(result.categories).toContain("parking");
+    const keys = selectorKeys(result.filter.selectors);
+    expect(keys).toContain("amenity=parking");
     expect(result.confidence).toBe(0.6);
   });
 
-  it("'coffee shop' (lowercase) → cafes", async () => {
+  it("'coffee shop' (lowercase) → amenity=cafe selector", async () => {
     const result = await keywordProvider.parseQuery("coffee shop", ctx);
-    expect(result.categories).toContain("cafes");
+    const keys = selectorKeys(result.filter.selectors);
+    expect(keys).toContain("amenity=cafe");
     expect(result.confidence).toBe(0.6);
   });
 
-  it("'cafe' (single word) → cafes, not suppressed", async () => {
+  it("'cafe' (single word) → amenity=cafe selector, not suppressed", async () => {
     const result = await keywordProvider.parseQuery("cafe", ctx);
-    expect(result.categories).toContain("cafes");
+    const keys = selectorKeys(result.filter.selectors);
+    expect(keys).toContain("amenity=cafe");
     expect(result.confidence).toBe(0.6);
   });
 
-  it("'vegan restaurant with wifi' → restaurants, diet:vegan yes, internet_access wlan", async () => {
+  it("'vegan restaurant with wifi' → restaurant selector, diet:vegan and internet_access require predicates", async () => {
     const result = await keywordProvider.parseQuery("vegan restaurant with wifi", ctx);
-    expect(result.categories).toContain("restaurants");
-    expect(result.attributes["diet:vegan"]).toBe("yes");
-    expect(result.attributes.internet_access).toBe("wlan");
+    const keys = selectorKeys(result.filter.selectors);
+    expect(keys.some((k) => k.startsWith("amenity=") || k.startsWith("cuisine="))).toBe(true);
+    expect(result.filter.require).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "diet:vegan", value: "yes" }),
+        expect.objectContaining({ key: "internet_access", value: "wlan" }),
+      ]),
+    );
   });
 
-  it("'bar open 24h near me' → bars, open_24h, distance", async () => {
+  it("'bar open 24h near me' → bar selector, open_24h, distance", async () => {
     const result = await keywordProvider.parseQuery("bar open 24h near me", ctx);
-    expect(result.categories).toContain("bars");
+    const keys = selectorKeys(result.filter.selectors);
+    expect(keys.some((k) => k.includes("bar") || k.includes("pub"))).toBe(true);
     expect(result.time_constraint).toEqual({ type: "open_24h" });
     expect(result.sort_by).toBe("distance");
   });
 
-  it("'wheelchair accessible museum' → museums, wheelchair yes", async () => {
+  it("'wheelchair accessible museum' → museum selector, wheelchair require predicate", async () => {
     const result = await keywordProvider.parseQuery("wheelchair accessible museum", ctx);
-    expect(result.categories).toContain("museums");
-    expect(result.attributes.wheelchair).toBe("yes");
+    const keys = selectorKeys(result.filter.selectors);
+    expect(keys.some((k) => k.includes("museum"))).toBe(true);
+    expect(result.filter.require).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: "wheelchair", value: "yes" })]),
+    );
   });
 
-  it("'ev charger' → ev_charging", async () => {
+  it("'ev charger' → amenity=charging_station selector", async () => {
     const result = await keywordProvider.parseQuery("ev charger", ctx);
-    expect(result.categories).toContain("ev_charging");
+    const keys = selectorKeys(result.filter.selectors);
+    expect(keys).toContain("amenity=charging_station");
   });
 
   it("matched categories produce confidence 0.6", async () => {
@@ -113,9 +136,11 @@ describe("keywordProvider", () => {
     expect(result.spatial_constraint).toEqual({ type: "current_view" });
   });
 
-  it("deduplicated categories (no repeats)", async () => {
+  it("deduplicated categories (no repeated selectors from same category)", async () => {
     const result = await keywordProvider.parseQuery("coffee cafe espresso latte", ctx);
-    const cafesCount = result.categories.filter((c) => c === "cafes").length;
-    expect(cafesCount).toBe(1);
+    const cafeSelectors = result.filter.selectors.filter((s) =>
+      s.tags.some((t) => t.key === "amenity" && t.value === "cafe"),
+    );
+    expect(cafeSelectors).toHaveLength(1);
   });
 });

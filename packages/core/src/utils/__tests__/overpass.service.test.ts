@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCategoryWithAttributesQuery } from "../overpass.service";
+import { buildCategoryWithAttributesQuery, escapeOverpassRegex } from "../overpass.service";
 
 const bbox = { south: 48.85, west: 2.33, north: 48.87, east: 2.37 };
 
@@ -54,5 +54,16 @@ describe("buildCategoryWithAttributesQuery", () => {
     );
     expect(query).not.toMatch(/~"italian\.fusion"/);
     expect(query).toContain('["cuisine"~"italian\\.fusion"]');
+  });
+});
+
+describe("escapeOverpassRegex (shared, strict escaper)", () => {
+  it("escapes pipe so a user-supplied value with | becomes a literal match, not alternation", () => {
+    expect(escapeOverpassRegex("yes|only")).toBe("yes\\|only");
+  });
+
+  it("escapes other metacharacters", () => {
+    expect(escapeOverpassRegex("a.b*c+d?")).toBe("a\\.b\\*c\\+d\\?");
+    expect(escapeOverpassRegex('say "hi"')).toBe('say \\"hi\\"');
   });
 });

@@ -2,7 +2,7 @@ import type { BoundingBox } from "../types/geometry";
 import { overpassQuery } from "./overpass";
 import type { OverpassElement } from "./overpass/types";
 
-const MAX_RESULTS = 50;
+export const MAX_RESULTS = 50;
 
 export type { BoundingBox };
 
@@ -287,7 +287,7 @@ function getCategoryValue(tags: Record<string, string>): string | undefined {
   );
 }
 
-function mapOverpassElements(elements: readonly OverpassElement[]): CategoryPlaceResult[] {
+export function mapOverpassElements(elements: readonly OverpassElement[]): CategoryPlaceResult[] {
   const results: CategoryPlaceResult[] = [];
   for (const el of elements) {
     const tags = el.tags ?? {};
@@ -357,7 +357,7 @@ export async function searchByOsmTags(
 }
 
 /** Escape backslash and double-quote so a literal value can be safely embedded inside `"..."`. */
-function escapeOverpassLiteral(s: string): string {
+export function escapeOverpassLiteral(s: string): string {
   return s.replace(/[\\"]/g, "\\$&");
 }
 
@@ -402,8 +402,12 @@ export async function searchByCategoryWithAttributes(
 // (shops, venues, …) rather than streets, boundaries or address-only nodes.
 const TEXT_SEARCH_KEYS = ["amenity", "shop", "tourism", "leisure", "office", "healthcare"] as const;
 
-/** Escape regex metacharacters + the quote so the user's text matches literally inside `~"..."`. */
-function escapeOverpassRegex(value: string): string {
+/**
+ * Escape regex metacharacters + the quote so text embeds safely inside `~"..."`.
+ * All metacharacters including `|` are escaped so user-supplied strings match
+ * literally — callers that need alternation must use their own escaper.
+ */
+export function escapeOverpassRegex(value: string): string {
   return value.replace(/[\\.*+?()[\]{}^$|"]/g, "\\$&");
 }
 

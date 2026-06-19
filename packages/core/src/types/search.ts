@@ -1,3 +1,5 @@
+import type { OverpassFilter } from "../utils/overpassFilter";
+
 export type SpatialConstraint =
   | { type: "near_place"; place_name: string }
   | { type: "near_coordinates"; lat: number; lng: number }
@@ -10,8 +12,7 @@ export type TimeConstraint =
   | { type: "open_24h" };
 
 export interface SearchIntent {
-  categories: string[];
-  attributes: Record<string, string>;
+  filter: OverpassFilter;
   spatial_constraint: SpatialConstraint | null;
   time_constraint: TimeConstraint | null;
   sort_by: "relevance" | "distance" | "rating";

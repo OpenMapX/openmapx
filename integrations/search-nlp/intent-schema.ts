@@ -19,9 +19,21 @@ const timeConstraint = z.union([
   z.object({ type: z.literal("open_24h") }),
 ]);
 
+const tagPredicate = z.object({
+  key: z.string(),
+  op: z.enum(["=", "~", "exists"]).optional(),
+  value: z.string().optional(),
+});
+
+const filterSchema = z.object({
+  selectors: z.array(z.object({ tags: z.array(tagPredicate) })),
+  require: z.array(tagPredicate).optional(),
+  exclude: z.array(tagPredicate).optional(),
+  elementTypes: z.array(z.enum(["node", "way", "relation"])).optional(),
+});
+
 export const SearchIntentSchema = z.object({
-  categories: z.array(z.string()),
-  attributes: z.record(z.string(), z.string()),
+  filter: filterSchema,
   spatial_constraint: spatialConstraint.nullable(),
   time_constraint: timeConstraint.nullable(),
   sort_by: z.enum(["relevance", "distance", "rating"]),
@@ -35,15 +47,84 @@ export type SearchIntentParsed = z.infer<typeof SearchIntentSchema>;
 export const searchIntentJsonSchema = {
   type: "object",
   properties: {
-    categories: {
-      type: "array",
-      items: { type: "string" },
-      description: "Category IDs matched from the available categories list",
-    },
-    attributes: {
+    filter: {
       type: "object",
-      additionalProperties: { type: "string" },
-      description: "OSM attribute tag key/value filters (string values only)",
+      description:
+        "Structured Overpass tag filter describing what to search for. " +
+        "selectors are OR-ed (any selector matching a feature is a hit). " +
+        "require and exclude predicates are AND-ed across all selectors.",
+      properties: {
+        selectors: {
+          type: "array",
+          description:
+            "One or more tag groups, OR-ed together. Each selector must match at least one tag. " +
+            "Example: [{tags:[{key:'amenity',op:'=',value:'cafe'}]}]",
+          items: {
+            type: "object",
+            properties: {
+              tags: {
+                type: "array",
+                description:
+                  "Tag predicates that must ALL match for this selector (AND within a selector)",
+                items: {
+                  type: "object",
+                  properties: {
+                    key: {
+                      type: "string",
+                      description: "OSM tag key, e.g. amenity, shop, leisure",
+                    },
+                    op: {
+                      type: "string",
+                      enum: ["=", "~", "exists"],
+                      description:
+                        "Match operator: '=' exact value, '~' regex value, 'exists' key present (no value needed)",
+                    },
+                    value: { type: "string", description: "Tag value (omit for op='exists')" },
+                  },
+                  required: ["key"],
+                },
+              },
+            },
+            required: ["tags"],
+          },
+        },
+        require: {
+          type: "array",
+          description:
+            "Tag predicates that must ALL match on top of every selector (AND across all selectors). " +
+            "Use for mandatory attributes like wheelchair=yes.",
+          items: {
+            type: "object",
+            properties: {
+              key: { type: "string" },
+              op: { type: "string", enum: ["=", "~", "exists"] },
+              value: { type: "string" },
+            },
+            required: ["key"],
+          },
+        },
+        exclude: {
+          type: "array",
+          description:
+            "Tag predicates that must NOT match (excluded across all selectors). " +
+            "Use to filter out unwanted sub-types.",
+          items: {
+            type: "object",
+            properties: {
+              key: { type: "string" },
+              op: { type: "string", enum: ["=", "~", "exists"] },
+              value: { type: "string" },
+            },
+            required: ["key"],
+          },
+        },
+        elementTypes: {
+          type: "array",
+          description: "Limit to specific OSM element types. Omit to search nodes and ways.",
+          items: { type: "string", enum: ["node", "way", "relation"] },
+        },
+      },
+      required: ["selectors"],
     },
     spatial_constraint: {
       anyOf: [
@@ -127,8 +208,7 @@ export const searchIntentJsonSchema = {
     },
   },
   required: [
-    "categories",
-    "attributes",
+    "filter",
     "spatial_constraint",
     "time_constraint",
     "sort_by",
