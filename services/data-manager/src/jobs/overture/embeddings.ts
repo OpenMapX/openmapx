@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { sql } from "../../db/index.js";
 
-const DEFAULT_MODEL = "mxbai-embed-large";
+export const DEFAULT_MODEL = "mxbai-embed-large";
 const DEFAULT_OLLAMA_URL = "http://local-ai:11434";
 const MAX_CONCURRENCY = 8;
 

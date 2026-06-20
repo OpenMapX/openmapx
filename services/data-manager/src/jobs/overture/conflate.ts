@@ -6,7 +6,7 @@ import {
 } from "@openmapx/core";
 import { gridDisk, latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";
-import { cosineSimilarity, embed } from "./embeddings.js";
+import { cosineSimilarity, DEFAULT_MODEL, embed, ensureEmbeddingModel } from "./embeddings.js";
 import { OVERTURE_RELEASE } from "./pull.js";
 
 export interface OverturePlacePoint {
@@ -173,14 +173,31 @@ export async function computeLinks(
     }
 
     if (candidatePairs.length > 0) {
-      const osmTexts = osmArr.map((p) => p.name);
-      const overtureTexts = overtureArr.map((p) => [p.name, p.address].filter(Boolean).join(" "));
+      const uniqueOsmIndices = [...new Set(candidatePairs.map((p) => p.osmIdx))];
+      const uniqueOvertureIndices = [...new Set(candidatePairs.map((p) => p.overtureIdx))];
 
-      const osmEmbeddings = await embedFn(osmTexts);
-      const overtureEmbeddings = await embedFn(overtureTexts);
+      const osmTexts = uniqueOsmIndices.map((i) => osmArr[i].name);
+      const overtureTexts = uniqueOvertureIndices.map((i) =>
+        [overtureArr[i].name, overtureArr[i].address].filter(Boolean).join(" "),
+      );
+
+      const osmVecList = await embedFn(osmTexts);
+      const overtureVecList = await embedFn(overtureTexts);
+
+      const osmVecByIdx = new Map<number, number[]>();
+      for (let k = 0; k < uniqueOsmIndices.length; k++) {
+        osmVecByIdx.set(uniqueOsmIndices[k], osmVecList[k]);
+      }
+      const overtureVecByIdx = new Map<number, number[]>();
+      for (let k = 0; k < uniqueOvertureIndices.length; k++) {
+        overtureVecByIdx.set(uniqueOvertureIndices[k], overtureVecList[k]);
+      }
 
       for (const { osmIdx, overtureIdx } of candidatePairs) {
-        const sim = cosineSimilarity(osmEmbeddings[osmIdx], overtureEmbeddings[overtureIdx]);
+        const osmVec = osmVecByIdx.get(osmIdx);
+        const overtureVec = overtureVecByIdx.get(overtureIdx);
+        if (!osmVec || !overtureVec) continue;
+        const sim = cosineSimilarity(osmVec, overtureVec);
         if (sim > cosineFloor) {
           const osmPoi = osmArr[osmIdx];
           const overturePl = overtureArr[overtureIdx];
@@ -298,6 +315,10 @@ export async function conflateOverture(opts: {
     lng: Number(r.lng),
     category: r.category ?? undefined,
   }));
+
+  if (useEmbeddings && ollamaUrl) {
+    await ensureEmbeddingModel(DEFAULT_MODEL, ollamaUrl);
+  }
 
   const embedFn = useEmbeddings ? (texts: string[]) => embed(texts, { ollamaUrl }) : undefined;
 

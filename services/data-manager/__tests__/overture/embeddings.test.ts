@@ -44,6 +44,10 @@ describe("cosineSimilarity", () => {
   it("returns ~-1 for opposite vectors", () => {
     expect(cosineSimilarity([1, 0], [-1, 0])).toBeCloseTo(-1, 5);
   });
+
+  it("returns 0 when one vector is the zero vector", () => {
+    expect(cosineSimilarity([0, 0], [1, 0])).toBe(0);
+  });
 });
 
 describe("embed", () => {
