@@ -1,8 +1,8 @@
 import { join } from "node:path";
 import { overtureCategoryToOpenMapX } from "@openmapx/core/utils/overtureCategoryMap";
-import { execa } from "execa";
 import { latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";
+import { runDuckDb } from "./duckdb.js";
 import { OVERTURE_RELEASE, regionSlug } from "./pull.js";
 import { assertValidOvertureSchema, buildSchemaDDL } from "./schema.js";
 
@@ -67,7 +67,7 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
   ].join("\n");
 
   opts.onProgress?.("Running DuckDB → PostGIS ingest...");
-  await execa("duckdb", ["-c", duckSql], { stdio: "inherit" });
+  await runDuckDb(["-c", duckSql], { stdio: "inherit" });
 
   opts.onProgress?.("Stamping geometry SRID 4326...");
   await sql.unsafe(

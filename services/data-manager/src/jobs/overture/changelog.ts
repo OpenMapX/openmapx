@@ -8,8 +8,8 @@
  * delta path via DuckDB; on any error it falls back to a full region
  * re-ingest so the monthly cron is always self-healing.
  */
-import { execa } from "execa";
 import { conflateOverture } from "./conflate.js";
+import { runDuckDb } from "./duckdb.js";
 import { ingestOverture } from "./ingest.js";
 import { assertValidRegion, pullOverture } from "./pull.js";
 
@@ -138,8 +138,9 @@ export async function applyOvertureChangelog(opts: ApplyOvertureChangelogOptions
 
   try {
     onProgress?.(`Counting Overture changelog rows for ${release}…`);
-    const countResult = await execa("duckdb", ["-csv", "-c", countScript], { stdio: "pipe" });
-    for (const line of countResult.stdout.split("\n").slice(1)) {
+    const countResult = await runDuckDb(["-csv", "-c", countScript], { stdio: "pipe" });
+    const stdout = typeof countResult.stdout === "string" ? countResult.stdout : "";
+    for (const line of stdout.split("\n").slice(1)) {
       const parts = line.trim().split(",");
       if (parts.length < 2) continue;
       const changeType = parts[0].trim();
@@ -155,7 +156,7 @@ export async function applyOvertureChangelog(opts: ApplyOvertureChangelogOptions
 
   try {
     onProgress?.(`Trying Overture changelog delta for ${release}…`);
-    await execa("duckdb", ["-c", deltaScript], { stdio: "pipe" });
+    await runDuckDb(["-c", deltaScript], { stdio: "pipe" });
     onProgress?.("Changelog delta applied. Running conflation…");
     const conflateResult = await conflateOverture({ region, release, schema });
     onProgress?.(`Conflation complete: ${conflateResult.linked} links.`);
