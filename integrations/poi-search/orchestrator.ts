@@ -15,6 +15,61 @@ const SHRINK_FACTOR = 0.6;
 const PRESET_PREFIX = "preset:";
 const PRESET_SENTINEL = "__preset__";
 
+interface ConflationLinkRow {
+  osm_type: string;
+  osm_id: number | bigint;
+  gers_id: string;
+}
+
+/**
+ * Builds a `Map<"${osm_type}/${osm_id}", gers_id>` by batch-querying
+ * `overture_places.poi_conflation_link` for the given OSM result set.
+ *
+ * Issues a single query for the entire result set (no N+1). Returns `undefined`
+ * when `ctx.db` is absent (no PostGIS) or when there are no OSM results with
+ * a parseable osm_type/osm_id — callers treat `undefined` as "no link, run
+ * union-find only", which is deep-equal to the plan-01 behavior.
+ */
+async function buildConflationLinkMap(
+  ctx: IntegrationContext,
+  osmResults: PoiSearchResult[],
+): Promise<Map<string, string> | undefined> {
+  if (!ctx.db) return undefined;
+
+  type OsmParsed = { type: string; id: bigint; key: string };
+  const parsed: OsmParsed[] = [];
+  for (const r of osmResults) {
+    if (!r.id.startsWith("osm:")) continue;
+    const rest = r.id.slice(4);
+    const slash = rest.indexOf("/");
+    if (slash < 0) continue;
+    const type = rest.slice(0, slash);
+    const rawId = rest.slice(slash + 1);
+    const numId = Number(rawId);
+    if (!Number.isFinite(numId) || numId <= 0) continue;
+    parsed.push({ type, id: BigInt(numId), key: rest });
+  }
+
+  if (parsed.length === 0) return undefined;
+
+  try {
+    const rows = await ctx.db.execute<ConflationLinkRow[]>(
+      `SELECT osm_type, osm_id, gers_id
+         FROM overture_places.poi_conflation_link
+        WHERE (osm_type, osm_id) IN (${parsed.map((_, i) => `($${i * 2 + 1},$${i * 2 + 2})`).join(",")})`,
+      parsed.flatMap((p) => [p.type, p.id]),
+    );
+    if (!Array.isArray(rows) || rows.length === 0) return undefined;
+    const map = new Map<string, string>();
+    for (const row of rows) {
+      map.set(`${row.osm_type}/${row.osm_id}`, row.gers_id);
+    }
+    return map.size > 0 ? map : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // Progressive relaxation: when a structured filter returns fewer than this many
 // results, drop attribute (`require`) predicates one at a time so an
 // over-specific NL query still surfaces near-misses instead of nothing. Each
@@ -131,8 +186,10 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
     const osmResults = overpassIdx >= 0 ? settled[overpassIdx].results : [];
     const overtureResults = overtureIdx >= 0 ? settled[overtureIdx].results : [];
 
+    const linkMap = await buildConflationLinkMap(ctx, osmResults);
+
     return {
-      results: fusePoiResults(osmResults, overtureResults, DEFAULT_CONFLATION_THRESHOLDS),
+      results: fusePoiResults(osmResults, overtureResults, DEFAULT_CONFLATION_THRESHOLDS, linkMap),
       partial,
     };
   }

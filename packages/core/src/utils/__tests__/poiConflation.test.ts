@@ -232,3 +232,100 @@ describe("fusePoiResults", () => {
     expect(osmResult?.name).toBe("Drinking Water Fountain");
   });
 });
+
+describe("fusePoiResults — link-first pass", () => {
+  it("fuses via link even when names are too dissimilar for the union-find", () => {
+    // OSM: "HARMANS KFC #189" — Overture: "KFC" — Dice similarity << 0.8, far enough apart
+    // that union-find would NOT match, but the link table says they are the same entity.
+    const osm: PoiSearchResult[] = [
+      makePoi("osm:node/999", "HARMANS KFC #189", 52.52, 13.4, { category: "restaurants" }),
+    ];
+    const overture: PoiSearchResult[] = [
+      makePoi("overture:gers-kfc-001", "KFC", 52.5205, 13.4, {
+        gersId: "gers-kfc-001",
+        category: "restaurants",
+        osmTags: { brand: "KFC", "brand:wikidata": "Q524757" },
+      }),
+    ];
+    // Without a link the names are too dissimilar: union-find should NOT match them.
+    const noLinkResult = fusePoiResults(osm, overture, DEFAULT_CONFLATION_THRESHOLDS);
+    expect(noLinkResult.find((r) => r.gersId === "gers-kfc-001")?.id).not.toBe("osm:node/999");
+
+    // With the link the pair must be fused: OSM id kept, gers carried, brand merged.
+    const link = new Map([["node/999", "gers-kfc-001"]]);
+    const linked = fusePoiResults(osm, overture, DEFAULT_CONFLATION_THRESHOLDS, link);
+    expect(linked).toHaveLength(1);
+    const fused = linked[0];
+    expect(fused.id).toBe("osm:node/999");
+    expect(fused.gersId).toBe("gers-kfc-001");
+    expect(fused.osmTags?.brand).toBe("KFC");
+    expect(fused.osmTags?.["brand:wikidata"]).toBe("Q524757");
+  });
+
+  it("absent-link fallback: 3-arg, 4-arg-undefined, and 4-arg-empty-map produce deep-equal output", () => {
+    const osm: PoiSearchResult[] = [
+      makePoi("osm:node/1", "Starbucks Coffee", 52.52, 13.4, {
+        category: "cafes",
+        osmTags: { wheelchair: "yes" },
+      }),
+      makePoi("osm:node/2", "Lone Café", 52.51, 13.38, { category: "cafes" }),
+    ];
+    const overture: PoiSearchResult[] = [
+      makePoi("overture:gers-sb-001", "Starbucks Coffee", 52.52, 13.4, {
+        gersId: "gers-sb-001",
+        category: "cafes",
+        osmTags: { brand: "Starbucks", "brand:wikidata": "Q37158" },
+      }),
+      makePoi("overture:gers-gap-fill", "New Place", 52.53, 13.41, {
+        gersId: "gers-gap-fill",
+        category: "cafes",
+      }),
+    ];
+
+    const threeArg = fusePoiResults(osm, overture, DEFAULT_CONFLATION_THRESHOLDS);
+    const fourArgUndefined = fusePoiResults(
+      osm,
+      overture,
+      DEFAULT_CONFLATION_THRESHOLDS,
+      undefined,
+    );
+    const fourArgEmpty = fusePoiResults(osm, overture, DEFAULT_CONFLATION_THRESHOLDS, new Map());
+
+    expect(fourArgUndefined).toStrictEqual(threeArg);
+    expect(fourArgEmpty).toStrictEqual(threeArg);
+  });
+
+  it("link fuses one pair while union-find still fuses a name-similar pair; both carry gers", () => {
+    // node/10 ↔ gers-link-only: name-dissimilar, linked via link table
+    // node/20 ↔ gers-name-match: name-similar, matched by union-find
+    const osm: PoiSearchResult[] = [
+      makePoi("osm:node/10", "TOTALLY DIFFERENT NAME XYZABC", 52.52, 13.4, {
+        category: "cafes",
+      }),
+      makePoi("osm:node/20", "Café Roma", 52.521, 13.401, { category: "cafes" }),
+    ];
+    const overture: PoiSearchResult[] = [
+      makePoi("overture:gers-link-only", "Some Brand Store", 52.5205, 13.4, {
+        gersId: "gers-link-only",
+        category: "cafes",
+        osmTags: { brand: "SomeBrand" },
+      }),
+      makePoi("overture:gers-name-match", "Café Roma", 52.521, 13.401, {
+        gersId: "gers-name-match",
+        category: "cafes",
+      }),
+    ];
+
+    const link = new Map([["node/10", "gers-link-only"]]);
+    const result = fusePoiResults(osm, overture, DEFAULT_CONFLATION_THRESHOLDS, link);
+
+    const linkedFused = result.find((r) => r.id === "osm:node/10");
+    expect(linkedFused).toBeDefined();
+    expect(linkedFused?.gersId).toBe("gers-link-only");
+    expect(linkedFused?.osmTags?.brand).toBe("SomeBrand");
+
+    const nameFused = result.find((r) => r.id === "osm:node/20");
+    expect(nameFused).toBeDefined();
+    expect(nameFused?.gersId).toBe("gers-name-match");
+  });
+});

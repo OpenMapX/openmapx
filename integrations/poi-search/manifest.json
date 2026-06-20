@@ -6,5 +6,6 @@
   "domains": ["poi-search"],
   "backend": { "routes": true },
   "quality": "built-in",
-  "category": "Geocoding"
+  "category": "Geocoding",
+  "requires": [{ "service": "postgis", "optional": true }]
 }

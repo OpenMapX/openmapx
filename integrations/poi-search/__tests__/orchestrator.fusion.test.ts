@@ -4,9 +4,13 @@ import type { PoiSearchProvider, PoiSearchResult } from "../types";
 
 const BBOX = { south: 52.49, west: 13.38, north: 52.53, east: 13.43 };
 
-function makeCtx(providers: PoiSearchProvider[]) {
+function makeCtx(
+  providers: PoiSearchProvider[],
+  db?: { execute: (query: string, params?: unknown[]) => Promise<unknown> },
+) {
   return {
     getIntegrationsByDomain: () => [{ providers: new Map([["poi-search", providers]]) }],
+    db,
   } as unknown as Parameters<typeof createPoiSearchOrchestrator>[0];
 }
 
@@ -146,5 +150,100 @@ describe("(C) Category routing", () => {
     await orch.search("viewpoints", BBOX);
     expect(overpassCallCount).toBe(1);
     expect(overtureCallCount).toBe(0);
+  });
+});
+
+describe("(D) Link-table wiring — ctx.db integration", () => {
+  // OSM at 52.5100 — Overture at 52.5104 (~45m apart, beyond alwaysMergeM=25m).
+  // Names "HARMANS KFC #189" vs "Starbucks Coffee" have Dice << 0.8, so union-find
+  // will NOT match. The link table entry forces the fuse.
+  const dissimilarOsmProvider: PoiSearchProvider = {
+    id: "overpass",
+    categories: ["cafes"],
+    async search() {
+      return [
+        {
+          id: "osm:node/1",
+          name: "HARMANS KFC #189",
+          coordinates: [13.4, 52.51],
+          category: "cafes",
+        } satisfies PoiSearchResult,
+        {
+          id: "osm:node/2",
+          name: "Einstein Kaffee",
+          coordinates: [13.42, 52.52],
+          category: "cafes",
+        } satisfies PoiSearchResult,
+      ];
+    },
+  };
+
+  const overtureWithGers: PoiSearchProvider = {
+    id: "overture",
+    categories: ["cafes"],
+    async search() {
+      return [
+        {
+          id: "overture:gers-starbucks-001",
+          gersId: "gers-starbucks-001",
+          name: "Starbucks Coffee",
+          coordinates: [13.4, 52.5104],
+          category: "cafes",
+          osmTags: { brand: "Starbucks", "brand:wikidata": "Q37158" },
+        } satisfies PoiSearchResult,
+      ];
+    },
+  };
+
+  it("without ctx.db, dissimilar-name nearby pair is NOT fused (proves link is needed)", async () => {
+    const orchNoDb = createPoiSearchOrchestrator(
+      makeCtx([dissimilarOsmProvider, overtureWithGers]),
+    );
+    const result = await orchNoDb.search("cafes", BBOX);
+    const entry = result.results.find((r) => r.id === "osm:node/1");
+    expect(entry?.gersId).toBeUndefined();
+  });
+
+  it("fuses via link when ctx.db returns a link row, even with dissimilar names", async () => {
+    const db = {
+      execute: async () =>
+        [{ osm_type: "node", osm_id: 1, gers_id: "gers-starbucks-001" }] as unknown[],
+    };
+    const orch = createPoiSearchOrchestrator(
+      makeCtx([dissimilarOsmProvider, overtureWithGers], db),
+    );
+    const result = await orch.search("cafes", BBOX);
+    const fused = result.results.find((r) => r.id === "osm:node/1");
+    expect(fused).toBeDefined();
+    expect(fused?.gersId).toBe("gers-starbucks-001");
+    expect(fused?.osmTags?.brand).toBe("Starbucks");
+  });
+
+  it("without ctx.db falls back to union-find only — output deep-equal to no-db baseline", async () => {
+    const orchWithoutDb = createPoiSearchOrchestrator(
+      makeCtx([overpassProvider, overtureProvider]),
+    );
+    const orchWithUndefinedDb = createPoiSearchOrchestrator(
+      makeCtx([overpassProvider, overtureProvider], undefined),
+    );
+    const [resultA, resultB] = await Promise.all([
+      orchWithoutDb.search("cafes", BBOX),
+      orchWithUndefinedDb.search("cafes", BBOX),
+    ]);
+    expect(resultB.results).toStrictEqual(resultA.results);
+    expect(resultB.partial).toStrictEqual(resultA.partial);
+  });
+
+  it("issues exactly one batched db query per search call (no N+1)", async () => {
+    let queryCount = 0;
+    const db = {
+      execute: async () => {
+        queryCount++;
+        return [] as unknown[];
+      },
+    };
+    const orch = createPoiSearchOrchestrator(makeCtx([overpassProvider, overtureProvider], db));
+    await orch.search("cafes", BBOX);
+    expect(queryCount).toBe(1);
   });
 });
