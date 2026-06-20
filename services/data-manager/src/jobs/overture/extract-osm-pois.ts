@@ -4,6 +4,7 @@ import type { OsmFilter } from "@openmapx/core/utils/osmCategoryFilters";
 import { CATEGORY_FILTERS } from "@openmapx/core/utils/osmCategoryFilters";
 import { execa } from "execa";
 import { sql } from "../../db/index.js";
+import { osmPbfName } from "../download-osm.js";
 import { assertValidRegion } from "./pull.js";
 import { applyOsmPoisTable } from "./schema.js";
 
@@ -29,7 +30,8 @@ export function osmTagsToCategory(tags: Record<string, string>): string | undefi
 }
 
 export interface ExtractOsmPoisOptions {
-  pbfPath: string;
+  /** Defaults to the region's downloaded PBF: <dataDir>/osm/<osmPbfName(region)>. */
+  pbfPath?: string;
   dataDir: string;
   region: string;
   onProgress?: (msg: string) => void;
@@ -54,8 +56,11 @@ export interface OsmPoiRecord {
  */
 export async function extractOsmPois(opts: ExtractOsmPoisOptions): Promise<OsmPoiRecord[]> {
   assertValidRegion(opts.region);
+  const pbfPath = opts.pbfPath ?? join(opts.dataDir, "osm", osmPbfName(opts.region));
   const outDir = join(opts.dataDir, "overture", "osm-extract");
-  const outPath = join(outDir, `${opts.region.replace(/\//g, "-")}-pois.geojson`);
+  const slug = opts.region.replace(/\//g, "-");
+  const filteredPbf = join(outDir, `${slug}-pois.osm.pbf`);
+  const outPath = join(outDir, `${slug}-pois.geojson`);
 
   const filterExpressions: string[] = [];
   for (const filters of Object.values(CATEGORY_FILTERS)) {
@@ -65,24 +70,20 @@ export async function extractOsmPois(opts: ExtractOsmPoisOptions): Promise<OsmPo
   }
   const uniqueFilters = [...new Set(filterExpressions)];
 
-  opts.onProgress?.(`Extracting OSM POIs from ${opts.pbfPath}...`);
+  opts.onProgress?.(`Extracting OSM POIs from ${pbfPath}...`);
   mkdirSync(outDir, { recursive: true });
 
+  // osmium tags-filter only emits OSM formats, so filter to a temp PBF first,
+  // then convert that to GeoJSON via osmium export (a single tags-filter →
+  // geojson step is rejected by osmium).
   await execa(
     "osmium",
-    [
-      "tags-filter",
-      opts.pbfPath,
-      "nwr/name",
-      ...uniqueFilters.map((f) => `nwr/${f}`),
-      "-o",
-      outPath,
-      "--output-format",
-      "geojson",
-      "-O",
-    ],
+    ["tags-filter", pbfPath, ...uniqueFilters.map((f) => `nwr/${f}`), "-o", filteredPbf, "-O"],
     { stdio: "inherit" },
   );
+  await execa("osmium", ["export", "-f", "geojson", filteredPbf, "-o", outPath, "-O"], {
+    stdio: "inherit",
+  });
 
   opts.onProgress?.(`Parsing ${outPath}...`);
 
