@@ -5,35 +5,42 @@ import {
   overtureCategoryToOpenMapX,
 } from "@openmapx/core";
 import type { DatabaseClient, IntegrationContext } from "@openmapx/integration-framework";
-import type { PoiSearchProvider, PoiSearchResult } from "@openmapx/integration-poi-search/types";
+import type {
+  CategoryId,
+  PoiSearchProvider,
+  PoiSearchResult,
+} from "@openmapx/integration-poi-search/types";
 
 interface OvertureRow {
-  id: string;
-  primary_name: string | null;
+  gers_id: string;
+  name: string;
   longitude: number;
   latitude: number;
+  openmapx_category: string | null;
   basic_category: string | null;
   brand_name: string | null;
   brand_wikidata: string | null;
-  operator: string | null;
+  phone: string | null;
 }
 
 function overtureRowToPoiSearchResult(row: OvertureRow): PoiSearchResult {
   const osmTags: Record<string, string> = {};
   if (row.brand_name) osmTags.brand = row.brand_name;
   if (row.brand_wikidata) osmTags["brand:wikidata"] = row.brand_wikidata;
-  if (row.operator) osmTags.operator = row.operator;
 
-  const category = row.basic_category
-    ? (overtureCategoryToOpenMapX(row.basic_category) ?? undefined)
-    : undefined;
+  const category: CategoryId | undefined =
+    (row.openmapx_category as CategoryId | null) ??
+    (row.basic_category
+      ? (overtureCategoryToOpenMapX(row.basic_category) ?? undefined)
+      : undefined);
 
   return {
-    id: `overture:${row.id}`,
-    gersId: row.id,
-    name: row.primary_name ?? row.id,
+    id: `overture:${row.gers_id}`,
+    gersId: row.gers_id,
+    name: row.name || row.gers_id,
     coordinates: [row.longitude, row.latitude],
-    category,
+    category: category ?? undefined,
+    phone: row.phone ?? undefined,
     osmTags: Object.keys(osmTags).length > 0 ? osmTags : undefined,
   };
 }
@@ -46,17 +53,17 @@ async function queryOverturePlaces(
   const leafParams = leaves.map((_, i) => `$${i + 5}`).join(", ");
   const sql = `
     SELECT
-      id,
-      primary_name,
-      longitude,
-      latitude,
+      gers_id,
+      name,
+      ST_X(geom) AS longitude,
+      ST_Y(geom) AS latitude,
+      openmapx_category,
       basic_category,
-      brand_name,
-      brand_wikidata,
-      operator
+      brand->>'name' AS brand_name,
+      brand->>'wikidata' AS brand_wikidata,
+      phones[1] AS phone
     FROM overture_places.places
-    WHERE longitude BETWEEN $1 AND $2
-      AND latitude BETWEEN $3 AND $4
+    WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
       AND operating_status <> 'permanently_closed'
       AND confidence >= $${leaves.length + 5}
       AND basic_category IN (${leafParams})
@@ -64,8 +71,8 @@ async function queryOverturePlaces(
   `;
   const params: unknown[] = [
     bbox.west,
-    bbox.east,
     bbox.south,
+    bbox.east,
     bbox.north,
     ...leaves,
     minConfidence,

@@ -6,24 +6,26 @@ const BBOX = { south: 52.49, west: 13.38, north: 52.53, east: 13.43 };
 
 const FIXTURE_ROWS = [
   {
-    id: "gers-abc-001",
-    primary_name: "Starbucks Mitte",
+    gers_id: "gers-abc-001",
+    name: "Starbucks Mitte",
     longitude: 13.4,
     latitude: 52.51,
+    openmapx_category: "cafes",
     basic_category: "coffee_shop",
     brand_name: "Starbucks",
     brand_wikidata: "Q37158",
-    operator: null,
+    phone: null,
   },
   {
-    id: "gers-abc-002",
-    primary_name: "McDonald's Alexanderplatz",
+    gers_id: "gers-abc-002",
+    name: "McDonald's Alexanderplatz",
     longitude: 13.41,
     latitude: 52.52,
+    openmapx_category: "restaurants",
     basic_category: "burger_restaurant",
     brand_name: "McDonald's",
     brand_wikidata: "Q38076",
-    operator: "McDonald's Corporation",
+    phone: "+49 30 12345678",
   },
 ];
 
@@ -91,14 +93,14 @@ describe("poi-overture provider.search", () => {
     expect(db.execute).not.toHaveBeenCalled();
   });
 
-  it("includes operator in osmTags when present", async () => {
+  it("includes phone when present", async () => {
     const db = makeFakeDb([FIXTURE_ROWS[1]]);
     const ctx = createMockIntegrationContext({ db });
     const { setup } = await import("../index.js");
     setup(ctx);
     const provider = ctx.registered.poiSearch[0] as PoiSearchProvider;
     const results = await provider.search("restaurants", BBOX);
-    expect(results[0].osmTags?.operator).toBe("McDonald's Corporation");
+    expect(results[0].phone).toBe("+49 30 12345678");
   });
 });
 
