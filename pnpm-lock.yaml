@@ -1088,6 +1088,9 @@ importers:
       '@openmapx/integration-poi-search':
         specifier: workspace:^
         version: link:../poi-search
+      '@openmapx/place-ids':
+        specifier: workspace:^
+        version: link:../../packages/place-ids
 
   integrations/poi-search:
     dependencies:

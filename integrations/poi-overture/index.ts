@@ -1,5 +1,6 @@
 import type { BoundingBox } from "@openmapx/core";
 import {
+  createPlace,
   OVERTURE_COMMERCIAL_CATEGORIES,
   openmapxCategoryToOvertureLeaves,
   overtureCategoryToOpenMapX,
@@ -10,6 +11,7 @@ import type {
   PoiSearchProvider,
   PoiSearchResult,
 } from "@openmapx/integration-poi-search/types";
+import { registerPlaceResolver } from "@openmapx/place-ids";
 
 interface OvertureRow {
   gers_id: string;
@@ -80,6 +82,53 @@ async function queryOverturePlaces(
   return db.execute<OvertureRow[]>(sql, params);
 }
 
+async function fetchOverturePlaceByGers(
+  db: DatabaseClient,
+  gers: string,
+  _lang?: string,
+): Promise<OvertureRow | null> {
+  const rows = await db.execute<OvertureRow[]>(
+    `SELECT
+       gers_id,
+       name,
+       ST_X(geom) AS longitude,
+       ST_Y(geom) AS latitude,
+       openmapx_category,
+       basic_category,
+       brand->>'name' AS brand_name,
+       brand->>'wikidata' AS brand_wikidata,
+       phones[1] AS phone
+     FROM overture_places.places
+     WHERE gers_id = $1
+     LIMIT 1`,
+    [gers],
+  );
+  return rows[0] ?? null;
+}
+
+function overtureRowToPlace(row: OvertureRow) {
+  const osmTags: Record<string, string> = {};
+  if (row.brand_name) osmTags.brand = row.brand_name;
+  if (row.brand_wikidata) osmTags["brand:wikidata"] = row.brand_wikidata;
+
+  const category: CategoryId | undefined =
+    (row.openmapx_category as CategoryId | null) ??
+    (row.basic_category
+      ? (overtureCategoryToOpenMapX(row.basic_category) ?? undefined)
+      : undefined);
+
+  return createPlace({
+    primaryScheme: "overture",
+    ids: { overture: row.gers_id },
+    name: row.name || row.gers_id,
+    address: "",
+    coordinates: [row.longitude, row.latitude],
+    category: category ?? undefined,
+    phone: row.phone ?? undefined,
+    osmTags: Object.keys(osmTags).length > 0 ? osmTags : undefined,
+  });
+}
+
 let boundDb: DatabaseClient | undefined;
 
 function bindDb(db: DatabaseClient): void {
@@ -129,4 +178,10 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerPoiSearchProvider(overtureProvider);
+
+  registerPlaceResolver("overture", async (gers, rctx) => {
+    const row = await fetchOverturePlaceByGers(db, gers, rctx.lang);
+    if (!row) return null;
+    return overtureRowToPlace(row);
+  });
 }

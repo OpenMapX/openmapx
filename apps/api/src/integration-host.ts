@@ -895,6 +895,26 @@ export function isIntegrationScheme(scheme: string): boolean {
   return integrations.has(scheme);
 }
 
+/**
+ * True when `scheme` matches an installed integration that is **not**
+ * config-disabled (`config.enabled !== false`). The places route uses this
+ * to decide whether a missing resolver should 404 (the integration owns the
+ * scheme and is enabled, so the missing resolver is a boot failure) or fall
+ * through to coord-fallback (the integration is config-disabled, so a stale
+ * deep-link should degrade gracefully rather than hard-404).
+ *
+ * Keyed on `config.enabled`, not the runtime `enabled` flag: both a
+ * config-disabled integration and an enabled-but-`setup()`-threw integration
+ * have `enabled === false` at runtime, but only `config.enabled === false`
+ * uniquely marks config-disabled. Using the runtime flag would let a broken
+ * enabled integration fall through to coord-fallback, re-opening the
+ * tag-substitution leak the 404 trap closes.
+ */
+export function isEnabledIntegrationScheme(scheme: string): boolean {
+  const i = integrations.get(scheme);
+  return i !== undefined && i.config?.enabled !== false;
+}
+
 export function getIntegrationsByDomain(domain: string): LoadedIntegration[] {
   return Array.from(integrations.values()).filter(
     (i) => i.enabled && i.manifest.domains.includes(domain),
