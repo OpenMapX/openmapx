@@ -34,6 +34,9 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
     "INSTALL spatial; LOAD spatial;",
     `ATTACH '${databaseUrl}' AS pg (TYPE postgres);`,
     `INSERT INTO pg."${stagingSchema}".places`,
+    `  (gers_id, name, names, basic_category, taxonomy, openmapx_category, geom, h3_r8,`,
+    `   addresses, country_code, websites, socials, emails, phones, brand, opening_hours,`,
+    `   confidence, operating_status, sources, release)`,
     `SELECT`,
     `  id AS gers_id,`,
     `  COALESCE(names.primary, '') AS name,`,
@@ -42,10 +45,11 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
     `  categories.alternate AS taxonomy,`,
     `  NULL::TEXT AS openmapx_category,`,
     // Overture GeoParquet exposes a single `geometry` (WKB) column, not
-    // longitude/latitude. DuckDB has no SRID concept, so the staging geom
-    // column is plain GEOMETRY (SRID 0); the ALTER below stamps SRID 4326 +
-    // the POINT typmod Postgres-side before the swap.
-    `  geometry AS geom,`,
+    // longitude/latitude. Emit it as hex-WKB so the Postgres COPY parses it
+    // into the geometry column (a raw binary transfer is rejected); DuckDB
+    // carries no SRID, so the ALTER below stamps SRID 4326 + the POINT typmod
+    // Postgres-side before the swap.
+    `  ST_AsHEXWKB(geometry) AS geom,`,
     `  NULL::TEXT AS h3_r8,`,
     `  to_json(addresses) AS addresses,`,
     `  addresses[1].country AS country_code,`,
