@@ -18,7 +18,11 @@
 
 import { writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
-import { type ConflationPoint, type ConflationThresholds, conflate } from "@openmapx/core";
+import {
+  type ConflationPoint,
+  type ConflationThresholds,
+  conflate,
+} from "@openmapx/core/utils/poiConflation";
 import { sql } from "../../../db/index.js";
 import { generateCandidatePairs, type OsmPoi, type OverturePlace } from "./candidates.js";
 import { computeMetrics, type MetricsResult, SWEEP_GRID, type SweepCell } from "./metrics.js";

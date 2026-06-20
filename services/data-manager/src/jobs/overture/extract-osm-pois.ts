@@ -1,9 +1,10 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { OsmFilter } from "@openmapx/core";
-import { CATEGORY_FILTERS } from "@openmapx/core";
+import type { OsmFilter } from "@openmapx/core/utils/osmCategoryFilters";
+import { CATEGORY_FILTERS } from "@openmapx/core/utils/osmCategoryFilters";
 import { execa } from "execa";
 import { sql } from "../../db/index.js";
+import { assertValidRegion } from "./pull.js";
 import { applyOsmPoisTable } from "./schema.js";
 
 export type { OsmFilter };
@@ -52,6 +53,7 @@ export interface OsmPoiRecord {
  * heavy XML/PBF work stays in the C++ tool rather than Node.
  */
 export async function extractOsmPois(opts: ExtractOsmPoisOptions): Promise<OsmPoiRecord[]> {
+  assertValidRegion(opts.region);
   const outDir = join(opts.dataDir, "overture", "osm-extract");
   const outPath = join(outDir, `${opts.region.replace(/\//g, "-")}-pois.geojson`);
 

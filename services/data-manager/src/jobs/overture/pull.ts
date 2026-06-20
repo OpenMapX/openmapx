@@ -9,7 +9,24 @@ const REGION_BBOXES: Record<string, { west: number; south: number; east: number;
     "europe/berlin": { west: 13.0, south: 52.3, east: 13.8, north: 52.7 },
   };
 
+// A region is one or more lowercase "<area>" segments joined by "/" (Geofabrik
+// style, e.g. "europe/berlin" or "north-america/us/texas"). The strict shape is
+// security-load-bearing: the slug is interpolated into DuckDB SQL string
+// literals and filesystem paths, so quotes, semicolons, dots (path traversal),
+// spaces and other metacharacters must never reach those sinks.
+const REGION_RE = /^[a-z][a-z0-9_-]*(\/[a-z][a-z0-9_-]*)*$/;
+
+export function assertValidRegion(region: string): void {
+  if (!REGION_RE.test(region)) {
+    throw new Error(
+      `Invalid region "${region}": expected lowercase "<area>[/<sub-area>...]" segments ` +
+        `(letters, digits, "_", "-"; no quotes, dots, or path separators beyond "/").`,
+    );
+  }
+}
+
 export function regionSlug(region: string): string {
+  assertValidRegion(region);
   return region.replace(/\//g, "-");
 }
 

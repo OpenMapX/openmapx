@@ -21,6 +21,22 @@
     "./place-ids": {
       "types": "./src/types/placeIds.ts",
       "default": "./src/types/placeIds.ts"
+    },
+    "./utils/poiConflation": {
+      "types": "./src/utils/poiConflation.ts",
+      "default": "./src/utils/poiConflation.ts"
+    },
+    "./utils/geo-server": {
+      "types": "./src/utils/geo-server.ts",
+      "default": "./src/utils/geo-server.ts"
+    },
+    "./utils/overtureCategoryMap": {
+      "types": "./src/utils/overtureCategoryMap.ts",
+      "default": "./src/utils/overtureCategoryMap.ts"
+    },
+    "./utils/osmCategoryFilters": {
+      "types": "./src/utils/osmCategoryFilters.ts",
+      "default": "./src/utils/osmCategoryFilters.ts"
     }
   },
   "scripts": {

@@ -36,6 +36,7 @@ COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
 COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
 COPY packages/poi-source-registry/package.json packages/poi-source-registry/
+COPY packages/core/package.json packages/core/
 
 RUN pnpm install --filter @openmapx/data-manager... --frozen-lockfile
 
@@ -49,6 +50,7 @@ COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
 COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
 COPY packages/poi-source-registry/package.json packages/poi-source-registry/
+COPY packages/core/package.json packages/core/
 
 RUN pnpm install --filter @openmapx/data-manager... --frozen-lockfile --prod --ignore-scripts
 
@@ -60,6 +62,7 @@ COPY packages/db-schema/ packages/db-schema/
 COPY packages/hardlinks/ packages/hardlinks/
 COPY packages/motis-feed-proxy-config/ packages/motis-feed-proxy-config/
 COPY packages/poi-source-registry/ packages/poi-source-registry/
+COPY packages/core/ packages/core/
 COPY services/data-manager/ services/data-manager/
 
 WORKDIR /app/services/data-manager
@@ -100,7 +103,7 @@ RUN set -eux; \
     arch="$(uname -m)"; \
     case "$arch" in \
       x86_64)          duckdb_arch=linux-amd64 ;; \
-      aarch64|arm64)   duckdb_arch=linux-aarch64 ;; \
+      aarch64|arm64)   duckdb_arch=linux-arm64 ;; \
       *) echo "Unsupported arch $arch for DuckDB CLI install" >&2; exit 1 ;; \
     esac; \
     curl -fsSL "https://github.com/duckdb/duckdb/releases/download/v${DUCKDB_VERSION}/duckdb_cli-${duckdb_arch}.zip" -o /tmp/duckdb.zip; \
@@ -131,6 +134,7 @@ COPY --from=prod-deps /app/packages/db-schema/node_modules ./packages/db-schema/
 COPY packages/hardlinks/ ./packages/hardlinks/
 COPY packages/motis-feed-proxy-config/ ./packages/motis-feed-proxy-config/
 COPY packages/poi-source-registry/ ./packages/poi-source-registry/
+COPY packages/core/ ./packages/core/
 COPY --from=builder /app/services/data-manager/dist ./services/data-manager/dist
 COPY services/data-manager/package.json ./services/data-manager/
 

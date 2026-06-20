@@ -1,4 +1,4 @@
-import { diceSimilarity, haversineMeters } from "@openmapx/core";
+import { diceSimilarity, haversineMeters } from "@openmapx/core/utils/geo-server";
 
 const RADIUS_M = 150;
 

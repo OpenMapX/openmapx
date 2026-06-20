@@ -5,8 +5,8 @@ import {
   type ConflationThresholds,
   conflate,
   DEFAULT_CONFLATION_THRESHOLDS,
-  fusePoiResults,
 } from "../poiConflation";
+import { fusePoiResults } from "../poiFusion";
 
 const T: ConflationThresholds = {
   alwaysMergeM: 25,

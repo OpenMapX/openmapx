@@ -1,13 +1,13 @@
+import { haversineMeters } from "@openmapx/core/utils/geo-server";
 import {
   type ConflationPoint,
   type ConflationThresholds,
   conflate,
-  haversineMeters,
-} from "@openmapx/core";
+} from "@openmapx/core/utils/poiConflation";
 import { gridDisk, latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";
 import { cosineSimilarity, DEFAULT_MODEL, embed, ensureEmbeddingModel } from "./embeddings.js";
-import { OVERTURE_RELEASE } from "./pull.js";
+import { assertValidRegion, OVERTURE_RELEASE } from "./pull.js";
 
 export interface OverturePlacePoint {
   gersId: string;
@@ -248,6 +248,7 @@ export async function conflateOverture(opts: {
   schema?: string;
   onProgress?: (msg: string) => void;
 }): Promise<{ linked: number }> {
+  assertValidRegion(opts.region);
   const { release = OVERTURE_RELEASE, ollamaUrl, useEmbeddings = false, onProgress } = opts;
   const schema = opts.schema ?? "overture_places";
 

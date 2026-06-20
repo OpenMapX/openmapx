@@ -9,7 +9,7 @@ import { downloadStyle } from "./jobs/download-style.js";
 import { applyHardlinkPlan, type HardlinkEntry } from "./jobs/link.js";
 import { conflateOverture } from "./jobs/overture/conflate.js";
 import { ingestOverture } from "./jobs/overture/ingest.js";
-import { pullOverture } from "./jobs/overture/pull.js";
+import { assertValidRegion, pullOverture } from "./jobs/overture/pull.js";
 import {
   buildJobContext,
   runTransitousPipeline,
@@ -267,6 +267,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   app.post<{ Body: { region: string } }>("/overture/pull", async (req, reply) => {
     const { region } = req.body;
     if (!region) throw new Error("region required");
+    assertValidRegion(region);
 
     reply.hijack();
     reply.raw.writeHead(200, {
@@ -295,6 +296,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   app.post<{ Body: { region: string } }>("/overture/ingest", async (req, reply) => {
     const { region } = req.body;
     if (!region) throw new Error("region required");
+    assertValidRegion(region);
 
     reply.hijack();
     reply.raw.writeHead(200, {
@@ -323,6 +325,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   app.post<{ Body: { region: string } }>("/overture/conflate", async (req, reply) => {
     const { region } = req.body;
     if (!region) throw new Error("region required");
+    assertValidRegion(region);
 
     const ollamaUrl = process.env.OLLAMA_URL || "http://local-ai:11434";
 

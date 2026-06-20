@@ -579,7 +579,7 @@ export {
   openMapXCategoryToOverture,
   openmapxCategoryToOvertureLeaves,
   overtureCategoryToOpenMapX,
-} from "./utils/overtureCategoryMap";
+} from "./utils/overtureCategoryTyped";
 export {
   parseCoordinateInput,
   parseDMSCoordinateInput,
@@ -600,8 +600,8 @@ export {
   type ConflationThresholds,
   conflate,
   DEFAULT_CONFLATION_THRESHOLDS,
-  fusePoiResults,
 } from "./utils/poiConflation";
+export { fusePoiResults } from "./utils/poiFusion";
 export { pointInIsochroneGeometry } from "./utils/pointInPolygon";
 export { decodePolyline, encodePolyline } from "./utils/polyline";
 export { sectionSlug } from "./utils/sectionSlug";

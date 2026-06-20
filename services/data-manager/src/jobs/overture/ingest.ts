@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { overtureCategoryToOpenMapX } from "@openmapx/core";
+import { overtureCategoryToOpenMapX } from "@openmapx/core/utils/overtureCategoryMap";
 import { execa } from "execa";
 import { latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";

@@ -11,7 +11,7 @@
 import { execa } from "execa";
 import { conflateOverture } from "./conflate.js";
 import { ingestOverture } from "./ingest.js";
-import { pullOverture } from "./pull.js";
+import { assertValidRegion, pullOverture } from "./pull.js";
 
 export function buildInsertSql(schema: string): string {
   return [
@@ -94,6 +94,7 @@ export async function applyOvertureChangelog(opts: ApplyOvertureChangelogOptions
   removed: number;
 }> {
   const { region, release, dataDir, onProgress, schema = "overture_places" } = opts;
+  assertValidRegion(region);
   const databaseUrl =
     process.env.DATABASE_URL || "postgresql://postgres:postgres@postgis:5432/openmapx";
 
