@@ -65,7 +65,7 @@ export function buildSchemaDDL(schema: string): string {
       basic_category    TEXT,
       taxonomy          TEXT[],
       openmapx_category TEXT,
-      geom              GEOMETRY(POINT, 4326) NOT NULL,
+      geom              GEOMETRY NOT NULL,
       h3_r8             TEXT,
       addresses         JSONB,
       country_code      TEXT,

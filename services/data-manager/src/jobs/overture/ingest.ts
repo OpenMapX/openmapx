@@ -41,7 +41,11 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
     `  categories.primary AS basic_category,`,
     `  categories.alternate AS taxonomy,`,
     `  NULL::TEXT AS openmapx_category,`,
-    `  ST_Point(longitude, latitude) AS geom,`,
+    // Overture GeoParquet exposes a single `geometry` (WKB) column, not
+    // longitude/latitude. DuckDB has no SRID concept, so the staging geom
+    // column is plain GEOMETRY (SRID 0); the ALTER below stamps SRID 4326 +
+    // the POINT typmod Postgres-side before the swap.
+    `  geometry AS geom,`,
     `  NULL::TEXT AS h3_r8,`,
     `  to_json(addresses) AS addresses,`,
     `  addresses[1].country AS country_code,`,
@@ -60,6 +64,12 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
 
   opts.onProgress?.("Running DuckDB → PostGIS ingest...");
   await execa("duckdb", ["-c", duckSql], { stdio: "inherit" });
+
+  opts.onProgress?.("Stamping geometry SRID 4326...");
+  await sql.unsafe(
+    `ALTER TABLE "${stagingSchema}".places
+       ALTER COLUMN geom TYPE geometry(Point, 4326) USING ST_SetSRID(geom, 4326)`,
+  );
 
   opts.onProgress?.("Backfilling h3_r8...");
   const H3_BATCH = 5_000;
@@ -130,10 +140,8 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
     }
   }
 
-  opts.onProgress?.("Building indexes...");
-  await sql.unsafe(`CREATE INDEX ON "${stagingSchema}".places USING GIST (geom)`);
-  await sql.unsafe(`CREATE INDEX ON "${stagingSchema}".places (h3_r8)`);
-  await sql.unsafe(`CREATE INDEX ON "${stagingSchema}".places (openmapx_category)`);
+  // Indexes (geom GIST + h3 + openmapx_category btree) are created by
+  // buildSchemaDDL; the geom GIST is rebuilt automatically by the SRID ALTER.
 
   opts.onProgress?.("Atomic swap staging → live...");
   await sql.begin(async (tx) => {
