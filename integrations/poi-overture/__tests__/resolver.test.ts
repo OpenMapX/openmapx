@@ -43,15 +43,15 @@ describe("overture place resolver", () => {
     const resolver = getPlaceResolver("overture");
     expect(resolver).toBeDefined();
 
-    const place = await resolver!(GERS_ID, {});
+    const place = await resolver?.(GERS_ID, {});
     expect(place).not.toBeNull();
-    expect(place!.primaryScheme).toBe("overture");
-    expect(place!.id).toBe(`overture:${GERS_ID}`);
-    expect(place!.ids.overture).toBe(GERS_ID);
-    expect(place!.name).toBe("Test Cafe Berlin");
-    expect(place!.coordinates).toEqual([13.405, 52.52]);
-    expect(place!.osmTags?.brand).toBe("Starbucks");
-    expect(place!.osmTags?.["brand:wikidata"]).toBe("Q37158");
+    expect(place?.primaryScheme).toBe("overture");
+    expect(place?.id).toBe(`overture:${GERS_ID}`);
+    expect(place?.ids.overture).toBe(GERS_ID);
+    expect(place?.name).toBe("Test Cafe Berlin");
+    expect(place?.coordinates).toEqual([13.405, 52.52]);
+    expect(place?.osmTags?.brand).toBe("Starbucks");
+    expect(place?.osmTags?.["brand:wikidata"]).toBe("Q37158");
   });
 
   it("returns null for an unknown GERS (no db row)", async () => {
@@ -66,7 +66,7 @@ describe("overture place resolver", () => {
     const resolver = getPlaceResolver("overture");
     expect(resolver).toBeDefined();
 
-    const place = await resolver!(GERS_ID, {});
+    const place = await resolver?.(GERS_ID, {});
     expect(place).toBeNull();
   });
 

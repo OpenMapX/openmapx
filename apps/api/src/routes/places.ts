@@ -23,11 +23,7 @@ import {
   type PlaceResolverContext,
 } from "@openmapx/place-ids";
 import type { FastifyPluginAsync } from "fastify";
-import {
-  getAllIntegrations,
-  isEnabledIntegrationScheme,
-  isIntegrationScheme,
-} from "../integration-host.js";
+import { getAllIntegrations, isEnabledIntegrationScheme } from "../integration-host.js";
 import { getPlaceKnowledge } from "../services/knowledge/index";
 import { buildReviewLinks } from "../services/review-links";
 import { TTL, withCache } from "../utils/cache.js";
