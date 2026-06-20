@@ -81,9 +81,11 @@ export async function extractOsmPois(opts: ExtractOsmPoisOptions): Promise<OsmPo
     ["tags-filter", pbfPath, ...uniqueFilters.map((f) => `nwr/${f}`), "-o", filteredPbf, "-O"],
     { stdio: "inherit" },
   );
-  await execa("osmium", ["export", "-f", "geojson", filteredPbf, "-o", outPath, "-O"], {
-    stdio: "inherit",
-  });
+  await execa(
+    "osmium",
+    ["export", "-f", "geojson", "--add-unique-id=type_id", filteredPbf, "-o", outPath, "-O"],
+    { stdio: "inherit" },
+  );
 
   opts.onProgress?.(`Parsing ${outPath}...`);
 
@@ -124,23 +126,13 @@ export async function extractOsmPois(opts: ExtractOsmPoisOptions): Promise<OsmPo
       continue;
     }
 
+    // osmium export --add-unique-id=type_id emits ids like n123 / w123 / r123.
+    const rawId = typeof feature.id === "string" ? feature.id : "";
     let osmType: "node" | "way" | "relation" = "node";
-    let osmId = "";
-    const rawId = feature.id ?? "";
-    if (typeof rawId === "string") {
-      if (rawId.startsWith("node/")) {
-        osmType = "node";
-        osmId = rawId.slice(5);
-      } else if (rawId.startsWith("way/")) {
-        osmType = "way";
-        osmId = rawId.slice(4);
-      } else if (rawId.startsWith("relation/")) {
-        osmType = "relation";
-        osmId = rawId.slice(9);
-      } else {
-        osmId = rawId;
-      }
-    }
+    if (rawId.startsWith("w")) osmType = "way";
+    else if (rawId.startsWith("r")) osmType = "relation";
+    const osmId = rawId.slice(1);
+    if (!osmId || Number.isNaN(Number(osmId))) continue;
 
     const category = osmTagsToCategory(props);
     records.push({ osmType, osmId, name, lat, lng, category, tags: props });
