@@ -5,24 +5,26 @@ import { execa } from "execa";
 import type { DatasetMetadata, StateStore } from "../state.js";
 import { curlAtomic } from "./atomic-download.js";
 
-/**
- * Geofabrik nests sub-country extracts under their parent country, so a few
- * friendly region keys don't match Geofabrik's path. Map those keys to their
- * actual Geofabrik download path. Only the upstream URL is rewritten — the
- * local filename (`osmPbfName`) stays keyed on the original region so callers
- * that derive the PBF path from the same region still find it.
- */
-const GEOFABRIK_PATH_ALIASES: Record<string, string> = {
-  "europe/berlin": "europe/germany/berlin",
-};
-
 export function resolveOsmUrl(region: string): string {
   if (!region) throw new Error("region is required");
   if (region === "planet") {
     return "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf";
   }
-  const path = GEOFABRIK_PATH_ALIASES[region] ?? region;
-  return `https://download.geofabrik.de/${path}-latest.osm.pbf`;
+  return `https://download.geofabrik.de/${region}-latest.osm.pbf`;
+}
+
+/**
+ * Geofabrik publishes a `.poly` boundary file next to every region's PBF (e.g.
+ * `europe/germany/berlin.poly`). It's a few KB and is the authoritative source
+ * for a region's extent — used to derive the Overture pull bbox without
+ * hardcoding per-region coordinates. Region identifiers are Geofabrik paths.
+ */
+export function resolveOsmPolyUrl(region: string): string {
+  if (!region) throw new Error("region is required");
+  if (region === "planet") {
+    throw new Error("planet has no Geofabrik .poly boundary; specify a Geofabrik region");
+  }
+  return `https://download.geofabrik.de/${region}.poly`;
 }
 
 /**

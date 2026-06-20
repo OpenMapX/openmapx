@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { assertValidRegion, regionSlug, resolveRegionBbox } from "../../src/jobs/overture/pull.js";
+import {
+  assertValidRegion,
+  computeBboxFromPoly,
+  regionSlug,
+} from "../../src/jobs/overture/pull.js";
 
 describe("assertValidRegion", () => {
   it("accepts well-formed Geofabrik-style regions", () => {
@@ -31,17 +35,36 @@ describe("regionSlug", () => {
   });
 });
 
-describe("resolveRegionBbox", () => {
-  it("returns the bbox for a known region", () => {
-    expect(resolveRegionBbox("europe/berlin")).toEqual({
-      west: 13.0,
-      south: 52.3,
-      east: 13.8,
-      north: 52.7,
-    });
+describe("computeBboxFromPoly", () => {
+  // A trimmed Geofabrik .poly: a name line, one ring of `lon lat` lines in
+  // scientific notation, and END terminators (Berlin-shaped coordinates).
+  const poly = [
+    "none",
+    "1",
+    "   1.373096E+01   5.239455E+01",
+    "   1.308280E+01   5.267830E+01",
+    "   1.376220E+01   5.233450E+01",
+    "   1.350000E+01   5.250000E+01",
+    "END",
+    "END",
+  ].join("\n");
+
+  it("derives the bounding box from .poly coordinate lines", () => {
+    const bbox = computeBboxFromPoly(poly);
+    expect(bbox.west).toBeCloseTo(13.0828, 3);
+    expect(bbox.south).toBeCloseTo(52.3345, 3);
+    expect(bbox.east).toBeCloseTo(13.7622, 3);
+    expect(bbox.north).toBeCloseTo(52.6783, 3);
   });
 
-  it("throws for a region with no defined bbox", () => {
-    expect(() => resolveRegionBbox("europe/atlantis")).toThrow(/No bbox defined/);
+  it("ignores the name/section-header/END lines (not 2 numeric tokens)", () => {
+    // Only the four coordinate lines contribute; headers must not skew the bbox.
+    const bbox = computeBboxFromPoly(poly);
+    expect(bbox.north).toBeLessThan(90);
+    expect(bbox.west).toBeGreaterThan(-180);
+  });
+
+  it("throws when the .poly has no coordinate lines", () => {
+    expect(() => computeBboxFromPoly("none\nEND\n")).toThrow(/no coordinates/);
   });
 });

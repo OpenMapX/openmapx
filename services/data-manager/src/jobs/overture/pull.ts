@@ -1,19 +1,22 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { execa } from "execa";
+import { resolveOsmPolyUrl } from "../download-osm.js";
 
 export const OVERTURE_RELEASE = "2026-06-17.0";
 
-const REGION_BBOXES: Record<string, { west: number; south: number; east: number; north: number }> =
-  {
-    "europe/berlin": { west: 13.0, south: 52.3, east: 13.8, north: 52.7 },
-  };
+export interface RegionBbox {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+}
 
-// A region is one or more lowercase "<area>" segments joined by "/" (Geofabrik
-// style, e.g. "europe/berlin" or "north-america/us/texas"). The strict shape is
-// security-load-bearing: the slug is interpolated into DuckDB SQL string
-// literals and filesystem paths, so quotes, semicolons, dots (path traversal),
-// spaces and other metacharacters must never reach those sinks.
+// A region is one or more lowercase "<area>" segments joined by "/" — a
+// Geofabrik download path (e.g. "europe/germany/berlin", "north-america/us/texas").
+// The strict shape is security-load-bearing: the slug is interpolated into
+// DuckDB SQL string literals and filesystem paths, so quotes, semicolons, dots
+// (path traversal), spaces and other metacharacters must never reach those sinks.
 const REGION_RE = /^[a-z][a-z0-9_-]*(\/[a-z][a-z0-9_-]*)*$/;
 
 export function assertValidRegion(region: string): void {
@@ -30,15 +33,53 @@ export function regionSlug(region: string): string {
   return region.replace(/\//g, "-");
 }
 
-export function resolveRegionBbox(region: string): {
-  west: number;
-  south: number;
-  east: number;
-  north: number;
-} {
-  const bbox = REGION_BBOXES[region];
-  if (!bbox) throw new Error(`No bbox defined for region "${region}". Define it in REGION_BBOXES.`);
-  return bbox;
+/**
+ * Computes a bounding box from a Geofabrik `.poly` boundary file. The format is
+ * a name line, then ring sections of `lon lat` coordinate lines terminated by
+ * `END`. Holes don't affect the outer bbox, so we just min/max every coordinate
+ * line (any line with two finite lon/lat tokens in range). Pure + testable.
+ */
+export function computeBboxFromPoly(polyText: string): RegionBbox {
+  let west = Number.POSITIVE_INFINITY;
+  let south = Number.POSITIVE_INFINITY;
+  let east = Number.NEGATIVE_INFINITY;
+  let north = Number.NEGATIVE_INFINITY;
+  let found = false;
+  for (const line of polyText.split("\n")) {
+    const parts = line.trim().split(/\s+/);
+    if (parts.length !== 2) continue;
+    const lon = Number(parts[0]);
+    const lat = Number(parts[1]);
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+    if (Math.abs(lon) > 180 || Math.abs(lat) > 90) continue;
+    found = true;
+    if (lon < west) west = lon;
+    if (lon > east) east = lon;
+    if (lat < south) south = lat;
+    if (lat > north) north = lat;
+  }
+  if (!found) throw new Error("no coordinates found in .poly file");
+  return { west, south, east, north };
+}
+
+/**
+ * Fetches the region's Geofabrik `.poly` boundary and derives its bbox. This
+ * replaces a hardcoded per-region table — any of Geofabrik's ~555 regions
+ * resolves from its own published boundary, country or sub-country.
+ */
+export async function fetchRegionBbox(region: string): Promise<RegionBbox> {
+  assertValidRegion(region);
+  const polyUrl = resolveOsmPolyUrl(region);
+  let stdout: string;
+  try {
+    ({ stdout } = await execa("curl", ["-fsSL", polyUrl], { timeout: 30_000 }));
+  } catch {
+    throw new Error(
+      `Could not fetch Geofabrik boundary for region "${region}" (${polyUrl}). ` +
+        `Use a valid Geofabrik region path (e.g. "europe/germany/berlin").`,
+    );
+  }
+  return computeBboxFromPoly(stdout);
 }
 
 export interface PullOvertureOptions {
@@ -50,7 +91,8 @@ export interface PullOvertureOptions {
 
 export async function pullOverture(opts: PullOvertureOptions): Promise<string> {
   const release = opts.release ?? OVERTURE_RELEASE;
-  const bbox = resolveRegionBbox(opts.region);
+  opts.onProgress?.(`Resolving ${opts.region} boundary from Geofabrik...`);
+  const bbox = await fetchRegionBbox(opts.region);
   const slug = regionSlug(opts.region);
   const outDir = join(opts.dataDir, "overture", release);
   mkdirSync(outDir, { recursive: true });

@@ -81,7 +81,7 @@ export interface CronSetupOptions {
   runStalenessCheck?: () => Promise<void>;
   /** Test seam: pre-built GitHub sink. Overrides env-var lookup. */
   githubIssueSink?: GithubIssueSink | null;
-  /** Region used by the monthly Overture sync. Defaults to OPENMAPX_REGION or "europe/berlin". */
+  /** Region used by the monthly Overture sync. A Geofabrik path; defaults to OPENMAPX_REGION or "europe/germany/berlin". */
   overtureRegion?: string;
   /** Override the Overture monthly cron schedule (e.g. for tests). */
   overtureCronExpression?: string;
@@ -363,7 +363,8 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     : null;
 
   const runOvertureSync = async (): Promise<void> => {
-    const region = options.overtureRegion ?? (process.env.OPENMAPX_REGION || "europe/berlin");
+    const region =
+      options.overtureRegion ?? (process.env.OPENMAPX_REGION || "europe/germany/berlin");
     const release = OVERTURE_RELEASE;
     try {
       await applyOvertureChangelog({
