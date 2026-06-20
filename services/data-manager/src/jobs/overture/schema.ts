@@ -52,7 +52,7 @@ export function assertValidOvertureSchema(name: string): void {
  *     sidesteps the conversion and is adequate for equality/grouping blocking.
  *   - geom is GEOMETRY(POINT,4326) (not geography) for lower-cost bbox/&& ops.
  */
-function buildSchemaDDL(schema: string): string {
+export function buildSchemaDDL(schema: string): string {
   return `
     CREATE EXTENSION IF NOT EXISTS postgis;
     DROP SCHEMA IF EXISTS "${schema}" CASCADE;
@@ -120,4 +120,37 @@ export async function applyOvertureSchema(schema: string): Promise<void> {
     await tx.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
     await tx.unsafe(`ALTER SCHEMA "${stagingSchema}" RENAME TO "${schema}"`);
   });
+}
+
+/**
+ * Returns the DDL for the `osm_pois` table within a given schema.
+ * `IF NOT EXISTS` guards make this idempotent — safe to call on both a fresh
+ * staging schema and an existing live schema during incremental refreshes.
+ */
+export function buildOsmPoisTableDDL(schema: string): string {
+  return `
+    CREATE TABLE IF NOT EXISTS "${schema}".osm_pois (
+      osm_type  TEXT NOT NULL,
+      osm_id    BIGINT NOT NULL,
+      name      TEXT NOT NULL DEFAULT '',
+      lat       DOUBLE PRECISION NOT NULL,
+      lng       DOUBLE PRECISION NOT NULL,
+      category  TEXT,
+      tags      JSONB,
+      PRIMARY KEY (osm_type, osm_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_osm_pois_category ON "${schema}".osm_pois (category);
+    CREATE INDEX IF NOT EXISTS idx_osm_pois_geom
+      ON "${schema}".osm_pois USING GIST (ST_Point(lng, lat));
+  `;
+}
+
+/**
+ * Creates (or ensures) the `osm_pois` table inside the given schema.
+ * The schema must already exist and pass `assertValidOvertureSchema`.
+ */
+export async function applyOsmPoisTable(schema: string): Promise<void> {
+  assertValidOvertureSchema(schema);
+  await sql.unsafe(`CREATE EXTENSION IF NOT EXISTS postgis`);
+  await sql.unsafe(buildOsmPoisTableDDL(schema));
 }

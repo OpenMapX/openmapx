@@ -575,6 +575,10 @@ export {
   validateOverpassFilter,
 } from "./utils/overpassFilter";
 export {
+  openMapXCategoryToOverture,
+  overtureCategoryToOpenMapX,
+} from "./utils/overtureCategoryMap";
+export {
   parseCoordinateInput,
   parseDMSCoordinateInput,
 } from "./utils/parseCoordinates";
@@ -588,6 +592,13 @@ export {
   shortenPlusCode,
 } from "./utils/plusCode";
 export { AD_HOC_ICON_PATH, poiCategoryIconPath, resolvePoiIconPath } from "./utils/poi-icon";
+export {
+  type ConflationPoint,
+  type ConflationResult,
+  type ConflationThresholds,
+  conflate,
+  DEFAULT_CONFLATION_THRESHOLDS,
+} from "./utils/poiConflation";
 export { pointInIsochroneGeometry } from "./utils/pointInPolygon";
 export { decodePolyline, encodePolyline } from "./utils/polyline";
 export { sectionSlug } from "./utils/sectionSlug";

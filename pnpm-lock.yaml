@@ -1918,6 +1918,9 @@ importers:
 
   services/data-manager:
     dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@openmapx/db-schema':
         specifier: workspace:^
         version: link:../../packages/db-schema
