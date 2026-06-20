@@ -27,8 +27,15 @@ interface OvertureDetailRow {
  * bound its own latency.
  */
 async function withDeadline<T>(ms: number, fn: () => Promise<T>): Promise<T | null> {
-  const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), ms));
-  return Promise.race([fn(), timeout]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), ms);
+  });
+  try {
+    return await Promise.race([fn(), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -88,6 +95,7 @@ async function resolveGers(
       FROM overture_places.places
       WHERE ST_DWithin(geom::geography, ST_MakePoint($1, $2)::geography, 150)
         AND openmapx_category = $3
+        AND operating_status <> 'permanently_closed'
       ORDER BY geom <-> ST_MakePoint($1, $2)::geometry
       LIMIT 5
     `;
@@ -97,6 +105,7 @@ async function resolveGers(
       SELECT gers_id, name
       FROM overture_places.places
       WHERE ST_DWithin(geom::geography, ST_MakePoint($1, $2)::geography, 150)
+        AND operating_status <> 'permanently_closed'
       ORDER BY geom <-> ST_MakePoint($1, $2)::geometry
       LIMIT 5
     `;

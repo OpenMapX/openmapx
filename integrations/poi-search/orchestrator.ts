@@ -36,7 +36,7 @@ async function buildConflationLinkMap(
 ): Promise<Map<string, string> | undefined> {
   if (!ctx.db) return undefined;
 
-  type OsmParsed = { type: string; id: bigint; key: string };
+  type OsmParsed = { type: string; id: bigint };
   const parsed: OsmParsed[] = [];
   for (const r of osmResults) {
     if (!r.id.startsWith("osm:")) continue;
@@ -47,7 +47,7 @@ async function buildConflationLinkMap(
     const rawId = rest.slice(slash + 1);
     const numId = Number(rawId);
     if (!Number.isFinite(numId) || numId <= 0) continue;
-    parsed.push({ type, id: BigInt(numId), key: rest });
+    parsed.push({ type, id: BigInt(numId) });
   }
 
   if (parsed.length === 0) return undefined;

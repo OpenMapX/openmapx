@@ -271,7 +271,9 @@ export async function conflateOverture(opts: {
             openmapx_category AS category,
             addresses,
             confidence
-     FROM "${schema}".places`,
+     FROM "${schema}".places
+     WHERE operating_status <> 'permanently_closed'
+       AND (confidence IS NULL OR confidence >= 0.7)`,
     [],
   );
 
