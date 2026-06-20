@@ -561,6 +561,76 @@ export function registerDataCommands(program: Command): void {
     });
 
   data
+    .command("overture-pull [region]")
+    .description("Pull Overture Maps places parquet for a region from S3")
+    .action(async (region: string | undefined) => {
+      const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
+      const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/berlin";
+      try {
+        log.dim(`Pulling Overture places for "${resolvedRegion}"…`);
+        const result = await client.pullOverture(resolvedRegion, {
+          onProgress: (msg) => log.dim(msg),
+        });
+        if (!result.ok) {
+          log.err(`overture-pull failed: ${result.message ?? "unknown error"}`);
+          process.exit(1);
+        }
+        log.ok(`Overture pull complete for "${resolvedRegion}"`);
+      } catch (err) {
+        log.err(`overture-pull failed: ${(err as Error).message}`);
+        dataManagerHint();
+        process.exit(1);
+      }
+    });
+
+  data
+    .command("overture-ingest [region]")
+    .description("Ingest Overture places parquet into PostGIS for a region")
+    .action(async (region: string | undefined) => {
+      const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
+      const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/berlin";
+      try {
+        log.dim(`Ingesting Overture places for "${resolvedRegion}"…`);
+        const result = await client.ingestOverture(resolvedRegion, {
+          onProgress: (msg) => log.dim(msg),
+        });
+        if (!result.ok) {
+          log.err(`overture-ingest failed: ${result.message ?? "unknown error"}`);
+          process.exit(1);
+        }
+        log.ok(`Overture ingest complete for "${resolvedRegion}"`);
+      } catch (err) {
+        log.err(`overture-ingest failed: ${(err as Error).message}`);
+        dataManagerHint();
+        process.exit(1);
+      }
+    });
+
+  data
+    .command("overture-conflate [region]")
+    .description("Run OSM↔Overture conflation for a region and write link records")
+    .action(async (region: string | undefined) => {
+      const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
+      const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/berlin";
+      try {
+        log.dim(`Running Overture conflation for "${resolvedRegion}"…`);
+        const result = await client.conflateOverture(resolvedRegion, {
+          onProgress: (msg) => log.dim(msg),
+        });
+        if (!result.ok) {
+          log.err("overture-conflate failed");
+          process.exit(1);
+        }
+        const linked = result.linked ?? 0;
+        log.ok(`Overture conflation complete: ${linked} link${linked === 1 ? "" : "s"} written`);
+      } catch (err) {
+        log.err(`overture-conflate failed: ${(err as Error).message}`);
+        dataManagerHint();
+        process.exit(1);
+      }
+    });
+
+  data
     .command("generate-api-keys")
     .description(
       "Generate Transitous API-key template at services/motis/tools/transitous/api-keys.json",

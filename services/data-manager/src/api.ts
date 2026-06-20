@@ -7,6 +7,9 @@ import { downloadGtfs, type FeedDescriptor } from "./jobs/download-gtfs.js";
 import { downloadOsm } from "./jobs/download-osm.js";
 import { downloadStyle } from "./jobs/download-style.js";
 import { applyHardlinkPlan, type HardlinkEntry } from "./jobs/link.js";
+import { conflateOverture } from "./jobs/overture/conflate.js";
+import { ingestOverture } from "./jobs/overture/ingest.js";
+import { pullOverture } from "./jobs/overture/pull.js";
 import {
   buildJobContext,
   runTransitousPipeline,
@@ -260,6 +263,92 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       }
     },
   );
+
+  app.post<{ Body: { region: string } }>("/overture/pull", async (req, reply) => {
+    const { region } = req.body;
+    if (!region) throw new Error("region required");
+
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      "Content-Type": "application/x-ndjson",
+      "Cache-Control": "no-cache",
+      "X-Accel-Buffering": "no",
+    });
+    const writeLine = (obj: Record<string, unknown>) => {
+      reply.raw.write(`${JSON.stringify(obj)}\n`);
+    };
+
+    try {
+      const result = await pullOverture({
+        region,
+        dataDir,
+        onProgress: (msg) => writeLine({ event: "progress", message: msg }),
+      });
+      writeLine({ event: "done", ok: true, path: result });
+    } catch (err) {
+      writeLine({ event: "error", message: (err as Error).message });
+    } finally {
+      reply.raw.end();
+    }
+  });
+
+  app.post<{ Body: { region: string } }>("/overture/ingest", async (req, reply) => {
+    const { region } = req.body;
+    if (!region) throw new Error("region required");
+
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      "Content-Type": "application/x-ndjson",
+      "Cache-Control": "no-cache",
+      "X-Accel-Buffering": "no",
+    });
+    const writeLine = (obj: Record<string, unknown>) => {
+      reply.raw.write(`${JSON.stringify(obj)}\n`);
+    };
+
+    try {
+      await ingestOverture({
+        region,
+        dataDir,
+        onProgress: (msg) => writeLine({ event: "progress", message: msg }),
+      });
+      writeLine({ event: "done", ok: true });
+    } catch (err) {
+      writeLine({ event: "error", message: (err as Error).message });
+    } finally {
+      reply.raw.end();
+    }
+  });
+
+  app.post<{ Body: { region: string } }>("/overture/conflate", async (req, reply) => {
+    const { region } = req.body;
+    if (!region) throw new Error("region required");
+
+    const ollamaUrl = process.env.OLLAMA_URL || "http://local-ai:11434";
+
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      "Content-Type": "application/x-ndjson",
+      "Cache-Control": "no-cache",
+      "X-Accel-Buffering": "no",
+    });
+    const writeLine = (obj: Record<string, unknown>) => {
+      reply.raw.write(`${JSON.stringify(obj)}\n`);
+    };
+
+    try {
+      const result = await conflateOverture({
+        region,
+        ollamaUrl,
+        useEmbeddings: false,
+      });
+      writeLine({ event: "done", ok: true, ...result });
+    } catch (err) {
+      writeLine({ event: "error", message: (err as Error).message });
+    } finally {
+      reply.raw.end();
+    }
+  });
 
   // POST /transit/sync — fire-and-forget Transitous pipeline trigger. Honours
   // the single-flight lock + idempotency key. apps/api proxies user-facing
