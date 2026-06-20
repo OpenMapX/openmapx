@@ -11,7 +11,7 @@
 import { execa } from "execa";
 import { conflateOverture } from "./conflate.js";
 import { ingestOverture } from "./ingest.js";
-import { OVERTURE_RELEASE, pullOverture } from "./pull.js";
+import { pullOverture } from "./pull.js";
 
 export function buildInsertSql(schema: string): string {
   return [
@@ -123,22 +123,53 @@ export async function applyOvertureChangelog(opts: ApplyOvertureChangelogOptions
     `${deleteSql};`,
   ].join("\n");
 
+  const countScript = [
+    "INSTALL httpfs; LOAD httpfs;",
+    "SET s3_region='us-west-2';",
+    `SELECT change_type, COUNT(*) AS n`,
+    `FROM read_parquet('${changelogPath}')`,
+    `GROUP BY change_type;`,
+  ].join("\n");
+
+  let added = 0;
+  let updated = 0;
+  let removed = 0;
+
+  try {
+    onProgress?.(`Counting Overture changelog rows for ${release}…`);
+    const countResult = await execa("duckdb", ["-csv", "-c", countScript], { stdio: "pipe" });
+    for (const line of countResult.stdout.split("\n").slice(1)) {
+      const parts = line.trim().split(",");
+      if (parts.length < 2) continue;
+      const changeType = parts[0].trim();
+      const count = parseInt(parts[1].trim(), 10);
+      if (changeType === "added") added = count;
+      else if (changeType === "data_changed") updated = count;
+      else if (changeType === "removed") removed = count;
+    }
+    onProgress?.(`Changelog: ${added} added, ${updated} updated, ${removed} removed.`);
+  } catch {
+    onProgress?.("Could not count changelog rows — proceeding with delta apply.");
+  }
+
   try {
     onProgress?.(`Trying Overture changelog delta for ${release}…`);
     await execa("duckdb", ["-c", deltaScript], { stdio: "pipe" });
     onProgress?.("Changelog delta applied. Running conflation…");
     const conflateResult = await conflateOverture({ region, release, schema });
     onProgress?.(`Conflation complete: ${conflateResult.linked} links.`);
-    return { added: 0, updated: 0, removed: 0 };
+    return { added, updated, removed };
   } catch (err) {
     onProgress?.(
       `Changelog path unavailable (${(err as Error).message}); falling back to full re-ingest…`,
     );
-    const fallbackRelease = release ?? OVERTURE_RELEASE;
-    await pullOverture({ region, dataDir, release: fallbackRelease, onProgress });
-    await ingestOverture({ region, dataDir, release: fallbackRelease, onProgress });
-    await conflateOverture({ region, release: fallbackRelease, schema });
+    await pullOverture({ region, dataDir, release, onProgress });
+    await ingestOverture({ region, dataDir, release, onProgress });
+    await conflateOverture({ region, release, schema });
     onProgress?.("Full re-ingest complete.");
-    return { added: 0, updated: 0, removed: 0 };
+    // Full re-ingest replaces all rows; meaningful per-operation counts are
+    // not available from this path. Return -1 as a sentinel meaning
+    // "full reingest, row-level counts N/A".
+    return { added: -1, updated: -1, removed: -1 };
   }
 }

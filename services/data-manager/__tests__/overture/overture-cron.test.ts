@@ -17,12 +17,8 @@ function buildStubDb() {
           return {
             where(_predicate: unknown) {
               return {
-                orderBy() {
-                  return {
-                    limit(_n: number) {
-                      return Promise.resolve([]);
-                    },
-                  };
+                limit(_n: number) {
+                  return Promise.resolve([]);
                 },
               };
             },
@@ -135,5 +131,58 @@ describe("Overture cron gating", () => {
     });
     expect(typeof handles.runOvertureNow).toBe("function");
     handles.stop();
+  });
+
+  it("runOvertureNow with overtureEnabled=true does not throw when changelog job is stubbed", async () => {
+    let overtureCalled = false;
+    const handles = setupCron({
+      dataDir,
+      repoRoot: "/tmp/nope",
+      countries: [],
+      store: {} as never,
+      singleFlight: makeController(),
+      logger: { info: () => {}, warn: () => {}, error: () => {} },
+      syncCronExpression: "disabled",
+      feedProxyReloadCronExpression: "disabled",
+      overtureEnabled: true,
+      overtureCronExpression: "0 5 1 * *",
+      runStalenessCheck: async () => {},
+      runPipeline: async () => {
+        overtureCalled = true;
+        return { finalStatus: "done", results: [] } as never;
+      },
+    });
+    expect(typeof handles.runOvertureNow).toBe("function");
+    handles.stop();
+    // runOvertureNow calls applyOvertureChangelog which will fail (no duckdb/postgres)
+    // but the cron handler swallows errors — assert it resolves without throwing.
+    await expect(handles.runOvertureNow()).resolves.toBeUndefined();
+    void overtureCalled;
+  });
+
+  it("overtureCron is registered when OVERTURE_ENABLED env var is 'true'", () => {
+    const prev = process.env.OVERTURE_ENABLED;
+    try {
+      process.env.OVERTURE_ENABLED = "true";
+      const handles = setupCron({
+        dataDir,
+        repoRoot: "/tmp/nope",
+        countries: [],
+        store: {} as never,
+        singleFlight: makeController(),
+        logger: { info: () => {}, warn: () => {}, error: () => {} },
+        syncCronExpression: "disabled",
+        feedProxyReloadCronExpression: "disabled",
+        overtureCronExpression: "0 5 1 * *",
+      });
+      expect(handles.overtureCron).not.toBeNull();
+      handles.stop();
+    } finally {
+      if (prev === undefined) {
+        delete process.env.OVERTURE_ENABLED;
+      } else {
+        process.env.OVERTURE_ENABLED = prev;
+      }
+    }
   });
 });

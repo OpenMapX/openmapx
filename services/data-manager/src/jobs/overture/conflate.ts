@@ -246,8 +246,9 @@ export async function conflateOverture(opts: {
   ollamaUrl?: string;
   useEmbeddings?: boolean;
   schema?: string;
+  onProgress?: (msg: string) => void;
 }): Promise<{ linked: number }> {
-  const { release = OVERTURE_RELEASE, ollamaUrl, useEmbeddings = false } = opts;
+  const { release = OVERTURE_RELEASE, ollamaUrl, useEmbeddings = false, onProgress } = opts;
   const schema = opts.schema ?? "overture_places";
 
   const placesRows = await sql.unsafe<
@@ -291,6 +292,7 @@ export async function conflateOverture(opts: {
       confidence: r.confidence ?? undefined,
     };
   });
+  onProgress?.(`Loaded ${places.length} Overture places from DB.`);
 
   const osmRows = await sql.unsafe<
     {
@@ -315,6 +317,7 @@ export async function conflateOverture(opts: {
     lng: Number(r.lng),
     category: r.category ?? undefined,
   }));
+  onProgress?.(`Loaded ${osmPois.length} OSM POIs from DB.`);
 
   if (useEmbeddings && ollamaUrl) {
     await ensureEmbeddingModel(DEFAULT_MODEL, ollamaUrl);
@@ -322,6 +325,7 @@ export async function conflateOverture(opts: {
 
   const embedFn = useEmbeddings ? (texts: string[]) => embed(texts, { ollamaUrl }) : undefined;
 
+  onProgress?.(`Computing OSM↔Overture links…`);
   const links = await computeLinks(places, osmPois, {
     thresholds: {
       alwaysMergeM: 25,
@@ -331,6 +335,7 @@ export async function conflateOverture(opts: {
     embedFn,
     release,
   });
+  onProgress?.(`Computed ${links.length} candidate links.`);
 
   if (links.length === 0) {
     return { linked: 0 };
@@ -371,5 +376,6 @@ export async function conflateOverture(opts: {
     );
   }
 
+  onProgress?.(`Upserted ${links.length} conflation links into poi_conflation_link.`);
   return { linked: links.length };
 }

@@ -341,6 +341,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         region,
         ollamaUrl,
         useEmbeddings: false,
+        onProgress: (msg) => writeLine({ event: "progress", message: msg }),
       });
       writeLine({ event: "done", ok: true, ...result });
     } catch (err) {
