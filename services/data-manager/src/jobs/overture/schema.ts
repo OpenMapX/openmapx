@@ -154,3 +154,28 @@ export async function applyOsmPoisTable(schema: string): Promise<void> {
   await sql.unsafe(`CREATE EXTENSION IF NOT EXISTS postgis`);
   await sql.unsafe(buildOsmPoisTableDDL(schema));
 }
+
+/**
+ * Returns the DDL for the `embedding_cache` table within a given schema.
+ * `IF NOT EXISTS` guards make this idempotent — safe to call on repeated runs.
+ * Stores SHA-256 hashes of `model + "\\n" + text` alongside the embedding vector.
+ */
+export function buildEmbeddingCacheDDL(schema: string): string {
+  return `
+    CREATE TABLE IF NOT EXISTS "${schema}".embedding_cache (
+      text_hash  TEXT PRIMARY KEY,
+      model      TEXT NOT NULL,
+      embedding  DOUBLE PRECISION[] NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+  `;
+}
+
+/**
+ * Creates (or ensures) the `embedding_cache` table inside the given schema.
+ * The schema must already exist and pass `assertValidOvertureSchema`.
+ */
+export async function applyEmbeddingCacheTable(schema: string): Promise<void> {
+  assertValidOvertureSchema(schema);
+  await sql.unsafe(buildEmbeddingCacheDDL(schema));
+}

@@ -32,7 +32,8 @@
       "DB_BAHNPARK_CLIENT_ID": "${DB_BAHNPARK_CLIENT_ID:-}",
       "DB_BAHNPARK_API_KEY": "${DB_BAHNPARK_API_KEY:-}",
       "NSW_TRANSPORT_API_KEY": "${NSW_TRANSPORT_API_KEY:-}",
-      "TRANSITOUS_FEED_PROXY_KEY_FILE": "/secrets/transitous-feed-proxy.age"
+      "TRANSITOUS_FEED_PROXY_KEY_FILE": "/secrets/transitous-feed-proxy.age",
+      "OLLAMA_URL": "${OLLAMA_URL:-http://local-ai:11434}"
     },
     "memory": "8g",
     "restart": "unless-stopped",
