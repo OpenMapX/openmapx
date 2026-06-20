@@ -1,0 +1,14 @@
+{
+  "name": "Overture Places Knowledge Enrichment",
+  "description": "Enriches place cards with brand, multilingual names, and structured opening hours from Overture Maps Places",
+  "dataSources": {
+    "overture": {
+      "purpose": "Match a clicked OSM place to its Overture twin to fill in brand identity, multilingual names, structured opening hours, and Wikidata cross-reference",
+      "dataSent": "Place name, coordinates, OSM category tag, and OSM node/way/relation ID for the viewed place"
+    },
+    "foursquare": {
+      "purpose": "Provide additional venue brand and hours data for commercial places via the Overture Places dataset (Foursquare is one of the Overture contributing sources)",
+      "dataSent": "No data sent directly to Foursquare; data is accessed via the locally-ingested Overture Places snapshot"
+    }
+  }
+}

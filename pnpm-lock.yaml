@@ -660,6 +660,15 @@ importers:
         specifier: workspace:^
         version: link:../../packages/place-ids
 
+  integrations/knowledge-overture:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+
   integrations/knowledge-sunrise-sunset:
     dependencies:
       '@openmapx/core':

@@ -144,4 +144,10 @@ export interface Place extends Identified {
    * to the whole area instead of zooming to the centre point.
    */
   boundingBox?: BBox;
+  /** Brand identity enriched from Overture Places (name + optional Wikidata Q-id). */
+  brand?: { name: string; wikidata?: string };
+  /** Multilingual name variants keyed by BCP-47 language tag (from Overture Places). */
+  names?: Record<string, string>;
+  /** Raw opening_hours string from Overture structured hours (OSM-format compatible). */
+  structuredOpeningHours?: string;
 }

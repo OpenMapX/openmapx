@@ -176,4 +176,39 @@ describe("getPlaceKnowledge", () => {
     expect(wikidataLookup).not.toHaveBeenCalled();
     expect(result.description).toBe("Wikipedia desc");
   });
+
+  it("optionality: enrichment output is unchanged when knowledge-overture is not registered", async () => {
+    wikidataLookup.mockReset();
+    wikipediaLookup.mockReset();
+    wikidataLookup.mockResolvedValueOnce({ description: "Wikidata desc" });
+    wikipediaLookup.mockResolvedValueOnce({ description: "Wikipedia desc" });
+
+    const { getPlaceKnowledge } = await import("../index.js");
+    const result = await getPlaceKnowledge(makePlace({ wikidata: "Q42" }));
+
+    expect(result.description).toBe("Wikidata desc");
+    expect(result.brand).toBeUndefined();
+    expect(result.names).toBeUndefined();
+    expect(result.structuredOpeningHours).toBeUndefined();
+  });
+
+  it("merges brand, names, structuredOpeningHours from first non-null source", async () => {
+    wikidataLookup.mockReset();
+    wikipediaLookup.mockReset();
+    wikidataLookup.mockResolvedValueOnce({
+      brand: { name: "Starbucks", wikidata: "Q37158" },
+      names: { de: "Starbucks" },
+      structuredOpeningHours: "Mo-Fr 07:00-21:00",
+    });
+    wikipediaLookup.mockResolvedValueOnce({
+      brand: { name: "Other Brand" },
+    });
+
+    const { getPlaceKnowledge } = await import("../index.js");
+    const result = await getPlaceKnowledge(makePlace({ wikidata: "Q42" }));
+
+    expect(result.brand).toEqual({ name: "Starbucks", wikidata: "Q37158" });
+    expect(result.names).toEqual({ de: "Starbucks" });
+    expect(result.structuredOpeningHours).toBe("Mo-Fr 07:00-21:00");
+  });
 });

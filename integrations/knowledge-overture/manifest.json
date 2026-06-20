@@ -1,0 +1,50 @@
+{
+  "id": "knowledge-overture",
+  "name": "Overture Places Knowledge Enrichment",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "AGPL-3.0-or-later",
+  "domains": ["knowledge"],
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": false
+      }
+    }
+  },
+  "requires": [
+    {
+      "service": "postgis",
+      "optional": false
+    }
+  ],
+  "healthCheck": { "type": "custom" },
+  "quality": "built-in",
+  "category": "External",
+  "dataSources": [
+    {
+      "sourceId": "overture",
+      "name": "Overture Maps",
+      "url": "https://overturemaps.org",
+      "license": "CDLA-Permissive-2.0",
+      "attribution": "© Overture Maps Foundation contributors (Meta, Microsoft, PinMeTo, AllThePlaces)",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://overturemaps.org/privacy/",
+      "endUserExposure": "server-only"
+    },
+    {
+      "sourceId": "foursquare",
+      "name": "Foursquare",
+      "url": "https://foursquare.com",
+      "license": "Apache-2.0",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://location.foursquare.com/legal/fsq-privacy-statement/",
+      "endUserExposure": "server-only"
+    }
+  ]
+}
