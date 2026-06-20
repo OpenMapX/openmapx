@@ -101,47 +101,46 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
   }
 
   opts.onProgress?.("Backfilling openmapx_category...");
-  const CAT_BATCH = 5_000;
-  while (true) {
-    const catRows = await sql<
-      {
-        gers_id: string;
-        basic_category: string | null;
-        taxonomy: string[] | null;
-      }[]
-    >`
-      SELECT gers_id, basic_category, taxonomy
-      FROM ${sql(stagingSchema)}.places
-      WHERE openmapx_category IS NULL
-        AND (basic_category IS NOT NULL OR taxonomy IS NOT NULL)
-      LIMIT ${CAT_BATCH}
-    `;
-    if (catRows.length === 0) break;
+  // Read every categorizable row once and map in memory, then write in chunks.
+  // A windowed `WHERE openmapx_category IS NULL LIMIT n` loop cannot be used
+  // here: rows whose category has no OpenMapX equivalent stay NULL forever, so
+  // the unmatched rows accumulate at the front of the scan and a later window
+  // can return only-unmatched rows while matchable rows further in remain
+  // unread — silently capping coverage. A single full pass avoids that.
+  const catRows = await sql<
+    {
+      gers_id: string;
+      basic_category: string | null;
+      taxonomy: string[] | null;
+    }[]
+  >`
+    SELECT gers_id, basic_category, taxonomy
+    FROM ${sql(stagingSchema)}.places
+    WHERE basic_category IS NOT NULL OR taxonomy IS NOT NULL
+  `;
 
-    const updates: Array<{ gers_id: string; category: string }> = [];
-    for (const row of catRows) {
-      const candidates = [row.basic_category, ...(row.taxonomy ?? [])].filter(Boolean) as string[];
-      let matched: string | undefined;
-      for (const leaf of candidates) {
-        matched = overtureCategoryToOpenMapX(leaf);
-        if (matched) break;
-      }
+  const updates: Array<{ gers_id: string; category: string }> = [];
+  for (const row of catRows) {
+    const candidates = [row.basic_category, ...(row.taxonomy ?? [])].filter(Boolean) as string[];
+    for (const leaf of candidates) {
+      const matched = overtureCategoryToOpenMapX(leaf);
       if (matched) {
         updates.push({ gers_id: row.gers_id, category: matched });
+        break;
       }
     }
+  }
 
-    if (updates.length > 0) {
-      await sql.unsafe(
-        `UPDATE "${stagingSchema}".places AS p
-         SET openmapx_category = v.category
-         FROM (SELECT UNNEST($1::TEXT[]) AS gers_id, UNNEST($2::TEXT[]) AS category) AS v
-         WHERE p.gers_id = v.gers_id`,
-        [updates.map((u) => u.gers_id), updates.map((u) => u.category)],
-      );
-    } else {
-      break;
-    }
+  const CAT_BATCH = 5_000;
+  for (let i = 0; i < updates.length; i += CAT_BATCH) {
+    const chunk = updates.slice(i, i + CAT_BATCH);
+    await sql.unsafe(
+      `UPDATE "${stagingSchema}".places AS p
+       SET openmapx_category = v.category
+       FROM (SELECT UNNEST($1::TEXT[]) AS gers_id, UNNEST($2::TEXT[]) AS category) AS v
+       WHERE p.gers_id = v.gers_id`,
+      [chunk.map((u) => u.gers_id), chunk.map((u) => u.category)],
+    );
   }
 
   // Indexes (geom GIST + h3 + openmapx_category btree) are created by

@@ -110,11 +110,40 @@ describe("overtureCategoryToOpenMapX — Overture leaves resolve to CategoryId",
     expect(overtureCategoryToOpenMapX("pharmacy")).toBe("pharmacies");
   });
 
+  it("'dentist' maps to 'dentists'", () => {
+    expect(overtureCategoryToOpenMapX("dentist")).toBe("dentists");
+  });
+
+  it("'doctor' maps to 'doctors'", () => {
+    expect(overtureCategoryToOpenMapX("doctor")).toBe("doctors");
+  });
+
+  it("'train_station' maps to 'transit'", () => {
+    expect(overtureCategoryToOpenMapX("train_station")).toBe("transit");
+  });
+
+  it("'supermarket' maps to 'supermarkets'", () => {
+    expect(overtureCategoryToOpenMapX("supermarket")).toBe("supermarkets");
+  });
+
+  it("office/professional categories with no OpenMapX analog stay unmapped", () => {
+    expect(overtureCategoryToOpenMapX("professional_services")).toBeUndefined();
+    expect(overtureCategoryToOpenMapX("advertising_agency")).toBeUndefined();
+  });
+
   it("unknown leaf returns undefined", () => {
     expect(overtureCategoryToOpenMapX("definitely_not_a_category")).toBeUndefined();
   });
 
   it("empty string returns undefined", () => {
     expect(overtureCategoryToOpenMapX("")).toBeUndefined();
+  });
+
+  it("covers the bridged Overture taxonomy breadth (>=400 leaves)", () => {
+    const total = OVERTURE_COMMERCIAL_CATEGORIES.reduce(
+      (n, cat) => n + openmapxCategoryToOvertureLeaves(cat).length,
+      0,
+    );
+    expect(total).toBeGreaterThanOrEqual(400);
   });
 });
