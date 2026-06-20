@@ -249,6 +249,9 @@ const FILTERABLE_TAG_KEYS = [
   "diet:kosher",
   "diet:gluten_free",
   "cuisine",
+  "brand",
+  "operator",
+  "brand:wikidata",
 ] as const;
 
 function pickFilterableTags(tags: Record<string, string>): Record<string, string> | undefined {

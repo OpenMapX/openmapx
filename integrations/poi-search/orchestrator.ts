@@ -1,5 +1,10 @@
 import type { BoundingBox, OverpassFilter, TagPredicate } from "@openmapx/core";
-import { OverpassTimeoutError, removeFilterPredicate } from "@openmapx/core";
+import {
+  DEFAULT_CONFLATION_THRESHOLDS,
+  fusePoiResults,
+  OverpassTimeoutError,
+  removeFilterPredicate,
+} from "@openmapx/core";
 import { buildOpeningHoursInfo } from "@openmapx/core/server";
 import { httpError, type IntegrationContext } from "@openmapx/integration-framework";
 import { getPresetById } from "@openmapx/presets";
@@ -28,6 +33,34 @@ function shrinkBbox(bbox: BoundingBox, factor: number): BoundingBox {
     west: centerLon - halfLon,
     east: centerLon + halfLon,
   };
+}
+
+async function runWithShrink(
+  fn: (bbox: BoundingBox) => Promise<PoiSearchResult[]>,
+  bbox: BoundingBox,
+  _lang: string | undefined,
+): Promise<{ results: PoiSearchResult[]; partial: boolean }> {
+  let currentBbox = bbox;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const results = await fn(currentBbox);
+      for (const r of results) {
+        if (r.openingHours && !r.openingHoursInfo) {
+          r.openingHoursInfo = buildOpeningHoursInfo(r.openingHours, {
+            lat: r.coordinates[1],
+            lon: r.coordinates[0],
+          });
+        }
+      }
+      return { results, partial: attempt > 0 };
+    } catch (err) {
+      if (err instanceof OverpassTimeoutError && attempt < MAX_SHRINK_RETRIES) {
+        currentBbox = shrinkBbox(currentBbox, SHRINK_FACTOR);
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
@@ -65,35 +98,43 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
       lookupCategory = PRESET_SENTINEL;
     }
 
-    const provider = providers.find((p) => p.categories.includes(lookupCategory));
-    if (!provider) {
+    const matching = providers.filter((p) => p.categories.includes(lookupCategory));
+    if (matching.length === 0) {
       throw httpError(400, `Unknown category: ${category}`);
     }
 
-    let currentBbox = bbox;
-    for (let attempt = 0; ; attempt++) {
-      try {
-        const results = await provider.search(lookupCategory, currentBbox, {
-          lang: options?.lang,
-          osmTags,
-        });
-        for (const r of results) {
-          if (r.openingHours && !r.openingHoursInfo) {
-            r.openingHoursInfo = buildOpeningHoursInfo(r.openingHours, {
-              lat: r.coordinates[1],
-              lon: r.coordinates[0],
-            });
-          }
-        }
-        return { results, partial: attempt > 0 };
-      } catch (err) {
-        if (err instanceof OverpassTimeoutError && attempt < MAX_SHRINK_RETRIES) {
-          currentBbox = shrinkBbox(currentBbox, SHRINK_FACTOR);
-          continue;
-        }
-        throw err;
-      }
+    if (matching.length === 1) {
+      const provider = matching[0];
+      return runWithShrink(
+        (currentBbox) =>
+          provider.search(lookupCategory, currentBbox, { lang: options?.lang, osmTags }),
+        bbox,
+        options?.lang,
+      );
     }
+
+    const settled = await Promise.all(
+      matching.map((p) => {
+        return runWithShrink(
+          (currentBbox) => p.search(lookupCategory, currentBbox, { lang: options?.lang, osmTags }),
+          bbox,
+          options?.lang,
+        ).catch(() => ({ results: [] as PoiSearchResult[], partial: false }));
+      }),
+    );
+
+    const partial = settled.some((s) => s.partial);
+
+    const overpassIdx = matching.findIndex((p) => p.id === "overpass");
+    const overtureIdx = matching.findIndex((p) => p.id === "overture");
+
+    const osmResults = overpassIdx >= 0 ? settled[overpassIdx].results : [];
+    const overtureResults = overtureIdx >= 0 ? settled[overtureIdx].results : [];
+
+    return {
+      results: fusePoiResults(osmResults, overtureResults, DEFAULT_CONFLATION_THRESHOLDS),
+      partial,
+    };
   }
 
   async function searchText(
@@ -187,7 +228,7 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
 
     // Run one filter with the existing shrink-on-timeout retry, enriching each
     // result's opening-hours info before returning.
-    async function runWithShrink(
+    async function runWithShrinkFilter(
       f: OverpassFilter,
     ): Promise<{ results: PoiSearchResult[]; partial: boolean }> {
       let currentBbox = bbox;
@@ -213,7 +254,7 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
       }
     }
 
-    const full = await runWithShrink(filter);
+    const full = await runWithShrinkFilter(filter);
     // Enough exact matches, or no attribute predicates to drop — return as-is.
     if (full.results.length >= RELAX_MIN_RESULTS || (filter.require?.length ?? 0) === 0) {
       return { ...full, relaxed: [] };
@@ -232,7 +273,7 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
       if (!reqs || reqs.length === 0) break;
       relaxed.push(reqs[reqs.length - 1]);
       working = removeFilterPredicate(working, "require", reqs.length - 1);
-      const next = await runWithShrink(working);
+      const next = await runWithShrinkFilter(working);
       anyPartial = anyPartial || next.partial;
       bestResults = next.results;
       if (bestResults.length >= RELAX_MIN_RESULTS) break;

@@ -1,3 +1,4 @@
+import type { PoiSearchResult } from "@openmapx/integration-framework";
 import { diceSimilarity, haversineMeters } from "./geo-server";
 
 export interface ConflationPoint {
@@ -216,4 +217,75 @@ export function conflate(
   const unmatchedB = b.filter((_, j) => !matchedBIdx.has(j));
 
   return { matched, unmatchedA, unmatchedB };
+}
+
+/**
+ * Fuses OSM and Overture POI results using spatial+name conflation.
+ * Matched pairs keep the OSM id, carry gersId from Overture, and merge attributes
+ * (OSM wins presence; Overture fills gaps + always supplies brand fields).
+ * Overture-only results are appended as gap-fill. OSM-only results pass through.
+ *
+ * @param link - Reserved for a precomputed GERS↔OSM link table (wired in a later phase); currently unused.
+ */
+export function fusePoiResults(
+  osm: PoiSearchResult[],
+  overture: PoiSearchResult[],
+  thresholds: ConflationThresholds,
+  link?: Map<string, string>,
+): PoiSearchResult[] {
+  void link;
+  if (overture.length === 0) return osm;
+
+  const osmPts: ConflationPoint[] = osm.map((r) => ({
+    id: r.id,
+    name: r.name ?? "",
+    lat: r.coordinates[1],
+    lng: r.coordinates[0],
+    category: r.category,
+  }));
+  const overturePts: ConflationPoint[] = overture.map((r) => ({
+    id: r.id,
+    name: r.name ?? "",
+    lat: r.coordinates[1],
+    lng: r.coordinates[0],
+    category: r.category,
+  }));
+
+  const result = conflate(osmPts, overturePts, thresholds);
+
+  const osmById = new Map(osm.map((r) => [r.id, r]));
+  const overtureById = new Map(overture.map((r) => [r.id, r]));
+
+  const fused: PoiSearchResult[] = result.matched.flatMap(({ a: osmPt, b: overturePt }) => {
+    const osmR = osmById.get(osmPt.id);
+    const overtR = overtureById.get(overturePt.id);
+    if (!osmR || !overtR) return [];
+    const overtureBrandTags: Record<string, string> = {};
+    if (overtR.osmTags?.brand) overtureBrandTags.brand = overtR.osmTags.brand;
+    if (overtR.osmTags?.["brand:wikidata"])
+      overtureBrandTags["brand:wikidata"] = overtR.osmTags["brand:wikidata"];
+    return [
+      {
+        ...osmR,
+        gersId: overtR.gersId ?? overtR.id,
+        name: osmR.name ?? overtR.name,
+        coordinates: osmR.coordinates,
+        openingHours: osmR.openingHours ?? overtR.openingHours,
+        phone: osmR.phone ?? overtR.phone,
+        category: osmR.category ?? overtR.category,
+        osmTags: { ...osmR.osmTags, ...overtureBrandTags },
+      },
+    ];
+  });
+
+  const osmOnly: PoiSearchResult[] = result.unmatchedA.flatMap((pt) => {
+    const r = osmById.get(pt.id);
+    return r ? [r] : [];
+  });
+  const overtureOnly: PoiSearchResult[] = result.unmatchedB.flatMap((pt) => {
+    const r = overtureById.get(pt.id);
+    return r ? [r] : [];
+  });
+
+  return [...fused, ...osmOnly, ...overtureOnly];
 }

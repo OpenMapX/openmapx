@@ -2,6 +2,8 @@ import type { BoundingBox, LngLat, OpeningHoursInfo, OverpassFilter, Place } fro
 
 export interface PoiSearchResult {
   id: string;
+  /** GERS id when the result originated from (or was matched to) Overture Places. */
+  gersId?: string;
   name: string;
   coordinates: LngLat;
   category?: string;

@@ -575,7 +575,9 @@ export {
   validateOverpassFilter,
 } from "./utils/overpassFilter";
 export {
+  OVERTURE_COMMERCIAL_CATEGORIES,
   openMapXCategoryToOverture,
+  openmapxCategoryToOvertureLeaves,
   overtureCategoryToOpenMapX,
 } from "./utils/overtureCategoryMap";
 export {
@@ -598,6 +600,7 @@ export {
   type ConflationThresholds,
   conflate,
   DEFAULT_CONFLATION_THRESHOLDS,
+  fusePoiResults,
 } from "./utils/poiConflation";
 export { pointInIsochroneGeometry } from "./utils/pointInPolygon";
 export { decodePolyline, encodePolyline } from "./utils/polyline";

@@ -1,9 +1,11 @@
+import type { PoiSearchResult } from "@openmapx/integration-framework";
 import { describe, expect, it } from "vitest";
 import {
   type ConflationPoint,
   type ConflationThresholds,
   conflate,
   DEFAULT_CONFLATION_THRESHOLDS,
+  fusePoiResults,
 } from "../poiConflation";
 
 const T: ConflationThresholds = {
@@ -141,5 +143,92 @@ describe("DEFAULT_CONFLATION_THRESHOLDS", () => {
     expect(DEFAULT_CONFLATION_THRESHOLDS.alwaysMergeM).toBe(25);
     expect(DEFAULT_CONFLATION_THRESHOLDS.softWindowM).toBe(120);
     expect(DEFAULT_CONFLATION_THRESHOLDS.nameDiceFloor).toBe(0.8);
+  });
+});
+
+function makePoi(
+  id: string,
+  name: string,
+  lat: number,
+  lng: number,
+  overrides: Partial<PoiSearchResult> = {},
+): PoiSearchResult {
+  return { id, name, coordinates: [lng, lat], ...overrides };
+}
+
+describe("fusePoiResults", () => {
+  it("returns OSM array deep-equal unchanged when overture is empty (optionality invariant)", () => {
+    const osm: PoiSearchResult[] = [
+      makePoi("osm:node/1", "Starbucks", 52.52, 13.4, { category: "cafes" }),
+      makePoi("osm:node/2", "McDonald's", 52.521, 13.401, { category: "restaurants" }),
+    ];
+    const result = fusePoiResults(osm, [], DEFAULT_CONFLATION_THRESHOLDS);
+    expect(result).toStrictEqual(osm);
+  });
+
+  it("fuses matched pair: OSM id kept, gersId from Overture, brand tags merged", () => {
+    const osm: PoiSearchResult[] = [
+      makePoi("osm:node/1", "Starbucks Coffee", 52.52, 13.4, {
+        category: "cafes",
+        openingHours: "Mo-Su 07:00-22:00",
+        osmTags: { wheelchair: "yes" },
+      }),
+    ];
+    const overture: PoiSearchResult[] = [
+      makePoi("overture:gers-abc-123", "Starbucks Coffee", 52.52, 13.4, {
+        gersId: "gers-abc-123",
+        category: "cafes",
+        osmTags: { brand: "Starbucks", "brand:wikidata": "Q37158" },
+      }),
+    ];
+    const result = fusePoiResults(osm, overture, DEFAULT_CONFLATION_THRESHOLDS);
+    expect(result).toHaveLength(1);
+    const fused = result[0];
+    expect(fused.id).toBe("osm:node/1");
+    expect(fused.gersId).toBe("gers-abc-123");
+    expect(fused.osmTags?.wheelchair).toBe("yes");
+    expect(fused.osmTags?.brand).toBe("Starbucks");
+    expect(fused.osmTags?.["brand:wikidata"]).toBe("Q37158");
+    expect(fused.openingHours).toBe("Mo-Su 07:00-22:00");
+    expect(fused.coordinates).toEqual([13.4, 52.52]);
+  });
+
+  it("appends Overture-only result as gap-fill", () => {
+    const osm: PoiSearchResult[] = [
+      makePoi("osm:node/1", "Café Central", 52.52, 13.4, { category: "cafes" }),
+    ];
+    const overture: PoiSearchResult[] = [
+      makePoi("overture:gers-cafe-999", "Café Central", 52.52, 13.4, {
+        gersId: "gers-cafe-999",
+        category: "cafes",
+      }),
+      makePoi("overture:gers-new-555", "Brand New Place", 52.6, 13.5, {
+        gersId: "gers-new-555",
+        category: "cafes",
+      }),
+    ];
+    const result = fusePoiResults(osm, overture, DEFAULT_CONFLATION_THRESHOLDS);
+    expect(result).toHaveLength(2);
+    const ids = result.map((r) => r.id);
+    expect(ids).toContain("osm:node/1");
+    expect(ids).toContain("overture:gers-new-555");
+  });
+
+  it("emits OSM-only result unchanged when it has no Overture counterpart", () => {
+    const osm: PoiSearchResult[] = [
+      makePoi("osm:node/42", "Drinking Water Fountain", 52.52, 13.4, {
+        category: "drinking_water",
+      }),
+    ];
+    const overture: PoiSearchResult[] = [
+      makePoi("overture:gers-unrelated", "Pizza Roma", 52.6, 13.5, {
+        gersId: "gers-unrelated",
+        category: "restaurants",
+      }),
+    ];
+    const result = fusePoiResults(osm, overture, DEFAULT_CONFLATION_THRESHOLDS);
+    const osmResult = result.find((r) => r.id === "osm:node/42");
+    expect(osmResult).toBeDefined();
+    expect(osmResult?.name).toBe("Drinking Water Fountain");
   });
 });
