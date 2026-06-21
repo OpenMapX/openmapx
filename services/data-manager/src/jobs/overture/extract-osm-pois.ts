@@ -47,6 +47,57 @@ export interface OsmPoiRecord {
   tags: Record<string, string>;
 }
 
+interface GeoJsonFeature {
+  type?: string;
+  id?: string;
+  geometry?: { type: string; coordinates: unknown };
+  properties?: Record<string, string>;
+}
+
+/**
+ * Maps one osmium-exported GeoJSON feature to an OsmPoiRecord, or null when it
+ * is unnamed, lacks a usable geometry, or has no parseable id. osmium
+ * `--add-unique-id=type_id` emits ids like n123 / w123 / r123.
+ *
+ * Exported for testing only — internal helper used by `extractOsmPois`.
+ */
+export function featureToOsmPoiRecord(feature: GeoJsonFeature): OsmPoiRecord | null {
+  const props = feature.properties ?? {};
+  const name = props.name;
+  if (!name) return null;
+
+  const geom = feature.geometry;
+  if (!geom) return null;
+
+  let lat: number;
+  let lng: number;
+  if (geom.type === "Point") {
+    const [lngVal, latVal] = geom.coordinates as number[];
+    lng = lngVal;
+    lat = latVal;
+  } else if (
+    geom.type === "LineString" ||
+    geom.type === "Polygon" ||
+    geom.type === "MultiPolygon"
+  ) {
+    const coords = representativePoint(geom);
+    if (!coords) return null;
+    [lng, lat] = coords;
+  } else {
+    return null;
+  }
+
+  const rawId = typeof feature.id === "string" ? feature.id : "";
+  let osmType: "node" | "way" | "relation" = "node";
+  if (rawId.startsWith("w")) osmType = "way";
+  else if (rawId.startsWith("r")) osmType = "relation";
+  const osmId = rawId.slice(1);
+  if (!osmId || Number.isNaN(Number(osmId))) return null;
+
+  const category = osmTagsToCategory(props);
+  return { osmType, osmId, name, lat, lng, category, tags: props };
+}
+
 /**
  * Extracts named POIs from a local OSM PBF file using `osmium tags-filter`,
  * writing a GeoJSON output that is then parsed into structured records.
@@ -60,7 +111,7 @@ export async function extractOsmPois(opts: ExtractOsmPoisOptions): Promise<OsmPo
   const outDir = join(opts.dataDir, "overture", "osm-extract");
   const slug = opts.region.replace(/\//g, "-");
   const filteredPbf = join(outDir, `${slug}-pois.osm.pbf`);
-  const outPath = join(outDir, `${slug}-pois.geojson`);
+  const outPath = join(outDir, `${slug}-pois.geojsonseq`);
 
   const filterExpressions: string[] = [];
   for (const filters of Object.values(CATEGORY_FILTERS)) {
@@ -81,61 +132,37 @@ export async function extractOsmPois(opts: ExtractOsmPoisOptions): Promise<OsmPo
     ["tags-filter", pbfPath, ...uniqueFilters.map((f) => `nwr/${f}`), "-o", filteredPbf, "-O"],
     { stdio: "inherit" },
   );
+  // GeoJSON Text Sequence (one feature per line). A single -f geojson document
+  // for a country-sized extract is gigabytes, which overflows Node's maximum
+  // string length when read in one piece — so emit a sequence and stream it.
   await execa(
     "osmium",
-    ["export", "-f", "geojson", "--add-unique-id=type_id", filteredPbf, "-o", outPath, "-O"],
+    ["export", "-f", "geojsonseq", "--add-unique-id=type_id", filteredPbf, "-o", outPath, "-O"],
     { stdio: "inherit" },
   );
 
   opts.onProgress?.(`Parsing ${outPath}...`);
 
-  const { readFile } = await import("node:fs/promises");
-  const raw = await readFile(outPath, "utf8");
-  const geojson = JSON.parse(raw) as {
-    features: Array<{
-      type: string;
-      id?: string;
-      geometry: { type: string; coordinates: unknown };
-      properties: Record<string, string>;
-    }>;
-  };
+  const { createReadStream } = await import("node:fs");
+  const { createInterface } = await import("node:readline");
+  const rl = createInterface({
+    input: createReadStream(outPath, "utf8"),
+    crlfDelay: Number.POSITIVE_INFINITY,
+  });
 
   const records: OsmPoiRecord[] = [];
-  for (const feature of geojson.features ?? []) {
-    const props = feature.properties ?? {};
-    const name = props.name;
-    if (!name) continue;
-
-    let lat: number;
-    let lng: number;
-    const geom = feature.geometry;
-
-    if (geom.type === "Point") {
-      const [lngVal, latVal] = geom.coordinates as number[];
-      lng = lngVal;
-      lat = latVal;
-    } else if (
-      geom.type === "LineString" ||
-      geom.type === "Polygon" ||
-      geom.type === "MultiPolygon"
-    ) {
-      const coords = representativePoint(geom);
-      if (!coords) continue;
-      [lng, lat] = coords;
-    } else {
+  for await (const rawLine of rl) {
+    // geojsonseq may prefix each record with the RS (0x1e) control character.
+    const line = (rawLine.charCodeAt(0) === 0x1e ? rawLine.slice(1) : rawLine).trim();
+    if (!line) continue;
+    let feature: GeoJsonFeature;
+    try {
+      feature = JSON.parse(line);
+    } catch {
       continue;
     }
-
-    // osmium export --add-unique-id=type_id emits ids like n123 / w123 / r123.
-    const rawId = typeof feature.id === "string" ? feature.id : "";
-    let osmType: "node" | "way" | "relation" = "node";
-    if (rawId.startsWith("w")) osmType = "way";
-    else if (rawId.startsWith("r")) osmType = "relation";
-    const osmId = rawId.slice(1);
-    if (!osmId || Number.isNaN(Number(osmId))) continue;
-
-    const category = osmTagsToCategory(props);
-    records.push({ osmType, osmId, name, lat, lng, category, tags: props });
+    const record = featureToOsmPoiRecord(feature);
+    if (record) records.push(record);
   }
 
   opts.onProgress?.(`Extracted ${records.length} POIs.`);

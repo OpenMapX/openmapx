@@ -1,5 +1,63 @@
 import { describe, expect, it } from "vitest";
-import { representativePoint } from "../../src/jobs/overture/extract-osm-pois.js";
+import {
+  featureToOsmPoiRecord,
+  representativePoint,
+} from "../../src/jobs/overture/extract-osm-pois.js";
+
+describe("featureToOsmPoiRecord", () => {
+  it("maps a named Point feature with a type_id to an OsmPoiRecord", () => {
+    const rec = featureToOsmPoiRecord({
+      id: "n123",
+      geometry: { type: "Point", coordinates: [13.4, 52.5] },
+      properties: { name: "Späti", shop: "convenience" },
+    });
+    expect(rec).toEqual({
+      osmType: "node",
+      osmId: "123",
+      name: "Späti",
+      lat: 52.5,
+      lng: 13.4,
+      category: expect.anything(),
+      tags: { name: "Späti", shop: "convenience" },
+    });
+  });
+
+  it("derives osmType from the way/relation id prefix and uses a representative point", () => {
+    const way = featureToOsmPoiRecord({
+      id: "w999",
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [10, 50],
+            [12, 50],
+            [12, 52],
+            [10, 52],
+            [10, 50],
+          ],
+        ],
+      },
+      properties: { name: "Park" },
+    });
+    expect(way?.osmType).toBe("way");
+    expect(way?.osmId).toBe("999");
+    expect(way?.lat).toBeCloseTo(51, 0);
+  });
+
+  it("returns null for unnamed features, missing geometry, or unparseable ids", () => {
+    expect(
+      featureToOsmPoiRecord({ id: "n1", geometry: { type: "Point", coordinates: [1, 2] } }),
+    ).toBeNull();
+    expect(featureToOsmPoiRecord({ id: "n1", properties: { name: "x" } })).toBeNull();
+    expect(
+      featureToOsmPoiRecord({
+        id: "",
+        geometry: { type: "Point", coordinates: [1, 2] },
+        properties: { name: "x" },
+      }),
+    ).toBeNull();
+  });
+});
 
 describe("representativePoint", () => {
   it("returns the mean lat/lng for a simple Polygon ring", () => {
