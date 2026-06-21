@@ -43,11 +43,65 @@ export function diceSimilarity(a: string, b: string): number {
  */
 export function normalizeName(name: string): string {
   return name
+    .replace(/ß/g, "ss")
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+/**
+ * Normalizes a street name for address-key comparison: applies normalizeName,
+ * then folds common German street-type abbreviations (str/straße → str,
+ * platz/pl → pl) so "Karl-Liebknecht-Straße" and "Karl-Liebknecht-Str." agree.
+ */
+export function normalizeStreet(street: string): string {
+  return normalizeName(street)
+    .replace(/\bstrasse\b/g, "str")
+    .replace(/\bstr\b/g, "str")
+    .replace(/\bplatz\b/g, "pl")
+    .replace(/\bpl\b/g, "pl")
+    .trim();
+}
+
+function firstHouseNumber(hn: string): string | null {
+  const m = hn.match(/\d+/);
+  return m ? m[0] : null;
+}
+
+/**
+ * Address key `postcode|street|housenumber` from separate OSM addr:* tags, or
+ * null when any component is missing. Two POIs with the same key are at the same
+ * street address — a strong, name-independent same-location signal.
+ */
+export function osmAddressKey(
+  street?: string | null,
+  housenumber?: string | null,
+  postcode?: string | null,
+): string | null {
+  if (!street || !housenumber || !postcode) return null;
+  const hn = firstHouseNumber(housenumber);
+  const st = normalizeStreet(street);
+  const pc = postcode.trim();
+  return pc && hn && st ? `${pc}|${st}|${hn}` : null;
+}
+
+/**
+ * Address key from an Overture freeform address (`"<street> <housenumber>"`) +
+ * postcode, in the same `postcode|street|housenumber` shape as osmAddressKey.
+ */
+export function overtureAddressKey(
+  freeform?: string | null,
+  postcode?: string | null,
+): string | null {
+  if (!freeform || !postcode) return null;
+  const m = freeform.match(/^(.*?)[\s,]+(\d+\S*)\s*$/);
+  if (!m) return null;
+  const st = normalizeStreet(m[1] ?? "");
+  const hn = firstHouseNumber(m[2] ?? "");
+  const pc = postcode.trim();
+  return st && hn && pc ? `${pc}|${st}|${hn}` : null;
 }
 
 /**

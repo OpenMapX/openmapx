@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { diceSimilarity, nameSimilarity, normalizeName } from "../geo-server";
+import {
+  diceSimilarity,
+  nameSimilarity,
+  normalizeName,
+  normalizeStreet,
+  osmAddressKey,
+  overtureAddressKey,
+} from "../geo-server";
 
 describe("normalizeName", () => {
   it("lowercases", () => {
@@ -16,8 +23,44 @@ describe("normalizeName", () => {
     expect(normalizeName("  KFC #189  ")).toBe("kfc 189");
   });
 
+  it("folds ß to ss (so it isn't dropped by diacritic stripping)", () => {
+    expect(normalizeName("Weißensee")).toBe("weissensee");
+    expect(normalizeName("Straße")).toBe("strasse");
+  });
+
   it("returns empty for a name with no alphanumerics", () => {
     expect(normalizeName("—")).toBe("");
+  });
+});
+
+describe("address keys", () => {
+  it("normalizeStreet folds German street-type abbreviations", () => {
+    expect(normalizeStreet("Karl-Liebknecht-Straße")).toBe(normalizeStreet("Karl-Liebknecht-Str."));
+  });
+
+  it("osmAddressKey and overtureAddressKey agree for the same address", () => {
+    const osm = osmAddressKey("Karl-Liebknecht-Straße", "131", "14482");
+    const ov = overtureAddressKey("Karl-Liebknecht-Str. 131", "14482");
+    expect(osm).not.toBeNull();
+    expect(osm).toBe(ov);
+  });
+
+  it("different house numbers produce different keys", () => {
+    expect(osmAddressKey("Hauptstraße", "5", "10115")).not.toBe(
+      osmAddressKey("Hauptstraße", "7", "10115"),
+    );
+  });
+
+  it("returns null when a component is missing", () => {
+    expect(osmAddressKey("Hauptstraße", null, "10115")).toBeNull();
+    expect(overtureAddressKey("Hauptstraße", null)).toBeNull();
+    expect(overtureAddressKey("NoNumberHere", "10115")).toBeNull();
+  });
+
+  it("parses a house-number range to its first number", () => {
+    expect(overtureAddressKey("Großbeerenstraße 249-253", "14480")).toBe(
+      osmAddressKey("Großbeerenstraße", "249", "14480"),
+    );
   });
 });
 

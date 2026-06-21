@@ -130,6 +130,47 @@ describe("conflate — close band (≤ alwaysMergeM) still needs a name signal",
   });
 });
 
+describe("conflate — address corroboration", () => {
+  const ap = (
+    id: string,
+    name: string,
+    lat: number,
+    lng: number,
+    addressKey: string | undefined,
+    category?: string,
+    wikidata?: string,
+  ): ConflationPoint => ({ id, name, lat, lng, addressKey, category, wikidata });
+
+  it("matches same-address points even when names differ (same place, different label)", () => {
+    const a = [ap("osm:1", "Schnell", 52.52, 13.4, "10115|hauptstr|5", "bakeries")];
+    const b = [
+      ap("ov:1", "Bäckerei & Café Schnell", 52.5205, 13.4, "10115|hauptstr|5", "bakeries"),
+    ];
+    expect(conflate(a, b, T).matched).toHaveLength(1);
+  });
+
+  it("rejects a strong name match when addresses contradict (precision)", () => {
+    // Identical names, ~55 m apart, but different street addresses → not the same place.
+    const a = [ap("osm:1", "Apotheke", 52.52, 13.4, "10115|hauptstr|5", "pharmacies")];
+    const b = [ap("ov:1", "Apotheke", 52.5205, 13.4, "10115|nebenstr|9", "pharmacies")];
+    expect(conflate(a, b, T).matched).toHaveLength(0);
+  });
+
+  it("does not merge different businesses sharing one address (incompatible category, weak name)", () => {
+    const a = [ap("osm:1", "Dr. Müller Zahnarzt", 52.52, 13.4, "10115|hauptstr|5", "dentists")];
+    const b = [ap("ov:1", "Tchibo", 52.5205, 13.4, "10115|hauptstr|5", "cafes")];
+    expect(conflate(a, b, T).matched).toHaveLength(0);
+  });
+
+  it("matches on equal wikidata id within the window regardless of name", () => {
+    const a = [ap("osm:1", "KFC", 52.52, 13.4, undefined, "restaurants", "Q524757")];
+    const b = [
+      ap("ov:1", "Kentucky Fried Chicken", 52.5205, 13.4, undefined, "restaurants", "Q524757"),
+    ];
+    expect(conflate(a, b, T).matched).toHaveLength(1);
+  });
+});
+
 describe("conflate — empty inputs", () => {
   it("handles empty a", () => {
     const b = [pt("ov:1", "Some Place", 52.52, 13.4)];

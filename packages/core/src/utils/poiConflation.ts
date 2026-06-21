@@ -6,6 +6,15 @@ export interface ConflationPoint {
   lat: number;
   lng: number;
   category?: string;
+  /**
+   * `postcode|street|housenumber` address key (see geo-server osmAddressKey /
+   * overtureAddressKey). When both sides have one, it's a strong same-location
+   * signal: equal keys corroborate a match (name-independent), different keys
+   * reject it. Absent → fall back to name matching.
+   */
+  addressKey?: string;
+  /** Wikidata/brand-wikidata id; equal ids within the window short-circuit to a match. */
+  wikidata?: string;
 }
 
 export interface ConflationThresholds {
@@ -66,10 +75,25 @@ function categoryCompatible(a: ConflationPoint, b: ConflationPoint): boolean {
 // never force a merge. A bare-distance auto-merge produced ~75% false links on
 // real city-scale data.
 const CLOSE_BAND_NAME_FLOOR = 0.5;
+// Same-address pairs that share a category are taken as the same place even with
+// a weak name; with an incompatible category they need this name floor to rule
+// out a different business in the same building (mall/multi-tenant address).
+const ADDRESS_MATCH_NAME_FLOOR = 0.5;
 
 function shouldMatch(a: ConflationPoint, b: ConflationPoint, t: ConflationThresholds): boolean {
   const d = haversineMeters(a.lat, a.lng, b.lat, b.lng);
   if (d > t.softWindowM) return false;
+
+  // Same specific entity / same brand outlet within the window → same place.
+  if (a.wikidata && b.wikidata && a.wikidata === b.wikidata) return true;
+
+  // Address corroboration: a strong, name-independent same-location signal.
+  if (a.addressKey && b.addressKey) {
+    if (a.addressKey !== b.addressKey) return false; // different address → reject
+    return categoryCompatible(a, b) || nameSimilarity(a.name, b.name) >= ADDRESS_MATCH_NAME_FLOOR;
+  }
+
+  // Name fallback (no usable address on at least one side).
   const sim = nameSimilarity(a.name, b.name);
   if (d <= t.alwaysMergeM) return sim >= CLOSE_BAND_NAME_FLOOR;
   return sim >= t.nameDiceFloor && categoryCompatible(a, b);

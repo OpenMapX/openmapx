@@ -520,6 +520,9 @@ export {
   mergeAttributions,
   nameSimilarity,
   normalizeName,
+  normalizeStreet,
+  osmAddressKey,
+  overtureAddressKey,
 } from "./utils/geo-server";
 export {
   geocodeStopAsPlace,

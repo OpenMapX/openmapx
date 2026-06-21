@@ -1,4 +1,8 @@
-import { haversineMeters } from "@openmapx/core/utils/geo-server";
+import {
+  haversineMeters,
+  osmAddressKey,
+  overtureAddressKey,
+} from "@openmapx/core/utils/geo-server";
 import {
   type ConflationPoint,
   type ConflationThresholds,
@@ -26,6 +30,8 @@ export interface OverturePlacePoint {
   category?: string;
   address?: string;
   confidence?: number;
+  addressKey?: string;
+  wikidata?: string;
 }
 
 export interface OsmPoiPoint {
@@ -36,6 +42,8 @@ export interface OsmPoiPoint {
   lng: number;
   h3_r8?: string | null;
   category?: string;
+  addressKey?: string;
+  wikidata?: string;
 }
 
 export interface LinkRecord {
@@ -121,6 +129,8 @@ export async function computeLinks(
       lat: p.lat,
       lng: p.lng,
       category: p.category,
+      addressKey: p.addressKey,
+      wikidata: p.wikidata,
     }));
 
     const overtureConflation: ConflationPoint[] = overtureGroup.map((p) => ({
@@ -129,6 +139,8 @@ export async function computeLinks(
       lat: p.lat,
       lng: p.lng,
       category: p.category,
+      addressKey: p.addressKey,
+      wikidata: p.wikidata,
     }));
 
     const result = conflate(osmConflation, overtureConflation, thresholds);
@@ -288,6 +300,7 @@ export async function conflateOverture(opts: {
       h3_r8: string | null;
       category: string | null;
       addresses: unknown;
+      wikidata: string | null;
       confidence: number | null;
     }[]
   >(
@@ -298,6 +311,7 @@ export async function conflateOverture(opts: {
             h3_r8,
             openmapx_category AS category,
             addresses,
+            brand->>'wikidata' AS wikidata,
             confidence
      FROM "${schema}".places
      WHERE (operating_status IS NULL OR operating_status <> 'permanently_closed')
@@ -306,10 +320,12 @@ export async function conflateOverture(opts: {
   );
 
   const places: OverturePlacePoint[] = placesRows.map((r) => {
-    let address: string | undefined;
+    let freeform: string | undefined;
+    let postcode: string | undefined;
     if (r.addresses && typeof r.addresses === "object") {
-      const addrArr = r.addresses as Array<{ freeform?: string }>;
-      address = addrArr[0]?.freeform ?? undefined;
+      const addrArr = r.addresses as Array<{ freeform?: string; postcode?: string }>;
+      freeform = addrArr[0]?.freeform ?? undefined;
+      postcode = addrArr[0]?.postcode ?? undefined;
     }
     return {
       gersId: r.gers_id,
@@ -318,8 +334,10 @@ export async function conflateOverture(opts: {
       lng: Number(r.lng),
       h3_r8: r.h3_r8,
       category: r.category ?? undefined,
-      address,
+      address: freeform,
       confidence: r.confidence ?? undefined,
+      addressKey: overtureAddressKey(freeform, postcode) ?? undefined,
+      wikidata: r.wikidata ?? undefined,
     };
   });
   onProgress?.(`Loaded ${places.length} Overture places from DB.`);
@@ -334,9 +352,17 @@ export async function conflateOverture(opts: {
       lat: number;
       lng: number;
       category: string | null;
+      street: string | null;
+      housenumber: string | null;
+      postcode: string | null;
+      wikidata: string | null;
     }[]
   >(
-    `SELECT osm_type, osm_id, name, lat, lng, category
+    `SELECT osm_type, osm_id, name, lat, lng, category,
+            tags->>'addr:street' AS street,
+            tags->>'addr:housenumber' AS housenumber,
+            tags->>'addr:postcode' AS postcode,
+            COALESCE(tags->>'wikidata', tags->>'brand:wikidata') AS wikidata
      FROM "${schema}".osm_pois`,
     [],
   );
@@ -348,6 +374,8 @@ export async function conflateOverture(opts: {
     lat: Number(r.lat),
     lng: Number(r.lng),
     category: r.category ?? undefined,
+    addressKey: osmAddressKey(r.street, r.housenumber, r.postcode) ?? undefined,
+    wikidata: r.wikidata ?? undefined,
   }));
   onProgress?.(`Loaded ${osmPois.length} OSM POIs from DB.`);
 
