@@ -11,6 +11,12 @@ import { cosineSimilarity, DEFAULT_MODEL, embed, ensureEmbeddingModel } from "./
 import { assertValidRegion, OVERTURE_RELEASE } from "./pull.js";
 import { applyOsmPoisTable } from "./schema.js";
 
+// Overture confidence floor for conflation candidates. Calibrated to 0.5 (vs
+// the earlier provisional 0.7) by the precision sweep: 0.7 excluded ~99.8% of
+// Berlin places — including most genuine ones — starving the matcher. NULL
+// confidence is always kept. A literal (not a parameter) interpolated into SQL.
+const MIN_CONFLATE_CONFIDENCE = 0.5;
+
 export interface OverturePlacePoint {
   gersId: string;
   name: string;
@@ -295,7 +301,7 @@ export async function conflateOverture(opts: {
             confidence
      FROM "${schema}".places
      WHERE operating_status <> 'permanently_closed'
-       AND (confidence IS NULL OR confidence >= 0.7)`,
+       AND (confidence IS NULL OR confidence >= ${MIN_CONFLATE_CONFIDENCE})`,
     [],
   );
 
