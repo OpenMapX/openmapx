@@ -10,7 +10,8 @@
  */
 import { conflateOverture } from "./conflate.js";
 import { runDuckDb } from "./duckdb.js";
-import { ingestOverture } from "./ingest.js";
+import { extractOsmPois } from "./extract-osm-pois.js";
+import { backfillDerivedColumns, ingestOverture } from "./ingest.js";
 import { assertValidRegion, pullOverture } from "./pull.js";
 
 export function buildInsertSql(schema: string): string {
@@ -157,7 +158,17 @@ export async function applyOvertureChangelog(opts: ApplyOvertureChangelogOptions
   try {
     onProgress?.(`Trying Overture changelog delta for ${release}…`);
     await runDuckDb(["-c", deltaScript], { stdio: "pipe" });
-    onProgress?.("Changelog delta applied. Running conflation…");
+    onProgress?.("Backfilling derived columns for changelog rows…");
+    await backfillDerivedColumns(schema);
+    onProgress?.("Changelog delta applied. Extracting OSM POIs…");
+    try {
+      await extractOsmPois({ region, dataDir, onProgress });
+    } catch {
+      onProgress?.(
+        `overture: OSM PBF for ${region} not found; run 'data download osm ${region}' to enable link precomputation`,
+      );
+    }
+    onProgress?.("Running conflation…");
     const conflateResult = await conflateOverture({ region, release, schema });
     onProgress?.(`Conflation complete: ${conflateResult.linked} links.`);
     return { added, updated, removed };
@@ -167,6 +178,13 @@ export async function applyOvertureChangelog(opts: ApplyOvertureChangelogOptions
     );
     await pullOverture({ region, dataDir, release, onProgress });
     await ingestOverture({ region, dataDir, release, onProgress });
+    try {
+      await extractOsmPois({ region, dataDir, onProgress });
+    } catch {
+      onProgress?.(
+        `overture: OSM PBF for ${region} not found; run 'data download osm ${region}' to enable link precomputation`,
+      );
+    }
     await conflateOverture({ region, release, schema });
     onProgress?.("Full re-ingest complete.");
     // Full re-ingest replaces all rows; meaningful per-operation counts are

@@ -240,6 +240,21 @@ export class DataManagerClient {
     return readOvertureStream(res, "overture/ingest", opts.onProgress);
   }
 
+  async extractOverture(
+    region: string,
+    opts: { onProgress?: (msg: string) => void } = {},
+  ): Promise<{ ok: boolean; message?: string }> {
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/overture/extract`,
+      this.authed({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ region }),
+      }),
+    );
+    return readOvertureStream(res, "overture/extract", opts.onProgress);
+  }
+
   async conflateOverture(
     region: string,
     opts: { onProgress?: (msg: string) => void } = {},

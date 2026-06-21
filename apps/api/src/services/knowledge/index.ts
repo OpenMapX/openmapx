@@ -26,13 +26,13 @@ function getKnowledgeSources(disallowedIntegrations: Set<string>): KnowledgeProv
  * Never throws — failures are silently dropped.
  */
 export async function getPlaceKnowledge(place: Place, lang?: string): Promise<KnowledgeResult> {
-  if (!place.osmTags) return {};
+  if (!place.osmTags && !place.coordinates) return {};
 
   const sources = getKnowledgeSources(await getGatedIntegrationIds());
 
   const settled = await Promise.allSettled(
     sources.map((source) =>
-      source.lookup(place.osmTags as Record<string, string>, lang, {
+      source.lookup((place.osmTags ?? {}) as Record<string, string>, lang, {
         coordinates: place.coordinates,
         name: place.name,
         ids: place.ids,

@@ -202,14 +202,29 @@ export function conflate(
     const aMembers = members.filter((idx) => isA(idx));
     const bMembers = members.filter((idx) => !isA(idx));
     if (aMembers.length === 0 || bMembers.length === 0) continue;
-    // Bipartite: pick the best a-b pair (closest by index = first found)
-    // For the spike, pick first a × first b and leave remaining unmatched.
-    const pa = a[aMembers[0]];
-    const pb = b[bMembers[0] - na];
-    matched.push({ a: pa, b: pb });
-    matchedAIdx.add(aMembers[0]);
-    matchedBIdx.add(bMembers[0] - na);
-    // Remaining in this cluster are left unmatched (bipartite constraint)
+
+    // Greedy nearest-neighbour pairing: pair each a-member with its nearest
+    // still-unused b-member so dense clusters (food courts, multi-entrance
+    // venues) don't collapse to a single pair and leave duplicate Overture pins.
+    const usedB = new Set<number>();
+    for (const ai of aMembers) {
+      let bestBLocal = -1;
+      let bestDist = Infinity;
+      for (const bi of bMembers) {
+        const biRel = bi - na;
+        if (usedB.has(biRel)) continue;
+        const d = haversineMeters(a[ai].lat, a[ai].lng, b[biRel].lat, b[biRel].lng);
+        if (d < bestDist) {
+          bestDist = d;
+          bestBLocal = biRel;
+        }
+      }
+      if (bestBLocal < 0) break;
+      matched.push({ a: a[ai], b: b[bestBLocal] });
+      matchedAIdx.add(ai);
+      matchedBIdx.add(bestBLocal);
+      usedB.add(bestBLocal);
+    }
   }
 
   const unmatchedA = a.filter((_, i) => !matchedAIdx.has(i));

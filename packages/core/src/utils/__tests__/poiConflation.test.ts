@@ -136,6 +136,30 @@ describe("conflate — bipartite matching (each point matches at most once)", ()
     expect(result.matched.length + result.unmatchedA.length).toBe(2);
     expect(result.unmatchedB).toHaveLength(0);
   });
+
+  it("greedy multi-member: pairs all mutual members, no duplicate Overture pins", () => {
+    // Three OSM + three Overture all within alwaysMergeM of each other — every
+    // cross-side pair mutually matches, so the cluster covers all six points.
+    // Greedy pairing must produce min(3,3)=3 pairs, leaving unmatchedB empty.
+    const a = [
+      pt("osm:1", "Food Court A", 52.52, 13.4, "restaurants"),
+      pt("osm:2", "Food Court B", 52.52002, 13.4, "restaurants"),
+      pt("osm:3", "Food Court C", 52.52004, 13.4, "restaurants"),
+    ];
+    const b = [
+      pt("ov:1", "Food Court A", 52.52, 13.4, "restaurants"),
+      pt("ov:2", "Food Court B", 52.52002, 13.4, "restaurants"),
+      pt("ov:3", "Food Court C", 52.52004, 13.4, "restaurants"),
+    ];
+    const result = conflate(a, b, T);
+    expect(result.matched).toHaveLength(3);
+    expect(result.unmatchedA).toHaveLength(0);
+    expect(result.unmatchedB).toHaveLength(0);
+    const matchedAIds = result.matched.map((m) => m.a.id).sort();
+    const matchedBIds = result.matched.map((m) => m.b.id).sort();
+    expect(matchedAIds).toEqual(["osm:1", "osm:2", "osm:3"]);
+    expect(matchedBIds).toEqual(["ov:1", "ov:2", "ov:3"]);
+  });
 });
 
 describe("DEFAULT_CONFLATION_THRESHOLDS", () => {

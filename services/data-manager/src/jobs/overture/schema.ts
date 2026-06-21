@@ -53,7 +53,8 @@ export function assertValidOvertureSchema(name: string): void {
  *   - geom is GEOMETRY(POINT,4326) (not geography) for lower-cost bbox/&& ops.
  */
 export function buildSchemaDDL(schema: string): string {
-  return `
+  return (
+    `
     CREATE EXTENSION IF NOT EXISTS postgis;
     DROP SCHEMA IF EXISTS "${schema}" CASCADE;
     CREATE SCHEMA "${schema}";
@@ -97,7 +98,10 @@ export function buildSchemaDDL(schema: string): string {
     );
 
     CREATE INDEX idx_link_gers ON "${schema}".poi_conflation_link (gers_id);
-  `;
+  ` +
+    buildOsmPoisTableDDL(schema) +
+    buildEmbeddingCacheDDL(schema)
+  );
 }
 
 /**

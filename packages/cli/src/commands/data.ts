@@ -565,7 +565,7 @@ export function registerDataCommands(program: Command): void {
     .description("Pull Overture Maps places parquet for a region from S3")
     .action(async (region: string | undefined) => {
       const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
-      const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/berlin";
+      const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/germany/berlin";
       try {
         log.dim(`Pulling Overture places for "${resolvedRegion}"…`);
         const result = await client.pullOverture(resolvedRegion, {
@@ -588,7 +588,7 @@ export function registerDataCommands(program: Command): void {
     .description("Ingest Overture places parquet into PostGIS for a region")
     .action(async (region: string | undefined) => {
       const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
-      const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/berlin";
+      const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/germany/berlin";
       try {
         log.dim(`Ingesting Overture places for "${resolvedRegion}"…`);
         const result = await client.ingestOverture(resolvedRegion, {
@@ -611,7 +611,7 @@ export function registerDataCommands(program: Command): void {
     .description("Run OSM↔Overture conflation for a region and write link records")
     .action(async (region: string | undefined) => {
       const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
-      const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/berlin";
+      const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/germany/berlin";
       try {
         log.dim(`Running Overture conflation for "${resolvedRegion}"…`);
         const result = await client.conflateOverture(resolvedRegion, {
@@ -625,6 +625,29 @@ export function registerDataCommands(program: Command): void {
         log.ok(`Overture conflation complete: ${linked} link${linked === 1 ? "" : "s"} written`);
       } catch (err) {
         log.err(`overture-conflate failed: ${(err as Error).message}`);
+        dataManagerHint();
+        process.exit(1);
+      }
+    });
+
+  data
+    .command("overture-extract [region]")
+    .description("Extract OSM POIs from the local PBF and write them to overture_places.osm_pois")
+    .action(async (region: string | undefined) => {
+      const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
+      const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/germany/berlin";
+      try {
+        log.dim(`Extracting OSM POIs for "${resolvedRegion}"…`);
+        const result = await client.extractOverture(resolvedRegion, {
+          onProgress: (msg) => log.dim(msg),
+        });
+        if (!result.ok) {
+          log.err(`overture-extract failed: ${result.message ?? "unknown error"}`);
+          process.exit(1);
+        }
+        log.ok(`OSM POI extraction complete for "${resolvedRegion}"`);
+      } catch (err) {
+        log.err(`overture-extract failed: ${(err as Error).message}`);
         dataManagerHint();
         process.exit(1);
       }

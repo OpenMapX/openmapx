@@ -1,3 +1,4 @@
+import { OverpassTimeoutError } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
 import { createPoiSearchOrchestrator } from "../orchestrator";
 import type { PoiSearchProvider, PoiSearchResult } from "../types";
@@ -150,6 +151,27 @@ describe("(C) Category routing", () => {
     await orch.search("viewpoints", BBOX);
     expect(overpassCallCount).toBe(1);
     expect(overtureCallCount).toBe(0);
+  });
+});
+
+describe("(C2) OverpassTimeoutError propagates from fused search", () => {
+  it("search() rejects with OverpassTimeoutError when overpass throws it (not swallowed)", async () => {
+    const timeoutOverpass: PoiSearchProvider = {
+      id: "overpass",
+      categories: ["cafes"],
+      async search() {
+        throw new OverpassTimeoutError("area_too_large");
+      },
+    };
+    const silentOverture: PoiSearchProvider = {
+      id: "overture",
+      categories: ["cafes"],
+      async search() {
+        return [];
+      },
+    };
+    const orch = createPoiSearchOrchestrator(makeCtx([timeoutOverpass, silentOverture]));
+    await expect(orch.search("cafes", BBOX)).rejects.toBeInstanceOf(OverpassTimeoutError);
   });
 });
 

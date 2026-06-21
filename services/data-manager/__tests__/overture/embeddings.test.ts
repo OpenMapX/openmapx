@@ -48,6 +48,11 @@ describe("cosineSimilarity", () => {
   it("returns 0 when one vector is the zero vector", () => {
     expect(cosineSimilarity([0, 0], [1, 0])).toBe(0);
   });
+
+  it("returns 0 for mismatched-length vectors (stale cache guard)", () => {
+    expect(cosineSimilarity([1, 0, 0], [1, 0])).toBe(0);
+    expect(cosineSimilarity([1, 0], [1, 0, 0])).toBe(0);
+  });
 });
 
 describe("embed", () => {

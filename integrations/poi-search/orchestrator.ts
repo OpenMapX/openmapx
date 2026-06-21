@@ -168,28 +168,43 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
       );
     }
 
-    const settled = await Promise.all(
-      matching.map((p) => {
-        return runWithShrink(
+    const overpassIdx = matching.findIndex((p) => p.id === "overpass");
+    const augmentProviders = matching.filter((p) => p.id !== "overpass");
+
+    const baseResult =
+      overpassIdx >= 0
+        ? await runWithShrink(
+            (currentBbox) =>
+              matching[overpassIdx].search(lookupCategory, currentBbox, {
+                lang: options?.lang,
+                osmTags,
+              }),
+            bbox,
+            options?.lang,
+          ).catch((err: unknown) => {
+            if (err instanceof OverpassTimeoutError) throw err;
+            return { results: [] as PoiSearchResult[], partial: false };
+          })
+        : { results: [] as PoiSearchResult[], partial: false };
+
+    const augmentSettled = await Promise.all(
+      augmentProviders.map((p) =>
+        runWithShrink(
           (currentBbox) => p.search(lookupCategory, currentBbox, { lang: options?.lang, osmTags }),
           bbox,
           options?.lang,
-        ).catch(() => ({ results: [] as PoiSearchResult[], partial: false }));
-      }),
+        ).catch(() => ({ results: [] as PoiSearchResult[], partial: false })),
+      ),
     );
 
-    const partial = settled.some((s) => s.partial);
-
-    const overpassIdx = matching.findIndex((p) => p.id === "overpass");
-    const overtureIdx = matching.findIndex((p) => p.id === "overture");
-
-    const osmResults = overpassIdx >= 0 ? settled[overpassIdx].results : [];
-    const overtureResults = overtureIdx >= 0 ? settled[overtureIdx].results : [];
+    const osmResults = baseResult.results;
+    const augmentResults = augmentSettled.flatMap((s) => s.results);
+    const partial = baseResult.partial || augmentSettled.some((s) => s.partial);
 
     const linkMap = await buildConflationLinkMap(ctx, osmResults);
 
     return {
-      results: fusePoiResults(osmResults, overtureResults, DEFAULT_CONFLATION_THRESHOLDS, linkMap),
+      results: fusePoiResults(osmResults, augmentResults, DEFAULT_CONFLATION_THRESHOLDS, linkMap),
       partial,
     };
   }

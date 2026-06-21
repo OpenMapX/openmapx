@@ -150,13 +150,15 @@ export async function extractOsmPois(opts: ExtractOsmPoisOptions): Promise<OsmPo
 }
 
 /**
+ * Exported for testing only — internal helper used by `extractOsmPois`.
+ *
  * Computes a representative [lng, lat] point for non-Point geometries.
  * For LineString: mean of all coordinates.
  * For Polygon: mean of the outer ring coordinates.
  * For MultiPolygon: mean of the first polygon's outer ring.
  * Returns null if no usable coordinates are present.
  */
-function representativePoint(geom: {
+export function representativePoint(geom: {
   type: string;
   coordinates: unknown;
 }): [number, number] | null {
@@ -173,13 +175,17 @@ function representativePoint(geom: {
     return null;
   }
   if (ring.length === 0) return null;
-  let sumLng = 0;
+  let sumSin = 0;
+  let sumCos = 0;
   let sumLat = 0;
   for (const [lngVal, latVal] of ring) {
-    sumLng += lngVal;
+    const rad = (lngVal * Math.PI) / 180;
+    sumSin += Math.sin(rad);
+    sumCos += Math.cos(rad);
     sumLat += latVal;
   }
-  return [sumLng / ring.length, sumLat / ring.length];
+  const meanLng = (Math.atan2(sumSin / ring.length, sumCos / ring.length) * 180) / Math.PI;
+  return [meanLng, sumLat / ring.length];
 }
 
 const OSM_POIS_INSERT_BATCH = 500;

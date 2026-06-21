@@ -3,11 +3,13 @@ import {
   type ConflationPoint,
   type ConflationThresholds,
   conflate,
+  DEFAULT_CONFLATION_THRESHOLDS,
 } from "@openmapx/core/utils/poiConflation";
 import { gridDisk, latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";
 import { cosineSimilarity, DEFAULT_MODEL, embed, ensureEmbeddingModel } from "./embeddings.js";
 import { assertValidRegion, OVERTURE_RELEASE } from "./pull.js";
+import { applyOsmPoisTable } from "./schema.js";
 
 export interface OverturePlacePoint {
   gersId: string;
@@ -125,9 +127,14 @@ export async function computeLinks(
 
     const result = conflate(osmConflation, overtureConflation, thresholds);
 
+    const osmGroupByKey = new Map<string, OsmPoiPoint>();
+    for (const p of osmGroup) osmGroupByKey.set(`${p.osm_type}:${p.osm_id}`, p);
+    const overtureGroupByKey = new Map<string, OverturePlacePoint>();
+    for (const p of overtureGroup) overtureGroupByKey.set(p.gersId, p);
+
     for (const { a: osmPt, b: overturePt } of result.matched) {
-      const osmPoi = osmGroup.find((p) => `${p.osm_type}:${p.osm_id}` === osmPt.id);
-      const overturePl = overtureGroup.find((p) => p.gersId === overturePt.id);
+      const osmPoi = osmGroupByKey.get(osmPt.id);
+      const overturePl = overtureGroupByKey.get(overturePt.id);
       if (!osmPoi || !overturePl) continue;
 
       const confidence = overturePl.confidence ?? 0.9;
@@ -142,11 +149,11 @@ export async function computeLinks(
     }
 
     for (const pt of result.unmatchedA) {
-      const poi = osmGroup.find((p) => `${p.osm_type}:${p.osm_id}` === pt.id);
+      const poi = osmGroupByKey.get(pt.id);
       if (poi) residualOsm.set(pt.id, poi);
     }
     for (const pt of result.unmatchedB) {
-      const pl = overtureGroup.find((p) => p.gersId === pt.id);
+      const pl = overtureGroupByKey.get(pt.id);
       if (pl) residualOverture.set(pt.id, pl);
     }
   }
@@ -157,17 +164,31 @@ export async function computeLinks(
     const osmArr = Array.from(residualOsm.values());
     const overtureArr = Array.from(residualOverture.values());
 
+    const overtureByH3 = new Map<string, number[]>();
+    for (let j = 0; j < overtureArr.length; j++) {
+      const cell = latLngToCell(overtureArr[j].lat, overtureArr[j].lng, 8);
+      const arr = overtureByH3.get(cell);
+      if (arr) arr.push(j);
+      else overtureByH3.set(cell, [j]);
+    }
+
     const candidatePairs: Array<{ osmIdx: number; overtureIdx: number; dist: number }> = [];
     for (let i = 0; i < osmArr.length; i++) {
-      for (let j = 0; j < overtureArr.length; j++) {
-        const dist = haversineMeters(
-          osmArr[i].lat,
-          osmArr[i].lng,
-          overtureArr[j].lat,
-          overtureArr[j].lng,
-        );
-        if (dist <= thresholds.softWindowM) {
-          candidatePairs.push({ osmIdx: i, overtureIdx: j, dist });
+      const osmCell = latLngToCell(osmArr[i].lat, osmArr[i].lng, 8);
+      const neighborCells = gridDisk(osmCell, 1);
+      for (const nc of neighborCells) {
+        const neighbors = overtureByH3.get(nc);
+        if (!neighbors) continue;
+        for (const j of neighbors) {
+          const dist = haversineMeters(
+            osmArr[i].lat,
+            osmArr[i].lng,
+            overtureArr[j].lat,
+            overtureArr[j].lng,
+          );
+          if (dist <= thresholds.softWindowM) {
+            candidatePairs.push({ osmIdx: i, overtureIdx: j, dist });
+          }
         }
       }
     }
@@ -205,7 +226,7 @@ export async function computeLinks(
             osm_type: osmPoi.osm_type,
             osm_id: osmPoi.osm_id,
             gers_id: overturePl.gersId,
-            confidence: sim * (overturePl.confidence ?? 1.0),
+            confidence: sim * (overturePl.confidence ?? 0.9),
             method: "embedding",
             release,
           });
@@ -297,6 +318,8 @@ export async function conflateOverture(opts: {
   });
   onProgress?.(`Loaded ${places.length} Overture places from DB.`);
 
+  await applyOsmPoisTable(schema);
+
   const osmRows = await sql.unsafe<
     {
       osm_type: string;
@@ -330,11 +353,7 @@ export async function conflateOverture(opts: {
 
   onProgress?.(`Computing OSM↔Overture links…`);
   const links = await computeLinks(places, osmPois, {
-    thresholds: {
-      alwaysMergeM: 25,
-      softWindowM: 120,
-      nameDiceFloor: 0.8,
-    },
+    thresholds: DEFAULT_CONFLATION_THRESHOLDS,
     embedFn,
     release,
   });

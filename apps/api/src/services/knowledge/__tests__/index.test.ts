@@ -61,12 +61,34 @@ function makePlace(osmTags?: Record<string, string>) {
 }
 
 describe("getPlaceKnowledge", () => {
-  it("returns {} immediately when place has no osmTags", async () => {
+  it("returns {} immediately when place has neither osmTags nor coordinates", async () => {
     const { getPlaceKnowledge } = await import("../index.js");
-    const result = await getPlaceKnowledge(makePlace(undefined));
+    const placeWithoutBoth = {
+      id: "overture:gers-abc",
+      primaryScheme: "overture",
+      ids: { overture: "gers-abc" },
+      name: "Test",
+      address: "",
+      coordinates: undefined,
+      osmTags: undefined,
+    } as unknown as Parameters<typeof getPlaceKnowledge>[0];
+    const result = await getPlaceKnowledge(placeWithoutBoth);
     expect(result).toEqual({});
     expect(wikidataLookup).not.toHaveBeenCalled();
     expect(wikipediaLookup).not.toHaveBeenCalled();
+  });
+
+  it("calls sources with empty osmTags when coordinates are present but osmTags absent (Overture brandless)", async () => {
+    wikidataLookup.mockResolvedValueOnce(null);
+    wikipediaLookup.mockResolvedValueOnce(null);
+    const { getPlaceKnowledge } = await import("../index.js");
+    const result = await getPlaceKnowledge(makePlace(undefined));
+    expect(result).toEqual({});
+    expect(wikidataLookup).toHaveBeenCalledWith(
+      {},
+      undefined,
+      expect.objectContaining({ coordinates: [13.4, 52.5] }),
+    );
   });
 
   it("scalar fields: first non-null description wins", async () => {

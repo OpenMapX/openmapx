@@ -158,6 +158,7 @@ export async function ensureEmbeddingModel(
  * Returns 1.0 for identical direction, 0 for orthogonal, -1 for opposite.
  */
 export function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) return 0;
   let dot = 0;
   let normA = 0;
   let normB = 0;

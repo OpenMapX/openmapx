@@ -67,7 +67,7 @@ async function queryOverturePlaces(
     FROM overture_places.places
     WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
       AND operating_status <> 'permanently_closed'
-      AND confidence >= $${leaves.length + 5}
+      AND (confidence IS NULL OR confidence >= $${leaves.length + 5})
       AND basic_category IN (${leafParams})
     LIMIT 200
   `;
