@@ -100,10 +100,8 @@ describe("conflate — soft window: name variant → match", () => {
 
 describe("conflate — category mismatch within soft window → no match", () => {
   it("does not match category-incompatible points even if name matches and distance is small", () => {
-    // ~20 m apart (within alwaysMergeM=25), BUT names are very similar
-    // but categories are different → must still not match due to category gate
-    // Actually: within alwaysMergeM it always merges (no category check at ≤25m).
-    // Use the soft window (>25m, ≤120m) where category matters.
+    // In the soft window (>25 m, ≤120 m) the category gate applies: same name
+    // but incompatible categories must not match.
     const a = [pt("osm:1", "Berliner Apotheke", 52.52, 13.4, "pharmacies")];
     const b = [pt("ov:1", "Berliner Apotheke", 52.5204, 13.4, "restaurants")]; // ~50 m, cat mismatch
     const result = conflate(a, b, T);
@@ -113,11 +111,20 @@ describe("conflate — category mismatch within soft window → no match", () =>
   });
 });
 
-describe("conflate — always-merge zone (≤ alwaysMergeM)", () => {
-  it("matches regardless of name difference when within alwaysMergeM", () => {
-    // ~15 m apart — well within 25 m always-merge zone
-    const a = [pt("osm:1", "Old Name", 52.52, 13.4)];
-    const b = [pt("ov:1", "Completely Different", 52.52013, 13.4)];
+describe("conflate — close band (≤ alwaysMergeM) still needs a name signal", () => {
+  it("does NOT merge clearly-different names even within alwaysMergeM", () => {
+    // ~15 m apart — well within 25 m. Distance alone must not force a merge:
+    // adjacent different businesses sit this close in dense areas.
+    const a = [pt("osm:1", "Smash Your Burger", 52.52, 13.4)];
+    const b = [pt("ov:1", "Tron KFZ-Technik", 52.52013, 13.4)];
+    const result = conflate(a, b, T);
+    expect(result.matched).toHaveLength(0);
+  });
+
+  it("merges close points with a relaxed name match (brand variant)", () => {
+    // ~15 m apart with a shared distinctive token → relaxed close-band floor.
+    const a = [pt("osm:1", "Aral", 52.52, 13.4)];
+    const b = [pt("ov:1", "ARAL Station", 52.52013, 13.4)];
     const result = conflate(a, b, T);
     expect(result.matched).toHaveLength(1);
   });

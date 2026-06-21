@@ -59,11 +59,20 @@ function categoryCompatible(a: ConflationPoint, b: ConflationPoint): boolean {
   return a.category === b.category;
 }
 
+// Relaxed name floor inside the always-merge band. Proximity is strong
+// corroborating evidence, so the floor is lower than the soft-window floor — but
+// it is NOT zero: in dense areas two clearly-different businesses sit within a
+// few metres (adjacent shops, mall units, stacked POIs), and distance alone must
+// never force a merge. A bare-distance auto-merge produced ~75% false links on
+// real city-scale data.
+const CLOSE_BAND_NAME_FLOOR = 0.5;
+
 function shouldMatch(a: ConflationPoint, b: ConflationPoint, t: ConflationThresholds): boolean {
   const d = haversineMeters(a.lat, a.lng, b.lat, b.lng);
   if (d > t.softWindowM) return false;
-  if (d <= t.alwaysMergeM) return true;
-  return nameSimilarity(a.name, b.name) >= t.nameDiceFloor && categoryCompatible(a, b);
+  const sim = nameSimilarity(a.name, b.name);
+  if (d <= t.alwaysMergeM) return sim >= CLOSE_BAND_NAME_FLOOR;
+  return sim >= t.nameDiceFloor && categoryCompatible(a, b);
 }
 
 class UnionFind {
