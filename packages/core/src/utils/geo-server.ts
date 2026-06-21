@@ -156,10 +156,20 @@ export function overtureAddressKey(
   postcode?: string | null,
 ): string | null {
   if (!freeform || !postcode) return null;
-  const m = freeform.match(/^(.*?)[\s,]+(\d+\S*)\s*$/);
-  if (!m) return null;
-  const st = normalizeStreet(m[1] ?? "");
-  const hn = firstHouseNumber(m[2] ?? "");
+  // Split "<street> <housenumber>" on the LAST whitespace/comma via a linear
+  // scan rather than a regex — the freeform comes from library data, and a
+  // backtracking pattern here is a polynomial-ReDoS vector.
+  const trimmed = freeform.trim();
+  const sepIdx = Math.max(
+    trimmed.lastIndexOf(" "),
+    trimmed.lastIndexOf(","),
+    trimmed.lastIndexOf("\t"),
+  );
+  if (sepIdx <= 0) return null;
+  const hnPart = trimmed.slice(sepIdx + 1);
+  if (!/^\d/.test(hnPart)) return null; // house number must start with a digit
+  const st = normalizeStreet(trimmed.slice(0, sepIdx));
+  const hn = firstHouseNumber(hnPart);
   const pc = postcode.trim();
   return st && hn && pc ? `${pc}|${st}|${hn}` : null;
 }

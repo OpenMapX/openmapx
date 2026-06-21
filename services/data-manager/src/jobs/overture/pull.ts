@@ -70,6 +70,14 @@ export function computeBboxFromPoly(polyText: string): RegionBbox {
 export async function fetchRegionBbox(region: string): Promise<RegionBbox> {
   assertValidRegion(region);
   const polyUrl = resolveOsmPolyUrl(region);
+  // Defense-in-depth: the region is already constrained to lowercase path
+  // segments by assertValidRegion, but pin the fetched host to Geofabrik so a
+  // region value can only ever select a path under the fixed boundary host
+  // (no scheme/host injection — SSRF guard).
+  const parsedPolyUrl = new URL(polyUrl);
+  if (parsedPolyUrl.protocol !== "https:" || parsedPolyUrl.hostname !== "download.geofabrik.de") {
+    throw new Error(`Refusing to fetch non-Geofabrik boundary URL for region "${region}"`);
+  }
   let stdout: string;
   try {
     ({ stdout } = await execa("curl", ["-fsSL", polyUrl], { timeout: 30_000 }));
