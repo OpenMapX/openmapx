@@ -210,6 +210,69 @@ export class DataManagerClient {
     };
   }
 
+  async pullOverture(
+    region: string,
+    opts: { onProgress?: (msg: string) => void } = {},
+  ): Promise<{ ok: boolean; message?: string }> {
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/overture/pull`,
+      this.authed({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ region }),
+      }),
+    );
+    return readOvertureStream(res, "overture/pull", opts.onProgress);
+  }
+
+  async ingestOverture(
+    region: string,
+    opts: { onProgress?: (msg: string) => void } = {},
+  ): Promise<{ ok: boolean; message?: string }> {
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/overture/ingest`,
+      this.authed({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ region }),
+      }),
+    );
+    return readOvertureStream(res, "overture/ingest", opts.onProgress);
+  }
+
+  async extractOverture(
+    region: string,
+    opts: { onProgress?: (msg: string) => void } = {},
+  ): Promise<{ ok: boolean; message?: string }> {
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/overture/extract`,
+      this.authed({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ region }),
+      }),
+    );
+    return readOvertureStream(res, "overture/extract", opts.onProgress);
+  }
+
+  async conflateOverture(
+    region: string,
+    opts: { onProgress?: (msg: string) => void } = {},
+  ): Promise<{ ok: boolean; linked?: number }> {
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/overture/conflate`,
+      this.authed({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ region }),
+      }),
+    );
+    return readOvertureStream(res, "overture/conflate", opts.onProgress) as Promise<{
+      ok: boolean;
+      linked?: number;
+    }>;
+  }
+
   // POI ingest pipeline — wraps the /poi-ingest/* routes. Methods are typed
   // loosely (Record<string, unknown>) because the server-side response shape is
   // expanding (drift guard, etc.) and CLI callers don't need strict types.
@@ -276,6 +339,60 @@ export class DataManagerClient {
     if (!res.ok) throw new Error(`poi-ingest sync failed: HTTP ${res.status}`);
     return body;
   }
+}
+
+/**
+ * Parse an NDJSON progress stream from Overture endpoints. Each line is:
+ *
+ *   `{event: "progress", message}`
+ *   `{event: "done",     ok, ...result}`
+ *   `{event: "error",    message}`
+ */
+async function readOvertureStream(
+  res: { ok: boolean; body: ReadableStream<Uint8Array> | null; status?: number },
+  label: string,
+  onProgress?: (msg: string) => void,
+): Promise<{ ok: boolean; [key: string]: unknown }> {
+  if (!res.ok) throw new Error(`${label} failed: HTTP ${res.status ?? "?"}`);
+  if (!res.body) throw new Error(`${label}: server returned no body stream`);
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let final: { ok: boolean; [key: string]: unknown } | null = null;
+
+  const handleLine = (line: string) => {
+    if (!line) return;
+    let msg: Record<string, unknown>;
+    try {
+      msg = JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+    if (msg.event === "progress") {
+      onProgress?.(String(msg.message ?? ""));
+    } else if (msg.event === "done") {
+      final = { ok: Boolean(msg.ok), ...msg };
+    } else if (msg.event === "error") {
+      throw new Error(String(msg.message ?? `${label} failed`));
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    while (true) {
+      const newlineIdx = buffer.indexOf("\n");
+      if (newlineIdx < 0) break;
+      handleLine(buffer.slice(0, newlineIdx).trim());
+      buffer = buffer.slice(newlineIdx + 1);
+    }
+  }
+  handleLine(buffer.trim());
+
+  if (!final) throw new Error(`${label}: stream ended without a 'done' event`);
+  return final;
 }
 
 /**

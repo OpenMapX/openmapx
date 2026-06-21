@@ -14,6 +14,20 @@ export function resolveOsmUrl(region: string): string {
 }
 
 /**
+ * Geofabrik publishes a `.poly` boundary file next to every region's PBF (e.g.
+ * `europe/germany/berlin.poly`). It's a few KB and is the authoritative source
+ * for a region's extent — used to derive the Overture pull bbox without
+ * hardcoding per-region coordinates. Region identifiers are Geofabrik paths.
+ */
+export function resolveOsmPolyUrl(region: string): string {
+  if (!region) throw new Error("region is required");
+  if (region === "planet") {
+    throw new Error("planet has no Geofabrik .poly boundary; specify a Geofabrik region");
+  }
+  return `https://download.geofabrik.de/${region}.poly`;
+}
+
+/**
  * Local OSM PBF filename for a build region, matching the CLI's `osmPbfName`:
  * `planet` → `planet.osm.pbf`, otherwise the region with `/` → `-`
  * (e.g. `europe/germany` → `europe-germany.osm.pbf`).

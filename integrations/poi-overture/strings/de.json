@@ -1,0 +1,14 @@
+{
+  "integrationName": "Overture Places",
+  "description": "Kommerzielle POI-Suche basierend auf Overture Maps Places-Daten (Restaurants, Hotels, Geschäfte und mehr)",
+  "dataSources": {
+    "overture": {
+      "purpose": "Stellt kommerzielle POI-Daten für Kategorien wie Restaurants, Hotels und Geschäfte bereit",
+      "dataSent": "Begrenzungsrahmen-Koordinaten des Suchbereichs"
+    },
+    "foursquare": {
+      "purpose": "Liefert zusätzliche Ortsdaten für kommerzielle POI-Kategorien",
+      "dataSent": "Begrenzungsrahmen-Koordinaten des Suchbereichs"
+    }
+  }
+}

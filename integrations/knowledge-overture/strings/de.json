@@ -1,0 +1,14 @@
+{
+  "name": "Overture Places Wissensanreicherung",
+  "description": "Ergänzt Ortskarten mit Marke, mehrsprachigen Namen und strukturierten Öffnungszeiten aus Overture Maps Places",
+  "dataSources": {
+    "overture": {
+      "purpose": "Einen angeklickten OSM-Ort mit seinem Overture-Zwilling abgleichen, um Markenidentität, mehrsprachige Namen, strukturierte Öffnungszeiten und Wikidata-Querverweise zu ergänzen",
+      "dataSent": "Ortsname, Koordinaten, OSM-Kategorie-Tag und OSM-Knoten-/Linien-/Relationskennung des angezeigten Ortes"
+    },
+    "foursquare": {
+      "purpose": "Zusätzliche Marken- und Öffnungszeitdaten für kommerzielle Orte über den Overture-Places-Datensatz bereitstellen (Foursquare ist eine der beitragenden Overture-Quellen)",
+      "dataSent": "Es werden keine Daten direkt an Foursquare übermittelt; der Zugriff erfolgt über den lokal importierten Overture-Places-Snapshot"
+    }
+  }
+}

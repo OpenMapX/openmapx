@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveOsmMd5Url, resolveOsmUrl } from "../src/jobs/download-osm.js";
+import { resolveOsmMd5Url, resolveOsmPolyUrl, resolveOsmUrl } from "../src/jobs/download-osm.js";
 
 describe("resolveOsmUrl", () => {
   it("returns Planet URL for 'planet'", () => {
@@ -22,6 +22,22 @@ describe("resolveOsmUrl", () => {
 
   it("rejects empty region", () => {
     expect(() => resolveOsmUrl("")).toThrow();
+  });
+});
+
+describe("resolveOsmPolyUrl", () => {
+  it("returns the Geofabrik .poly boundary URL for a region path", () => {
+    expect(resolveOsmPolyUrl("europe/germany/berlin")).toBe(
+      "https://download.geofabrik.de/europe/germany/berlin.poly",
+    );
+  });
+
+  it("rejects empty region", () => {
+    expect(() => resolveOsmPolyUrl("")).toThrow();
+  });
+
+  it("rejects planet (no Geofabrik .poly)", () => {
+    expect(() => resolveOsmPolyUrl("planet")).toThrow(/planet/);
   });
 });
 

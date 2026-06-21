@@ -61,12 +61,34 @@ function makePlace(osmTags?: Record<string, string>) {
 }
 
 describe("getPlaceKnowledge", () => {
-  it("returns {} immediately when place has no osmTags", async () => {
+  it("returns {} immediately when place has neither osmTags nor coordinates", async () => {
     const { getPlaceKnowledge } = await import("../index.js");
-    const result = await getPlaceKnowledge(makePlace(undefined));
+    const placeWithoutBoth = {
+      id: "overture:gers-abc",
+      primaryScheme: "overture",
+      ids: { overture: "gers-abc" },
+      name: "Test",
+      address: "",
+      coordinates: undefined,
+      osmTags: undefined,
+    } as unknown as Parameters<typeof getPlaceKnowledge>[0];
+    const result = await getPlaceKnowledge(placeWithoutBoth);
     expect(result).toEqual({});
     expect(wikidataLookup).not.toHaveBeenCalled();
     expect(wikipediaLookup).not.toHaveBeenCalled();
+  });
+
+  it("calls sources with empty osmTags when coordinates are present but osmTags absent (Overture brandless)", async () => {
+    wikidataLookup.mockResolvedValueOnce(null);
+    wikipediaLookup.mockResolvedValueOnce(null);
+    const { getPlaceKnowledge } = await import("../index.js");
+    const result = await getPlaceKnowledge(makePlace(undefined));
+    expect(result).toEqual({});
+    expect(wikidataLookup).toHaveBeenCalledWith(
+      {},
+      undefined,
+      expect.objectContaining({ coordinates: [13.4, 52.5] }),
+    );
   });
 
   it("scalar fields: first non-null description wins", async () => {
@@ -175,5 +197,40 @@ describe("getPlaceKnowledge", () => {
 
     expect(wikidataLookup).not.toHaveBeenCalled();
     expect(result.description).toBe("Wikipedia desc");
+  });
+
+  it("optionality: enrichment output is unchanged when knowledge-overture is not registered", async () => {
+    wikidataLookup.mockReset();
+    wikipediaLookup.mockReset();
+    wikidataLookup.mockResolvedValueOnce({ description: "Wikidata desc" });
+    wikipediaLookup.mockResolvedValueOnce({ description: "Wikipedia desc" });
+
+    const { getPlaceKnowledge } = await import("../index.js");
+    const result = await getPlaceKnowledge(makePlace({ wikidata: "Q42" }));
+
+    expect(result.description).toBe("Wikidata desc");
+    expect(result.brand).toBeUndefined();
+    expect(result.names).toBeUndefined();
+    expect(result.structuredOpeningHours).toBeUndefined();
+  });
+
+  it("merges brand, names, structuredOpeningHours from first non-null source", async () => {
+    wikidataLookup.mockReset();
+    wikipediaLookup.mockReset();
+    wikidataLookup.mockResolvedValueOnce({
+      brand: { name: "Starbucks", wikidata: "Q37158" },
+      names: { de: "Starbucks" },
+      structuredOpeningHours: "Mo-Fr 07:00-21:00",
+    });
+    wikipediaLookup.mockResolvedValueOnce({
+      brand: { name: "Other Brand" },
+    });
+
+    const { getPlaceKnowledge } = await import("../index.js");
+    const result = await getPlaceKnowledge(makePlace({ wikidata: "Q42" }));
+
+    expect(result.brand).toEqual({ name: "Starbucks", wikidata: "Q37158" });
+    expect(result.names).toEqual({ de: "Starbucks" });
+    expect(result.structuredOpeningHours).toBe("Mo-Fr 07:00-21:00");
   });
 });

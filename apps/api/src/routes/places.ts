@@ -23,7 +23,7 @@ import {
   type PlaceResolverContext,
 } from "@openmapx/place-ids";
 import type { FastifyPluginAsync } from "fastify";
-import { getAllIntegrations, isIntegrationScheme } from "../integration-host.js";
+import { getAllIntegrations, isEnabledIntegrationScheme } from "../integration-host.js";
 import { getPlaceKnowledge } from "../services/knowledge/index";
 import { buildReviewLinks } from "../services/review-links";
 import { TTL, withCache } from "../utils/cache.js";
@@ -235,7 +235,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
             // never got to register its resolver. The manifest registry
             // tells us which is which: any scheme matching an installed
             // integration id is strict; everything else is freeform.
-            if (isIntegrationScheme(parsedId.scheme)) {
+            if (isEnabledIntegrationScheme(parsedId.scheme)) {
               fastify.log.warn(
                 { scheme: parsedId.scheme, rawId },
                 "places: integration scheme has no resolver; refusing coord-fallback",

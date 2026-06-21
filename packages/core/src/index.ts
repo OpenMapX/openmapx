@@ -518,6 +518,14 @@ export {
   haversineKm,
   haversineMeters,
   mergeAttributions,
+  nameSimilarity,
+  normalizeName,
+  normalizePhone,
+  normalizeStreet,
+  osmAddressKey,
+  overtureAddressKey,
+  parsePhones,
+  websiteDomain,
 } from "./utils/geo-server";
 export {
   geocodeStopAsPlace,
@@ -575,6 +583,12 @@ export {
   validateOverpassFilter,
 } from "./utils/overpassFilter";
 export {
+  OVERTURE_COMMERCIAL_CATEGORIES,
+  openMapXCategoryToOverture,
+  openmapxCategoryToOvertureLeaves,
+  overtureCategoryToOpenMapX,
+} from "./utils/overtureCategoryTyped";
+export {
   parseCoordinateInput,
   parseDMSCoordinateInput,
 } from "./utils/parseCoordinates";
@@ -588,6 +602,14 @@ export {
   shortenPlusCode,
 } from "./utils/plusCode";
 export { AD_HOC_ICON_PATH, poiCategoryIconPath, resolvePoiIconPath } from "./utils/poi-icon";
+export {
+  type ConflationPoint,
+  type ConflationResult,
+  type ConflationThresholds,
+  conflate,
+  DEFAULT_CONFLATION_THRESHOLDS,
+} from "./utils/poiConflation";
+export { fusePoiResults } from "./utils/poiFusion";
 export { pointInIsochroneGeometry } from "./utils/pointInPolygon";
 export { decodePolyline, encodePolyline } from "./utils/polyline";
 export { sectionSlug } from "./utils/sectionSlug";

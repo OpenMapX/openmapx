@@ -48,9 +48,11 @@ vi.mock("@integrations/reviews/orchestrator", () => ({
 }));
 
 const mockIsIntegrationScheme = vi.fn().mockReturnValue(false);
+const mockIsEnabledIntegrationScheme = vi.fn().mockReturnValue(false);
 vi.mock("../../integration-host.js", () => ({
   getAllIntegrations: vi.fn().mockReturnValue([]),
   isIntegrationScheme: (scheme: string) => mockIsIntegrationScheme(scheme),
+  isEnabledIntegrationScheme: (scheme: string) => mockIsEnabledIntegrationScheme(scheme),
 }));
 
 // Mock DB RIS service
@@ -348,14 +350,14 @@ describe("GET /places/:id", () => {
     expect(mockLookupByCoords).toHaveBeenCalled();
   });
 
-  it("returns 404 for an integration scheme whose resolver didn't register", async () => {
+  it("returns 404 for an enabled integration scheme whose resolver didn't register", async () => {
     // Mirrors the failure mode that produced the original leak: a data-
-    // source integration (here scooter-sharing) is installed — its manifest
-    // is on disk so `isIntegrationScheme` returns true — but its `setup()`
-    // threw at boot, so no resolver was registered. Without this gate the
-    // route would fall through to lookupByCoords and substitute the
-    // nearest OSM POI's tags onto the scooter.
-    mockIsIntegrationScheme.mockImplementation((scheme) => scheme === "scooter-sharing");
+    // source integration (here scooter-sharing) is installed and enabled —
+    // `isEnabledIntegrationScheme` returns true — but its `setup()` threw at
+    // boot, so no resolver was registered. Without this gate the route would
+    // fall through to lookupByCoords and substitute the nearest OSM POI's
+    // tags onto the scooter.
+    mockIsEnabledIntegrationScheme.mockImplementation((scheme) => scheme === "scooter-sharing");
 
     const res = await app.inject({
       method: "GET",
@@ -370,7 +372,46 @@ describe("GET /places/:id", () => {
     expect(mockLookupByNameAndCoords).not.toHaveBeenCalled();
     expect(mockLookupByCoords).not.toHaveBeenCalled();
 
-    mockIsIntegrationScheme.mockReturnValue(false);
+    mockIsEnabledIntegrationScheme.mockReturnValue(false);
+  });
+
+  it("coord-falls-back for a config-disabled integration scheme with lat/lng/name", async () => {
+    // A config-disabled integration's scheme should NOT 404 — the request
+    // should reach the coord-fallback so a shared link degrades gracefully.
+    // `isEnabledIntegrationScheme` returns false (config-disabled); no resolver is registered.
+    mockIsEnabledIntegrationScheme.mockReturnValue(false);
+    mockLookupByNameAndCoords.mockResolvedValue(MOCK_PLACE);
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+    mockBuildReviewLinks.mockReturnValue([]);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/places/${encodeURIComponent("overture:some-gers-id")}?${qs({
+        lat: "52.52",
+        lng: "13.37",
+        name: "Some Place",
+      })}`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(mockLookupByNameAndCoords).toHaveBeenCalled();
+  });
+
+  it("returns 404 for an enabled integration scheme with no resolver (no coords supplied)", async () => {
+    // When no lat/lng are provided AND the scheme belongs to an enabled
+    // integration whose resolver never registered, the route must 404.
+    mockIsEnabledIntegrationScheme.mockImplementation((scheme) => scheme === "scooter-sharing");
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/places/${encodeURIComponent("scooter-sharing:dott-456")}`,
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(mockLookupByNameAndCoords).not.toHaveBeenCalled();
+    expect(mockLookupByCoords).not.toHaveBeenCalled();
+
+    mockIsEnabledIntegrationScheme.mockReturnValue(false);
   });
 
   it("allows coord-fallback for a non-integration freeform scheme (stylePoi)", async () => {

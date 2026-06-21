@@ -1,0 +1,14 @@
+{
+  "integrationName": "Overture Places",
+  "description": "Commercial POI search powered by Overture Maps Places data (restaurants, hotels, shops, and more)",
+  "dataSources": {
+    "overture": {
+      "purpose": "Provides commercial POI data for categories like restaurants, hotels, and shops",
+      "dataSent": "Bounding box coordinates for the search area"
+    },
+    "foursquare": {
+      "purpose": "Provides additional venue data for commercial POI categories",
+      "dataSent": "Bounding box coordinates for the search area"
+    }
+  }
+}

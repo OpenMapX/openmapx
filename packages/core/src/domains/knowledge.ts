@@ -1,4 +1,5 @@
 import type { LngLat } from "../types/geometry";
+import type { Ids } from "../types/identified";
 import type { AirportInfo, PlaceFact, PlacePhoto } from "../types/place";
 
 export interface KnowledgeResult {
@@ -12,6 +13,12 @@ export interface KnowledgeResult {
   externalIds?: Record<string, string>;
   /** OurAirports-derived structured airport detail (runways, frequencies, navaids). */
   airport?: AirportInfo;
+  /** Brand identity (name + optional Wikidata Q-id). */
+  brand?: { name: string; wikidata?: string };
+  /** Multilingual name variants keyed by BCP-47 language tag. */
+  names?: Record<string, string>;
+  /** Raw OSM-compatible opening_hours string from Overture structured hours. */
+  structuredOpeningHours?: string;
 }
 
 /**
@@ -22,6 +29,8 @@ export interface KnowledgeResult {
 export interface KnowledgeContext {
   coordinates?: LngLat;
   name?: string;
+  /** All known external identifiers for the place (used for link-first GERS lookup). */
+  ids?: Ids;
 }
 
 export interface KnowledgeProvider {

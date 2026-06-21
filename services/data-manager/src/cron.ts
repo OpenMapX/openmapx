@@ -1,8 +1,13 @@
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { feedState } from "@openmapx/db-schema";
 import { Cron } from "croner";
+import { and, eq } from "drizzle-orm";
 import { execa } from "execa";
 import type { FastifyBaseLogger } from "fastify";
+import { db } from "./db/index.js";
+import { applyOvertureChangelog } from "./jobs/overture/changelog.js";
+import { OVERTURE_RELEASE } from "./jobs/overture/pull.js";
 import {
   buildJobContext,
   type RunPipelineResult,
@@ -76,12 +81,22 @@ export interface CronSetupOptions {
   runStalenessCheck?: () => Promise<void>;
   /** Test seam: pre-built GitHub sink. Overrides env-var lookup. */
   githubIssueSink?: GithubIssueSink | null;
+  /** Region used by the monthly Overture sync. A Geofabrik path; defaults to OPENMAPX_REGION or "europe/germany/berlin". */
+  overtureRegion?: string;
+  /** Override the Overture monthly cron schedule (e.g. for tests). */
+  overtureCronExpression?: string;
+  /**
+   * Test seam: directly enable/disable the Overture cron without touching
+   * OVERTURE_ENABLED. When omitted, the env var governs.
+   */
+  overtureEnabled?: boolean;
 }
 
 export interface CronHandles {
   syncCron: Cron | null;
   feedProxyReloadCron: Cron | null;
   stalenessCheckCron: Cron | null;
+  overtureCron: Cron | null;
   /** Stop all cron jobs; awaitable shutdown lives on the caller. */
   stop: () => void;
   /** Test seam: directly invoke the sync handler as if the cron fired. */
@@ -90,6 +105,8 @@ export interface CronHandles {
   runFeedProxyReloadNow: () => Promise<void>;
   /** Test seam: directly invoke the staleness-alert handler. */
   runStalenessCheckNow: () => Promise<void>;
+  /** Test seam: directly invoke the Overture monthly sync handler. */
+  runOvertureNow: () => Promise<void>;
 }
 
 function pickCronExpression(
@@ -119,6 +136,34 @@ function asCronLogger(logger: FastifyBaseLogger | CronLogger): CronLogger {
     }
   }
   return logger as CronLogger;
+}
+
+async function writeFeedState(region: string, hash: string, log: CronLogger): Promise<void> {
+  try {
+    const feedRegion = `overture-places-${region}`;
+    const feedName = "overture-places";
+    const existing = await db
+      .select({ id: feedState.id })
+      .from(feedState)
+      .where(and(eq(feedState.region, feedRegion), eq(feedState.name, feedName)))
+      .limit(1);
+    if (existing[0]) {
+      await db
+        .update(feedState)
+        .set({ hash, lastFetchedAt: new Date(), status: "active" })
+        .where(eq(feedState.id, existing[0].id));
+    } else {
+      await db.insert(feedState).values({
+        region: feedRegion,
+        name: feedName,
+        hash,
+        lastFetchedAt: new Date(),
+        status: "active",
+      });
+    }
+  } catch (err) {
+    log.warn("overture-cron: feed_state write failed", { err: (err as Error).message });
+  }
 }
 
 /**
@@ -310,6 +355,45 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       })
     : null;
 
+  const overtureEnabled =
+    options.overtureEnabled ?? (process.env.OVERTURE_ENABLED || "").trim().toLowerCase() === "true";
+
+  const overtureExpr = overtureEnabled
+    ? pickCronExpression(options.overtureCronExpression, "OVERTURE_SYNC_CRON", "0 5 1 * *")
+    : null;
+
+  const runOvertureSync = async (): Promise<void> => {
+    const region =
+      options.overtureRegion ?? (process.env.OPENMAPX_REGION || "europe/germany/berlin");
+    const release = OVERTURE_RELEASE;
+    try {
+      await applyOvertureChangelog({
+        region,
+        release,
+        dataDir: options.dataDir,
+        onProgress: (msg) => log.info(msg),
+      });
+      await writeFeedState(region, release, log);
+      await runStalenessCheck();
+    } catch (err) {
+      log.error("overture-cron: sync failed", { err: (err as Error).message });
+    }
+  };
+
+  let overtureCron: Cron | null = null;
+  if (!overtureEnabled) {
+    log.info("overture-cron: disabled (OVERTURE_ENABLED not set or false)");
+  } else if (!overtureExpr) {
+    log.info("overture-cron: disabled by cron expression sentinel");
+  } else {
+    overtureCron = new Cron(overtureExpr, { name: "overture-monthly-sync", protect: true }, () => {
+      void runOvertureSync().catch((err) => {
+        log.error("overture-cron: unexpected rejection", { err: (err as Error).message });
+      });
+    });
+    log.info("overture-cron: scheduled", { expression: overtureExpr });
+  }
+
   if (!syncCron) log.info("transitous-cron: sync disabled by env");
   else log.info("transitous-cron: sync scheduled", { expression: syncExpr });
   if (!feedProxyReloadCron) log.info("transitous-cron: feed-proxy reload disabled by env");
@@ -328,16 +412,19 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     syncCron?.stop();
     feedProxyReloadCron?.stop();
     stalenessCheckCron?.stop();
+    overtureCron?.stop();
   }
 
   return {
     syncCron,
     feedProxyReloadCron,
     stalenessCheckCron,
+    overtureCron,
     stop,
     runSyncNow: runSync,
     runFeedProxyReloadNow: runFeedProxyReload,
     runStalenessCheckNow: runStalenessCheck,
+    runOvertureNow: runOvertureSync,
     // `activeJobId` is exposed indirectly through singleFlight.getInflight()
     // for the shutdown helper — no need to surface it here.
   };

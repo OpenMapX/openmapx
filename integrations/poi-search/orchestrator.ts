@@ -1,5 +1,10 @@
 import type { BoundingBox, OverpassFilter, TagPredicate } from "@openmapx/core";
-import { OverpassTimeoutError, removeFilterPredicate } from "@openmapx/core";
+import {
+  DEFAULT_CONFLATION_THRESHOLDS,
+  fusePoiResults,
+  OverpassTimeoutError,
+  removeFilterPredicate,
+} from "@openmapx/core";
 import { buildOpeningHoursInfo } from "@openmapx/core/server";
 import { httpError, type IntegrationContext } from "@openmapx/integration-framework";
 import { getPresetById } from "@openmapx/presets";
@@ -9,6 +14,64 @@ const MAX_SHRINK_RETRIES = 3;
 const SHRINK_FACTOR = 0.6;
 const PRESET_PREFIX = "preset:";
 const PRESET_SENTINEL = "__preset__";
+// Id of the authoritative base POI provider (OSM via Overpass); all other
+// matching providers are treated as augments to its result set.
+const BASE_PROVIDER_ID = "overpass";
+
+interface ConflationLinkRow {
+  osm_type: string;
+  osm_id: number | bigint;
+  gers_id: string;
+}
+
+/**
+ * Builds a `Map<"${osm_type}/${osm_id}", gers_id>` by batch-querying
+ * `overture_places.poi_conflation_link` for the given OSM result set.
+ *
+ * Issues a single query for the entire result set (no N+1). Returns `undefined`
+ * when `ctx.db` is absent (no PostGIS) or when there are no OSM results with
+ * a parseable osm_type/osm_id — callers treat `undefined` as "no link, run
+ * union-find only", which is deep-equal to the plan-01 behavior.
+ */
+async function buildConflationLinkMap(
+  ctx: IntegrationContext,
+  osmResults: PoiSearchResult[],
+): Promise<Map<string, string> | undefined> {
+  if (!ctx.db) return undefined;
+
+  type OsmParsed = { type: string; id: bigint };
+  const parsed: OsmParsed[] = [];
+  for (const r of osmResults) {
+    if (!r.id.startsWith("osm:")) continue;
+    const rest = r.id.slice(4);
+    const slash = rest.indexOf("/");
+    if (slash < 0) continue;
+    const type = rest.slice(0, slash);
+    const rawId = rest.slice(slash + 1);
+    const numId = Number(rawId);
+    if (!Number.isFinite(numId) || numId <= 0) continue;
+    parsed.push({ type, id: BigInt(numId) });
+  }
+
+  if (parsed.length === 0) return undefined;
+
+  try {
+    const rows = await ctx.db.execute<ConflationLinkRow[]>(
+      `SELECT osm_type, osm_id, gers_id
+         FROM overture_places.poi_conflation_link
+        WHERE (osm_type, osm_id) IN (${parsed.map((_, i) => `($${i * 2 + 1},$${i * 2 + 2})`).join(",")})`,
+      parsed.flatMap((p) => [p.type, p.id]),
+    );
+    if (!Array.isArray(rows) || rows.length === 0) return undefined;
+    const map = new Map<string, string>();
+    for (const row of rows) {
+      map.set(`${row.osm_type}/${row.osm_id}`, row.gers_id);
+    }
+    return map.size > 0 ? map : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 // Progressive relaxation: when a structured filter returns fewer than this many
 // results, drop attribute (`require`) predicates one at a time so an
@@ -28,6 +91,33 @@ function shrinkBbox(bbox: BoundingBox, factor: number): BoundingBox {
     west: centerLon - halfLon,
     east: centerLon + halfLon,
   };
+}
+
+async function runWithShrink(
+  fn: (bbox: BoundingBox) => Promise<PoiSearchResult[]>,
+  bbox: BoundingBox,
+): Promise<{ results: PoiSearchResult[]; partial: boolean }> {
+  let currentBbox = bbox;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const results = await fn(currentBbox);
+      for (const r of results) {
+        if (r.openingHours && !r.openingHoursInfo) {
+          r.openingHoursInfo = buildOpeningHoursInfo(r.openingHours, {
+            lat: r.coordinates[1],
+            lon: r.coordinates[0],
+          });
+        }
+      }
+      return { results, partial: attempt > 0 };
+    } catch (err) {
+      if (err instanceof OverpassTimeoutError && attempt < MAX_SHRINK_RETRIES) {
+        currentBbox = shrinkBbox(currentBbox, SHRINK_FACTOR);
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
@@ -65,35 +155,60 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
       lookupCategory = PRESET_SENTINEL;
     }
 
-    const provider = providers.find((p) => p.categories.includes(lookupCategory));
-    if (!provider) {
+    const matching = providers.filter((p) => p.categories.includes(lookupCategory));
+    if (matching.length === 0) {
       throw httpError(400, `Unknown category: ${category}`);
     }
 
-    let currentBbox = bbox;
-    for (let attempt = 0; ; attempt++) {
-      try {
-        const results = await provider.search(lookupCategory, currentBbox, {
-          lang: options?.lang,
-          osmTags,
-        });
-        for (const r of results) {
-          if (r.openingHours && !r.openingHoursInfo) {
-            r.openingHoursInfo = buildOpeningHoursInfo(r.openingHours, {
-              lat: r.coordinates[1],
-              lon: r.coordinates[0],
-            });
-          }
-        }
-        return { results, partial: attempt > 0 };
-      } catch (err) {
-        if (err instanceof OverpassTimeoutError && attempt < MAX_SHRINK_RETRIES) {
-          currentBbox = shrinkBbox(currentBbox, SHRINK_FACTOR);
-          continue;
-        }
-        throw err;
-      }
+    if (matching.length === 1) {
+      const provider = matching[0];
+      return runWithShrink(
+        (currentBbox) =>
+          provider.search(lookupCategory, currentBbox, { lang: options?.lang, osmTags }),
+        bbox,
+      );
     }
+
+    // The OSM/Overpass provider is the authoritative base set; every other
+    // matching provider augments it (Overture gap-fill today). The split keys
+    // off the base provider's id.
+    const overpassIdx = matching.findIndex((p) => p.id === BASE_PROVIDER_ID);
+    const augmentProviders = matching.filter((p) => p.id !== BASE_PROVIDER_ID);
+
+    const baseResult =
+      overpassIdx >= 0
+        ? await runWithShrink(
+            (currentBbox) =>
+              matching[overpassIdx].search(lookupCategory, currentBbox, {
+                lang: options?.lang,
+                osmTags,
+              }),
+            bbox,
+          ).catch((err: unknown) => {
+            if (err instanceof OverpassTimeoutError) throw err;
+            return { results: [] as PoiSearchResult[], partial: false };
+          })
+        : { results: [] as PoiSearchResult[], partial: false };
+
+    const augmentSettled = await Promise.all(
+      augmentProviders.map((p) =>
+        runWithShrink(
+          (currentBbox) => p.search(lookupCategory, currentBbox, { lang: options?.lang, osmTags }),
+          bbox,
+        ).catch(() => ({ results: [] as PoiSearchResult[], partial: false })),
+      ),
+    );
+
+    const osmResults = baseResult.results;
+    const augmentResults = augmentSettled.flatMap((s) => s.results);
+    const partial = baseResult.partial || augmentSettled.some((s) => s.partial);
+
+    const linkMap = await buildConflationLinkMap(ctx, osmResults);
+
+    return {
+      results: fusePoiResults(osmResults, augmentResults, DEFAULT_CONFLATION_THRESHOLDS, linkMap),
+      partial,
+    };
   }
 
   async function searchText(
@@ -187,7 +302,7 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
 
     // Run one filter with the existing shrink-on-timeout retry, enriching each
     // result's opening-hours info before returning.
-    async function runWithShrink(
+    async function runWithShrinkFilter(
       f: OverpassFilter,
     ): Promise<{ results: PoiSearchResult[]; partial: boolean }> {
       let currentBbox = bbox;
@@ -213,7 +328,7 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
       }
     }
 
-    const full = await runWithShrink(filter);
+    const full = await runWithShrinkFilter(filter);
     // Enough exact matches, or no attribute predicates to drop — return as-is.
     if (full.results.length >= RELAX_MIN_RESULTS || (filter.require?.length ?? 0) === 0) {
       return { ...full, relaxed: [] };
@@ -232,7 +347,7 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
       if (!reqs || reqs.length === 0) break;
       relaxed.push(reqs[reqs.length - 1]);
       working = removeFilterPredicate(working, "require", reqs.length - 1);
-      const next = await runWithShrink(working);
+      const next = await runWithShrinkFilter(working);
       anyPartial = anyPartial || next.partial;
       bestResults = next.results;
       if (bestResults.length >= RELAX_MIN_RESULTS) break;

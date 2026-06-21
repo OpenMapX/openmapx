@@ -660,6 +660,15 @@ importers:
         specifier: workspace:^
         version: link:../../packages/place-ids
 
+  integrations/knowledge-overture:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+
   integrations/knowledge-sunrise-sunset:
     dependencies:
       '@openmapx/core':
@@ -1067,6 +1076,21 @@ importers:
       '@openmapx/integration-poi-search':
         specifier: workspace:^
         version: link:../poi-search
+
+  integrations/poi-overture:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+      '@openmapx/integration-poi-search':
+        specifier: workspace:^
+        version: link:../poi-search
+      '@openmapx/place-ids':
+        specifier: workspace:^
+        version: link:../../packages/place-ids
 
   integrations/poi-search:
     dependencies:
@@ -1918,6 +1942,9 @@ importers:
 
   services/data-manager:
     dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@openmapx/db-schema':
         specifier: workspace:^
         version: link:../../packages/db-schema
@@ -1951,6 +1978,9 @@ importers:
       fastify:
         specifier: ^5.8.5
         version: 5.8.5
+      h3-js:
+        specifier: ^4.4.0
+        version: 4.4.0
       ioredis:
         specifier: ^5.11.1
         version: 5.11.1
@@ -5202,6 +5232,10 @@ packages:
   gtfs-realtime-bindings-transit@1.10.0:
     resolution: {integrity: sha512-nzhLh8FscWtNK5/UKX3pwfS1zYAgDD4+NAGBflTW+NecHUHiZA0kioKKDQqsY2soRUhQ67GlQSFxZvBJri/AMw==}
     engines: {node: '>=8.0.0'}
+
+  h3-js@4.4.0:
+    resolution: {integrity: sha512-DvJh07MhGgY2KcC4OeZc8SSyA+ZXpdvoh6uCzGpoKvWtZxJB+g6VXXC1+eWYkaMIsLz7J/ErhOalHCpcs1KYog==}
+    engines: {node: '>=4', npm: '>=3', yarn: '>=1.3.0'}
 
   hafas-client@6.3.6:
     resolution: {integrity: sha512-cuoEUGkO+oEngWGlOoVcpwIfLaXbcwIV231/+H3O2plNwof1pamFOYkx3TFtA+4yW2Egt8QKFhWf/i8iQIH6/g==}
@@ -10220,6 +10254,8 @@ snapshots:
   gtfs-realtime-bindings-transit@1.10.0:
     dependencies:
       protobufjs: 8.6.3
+
+  h3-js@4.4.0: {}
 
   hafas-client@6.3.6:
     dependencies:
