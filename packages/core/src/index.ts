@@ -524,6 +524,7 @@ export {
   normalizeStreet,
   osmAddressKey,
   overtureAddressKey,
+  parsePhones,
   websiteDomain,
 } from "./utils/geo-server";
 export {

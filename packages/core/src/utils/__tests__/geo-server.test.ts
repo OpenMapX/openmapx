@@ -7,6 +7,7 @@ import {
   normalizeStreet,
   osmAddressKey,
   overtureAddressKey,
+  parsePhones,
   websiteDomain,
 } from "../geo-server";
 
@@ -85,10 +86,33 @@ describe("normalizePhone", () => {
     expect(normalizePhone("030 12345678")).not.toBe(normalizePhone("030 87654321"));
   });
 
+  it("does NOT strip a leading 49 from a bare local number (no +/00 prefix)", () => {
+    // "49" is folded as a country code only when the input was explicitly
+    // international; a plain number that merely starts with 49 keeps its digits.
+    expect(normalizePhone("4912345")).toBe("4912345");
+    expect(normalizePhone("+49 89 1234")).toBe("891234");
+  });
+
   it("returns null for missing or too-short input", () => {
     expect(normalizePhone(null)).toBeNull();
     expect(normalizePhone("")).toBeNull();
     expect(normalizePhone("12 34")).toBeNull();
+  });
+});
+
+describe("parsePhones", () => {
+  it("splits a multi-value OSM tag and canonicalizes each number", () => {
+    expect(parsePhones("+49 30 111111; +49 30 222222")).toEqual(["30111111", "30222222"]);
+  });
+
+  it("canonicalizes and dedupes an Overture phones[] array", () => {
+    expect(parsePhones(["+49 30 111111", "030 111111"])).toEqual(["30111111"]);
+  });
+
+  it("returns an empty array for null/empty/too-short values", () => {
+    expect(parsePhones(null)).toEqual([]);
+    expect(parsePhones("")).toEqual([]);
+    expect(parsePhones(["123", "45"])).toEqual([]);
   });
 });
 
@@ -97,6 +121,12 @@ describe("websiteDomain", () => {
     expect(websiteDomain("https://www.Edeka.de/markt/berlin?ref=x")).toBe("edeka.de");
     expect(websiteDomain("http://edeka.de")).toBe("edeka.de");
     expect(websiteDomain("edeka.de/foo")).toBe("edeka.de");
+  });
+
+  it("drops userinfo and port so they don't block equal-domain corroboration", () => {
+    expect(websiteDomain("http://info@edeka.de")).toBe("edeka.de");
+    expect(websiteDomain("https://edeka.de:443/x")).toBe("edeka.de");
+    expect(websiteDomain("//edeka.de")).toBe("edeka.de");
   });
 
   it("returns null when no host can be parsed", () => {

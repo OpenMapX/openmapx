@@ -1,4 +1,5 @@
 import type { PoiSearchResult } from "@openmapx/integration-framework";
+import { parsePhones, websiteDomain } from "./geo-server";
 import { type ConflationPoint, type ConflationThresholds, conflate } from "./poiConflation";
 
 /**
@@ -92,12 +93,17 @@ export function fusePoiResults(
     return [...linkFused, ...remainingOsmOnly];
   }
 
+  // Carry phone/website so the query-time residual conflation uses the same
+  // corroboration signals as the precomputed batch link table; otherwise the two
+  // paths would disagree on a pair depending on whether the link table covered it.
   const osmPts: ConflationPoint[] = remainingOsm.map((r) => ({
     id: r.id,
     name: r.name ?? "",
     lat: r.coordinates[1],
     lng: r.coordinates[0],
     category: r.category,
+    phones: parsePhones(r.phone),
+    website: websiteDomain(r.website) ?? undefined,
   }));
   const overturePts: ConflationPoint[] = remainingOverture.map((r) => ({
     id: r.id,
@@ -105,6 +111,8 @@ export function fusePoiResults(
     lat: r.coordinates[1],
     lng: r.coordinates[0],
     category: r.category,
+    phones: parsePhones(r.phone),
+    website: websiteDomain(r.website) ?? undefined,
   }));
 
   const conflateResult = conflate(osmPts, overturePts, thresholds);

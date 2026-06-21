@@ -188,48 +188,76 @@ describe("conflate — address corroboration", () => {
 describe("conflate — phone/website corroboration", () => {
   const withContact = (
     p: ConflationPoint,
-    contact: { phone?: string; website?: string },
+    contact: { phones?: string[]; website?: string; addressKey?: string; wikidata?: string },
   ): ConflationPoint => ({ ...p, ...contact });
 
-  it("matches on equal phone even when name and address differ (rebrand / moved listing)", () => {
+  it("matches on equal phone even when name AND address contradict (rebrand / moved listing)", () => {
+    // Different names AND different address keys, but the same phone → the same
+    // business that moved/rebranded. Proves the phone confirm overrides an
+    // address contradiction (the address gate is checked after phone).
     const a = [
       withContact(pt("osm:1", "Pizzeria Bella", 52.52, 13.4, "restaurants"), {
-        phone: "3012345678",
+        phones: ["3012345678"],
+        addressKey: "10115|altestr|5",
       }),
     ];
     const b = [
       withContact(pt("ov:1", "Trattoria Roma", 52.5205, 13.4, "restaurants"), {
-        phone: "3012345678",
+        phones: ["3012345678"],
+        addressKey: "10115|neuestr|9",
       }),
     ];
     expect(conflate(a, b, T).matched).toHaveLength(1);
   });
 
-  it("REJECTS a same-address same-name pair when phones contradict (distinct businesses)", () => {
-    // Address + name both agree, yet different phones → different businesses.
+  it("merges when the phone sets intersect on a shared number (multi-value tags)", () => {
+    // OSM lists two numbers, Overture lists two others sharing one → same business.
+    const a = [
+      withContact(pt("osm:1", "Café Nord", 52.52, 13.4, "cafes"), {
+        phones: ["3011111111", "3022222222"],
+      }),
+    ];
+    const b = [
+      withContact(pt("ov:1", "Cafe Nord", 52.5205, 13.4, "cafes"), {
+        phones: ["3022222222", "3033333333"],
+      }),
+    ];
+    expect(conflate(a, b, T).matched).toHaveLength(1);
+  });
+
+  it("REJECTS a same-address same-name pair when phone sets are disjoint (distinct businesses)", () => {
+    // Address + name both agree, yet fully different phones → different businesses.
     // This is exactly the residual error that name+address alone cannot see.
     const a = [
       withContact(
         { id: "osm:1", name: "Apotheke", lat: 52.52, lng: 13.4, addressKey: "10115|hauptstr|5" },
-        { phone: "3011111111" },
+        { phones: ["3011111111"] },
       ),
     ];
     const b = [
       withContact(
-        {
-          id: "ov:1",
-          name: "Apotheke",
-          lat: 52.5205,
-          lng: 13.4,
-          addressKey: "10115|hauptstr|5",
-        },
-        { phone: "3022222222" },
+        { id: "ov:1", name: "Apotheke", lat: 52.5205, lng: 13.4, addressKey: "10115|hauptstr|5" },
+        { phones: ["3022222222"] },
       ),
     ];
     expect(conflate(a, b, T).matched).toHaveLength(0);
   });
 
-  it("matches on equal website host when no phone is present", () => {
+  it("does NOT merge co-located units sharing a switchboard across categories", () => {
+    // A hotel reception number listed on its restaurant: same phone, incompatible
+    // category → the phone confirm is category-gated, so they stay separate.
+    const a = [
+      withContact(pt("osm:1", "Grand Hotel", 52.52, 13.4, "hotels"), { phones: ["3055555"] }),
+    ];
+    const b = [
+      withContact(pt("ov:1", "Hotel Restaurant", 52.5205, 13.4, "restaurants"), {
+        phones: ["3055555"],
+      }),
+    ];
+    expect(conflate(a, b, T).matched).toHaveLength(0);
+  });
+
+  it("matches on an equal (non-generic) website host when no phone is present", () => {
     const a = [
       withContact(pt("osm:1", "Edeka", 52.52, 13.4, "supermarkets"), { website: "edeka.de" }),
     ];
@@ -241,20 +269,34 @@ describe("conflate — phone/website corroboration", () => {
     expect(conflate(a, b, T).matched).toHaveLength(1);
   });
 
-  it("phone contradiction overrides a matching website (different branch of one chain)", () => {
+  it("does NOT merge two different businesses sharing a generic platform host", () => {
+    // Both link facebook.com — a non-identifying shared host, so it must not
+    // confirm a match the way a real own-domain would.
     const a = [
-      withContact(pt("osm:1", "Edeka", 52.52, 13.4, "supermarkets"), {
-        website: "edeka.de",
-        phone: "3011111111",
+      withContact(pt("osm:1", "Shop A", 52.52, 13.4, "shops"), { website: "facebook.com" }),
+    ];
+    const b = [
+      withContact(pt("ov:1", "Boutique B", 52.5205, 13.4, "shops"), { website: "facebook.com" }),
+    ];
+    expect(conflate(a, b, T).matched).toHaveLength(0);
+  });
+
+  it("honours a wikidata identity link over a phone discrepancy", () => {
+    // Same wikidata id but different phones (stale/secondary number) → the
+    // explicit identity link wins; the pair is still merged.
+    const a = [
+      withContact(pt("osm:1", "Museum", 52.52, 13.4, "museums"), {
+        wikidata: "Q123",
+        phones: ["3011111111"],
       }),
     ];
     const b = [
-      withContact(pt("ov:1", "Edeka", 52.5205, 13.4, "supermarkets"), {
-        website: "edeka.de",
-        phone: "3099999999",
+      withContact(pt("ov:1", "Museum", 52.5205, 13.4, "museums"), {
+        wikidata: "Q123",
+        phones: ["3022222222"],
       }),
     ];
-    expect(conflate(a, b, T).matched).toHaveLength(0);
+    expect(conflate(a, b, T).matched).toHaveLength(1);
   });
 });
 

@@ -1,8 +1,8 @@
 import {
   haversineMeters,
-  normalizePhone,
   osmAddressKey,
   overtureAddressKey,
+  parsePhones,
   websiteDomain,
 } from "@openmapx/core/utils/geo-server";
 import {
@@ -34,7 +34,7 @@ export interface OverturePlacePoint {
   confidence?: number;
   addressKey?: string;
   wikidata?: string;
-  phone?: string;
+  phones?: string[];
   website?: string;
 }
 
@@ -48,7 +48,7 @@ export interface OsmPoiPoint {
   category?: string;
   addressKey?: string;
   wikidata?: string;
-  phone?: string;
+  phones?: string[];
   website?: string;
 }
 
@@ -137,7 +137,7 @@ export async function computeLinks(
       category: p.category,
       addressKey: p.addressKey,
       wikidata: p.wikidata,
-      phone: p.phone,
+      phones: p.phones,
       website: p.website,
     }));
 
@@ -149,7 +149,7 @@ export async function computeLinks(
       category: p.category,
       addressKey: p.addressKey,
       wikidata: p.wikidata,
-      phone: p.phone,
+      phones: p.phones,
       website: p.website,
     }));
 
@@ -250,6 +250,13 @@ export async function computeLinks(
         if (sim > cosineFloor) {
           const osmPoi = osmArr[osmIdx];
           const overturePl = overtureArr[overtureIdx];
+          // Respect the same phone rejection as shouldMatch: a name-similar pair
+          // with disjoint phone sets is two different businesses, so the
+          // embedding fallback must not re-link what conflate() deliberately
+          // dropped into the residuals.
+          const op = osmPoi.phones;
+          const pp = overturePl.phones;
+          if (op?.length && pp?.length && !op.some((p) => pp.includes(p))) continue;
           embeddingLinks.push({
             osm_type: osmPoi.osm_type,
             osm_id: osmPoi.osm_id,
@@ -311,7 +318,7 @@ export async function conflateOverture(opts: {
       category: string | null;
       addresses: unknown;
       wikidata: string | null;
-      phone: string | null;
+      phones: string[] | null;
       website: string | null;
       confidence: number | null;
     }[]
@@ -324,7 +331,7 @@ export async function conflateOverture(opts: {
             openmapx_category AS category,
             addresses,
             brand->>'wikidata' AS wikidata,
-            phones[1] AS phone,
+            phones,
             websites[1] AS website,
             confidence
      FROM "${schema}".places
@@ -352,7 +359,7 @@ export async function conflateOverture(opts: {
       confidence: r.confidence ?? undefined,
       addressKey: overtureAddressKey(freeform, postcode) ?? undefined,
       wikidata: r.wikidata ?? undefined,
-      phone: normalizePhone(r.phone) ?? undefined,
+      phones: parsePhones(r.phones),
       website: websiteDomain(r.website) ?? undefined,
     };
   });
@@ -396,7 +403,7 @@ export async function conflateOverture(opts: {
     category: r.category ?? undefined,
     addressKey: osmAddressKey(r.street, r.housenumber, r.postcode) ?? undefined,
     wikidata: r.wikidata ?? undefined,
-    phone: normalizePhone(r.phone) ?? undefined,
+    phones: parsePhones(r.phone),
     website: websiteDomain(r.website) ?? undefined,
   }));
   onProgress?.(`Loaded ${osmPois.length} OSM POIs from DB.`);

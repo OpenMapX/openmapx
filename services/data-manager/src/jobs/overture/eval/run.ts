@@ -19,6 +19,12 @@
 import { writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import {
+  osmAddressKey,
+  overtureAddressKey,
+  parsePhones,
+  websiteDomain,
+} from "@openmapx/core/utils/geo-server";
+import {
   type ConflationPoint,
   type ConflationThresholds,
   conflate,
@@ -34,6 +40,10 @@ interface OvertureRow {
   lng: number;
   category: string | null;
   address: string | null;
+  postcode: string | null;
+  wikidata: string | null;
+  phones: string[] | null;
+  website: string | null;
   confidence: number | null;
   operating_status: string | null;
 }
@@ -45,6 +55,12 @@ interface OsmPoiRow {
   lat: number;
   lng: number;
   category: string | null;
+  street: string | null;
+  housenumber: string | null;
+  postcode: string | null;
+  wikidata: string | null;
+  phone: string | null;
+  website: string | null;
 }
 
 interface LabeledEntry {
@@ -68,6 +84,10 @@ async function loadOverturePlaces(): Promise<OvertureRow[]> {
       ST_X(geom) AS lng,
       openmapx_category AS category,
       addresses->0->>'freeform' AS address,
+      addresses->0->>'postcode' AS postcode,
+      brand->>'wikidata' AS wikidata,
+      phones,
+      websites[1] AS website,
       confidence,
       operating_status
     FROM overture_places.places
@@ -76,7 +96,13 @@ async function loadOverturePlaces(): Promise<OvertureRow[]> {
 
 async function loadOsmPois(): Promise<OsmPoiRow[]> {
   return sql<OsmPoiRow[]>`
-    SELECT osm_type, osm_id::TEXT AS osm_id, name, lat, lng, category
+    SELECT osm_type, osm_id::TEXT AS osm_id, name, lat, lng, category,
+      tags->>'addr:street' AS street,
+      tags->>'addr:housenumber' AS housenumber,
+      tags->>'addr:postcode' AS postcode,
+      COALESCE(tags->>'wikidata', tags->>'brand:wikidata') AS wikidata,
+      COALESCE(tags->>'phone', tags->>'contact:phone') AS phone,
+      COALESCE(tags->>'website', tags->>'contact:website', tags->>'url') AS website
     FROM overture_places.osm_pois
   `;
 }
@@ -120,12 +146,19 @@ function runSweepWithConflate(
         (r.confidence ?? 1) >= cell.confidenceFloor && r.operating_status !== "permanently_closed",
     );
 
+    // Mirror the production conflateOverture point construction so the sweep
+    // measures the predicate that actually ships (address/wikidata/phone/website
+    // corroboration), not a name-only subset of it.
     const osmPts: ConflationPoint[] = osmRows.map((r) => ({
       id: `${r.osm_type}/${r.osm_id}`,
       name: r.name,
       lat: r.lat,
       lng: r.lng,
       category: r.category ?? undefined,
+      addressKey: osmAddressKey(r.street, r.housenumber, r.postcode) ?? undefined,
+      wikidata: r.wikidata ?? undefined,
+      phones: parsePhones(r.phone),
+      website: websiteDomain(r.website) ?? undefined,
     }));
 
     const overturePts: ConflationPoint[] = filteredOverture.map((r) => ({
@@ -134,6 +167,10 @@ function runSweepWithConflate(
       lat: r.lat,
       lng: r.lng,
       category: r.category ?? undefined,
+      addressKey: overtureAddressKey(r.address, r.postcode) ?? undefined,
+      wikidata: r.wikidata ?? undefined,
+      phones: parsePhones(r.phones),
+      website: websiteDomain(r.website) ?? undefined,
     }));
 
     const thresholds: ConflationThresholds = {

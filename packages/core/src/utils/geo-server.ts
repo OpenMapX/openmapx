@@ -88,30 +88,63 @@ export function osmAddressKey(
 }
 
 /**
- * Canonicalizes a phone number for equality comparison: digits only, with the
- * German country/trunk prefixes folded (+49 / 0049 / leading 0 → subscriber
- * part) so "+49 30 318 06 750" and "030 31806750" compare equal. Returns null
- * for numbers too short to be a reliable signal. A matching phone is a strong
- * business-level same-place signal; a differing one means different businesses.
+ * Canonicalizes a SINGLE phone number for equality comparison: digits only, with
+ * the German country/trunk prefixes folded (+49 / 0049 / leading 0 → subscriber
+ * part) so "+49 30 318 06 750" and "030 31806750" compare equal. The "49"
+ * country code is stripped only when the input carried an explicit international
+ * prefix (`+` or `00`) — a bare local number that merely starts with 49 keeps
+ * all its digits. Returns null for numbers too short to be a reliable signal.
+ * For tag values that may hold multiple numbers, use parsePhones.
  */
 export function normalizePhone(phone?: string | null): string | null {
   if (!phone) return null;
+  const hadIntlPrefix = /^\s*(?:\+|00)/.test(phone);
   let d = phone.replace(/\D/g, "");
   if (d.startsWith("0049")) d = d.slice(4);
-  else if (d.startsWith("49") && d.length > 9) d = d.slice(2);
+  else if (hadIntlPrefix && d.startsWith("49")) d = d.slice(2);
   if (d.startsWith("0")) d = d.slice(1);
   return d.length >= 6 ? d : null;
 }
 
 /**
- * Extracts the bare host (no scheme, no `www.`, lowercased) from a URL — a
- * brand/site-level signal: an equal domain within the window corroborates a
- * match. Returns null when no host can be parsed.
+ * Canonicalizes a phone field that may hold multiple numbers — an Overture
+ * `phones[]` array, or an OSM tag using the documented `;`/`,`-separated
+ * multi-value convention ("+49 30 1;+49 30 2") — into a deduped set of
+ * canonical numbers. Two POIs are the same business when their phone sets
+ * INTERSECT and different businesses when both are non-empty yet disjoint, so a
+ * single stale or secondary number on one side never forces a false split.
+ */
+export function parsePhones(value?: string | string[] | null): string[] {
+  if (value == null) return [];
+  const parts = Array.isArray(value) ? value : value.split(/[;,/]/);
+  const out = new Set<string>();
+  for (const part of parts) {
+    const n = normalizePhone(part);
+    if (n) out.add(n);
+  }
+  return [...out];
+}
+
+/**
+ * Extracts the bare host (no scheme, no `www.`, no userinfo, no port, lowercased)
+ * from a URL — a brand/site-level signal: an equal domain within the window
+ * corroborates a match. Uses the URL parser (so credentials, ports and IDNs are
+ * handled consistently) and tolerates scheme-less ("edeka.de/markt") and
+ * protocol-relative ("//edeka.de") inputs. Returns null when no host parses.
  */
 export function websiteDomain(url?: string | null): string | null {
   if (!url) return null;
-  const m = url.match(/^(?:https?:\/\/)?(?:www\.)?([^/\s?#]+)/i);
-  return m?.[1] ? m[1].toLowerCase() : null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed.replace(/^\/\//, "")}`;
+  try {
+    const host = new URL(withScheme).hostname.replace(/^www\./, "").toLowerCase();
+    return host || null;
+  } catch {
+    return null;
+  }
 }
 
 /**

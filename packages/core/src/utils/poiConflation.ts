@@ -16,18 +16,21 @@ export interface ConflationPoint {
   /** Wikidata/brand-wikidata id; equal ids within the window short-circuit to a match. */
   wikidata?: string;
   /**
-   * Canonicalized phone (digits, country/trunk prefix folded — see geo-server
-   * normalizePhone). The most specific business-identity signal: when both sides
-   * have one, an equal phone confirms the match and a DIFFERENT phone rejects it
-   * (two businesses with different numbers are different businesses, even at the
-   * same address or under the same brand). Absent → fall back to weaker signals.
+   * Canonicalized phone numbers (digits, country/trunk prefix folded — see
+   * geo-server parsePhones). The most specific business-identity signal: when
+   * both sides have at least one number, INTERSECTING sets confirm the match and
+   * fully DISJOINT sets reject it (different numbers → different businesses, even
+   * at the same address or under the same brand). Sets (not a single value) so a
+   * stale/secondary number on one side never forces a false split. Empty/absent
+   * → fall back to weaker signals.
    */
-  phone?: string;
+  phones?: string[];
   /**
    * Website host (no scheme/`www.`, lowercased — see geo-server websiteDomain).
    * A brand/site-level corroboration: an equal domain within the window confirms
-   * a match. Weaker than phone (chains share one domain across branches), so it
-   * only confirms, never rejects.
+   * a match. Weaker than phone (chains share one domain across branches; social /
+   * booking platforms host thousands of unrelated businesses — see
+   * GENERIC_WEBSITE_HOSTS), so it only confirms, never rejects.
    */
   website?: string;
 }
@@ -98,6 +101,32 @@ const ADDRESS_MATCH_NAME_FLOOR = 0.5;
 // name signal. Excluded "plural" categories (restaurants, cafes, bars, gyms, …)
 // routinely co-locate (food courts, multi-tenant buildings), so they still need
 // a name match — a shared address + "both are restaurants" is NOT enough.
+// Non-identifying website hosts: social, link-in-bio, map and food-ordering
+// platforms list thousands of unrelated businesses, so a shared one of these is
+// NOT evidence of the same business. The website-confirm branch skips them.
+const GENERIC_WEBSITE_HOSTS = new Set([
+  "facebook.com",
+  "m.facebook.com",
+  "instagram.com",
+  "twitter.com",
+  "x.com",
+  "youtube.com",
+  "tiktok.com",
+  "linktr.ee",
+  "linktree.com",
+  "google.com",
+  "business.google.com",
+  "maps.google.com",
+  "goo.gl",
+  "wa.me",
+  "t.me",
+  "yelp.com",
+  "tripadvisor.com",
+  "lieferando.de",
+  "wolt.com",
+  "ubereats.com",
+]);
+
 const SINGULAR_PER_ADDRESS = new Set([
   "supermarkets",
   "pharmacies",
@@ -122,21 +151,24 @@ function shouldMatch(a: ConflationPoint, b: ConflationPoint, t: ConflationThresh
   const d = haversineMeters(a.lat, a.lng, b.lat, b.lng);
   if (d > t.softWindowM) return false;
 
-  // Phone is the most specific business-identity signal and decides both ways:
-  // a shared number confirms the same business even when names/addresses differ
-  // (rebrands, moved listings); a DIFFERENT number rejects the pair even when
-  // name, address, or brand coincide (distinct businesses, or two branches of one
-  // chain within the window). This is the signal that separates co-located but
-  // distinct businesses that name+address alone cannot tell apart.
-  if (a.phone && b.phone) return a.phone === b.phone;
-
-  // Same specific entity / same brand outlet within the window → same place.
+  // Same specific entity / same brand outlet within the window → same place. An
+  // explicit wikidata identity link is honoured over a phone discrepancy (which
+  // is often stale or a secondary number).
   if (a.wikidata && b.wikidata && a.wikidata === b.wikidata) return true;
 
-  // Same website host within the window → same business (brand/site-level
-  // corroboration). Confirms only; a shared domain across chain branches is
-  // handled by the phone check above when numbers are present.
-  if (a.website && b.website && a.website === b.website) return true;
+  // Phone is the most specific business-identity signal. Sets INTERSECT → same
+  // business (confirm); both non-empty yet DISJOINT → different numbers, so
+  // different businesses (reject) even when name, address or brand coincide
+  // (distinct co-located shops, two branches of one chain in-window). The
+  // confirm is category-gated so a shared switchboard — a hotel's reception
+  // number listed on its restaurant and bar — does not merge those distinct
+  // units; an incompatible category falls through to address/name instead.
+  const aPhones = a.phones ?? [];
+  const bPhones = b.phones ?? [];
+  const phonesBoth = aPhones.length > 0 && bPhones.length > 0;
+  const phonesShare = phonesBoth && aPhones.some((p) => bPhones.includes(p));
+  if (phonesBoth && !phonesShare) return false;
+  if (phonesShare && categoryCompatible(a, b)) return true;
 
   // Address corroboration. A shared address is a strong location signal but does
   // NOT confirm the business: OSM and Overture map different POIs at the same
@@ -150,6 +182,20 @@ function shouldMatch(a: ConflationPoint, b: ConflationPoint, t: ConflationThresh
     return (
       a.category !== undefined && a.category === b.category && SINGULAR_PER_ADDRESS.has(a.category)
     );
+  }
+
+  // Website-host corroboration. Checked AFTER the address gate so a shared host
+  // can never override an address contradiction, category-gated, and skipped for
+  // non-identifying shared hosts (social/booking/link-in-bio platforms list
+  // thousands of unrelated businesses).
+  if (
+    a.website &&
+    b.website &&
+    a.website === b.website &&
+    !GENERIC_WEBSITE_HOSTS.has(a.website) &&
+    categoryCompatible(a, b)
+  ) {
+    return true;
   }
 
   // Name fallback (no usable address on at least one side).
