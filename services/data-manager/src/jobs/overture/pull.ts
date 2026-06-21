@@ -69,21 +69,22 @@ export function computeBboxFromPoly(polyText: string): RegionBbox {
  */
 export async function fetchRegionBbox(region: string): Promise<RegionBbox> {
   assertValidRegion(region);
-  const polyUrl = resolveOsmPolyUrl(region);
   // Defense-in-depth: the region is already constrained to lowercase path
   // segments by assertValidRegion, but pin the fetched host to Geofabrik so a
   // region value can only ever select a path under the fixed boundary host
-  // (no scheme/host injection — SSRF guard).
-  const parsedPolyUrl = new URL(polyUrl);
-  if (parsedPolyUrl.protocol !== "https:" || parsedPolyUrl.hostname !== "download.geofabrik.de") {
+  // (no scheme/host injection — SSRF guard). The request uses the validated URL
+  // object, so the host allow-list check actually guards the fetched value.
+  const polyUrl = new URL(resolveOsmPolyUrl(region));
+  if (polyUrl.protocol !== "https:" || polyUrl.hostname !== "download.geofabrik.de") {
     throw new Error(`Refusing to fetch non-Geofabrik boundary URL for region "${region}"`);
   }
+  const safePolyUrl = polyUrl.toString();
   let stdout: string;
   try {
-    ({ stdout } = await execa("curl", ["-fsSL", polyUrl], { timeout: 30_000 }));
+    ({ stdout } = await execa("curl", ["-fsSL", safePolyUrl], { timeout: 30_000 }));
   } catch {
     throw new Error(
-      `Could not fetch Geofabrik boundary for region "${region}" (${polyUrl}). ` +
+      `Could not fetch Geofabrik boundary for region "${region}" (${safePolyUrl}). ` +
         `Use a valid Geofabrik region path (e.g. "europe/germany/berlin").`,
     );
   }
