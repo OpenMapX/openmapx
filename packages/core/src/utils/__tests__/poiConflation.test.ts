@@ -149,10 +149,17 @@ describe("conflate — address corroboration", () => {
     expect(conflate(a, b, T).matched).toHaveLength(1);
   });
 
-  it("matches same-address points when both categories are known and equal (weak name)", () => {
+  it("matches same-address points when both categories are a singular-per-address type (weak name)", () => {
     const a = [ap("osm:1", "Nahkauf", 52.52, 13.4, "10115|hauptstr|5", "supermarkets")];
     const b = [ap("ov:1", "Markt am Eck", 52.5205, 13.4, "10115|hauptstr|5", "supermarkets")];
     expect(conflate(a, b, T).matched).toHaveLength(1);
+  });
+
+  it("does NOT match same-address same-category when the category is plural-per-address", () => {
+    // Two restaurants at one address (food court) with no name overlap → different places.
+    const a = [ap("osm:1", "Tandoori Nächte", 52.52, 13.4, "10115|hauptstr|5", "restaurants")];
+    const b = [ap("ov:1", "Restaurant Greece", 52.5205, 13.4, "10115|hauptstr|5", "restaurants")];
+    expect(conflate(a, b, T).matched).toHaveLength(0);
   });
 
   it("rejects a strong name match when addresses contradict (precision)", () => {

@@ -75,10 +75,34 @@ function categoryCompatible(a: ConflationPoint, b: ConflationPoint): boolean {
 // never force a merge. A bare-distance auto-merge produced ~75% false links on
 // real city-scale data.
 const CLOSE_BAND_NAME_FLOOR = 0.5;
-// Same-address pairs that share a category are taken as the same place even with
-// a weak name; with an incompatible category they need this name floor to rule
-// out a different business in the same building (mall/multi-tenant address).
+// Name floor for confirming a same-address pair when a name signal is available.
 const ADDRESS_MATCH_NAME_FLOOR = 0.5;
+
+// Categories where two distinct POIs almost never share one street address. For
+// these, a shared address + equal category confirms the match even without a
+// name signal. Excluded "plural" categories (restaurants, cafes, bars, gyms, …)
+// routinely co-locate (food courts, multi-tenant buildings), so they still need
+// a name match — a shared address + "both are restaurants" is NOT enough.
+const SINGULAR_PER_ADDRESS = new Set([
+  "supermarkets",
+  "pharmacies",
+  "banks",
+  "atms",
+  "fuel",
+  "hospitals",
+  "post_offices",
+  "fire_stations",
+  "police",
+  "ambulance_stations",
+  "libraries",
+  "schools",
+  "kindergartens",
+  "museums",
+  "hotels",
+  "transit",
+  "cinemas",
+  "ev_charging",
+]);
 
 function shouldMatch(a: ConflationPoint, b: ConflationPoint, t: ConflationThresholds): boolean {
   const d = haversineMeters(a.lat, a.lng, b.lat, b.lng);
@@ -91,12 +115,14 @@ function shouldMatch(a: ConflationPoint, b: ConflationPoint, t: ConflationThresh
   // NOT confirm the business: OSM and Overture map different POIs at the same
   // building, so a matching address alone links different businesses. Treat it as
   // necessary-not-sufficient — a CONTRADICTING address rejects even a strong name
-  // match, but a matching address still needs a name or same-known-category signal.
+  // match; a matching address confirms only with a name signal, or an equal
+  // category that is singular-per-address.
   if (a.addressKey && b.addressKey) {
     if (a.addressKey !== b.addressKey) return false;
-    const bothCategoriesEqual =
-      a.category !== undefined && b.category !== undefined && a.category === b.category;
-    return bothCategoriesEqual || nameSimilarity(a.name, b.name) >= ADDRESS_MATCH_NAME_FLOOR;
+    if (nameSimilarity(a.name, b.name) >= ADDRESS_MATCH_NAME_FLOOR) return true;
+    return (
+      a.category !== undefined && a.category === b.category && SINGULAR_PER_ADDRESS.has(a.category)
+    );
   }
 
   // Name fallback (no usable address on at least one side).
