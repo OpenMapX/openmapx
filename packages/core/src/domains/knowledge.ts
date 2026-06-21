@@ -19,6 +19,10 @@ export interface KnowledgeResult {
   names?: Record<string, string>;
   /** Raw OSM-compatible opening_hours string from Overture structured hours. */
   structuredOpeningHours?: string;
+  /** Contact phone supplied by a source — fills a gap when the base place lacks one. */
+  phone?: string;
+  /** Contact website/homepage supplied by a source — fills a gap when the base place lacks one. */
+  website?: string;
 }
 
 /**

@@ -62,8 +62,11 @@ function makeOvertureDetailRow() {
     gers_id: "overture-abc-123",
     name: "Starbucks",
     names: { de: "Starbucks", fr: "Starbucks" },
-    brand: { name: "Starbucks", wikidata: "Q37158" },
+    // Overture nests the brand name under brand.names.primary (NOT brand.name).
+    brand: { names: { primary: "Starbucks" }, wikidata: "Q37158" },
     opening_hours: "Mo-Fr 07:00-21:00; Sa-Su 08:00-20:00",
+    phones: ["+49 30 1234567"],
+    websites: ["https://starbucks.de"],
   };
 }
 
@@ -114,41 +117,75 @@ describe("knowledge-overture provider lookup", () => {
     expect(result).toBeNull();
   });
 
-  it("spatial+name match returns brand, names, structuredOpeningHours, externalIds.wikidata", async () => {
-    const detailRow = makeOvertureDetailRow();
-    const db = makeDb(
+  const detailRowDb = (detailRow: ReturnType<typeof makeOvertureDetailRow>) =>
+    makeDb(
       vi.fn().mockImplementation((sql: string) => {
-        if (sql.includes("poi_conflation_link")) {
-          return Promise.resolve([]);
-        }
+        if (sql.includes("poi_conflation_link")) return Promise.resolve([]);
         if (sql.includes("places") && sql.includes("ST_DWithin")) {
           return Promise.resolve([makeOvertureSpatialRow()]);
         }
-        if (sql.includes("gers_id")) {
-          return Promise.resolve([detailRow]);
-        }
+        if (sql.includes("gers_id")) return Promise.resolve([detailRow]);
         return Promise.resolve([]);
       }),
     );
-    const ctx = makeCtx(db);
+
+  it("returns brand, names, hours, wikidata, phone and website from the Overture row", async () => {
+    const ctx = makeCtx(detailRowDb(makeOvertureDetailRow()));
     const { setup, overtureKnowledgeSource } = await import("../index.js");
     setup(ctx);
 
     const result = await overtureKnowledgeSource.lookup(
       { amenity: "cafe", category: "coffee" },
       "en",
-      {
-        coordinates: [13.4, 52.5],
-        name: "Starbucks",
-        ids: { osm: "node/123456789" },
-      },
+      { coordinates: [13.4, 52.5], name: "Starbucks", ids: { osm: "node/123456789" } },
     );
 
     expect(result).not.toBeNull();
+    // Brand name comes from the NESTED brand.names.primary, not brand.name.
     expect(result?.brand).toEqual({ name: "Starbucks", wikidata: "Q37158" });
     expect(result?.names).toEqual({ de: "Starbucks", fr: "Starbucks" });
     expect(result?.structuredOpeningHours).toBe("Mo-Fr 07:00-21:00; Sa-Su 08:00-20:00");
     expect(result?.externalIds?.wikidata).toBe("Q37158");
+    expect(result?.phone).toBe("+49 30 1234567");
+    expect(result?.website).toBe("https://starbucks.de");
+  });
+
+  it("exposes wikidata via externalIds even when the brand has no resolvable name", async () => {
+    const row = makeOvertureDetailRow();
+    row.brand = { names: null, wikidata: "Q37158" } as never;
+    const ctx = makeCtx(detailRowDb(row));
+    const { setup, overtureKnowledgeSource } = await import("../index.js");
+    setup(ctx);
+
+    const result = await overtureKnowledgeSource.lookup({ amenity: "cafe" }, "en", {
+      coordinates: [13.4, 52.5],
+      name: "Starbucks",
+      ids: { osm: "node/123456789" },
+    });
+
+    expect(result?.brand).toBeUndefined();
+    expect(result?.externalIds?.wikidata).toBe("Q37158");
+  });
+
+  it("surfaces phone/website even for an unbranded place with no hours", async () => {
+    const row = makeOvertureDetailRow();
+    row.brand = null as never;
+    row.opening_hours = null as never;
+    row.names = null as never;
+    const ctx = makeCtx(detailRowDb(row));
+    const { setup, overtureKnowledgeSource } = await import("../index.js");
+    setup(ctx);
+
+    const result = await overtureKnowledgeSource.lookup({ amenity: "restaurant" }, "en", {
+      coordinates: [11.576, 48.137],
+      name: "Starbucks",
+      ids: { osm: "node/60013073" },
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.phone).toBe("+49 30 1234567");
+    expect(result?.website).toBe("https://starbucks.de");
+    expect(result?.brand).toBeUndefined();
   });
 
   it("returns null when no candidate is within 150 m", async () => {

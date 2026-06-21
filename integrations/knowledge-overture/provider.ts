@@ -17,8 +17,12 @@ interface OvertureDetailRow {
   gers_id: string;
   name: string;
   names: Record<string, string> | null;
-  brand: { name?: string; wikidata?: string } | null;
+  // Overture nests the brand name under brand.names.primary (NOT brand.name);
+  // wikidata is a sibling. Type it the way the data actually arrives.
+  brand: { names?: { primary?: string } | null; wikidata?: string } | null;
   opening_hours: string | null;
+  phones: string[] | null;
+  websites: string[] | null;
 }
 
 /**
@@ -130,7 +134,7 @@ async function fetchOverturePlaceByGers(
 ): Promise<OvertureDetailRow | null> {
   const rows = await database.execute<OvertureDetailRow[]>(
     `
-    SELECT gers_id, name, names, brand, opening_hours
+    SELECT gers_id, name, names, brand, opening_hours, phones, websites
     FROM overture_places.places
     WHERE gers_id = $1
     LIMIT 1
@@ -144,12 +148,16 @@ async function fetchOverturePlaceByGers(
 function overtureRowToKnowledgeResult(row: OvertureDetailRow): KnowledgeResult | null {
   const result: KnowledgeResult = {};
 
-  if (row.brand?.name) {
-    result.brand = { name: row.brand.name };
-    if (row.brand.wikidata) {
+  const brandName = row.brand?.names?.primary;
+  if (brandName) {
+    result.brand = { name: brandName };
+    if (row.brand?.wikidata) {
       result.brand.wikidata = row.brand.wikidata;
       result.externalIds = { wikidata: row.brand.wikidata };
     }
+  } else if (row.brand?.wikidata) {
+    // Branded place with no resolvable brand name — still expose the Q-id.
+    result.externalIds = { wikidata: row.brand.wikidata };
   }
 
   if (row.names && Object.keys(row.names).length > 0) {
@@ -159,6 +167,12 @@ function overtureRowToKnowledgeResult(row: OvertureDetailRow): KnowledgeResult |
   if (row.opening_hours) {
     result.structuredOpeningHours = row.opening_hours;
   }
+
+  const phone = row.phones?.[0];
+  if (phone) result.phone = phone;
+
+  const website = row.websites?.[0];
+  if (website) result.website = website;
 
   return Object.keys(result).length > 0 ? result : null;
 }

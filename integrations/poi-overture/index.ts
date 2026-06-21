@@ -61,7 +61,7 @@ async function queryOverturePlaces(
       ST_Y(geom) AS latitude,
       openmapx_category,
       basic_category,
-      brand->>'name' AS brand_name,
+      brand->'names'->>'primary' AS brand_name,
       brand->>'wikidata' AS brand_wikidata,
       phones[1] AS phone
     FROM overture_places.places
@@ -95,7 +95,7 @@ async function fetchOverturePlaceByGers(
        ST_Y(geom) AS latitude,
        openmapx_category,
        basic_category,
-       brand->>'name' AS brand_name,
+       brand->'names'->>'primary' AS brand_name,
        brand->>'wikidata' AS brand_wikidata,
        phones[1] AS phone
      FROM overture_places.places

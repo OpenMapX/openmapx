@@ -116,6 +116,8 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
   const {
     externalIds,
     photos: knowledgePhotos,
+    phone: knowledgePhone,
+    website: knowledgeWebsite,
     ...knowledge
   } = await getPlaceKnowledge(place, lang);
   const enriched = foldExternalIdsIntoPlace(place, externalIds);
@@ -147,6 +149,10 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
   return {
     ...enriched,
     ...knowledge,
+    // Contact details: OSM is fresher, so it wins; a knowledge source (e.g.
+    // Overture) only fills the gap when the base place has none.
+    phone: enriched.phone ?? knowledgePhone,
+    website: enriched.website ?? knowledgeWebsite,
     photos,
     reviewLinks: buildReviewLinks(enriched),
     rating: reviewStats?.stars,
