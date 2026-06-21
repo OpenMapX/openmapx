@@ -83,20 +83,6 @@ export async function computeLinks(
 ): Promise<LinkRecord[]> {
   const { thresholds, embedFn, cosineFloor = 0.87, release } = opts;
 
-  // Address cardinality per side: an addressKey shared by >1 POI marks a
-  // multi-tenant building, where the address alone doesn't confirm a match.
-  const osmAddrCount = new Map<string, number>();
-  for (const p of osmPois)
-    if (p.addressKey) osmAddrCount.set(p.addressKey, (osmAddrCount.get(p.addressKey) ?? 0) + 1);
-  const overtureAddrCount = new Map<string, number>();
-  for (const p of places)
-    if (p.addressKey)
-      overtureAddrCount.set(p.addressKey, (overtureAddrCount.get(p.addressKey) ?? 0) + 1);
-  const osmShared = (p: OsmPoiPoint) =>
-    p.addressKey ? (osmAddrCount.get(p.addressKey) ?? 0) > 1 : false;
-  const overtureShared = (p: OverturePlacePoint) =>
-    p.addressKey ? (overtureAddrCount.get(p.addressKey) ?? 0) > 1 : false;
-
   const overtureByCell = new Map<string, OverturePlacePoint[]>();
   for (const place of places) {
     const cell = ensureH3(place);
@@ -144,7 +130,6 @@ export async function computeLinks(
       lng: p.lng,
       category: p.category,
       addressKey: p.addressKey,
-      addressShared: osmShared(p),
       wikidata: p.wikidata,
     }));
 
@@ -155,7 +140,6 @@ export async function computeLinks(
       lng: p.lng,
       category: p.category,
       addressKey: p.addressKey,
-      addressShared: overtureShared(p),
       wikidata: p.wikidata,
     }));
 

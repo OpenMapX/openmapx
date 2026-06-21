@@ -13,14 +13,6 @@ export interface ConflationPoint {
    * reject it. Absent → fall back to name matching.
    */
   addressKey?: string;
-  /**
-   * True when this point's addressKey is shared by other POIs on its own side
-   * (a multi-tenant building). When both sides of an address-equal pair are
-   * single-tenant, the address alone confirms the match; multi-tenant addresses
-   * additionally require a name/category signal so different businesses sharing
-   * one address aren't merged.
-   */
-  addressShared?: boolean;
   /** Wikidata/brand-wikidata id; equal ids within the window short-circuit to a match. */
   wikidata?: string;
 }
@@ -95,13 +87,13 @@ function shouldMatch(a: ConflationPoint, b: ConflationPoint, t: ConflationThresh
   // Same specific entity / same brand outlet within the window → same place.
   if (a.wikidata && b.wikidata && a.wikidata === b.wikidata) return true;
 
-  // Address corroboration: a strong, name-independent same-location signal.
+  // Address corroboration. A shared address is a strong location signal but does
+  // NOT confirm the business: OSM and Overture map different POIs at the same
+  // building, so a matching address alone links different businesses. Treat it as
+  // necessary-not-sufficient — a CONTRADICTING address rejects even a strong name
+  // match, but a matching address still needs a name or same-known-category signal.
   if (a.addressKey && b.addressKey) {
-    if (a.addressKey !== b.addressKey) return false; // different address → reject
-    // Single-tenant building (one POI per side at this address) → the address
-    // confirms it. Multi-tenant → require same known category or a name signal
-    // so different businesses at one address aren't merged.
-    if (!a.addressShared && !b.addressShared) return true;
+    if (a.addressKey !== b.addressKey) return false;
     const bothCategoriesEqual =
       a.category !== undefined && b.category !== undefined && a.category === b.category;
     return bothCategoriesEqual || nameSimilarity(a.name, b.name) >= ADDRESS_MATCH_NAME_FLOOR;
