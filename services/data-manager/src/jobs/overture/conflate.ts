@@ -365,6 +365,12 @@ export async function conflateOverture(opts: {
   });
   onProgress?.(`Computed ${links.length} candidate links.`);
 
+  // Full rebuild: conflate recomputes the complete link set for the schema, so
+  // clear stale links first. Without this the table accumulates across runs
+  // (ON CONFLICT only overwrites the same osm↔gers triple), leaving links from
+  // prior releases / pre-fix runs behind.
+  await sql.unsafe(`DELETE FROM "${schema}".poi_conflation_link`);
+
   if (links.length === 0) {
     return { linked: 0 };
   }
