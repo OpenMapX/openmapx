@@ -31,6 +31,7 @@
       "name": "Foursquare",
       "url": "https://foursquare.com",
       "license": "Apache-2.0",
+      "attribution": "© Foursquare Labs, Inc. — Foursquare Open Source Places (Apache-2.0), via Overture Maps",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://location.foursquare.com/legal/fsq-privacy-statement/",
       "endUserExposure": "server-only"

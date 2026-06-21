@@ -14,6 +14,9 @@ const MAX_SHRINK_RETRIES = 3;
 const SHRINK_FACTOR = 0.6;
 const PRESET_PREFIX = "preset:";
 const PRESET_SENTINEL = "__preset__";
+// Id of the authoritative base POI provider (OSM via Overpass); all other
+// matching providers are treated as augments to its result set.
+const BASE_PROVIDER_ID = "overpass";
 
 interface ConflationLinkRow {
   osm_type: string;
@@ -93,7 +96,6 @@ function shrinkBbox(bbox: BoundingBox, factor: number): BoundingBox {
 async function runWithShrink(
   fn: (bbox: BoundingBox) => Promise<PoiSearchResult[]>,
   bbox: BoundingBox,
-  _lang: string | undefined,
 ): Promise<{ results: PoiSearchResult[]; partial: boolean }> {
   let currentBbox = bbox;
   for (let attempt = 0; ; attempt++) {
@@ -164,12 +166,14 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
         (currentBbox) =>
           provider.search(lookupCategory, currentBbox, { lang: options?.lang, osmTags }),
         bbox,
-        options?.lang,
       );
     }
 
-    const overpassIdx = matching.findIndex((p) => p.id === "overpass");
-    const augmentProviders = matching.filter((p) => p.id !== "overpass");
+    // The OSM/Overpass provider is the authoritative base set; every other
+    // matching provider augments it (Overture gap-fill today). The split keys
+    // off the base provider's id.
+    const overpassIdx = matching.findIndex((p) => p.id === BASE_PROVIDER_ID);
+    const augmentProviders = matching.filter((p) => p.id !== BASE_PROVIDER_ID);
 
     const baseResult =
       overpassIdx >= 0
@@ -180,7 +184,6 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
                 osmTags,
               }),
             bbox,
-            options?.lang,
           ).catch((err: unknown) => {
             if (err instanceof OverpassTimeoutError) throw err;
             return { results: [] as PoiSearchResult[], partial: false };
@@ -192,7 +195,6 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
         runWithShrink(
           (currentBbox) => p.search(lookupCategory, currentBbox, { lang: options?.lang, osmTags }),
           bbox,
-          options?.lang,
         ).catch(() => ({ results: [] as PoiSearchResult[], partial: false })),
       ),
     );

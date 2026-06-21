@@ -16,8 +16,8 @@ describe("representativePoint", () => {
       ],
     };
     const result = representativePoint(geom);
-    expect(result).not.toBeNull();
-    const [lng, lat] = result!;
+    if (result === null) throw new Error("expected a representative point");
+    const [lng, lat] = result;
     expect(lat).toBeCloseTo(50.8, 1);
     // Circular mean of [10, 12, 12, 10, 10] ≈ 10.8 (slightly below arithmetic 10.8
     // due to circular path vs straight line at these small angles)
@@ -44,8 +44,8 @@ describe("representativePoint", () => {
       ],
     };
     const result = representativePoint(geom);
-    expect(result).not.toBeNull();
-    const [lng, lat] = result!;
+    if (result === null) throw new Error("expected a representative point");
+    const [lng, lat] = result;
     // Circular mean of -179 and 179 (via sin/cos) should yield ±180 (wraps to 180 or -180).
     // The absolute value of the result should be close to 180, not 0.
     expect(Math.abs(lng)).toBeGreaterThan(170);
