@@ -21,7 +21,7 @@
       "name": "Overture Maps",
       "url": "https://overturemaps.org",
       "license": "CDLA-Permissive-2.0",
-      "attribution": "© Overture Maps Foundation contributors (Meta, Microsoft, PinMeTo, AllThePlaces)",
+      "licenseUrl": "https://cdla.dev/permissive-2-0/",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://overturemaps.org/privacy/",
       "endUserExposure": "server-only"
@@ -31,7 +31,7 @@
       "name": "Foursquare",
       "url": "https://foursquare.com",
       "license": "Apache-2.0",
-      "attribution": "© Foursquare Labs, Inc. — Foursquare Open Source Places (Apache-2.0), via Overture Maps",
+      "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://location.foursquare.com/legal/fsq-privacy-statement/",
       "endUserExposure": "server-only"
