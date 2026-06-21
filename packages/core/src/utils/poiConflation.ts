@@ -97,7 +97,6 @@ const SINGULAR_PER_ADDRESS = new Set([
   "libraries",
   "schools",
   "kindergartens",
-  "museums",
   "hotels",
   "transit",
   "cinemas",
