@@ -138,10 +138,10 @@ describe("conflate — address corroboration", () => {
     lng: number,
     addressKey: string | undefined,
     category?: string,
-    wikidata?: string,
-  ): ConflationPoint => ({ id, name, lat, lng, addressKey, category, wikidata });
+    extra?: { wikidata?: string; addressShared?: boolean },
+  ): ConflationPoint => ({ id, name, lat, lng, addressKey, category, ...extra });
 
-  it("matches same-address points even when names differ (same place, different label)", () => {
+  it("matches same-address points even when names differ (single-tenant, address confirms)", () => {
     const a = [ap("osm:1", "Schnell", 52.52, 13.4, "10115|hauptstr|5", "bakeries")];
     const b = [
       ap("ov:1", "Bäckerei & Café Schnell", 52.5205, 13.4, "10115|hauptstr|5", "bakeries"),
@@ -149,23 +149,38 @@ describe("conflate — address corroboration", () => {
     expect(conflate(a, b, T).matched).toHaveLength(1);
   });
 
+  it("matches a single-tenant address even with no name overlap and unknown category", () => {
+    const a = [ap("osm:1", "Nahkauf", 52.52, 13.4, "10115|hauptstr|5", "supermarkets")];
+    const b = [ap("ov:1", "Market 4062467", 52.5205, 13.4, "10115|hauptstr|5", undefined)];
+    expect(conflate(a, b, T).matched).toHaveLength(1);
+  });
+
   it("rejects a strong name match when addresses contradict (precision)", () => {
-    // Identical names, ~55 m apart, but different street addresses → not the same place.
     const a = [ap("osm:1", "Apotheke", 52.52, 13.4, "10115|hauptstr|5", "pharmacies")];
     const b = [ap("ov:1", "Apotheke", 52.5205, 13.4, "10115|nebenstr|9", "pharmacies")];
     expect(conflate(a, b, T).matched).toHaveLength(0);
   });
 
-  it("does not merge different businesses sharing one address (incompatible category, weak name)", () => {
-    const a = [ap("osm:1", "Dr. Müller Zahnarzt", 52.52, 13.4, "10115|hauptstr|5", "dentists")];
-    const b = [ap("ov:1", "Tchibo", 52.5205, 13.4, "10115|hauptstr|5", "cafes")];
+  it("does NOT merge different businesses at a shared multi-tenant address", () => {
+    // addressShared marks the address as multi-tenant → a name/category signal
+    // is required, and these have neither.
+    const a = [
+      ap("osm:1", "Dr. Müller Zahnarzt", 52.52, 13.4, "10115|hauptstr|5", "dentists", {
+        addressShared: true,
+      }),
+    ];
+    const b = [
+      ap("ov:1", "Tchibo", 52.5205, 13.4, "10115|hauptstr|5", "cafes", { addressShared: true }),
+    ];
     expect(conflate(a, b, T).matched).toHaveLength(0);
   });
 
   it("matches on equal wikidata id within the window regardless of name", () => {
-    const a = [ap("osm:1", "KFC", 52.52, 13.4, undefined, "restaurants", "Q524757")];
+    const a = [ap("osm:1", "KFC", 52.52, 13.4, undefined, "restaurants", { wikidata: "Q524757" })];
     const b = [
-      ap("ov:1", "Kentucky Fried Chicken", 52.5205, 13.4, undefined, "restaurants", "Q524757"),
+      ap("ov:1", "Kentucky Fried Chicken", 52.5205, 13.4, undefined, "restaurants", {
+        wikidata: "Q524757",
+      }),
     ];
     expect(conflate(a, b, T).matched).toHaveLength(1);
   });
