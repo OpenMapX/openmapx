@@ -3,9 +3,11 @@ import {
   diceSimilarity,
   nameSimilarity,
   normalizeName,
+  normalizePhone,
   normalizeStreet,
   osmAddressKey,
   overtureAddressKey,
+  websiteDomain,
 } from "../geo-server";
 
 describe("normalizeName", () => {
@@ -67,6 +69,39 @@ describe("address keys", () => {
     expect(overtureAddressKey("Großbeerenstraße 249-253", "14480")).toBe(
       osmAddressKey("Großbeerenstraße", "249", "14480"),
     );
+  });
+});
+
+describe("normalizePhone", () => {
+  it("folds +49 / 0049 / leading-0 trunk prefixes to one canonical form", () => {
+    const canonical = normalizePhone("+49 30 31806750");
+    expect(canonical).toBe("3031806750");
+    expect(normalizePhone("0049 30 318 06 750")).toBe(canonical);
+    expect(normalizePhone("030 31806750")).toBe(canonical);
+    expect(normalizePhone("(030) 318-067-50")).toBe(canonical);
+  });
+
+  it("distinguishes genuinely different numbers", () => {
+    expect(normalizePhone("030 12345678")).not.toBe(normalizePhone("030 87654321"));
+  });
+
+  it("returns null for missing or too-short input", () => {
+    expect(normalizePhone(null)).toBeNull();
+    expect(normalizePhone("")).toBeNull();
+    expect(normalizePhone("12 34")).toBeNull();
+  });
+});
+
+describe("websiteDomain", () => {
+  it("strips scheme, www, path and query to the bare host", () => {
+    expect(websiteDomain("https://www.Edeka.de/markt/berlin?ref=x")).toBe("edeka.de");
+    expect(websiteDomain("http://edeka.de")).toBe("edeka.de");
+    expect(websiteDomain("edeka.de/foo")).toBe("edeka.de");
+  });
+
+  it("returns null when no host can be parsed", () => {
+    expect(websiteDomain(null)).toBeNull();
+    expect(websiteDomain("")).toBeNull();
   });
 });
 

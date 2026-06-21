@@ -185,6 +185,79 @@ describe("conflate — address corroboration", () => {
   });
 });
 
+describe("conflate — phone/website corroboration", () => {
+  const withContact = (
+    p: ConflationPoint,
+    contact: { phone?: string; website?: string },
+  ): ConflationPoint => ({ ...p, ...contact });
+
+  it("matches on equal phone even when name and address differ (rebrand / moved listing)", () => {
+    const a = [
+      withContact(pt("osm:1", "Pizzeria Bella", 52.52, 13.4, "restaurants"), {
+        phone: "3012345678",
+      }),
+    ];
+    const b = [
+      withContact(pt("ov:1", "Trattoria Roma", 52.5205, 13.4, "restaurants"), {
+        phone: "3012345678",
+      }),
+    ];
+    expect(conflate(a, b, T).matched).toHaveLength(1);
+  });
+
+  it("REJECTS a same-address same-name pair when phones contradict (distinct businesses)", () => {
+    // Address + name both agree, yet different phones → different businesses.
+    // This is exactly the residual error that name+address alone cannot see.
+    const a = [
+      withContact(
+        { id: "osm:1", name: "Apotheke", lat: 52.52, lng: 13.4, addressKey: "10115|hauptstr|5" },
+        { phone: "3011111111" },
+      ),
+    ];
+    const b = [
+      withContact(
+        {
+          id: "ov:1",
+          name: "Apotheke",
+          lat: 52.5205,
+          lng: 13.4,
+          addressKey: "10115|hauptstr|5",
+        },
+        { phone: "3022222222" },
+      ),
+    ];
+    expect(conflate(a, b, T).matched).toHaveLength(0);
+  });
+
+  it("matches on equal website host when no phone is present", () => {
+    const a = [
+      withContact(pt("osm:1", "Edeka", 52.52, 13.4, "supermarkets"), { website: "edeka.de" }),
+    ];
+    const b = [
+      withContact(pt("ov:1", "Edeka Markt", 52.5205, 13.4, "supermarkets"), {
+        website: "edeka.de",
+      }),
+    ];
+    expect(conflate(a, b, T).matched).toHaveLength(1);
+  });
+
+  it("phone contradiction overrides a matching website (different branch of one chain)", () => {
+    const a = [
+      withContact(pt("osm:1", "Edeka", 52.52, 13.4, "supermarkets"), {
+        website: "edeka.de",
+        phone: "3011111111",
+      }),
+    ];
+    const b = [
+      withContact(pt("ov:1", "Edeka", 52.5205, 13.4, "supermarkets"), {
+        website: "edeka.de",
+        phone: "3099999999",
+      }),
+    ];
+    expect(conflate(a, b, T).matched).toHaveLength(0);
+  });
+});
+
 describe("conflate — empty inputs", () => {
   it("handles empty a", () => {
     const b = [pt("ov:1", "Some Place", 52.52, 13.4)];

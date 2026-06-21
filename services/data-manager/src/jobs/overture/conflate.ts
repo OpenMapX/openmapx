@@ -1,7 +1,9 @@
 import {
   haversineMeters,
+  normalizePhone,
   osmAddressKey,
   overtureAddressKey,
+  websiteDomain,
 } from "@openmapx/core/utils/geo-server";
 import {
   type ConflationPoint,
@@ -32,6 +34,8 @@ export interface OverturePlacePoint {
   confidence?: number;
   addressKey?: string;
   wikidata?: string;
+  phone?: string;
+  website?: string;
 }
 
 export interface OsmPoiPoint {
@@ -44,6 +48,8 @@ export interface OsmPoiPoint {
   category?: string;
   addressKey?: string;
   wikidata?: string;
+  phone?: string;
+  website?: string;
 }
 
 export interface LinkRecord {
@@ -131,6 +137,8 @@ export async function computeLinks(
       category: p.category,
       addressKey: p.addressKey,
       wikidata: p.wikidata,
+      phone: p.phone,
+      website: p.website,
     }));
 
     const overtureConflation: ConflationPoint[] = overtureGroup.map((p) => ({
@@ -141,6 +149,8 @@ export async function computeLinks(
       category: p.category,
       addressKey: p.addressKey,
       wikidata: p.wikidata,
+      phone: p.phone,
+      website: p.website,
     }));
 
     const result = conflate(osmConflation, overtureConflation, thresholds);
@@ -301,6 +311,8 @@ export async function conflateOverture(opts: {
       category: string | null;
       addresses: unknown;
       wikidata: string | null;
+      phone: string | null;
+      website: string | null;
       confidence: number | null;
     }[]
   >(
@@ -312,6 +324,8 @@ export async function conflateOverture(opts: {
             openmapx_category AS category,
             addresses,
             brand->>'wikidata' AS wikidata,
+            phones[1] AS phone,
+            websites[1] AS website,
             confidence
      FROM "${schema}".places
      WHERE (operating_status IS NULL OR operating_status <> 'permanently_closed')
@@ -338,6 +352,8 @@ export async function conflateOverture(opts: {
       confidence: r.confidence ?? undefined,
       addressKey: overtureAddressKey(freeform, postcode) ?? undefined,
       wikidata: r.wikidata ?? undefined,
+      phone: normalizePhone(r.phone) ?? undefined,
+      website: websiteDomain(r.website) ?? undefined,
     };
   });
   onProgress?.(`Loaded ${places.length} Overture places from DB.`);
@@ -356,13 +372,17 @@ export async function conflateOverture(opts: {
       housenumber: string | null;
       postcode: string | null;
       wikidata: string | null;
+      phone: string | null;
+      website: string | null;
     }[]
   >(
     `SELECT osm_type, osm_id, name, lat, lng, category,
             tags->>'addr:street' AS street,
             tags->>'addr:housenumber' AS housenumber,
             tags->>'addr:postcode' AS postcode,
-            COALESCE(tags->>'wikidata', tags->>'brand:wikidata') AS wikidata
+            COALESCE(tags->>'wikidata', tags->>'brand:wikidata') AS wikidata,
+            COALESCE(tags->>'phone', tags->>'contact:phone') AS phone,
+            COALESCE(tags->>'website', tags->>'contact:website', tags->>'url') AS website
      FROM "${schema}".osm_pois`,
     [],
   );
@@ -376,6 +396,8 @@ export async function conflateOverture(opts: {
     category: r.category ?? undefined,
     addressKey: osmAddressKey(r.street, r.housenumber, r.postcode) ?? undefined,
     wikidata: r.wikidata ?? undefined,
+    phone: normalizePhone(r.phone) ?? undefined,
+    website: websiteDomain(r.website) ?? undefined,
   }));
   onProgress?.(`Loaded ${osmPois.length} OSM POIs from DB.`);
 

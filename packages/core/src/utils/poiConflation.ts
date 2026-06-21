@@ -15,6 +15,21 @@ export interface ConflationPoint {
   addressKey?: string;
   /** Wikidata/brand-wikidata id; equal ids within the window short-circuit to a match. */
   wikidata?: string;
+  /**
+   * Canonicalized phone (digits, country/trunk prefix folded — see geo-server
+   * normalizePhone). The most specific business-identity signal: when both sides
+   * have one, an equal phone confirms the match and a DIFFERENT phone rejects it
+   * (two businesses with different numbers are different businesses, even at the
+   * same address or under the same brand). Absent → fall back to weaker signals.
+   */
+  phone?: string;
+  /**
+   * Website host (no scheme/`www.`, lowercased — see geo-server websiteDomain).
+   * A brand/site-level corroboration: an equal domain within the window confirms
+   * a match. Weaker than phone (chains share one domain across branches), so it
+   * only confirms, never rejects.
+   */
+  website?: string;
 }
 
 export interface ConflationThresholds {
@@ -107,8 +122,21 @@ function shouldMatch(a: ConflationPoint, b: ConflationPoint, t: ConflationThresh
   const d = haversineMeters(a.lat, a.lng, b.lat, b.lng);
   if (d > t.softWindowM) return false;
 
+  // Phone is the most specific business-identity signal and decides both ways:
+  // a shared number confirms the same business even when names/addresses differ
+  // (rebrands, moved listings); a DIFFERENT number rejects the pair even when
+  // name, address, or brand coincide (distinct businesses, or two branches of one
+  // chain within the window). This is the signal that separates co-located but
+  // distinct businesses that name+address alone cannot tell apart.
+  if (a.phone && b.phone) return a.phone === b.phone;
+
   // Same specific entity / same brand outlet within the window → same place.
   if (a.wikidata && b.wikidata && a.wikidata === b.wikidata) return true;
+
+  // Same website host within the window → same business (brand/site-level
+  // corroboration). Confirms only; a shared domain across chain branches is
+  // handled by the phone check above when numbers are present.
+  if (a.website && b.website && a.website === b.website) return true;
 
   // Address corroboration. A shared address is a strong location signal but does
   // NOT confirm the business: OSM and Overture map different POIs at the same

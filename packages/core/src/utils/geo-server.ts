@@ -88,6 +88,33 @@ export function osmAddressKey(
 }
 
 /**
+ * Canonicalizes a phone number for equality comparison: digits only, with the
+ * German country/trunk prefixes folded (+49 / 0049 / leading 0 → subscriber
+ * part) so "+49 30 318 06 750" and "030 31806750" compare equal. Returns null
+ * for numbers too short to be a reliable signal. A matching phone is a strong
+ * business-level same-place signal; a differing one means different businesses.
+ */
+export function normalizePhone(phone?: string | null): string | null {
+  if (!phone) return null;
+  let d = phone.replace(/\D/g, "");
+  if (d.startsWith("0049")) d = d.slice(4);
+  else if (d.startsWith("49") && d.length > 9) d = d.slice(2);
+  if (d.startsWith("0")) d = d.slice(1);
+  return d.length >= 6 ? d : null;
+}
+
+/**
+ * Extracts the bare host (no scheme, no `www.`, lowercased) from a URL — a
+ * brand/site-level signal: an equal domain within the window corroborates a
+ * match. Returns null when no host can be parsed.
+ */
+export function websiteDomain(url?: string | null): string | null {
+  if (!url) return null;
+  const m = url.match(/^(?:https?:\/\/)?(?:www\.)?([^/\s?#]+)/i);
+  return m?.[1] ? m[1].toLowerCase() : null;
+}
+
+/**
  * Address key from an Overture freeform address (`"<street> <housenumber>"`) +
  * postcode, in the same `postcode|street|housenumber` shape as osmAddressKey.
  */
