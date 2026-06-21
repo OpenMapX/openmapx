@@ -53,15 +53,15 @@ export function normalizeName(name: string): string {
 
 /**
  * Normalizes a street name for address-key comparison: applies normalizeName,
- * then folds common German street-type abbreviations (str/straße → str,
- * platz/pl → pl) so "Karl-Liebknecht-Straße" and "Karl-Liebknecht-Str." agree.
+ * then folds the German street-type suffixes (straße/strasse → str, platz → pl)
+ * so "Karl-Liebknecht-Straße" ≡ "Karl-Liebknecht-Str." AND the compound forms
+ * "Schloßstraße" ≡ "Schloßstr." agree. The folds are global, not word-bounded,
+ * because most German street types are written compound (one token).
  */
 export function normalizeStreet(street: string): string {
   return normalizeName(street)
-    .replace(/\bstrasse\b/g, "str")
-    .replace(/\bstr\b/g, "str")
-    .replace(/\bplatz\b/g, "pl")
-    .replace(/\bpl\b/g, "pl")
+    .replace(/strasse/g, "str")
+    .replace(/platz/g, "pl")
     .trim();
 }
 

@@ -38,6 +38,12 @@ describe("address keys", () => {
     expect(normalizeStreet("Karl-Liebknecht-Straße")).toBe(normalizeStreet("Karl-Liebknecht-Str."));
   });
 
+  it("normalizeStreet folds compound (one-token) street suffixes", () => {
+    // Schloßstraße / Schloßstr. are one token — the fold must be global, not word-bounded.
+    expect(normalizeStreet("Schloßstraße")).toBe(normalizeStreet("Schloßstr."));
+    expect(normalizeStreet("Hauptstraße")).toBe("hauptstr");
+  });
+
   it("osmAddressKey and overtureAddressKey agree for the same address", () => {
     const osm = osmAddressKey("Karl-Liebknecht-Straße", "131", "14482");
     const ov = overtureAddressKey("Karl-Liebknecht-Str. 131", "14482");
