@@ -35,6 +35,52 @@ export function diceSimilarity(a: string, b: string): number {
   return (2 * intersection) / total;
 }
 
+/**
+ * Normalizes a place name for fuzzy matching: strips diacritics (NFKD),
+ * lowercases, and collapses any run of non-alphanumeric characters to a single
+ * space. So "PENNY"/"Penny" and "Schöneberg"/"Schoneberg" compare as equal and
+ * casing/accents/punctuation stop blocking otherwise-identical names.
+ */
+export function normalizeName(name: string): string {
+  return name
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/**
+ * Sørensen–Dice over whitespace-delimited token (word) SETS, 0..1. Complements
+ * character-bigram Dice: it rewards shared distinctive words even when word
+ * order or surrounding tokens differ ("U Lindauer Allee" vs "U-Bahnhof Lindauer
+ * Allee", "Trattoria La Marina" vs "La Marina Trattoria"). Inputs are assumed
+ * already normalized.
+ */
+function tokenDice(a: string, b: string): number {
+  const ta = new Set(a.split(" ").filter(Boolean));
+  const tb = new Set(b.split(" ").filter(Boolean));
+  if (ta.size === 0 || tb.size === 0) return 0;
+  let intersection = 0;
+  for (const t of ta) if (tb.has(t)) intersection += 1;
+  return (2 * intersection) / (ta.size + tb.size);
+}
+
+/**
+ * Name similarity for conflation, 0..1. Normalizes both names
+ * (case/accent/punctuation insensitive) then returns the max of character-bigram
+ * Dice (handles typos/inflections) and word-token Dice (handles word order and
+ * prefix/suffix noise). Two names that normalize to the empty string return 0
+ * (placeholder/blank names must not match each other).
+ */
+export function nameSimilarity(a: string, b: string): number {
+  const na = normalizeName(a);
+  const nb = normalizeName(b);
+  if (na.length === 0 || nb.length === 0) return 0;
+  if (na === nb) return 1;
+  return Math.max(diceSimilarity(na, nb), tokenDice(na, nb));
+}
+
 /** Merge attribution arrays, deduplicating by label. */
 export function mergeAttributions<T extends { label: string }>(
   existing: T | T[] | undefined,

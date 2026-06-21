@@ -37,6 +37,32 @@ describe("conflate — exact-coincident pair", () => {
   });
 });
 
+describe("conflate — normalized name match (Tier 1/2)", () => {
+  it("matches a case-only name variant within the soft window", () => {
+    // ~55 m apart: beyond alwaysMergeM (25), so it must pass via name similarity.
+    // Raw char-Dice for "PENNY" vs "Penny" is 0 — only normalization rescues it.
+    const a = [pt("osm:1", "PENNY", 52.52, 13.4, "supermarkets")];
+    const b = [pt("ov:1", "Penny", 52.5205, 13.4, "supermarkets")];
+    const result = conflate(a, b, T);
+    expect(result.matched).toHaveLength(1);
+    expect(result.unmatchedB).toHaveLength(0);
+  });
+
+  it("matches via shared distinctive tokens despite a prefix difference", () => {
+    const a = [pt("osm:1", "U Lindauer Allee", 52.52, 13.4, "transit")];
+    const b = [pt("ov:1", "U-Bahnhof Lindauer Allee", 52.5205, 13.4, "transit")];
+    const result = conflate(a, b, T);
+    expect(result.matched).toHaveLength(1);
+  });
+
+  it("still rejects genuinely different names within the window", () => {
+    const a = [pt("osm:1", "Aldi", 52.52, 13.4, "supermarkets")];
+    const b = [pt("ov:1", "Lidl", 52.5205, 13.4, "supermarkets")];
+    const result = conflate(a, b, T);
+    expect(result.matched).toHaveLength(0);
+  });
+});
+
 describe("conflate — far-apart no-match", () => {
   it("does not match points more than softWindowM apart", () => {
     const a = [pt("osm:1", "Cafe Mitte", 52.52, 13.4)];

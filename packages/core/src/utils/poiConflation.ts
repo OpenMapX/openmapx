@@ -1,4 +1,4 @@
-import { diceSimilarity, haversineMeters } from "./geo-server";
+import { haversineMeters, nameSimilarity } from "./geo-server";
 
 export interface ConflationPoint {
   id: string;
@@ -63,7 +63,7 @@ function shouldMatch(a: ConflationPoint, b: ConflationPoint, t: ConflationThresh
   const d = haversineMeters(a.lat, a.lng, b.lat, b.lng);
   if (d > t.softWindowM) return false;
   if (d <= t.alwaysMergeM) return true;
-  return diceSimilarity(a.name, b.name) >= t.nameDiceFloor && categoryCompatible(a, b);
+  return nameSimilarity(a.name, b.name) >= t.nameDiceFloor && categoryCompatible(a, b);
 }
 
 class UnionFind {

@@ -1,5 +1,5 @@
 import type { KnowledgeContext, KnowledgeProvider, KnowledgeResult } from "@openmapx/core";
-import { diceSimilarity } from "@openmapx/core";
+import { nameSimilarity } from "@openmapx/core";
 import type { DatabaseClient } from "@openmapx/integration-framework";
 
 let db: DatabaseClient | undefined;
@@ -56,7 +56,7 @@ function parseOsmRef(ref: string): { type: string; id: bigint } | null {
  *
  * Phase 2 — spatial+name: find candidates within 150 m of the place
  * coordinates and filter by openmapx_category; pick the one whose name
- * achieves diceSimilarity >= 0.8 with the place name.
+ * achieves nameSimilarity >= 0.8 with the place name (normalized fuzzy match).
  *
  * context.ids may be undefined (the neighborhoods call site passes a partial
  * Place with no ids) — falls through to the spatial path without throwing.
@@ -116,7 +116,7 @@ async function resolveGers(
   if (!Array.isArray(rows) || rows.length === 0) return null;
 
   for (const row of rows) {
-    if (diceSimilarity(row.name.toLowerCase(), placeName.toLowerCase()) >= 0.8) {
+    if (nameSimilarity(row.name, placeName) >= 0.8) {
       return row.gers_id;
     }
   }

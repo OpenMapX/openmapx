@@ -518,6 +518,8 @@ export {
   haversineKm,
   haversineMeters,
   mergeAttributions,
+  nameSimilarity,
+  normalizeName,
 } from "./utils/geo-server";
 export {
   geocodeStopAsPlace,
