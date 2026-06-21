@@ -95,7 +95,7 @@ async function resolveGers(
       FROM overture_places.places
       WHERE ST_DWithin(geom::geography, ST_MakePoint($1, $2)::geography, 150)
         AND openmapx_category = $3
-        AND operating_status <> 'permanently_closed'
+        AND (operating_status IS NULL OR operating_status <> 'permanently_closed')
       ORDER BY geom <-> ST_MakePoint($1, $2)::geometry
       LIMIT 5
     `;
@@ -105,7 +105,7 @@ async function resolveGers(
       SELECT gers_id, name
       FROM overture_places.places
       WHERE ST_DWithin(geom::geography, ST_MakePoint($1, $2)::geography, 150)
-        AND operating_status <> 'permanently_closed'
+        AND (operating_status IS NULL OR operating_status <> 'permanently_closed')
       ORDER BY geom <-> ST_MakePoint($1, $2)::geometry
       LIMIT 5
     `;

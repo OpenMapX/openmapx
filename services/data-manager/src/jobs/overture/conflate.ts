@@ -300,7 +300,7 @@ export async function conflateOverture(opts: {
             addresses,
             confidence
      FROM "${schema}".places
-     WHERE operating_status <> 'permanently_closed'
+     WHERE (operating_status IS NULL OR operating_status <> 'permanently_closed')
        AND (confidence IS NULL OR confidence >= ${MIN_CONFLATE_CONFIDENCE})`,
     [],
   );

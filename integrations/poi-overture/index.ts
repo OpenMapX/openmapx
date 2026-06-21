@@ -66,7 +66,7 @@ async function queryOverturePlaces(
       phones[1] AS phone
     FROM overture_places.places
     WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
-      AND operating_status <> 'permanently_closed'
+      AND (operating_status IS NULL OR operating_status <> 'permanently_closed')
       AND (confidence IS NULL OR confidence >= $${leaves.length + 5})
       AND basic_category IN (${leafParams})
     LIMIT 200
@@ -154,7 +154,9 @@ export const overtureProvider: PoiSearchProvider = {
       bbox,
       leaves,
       lang: _options?.lang,
-      minConfidence: 0.7,
+      // Calibrated to 0.5 (was 0.7): the sweep showed 0.7 excludes most genuine
+      // places; matches the offline conflation candidate floor.
+      minConfidence: 0.5,
     });
     return rows.map(overtureRowToPoiSearchResult);
   },
