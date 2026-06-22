@@ -73,6 +73,11 @@ function foldExternalIdsIntoPlace(
     if (externalIds.facebook && !ids.facebook && buildFacebookUrl(externalIds.facebook)) {
       ids.facebook = externalIds.facebook;
     }
+    // Overture GERS id — surfaces as an "Overture Maps" external reference,
+    // crediting the source whenever Overture enrichment matched the place.
+    if (externalIds.gers && !ids.gers) {
+      ids.gers = externalIds.gers;
+    }
   }
   const osmTripadvisor = place.osmTags?.["contact:tripadvisor"];
   if (osmTripadvisor && !ids.tripadvisor && buildTripadvisorUrl(osmTripadvisor)) {

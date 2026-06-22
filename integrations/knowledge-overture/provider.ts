@@ -146,18 +146,17 @@ async function fetchOverturePlaceByGers(
 }
 
 function overtureRowToKnowledgeResult(row: OvertureDetailRow): KnowledgeResult | null {
-  const result: KnowledgeResult = {};
+  // A successful match always credits Overture as a source via its GERS id,
+  // which surfaces as an "Overture Maps" external reference on the place card.
+  const result: KnowledgeResult = { externalIds: { gers: row.gers_id } };
 
   const brandName = row.brand?.names?.primary;
   if (brandName) {
     result.brand = { name: brandName };
-    if (row.brand?.wikidata) {
-      result.brand.wikidata = row.brand.wikidata;
-      result.externalIds = { wikidata: row.brand.wikidata };
-    }
-  } else if (row.brand?.wikidata) {
-    // Branded place with no resolvable brand name — still expose the Q-id.
-    result.externalIds = { wikidata: row.brand.wikidata };
+  }
+  if (row.brand?.wikidata) {
+    if (result.brand) result.brand.wikidata = row.brand.wikidata;
+    result.externalIds = { ...result.externalIds, wikidata: row.brand.wikidata };
   }
 
   if (row.names && Object.keys(row.names).length > 0) {
@@ -174,7 +173,8 @@ function overtureRowToKnowledgeResult(row: OvertureDetailRow): KnowledgeResult |
   const website = row.websites?.[0];
   if (website) result.website = website;
 
-  return Object.keys(result).length > 0 ? result : null;
+  // Always non-empty: externalIds.gers is set for every match.
+  return result;
 }
 
 export const overtureKnowledgeSource: KnowledgeProvider = {

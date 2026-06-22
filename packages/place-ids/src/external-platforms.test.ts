@@ -82,4 +82,11 @@ describe("external platform URL builders", () => {
       "https://www.instagram.com/openmapx/",
     );
   });
+
+  it("registers a user-facing 'Overture Maps' view for the gers scheme", () => {
+    registerBuiltinIdSchemeViews();
+    const view = getIdSchemeView("gers");
+    expect(view?.label).toBe("Overture Maps");
+    expect(view?.internal).toBeFalsy();
+  });
 });

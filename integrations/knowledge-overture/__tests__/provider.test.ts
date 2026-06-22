@@ -146,6 +146,8 @@ describe("knowledge-overture provider lookup", () => {
     expect(result?.names).toEqual({ de: "Starbucks", fr: "Starbucks" });
     expect(result?.structuredOpeningHours).toBe("Mo-Fr 07:00-21:00; Sa-Su 08:00-20:00");
     expect(result?.externalIds?.wikidata).toBe("Q37158");
+    // The GERS id is always exposed so the place card can credit Overture.
+    expect(result?.externalIds?.gers).toBe("overture-abc-123");
     expect(result?.phone).toBe("+49 30 1234567");
     expect(result?.website).toBe("https://starbucks.de");
   });

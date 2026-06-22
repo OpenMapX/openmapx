@@ -53,6 +53,14 @@ export function registerBuiltinIdSchemeViews(): void {
     },
   });
 
+  registerIdSchemeView({
+    scheme: "gers",
+    label: "Overture Maps",
+    displayOrder: 25,
+    // Overture's GERS ids have no canonical per-feature public page, so the id
+    // is shown as a source credit without a deep link (like EVA/GTFS).
+  });
+
   // Transit / stations
 
   registerIdSchemeView({
