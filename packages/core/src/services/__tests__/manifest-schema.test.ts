@@ -1,5 +1,33 @@
 import { describe, expect, it } from "vitest";
-import { serviceManifestSchema } from "../manifest-schema";
+import { serviceManifestSchema, validateServiceManifest } from "../manifest-schema";
+
+const minimalManifest = {
+  id: "conditions-ingest",
+  name: "Conditions Ingest",
+  version: "1.0.0",
+  quality: "community" as const,
+  container: { image: "ghcr.io/openconditions/ingest", tag: "latest" },
+};
+
+describe("service manifest ownsSchema field", () => {
+  it("accepts a valid ownsSchema identifier", () => {
+    const result = validateServiceManifest({ ...minimalManifest, ownsSchema: "conditions" });
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it("rejects an ownsSchema with uppercase letters or spaces", () => {
+    const result = validateServiceManifest({ ...minimalManifest, ownsSchema: "Bad Name" });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("Postgres identifier"))).toBe(true);
+  });
+
+  it("validates a manifest without ownsSchema (backward compatibility)", () => {
+    const result = validateServiceManifest({ ...minimalManifest });
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+});
 
 describe("service manifest gpu field", () => {
   it("accepts an optional container.gpu reservation", () => {

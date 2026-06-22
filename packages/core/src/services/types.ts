@@ -278,6 +278,8 @@ export interface ServiceManifest {
 
   configSchema?: Record<string, unknown>;
   envVars?: Array<{ name: string; required?: boolean; description?: string; default?: string }>;
+  /** Postgres schema this service owns + migrates itself on boot (declaration only). */
+  ownsSchema?: string;
 
   volumes?: ServiceVolume[];
   bindMounts?: ServiceBindMount[];

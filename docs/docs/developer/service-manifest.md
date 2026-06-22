@@ -404,6 +404,42 @@ documentation surfaced in the admin UI — it is **not** enforced.
 ]
 ```
 
+## `ownsSchema`
+
+Declares the Postgres schema this service owns and migrates itself, idempotently,
+on boot. The value must be a valid lowercase Postgres identifier (`[a-z_][a-z0-9_]*`).
+
+```json
+"ownsSchema": "conditions"
+```
+
+### Boot-migration pattern
+
+When a service declares `ownsSchema`, it is responsible for creating and evolving
+its schema during container startup — before it begins serving traffic. The
+blessed pattern is a sequence of idempotent DDL statements run under the
+service's own DB role:
+
+```sql
+CREATE SCHEMA IF NOT EXISTS conditions;
+CREATE TABLE IF NOT EXISTS conditions.observations (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_id   text NOT NULL,
+  observed_at timestamptz NOT NULL,
+  geometry    geometry(Geometry, 4326) NOT NULL,
+  payload     jsonb NOT NULL
+);
+```
+
+**Platform contract**: the platform applies no migration and grants nothing. It
+is entirely the service's responsibility to create and migrate its schema. A
+service must write only under the schema it declares — cross-schema writes by a
+community service are not permitted.
+
+**Namespace isolation**: each service owns exactly one schema. If a service needs
+multiple schemas, it should either consolidate them or be split into separate
+services with separate manifests.
+
 ## `buildCommand`
 
 An optional operator-facing build hook for engines that need a prepared graph or

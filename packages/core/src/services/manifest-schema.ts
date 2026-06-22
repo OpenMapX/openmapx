@@ -348,6 +348,14 @@ export const serviceManifestSchema = z.object({
   configSchema: z.record(z.string(), z.unknown()).optional(),
   envVars: z.array(envVarSchema).optional(),
 
+  // Postgres schema this service owns and migrates itself, idempotently, on boot
+  // (CREATE SCHEMA/TABLE IF NOT EXISTS under its own DB role). Declaration only —
+  // the platform applies no migration and grants nothing.
+  ownsSchema: z
+    .string()
+    .regex(/^[a-z_][a-z0-9_]*$/, "must be a valid lowercase Postgres identifier")
+    .optional(),
+
   volumes: z.array(volumeSchema).optional(),
   bindMounts: z.array(bindMountSchema).optional(),
   exposure: exposureSchema.optional(),
