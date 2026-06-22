@@ -1140,6 +1140,15 @@ importers:
         specifier: workspace:^
         version: link:../../packages/mangrove-client
 
+  integrations/road-conditions:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+
   integrations/routing:
     dependencies:
       '@openmapx/core':

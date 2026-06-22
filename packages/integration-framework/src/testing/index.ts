@@ -23,6 +23,7 @@ import type { PhotoProvider } from "../contracts/photo-provider.js";
 import type { PoiSearchProvider } from "../contracts/poi-search-provider.js";
 import type { RealtimeProvider } from "../contracts/realtime-provider.js";
 import type { ReviewProvider } from "../contracts/review-provider.js";
+import type { RoadConditionsProvider } from "../contracts/road-conditions-provider.js";
 import type { RoutingProvider } from "../contracts/routing-provider.js";
 import type { TransitProvider } from "../contracts/transit-provider.js";
 import type { WeatherProvider } from "../contracts/weather-provider.js";
@@ -113,6 +114,7 @@ export interface CapturedRegistrations {
   weather: WeatherProvider[];
   geocoding: GeocodingProvider[];
   routing: RoutingProvider[];
+  roadConditions: RoadConditionsProvider[];
   photo: PhotoProvider[];
   review: ReviewProvider[];
   poiSearch: PoiSearchProvider[];
@@ -157,6 +159,7 @@ export function createMockIntegrationContext(
     weather: [],
     geocoding: [],
     routing: [],
+    roadConditions: [],
     photo: [],
     review: [],
     poiSearch: [],
@@ -205,6 +208,9 @@ export function createMockIntegrationContext(
     },
     registerRoutingProvider: (p) => {
       registered.routing.push(p);
+    },
+    registerRoadConditionsProvider: (p) => {
+      registered.roadConditions.push(p);
     },
     registerPhotoProvider: (p) => {
       registered.photo.push(p);

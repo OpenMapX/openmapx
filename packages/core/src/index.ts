@@ -28,6 +28,15 @@ export type {
   ReviewSubject,
 } from "@integrations/reviews/types";
 export type {
+  RoadConditionAttribution,
+  RoadConditionEvent,
+  RoadConditionRoadRef,
+  RoadConditionSeverity,
+  RoadConditionsQuery,
+  RoadConditionType,
+  RoadState,
+} from "@integrations/road-conditions/types";
+export type {
   DirectionsResult,
   IsochroneContour,
   IsochroneGeometry,
@@ -87,6 +96,10 @@ export {
 } from "./api/directions";
 export { API_ENDPOINTS } from "./api/endpoints";
 export { type AlertBBox, fetchRoadAlerts, type RawRoadAlert } from "./api/roadAlerts";
+export {
+  type FetchRoadConditionsOptions,
+  fetchRoadConditions,
+} from "./api/roadConditions";
 export { fetchRouteMatchWindow, type RouteMatchWindow } from "./api/routeAttributes";
 export { fetchSpeedLimit } from "./api/speedLimit";
 export { fetchTrafficSignals } from "./api/trafficSignals";

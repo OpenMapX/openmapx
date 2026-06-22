@@ -1,0 +1,18 @@
+{
+  "trafficIncidents": "Verkehrsstörungen",
+  "panel": {
+    "headline": "Vorfall",
+    "description": "Beschreibung",
+    "roads": "Betroffene Straßen",
+    "validFrom": "Von",
+    "validTo": "Bis",
+    "via": "Quelle",
+    "severity": {
+      "low": "Niedrig",
+      "medium": "Mittel",
+      "high": "Hoch",
+      "critical": "Kritisch",
+      "unknown": "Unbekannt"
+    }
+  }
+}

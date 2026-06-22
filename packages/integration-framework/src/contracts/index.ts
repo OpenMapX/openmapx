@@ -60,6 +60,16 @@ export type {
   ReviewSubject,
 } from "./review-provider.js";
 export type {
+  RoadConditionAttribution,
+  RoadConditionEvent,
+  RoadConditionRoadRef,
+  RoadConditionSeverity,
+  RoadConditionsProvider,
+  RoadConditionsQuery,
+  RoadConditionType,
+  RoadState,
+} from "./road-conditions-provider.js";
+export type {
   DirectionsResult,
   IsochroneContour,
   IsochroneGeometry,

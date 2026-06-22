@@ -1,0 +1,18 @@
+{
+  "trafficIncidents": "Traffic incidents",
+  "panel": {
+    "headline": "Incident",
+    "description": "Description",
+    "roads": "Roads affected",
+    "validFrom": "From",
+    "validTo": "Until",
+    "via": "Via",
+    "severity": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "critical": "Critical",
+      "unknown": "Unknown"
+    }
+  }
+}

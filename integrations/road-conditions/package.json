@@ -1,0 +1,23 @@
+{
+  "name": "@openmapx/integration-road-conditions",
+  "license": "AGPL-3.0-or-later",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "default": "./index.ts"
+    },
+    "./types": {
+      "types": "./types.ts",
+      "default": "./types.ts"
+    }
+  },
+  "dependencies": {
+    "@openmapx/core": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^"
+  }
+}

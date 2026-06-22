@@ -1,0 +1,71 @@
+{
+  "id": "road-conditions",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "AGPL-3.0-or-later",
+  "domains": ["road-conditions", "map-overlay"],
+  "backend": {
+    "routes": true
+  },
+  "quality": "built-in",
+  "category": "Navigation",
+  "frontend": {
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "trafficIncidents",
+      "icon": "warning"
+    },
+    "overlay": {
+      "minZoom": 5,
+      "source": {
+        "kind": "geojson-bbox",
+        "route": "/events",
+        "bboxParam": "bbox"
+      },
+      "layers": [
+        {
+          "id": "points",
+          "type": "circle",
+          "interactive": true,
+          "paint": {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 4, 12, 8],
+            "circle-color": [
+              "match",
+              ["get", "severity"],
+              "critical",
+              "#7e0023",
+              "high",
+              "#cc0033",
+              "medium",
+              "#ff9933",
+              "low",
+              "#ffde33",
+              "#8a8a8a"
+            ],
+            "circle-opacity": 0.85,
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": 1
+          }
+        }
+      ],
+      "legend": {
+        "kind": "categorical",
+        "title": "Road conditions",
+        "items": [
+          { "color": "#7e0023", "label": "Critical" },
+          { "color": "#cc0033", "label": "High" },
+          { "color": "#ff9933", "label": "Medium" },
+          { "color": "#ffde33", "label": "Low" }
+        ]
+      },
+      "popup": {
+        "titleField": "headline",
+        "rows": [
+          { "field": "type", "label": "Type" },
+          { "field": "severity", "label": "Severity" },
+          { "field": "description", "label": "Details" }
+        ]
+      }
+    }
+  }
+}
