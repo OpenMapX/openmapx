@@ -44,6 +44,7 @@ const MIT = "MIT";
 const APACHE_PACKAGES = new Set([
   "integration-framework",
   "core", // SDK + ~all integrations depend on it; it is the shared foundation
+  "extension-sdk", // prebuilt public authoring surface — the plugin SDK itself
   "presets", // integration-poi-search depends on it
   "mobility-formats",
   "mobility-formats-tomp",
@@ -64,7 +65,7 @@ const VENDORED: Record<string, string> = {
 };
 
 /** Packages currently meant to be published to npm (not `private`). */
-const PUBLIC_PACKAGES = new Set(["core"]);
+const PUBLIC_PACKAGES = new Set(["core", "extension-sdk"]);
 
 type Plan = { spdx: string; keepPrivate: boolean };
 

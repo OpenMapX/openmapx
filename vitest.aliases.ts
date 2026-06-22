@@ -59,6 +59,14 @@ export function createRepoVitestAliases(repoRoot: string) {
       replacement: resolve(repoRoot, "packages/integration-framework/src/index.ts"),
     },
     {
+      find: /^@openmapx\/extension-sdk\/testing$/,
+      replacement: resolve(repoRoot, "packages/extension-sdk/src/testing.ts"),
+    },
+    {
+      find: /^@openmapx\/extension-sdk$/,
+      replacement: resolve(repoRoot, "packages/extension-sdk/src/index.ts"),
+    },
+    {
       find: /^@integrations\/(.+)$/,
       replacement: resolve(repoRoot, "integrations/$1"),
     },

@@ -1,0 +1,122 @@
+/**
+ * @openmapx/extension-sdk
+ *
+ * Curated, prebuilt, Apache-2.0 public authoring surface for OpenMapX
+ * integrations. Re-exports the stable subset of `@openmapx/integration-framework`
+ * and `@openmapx/mobility-core` needed to author and type-check an integration
+ * outside the monorepo.
+ *
+ * The host injects `@openmapx/integration-framework` as a runtime external —
+ * declare it as an external in your bundler config.
+ */
+
+// Context types, manifest types, provider contracts, platform helpers, and HTTP error
+export type {
+  AutocompleteResult,
+  CacheClient,
+  CredentialSetup,
+  CurrentWeather,
+  CustomHealthCheckFn,
+  DailyForecastPoint,
+  DatabaseClient,
+  DataSourceAttribution,
+  DataSourceBranding,
+  DataSourceDetail,
+  DataSourceDetailSection,
+  DataSourceFilterDef,
+  DataSourceGeoJsonFeature,
+  DataSourceGeoJsonFeatureCollection,
+  DataSourceGeoJsonGeometry,
+  DataSourceMapContext,
+  DataSourceMapContextSelection,
+  DataSourceMarkerStyle,
+  DataSourceMeta,
+  DataSourceResult,
+  DirectionsResult,
+  GeocodingProvider,
+  GtfsCatalogFeed,
+  GtfsCatalogProvider,
+  HealthCheckResult,
+  HourlyForecastPoint,
+  HttpClient,
+  HttpClientOptions,
+  IntegrationContext,
+  IntegrationDataSource,
+  IntegrationFrontend,
+  IntegrationHealthCheck,
+  IntegrationLayerSelector,
+  IntegrationManifest,
+  IsochroneContour,
+  IsochroneGeometry,
+  IsochroneResult,
+  IsochroneTravelMode,
+  KnowledgeContext,
+  KnowledgeProvider,
+  KnowledgeResult,
+  LiveStoreClient,
+  Logger,
+  ManeuverLane,
+  ManeuverSign,
+  ManifestValidationResult,
+  MatchEdge,
+  MatchOptions,
+  MatchPoint,
+  MatchResult,
+  MobilityDataSourceProvider,
+  OsmIdentity,
+  PhotoProvider,
+  PhotoQuery,
+  PoiSearchProvider,
+  PoiSearchResult,
+  PricingPlanEntry,
+  ProviderAttribution,
+  RealtimeCapabilities,
+  RealtimeProvider,
+  ReverseGeocodingResult,
+  Review,
+  ReviewAction,
+  ReviewAggregate,
+  ReviewAuthor,
+  ReviewImage,
+  ReviewMetadata,
+  ReviewProvider,
+  ReviewSubject,
+  Route,
+  RouteHandler,
+  RouteLeg,
+  RouteOptions,
+  RouteStep,
+  RoutingOptions,
+  RoutingProvider,
+  SearchResult,
+  SecretsClient,
+  SpatialConstraint,
+  TimeConstraint,
+  TimetableEntry,
+  TransitCapabilities,
+  TransitProvider,
+  TravelMode,
+  TripPlanRequest,
+  TripUpdate,
+  VehicleJourney,
+  Waypoint,
+  WeatherOptions,
+  WeatherProvider,
+  WeatherResponse,
+} from "@openmapx/integration-framework";
+export {
+  createManifestAttribution,
+  dataSourceToAttribution,
+  httpError,
+  INTEGRATION_ID_REGEX,
+  integrationManifestSchema,
+  PLATFORM_VERSION,
+  satisfiesPlatformVersion,
+  validateManifest,
+} from "@openmapx/integration-framework";
+// Mobility result helpers from @openmapx/mobility-core
+export type { Attribution } from "@openmapx/mobility-core/attribution";
+export type { Freshness } from "@openmapx/mobility-core/freshness";
+export { freshnessNow } from "@openmapx/mobility-core/freshness";
+export type { MobilityResult } from "@openmapx/mobility-core/result";
+export { withAttribution } from "@openmapx/mobility-core/result";

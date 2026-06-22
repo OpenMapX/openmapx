@@ -1,0 +1,45 @@
+{
+  "name": "@openmapx/extension-sdk",
+  "version": "0.1.0",
+  "description": "Prebuilt public authoring surface for OpenMapX integrations",
+  "license": "Apache-2.0",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js",
+      "require": "./dist/testing.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup && node scripts/rollup-dts.mjs",
+    "check-types": "tsc --noEmit",
+    "test": "cd ../.. && vitest run --project node src/__tests__/smoke.test.ts"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "^7.58.9",
+    "@openmapx/core": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/mobility-core": "workspace:^",
+    "@openmapx/place-ids": "workspace:^",
+    "@openmapx/poi-source-registry": "workspace:^",
+    "@types/node": "^25.9.3",
+    "tsup": "8.1.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  }
+}
