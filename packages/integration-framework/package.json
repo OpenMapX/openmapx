@@ -48,10 +48,14 @@
   },
   "peerDependencies": {
     "esbuild": "^0.28.0",
+    "maplibre-gl": ">=5",
     "react": ">=19"
   },
   "peerDependenciesMeta": {
     "esbuild": {
+      "optional": true
+    },
+    "maplibre-gl": {
       "optional": true
     }
   },
@@ -61,6 +65,7 @@
     "@types/node": "^25.9.3",
     "@types/react": "^19.2.17",
     "esbuild": "^0.28.0",
+    "maplibre-gl": "^5.24.0",
     "react": "19.2.6",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"

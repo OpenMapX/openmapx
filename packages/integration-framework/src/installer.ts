@@ -52,6 +52,9 @@ const FRONTEND_RUNTIME_EXTERNALS = [
   "@openmapx/core",
   "@openmapx/integration-framework",
   "@openmapx/integration-framework/react",
+  // Shared so a community map overlay's Popup/expressions operate on the host's
+  // single maplibre-gl instance (the live map is a host maplibre object).
+  "maplibre-gl",
 ] as const;
 
 // Server runtime exposes these as already-loaded modules; integrations must

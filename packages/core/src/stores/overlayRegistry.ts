@@ -22,7 +22,7 @@ type StoreHook = {
 };
 
 /** Convert integration ID to overlay ID */
-function integrationIdToOverlayId(integrationId: string): string {
+export function integrationIdToOverlayId(integrationId: string): string {
   if (integrationId === "overlay-traffic-tomtom") return "traffic";
   if (integrationId === "street-view-mapillary") return "street-view";
   return integrationId.replace(/^overlay-/, "").replace(/^tool-/, "");

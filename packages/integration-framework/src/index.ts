@@ -2,8 +2,10 @@ export type { CommunityIntegrationModule } from "./community";
 export {
   getCommunityModule,
   getCommunityModuleIds,
+  getCommunityModulesVersion,
   initCommunityIntegrationRegistry,
   registerCommunityModule,
+  subscribeCommunityModules,
 } from "./community";
 export type {
   AiSearchDisclosure,
@@ -141,6 +143,11 @@ export type {
   IntegrationLayerSelector,
   IntegrationManifest,
   IntegrationOverlay,
+  IntegrationOverlayLayer,
+  IntegrationOverlayLegend,
+  IntegrationOverlayPopup,
+  IntegrationOverlayPopupRow,
+  IntegrationOverlaySource,
   IntegrationSearchCategory,
   ManifestAttributionStore,
   ManifestValidationResult,

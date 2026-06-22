@@ -1780,6 +1780,9 @@ importers:
       esbuild:
         specifier: '>=0.28.1'
         version: 0.28.1
+      maplibre-gl:
+        specifier: ^5.24.0
+        version: 5.24.0
       react:
         specifier: 19.2.7
         version: 19.2.7

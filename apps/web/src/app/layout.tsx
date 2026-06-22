@@ -29,6 +29,7 @@ const RUNTIME_IMPORTMAP = JSON.stringify({
     "@openmapx/core": "/runtime/openmapx-core.js",
     "@openmapx/integration-framework": "/runtime/openmapx-integration-framework.js",
     "@openmapx/integration-framework/react": "/runtime/openmapx-integration-framework-react.js",
+    "maplibre-gl": "/runtime/maplibre-gl.js",
   },
 });
 

@@ -1,9 +1,13 @@
 "use client";
 
 import { getCommunityModule } from "@openmapx/integration-framework";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import {
+  useCommunityModulesVersion,
+  useIntegrationRegistry,
+} from "@openmapx/integration-framework/react";
 import type { ComponentType } from "react";
 import { lazy, Suspense, useMemo } from "react";
+import { DeclarativeLegend } from "./overlay/DeclarativeLegend";
 
 function resolveDefault(mod: Record<string, unknown>): { default: ComponentType } {
   const Component = (mod.default ??
@@ -39,14 +43,25 @@ function CommunityLegend({ id }: { id: string }) {
 
 export function LegendHost() {
   const registry = useIntegrationRegistry();
-  const withLegend = registry.getWithLegend();
+  // Re-render when a community bundle registers its legend after first paint.
+  useCommunityModulesVersion();
 
-  if (withLegend.length === 0) return null;
+  // Declarative legends (manifest `frontend.overlay.legend` data) are rendered by
+  // the host; they take precedence over the code legend path.
+  const declarative = registry.getAll().filter((i) => i.enabled && i.frontend?.overlay?.legend);
+  const declarativeIds = new Set(declarative.map((i) => i.id));
+  const codeLegends = registry.getWithLegend().filter((i) => !declarativeIds.has(i.id));
+
+  if (declarative.length === 0 && codeLegends.length === 0) return null;
 
   return (
     <>
-      {withLegend.map((integration) => {
-        const isCommunity = getCommunityModule(integration.id) !== undefined;
+      {declarative.map((integration) => (
+        <DeclarativeLegend key={integration.id} integration={integration} />
+      ))}
+      {codeLegends.map((integration) => {
+        const isCommunity =
+          integration.isBuiltIn === false || getCommunityModule(integration.id) !== undefined;
         return isCommunity ? (
           <CommunityLegend key={integration.id} id={integration.id} />
         ) : (

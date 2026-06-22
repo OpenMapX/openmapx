@@ -142,9 +142,81 @@ const layerSelectorSchema = z.object({
   quickSelector: z.boolean().optional(),
 });
 
+/**
+ * Declarative overlay source. The host's generic overlay renderer fetches/binds
+ * this — community overlays describe their data instead of shipping code.
+ * `geojson-bbox` re-fetches `route` (the integration's own backend route) on map
+ * move with the viewport substituted; `geojson` fetches once; `vector` points at
+ * `tiles`.
+ */
+const overlaySourceSchema = z.object({
+  kind: z.enum(["geojson-bbox", "geojson", "vector"]),
+  /** Integration-relative route, e.g. "/observations" → /api/integrations/<id>/observations. */
+  route: z.string().optional(),
+  /**
+   * How the viewport is passed for geojson-bbox. "bbox" (default) → one
+   * `bbox=west,south,east,north` param; "wsen" → separate `west/south/east/north`
+   * params.
+   */
+  bboxParam: z.enum(["bbox", "wsen"]).optional(),
+  /** Static query params appended to every fetch. */
+  extraParams: z.record(z.string(), z.string()).optional(),
+  /** Vector tile URL templates (vector only). */
+  tiles: z.array(z.string()).optional(),
+  /** Default `source-layer` for vector layers that don't set their own. */
+  sourceLayer: z.string().optional(),
+});
+
+/** A MapLibre Style-Spec layer the host adds for this overlay (validated subset). */
+const overlayLayerSchema = z.object({
+  id: z.string(),
+  type: z.enum(["circle", "line", "fill", "symbol"]),
+  sourceLayer: z.string().optional(),
+  paint: z.record(z.string(), z.unknown()).optional(),
+  layout: z.record(z.string(), z.unknown()).optional(),
+  filter: z.array(z.unknown()).optional(),
+  minzoom: z.number().optional(),
+  maxzoom: z.number().optional(),
+  /** Register for click (popup) + hover cursor. */
+  interactive: z.boolean().optional(),
+});
+
+const overlayLegendItemSchema = z.object({
+  color: z.string(),
+  label: z.string().optional(),
+  labelKey: z.string().optional(),
+});
+
+const overlayLegendSchema = z.object({
+  kind: z.enum(["categorical", "ramp"]),
+  title: z.string().optional(),
+  titleKey: z.string().optional(),
+  /** categorical: discrete swatches. */
+  items: z.array(overlayLegendItemSchema).optional(),
+  /** ramp: a value→color gradient. */
+  stops: z.array(z.object({ value: z.number(), color: z.string() })).optional(),
+});
+
+const overlayPopupRowSchema = z.object({
+  field: z.string(),
+  label: z.string().optional(),
+  labelKey: z.string().optional(),
+  format: z.enum(["text", "number", "date"]).optional(),
+});
+
+/** Declarative click popup. The host renders it with every value escaped. */
+const overlayPopupSchema = z.object({
+  titleField: z.string(),
+  rows: z.array(overlayPopupRowSchema).optional(),
+});
+
 const overlaySchema = z.object({
   excludes: z.array(z.string()).optional(),
   minZoom: z.number().optional(),
+  source: overlaySourceSchema.optional(),
+  layers: z.array(overlayLayerSchema).optional(),
+  legend: overlayLegendSchema.optional(),
+  popup: overlayPopupSchema.optional(),
 });
 
 const searchCategorySchema = z.object({
@@ -228,6 +300,11 @@ export type IntegrationHealthCheck = z.infer<typeof healthCheckSchema>;
 export type IntegrationFrontend = z.infer<typeof frontendSchema>;
 export type IntegrationLayerSelector = z.infer<typeof layerSelectorSchema>;
 export type IntegrationOverlay = z.infer<typeof overlaySchema>;
+export type IntegrationOverlaySource = z.infer<typeof overlaySourceSchema>;
+export type IntegrationOverlayLayer = z.infer<typeof overlayLayerSchema>;
+export type IntegrationOverlayLegend = z.infer<typeof overlayLegendSchema>;
+export type IntegrationOverlayPopup = z.infer<typeof overlayPopupSchema>;
+export type IntegrationOverlayPopupRow = z.infer<typeof overlayPopupRowSchema>;
 export type IntegrationSearchCategory = z.infer<typeof searchCategorySchema>;
 
 export interface ManifestValidationResult {

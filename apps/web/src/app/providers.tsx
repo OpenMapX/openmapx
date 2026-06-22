@@ -7,6 +7,10 @@ import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { useEffect, useState } from "react";
+// Side-effect import: populates globalThis.__OMX_RUNTIME__ so community bundles
+// resolve react/@openmapx/* to the host's singletons (must run before any
+// community bundle script is appended by IntegrationProvider).
+import "../lib/communityRuntime";
 import { ImpersonationBanner } from "../components/admin/ImpersonationBanner";
 import { SavedPlacesMirror } from "../components/pwa/SavedPlacesMirror";
 import { createIdbPersister } from "../lib/queryPersister";

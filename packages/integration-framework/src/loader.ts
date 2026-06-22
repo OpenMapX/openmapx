@@ -28,6 +28,13 @@ export interface LoadedIntegrationMeta {
   dataSources?: IntegrationManifest["dataSources"];
   healthCheck?: IntegrationManifest["healthCheck"];
   strings?: IntegrationStrings;
+  /**
+   * False for community integrations loaded from `custom_integrations/` (their
+   * frontend ships as a runtime bundle), true/undefined for built-ins. The
+   * frontend hosts use this to route community integrations to the community
+   * (bundle) render path instead of the build-time `@integrations/*` import.
+   */
+  isBuiltIn?: boolean;
 }
 
 /**

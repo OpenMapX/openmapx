@@ -55,6 +55,8 @@ export function IntegrationProvider({ children }: { children: React.ReactNode })
     for (const integration of integrations) {
       if (integration.isBuiltIn !== false) continue;
       const fe = integration.frontend;
+      // Declarative overlays are host-rendered from the manifest — no bundle to load.
+      if (fe?.overlay?.source) continue;
       if (!fe?.mapLayer && !fe?.legend && !fe?.panel) continue;
       if (getCommunityModule(integration.id)) continue;
       if (loadingBundleIdsRef.current.has(integration.id)) continue;

@@ -26,9 +26,30 @@ declare global {
 
 const communityModules = new Map<string, CommunityIntegrationModule>();
 
+// Subscription so the frontend hosts (MapLayerHost/LegendHost/PanelHost) re-render
+// when a community bundle self-registers AFTER first paint. Without this the
+// hosts would render once (module absent) and never pick up the loaded bundle —
+// IntegrationProvider's own re-render doesn't propagate through its stable
+// `{children}` prop.
+const communityModuleListeners = new Set<() => void>();
+let communityModulesVersion = 0;
+
+/** Subscribe to community-module registrations. Returns an unsubscribe fn. */
+export function subscribeCommunityModules(listener: () => void): () => void {
+  communityModuleListeners.add(listener);
+  return () => communityModuleListeners.delete(listener);
+}
+
+/** Monotonic version, bumped on each registration — the useSyncExternalStore snapshot. */
+export function getCommunityModulesVersion(): number {
+  return communityModulesVersion;
+}
+
 /** Register a community integration module (called from bundle self-registration). */
 export function registerCommunityModule(mod: CommunityIntegrationModule): void {
   communityModules.set(mod.id, mod);
+  communityModulesVersion += 1;
+  for (const listener of communityModuleListeners) listener();
 }
 
 /** Get a registered community integration module by ID. */

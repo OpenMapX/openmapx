@@ -358,6 +358,7 @@ export {
   closeExclusionPeers,
   getOverlayEntry,
   initOverlayRegistry,
+  integrationIdToOverlayId,
   isOverlayActive,
   OVERLAY_REGISTRY,
   registerOverlayEntry,
