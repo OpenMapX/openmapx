@@ -37,10 +37,14 @@ interface IntegrationsApiResponse {
   disclosures?: Disclosure[];
 }
 
+// Not cached: the only callers are the force-dynamic /privacy and /terms
+// pages, whose attribution/disclosure tables must reflect the integrations
+// enabled at runtime. A cached fetch here is seeded empty during `next build`
+// (no API runs then) and baked into the image, rendering those tables stale.
 export async function fetchIntegrations(): Promise<LoadedIntegrationMeta[]> {
   try {
     const res = await fetch(`${serverApiUrl()}/api/integrations`, {
-      next: { revalidate: 3600 },
+      cache: "no-store",
     } as RequestInit);
     if (!res.ok) return [];
     const body = (await res.json()) as IntegrationsApiResponse;
@@ -53,7 +57,7 @@ export async function fetchIntegrations(): Promise<LoadedIntegrationMeta[]> {
 export async function fetchDisclosures(): Promise<Disclosure[]> {
   try {
     const res = await fetch(`${serverApiUrl()}/api/integrations`, {
-      next: { revalidate: 3600 },
+      cache: "no-store",
     } as RequestInit);
     if (!res.ok) return [];
     const body = (await res.json()) as IntegrationsApiResponse;
