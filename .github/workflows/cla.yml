@@ -32,7 +32,7 @@ jobs:
           github.event_name == 'pull_request_target'
         # OpenMapX fork of the (archived) contributor-assistant/github-action,
         # bumped to the Node 24 runtime. See OpenMapX/cla-assistant-action.
-        uses: OpenMapX/cla-assistant-action@3e864d0e9c7ec7a7fc4eb36e78ff857b1db7978c # v2.6.1-node24
+        uses: OpenMapX/cla-assistant-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08 # v2.6.1-node24
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # A classic PAT (repo scope) or fine-grained token with Contents:write
