@@ -75,7 +75,7 @@ describe("scaffold service", () => {
     };
     expect(service.id).toBe("my-service");
     expect(service.quality).toBe("community");
-    expect(service.ownsSchema).toBe("my-service");
+    expect(service.ownsSchema).toBe("my_service");
   });
 
   it("produces a service.json that passes the OpenMapX service-manifest validator", () => {

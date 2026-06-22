@@ -20,5 +20,5 @@
     }
   },
   "provides": [],
-  "ownsSchema": "__ID__"
+  "ownsSchema": "__OWNS_SCHEMA__"
 }
