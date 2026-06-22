@@ -267,7 +267,7 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
   const hasDescription = Boolean(infoDescription);
   const hasFacts = Boolean(place.facts?.length);
   const hasOsmTags = Boolean(place.osmTags && Object.keys(place.osmTags).length > 0);
-  const externalRefs = buildExternalRefs(place.ids);
+  const externalRefs = buildExternalRefs(place.ids, place.coordinates);
   const hasExternalRefs = externalRefs.length > 0;
   const hasAnyContent = hasDescription || hasFacts || hasOsmTags || hasExternalRefs;
 

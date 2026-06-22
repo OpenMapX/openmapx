@@ -89,4 +89,18 @@ describe("external platform URL builders", () => {
     expect(view?.label).toBe("Overture Maps");
     expect(view?.internal).toBeFalsy();
   });
+
+  it("builds an Overture explorer deep link from the gers id + coordinates", () => {
+    registerBuiltinIdSchemeViews();
+    const view = getIdSchemeView("gers");
+    expect(
+      view?.buildUrl?.("aff9ee5d-3ec2-4ab0-af60-823b5244fb5f", { coordinates: [6.6867, 51.1734] }),
+    ).toBe(
+      "https://explore.overturemaps.org/?feature=places.place.aff9ee5d-3ec2-4ab0-af60-823b5244fb5f#16/51.1734/6.6867",
+    );
+    // Without coordinates it still links to the feature, omitting the viewport.
+    expect(view?.buildUrl?.("abc")).toBe(
+      "https://explore.overturemaps.org/?feature=places.place.abc",
+    );
+  });
 });

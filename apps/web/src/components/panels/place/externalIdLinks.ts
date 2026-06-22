@@ -21,7 +21,10 @@ export interface ExternalRef {
  * schemes (transit providers, data-source item ids) are not cross-refs
  * and shouldn't be shown.
  */
-export function buildExternalRefs(ids: PlaceIds | undefined): ExternalRef[] {
+export function buildExternalRefs(
+  ids: PlaceIds | undefined,
+  coordinates?: [number, number],
+): ExternalRef[] {
   if (!ids) return [];
 
   type Entry = {
@@ -45,7 +48,7 @@ export function buildExternalRefs(ids: PlaceIds | undefined): ExternalRef[] {
       order: view.displayOrder ?? Number.POSITIVE_INFINITY,
       insertionIndex: insertionIndex++,
       label: view.label,
-      url: view.buildUrl?.(value),
+      url: view.buildUrl?.(value, { coordinates }),
     });
   }
 

@@ -8,6 +8,15 @@
  * order for anything without an explicit number.
  */
 
+/**
+ * Optional context passed to {@link IdSchemeView.buildUrl}, for schemes whose
+ * URL embeds the place's location (e.g. a map-explorer deep link).
+ */
+export interface IdSchemeUrlContext {
+  /** Place coordinates as `[lng, lat]`. */
+  coordinates?: [number, number];
+}
+
 export interface IdSchemeView {
   /** Scheme key in `Place.ids` (e.g. `"osm"`, `"yelp"`, `"ocm"`). */
   scheme: string;
@@ -24,9 +33,10 @@ export interface IdSchemeView {
   /**
    * Return an external URL for a given id value, or `undefined` if the
    * scheme isn't naturally linkable (e.g. a raw EVA number). Accepts the
-   * raw id value (without the `scheme:` prefix).
+   * raw id value (without the `scheme:` prefix) and optional place context
+   * (e.g. coordinates) for schemes whose URL embeds a map viewport.
    */
-  buildUrl?(value: string): string | undefined;
+  buildUrl?(value: string, context?: IdSchemeUrlContext): string | undefined;
 }
 
 const registry = new Map<string, IdSchemeView>();

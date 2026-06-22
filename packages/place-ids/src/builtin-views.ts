@@ -57,8 +57,15 @@ export function registerBuiltinIdSchemeViews(): void {
     scheme: "gers",
     label: "Overture Maps",
     displayOrder: 25,
-    // Overture's GERS ids have no canonical per-feature public page, so the id
-    // is shown as a source credit without a deep link (like EVA/GTFS).
+    buildUrl(value, context) {
+      // Overture's GERS explorer: ?feature=places.place.<gers>#<zoom>/<lat>/<lng>.
+      const base = `https://explore.overturemaps.org/?feature=places.place.${encodeURIComponent(value)}`;
+      const c = context?.coordinates;
+      if (c && Number.isFinite(c[0]) && Number.isFinite(c[1])) {
+        return `${base}#16/${c[1]}/${c[0]}`;
+      }
+      return base;
+    },
   });
 
   // Transit / stations
