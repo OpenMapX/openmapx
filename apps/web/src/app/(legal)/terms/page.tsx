@@ -8,6 +8,11 @@ import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { LegalPageShell, type LegalSection } from "@/components/legal/LegalPageShell";
 
+// Render per-request so the data-source / attribution tables reflect the
+// integrations enabled at runtime (matching /licenses), not the build-time
+// default enablement.
+export const dynamic = "force-dynamic";
+
 const sectionsEn: LegalSection[] = [
   { id: sectionSlug("1. Scope and Provider"), label: "Scope and Provider" },
   { id: sectionSlug("2. Description of the Service"), label: "Service Description" },

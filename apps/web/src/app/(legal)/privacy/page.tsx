@@ -9,6 +9,12 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { LegalPageShell } from "@/components/legal/LegalPageShell";
 import { privacyNav } from "./sections";
 
+// Render per-request against the live API so the data-source / attribution
+// tables reflect the integrations actually enabled at runtime (matching
+// /licenses). Without this the page is statically built with the default
+// enablement and never credits a runtime-enabled source like Overture.
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("legal");
   return {
