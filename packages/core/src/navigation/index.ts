@@ -15,6 +15,7 @@ export {
   stepDeadReckon,
 } from "./deadReckon";
 export { eta } from "./eta";
+export { formatIncidentAnnouncement } from "./incidentAnnounce";
 export {
   type IncidentAlert,
   type ProjectEventsOptions,

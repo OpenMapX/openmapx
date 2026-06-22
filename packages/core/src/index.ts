@@ -278,6 +278,7 @@ export {
   eta,
   extractTimeline,
   extractTrafficSignals,
+  formatIncidentAnnouncement,
   freshNavTickState,
   type GeometryWindow,
   type IncidentAlert,

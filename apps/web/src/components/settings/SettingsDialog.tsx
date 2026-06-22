@@ -96,6 +96,10 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const setVoiceGuidanceTiming = useSettingsStore((s) => s.setVoiceGuidanceTiming);
   const speedCameraAlerts = useSettingsStore((s) => s.speedCameraAlerts);
   const setSpeedCameraAlerts = useSettingsStore((s) => s.setSpeedCameraAlerts);
+  const incidentAlerts = useSettingsStore((s) => s.incidentAlerts);
+  const setIncidentAlerts = useSettingsStore((s) => s.setIncidentAlerts);
+  const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
+  const setAvoidIncidents = useSettingsStore((s) => s.setAvoidIncidents);
   const aiSearchEnabled = useSettingsStore((s) => s.aiSearchEnabled);
   const setAiSearchEnabled = useSettingsStore((s) => s.setAiSearchEnabled);
   const fullScreen = useFullScreenOnMobile();
@@ -223,6 +227,28 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           </SettingRow>
           <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
             {ts("speedCameraAlertsHint")}
+          </Typography>
+          <SettingRow label={ts("incidentAlerts")}>
+            <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+              <Switch
+                checked={incidentAlerts}
+                onChange={(e) => setIncidentAlerts(e.target.checked)}
+              />
+            </Box>
+          </SettingRow>
+          <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
+            {ts("incidentAlertsHint")}
+          </Typography>
+          <SettingRow label={ts("avoidIncidents")}>
+            <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+              <Switch
+                checked={avoidIncidents}
+                onChange={(e) => setAvoidIncidents(e.target.checked)}
+              />
+            </Box>
+          </SettingRow>
+          <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
+            {ts("avoidIncidentsHint")}
           </Typography>
         </Section>
 

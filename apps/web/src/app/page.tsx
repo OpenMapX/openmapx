@@ -17,6 +17,7 @@ import { DataSourceLayer } from "@/components/map/layers/DataSourceLayer";
 import { FlightArcLayer } from "@/components/map/layers/FlightArcLayer";
 import { GlobeProjection } from "@/components/map/layers/GlobeProjection";
 import { ImportedGeometryLayer } from "@/components/map/layers/ImportedGeometryLayer";
+import { NavIncidentsLayer } from "@/components/map/layers/NavIncidentsLayer";
 import { NavigationRouteLayer } from "@/components/map/layers/NavigationRouteLayer";
 import { NavTrafficSignalsLayer } from "@/components/map/layers/NavTrafficSignalsLayer";
 import { PlaceBoundaryLayer } from "@/components/map/layers/PlaceBoundaryLayer";
@@ -138,6 +139,7 @@ export default function HomePage() {
           <RouteLayer />
           <NavigationRouteLayer />
           <NavTrafficSignalsLayer />
+          <NavIncidentsLayer />
           <NavigationView />
           <TransitNavigationView />
           <FlightArcLayer />

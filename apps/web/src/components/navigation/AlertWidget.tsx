@@ -5,8 +5,13 @@ import TrainIcon from "@mui/icons-material/Train";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import type { ActiveAlert, RoadAlertType } from "@openmapx/core";
-import { formatMeasurementDistance, useNavigationStore, useSettingsStore } from "@openmapx/core";
+import type { ActiveAlert, IncidentAlert, RoadAlertType } from "@openmapx/core";
+import {
+  formatIncidentAnnouncement,
+  formatMeasurementDistance,
+  useNavigationStore,
+  useSettingsStore,
+} from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { haptics } from "@/lib/haptics";
@@ -47,14 +52,17 @@ export function AlertWidget({ alert }: { alert: ActiveAlert }) {
 
   const type = alert.alert.type;
   const Icon = ICON[type];
-  const label = t(LABEL_KEY[type]);
+  const incident = type === "traffic_incident" ? (alert.alert as IncidentAlert) : null;
+  const label = incident ? t(`incidentType.${incident.eventType}`) : t(LABEL_KEY[type]);
+  const distanceText = formatMeasurementDistance(alert.distanceMeters, units);
+  const announceText = incident ? formatIncidentAnnouncement(incident, distanceText, t) : label;
 
   useEffect(() => {
     if (announcedRef.current === alert.alert.id) return;
     announcedRef.current = alert.alert.id;
     haptics.warn();
-    if (voiceEnabled) speak(label);
-  }, [alert.alert.id, label, speak, voiceEnabled]);
+    if (voiceEnabled) speak(announceText);
+  }, [alert.alert.id, announceText, speak, voiceEnabled]);
 
   return (
     <Box
@@ -79,7 +87,7 @@ export function AlertWidget({ alert }: { alert: ActiveAlert }) {
           {label}
         </Typography>
         <Typography variant="caption" sx={{ opacity: 0.85 }}>
-          {formatMeasurementDistance(alert.distanceMeters, units)}
+          {distanceText}
         </Typography>
       </Box>
     </Box>

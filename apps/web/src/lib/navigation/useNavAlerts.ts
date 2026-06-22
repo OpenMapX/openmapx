@@ -15,6 +15,7 @@ import {
   useSettingsStore,
 } from "@openmapx/core";
 import { useEffect, useMemo, useState } from "react";
+import { useNavIncidents } from "./useNavIncidents";
 
 /** An alert must sit within this distance (m) of the route to be relevant. */
 const MAX_DEVIATION_M = 25;
@@ -84,5 +85,13 @@ export function useNavAlerts(): ActiveAlert | null {
     return out;
   }, [raw, route, speedCameraAlerts, country]);
 
-  return useMemo(() => selectActiveAlert(alerts, along, speed, []), [alerts, along, speed]);
+  // Traffic incidents (from the road-conditions capability) merge into the same
+  // selector as the OSM hazards; they carry priority 0, so an in-range incident
+  // is surfaced before a speed camera or crossing.
+  const incidents = useNavIncidents();
+
+  return useMemo(
+    () => selectActiveAlert([...incidents, ...alerts], along, speed, []),
+    [incidents, alerts, along, speed],
+  );
 }
