@@ -255,6 +255,24 @@ manual request (it renders a `mailto:` with the subject/body pre-filled); for
 self-service providers a `url` plus `steps` is enough. Keep the steps short and
 imperative — they are operator instructions, not prose.
 
+### Adding a map overlay
+
+This walkthrough builds a route-only provider, so its `frontend` flags are all
+`false`. If your integration instead draws on the map, you have two options:
+
+- **Declarative** (recommended, no frontend code): put a `frontend.overlay.source`
+  + `layers` + `legend` + `popup` block in the manifest and the host renders it —
+  a community integration needs no frontend bundle at all. Add a `layerSelector`
+  entry so users can toggle it, and `domains: ["map-overlay"]`.
+- **Code**: ship a `map-layer.tsx` (and optionally `legend.tsx` / `panel.tsx`)
+  and set the matching `frontend.mapLayer` / `legend` / `panel` flag; community
+  overlays reach the map via `useHostMap()` from
+  `@openmapx/integration-framework/react`.
+
+Both paths — the full `frontend.overlay` schema and the community frontend
+runtime — are documented in
+[Integration system → Map overlays](./integration-system.md#map-overlays).
+
 ## Implement `setup(ctx)`
 
 `index.ts` exports a `setup(ctx)` function that the host calls once at load time,

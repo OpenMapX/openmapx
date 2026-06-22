@@ -71,18 +71,25 @@ externals: [
 ]
 ```
 
-If your integration contributes a frontend component, also externalize the React
-surfaces the host provides:
+If your integration contributes a **code** frontend component (a map overlay
+written in React, not a declarative one — see [Add a map overlay](#add-a-map-overlay)),
+also externalize the React + map surfaces the host provides:
 
 ```js
 externals: [
-  // ...server externals above...
+  // ...server externals above (including @openmapx/core)...
   "react",
   "react/jsx-runtime",
   "react/jsx-dev-runtime",
   "@openmapx/integration-framework/react",
+  "maplibre-gl",
 ]
 ```
+
+The host resolves all of these to its own live singletons via the page's import
+map, so your overlay shares the host's React, registry context, and maplibre
+instance. Bundling your own copy breaks hooks/context and detaches popups from
+the map.
 
 Do **not** list `@openmapx/extension-sdk` as an external — that package is used
 only at build time (types and helpers); the SDK inlines what it needs into your
@@ -184,6 +191,40 @@ openmapx-ext validate ./integrations/conditions
 ```
 
 Exits non-zero and prints errors if the manifest is invalid.
+
+## Add a map overlay
+
+If your extension draws on the map, prefer the **declarative** path — it needs no
+frontend bundle at all, which keeps your artifact backend-only and is the most
+secure option (no third-party JavaScript runs in the app). Put the overlay in the
+manifest:
+
+```jsonc
+{
+  "domains": ["map-overlay"],
+  "frontend": {
+    "layerSelector": { "group": "map-details", "labelKey": "myOverlay", "icon": "warning" },
+    "overlay": {
+      "source": { "kind": "geojson-bbox", "route": "/observations", "bboxParam": "bbox" },
+      "layers": [{ "id": "points", "type": "circle", "interactive": true, "paint": { "circle-color": "#cc0033" } }],
+      "legend": { "kind": "categorical", "title": "My overlay", "items": [{ "color": "#cc0033", "label": "High" }] },
+      "popup": { "titleField": "headline", "rows": [{ "field": "type", "label": "Type" }] }
+    }
+  }
+}
+```
+
+The host fetches your integration's `route` (here `/observations`) as the user
+pans, draws the Style-Spec `layers`, and renders the legend and click popup — no
+shipped code. OpenConditions' road-conditions overlay works exactly this way.
+
+For overlays that need imperative logic, ship a `map-layer.tsx` instead, reach
+the map with `useHostMap()` from `@openmapx/integration-framework/react`, and
+externalize the React + `maplibre-gl` surfaces (see
+[Mark host-injected packages as externals](#mark-host-injected-packages-as-externals)).
+The full `frontend.overlay` schema and the community frontend runtime are
+documented in
+[Integration system → Map overlays](./integration-system.md#map-overlays).
 
 ## Package and install the integration
 

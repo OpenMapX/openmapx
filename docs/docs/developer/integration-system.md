@@ -40,9 +40,10 @@ two things to be present:
   integration registers providers, routes, and lifecycle hooks.
 
 Most integrations also ship `strings/<locale>.json` localization files and, when
-they have a frontend, MapLibre layer / legend / panel components. Those are
-loaded by convention and are out of scope here; this page focuses on the
-declarative and backend contract.
+they have a frontend, a map overlay. An overlay can be **declarative** (described
+entirely in the manifest and drawn by the host — no shipped frontend code) or
+**code** (MapLibre layer / legend / panel components the integration ships). Both
+are covered in [Map overlays](#map-overlays).
 
 A backend entry point is typically very small — it wires implementations into
 the context and returns:
@@ -123,12 +124,37 @@ described in [Capability requirement resolution](#capability-requirement-resolut
 ```ts
 {
   frontend?: {
-    mapLayer?: boolean;
-    legend?: boolean;
-    panel?: boolean;
+    mapLayer?: boolean;      // ships a code map-layer component
+    legend?: boolean;        // ships a code legend component
+    panel?: boolean;         // ships a code side-panel component
     searchCategory?: { id: string; label?: string; showInChipBar?: boolean; iconPath?: string };
-    layerSelector?: { group: "map-details" | "map-tools" | "map-types"; labelKey: string; /* … */ };
-    overlay?: { excludes?: string[]; minZoom?: number };
+    layerSelector?: { group: "map-details" | "map-tools" | "map-types"; labelKey: string; icon?: string; /* … */ };
+    overlay?: {
+      excludes?: string[];   // overlay ids this one is mutually exclusive with
+      minZoom?: number;
+      // Declarative overlay — when `source` is present the host draws it from the
+      // manifest with no shipped code (see "Map overlays" below):
+      source?: {
+        kind: "geojson-bbox" | "geojson" | "vector";
+        route?: string;                       // integration-relative, e.g. "/observations"
+        bboxParam?: "bbox" | "wsen";          // how the viewport is passed (geojson-bbox)
+        extraParams?: Record<string, string>;
+        tiles?: string[];                     // vector tile URL templates
+      };
+      layers?: Array<{
+        id: string;
+        type: "circle" | "line" | "fill" | "symbol";
+        paint?: object; layout?: object; filter?: unknown[];  // MapLibre Style-Spec
+        interactive?: boolean;                // register for click popup + hover cursor
+      }>;
+      legend?: {
+        kind: "categorical" | "ramp";
+        title?: string; titleKey?: string;
+        items?: Array<{ color: string; label?: string; labelKey?: string }>;  // categorical
+        stops?: Array<{ value: number; color: string }>;                      // ramp
+      };
+      popup?: { titleField: string; rows?: Array<{ field: string; label?: string; format?: "text" | "number" | "date" }> };
+    };
   };
   backend?: {
     routes?: boolean;        // registers routes via ctx.registerRoute
@@ -137,11 +163,14 @@ described in [Capability requirement resolution](#capability-requirement-resolut
 }
 ```
 
-These are advertisement flags. `frontend.*` tells the web app which UI surfaces
-the integration contributes (a map layer, a legend, a side panel, a search-bar
-category chip, a layer-selector entry, mutual-exclusion rules between overlays).
-`backend.routes` signals that the integration registers HTTP routes;
-`backend.cron` declares a schedule for a recurring backend task.
+`mapLayer` / `legend` / `panel` are advertisement flags for **code** components
+the integration ships. `searchCategory` and `layerSelector` are pure
+declarations the host renders (a search-bar category chip; a layer-selector
+entry). `overlay` carries mutual-exclusion rules (`excludes`) and `minZoom`,
+**and**, when it includes a `source`, a full **declarative overlay** the host
+draws from the manifest with no shipped code. `backend.routes` signals that the
+integration registers HTTP routes; `backend.cron` declares a recurring task. How
+the two overlay paths render is detailed in [Map overlays](#map-overlays).
 
 ### Config schema
 
@@ -400,6 +429,79 @@ UI surfaces and routes rather than a registered provider object.
 The per-contract authoring guides live alongside this reference: the
 data-source and transit how-tos, and the end-to-end walkthrough of writing an
 integration, are separate developer pages.
+
+## Map overlays
+
+An integration that draws on the map (`domains` includes `map-overlay`, with a
+`layerSelector` entry so users can toggle it) renders one of two ways.
+
+### Declarative overlays (no shipped code)
+
+When `frontend.overlay.source` is present, the overlay is **fully described in the
+manifest** and a generic host renderer draws it — the integration ships no
+frontend code. This is the preferred path: it is the most secure (no third-party
+JavaScript runs in the app), works for community integrations without a frontend
+bundle, and the host gets the lifecycle right once for everyone. The manifest
+declares:
+
+- a **`source`** — `geojson-bbox` (the host fetches the integration's own
+  `route` and refetches it, debounced, as the user pans/zooms, substituting the
+  viewport per `bboxParam`), `geojson` (fetched once), or `vector` (`tiles`);
+- one or more **`layers`** — MapLibre Style-Spec layer objects (`type`, `paint`,
+  `layout`, `filter`); mark a layer `interactive` to get a click popup;
+- an optional **`legend`** (categorical swatches or a value→color ramp) and
+  **`popup`** (a title field plus rows), both rendered by the host with every
+  value escaped.
+
+The host owns add/remove, re-anchoring beneath labels on base-map switch, the
+bbox refetch, popups, interactive-layer registration, attribution (from the
+manifest `dataSources`), and teardown. OpenConditions' road-conditions overlay is
+the canonical example: a `geojson-bbox` source pointing at its `/observations`
+route, a severity-colored circle layer, a categorical legend, and a popup —
+all manifest, no bundle.
+
+### Code overlays (shipped components)
+
+When an overlay needs imperative logic (custom WebGL layers, animation, bespoke
+interaction) it ships `map-layer.tsx` (and optionally `legend.tsx` / `panel.tsx`)
+and sets the matching `frontend.mapLayer` / `legend` / `panel` flag. Built-in
+overlays import the app's internals directly. **Community** code overlays reach
+the map through the curated runtime surface exported from
+`@openmapx/integration-framework/react`:
+
+```tsx
+import { useHostMap } from "@openmapx/integration-framework/react";
+import maplibregl from "maplibre-gl";
+
+export default function MapLayer() {
+  const { mapRef, mapReady, styleVersion, getFirstSymbolLayerId, setLayerInteractive } = useHostMap();
+  // add sources/layers to mapRef.current, anchor beneath labels, react to styleVersion…
+  return null;
+}
+```
+
+`useHostMap()` returns the live host map (`mapRef`, `mapReady`, `styleVersion`)
+plus helpers (`getFirstSymbolLayerId`, `anchorBelowLabels`, `setLayerInteractive`).
+
+### The community frontend runtime
+
+Community integration frontends are built into a bundle and served back to the
+web app at `/api/integrations/:id/bundle/*` (refused for built-ins). The web app
+loads each as an ES module that self-registers its components onto
+`window.__openmapx_integrations`. Crucially, the bundle does **not** ship its own
+copy of React or the platform packages: it marks `react`, `react/jsx-runtime`,
+`@openmapx/core`, `@openmapx/integration-framework` (+ `/react`), and
+`maplibre-gl` as externals, and the page's import map resolves those to the
+host's live singletons. So a community overlay shares the host's React, registry
+context, and maplibre instance — hooks and context work across the boundary, and
+its `maplibregl.Popup` operates on the host map.
+
+:::note[CSP and the API origin]
+The bundle `<script>` loads from the API origin. When the app and API share an
+origin (the typical deployment, with `/api` proxied) the default
+`script-src 'self'` covers it. A cross-origin API deployment must add the API
+origin to the web app's `script-src`, or the browser blocks the bundle.
+:::
 
 ## Lifecycle: discovery, loading, and hosting
 
