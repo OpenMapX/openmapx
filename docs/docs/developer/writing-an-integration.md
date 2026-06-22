@@ -6,6 +6,10 @@ sidebar_position: 5
 
 # Writing an integration
 
+:::note
+Building an integration in your **own repository**? See [Building an external extension](./building-an-external-extension.md) for the out-of-monorepo path using the standalone SDK and CLI.
+:::
+
 This page builds your first integration from an empty directory to an
 installable artifact. It assumes you have read the
 [Integration system](./integration-system.md) concepts — the manifest, the
