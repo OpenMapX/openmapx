@@ -33,6 +33,7 @@
       "url": "https://overturemaps.org",
       "license": "CDLA-Permissive-2.0",
       "licenseUrl": "https://cdla.dev/permissive-2-0/",
+      "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://overturemaps.org/privacy/",
       "endUserExposure": "server-only"
@@ -43,6 +44,7 @@
       "url": "https://foursquare.com",
       "license": "Apache-2.0",
       "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
+      "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://location.foursquare.com/legal/fsq-privacy-statement/",
       "endUserExposure": "server-only"

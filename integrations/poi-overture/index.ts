@@ -23,6 +23,7 @@ interface OvertureRow {
   brand_name: string | null;
   brand_wikidata: string | null;
   phone: string | null;
+  website: string | null;
 }
 
 function overtureRowToPoiSearchResult(row: OvertureRow): PoiSearchResult {
@@ -43,6 +44,7 @@ function overtureRowToPoiSearchResult(row: OvertureRow): PoiSearchResult {
     coordinates: [row.longitude, row.latitude],
     category: category ?? undefined,
     phone: row.phone ?? undefined,
+    website: row.website ?? undefined,
     osmTags: Object.keys(osmTags).length > 0 ? osmTags : undefined,
   };
 }
@@ -63,7 +65,8 @@ async function queryOverturePlaces(
       basic_category,
       brand->'names'->>'primary' AS brand_name,
       brand->>'wikidata' AS brand_wikidata,
-      phones[1] AS phone
+      phones[1] AS phone,
+      websites[1] AS website
     FROM overture_places.places
     WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
       AND (operating_status IS NULL OR operating_status <> 'permanently_closed')
@@ -97,7 +100,8 @@ async function fetchOverturePlaceByGers(
        basic_category,
        brand->'names'->>'primary' AS brand_name,
        brand->>'wikidata' AS brand_wikidata,
-       phones[1] AS phone
+       phones[1] AS phone,
+       websites[1] AS website
      FROM overture_places.places
      WHERE gers_id = $1
      LIMIT 1`,
