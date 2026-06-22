@@ -48,7 +48,10 @@ function foldExternalIdsIntoPlace(
   externalIds: Record<string, string> | undefined,
 ): Place {
   const ids: PlaceIds = { ...place.ids };
-  const wd = place.osmTags?.wikidata;
+  // Fall back to brand:wikidata (chain outlets often carry only that) so the
+  // Wikidata reference still surfaces — e.g. a Shell station with brand:wikidata
+  // but no place-level wikidata tag.
+  const wd = place.osmTags?.wikidata ?? place.osmTags?.["brand:wikidata"];
   if (wd && !ids.wikidata) ids.wikidata = wd;
   if (externalIds) {
     if (externalIds.yelp && !ids.yelp && buildYelpUrl(externalIds.yelp)) {
@@ -84,6 +87,94 @@ function foldExternalIdsIntoPlace(
     ids.tripadvisor = osmTripadvisor;
   }
   return { ...place, ids };
+}
+
+/** Maps a social-profile URL to its OSM `contact:*` tag key, or null if unsupported. Exported for testing. */
+export function socialContactTag(url: string): string | null {
+  let host: string;
+  try {
+    host = new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return null;
+  }
+  if (host === "facebook.com" || host === "m.facebook.com" || host === "fb.com") {
+    return "contact:facebook";
+  }
+  if (host === "instagram.com") return "contact:instagram";
+  if (host === "twitter.com" || host === "x.com") return "contact:twitter";
+  if (host === "youtube.com" || host === "youtu.be") return "contact:youtube";
+  if (host === "linkedin.com") return "contact:linkedin";
+  if (host === "t.me" || host === "telegram.me") return "contact:telegram";
+  if (host === "pinterest.com") return "contact:pinterest";
+  if (host === "reddit.com") return "contact:reddit";
+  return null;
+}
+
+/**
+ * Gap-fills OSM `contact:<platform>` tags from knowledge-source social URLs
+ * (e.g. Overture `socials`) so they render in the place panel's social row.
+ * OSM values are never overwritten.
+ */
+function applyKnowledgeSocials(
+  osmTags: Record<string, string> | undefined,
+  socials: string[] | undefined,
+): Record<string, string> | undefined {
+  if (!socials?.length) return osmTags;
+  const out = { ...(osmTags ?? {}) };
+  for (const url of socials) {
+    const tag = socialContactTag(url);
+    if (tag && !out[tag]) out[tag] = url;
+  }
+  return out;
+}
+
+function websitePathDepth(url: string): number {
+  try {
+    const path = new URL(url).pathname.replace(/\/+$/, "");
+    return path === "" ? 0 : path.split("/").filter(Boolean).length;
+  } catch {
+    return 0;
+  }
+}
+
+// Aggregator / directory hosts that should never win the website slot over an
+// OSM-curated URL, even if their path looks more specific.
+const WEBSITE_AGGREGATOR_HOSTS = new Set([
+  "lieferando.de",
+  "ubereats.com",
+  "wolt.com",
+  "booking.com",
+  "opentable.com",
+  "thefork.com",
+  "facebook.com",
+  "instagram.com",
+  "google.com",
+  "business.site",
+  "linktr.ee",
+  "yelp.com",
+  "tripadvisor.com",
+]);
+
+/**
+ * Picks the more specific of two website URLs by path depth — a deep outlet
+ * link (e.g. find.shell.com/de/fuel/<store>) beats a bare brand homepage
+ * (shell.de/). Returns whichever is present; ties keep the OSM URL; an
+ * aggregator/directory host never displaces an OSM-curated URL. Exported for testing.
+ */
+export function pickMoreSpecificWebsite(
+  osm: string | undefined,
+  other: string | undefined,
+): string | undefined {
+  if (!other) return osm;
+  if (!osm) return other;
+  let otherHost: string;
+  try {
+    otherHost = new URL(other).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return osm;
+  }
+  if (WEBSITE_AGGREGATOR_HOSTS.has(otherHost)) return osm;
+  return websitePathDepth(other) > websitePathDepth(osm) ? other : osm;
 }
 
 /**
@@ -123,6 +214,7 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
     photos: knowledgePhotos,
     phone: knowledgePhone,
     website: knowledgeWebsite,
+    socials: knowledgeSocials,
     ...knowledge
   } = await getPlaceKnowledge(place, lang);
   const enriched = foldExternalIdsIntoPlace(place, externalIds);
@@ -154,10 +246,13 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
   return {
     ...enriched,
     ...knowledge,
-    // Contact details: OSM is fresher, so it wins; a knowledge source (e.g.
-    // Overture) only fills the gap when the base place has none.
+    // Social profiles: gap-fill the OSM `contact:*` tags from a knowledge
+    // source so they render in the existing social-links row.
+    osmTags: applyKnowledgeSocials(enriched.osmTags, knowledgeSocials),
+    // Contact details: OSM is fresher, so phone wins; for the website, prefer
+    // the more specific URL (a deep outlet link beats a bare brand homepage).
     phone: enriched.phone ?? knowledgePhone,
-    website: enriched.website ?? knowledgeWebsite,
+    website: pickMoreSpecificWebsite(enriched.website, knowledgeWebsite),
     photos,
     reviewLinks: buildReviewLinks(enriched),
     rating: reviewStats?.stars,

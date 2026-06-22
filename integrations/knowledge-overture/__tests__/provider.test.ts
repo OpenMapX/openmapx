@@ -67,6 +67,7 @@ function makeOvertureDetailRow() {
     opening_hours: "Mo-Fr 07:00-21:00; Sa-Su 08:00-20:00",
     phones: ["+49 30 1234567"],
     websites: ["https://starbucks.de"],
+    socials: ["https://www.facebook.com/starbucks"],
   };
 }
 
@@ -150,6 +151,7 @@ describe("knowledge-overture provider lookup", () => {
     expect(result?.externalIds?.gers).toBe("overture-abc-123");
     expect(result?.phone).toBe("+49 30 1234567");
     expect(result?.website).toBe("https://starbucks.de");
+    expect(result?.socials).toEqual(["https://www.facebook.com/starbucks"]);
   });
 
   it("exposes wikidata via externalIds even when the brand has no resolvable name", async () => {

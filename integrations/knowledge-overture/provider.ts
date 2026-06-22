@@ -23,6 +23,7 @@ interface OvertureDetailRow {
   opening_hours: string | null;
   phones: string[] | null;
   websites: string[] | null;
+  socials: string[] | null;
 }
 
 /**
@@ -134,7 +135,7 @@ async function fetchOverturePlaceByGers(
 ): Promise<OvertureDetailRow | null> {
   const rows = await database.execute<OvertureDetailRow[]>(
     `
-    SELECT gers_id, name, names, brand, opening_hours, phones, websites
+    SELECT gers_id, name, names, brand, opening_hours, phones, websites, socials
     FROM overture_places.places
     WHERE gers_id = $1
     LIMIT 1
@@ -172,6 +173,8 @@ function overtureRowToKnowledgeResult(row: OvertureDetailRow): KnowledgeResult |
 
   const website = row.websites?.[0];
   if (website) result.website = website;
+
+  if (row.socials?.length) result.socials = row.socials;
 
   // Always non-empty: externalIds.gers is set for every match.
   return result;

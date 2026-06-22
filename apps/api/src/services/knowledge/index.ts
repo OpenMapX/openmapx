@@ -58,6 +58,7 @@ export async function getPlaceKnowledge(place: Place, lang?: string): Promise<Kn
       structuredOpeningHours,
       phone,
       website,
+      socials,
     } = result.value;
 
     if (description && !merged.description) merged.description = description;
@@ -79,6 +80,7 @@ export async function getPlaceKnowledge(place: Place, lang?: string): Promise<Kn
     }
     if (phone && !merged.phone) merged.phone = phone;
     if (website && !merged.website) merged.website = website;
+    if (socials?.length && !merged.socials) merged.socials = socials;
   }
 
   return merged;

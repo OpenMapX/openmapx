@@ -585,3 +585,47 @@ describe("GET /places/:id", () => {
     expect(spread).toBeLessThan(10);
   });
 });
+
+describe("socialContactTag", () => {
+  it("maps known social hosts to their OSM contact tag", async () => {
+    const { socialContactTag } = await import("../places.js");
+    expect(socialContactTag("https://www.facebook.com/1967663743283516")).toBe("contact:facebook");
+    expect(socialContactTag("https://instagram.com/openmapx")).toBe("contact:instagram");
+    expect(socialContactTag("https://x.com/openmapx")).toBe("contact:twitter");
+    expect(socialContactTag("https://www.linkedin.com/company/x")).toBe("contact:linkedin");
+  });
+
+  it("returns null for unsupported or unparseable hosts", async () => {
+    const { socialContactTag } = await import("../places.js");
+    expect(socialContactTag("https://example.com/x")).toBeNull();
+    expect(socialContactTag("not a url")).toBeNull();
+  });
+});
+
+describe("pickMoreSpecificWebsite", () => {
+  it("prefers the deeper-path URL (specific outlet over brand homepage)", async () => {
+    const { pickMoreSpecificWebsite } = await import("../places.js");
+    expect(
+      pickMoreSpecificWebsite(
+        "http://www.shell.de/",
+        "https://find.shell.com/de/fuel/10024555-neuss-bergheimer-str-415",
+      ),
+    ).toBe("https://find.shell.com/de/fuel/10024555-neuss-bergheimer-str-415");
+  });
+
+  it("keeps the present one when only one is set, and OSM on ties", async () => {
+    const { pickMoreSpecificWebsite } = await import("../places.js");
+    expect(pickMoreSpecificWebsite("https://a.de/", undefined)).toBe("https://a.de/");
+    expect(pickMoreSpecificWebsite(undefined, "https://b.de/x")).toBe("https://b.de/x");
+    expect(pickMoreSpecificWebsite("https://a.de/menu", "https://b.de/info")).toBe(
+      "https://a.de/menu",
+    );
+  });
+
+  it("never lets an aggregator host displace an OSM-curated URL", async () => {
+    const { pickMoreSpecificWebsite } = await import("../places.js");
+    expect(
+      pickMoreSpecificWebsite("https://restaurant-mueller.de/", "https://www.lieferando.de/x/y/z"),
+    ).toBe("https://restaurant-mueller.de/");
+  });
+});

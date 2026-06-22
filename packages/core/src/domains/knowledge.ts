@@ -23,6 +23,8 @@ export interface KnowledgeResult {
   phone?: string;
   /** Contact website/homepage supplied by a source — fills a gap when the base place lacks one. */
   website?: string;
+  /** Social-profile URLs (e.g. Facebook/Instagram) supplied by a source. */
+  socials?: string[];
 }
 
 /**
