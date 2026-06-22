@@ -29,6 +29,31 @@ describe("selectActiveAlert", () => {
     const a = selectActiveAlert([calming, cam], 1000, 14, ["c1"]);
     expect(a?.alert.id).toBe("t1");
   });
+
+  it("ranks a traffic incident above a speed camera", () => {
+    const incident: RoadAlert = {
+      id: "i1",
+      type: "traffic_incident",
+      coord: [0, 0],
+      alongMeters: 1100,
+      approach: { leadSec: 20, minM: 400, maxM: 1500 },
+    };
+    const a = selectActiveAlert([cam, incident], 1000, 14, []);
+    expect(a?.alert.id).toBe("i1"); // priority 0 outranks the camera
+  });
+
+  it("honours a per-alert approach window wider than the static table", () => {
+    const incident: RoadAlert = {
+      id: "i2",
+      type: "traffic_incident",
+      coord: [0, 0],
+      alongMeters: 1000,
+      approach: { leadSec: 20, minM: 400, maxM: 1500 },
+    };
+    // 1000 m ahead at 60 m/s: the per-alert window is 60×20=1200 m (covers it),
+    // whereas the static traffic_incident cap (800 m) would not.
+    expect(selectActiveAlert([incident], 0, 60, [])?.alert.id).toBe("i2");
+  });
 });
 
 describe("shouldWarnCamera", () => {

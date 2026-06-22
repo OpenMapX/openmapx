@@ -13,6 +13,7 @@ import { haptics } from "@/lib/haptics";
 import { useNavigationVoice } from "@/lib/navigation/useNavigationVoice";
 
 const ICON: Record<RoadAlertType, typeof WarningAmberIcon> = {
+  traffic_incident: WarningAmberIcon,
   speed_camera: PhotoCameraIcon,
   railway_crossing: TrainIcon,
   stop: WarningAmberIcon,
@@ -22,6 +23,7 @@ const ICON: Record<RoadAlertType, typeof WarningAmberIcon> = {
 };
 
 const LABEL_KEY: Record<RoadAlertType, string> = {
+  traffic_incident: "alertTrafficIncident",
   speed_camera: "alertSpeedCamera",
   railway_crossing: "alertRailwayCrossing",
   stop: "alertStop",

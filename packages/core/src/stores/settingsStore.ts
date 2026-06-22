@@ -9,6 +9,8 @@ const DATE_FORMAT_STORAGE_KEY = "openmapx:dateFormat";
 const VOICE_TIMING_STORAGE_KEY = "openmapx:voiceGuidanceTiming";
 const SPEED_CAMERA_ALERTS_STORAGE_KEY = "openmapx:speedCameraAlerts";
 const AI_SEARCH_STORAGE_KEY = "openmapx:aiSearch";
+const INCIDENT_ALERTS_STORAGE_KEY = "openmapx:incidentAlerts";
+const AVOID_INCIDENTS_STORAGE_KEY = "openmapx:avoidIncidents";
 
 const TIME_FORMATS: readonly TimeFormat[] = ["auto", "12h", "24h"];
 const DATE_FORMATS: readonly DateFormat[] = ["auto", "dmy", "mdy", "ymd"];
@@ -59,6 +61,18 @@ function readAiSearch(): boolean {
   return getStorage().getString(AI_SEARCH_STORAGE_KEY) !== "false";
 }
 
+// Traffic-incident announcements during navigation are on by default (no legal
+// gate, unlike speed cameras); stored only when toggled, so absent means on.
+function readIncidentAlerts(): boolean {
+  return getStorage().getString(INCIDENT_ALERTS_STORAGE_KEY) !== "false";
+}
+
+// Avoid closures/incidents when routing is opt-in (default off); consumed by
+// Phase-2 routing exclusion.
+function readAvoidIncidents(): boolean {
+  return getStorage().getString(AVOID_INCIDENTS_STORAGE_KEY) === "true";
+}
+
 interface SettingsState {
   units: UnitSystem;
   setUnits: (u: UnitSystem) => void;
@@ -77,6 +91,12 @@ interface SettingsState {
   /** Natural-language ("AI") search understanding (on by default; opt-out). */
   aiSearchEnabled: boolean;
   setAiSearchEnabled: (v: boolean) => void;
+  /** Announce traffic incidents ahead during navigation (on by default). */
+  incidentAlerts: boolean;
+  setIncidentAlerts: (v: boolean) => void;
+  /** Avoid closures/incidents when routing (off by default; Phase-2 routing). */
+  avoidIncidents: boolean;
+  setAvoidIncidents: (v: boolean) => void;
   /**
    * Re-read the persisted preferences from storage. The store is created at
    * module-eval time, which can run before the platform storage adapter is
@@ -117,6 +137,16 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     getStorage().setString(AI_SEARCH_STORAGE_KEY, String(aiSearchEnabled));
     set({ aiSearchEnabled });
   },
+  incidentAlerts: readIncidentAlerts(),
+  setIncidentAlerts: (incidentAlerts) => {
+    getStorage().setString(INCIDENT_ALERTS_STORAGE_KEY, String(incidentAlerts));
+    set({ incidentAlerts });
+  },
+  avoidIncidents: readAvoidIncidents(),
+  setAvoidIncidents: (avoidIncidents) => {
+    getStorage().setString(AVOID_INCIDENTS_STORAGE_KEY, String(avoidIncidents));
+    set({ avoidIncidents });
+  },
   hydrate: () =>
     set({
       units: readUnits(),
@@ -125,5 +155,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       voiceGuidanceTiming: readVoiceTiming(),
       speedCameraAlerts: readSpeedCameraAlerts(),
       aiSearchEnabled: readAiSearch(),
+      incidentAlerts: readIncidentAlerts(),
+      avoidIncidents: readAvoidIncidents(),
     }),
 }));

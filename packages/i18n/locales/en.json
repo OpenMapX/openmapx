@@ -28,6 +28,7 @@
     "moreOptions": "More options",
     "rerouteFailed": "Couldn't find a new route. Retrying…",
     "then": "Then {instruction}",
+    "alertTrafficIncident": "Traffic incident",
     "alertSpeedCamera": "Speed camera",
     "alertRailwayCrossing": "Railway crossing",
     "alertStop": "Stop sign",

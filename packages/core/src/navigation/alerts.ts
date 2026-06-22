@@ -8,6 +8,7 @@ import type { LngLat } from "../types/geometry";
  * pure selection/timing logic only.
  */
 export type RoadAlertType =
+  | "traffic_incident"
   | "speed_camera"
   | "railway_crossing"
   | "stop"
@@ -24,6 +25,11 @@ export interface RoadAlert {
   alongMeters: number;
   /** Posted limit at a speed camera, km/h, when known. */
   speedLimitKmh?: number;
+  /**
+   * Per-alert approach window, overriding the static per-type {@link APPROACH}.
+   * Used by traffic incidents, whose window is scaled by severity.
+   */
+  approach?: { leadSec: number; minM: number; maxM: number };
 }
 
 export interface ActiveAlert {
@@ -39,6 +45,7 @@ export interface ActiveAlert {
 
 /** Priority order — lower is more important and wins when several are in range. */
 const PRIORITY: Record<RoadAlertType, number> = {
+  traffic_incident: 0,
   speed_camera: 1,
   railway_crossing: 2,
   stop: 3,
@@ -49,6 +56,7 @@ const PRIORITY: Record<RoadAlertType, number> = {
 
 /** Per-type approach window: announce `leadSec` ahead, clamped to [minM, maxM]. */
 const APPROACH: Record<RoadAlertType, { leadSec: number; minM: number; maxM: number }> = {
+  traffic_incident: { leadSec: 12, minM: 200, maxM: 800 },
   speed_camera: { leadSec: 12, minM: 120, maxM: 500 },
   railway_crossing: { leadSec: 8, minM: 60, maxM: 250 },
   stop: { leadSec: 6, minM: 40, maxM: 150 },
@@ -90,8 +98,8 @@ export function shouldWarnCamera(
   return brakingDistanceMeters(speedMps, target) >= distanceMeters;
 }
 
-function approachMeters(type: RoadAlertType, speedMps: number): number {
-  const a = APPROACH[type];
+function approachMeters(alert: RoadAlert, speedMps: number): number {
+  const a = alert.approach ?? APPROACH[alert.type];
   return Math.min(Math.max(speedMps * a.leadSec, a.minM), a.maxM);
 }
 
@@ -112,7 +120,7 @@ export function selectActiveAlert(
     if (spoken.includes(alert.id)) continue;
     const distance = alert.alongMeters - alongMeters;
     if (distance <= 0) continue; // behind us
-    if (distance > approachMeters(alert.type, speedMps)) continue; // not yet in range
+    if (distance > approachMeters(alert, speedMps)) continue; // not yet in range
     if (best === null) {
       best = { alert, distanceMeters: distance, warn: true };
       continue;
