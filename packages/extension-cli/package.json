@@ -1,0 +1,33 @@
+{
+  "name": "@openmapx/extension-cli",
+  "version": "0.1.0",
+  "description": "Standalone Apache-2.0 CLI for scaffolding, packaging, and validating OpenMapX integrations and services",
+  "license": "Apache-2.0",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "openmapx-ext": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "check-types": "tsc --noEmit",
+    "test": "cd ../.. && vitest run --project node packages/extension-cli/src/__tests__"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "esbuild": "^0.25.5"
+  },
+  "devDependencies": {
+    "@openmapx/integration-framework": "workspace:^",
+    "@types/node": "^25.9.3",
+    "tsup": "8.1.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  }
+}

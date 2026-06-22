@@ -1650,6 +1650,31 @@ importers:
         specifier: ^4.1.8
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@25.9.3)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.0.16(@types/node@25.9.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
 
+  packages/extension-cli:
+    dependencies:
+      commander:
+        specifier: ^15.0.0
+        version: 15.0.0
+      esbuild:
+        specifier: '>=0.28.1'
+        version: 0.28.1
+    devDependencies:
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../integration-framework
+      '@types/node':
+        specifier: ^25.9.3
+        version: 25.9.3
+      tsup:
+        specifier: 8.1.2
+        version: 8.1.2(@microsoft/api-extractor@7.58.9(@types/node@25.9.3))(@swc/core@1.15.40)(jiti@2.7.0)(postcss@8.5.15)(tsx@4.22.4)(typescript@6.0.3)(yaml@2.9.0)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@25.9.3)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.0.16(@types/node@25.9.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+
   packages/extension-sdk:
     devDependencies:
       '@microsoft/api-extractor':

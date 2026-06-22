@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    "paths": {
+      "@integrations/*": ["../../integrations/*"],
+      "@openmapx/core": ["../core/src/index.ts"],
+      "@openmapx/core/server": ["../core/src/server.ts"],
+      "@openmapx/integration-framework": ["../integration-framework/src/index.ts"],
+      "@openmapx/integration-framework/installer": ["../integration-framework/src/installer.ts"],
+      "@openmapx/mobility-core/*": ["../mobility-core/src/*.ts", "../mobility-core/src/types/*.ts"],
+      "@openmapx/mobility-core/types": ["../mobility-core/src/types/shared-mobility.ts"],
+      "@openmapx/place-ids": ["../place-ids/src/index.ts"],
+      "@openmapx/poi-source-registry": ["../poi-source-registry/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*", "../../integrations/*/types.ts"]
+}
