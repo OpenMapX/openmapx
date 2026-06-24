@@ -43,7 +43,7 @@
     "@openmapx/poi-source-registry": "workspace:^",
     "impit": "^0.14.1",
     "intl-messageformat": "^11.2.8",
-    "js-yaml": "^4.2.0",
+    "js-yaml": "^5.0.0",
     "zod": "^4.4.3"
   },
   "peerDependencies": {
