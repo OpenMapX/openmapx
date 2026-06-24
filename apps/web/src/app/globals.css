@@ -96,6 +96,88 @@ main {
     color: var(--omx-overlay-text) !important;
   }
 
+  /* Declarative overlay popup card (built by buildPopupHtml). Inherits the
+   * popup's theme background + text color; muted elements use opacity so they
+   * read in both light and dark themes. */
+  .omx-overlay-popup {
+    min-width: 200px;
+    max-width: 280px;
+  }
+  .omx-overlay-popup__header {
+    /* Reserve room on the right for the absolute close button. */
+    padding-right: 22px;
+  }
+  .omx-overlay-popup__title {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  .omx-overlay-popup__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .omx-overlay-popup__badge {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .omx-overlay-popup__chip {
+    padding: 2px 8px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 500;
+    background: var(--omx-hover-bg);
+    color: var(--omx-overlay-text);
+  }
+  .omx-overlay-popup__row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 6px;
+    font-size: 12px;
+  }
+  .omx-overlay-popup__label {
+    opacity: 0.6;
+  }
+  .omx-overlay-popup__value {
+    font-weight: 500;
+    text-align: right;
+  }
+  .omx-overlay-popup__block {
+    margin-top: 10px;
+  }
+  .omx-overlay-popup__block-label {
+    display: block;
+    margin-bottom: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    opacity: 0.55;
+  }
+  .omx-overlay-popup__text {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    white-space: pre-line;
+    max-height: 132px;
+    overflow-y: auto;
+    opacity: 0.9;
+  }
+  .omx-overlay-popup__footer {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--omx-border-light);
+    font-size: 10px;
+    opacity: 0.55;
+  }
+
   /* MapLibre's built-in AttributionControl host: stay anchored to the right
    * edge (respecting mobile safe-area insets) and cap width so the text can't
    * extend left under the sidebar when it's open. */

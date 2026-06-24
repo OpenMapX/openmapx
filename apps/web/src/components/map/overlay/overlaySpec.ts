@@ -62,7 +62,28 @@ function labelFor(row: IntegrationOverlayPopupRow, resolveLabel?: (key: string) 
   return row.field;
 }
 
-function formatValue(raw: unknown, format?: "text" | "number" | "date"): string {
+/** Severity → badge colors, matching the marker severity ramp. */
+const SEVERITY_STYLE: Record<string, { bg: string; fg: string }> = {
+  critical: { bg: "#7e0023", fg: "#ffffff" },
+  high: { bg: "#cc0033", fg: "#ffffff" },
+  medium: { bg: "#ff9933", fg: "#3a2a00" },
+  low: { bg: "#ffde33", fg: "#3a2a00" },
+  unknown: { bg: "#8a8a8a", fg: "#ffffff" },
+};
+
+/** Humanize an enum-ish token: "road_closure" → "Road closure". */
+function humanize(raw: string): string {
+  const s = raw.replace(/[_-]+/g, " ").trim();
+  return s.length === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * Format a value to a display string. Returns "" for values that can't be
+ * sensibly stringified (objects/arrays/null), so the caller drops the row
+ * rather than printing "[object Object]".
+ */
+function formatValue(raw: unknown, format?: "text" | "number" | "date" | "label"): string {
+  if (raw == null || typeof raw === "object") return "";
   if (format === "number") {
     const n = Number(raw);
     return Number.isFinite(n) ? n.toLocaleString() : String(raw);
@@ -71,13 +92,28 @@ function formatValue(raw: unknown, format?: "text" | "number" | "date"): string 
     const d = new Date(String(raw));
     return Number.isNaN(d.getTime()) ? String(raw) : d.toLocaleDateString();
   }
+  if (format === "label") return humanize(String(raw));
   return String(raw);
 }
 
+/** Resolve the attribution credit from a string or an {provider,license} object. */
+function attributionText(raw: unknown): string {
+  if (typeof raw === "string") return raw;
+  if (raw != null && typeof raw === "object") {
+    const o = raw as Record<string, unknown>;
+    const provider = typeof o.provider === "string" ? o.provider : "";
+    const license = typeof o.license === "string" ? o.license : "";
+    return provider && license ? `${provider} · ${license}` : provider || license;
+  }
+  return "";
+}
+
 /**
- * Render a declarative popup to an HTML string with EVERY value and label
- * escaped — community overlays never inject raw HTML. Rows whose field is absent
- * (or empty) from the feature properties are omitted.
+ * Render a declarative popup as a structured card with EVERY value and label
+ * escaped — community overlays never inject raw HTML. The card has a header
+ * (title + optional colored severity badge), compact chips, label/value rows,
+ * full-width text blocks, and a muted attribution footer. Rows whose field is
+ * absent/empty (or holds an object) are omitted.
  */
 export function buildPopupHtml(
   popup: IntegrationOverlayPopup,
@@ -85,16 +121,49 @@ export function buildPopupHtml(
   resolveLabel?: (key: string) => string,
 ): string {
   const title = escapeHtml(String(properties[popup.titleField] ?? ""));
-  const rowsHtml = (popup.rows ?? [])
-    .filter((r) => {
-      const v = properties[r.field];
-      return v != null && v !== "";
-    })
-    .map((r) => {
-      const label = escapeHtml(labelFor(r, resolveLabel));
-      const value = escapeHtml(formatValue(properties[r.field], r.format));
-      return `<div class="omx-overlay-popup__row"><span class="omx-overlay-popup__label">${label}</span><span class="omx-overlay-popup__value">${value}</span></div>`;
-    })
-    .join("");
-  return `<div class="omx-overlay-popup"><div class="omx-overlay-popup__title">${title}</div>${rowsHtml}</div>`;
+
+  let badge = "";
+  if (popup.severityField) {
+    const sevRaw = properties[popup.severityField];
+    if (sevRaw != null && sevRaw !== "") {
+      const style = SEVERITY_STYLE[String(sevRaw).toLowerCase()] ?? SEVERITY_STYLE.unknown;
+      badge = `<span class="omx-overlay-popup__badge" style="background:${style.bg};color:${style.fg}">${escapeHtml(humanize(String(sevRaw)))}</span>`;
+    }
+  }
+  const header = `<div class="omx-overlay-popup__header"><span class="omx-overlay-popup__title">${title}</span></div>`;
+
+  const chips: string[] = [];
+  const rows: string[] = [];
+  const blocks: string[] = [];
+  for (const r of popup.rows ?? []) {
+    const value = formatValue(properties[r.field], r.format);
+    if (value === "") continue;
+    const label = escapeHtml(labelFor(r, resolveLabel));
+    const safe = escapeHtml(value);
+    if (r.variant === "chip") {
+      chips.push(`<span class="omx-overlay-popup__chip">${safe}</span>`);
+    } else if (r.variant === "block") {
+      blocks.push(
+        `<div class="omx-overlay-popup__block"><span class="omx-overlay-popup__block-label">${label}</span><p class="omx-overlay-popup__text">${safe}</p></div>`,
+      );
+    } else {
+      rows.push(
+        `<div class="omx-overlay-popup__row"><span class="omx-overlay-popup__label">${label}</span><span class="omx-overlay-popup__value">${safe}</span></div>`,
+      );
+    }
+  }
+  // The severity badge leads the meta line (it sits below the title, clear of
+  // the close button) alongside any chips.
+  const metaItems = badge ? [badge, ...chips] : chips;
+  const chipsHtml = metaItems.length
+    ? `<div class="omx-overlay-popup__chips">${metaItems.join("")}</div>`
+    : "";
+
+  let footer = "";
+  if (popup.attributionField) {
+    const attr = attributionText(properties[popup.attributionField]);
+    if (attr) footer = `<div class="omx-overlay-popup__footer">${escapeHtml(attr)}</div>`;
+  }
+
+  return `<div class="omx-overlay-popup">${header}${chipsHtml}${rows.join("")}${blocks.join("")}${footer}</div>`;
 }

@@ -201,10 +201,12 @@
       },
       "popup": {
         "titleField": "headline",
+        "severityField": "severity",
+        "attributionField": "attribution",
         "rows": [
-          { "field": "type", "label": "Type" },
-          { "field": "severity", "label": "Severity" },
-          { "field": "description", "label": "Details" }
+          { "field": "type", "label": "Type", "format": "label", "variant": "chip" },
+          { "field": "roadState", "label": "Status", "format": "label", "variant": "chip" },
+          { "field": "description", "label": "Details", "variant": "block" }
         ]
       }
     }

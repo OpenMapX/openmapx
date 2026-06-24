@@ -108,3 +108,73 @@ describe("buildPopupHtml", () => {
     expect(html).not.toContain("Type");
   });
 });
+
+describe("buildPopupHtml (rich card)", () => {
+  it("humanizes label-formatted enum values", () => {
+    const html = buildPopupHtml(
+      { titleField: "h", rows: [{ field: "type", label: "Type", format: "label" }] },
+      { h: "T", type: "road_closure" },
+    );
+    expect(html).toContain("Road closure");
+    expect(html).not.toContain("road_closure");
+  });
+
+  it("renders a colored, humanized severity badge from severityField", () => {
+    const html = buildPopupHtml(
+      { titleField: "h", severityField: "severity", rows: [] },
+      { h: "T", severity: "high" },
+    );
+    expect(html).toContain("omx-overlay-popup__badge");
+    expect(html).toContain("High");
+    expect(html).toContain("#cc0033"); // high severity color, inlined
+  });
+
+  it("renders chip-variant rows as chips with humanized values", () => {
+    const html = buildPopupHtml(
+      {
+        titleField: "h",
+        rows: [{ field: "roadState", label: "Status", format: "label", variant: "chip" }],
+      },
+      { h: "T", roadState: "closed" },
+    );
+    expect(html).toContain("omx-overlay-popup__chip");
+    expect(html).toContain("Closed");
+  });
+
+  it("renders block-variant rows preserving the text and label", () => {
+    const html = buildPopupHtml(
+      { titleField: "h", rows: [{ field: "description", label: "Details", variant: "block" }] },
+      { h: "T", description: "line1\nline2" },
+    );
+    expect(html).toContain("omx-overlay-popup__block");
+    expect(html).toContain("Details");
+    expect(html).toContain("line1");
+  });
+
+  it("omits object/array values instead of rendering [object Object]", () => {
+    const html = buildPopupHtml(
+      { titleField: "h", rows: [{ field: "roads", label: "Roads" }] },
+      { h: "T", roads: [{ ref: "A1" }] },
+    );
+    expect(html).not.toContain("[object Object]");
+    expect(html).not.toContain("Roads");
+  });
+
+  it("renders an attribution footer from an attribution object's provider", () => {
+    const html = buildPopupHtml(
+      { titleField: "h", attributionField: "attribution", rows: [] },
+      { h: "T", attribution: { provider: "Quelle: Autobahn GmbH", license: "dl-de/by-2-0" } },
+    );
+    expect(html).toContain("omx-overlay-popup__footer");
+    expect(html).toContain("Quelle: Autobahn GmbH");
+  });
+
+  it("escapes humanized values and badges", () => {
+    const html = buildPopupHtml(
+      { titleField: "h", severityField: "s", rows: [{ field: "type", format: "label" }] },
+      { h: "T", s: "<x>", type: "<b>x</b>" },
+    );
+    expect(html).not.toContain("<b>x</b>");
+    expect(html).not.toContain("<x>");
+  });
+});

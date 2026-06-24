@@ -99,6 +99,29 @@ describe("declarative frontend.overlay spec", () => {
     });
   });
 
+  it("preserves a rich popup spec (severityField, attributionField, chip/block rows)", () => {
+    const r = withOverlay({
+      source: { kind: "geojson-bbox", route: "/events" },
+      popup: {
+        titleField: "headline",
+        severityField: "severity",
+        attributionField: "attribution",
+        rows: [
+          { field: "type", label: "Type", format: "label", variant: "chip" },
+          { field: "description", label: "Details", variant: "block" },
+        ],
+      },
+    });
+    expect(r.success).toBe(true);
+    if (!r.success) return;
+    const popup = r.data.frontend?.overlay?.popup;
+    expect(popup?.severityField).toBe("severity");
+    expect(popup?.attributionField).toBe("attribution");
+    expect(popup?.rows?.[0]?.variant).toBe("chip");
+    expect(popup?.rows?.[0]?.format).toBe("label");
+    expect(popup?.rows?.[1]?.variant).toBe("block");
+  });
+
   it("rejects an overlay image missing its path", () => {
     const r = withOverlay({
       source: { kind: "geojson-bbox", route: "/events" },

@@ -219,12 +219,29 @@ const overlayPopupRowSchema = z.object({
   field: z.string(),
   label: z.string().optional(),
   labelKey: z.string().optional(),
-  format: z.enum(["text", "number", "date"]).optional(),
+  /** `label` humanizes enum-ish values (e.g. "road_closure" → "Road closure"). */
+  format: z.enum(["text", "number", "date", "label"]).optional(),
+  /**
+   * How the row is rendered: a label/value `row` (default), a compact `chip`
+   * (for short categorical values), or a full-width `block` (for long text like
+   * a description, preserving line breaks).
+   */
+  variant: z.enum(["row", "chip", "block"]).optional(),
 });
 
-/** Declarative click popup. The host renders it with every value escaped. */
+/** Declarative click popup. The host renders it as a card with every value escaped. */
 const overlayPopupSchema = z.object({
   titleField: z.string(),
+  /**
+   * Field whose value (low|medium|high|critical|unknown) renders as a colored
+   * severity badge in the header. Don't also list it as a row.
+   */
+  severityField: z.string().optional(),
+  /**
+   * Field holding the source credit — a string, or an object with `provider`
+   * (and optional `license`) — rendered as a muted footer.
+   */
+  attributionField: z.string().optional(),
   rows: z.array(overlayPopupRowSchema).optional(),
 });
 
