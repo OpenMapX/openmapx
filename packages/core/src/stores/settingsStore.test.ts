@@ -57,10 +57,21 @@ describe("useSettingsStore", () => {
     expect(useSettingsStore.getState().aiSearchEnabled).toBe(false);
   });
 
-  it("incident alerts default on, avoid-incidents default off", () => {
+  it("incident alerts and avoid-incidents both default on", () => {
     configureStorage(makeMemoryStorage());
     useSettingsStore.getState().hydrate();
     expect(useSettingsStore.getState().incidentAlerts).toBe(true);
+    expect(useSettingsStore.getState().avoidIncidents).toBe(true);
+  });
+
+  it("setAvoidIncidents(false) persists and hydrates back as disabled", () => {
+    const storage = makeMemoryStorage();
+    configureStorage(storage);
+    useSettingsStore.getState().setAvoidIncidents(false);
+    expect(useSettingsStore.getState().avoidIncidents).toBe(false);
+    expect(storage.getString("openmapx:avoidIncidents")).toBe("false");
+    useSettingsStore.setState({ avoidIncidents: true });
+    useSettingsStore.getState().hydrate();
     expect(useSettingsStore.getState().avoidIncidents).toBe(false);
   });
 

@@ -26,6 +26,28 @@ const MAX_EXCLUSION_SPACING_M = 45;
  */
 const MAX_EXCLUSION_POINTS_PER_CLOSURE = 300;
 
+/**
+ * Hard cap on the TOTAL number of exclusion points across all closures in one
+ * request. Valhalla rejects more than 50 `exclude_locations` outright
+ * (HTTP 400, "Exceeded max avoid locations: 50"), which would fail the whole
+ * route — so we stay safely below that ceiling and subsample if needed. 45
+ * still blocks a closure densely enough to force a detour (verified against the
+ * A565 Bonn-Nord bridge closure).
+ */
+const MAX_TOTAL_EXCLUSION_POINTS = 45;
+
+/**
+ * Evenly subsample `points` down to at most `max`, preserving geographic spread
+ * (and the first vertex). Returns the input unchanged when already within `max`.
+ */
+function subsampleEvenly(points: LngLat[], max: number): LngLat[] {
+  if (points.length <= max) return points;
+  const stride = points.length / max;
+  const out: LngLat[] = [];
+  for (let i = 0; i < max; i++) out.push(points[Math.floor(i * stride)] as LngLat);
+  return out;
+}
+
 function isClosure(type: string, severity: string): boolean {
   // The severity branch is defensive: some providers may not filter by `types`
   // and instead return critical-severity events of any type (e.g. "accident"),
@@ -192,6 +214,14 @@ export async function activeClosuresForBbox(
       if (!event.geometry) continue;
       geometryToExclusions(event.geometry, points, polygons, ctx);
     }
+  }
+
+  if (points.length > MAX_TOTAL_EXCLUSION_POINTS) {
+    const trimmed = subsampleEvenly(points, MAX_TOTAL_EXCLUSION_POINTS);
+    ctx.log.warn(
+      `[routing/closures] ${points.length} exclusion points exceed Valhalla's exclude_locations limit; subsampled to ${trimmed.length}`,
+    );
+    return { points: trimmed, polygons };
   }
 
   return { points, polygons };

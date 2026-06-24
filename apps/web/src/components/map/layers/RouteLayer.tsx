@@ -30,6 +30,7 @@ export function RouteLayer() {
     avoidFerries,
   } = useDirectionsStore();
   const units = useSettingsStore((s) => s.units);
+  const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
 
   const routeWaypoints = useMemo(
     () =>
@@ -49,6 +50,7 @@ export function RouteLayer() {
     avoidHighways,
     avoidTolls,
     avoidFerries,
+    avoidClosures: avoidIncidents,
     units,
   });
 

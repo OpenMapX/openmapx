@@ -204,6 +204,11 @@ export function RouteOptions() {
   } = useDirectionsStore();
   const units = useSettingsStore((s) => s.units);
   const setUnits = useSettingsStore((s) => s.setUnits);
+  // Closure avoidance is a persisted, account-wide preference (kept in the
+  // settings store so it's remembered), but surfaced here where users look for
+  // routing options.
+  const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
+  const setAvoidIncidents = useSettingsStore((s) => s.setAvoidIncidents);
 
   // Highways and tolls only apply to driving; ferries can be avoided on foot or bike too.
   const isDriving = mode === "driving";
@@ -229,6 +234,7 @@ export function RouteOptions() {
               </>
             )}
             <CheckRow label={t("ferries")} checked={avoidFerries} onChange={setAvoidFerries} />
+            <CheckRow label={t("closures")} checked={avoidIncidents} onChange={setAvoidIncidents} />
           </Box>
           <Box sx={{ flex: 1 }}>
             <ColumnHeading label={t("distance")} />

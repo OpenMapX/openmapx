@@ -20,6 +20,7 @@ import type {
   TravelMode,
 } from "@openmapx/core";
 import {
+  directionsQueryKey,
   formatDistance,
   formatDuration,
   preferredModesToMotis,
@@ -292,16 +293,21 @@ export function DirectionsPanelContent() {
 
   const getCachedTime = (m: TravelMode): string | undefined => {
     if (!allWaypointsFilled) return undefined;
-    const waypointsStr = routeWaypoints.map(([lng, lat]) => `${lng},${lat}`).join(";");
-    const cached = queryClient.getQueryData<DirectionsResult>([
-      "directions",
-      waypointsStr,
-      m,
-      avoidHighways,
-      avoidTolls,
-      avoidFerries,
-      units,
-    ]);
+    // Build the key with the shared builder so it always matches what
+    // useDirections stored — driving carries the time pickers, other modes don't.
+    const cached = queryClient.getQueryData<DirectionsResult>(
+      directionsQueryKey({
+        waypoints: routeWaypoints,
+        mode: m,
+        avoidHighways,
+        avoidTolls,
+        avoidFerries,
+        avoidClosures: avoidIncidents,
+        units,
+        departAt: m === "driving" ? drivingDepartAtStr : undefined,
+        arriveBy: m === "driving" ? drivingArriveByStr : undefined,
+      }),
+    );
     const duration = cached?.routes[0]?.duration;
     return duration !== undefined ? formatDuration(duration) : undefined;
   };

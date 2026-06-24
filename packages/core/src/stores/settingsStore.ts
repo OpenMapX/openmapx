@@ -70,7 +70,10 @@ function readIncidentAlerts(): boolean {
 // Avoid closures/incidents when routing is opt-in (default off); consumed by
 // Phase-2 routing exclusion.
 function readAvoidIncidents(): boolean {
-  return getStorage().getString(AVOID_INCIDENTS_STORAGE_KEY) === "true";
+  // Defaults ON: steering around reported closures is the safer behavior, and
+  // the toggle lives in the directions panel's Options for easy opt-out.
+  const v = getStorage().getString(AVOID_INCIDENTS_STORAGE_KEY);
+  return v === null ? true : v === "true";
 }
 
 interface SettingsState {

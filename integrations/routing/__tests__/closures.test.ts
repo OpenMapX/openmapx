@@ -113,6 +113,33 @@ describe("activeClosuresForBbox", () => {
     expect(result.points[result.points.length - 1]).toEqual([0.1, 51.1045]);
   });
 
+  it("caps total exclusion points below Valhalla's exclude-locations limit and warns", async () => {
+    // A ~3.3 km LineString densifies to ~74 points (> the 45-point cap). Valhalla
+    // rejects > 50 exclude_locations with HTTP 400, so the result must be trimmed.
+    const coords = [
+      [0.1, 51.1],
+      [0.1, 51.13],
+    ];
+    const getEvents = vi.fn().mockResolvedValue([
+      {
+        id: "test:cap",
+        source: "test",
+        provider: "road-conditions-test",
+        type: "road_closure",
+        severity: "high",
+        geometry: { type: "LineString", coordinates: coords },
+        headline: "Very long closure",
+      },
+    ]);
+    const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
+    const result = await activeClosuresForBbox(ctx, TEST_BBOX);
+    expect(result.points.length).toBeGreaterThan(1);
+    expect(result.points.length).toBeLessThanOrEqual(45);
+    // Subsampling keeps geographic spread, including the first vertex.
+    expect(result.points[0]).toEqual([0.1, 51.1]);
+    expect(ctx.log.warn).toHaveBeenCalled();
+  });
+
   it("converts a Polygon geometry closure to polygons", async () => {
     const ring = [
       [0.0, 51.0],

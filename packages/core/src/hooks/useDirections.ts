@@ -19,7 +19,23 @@ interface UseDirectionsParams {
   arriveBy?: string;
 }
 
-export function useDirections({
+// Highways and tolls only apply to driving; the UI hides their toggles for
+// other modes, so a stale flag (set while driving) must never reach a cycling /
+// walking route. Ferries can be avoided on foot or bike too, so it is not gated.
+function effectiveAvoid(mode: TravelMode, avoidHighways: boolean, avoidTolls: boolean) {
+  return {
+    avoidHighways: mode === "driving" && avoidHighways,
+    avoidTolls: mode === "driving" && avoidTolls,
+  };
+}
+
+/**
+ * The single source of truth for the directions query key. Any component that
+ * reads the directions cache (the panel's mode-chip time preview, the map
+ * RouteLayer) MUST build its key with this so the keys can never drift apart —
+ * a mismatch silently splits the cache and makes the map and panel disagree.
+ */
+export function directionsQueryKey({
   waypoints,
   mode = "driving",
   avoidHighways = false,
@@ -30,36 +46,47 @@ export function useDirections({
   lang,
   departAt,
   arriveBy,
-}: UseDirectionsParams) {
+}: UseDirectionsParams): (string | boolean | undefined)[] {
   const waypointsStr = waypoints.map(([lng, lat]) => `${lng},${lat}`).join(";");
+  const eff = effectiveAvoid(mode, avoidHighways, avoidTolls);
+  return [
+    "directions",
+    waypointsStr,
+    mode,
+    eff.avoidHighways,
+    eff.avoidTolls,
+    avoidFerries,
+    avoidClosures,
+    units,
+    lang,
+    departAt,
+    arriveBy,
+  ];
+}
 
-  // Highways and tolls only apply to driving; the UI hides their toggles for
-  // other modes, so never send a stale flag (set while driving) to a cycling /
-  // walking route the user can no longer clear. Ferries can be avoided on foot
-  // or bike too, so it is not gated.
-  const effectiveAvoidHighways = mode === "driving" && avoidHighways;
-  const effectiveAvoidTolls = mode === "driving" && avoidTolls;
+export function useDirections(params: UseDirectionsParams) {
+  const {
+    waypoints,
+    mode = "driving",
+    avoidHighways = false,
+    avoidTolls = false,
+    avoidFerries = false,
+    avoidClosures = false,
+    units = "metric",
+    lang,
+    departAt,
+    arriveBy,
+  } = params;
+  const eff = effectiveAvoid(mode, avoidHighways, avoidTolls);
 
   return useQuery({
-    queryKey: [
-      "directions",
-      waypointsStr,
-      mode,
-      effectiveAvoidHighways,
-      effectiveAvoidTolls,
-      avoidFerries,
-      avoidClosures,
-      units,
-      lang,
-      departAt,
-      arriveBy,
-    ],
+    queryKey: directionsQueryKey(params),
     queryFn: () =>
       fetchDirections({
         waypoints,
         mode,
-        avoidHighways: effectiveAvoidHighways,
-        avoidTolls: effectiveAvoidTolls,
+        avoidHighways: eff.avoidHighways,
+        avoidTolls: eff.avoidTolls,
         avoidFerries,
         avoidClosures,
         units,

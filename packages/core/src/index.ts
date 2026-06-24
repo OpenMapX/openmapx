@@ -201,7 +201,7 @@ export {
 } from "./hooks/useDataSources";
 export { useDebounce, useDebouncedCallback } from "./hooks/useDebounce";
 export { useDeliveryProviders } from "./hooks/useDeliveryProviders";
-export { useDirections } from "./hooks/useDirections";
+export { directionsQueryKey, useDirections } from "./hooks/useDirections";
 export { useElevation } from "./hooks/useElevation";
 export { useExploreResults } from "./hooks/useExploreResults";
 export { useFilteredCategoryResults } from "./hooks/useFilteredCategoryResults";
