@@ -150,6 +150,21 @@ risk acknowledgment: in an interactive terminal it prompts for confirmation; in 
 script or CI it refuses (exit 1, before any clone) unless you pass `--yes`. A
 copy-pasted command can never silently register a repo.
 
+An extension that ships both a service and a provider integration uses `repos`
+and `integrations` together. Installing [OpenConditions](https://github.com/openconditions/openconditions)
+(road-conditions overlay + companion ingest service) looks like:
+
+```bash
+pnpm openmapx repos add https://github.com/openconditions/openconditions
+pnpm openmapx services enable openconditions-ingest
+pnpm openmapx compose render && pnpm openmapx compose up
+pnpm openmapx integrations install <road-conditions-openconditions artifact>
+pnpm openmapx services restart app-api
+```
+
+See [Building an external extension](./building-an-external-extension.md) for the
+full walkthrough.
+
 ## `integrations`
 
 Manage community **integrations** under `custom_integrations/`. The CLI is the

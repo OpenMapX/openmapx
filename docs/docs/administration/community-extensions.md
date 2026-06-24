@@ -217,6 +217,29 @@ author of the code you run.
 | A backend daemon — database, routing engine, geocoder, worker | A community **service repository** |
 | An app feature — overlay, data source, transit/geocoding provider, API route | A community **integration** via the **Store** |
 
+## Example: installing OpenConditions
+
+Some extensions span both channels — a backend service that owns the data plus a
+provider integration that surfaces it. [OpenConditions](https://github.com/openconditions/openconditions)
+is one: a community **service** (`openconditions-ingest`) writes road-condition
+observations to the shared database, and a community **integration**
+(`road-conditions-openconditions`) exposes them as a road-conditions overlay and
+feeds routing closure-avoidance. Installing it touches both channels:
+
+```bash
+pnpm openmapx repos add https://github.com/openconditions/openconditions
+pnpm openmapx services enable openconditions-ingest
+pnpm openmapx compose render && pnpm openmapx compose up
+pnpm openmapx integrations install <road-conditions-openconditions artifact>
+pnpm openmapx services restart app-api
+```
+
+The service repo is registered and started first so the database schema and feed
+exist; then the integration is installed and `app-api` is restarted to load it.
+For the full author-and-operator walkthrough — how the two pieces are built and
+wired together — see
+[Building an external extension](../developer/building-an-external-extension.md).
+
 ## Where to go next
 
 - **[Managing services](../install/managing-services.md)** — enable, render, run,

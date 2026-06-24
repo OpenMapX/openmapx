@@ -74,6 +74,7 @@ The built-in overlays group into a few themes.
 | **Transit lines**      | Public-transport routes and lines                    | OpenStreetMap                 |
 | **Live transit**       | Real-time bus, tram, and train positions             | Live-vehicle feeds (e.g. DB RIS, Entur) |
 | **Airports**           | Airport locations and metadata                       | OurAirports                   |
+| **Road conditions**    | Incidents, roadworks, and closures (community extension) | [OpenConditions](../developer/building-an-external-extension.md) |
 
 The traffic overlay needs a TomTom API key (set in the admin panel or via
 `.env`), and only renders above a minimum zoom. The live-transit overlay picks

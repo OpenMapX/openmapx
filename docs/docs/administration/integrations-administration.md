@@ -21,6 +21,11 @@ focuses on the admin side. The panel and the API behind it are mapped in the
 [Admin panel tour](./admin-panel.md); installing third-party integrations is
 covered in [Community extensions](./community-extensions.md).
 
+Community integrations — such as the OpenConditions road-conditions provider —
+configure, bind, and probe exactly like the built-in ones described here once
+installed; see [Community extensions](./community-extensions.md) for how to
+install them.
+
 ## The integration list
 
 `/admin/integrations` lists every loaded integration with its display name, the

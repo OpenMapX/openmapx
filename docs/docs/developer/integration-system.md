@@ -458,7 +458,10 @@ bbox refetch, popups, interactive-layer registration, attribution (from the
 manifest `dataSources`), and teardown. OpenConditions' road-conditions overlay is
 the canonical example: a `geojson-bbox` source pointing at its `/observations`
 route, a severity-colored circle layer, a categorical legend, and a popup —
-all manifest, no bundle.
+all manifest, no bundle. See
+[Building an external extension](./building-an-external-extension.md) for the
+complete OpenConditions walkthrough (provider integration + companion ingest
+service).
 
 ### Code overlays (shipped components)
 
