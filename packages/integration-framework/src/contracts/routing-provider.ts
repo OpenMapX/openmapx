@@ -162,6 +162,10 @@ export interface RoutingOptions {
    * Used by Valhalla `date_time.type=2`.
    */
   arriveBy?: string;
+  /** Points the router must not pass through, e.g. closure centroids. */
+  excludeLocations?: LngLat[];
+  /** Polygon rings the router must not enter, e.g. road-closure boundaries. */
+  excludePolygons?: LngLat[][];
 }
 
 /** A single point in a recorded GPS trace, optionally tagged with capture time. */

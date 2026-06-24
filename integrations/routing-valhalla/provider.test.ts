@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildCostingOptions,
+  buildExclusions,
   TRACE_ATTRIBUTE_FILTER,
   transformTraceEdge,
   valhallaLanes,
   valhallaManeuverType,
+  valhallaService,
   valhallaSign,
 } from "./provider.js";
 
@@ -196,5 +198,120 @@ describe("buildCostingOptions", () => {
     expect(buildCostingOptions({}, "auto")).toEqual({ maneuver_penalty: 10 });
     expect(buildCostingOptions({}, "motorcycle")).toEqual({ maneuver_penalty: 10 });
     expect(buildCostingOptions({}, "pedestrian")).toEqual({});
+  });
+});
+
+describe("buildExclusions", () => {
+  it("returns empty object when no exclusion options are set", () => {
+    expect(buildExclusions({})).toEqual({});
+  });
+
+  it("omits exclude_locations when the array is empty", () => {
+    expect(buildExclusions({ excludeLocations: [] })).toEqual({});
+  });
+
+  it("converts excludeLocations tuples to {lon,lat} objects", () => {
+    expect(buildExclusions({ excludeLocations: [[5.1, 52.1]] })).toEqual({
+      exclude_locations: [{ lon: 5.1, lat: 52.1 }],
+    });
+  });
+
+  it("converts excludePolygons rings preserving [lon,lat] order", () => {
+    const ring: [number, number][] = [
+      [5, 52],
+      [5.1, 52],
+      [5.1, 52.1],
+      [5, 52],
+    ];
+    expect(buildExclusions({ excludePolygons: [ring] })).toEqual({
+      exclude_polygons: [ring],
+    });
+  });
+
+  it("omits exclude_polygons when the array is empty", () => {
+    expect(buildExclusions({ excludePolygons: [] })).toEqual({});
+  });
+});
+
+// Minimal valid Valhalla /route response shape for fetch mocking.
+// shape is polyline6 for two [0,0] points: each coord encodes to "?" (value 0 → char 63 = "?").
+const MINIMAL_VALHALLA_RESPONSE = {
+  trip: {
+    summary: { length: 1, time: 60 },
+    legs: [
+      {
+        shape: "????",
+        summary: { length: 1, time: 60 },
+        maneuvers: [
+          {
+            type: 1,
+            instruction: "Start",
+            length: 0.5,
+            time: 30,
+            begin_shape_index: 0,
+            end_shape_index: 1,
+          },
+          {
+            type: 4,
+            instruction: "Arrive",
+            length: 0.5,
+            time: 30,
+            begin_shape_index: 1,
+            end_shape_index: 1,
+          },
+        ],
+      },
+    ],
+  },
+};
+
+describe("valhallaService.getRoute exclusion body params", () => {
+  let capturedBody: Record<string, unknown>;
+
+  beforeEach(() => {
+    capturedBody = {};
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        capturedBody = JSON.parse(init?.body as string) as Record<string, unknown>;
+        return {
+          ok: true,
+          json: async () => MINIMAL_VALHALLA_RESPONSE,
+        };
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const WPS: [number, number][] = [
+    [5.1, 52.1],
+    [5.2, 52.2],
+  ];
+
+  it("posts exclude_locations when excludeLocations is provided", async () => {
+    await valhallaService.getRoute(WPS, "driving", {
+      excludeLocations: [[5.1, 52.1]],
+    });
+    expect(capturedBody.exclude_locations).toEqual([{ lon: 5.1, lat: 52.1 }]);
+  });
+
+  it("posts exclude_polygons when excludePolygons is provided", async () => {
+    const ring: [number, number][] = [
+      [5, 52],
+      [5.1, 52],
+      [5.1, 52.1],
+      [5, 52],
+    ];
+    await valhallaService.getRoute(WPS, "driving", { excludePolygons: [ring] });
+    expect(capturedBody.exclude_polygons).toEqual([ring]);
+  });
+
+  it("omits both keys when no exclusion options are passed", async () => {
+    await valhallaService.getRoute(WPS, "driving", {});
+    expect(capturedBody).not.toHaveProperty("exclude_locations");
+    expect(capturedBody).not.toHaveProperty("exclude_polygons");
   });
 });
