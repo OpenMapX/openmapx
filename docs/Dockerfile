@@ -3,7 +3,7 @@
 # The build context is `docs/` only — this package is a self-contained pnpm
 # workspace (its own pnpm-workspace.yaml + pnpm-lock.yaml), fully decoupled from
 # the monorepo workspace and the app build.
-FROM node:22-alpine@sha256:9385cd9f3001dfc3431e8ead12c43e9e1f87cc1b9b5c6cfd0f73865d405b27c4 AS build
+FROM node:26-alpine@sha256:a2dc166a387cc6ca1e62d0c8e265e49ca985d6e60abc9fe6e6c3d6ce8e63f606 AS build
 WORKDIR /app
 RUN npm install -g pnpm@11.1.2
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
