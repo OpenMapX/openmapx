@@ -42,6 +42,7 @@ export {
   pruneRerouteTimes,
   remainingWaypoints,
   shouldReroute,
+  shouldRerouteForClosure,
   updateOffRouteScore,
 } from "./reroute";
 export {

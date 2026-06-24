@@ -31,6 +31,24 @@ export function updateOffRouteScore(
 }
 
 /**
+ * Decide whether to trigger a reroute because a new road closure has appeared
+ * ahead on the active route. The `closureAhead` flag is true when at least one
+ * closure whose id was not known at route-commit time is projected ahead of the
+ * driver's current position. Reuses the same backoff/debounce as the off-route
+ * reroute so both causes share a single cooldown — no extra churn.
+ */
+export function shouldRerouteForClosure(
+  closureAhead: boolean,
+  lastRerouteAtMs: number | null,
+  backoffMs: number,
+  nowMs: number,
+): boolean {
+  if (!closureAhead) return false;
+  if (lastRerouteAtMs !== null && nowMs - lastRerouteAtMs < backoffMs) return false;
+  return true;
+}
+
+/**
  * Decide whether to trigger a reroute: the accrued off-route score has reached
  * the threshold and the (growing) back-off window since the last reroute has
  * elapsed.

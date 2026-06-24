@@ -9,6 +9,7 @@ import {
   processFix,
   pruneRerouteTimes,
   remainingWaypoints,
+  shouldRerouteForClosure,
   useNavigationStore,
   useSettingsStore,
   VOICE_TIMING_MULTIPLIER,
@@ -20,6 +21,7 @@ import { haptics } from "../haptics";
 import { useWatchPosition } from "../useWatchPosition";
 import { useNavRecordingStore } from "./navRecordingStore";
 import { useNavSimStore } from "./navSimStore";
+import { useNavIncidents } from "./useNavIncidents";
 import { useNavigationVoice } from "./useNavigationVoice";
 import { useNavRecorder } from "./useNavRecorder";
 import { useReplayPosition } from "./useReplayPosition";
@@ -50,6 +52,9 @@ export function useNavigationEngine(): void {
   // Recent successful-reroute times (ms) + cooldown deadline for the churn guard.
   const rerouteTimesRef = useRef<number[]>([]);
   const rerouteCooldownUntilRef = useRef(0);
+  // Closure ids projected onto the route at route-commit time; a new closure
+  // appearing after commit (id not in this set) triggers a reroute.
+  const knownClosureIdsRef = useRef<Set<string>>(new Set());
   const captureFix = useNavRecorder();
 
   const speakCue = useCallback(
@@ -146,7 +151,12 @@ export function useNavigationEngine(): void {
           from,
           result.progress.alongMeters,
         );
-        fetchDirections({ waypoints, mode, lang: locale })
+        fetchDirections({
+          waypoints,
+          mode,
+          lang: locale,
+          avoidClosures: useSettingsStore.getState().avoidIncidents,
+        })
           .then((res) => {
             // Bail out if navigation ended (stopped or arrived) while the
             // reroute was in flight — otherwise we'd resurrect a finished trip.
@@ -193,10 +203,14 @@ export function useNavigationEngine(): void {
   // Reset per-session tick state (spoken cues + deviation history) whenever the
   // active route changes — a fresh start or an applied reroute — so a second
   // navigation session doesn't inherit the previous one's spoken-cue keys.
+  // Also snapshot which closures are currently on the route so we can tell new
+  // ones from ones that were already there when the route was planned.
   const activeRoute = useNavigationStore((s) => s.route);
+  const incidents = useNavIncidents();
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset is keyed on route identity, not tickRef.
   useEffect(() => {
     tickRef.current = freshTick();
+    knownClosureIdsRef.current = new Set(incidents.map((a) => a.id));
   }, [activeRoute]);
 
   // Clear the churn guard when navigation ends so a new session starts clean.
@@ -207,6 +221,74 @@ export function useNavigationEngine(): void {
       rerouteCooldownUntilRef.current = 0;
     }
   }, [navStatus]);
+
+  // Closure-ahead reroute: when avoidIncidents is on, a new road/lane closure
+  // projected ahead of the driver (not known at route-commit time) triggers an
+  // automatic reroute. Uses the same backoff + churn guard as off-route reroutes.
+  const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
+  useEffect(() => {
+    if (!avoidIncidents) return;
+    if (navStatus !== "navigating") return;
+    const newClosureAhead = incidents.some(
+      (a) =>
+        (a.eventType === "road_closure" || a.eventType === "lane_closure") &&
+        !knownClosureIdsRef.current.has(a.id),
+    );
+    const tick = tickRef.current;
+    const backoffMs = tick.rerouteBackoffMs || 3_000;
+    const fire = shouldRerouteForClosure(
+      newClosureAhead,
+      tick.lastRerouteAtMs,
+      backoffMs,
+      Date.now(),
+    );
+    if (!fire || reroutingRef.current || Date.now() < rerouteCooldownUntilRef.current) return;
+    const store = useNavigationStore.getState();
+    const { route, mode, destinationWaypoints, progress } = store;
+    if (!route || !progress) return;
+    reroutingRef.current = true;
+    haptics.warn();
+    store.beginReroute();
+    const from = progress.snapped;
+    const waypoints = remainingWaypoints(
+      route.geometry,
+      destinationWaypoints,
+      from,
+      progress.alongMeters,
+    );
+    fetchDirections({ waypoints, mode, lang: locale, avoidClosures: true })
+      .then((res) => {
+        const st = useNavigationStore.getState().status;
+        if (st === "idle" || st === "arrived") return;
+        const next = res.routes?.[res.activeRouteIndex ?? 0];
+        if (next) {
+          const now = Date.now();
+          rerouteTimesRef.current = pruneRerouteTimes(
+            [...rerouteTimesRef.current, now],
+            now,
+            REROUTE_CHURN_WINDOW_MS,
+          );
+          if (isReroutingTooOften(rerouteTimesRef.current, REROUTE_CHURN_MAX)) {
+            rerouteCooldownUntilRef.current = now + REROUTE_CHURN_COOLDOWN_MS;
+            rerouteTimesRef.current = [];
+          }
+          tickRef.current = freshTick();
+          useNavigationStore.getState().applyReroute(next, res.provider);
+        } else {
+          useNavigationStore.setState({ status: "navigating" });
+          useNavigationStore.getState().signalRerouteFailed();
+        }
+      })
+      .catch(() => {
+        const st = useNavigationStore.getState().status;
+        if (st === "idle" || st === "arrived") return;
+        useNavigationStore.setState({ status: "navigating" });
+        useNavigationStore.getState().signalRerouteFailed();
+      })
+      .finally(() => {
+        reroutingRef.current = false;
+      });
+  }, [incidents, avoidIncidents, navStatus, locale]);
 
   // Opt into the navigation simulator from the URL (`?navsim=1`) once on mount.
   // It swaps synthetic fixes for real geolocation so the full pipeline can be

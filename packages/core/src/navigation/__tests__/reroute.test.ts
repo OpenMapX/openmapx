@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { remainingWaypoints, shouldReroute, updateOffRouteScore } from "../reroute";
+import {
+  remainingWaypoints,
+  shouldReroute,
+  shouldRerouteForClosure,
+  updateOffRouteScore,
+} from "../reroute";
 
 const opts = {
   thresholdMeters: 45,
@@ -42,6 +47,27 @@ describe("shouldReroute", () => {
   it("respects the back-off window since the last reroute", () => {
     expect(shouldReroute(10, 1_000, 5_000, 4_000, opts)).toBe(false); // 3 s < 5 s
     expect(shouldReroute(10, 1_000, 5_000, 7_000, opts)).toBe(true); // 6 s > 5 s
+  });
+});
+
+describe("shouldRerouteForClosure", () => {
+  it("triggers when a new closure is ahead and backoff has cleared", () => {
+    expect(shouldRerouteForClosure(true, null, 5_000, 0)).toBe(true);
+  });
+
+  it("does not trigger when there is no new closure ahead", () => {
+    expect(shouldRerouteForClosure(false, null, 5_000, 0)).toBe(false);
+  });
+
+  it("respects the backoff window (same as off-route reroute)", () => {
+    expect(shouldRerouteForClosure(true, 1_000, 5_000, 4_000)).toBe(false); // 3 s < 5 s
+    expect(shouldRerouteForClosure(true, 1_000, 5_000, 7_000)).toBe(true); // 6 s > 5 s
+  });
+
+  it("does not trigger for a closure behind the driver (already-known scenario)", () => {
+    // The caller is responsible for passing closureAhead=false if the closure is behind;
+    // a second call with the same closure id (already known) → still false.
+    expect(shouldRerouteForClosure(false, null, 5_000, 0)).toBe(false);
   });
 });
 

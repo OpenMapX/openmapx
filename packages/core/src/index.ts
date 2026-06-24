@@ -308,6 +308,7 @@ export {
   SIGNAL_LOST_GAP_MS,
   selectActiveAlert,
   shouldReroute,
+  shouldRerouteForClosure,
   shouldWarnCamera,
   signalCoordKey,
   simulatePositions,
