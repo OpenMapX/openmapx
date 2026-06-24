@@ -425,26 +425,23 @@ export function buildCostingOptions(
   return costingOptions;
 }
 
+type ValhallaExclusions = {
+  exclude_locations?: Array<{ lon: number; lat: number }>;
+  exclude_polygons?: Array<Array<[number, number]>>;
+};
+
 /**
  * Translate optional exclusion geometry from `RoutingOptions` into the
  * Valhalla request fields. Each key is omitted entirely when empty so the
  * engine receives a clean request without no-op empty arrays.
  */
-export function buildExclusions(options: RoutingOptions): {
-  exclude_locations?: Array<{ lon: number; lat: number }>;
-  exclude_polygons?: Array<Array<[number, number]>>;
-} {
-  const result: {
-    exclude_locations?: Array<{ lon: number; lat: number }>;
-    exclude_polygons?: Array<Array<[number, number]>>;
-  } = {};
+export function buildExclusions(options: RoutingOptions): ValhallaExclusions {
+  const result: ValhallaExclusions = {};
   if (options.excludeLocations?.length) {
     result.exclude_locations = options.excludeLocations.map(([lon, lat]) => ({ lon, lat }));
   }
   if (options.excludePolygons?.length) {
-    result.exclude_polygons = options.excludePolygons.map((ring) =>
-      ring.map(([lon, lat]) => [lon, lat] as [number, number]),
-    );
+    result.exclude_polygons = options.excludePolygons;
   }
   return result;
 }
