@@ -30,20 +30,26 @@ export interface NavIncidentsResult {
  * Road-condition incidents projected onto the active route as severity-scaled
  * approach alerts. Fetches the route-ahead bbox from the `road-conditions`
  * capability once per route (refreshed on a coarse interval), then projects
- * each render against the current along-distance. Empty when the user has turned
- * incident alerts off. Returns `{ incidents: [], ready: false }` before the
- * first fetch resolves, and on any error — navigation must never break.
+ * each render against the current along-distance. Returns
+ * `{ incidents: [], ready: false }` before the first fetch resolves and on
+ * any error — navigation must never break.
+ *
+ * Fetches whenever EITHER `incidentAlerts` OR `avoidIncidents` is on: display
+ * consumers gate on `incidentAlerts`, the engine's closure-reroute gates on
+ * `avoidIncidents`, and both need the same underlying data.
  */
 export function useNavIncidents(): NavIncidentsResult {
   const route = useNavigationStore((s) => s.route);
   const along = useNavigationStore((s) => s.progress?.alongMeters ?? 0);
-  const enabled = useSettingsStore((s) => s.incidentAlerts);
+  const incidentAlerts = useSettingsStore((s) => s.incidentAlerts);
+  const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
+  const fetchEnabled = incidentAlerts || avoidIncidents;
 
   const [events, setEvents] = useState<RoadConditionEvent[]>([]);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!enabled || !route || route.geometry.length < 2) {
+    if (!fetchEnabled || !route || route.geometry.length < 2) {
       setEvents([]);
       setReady(false);
       return;
@@ -73,7 +79,7 @@ export function useNavIncidents(): NavIncidentsResult {
       clearInterval(timer);
       setReady(false);
     };
-  }, [route, enabled]);
+  }, [route, fetchEnabled]);
 
   const incidents = useMemo(
     () => (route ? projectEventsToRoute(events, route.geometry, along) : []),

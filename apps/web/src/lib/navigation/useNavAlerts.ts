@@ -33,6 +33,7 @@ export function useNavAlerts(): ActiveAlert | null {
   const along = useNavigationStore((s) => s.progress?.alongMeters ?? 0);
   const speed = useNavigationStore((s) => s.progress?.speedMps ?? 0);
   const speedCameraAlerts = useSettingsStore((s) => s.speedCameraAlerts);
+  const incidentAlerts = useSettingsStore((s) => s.incidentAlerts);
 
   const origin = (route?.geometry[0] ?? null) as LngLat | null;
   const { data: country } = useCountryFromCoordinates(origin, !!route);
@@ -87,11 +88,13 @@ export function useNavAlerts(): ActiveAlert | null {
 
   // Traffic incidents (from the road-conditions capability) merge into the same
   // selector as the OSM hazards; they carry priority 0, so an in-range incident
-  // is surfaced before a speed camera or crossing.
+  // is surfaced before a speed camera or crossing. Only included when the user
+  // has incident alerts on; the fetch may still be active for avoidIncidents.
   const { incidents } = useNavIncidents();
+  const visibleIncidents = incidentAlerts ? incidents : [];
 
   return useMemo(
-    () => selectActiveAlert([...incidents, ...alerts], along, speed, []),
-    [incidents, alerts, along, speed],
+    () => selectActiveAlert([...visibleIncidents, ...alerts], along, speed, []),
+    [visibleIncidents, alerts, along, speed],
   );
 }

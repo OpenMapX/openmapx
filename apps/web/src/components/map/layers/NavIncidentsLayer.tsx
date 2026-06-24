@@ -1,5 +1,6 @@
 "use client";
 
+import { useSettingsStore } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
@@ -32,6 +33,10 @@ const SEVERITY_COLOR: maplibregl.ExpressionSpecification = [
 export function NavIncidentsLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const { incidents } = useNavIncidents();
+  const incidentAlerts = useSettingsStore((s) => s.incidentAlerts);
+  // Only render markers when the user has incident display enabled; the fetch
+  // may still be running for avoidIncidents, but markers stay hidden.
+  const visibleIncidents = incidentAlerts ? incidents : [];
 
   useEffect(() => {
     void styleVersion;
@@ -63,13 +68,13 @@ export function NavIncidentsLayer() {
     if (raw?.type !== "geojson") return;
     (raw as GeoJSONSource).setData({
       type: "FeatureCollection",
-      features: incidents.map((i) => ({
+      features: visibleIncidents.map((i) => ({
         type: "Feature",
         properties: { severity: i.severity, eventType: i.eventType },
         geometry: { type: "Point", coordinates: i.coord },
       })),
     });
-  }, [mapRef, incidents, styleVersion]);
+  }, [mapRef, visibleIncidents, styleVersion]);
 
   return null;
 }
