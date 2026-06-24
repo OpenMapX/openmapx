@@ -168,6 +168,38 @@ export const trafficPreview: ReactNode = (
   </svg>
 );
 
+export const roadConditionsPreview: ReactNode = (
+  <svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+    role="img"
+    aria-hidden="true"
+  >
+    <rect width="80" height="80" fill="#dce4e8" />
+    {/* map background blocks */}
+    <rect x="0" y="0" width="30" height="30" rx="3" fill="#e8eef2" />
+    <rect x="50" y="0" width="30" height="30" rx="3" fill="#e8eef2" />
+    <rect x="0" y="50" width="30" height="30" rx="3" fill="#e8eef2" />
+    <rect x="50" y="50" width="30" height="30" rx="3" fill="#e8eef2" />
+    {/* roads */}
+    <line x1="40" y1="0" x2="40" y2="80" stroke="#c8cdd2" strokeWidth="7" />
+    <line x1="0" y1="40" x2="80" y2="40" stroke="#c8cdd2" strokeWidth="7" />
+    {/* warning triangle (amber road-hazard sign) */}
+    <polygon
+      points="40,15 67,63 13,63"
+      fill="#f9a825"
+      stroke="#ffffff"
+      strokeWidth="3"
+      strokeLinejoin="round"
+    />
+    {/* exclamation mark */}
+    <rect x="37.6" y="34" width="4.8" height="15" rx="2.4" fill="#3a2a00" />
+    <circle cx="40" cy="57" r="2.8" fill="#3a2a00" />
+  </svg>
+);
+
 export const transitPreview: ReactNode = (
   <svg
     viewBox="0 0 80 80"

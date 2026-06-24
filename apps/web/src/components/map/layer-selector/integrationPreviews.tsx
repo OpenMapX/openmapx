@@ -13,6 +13,7 @@ import {
   measurePreview,
   naturalEventsPreview,
   nauticalPreview,
+  roadConditionsPreview,
   satelliteImageryPreview,
   streetViewPreview,
   trafficPreview,
@@ -31,6 +32,7 @@ import {
  */
 export const INTEGRATION_PREVIEWS: Record<string, ReactNode> = {
   traffic: trafficPreview,
+  "road-conditions": roadConditionsPreview,
   transit: transitPreview,
   hiking: hikingPreview,
   "street-view": streetViewPreview,
