@@ -13,129 +13,65 @@ function withOverlay(overlay: unknown) {
   });
 }
 
-describe("declarative frontend.overlay spec", () => {
-  it("preserves a full declarative overlay (source + layers + legend + popup)", () => {
+describe("frontend.overlay spec (lightweight config; markers/popups live in code)", () => {
+  it("preserves excludes, minZoom and a declarative legend", () => {
     const r = withOverlay({
-      source: { kind: "geojson-bbox", route: "/observations", bboxParam: "bbox" },
-      layers: [
-        {
-          id: "points",
-          type: "circle",
-          interactive: true,
-          paint: { "circle-color": ["get", "color"] },
-        },
-      ],
+      excludes: ["street-view", "earthquakes"],
+      minZoom: 5,
       legend: {
         kind: "categorical",
-        items: [{ color: "#cc0033", label: "Critical" }],
+        title: "Road conditions",
+        items: [{ color: "#cc0033", label: "High" }],
       },
-      popup: { titleField: "headline", rows: [{ field: "type", format: "text" }] },
     });
     expect(r.success).toBe(true);
     if (!r.success) return;
     const overlay = r.data.frontend?.overlay;
-    expect(overlay?.source?.kind).toBe("geojson-bbox");
-    expect(overlay?.source?.route).toBe("/observations");
-    expect(overlay?.layers?.[0]?.type).toBe("circle");
-    expect(overlay?.layers?.[0]?.interactive).toBe(true);
+    expect(overlay?.excludes).toEqual(["street-view", "earthquakes"]);
+    expect(overlay?.minZoom).toBe(5);
     expect(overlay?.legend?.kind).toBe("categorical");
-    expect(overlay?.popup?.titleField).toBe("headline");
+    expect(overlay?.legend?.items?.[0]?.color).toBe("#cc0033");
   });
 
-  it("accepts a vector source with tiles", () => {
+  it("accepts a ramp legend with stops", () => {
     const r = withOverlay({
-      source: { kind: "vector", tiles: ["https://tiles.example/{z}/{x}/{y}.pbf"] },
-      layers: [{ id: "roads", type: "line", sourceLayer: "road" }],
-    });
-    expect(r.success).toBe(true);
-    if (!r.success) return;
-    expect(r.data.frontend?.overlay?.source?.tiles?.[0]).toContain("{z}");
-  });
-
-  it("rejects an unknown source.kind", () => {
-    const r = withOverlay({
-      source: { kind: "wms", route: "/observations" },
-      layers: [{ id: "points", type: "circle" }],
-    });
-    expect(r.success).toBe(false);
-  });
-
-  it("rejects an unsupported layer type", () => {
-    const r = withOverlay({
-      source: { kind: "geojson-bbox", route: "/observations" },
-      layers: [{ id: "x", type: "heatmap-3d" }],
-    });
-    expect(r.success).toBe(false);
-  });
-
-  it("rejects a layer missing an id", () => {
-    const r = withOverlay({
-      source: { kind: "geojson-bbox", route: "/observations" },
-      layers: [{ type: "circle" }],
-    });
-    expect(r.success).toBe(false);
-  });
-
-  it("preserves overlay images (id + path) the host registers for symbol-layer glyphs", () => {
-    const r = withOverlay({
-      source: { kind: "geojson-bbox", route: "/events" },
-      images: [{ id: "rc-accident", path: "M1 21h22L12 2z" }],
-      layers: [
-        { id: "points", type: "circle" },
-        {
-          id: "icons",
-          type: "symbol",
-          layout: {
-            "icon-image": ["match", ["get", "type"], "accident", "rc-accident", "rc-accident"],
-          },
-        },
-      ],
-    });
-    expect(r.success).toBe(true);
-    if (!r.success) return;
-    expect(r.data.frontend?.overlay?.images?.[0]).toEqual({
-      id: "rc-accident",
-      path: "M1 21h22L12 2z",
-    });
-  });
-
-  it("preserves a rich popup spec (severityField, attributionField, chip/block rows)", () => {
-    const r = withOverlay({
-      source: { kind: "geojson-bbox", route: "/events" },
-      popup: {
-        titleField: "headline",
-        severityField: "severity",
-        attributionField: "attribution",
-        rows: [
-          { field: "type", label: "Type", format: "label", variant: "chip" },
-          { field: "description", label: "Details", variant: "block" },
+      legend: {
+        kind: "ramp",
+        stops: [
+          { value: 0, color: "#fff" },
+          { value: 100, color: "#000" },
         ],
       },
     });
     expect(r.success).toBe(true);
     if (!r.success) return;
-    const popup = r.data.frontend?.overlay?.popup;
-    expect(popup?.severityField).toBe("severity");
-    expect(popup?.attributionField).toBe("attribution");
-    expect(popup?.rows?.[0]?.variant).toBe("chip");
-    expect(popup?.rows?.[0]?.format).toBe("label");
-    expect(popup?.rows?.[1]?.variant).toBe("block");
+    expect(r.data.frontend?.overlay?.legend?.stops?.length).toBe(2);
   });
 
-  it("rejects an overlay image missing its path", () => {
+  it("drops removed declarative marker/popup fields rather than rejecting them", () => {
+    // source/images/layers/popup moved to code (map-layer.tsx). A manifest that
+    // still carries them parses, but the host-irrelevant fields are stripped.
     const r = withOverlay({
+      minZoom: 5,
       source: { kind: "geojson-bbox", route: "/events" },
-      images: [{ id: "rc-accident" }],
+      images: [{ id: "x", path: "M0 0" }],
       layers: [{ id: "points", type: "circle" }],
+      popup: { titleField: "headline" },
     });
-    expect(r.success).toBe(false);
+    expect(r.success).toBe(true);
+    if (!r.success) return;
+    const overlay = r.data.frontend?.overlay as Record<string, unknown> | undefined;
+    expect(overlay?.minZoom).toBe(5);
+    expect(overlay?.source).toBeUndefined();
+    expect(overlay?.images).toBeUndefined();
+    expect(overlay?.layers).toBeUndefined();
+    expect(overlay?.popup).toBeUndefined();
   });
 
-  it("still accepts the legacy minimal overlay (excludes + minZoom) and preserves it", () => {
-    const r = withOverlay({ excludes: ["street-view"], minZoom: 5 });
+  it("still accepts the minimal overlay (excludes only)", () => {
+    const r = withOverlay({ excludes: ["street-view"] });
     expect(r.success).toBe(true);
     if (!r.success) return;
     expect(r.data.frontend?.overlay?.excludes).toEqual(["street-view"]);
-    expect(r.data.frontend?.overlay?.minZoom).toBe(5);
   });
 });

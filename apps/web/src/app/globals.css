@@ -96,7 +96,7 @@ main {
     color: var(--omx-overlay-text) !important;
   }
 
-  /* Declarative overlay popup card (built by buildPopupHtml). Inherits the
+  /* Overlay popup card (built by buildPopupCard). Inherits the
    * popup's theme background + text color; muted elements use opacity so they
    * read in both light and dark themes. */
   .omx-overlay-popup {

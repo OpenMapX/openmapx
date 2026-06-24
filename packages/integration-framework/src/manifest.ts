@@ -142,63 +142,6 @@ const layerSelectorSchema = z.object({
   quickSelector: z.boolean().optional(),
 });
 
-/**
- * Declarative overlay source. The host's generic overlay renderer fetches/binds
- * this — community overlays describe their data instead of shipping code.
- * `geojson-bbox` re-fetches `route` (the integration's own backend route) on map
- * move with the viewport substituted; `geojson` fetches once; `vector` points at
- * `tiles`.
- */
-const overlaySourceSchema = z.object({
-  kind: z.enum(["geojson-bbox", "geojson", "vector"]),
-  /** Integration-relative route, e.g. "/observations" → /api/integrations/<id>/observations. */
-  route: z.string().optional(),
-  /**
-   * How the viewport is passed for geojson-bbox. "bbox" (default) → one
-   * `bbox=west,south,east,north` param; "wsen" → separate `west/south/east/north`
-   * params.
-   */
-  bboxParam: z.enum(["bbox", "wsen"]).optional(),
-  /** Static query params appended to every fetch. */
-  extraParams: z.record(z.string(), z.string()).optional(),
-  /** Vector tile URL templates (vector only). */
-  tiles: z.array(z.string()).optional(),
-  /** Default `source-layer` for vector layers that don't set their own. */
-  sourceLayer: z.string().optional(),
-});
-
-/** A MapLibre Style-Spec layer the host adds for this overlay (validated subset). */
-const overlayLayerSchema = z.object({
-  id: z.string(),
-  type: z.enum(["circle", "line", "fill", "symbol"]),
-  sourceLayer: z.string().optional(),
-  paint: z.record(z.string(), z.unknown()).optional(),
-  layout: z.record(z.string(), z.unknown()).optional(),
-  filter: z.array(z.unknown()).optional(),
-  minzoom: z.number().optional(),
-  maxzoom: z.number().optional(),
-  /** Register for click (popup) + hover cursor. */
-  interactive: z.boolean().optional(),
-});
-
-/**
- * A marker glyph the host rasterizes and registers via `map.addImage`, so a
- * symbol layer can reference it by `id` in an `icon-image` expression. Lets a
- * declarative overlay ship per-type icons (e.g. one per incident type) without
- * any integration frontend code — the color stays on the circle layer, the
- * glyph carries the type.
- */
-const overlayImageSchema = z.object({
-  /** Image id referenced by a symbol layer's `icon-image`. */
-  id: z.string(),
-  /**
-   * A 24×24 SVG path `d` string (multiple subpaths allowed). The host draws it
-   * as a centered white glyph with a thin dark outline for contrast on any
-   * marker color.
-   */
-  path: z.string(),
-});
-
 const overlayLegendItemSchema = z.object({
   color: z.string(),
   label: z.string().optional(),
@@ -215,44 +158,15 @@ const overlayLegendSchema = z.object({
   stops: z.array(z.object({ value: z.number(), color: z.string() })).optional(),
 });
 
-const overlayPopupRowSchema = z.object({
-  field: z.string(),
-  label: z.string().optional(),
-  labelKey: z.string().optional(),
-  /** `label` humanizes enum-ish values (e.g. "road_closure" → "Road closure"). */
-  format: z.enum(["text", "number", "date", "label"]).optional(),
-  /**
-   * How the row is rendered: a label/value `row` (default), a compact `chip`
-   * (for short categorical values), or a full-width `block` (for long text like
-   * a description, preserving line breaks).
-   */
-  variant: z.enum(["row", "chip", "block"]).optional(),
-});
-
-/** Declarative click popup. The host renders it as a card with every value escaped. */
-const overlayPopupSchema = z.object({
-  titleField: z.string(),
-  /**
-   * Field whose value (low|medium|high|critical|unknown) renders as a colored
-   * severity badge in the header. Don't also list it as a row.
-   */
-  severityField: z.string().optional(),
-  /**
-   * Field holding the source credit — a string, or an object with `provider`
-   * (and optional `license`) — rendered as a muted footer.
-   */
-  attributionField: z.string().optional(),
-  rows: z.array(overlayPopupRowSchema).optional(),
-});
-
+/**
+ * Lightweight, non-visual overlay config the host reads for any map overlay
+ * (declarative legend, mutual-exclusion peers, zoom gating). Markers and popups
+ * are rendered by the integration's own `map-layer.tsx` code, not the manifest.
+ */
 const overlaySchema = z.object({
   excludes: z.array(z.string()).optional(),
   minZoom: z.number().optional(),
-  source: overlaySourceSchema.optional(),
-  images: z.array(overlayImageSchema).optional(),
-  layers: z.array(overlayLayerSchema).optional(),
   legend: overlayLegendSchema.optional(),
-  popup: overlayPopupSchema.optional(),
 });
 
 const searchCategorySchema = z.object({
@@ -336,12 +250,7 @@ export type IntegrationHealthCheck = z.infer<typeof healthCheckSchema>;
 export type IntegrationFrontend = z.infer<typeof frontendSchema>;
 export type IntegrationLayerSelector = z.infer<typeof layerSelectorSchema>;
 export type IntegrationOverlay = z.infer<typeof overlaySchema>;
-export type IntegrationOverlaySource = z.infer<typeof overlaySourceSchema>;
-export type IntegrationOverlayImage = z.infer<typeof overlayImageSchema>;
-export type IntegrationOverlayLayer = z.infer<typeof overlayLayerSchema>;
 export type IntegrationOverlayLegend = z.infer<typeof overlayLegendSchema>;
-export type IntegrationOverlayPopup = z.infer<typeof overlayPopupSchema>;
-export type IntegrationOverlayPopupRow = z.infer<typeof overlayPopupRowSchema>;
 export type IntegrationSearchCategory = z.infer<typeof searchCategorySchema>;
 
 export interface ManifestValidationResult {

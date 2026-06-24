@@ -1,65 +1,31 @@
 import { escapeHtml } from "@openmapx/core";
-import type {
-  IntegrationOverlayPopup,
-  IntegrationOverlayPopupRow,
-  IntegrationOverlaySource,
-} from "@openmapx/integration-framework";
 
-/** Viewport in lng/lat extents, as MapLibre's `LngLatBounds` decomposes to. */
-export interface OverlayBounds {
-  west: number;
-  south: number;
-  east: number;
-  north: number;
-}
-
-/** Source/layer ids are namespaced so multiple overlays can't collide on the map. */
-export function namespacedSourceId(integrationId: string): string {
-  return `omx-ext:${integrationId}`;
-}
-
-export function namespacedLayerId(integrationId: string, layerId: string): string {
-  return `omx-ext:${integrationId}:${layerId}`;
+/**
+ * A single row in an overlay popup card. `format: "label"` humanizes enum-ish
+ * values ("road_closure" → "Road closure"); `variant` controls layout — a
+ * compact `chip`, a full-width `block` (long text, line breaks preserved), or a
+ * default label/value `row`.
+ */
+export interface PopupCardRow {
+  field: string;
+  label?: string;
+  labelKey?: string;
+  format?: "text" | "number" | "date" | "label";
+  variant?: "row" | "chip" | "block";
 }
 
 /**
- * Build the fetch URL for a declarative overlay source. Points at the
- * integration's own backend route (`/api/integrations/<id><route>`) with the
- * viewport substituted per `bboxParam`, plus any static (`extraParams`) and
- * dynamic (panel-driven) query params.
+ * Code-defined spec for an overlay popup card. Integrations build this in their
+ * `map-layer.tsx` and render it with {@link buildPopupCard} — no manifest schema
+ * involved, so they have full freedom over the fields and formatting.
  */
-export function buildOverlaySourceUrl(
-  apiBase: string,
-  integrationId: string,
-  source: IntegrationOverlaySource,
-  bounds: OverlayBounds,
-  dynamicParams?: Record<string, string>,
-): string {
-  const base = apiBase.replace(/\/$/, "");
-  const route = source.route ?? "";
-  const path = route.startsWith("/") ? route : `/${route}`;
-  const params = new URLSearchParams();
-
-  const { west, south, east, north } = bounds;
-  if (source.bboxParam === "wsen") {
-    params.set("west", String(west));
-    params.set("south", String(south));
-    params.set("east", String(east));
-    params.set("north", String(north));
-  } else {
-    params.set("bbox", `${west},${south},${east},${north}`);
-  }
-
-  for (const [k, v] of Object.entries(source.extraParams ?? {})) params.set(k, v);
-  for (const [k, v] of Object.entries(dynamicParams ?? {})) params.set(k, v);
-
-  return `${base}/api/integrations/${integrationId}${path}?${params.toString()}`;
-}
-
-function labelFor(row: IntegrationOverlayPopupRow, resolveLabel?: (key: string) => string): string {
-  if (row.label) return row.label;
-  if (row.labelKey) return resolveLabel ? resolveLabel(row.labelKey) : row.labelKey;
-  return row.field;
+export interface PopupCardSpec {
+  titleField: string;
+  /** Field whose value (low|medium|high|critical|unknown) → colored severity badge. */
+  severityField?: string;
+  /** Field holding a source credit — a string or `{ provider, license }` → muted footer. */
+  attributionField?: string;
+  rows?: PopupCardRow[];
 }
 
 /** Severity → badge colors, matching the marker severity ramp. */
@@ -77,12 +43,18 @@ function humanize(raw: string): string {
   return s.length === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+function labelFor(row: PopupCardRow, resolveLabel?: (key: string) => string): string {
+  if (row.label) return row.label;
+  if (row.labelKey) return resolveLabel ? resolveLabel(row.labelKey) : row.labelKey;
+  return row.field;
+}
+
 /**
  * Format a value to a display string. Returns "" for values that can't be
  * sensibly stringified (objects/arrays/null), so the caller drops the row
  * rather than printing "[object Object]".
  */
-function formatValue(raw: unknown, format?: "text" | "number" | "date" | "label"): string {
+function formatValue(raw: unknown, format?: PopupCardRow["format"]): string {
   if (raw == null || typeof raw === "object") return "";
   if (format === "number") {
     const n = Number(raw);
@@ -109,22 +81,23 @@ function attributionText(raw: unknown): string {
 }
 
 /**
- * Render a declarative popup as a structured card with EVERY value and label
- * escaped — community overlays never inject raw HTML. The card has a header
- * (title + optional colored severity badge), compact chips, label/value rows,
- * full-width text blocks, and a muted attribution footer. Rows whose field is
- * absent/empty (or holds an object) are omitted.
+ * Render an overlay popup as a structured card (HTML string) with EVERY value
+ * and label escaped. The card has a header (title), a meta line (colored
+ * severity badge + chips), label/value rows, full-width text blocks, and a
+ * muted attribution footer. Rows whose field is absent/empty (or holds an
+ * object) are omitted. Styled by the `.omx-overlay-popup*` classes in
+ * globals.css.
  */
-export function buildPopupHtml(
-  popup: IntegrationOverlayPopup,
+export function buildPopupCard(
+  spec: PopupCardSpec,
   properties: Record<string, unknown>,
   resolveLabel?: (key: string) => string,
 ): string {
-  const title = escapeHtml(String(properties[popup.titleField] ?? ""));
+  const title = escapeHtml(String(properties[spec.titleField] ?? ""));
 
   let badge = "";
-  if (popup.severityField) {
-    const sevRaw = properties[popup.severityField];
+  if (spec.severityField) {
+    const sevRaw = properties[spec.severityField];
     if (sevRaw != null && sevRaw !== "") {
       const style = SEVERITY_STYLE[String(sevRaw).toLowerCase()] ?? SEVERITY_STYLE.unknown;
       badge = `<span class="omx-overlay-popup__badge" style="background:${style.bg};color:${style.fg}">${escapeHtml(humanize(String(sevRaw)))}</span>`;
@@ -135,7 +108,7 @@ export function buildPopupHtml(
   const chips: string[] = [];
   const rows: string[] = [];
   const blocks: string[] = [];
-  for (const r of popup.rows ?? []) {
+  for (const r of spec.rows ?? []) {
     const value = formatValue(properties[r.field], r.format);
     if (value === "") continue;
     const label = escapeHtml(labelFor(r, resolveLabel));
@@ -152,16 +125,15 @@ export function buildPopupHtml(
       );
     }
   }
-  // The severity badge leads the meta line (it sits below the title, clear of
-  // the close button) alongside any chips.
+  // The severity badge leads the meta line (clear of the close button) with chips.
   const metaItems = badge ? [badge, ...chips] : chips;
   const chipsHtml = metaItems.length
     ? `<div class="omx-overlay-popup__chips">${metaItems.join("")}</div>`
     : "";
 
   let footer = "";
-  if (popup.attributionField) {
-    const attr = attributionText(properties[popup.attributionField]);
+  if (spec.attributionField) {
+    const attr = attributionText(properties[spec.attributionField]);
     if (attr) footer = `<div class="omx-overlay-popup__footer">${escapeHtml(attr)}</div>`;
   }
 
