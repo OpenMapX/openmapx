@@ -88,7 +88,7 @@ export function useNavAlerts(): ActiveAlert | null {
   // Traffic incidents (from the road-conditions capability) merge into the same
   // selector as the OSM hazards; they carry priority 0, so an in-range incident
   // is surfaced before a speed camera or crossing.
-  const incidents = useNavIncidents();
+  const { incidents } = useNavIncidents();
 
   return useMemo(
     () => selectActiveAlert([...incidents, ...alerts], along, speed, []),

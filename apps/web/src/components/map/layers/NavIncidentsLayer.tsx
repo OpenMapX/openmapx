@@ -31,7 +31,7 @@ const SEVERITY_COLOR: maplibregl.ExpressionSpecification = [
  */
 export function NavIncidentsLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
-  const incidents = useNavIncidents();
+  const { incidents } = useNavIncidents();
 
   useEffect(() => {
     void styleVersion;

@@ -64,10 +64,11 @@ describe("shouldRerouteForClosure", () => {
     expect(shouldRerouteForClosure(true, 1_000, 5_000, 7_000)).toBe(true); // 6 s > 5 s
   });
 
-  it("does not trigger for a closure behind the driver (already-known scenario)", () => {
-    // The caller is responsible for passing closureAhead=false if the closure is behind;
-    // a second call with the same closure id (already known) → still false.
-    expect(shouldRerouteForClosure(false, null, 5_000, 0)).toBe(false);
+  it("does not trigger when backoff has cleared but there is no new closure", () => {
+    // Already-known filtering is the caller's responsibility (engine-level): the
+    // engine passes closureAhead=false when every closure in the list is in the
+    // knownClosureIdsRef baseline. The pure function just sees no closure → false.
+    expect(shouldRerouteForClosure(false, 0, 5_000, 10_000)).toBe(false);
   });
 });
 

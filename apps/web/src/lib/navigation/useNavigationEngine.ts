@@ -52,9 +52,13 @@ export function useNavigationEngine(): void {
   // Recent successful-reroute times (ms) + cooldown deadline for the churn guard.
   const rerouteTimesRef = useRef<number[]>([]);
   const rerouteCooldownUntilRef = useRef(0);
-  // Closure ids projected onto the route at route-commit time; a new closure
-  // appearing after commit (id not in this set) triggers a reroute.
+  // Closure ids present at the time the first road-conditions fetch for the
+  // committed route resolved (the baseline). Only incidents whose id is NOT in
+  // this set are treated as "new" and trigger a reroute.
   const knownClosureIdsRef = useRef<Set<string>>(new Set());
+  // True once the baseline has been captured from the route's first fetch result.
+  // Resets on route change so we don't fire against stale/empty state.
+  const baselineReadyRef = useRef(false);
   const captureFix = useNavRecorder();
 
   const speakCue = useCallback(
@@ -203,15 +207,25 @@ export function useNavigationEngine(): void {
   // Reset per-session tick state (spoken cues + deviation history) whenever the
   // active route changes — a fresh start or an applied reroute — so a second
   // navigation session doesn't inherit the previous one's spoken-cue keys.
-  // Also snapshot which closures are currently on the route so we can tell new
-  // ones from ones that were already there when the route was planned.
   const activeRoute = useNavigationStore((s) => s.route);
-  const incidents = useNavIncidents();
+  const { incidents, ready } = useNavIncidents();
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset is keyed on route identity, not tickRef.
   useEffect(() => {
     tickRef.current = freshTick();
-    knownClosureIdsRef.current = new Set(incidents.map((a) => a.id));
+    knownClosureIdsRef.current = new Set();
+    baselineReadyRef.current = false;
   }, [activeRoute]);
+
+  // Capture the closure baseline only once the first road-conditions fetch for
+  // the committed route has resolved. This prevents pre-fetch state (an empty or
+  // stale snapshot) from being mistaken for "no closures", which would make every
+  // closure that arrives with the first response look "new" and trigger a spurious
+  // reroute at navigation start.
+  useEffect(() => {
+    if (!ready || baselineReadyRef.current) return;
+    knownClosureIdsRef.current = new Set(incidents.map((a) => a.id));
+    baselineReadyRef.current = true;
+  }, [ready, incidents]);
 
   // Clear the churn guard when navigation ends so a new session starts clean.
   const navStatus = useNavigationStore((s) => s.status);
@@ -225,10 +239,13 @@ export function useNavigationEngine(): void {
   // Closure-ahead reroute: when avoidIncidents is on, a new road/lane closure
   // projected ahead of the driver (not known at route-commit time) triggers an
   // automatic reroute. Uses the same backoff + churn guard as off-route reroutes.
+  // Gated on baselineReadyRef so we never fire before the first fetch resolves —
+  // closures present when the route was planned are always part of the baseline.
   const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
   useEffect(() => {
     if (!avoidIncidents) return;
     if (navStatus !== "navigating") return;
+    if (!baselineReadyRef.current) return;
     const newClosureAhead = incidents.some(
       (a) =>
         (a.eventType === "road_closure" || a.eventType === "lane_closure") &&
