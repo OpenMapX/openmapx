@@ -28,6 +28,7 @@ export {
   type GtfsDownloadFailure,
   type GtfsDownloadResult,
 } from "./data-manager-client";
+export { findServiceManifestDirs } from "./manifest-discovery";
 export {
   type ManifestValidationResult,
   serviceManifestSchema,

@@ -79,6 +79,22 @@ describe("ServiceRegistry.load", () => {
     expect(registry.get("extra")?.isBuiltIn).toBe(false);
   });
 
+  it("discovers a community manifest nested next to its service", async () => {
+    // Manifest shipped at <repo>/services/ingest/service.json (two levels deep),
+    // not at the repo root — the scanner walks the clone to find it.
+    const svcDir = join(tmp, "services", ".community", "def456", "services", "ingest");
+    mkdirSync(svcDir, { recursive: true });
+    writeFileSync(
+      join(svcDir, "service.json"),
+      JSON.stringify({ ...baseManifest, id: "nested-svc", quality: "community" }),
+    );
+
+    const registry = new ServiceRegistry({ rootDir: tmp });
+    await registry.load();
+
+    expect(registry.get("nested-svc")?.isBuiltIn).toBe(false);
+  });
+
   it("returns undefined for unknown id", async () => {
     const registry = new ServiceRegistry({ rootDir: tmp });
     await registry.load();

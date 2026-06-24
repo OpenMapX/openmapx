@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { findServiceManifestDirs } from "./manifest-discovery";
 import { validateServiceManifest } from "./manifest-schema";
 import type { LoadedService, ServiceManifest } from "./types";
 
@@ -44,10 +45,11 @@ export class ServiceRegistry {
   private scanCommunityDir(dir: string, warnings: string[]): void {
     for (const repoEntry of readdirSync(dir, { withFileTypes: true })) {
       if (!repoEntry.isDirectory()) continue;
-      const repoDir = join(dir, repoEntry.name);
-      for (const svcEntry of readdirSync(repoDir, { withFileTypes: true })) {
-        if (!svcEntry.isDirectory()) continue;
-        this.tryLoadManifest(join(repoDir, svcEntry.name), false, warnings);
+      // A community repo may place its service.json next to the service (e.g.
+      // services/ingest/service.json), not only at the repo root, so walk the
+      // clone with the shared bounded finder rather than a fixed one level.
+      for (const svcDir of findServiceManifestDirs(join(dir, repoEntry.name))) {
+        this.tryLoadManifest(svcDir, false, warnings);
       }
     }
   }

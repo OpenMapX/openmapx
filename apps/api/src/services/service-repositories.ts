@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, rmSync } from "node:fs";
+import { basename, join } from "node:path";
 import { assertAllowedGitUrl, InvalidGitUrlError } from "@openmapx/core";
 import { findRepoRoot, gitShallowCloneAtomic, repoPaths, services } from "@openmapx/core/server";
 import { eq } from "drizzle-orm";
@@ -8,7 +8,7 @@ import simpleGit from "simple-git";
 import { db } from "../db";
 import { type ServiceRepositoryRow, serviceRepository } from "../db/schema";
 
-const { getProvidedCapabilityNames, validateServiceManifest } = services;
+const { findServiceManifestDirs, getProvidedCapabilityNames, validateServiceManifest } = services;
 
 // Re-export under the historical name + class so existing callers (and tests)
 // keep working. The implementation lives in @openmapx/core and is shared with
@@ -74,23 +74,25 @@ async function atomicShallowClone(url: string, finalTarget: string): Promise<voi
 
 function readPreviewsFromClone(target: string): RepoManifestPreview[] {
   const out: RepoManifestPreview[] = [];
-  const entries = readdirSync(target, { withFileTypes: true });
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const manifestPath = join(target, entry.name, "service.json");
-    if (!existsSync(manifestPath) || !statSync(manifestPath).isFile()) continue;
+  // Discover manifests anywhere in the clone (bounded), so a repo can ship its
+  // service.json next to the service (e.g. services/ingest/service.json), not
+  // only at the repo root. Same finder the runtime registry uses, so preview
+  // and load always agree.
+  for (const svcDir of findServiceManifestDirs(target)) {
+    const manifestPath = join(svcDir, "service.json");
+    const slug = basename(svcDir);
 
     let raw: unknown;
     try {
       raw = JSON.parse(readFileSync(manifestPath, "utf-8"));
     } catch (err) {
-      out.push(buildErrorPreview(entry.name, [`Invalid JSON: ${(err as Error).message}`]));
+      out.push(buildErrorPreview(slug, [`Invalid JSON: ${(err as Error).message}`]));
       continue;
     }
 
     const validation = validateServiceManifest(raw);
     if (!validation.valid) {
-      out.push(buildErrorPreview(entry.name, validation.errors));
+      out.push(buildErrorPreview(slug, validation.errors));
       continue;
     }
 

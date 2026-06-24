@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,6 +17,14 @@ vi.mock("@openmapx/core/server", () => ({
   services: {
     validateServiceManifest: (raw: unknown) => validateMock(raw),
     getProvidedCapabilityNames: () => [],
+    // Fixtures live one level deep (<hash>/<slug>/service.json); a shallow scan
+    // matches them. The deep-walk behaviour is covered by manifest-discovery's
+    // own unit tests.
+    findServiceManifestDirs: (root: string) =>
+      readdirSync(root, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => join(root, e.name))
+        .filter((d) => existsSync(join(d, "service.json"))),
   },
 }));
 
