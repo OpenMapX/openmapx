@@ -181,6 +181,24 @@ const overlayLayerSchema = z.object({
   interactive: z.boolean().optional(),
 });
 
+/**
+ * A marker glyph the host rasterizes and registers via `map.addImage`, so a
+ * symbol layer can reference it by `id` in an `icon-image` expression. Lets a
+ * declarative overlay ship per-type icons (e.g. one per incident type) without
+ * any integration frontend code — the color stays on the circle layer, the
+ * glyph carries the type.
+ */
+const overlayImageSchema = z.object({
+  /** Image id referenced by a symbol layer's `icon-image`. */
+  id: z.string(),
+  /**
+   * A 24×24 SVG path `d` string (multiple subpaths allowed). The host draws it
+   * as a centered white glyph with a thin dark outline for contrast on any
+   * marker color.
+   */
+  path: z.string(),
+});
+
 const overlayLegendItemSchema = z.object({
   color: z.string(),
   label: z.string().optional(),
@@ -214,6 +232,7 @@ const overlaySchema = z.object({
   excludes: z.array(z.string()).optional(),
   minZoom: z.number().optional(),
   source: overlaySourceSchema.optional(),
+  images: z.array(overlayImageSchema).optional(),
   layers: z.array(overlayLayerSchema).optional(),
   legend: overlayLegendSchema.optional(),
   popup: overlayPopupSchema.optional(),
@@ -301,6 +320,7 @@ export type IntegrationFrontend = z.infer<typeof frontendSchema>;
 export type IntegrationLayerSelector = z.infer<typeof layerSelectorSchema>;
 export type IntegrationOverlay = z.infer<typeof overlaySchema>;
 export type IntegrationOverlaySource = z.infer<typeof overlaySourceSchema>;
+export type IntegrationOverlayImage = z.infer<typeof overlayImageSchema>;
 export type IntegrationOverlayLayer = z.infer<typeof overlayLayerSchema>;
 export type IntegrationOverlayLegend = z.infer<typeof overlayLegendSchema>;
 export type IntegrationOverlayPopup = z.infer<typeof overlayPopupSchema>;

@@ -18,6 +18,7 @@ import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
 import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
+import { registerOverlayGlyph } from "./overlayGlyphImage";
 import {
   buildOverlaySourceUrl,
   buildPopupHtml,
@@ -58,6 +59,7 @@ function DeclarativeOverlayInner({
   // `source` is guaranteed by the parent guard; the manifest is stable per mount.
   const source = overlay.source as NonNullable<IntegrationOverlay["source"]>;
   const layers = useMemo(() => overlay.layers ?? [], [overlay]);
+  const images = useMemo(() => overlay.images ?? [], [overlay]);
   const popup = overlay.popup;
   const sourceId = useMemo(() => namespacedSourceId(integration.id), [integration.id]);
   const layerIds = useMemo(
@@ -117,6 +119,10 @@ function DeclarativeOverlayInner({
         }
       }
 
+      // Register marker glyphs before any symbol layer references them. A style
+      // swap clears registered images, so this re-runs on every styledata sync.
+      for (const image of images) registerOverlayGlyph(map, image);
+
       const before = getFirstSymbolLayerId(map);
       for (const layer of layers) {
         const id = namespacedLayerId(integration.id, layer.id);
@@ -152,6 +158,7 @@ function DeclarativeOverlayInner({
     mapRef,
     layerVisible,
     layers,
+    images,
     source,
     sourceId,
     layerIds,

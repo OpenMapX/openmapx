@@ -151,6 +151,7 @@ export type {
   IntegrationLayerSelector,
   IntegrationManifest,
   IntegrationOverlay,
+  IntegrationOverlayImage,
   IntegrationOverlayLayer,
   IntegrationOverlayLegend,
   IntegrationOverlayPopup,
