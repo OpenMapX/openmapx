@@ -63,6 +63,95 @@ describe("dedupeRoadConditionEvents", () => {
     expect(out).toHaveLength(2);
   });
 
+  it("merges a Point against a LineString for the same incident (first-vertices far apart)", () => {
+    // The point sits ~33 m off the MIDDLE of the line; the line's first vertex is
+    // ~340 m away, so first-vertex proximity would miss it — segment distance won't.
+    const out = dedupeRoadConditionEvents([
+      ev({
+        id: "oc:1",
+        provider: "road-conditions-openconditions",
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [13.4, 52.5],
+            [13.41, 52.5],
+          ],
+        },
+        dataUpdatedAt: "2026-06-01T00:00:00Z",
+        headline: "Accident on the A1",
+      }),
+      ev({
+        id: "tt:9",
+        provider: "road-conditions-tomtom",
+        geometry: { type: "Point", coordinates: [13.405, 52.5003] },
+        dataUpdatedAt: "2026-06-02T00:00:00Z",
+        headline: "Accident A1",
+      }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.provider).toBe("road-conditions-tomtom");
+  });
+
+  it("merges two sparsely-digitised overlapping lines (no shared/near vertices)", () => {
+    // B overlaps A's eastern half offset ~22 m north; their vertices are >600 m
+    // apart, so only vertex-to-SEGMENT distance catches the overlap.
+    const out = dedupeRoadConditionEvents([
+      ev({
+        id: "a",
+        type: "roadworks",
+        headline: "Roadworks on the A2",
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [13.4, 52.5],
+            [13.42, 52.5],
+          ],
+        },
+      }),
+      ev({
+        id: "b",
+        type: "roadworks",
+        headline: "Roadworks A2",
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [13.41, 52.5002],
+            [13.43, 52.5002],
+          ],
+        },
+      }),
+    ]);
+    expect(out).toHaveLength(1);
+  });
+
+  it("keeps two same-type lines that are far apart", () => {
+    const out = dedupeRoadConditionEvents([
+      ev({
+        id: "a",
+        type: "roadworks",
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [13.4, 52.5],
+            [13.41, 52.5],
+          ],
+        },
+      }),
+      ev({
+        id: "b",
+        type: "roadworks",
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [13.5, 52.5],
+            [13.51, 52.5],
+          ],
+        },
+      }),
+    ]);
+    expect(out).toHaveLength(2);
+  });
+
   it("returns [] for []", () => {
     expect(dedupeRoadConditionEvents([])).toEqual([]);
   });
