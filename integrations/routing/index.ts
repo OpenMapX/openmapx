@@ -114,6 +114,55 @@ function cacheTtlSeconds(hasExplicitTime: boolean): number {
  */
 const MAX_MATCH_TRACE_POINTS = 10_000;
 
+/** Margin (degrees) added around the waypoint bounding box when querying closures. */
+const CLOSURE_BBOX_MARGIN_DEG = 0.05;
+
+interface ClosureExclusionResult {
+  exclusions: { points: [number, number][]; polygons: [number, number][][] };
+  hasExclusions: boolean;
+  exclusionsHash: string | null;
+}
+
+/**
+ * Fetch active road closures for the bounding box around the given waypoints
+ * and return the exclusion geometry plus a cache-key hash. When
+ * `wantClosureAvoidance` is false the function returns empty exclusions
+ * immediately without hitting any provider.
+ */
+async function applyClosureExclusions(
+  ctx: IntegrationContext,
+  waypoints: [number, number][],
+  wantClosureAvoidance: boolean,
+): Promise<ClosureExclusionResult> {
+  const empty = { points: [] as [number, number][], polygons: [] as [number, number][][] };
+  if (!wantClosureAvoidance) {
+    return { exclusions: empty, hasExclusions: false, exclusionsHash: null };
+  }
+
+  const lons = waypoints.map((wp) => wp[0]);
+  const lats = waypoints.map((wp) => wp[1]);
+  const bbox: [number, number, number, number] = [
+    Math.min(...lons) - CLOSURE_BBOX_MARGIN_DEG,
+    Math.min(...lats) - CLOSURE_BBOX_MARGIN_DEG,
+    Math.max(...lons) + CLOSURE_BBOX_MARGIN_DEG,
+    Math.max(...lats) + CLOSURE_BBOX_MARGIN_DEG,
+  ];
+
+  let exclusions = empty;
+  try {
+    exclusions = await activeClosuresForBbox(ctx, bbox);
+  } catch (err) {
+    ctx.log.warn("[routing] failed to fetch closures; routing without exclusions", err as Error);
+  }
+
+  const hasExclusions = exclusions.points.length > 0 || exclusions.polygons.length > 0;
+  const exclusionsHash = hasExclusions
+    ? hashKey("excl", { points: exclusions.points, polygons: exclusions.polygons })
+    : null;
+
+  return { exclusions, hasExclusions, exclusionsHash };
+}
+
 export function setup(ctx: IntegrationContext): void {
   const { getRoutingProviders, getOptimizeProvider, getMatchProvider } =
     createRoutingOrchestrator(ctx);
@@ -192,31 +241,11 @@ export function setup(ctx: IntegrationContext): void {
 
     const wantClosureAvoidance = avoidClosures === "true" || avoidClosures === "1";
 
-    let exclusions: { points: [number, number][]; polygons: [number, number][][] } = {
-      points: [],
-      polygons: [],
-    };
-    if (wantClosureAvoidance) {
-      const lons = waypoints.map((wp) => wp[0]);
-      const lats = waypoints.map((wp) => wp[1]);
-      const margin = 0.05;
-      const bbox: [number, number, number, number] = [
-        Math.min(...lons) - margin,
-        Math.min(...lats) - margin,
-        Math.max(...lons) + margin,
-        Math.max(...lats) + margin,
-      ];
-      try {
-        exclusions = await activeClosuresForBbox(ctx, bbox);
-      } catch (err) {
-        ctx.log.warn(
-          "[routing] failed to fetch closures; routing without exclusions",
-          err as Error,
-        );
-      }
-    }
-
-    const hasExclusions = exclusions.points.length > 0 || exclusions.polygons.length > 0;
+    const { exclusions, hasExclusions, exclusionsHash } = await applyClosureExclusions(
+      ctx,
+      waypoints,
+      wantClosureAvoidance,
+    );
 
     const keyParams = {
       arriveBy: arriveBy ?? null,
@@ -225,9 +254,7 @@ export function setup(ctx: IntegrationContext): void {
       avoidHighways: opts.avoidHighways,
       avoidTolls: opts.avoidTolls,
       departAt: departAt ?? null,
-      exclusionsHash: hasExclusions
-        ? hashKey("excl", { points: exclusions.points, polygons: exclusions.polygons })
-        : null,
+      exclusionsHash,
       lang: lang ?? "en",
       mode: travelMode,
       units: opts.units,
@@ -305,6 +332,7 @@ export function setup(ctx: IntegrationContext): void {
       avoidHighways,
       avoidTolls,
       avoidFerries,
+      avoidClosures,
       units,
       lang,
       departAt: departAtRaw,
@@ -365,12 +393,22 @@ export function setup(ctx: IntegrationContext): void {
       units: (units ?? "metric") as "metric" | "imperial",
     };
 
+    const wantClosureAvoidance = avoidClosures === "true" || avoidClosures === "1";
+
+    const { exclusions, hasExclusions, exclusionsHash } = await applyClosureExclusions(
+      ctx,
+      waypoints,
+      wantClosureAvoidance,
+    );
+
     const keyParams = {
       arriveBy: arriveBy ?? null,
+      avoidClosures: wantClosureAvoidance,
       avoidFerries: opts.avoidFerries,
       avoidHighways: opts.avoidHighways,
       avoidTolls: opts.avoidTolls,
       departAt: departAt ?? null,
+      exclusionsHash,
       lang: lang ?? "en",
       mode: travelMode,
       optimize: true,
@@ -379,9 +417,16 @@ export function setup(ctx: IntegrationContext): void {
     };
 
     const requireTimeAware = Boolean(departAt || arriveBy);
+
     const resolved = getOptimizeProvider(travelMode, { requireTimeAware });
-    const optimizeFn = resolved?.provider.optimizeRoute;
-    if (!resolved || !optimizeFn) {
+
+    // When exclusions are present, restrict to Valhalla — OSRM ignores
+    // excludeLocations/excludePolygons and would silently return a route through
+    // the closed segment.
+    const effectiveResolved =
+      hasExclusions && resolved?.provider.id !== "valhalla" ? null : resolved;
+    const optimizeFn = effectiveResolved?.provider.optimizeRoute;
+    if (!effectiveResolved || !optimizeFn) {
       const detail = requireTimeAware
         ? `No time-aware optimize provider available for mode: ${travelMode}`
         : `No optimize provider available for mode: ${travelMode}`;
@@ -389,7 +434,16 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const routingOpts = { ...opts, lang, departAt, arriveBy };
+    const routingOpts = {
+      ...opts,
+      lang,
+      departAt,
+      arriveBy,
+      ...(hasExclusions && {
+        excludeLocations: exclusions.points,
+        excludePolygons: exclusions.polygons,
+      }),
+    };
     const ttl = cacheTtlSeconds(requireTimeAware);
 
     try {
@@ -398,7 +452,7 @@ export function setup(ctx: IntegrationContext): void {
         ttl,
         async () => {
           const r = await optimizeFn(waypoints, travelMode, routingOpts);
-          r.provider = resolved.integrationId;
+          r.provider = effectiveResolved.integrationId;
           return r;
         },
       );

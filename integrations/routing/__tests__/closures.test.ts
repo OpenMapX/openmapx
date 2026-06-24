@@ -57,11 +57,13 @@ describe("activeClosuresForBbox", () => {
     expect(result.polygons).toHaveLength(0);
   });
 
-  it("converts a LineString geometry closure to sampled points", async () => {
+  it("converts a short LineString closure to its vertices (no densification needed)", async () => {
+    // Vertices are ~14 m apart — below MAX_EXCLUSION_SPACING_M, so no
+    // intermediate points are inserted and the result equals the raw vertices.
     const coords = [
       [0.1, 51.1],
-      [0.2, 51.2],
-      [0.3, 51.3],
+      [0.1001, 51.1001],
+      [0.1002, 51.1002],
     ];
     const getEvents = vi.fn().mockResolvedValue([
       {
@@ -78,10 +80,37 @@ describe("activeClosuresForBbox", () => {
     const result = await activeClosuresForBbox(ctx, TEST_BBOX);
     expect(result.points).toEqual([
       [0.1, 51.1],
-      [0.2, 51.2],
-      [0.3, 51.3],
+      [0.1001, 51.1001],
+      [0.1002, 51.1002],
     ]);
     expect(result.polygons).toHaveLength(0);
+  });
+
+  it("densifies a long sparse LineString so the result has more than just the endpoints", async () => {
+    // Two endpoints ~500 m apart — well above the 45 m max spacing.
+    // Densification must insert intermediate points so the whole segment
+    // is covered by exclusion markers.
+    const coords = [
+      [0.1, 51.1],
+      [0.1, 51.1045], // ~500 m north of the first point
+    ];
+    const getEvents = vi.fn().mockResolvedValue([
+      {
+        id: "test:dense",
+        source: "test",
+        provider: "road-conditions-test",
+        type: "road_closure",
+        severity: "high",
+        geometry: { type: "LineString", coordinates: coords },
+        headline: "Long closure",
+      },
+    ]);
+    const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
+    const result = await activeClosuresForBbox(ctx, TEST_BBOX);
+    expect(result.points.length).toBeGreaterThan(2);
+    // Original endpoints must be among the output.
+    expect(result.points[0]).toEqual([0.1, 51.1]);
+    expect(result.points[result.points.length - 1]).toEqual([0.1, 51.1045]);
   });
 
   it("converts a Polygon geometry closure to polygons", async () => {
@@ -176,7 +205,9 @@ describe("activeClosuresForBbox", () => {
     });
   });
 
-  it("handles MultiLineString geometry by sampling all lines into points", async () => {
+  it("handles MultiLineString geometry by densifying all lines into points", async () => {
+    // Each line has vertices ~14 m apart (below the 45 m threshold), so no
+    // intermediate points are inserted and the result covers both lines.
     const getEvents = vi.fn().mockResolvedValue([
       {
         id: "test:ml",
@@ -189,11 +220,11 @@ describe("activeClosuresForBbox", () => {
           coordinates: [
             [
               [0.0, 51.0],
-              [0.1, 51.1],
+              [0.0001, 51.0001],
             ],
             [
               [0.2, 51.2],
-              [0.3, 51.3],
+              [0.2001, 51.2001],
             ],
           ],
         },
@@ -204,9 +235,9 @@ describe("activeClosuresForBbox", () => {
     const result = await activeClosuresForBbox(ctx, TEST_BBOX);
     expect(result.points).toEqual([
       [0.0, 51.0],
-      [0.1, 51.1],
+      [0.0001, 51.0001],
       [0.2, 51.2],
-      [0.3, 51.3],
+      [0.2001, 51.2001],
     ]);
   });
 

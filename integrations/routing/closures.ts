@@ -1,4 +1,5 @@
 import type { BBox } from "@openmapx/core";
+import { haversineDistance } from "@openmapx/core";
 import type { IntegrationContext, RoadConditionsProvider } from "@openmapx/integration-framework";
 
 export type LngLat = [number, number];
@@ -11,6 +12,19 @@ export interface ClosureExclusions {
 /** Severity threshold: only events at this level or above are treated as exclusions. */
 const CLOSURE_TYPES = new Set(["road_closure", "lane_closure"]);
 const CRITICAL_SEVERITY = "critical";
+
+/**
+ * Maximum spacing (metres) between consecutive exclusion points on a densified
+ * closure line. Keeps the gap small enough that Valhalla blocks the full segment
+ * rather than routing through the space between sparse vertices.
+ */
+const MAX_EXCLUSION_SPACING_M = 45;
+
+/**
+ * Hard cap on exclusion points emitted per single closure geometry. Prevents a
+ * single very-long LineString from flooding the Valhalla request body.
+ */
+const MAX_EXCLUSION_POINTS_PER_CLOSURE = 300;
 
 function isClosure(type: string, severity: string): boolean {
   // The severity branch is defensive: some providers may not filter by `types`
@@ -26,6 +40,61 @@ function toLngLat(coord: number[]): LngLat | null {
   return [lng as number, lat as number];
 }
 
+/**
+ * Densify a single line segment from `a` to `b` by inserting interpolated
+ * [lng,lat] points whenever the segment exceeds MAX_EXCLUSION_SPACING_M. The
+ * start vertex `a` is included; the end vertex `b` is NOT (the caller appends
+ * it after the final segment to avoid duplicates).
+ */
+function densifySegment(a: LngLat, b: LngLat): LngLat[] {
+  const dist = haversineDistance(a, b);
+  const steps = Math.ceil(dist / MAX_EXCLUSION_SPACING_M);
+  if (steps <= 1) return [a];
+  const result: LngLat[] = [];
+  for (let i = 0; i < steps; i++) {
+    const t = i / steps;
+    result.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+  }
+  return result;
+}
+
+/**
+ * Convert a LineString coordinate array into a densified set of [lng,lat]
+ * exclusion points, capped at MAX_EXCLUSION_POINTS_PER_CLOSURE.
+ */
+function densifyLine(coords: number[][], ctx: IntegrationContext): LngLat[] {
+  const vertices: LngLat[] = [];
+  for (const c of coords) {
+    const p = toLngLat(c);
+    if (p) vertices.push(p);
+  }
+  if (vertices.length === 0) return [];
+  if (vertices.length === 1) return [vertices[0] as LngLat];
+
+  const out: LngLat[] = [];
+  for (let i = 0; i < vertices.length - 1; i++) {
+    const seg = densifySegment(vertices[i] as LngLat, vertices[i + 1] as LngLat);
+    for (const pt of seg) {
+      out.push(pt);
+      if (out.length >= MAX_EXCLUSION_POINTS_PER_CLOSURE) {
+        ctx.log.warn(
+          `[routing/closures] closure line exceeded ${MAX_EXCLUSION_POINTS_PER_CLOSURE} exclusion points; trimming`,
+        );
+        return out;
+      }
+    }
+  }
+  const last = vertices[vertices.length - 1] as LngLat;
+  if (out.length < MAX_EXCLUSION_POINTS_PER_CLOSURE) {
+    out.push(last);
+  } else {
+    ctx.log.warn(
+      `[routing/closures] closure line exceeded ${MAX_EXCLUSION_POINTS_PER_CLOSURE} exclusion points; trimming`,
+    );
+  }
+  return out;
+}
+
 function sampleCoords(coords: number[][]): LngLat[] {
   const out: LngLat[] = [];
   for (const c of coords) {
@@ -39,6 +108,7 @@ function geometryToExclusions(
   geometry: { type: string; coordinates?: unknown },
   points: LngLat[],
   polygons: LngLat[][],
+  ctx: IntegrationContext,
 ): void {
   switch (geometry.type) {
     case "Point": {
@@ -47,12 +117,12 @@ function geometryToExclusions(
       break;
     }
     case "LineString": {
-      points.push(...sampleCoords(geometry.coordinates as number[][]));
+      points.push(...densifyLine(geometry.coordinates as number[][], ctx));
       break;
     }
     case "MultiLineString": {
       for (const line of geometry.coordinates as number[][][]) {
-        points.push(...sampleCoords(line));
+        points.push(...densifyLine(line, ctx));
       }
       break;
     }
@@ -120,7 +190,7 @@ export async function activeClosuresForBbox(
       if (!isClosure(event.type, event.severity)) continue;
       if (event.roadState === "open") continue;
       if (!event.geometry) continue;
-      geometryToExclusions(event.geometry, points, polygons);
+      geometryToExclusions(event.geometry, points, polygons, ctx);
     }
   }
 
