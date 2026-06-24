@@ -19,7 +19,7 @@ FROM docker.io/golang:1.26@sha256:792443b89f65105abba56b9bd5e97f680a80074ac62fc8
 # instead of @latest so the build is reproducible and can't silently pull new code.
 RUN GOPROXY=direct GOBIN=/usr/local/bin/ go install github.com/public-transport/gtfsclean@bb3ea74f66ef9bc07dc1bd038c3f653e10f0ade0 # snapshot-5
 
-FROM node:24-slim@sha256:2c87ef9bd3c6a3bd4b472b4bec2ce9d16354b0c574f736c476489d09f560a203 AS base
+FROM node:24-slim@sha256:862263c612aa437e3037674b85419622a9d93bff80aa1eee5398dfe686375532 AS base
 
 # Read the pnpm version directly from the repo root package.json to ensure
 # lockfile resolution stays reproducible across local and CI Docker builds.
@@ -68,7 +68,7 @@ COPY services/data-manager/ services/data-manager/
 WORKDIR /app/services/data-manager
 RUN pnpm build
 
-FROM node:24-slim@sha256:2c87ef9bd3c6a3bd4b472b4bec2ce9d16354b0c574f736c476489d09f560a203 AS runner
+FROM node:24-slim@sha256:862263c612aa437e3037674b85419622a9d93bff80aa1eee5398dfe686375532 AS runner
 WORKDIR /app
 
 RUN apt-get update \
