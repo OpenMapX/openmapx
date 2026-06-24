@@ -53,6 +53,11 @@ updates:
         patterns:
           - "turbo"
           - "@changesets/*"
+    ignore:
+      # @types/node tracks the Node runtime (24 LTS); don't let it jump a major
+      # ahead of the runtime — bump it deliberately when the Node version moves.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: "/"
@@ -65,6 +70,10 @@ updates:
     labels: [dependencies, ci]
     commit-message:
       prefix: ci
+    ignore:
+      # Pinned fork that provides the Node 24 runtime; the upstream 2.6.1 tag
+      # regresses the runtime, so update this action by hand, not via Dependabot.
+      - dependency-name: "OpenMapX/cla-assistant-action"
 
   - package-ecosystem: docker
     # Cover every Dockerfile so the digest-pinned base images get bumped (a
@@ -86,3 +95,8 @@ updates:
     commit-message:
       prefix: chore
       include: scope
+    ignore:
+      # Stay on the Node 24 LTS base images; bump the Node major deliberately
+      # (Dockerfiles + .nvmrc + engines + @types/node together), not piecemeal.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
