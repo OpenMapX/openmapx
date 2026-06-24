@@ -9,6 +9,8 @@ interface UseDirectionsParams {
   avoidHighways?: boolean;
   avoidTolls?: boolean;
   avoidFerries?: boolean;
+  /** When true, the server injects active road closures as Valhalla exclusions. */
+  avoidClosures?: boolean;
   units?: "metric" | "imperial";
   lang?: string;
   /** Wall-clock departure time `YYYY-MM-DDTHH:mm`. Mutually exclusive with `arriveBy`. */
@@ -23,6 +25,7 @@ export function useDirections({
   avoidHighways = false,
   avoidTolls = false,
   avoidFerries = false,
+  avoidClosures = false,
   units = "metric",
   lang,
   departAt,
@@ -45,6 +48,7 @@ export function useDirections({
       effectiveAvoidHighways,
       effectiveAvoidTolls,
       avoidFerries,
+      avoidClosures,
       units,
       lang,
       departAt,
@@ -57,6 +61,7 @@ export function useDirections({
         avoidHighways: effectiveAvoidHighways,
         avoidTolls: effectiveAvoidTolls,
         avoidFerries,
+        avoidClosures,
         units,
         lang,
         departAt,

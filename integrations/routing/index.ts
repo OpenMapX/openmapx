@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { overpassQuerySafe, type TravelMode } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { activeClosuresForBbox } from "./closures.js";
 import { createRoutingOrchestrator } from "./orchestrator.js";
 import { parseDateTime, parseTravelMode } from "./validation.js";
 
@@ -128,6 +129,7 @@ export function setup(ctx: IntegrationContext): void {
       avoidHighways,
       avoidTolls,
       avoidFerries,
+      avoidClosures,
       units,
       lang,
       departAt: departAtRaw,
@@ -188,12 +190,44 @@ export function setup(ctx: IntegrationContext): void {
       units: (units ?? "metric") as "metric" | "imperial",
     };
 
+    const wantClosureAvoidance = avoidClosures === "true" || avoidClosures === "1";
+
+    let exclusions: { points: [number, number][]; polygons: [number, number][][] } = {
+      points: [],
+      polygons: [],
+    };
+    if (wantClosureAvoidance) {
+      const lons = waypoints.map((wp) => wp[0]);
+      const lats = waypoints.map((wp) => wp[1]);
+      const margin = 0.05;
+      const bbox: [number, number, number, number] = [
+        Math.min(...lons) - margin,
+        Math.min(...lats) - margin,
+        Math.max(...lons) + margin,
+        Math.max(...lats) + margin,
+      ];
+      try {
+        exclusions = await activeClosuresForBbox(ctx, bbox);
+      } catch (err) {
+        ctx.log.warn(
+          "[routing] failed to fetch closures; routing without exclusions",
+          err as Error,
+        );
+      }
+    }
+
+    const hasExclusions = exclusions.points.length > 0 || exclusions.polygons.length > 0;
+
     const keyParams = {
       arriveBy: arriveBy ?? null,
+      avoidClosures: wantClosureAvoidance,
       avoidFerries: opts.avoidFerries,
       avoidHighways: opts.avoidHighways,
       avoidTolls: opts.avoidTolls,
       departAt: departAt ?? null,
+      exclusionsHash: hasExclusions
+        ? hashKey("excl", { points: exclusions.points, polygons: exclusions.polygons })
+        : null,
       lang: lang ?? "en",
       mode: travelMode,
       units: opts.units,
@@ -201,7 +235,15 @@ export function setup(ctx: IntegrationContext): void {
     };
 
     const requireTimeAware = Boolean(departAt || arriveBy);
-    const resolvedChain = getRoutingProviders(travelMode, { requireTimeAware });
+
+    // When exclusions are present, restrict to Valhalla — OSRM ignores
+    // excludeLocations/excludePolygons and would silently return a route through
+    // the closed segment.
+    let resolvedChain = getRoutingProviders(travelMode, { requireTimeAware });
+    if (hasExclusions) {
+      resolvedChain = resolvedChain.filter((e) => e.provider.id === "valhalla");
+    }
+
     if (resolvedChain.length === 0) {
       const detail = requireTimeAware
         ? `No time-aware routing provider available for mode: ${travelMode}`
@@ -210,7 +252,16 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const routingOpts = { ...opts, lang, departAt, arriveBy };
+    const routingOpts = {
+      ...opts,
+      lang,
+      departAt,
+      arriveBy,
+      ...(hasExclusions && {
+        excludeLocations: exclusions.points,
+        excludePolygons: exclusions.polygons,
+      }),
+    };
     const ttl = cacheTtlSeconds(requireTimeAware);
 
     try {

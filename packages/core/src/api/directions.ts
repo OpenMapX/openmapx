@@ -9,6 +9,8 @@ export interface FetchDirectionsParams {
   avoidHighways?: boolean;
   avoidTolls?: boolean;
   avoidFerries?: boolean;
+  /** When true, the server will inject active road closures as Valhalla exclusions. */
+  avoidClosures?: boolean;
   units?: "metric" | "imperial";
   lang?: string;
   departAt?: string;
@@ -22,6 +24,7 @@ export function fetchDirections({
   avoidHighways = false,
   avoidTolls = false,
   avoidFerries = false,
+  avoidClosures = false,
   units = "metric",
   lang,
   departAt,
@@ -34,6 +37,7 @@ export function fetchDirections({
     avoidHighways: String(avoidHighways),
     avoidTolls: String(avoidTolls),
     avoidFerries: String(avoidFerries),
+    ...(avoidClosures && { avoidClosures: "1" }),
     units,
     ...(lang && { lang }),
     ...(departAt && { departAt }),

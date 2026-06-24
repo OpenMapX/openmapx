@@ -103,6 +103,7 @@ export function DirectionsPanelContent() {
     setTransitArrivalTime,
   } = useDirectionsStore();
   const units = useSettingsStore((s) => s.units);
+  const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
 
   const { userLocation } = useMapStore();
   const registry = useIntegrationRegistry();
@@ -171,6 +172,7 @@ export function DirectionsPanelContent() {
     avoidHighways,
     avoidTolls,
     avoidFerries,
+    avoidClosures: avoidIncidents,
     units,
     departAt: drivingDepartAtStr,
     arriveBy: drivingArriveByStr,
