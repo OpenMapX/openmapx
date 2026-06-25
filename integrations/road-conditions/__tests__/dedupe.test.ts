@@ -155,4 +155,69 @@ describe("dedupeRoadConditionEvents", () => {
   it("returns [] for []", () => {
     expect(dedupeRoadConditionEvents([])).toEqual([]);
   });
+
+  describe("road-name guard", () => {
+    it("does NOT merge co-located same-type events on different named roads", () => {
+      // ~7 m apart, identical generic headline (jaccard 1.0) — would merge on
+      // geometry alone — but they name different roads (an interchange).
+      const out = dedupeRoadConditionEvents([
+        ev({
+          id: "a",
+          type: "roadworks",
+          headline: "Roadworks",
+          roads: [{ name: "A3" }],
+          geometry: { type: "Point", coordinates: [13.4, 52.5] },
+        }),
+        ev({
+          id: "b",
+          type: "roadworks",
+          headline: "Roadworks",
+          roads: [{ name: "A44" }],
+          geometry: { type: "Point", coordinates: [13.4001, 52.5] },
+        }),
+      ]);
+      expect(out).toHaveLength(2);
+    });
+
+    it("still merges co-located same-type events that share a road name", () => {
+      const out = dedupeRoadConditionEvents([
+        ev({
+          id: "a",
+          type: "roadworks",
+          headline: "Roadworks",
+          roads: [{ name: "A3" }],
+          dataUpdatedAt: "2026-06-01T00:00:00Z",
+          geometry: { type: "Point", coordinates: [13.4, 52.5] },
+        }),
+        ev({
+          id: "b",
+          type: "roadworks",
+          headline: "Roadworks",
+          roads: [{ name: "A3", direction: "north" }],
+          dataUpdatedAt: "2026-06-02T00:00:00Z",
+          geometry: { type: "Point", coordinates: [13.4001, 52.5] },
+        }),
+      ]);
+      expect(out).toHaveLength(1);
+    });
+
+    it("still merges when one or both events carry no road ref (NDW fallback)", () => {
+      const out = dedupeRoadConditionEvents([
+        ev({
+          id: "a",
+          type: "lane_closure",
+          headline: "Lane closure",
+          geometry: { type: "Point", coordinates: [13.4, 52.5] },
+        }),
+        ev({
+          id: "b",
+          type: "lane_closure",
+          headline: "Lane closure",
+          roads: [{ name: "A3" }],
+          geometry: { type: "Point", coordinates: [13.4001, 52.5] },
+        }),
+      ]);
+      expect(out).toHaveLength(1);
+    });
+  });
 });

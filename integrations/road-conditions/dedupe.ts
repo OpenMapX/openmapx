@@ -114,6 +114,31 @@ function headlineSimilar(a: string, b: string): boolean {
   return union > 0 && inter / union >= 0.5;
 }
 
+/** Normalised road-name keys for an event (lowercased, whitespace-stripped). */
+function roadKeys(e: RoadConditionEvent): Set<string> {
+  const keys = new Set<string>();
+  for (const r of e.roads ?? []) {
+    const k = r.name?.toLowerCase().replace(/\s+/g, "");
+    if (k) keys.add(k);
+  }
+  return keys;
+}
+
+/**
+ * True when both events name roads and share NONE — i.e. they are on different
+ * roads, so they must not merge even if co-located with a similar headline (an
+ * interchange where two roads pass within the cluster radius). When either event
+ * carries no road ref (e.g. NDW, which omits road names) there is no discriminator
+ * and this returns false, preserving the geometry+headline behaviour.
+ */
+function roadsConflict(a: RoadConditionEvent, b: RoadConditionEvent): boolean {
+  const ka = roadKeys(a);
+  const kb = roadKeys(b);
+  if (ka.size === 0 || kb.size === 0) return false;
+  for (const k of ka) if (kb.has(k)) return false;
+  return true;
+}
+
 function newer(a: RoadConditionEvent, b: RoadConditionEvent): RoadConditionEvent {
   const ta = a.dataUpdatedAt ? Date.parse(a.dataUpdatedAt) : 0;
   const tb = b.dataUpdatedAt ? Date.parse(b.dataUpdatedAt) : 0;
@@ -126,7 +151,9 @@ function newer(a: RoadConditionEvent, b: RoadConditionEvent): RoadConditionEvent
  * {@link CLUSTER_METERS} (minimum vertex-to-segment distance, so a Point and a
  * LineString — or two overlapping lines — for the same incident match) and whose
  * headlines are similar (so NDW and TomTom reporting the same accident become
- * one). The newest `dataUpdatedAt` survives, keeping its own provider/source.
+ * one). Events that name different roads never merge (see {@link roadsConflict}),
+ * so two incidents passing within the radius at an interchange stay distinct. The
+ * newest `dataUpdatedAt` survives, keeping its own provider/source.
  *
  * Greedy single-linkage: each event merges into the first matching survivor.
  * O(n²·k²) over a bbox query's events (k = {@link VERTEX_SAMPLE}); fine for the
@@ -151,6 +178,7 @@ export function dedupeRoadConditionEvents(events: RoadConditionEvent[]): RoadCon
       const sp = survivorPos[i]!;
       if (ep.length === 0 || sp.length === 0) return false;
       if (geometryDistanceMeters(ep, sp) > CLUSTER_METERS) return false;
+      if (roadsConflict(s, e)) return false;
       return headlineSimilar(s.headline, e.headline);
     });
     if (dupIdx === -1) {
