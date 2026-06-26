@@ -32,6 +32,7 @@ import { useAdminToast } from "../shared/AdminToast";
 import { MetaRow } from "../shared/MetaRow";
 import { statusColor, statusLabel } from "../shared/ServiceStatusChip";
 import { ServiceConfigForm } from "./ServiceConfigForm";
+import { ServiceCredentials } from "./ServiceCredentials";
 import { ServiceLogsDrawer } from "./ServiceLogsDrawer";
 
 function OverviewTab({ data }: { data: ServiceDetailData }) {
@@ -462,7 +463,7 @@ function ManifestTab({ data }: { data: ServiceDetailData }) {
   );
 }
 
-const TABS = ["Overview", "Config", "Logs", "Manifest"];
+const TABS = ["Overview", "Config", "Credentials", "Logs", "Manifest"];
 
 interface ServiceDetailProps {
   id: string;
@@ -681,7 +682,8 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
 
         {tab === 0 && <OverviewTab data={data} />}
         {tab === 1 && <ConfigTab data={data} />}
-        {tab === 2 && (
+        {tab === 2 && <ServiceCredentials serviceId={data.manifest.id} />}
+        {tab === 3 && (
           <Box
             sx={{
               py: 2,
@@ -706,7 +708,7 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
             </Button>
           </Box>
         )}
-        {tab === 3 && <ManifestTab data={data} />}
+        {tab === 4 && <ManifestTab data={data} />}
       </Box>
       <ServiceLogsDrawer
         open={logsOpen}

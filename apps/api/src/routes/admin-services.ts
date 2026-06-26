@@ -13,15 +13,22 @@ import {
   writeServiceSelection as persistServiceSelection,
   validateServiceSelectionForWrite,
 } from "../services/admin-cli";
+import { isDockerAvailable } from "../services/admin-ops";
 import { gtfsManager } from "../services/gtfs/index";
 import { jobRunner } from "../services/job-runner";
+import { isSecretsConfigured } from "../services/secrets";
 import { resolveServiceConfigWithSources } from "../services/service-config-resolver";
 import { getServiceRegistry } from "../services/service-registry";
+import {
+  deleteServiceSecret,
+  listServiceSecrets,
+  setServiceSecret,
+} from "../services/service-secrets";
 import { writeAuditLog } from "../utils/audit-log";
 import { dockerComposeLogs, dockerComposePs } from "../utils/docker-compose";
 import { serviceActionLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
-import { validateConfigBody } from "../utils/validate-config-body";
+import { getSecretFields, validateConfigBody } from "../utils/validate-config-body";
 
 const { getProvidedCapabilityNames, serviceConfigEnvPrefix } = coreServices;
 const DATA_JOB_OPERATIONS = new Set([
@@ -319,6 +326,113 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         request: req,
       });
       return { ok: true };
+    },
+  );
+
+  // Service credentials (the container vault). Mirrors the integration
+  // credentials API, but applying a change re-renders the secret files and
+  // recreates the service (services bake env/secrets at create time — no live
+  // reload). Requires Docker host-control; otherwise the caller gets
+  // `needsRender` and must render + recreate on the host.
+  async function applyServiceSecretChange(
+    serviceId: string,
+    userId: string,
+  ): Promise<{ ok: true; jobId?: string; needsRender?: boolean }> {
+    if (await isDockerAvailable()) {
+      const jobId = await jobRunner.enqueue("service.recreate", { service: serviceId }, userId);
+      return { ok: true, jobId };
+    }
+    return { ok: true, needsRender: true };
+  }
+
+  // GET /admin/services/:id/credentials — declared secret fields + per-field
+  // status (vault | missing), setup guides, and who set each + when.
+  app.get<{ Params: { id: string } }>("/admin/services/:id/credentials", async (req, reply) => {
+    const svc = getServiceRegistry().get(req.params.id);
+    if (!svc) {
+      reply.status(404);
+      return { error: "Service not found" };
+    }
+    const fields = getSecretFields(svc.manifest.configSchema);
+    const vault = await listServiceSecrets(svc.manifest.id);
+    const vaultByKey = new Map(vault.map((v) => [v.key, v]));
+    return {
+      serviceId: svc.manifest.id,
+      secretsConfigured: isSecretsConfigured(),
+      credentials: fields.map((f) => {
+        const v = vaultByKey.get(f.key);
+        return {
+          key: f.key,
+          title: f.title,
+          description: f.description,
+          setup: f.setup,
+          source: v ? ("vault" as const) : ("missing" as const),
+          updatedAt: v?.updatedAt?.toISOString(),
+          updatedBy: v?.updatedBy ?? null,
+        };
+      }),
+    };
+  });
+
+  // PUT /admin/services/:id/credentials/:key — set or rotate a secret.
+  app.put<{ Params: { id: string; key: string }; Body: { value: string } }>(
+    "/admin/services/:id/credentials/:key",
+    async (req, reply) => {
+      const svc = getServiceRegistry().get(req.params.id);
+      if (!svc) {
+        reply.status(404);
+        return { error: "Service not found" };
+      }
+      if (!isSecretsConfigured()) {
+        reply.status(400);
+        return { error: "Secret vault not configured — set OPENMAPX_SECRETS_KEY" };
+      }
+      const field = getSecretFields(svc.manifest.configSchema).find(
+        (f) => f.key === req.params.key,
+      );
+      if (!field) {
+        reply.status(400);
+        return { error: `"${req.params.key}" is not a declared secret field of this service` };
+      }
+      const value = req.body?.value;
+      if (typeof value !== "string" || value.trim() === "") {
+        reply.status(400);
+        return { error: "value must be a non-empty string" };
+      }
+      const adminSession = getAdminSession(req);
+      await setServiceSecret(svc.manifest.id, req.params.key, value, adminSession.user.id);
+      await writeAuditLog({
+        actorId: adminSession.user.id,
+        targetId: svc.manifest.id,
+        targetType: "service",
+        action: "service.credential.set",
+        details: { key: req.params.key },
+        request: req,
+      });
+      return applyServiceSecretChange(svc.manifest.id, adminSession.user.id);
+    },
+  );
+
+  // DELETE /admin/services/:id/credentials/:key — remove a secret.
+  app.delete<{ Params: { id: string; key: string } }>(
+    "/admin/services/:id/credentials/:key",
+    async (req, reply) => {
+      const svc = getServiceRegistry().get(req.params.id);
+      if (!svc) {
+        reply.status(404);
+        return { error: "Service not found" };
+      }
+      const adminSession = getAdminSession(req);
+      await deleteServiceSecret(svc.manifest.id, req.params.key);
+      await writeAuditLog({
+        actorId: adminSession.user.id,
+        targetId: svc.manifest.id,
+        targetType: "service",
+        action: "service.credential.delete",
+        details: { key: req.params.key },
+        request: req,
+      });
+      return applyServiceSecretChange(svc.manifest.id, adminSession.user.id);
     },
   );
 

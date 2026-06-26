@@ -83,6 +83,8 @@ plans/
 infra/docker/docker-compose.generated.yml
 infra/docker/docker-compose.generated.hardlinks.json
 infra/docker/service-selection.json
+# Decrypted per-service secret files (rendered from the vault; never commit)
+infra/docker/.generated-secrets/
 infra/docker/services/transitous/api-keys.json
 services/motis/tools/transitous/api-keys.json
 services/.community/

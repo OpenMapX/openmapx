@@ -753,3 +753,39 @@ describe("renderServiceSnippet healthcheck", () => {
     expect(cmd).toContain("wget");
   });
 });
+
+describe("service secret (file-based) delivery", () => {
+  const ctxWithSecrets = {
+    serviceSecretKeys: new Map([["ingest", ["NY_511_API_KEY", "LTA_ACCOUNT_KEY"]]]),
+  };
+
+  it("mounts each vault key as a Docker secret and points <KEY>_FILE at it — never the value", () => {
+    const snippet = renderServiceSnippet(svc("ingest"), ctxWithSecrets);
+    expect(snippet.secrets).toEqual([
+      { source: "ingest__NY_511_API_KEY", target: "NY_511_API_KEY" },
+      { source: "ingest__LTA_ACCOUNT_KEY", target: "LTA_ACCOUNT_KEY" },
+    ]);
+    expect(snippet.environment?.NY_511_API_KEY_FILE).toBe("/run/secrets/NY_511_API_KEY");
+    expect(snippet.environment?.LTA_ACCOUNT_KEY_FILE).toBe("/run/secrets/LTA_ACCOUNT_KEY");
+    // The secret VALUE must never appear in the environment.
+    expect(snippet.environment?.NY_511_API_KEY).toBeUndefined();
+  });
+
+  it("emits a top-level secrets block with per-service file sources", () => {
+    const { composeYaml } = renderCompose([svc("ingest")], ctxWithSecrets);
+    const doc = parseYaml(composeYaml) as {
+      secrets: Record<string, { file: string }>;
+    };
+    expect(doc.secrets).toEqual({
+      ingest__NY_511_API_KEY: { file: "./.generated-secrets/ingest/NY_511_API_KEY" },
+      ingest__LTA_ACCOUNT_KEY: { file: "./.generated-secrets/ingest/LTA_ACCOUNT_KEY" },
+    });
+  });
+
+  it("emits no secrets block when no vault keys are supplied (plain CLI render)", () => {
+    const { composeYaml } = renderCompose([svc("ingest")], {});
+    const doc = parseYaml(composeYaml) as Record<string, unknown>;
+    expect(doc.secrets).toBeUndefined();
+    expect(renderServiceSnippet(svc("ingest"), {}).secrets).toBeUndefined();
+  });
+});

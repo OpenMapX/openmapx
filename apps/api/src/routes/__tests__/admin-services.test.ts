@@ -1,5 +1,5 @@
 import Fastify, { type FastifyInstance } from "fastify";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { mockAdminSession } from "./admin-test-helpers.js";
 
 // Auth guard mock — all three exports required
@@ -116,9 +116,31 @@ vi.mock("@openmapx/core/server", () => ({
   },
 }));
 
-// validate-config-body
-vi.mock("../../utils/validate-config-body.js", () => ({
+// validate-config-body — keep the real `getSecretFields` (pure), mock only the
+// config validator.
+vi.mock("../../utils/validate-config-body.js", async (importActual) => ({
+  ...(await importActual<typeof import("../../utils/validate-config-body.js")>()),
   validateConfigBody: vi.fn().mockReturnValue({ updates: {}, errors: [] }),
+}));
+
+// Service secret vault + apply plumbing
+const mockIsSecretsConfigured = vi.fn().mockReturnValue(true);
+vi.mock("../../services/secrets.js", () => ({
+  isSecretsConfigured: (...args: unknown[]) => mockIsSecretsConfigured(...args),
+}));
+
+const mockIsDockerAvailable = vi.fn().mockResolvedValue(true);
+vi.mock("../../services/admin-ops.js", () => ({
+  isDockerAvailable: (...args: unknown[]) => mockIsDockerAvailable(...args),
+}));
+
+const mockSetServiceSecret = vi.fn().mockResolvedValue(undefined);
+const mockDeleteServiceSecret = vi.fn().mockResolvedValue(undefined);
+const mockListServiceSecrets = vi.fn().mockResolvedValue([]);
+vi.mock("../../services/service-secrets.js", () => ({
+  setServiceSecret: (...args: unknown[]) => mockSetServiceSecret(...args),
+  deleteServiceSecret: (...args: unknown[]) => mockDeleteServiceSecret(...args),
+  listServiceSecrets: (...args: unknown[]) => mockListServiceSecrets(...args),
 }));
 
 // Fixtures
@@ -308,6 +330,149 @@ describe("POST /admin/services/check", () => {
     expect(body.checkedAt).toBeTruthy();
     expect(mockWriteAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: "service.health_check" }),
+    );
+  });
+});
+
+describe("service credentials", () => {
+  const SECRET_SERVICE = {
+    manifest: {
+      id: "openconditions-ingest",
+      name: "OpenConditions Ingest",
+      version: "0.1.0",
+      quality: "community-verified",
+      configSchema: {
+        properties: {
+          NY_511_API_KEY: {
+            type: "string",
+            title: "511NY API key",
+            "x-openmapx-secret": true,
+            "x-openmapx-setup": { url: "https://511ny.org/developers" },
+          },
+          RATE_LIMIT_MAX: { type: "number", default: 120 },
+        },
+      },
+    },
+    enabled: true,
+    isBuiltIn: false,
+  };
+
+  // Reset the shared mocks' queues + implementations so leftover `…Once`
+  // values from earlier describes can't leak in (the global afterEach only
+  // clears call history, not queued implementations).
+  beforeEach(() => {
+    mockRegistryGet.mockReset().mockReturnValue(SECRET_SERVICE);
+    mockListServiceSecrets.mockReset().mockResolvedValue([]);
+    mockIsSecretsConfigured.mockReset().mockReturnValue(true);
+    mockIsDockerAvailable.mockReset().mockResolvedValue(true);
+    mockSetServiceSecret.mockReset().mockResolvedValue(undefined);
+    mockDeleteServiceSecret.mockReset().mockResolvedValue(undefined);
+    mockJobRunnerEnqueue.mockReset().mockResolvedValue("job-123");
+  });
+
+  it("GET lists declared secret fields with vault/missing status + setup guide", async () => {
+    mockListServiceSecrets.mockResolvedValue([
+      { key: "NY_511_API_KEY", updatedAt: new Date("2026-06-26T10:00:00Z"), updatedBy: "u1" },
+    ]);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/admin/services/openconditions-ingest/credentials",
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    // Only the secret field is listed (not the non-secret RATE_LIMIT_MAX).
+    expect(body.credentials).toEqual([
+      {
+        key: "NY_511_API_KEY",
+        title: "511NY API key",
+        setup: { url: "https://511ny.org/developers" },
+        source: "vault",
+        updatedAt: "2026-06-26T10:00:00.000Z",
+        updatedBy: "u1",
+      },
+    ]);
+    expect(body.secretsConfigured).toBe(true);
+  });
+
+  it("PUT stores the secret and enqueues a recreate when Docker is available", async () => {
+    const res = await app.inject({
+      method: "PUT",
+      url: "/admin/services/openconditions-ingest/credentials/NY_511_API_KEY",
+      payload: { value: "secret-123" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(mockSetServiceSecret).toHaveBeenCalledWith(
+      "openconditions-ingest",
+      "NY_511_API_KEY",
+      "secret-123",
+      fakeSession.user.id,
+    );
+    expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
+      "service.recreate",
+      { service: "openconditions-ingest" },
+      fakeSession.user.id,
+    );
+    expect(res.json()).toEqual({ ok: true, jobId: "job-123" });
+    expect(mockWriteAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "service.credential.set" }),
+    );
+  });
+
+  it("PUT returns needsRender (no recreate) when Docker is unavailable", async () => {
+    mockIsDockerAvailable.mockResolvedValue(false);
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/admin/services/openconditions-ingest/credentials/NY_511_API_KEY",
+      payload: { value: "secret-123" },
+    });
+
+    expect(res.json()).toEqual({ ok: true, needsRender: true });
+    expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
+  });
+
+  it("PUT rejects a key that is not a declared secret field", async () => {
+    const res = await app.inject({
+      method: "PUT",
+      url: "/admin/services/openconditions-ingest/credentials/RATE_LIMIT_MAX",
+      payload: { value: "x" },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(mockSetServiceSecret).not.toHaveBeenCalled();
+  });
+
+  it("PUT rejects when the secret vault is not configured", async () => {
+    mockIsSecretsConfigured.mockReturnValue(false);
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/admin/services/openconditions-ingest/credentials/NY_511_API_KEY",
+      payload: { value: "secret-123" },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(mockSetServiceSecret).not.toHaveBeenCalled();
+  });
+
+  it("DELETE removes the secret and enqueues a recreate", async () => {
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/admin/services/openconditions-ingest/credentials/NY_511_API_KEY",
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(mockDeleteServiceSecret).toHaveBeenCalledWith("openconditions-ingest", "NY_511_API_KEY");
+    expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
+      "service.recreate",
+      { service: "openconditions-ingest" },
+      fakeSession.user.id,
+    );
+    expect(mockWriteAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "service.credential.delete" }),
     );
   });
 });

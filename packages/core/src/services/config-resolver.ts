@@ -39,10 +39,17 @@ export function configSchemaKeys(
   configSchema: Record<string, unknown> | undefined,
 ): Array<{ key: string; default?: unknown }> {
   if (!configSchema) return [];
-  const props = (configSchema.properties ?? configSchema) as Record<string, { default?: unknown }>;
+  const props = (configSchema.properties ?? configSchema) as Record<
+    string,
+    { default?: unknown; "x-openmapx-secret"?: unknown }
+  >;
   const out: Array<{ key: string; default?: unknown }> = [];
   for (const [key, def] of Object.entries(props)) {
     if (key === "type" || key === "properties") continue;
+    // Secret fields are delivered to the container as mounted files (Docker
+    // `secrets:`), never through the env map this function feeds — so skip them
+    // here to guarantee a secret value can't be baked into the rendered YAML.
+    if (def && typeof def === "object" && def["x-openmapx-secret"] === true) continue;
     out.push({ key, default: def && typeof def === "object" ? def.default : undefined });
   }
   return out;

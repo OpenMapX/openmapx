@@ -149,6 +149,18 @@ export interface RenderContext {
    */
   resolvedServiceConfigs?: Map<string, Record<string, unknown>>;
   /**
+   * Per-service list of secret config keys that currently have a vault value.
+   * The renderer wires each as a Docker `secrets:` mount (source
+   * `<serviceId>__<KEY>` → target `<KEY>`, mounted at `/run/secrets/<KEY>`) and
+   * sets `<KEY>_FILE=/run/secrets/<KEY>` in the environment — the *path*, never
+   * the value. The secret values themselves are written to
+   * `<composeOutDir>/.generated-secrets/<serviceId>/<KEY>` by the caller
+   * (app-api's render step), which holds the decryption key. The renderer stays
+   * pure: it only needs the key names. Absent on the plain CLI render path (no
+   * vault), so no secrets block is emitted there.
+   */
+  serviceSecretKeys?: Map<string, string[]>;
+  /**
    * Optional override for the host-path existence check used by
    * `bindMounts[].optional`. Defaults to `node:fs`'s `existsSync`. Tests
    * inject a fake here to avoid touching the real filesystem; production
@@ -289,6 +301,7 @@ export interface ComposeServiceSnippet {
   network_mode?: string;
   networks?: string[] | Record<string, { aliases?: string[] }>;
   volumes?: string[];
+  secrets?: Array<{ source: string; target: string }>;
   labels?: Record<string, string>;
   restart?: string;
   healthcheck?: Record<string, unknown>;
@@ -302,6 +315,20 @@ export interface ComposeServiceSnippet {
       };
     };
   };
+}
+
+/** Top-level Docker secret name for a service's vault key (namespaced per service). */
+export function serviceSecretName(serviceId: string, key: string): string {
+  return `${serviceId}__${key}`;
+}
+
+/**
+ * Compose `file:` source for a service secret, relative to the compose-file
+ * directory. The app-api render step writes the decrypted value to this exact
+ * path so the rendered `secrets:` block and the on-disk files never drift.
+ */
+export function serviceSecretFilePath(serviceId: string, key: string): string {
+  return `./.generated-secrets/${serviceId}/${key}`;
 }
 
 export function renderServiceSnippet(
@@ -345,6 +372,21 @@ export function renderServiceSnippet(
       env[key] = String(value);
     }
     if (Object.keys(env).length > 0) snippet.environment = env;
+  }
+  // Vault secrets (the container track): mount each as a Docker secret at
+  // `/run/secrets/<KEY>` and point `<KEY>_FILE` at it. The value never enters
+  // the environment (which is exposed via `docker inspect`/`/proc/environ`);
+  // the consumer reads the file. Source name is namespaced per service so two
+  // services can declare the same key without colliding in the top-level block.
+  const secretKeys = ctx.serviceSecretKeys?.get(m.id) ?? [];
+  if (secretKeys.length > 0) {
+    snippet.secrets = secretKeys.map((key) => ({
+      source: serviceSecretName(m.id, key),
+      target: key,
+    }));
+    const env = snippet.environment ?? {};
+    for (const key of secretKeys) env[`${key}_FILE`] = `/run/secrets/${key}`;
+    snippet.environment = env;
   }
   if (c.workingDir) snippet.working_dir = c.workingDir;
   if (c.user) snippet.user = c.user;
@@ -670,6 +712,19 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
     }
   }
 
+  // Top-level `secrets:` block: one entry per (enabled service, vault key),
+  // each a file source the app-api render step materialises. Only emitted when
+  // the caller supplied secret keys (never on the plain CLI render).
+  const composeSecrets: Record<string, { file: string }> = {};
+  for (const s of sorted) {
+    if (!s.enabled) continue;
+    for (const key of ctx.serviceSecretKeys?.get(s.manifest.id) ?? []) {
+      composeSecrets[serviceSecretName(s.manifest.id, key)] = {
+        file: serviceSecretFilePath(s.manifest.id, key),
+      };
+    }
+  }
+
   const composeDoc = {
     services: composeServices,
     networks: {
@@ -687,6 +742,7 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
       },
     },
     ...(Object.keys(namedVolumes).length ? { volumes: namedVolumes } : {}),
+    ...(Object.keys(composeSecrets).length ? { secrets: composeSecrets } : {}),
   };
 
   const composeYaml = yamlDump(composeDoc, { lineWidth: 120, noRefs: true });

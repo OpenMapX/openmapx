@@ -48,6 +48,16 @@ describe("configSchemaKeys", () => {
     });
     expect(result.map((k) => k.key)).toEqual(["real"]);
   });
+
+  it("skips `x-openmapx-secret` fields — secrets are delivered as files, never via the env map", () => {
+    const result = configSchemaKeys({
+      properties: {
+        rate_limit: { type: "number", default: 120 },
+        ny_511_api_key: { type: "string", "x-openmapx-secret": true },
+      },
+    });
+    expect(result.map((k) => k.key)).toEqual(["rate_limit"]);
+  });
 });
 
 describe("resolveServiceConfigFromEnv", () => {

@@ -34,15 +34,19 @@ export async function dockerComposePs(): Promise<PsEntry[]> {
 
 export async function dockerComposeAction(
   serviceId: string,
-  action: "start" | "stop" | "restart",
+  action: "start" | "stop" | "restart" | "recreate",
 ): Promise<{ exitCode: number; stdout: string }> {
   const serviceArgs = serviceId ? [serviceId] : [];
   const args =
     action === "start"
       ? ["up", "-d", ...serviceArgs]
-      : action === "stop"
-        ? ["stop", ...serviceArgs]
-        : ["restart", ...serviceArgs];
+      : action === "recreate"
+        ? // Force-recreate so a rotated secret (same key/path, new file content)
+          // is always picked up, not just config-shape changes.
+          ["up", "-d", "--force-recreate", ...serviceArgs]
+        : action === "stop"
+          ? ["stop", ...serviceArgs]
+          : ["restart", ...serviceArgs];
   try {
     const { stdout } = await execFile("docker", ["compose", "-f", composePath(), ...args], {
       timeout: 120_000,

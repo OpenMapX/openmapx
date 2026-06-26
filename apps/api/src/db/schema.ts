@@ -52,5 +52,7 @@ export {
 export { type ServiceConfigRow, serviceConfig } from "./service-config-schema";
 // Community service repositories
 export { type ServiceRepositoryRow, serviceRepository } from "./service-repository-schema";
+// Encrypted per-service operator secrets (container track)
+export { serviceSecret } from "./service-secret-schema";
 // System settings
 export { systemSettings } from "./system-settings-schema";

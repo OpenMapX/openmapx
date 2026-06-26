@@ -9,6 +9,8 @@ import { dockerComposeAction } from "../utils/docker-compose";
 import type { JobContext } from "./job-runner";
 import { resolveAllServiceConfigs } from "./service-config-resolver";
 import { getServiceRegistry } from "./service-registry";
+import { regenerateServiceSecretFiles } from "./service-secret-files";
+import { resolveServiceVaultSecrets } from "./service-secrets";
 
 const execFile = promisify(execFileCb);
 const { DataManagerClient, buildAppApiServiceEnv, renderCompose } = coreServices;
@@ -112,11 +114,25 @@ export async function renderAndPersistCompose(): Promise<void> {
     );
   }
 
+  // Resolve each enabled service's decrypted vault secrets. The key names wire
+  // the rendered `secrets:` mounts; the values are written to the regenerated
+  // secret files below. Both come from the same resolved set in one pass, so
+  // the YAML and the on-disk files never drift.
+  const secretsBySvc = new Map<string, Record<string, string>>();
+  for (const service of enabled) {
+    const secrets = await resolveServiceVaultSecrets(service.manifest.id);
+    if (Object.keys(secrets).length > 0) secretsBySvc.set(service.manifest.id, secrets);
+  }
+  const serviceSecretKeys = new Map(
+    [...secretsBySvc].map(([id, secrets]) => [id, Object.keys(secrets)]),
+  );
+
   const rendered = renderCompose(enabled, {
     domain: process.env.DOMAIN ?? "localhost",
     composeOutDir: paths.infraDir,
     allServices: registry.list(),
     resolvedServiceConfigs,
+    serviceSecretKeys,
   });
 
   mkdirSync(paths.infraDir, { recursive: true });
@@ -126,6 +142,9 @@ export async function renderAndPersistCompose(): Promise<void> {
     JSON.stringify(rendered.hardlinkPlan, null, 2),
     "utf-8",
   );
+  // Always (re)generate — even when empty — so removing the last credential
+  // wipes the directory.
+  regenerateServiceSecretFiles(paths.infraDir, secretsBySvc);
 }
 
 function dataManagerEnabled(): boolean {
@@ -249,6 +268,23 @@ export async function serviceStart(service: string, ctx: JobContext): Promise<vo
   const r = await dockerComposeAction(service, "start");
   if (r.exitCode !== 0) throw new Error(`docker compose up exited with ${r.exitCode}`);
   await ctx.log(`${service} started.`);
+}
+
+export async function serviceRecreate(service: string, ctx: JobContext): Promise<void> {
+  assertKnownService(service);
+  await ctx.log(`Rendering compose for latest config + secrets...`);
+  await renderAndPersistCompose();
+  const hardlinks = await applyHardlinksFromPlan({ log: (m) => ctx.log(m) });
+  if (hardlinks.applied) {
+    await ctx.log(
+      `Hardlinks applied (${hardlinks.linked} linked, ${hardlinks.skipped} already linked, ${hardlinks.pruned} pruned)`,
+    );
+  }
+  await ctx.log(`Recreating ${service}...`);
+  const r = await dockerComposeAction(service, "recreate");
+  if (r.exitCode !== 0)
+    throw new Error(`docker compose up --force-recreate exited with ${r.exitCode}`);
+  await ctx.log(`${service} recreated.`);
 }
 
 export async function serviceStop(service: string, ctx: JobContext): Promise<void> {

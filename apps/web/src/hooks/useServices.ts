@@ -244,3 +244,92 @@ export function useServiceAction(id: string) {
     },
   });
 }
+
+export interface ServiceCredentialStatus {
+  key: string;
+  title: string;
+  description?: string;
+  setup?: import("@openmapx/integration-framework").CredentialSetup;
+  source: "vault" | "missing";
+  updatedAt?: string;
+  updatedBy?: string | null;
+}
+
+export interface ServiceCredentialsResponse {
+  serviceId: string;
+  secretsConfigured: boolean;
+  credentials: ServiceCredentialStatus[];
+}
+
+/** Result of a credential set/delete: a recreate was enqueued, or a render is needed. */
+export interface ServiceCredentialApplyResult {
+  ok: boolean;
+  jobId?: string;
+  needsRender?: boolean;
+}
+
+/** Declared secret fields of a service + per-field vault status. */
+export function useServiceCredentials(id: string) {
+  const apiUrl = useEnv().apiUrl;
+
+  return useQuery<ServiceCredentialsResponse>({
+    queryKey: ["admin", "services", id, "credentials"],
+    queryFn: async () => {
+      const res = await fetch(`${apiUrl}/api/admin/services/${id}/credentials`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to load service credentials");
+      return res.json();
+    },
+    enabled: Boolean(id),
+  });
+}
+
+export function useSetServiceCredential(id: string) {
+  const apiUrl = useEnv().apiUrl;
+  const qc = useQueryClient();
+
+  return useMutation<ServiceCredentialApplyResult, Error, { key: string; value: string }>({
+    mutationFn: async ({ key, value }) => {
+      const res = await fetch(
+        `${apiUrl}/api/admin/services/${id}/credentials/${encodeURIComponent(key)}`,
+        {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value }),
+        },
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string })?.error ?? "Failed to set credential");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "services", id, "credentials"] });
+    },
+  });
+}
+
+export function useDeleteServiceCredential(id: string) {
+  const apiUrl = useEnv().apiUrl;
+  const qc = useQueryClient();
+
+  return useMutation<ServiceCredentialApplyResult, Error, string>({
+    mutationFn: async (key) => {
+      const res = await fetch(
+        `${apiUrl}/api/admin/services/${id}/credentials/${encodeURIComponent(key)}`,
+        { method: "DELETE", credentials: "include" },
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string })?.error ?? "Failed to delete credential");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "services", id, "credentials"] });
+    },
+  });
+}

@@ -53,7 +53,7 @@ import {
   handleDataOperationJob,
   handleServiceBulkJob,
 } from "./services/admin-job-handlers";
-import { serviceRestart, serviceStart, serviceStop } from "./services/admin-ops";
+import { serviceRecreate, serviceRestart, serviceStart, serviceStop } from "./services/admin-ops";
 import { appLogger } from "./services/app-logger";
 import {
   filterGatedSources,
@@ -463,6 +463,12 @@ jobRunner.register("service.restart", async (ctx) => {
   const service = ctx.payload.service as string;
   await serviceRestart(service, ctx);
   return { service, action: "restart" };
+});
+
+jobRunner.register("service.recreate", async (ctx) => {
+  const service = ctx.payload.service as string;
+  await serviceRecreate(service, ctx);
+  return { service, action: "recreate" };
 });
 
 jobRunner.register("data.operation", handleDataOperationJob);

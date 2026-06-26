@@ -50,6 +50,13 @@
       "when": 1779573972134,
       "tag": "0006_add_poi_feed_state",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782483923333,
+      "tag": "0007_service_secret",
+      "breakpoints": true
     }
   ]
 }
