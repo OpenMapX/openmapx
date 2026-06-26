@@ -18,7 +18,6 @@ import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import NextLink from "next/link";
 import { useState } from "react";
 import type { ServiceDetail as ServiceDetailData } from "@/hooks/useServices";
 import {
@@ -633,15 +632,6 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
               onClick={() => setLogsOpen(true)}
             >
               Logs
-            </Button>
-            <Button
-              size="small"
-              variant="outlined"
-              startIcon={<OpenInNewIcon />}
-              component={NextLink}
-              href="/admin/services"
-            >
-              Back to catalog
             </Button>
           </Stack>
         </Stack>

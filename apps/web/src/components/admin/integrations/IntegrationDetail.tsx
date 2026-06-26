@@ -32,7 +32,6 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { CredentialSetup } from "@openmapx/integration-framework";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import NextLink from "next/link";
 import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { useAdminToast } from "../shared/AdminToast";
@@ -1336,15 +1335,6 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
               disabled={isBusy}
             >
               Reload
-            </Button>
-            <Button
-              size="small"
-              variant="outlined"
-              startIcon={<OpenInNewIcon />}
-              component={NextLink}
-              href="/admin/integrations"
-            >
-              Back to list
             </Button>
           </Stack>
         </Stack>
