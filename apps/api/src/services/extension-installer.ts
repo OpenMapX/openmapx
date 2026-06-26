@@ -220,7 +220,7 @@ export async function installExtension(
         manifest: manifest as unknown as Record<string, unknown>,
         installedAt: now,
         updatedAt: now,
-        installedBy: opts.actorId ?? null,
+        installedBy,
       })
       .onConflictDoUpdate({
         target: installedExtension.id,
