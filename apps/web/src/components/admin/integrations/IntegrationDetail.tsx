@@ -58,7 +58,6 @@ interface CredentialStatus {
   setup?: CredentialSetup;
   updatedAt?: string;
   updatedBy?: string | null;
-  isLegacyEnvVar: boolean;
   /** False for optional env-var overrides (built-in default exists). */
   required: boolean;
 }
@@ -562,12 +561,9 @@ function CredentialsTab({
     onError: (_, key) => showToast(`Failed to delete "${key}"`, "error"),
   });
 
-  const secretCredentials = data.credentialStatus.filter((c) => !c.isLegacyEnvVar);
-  const legacyEnvVars = data.credentialStatus.filter((c) => c.isLegacyEnvVar);
+  const secretCredentials = data.credentialStatus;
   const { paged: pagedSecrets, paginationProps: secretsPagination } =
     useClientPagination(secretCredentials);
-  const { paged: pagedEnvVars, paginationProps: envVarsPagination } =
-    useClientPagination(legacyEnvVars);
 
   if (data.credentialStatus.length === 0) {
     return (
@@ -728,122 +724,6 @@ function CredentialsTab({
               </Table>
             </TableContainer>
             <AdminTablePagination {...secretsPagination} />
-          </CardContent>
-        </Card>
-      )}
-      {legacyEnvVars.length > 0 && (
-        <Card variant="outlined">
-          <CardContent>
-            <Typography
-              variant="subtitle2"
-              gutterBottom
-              sx={{
-                color: "text.secondary",
-              }}
-            >
-              Environment Variables
-            </Typography>
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Variable</TableCell>
-                    <TableCell>Requirement</TableCell>
-                    <TableCell>Status</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {pagedEnvVars.map((entry) => {
-                    const isSet = entry.source === "env";
-                    return (
-                      <TableRow key={entry.key}>
-                        <TableCell>
-                          <Stack
-                            sx={{
-                              gap: 0.25,
-                            }}
-                          >
-                            <Typography
-                              variant="body2"
-                              sx={{
-                                fontFamily: "monospace",
-                                fontWeight: 500,
-                              }}
-                            >
-                              {entry.key}
-                            </Typography>
-                            {entry.description && (
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  color: "text.secondary",
-                                }}
-                              >
-                                {entry.description}
-                              </Typography>
-                            )}
-                          </Stack>
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={entry.required ? "Required" : "Optional"}
-                            size="small"
-                            color={entry.required ? "default" : "info"}
-                            variant="outlined"
-                            sx={{ fontSize: "0.7rem" }}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Stack
-                            direction="row"
-                            sx={{
-                              alignItems: "center",
-                              gap: 0.75,
-                            }}
-                          >
-                            {isSet ? (
-                              <>
-                                <CheckCircleIcon fontSize="small" sx={{ color: "success.main" }} />
-                                <Typography
-                                  variant="body2"
-                                  sx={{
-                                    color: "success.main",
-                                  }}
-                                >
-                                  Set
-                                </Typography>
-                              </>
-                            ) : entry.required ? (
-                              <>
-                                <ErrorIcon fontSize="small" color="error" />
-                                <Typography
-                                  variant="body2"
-                                  sx={{
-                                    color: "error.main",
-                                  }}
-                                >
-                                  Not set
-                                </Typography>
-                              </>
-                            ) : (
-                              <Typography
-                                variant="body2"
-                                sx={{
-                                  color: "text.secondary",
-                                }}
-                              >
-                                Using default
-                              </Typography>
-                            )}
-                          </Stack>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
-            <AdminTablePagination {...envVarsPagination} />
           </CardContent>
         </Card>
       )}

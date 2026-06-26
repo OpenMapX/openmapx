@@ -619,15 +619,4 @@ export function setup(ctx: IntegrationContext): void {
     );
     reply.send(toEnvelope(result));
   });
-
-  // GET /health
-  // Provider health is now persistent (Redis) and exposed cross-domain via
-  // /api/data-manager/providers. This route is kept as a deprecation hint so
-  // legacy callers see a clear redirect instead of an empty response.
-  ctx.registerRoute("GET", "/health", async (_req, reply) => {
-    reply.status(410).send({
-      error: "Gone",
-      message: "Provider health moved to /api/data-manager/providers (persistent, cross-domain).",
-    });
-  });
 }

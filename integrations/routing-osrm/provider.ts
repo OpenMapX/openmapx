@@ -11,9 +11,8 @@ import type {
   RoutingProvider,
 } from "@openmapx/integration-routing/types";
 
-// Populated by setup(ctx): service-registry URL → ctx.config.endpoint (which
-// already folds in `INTEGRATION_ROUTING_OSRM_ENDPOINT` + legacy `OSRM_URL`
-// env aliases via the core config resolver) → hardcoded fallback.
+// Populated by setup(ctx): service-registry URL → ctx.config.endpoint
+// (INTEGRATION_ROUTING_OSRM_ENDPOINT) → hardcoded fallback.
 let OSRM_URL = "https://router.project-osrm.org";
 
 /** Update the OSRM base URL (called from setup() when service registry resolves it). */

@@ -44,7 +44,6 @@ interface CredentialStatus {
   setup?: CredentialSetup;
   updatedAt?: string;
   updatedBy?: string | null;
-  isLegacyEnvVar: boolean;
   required: boolean;
 }
 
@@ -296,7 +295,7 @@ function hasEditableConfigFields(schema: Record<string, unknown> | undefined): b
 }
 
 function IntegrationPanel({ data }: { data: IntegrationDetail }) {
-  const secretCredentials = data.credentialStatus.filter((c) => !c.isLegacyEnvVar);
+  const secretCredentials = data.credentialStatus;
   // Only render the Configuration block if ConfigSchemaForm would actually
   // produce inputs. Otherwise it falls back to a "No editable configuration
   // fields…" info alert which is just noise next to a Credentials table.

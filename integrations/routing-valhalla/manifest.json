@@ -27,7 +27,7 @@
       "apiKey": {
         "type": "string",
         "title": "Valhalla API key",
-        "description": "API key appended as `?api_key=` to requests. Required for Stadia Maps (free non-commercial tier); leave blank for key-less self-hosted instances. Also settable via the VALHALLA_API_KEY env var.",
+        "description": "API key appended as `?api_key=` to requests. Required for Stadia Maps (free non-commercial tier); leave blank for key-less self-hosted instances. Set it here in the admin panel or via INTEGRATION_ROUTING_VALHALLA_APIKEY.",
         "format": "password",
         "x-openmapx-setup": {
           "url": "https://client.stadiamaps.com/dashboard/",
@@ -67,7 +67,7 @@
       "license": "MIT (Valhalla routing engine); Stadia Maps",
       "licenseUrl": "https://stadiamaps.com/terms-of-service/",
       "attribution": "Routing © <a href=\"https://stadiamaps.com/\">Stadia Maps</a>, © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
-      "notes": "Default Valhalla host. Free tier requires an API key (VALHALLA_API_KEY) and is limited to non-commercial / evaluation use; commercial use needs a paid Stadia plan. A self-hosted or other Valhalla-compatible endpoint can be set via VALHALLA_URL (no key).",
+      "notes": "Default Valhalla host. Free tier requires an API key and is limited to non-commercial / evaluation use; commercial use needs a paid Stadia plan. A self-hosted or other Valhalla-compatible endpoint can be set via the endpoint field above (no key).",
       "commercialUse": "conditional",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://stadiamaps.com/privacy/privacy-policy/",

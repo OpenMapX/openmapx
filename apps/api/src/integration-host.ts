@@ -363,16 +363,11 @@ function manifestDeclaresSecretFields(manifest: IntegrationManifest): boolean {
 
 /**
  * Builds the per-integration `DatabaseClient` when the manifest requires
- * postgis (via `requires:` or the legacy `infrastructure.services`); returns
- * `undefined` otherwise. Shared by cold start and reload.
+ * postgis (via `requires: [{ service: "postgis" }]`); returns `undefined`
+ * otherwise. Shared by cold start and reload.
  */
-function buildIntegrationDb(manifest: IntegrationManifest, raw: unknown): IntegrationContext["db"] {
-  const rawInfra = (raw as Record<string, unknown>).infrastructure as
-    | { services?: string[] }
-    | undefined;
-  const needsDb =
-    manifest.requires?.some((r) => r.service === "postgis") ||
-    rawInfra?.services?.includes("postgres");
+function buildIntegrationDb(manifest: IntegrationManifest): IntegrationContext["db"] {
+  const needsDb = manifest.requires?.some((r) => r.service === "postgis");
   if (!needsDb) return undefined;
   return {
     async execute<T = unknown>(query: string, params?: unknown[]): Promise<T> {
@@ -719,7 +714,7 @@ export async function initIntegrations(
       continue;
     }
 
-    const integrationDb = buildIntegrationDb(manifest, raw);
+    const integrationDb = buildIntegrationDb(manifest);
 
     const requiresMap = resolveRequiresForIntegration({
       manifestId: id,
@@ -1049,7 +1044,7 @@ export async function reloadIntegrations(): Promise<{
       continue;
     }
 
-    const integrationDb = buildIntegrationDb(manifest, raw);
+    const integrationDb = buildIntegrationDb(manifest);
 
     const fastifyForReload = _fastify;
     const reloadRequiresMap = resolveRequiresForIntegration({

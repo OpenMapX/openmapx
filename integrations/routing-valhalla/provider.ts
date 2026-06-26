@@ -18,10 +18,8 @@ import type {
   RoutingProvider,
 } from "@openmapx/integration-routing/types";
 
-// Populated by setup(ctx): service-registry URL → ctx.config.endpoint (which
-// already folds in `INTEGRATION_ROUTING_VALHALLA_ENDPOINT` + legacy
-// `VALHALLA_URL` env aliases via the core config resolver) → hardcoded
-// fallback.
+// Populated by setup(ctx): service-registry URL → ctx.config.endpoint
+// (INTEGRATION_ROUTING_VALHALLA_ENDPOINT) → hardcoded fallback.
 let VALHALLA_URL = "https://api.stadiamaps.com";
 let VALHALLA_API_KEY: string | undefined;
 
