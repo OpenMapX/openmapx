@@ -78,8 +78,8 @@ const BASE_NAV_ITEMS = [
     selfHostedOnly: false,
   },
   {
-    label: "Store",
-    href: "/admin/store",
+    label: "Extensions",
+    href: "/admin/extensions",
     icon: <StoreIcon fontSize="small" />,
     selfHostedOnly: false,
   },
