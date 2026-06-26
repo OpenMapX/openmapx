@@ -33,8 +33,7 @@ export interface BackupVolumeEntry {
    * `openmapx_openmapx-pgdata` for declared name `openmapx-pgdata`). Persisted
    * so restore works even if the compose project name changes between
    * backup and restore (different cwd, COMPOSE_PROJECT_NAME override, host
-   * migration). Older backups without this field fall back to re-resolving
-   * against the current compose file. tar-mode entries only.
+   * migration). tar-mode entries only.
    */
   resolvedName?: string;
   mode: BackupVolumeMode;
@@ -44,8 +43,7 @@ export interface BackupVolumeEntry {
    * Postgres credentials captured from the producer service's manifest at
    * backup time (`pg_dump`-mode entries only). Persisted so restore targets
    * the same database/user even if `services/postgis/service.json` changes
-   * between backup and restore. Defaults to `postgres`/`openmapx` for
-   * legacy backups that don't carry these fields.
+   * between backup and restore.
    */
   postgresUser?: string;
   postgresDb?: string;
@@ -713,17 +711,6 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
     );
   }
 
-  // Resolve docker-side volume names only for tar entries that don't already
-  // carry a `resolvedName` from backup time. Newer backups embed the resolved
-  // name in the manifest (so the restore is portable across compose-project
-  // renames); older backups fall back to re-resolving against the current
-  // compose file.
-  const needResolution = pre.targets.flatMap((s) =>
-    s.volumes.filter((v) => v.mode === "tar" && !v.resolvedName).map((v) => v.name),
-  );
-  const fallbackVolumeNames =
-    needResolution.length > 0 ? await resolveVolumeNames(ctx, needResolution) : new Map();
-
   const stopped: string[] = [];
   try {
     // Stop running targets up-front (postgres handled separately below — we
@@ -751,18 +738,24 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
             log.dim(`  starting ${svc.id} for restore…`);
             await dockerCompose(ctx, ["start", svc.id]);
           }
-          // Use the credentials persisted at backup time. Legacy backups
-          // (no postgresUser/Db in the manifest) fall back to the historical
-          // hard-coded values — those happen to match the postgis service's
-          // current default env, but newer backups don't depend on that.
-          const user = vol.postgresUser ?? "postgres";
-          const db = vol.postgresDb ?? "openmapx";
+          // Credentials persisted at backup time.
+          if (!vol.postgresUser || !vol.postgresDb) {
+            throw new Error(
+              `Backup entry ${vol.name} is missing postgres credentials — re-create the backup.`,
+            );
+          }
+          const user = vol.postgresUser;
+          const db = vol.postgresDb;
           log.dim(`  restoring database ${db} (user=${user}) from ${vol.file}…`);
           await pgRestoreFromFile(ctx, svc.id, file, user, db);
         } else {
-          const realVol = vol.resolvedName ?? fallbackVolumeNames.get(vol.name) ?? vol.name;
-          log.dim(`  restoring volume ${realVol} from ${vol.file}…`);
-          await tarRestoreFromFile(realVol, pre.backupDir, vol.file);
+          if (!vol.resolvedName) {
+            throw new Error(
+              `Backup entry ${vol.name} is missing its resolved docker volume name — re-create the backup.`,
+            );
+          }
+          log.dim(`  restoring volume ${vol.resolvedName} from ${vol.file}…`);
+          await tarRestoreFromFile(vol.resolvedName, pre.backupDir, vol.file);
         }
       }
     }
