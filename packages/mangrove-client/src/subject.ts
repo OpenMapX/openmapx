@@ -17,8 +17,8 @@ export const DEFAULT_UNCERTAINTY_METERS = 30;
 export const REVIEW_MATCH_MAX_DISTANCE_METERS = 80;
 
 /**
- * Fallback cap for legacy/third-party reviews that have a `geo:` subject but
- * no usable name (`q=`) or OSM metadata. Such records are inherently ambiguous
+ * Fallback cap for third-party / older-format reviews that have a `geo:`
+ * subject but no usable name (`q=`) or OSM metadata. Such records are ambiguous
  * in dense POI clusters, so only attach them when the pin is effectively on
  * top of the selected place.
  */

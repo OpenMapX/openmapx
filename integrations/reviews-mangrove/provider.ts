@@ -151,8 +151,8 @@ function isNewerReview(candidate: Review, current: Review): boolean {
  * without using Mangrove's edit chain. Keeping the newest effective review
  * prevents one author/source-account from voting multiple times.
  *
- * The nickname participates in the key because legacy imports may be signed by
- * one importer key while preserving the original reviewer only as metadata.
+ * The nickname participates in the key because imported reviews may be signed
+ * by one importer key while preserving the original reviewer only as metadata.
  */
 function collapseDuplicateEffectiveReviews(reviews: Review[]): Review[] {
   const byAuthor = new Map<string, Review>();
