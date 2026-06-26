@@ -40,7 +40,9 @@ import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { DomainChip } from "../integrations/DomainChip";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
+import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { useAdminToast } from "../shared/AdminToast";
+import { useClientPagination } from "../shared/tableHooks";
 import { InstallFromUrlDialog } from "./InstallFromUrlDialog";
 import type { StoreCatalogEntry } from "./StoreCard";
 import { StoreCard } from "./StoreCard";
@@ -222,6 +224,7 @@ function SourcesTab() {
   });
 
   const sources = data?.sources ?? [];
+  const { paged, paginationProps } = useClientPagination(sources);
 
   return (
     <Stack
@@ -269,7 +272,7 @@ function SourcesTab() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {sources.map((src) => (
+                {paged.map((src) => (
                   <TableRow key={src.url} hover>
                     <TableCell>
                       <Stack
@@ -346,6 +349,7 @@ function SourcesTab() {
               </TableBody>
             </Table>
           </TableContainer>
+          <AdminTablePagination {...paginationProps} />
         </Paper>
       )}
       <AddSourceDialog open={addOpen} onClose={() => setAddOpen(false)} />
@@ -385,6 +389,8 @@ function InstalledTab({
     onError: (e) => showToast(String(e), "error"),
   });
 
+  const { paged, paginationProps } = useClientPagination(data?.integrations ?? []);
+
   if (!data?.integrations.length) {
     return (
       <Box
@@ -413,135 +419,138 @@ function InstalledTab({
   }
 
   return (
-    <TableContainer>
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell>Integration</TableCell>
-            <TableCell>Source</TableCell>
-            <TableCell>Version</TableCell>
-            <TableCell>Installed</TableCell>
-            <TableCell align="right">Actions</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {data.integrations.map((inst) => (
-            <TableRow key={inst.id} hover>
-              <TableCell>
-                <Stack
-                  direction="row"
-                  sx={{
-                    alignItems: "center",
-                    gap: 1,
-                  }}
-                >
-                  {inst.catalogEntry ? (
-                    <Button
-                      size="small"
-                      variant="text"
-                      sx={{ p: 0, fontWeight: 600, textAlign: "left" }}
-                      onClick={() => inst.catalogEntry && onSelect(inst.catalogEntry)}
-                    >
-                      {inst.catalogEntry.name}
-                    </Button>
-                  ) : (
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        fontWeight: 600,
-                      }}
-                    >
-                      {inst.id}
-                    </Typography>
-                  )}
-                  {inst.hasUpdate && (
-                    <Chip
-                      label="Update"
-                      color="warning"
-                      size="small"
-                      icon={<SystemUpdateAltIcon sx={{ fontSize: "0.75rem !important" }} />}
-                    />
-                  )}
-                </Stack>
-                {inst.catalogEntry && (
+    <>
+      <TableContainer>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Integration</TableCell>
+              <TableCell>Source</TableCell>
+              <TableCell>Version</TableCell>
+              <TableCell>Installed</TableCell>
+              <TableCell align="right">Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {paged.map((inst) => (
+              <TableRow key={inst.id} hover>
+                <TableCell>
                   <Stack
                     direction="row"
                     sx={{
-                      gap: 0.5,
-                      mt: 0.5,
-                      flexWrap: "wrap",
+                      alignItems: "center",
+                      gap: 1,
                     }}
                   >
-                    {inst.catalogEntry.domains.map((d) => (
-                      <DomainChip key={d} domain={d} />
-                    ))}
+                    {inst.catalogEntry ? (
+                      <Button
+                        size="small"
+                        variant="text"
+                        sx={{ p: 0, fontWeight: 600, textAlign: "left" }}
+                        onClick={() => inst.catalogEntry && onSelect(inst.catalogEntry)}
+                      >
+                        {inst.catalogEntry.name}
+                      </Button>
+                    ) : (
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight: 600,
+                        }}
+                      >
+                        {inst.id}
+                      </Typography>
+                    )}
+                    {inst.hasUpdate && (
+                      <Chip
+                        label="Update"
+                        color="warning"
+                        size="small"
+                        icon={<SystemUpdateAltIcon sx={{ fontSize: "0.75rem !important" }} />}
+                      />
+                    )}
                   </Stack>
-                )}
-              </TableCell>
-              <TableCell>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: "text.secondary",
-                    fontFamily: "monospace",
-                  }}
-                >
-                  {inst.sourceType}
-                </Typography>
-              </TableCell>
-              <TableCell>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    fontFamily: "monospace",
-                  }}
-                >
-                  {inst.installedVersion}
-                </Typography>
-                {inst.hasUpdate && inst.catalogEntry && (
+                  {inst.catalogEntry && (
+                    <Stack
+                      direction="row"
+                      sx={{
+                        gap: 0.5,
+                        mt: 0.5,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      {inst.catalogEntry.domains.map((d) => (
+                        <DomainChip key={d} domain={d} />
+                      ))}
+                    </Stack>
+                  )}
+                </TableCell>
+                <TableCell>
                   <Typography
                     variant="caption"
                     sx={{
-                      color: "warning.main",
+                      color: "text.secondary",
+                      fontFamily: "monospace",
                     }}
                   >
-                    → {inst.catalogEntry.version}
+                    {inst.sourceType}
                   </Typography>
-                )}
-              </TableCell>
-              <TableCell>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: "text.secondary",
-                  }}
-                >
-                  {new Date(inst.installedAt).toLocaleDateString()}
-                </Typography>
-              </TableCell>
-              <TableCell align="right">
-                {inst.hasUpdate && (
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="warning"
-                    onClick={() => updateMutation.mutate(inst.id)}
-                    disabled={updateMutation.isPending}
+                </TableCell>
+                <TableCell>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontFamily: "monospace",
+                    }}
                   >
-                    Update
-                  </Button>
-                )}
-                {!inst.hasUpdate && (
-                  <Tooltip title="Up to date">
-                    <CheckCircleOutlineIcon sx={{ color: "success.main", fontSize: "1.1rem" }} />
-                  </Tooltip>
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
+                    {inst.installedVersion}
+                  </Typography>
+                  {inst.hasUpdate && inst.catalogEntry && (
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "warning.main",
+                      }}
+                    >
+                      → {inst.catalogEntry.version}
+                    </Typography>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
+                    {new Date(inst.installedAt).toLocaleDateString()}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right">
+                  {inst.hasUpdate && (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="warning"
+                      onClick={() => updateMutation.mutate(inst.id)}
+                      disabled={updateMutation.isPending}
+                    >
+                      Update
+                    </Button>
+                  )}
+                  {!inst.hasUpdate && (
+                    <Tooltip title="Up to date">
+                      <CheckCircleOutlineIcon sx={{ color: "success.main", fontSize: "1.1rem" }} />
+                    </Tooltip>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+      <AdminTablePagination {...paginationProps} />
+    </>
   );
 }
 

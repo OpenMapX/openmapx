@@ -20,6 +20,8 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import { useRefreshRepo, useRemoveRepo, useServiceRepos } from "@/hooks/useServiceRepos";
+import { AdminTablePagination } from "../shared/AdminTablePagination";
+import { useClientPagination } from "../shared/tableHooks";
 import { AddRepoDialog } from "./AddRepoDialog";
 
 export function ServiceRepoList() {
@@ -27,6 +29,8 @@ export function ServiceRepoList() {
   const remove = useRemoveRepo();
   const refresh = useRefreshRepo();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const repos = data?.repos ?? [];
+  const { paged, paginationProps } = useClientPagination(repos);
 
   return (
     <Box>
@@ -88,7 +92,7 @@ export function ServiceRepoList() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {(data?.repos ?? []).length === 0 ? (
+              {repos.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4}>
                     <Typography
@@ -104,7 +108,7 @@ export function ServiceRepoList() {
                   </TableCell>
                 </TableRow>
               ) : (
-                (data?.repos ?? []).map((r) => (
+                paged.map((r) => (
                   <TableRow key={r.hash}>
                     <TableCell>
                       <Typography
@@ -173,6 +177,7 @@ export function ServiceRepoList() {
               )}
             </TableBody>
           </Table>
+          <AdminTablePagination {...paginationProps} />
         </TableContainer>
       )}
       <AddRepoDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />

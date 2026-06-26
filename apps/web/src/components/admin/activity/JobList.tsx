@@ -13,7 +13,6 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
-import TablePagination from "@mui/material/TablePagination";
 import TableRow from "@mui/material/TableRow";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
@@ -23,7 +22,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { relativeTimeFromIso } from "@/lib/formatTime";
+import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { TableSkeleton } from "../shared/TableSkeleton";
+import { useServerPagination } from "../shared/tableHooks";
 import { ActorCell } from "./ActorCell";
 import { JobDetail } from "./JobDetail";
 import { JobStatusChip } from "./JobStatusChip";
@@ -147,8 +148,7 @@ export function JobList() {
   const env = useEnv();
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [page, setPage] = useState(0);
-  const rowsPerPage = 25;
+  const { page, rowsPerPage, offset, setPage, paginationProps } = useServerPagination(25);
 
   const statusParam = STATUS_FILTER_QUERY[statusFilter];
 
@@ -157,7 +157,7 @@ export function JobList() {
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: String(rowsPerPage),
-        offset: String(page * rowsPerPage),
+        offset: String(offset),
       });
       if (statusParam) params.set("status", statusParam);
       const res = await fetch(`${env.apiUrl}/api/admin/jobs?${params}`, { credentials: "include" });
@@ -250,16 +250,12 @@ export function JobList() {
           )}
         </Table>
       </TableContainer>
-      {!!data?.jobs.length && (
-        <TablePagination
-          component="div"
-          count={data.total}
-          page={page}
-          onPageChange={(_, p) => setPage(p)}
-          rowsPerPage={rowsPerPage}
-          rowsPerPageOptions={[25]}
-        />
-      )}
+      <AdminTablePagination
+        {...paginationProps}
+        count={data?.total ?? 0}
+        rowsPerPageOptions={[25]}
+        hideSinglePage={false}
+      />
     </Stack>
   );
 }

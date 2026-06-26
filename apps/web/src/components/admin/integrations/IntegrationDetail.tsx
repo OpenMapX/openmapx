@@ -34,8 +34,10 @@ import type { CredentialSetup } from "@openmapx/integration-framework";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
+import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { useAdminToast } from "../shared/AdminToast";
 import { MetaRow } from "../shared/MetaRow";
+import { useClientPagination } from "../shared/tableHooks";
 import { ConfigSchemaForm } from "./ConfigSchemaForm";
 import { CredentialSetupGuide } from "./CredentialSetupGuide";
 import { DomainChip } from "./DomainChip";
@@ -390,6 +392,7 @@ function ConfigTab({
   onRefresh: () => void;
 }) {
   const entries = Object.entries(data.resolvedConfig);
+  const { paged: pagedEntries, paginationProps: entriesPagination } = useClientPagination(entries);
 
   return (
     <Stack
@@ -429,7 +432,7 @@ function ConfigTab({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {entries.map(([key, { value, source }]) => (
+                  {pagedEntries.map(([key, { value, source }]) => (
                     <TableRow key={key}>
                       <TableCell>
                         <Typography
@@ -468,6 +471,7 @@ function ConfigTab({
               </Table>
             </TableContainer>
           )}
+          <AdminTablePagination {...entriesPagination} />
         </CardContent>
       </Card>
       {/* Editable config form */}
@@ -560,6 +564,10 @@ function CredentialsTab({
 
   const secretCredentials = data.credentialStatus.filter((c) => !c.isLegacyEnvVar);
   const legacyEnvVars = data.credentialStatus.filter((c) => c.isLegacyEnvVar);
+  const { paged: pagedSecrets, paginationProps: secretsPagination } =
+    useClientPagination(secretCredentials);
+  const { paged: pagedEnvVars, paginationProps: envVarsPagination } =
+    useClientPagination(legacyEnvVars);
 
   if (data.credentialStatus.length === 0) {
     return (
@@ -604,7 +612,7 @@ function CredentialsTab({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {secretCredentials.map((cred) => (
+                  {pagedSecrets.map((cred) => (
                     <TableRow key={cred.key}>
                       <TableCell>
                         <Stack
@@ -719,6 +727,7 @@ function CredentialsTab({
                 </TableBody>
               </Table>
             </TableContainer>
+            <AdminTablePagination {...secretsPagination} />
           </CardContent>
         </Card>
       )}
@@ -744,7 +753,7 @@ function CredentialsTab({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {legacyEnvVars.map((entry) => {
+                  {pagedEnvVars.map((entry) => {
                     const isSet = entry.source === "env";
                     return (
                       <TableRow key={entry.key}>
@@ -834,6 +843,7 @@ function CredentialsTab({
                 </TableBody>
               </Table>
             </TableContainer>
+            <AdminTablePagination {...envVarsPagination} />
           </CardContent>
         </Card>
       )}

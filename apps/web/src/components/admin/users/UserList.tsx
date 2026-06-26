@@ -28,7 +28,6 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
-import TablePagination from "@mui/material/TablePagination";
 import TableRow from "@mui/material/TableRow";
 import TableSortLabel from "@mui/material/TableSortLabel";
 import TextField from "@mui/material/TextField";
@@ -42,10 +41,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
+import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 import { TableEmptyState } from "../shared/TableEmptyState";
 import { TableSkeleton } from "../shared/TableSkeleton";
+import { useServerPagination } from "../shared/tableHooks";
 import { BanUserDialog } from "./BanUserDialog";
 import { CreateUserDialog } from "./CreateUserDialog";
 
@@ -251,8 +252,7 @@ function ActionsMenu({
 export function UserList() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterTab>("all");
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(25);
+  const { page, rowsPerPage, offset, setPage, paginationProps } = useServerPagination(25);
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [createOpen, setCreateOpen] = useState(false);
@@ -278,7 +278,7 @@ export function UserList() {
             : {}),
           ...filterMap[filter],
           limit: rowsPerPage,
-          offset: page * rowsPerPage,
+          offset,
           sortBy: sortField,
           sortDirection: sortDir,
         },
@@ -520,17 +520,11 @@ export function UserList() {
             )}
           </Table>
         </TableContainer>
-        <TablePagination
-          component="div"
+        <AdminTablePagination
+          {...paginationProps}
           count={total}
-          page={page}
-          rowsPerPage={rowsPerPage}
           rowsPerPageOptions={[25, 50, 100]}
-          onPageChange={(_, p) => setPage(p)}
-          onRowsPerPageChange={(e) => {
-            setRowsPerPage(Number(e.target.value));
-            setPage(0);
-          }}
+          hideSinglePage={false}
         />
       </Paper>
       <CreateUserDialog open={createOpen} onClose={() => setCreateOpen(false)} />

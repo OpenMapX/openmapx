@@ -33,9 +33,11 @@ import type { ServiceQuality, ServiceSummary } from "@/hooks/useServices";
 import { useServicesList } from "@/hooks/useServices";
 import { useEnv } from "@/lib/EnvProvider";
 import { StatusBadge } from "../integrations/StatusBadge";
+import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { useAdminToast } from "../shared/AdminToast";
 import { ServiceStatusChip } from "../shared/ServiceStatusChip";
 import { TableEmptyState } from "../shared/TableEmptyState";
+import { useClientPagination } from "../shared/tableHooks";
 
 type QualityFilter = "all" | ServiceQuality;
 
@@ -194,6 +196,7 @@ export function ServiceCatalog() {
     () => filterServices(services, search, quality),
     [services, search, quality],
   );
+  const { paged, paginationProps } = useClientPagination(filtered);
 
   useEffect(() => {
     setSelectedIds((prev) => {
@@ -206,8 +209,7 @@ export function ServiceCatalog() {
     });
   }, [services]);
 
-  const allVisibleSelected =
-    filtered.length > 0 && filtered.every((svc) => selectedIds.has(svc.id));
+  const allVisibleSelected = paged.length > 0 && paged.every((svc) => selectedIds.has(svc.id));
 
   const toggleSelected = (id: string) => {
     setSelectedIds((prev) => {
@@ -222,9 +224,9 @@ export function ServiceCatalog() {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (allVisibleSelected) {
-        for (const svc of filtered) next.delete(svc.id);
+        for (const svc of paged) next.delete(svc.id);
       } else {
-        for (const svc of filtered) next.add(svc.id);
+        for (const svc of paged) next.add(svc.id);
       }
       return next;
     });
@@ -704,7 +706,7 @@ export function ServiceCatalog() {
                   }
                 />
               ) : (
-                filtered.map((svc) => (
+                paged.map((svc) => (
                   <TableRow key={svc.id} hover>
                     <TableCell padding="checkbox">
                       <Checkbox
@@ -767,6 +769,7 @@ export function ServiceCatalog() {
             </TableBody>
           </Table>
         </TableContainer>
+        <AdminTablePagination {...paginationProps} />
       </Paper>
       {!isLoading && !isError && filtered.length > 0 && (
         <Typography

@@ -12,9 +12,12 @@ import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
+import FormControl from "@mui/material/FormControl";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import IconButton from "@mui/material/IconButton";
+import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
+import Select from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
 import Table from "@mui/material/Table";
@@ -22,19 +25,21 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
-import TablePagination from "@mui/material/TablePagination";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { formatBytes } from "@/lib/storageFormat";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
+import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { useAdminToast } from "../shared/AdminToast";
 import { TableEmptyState } from "../shared/TableEmptyState";
+import { TableSearchField, TableToolbar } from "../shared/TableToolbar";
+import { useClientPagination, useTextFilter } from "../shared/tableHooks";
 
 interface BackupSummary {
   name: string;
@@ -70,8 +75,7 @@ export function BackupsPage() {
   const [restoreServiceIds, setRestoreServiceIds] = useState("");
   const [restoreStopRunning, setRestoreStopRunning] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<BackupSummary | null>(null);
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(25);
+  const [statusFilter, setStatusFilter] = useState<"all" | "valid" | "corrupt">("all");
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery<BackupsResponse>({
     queryKey: ["admin", "services", "backups"],
@@ -161,6 +165,15 @@ export function BackupsPage() {
   const sortedBackups = [...(data?.backups ?? [])].sort((a, b) =>
     b.createdAt.localeCompare(a.createdAt),
   );
+  const { query, setQuery, filtered: searched } = useTextFilter(sortedBackups, (b) => b.name);
+  const filtered = useMemo(
+    () =>
+      searched.filter(
+        (b) => statusFilter === "all" || (statusFilter === "corrupt" ? !!b.corrupt : !b.corrupt),
+      ),
+    [searched, statusFilter],
+  );
+  const { paged, paginationProps } = useClientPagination(filtered);
 
   return (
     <Stack
@@ -242,27 +255,52 @@ export function BackupsPage() {
         </Alert>
       )}
       {!isLoading && !isError && (
-        <Paper variant="outlined">
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Created</TableCell>
-                  <TableCell>Version</TableCell>
-                  <TableCell>Services</TableCell>
-                  <TableCell>Volumes</TableCell>
-                  <TableCell>Size</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {sortedBackups.length === 0 ? (
-                  <TableEmptyState colSpan={7} message="No backups found yet." />
-                ) : (
-                  sortedBackups
-                    .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                    .map((backup) => (
+        <>
+          {sortedBackups.length > 0 && (
+            <TableToolbar>
+              <TableSearchField
+                value={query}
+                onChange={setQuery}
+                placeholder="Search backups by name…"
+              />
+              <FormControl size="small" sx={{ minWidth: 150 }}>
+                <Select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+                >
+                  <MenuItem value="all">All backups</MenuItem>
+                  <MenuItem value="valid">Valid</MenuItem>
+                  <MenuItem value="corrupt">Corrupt</MenuItem>
+                </Select>
+              </FormControl>
+            </TableToolbar>
+          )}
+          <Paper variant="outlined">
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Name</TableCell>
+                    <TableCell>Created</TableCell>
+                    <TableCell>Version</TableCell>
+                    <TableCell>Services</TableCell>
+                    <TableCell>Volumes</TableCell>
+                    <TableCell>Size</TableCell>
+                    <TableCell align="right">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filtered.length === 0 ? (
+                    <TableEmptyState
+                      colSpan={7}
+                      message={
+                        sortedBackups.length === 0
+                          ? "No backups found yet."
+                          : "No backups match your search or filter."
+                      }
+                    />
+                  ) : (
+                    paged.map((backup) => (
                       <TableRow key={backup.name} hover>
                         <TableCell>
                           <Stack
@@ -351,25 +389,13 @@ export function BackupsPage() {
                         </TableCell>
                       </TableRow>
                     ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-          {sortedBackups.length > 0 && (
-            <TablePagination
-              component="div"
-              count={sortedBackups.length}
-              page={page}
-              rowsPerPage={rowsPerPage}
-              rowsPerPageOptions={[25, 50, 100]}
-              onPageChange={(_, p) => setPage(p)}
-              onRowsPerPageChange={(e) => {
-                setRowsPerPage(Number(e.target.value));
-                setPage(0);
-              }}
-            />
-          )}
-        </Paper>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+            <AdminTablePagination {...paginationProps} />
+          </Paper>
+        </>
       )}
       <Dialog open={!!restoreTarget} onClose={() => setRestoreTarget(null)} maxWidth="sm" fullWidth>
         <DialogTitle>Restore Backup</DialogTitle>

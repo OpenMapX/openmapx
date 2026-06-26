@@ -18,10 +18,13 @@ import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
+import FormControl from "@mui/material/FormControl";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Grid from "@mui/material/Grid";
 import IconButton from "@mui/material/IconButton";
+import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
+import Select from "@mui/material/Select";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
@@ -36,11 +39,15 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { formatBytes } from "@/lib/storageFormat";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
+import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { useAdminToast } from "../shared/AdminToast";
+import { TableEmptyState } from "../shared/TableEmptyState";
+import { TableSearchField, TableToolbar } from "../shared/TableToolbar";
+import { useClientPagination, useTextFilter } from "../shared/tableHooks";
 
 interface OsmInfo {
   found: boolean;
@@ -784,6 +791,25 @@ function buildUnifiedRows(feeds: GtfsFeed[], archives: MotisGtfsArchive[]): Unif
   return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
 }
 
+/** Effective status of a unified row (Postgres status, else MOTIS-only). */
+function gtfsRowStatus(row: UnifiedGtfsRow): string {
+  return row.postgres?.status ?? (row.motis ? "motis-only" : "—");
+}
+
+/** Concatenated searchable text for a unified row (name, slug, origin URLs). */
+function gtfsRowSearchText(row: UnifiedGtfsRow): string {
+  return [
+    row.postgres?.name,
+    row.postgres?.slug,
+    row.postgres?.originUrl,
+    row.motis?.id,
+    row.motis?.originUrl,
+    row.key,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 function GtfsSection({
   feeds,
   motisArchives,
@@ -876,6 +902,23 @@ function GtfsSection({
       }
     })();
   };
+
+  const allRows = useMemo(() => buildUnifiedRows(feeds, motisArchives), [feeds, motisArchives]);
+  const [storeFilter, setStoreFilter] = useState<"all" | "postgres" | "motis">("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const statusOptions = useMemo(() => [...new Set(allRows.map(gtfsRowStatus))].sort(), [allRows]);
+  const { query, setQuery, filtered: searched } = useTextFilter(allRows, gtfsRowSearchText);
+  const filtered = useMemo(
+    () =>
+      searched.filter((row) => {
+        if (storeFilter === "postgres" && !row.postgres) return false;
+        if (storeFilter === "motis" && !row.motis) return false;
+        if (statusFilter !== "all" && gtfsRowStatus(row) !== statusFilter) return false;
+        return true;
+      }),
+    [searched, storeFilter, statusFilter],
+  );
+  const { paged, paginationProps } = useClientPagination(filtered);
 
   return (
     <Paper variant="outlined" sx={{ p: 2.5 }}>
@@ -981,8 +1024,7 @@ function GtfsSection({
         </DialogActions>
       </Dialog>
       {(() => {
-        const rows = buildUnifiedRows(feeds, motisArchives);
-        if (rows.length === 0) {
+        if (allRows.length === 0) {
           return (
             <Alert severity="info">
               No GTFS feeds yet. Either run{" "}
@@ -1009,6 +1051,35 @@ function GtfsSection({
               SQL-based stop/route lookups (place panel, transit-gtfs-local provider). The same
               upstream feed can live in either or both.
             </Typography>
+            <Box sx={{ mb: 2 }}>
+              <TableToolbar>
+                <TableSearchField
+                  value={query}
+                  onChange={setQuery}
+                  placeholder="Search feeds by name, slug, or URL…"
+                />
+                <FormControl size="small" sx={{ minWidth: 150 }}>
+                  <Select
+                    value={storeFilter}
+                    onChange={(e) => setStoreFilter(e.target.value as typeof storeFilter)}
+                  >
+                    <MenuItem value="all">All stores</MenuItem>
+                    <MenuItem value="postgres">In Postgres</MenuItem>
+                    <MenuItem value="motis">In MOTIS</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControl size="small" sx={{ minWidth: 150 }}>
+                  <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                    <MenuItem value="all">All statuses</MenuItem>
+                    {statusOptions.map((s) => (
+                      <MenuItem key={s} value={s}>
+                        {s}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </TableToolbar>
+            </Box>
             <TableContainer>
               <Table size="small">
                 <TableHead>
@@ -1024,161 +1095,166 @@ function GtfsSection({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {rows.map((row) => {
-                    const pg = row.postgres;
-                    const motis = row.motis;
-                    const displayName = pg?.name ?? motis?.id ?? row.key;
-                    const updatedIso = pg?.importedAt ?? motis?.modifiedAt;
-                    // Prefer the Postgres-recorded origin (it survives MOTIS-side cleanup) and
-                    // fall back to the catalog-derived MOTIS archive URL when the feed only
-                    // exists on disk.
-                    const originUrl = pg?.originUrl ?? motis?.originUrl ?? null;
-                    const status = pg?.status ?? (motis ? "motis-only" : "—");
-                    const statusColor: "success" | "warning" | "default" | "info" =
-                      status === "active"
-                        ? "success"
-                        : status === "importing" || status === "downloading"
-                          ? "warning"
-                          : status === "motis-only"
-                            ? "info"
-                            : "default";
-                    return (
-                      <TableRow key={row.key} hover>
-                        <TableCell>
-                          <Stack spacing={0.25}>
-                            <Typography variant="body2">{displayName}</Typography>
-                            <Typography
-                              variant="caption"
+                  {paged.length === 0 ? (
+                    <TableEmptyState colSpan={8} message="No feeds match your search or filters." />
+                  ) : (
+                    paged.map((row) => {
+                      const pg = row.postgres;
+                      const motis = row.motis;
+                      const displayName = pg?.name ?? motis?.id ?? row.key;
+                      const updatedIso = pg?.importedAt ?? motis?.modifiedAt;
+                      // Prefer the Postgres-recorded origin (it survives MOTIS-side cleanup) and
+                      // fall back to the catalog-derived MOTIS archive URL when the feed only
+                      // exists on disk.
+                      const originUrl = pg?.originUrl ?? motis?.originUrl ?? null;
+                      const status = pg?.status ?? (motis ? "motis-only" : "—");
+                      const statusColor: "success" | "warning" | "default" | "info" =
+                        status === "active"
+                          ? "success"
+                          : status === "importing" || status === "downloading"
+                            ? "warning"
+                            : status === "motis-only"
+                              ? "info"
+                              : "default";
+                      return (
+                        <TableRow key={row.key} hover>
+                          <TableCell>
+                            <Stack spacing={0.25}>
+                              <Typography variant="body2">{displayName}</Typography>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  color: "text.secondary",
+                                  fontFamily: "monospace",
+                                }}
+                              >
+                                {pg ? `g-${pg.slug}` : row.key}
+                                {motis ? ` · ${formatBytes(motis.sizeBytes)}` : ""}
+                              </Typography>
+                              {originUrl && (
+                                <Tooltip title={originUrl}>
+                                  <Typography
+                                    variant="caption"
+                                    sx={{
+                                      color: "text.secondary",
+                                      maxWidth: 280,
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                      whiteSpace: "nowrap",
+                                    }}
+                                  >
+                                    origin:{" "}
+                                    <Box
+                                      component="a"
+                                      href={originUrl}
+                                      target="_blank"
+                                      rel="noreferrer noopener"
+                                      sx={{ color: "inherit", textDecoration: "underline" }}
+                                    >
+                                      {originUrl}
+                                    </Box>
+                                  </Typography>
+                                </Tooltip>
+                              )}
+                            </Stack>
+                          </TableCell>
+                          <TableCell>
+                            <Stack direction="row" spacing={0.5}>
+                              {motis && <Chip label="MOTIS" size="small" variant="outlined" />}
+                              {pg && (
+                                <Chip
+                                  label="Postgres"
+                                  size="small"
+                                  color="primary"
+                                  variant="outlined"
+                                />
+                              )}
+                            </Stack>
+                          </TableCell>
+                          <TableCell>
+                            <Stack spacing={0.25}>
+                              <Chip label={status} size="small" color={statusColor} />
+                              {pg?.currentStage &&
+                                (status === "importing" || status === "downloading") && (
+                                  <Typography
+                                    variant="caption"
+                                    sx={{
+                                      color: "text.secondary",
+                                      pl: 0.25,
+                                    }}
+                                  >
+                                    {pg.currentStage}
+                                  </Typography>
+                                )}
+                              {pg?.errorMessage && status === "failed" && (
+                                <Tooltip title={pg.errorMessage}>
+                                  <Typography
+                                    variant="caption"
+                                    color="error"
+                                    sx={{
+                                      pl: 0.25,
+                                      maxWidth: 200,
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                      whiteSpace: "nowrap",
+                                      cursor: "help",
+                                    }}
+                                  >
+                                    {pg.errorMessage}
+                                  </Typography>
+                                </Tooltip>
+                              )}
+                            </Stack>
+                          </TableCell>
+                          <TableCell>{pg?.rowCounts?.stops?.toLocaleString() ?? "—"}</TableCell>
+                          <TableCell>{pg?.rowCounts?.routes?.toLocaleString() ?? "—"}</TableCell>
+                          <TableCell>{renderExpiryCell(pg?.serviceEndDate)}</TableCell>
+                          <TableCell>{updatedIso ? formatDate(updatedIso) : "—"}</TableCell>
+                          <TableCell align="right">
+                            <Stack
+                              direction="row"
+                              spacing={0.5}
                               sx={{
-                                color: "text.secondary",
-                                fontFamily: "monospace",
+                                justifyContent: "flex-end",
                               }}
                             >
-                              {pg ? `g-${pg.slug}` : row.key}
-                              {motis ? ` · ${formatBytes(motis.sizeBytes)}` : ""}
-                            </Typography>
-                            {originUrl && (
-                              <Tooltip title={originUrl}>
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    color: "text.secondary",
-                                    maxWidth: 280,
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                  }}
-                                >
-                                  origin:{" "}
-                                  <Box
-                                    component="a"
-                                    href={originUrl}
-                                    target="_blank"
-                                    rel="noreferrer noopener"
-                                    sx={{ color: "inherit", textDecoration: "underline" }}
-                                  >
-                                    {originUrl}
-                                  </Box>
-                                </Typography>
-                              </Tooltip>
-                            )}
-                          </Stack>
-                        </TableCell>
-                        <TableCell>
-                          <Stack direction="row" spacing={0.5}>
-                            {motis && <Chip label="MOTIS" size="small" variant="outlined" />}
-                            {pg && (
-                              <Chip
-                                label="Postgres"
-                                size="small"
-                                color="primary"
-                                variant="outlined"
-                              />
-                            )}
-                          </Stack>
-                        </TableCell>
-                        <TableCell>
-                          <Stack spacing={0.25}>
-                            <Chip label={status} size="small" color={statusColor} />
-                            {pg?.currentStage &&
-                              (status === "importing" || status === "downloading") && (
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    color: "text.secondary",
-                                    pl: 0.25,
-                                  }}
-                                >
-                                  {pg.currentStage}
-                                </Typography>
+                              {!pg && motis && (
+                                <Tooltip title="Promote this MOTIS-fetched archive into Postgres (no re-download — apps/api reads the local zip directly)">
+                                  <span>
+                                    <Button
+                                      size="small"
+                                      disabled={importMutation.isPending}
+                                      onClick={() =>
+                                        importMutation.mutate({ motisArchiveId: motis.id })
+                                      }
+                                    >
+                                      Import to Postgres
+                                    </Button>
+                                  </span>
+                                </Tooltip>
                               )}
-                            {pg?.errorMessage && status === "failed" && (
-                              <Tooltip title={pg.errorMessage}>
-                                <Typography
-                                  variant="caption"
-                                  color="error"
-                                  sx={{
-                                    pl: 0.25,
-                                    maxWidth: 200,
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                    cursor: "help",
-                                  }}
-                                >
-                                  {pg.errorMessage}
-                                </Typography>
-                              </Tooltip>
-                            )}
-                          </Stack>
-                        </TableCell>
-                        <TableCell>{pg?.rowCounts?.stops?.toLocaleString() ?? "—"}</TableCell>
-                        <TableCell>{pg?.rowCounts?.routes?.toLocaleString() ?? "—"}</TableCell>
-                        <TableCell>{renderExpiryCell(pg?.serviceEndDate)}</TableCell>
-                        <TableCell>{updatedIso ? formatDate(updatedIso) : "—"}</TableCell>
-                        <TableCell align="right">
-                          <Stack
-                            direction="row"
-                            spacing={0.5}
-                            sx={{
-                              justifyContent: "flex-end",
-                            }}
-                          >
-                            {!pg && motis && (
-                              <Tooltip title="Promote this MOTIS-fetched archive into Postgres (no re-download — apps/api reads the local zip directly)">
-                                <span>
-                                  <Button
+                              {pg && (
+                                <Tooltip title="Remove from Postgres (the MOTIS zip on disk is untouched)">
+                                  <IconButton
                                     size="small"
-                                    disabled={importMutation.isPending}
-                                    onClick={() =>
-                                      importMutation.mutate({ motisArchiveId: motis.id })
-                                    }
+                                    color="error"
+                                    onClick={() => removeMutation.mutate(pg.slug)}
+                                    disabled={removeMutation.isPending}
                                   >
-                                    Import to Postgres
-                                  </Button>
-                                </span>
-                              </Tooltip>
-                            )}
-                            {pg && (
-                              <Tooltip title="Remove from Postgres (the MOTIS zip on disk is untouched)">
-                                <IconButton
-                                  size="small"
-                                  color="error"
-                                  onClick={() => removeMutation.mutate(pg.slug)}
-                                  disabled={removeMutation.isPending}
-                                >
-                                  <DeleteIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                            )}
-                          </Stack>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                            </Stack>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
                 </TableBody>
               </Table>
             </TableContainer>
+            <AdminTablePagination {...paginationProps} />
           </>
         );
       })()}

@@ -18,7 +18,6 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
-import TablePagination from "@mui/material/TablePagination";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
@@ -27,7 +26,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { relativeTimeFromIso } from "@/lib/formatTime";
+import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { TableSkeleton } from "../shared/TableSkeleton";
+import { useServerPagination } from "../shared/tableHooks";
 import { ActorCell } from "./ActorCell";
 
 interface AuditEntry {
@@ -201,15 +202,14 @@ export function AuditLog() {
   const [actionFilter, setActionFilter] = useState("");
   const [targetTypeFilter, setTargetTypeFilter] = useState("");
   const [targetSearch, setTargetSearch] = useState("");
-  const [page, setPage] = useState(0);
-  const rowsPerPage = 50;
+  const { page, rowsPerPage, offset, setPage, paginationProps } = useServerPagination(50);
 
   const { data, isLoading, isFetching } = useQuery<{ entries: AuditEntry[]; total: number }>({
     queryKey: ["admin", "audit", actionFilter, targetTypeFilter, targetSearch, page],
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: String(rowsPerPage),
-        offset: String(page * rowsPerPage),
+        offset: String(offset),
       });
       if (actionFilter) params.set("action", actionFilter);
       if (targetTypeFilter) params.set("targetType", targetTypeFilter);
@@ -469,16 +469,12 @@ export function AuditLog() {
           )}
         </Table>
       </TableContainer>
-      {!!data?.entries.length && (
-        <TablePagination
-          component="div"
-          count={data.total}
-          page={page}
-          onPageChange={(_, p) => setPage(p)}
-          rowsPerPage={rowsPerPage}
-          rowsPerPageOptions={[50]}
-        />
-      )}
+      <AdminTablePagination
+        {...paginationProps}
+        count={data?.total ?? 0}
+        rowsPerPageOptions={[50]}
+        hideSinglePage={false}
+      />
     </Stack>
   );
 }

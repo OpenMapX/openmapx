@@ -17,11 +17,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
+import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 import { ErrorState } from "../shared/ErrorState";
 import { TableEmptyState } from "../shared/TableEmptyState";
 import { TableSkeleton } from "../shared/TableSkeleton";
+import { useClientPagination } from "../shared/tableHooks";
 
 interface CacheNamespace {
   namespace: string;
@@ -72,6 +74,7 @@ export function CacheManager() {
   });
 
   const namespaces = data?.namespaces ?? [];
+  const { paged, paginationProps } = useClientPagination(namespaces);
   const confirmMessage =
     target?.kind === "namespace"
       ? `Clear all cached keys under "${target.namespace}"? This cannot be undone.`
@@ -122,7 +125,7 @@ export function CacheManager() {
                 {namespaces.length === 0 ? (
                   <TableEmptyState colSpan={3} message="No cached data found" />
                 ) : (
-                  namespaces.map((ns) => (
+                  paged.map((ns) => (
                     <TableRow key={ns.namespace} hover>
                       <TableCell sx={{ fontFamily: "monospace" }}>{ns.namespace}</TableCell>
                       <TableCell align="right">{ns.keyCount}</TableCell>
@@ -142,6 +145,7 @@ export function CacheManager() {
               </TableBody>
             )}
           </Table>
+          <AdminTablePagination {...paginationProps} />
         </TableContainer>
       )}
 

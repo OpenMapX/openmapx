@@ -34,7 +34,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
+import { useClientPagination } from "../shared/tableHooks";
 import { BanUserDialog } from "./BanUserDialog";
 
 interface AdminUser {
@@ -327,6 +329,9 @@ function SessionsTab({ userId }: { userId: string }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "user-sessions", userId] }),
   });
 
+  const sessions = data ?? [];
+  const { paged, paginationProps } = useClientPagination(sessions);
+
   if (isLoading) return <CircularProgress size={24} sx={{ mt: 2 }} />;
 
   return (
@@ -379,7 +384,7 @@ function SessionsTab({ userId }: { userId: string }) {
                   </TableCell>
                 </TableRow>
               ) : (
-                (data ?? []).map((s) => (
+                paged.map((s) => (
                   <TableRow key={s.id} hover>
                     <TableCell>
                       <Typography variant="body2">{s.ipAddress ?? "—"}</Typography>
@@ -417,6 +422,7 @@ function SessionsTab({ userId }: { userId: string }) {
             </TableBody>
           </Table>
         </TableContainer>
+        <AdminTablePagination {...paginationProps} />
       </Paper>
     </Stack>
   );

@@ -13,13 +13,14 @@ import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
-import TablePagination from "@mui/material/TablePagination";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
+import { AdminTablePagination } from "../shared/AdminTablePagination";
+import { useServerPagination } from "../shared/tableHooks";
 
 interface AppLogEntry {
   id: number;
@@ -117,8 +118,7 @@ export function AppLogViewer() {
   const [timeRange, setTimeRange] = useState("last 1h");
   const [search, setSearch] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(100);
+  const { page, rowsPerPage, offset, setPage, paginationProps } = useServerPagination(100);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const sinceMs = TIME_RANGES[timeRange];
@@ -133,7 +133,7 @@ export function AppLogViewer() {
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: String(rowsPerPage),
-        offset: String(page * rowsPerPage),
+        offset: String(offset),
       });
       if (levelFilter && levelFilter !== "all") params.set("level", levelFilter);
       if (sourceFilter && sourceFilter !== "all") params.set("source", sourceFilter);
@@ -302,17 +302,11 @@ export function AppLogViewer() {
           </>
         )}
       </Box>
-      <TablePagination
-        component="div"
+      <AdminTablePagination
+        {...paginationProps}
         count={data?.total ?? 0}
-        page={page}
-        rowsPerPage={rowsPerPage}
         rowsPerPageOptions={[100, 200, 500]}
-        onPageChange={(_, p) => setPage(p)}
-        onRowsPerPageChange={(e) => {
-          setRowsPerPage(Number(e.target.value));
-          setPage(0);
-        }}
+        hideSinglePage={false}
       />
     </Stack>
   );
