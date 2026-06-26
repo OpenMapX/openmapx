@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob, adminJobLog } from "../db/schema";
+import { dbActorId } from "../utils/actor";
 
 export interface JobContext {
   jobId: string;
@@ -34,7 +35,8 @@ class AdminJobRunner {
       type,
       status: "queued",
       payload,
-      createdBy: createdBy ?? null,
+      // Synthetic (loopback) actors have no user row → store null, not a FK violation.
+      createdBy: dbActorId(createdBy),
     });
     setTimeout(() => void this.pump(), 0);
     return id;

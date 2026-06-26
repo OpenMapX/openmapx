@@ -12,6 +12,7 @@ import { db } from "../db";
 import { installedIntegration } from "../db/schema";
 import { reloadIntegrations } from "../integration-host";
 import { redis } from "../redis";
+import { dbActorId } from "../utils/actor";
 import { envString } from "../utils/env.js";
 import type { JobContext } from "./job-runner";
 
@@ -312,7 +313,7 @@ export async function handleInstallJob(ctx: JobContext): Promise<Record<string, 
       sourceType,
       installedAt: now,
       updatedAt: now,
-      installedBy: payload.actorId ?? null,
+      installedBy: dbActorId(payload.actorId),
     })
     .onConflictDoUpdate({
       target: installedIntegration.id,
@@ -321,7 +322,7 @@ export async function handleInstallJob(ctx: JobContext): Promise<Record<string, 
         installedVersion,
         sourceType,
         updatedAt: now,
-        installedBy: payload.actorId ?? null,
+        installedBy: dbActorId(payload.actorId),
       },
     });
 
@@ -368,7 +369,7 @@ export async function handleUpdateJob(ctx: JobContext): Promise<Record<string, u
     .set({
       installedVersion: payload.installedVersion ?? "unknown",
       updatedAt: new Date(),
-      installedBy: payload.actorId ?? null,
+      installedBy: dbActorId(payload.actorId),
     })
     .where(eq(installedIntegration.id, payload.id));
 

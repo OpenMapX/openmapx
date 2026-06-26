@@ -13,6 +13,7 @@ import {
   serviceRepository,
 } from "../db/schema";
 import { reloadIntegrations } from "../integration-host";
+import { dbActorId } from "../utils/actor";
 import { dockerComposeAction } from "../utils/docker-compose";
 import {
   getServiceSelectionSummary,
@@ -100,6 +101,8 @@ export async function installExtension(
   opts: InstallExtensionOptions,
 ): Promise<{ id: string; components: number }> {
   const { manifest } = opts;
+  // Synthetic (loopback) actors have no user row → attribute to null.
+  const installedBy = dbActorId(opts.actorId);
 
   if (manifest.platform && !satisfiesPlatformVersion(manifest.platform)) {
     throw new Error(
@@ -172,7 +175,7 @@ export async function installExtension(
           sourceType: "registry",
           installedAt: now,
           updatedAt: now,
-          installedBy: opts.actorId ?? null,
+          installedBy,
           managedByExtension: manifest.id,
         })
         .onConflictDoUpdate({
