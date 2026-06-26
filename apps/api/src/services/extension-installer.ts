@@ -15,11 +15,7 @@ import {
 import { reloadIntegrations } from "../integration-host";
 import { dbActorId } from "../utils/actor";
 import { dockerComposeAction } from "../utils/docker-compose";
-import {
-  getServiceSelectionSummary,
-  validateServiceSelectionForWrite,
-  writeServiceSelection,
-} from "./admin-cli";
+import { getServiceSelectionSummary, writeServiceSelection } from "./admin-cli";
 import { renderAndPersistCompose, serviceStart } from "./admin-ops";
 import type { JobContext } from "./job-runner";
 import { getServiceRegistry, initServiceRegistry } from "./service-registry";
@@ -56,31 +52,46 @@ async function integrationInstalledExists(id: string): Promise<boolean> {
   return !!row;
 }
 
-/** Add service ids to the file-based selection. Returns the ids newly added. */
+// Enable/disable services for the *running* api without an api restart. The
+// app-api container always carries a baked OPENMAPX_ENABLED_SERVICES (the
+// renderer injects it — see buildAppApiServiceEnv), which puts selection in
+// "env mode" where the file can't be edited via the normal guarded path. So we
+// (a) apply the new enabled set to the in-memory registry — that's what
+// renderAndPersistCompose reads to (re)bake the env + emit the compose this
+// instant — and (b) write the selection file too, the source of truth a later
+// host-side `compose render` consumes. Both must agree; do not re-init the
+// registry from env after this (that would re-read the stale baked list).
+
+/** Re-derive and apply an enabled set from a fresh root list, persist the file. */
+function applySelectionRoots(roots: string[], allowMissing: boolean): void {
+  const registry = getServiceRegistry();
+  const normalized = coreServices.normalizeServiceIds(roots);
+  const expanded = coreServices.expandServiceSelection(registry.list(), normalized, {
+    allowMissingSelected: allowMissing,
+  });
+  if (expanded.missingIds.length > 0) {
+    throw new Error(`Selected service(s) are not installed: ${expanded.missingIds.join(", ")}`);
+  }
+  writeServiceSelection(normalized);
+  registry.applyEnabledIds(expanded.enabledIds);
+}
+
+/** Add service ids to the selection. Returns the ids newly added. */
 function enableServicesInSelection(serviceIds: string[]): string[] {
   const registry = getServiceRegistry();
-  const summary = getServiceSelectionSummary(registry);
-  const roots = [...summary.selectedRoots];
-  const added: string[] = [];
-  for (const id of serviceIds) {
-    if (!roots.includes(id)) {
-      roots.push(id);
-      added.push(id);
-    }
-  }
-  if (added.length > 0) {
-    const { normalized } = validateServiceSelectionForWrite(registry, roots);
-    writeServiceSelection(normalized);
-  }
+  const roots = [...getServiceSelectionSummary(registry).selectedRoots];
+  const added = serviceIds.filter((id) => !roots.includes(id));
+  if (added.length === 0) return [];
+  applySelectionRoots([...roots, ...added], false);
   return added;
 }
 
 function disableServicesInSelection(serviceIds: string[]): void {
   const registry = getServiceRegistry();
-  const summary = getServiceSelectionSummary(registry);
-  const roots = summary.selectedRoots.filter((r) => !serviceIds.includes(r));
-  const { normalized } = validateServiceSelectionForWrite(registry, roots);
-  writeServiceSelection(normalized);
+  const roots = getServiceSelectionSummary(registry).selectedRoots.filter(
+    (r) => !serviceIds.includes(r),
+  );
+  applySelectionRoots(roots, true);
 }
 
 interface InstallLedger {
@@ -132,13 +143,13 @@ export async function installExtension(
     }
     await ctx.setProgress(25);
 
-    // 2. Reload the registry so the freshly-cloned services are loadable, then
-    // enable them in the selection and reload again to apply.
+    // 2. Reload the registry so the freshly-cloned services appear in list(),
+    // then enable them in-memory (applySelectionRoots also persists the file).
+    // Do NOT re-init after enabling — that re-reads the stale baked env list.
     if (serviceComponents.length > 0) {
       await initServiceRegistry();
       const newlyEnabled = enableServicesInSelection(serviceComponents.map((s) => s.service));
       ledger.enabledServiceIds.push(...newlyEnabled);
-      await initServiceRegistry();
 
       await ctx.log("Rendering compose...");
       await renderAndPersistCompose();
@@ -282,7 +293,9 @@ async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<
     await removeRepo(hash).catch(() => {});
   }
   if (ledger.enabledServiceIds.length > 0 || ledger.addedRepoHashes.length > 0) {
-    await initServiceRegistry().catch(() => {});
+    // disableServicesInSelection already applied the reduced enabled set in
+    // memory; just re-render. (No initServiceRegistry — it would re-read the
+    // stale baked OPENMAPX_ENABLED_SERVICES and undo the disable.)
     await renderAndPersistCompose().catch(() => {});
   }
 }
@@ -334,7 +347,9 @@ export async function removeExtension(
       await ctx.log(`Removing service repo ${repo.url}...`);
       await removeRepo(repo.hash).catch(() => {});
     }
-    await initServiceRegistry().catch(() => {});
+    // disableServicesInSelection already applied the reduced enabled set in
+    // memory; re-render to drop the service from compose (no registry re-init,
+    // which would re-read the stale baked env).
     await renderAndPersistCompose().catch(() => {});
   }
   await ctx.setProgress(60);
