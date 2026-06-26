@@ -1267,18 +1267,14 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
         gap: 3,
       }}
     >
-      <Stack
-        direction="row"
-        sx={{
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 1.5,
-        }}
-      >
+      <Stack sx={{ gap: 1 }}>
         <Stack
+          direction="row"
           sx={{
-            gap: 1,
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 1.5,
           }}
         >
           <Stack
@@ -1286,6 +1282,9 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
             sx={{
               alignItems: "center",
               gap: 1.5,
+              flexWrap: "wrap",
+              minWidth: 0,
+              flexGrow: 1,
             }}
           >
             <IntegrationStatusDot
@@ -1304,66 +1303,61 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
               {data.name}
             </Typography>
             <StatusBadge quality={data.quality} />
+            <Stack direction="row" sx={{ gap: 0.5, flexWrap: "wrap" }}>
+              {data.domains.map((d) => (
+                <DomainChip key={d} domain={d} />
+              ))}
+            </Stack>
           </Stack>
           <Stack
             direction="row"
             sx={{
-              gap: 0.5,
+              gap: 1,
               flexWrap: "wrap",
+              alignItems: "center",
+              flexShrink: 0,
             }}
           >
-            {data.domains.map((d) => (
-              <DomainChip key={d} domain={d} />
-            ))}
-          </Stack>
-          {data.description && (
-            <Typography
-              variant="body2"
-              sx={{
-                color: "text.secondary",
-              }}
+            <Button
+              size="small"
+              variant={data.enabled ? "outlined" : "contained"}
+              color={data.enabled ? "error" : "success"}
+              startIcon={isBusy ? <CircularProgress size={14} /> : <PowerSettingsNewIcon />}
+              onClick={() => toggleMutation.mutate(!data.enabled)}
+              disabled={isBusy}
             >
-              {data.description}
-            </Typography>
-          )}
+              {data.enabled ? "Disable" : "Enable"}
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={isBusy ? <CircularProgress size={14} /> : <RefreshIcon />}
+              onClick={() => reloadMutation.mutate()}
+              disabled={isBusy}
+            >
+              Reload
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<OpenInNewIcon />}
+              component={NextLink}
+              href="/admin/integrations"
+            >
+              Back to list
+            </Button>
+          </Stack>
         </Stack>
-        <Stack
-          direction="row"
-          sx={{
-            gap: 1,
-            flexWrap: "wrap",
-            alignItems: "center",
-          }}
-        >
-          <Button
-            size="small"
-            variant={data.enabled ? "outlined" : "contained"}
-            color={data.enabled ? "error" : "success"}
-            startIcon={isBusy ? <CircularProgress size={14} /> : <PowerSettingsNewIcon />}
-            onClick={() => toggleMutation.mutate(!data.enabled)}
-            disabled={isBusy}
+        {data.description && (
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+            }}
           >
-            {data.enabled ? "Disable" : "Enable"}
-          </Button>
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={isBusy ? <CircularProgress size={14} /> : <RefreshIcon />}
-            onClick={() => reloadMutation.mutate()}
-            disabled={isBusy}
-          >
-            Reload
-          </Button>
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<OpenInNewIcon />}
-            component={NextLink}
-            href="/admin/integrations"
-          >
-            Back to list
-          </Button>
-        </Stack>
+            {data.description}
+          </Typography>
+        )}
       </Stack>
       <Divider />
       <Box>

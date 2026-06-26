@@ -532,18 +532,14 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
         gap: 3,
       }}
     >
-      <Stack
-        direction="row"
-        sx={{
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 1.5,
-        }}
-      >
+      <Stack sx={{ gap: 1 }}>
         <Stack
+          direction="row"
           sx={{
-            gap: 1,
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 1.5,
           }}
         >
           <Stack
@@ -552,6 +548,8 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
               alignItems: "center",
               gap: 1.5,
               flexWrap: "wrap",
+              minWidth: 0,
+              flexGrow: 1,
             }}
           >
             <Typography
@@ -582,90 +580,90 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
               />
             )}
           </Stack>
+          <Stack
+            direction="row"
+            sx={{
+              gap: 1,
+              flexWrap: "wrap",
+              alignItems: "center",
+              flexShrink: 0,
+            }}
+          >
+            <Tooltip title="Recreate this service from the latest rendered compose and hardlink plan.">
+              <span>
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="success"
+                  startIcon={isBusy ? <CircularProgress size={14} /> : <PlayArrowIcon />}
+                  onClick={() => runAction("start")}
+                  disabled={isBusy}
+                >
+                  {data.status === "running" ? "Recreate" : "Start"}
+                </Button>
+              </span>
+            </Tooltip>
+            <Button
+              size="small"
+              variant="outlined"
+              color="error"
+              startIcon={isBusy ? <CircularProgress size={14} /> : <StopIcon />}
+              onClick={() => runAction("stop")}
+              disabled={isBusy || data.status === "exited" || data.status === "not-running"}
+            >
+              Stop
+            </Button>
+            <Tooltip title="In-place restart only. Use Start to apply new config/compose/hardlink changes.">
+              <span>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={isBusy ? <CircularProgress size={14} /> : <RefreshIcon />}
+                  onClick={() => runAction("restart")}
+                  disabled={isBusy}
+                >
+                  Restart
+                </Button>
+              </span>
+            </Tooltip>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<ArticleIcon />}
+              onClick={() => setLogsOpen(true)}
+            >
+              Logs
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<OpenInNewIcon />}
+              component={NextLink}
+              href="/admin/services"
+            >
+              Back to catalog
+            </Button>
+          </Stack>
+        </Stack>
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+            fontFamily: "monospace",
+          }}
+        >
+          {manifest.id} · v{manifest.version}
+        </Typography>
+        {manifest.description && (
           <Typography
             variant="body2"
             sx={{
               color: "text.secondary",
-              fontFamily: "monospace",
             }}
           >
-            {manifest.id} · v{manifest.version}
+            {manifest.description}
           </Typography>
-          {manifest.description && (
-            <Typography
-              variant="body2"
-              sx={{
-                color: "text.secondary",
-              }}
-            >
-              {manifest.description}
-            </Typography>
-          )}
-        </Stack>
-
-        <Stack
-          direction="row"
-          sx={{
-            gap: 1,
-            flexWrap: "wrap",
-            alignItems: "center",
-          }}
-        >
-          <Tooltip title="Recreate this service from the latest rendered compose and hardlink plan.">
-            <span>
-              <Button
-                size="small"
-                variant="contained"
-                color="success"
-                startIcon={isBusy ? <CircularProgress size={14} /> : <PlayArrowIcon />}
-                onClick={() => runAction("start")}
-                disabled={isBusy}
-              >
-                {data.status === "running" ? "Recreate" : "Start"}
-              </Button>
-            </span>
-          </Tooltip>
-          <Button
-            size="small"
-            variant="outlined"
-            color="error"
-            startIcon={isBusy ? <CircularProgress size={14} /> : <StopIcon />}
-            onClick={() => runAction("stop")}
-            disabled={isBusy || data.status === "exited" || data.status === "not-running"}
-          >
-            Stop
-          </Button>
-          <Tooltip title="In-place restart only. Use Start to apply new config/compose/hardlink changes.">
-            <span>
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={isBusy ? <CircularProgress size={14} /> : <RefreshIcon />}
-                onClick={() => runAction("restart")}
-                disabled={isBusy}
-              >
-                Restart
-              </Button>
-            </span>
-          </Tooltip>
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<ArticleIcon />}
-            onClick={() => setLogsOpen(true)}
-          >
-            Logs
-          </Button>
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<OpenInNewIcon />}
-            component={NextLink}
-            href="/admin/services"
-          >
-            Back to catalog
-          </Button>
-        </Stack>
+        )}
       </Stack>
       <Divider />
       <Box>
