@@ -1,8 +1,13 @@
 import { join } from "node:path";
 import { Command } from "commander";
+import { type BundleOptions, runBundle } from "./commands/bundle.js";
 import { runPackage } from "./commands/package.js";
 import { scaffoldIntegration, scaffoldService } from "./commands/scaffold.js";
 import { runValidate } from "./commands/validate.js";
+
+function collect(value: string, previous: string[]): string[] {
+  return [...previous, value];
+}
 
 const program = new Command();
 
@@ -76,6 +81,34 @@ program
   .description("Validate an integration directory against the manifest schema")
   .action(async (source: string) => {
     await runValidate(source);
+  });
+
+program
+  .command("bundle")
+  .description("Emit an extension.json bundle (N services + N integrations) for the store")
+  .requiredOption("--id <id>", "Extension id (lowercase, hyphenated)")
+  .requiredOption("--name <name>", "Display name")
+  .requiredOption("--version <version>", "Bundle version (SemVer)")
+  .option("--platform <version>", "Minimum platform version")
+  .option("--description <text>", "Description")
+  .option("--license <spdx>", "SPDX license id")
+  .option("--homepage <url>", "Homepage URL")
+  .option("--service <repo,ref,serviceId>", "Service component (repeatable)", collect, [])
+  .option(
+    "--integration <artifactUrl,sha256,id>",
+    "Integration component (repeatable)",
+    collect,
+    [],
+  )
+  .option("--out <file>", "Output path", "extension.json")
+  .action((options: BundleOptions & { out: string }) => {
+    try {
+      const out = runBundle(options);
+      console.log(`Wrote ${out}`);
+    } catch (err) {
+      console.error(`bundle failed: ${(err as Error).message}`);
+      process.exit(1);
+    }
   });
 
 program.parse();
