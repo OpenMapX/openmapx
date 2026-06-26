@@ -520,7 +520,8 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
 
   function handleTabChange(_: React.SyntheticEvent, value: number) {
     setTab(value);
-    if (value === 2) {
+    // Auto-open the logs drawer when the Logs tab is selected.
+    if (TABS[value] === "Logs") {
       setLogsOpen(true);
     }
   }
