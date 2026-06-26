@@ -1,5 +1,5 @@
+import { findNearestStation, type NoaaStation as TideStation } from "@openmapx/noaa-coops-data";
 import { describe, expect, it } from "vitest";
-import { findNearestStation, type TideStation } from "../data.js";
 
 const STATIONS: TideStation[] = [
   { id: "9414290", name: "San Francisco", lat: 37.8067, lng: -122.4659 },
