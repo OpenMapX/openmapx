@@ -1,7 +1,6 @@
 import { USER_AGENT_ADMIN, validatePublicUrl } from "@openmapx/core";
 import { services as coreServices } from "@openmapx/core/server";
 import { PLATFORM_VERSION, satisfiesPlatformVersion } from "@openmapx/integration-framework";
-import { eq } from "drizzle-orm";
 import { db } from "../db";
 import {
   type InstalledExtensionRow,
@@ -10,7 +9,6 @@ import {
 } from "../db/schema";
 import { redis } from "../redis";
 import { envString } from "../utils/env.js";
-import { getCatalog as getIntegrationCatalog } from "./store";
 
 type ExtensionManifest = coreServices.ExtensionManifest;
 type ExtensionTrust = "built-in" | "verified" | "community";
@@ -134,35 +132,6 @@ async function fetchCatalogFromUrl(url: string): Promise<FetchedCatalog> {
   };
 }
 
-/** Map a legacy integration catalog entry to a degenerate (single-integration) extension entry. */
-function integrationEntryToExtension(e: {
-  id: string;
-  name: string;
-  description: string;
-  author: string;
-  version: string;
-  minPlatform: string;
-  tags: string[];
-  artifact?: { url: string; sha256?: string };
-  lastUpdated: string;
-  quality: string;
-}): ExtensionCatalogEntry | null {
-  if (!e.artifact?.url) return null;
-  return {
-    id: e.id,
-    name: e.name,
-    summary: e.description,
-    description: e.description,
-    author: e.author,
-    version: e.version,
-    minPlatform: e.minPlatform,
-    tags: e.tags,
-    lastUpdated: e.lastUpdated,
-    integrations: [{ artifact: e.artifact.url, sha256: e.artifact.sha256, id: e.id }],
-    trust: e.quality === "community-verified" ? "verified" : "community",
-  };
-}
-
 interface CachedCatalog {
   entries: ExtensionCatalogEntry[];
   killSwitch: {
@@ -197,21 +166,6 @@ async function buildCatalog(): Promise<CachedCatalog> {
     } catch (err) {
       console.warn(`[extstore] Failed to fetch catalog from ${source.url}:`, err);
     }
-  }
-
-  // Fold the legacy integration catalog in as degenerate extensions, so the
-  // unified store shows existing community integrations alongside bundles.
-  try {
-    for (const ie of await getIntegrationCatalog()) {
-      if (seen.has(ie.id)) continue;
-      const mapped = integrationEntryToExtension(ie);
-      if (mapped) {
-        seen.add(ie.id);
-        entries.push(mapped);
-      }
-    }
-  } catch (err) {
-    console.warn("[extstore] Failed to fold legacy integration catalog:", err);
   }
 
   return { entries, killSwitch: { removed, critical } };

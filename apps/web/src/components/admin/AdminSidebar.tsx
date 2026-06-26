@@ -11,7 +11,6 @@ import PoiIcon from "@mui/icons-material/LocationOn";
 import UsersIcon from "@mui/icons-material/People";
 import BackupIcon from "@mui/icons-material/Restore";
 import SettingsIcon from "@mui/icons-material/Settings";
-import ReposIcon from "@mui/icons-material/Source";
 import DataIcon from "@mui/icons-material/Storage";
 import StoreIcon from "@mui/icons-material/Store";
 import TransitIcon from "@mui/icons-material/Train";
@@ -39,7 +38,6 @@ const SERVICES_SUB_ITEMS = [
     icon: <CatalogIcon fontSize="small" />,
     exact: true,
   },
-  { label: "Repositories", href: "/admin/services/repos", icon: <ReposIcon fontSize="small" /> },
   {
     label: "Compose preview",
     href: "/admin/services/compose",

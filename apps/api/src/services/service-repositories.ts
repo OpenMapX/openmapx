@@ -54,13 +54,6 @@ export interface RepoManifestPreview {
   validationErrors: string[];
 }
 
-export interface RepoPreview {
-  hash: string;
-  /** First service's `name` if any, used as the human-readable label for the repo row. */
-  suggestedDisplayName?: string;
-  services: RepoManifestPreview[];
-}
-
 interface ClonedRepo {
   /** Tmp directory holding the snapshot (no `.git`). Caller owns it: rename it
    * into place on success, or `rmSync` it on validation failure. */
@@ -155,21 +148,6 @@ function readPreviewsFromClone(target: string): RepoManifestPreview[] {
   return out;
 }
 
-export async function previewRepo(url: string, ref?: string): Promise<RepoPreview> {
-  assertAllowedUrl(url);
-  const hash = hashUrl(url);
-  // Preview into a throwaway tmp clone so we never clobber an already-registered
-  // `<hash>` directory the renderer may be reading.
-  const { dir } = await cloneToTmp(url, ref);
-  try {
-    const list = readPreviewsFromClone(dir);
-    const suggestedDisplayName = list.find((s) => s.validationErrors.length === 0)?.name;
-    return { hash, suggestedDisplayName, services: list };
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-}
-
 export interface RegisterRepoOptions {
   /** Pinned git tag/branch to clone (defaults to the repo's default branch). */
   ref?: string;
@@ -239,54 +217,9 @@ export async function registerRepo(
   return rows[0];
 }
 
-export async function listRepos(): Promise<ServiceRepositoryRow[]> {
-  return db.select().from(serviceRepository);
-}
-
 export async function removeRepo(hash: string): Promise<void> {
   assertRepoHash(hash);
   const target = join(communityDir(), hash);
   if (existsSync(target)) rmSync(target, { recursive: true, force: true });
   await db.delete(serviceRepository).where(eq(serviceRepository.hash, hash));
-}
-
-export async function refreshRepo(hash: string): Promise<ServiceRepositoryRow | null> {
-  assertRepoHash(hash);
-  const [row] = await db
-    .select()
-    .from(serviceRepository)
-    .where(eq(serviceRepository.hash, hash))
-    .limit(1);
-  if (!row) return null;
-
-  // Extension-managed repos are pinned by the bundle; manual refresh would
-  // desync the coupled parts. Update via the extension instead.
-  if (row.managedByExtension) {
-    throw new InvalidGitUrlError(
-      `Repository is managed by extension "${row.managedByExtension}" — update it through the extension, not a manual refresh.`,
-    );
-  }
-
-  const target = join(communityDir(), hash);
-  // Re-clone (at the pinned ref if set, else the default branch). The previous
-  // fetch+reset path was broken once `.git` was stripped — it operated on the
-  // monorepo, not the clone. Re-cloning into a tmp dir and validating before
-  // swapping also gives clean rollback: the old clone is untouched on failure.
-  const { dir, sha } = await cloneToTmp(row.url, row.pinnedRef ?? undefined);
-  const failed = readPreviewsFromClone(dir).filter((p) => p.validationErrors.length > 0);
-  if (failed.length > 0) {
-    rmSync(dir, { recursive: true, force: true });
-    throw new InvalidGitUrlError(
-      `Refusing to refresh: ${failed.length} service(s) failed validation: ` +
-        failed.map((f) => `${f.slug}: ${f.validationErrors.join("; ")}`).join(" | "),
-    );
-  }
-
-  moveIntoPlace(dir, target);
-  const [updated] = await db
-    .update(serviceRepository)
-    .set({ lastFetchedAt: new Date(), lastSha: sha })
-    .where(eq(serviceRepository.hash, hash))
-    .returning();
-  return updated ?? null;
 }

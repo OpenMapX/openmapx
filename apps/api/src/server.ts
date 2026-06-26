@@ -24,10 +24,8 @@ import { adminCacheRoute } from "./routes/admin-cache";
 import { registerCapabilityBindingRoutes } from "./routes/admin-capability-bindings";
 import { registerAdminComposeRoutes } from "./routes/admin-compose";
 import { adminExtensionsRoute } from "./routes/admin-extensions";
-import { registerAdminServiceReposRoutes } from "./routes/admin-service-repos";
 import { adminServicesRoute } from "./routes/admin-services";
 import { adminSettingsRoute } from "./routes/admin-settings";
-import { adminStoreRoute } from "./routes/admin-store";
 import { attributionRoute } from "./routes/attribution";
 import { capabilitiesRoute } from "./routes/capabilities";
 import { dataManagerRoute } from "./routes/data-manager";
@@ -74,7 +72,6 @@ import { pruneOldRecords } from "./services/health-history";
 import { jobRunner } from "./services/job-runner";
 import { motisManager } from "./services/motis/manager";
 import { initServiceRegistry } from "./services/service-registry";
-import { handleInstallJob, handleRemoveJob, handleUpdateJob } from "./services/store";
 import {
   authLimit,
   expensivePublicApiLimit,
@@ -357,12 +354,10 @@ await server.register(adminRoute, { prefix: "/api" });
 await server.register(adminServicesRoute, { prefix: "/api" });
 await server.register(dataManagerRoute, { prefix: "/api" });
 await server.register(adminSettingsRoute, { prefix: "/api" });
-await server.register(adminStoreRoute, { prefix: "/api" });
 await server.register(adminExtensionsRoute, { prefix: "/api" });
 await server.register(adminCacheRoute, { prefix: "/api" });
 await server.register(attributionRoute, { prefix: "/api" });
 await registerCapabilityBindingRoutes(server);
-await registerAdminServiceReposRoutes(server);
 await registerAdminComposeRoutes(server);
 
 // Session endpoint
@@ -488,9 +483,6 @@ jobRunner.register("integration.reload", async (ctx) => {
   return result as Record<string, unknown>;
 });
 
-jobRunner.register("store.install", handleInstallJob);
-jobRunner.register("store.update", handleUpdateJob);
-jobRunner.register("store.remove", handleRemoveJob);
 jobRunner.register("extension.install", handleExtensionInstallJob);
 jobRunner.register("extension.remove", handleExtensionRemoveJob);
 
