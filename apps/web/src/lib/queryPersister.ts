@@ -37,22 +37,7 @@ export function createIdbPersister(key: string): Persister {
 
     async restoreClient() {
       if (!isRecentMapDataCacheEnabled()) return undefined;
-      let client = await idbGet<PersistedClient>(key);
-
-      // One-time migration of the legacy localStorage blob.
-      if (!client && typeof localStorage !== "undefined") {
-        const legacy = localStorage.getItem(key);
-        if (legacy) {
-          try {
-            client = JSON.parse(legacy) as PersistedClient;
-            await idbSet(key, client);
-          } catch {
-            client = undefined;
-          }
-          localStorage.removeItem(key);
-        }
-      }
-
+      const client = await idbGet<PersistedClient>(key);
       return client ?? undefined;
     },
 

@@ -57,10 +57,6 @@ export function isRecentMapDataQueryKey(queryKey: readonly unknown[]): boolean {
 }
 
 export async function clearRecentMapDataCache(): Promise<void> {
-  if (typeof window !== "undefined") {
-    // Remove any legacy localStorage blob as well as the current IndexedDB one.
-    window.localStorage.removeItem(QUERY_CACHE_KEY);
-  }
   await idbDelete(QUERY_CACHE_KEY);
 
   if (typeof caches !== "undefined") {

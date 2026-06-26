@@ -1,7 +1,7 @@
 "use client";
 
 import type { LabeledPlace, SavedList, SavedPlace } from "@openmapx/core";
-import { isLabeledPlace, useSession } from "@openmapx/core";
+import { useSession } from "@openmapx/core";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { idbDelete, idbGet, idbSet } from "@/lib/idbStore";
@@ -83,10 +83,7 @@ export function SavedPlacesMirror(): null {
         queryClient.setQueryData(["savedLists"], stored.lists);
       }
       if (stored.labels && queryClient.getQueryData(["labeledPlaces"]) === undefined) {
-        // Drop entries persisted by an older app version whose shape predates the
-        // current LabeledPlace (e.g. legacy `{ id: "home" }` with no label/name),
-        // which would otherwise crash consumers that read `label`/`name`.
-        queryClient.setQueryData(["labeledPlaces"], stored.labels.filter(isLabeledPlace));
+        queryClient.setQueryData(["labeledPlaces"], stored.labels);
       }
       for (const [listId, places] of Object.entries(stored.listPlaces ?? {})) {
         if (queryClient.getQueryData(["savedListPlaces", listId]) === undefined) {

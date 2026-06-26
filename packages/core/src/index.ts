@@ -452,7 +452,6 @@ export {
 } from "./types/placeIds";
 export type { RestaurantMenu } from "./types/restaurantMenu";
 export type { LabeledPlace, SavedList, SavedPlace } from "./types/saved";
-export { isLabeledPlace } from "./types/saved";
 export type { SearchIntent, SpatialConstraint, TimeConstraint } from "./types/search";
 export { isCityOrSmaller } from "./utils/administrativePlace";
 export {
