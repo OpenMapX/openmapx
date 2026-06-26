@@ -28,6 +28,15 @@ export {
   type GtfsDownloadFailure,
   type GtfsDownloadResult,
 } from "./data-manager-client";
+export {
+  type ExtensionComponentRef,
+  type ExtensionIntegrationComponent,
+  type ExtensionManifest,
+  type ExtensionServiceComponent,
+  extensionComponentSummary,
+  extensionManifestSchema,
+  validateExtensionManifest,
+} from "./extension-schema";
 export { findServiceManifestDirs } from "./manifest-discovery";
 export {
   type ManifestValidationResult,
@@ -41,6 +50,7 @@ export {
   type ResolverContext,
   resolveRequirement,
 } from "./resolver";
+export { computeServiceSecurityRating, type ServiceSecurityRating } from "./security-rating";
 export {
   buildAppApiServiceEnv,
   DEFAULT_SELECTED_SERVICE_IDS,

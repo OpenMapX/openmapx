@@ -34,7 +34,7 @@ export async function dockerComposePs(): Promise<PsEntry[]> {
 
 export async function dockerComposeAction(
   serviceId: string,
-  action: "start" | "stop" | "restart" | "recreate",
+  action: "start" | "stop" | "restart" | "recreate" | "remove",
 ): Promise<{ exitCode: number; stdout: string }> {
   const serviceArgs = serviceId ? [serviceId] : [];
   const args =
@@ -46,7 +46,11 @@ export async function dockerComposeAction(
           ["up", "-d", "--force-recreate", ...serviceArgs]
         : action === "stop"
           ? ["stop", ...serviceArgs]
-          : ["restart", ...serviceArgs];
+          : action === "remove"
+            ? // Stop + remove the container (clean teardown when uninstalling an
+              // extension's service). `-s` stops first, `-f` skips confirmation.
+              ["rm", "-sf", ...serviceArgs]
+            : ["restart", ...serviceArgs];
   try {
     const { stdout } = await execFile("docker", ["compose", "-f", composePath(), ...args], {
       timeout: 120_000,

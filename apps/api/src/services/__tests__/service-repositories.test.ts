@@ -4,20 +4,32 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { assertAllowedUrl, hashUrl, InvalidRepoUrlError } from "../service-repositories";
 
-// One real temp dir stands in for communityDir(); each test writes a
-// service.json into <tmp>/<hash>/<slug>/ so the private readPreviewsFromClone
-// reads real files. validateServiceManifest is mocked to decide pass/fail.
+// One real temp dir stands in for communityDir(). The mocked gitShallowClone
+// materializes a fresh "clone" (a <tmp>/<slug>/service.json) into the targetDir
+// it's handed, so the private readPreviewsFromClone reads real files.
+// validateServiceManifest is mocked to decide pass/fail.
 const tmpCommunityDir = mkdtempSync(join(tmpdir(), "svc-repo-test-"));
 const validateMock = vi.fn();
+
+// Mocked clone: write a service.json into the requested targetDir and return it.
+const gitShallowCloneMock = vi.fn(async (opts: { targetDir?: string }) => {
+  const dir = opts.targetDir ?? join(tmpCommunityDir, "fallback-tmp");
+  mkdirSync(join(dir, "svc"), { recursive: true });
+  writeFileSync(
+    join(dir, "svc", "service.json"),
+    JSON.stringify({ id: "svc", name: "svc", version: "1.0.0", quality: "community" }),
+  );
+  return dir;
+});
 
 vi.mock("@openmapx/core/server", () => ({
   findRepoRoot: () => "/unused",
   repoPaths: () => ({ communityDir: tmpCommunityDir }),
-  gitShallowCloneAtomic: vi.fn(),
+  gitShallowClone: (opts: { targetDir?: string }) => gitShallowCloneMock(opts),
   services: {
     validateServiceManifest: (raw: unknown) => validateMock(raw),
     getProvidedCapabilityNames: () => [],
-    // Fixtures live one level deep (<hash>/<slug>/service.json); a shallow scan
+    // Fixtures live one level deep (<dir>/<slug>/service.json); a shallow scan
     // matches them. The deep-walk behaviour is covered by manifest-discovery's
     // own unit tests.
     findServiceManifestDirs: (root: string) =>
@@ -28,11 +40,9 @@ vi.mock("@openmapx/core/server", () => ({
   },
 }));
 
-const gitFetch = vi.fn().mockResolvedValue(undefined);
-const gitReset = vi.fn().mockResolvedValue(undefined);
 const gitRevparse = vi.fn();
 vi.mock("simple-git", () => ({
-  default: () => ({ fetch: gitFetch, reset: gitReset, revparse: gitRevparse }),
+  default: () => ({ revparse: gitRevparse }),
 }));
 
 const selectLimitMock = vi.fn();
@@ -47,21 +57,14 @@ vi.mock("../../db", () => {
   return { db: { select, update } };
 });
 
-vi.mock("../../db/schema", () => ({ serviceRepository: { hash: "hash" } }));
+vi.mock("../../db/schema", () => ({
+  serviceRepository: { hash: "hash", managedByExtension: "managed_by_extension" },
+}));
 
 // Import AFTER mocks are registered.
 import { refreshRepo } from "../service-repositories";
 
 const HASH = "aaaaaaaaaaaaaaaa"; // 16 hex chars — passes assertRepoHash
-
-function writeManifest(slug: string) {
-  const dir = join(tmpCommunityDir, HASH, slug);
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(
-    join(dir, "service.json"),
-    JSON.stringify({ id: slug, name: slug, version: "1.0.0", quality: "community" }),
-  );
-}
 
 describe("hashUrl", () => {
   it("is deterministic", () => {
@@ -112,55 +115,56 @@ describe("assertAllowedUrl", () => {
   });
 });
 
-describe("refreshRepo re-validates after update", () => {
+describe("refreshRepo re-clones and re-validates", () => {
   beforeEach(() => {
-    gitFetch.mockClear();
-    gitReset.mockClear();
+    gitShallowCloneMock.mockClear();
     gitRevparse.mockReset();
     selectLimitMock.mockReset();
     updateReturningMock.mockReset();
     validateMock.mockReset();
-    writeManifest("svc");
   });
 
-  it("returns null for an unknown repo hash (no git touched)", async () => {
+  it("returns null for an unknown repo hash (no clone touched)", async () => {
     selectLimitMock.mockResolvedValueOnce([]);
     const r = await refreshRepo(HASH);
     expect(r).toBeNull();
-    expect(gitFetch).not.toHaveBeenCalled();
+    expect(gitShallowCloneMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses to refresh an extension-managed repo", async () => {
+    selectLimitMock.mockResolvedValueOnce([
+      { hash: HASH, url: "https://github.com/x/y", managedByExtension: "openconditions" },
+    ]);
+    await expect(refreshRepo(HASH)).rejects.toBeInstanceOf(InvalidRepoUrlError);
+    expect(gitShallowCloneMock).not.toHaveBeenCalled();
   });
 
   it("updates lastSha when the refreshed clone validates clean", async () => {
-    selectLimitMock.mockResolvedValueOnce([{ hash: HASH, lastSha: "oldsha" }]);
-    gitRevparse
-      .mockResolvedValueOnce("oldsha\n") // prevSha (before reset)
-      .mockResolvedValueOnce("newsha\n"); // post-validation sha
+    selectLimitMock.mockResolvedValueOnce([
+      { hash: HASH, url: "https://github.com/x/y", lastSha: "oldsha", managedByExtension: null },
+    ]);
+    gitRevparse.mockResolvedValueOnce("newsha\n");
     validateMock.mockReturnValue({ valid: true, errors: [] });
     updateReturningMock.mockResolvedValueOnce([{ hash: HASH, lastSha: "newsha" }]);
 
     const r = await refreshRepo(HASH);
 
     expect(r).toEqual({ hash: HASH, lastSha: "newsha" });
-    expect(gitReset).toHaveBeenCalledTimes(1); // only the origin/HEAD reset
-    expect(gitReset).toHaveBeenCalledWith(["--hard", "origin/HEAD"]);
+    expect(gitShallowCloneMock).toHaveBeenCalledTimes(1);
     expect(updateReturningMock).toHaveBeenCalledTimes(1);
   });
 
-  it("rolls back and throws when the refreshed clone fails validation", async () => {
-    selectLimitMock.mockResolvedValueOnce([{ hash: HASH, lastSha: "oldsha" }]);
-    gitRevparse.mockResolvedValueOnce("oldsha\n"); // prevSha; second revparse never reached
+  it("throws and does not advance the DB when validation fails", async () => {
+    selectLimitMock.mockResolvedValueOnce([
+      { hash: HASH, url: "https://github.com/x/y", lastSha: "oldsha", managedByExtension: null },
+    ]);
+    gitRevparse.mockResolvedValueOnce("newsha\n");
     validateMock.mockReturnValue({
       valid: false,
       errors: ["container.capAdd: 'SYS_ADMIN' not allowed"],
     });
 
     await expect(refreshRepo(HASH)).rejects.toBeInstanceOf(InvalidRepoUrlError);
-
-    // rolled the working tree back to prevSha …
-    expect(gitReset).toHaveBeenCalledWith(["--hard", "origin/HEAD"]);
-    expect(gitReset).toHaveBeenCalledWith(["--hard", "oldsha"]);
-    expect(gitReset).toHaveBeenCalledTimes(2);
-    // … and never advanced the DB.
     expect(updateReturningMock).not.toHaveBeenCalled();
   });
 });

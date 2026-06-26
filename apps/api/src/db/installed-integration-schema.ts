@@ -11,6 +11,9 @@ export const installedIntegration = pgTable(
     installedAt: timestamp("installed_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
     installedBy: text("installed_by").references(() => user.id, { onDelete: "set null" }),
+    // Extension id that owns this integration (installed as part of a bundle).
+    // The standalone integration store skips update/remove of managed rows.
+    managedByExtension: text("managed_by_extension"),
   },
   (table) => [index("installedIntegration_sourceType_idx").on(table.sourceType)],
 );

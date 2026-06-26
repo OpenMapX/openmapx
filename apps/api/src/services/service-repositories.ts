@@ -1,8 +1,8 @@
-import { createHash } from "node:crypto";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { existsSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 import { assertAllowedGitUrl, InvalidGitUrlError } from "@openmapx/core";
-import { findRepoRoot, gitShallowCloneAtomic, repoPaths, services } from "@openmapx/core/server";
+import { findRepoRoot, gitShallowClone, repoPaths, services } from "@openmapx/core/server";
 import { eq } from "drizzle-orm";
 import simpleGit from "simple-git";
 import { db } from "../db";
@@ -61,15 +61,42 @@ export interface RepoPreview {
   services: RepoManifestPreview[];
 }
 
+interface ClonedRepo {
+  /** Tmp directory holding the snapshot (no `.git`). Caller owns it: rename it
+   * into place on success, or `rmSync` it on validation failure. */
+  dir: string;
+  /** The resolved commit SHA the clone is pinned to. */
+  sha: string;
+}
+
 /**
- * Clone-then-rename atomically into `services/.community/<hash>/`. Two admins
- * concurrently submitting the same URL each clone into a unique tmp dir and
- * the second `renameSync` over `<hash>` simply replaces the first — no torn
- * state, no half-finished clones for downstream readers. Implementation is
- * shared with the community-integration installer via `@openmapx/core`.
+ * Clone `url` (optionally at `ref`) into a fresh tmp directory *inside* the
+ * community dir (so the later `renameSync` into `<hash>` stays on the same
+ * filesystem) and resolve its commit SHA.
+ *
+ * We keep `.git` during the clone purely to run `git rev-parse HEAD`, then strip
+ * it before returning — a stripped clone placed inside the monorepo working tree
+ * would otherwise resolve `rev-parse`/`fetch`/`reset` against the *monorepo*,
+ * not the clone (a real, previously-latent bug in the fetch+reset refresh path).
+ * The result is a snapshot with no `.git`, matching the registry's expectations.
  */
-async function atomicShallowClone(url: string, finalTarget: string): Promise<void> {
-  await gitShallowCloneAtomic({ url, finalTarget });
+async function cloneToTmp(url: string, ref?: string): Promise<ClonedRepo> {
+  const tmp = join(communityDir(), `.tmp-clone-${randomBytes(6).toString("hex")}`);
+  try {
+    await gitShallowClone({ url, ref, targetDir: tmp, keepGit: true });
+    const sha = (await simpleGit(tmp).revparse(["HEAD"])).trim();
+    rmSync(join(tmp, ".git"), { recursive: true, force: true });
+    return { dir: tmp, sha };
+  } catch (err) {
+    rmSync(tmp, { recursive: true, force: true });
+    throw err;
+  }
+}
+
+/** Atomically replace `<hash>` with a freshly-cloned snapshot. */
+function moveIntoPlace(tmpDir: string, finalTarget: string): void {
+  if (existsSync(finalTarget)) rmSync(finalTarget, { recursive: true, force: true });
+  renameSync(tmpDir, finalTarget);
 }
 
 function readPreviewsFromClone(target: string): RepoManifestPreview[] {
@@ -128,14 +155,26 @@ function readPreviewsFromClone(target: string): RepoManifestPreview[] {
   return out;
 }
 
-export async function previewRepo(url: string): Promise<RepoPreview> {
+export async function previewRepo(url: string, ref?: string): Promise<RepoPreview> {
   assertAllowedUrl(url);
   const hash = hashUrl(url);
-  const target = join(communityDir(), hash);
-  await atomicShallowClone(url, target);
-  const list = readPreviewsFromClone(target);
-  const suggestedDisplayName = list.find((s) => s.validationErrors.length === 0)?.name;
-  return { hash, suggestedDisplayName, services: list };
+  // Preview into a throwaway tmp clone so we never clobber an already-registered
+  // `<hash>` directory the renderer may be reading.
+  const { dir } = await cloneToTmp(url, ref);
+  try {
+    const list = readPreviewsFromClone(dir);
+    const suggestedDisplayName = list.find((s) => s.validationErrors.length === 0)?.name;
+    return { hash, suggestedDisplayName, services: list };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+export interface RegisterRepoOptions {
+  /** Pinned git tag/branch to clone (defaults to the repo's default branch). */
+  ref?: string;
+  /** Extension id that owns this repo (set by the extension installer). */
+  managedByExtension?: string;
 }
 
 function buildErrorPreview(slug: string, errors: string[]): RepoManifestPreview {
@@ -153,37 +192,47 @@ function buildErrorPreview(slug: string, errors: string[]): RepoManifestPreview 
   };
 }
 
-export async function registerRepo(url: string): Promise<ServiceRepositoryRow> {
+export async function registerRepo(
+  url: string,
+  opts: RegisterRepoOptions = {},
+): Promise<ServiceRepositoryRow> {
   assertAllowedUrl(url);
   const hash = hashUrl(url);
   const target = join(communityDir(), hash);
-  if (!existsSync(target)) {
-    await atomicShallowClone(url, target);
-  }
 
-  // Re-validate every manifest at registration time. A repo that previewed
-  // cleanly could have been edited between preview and confirmation; refusing
-  // here prevents an admin-visible row pointing at a registry-rejected service.
-  const previews = readPreviewsFromClone(target);
+  // Clone fresh into a tmp dir so validation runs against the new content and
+  // an existing registered clone is only replaced once validation passes.
+  const { dir, sha } = await cloneToTmp(url, opts.ref);
+
+  const previews = readPreviewsFromClone(dir);
   const failed = previews.filter((p) => p.validationErrors.length > 0);
   if (failed.length > 0) {
-    rmSync(target, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
     throw new InvalidGitUrlError(
       `Refusing to register: ${failed.length} service(s) failed validation: ` +
         failed.map((f) => `${f.slug}: ${f.validationErrors.join("; ")}`).join(" | "),
     );
   }
 
-  const git = simpleGit(target);
-  const sha = (await git.revparse(["HEAD"])).trim();
+  moveIntoPlace(dir, target);
   const displayName = previews[0]?.name ?? null;
+  const pinnedRef = opts.ref ?? null;
+  const managedByExtension = opts.managedByExtension ?? null;
 
   const rows = await db
     .insert(serviceRepository)
-    .values({ hash, url, displayName, lastFetchedAt: new Date(), lastSha: sha })
+    .values({
+      hash,
+      url,
+      displayName,
+      lastFetchedAt: new Date(),
+      lastSha: sha,
+      pinnedRef,
+      managedByExtension,
+    })
     .onConflictDoUpdate({
       target: serviceRepository.hash,
-      set: { displayName, lastFetchedAt: new Date(), lastSha: sha },
+      set: { displayName, lastFetchedAt: new Date(), lastSha: sha, pinnedRef, managedByExtension },
     })
     .returning();
   if (!rows[0]) throw new Error("Failed to insert service repository");
@@ -210,29 +259,30 @@ export async function refreshRepo(hash: string): Promise<ServiceRepositoryRow | 
     .limit(1);
   if (!row) return null;
 
-  const target = join(communityDir(), hash);
-  const git = simpleGit(target);
-  // Capture the clone's current commit BEFORE updating, so a failed
-  // validation can roll the working tree back to the last-known-good state.
-  const prevSha = (await git.revparse(["HEAD"])).trim();
-  await git.fetch();
-  await git.reset(["--hard", "origin/HEAD"]);
+  // Extension-managed repos are pinned by the bundle; manual refresh would
+  // desync the coupled parts. Update via the extension instead.
+  if (row.managedByExtension) {
+    throw new InvalidGitUrlError(
+      `Repository is managed by extension "${row.managedByExtension}" — update it through the extension, not a manual refresh.`,
+    );
+  }
 
-  // Re-validate every manifest after the update — same guard registerRepo
-  // applies at registration. An upstream push (or repo compromise) must not
-  // land manifests the registry would reject. On failure, roll the clone back
-  // to prevSha and do NOT advance lastSha, so the next render keeps consuming
-  // the last validated commit.
-  const failed = readPreviewsFromClone(target).filter((p) => p.validationErrors.length > 0);
+  const target = join(communityDir(), hash);
+  // Re-clone (at the pinned ref if set, else the default branch). The previous
+  // fetch+reset path was broken once `.git` was stripped — it operated on the
+  // monorepo, not the clone. Re-cloning into a tmp dir and validating before
+  // swapping also gives clean rollback: the old clone is untouched on failure.
+  const { dir, sha } = await cloneToTmp(row.url, row.pinnedRef ?? undefined);
+  const failed = readPreviewsFromClone(dir).filter((p) => p.validationErrors.length > 0);
   if (failed.length > 0) {
-    await git.reset(["--hard", prevSha]);
+    rmSync(dir, { recursive: true, force: true });
     throw new InvalidGitUrlError(
       `Refusing to refresh: ${failed.length} service(s) failed validation: ` +
         failed.map((f) => `${f.slug}: ${f.validationErrors.join("; ")}`).join(" | "),
     );
   }
 
-  const sha = (await git.revparse(["HEAD"])).trim();
+  moveIntoPlace(dir, target);
   const [updated] = await db
     .update(serviceRepository)
     .set({ lastFetchedAt: new Date(), lastSha: sha })

@@ -23,6 +23,7 @@ import { adminRoute } from "./routes/admin";
 import { adminCacheRoute } from "./routes/admin-cache";
 import { registerCapabilityBindingRoutes } from "./routes/admin-capability-bindings";
 import { registerAdminComposeRoutes } from "./routes/admin-compose";
+import { adminExtensionsRoute } from "./routes/admin-extensions";
 import { registerAdminServiceReposRoutes } from "./routes/admin-service-repos";
 import { adminServicesRoute } from "./routes/admin-services";
 import { adminSettingsRoute } from "./routes/admin-settings";
@@ -64,6 +65,10 @@ import {
   refreshDataUsePolicy,
   startDataUsePolicyRefresh,
 } from "./services/data-use-policy";
+import {
+  handleExtensionInstallJob,
+  handleExtensionRemoveJob,
+} from "./services/extension-installer";
 import { gtfsManager } from "./services/gtfs/index";
 import { pruneOldRecords } from "./services/health-history";
 import { jobRunner } from "./services/job-runner";
@@ -353,6 +358,7 @@ await server.register(adminServicesRoute, { prefix: "/api" });
 await server.register(dataManagerRoute, { prefix: "/api" });
 await server.register(adminSettingsRoute, { prefix: "/api" });
 await server.register(adminStoreRoute, { prefix: "/api" });
+await server.register(adminExtensionsRoute, { prefix: "/api" });
 await server.register(adminCacheRoute, { prefix: "/api" });
 await server.register(attributionRoute, { prefix: "/api" });
 await registerCapabilityBindingRoutes(server);
@@ -485,6 +491,8 @@ jobRunner.register("integration.reload", async (ctx) => {
 jobRunner.register("store.install", handleInstallJob);
 jobRunner.register("store.update", handleUpdateJob);
 jobRunner.register("store.remove", handleRemoveJob);
+jobRunner.register("extension.install", handleExtensionInstallJob);
+jobRunner.register("extension.remove", handleExtensionRemoveJob);
 
 // Sanity check: ensure integrations were discovered
 const loadedCount = getAllIntegrations().length;

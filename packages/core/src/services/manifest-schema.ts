@@ -68,7 +68,7 @@ const ALLOWED_CAPS = new Set([
 // the host kernel/devices: SYS_ADMIN, SYS_PTRACE, SYS_TIME, SYS_CHROOT,
 // NET_ADMIN, MKNOD, DAC_READ_SEARCH, IPC_LOCK, AUDIT_WRITE.
 // SYS_ADMIN must never appear here — it is a well-known container-escape primitive.
-const COMMUNITY_SAFE_CAPS = new Set([
+export const COMMUNITY_SAFE_CAPS = new Set([
   "CHOWN",
   "DAC_OVERRIDE",
   "FOWNER",

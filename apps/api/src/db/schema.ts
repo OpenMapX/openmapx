@@ -31,6 +31,13 @@ export {
 export { type CapabilityBindingRow, capabilityBinding } from "./capability-binding-schema";
 // Health history
 export { healthHistory } from "./health-history-schema";
+// Installed extension bundles (parent of integration + service components)
+export {
+  type InstalledExtensionComponentRow,
+  type InstalledExtensionRow,
+  installedExtension,
+  installedExtensionComponent,
+} from "./installed-extension-schema";
 // Installed community integrations
 export { installedIntegration } from "./installed-integration-schema";
 // Integration config

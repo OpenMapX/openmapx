@@ -57,6 +57,20 @@
       "when": 1782483923333,
       "tag": "0007_service_secret",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782504427723,
+      "tag": "0008_service_repo_pinning",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782504723183,
+      "tag": "0009_installed_extension",
+      "breakpoints": true
     }
   ]
 }

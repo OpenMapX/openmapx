@@ -17,6 +17,14 @@ export interface GitShallowCloneOptions {
   ref?: string;
   /** Optional destination directory. Defaults to a fresh directory under OS tmp. */
   targetDir?: string;
+  /**
+   * Keep the `.git` directory in the result. Default false (a snapshot). Callers
+   * that need to resolve the cloned commit (`git rev-parse HEAD`) must set this,
+   * then strip `.git` themselves once they're done — otherwise a stripped clone
+   * placed inside a parent git working tree resolves `rev-parse`/`fetch`/`reset`
+   * against the *parent* repo, not the clone.
+   */
+  keepGit?: boolean;
   signal?: AbortSignal;
   onLog?: (line: string, stream: "stdout" | "stderr") => void;
 }
@@ -34,7 +42,7 @@ export async function gitShallowClone(opts: GitShallowCloneOptions): Promise<str
     if (opts.ref) args.push("--branch", opts.ref);
     args.push(opts.url, tmp);
     await spawnWithBufferedLogs("git", args, { signal: opts.signal, onLog: opts.onLog });
-    rmSync(join(tmp, ".git"), { recursive: true, force: true });
+    if (!opts.keepGit) rmSync(join(tmp, ".git"), { recursive: true, force: true });
     return tmp;
   } catch (err) {
     rmSync(tmp, { recursive: true, force: true });
