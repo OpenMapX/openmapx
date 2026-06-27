@@ -331,9 +331,10 @@ describe("buildMotisData", () => {
     expect(calls).toEqual([]);
   });
 
-  it("seeds from the mirror (source=mirror) without running generate-config/attribution", async () => {
+  it("seeds from the mirror (source=mirror): downloads cleaned archives, then generates config", async () => {
     writeFileSync(join(tmp, "infra", "docker", "data", "osm", "planet.osm.pbf"), "PBF");
     const gtfsDir = join(tmp, "infra", "docker", "data", "gtfs");
+    let wgetCalled = false;
     const dockerActions: string[] = [];
 
     const result = await buildMotisData({
@@ -342,28 +343,29 @@ describe("buildMotisData", () => {
       source: "mirror",
       runner: async (command, args) => {
         if (command === "wget") {
-          // Simulate the published artifacts landing in the gtfs dir.
-          const out = args.includes("-O") ? args[args.indexOf("-O") + 1] : undefined;
-          if (out?.endsWith("config.yml")) {
-            writeFileSync(out, "osm: planet-latest.osm.pbf\n");
-          } else if (out?.endsWith("license.json")) {
-            writeFileSync(out, '[{"id":"de-bvg"}]\n');
-          } else if (args.includes("--recursive")) {
+          // Mirror downloads Transitous's already-cleaned archives (no fetch.py).
+          wgetCalled = true;
+          if (args.includes("--recursive")) {
             writeFileSync(join(gtfsDir, "de_bvg.gtfs.zip"), "GTFS");
           }
         } else if (command === "docker" && args[0] === "run") {
           dockerActions.push(String(args.at(-1)));
+          if (args.at(-1) === "generate-config") {
+            writeFileSync(join(gtfsDir, MOTIS_CONFIG_FILENAME), "osm: planet-latest.osm.pbf\n");
+          } else if (args.at(-1) === "generate-attribution") {
+            writeFileSync(join(gtfsDir, MOTIS_LICENSE_FILENAME), '[{"id":"de-bvg"}]\n');
+          }
         }
       },
     });
 
-    // Mirror path produced the config from the download, not the generator.
+    // Mirror skips fetch.py (wgets cleaned archives) but still generates the
+    // config + attribution from the catalog — so the osm/tiles/rt rewrites apply.
+    expect(wgetCalled).toBe(true);
+    expect(dockerActions).toContain("generate-config");
+    expect(dockerActions).toContain("generate-feed-proxy-vars");
     expect(result.configPath).toBe(
       join(tmp, "infra", "docker", "data", MOTIS_DATA_DIR, "config.yml"),
     );
-    expect(dockerActions).not.toContain("generate-config");
-    expect(dockerActions).not.toContain("generate-attribution");
-    // RT feed-proxy vars are still generated (realtime stays on our proxy).
-    expect(dockerActions).toContain("generate-feed-proxy-vars");
   });
 });

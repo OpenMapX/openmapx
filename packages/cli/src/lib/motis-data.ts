@@ -487,36 +487,36 @@ export async function buildMotisData(
   await ensureTransitousToolsImage(paths.root, image, runner);
 
   const runScriptPath = join(paths.root, "services", "motis", "tools", "transitous", "run.sh");
-  // Build mode generates config.yml + license.json from the catalog. Mirror mode
-  // already downloaded both, so it only needs the feed-proxy vars below.
-  if (source === "build") {
-    await runner(
-      "docker",
-      dockerRunTransitousArgs(
-        transitousCatalogDir,
-        gtfsDir,
-        transitousDownloadsDir,
-        runScriptPath,
-        image,
-        "generate-config",
-        { feedProxyKeyFile },
-      ),
-      { cwd: paths.root, stdio: "inherit" },
-    );
-    await runner(
-      "docker",
-      dockerRunTransitousArgs(
-        transitousCatalogDir,
-        gtfsDir,
-        transitousDownloadsDir,
-        runScriptPath,
-        image,
-        "generate-attribution",
-        { feedProxyKeyFile },
-      ),
-      { cwd: paths.root, stdio: "inherit" },
-    );
-  }
+  // The MOTIS config + attribution are generated from the catalog in BOTH modes
+  // (so the osm override, tiles strip, and rt→our-proxy rewrite all apply). The
+  // only difference: build mode stages GTFS that `data download gtfs` fetched,
+  // mirror mode downloaded Transitous's already-cleaned archives above.
+  await runner(
+    "docker",
+    dockerRunTransitousArgs(
+      transitousCatalogDir,
+      gtfsDir,
+      transitousDownloadsDir,
+      runScriptPath,
+      image,
+      "generate-config",
+      { feedProxyKeyFile },
+    ),
+    { cwd: paths.root, stdio: "inherit" },
+  );
+  await runner(
+    "docker",
+    dockerRunTransitousArgs(
+      transitousCatalogDir,
+      gtfsDir,
+      transitousDownloadsDir,
+      runScriptPath,
+      image,
+      "generate-attribution",
+      { feedProxyKeyFile },
+    ),
+    { cwd: paths.root, stdio: "inherit" },
+  );
   await runner(
     "docker",
     dockerRunTransitousArgs(

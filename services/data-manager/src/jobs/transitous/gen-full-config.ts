@@ -1,11 +1,13 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildFeedProxyConfig } from "@openmapx/motis-feed-proxy-config";
+import { rewriteRtUrls } from "@openmapx/transitous-core";
 import { applyConfigOverrides } from "./config-overrides.js";
 import { FEED_PROXY_CONTAINER } from "./motis-containers.js";
 import type { JobContext, StageFn, StageResult } from "./types.js";
 
 const FEED_PROXY_CONF_REL = "motis-feed-proxy/conf/feed-proxy.conf";
+const DEFAULT_FEED_PROXY_URL = "http://motis-feed-proxy";
 
 // Mirrors services/motis/tools/transitous/run.sh: merge the `--feed-proxy`
 // output (/tmp/feed-proxy-vars.yml) with the catalog's curated feed-whitelist
@@ -157,6 +159,18 @@ export const run: StageFn = async (ctx) => {
     // `planet-latest.osm.pbf`) previously failed every post-promote re-import.
     const overrides = applyConfigOverrides(configPath, ctx.logger);
 
+    // Repoint the runtime config's realtime URLs (Transitous's hosted
+    // rt.triptix.tech) onto OUR feed-proxy so realtime is independent of
+    // Transitous infrastructure. Applies in both build and mirror mode.
+    const feedProxyUrl =
+      ctx.feedProxyUrl ?? process.env.OPENMAPX_TRANSITOUS_FEED_PROXY_URL ?? DEFAULT_FEED_PROXY_URL;
+    let rtRewritten = 0;
+    if (existsSync(configPath)) {
+      const result = rewriteRtUrls(readFileSync(configPath, "utf-8"), feedProxyUrl);
+      rtRewritten = result.replaced;
+      if (rtRewritten > 0) writeFileSync(configPath, result.text, "utf-8");
+    }
+
     const feedProxy = await generateFeedProxyConfig(ctx, catalogDir);
 
     return {
@@ -169,6 +183,7 @@ export const run: StageFn = async (ctx) => {
       artifacts: {
         configPath,
         ...overrides,
+        rtRewritten,
         feedProxyConfigPath: feedProxy.configPath,
         feedProxyWritten: feedProxy.written,
         feedProxyEntries: feedProxy.entries,

@@ -15,6 +15,7 @@ const ENV_KEYS = [
   "MOTIS_TILES",
   "MOTIS_REGION",
   "OPENMAPX_REGION",
+  "OPENMAPX_TRANSITOUS_FEED_PROXY_URL",
 ] as const;
 const originalEnv: Record<string, string | undefined> = {};
 
@@ -154,5 +155,35 @@ describe("gen-full-config region scoping", () => {
       "de",
       "ch",
     ]);
+  });
+});
+
+describe("gen-full-config realtime independence", () => {
+  const TEMPLATE_WITH_RT = `server:
+  port: 8080
+timetable:
+  datasets:
+    de-bvg:
+      rt:
+        - url: https://rt.triptix.tech/feed/de-bvg-0
+`;
+
+  it("repoints rt.triptix.tech onto our feed-proxy (default) so RT is infra-independent", async () => {
+    const fx = setupCatalog(TEMPLATE_WITH_RT);
+    const result = await genFullConfigRun(ctxFor(fx.dataDir, fx.catalogDir, ["de"]));
+    expect(result.status).toBe("ok");
+    expect(result.artifacts).toMatchObject({ rtRewritten: 1 });
+    const updated = readFileSync(fx.configPath, "utf-8");
+    expect(updated).toContain("http://motis-feed-proxy/feed/de-bvg-0");
+    expect(updated).not.toContain("rt.triptix.tech");
+  });
+
+  it("uses an explicit feed-proxy URL override when provided", async () => {
+    process.env.OPENMAPX_TRANSITOUS_FEED_PROXY_URL = "http://rt.openmapx.local";
+    const fx = setupCatalog(TEMPLATE_WITH_RT);
+    await genFullConfigRun(ctxFor(fx.dataDir, fx.catalogDir, ["de"]));
+    expect(readFileSync(fx.configPath, "utf-8")).toContain(
+      "http://rt.openmapx.local/feed/de-bvg-0",
+    );
   });
 });

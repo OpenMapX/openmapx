@@ -17,7 +17,6 @@ import {
   TRANSITOUS_DOWNLOADS_DIR,
 } from "./internal.js";
 import * as mirrorStage from "./mirror.js";
-import * as mirrorConfigStage from "./mirror-config.js";
 import * as motisHealthStage from "./motis-health.js";
 import * as motisImportStage from "./motis-import.js";
 import * as prepareStage from "./prepare.js";
@@ -53,21 +52,16 @@ const BUILD_STAGES: ReadonlyArray<StageEntry> = [
 ];
 
 /**
- * Mirror mode (TRANSIT_SOURCE=mirror, default): consume Transitous's published
- * artifacts. `prepare` still clones the catalog (mirror-config needs its
- * realtime metadata), then `mirror` downloads the processed gtfs + config +
- * license and `mirror-config` adapts the config to our infra. The
- * assemble→import→health→promote tail is shared with build mode.
+ * Mirror mode (TRANSIT_SOURCE=mirror, default): identical to build mode except
+ * the `fetch` stage is replaced by `mirror`, which downloads Transitous's
+ * already-cleaned GTFS archives instead of running fetch.py + gtfsclean. The
+ * MOTIS config, attribution, and feed-proxy are still generated from the
+ * catalog clone, so the result matches build mode (incl. RT routed through our
+ * own feed-proxy) — only the slow/fragile fetch step is skipped.
  */
-const MIRROR_STAGES: ReadonlyArray<StageEntry> = [
-  { name: "prepare", run: prepareStage.run, hardStop: true },
-  { name: "mirror", run: mirrorStage.run, hardStop: true },
-  { name: "mirror-config", run: mirrorConfigStage.run, hardStop: true },
-  { name: "assemble-staging", run: assembleStagingStage.run },
-  { name: "motis-import", run: motisImportStage.run },
-  { name: "motis-health", run: motisHealthStage.run },
-  { name: "promote", run: promoteStage.run },
-];
+const MIRROR_STAGES: ReadonlyArray<StageEntry> = BUILD_STAGES.map((stage) =>
+  stage.name === "fetch" ? { name: "mirror", run: mirrorStage.run } : stage,
+);
 
 export function stagesFor(source: TransitSource): ReadonlyArray<StageEntry> {
   return source === "mirror" ? MIRROR_STAGES : BUILD_STAGES;

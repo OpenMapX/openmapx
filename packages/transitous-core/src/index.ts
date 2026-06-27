@@ -17,11 +17,8 @@ export {
 export type { TransitousFeedFile, TransitousFeedSource } from "./feed-source.js";
 export {
   buildMirrorCommands,
-  isMirrorPublishInProgress,
-  type LicenseEntry,
   type MirrorCommand,
   mirrorArtifacts,
-  parseLicenseManifest,
   rewriteRtUrls,
   TRANSITOUS_FEED_PROXY_URL,
 } from "./mirror.js";

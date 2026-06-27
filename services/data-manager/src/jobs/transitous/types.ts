@@ -19,10 +19,9 @@ export type StageName =
   | "gen-attribution"
   | "promote"
   | "gc"
-  // Mirror-mode stages (TRANSIT_SOURCE=mirror): consume Transitous's published
-  // artifacts instead of cloning + running its scripts.
-  | "mirror"
-  | "mirror-config";
+  // Mirror mode (TRANSIT_SOURCE=mirror): replaces `fetch` — downloads
+  // Transitous's already-cleaned GTFS archives instead of running fetch.py.
+  | "mirror";
 
 export interface StageResult {
   stage: StageName;

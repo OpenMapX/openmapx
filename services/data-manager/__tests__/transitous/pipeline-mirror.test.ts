@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -20,38 +20,34 @@ afterEach(() => {
 });
 
 describe("stagesFor", () => {
+  const BUILD = [
+    "prepare",
+    "filter",
+    "fetch",
+    "validate",
+    "gen-motis-config",
+    "assemble-staging",
+    "motis-import",
+    "motis-health",
+    "gen-full-config",
+    "gen-attribution",
+    "promote",
+    "gc",
+  ];
+
   it("selects the build pipeline for source=build", () => {
-    expect(stagesFor("build").map((s) => s.name)).toEqual([
-      "prepare",
-      "filter",
-      "fetch",
-      "validate",
-      "gen-motis-config",
-      "assemble-staging",
-      "motis-import",
-      "motis-health",
-      "gen-full-config",
-      "gen-attribution",
-      "promote",
-      "gc",
-    ]);
+    expect(stagesFor("build").map((s) => s.name)).toEqual(BUILD);
   });
 
-  it("selects the mirror pipeline for source=mirror", () => {
-    expect(stagesFor("mirror").map((s) => s.name)).toEqual([
-      "prepare",
-      "mirror",
-      "mirror-config",
-      "assemble-staging",
-      "motis-import",
-      "motis-health",
-      "promote",
-    ]);
+  it("selects the mirror pipeline (build with fetch -> mirror) for source=mirror", () => {
+    expect(stagesFor("mirror").map((s) => s.name)).toEqual(
+      BUILD.map((n) => (n === "fetch" ? "mirror" : n)),
+    );
   });
 });
 
 describe("mirror-mode pipeline", () => {
-  it("downloads artifacts and repoints realtime onto our feed-proxy", async () => {
+  it("downloads cleaned archives in place of fetch.py", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-pipeline-mirror-"));
     const dataDir = tmp;
     const catalogDir = join(dataDir, ".transitous-catalog");
@@ -59,47 +55,42 @@ describe("mirror-mode pipeline", () => {
     mkdirSync(join(catalogDir, ".git"), { recursive: true });
     mkdirSync(join(catalogDir, "feeds"), { recursive: true });
     mkdirSync(join(catalogDir, "src"), { recursive: true });
+    writeFileSync(
+      join(catalogDir, "feeds", "de.json"),
+      JSON.stringify({ sources: [{ name: "BVG" }] }),
+    );
     writeFileSync(join(catalogDir, "src", "generate-motis-config.py"), "#!/usr/bin/env python3\n");
 
+    let wgetArgs: string[] | undefined;
     const persisted: StageResult[] = [];
     const ctx = buildJobContext({
       dataDir,
       store: new StateStore(dataDir),
-      countries: [],
+      countries: ["de"],
       source: "mirror",
-      feedProxyUrl: "http://test-feed-proxy",
       runner: async (command, args) => {
-        // Simulate `wget` writing the published config + license into out/.
-        if (command === "wget" && args.includes("-O")) {
-          const target = args[args.indexOf("-O") + 1];
-          if (typeof target === "string" && target.endsWith("config.yml")) {
-            writeFileSync(
-              target,
-              "osm: planet-latest.osm.pbf\ntimetable:\n  datasets:\n    de-bvg:\n      rt:\n        - url: https://rt.triptix.tech/feed/de-bvg-0\n",
-            );
-          } else if (typeof target === "string" && target.endsWith("license.json")) {
-            writeFileSync(target, "[]");
-          }
+        if (command === "wget") {
+          wgetArgs = args;
+          // Simulate the published cleaned archive landing in the gtfs dir.
+          mkdirSync(gtfsDir, { recursive: true });
+          writeFileSync(join(gtfsDir, "de_BVG.gtfs.zip"), "BVG");
         }
+        // python3 (filter's resolution pre-check) + everything else: no-op.
       },
       now: () => "2026-06-27T00:00:00.000Z",
-      onStageComplete: async (result) => {
-        persisted.push(result);
+      onStageComplete: async (r) => {
+        persisted.push(r);
       },
     });
 
-    const { results } = await runTransitousPipeline(ctx, { stopAt: "mirror-config" });
+    // Stop after `mirror` to avoid the docker/import tail (covered elsewhere).
+    const { results } = await runTransitousPipeline(ctx, { stopAt: "mirror" });
 
-    expect(results.map((r) => r.stage)).toEqual(["prepare", "mirror", "mirror-config"]);
-    const byStage = Object.fromEntries(results.map((r) => [r.stage, r]));
-    expect(byStage.prepare?.status).toBe("ok");
-    expect(byStage.mirror?.status).toBe("ok");
-    expect(byStage["mirror-config"]?.status).toBe("ok");
-
-    // The published config's rt.triptix.tech URL was repointed to our proxy.
-    const config = readFileSync(join(gtfsDir, "config.yml"), "utf-8");
-    expect(config).toContain("http://test-feed-proxy/feed/de-bvg-0");
-    expect(config).not.toContain("rt.triptix.tech");
-    expect(byStage["mirror-config"]?.artifacts).toMatchObject({ rtRewritten: 1 });
+    expect(results.map((r) => r.stage)).toEqual(["prepare", "filter", "mirror"]);
+    const mirror = results.find((r) => r.stage === "mirror");
+    expect(mirror?.status).toBe("ok");
+    // It wgetted (a recursive archive mirror), not ran fetch.py.
+    expect(wgetArgs).toContain("--recursive");
+    expect(existsSync(join(gtfsDir, "de_BVG.gtfs.zip"))).toBe(true);
   });
 });

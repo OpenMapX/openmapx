@@ -1,10 +1,11 @@
 import type { CommandRunner, TransitousLogger } from "./runner.js";
 
 /**
- * Mirror mode consumes Transitous's published, already-processed output instead
- * of cloning the catalog and running its scripts. These helpers build the
- * `wget` invocations, parse the published `license.json`, and rewrite the
- * published `config.yml`'s realtime URLs onto our own feed-proxy.
+ * Mirror mode reuses the build pipeline but replaces fetch.py (download each
+ * origin feed + gtfsclean — the slow, fragile step) with a download of
+ * Transitous's already-cleaned `*.gtfs.zip` / `*.netex.zip` artifacts from its
+ * published output. The MOTIS config, attribution, and feed-proxy are still
+ * generated from the catalog clone, so only the archive fetch differs.
  */
 
 /** A single download command (argv for the runner's `wget`). */
@@ -18,11 +19,11 @@ function ensureTrailingSlash(url: string): string {
 }
 
 /**
- * Build the `wget` commands that pull the published artifacts into `destDir`:
- * `config.yml` + `license.json` as direct fetches, then a recursive mirror of
- * the GTFS/NeTEx archives and `scripts/*.lua`. When `countries` is non-empty the
- * archive accept-list is scoped to `<cc>_*` / `<cc>-*` filename prefixes so a
- * region build doesn't pull the whole planet.
+ * Build the `wget` command that recursively mirrors the published GTFS/NeTEx
+ * archives into `destDir`. When `countries` is non-empty the accept-list is
+ * scoped to `<cc>_*` / `<cc>-*` filename prefixes so a region build doesn't pull
+ * the whole planet. (config.yml / license.json / scripts are NOT mirrored — they
+ * are regenerated from the catalog clone downstream.)
  */
 export function buildMirrorCommands(
   baseUrl: string,
@@ -30,22 +31,18 @@ export function buildMirrorCommands(
   countries: readonly string[] = [],
 ): MirrorCommand[] {
   const base = ensureTrailingSlash(baseUrl);
-  const archiveAccepts =
+  const accepts =
     countries.length === 0
-      ? ["*.gtfs.zip", "*.netex.zip", "*.lua"]
-      : [
-          ...countries.flatMap((cc) => [`${cc}_*.gtfs.zip`, `${cc}-*.gtfs.zip`]),
-          ...countries.flatMap((cc) => [`${cc}_*.netex.zip`, `${cc}-*.netex.zip`]),
-          "*.lua",
-        ];
+      ? ["*.gtfs.zip", "*.netex.zip"]
+      : countries.flatMap((cc) => [
+          `${cc}_*.gtfs.zip`,
+          `${cc}-*.gtfs.zip`,
+          `${cc}_*.netex.zip`,
+          `${cc}-*.netex.zip`,
+        ]);
   return [
-    { description: "config.yml", args: ["-q", "-O", `${destDir}/config.yml`, `${base}config.yml`] },
     {
-      description: "license.json",
-      args: ["-q", "-O", `${destDir}/license.json`, `${base}license.json`],
-    },
-    {
-      description: "gtfs archives + scripts",
+      description: "gtfs/netex archives",
       args: [
         "--recursive",
         "--no-parent",
@@ -55,31 +52,13 @@ export function buildMirrorCommands(
         "-R",
         "index.html*",
         "-A",
-        archiveAccepts.join(","),
+        accepts.join(","),
         "-P",
         destDir,
         base,
       ],
     },
   ];
-}
-
-/**
- * The `.import-running` sentinel published while Transitous's build host is
- * mid-import — mirroring then would capture a half-written tree.
- */
-export async function isMirrorPublishInProgress(
-  baseUrl: string,
-  runner: CommandRunner,
-): Promise<boolean> {
-  const base = ensureTrailingSlash(baseUrl);
-  try {
-    // `wget --spider` returns non-zero (throws) when the sentinel is absent.
-    await runner("wget", ["-q", "--spider", `${base}.import-running`], { stdio: "pipe" });
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /** Run all mirror commands in order. Throws if any download fails. */
@@ -98,68 +77,20 @@ export async function mirrorArtifacts(opts: {
   return commands.length;
 }
 
-export interface LicenseEntry {
-  countryCode?: string;
-  countryName?: string;
-  regionCode?: string;
-  regionName?: string;
-  humanName?: string;
-  filename?: string;
-  lastUpdated?: string;
-  spdxLicenseIdentifier?: string;
-}
-
-/**
- * Parse Transitous's `license.json` (an array). Tolerant of extra fields and of
- * either camelCase or the snake_case the script emits. Returns [] on bad input.
- */
-export function parseLicenseManifest(jsonText: string): LicenseEntry[] {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(jsonText);
-  } catch {
-    return [];
-  }
-  if (!Array.isArray(parsed)) return [];
-  return parsed.map((raw) => {
-    const r = (raw ?? {}) as Record<string, unknown>;
-    const str = (...keys: string[]): string | undefined => {
-      for (const k of keys) {
-        const v = r[k];
-        if (typeof v === "string" && v.length > 0) return v;
-      }
-      return undefined;
-    };
-    return {
-      countryCode: str("country_code", "countryCode"),
-      countryName: str("country_name", "countryName"),
-      regionCode: str("region_code", "regionCode"),
-      regionName: str("region_name", "regionName"),
-      humanName: str("human_name", "humanName", "name"),
-      filename: str("filename"),
-      lastUpdated: str("last_updated", "lastUpdated"),
-      spdxLicenseIdentifier: str("spdx_license_identifier", "spdxLicenseIdentifier"),
-    };
-  });
-}
-
-/** Transitous's hosted realtime feed-proxy, baked into the published config. */
+/** Transitous's hosted realtime feed-proxy, baked into the generated config. */
 export const TRANSITOUS_FEED_PROXY_URL = "https://rt.triptix.tech";
 
 /**
- * Rewrite the published `config.yml` so realtime feeds flow through OUR
- * feed-proxy instead of Transitous's hosted one (`rt.triptix.tech`) — keeping
- * our realtime independent of Transitous infrastructure. Returns the rewritten
- * text and how many occurrences were replaced.
+ * Rewrite the MOTIS `config.yml` so realtime feeds flow through OUR feed-proxy
+ * instead of Transitous's hosted one (`rt.triptix.tech`) — keeping realtime
+ * independent of Transitous infrastructure. Returns the rewritten text and how
+ * many occurrences were replaced. Used by both build and mirror mode.
  */
 export function rewriteRtUrls(
   configText: string,
   feedProxyUrl: string,
 ): { text: string; replaced: number } {
   const target = feedProxyUrl.replace(/\/$/, "");
-  let replaced = 0;
-  const text = configText.split(TRANSITOUS_FEED_PROXY_URL).join(target);
-  // Count occurrences replaced (split length - 1), guarding the no-op case.
-  replaced = configText.split(TRANSITOUS_FEED_PROXY_URL).length - 1;
-  return { text, replaced };
+  const parts = configText.split(TRANSITOUS_FEED_PROXY_URL);
+  return { text: parts.join(target), replaced: parts.length - 1 };
 }
