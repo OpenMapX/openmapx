@@ -137,6 +137,7 @@ COPY --from=prod-deps /app/packages/db-schema/node_modules ./packages/db-schema/
 COPY packages/hardlinks/ ./packages/hardlinks/
 COPY packages/motis-feed-proxy-config/ ./packages/motis-feed-proxy-config/
 COPY packages/poi-source-registry/ ./packages/poi-source-registry/
+COPY packages/transitous-core/ ./packages/transitous-core/
 COPY packages/core/ ./packages/core/
 COPY --from=builder /app/services/data-manager/dist ./services/data-manager/dist
 COPY services/data-manager/package.json ./services/data-manager/
