@@ -209,6 +209,28 @@ The pipeline, its lockfile-pinned Transitous ref, and the cron schedule live in
 the data-manager service; for everyday operation, just leaving `motis-staging`
 enabled gives you a hands-off daily update with a built-in rollback.
 
+#### Where the data comes from: `mirror` vs `build`
+
+The pipeline can get its GTFS + MOTIS config two ways, selected by
+`TRANSIT_SOURCE` in `infra/docker/.env`:
+
+- **`mirror` (default)** — download Transitous's already-processed output from
+  `api.transitous.org/gtfs/` (the cleaned `*.gtfs.zip`, `config.yml`, and
+  `license.json` their own nodes consume). This skips the slow, fragile fetch +
+  `gtfsclean` step entirely and inherits upstream's per-feed credential and
+  scraper handling for free. Override the source with
+  `TRANSITOUS_ARTIFACT_BASE_URL`.
+- **`build`** — clone the Transitous catalog and run its scripts (`fetch.py`,
+  `generate-motis-config.py`) yourself. Use this when you want to control feed
+  selection (`TRANSITOUS_COUNTRIES`) beyond what the published set offers, or
+  prefer not to depend on the upstream artifact server.
+
+Both modes are otherwise identical: the same staging → smoke-test → atomic
+promote tail, and **realtime always flows through your own feed-proxy** (the
+published config's `rt.triptix.tech` URLs are repointed onto it), so your
+realtime stays independent of Transitous infrastructure. Switch modes by setting
+`TRANSIT_SOURCE` and recreating the data-manager service.
+
 A few specifics worth knowing as an operator:
 
 - **Cadence.** The full sync runs on `TRANSITOUS_SYNC_CRON`, default `0 3 * * *`
