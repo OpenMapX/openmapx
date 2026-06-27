@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { parseTransitSource } from "@openmapx/transitous-core";
 import { execa } from "execa";
 import type { FastifyInstance } from "fastify";
 import { convertPbfToBz2, convertPbfToBz2ForRegion } from "./jobs/convert-overpass.js";
@@ -16,7 +17,7 @@ import {
   runTransitousPipeline,
   toDownloadGtfsResult,
 } from "./jobs/transitous/index.js";
-import { parseTransitousCountriesEnv, parseTransitSourceEnv } from "./jobs/transitous/internal.js";
+import { parseTransitousCountriesEnv } from "./jobs/transitous/internal.js";
 import { PRIMARY_CONTAINER } from "./jobs/transitous/motis-containers.js";
 import { finalizeJobRow, makePersistingOnStageComplete } from "./jobs/transitous/persistence.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
@@ -142,7 +143,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
           store,
           countries,
           repoRoot: process.env.OPENMAPX_ROOT_DIR,
-          source: parseTransitSourceEnv(),
+          source: parseTransitSource(),
         });
         await runTransitousPipeline(ctx);
         result = toDownloadGtfsResult(ctx, []);
@@ -436,7 +437,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
           store,
           countries,
           repoRoot,
-          source: parseTransitSourceEnv(),
+          source: parseTransitSource(),
           jobId,
           onStageComplete: persistingHook,
         });

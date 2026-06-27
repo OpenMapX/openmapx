@@ -15,8 +15,12 @@ import {
   type CommandRunner,
   DEFAULT_TRANSITOUS_REPO_URL,
   ensureCatalog,
+  mirrorArtifacts,
+  parseTransitSource,
+  TRANSITOUS_ARTIFACT_BASE_URL,
   TRANSITOUS_CATALOG_DIR,
   TRANSITOUS_DOWNLOADS_DIR,
+  type TransitSource,
 } from "@openmapx/transitous-core";
 import { execa } from "execa";
 import { TRANSITOUS_COUNTRIES_ENV } from "./env-defaults";
@@ -56,6 +60,10 @@ export interface BuildMotisDataOptions {
   image?: string;
   feedProxyUrl?: string;
   runner?: CommandRunner;
+  /** Acquisition mode. Defaults to TRANSIT_SOURCE (mirror). */
+  source?: TransitSource;
+  /** Mirror-mode artifact base URL. */
+  artifactBaseUrl?: string;
 }
 
 export interface BuildMotisDataResult {
@@ -408,6 +416,11 @@ export async function buildMotisData(
   const runner = opts.runner ?? defaultRunner;
   const transitousRepoUrl = opts.transitousRepoUrl ?? DEFAULT_TRANSITOUS_REPO_URL;
   const image = opts.image ?? DEFAULT_TRANSITOUS_TOOLS_IMAGE;
+  const source = opts.source ?? parseTransitSource();
+  const artifactBaseUrl =
+    opts.artifactBaseUrl ??
+    process.env.TRANSITOUS_ARTIFACT_BASE_URL ??
+    TRANSITOUS_ARTIFACT_BASE_URL;
   const feedProxyUrl =
     opts.feedProxyUrl ??
     process.env[OPENMAPX_TRANSITOUS_FEED_PROXY_URL_ENV] ??
@@ -416,6 +429,31 @@ export async function buildMotisData(
   clearPreparedMotisInputs(motisDir);
   clearPreparedFeedProxyInputs(feedProxyDir);
   linkOrCopy(sourcePbf, join(motisDir, basename(sourcePbf)));
+
+  // Mirror mode: pull Transitous's processed artifacts (config.yml, *.gtfs.zip,
+  // license.json, scripts/) into the gtfs dir so the rest of the flow stages +
+  // copies them exactly as it does the script-generated output. Skips the slow
+  // fetch + gtfsclean + config-gen; realtime still goes through our own proxy
+  // (patchMotisConfig rewrites the rt.triptix.tech URLs).
+  if (source === "mirror") {
+    const countries = (process.env[TRANSITOUS_COUNTRIES_ENV] ?? "")
+      .split(",")
+      .map((c) => c.trim())
+      .filter(Boolean);
+    mkdirSync(gtfsDir, { recursive: true });
+    await mirrorArtifacts({
+      baseUrl: artifactBaseUrl,
+      destDir: gtfsDir,
+      countries,
+      runner,
+      logger: {
+        info: (m) => console.error(m),
+        warn: (m) => console.error(m),
+        error: (m) => console.error(m),
+      },
+    });
+  }
+
   const gtfsFeeds = stageGtfsFeeds(gtfsDir, motisDir);
   const { configPath: emptyFeedProxyConfigPath, feedCount: emptyFeedProxyFeedCount } =
     renderMotisFeedProxyConfig(feedProxyDir);
@@ -449,32 +487,36 @@ export async function buildMotisData(
   await ensureTransitousToolsImage(paths.root, image, runner);
 
   const runScriptPath = join(paths.root, "services", "motis", "tools", "transitous", "run.sh");
-  await runner(
-    "docker",
-    dockerRunTransitousArgs(
-      transitousCatalogDir,
-      gtfsDir,
-      transitousDownloadsDir,
-      runScriptPath,
-      image,
-      "generate-config",
-      { feedProxyKeyFile },
-    ),
-    { cwd: paths.root, stdio: "inherit" },
-  );
-  await runner(
-    "docker",
-    dockerRunTransitousArgs(
-      transitousCatalogDir,
-      gtfsDir,
-      transitousDownloadsDir,
-      runScriptPath,
-      image,
-      "generate-attribution",
-      { feedProxyKeyFile },
-    ),
-    { cwd: paths.root, stdio: "inherit" },
-  );
+  // Build mode generates config.yml + license.json from the catalog. Mirror mode
+  // already downloaded both, so it only needs the feed-proxy vars below.
+  if (source === "build") {
+    await runner(
+      "docker",
+      dockerRunTransitousArgs(
+        transitousCatalogDir,
+        gtfsDir,
+        transitousDownloadsDir,
+        runScriptPath,
+        image,
+        "generate-config",
+        { feedProxyKeyFile },
+      ),
+      { cwd: paths.root, stdio: "inherit" },
+    );
+    await runner(
+      "docker",
+      dockerRunTransitousArgs(
+        transitousCatalogDir,
+        gtfsDir,
+        transitousDownloadsDir,
+        runScriptPath,
+        image,
+        "generate-attribution",
+        { feedProxyKeyFile },
+      ),
+      { cwd: paths.root, stdio: "inherit" },
+    );
+  }
   await runner(
     "docker",
     dockerRunTransitousArgs(

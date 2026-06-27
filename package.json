@@ -20,6 +20,7 @@
     "check-legal-updated": "pnpm -C packages/cli exec tsx ../../scripts/check-legal-updated.ts",
     "check-legal-urls": "pnpm -C packages/cli exec tsx ../../scripts/check-legal-urls.ts",
     "check-license-metadata": "pnpm -C packages/cli exec tsx ../../scripts/check-license-metadata.ts",
+    "check-toolchain-pins": "pnpm -C packages/cli exec tsx ../../scripts/check-toolchain-pins.ts",
     "openmapx": "pnpm -C packages/cli exec tsx src/index.ts"
   },
   "devDependencies": {

@@ -1,0 +1,65 @@
+/**
+ * Toolchain-pin gate: the MOTIS version and the `gtfsclean` build commit are
+ * each duplicated across Dockerfiles, service manifests, and package.json deps.
+ * `@openmapx/transitous-core` holds the single source of truth
+ * (`MOTIS_VERSION`, `GTFSCLEAN_COMMIT`); this script asserts every other
+ * occurrence matches, so a bump in one place can't silently drift from the
+ * others. Mirrors the other scripts/check-*.ts gates (run in pre-commit).
+ */
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { GTFSCLEAN_COMMIT, MOTIS_VERSION } from "@openmapx/transitous-core";
+
+const HERE = typeof __dirname !== "undefined" ? __dirname : dirname(fileURLToPath(import.meta.url));
+const ROOT = join(HERE, "..");
+
+const read = (rel: string): string => readFileSync(join(ROOT, rel), "utf-8");
+const errors: string[] = [];
+
+// MOTIS version: service.json container.tag (motis + staging).
+for (const rel of ["services/motis/service.json", "services/motis-staging/service.json"]) {
+  const tag = (JSON.parse(read(rel)) as { container?: { tag?: string } }).container?.tag;
+  if (tag !== MOTIS_VERSION) {
+    errors.push(`${rel}: container.tag "${tag}" != MOTIS_VERSION "${MOTIS_VERSION}"`);
+  }
+}
+
+// MOTIS version: transitous-tools Dockerfile ARG (v-prefixed release tag).
+if (
+  !read("services/motis/tools/transitous/Dockerfile").includes(
+    `ARG MOTIS_VERSION=v${MOTIS_VERSION}`,
+  )
+) {
+  errors.push(`services/motis/tools/transitous/Dockerfile: ARG MOTIS_VERSION != v${MOTIS_VERSION}`);
+}
+
+// MOTIS version: @motis-project/motis-client deps (caret range).
+for (const rel of ["apps/api/package.json", "packages/mobility-core/package.json"]) {
+  const deps = (JSON.parse(read(rel)) as { dependencies?: Record<string, string> }).dependencies;
+  const v = deps?.["@motis-project/motis-client"];
+  if (v !== `^${MOTIS_VERSION}`) {
+    errors.push(`${rel}: @motis-project/motis-client "${v}" != "^${MOTIS_VERSION}"`);
+  }
+}
+
+// gtfsclean commit: both images that build it.
+for (const rel of [
+  "services/motis/tools/transitous/Dockerfile",
+  "services/data-manager/Dockerfile",
+]) {
+  if (!read(rel).includes(`gtfsclean@${GTFSCLEAN_COMMIT}`)) {
+    errors.push(`${rel}: gtfsclean commit != ${GTFSCLEAN_COMMIT}`);
+  }
+}
+
+if (errors.length > 0) {
+  console.error(
+    `✗ Toolchain pins out of sync with @openmapx/transitous-core:\n${errors.map((e) => `  - ${e}`).join("\n")}\n` +
+      "Update the literals to match, or bump MOTIS_VERSION / GTFSCLEAN_COMMIT in packages/transitous-core/src/constants.ts.",
+  );
+  process.exit(1);
+}
+console.log(
+  `✓ Toolchain pins consistent — MOTIS ${MOTIS_VERSION}, gtfsclean ${GTFSCLEAN_COMMIT.slice(0, 10)}.`,
+);

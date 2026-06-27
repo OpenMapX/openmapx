@@ -1,5 +1,8 @@
+import type { TransitSource } from "@openmapx/transitous-core";
 import type { DatasetMetadata, StateStore } from "../../state.js";
 import type { FeedDownloadFailure } from "../download-gtfs.js";
+
+export type { TransitSource };
 
 export type StageStatus = "ok" | "skipped" | "error" | "partial";
 
@@ -20,13 +23,6 @@ export type StageName =
   // artifacts instead of cloning + running its scripts.
   | "mirror"
   | "mirror-config";
-
-/**
- * Where the transit data comes from:
- * - `mirror`: download Transitous's pre-processed output (gtfs + config + license).
- * - `build`: clone the catalog and run Transitous's scripts (fetch + config-gen).
- */
-export type TransitSource = "mirror" | "build";
 
 export interface StageResult {
   stage: StageName;

@@ -1,6 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { feedState } from "@openmapx/db-schema";
+import { parseTransitSource } from "@openmapx/transitous-core";
 import { Cron } from "croner";
 import { and, eq } from "drizzle-orm";
 import { execa } from "execa";
@@ -13,7 +14,6 @@ import {
   type RunPipelineResult,
   runTransitousPipeline,
 } from "./jobs/transitous/index.js";
-import { parseTransitSourceEnv } from "./jobs/transitous/internal.js";
 import { FEED_PROXY_CONTAINER } from "./jobs/transitous/motis-containers.js";
 import { finalizeJobRow, makePersistingOnStageComplete } from "./jobs/transitous/persistence.js";
 import type { SingleFlightController } from "./jobs/transitous/single-flight.js";
@@ -228,7 +228,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
           store: options.store,
           countries: options.countries,
           repoRoot: options.repoRoot,
-          source: parseTransitSourceEnv(),
+          source: parseTransitSource(),
           jobId: start.jobId,
           onStageComplete: makePersistingOnStageComplete(start.jobId, {
             info: (m) => log.info(m),
