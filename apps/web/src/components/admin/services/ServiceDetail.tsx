@@ -462,7 +462,7 @@ function ManifestTab({ data }: { data: ServiceDetailData }) {
   );
 }
 
-const TABS = ["Overview", "Config", "Credentials", "Logs", "Manifest"];
+const TABS = ["Overview", "Configuration", "Credentials", "Logs", "Manifest"];
 
 interface ServiceDetailProps {
   id: string;
