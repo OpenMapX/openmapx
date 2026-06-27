@@ -22,9 +22,11 @@ export const run: StageFn = async (ctx): Promise<StageResult> => {
   const start = Date.now();
   try {
     const gtfsDir = ctx.state.gtfsDir ?? ctx.outDir;
+    // `||` (not `??`): compose injects `${VAR:-}` as an empty string when the
+    // operator hasn't set it, and "" must fall through to the default.
     const baseUrl =
-      ctx.artifactBaseUrl ??
-      process.env.TRANSITOUS_ARTIFACT_BASE_URL ??
+      ctx.artifactBaseUrl ||
+      process.env.TRANSITOUS_ARTIFACT_BASE_URL ||
       TRANSITOUS_ARTIFACT_BASE_URL;
     const selectedFeedFiles = ctx.state.selectedFeedFiles ?? [];
 

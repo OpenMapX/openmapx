@@ -377,13 +377,15 @@ export async function buildMotisData(
   const transitousRepoUrl = opts.transitousRepoUrl ?? DEFAULT_TRANSITOUS_REPO_URL;
   const image = opts.image ?? DEFAULT_TRANSITOUS_TOOLS_IMAGE;
   const source = opts.source ?? parseTransitSource();
+  // `||` (not `??`): an empty-string env value (e.g. compose `${VAR:-}`) must
+  // fall through to the default rather than being taken literally.
   const artifactBaseUrl =
-    opts.artifactBaseUrl ??
-    process.env.TRANSITOUS_ARTIFACT_BASE_URL ??
+    opts.artifactBaseUrl ||
+    process.env.TRANSITOUS_ARTIFACT_BASE_URL ||
     TRANSITOUS_ARTIFACT_BASE_URL;
   const feedProxyUrl =
-    opts.feedProxyUrl ??
-    process.env[OPENMAPX_TRANSITOUS_FEED_PROXY_URL_ENV] ??
+    opts.feedProxyUrl ||
+    process.env[OPENMAPX_TRANSITOUS_FEED_PROXY_URL_ENV] ||
     DEFAULT_OPENMAPX_TRANSITOUS_FEED_PROXY_URL;
   const countries = (process.env[TRANSITOUS_COUNTRIES_ENV] ?? "")
     .split(",")

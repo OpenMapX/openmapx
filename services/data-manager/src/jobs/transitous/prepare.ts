@@ -23,8 +23,10 @@ export const run: StageFn = async (ctx) => {
     mkdirSync(ctx.dataDir, { recursive: true });
 
     const catalogDir = ctx.catalogDir;
+    // `||` (not `??`): compose injects `${VAR:-}` as an empty string when the
+    // operator hasn't set it, and "" must fall through to the default.
     const repoUrl =
-      ctx.transitousRepoUrl ?? process.env.TRANSITOUS_REPO_URL ?? DEFAULT_TRANSITOUS_REPO_URL;
+      ctx.transitousRepoUrl || process.env.TRANSITOUS_REPO_URL || DEFAULT_TRANSITOUS_REPO_URL;
     await ensureCatalog({
       dataDir: ctx.dataDir,
       catalogDir,

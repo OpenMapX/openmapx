@@ -172,8 +172,10 @@ export const run: StageFn = async (ctx) => {
     // Transitous infrastructure. Scoped to the feeds our proxy actually serves
     // (so we never break RT for a feed the proxy has no config for). Applies in
     // both build and mirror mode.
+    // `||` (not `??`): compose injects `${VAR:-}` as an empty string when the
+    // operator hasn't set it, and "" must fall through to the default.
     const feedProxyUrl =
-      ctx.feedProxyUrl ?? process.env.OPENMAPX_TRANSITOUS_FEED_PROXY_URL ?? DEFAULT_FEED_PROXY_URL;
+      ctx.feedProxyUrl || process.env.OPENMAPX_TRANSITOUS_FEED_PROXY_URL || DEFAULT_FEED_PROXY_URL;
     let rtRewritten = 0;
     if (existsSync(configPath)) {
       const result = rewriteRtUrls(

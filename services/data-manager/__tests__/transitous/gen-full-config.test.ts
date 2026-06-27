@@ -213,4 +213,14 @@ timetable:
       "http://rt.openmapx.local/feed/de-bvg-0",
     );
   });
+
+  it("falls back to the default URL when the env var is set but empty", async () => {
+    // Compose injects `${OPENMAPX_TRANSITOUS_FEED_PROXY_URL:-}` as "" when the
+    // operator hasn't set it — that empty string must NOT become the rewrite
+    // target (which would yield a broken "/feed/de-bvg-0").
+    process.env.OPENMAPX_TRANSITOUS_FEED_PROXY_URL = "";
+    const fx = setupCatalog(TEMPLATE_WITH_RT);
+    await genFullConfigRun(ctxWithProxyVars(fx.catalogDir, fx.dataDir, ["de-bvg-0"]));
+    expect(readFileSync(fx.configPath, "utf-8")).toContain("http://motis-feed-proxy/feed/de-bvg-0");
+  });
 });
