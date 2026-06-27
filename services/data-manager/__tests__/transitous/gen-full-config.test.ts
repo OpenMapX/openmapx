@@ -166,22 +166,49 @@ timetable:
     de-bvg:
       rt:
         - url: https://rt.triptix.tech/feed/de-bvg-0
+        - url: https://rt.triptix.tech/feed/de-vbb-0
 `;
 
-  it("repoints rt.triptix.tech onto our feed-proxy (default) so RT is infra-independent", async () => {
+  // A ctx whose runner simulates the --feed-proxy run producing feed-proxy
+  // vars (the keys = the feeds our proxy serves), so the selective RT rewrite
+  // has a feed-id set to act on.
+  function ctxWithProxyVars(catalogDir: string, dataDir: string, proxyKeys: string[]) {
+    const ctx = buildJobContext({
+      dataDir,
+      store: new StateStore(dataDir),
+      countries: ["de"],
+      runner: async (cmd, args) => {
+        if (cmd === "python3" && args.includes("-c")) {
+          const vars = Object.fromEntries(
+            proxyKeys.map((k) => [k, { url: `https://origin.example/gtfsrt/${k}` }]),
+          );
+          writeFileSync(join(catalogDir, "out", "feed-proxy-vars.json"), JSON.stringify(vars));
+        }
+      },
+      now: () => "2026-05-01T00:00:00.000Z",
+    });
+    ctx.state.catalogDir = catalogDir;
+    return ctx;
+  }
+
+  it("repoints only the feeds our proxy serves onto our feed-proxy (default URL)", async () => {
     const fx = setupCatalog(TEMPLATE_WITH_RT);
-    const result = await genFullConfigRun(ctxFor(fx.dataDir, fx.catalogDir, ["de"]));
+    const result = await genFullConfigRun(
+      ctxWithProxyVars(fx.catalogDir, fx.dataDir, ["de-bvg-0"]),
+    );
     expect(result.status).toBe("ok");
     expect(result.artifacts).toMatchObject({ rtRewritten: 1 });
     const updated = readFileSync(fx.configPath, "utf-8");
+    // de-bvg-0 is in our proxy set → repointed.
     expect(updated).toContain("http://motis-feed-proxy/feed/de-bvg-0");
-    expect(updated).not.toContain("rt.triptix.tech");
+    // de-vbb-0 is NOT served by our proxy → left on the origin rather than broken.
+    expect(updated).toContain("https://rt.triptix.tech/feed/de-vbb-0");
   });
 
   it("uses an explicit feed-proxy URL override when provided", async () => {
     process.env.OPENMAPX_TRANSITOUS_FEED_PROXY_URL = "http://rt.openmapx.local";
     const fx = setupCatalog(TEMPLATE_WITH_RT);
-    await genFullConfigRun(ctxFor(fx.dataDir, fx.catalogDir, ["de"]));
+    await genFullConfigRun(ctxWithProxyVars(fx.catalogDir, fx.dataDir, ["de-bvg-0"]));
     expect(readFileSync(fx.configPath, "utf-8")).toContain(
       "http://rt.openmapx.local/feed/de-bvg-0",
     );

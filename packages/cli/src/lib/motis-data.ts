@@ -18,6 +18,7 @@ import {
   mirrorArtifacts,
   parseTransitSource,
   pruneUnresolvableSources,
+  rewriteRtUrls,
   TRANSITOUS_ARTIFACT_BASE_URL,
   TRANSITOUS_CATALOG_DIR,
   TRANSITOUS_DOWNLOADS_DIR,
@@ -283,23 +284,13 @@ function patchMotisConfig(
     patched.push(line);
   }
 
-  const normalizedFeedProxyUrl = feedProxyUrl.trim().replace(/\/+$/, "");
-  const text = `${patched
+  const normalized = `${patched
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
-    .trimEnd()}\n`.replace(/https:\/\/rt\.triptix\.tech\/feed\/([^\s"']+)/g, (match, rawFeedId) => {
-    const decodedFeedId = (() => {
-      try {
-        return decodeURIComponent(rawFeedId);
-      } catch {
-        return rawFeedId;
-      }
-    })();
-    if (!feedProxyFeedIds.has(decodedFeedId) && !feedProxyFeedIds.has(rawFeedId)) {
-      return match;
-    }
-    return `${normalizedFeedProxyUrl}/feed/${rawFeedId}`;
-  });
+    .trimEnd()}\n`;
+  // Repoint realtime onto our own feed-proxy via the shared helper (same logic
+  // the daemon uses), scoped to the feeds our proxy actually serves.
+  const { text } = rewriteRtUrls(normalized, feedProxyUrl, feedProxyFeedIds);
   writeFileSync(configPath, text, "utf-8");
 }
 

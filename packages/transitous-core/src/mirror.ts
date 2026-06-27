@@ -80,17 +80,39 @@ export async function mirrorArtifacts(opts: {
 /** Transitous's hosted realtime feed-proxy, baked into the generated config. */
 export const TRANSITOUS_FEED_PROXY_URL = "https://rt.triptix.tech";
 
+const RT_FEED_URL_RE = /https:\/\/rt\.triptix\.tech\/feed\/([^\s"']+)/g;
+
 /**
  * Rewrite the MOTIS `config.yml` so realtime feeds flow through OUR feed-proxy
  * instead of Transitous's hosted one (`rt.triptix.tech`) — keeping realtime
- * independent of Transitous infrastructure. Returns the rewritten text and how
- * many occurrences were replaced. Used by both build and mirror mode.
+ * independent of Transitous infrastructure. Used by both the daemon (build +
+ * mirror) and the CLI seed.
+ *
+ * When `feedIds` is given, only `/feed/<id>` URLs whose id our proxy actually
+ * serves are repointed (others are left on the origin proxy, so we never break
+ * realtime for a feed our proxy has no config for). When omitted, every
+ * `rt.triptix.tech/feed/...` URL is repointed. Returns the rewritten text and
+ * the number of URLs replaced.
  */
 export function rewriteRtUrls(
   configText: string,
   feedProxyUrl: string,
+  feedIds?: ReadonlySet<string>,
 ): { text: string; replaced: number } {
-  const target = feedProxyUrl.replace(/\/$/, "");
-  const parts = configText.split(TRANSITOUS_FEED_PROXY_URL);
-  return { text: parts.join(target), replaced: parts.length - 1 };
+  const target = feedProxyUrl.trim().replace(/\/+$/, "");
+  let replaced = 0;
+  const text = configText.replace(RT_FEED_URL_RE, (match, rawId: string) => {
+    if (feedIds) {
+      let decoded = rawId;
+      try {
+        decoded = decodeURIComponent(rawId);
+      } catch {
+        // keep raw
+      }
+      if (!feedIds.has(rawId) && !feedIds.has(decoded)) return match;
+    }
+    replaced += 1;
+    return `${target}/feed/${rawId}`;
+  });
+  return { text, replaced };
 }

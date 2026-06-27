@@ -44,4 +44,20 @@ describe("rewriteRtUrls", () => {
     expect(replaced).toBe(0);
     expect(text).toBe("osm: planet.osm.pbf\n");
   });
+
+  it("only repoints feeds our proxy serves when a feedIds set is given", () => {
+    const config = [
+      `    - url: ${TRANSITOUS_FEED_PROXY_URL}/feed/de-bvg-0`,
+      `    - url: ${TRANSITOUS_FEED_PROXY_URL}/feed/de-vbb-0`,
+    ].join("\n");
+    const { text, replaced } = rewriteRtUrls(
+      config,
+      "http://motis-feed-proxy",
+      new Set(["de-bvg-0"]),
+    );
+    expect(replaced).toBe(1);
+    expect(text).toContain("http://motis-feed-proxy/feed/de-bvg-0");
+    // Not in our proxy set → left on the origin proxy rather than broken.
+    expect(text).toContain(`${TRANSITOUS_FEED_PROXY_URL}/feed/de-vbb-0`);
+  });
 });

@@ -42,6 +42,8 @@ export async function generateFeedProxyConfig(
   reloaded: boolean;
   reloadError?: string;
   entries: number;
+  /** Feed ids our proxy serves (vars keys) — used to scope the RT rewrite. */
+  feedIds: string[];
 }> {
   // Transitous's generator emits two side-effect files: out/config.yml (already
   // produced above) and an additional feed-proxy vars JSON when the
@@ -66,7 +68,7 @@ export async function generateFeedProxyConfig(
     ctx.logger.warn(
       `transitous-pipeline: feed-proxy config generation failed: ${(error as Error).message}`,
     );
-    return { configPath: null, written: false, reloaded: false, entries: 0 };
+    return { configPath: null, written: false, reloaded: false, entries: 0, feedIds: [] };
   }
 
   const jsonPath = join(catalogDir, "out", "feed-proxy-vars.json");
@@ -74,7 +76,7 @@ export async function generateFeedProxyConfig(
     ctx.logger.warn(
       "transitous-pipeline: feed-proxy vars file not found after --feed-proxy invocation",
     );
-    return { configPath: null, written: false, reloaded: false, entries: 0 };
+    return { configPath: null, written: false, reloaded: false, entries: 0, feedIds: [] };
   }
   const varsPath = jsonPath;
 
@@ -86,9 +88,13 @@ export async function generateFeedProxyConfig(
     ctx.logger.warn(
       `transitous-pipeline: failed to parse feed-proxy vars at ${varsPath}: ${(error as Error).message}`,
     );
-    return { configPath: null, written: false, reloaded: false, entries: 0 };
+    return { configPath: null, written: false, reloaded: false, entries: 0, feedIds: [] };
   }
 
+  const feedIds =
+    varsJson && typeof varsJson === "object"
+      ? Object.keys(varsJson as Record<string, unknown>)
+      : [];
   const targetPath = join(ctx.dataDir, FEED_PROXY_CONF_REL);
   let entries = 0;
   try {
@@ -98,7 +104,7 @@ export async function generateFeedProxyConfig(
     ctx.logger.warn(
       `transitous-pipeline: feed-proxy nginx render failed: ${(error as Error).message}`,
     );
-    return { configPath: null, written: false, reloaded: false, entries: 0 };
+    return { configPath: null, written: false, reloaded: false, entries: 0, feedIds: [] };
   }
 
   // Signal nginx reload — best effort. If the container isn't running or the
@@ -119,7 +125,7 @@ export async function generateFeedProxyConfig(
     );
   }
 
-  return { configPath: targetPath, written: true, reloaded, reloadError, entries };
+  return { configPath: targetPath, written: true, reloaded, reloadError, entries, feedIds };
 }
 
 /**
@@ -159,19 +165,25 @@ export const run: StageFn = async (ctx) => {
     // `planet-latest.osm.pbf`) previously failed every post-promote re-import.
     const overrides = applyConfigOverrides(configPath, ctx.logger);
 
+    const feedProxy = await generateFeedProxyConfig(ctx, catalogDir);
+
     // Repoint the runtime config's realtime URLs (Transitous's hosted
     // rt.triptix.tech) onto OUR feed-proxy so realtime is independent of
-    // Transitous infrastructure. Applies in both build and mirror mode.
+    // Transitous infrastructure. Scoped to the feeds our proxy actually serves
+    // (so we never break RT for a feed the proxy has no config for). Applies in
+    // both build and mirror mode.
     const feedProxyUrl =
       ctx.feedProxyUrl ?? process.env.OPENMAPX_TRANSITOUS_FEED_PROXY_URL ?? DEFAULT_FEED_PROXY_URL;
     let rtRewritten = 0;
     if (existsSync(configPath)) {
-      const result = rewriteRtUrls(readFileSync(configPath, "utf-8"), feedProxyUrl);
+      const result = rewriteRtUrls(
+        readFileSync(configPath, "utf-8"),
+        feedProxyUrl,
+        new Set(feedProxy.feedIds),
+      );
       rtRewritten = result.replaced;
       if (rtRewritten > 0) writeFileSync(configPath, result.text, "utf-8");
     }
-
-    const feedProxy = await generateFeedProxyConfig(ctx, catalogDir);
 
     return {
       stage: "gen-full-config",
