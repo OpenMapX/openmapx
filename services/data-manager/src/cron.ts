@@ -43,8 +43,11 @@ const TRANSITOUS_FEED_PROXY_RELOAD_CRON_DEFAULT = "*/15 * * * *";
  */
 const TRANSITOUS_STALENESS_CHECK_CRON_DEFAULT = "0 4 * * *";
 
-/** Sentinel values that disable a cron entirely. Mirrors the K8s convention. */
-const DISABLED_SENTINELS = new Set(["", "disabled", "off", "false"]);
+// Sentinel values that disable a cron entirely. Empty string is NOT one of
+// them: compose injects `${VAR:-}` as "" when the operator hasn't set the var,
+// and that must fall through to the built-in default (handled in
+// pickCronExpression), not silently disable the schedule.
+const DISABLED_SENTINELS = new Set(["disabled", "off", "false"]);
 
 export interface CronLogger {
   info: (msg: string, extra?: Record<string, unknown>) => void;
@@ -116,7 +119,9 @@ function pickCronExpression(
   fallback: string,
 ): string | null {
   const raw = override ?? process.env[envName];
-  if (raw === undefined) return fallback;
+  // Unset OR empty (compose `${VAR:-}`) → built-in default. Only an explicit
+  // disable sentinel turns the schedule off.
+  if (raw === undefined || raw.trim() === "") return fallback;
   const trimmed = raw.trim().toLowerCase();
   if (DISABLED_SENTINELS.has(trimmed)) return null;
   return raw.trim();

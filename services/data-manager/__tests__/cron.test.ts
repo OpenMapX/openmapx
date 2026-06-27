@@ -139,6 +139,23 @@ describe("setupCron", () => {
     handles.stop();
   });
 
+  it("treats an empty cron expression (unset via compose) as the default, not disabled", () => {
+    const handles = setupCron({
+      dataDir,
+      repoRoot: "/tmp/nope",
+      countries: [],
+      store: {} as never,
+      singleFlight: makeController(),
+      logger: { info: () => {}, warn: () => {}, error: () => {} },
+      syncCronExpression: "",
+      feedProxyReloadCronExpression: "",
+    });
+    // Unset-via-compose must fall through to the built-in schedule, not turn it off.
+    expect(handles.syncCron).not.toBeNull();
+    expect(handles.feedProxyReloadCron).not.toBeNull();
+    handles.stop();
+  });
+
   it("skips a scheduled run while another sync is in-flight", async () => {
     const controller = makeController();
     // Simulate an existing in-flight job by directly starting one.

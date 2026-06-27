@@ -214,22 +214,25 @@ enabled gives you a hands-off daily update with a built-in rollback.
 The pipeline can get its GTFS + MOTIS config two ways, selected by
 `TRANSIT_SOURCE` in `infra/docker/.env`:
 
-- **`mirror` (default)** — download Transitous's already-processed output from
-  `api.transitous.org/gtfs/` (the cleaned `*.gtfs.zip`, `config.yml`, and
-  `license.json` their own nodes consume). This skips the slow, fragile fetch +
-  `gtfsclean` step entirely and inherits upstream's per-feed credential and
-  scraper handling for free. Override the source with
+- **`mirror` (default)** — download Transitous's already-cleaned GTFS/NeTEx
+  archives (`*.gtfs.zip` / `*.netex.zip`) for your countries directly from
+  `api.transitous.org/gtfs/`, one request per feed. This skips the slow, fragile
+  fetch + `gtfsclean` step entirely and inherits upstream's per-feed credential
+  and scraper handling for free. Override the artifact source with
   `TRANSITOUS_ARTIFACT_BASE_URL`.
 - **`build`** — clone the Transitous catalog and run its scripts (`fetch.py`,
-  `generate-motis-config.py`) yourself. Use this when you want to control feed
-  selection (`TRANSITOUS_COUNTRIES`) beyond what the published set offers, or
-  prefer not to depend on the upstream artifact server.
+  `generate-motis-config.py`) yourself: fetch each feed from its origin and
+  `gtfsclean` it locally. Use this when you'd rather not depend on the upstream
+  artifact server, or need a feed the published set doesn't carry yet.
 
-Both modes are otherwise identical: the same staging → smoke-test → atomic
-promote tail, and **realtime always flows through your own feed-proxy** (the
-published config's `rt.triptix.tech` URLs are repointed onto it), so your
-realtime stays independent of Transitous infrastructure. Switch modes by setting
-`TRANSIT_SOURCE` and recreating the data-manager service.
+Both modes scope to `TRANSITOUS_COUNTRIES` and are otherwise identical — the
+MOTIS `config.yml` and attribution are generated locally from the catalog in
+**both** modes (not taken from upstream), followed by the same staging →
+smoke-test → atomic promote tail. **Realtime flows through your own feed-proxy**:
+the generated config's `rt.triptix.tech` URLs are repointed onto it — only for
+the feeds your proxy actually serves, so the rest stay on the origin rather than
+break — keeping realtime independent of Transitous infrastructure. Switch modes
+by setting `TRANSIT_SOURCE` and recreating the data-manager service.
 
 A few specifics worth knowing as an operator:
 
@@ -237,9 +240,10 @@ A few specifics worth knowing as an operator:
   (daily 03:00 UTC — late enough for European publishers' nightly bundles, early
   enough to land before the morning). A separate staleness sweep
   (`TRANSITOUS_STALENESS_CHECK_CRON`, default `0 4 * * *`) flags feeds that have
-  stopped updating. Set either to `""`, `disabled`, or `off` to turn it off.
+  stopped updating. Set either to `disabled`, `off`, or `false` to turn it off
+  (e.g. on staging where you trigger by hand).
 - **Trigger one by hand.** `curl -X POST http://localhost:3001/api/data-manager/transit/sync`
-  (admin session or `Authorization: Bearer ${DATA_MANAGER_TOKEN}`) kicks off a
+  (admin session or `Authorization: Bearer ${DATA_MANAGER_AUTH_TOKEN}`) kicks off a
   run immediately; it's single-flight, so a manual call while a sync is already
   in flight returns the running job's id instead of starting a second one. Track
   progress at `GET /api/data-manager/transit/jobs`.
