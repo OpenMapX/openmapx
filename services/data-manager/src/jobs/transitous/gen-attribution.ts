@@ -1,11 +1,13 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { StageFn, StageResult } from "./types.js";
 
 /**
- * Run Transitous's `src/generate-attribution.py` to produce the operator-
- * facing license/attribution file. Counts license entries when the produced
- * file is JSON; otherwise reports the file size as a coarse signal.
+ * Run Transitous's `src/generate-attribution.py`, which writes the consolidated
+ * per-feed attribution/licensing manifest to `out/license.json`. We assert that
+ * file exists afterwards and count its entries — a missing file is a hard stage
+ * error rather than a silently-empty success (the old code looked for the wrong
+ * filenames and reported `ok` with 0 entries forever).
  */
 export const run: StageFn = async (ctx) => {
   const startedAt = ctx.now();
@@ -28,28 +30,22 @@ export const run: StageFn = async (ctx) => {
       stdio: "pipe",
     });
 
-    // Transitous writes the attribution under `out/attributions.json` (newer
-    // revisions) or `out/attribution.html` (older). Best-effort detect both.
-    const candidates = [
-      join(catalogDir, "out", "attributions.json"),
-      join(catalogDir, "out", "attribution.html"),
-    ];
-    const attributionFilePath = candidates.find((path) => existsSync(path)) ?? candidates[0];
+    const attributionFilePath = join(catalogDir, "out", "license.json");
+    if (!existsSync(attributionFilePath)) {
+      throw new Error(
+        `generate-attribution.py did not produce ${attributionFilePath} — attribution data is missing`,
+      );
+    }
 
     let licenseEntries = 0;
-    if (attributionFilePath?.endsWith(".json") && existsSync(attributionFilePath)) {
-      try {
-        const parsed = JSON.parse(readFileSync(attributionFilePath, "utf-8")) as unknown;
-        if (Array.isArray(parsed)) licenseEntries = parsed.length;
-        else if (parsed && typeof parsed === "object") {
-          licenseEntries = Object.keys(parsed as Record<string, unknown>).length;
-        }
-      } catch {
-        // Tolerate a malformed file — the stage still succeeded.
+    try {
+      const parsed = JSON.parse(readFileSync(attributionFilePath, "utf-8")) as unknown;
+      if (Array.isArray(parsed)) licenseEntries = parsed.length;
+      else if (parsed && typeof parsed === "object") {
+        licenseEntries = Object.keys(parsed as Record<string, unknown>).length;
       }
-    } else if (attributionFilePath && existsSync(attributionFilePath)) {
-      // For HTML output we have no cheap entry count; fall back to byte size.
-      licenseEntries = statSync(attributionFilePath).size;
+    } catch {
+      // Tolerate a malformed file — the file exists, so the stage still ran.
     }
 
     return {
@@ -58,7 +54,7 @@ export const run: StageFn = async (ctx) => {
       startedAt,
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,
-      message: "Generated attribution file",
+      message: `Generated attribution file (${licenseEntries} entries)`,
       artifacts: {
         licenseEntries,
         attributionFilePath,

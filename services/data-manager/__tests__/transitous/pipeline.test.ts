@@ -57,6 +57,10 @@ describe("runTransitousPipeline orchestrator", () => {
       runner: async (command, args) => {
         if (command === "python3" && args[0] === "./src/fetch.py") {
           writeFileSync(join(gtfsDir, "de_bvg.gtfs.zip"), "BVG");
+        } else if (command === "python3" && args[0] === "./src/generate-attribution.py") {
+          // Simulate the upstream script writing its manifest (gen-attribution
+          // now asserts the file exists).
+          writeFileSync(join(catalogDir, "out", "license.json"), "[]");
         }
       },
       now: () => "2026-05-01T00:00:00.000Z",
@@ -158,6 +162,8 @@ describe("runTransitousPipeline orchestrator", () => {
           writeFileSync(join(gtfsDir, "de_bvg.gtfs.zip"), "BVG");
           writeFileSync(join(gtfsDir, "de_delfi.gtfs.zip"), "DELFI");
           writeFileSync(join(gtfsDir, "ch_sbb.gtfs.zip"), "SBB");
+        } else if (command === "python3" && args[0] === "./src/generate-attribution.py") {
+          writeFileSync(join(catalogDir, "out", "license.json"), "[]");
         }
       },
       now: () => "2026-05-01T00:00:00.000Z",
