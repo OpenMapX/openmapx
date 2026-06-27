@@ -6,7 +6,7 @@ import {
   DEFAULT_TRANSITOUS_API_KEYS_PATH,
   DEFAULT_TRANSITOUS_FEEDS_OVERLAY_PATH,
   listTransitousFeedFiles,
-  skipUnresolvableAtlasSources,
+  pruneUnresolvableSources,
   sumActiveGtfsSources,
 } from "./internal.js";
 import type { JobContext, JobLogger, StageFn } from "./types.js";
@@ -23,13 +23,24 @@ export const run: StageFn = async (ctx) => {
   try {
     const catalogDir = ctx.state.catalogDir ?? ctx.catalogDir;
 
-    skipUnresolvableAtlasSources(catalogDir);
     const apiKeysPath =
       ctx.apiKeysPath ?? process.env.TRANSITOUS_API_KEYS_PATH ?? DEFAULT_TRANSITOUS_API_KEYS_PATH;
     applyApiKeysOverlay(catalogDir, apiKeysPath);
 
     const feedsOverlayPath = resolveFeedsOverlayPath(ctx);
     const overlayPatchCount = applyFeedsOverlayToCatalog(catalogDir, feedsOverlayPath, ctx.logger);
+
+    // Pre-skip anything upstream can't resolve by RUNNING its own resolver and
+    // acting on the "Could not resolve" verdict (see pruneUnresolvableSources)
+    // rather than reimplementing transitland.py. MUST run before the fetch
+    // stage — fetch.py also exits on unresolvable sources, per feed file — and
+    // after the overlays so operator-supplied keys/url-overrides are respected.
+    const prunedUnresolvable = await pruneUnresolvableSources({
+      catalogDir,
+      countries: ctx.countries,
+      runner: ctx.runner,
+      logger: ctx.logger,
+    });
 
     const allFeedFiles = listTransitousFeedFiles(catalogDir);
     const requestedCount = sumActiveGtfsSources(allFeedFiles);
@@ -91,6 +102,7 @@ export const run: StageFn = async (ctx) => {
         requestedCount,
         selectedCount,
         skippedCount,
+        prunedUnresolvable: prunedUnresolvable.length,
       },
     };
   } catch (error) {
