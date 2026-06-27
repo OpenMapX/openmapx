@@ -42,7 +42,13 @@ const BUILD_STAGES: ReadonlyArray<StageEntry> = [
   { name: "fetch", run: fetchStage.run },
   { name: "validate", run: validateStage.run },
   { name: "gen-motis-config", run: genMotisConfigStage.run },
-  { name: "assemble-staging", run: assembleStagingStage.run },
+  // hardStop: assemble-staging returns "error" when it would stage 0 feeds.
+  // That's the real empty-import guard — halt before the container import +
+  // promote so a total acquisition failure can't swap an empty timetable over
+  // the live one. (fetch/mirror can legitimately "error" while a stale archive
+  // from a prior run is preserved on disk; that archive still gets assembled,
+  // so the guard belongs here, on the staged count — not on the fetch result.)
+  { name: "assemble-staging", run: assembleStagingStage.run, hardStop: true },
   { name: "motis-import", run: motisImportStage.run },
   { name: "motis-health", run: motisHealthStage.run },
   { name: "gen-full-config", run: genFullConfigStage.run },
@@ -60,7 +66,9 @@ const BUILD_STAGES: ReadonlyArray<StageEntry> = [
  * own feed-proxy) — only the slow/fragile fetch step is skipped.
  */
 const MIRROR_STAGES: ReadonlyArray<StageEntry> = BUILD_STAGES.map((stage) =>
-  stage.name === "fetch" ? { name: "mirror", run: mirrorStage.run } : stage,
+  stage.name === "fetch"
+    ? { name: "mirror", run: mirrorStage.run, hardStop: stage.hardStop }
+    : stage,
 );
 
 export function stagesFor(source: TransitSource): ReadonlyArray<StageEntry> {
@@ -176,6 +184,8 @@ export interface BuildJobContextOptions {
   source?: TransitSource;
   artifactBaseUrl?: string;
   feedProxyUrl?: string;
+  /** Mirror-mode archive downloader (default: curlAtomic). Injected by tests. */
+  artifactDownloader?: (url: string, dest: string) => Promise<void>;
 }
 
 /** Build a `JobContext` with safe defaults; used by API + tests. */
@@ -197,6 +207,7 @@ export function buildJobContext(opts: BuildJobContextOptions): JobContext {
     source: opts.source ?? "build",
     artifactBaseUrl: opts.artifactBaseUrl,
     feedProxyUrl: opts.feedProxyUrl,
+    artifactDownloader: opts.artifactDownloader,
     logger,
     abortSignal: opts.abortSignal ?? new AbortController().signal,
     onStageComplete: opts.onStageComplete ?? (async () => {}),

@@ -268,6 +268,26 @@ describe("assemble-staging run()", () => {
     expect((artifacts.missingFeeds as string[]).includes("missing-feed.gtfs.zip")).toBe(true);
   });
 
+  it("returns status 'error' (empty-staging guard) when the config references no feeds", async () => {
+    // gen-motis-config with --skip-missing-files emits a config with 0 datasets
+    // when nothing was acquired. Staging 0 feeds would import + promote an empty
+    // timetable, so the stage must error (it's a hardStop in the pipeline).
+    const fx = setupFixture({ withConfig: true, feeds: [] });
+    const result = await run(makeCtx(fx.dataDir));
+    expect(result.status).toBe("error");
+    expect(result.message).toMatch(/refusing to import\/promote an empty timetable/);
+    expect((result.artifacts as Record<string, unknown>).linkedFeeds).toBe(0);
+  });
+
+  it("returns status 'error' when every referenced feed is missing from output", async () => {
+    const fx = setupFixture({ withConfig: true, feeds: [] });
+    // Config references a feed that was never written to disk → 0 linked.
+    writeFileSync(join(fx.outDir, "config.yml"), buildConfig(["gone.gtfs.zip"]));
+    const result = await run(makeCtx(fx.dataDir));
+    expect(result.status).toBe("error");
+    expect((result.artifacts as Record<string, unknown>).missingFeeds).toContain("gone.gtfs.zip");
+  });
+
   it("prunes stale archives in staging dir not referenced by current config", async () => {
     const fx = setupFixture({
       withConfig: true,

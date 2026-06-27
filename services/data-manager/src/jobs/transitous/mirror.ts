@@ -1,9 +1,15 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { mirrorArtifacts, TRANSITOUS_ARTIFACT_BASE_URL } from "@openmapx/transitous-core";
+import { TRANSITOUS_ARTIFACT_BASE_URL } from "@openmapx/transitous-core";
+import { curlAtomic } from "../atomic-download.js";
 import type { FeedDownloadFailure } from "../download-gtfs.js";
 import { feedKeyForSource, recordFetchOutcome } from "./feed-state-writer.js";
 import type { StageFn, StageResult, StageStatus } from "./types.js";
+
+// Transitous publishes each cleaned feed as `<region>_<name>.<spec>.zip`. We
+// don't reliably know gtfs vs netex up front (catalog spec can differ from what
+// upstream actually published), so try gtfs then netex and keep the first hit.
+const ARCHIVE_SPECS = ["gtfs", "netex"] as const;
 
 /**
  * Mirror-mode replacement for the `fetch` stage. Instead of running fetch.py
@@ -13,46 +19,55 @@ import type { StageFn, StageResult, StageStatus } from "./types.js";
  * gen-full-config, gen-attribution, assemble, import, promote) is identical to
  * build mode and runs against the catalog clone + the mirrored archives.
  *
- * Per-source `feed_state` is recorded from archive presence — the published
- * filenames match fetch.py's `<region>_<name>.<spec>.zip` convention — so the
- * admin feed tables + staleness cron behave the same as in build mode.
+ * Each selected source's archive is fetched directly by URL (the published
+ * filenames match fetch.py's `<region>_<name>.<spec>.zip` convention). Direct
+ * per-file download is deterministic and incremental (curlAtomic sends
+ * If-Modified-Since for archives already on disk) — unlike a recursive wget,
+ * which has to parse the multi-thousand-entry autoindex and silently fetched
+ * nothing against it. Per-source `feed_state` is recorded from the download
+ * outcome so the admin feed tables + staleness cron behave as in build mode.
  */
 export const run: StageFn = async (ctx): Promise<StageResult> => {
   const startedAt = ctx.now();
   const start = Date.now();
   try {
     const gtfsDir = ctx.state.gtfsDir ?? ctx.outDir;
+    mkdirSync(gtfsDir, { recursive: true });
     // `||` (not `??`): compose injects `${VAR:-}` as an empty string when the
     // operator hasn't set it, and "" must fall through to the default.
-    const baseUrl =
+    const rawBase =
       ctx.artifactBaseUrl ||
       process.env.TRANSITOUS_ARTIFACT_BASE_URL ||
       TRANSITOUS_ARTIFACT_BASE_URL;
+    const baseUrl = rawBase.endsWith("/") ? rawBase : `${rawBase}/`;
+    const download = ctx.artifactDownloader ?? curlAtomic;
     const selectedFeedFiles = ctx.state.selectedFeedFiles ?? [];
-
-    await mirrorArtifacts({
-      baseUrl,
-      destDir: gtfsDir,
-      countries: ctx.countries,
-      runner: ctx.runner,
-      logger: ctx.logger,
-    });
 
     const failures: FeedDownloadFailure[] = [];
     for (const feed of selectedFeedFiles) {
       for (const source of feed.activeScheduleSources) {
-        const present = ["gtfs", "netex"].some((spec) =>
-          existsSync(join(gtfsDir, `${feed.id}_${source.name}.${spec}.zip`)),
-        );
+        let ok = false;
+        for (const spec of ARCHIVE_SPECS) {
+          const name = `${feed.id}_${source.name}.${spec}.zip`;
+          try {
+            await download(`${baseUrl}${name}`, join(gtfsDir, name));
+            if (existsSync(join(gtfsDir, name))) {
+              ok = true;
+              break;
+            }
+          } catch {
+            // No archive for this spec (404) — try the next, else count missing.
+          }
+        }
         const key = feedKeyForSource(feed, source.name);
         try {
-          await recordFetchOutcome({ region: key.region, name: key.name, ok: present });
+          await recordFetchOutcome({ region: key.region, name: key.name, ok });
         } catch (err) {
           ctx.logger.warn(
             `transitous-mirror: feed_state write failed for ${key.region}/${key.name}: ${(err as Error).message}`,
           );
         }
-        if (!present) {
+        if (!ok) {
           failures.push({
             id: source.id,
             country: feed.country,

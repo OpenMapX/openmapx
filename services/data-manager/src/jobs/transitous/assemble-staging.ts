@@ -144,6 +144,22 @@ export const run: StageFn = async (ctx) => {
     const licenseSrc = join(outDir, "license.json");
     if (existsSync(licenseSrc)) linkOrCopy(licenseSrc, join(stagingDir, "license.json"));
 
+    // Empty staging guard (hardStop): a config that stages 0 feeds would import
+    // an empty timetable and promote it over the live one. Refuse — the pipeline
+    // halts here, leaving live untouched. (A config genuinely referencing no
+    // feeds, or one whose every referenced archive is missing from the output.)
+    if (linkedFeeds.length === 0) {
+      return finish(
+        "error",
+        `assembled 0 feed(s) into ${stagingDir}: refusing to import/promote an empty timetable` +
+          (missingFeeds.length
+            ? `; ${missingFeeds.length} referenced feed(s) missing from output`
+            : "") +
+          (osm ? `; osm ${osmSource}` : ""),
+        { stagingDir, linkedFeeds: 0, missingFeeds, osm: osm ?? null, osmSource },
+      );
+    }
+
     const status = missingFeeds.length > 0 || osmSource === "missing" ? "partial" : "ok";
     return finish(
       status,
