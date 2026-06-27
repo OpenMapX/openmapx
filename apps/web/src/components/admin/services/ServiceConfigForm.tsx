@@ -31,6 +31,7 @@ interface SchemaProperty {
   default?: unknown;
   enum?: string[];
   format?: string;
+  "x-openmapx-secret"?: boolean;
 }
 
 interface ServiceConfigFormProps {
@@ -67,20 +68,25 @@ function humanize(key: string): string {
     .trim();
 }
 
-function extractFields(schema: Record<string, unknown> | undefined) {
+export function extractFields(schema: Record<string, unknown> | undefined) {
   if (!schema) return [];
   const props = (schema.properties ?? schema) as Record<string, SchemaProperty>;
-  return Object.entries(props)
-    .filter(([key]) => key !== "type" && key !== "properties")
-    .map(([key, def]) => ({
-      key,
-      title: def?.title ?? humanize(key),
-      description: def?.description,
-      type: def?.type ?? "string",
-      enum: def?.enum,
-      format: def?.format,
-      default: def?.default,
-    }));
+  return (
+    Object.entries(props)
+      .filter(([key]) => key !== "type" && key !== "properties")
+      // Secret fields are managed on the Credentials tab (vault-backed), never in
+      // the plain config form — mirrors the integration `ConfigSchemaForm`.
+      .filter(([, def]) => !def?.["x-openmapx-secret"])
+      .map(([key, def]) => ({
+        key,
+        title: def?.title ?? humanize(key),
+        description: def?.description,
+        type: def?.type ?? "string",
+        enum: def?.enum,
+        format: def?.format,
+        default: def?.default,
+      }))
+  );
 }
 
 export function ServiceConfigForm({

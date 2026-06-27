@@ -35,6 +35,7 @@
         "title": "Stadia Maps API key",
         "description": "Used only to validate the Valhalla/Stadia backend in the health check. Required for the Stadia default; self-hosted Valhalla needs none. The isochrone requests themselves use the apps/api VALHALLA_API_KEY env. Also settable via INTEGRATION_OVERLAY_TOOL_TRAVEL_TIME_APIKEY.",
         "format": "password",
+        "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://client.stadiamaps.com/dashboard/",
           "urlLabel": "Get Stadia Maps API key",
