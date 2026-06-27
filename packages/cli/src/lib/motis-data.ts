@@ -17,9 +17,11 @@ import {
   ensureCatalog,
   mirrorArtifacts,
   parseTransitSource,
+  pruneUnresolvableSources,
   TRANSITOUS_ARTIFACT_BASE_URL,
   TRANSITOUS_CATALOG_DIR,
   TRANSITOUS_DOWNLOADS_DIR,
+  type TransitousLogger,
   type TransitSource,
 } from "@openmapx/transitous-core";
 import { execa } from "execa";
@@ -136,67 +138,34 @@ function stageGtfsFeeds(gtfsDir: string, motisDir: string): string[] {
 }
 
 /**
- * Walk the catalog's `feeds/*.json` files and mark every `transitland-atlas`
- * source whose `transitland-atlas-id` is no longer present in the local
- * `transitland-atlas/feeds/` submodule as `skip: true`.
- *
- * Upstream Transitous occasionally lands a catalog change before the
- * matching atlas update is mirrored, or vice versa, leaving sources whose
- * atlas reference resolves to nothing. Both `fetch.py` and
- * `generate-motis-config.py` exit `1` on the first such source, which kills
- * the build for unrelated reasons. Marking them `skip: true` lets the rest
- * of the catalog proceed; once upstream catches up, a clean catalog pull
- * stops triggering this code path.
- *
- * Returns the number of sources newly marked. Idempotent across runs.
+ * `docker run` argv for an arbitrary command in the transitous-tools image with
+ * the catalog working tree mounted — used to run the resolution pre-check in the
+ * container (the CLI has no host Python). Mirrors dockerRunTransitousArgs's
+ * mounts but runs `<command> <args>` directly with WORKDIR /transitous.
  */
-function skipUnresolvableAtlasSources(catalogDir: string): number {
-  const atlasDir = join(catalogDir, "transitland-atlas", "feeds");
-  const feedsDir = join(catalogDir, "feeds");
-  if (!existsSync(atlasDir) || !existsSync(feedsDir)) return 0;
-
-  const knownAtlasIds = new Set<string>();
-  for (const fileName of readdirSync(atlasDir)) {
-    if (!fileName.endsWith(".json")) continue;
-    try {
-      const data = JSON.parse(readFileSync(join(atlasDir, fileName), "utf-8")) as {
-        feeds?: Array<{ id?: string }>;
-      };
-      for (const feed of data.feeds ?? []) {
-        if (feed.id) knownAtlasIds.add(feed.id);
-      }
-    } catch {
-      // Skip a malformed atlas file rather than refusing to mark anything.
-    }
+function dockerExecArgs(
+  catalogDir: string,
+  gtfsDir: string,
+  downloadsDir: string,
+  image: string,
+  command: string,
+  commandArgs: string[],
+): string[] {
+  const args = [
+    "run",
+    "--rm",
+    "-v",
+    `${catalogDir}:/transitous`,
+    "-v",
+    `${gtfsDir}:/transitous/out`,
+    "-v",
+    `${downloadsDir}:/transitous/downloads`,
+  ];
+  if (typeof process.getuid === "function" && typeof process.getgid === "function") {
+    args.push("--user", `${process.getuid()}:${process.getgid()}`);
   }
-
-  let markedCount = 0;
-  for (const fileName of readdirSync(feedsDir)) {
-    if (!fileName.endsWith(".json")) continue;
-    const feedPath = join(feedsDir, fileName);
-    let data: { sources?: Array<Record<string, unknown>> };
-    try {
-      data = JSON.parse(readFileSync(feedPath, "utf-8")) as {
-        sources?: Array<Record<string, unknown>>;
-      };
-    } catch {
-      continue;
-    }
-    let modified = false;
-    for (const source of data.sources ?? []) {
-      if (source.type !== "transitland-atlas") continue;
-      const atlasId = source["transitland-atlas-id"];
-      if (typeof atlasId !== "string" || knownAtlasIds.has(atlasId)) continue;
-      if (source.skip === true) continue;
-      source.skip = true;
-      markedCount++;
-      modified = true;
-    }
-    if (modified) {
-      writeFileSync(feedPath, `${JSON.stringify(data, null, 2)}\n`, "utf-8");
-    }
-  }
-  return markedCount;
+  args.push("-w", "/transitous", image, command, ...commandArgs);
+  return args;
 }
 
 async function ensureTransitousToolsImage(
@@ -425,32 +394,32 @@ export async function buildMotisData(
     opts.feedProxyUrl ??
     process.env[OPENMAPX_TRANSITOUS_FEED_PROXY_URL_ENV] ??
     DEFAULT_OPENMAPX_TRANSITOUS_FEED_PROXY_URL;
+  const countries = (process.env[TRANSITOUS_COUNTRIES_ENV] ?? "")
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean);
+  const cliLogger: TransitousLogger = {
+    info: (m) => console.error(m),
+    warn: (m) => console.error(m),
+    error: (m) => console.error(m),
+  };
 
   clearPreparedMotisInputs(motisDir);
   clearPreparedFeedProxyInputs(feedProxyDir);
   linkOrCopy(sourcePbf, join(motisDir, basename(sourcePbf)));
 
-  // Mirror mode: pull Transitous's processed artifacts (config.yml, *.gtfs.zip,
-  // license.json, scripts/) into the gtfs dir so the rest of the flow stages +
-  // copies them exactly as it does the script-generated output. Skips the slow
-  // fetch + gtfsclean + config-gen; realtime still goes through our own proxy
-  // (patchMotisConfig rewrites the rt.triptix.tech URLs).
+  // Mirror mode: download Transitous's already-cleaned GTFS archives into the
+  // gtfs dir (skipping fetch.py + gtfsclean). The config + attribution are still
+  // generated from the catalog below, so osm/tiles/RT handling is identical to
+  // build mode.
   if (source === "mirror") {
-    const countries = (process.env[TRANSITOUS_COUNTRIES_ENV] ?? "")
-      .split(",")
-      .map((c) => c.trim())
-      .filter(Boolean);
     mkdirSync(gtfsDir, { recursive: true });
     await mirrorArtifacts({
       baseUrl: artifactBaseUrl,
       destDir: gtfsDir,
       countries,
       runner,
-      logger: {
-        info: (m) => console.error(m),
-        warn: (m) => console.error(m),
-        error: (m) => console.error(m),
-      },
+      logger: cliLogger,
     });
   }
 
@@ -477,14 +446,34 @@ export async function buildMotisData(
     runner,
     stdio: "inherit",
   });
-  // Sanitise the catalog before any container runs against it. Sources
-  // referencing atlas feeds that were dropped (or not yet mirrored) make
-  // generate-motis-config.py exit on the first one and kill the build.
-  skipUnresolvableAtlasSources(transitousCatalogDir);
   const transitousDownloadsDir = resolve(dataDir, TRANSITOUS_DOWNLOADS_DIR);
   const feedProxyKeyFile = ensureFeedProxyKeyFile(feedProxyDir);
   mkdirSync(transitousDownloadsDir, { recursive: true });
   await ensureTransitousToolsImage(paths.root, image, runner);
+
+  // Pre-skip sources upstream can't resolve by RUNNING its resolver in the
+  // tools container and acting on the "Could not resolve" verdict (same as the
+  // daemon — delegates to upstream, so it handles credential-gated feeds the
+  // old static atlas-presence check missed). Otherwise generate-config exits on
+  // the first such source and kills the build.
+  await pruneUnresolvableSources({
+    catalogDir: transitousCatalogDir,
+    countries,
+    runner: async (command, commandArgs) =>
+      runner(
+        "docker",
+        dockerExecArgs(
+          transitousCatalogDir,
+          gtfsDir,
+          transitousDownloadsDir,
+          image,
+          command,
+          commandArgs,
+        ),
+        { cwd: paths.root, stdio: "pipe" },
+      ),
+    logger: cliLogger,
+  });
 
   const runScriptPath = join(paths.root, "services", "motis", "tools", "transitous", "run.sh");
   // The MOTIS config + attribution are generated from the catalog in BOTH modes

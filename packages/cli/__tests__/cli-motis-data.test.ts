@@ -144,6 +144,23 @@ describe("buildMotisData", () => {
         cwd: tmp,
       },
       {
+        // Resolution pre-check: run generate-config in the tools container and
+        // act on its "Could not resolve" verdict (delegates to upstream).
+        command: "docker",
+        args: expect.arrayContaining([
+          "run",
+          "--rm",
+          "-w",
+          "/transitous",
+          DEFAULT_TRANSITOUS_TOOLS_IMAGE,
+          "python3",
+          "./src/generate-motis-config.py",
+          "--import-only",
+          "--skip-missing-files",
+        ]),
+        cwd: tmp,
+      },
+      {
         command: "docker",
         args: expect.arrayContaining([
           "run",
@@ -299,10 +316,15 @@ describe("buildMotisData", () => {
       },
     });
 
-    expect(dockerRuns).toHaveLength(3);
-    for (const args of dockerRuns) {
+    // The three run.sh actions thread TRANSITOUS_COUNTRIES via -e.
+    const runShRuns = dockerRuns.filter((args) => args.includes("/run.sh"));
+    expect(runShRuns).toHaveLength(3);
+    for (const args of runShRuns) {
       expect(args).toEqual(expect.arrayContaining(["-e", "TRANSITOUS_COUNTRIES=de,at"]));
     }
+    // The resolution pre-check passes countries as positional region args.
+    const pruneRun = dockerRuns.find((args) => args.includes("./src/generate-motis-config.py"));
+    expect(pruneRun).toEqual(expect.arrayContaining(["--import-only", "de", "at"]));
   });
 
   it("stages OSM input without Transitous tooling when no GTFS feeds are present", async () => {
