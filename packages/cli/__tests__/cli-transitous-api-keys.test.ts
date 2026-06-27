@@ -73,10 +73,11 @@ describe("generateTransitousApiKeys", () => {
       "utf-8",
     );
 
+    const catalogDir = join(tmp, "infra", "docker", "data", ".transitous-catalog");
     const calls: Array<{ command: string; args: string[]; cwd?: string }> = [];
     const runner: CommandRunner = async (command, args, opts) => {
       calls.push({ command, args, cwd: opts.cwd });
-      if (command === "git" && args[0] === "clone") {
+      if (command === "git" && args.includes("clone")) {
         const targetDir = args.at(-1);
         if (typeof targetDir === "string") {
           writeTransitousCatalog(targetDir);
@@ -98,6 +99,8 @@ describe("generateTransitousApiKeys", () => {
       {
         command: "git",
         args: [
+          "-c",
+          `safe.directory=${catalogDir}`,
           "clone",
           "--depth",
           "1",
@@ -105,7 +108,7 @@ describe("generateTransitousApiKeys", () => {
           "--shallow-submodules",
           "--",
           DEFAULT_TRANSITOUS_REPO_URL,
-          join(tmp, "infra", "docker", "data", ".transitous-catalog"),
+          catalogDir,
         ],
         cwd: join(tmp, "infra", "docker", "data"),
       },
@@ -117,10 +120,11 @@ describe("generateTransitousApiKeys", () => {
     mkdirSync(join(catalogDir, ".git"), { recursive: true });
     writeTransitousCatalog(catalogDir);
 
+    const safe = `safe.directory=${catalogDir}`;
     const calls: Array<{ command: string; args: string[]; cwd?: string }> = [];
     const runner: CommandRunner = async (command, args, opts) => {
       calls.push({ command, args, cwd: opts.cwd });
-      if (command === "git" && args[2] === "pull") {
+      if (command === "git" && args.includes("pull")) {
         throw new Error("network unavailable");
       }
     };
@@ -138,17 +142,28 @@ describe("generateTransitousApiKeys", () => {
     expect(calls).toEqual([
       {
         command: "git",
-        args: ["-C", catalogDir, "reset", "--hard", "HEAD"],
+        args: ["-c", safe, "-C", catalogDir, "reset", "--hard", "HEAD"],
         cwd: catalogDir,
       },
       {
         command: "git",
-        args: ["-C", catalogDir, "pull", "--ff-only"],
+        args: ["-c", safe, "-C", catalogDir, "pull", "--ff-only"],
         cwd: join(tmp, "infra", "docker", "data"),
       },
       {
         command: "git",
-        args: ["-C", catalogDir, "submodule", "update", "--init", "--checkout", "--depth", "1"],
+        args: [
+          "-c",
+          safe,
+          "-C",
+          catalogDir,
+          "submodule",
+          "update",
+          "--init",
+          "--checkout",
+          "--depth",
+          "1",
+        ],
         cwd: join(tmp, "infra", "docker", "data"),
       },
     ]);

@@ -1,12 +1,11 @@
-import { existsSync, mkdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync } from "node:fs";
+import { ensureCatalog } from "@openmapx/transitous-core";
 import { parseRefShaPair, readTransitousLock } from "../../transitous-lock.js";
 import {
   DEFAULT_TRANSITOUS_REPO_URL,
   ensureTransitousWorkdirs,
   readGitHeadSha,
   readTransitlandAtlasSha,
-  resetTransitousCatalog,
   safeDirArgs,
 } from "./internal.js";
 import type { JobContext, JobLogger, StageFn, StageResult } from "./types.js";
@@ -26,50 +25,13 @@ export const run: StageFn = async (ctx) => {
     const catalogDir = ctx.catalogDir;
     const repoUrl =
       ctx.transitousRepoUrl ?? process.env.TRANSITOUS_REPO_URL ?? DEFAULT_TRANSITOUS_REPO_URL;
-    const safeArgs = safeDirArgs(catalogDir);
-
-    if (existsSync(join(catalogDir, ".git"))) {
-      await resetTransitousCatalog(catalogDir, ctx.runner);
-      try {
-        await ctx.runner("git", [...safeArgs, "-C", catalogDir, "pull", "--ff-only"], {
-          cwd: ctx.dataDir,
-          stdio: "pipe",
-        });
-      } catch {
-        // Keep using the cached checkout if the upstream refresh fails.
-      }
-      await ctx.runner(
-        "git",
-        [
-          ...safeArgs,
-          "-C",
-          catalogDir,
-          "submodule",
-          "update",
-          "--init",
-          "--checkout",
-          "--depth",
-          "1",
-        ],
-        { cwd: ctx.dataDir, stdio: "pipe" },
-      );
-    } else {
-      rmSync(catalogDir, { recursive: true, force: true });
-      await ctx.runner(
-        "git",
-        [
-          ...safeArgs,
-          "clone",
-          "--depth",
-          "1",
-          "--recurse-submodules",
-          "--shallow-submodules",
-          repoUrl,
-          catalogDir,
-        ],
-        { cwd: ctx.dataDir, stdio: "pipe" },
-      );
-    }
+    await ensureCatalog({
+      dataDir: ctx.dataDir,
+      catalogDir,
+      repoUrl,
+      runner: ctx.runner,
+      reset: true,
+    });
 
     await enforceTransitousLock(catalogDir, ctx.repoRoot, ctx.runner, ctx.logger);
     ensureTransitousWorkdirs(catalogDir, ctx.outDir, ctx.downloadsDir);

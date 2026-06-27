@@ -53,6 +53,7 @@ const APACHE_PACKAGES = new Set([
   "place-ids",
   "poi-source-registry",
   "motis-feed-proxy-config",
+  "transitous-core",
   "hardlinks",
   "mangrove-client",
   "mangrove-react",

@@ -1,11 +1,17 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import {
+  type CommandRunner,
+  DEFAULT_TRANSITOUS_REPO_URL,
+  ensureCatalog,
+  TRANSITOUS_CATALOG_DIR,
+  type TransitousFeedFile,
+} from "@openmapx/transitous-core";
 import { execa } from "execa";
-import { DEFAULT_TRANSITOUS_REPO_URL as DEFAULT_TRANSITOUS_REPO_URL_VALUE } from "./motis-data";
 import { repoPaths } from "./paths";
 
-const TRANSITOUS_CATALOG_DIR = ".transitous-catalog";
-export const DEFAULT_TRANSITOUS_REPO_URL = DEFAULT_TRANSITOUS_REPO_URL_VALUE;
+export type { CommandRunner };
+export { DEFAULT_TRANSITOUS_REPO_URL };
 
 interface TransitousAtlasFeed {
   id?: string;
@@ -15,23 +21,6 @@ interface TransitousAtlasFeed {
 interface TransitousAtlasFile {
   feeds?: TransitousAtlasFeed[];
 }
-
-interface TransitousFeedSource {
-  name?: string;
-  "api-key"?: string;
-  "url-override"?: string;
-  "transitland-atlas-id"?: string;
-}
-
-interface TransitousFeedFile {
-  sources?: TransitousFeedSource[];
-}
-
-export type CommandRunner = (
-  command: string,
-  args: string[],
-  opts: { cwd?: string; stdio?: "inherit" | "pipe" },
-) => Promise<void>;
 
 export interface GenerateTransitousApiKeysOptions {
   rootDir?: string;
@@ -63,68 +52,6 @@ function assertInsideRoot(candidate: string, root: string): string {
     throw new Error(`--output must resolve to a path inside ${root} (got ${candidate})`);
   }
   return candidate;
-}
-
-async function resetTransitousCatalog(catalogDir: string, runner: CommandRunner): Promise<void> {
-  try {
-    await runner("git", ["-C", catalogDir, "reset", "--hard", "HEAD"], {
-      cwd: catalogDir,
-      stdio: "pipe",
-    });
-  } catch {
-    // Best effort only. If this fails we still try to continue with the local clone.
-  }
-}
-
-async function ensureTransitousCatalog(
-  dataDir: string,
-  repoUrl: string,
-  runner: CommandRunner,
-): Promise<string> {
-  mkdirSync(dataDir, { recursive: true });
-  const catalogDir = resolve(dataDir, TRANSITOUS_CATALOG_DIR);
-  if (existsSync(join(catalogDir, ".git"))) {
-    await resetTransitousCatalog(catalogDir, runner);
-    try {
-      await runner("git", ["-C", catalogDir, "pull", "--ff-only"], {
-        cwd: dataDir,
-        stdio: "pipe",
-      });
-    } catch {
-      // Keep using the cached checkout if the upstream refresh fails.
-    }
-    await runner(
-      "git",
-      ["-C", catalogDir, "submodule", "update", "--init", "--checkout", "--depth", "1"],
-      {
-        cwd: dataDir,
-        stdio: "pipe",
-      },
-    );
-    return catalogDir;
-  }
-
-  rmSync(catalogDir, { recursive: true, force: true });
-  await runner(
-    "git",
-    // `--` terminates option parsing so a repoUrl starting with `-` can't be
-    // read by git as a flag (argument injection).
-    [
-      "clone",
-      "--depth",
-      "1",
-      "--recurse-submodules",
-      "--shallow-submodules",
-      "--",
-      repoUrl,
-      catalogDir,
-    ],
-    {
-      cwd: dataDir,
-      stdio: "pipe",
-    },
-  );
-  return catalogDir;
 }
 
 function listFilesRecursively(dir: string, suffix: string): string[] {
@@ -245,11 +172,14 @@ export async function generateTransitousApiKeys(
     ? assertInsideRoot(resolve(paths.root, opts.outputPath), paths.root)
     : join(paths.root, "services", "motis", "tools", "transitous", "api-keys.json");
 
-  const catalogDir = await ensureTransitousCatalog(
+  mkdirSync(dataDir, { recursive: true });
+  const catalogDir = await ensureCatalog({
     dataDir,
-    opts.transitousRepoUrl ?? DEFAULT_TRANSITOUS_REPO_URL,
+    catalogDir: resolve(dataDir, TRANSITOUS_CATALOG_DIR),
+    repoUrl: opts.transitousRepoUrl ?? DEFAULT_TRANSITOUS_REPO_URL,
     runner,
-  );
+    reset: true,
+  });
 
   const existing = readExistingApiKeys(outputPath);
   const requiredKeys = collectRequiredApiKeys(

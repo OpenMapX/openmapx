@@ -1541,6 +1541,9 @@ importers:
       '@openmapx/motis-feed-proxy-config':
         specifier: workspace:^
         version: link:../motis-feed-proxy-config
+      '@openmapx/transitous-core':
+        specifier: workspace:^
+        version: link:../transitous-core
       commander:
         specifier: ^15.0.0
         version: 15.0.0
@@ -2010,6 +2013,18 @@ importers:
         specifier: ^4.1.8
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@25.9.3)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.0.16(@types/node@25.9.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
 
+  packages/transitous-core:
+    devDependencies:
+      '@types/node':
+        specifier: ^25.9.3
+        version: 25.9.3
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@25.9.3)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.0.16(@types/node@25.9.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+
   services/data-manager:
     dependencies:
       '@openmapx/core':
@@ -2027,6 +2042,9 @@ importers:
       '@openmapx/poi-source-registry':
         specifier: workspace:^
         version: link:../../packages/poi-source-registry
+      '@openmapx/transitous-core':
+        specifier: workspace:^
+        version: link:../../packages/transitous-core
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1

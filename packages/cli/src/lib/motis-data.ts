@@ -11,6 +11,13 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, join, resolve } from "node:path";
+import {
+  type CommandRunner,
+  DEFAULT_TRANSITOUS_REPO_URL,
+  ensureCatalog,
+  TRANSITOUS_CATALOG_DIR,
+  TRANSITOUS_DOWNLOADS_DIR,
+} from "@openmapx/transitous-core";
 import { execa } from "execa";
 import { TRANSITOUS_COUNTRIES_ENV } from "./env-defaults";
 import { readFeedProxyVars, renderFeedProxyNginxConfig } from "./motis-feed-proxy";
@@ -26,7 +33,7 @@ export const MOTIS_FEED_PROXY_CONF_SUBDIR = "conf";
 export const MOTIS_CONFIG_FILENAME = "config.yml";
 export const MOTIS_LICENSE_FILENAME = "license.json";
 export const MOTIS_FEED_PROXY_CONFIG_FILENAME = "default.conf";
-export const DEFAULT_TRANSITOUS_REPO_URL = "https://github.com/public-transport/transitous.git";
+export { DEFAULT_TRANSITOUS_REPO_URL };
 // CI publishes a multi-arch transitous-tools image (.github/workflows/docker.yml).
 // Default to the registry image; ensureTransitousToolsImage falls back to a
 // local docker build when the registry pull fails (offline / private fork).
@@ -36,17 +43,11 @@ export const OPENMAPX_TRANSITOUS_FEED_PROXY_URL_ENV = "OPENMAPX_TRANSITOUS_FEED_
 export const DEFAULT_OPENMAPX_TRANSITOUS_FEED_PROXY_URL = "http://motis-feed-proxy";
 export const TRANSITOUS_FEED_PROXY_KEY_FILE_ENV = "TRANSITOUS_FEED_PROXY_KEY_FILE";
 
-const TRANSITOUS_CATALOG_DIR = ".transitous-catalog";
-const TRANSITOUS_DOWNLOADS_DIR = ".transitous-downloads";
 const FEED_PROXY_VARS_FILENAME = "feed-proxy-vars.json";
 const TRANSITOUS_FEED_PROXY_KEY_CONTAINER_PATH = "/run/secrets/transitous-feed-proxy.key";
 const EMPTY_FEED_PROXY_KEY_FILENAME = ".empty-feed-proxy.key";
 
-export type CommandRunner = (
-  command: string,
-  args: string[],
-  opts: { cwd?: string; stdio?: "inherit" },
-) => Promise<void>;
+export type { CommandRunner };
 
 export interface BuildMotisDataOptions {
   rootDir?: string;
@@ -73,7 +74,7 @@ export interface BuildMotisDataResult {
 async function defaultRunner(
   command: string,
   args: string[],
-  opts: { cwd?: string; stdio?: "inherit" },
+  opts: { cwd?: string; stdio?: "inherit" | "pipe" },
 ): Promise<void> {
   await execa(command, args, { cwd: opts.cwd, stdio: opts.stdio ?? "inherit" });
 }
@@ -124,66 +125,6 @@ function stageGtfsFeeds(gtfsDir: string, motisDir: string): string[] {
     staged.push(target);
   }
   return staged;
-}
-
-async function ensureTransitousCatalog(
-  dataDir: string,
-  repoUrl: string,
-  runner: CommandRunner,
-): Promise<string> {
-  const catalogDir = resolve(dataDir, TRANSITOUS_CATALOG_DIR);
-  // The catalog clone may have been written by the data-manager container
-  // (UID 1001 by default) and we're now running as the host operator (UID
-  // 1000). Modern git refuses to operate on a repo with mismatched
-  // ownership unless `safe.directory` is configured. Pass it inline on
-  // every invocation that targets the catalog so the build works without
-  // requiring the operator to fiddle with `git config --global` first.
-  const safeDirArgs = ["-c", `safe.directory=${catalogDir}`];
-  if (existsSync(join(catalogDir, ".git"))) {
-    await runner("git", [...safeDirArgs, "-C", catalogDir, "pull", "--ff-only"], {
-      cwd: dataDir,
-      stdio: "inherit",
-    });
-    await runner(
-      "git",
-      [
-        ...safeDirArgs,
-        "-C",
-        catalogDir,
-        "submodule",
-        "update",
-        "--init",
-        "--checkout",
-        "--depth",
-        "1",
-      ],
-      {
-        cwd: dataDir,
-        stdio: "inherit",
-      },
-    );
-    return catalogDir;
-  }
-
-  rmSync(catalogDir, { recursive: true, force: true });
-  await runner(
-    "git",
-    [
-      ...safeDirArgs,
-      "clone",
-      "--depth",
-      "1",
-      "--recurse-submodules",
-      "--shallow-submodules",
-      repoUrl,
-      catalogDir,
-    ],
-    {
-      cwd: dataDir,
-      stdio: "inherit",
-    },
-  );
-  return catalogDir;
 }
 
 /**
@@ -491,7 +432,13 @@ export async function buildMotisData(
     };
   }
 
-  const transitousCatalogDir = await ensureTransitousCatalog(dataDir, transitousRepoUrl, runner);
+  const transitousCatalogDir = await ensureCatalog({
+    dataDir,
+    catalogDir: resolve(dataDir, TRANSITOUS_CATALOG_DIR),
+    repoUrl: transitousRepoUrl,
+    runner,
+    stdio: "inherit",
+  });
   // Sanitise the catalog before any container runs against it. Sources
   // referencing atlas feeds that were dropped (or not yet mirrored) make
   // generate-motis-config.py exit on the first one and kill the build.

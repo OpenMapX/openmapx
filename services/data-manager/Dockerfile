@@ -36,6 +36,7 @@ COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
 COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
 COPY packages/poi-source-registry/package.json packages/poi-source-registry/
+COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/core/package.json packages/core/
 
 RUN pnpm install --filter @openmapx/data-manager... --frozen-lockfile
@@ -50,6 +51,7 @@ COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
 COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
 COPY packages/poi-source-registry/package.json packages/poi-source-registry/
+COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/core/package.json packages/core/
 
 RUN pnpm install --filter @openmapx/data-manager... --frozen-lockfile --prod --ignore-scripts
@@ -62,6 +64,7 @@ COPY packages/db-schema/ packages/db-schema/
 COPY packages/hardlinks/ packages/hardlinks/
 COPY packages/motis-feed-proxy-config/ packages/motis-feed-proxy-config/
 COPY packages/poi-source-registry/ packages/poi-source-registry/
+COPY packages/transitous-core/ packages/transitous-core/
 COPY packages/core/ packages/core/
 COPY services/data-manager/ services/data-manager/
 

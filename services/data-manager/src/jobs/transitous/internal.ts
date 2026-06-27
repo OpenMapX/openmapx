@@ -9,9 +9,33 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import {
+  DEFAULT_TRANSITOUS_REPO_URL,
+  type PruneUnresolvableSourcesOptions,
+  pruneUnresolvableSources,
+  resetCatalog,
+  safeDirArgs,
+  TRANSITOUS_CATALOG_DIR,
+  TRANSITOUS_DOWNLOADS_DIR,
+  type TransitousFeedFile,
+  type TransitousFeedSource,
+} from "@openmapx/transitous-core";
 import { execa } from "execa";
 import type { FeedDownloadFailure } from "../download-gtfs.js";
 import type { CommandRunner, FeedFileEntry, JobLogger } from "./types.js";
+
+export type { PruneUnresolvableSourcesOptions, TransitousFeedFile, TransitousFeedSource };
+// Shared Transitous helpers now live in @openmapx/transitous-core; re-export the
+// ones daemon modules still import from here so their import paths don't churn.
+export {
+  DEFAULT_TRANSITOUS_REPO_URL,
+  pruneUnresolvableSources,
+  safeDirArgs,
+  TRANSITOUS_CATALOG_DIR,
+  TRANSITOUS_DOWNLOADS_DIR,
+};
+/** Discard in-place catalog edits. Kept name; backed by the shared helper. */
+export const resetTransitousCatalog = resetCatalog;
 
 /**
  * Marker file the motis-import stage writes into the staging data
@@ -22,11 +46,8 @@ import type { CommandRunner, FeedFileEntry, JobLogger } from "./types.js";
 export const IMPORT_MARKER_FILE = ".data-manager-import.ok.json";
 
 export const RAW_BASE = "https://raw.githubusercontent.com/public-transport/transitous/main";
-export const DEFAULT_TRANSITOUS_REPO_URL = "https://github.com/public-transport/transitous.git";
 export const DEFAULT_TRANSITOUS_API_KEYS_PATH = "/config/transitous/api-keys.json";
 export const DEFAULT_TRANSITOUS_FEEDS_OVERLAY_PATH = "/data/overrides/feeds-overlay.json";
-export const TRANSITOUS_CATALOG_DIR = ".transitous-catalog";
-export const TRANSITOUS_DOWNLOADS_DIR = ".transitous-downloads";
 
 // Match published GTFS / NeTEx archives only. `.tmp-*.gtfs.zip` and any
 // other dotfile-prefixed name is excluded.
@@ -57,20 +78,6 @@ export function parseTransitousCountriesEnv(env: NodeJS.ProcessEnv = process.env
     .filter(Boolean);
 }
 
-export interface TransitousFeedSource {
-  name?: string;
-  skip?: boolean;
-  spec?: string;
-  type?: string;
-  url?: string;
-  "api-key"?: string;
-  "transitland-atlas-id"?: string;
-}
-
-interface TransitousFeedFile {
-  sources?: TransitousFeedSource[];
-}
-
 interface TransitlandAtlasFeedFile {
   feeds?: Array<{
     id?: string;
@@ -82,10 +89,6 @@ export interface GtfsArchiveSnapshot {
   path: string;
   id: string;
   sizeBytes: number;
-}
-
-export function safeDirArgs(catalogDir: string): string[] {
-  return ["-c", `safe.directory=${catalogDir}`];
 }
 
 export async function readGitHeadSha(catalogDir: string): Promise<string> {
@@ -110,20 +113,6 @@ export function readTransitlandAtlasSha(catalogDir: string): string | undefined 
     return undefined;
   } catch {
     return undefined;
-  }
-}
-
-export async function resetTransitousCatalog(
-  catalogDir: string,
-  runner: CommandRunner,
-): Promise<void> {
-  try {
-    await runner("git", [...safeDirArgs(catalogDir), "-C", catalogDir, "reset", "--hard", "HEAD"], {
-      cwd: catalogDir,
-      stdio: "pipe",
-    });
-  } catch {
-    // Best effort only.
   }
 }
 
@@ -185,151 +174,6 @@ export function applyApiKeysOverlay(catalogDir: string, overlayPath: string): nu
   }
 
   return applied;
-}
-
-/** Upstream's exact fatal line when a Transitland / MDB source won't resolve. */
-const COULD_NOT_RESOLVE_RE = /Error: Could not resolve\s+(\S+)/g;
-
-function resolveErrorText(err: unknown): string {
-  if (err && typeof err === "object") {
-    const e = err as { stderr?: unknown; stdout?: unknown; message?: unknown };
-    return [e.stderr, e.stdout, e.message]
-      .filter((part): part is string => typeof part === "string")
-      .join("\n");
-  }
-  return String(err);
-}
-
-function parseUnresolvableIds(text: string): string[] {
-  const ids = new Set<string>();
-  for (const match of text.matchAll(COULD_NOT_RESOLVE_RE)) {
-    const id = match[1]?.trim();
-    if (id) ids.add(id);
-  }
-  return [...ids];
-}
-
-/**
- * Mark feed sources whose `transitland-atlas-id` / `mdb-id` matches one of
- * `ids` as `skip: true` (with a `skip-reason`). Returns the ids actually
- * matched + newly skipped (empty when none were found or all were skipped).
- */
-function markSourcesSkipById(
-  catalogDir: string,
-  ids: ReadonlySet<string>,
-  reason: string,
-): string[] {
-  const feedsDir = join(catalogDir, "feeds");
-  if (!existsSync(feedsDir)) return [];
-  const marked: string[] = [];
-  for (const fileName of readdirSync(feedsDir)) {
-    if (!fileName.endsWith(".json")) continue;
-    const feedPath = join(feedsDir, fileName);
-    let data: { sources?: Array<Record<string, unknown>> };
-    try {
-      data = JSON.parse(readFileSync(feedPath, "utf-8")) as {
-        sources?: Array<Record<string, unknown>>;
-      };
-    } catch {
-      continue;
-    }
-    let modified = false;
-    for (const source of data.sources ?? []) {
-      if (source.skip === true) continue;
-      const atlasId = source["transitland-atlas-id"];
-      const mdbId = source["mdb-id"];
-      const matchId =
-        typeof atlasId === "string" && ids.has(atlasId)
-          ? atlasId
-          : (typeof mdbId === "string" || typeof mdbId === "number") && ids.has(String(mdbId))
-            ? String(mdbId)
-            : null;
-      if (!matchId) continue;
-      source.skip = true;
-      source["skip-reason"] = reason;
-      marked.push(matchId);
-      modified = true;
-    }
-    if (modified) writeFileSync(feedPath, `${JSON.stringify(data, null, 2)}\n`, "utf-8");
-  }
-  return marked;
-}
-
-export interface PruneUnresolvableSourcesOptions {
-  catalogDir: string;
-  /** Region globs scoping the check; mirror gen-motis-config's own scope. */
-  countries: string[];
-  runner: CommandRunner;
-  logger: JobLogger;
-  /** Backstop against an unexpected non-terminating loop. */
-  maxIterations?: number;
-}
-
-/**
- * Pre-skip sources that upstream's `generate-motis-config.py` can't resolve, by
- * RUNNING that script and acting on its own `Error: Could not resolve <id>`
- * verdict — rather than reimplementing transitland.py's resolution rules in TS
- * (which would silently drift when upstream changes them).
- *
- * Both `fetch.py` and `generate-motis-config.py` `sys.exit(1)` the moment a
- * selected source is unresolvable — e.g. a Transitland feed that gained
- * `authorization=basic_auth` upstream and we hold no key for. fetch.py runs
- * per-feed-file and config-gen runs over all of them, so one such source breaks
- * the whole sync. We therefore resolve it HERE, in the filter stage, before the
- * fetch stage runs. The check uses `--skip-missing-files` so it works before any
- * GTFS is downloaded (resolution happens before the file-existence check).
- *
- * Best-effort: it only acts on the "could not resolve" signal. Any OTHER failure
- * (network, malformed config) is left for the real gen-motis-config stage to
- * surface, so this never fails the filter stage on its own. Each iteration skips
- * the cited source(s) and re-runs until the check passes (the script exits at
- * the first unresolvable source, so ids surface one batch at a time). Returns
- * the source ids it skipped.
- */
-export async function pruneUnresolvableSources(
-  opts: PruneUnresolvableSourcesOptions,
-): Promise<string[]> {
-  const cap = opts.maxIterations ?? 100;
-  const skipped: string[] = [];
-  for (let i = 0; i < cap; i++) {
-    try {
-      await opts.runner(
-        "python3",
-        [
-          "./src/generate-motis-config.py",
-          "--import-only",
-          "--skip-missing-files",
-          ...opts.countries,
-        ],
-        { cwd: opts.catalogDir, stdio: "pipe" },
-      );
-      return skipped; // Everything resolves — fetch + config-gen are safe.
-    } catch (err) {
-      const ids = parseUnresolvableIds(resolveErrorText(err));
-      if (ids.length === 0) {
-        opts.logger.warn(
-          "transitous-pipeline: resolution pre-check failed for a non-resolution reason; deferring to gen-motis-config",
-        );
-        return skipped;
-      }
-      const reason = "unresolvable: upstream generate-motis-config could not resolve this source";
-      const newly = markSourcesSkipById(opts.catalogDir, new Set(ids), reason);
-      if (newly.length === 0) {
-        opts.logger.warn(
-          `transitous-pipeline: generate-motis-config could not resolve ${ids.join(", ")}, but no matching feed source was found to skip`,
-        );
-        return skipped;
-      }
-      skipped.push(...newly);
-      opts.logger.warn(
-        `transitous-pipeline: skipped unresolvable source(s) ${newly.join(", ")} (upstream generate-motis-config could not resolve them)`,
-      );
-    }
-  }
-  opts.logger.warn(
-    `transitous-pipeline: resolution pre-check hit the ${cap}-iteration cap; deferring remaining failures to gen-motis-config`,
-  );
-  return skipped;
 }
 
 export function sourceIdForFailure(
