@@ -92,6 +92,14 @@ below; for now, `--countries` filters the community
 [Transitous](https://github.com/public-transport/transitous) catalog to the
 countries you name. Downloaded feeds land in `data/gtfs/` as `.zip` archives.
 
+:::note[Mirror mode downloads feeds for you]
+`data download gtfs` fetches each feed from its origin (the `build`-mode path).
+In the default **`mirror`** mode the next step (`services build motis`) downloads
+Transitous's already-cleaned archives itself, so you can skip this command — run
+it only for `build` mode or to pull a feed from its origin. See
+[`mirror` vs `build`](#where-the-data-comes-from-mirror-vs-build).
+:::
+
 ### 3. Build the prepared data
 
 MOTIS's build step doesn't compile MOTIS — it assembles the exact input
