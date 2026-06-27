@@ -24,10 +24,10 @@ is generated from those plugins' manifests. You decide which pieces to run.
   overlays, weather, reviews, and place enrichment.
 - **A pluggable backend** — each daemon (the routing engine, the geocoder, the
   transit engine, the tile server, …) is described by a manifest and runs as a
-  container. Community services install from any Git URL.
+  container.
 - **A pluggable feature set** — built-in *integrations* span roughly a dozen
-  domains; community integrations install as prebuilt artifacts from the admin
-  Store, or from source during development.
+  domains. Community extensions — integrations, services, or bundles of both —
+  install from one unified **Extensions** store.
 - **Open data throughout** — OpenStreetMap, GTFS (via Transitous), Wikidata,
   Wikipedia, Mapillary, and a long list of public agency feeds.
 - **Privacy by default** — no third-party analytics, and every upstream API

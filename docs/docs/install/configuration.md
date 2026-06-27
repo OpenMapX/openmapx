@@ -142,8 +142,8 @@ backend runs outside the Compose stack. All optional and commented by default.
 
 | Variable            | Description                                                                                                        | Required / Default                  |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| `OSRM_URL`          | OSRM endpoint for road-snapping (driving / walking / cycling).                                                   | Optional. Commented `http://osrm:5000` |
-| `VALHALLA_URL`      | Valhalla endpoint for isochrones, elevation, road-snap (bus), and the routing/directions provider. The default targets Stadia Maps' hosted Valhalla, which requires `VALHALLA_API_KEY`. A self-hosted Valhalla needs no key. | Optional. Commented `https://api.stadiamaps.com` |
+| `INTEGRATION_ROUTING_OSRM_ENDPOINT` | OSRM endpoint for the routing provider (car routing). Usually unset — a co-deployed `osrm` service is auto-resolved over the internal network. | Optional. Default unset |
+| `VALHALLA_URL`      | Valhalla endpoint for isochrones, elevation, and road-snap (bus). The default targets Stadia Maps' hosted Valhalla, which requires `VALHALLA_API_KEY`; a self-hosted Valhalla needs no key. The routing/directions **provider** resolves separately — via the co-deployed `valhalla` service or `INTEGRATION_ROUTING_VALHALLA_ENDPOINT` / `INTEGRATION_ROUTING_VALHALLA_APIKEY`. | Optional. Commented `https://api.stadiamaps.com` |
 | `VALHALLA_API_KEY`  | API key for the hosted Valhalla above (free non-commercial tier at [stadiamaps.com](https://stadiamaps.com/)). Leave blank for a self-hosted Valhalla. | Optional. Default unset             |
 | `MOTIS_URL`         | MOTIS endpoint for the transit manager and shared local MOTIS helpers.                                            | Optional. Commented `http://motis:8081` |
 | `OVERPASS_URL`      | Overpass API endpoint used by the core Overpass client.                                                          | Optional. Commented `http://overpass:80` |
@@ -248,7 +248,7 @@ Lower-level toggles, retention, and legal-page metadata. All optional.
 | `AUDIT_LOG_RETENTION_DAYS`        | Days to keep admin audit-log entries before the daily prune.                                                     | Optional. Commented `90`  |
 | `ADMIN_JOB_RETENTION_DAYS`        | Days to keep finished admin jobs (in-flight jobs are never pruned).                                              | Optional. Commented `30`  |
 | `GITHUB_TOKEN`                    | GitHub API token — raises the Transitous catalog fetch rate limit from 60 to 5000 req/h. Needed only on multi-tenant hosts. | Optional. Commented       |
-| `STORE_CATALOG_URL`               | Catalog URL for the community-integration **Store** — the JSON list of installable integrations shown under `/admin/store`. | Optional. Commented `https://raw.githubusercontent.com/openmapx/community-integrations/main/catalog.json` |
+| `EXTENSION_CATALOG_URL`           | Default catalog URL for the **Extensions** store — the curated (verified-tier) list shown under `/admin/extensions`. | Optional. Commented `https://raw.githubusercontent.com/openmapx/community-extensions/main/catalog.json` |
 | `LEGAL_NAME`                      | Operator legal name shown on `/terms` and `/privacy`.                                                            | Optional. Commented       |
 | `LEGAL_STREET`                    | Operator street address.                                                                                         | Optional. Commented       |
 | `LEGAL_POSTAL_CODE`               | Operator postal code.                                                                                            | Optional. Commented       |

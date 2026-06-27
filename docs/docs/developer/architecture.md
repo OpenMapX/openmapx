@@ -72,7 +72,7 @@ up without a separate build step.
 | `@openmapx/mobility-formats-tomp` | The TOMP-API (OpenAPI-generated) client, split out so its codegen dependencies don't bleed into every bundle that touches the other formats. |
 | `@openmapx/mobility-core` | The canonical mobility model — one entity type per domain, plus `Attribution`, `Freshness`, `MobilityResult<T>`, the TTL/dedup policy constants, and the GBFS client. |
 | `@openmapx/db-schema` | Drizzle ORM table definitions shared between `apps/api` and `services/data-manager` (job tables, feed state, provider health). |
-| `@openmapx/cli` | The `openmapx` operator command line — `services`, `compose`, `data`, `repos`, `backup`, `check`. |
+| `@openmapx/cli` | The `openmapx` operator command line — `services`, `compose`, `data`, `ext`, `backup`, `check`. |
 | `@openmapx/i18n` | Locale JSON for `en` and `de`, plus a `check-translations` gate that fails CI when locales drift. Consumed by `apps/web` (next-intl) and `apps/api` (integration string lookups). |
 | `@openmapx/poi-source-registry` | A mutable in-process store of declared POI sources. Loaded independently by both `apps/api` (reader) and `services/data-manager` (ingest), so the same integration code drives both. |
 | `@openmapx/presets` | OSM preset matching and category chips, built on iD's tagging schema. |

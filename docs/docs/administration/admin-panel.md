@@ -79,22 +79,20 @@ into one to edit its config, set secrets, and bind it to a backend service; a
 bulk page configures every integration at once. See [Integrations
 administration](./integrations-administration.md).
 
-### Store
+### Extensions
 
-The community extension store: browse, install, and update integrations
-published as prebuilt artifacts, or install one straight from a Git URL. Each
-install shows a trust disclosure before you confirm. See [Community
-extensions](./community-extensions.md).
+The unified extension store: browse, install, update, and remove third-party
+extensions — integrations, services, and bundles of both — across **Browse**,
+**Installed**, and **Sources** tabs. Each entry shows its trust tier
+(built-in / verified / community) and, for services, a security rating before you
+confirm. See [Community extensions](./community-extensions.md).
 
 ### Services *(self-hosted only)*
 
 The backend control plane, with sub-pages for the day-to-day work:
 
-- **Catalog** — every installed service, its capabilities and container state,
-  with start/stop/restart and one-click install of services discovered in your
-  registered repositories.
-- **Repositories** — the community service Git repos you've registered, with
-  refresh and remove.
+- **Catalog** — every installed service (built-in or extension-installed), its
+  capabilities and container state, with start/stop/restart.
 - **Compose preview** — the generated `docker-compose` file, so you can see what
   the renderer will do before bringing the stack up.
 - **Data workflows** — the inventory of downloaded data (OSM extracts, GTFS
@@ -157,7 +155,7 @@ cascade and `infra/docker/.env` fit together, see
 - **[Integrations administration](./integrations-administration.md)** —
   configuring features, secrets, and capability bindings.
 - **[Community extensions](./community-extensions.md)** — installing from the
-  store and from Git.
+  unified Extensions store.
 - **[Users and access](./users-and-access.md)** — roles, sessions, and
   moderation.
 - **[Monitoring](./monitoring.md)** — health, jobs, and the audit log.

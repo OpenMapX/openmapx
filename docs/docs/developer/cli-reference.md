@@ -50,7 +50,7 @@ where the CLI points and how it authenticates:
 | `DOMAIN` | `localhost` | the public domain baked into renders |
 | `DATA_MANAGER_URL` | `http://localhost:4000` | the `data` and `poi-ingest` commands |
 | `DATA_MANAGER_AUTH_TOKEN` | (unset) | bearer token for data-manager mutations |
-| `OPENMAPX_API_URL` / `API_URL` | `http://localhost:3001` | the `repos` admin commands |
+| `OPENMAPX_API_URL` / `API_URL` | `http://localhost:3001` | the `ext` admin commands |
 | `OPENMAPX_REGION` | (unset) | fallback region for `data` downloads/builds |
 | `OPENMAPX_ENABLED_SERVICES` | (unset) | overrides the persisted service selection |
 
@@ -129,37 +129,34 @@ hardlinks, authenticated feeds — lives in
 commands error out asking for one. Regions use Geofabrik's path naming
 (`europe/germany`, `north-america/us/california`, or `planet`).
 
-## `repos`
+## `ext`
 
-Manage registered community **service** repositories. These commands call the
-admin API (`$OPENMAPX_API_URL`, default `http://localhost:3001`), which
-short-circuits authentication for loopback connections. See
-[Community extensions](../administration/community-extensions.md) for the trust
-model behind installing third-party services.
+Browse and manage **extensions** — the unified store for integrations, services,
+and bundles of both. These commands call the admin API (`$OPENMAPX_API_URL`,
+default `http://localhost:3001`), which short-circuits authentication for loopback
+connections. See [Community extensions](../administration/community-extensions.md)
+for the trust model.
 
 | Command | Description |
 | --- | --- |
-| `repos list` | List registered service repositories (URL, hash, last SHA, last fetch). |
-| `repos add <url>` | Register a community service repository from a Git URL. Requires risk acknowledgment — pass `-y, --yes`, or answer the interactive prompt. Flag: `-y, --yes`. |
-| `repos remove <hash>` | Unregister a repository and remove its local clone. |
-| `repos refresh <hash>` | `git fetch` + `reset --hard` a registered repository, then re-validate every manifest; on failure the working tree is rolled back and the prior commit kept. |
+| `ext browse` | List catalog extensions. Flags: `-q, --query <text>`, `--trust <verified\|community>`, `--type <service\|integration>`. |
+| `ext list` | List installed extensions, their components, and available updates. |
+| `ext install <id\|url>` | Install by catalog id, or by `extension.json` URL (the latter installs as the **community** tier). |
+| `ext update <id>` | Re-pin an installed extension to the catalog's current version. |
+| `ext remove <id>` | Uninstall an extension — removes its services and integrations. |
 
-Because community code runs with container (and, for integrations, in-process
-API) privileges, `repos add` will not register a repository without an explicit
-risk acknowledgment: in an interactive terminal it prompts for confirmation; in a
-script or CI it refuses (exit 1, before any clone) unless you pass `--yes`. A
-copy-pasted command can never silently register a repo.
+Install is one orchestrated, atomic job: it registers and pins each service repo,
+renders and starts the container(s), installs each integration artifact (SHA-256
+verified), reloads the integration host, and records the result — rolling back on
+any failure. Because community code runs with container (and, for integrations,
+in-process API) privileges, install only from sources you trust.
 
-An extension that ships both a service and a provider integration uses `repos`
-and `integrations` together. Installing [OpenConditions](https://github.com/openconditions/openconditions)
-(road-conditions overlay + companion ingest service) looks like:
+Installing the [OpenConditions](https://github.com/openconditions/openconditions)
+bundle (road-conditions overlay + companion ingest service), published as the
+first verified catalog entry, is one command:
 
 ```bash
-pnpm openmapx repos add https://github.com/openconditions/openconditions
-pnpm openmapx services enable openconditions-ingest
-pnpm openmapx compose render && pnpm openmapx compose up
-pnpm openmapx integrations install <road-conditions-openconditions artifact>
-pnpm openmapx services restart app-api
+pnpm openmapx ext install openconditions
 ```
 
 See [Building an external extension](./building-an-external-extension.md) for the
@@ -167,10 +164,10 @@ full walkthrough.
 
 ## `integrations`
 
-Manage community **integrations** under `custom_integrations/`. The CLI is the
-only place integrations are built and packaged — the API container never builds
-at runtime. The integration model is documented in
-[Integration system](./integration-system.md).
+The developer-side build/package tooling for integrations (distinct from the
+`ext` store above) — the CLI is the only place integrations are built and
+packaged; the API container never builds at runtime. The integration model is
+documented in [Integration system](./integration-system.md).
 
 | Command | Description |
 | --- | --- |

@@ -280,7 +280,7 @@ see [Services administration](./services-administration.md) and
 - **[Services administration](./services-administration.md)** — enabling and
   operating the backends that satisfy capability requirements.
 - **[Community extensions](./community-extensions.md)** — installing additional
-  integrations from the store or a Git URL.
+  integrations and services from the unified Extensions store.
 - **[Configuration](../install/configuration.md)** — `.env`, secrets, and how the
   cascade fits the wider deployment.
 - **[Monitoring](./monitoring.md)** — health history, background jobs, and the

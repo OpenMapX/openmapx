@@ -98,9 +98,10 @@ carry your real query volume.
 :::
 
 To point an engine at a *specific* hosted host (for example, your own managed
-Valhalla), set its URL in `infra/docker/.env` — `VALHALLA_URL`, `NOMINATIM_URL`,
-`OVERPASS_URL`, `OSRM_URL`, `MOTIS_URL`, and so on. An explicit value always wins
-over both the public default and the internal address.
+Valhalla), set its URL in `infra/docker/.env` — `VALHALLA_URL` (isochrones /
+elevation), `OVERPASS_URL`, `MOTIS_URL`, and so on; the routing providers take
+`INTEGRATION_ROUTING_VALHALLA_ENDPOINT` / `INTEGRATION_ROUTING_OSRM_ENDPOINT`. An
+explicit value always wins over both the public default and the internal address.
 
 ## 3. Scope data to a region, not the planet
 

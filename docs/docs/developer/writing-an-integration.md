@@ -436,7 +436,8 @@ an installable, prebuilt artifact that runs from a bundle under
 ## Package and install as a community integration
 
 To distribute your integration to other deployments, you publish it as a
-prebuilt `.tar.gz` **artifact** and operators install it through the Store. The
+prebuilt `.tar.gz` **artifact** and operators install it through the Extensions
+store (wrapped in an `extension.json`). The
 API never compiles code at runtime — it consumes the bundle — so the artifact
 must arrive fully built. The CLI is the only tool that builds; it uses esbuild to
 produce the bundles and stamps per-bundle checksums into the archive.
@@ -467,14 +468,15 @@ platform version you build against, for example `"platform": "1.0"`. The host
 refuses to load an artifact whose major version differs from the running
 platform, or whose minor is lower.
 
-### Install through the Store
+### Install through the Extensions store
 
-Publish the `.tar.gz` at an HTTPS URL — a GitHub release works well — and an
-administrator installs it from the admin Store, either from a catalog entry or by
-pasting the artifact URL (with an optional sha256). The admin install path is
-**artifact-only**: it does not accept Git source URLs, which keeps the API image
-free of build tooling. For testing on a dev workstation, the CLI installs the
-same artifact directly:
+Publish the `.tar.gz` at an HTTPS URL — a GitHub release works well — then wrap it
+in an [`extension.json`](./building-an-external-extension.md#bundle-it-as-an-extension)
+so an administrator installs it from the **Extensions** store (a catalog entry,
+or `pnpm openmapx ext install <extension.json-url>`). The store install is
+**artifact-pinned** (SHA-256), never a Git build, which keeps the API image free
+of build tooling. For testing on a dev workstation, the CLI installs the artifact
+directly:
 
 ```bash
 pnpm openmapx integrations install \

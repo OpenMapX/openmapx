@@ -211,9 +211,10 @@ A few service-adjacent pages sit alongside this one:
   `infra/docker/backups/`. Backups with a missing or malformed manifest are still
   listed and flagged as corrupt, with restore disabled but delete available so
   you can clean them up.
-- **[Service repositories](./community-extensions.md)** (`/admin/services/repos`)
-  — register, refresh, and remove the community Git repositories that supply
-  extra services, and install community services discovered from them.
+- **[Community extensions](./community-extensions.md)** (`/admin/extensions`) —
+  browse, install, update, and remove third-party extensions (integrations,
+  services, and bundles of both) from the unified Extensions store. Installing a
+  bundle's service adds it to the catalog you operate from this page.
 
 For configuring the *features* that run on top of these services — the geocoding
 and routing orchestrators, transit providers, overlays, and external data

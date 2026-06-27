@@ -1,6 +1,7 @@
 /**
  * OSRM routing service client (car routing).
- * Default: public OSRM demo server. Override with OSRM_URL env var.
+ * Default: public OSRM demo server. Override via the self-hosted `osrm` service
+ * capability or INTEGRATION_ROUTING_OSRM_ENDPOINT.
  */
 
 import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@openmapx/core";

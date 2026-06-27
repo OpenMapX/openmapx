@@ -209,17 +209,19 @@ docker image prune
 This removes only unreferenced images, so it won't touch what the running stack
 uses.
 
-## Upgrading community service repositories
+## Upgrading community extensions
 
-If you've installed third-party [services](../overview/how-it-works.md) from Git
-URLs, they upgrade on their own cadence rather than with the monorepo. Fetch the
-latest commit for an installed repo, then re-render and bring the stack up:
+Third-party [extensions](../administration/community-extensions.md) upgrade on
+their own cadence rather than with the monorepo. When a newer version is in the
+catalog, update from the **Extensions** admin page, or on the CLI:
 
 ```bash
-pnpm openmapx repos refresh <hash>             # git fetch + reset to the repo's HEAD
-pnpm openmapx compose render
-pnpm openmapx compose up
+pnpm openmapx ext list            # shows which installed extensions have updates
+pnpm openmapx ext update <id>     # re-pin every part to the catalog's current version
 ```
+
+An update re-pins the bundle's service(s) and integration(s) together and
+re-renders the stack as one orchestrated step.
 
 ## Where to go next
 

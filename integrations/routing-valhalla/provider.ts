@@ -1,7 +1,9 @@
 /**
  * Valhalla multi-modal routing service client (walking, cycling).
- * Default: Stadia Maps' hosted Valhalla (requires VALHALLA_API_KEY). Override
- * the base URL with VALHALLA_URL; self-hosted Valhalla works key-less.
+ * Default: Stadia Maps' hosted Valhalla (needs a key). Override via the
+ * self-hosted `valhalla` service capability or
+ * INTEGRATION_ROUTING_VALHALLA_ENDPOINT / INTEGRATION_ROUTING_VALHALLA_APIKEY;
+ * self-hosted Valhalla works key-less.
  */
 
 import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@openmapx/core";

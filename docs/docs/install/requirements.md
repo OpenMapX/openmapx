@@ -29,7 +29,7 @@ globally beyond the host tooling below.
 | **Docker Compose** | v2              | Orchestrates the generated stack (`docker compose`, not `docker-compose`) |
 | **Node.js**        | 24 or newer      | Runs the `openmapx` CLI directly off TypeScript — no build step      |
 | **pnpm**           | 11 (`pnpm@latest`) | Workspace package manager for the monorepo                         |
-| **git**            | any              | Cloning the repo and any community service repositories             |
+| **git**            | any              | Cloning the repo and any community extensions that ship a service   |
 
 A few notes:
 

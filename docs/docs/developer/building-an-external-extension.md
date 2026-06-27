@@ -255,11 +255,10 @@ declare the platform version you build against:
 The host refuses to load a bundle whose major version differs from the running
 platform, or whose minor is lower.
 
-### Install through the admin Store or the CLI
+### Install through the Extensions store or the CLI
 
-Publish the `.tar.gz` at an HTTPS URL (a GitHub release works well). An operator
-then installs it through the admin Store by pasting the artifact URL, or via the
-CLI:
+Publish the `.tar.gz` at an HTTPS URL (a GitHub release works well). For a
+standalone integration the quickest dev/manual path is the CLI installer:
 
 ```sh
 pnpm openmapx integrations install \
@@ -271,6 +270,11 @@ The installer downloads, verifies the checksum, extracts into a staging area,
 validates the manifest and artifact contract, and atomically swaps the result
 into `custom_integrations/conditions/`. The bundled files persist there across
 upgrades until you remove the integration.
+
+For distribution, wrap the artifact in an [`extension.json`](#bundle-it-as-an-extension)
+so an operator installs it from the **Extensions** store (or
+`pnpm openmapx ext install <extension.json-url>`) — that's the recommended path,
+and it's required once your extension also ships a companion service.
 
 ### Restart `app-api`
 
@@ -359,20 +363,15 @@ migration step stays idempotent.
 Each service owns exactly one schema. Cross-schema writes by a community service
 are not permitted.
 
-### Install the service
+### How the service gets installed
 
-Services install from a Git URL into the host's service registry:
-
-```sh
-pnpm openmapx repos add https://github.com/openconditions/openconditions.git
-pnpm openmapx services enable conditions-ingest
-pnpm openmapx compose render
-pnpm openmapx services start conditions-ingest
-```
-
-After `start`, the compose renderer has already created the service's named
-volumes; your boot migration runs and the Postgres schema is ready before the
-API accepts traffic.
+A service ships in an extension bundle (next section). When the operator installs
+the bundle, the orchestrator clones your service repo at the pinned ref into the
+host's service registry, enables the service, renders compose, and starts the
+container — all in one step. The renderer creates the service's named volumes
+first, then your boot migration runs, so the Postgres schema is ready before the
+API accepts traffic. There is no separate "register a service repo" step — the
+bundle is the unit of installation.
 
 ## Wire them together
 
@@ -402,21 +401,38 @@ internal HTTP, no shared code at runtime. The integration can evolve its read
 queries independently of the service's write side, as long as both agree on the
 table shapes.
 
-### End-to-end install order
+### Bundle it as an extension
 
-Installing a coupled extension for the first time:
+A coupled extension is distributed as one `extension.json` that pins every part —
+the integration artifact by SHA-256, the service repo by Git ref. Emit it with
+the authoring CLI:
 
-1. `pnpm openmapx repos add <git-url>` — register the service repository.
-2. `pnpm openmapx services enable conditions-ingest` — opt in the service.
-3. `pnpm openmapx compose render` — regenerate the compose file.
-4. `pnpm openmapx services start conditions-ingest` — bring the service up and
-   run its boot migration.
-5. `pnpm openmapx integrations install <artifact-url> --artifact --sha256 <hash>` —
-   install the integration artifact.
-6. `pnpm openmapx services restart app-api` — load the integration bundle.
+```sh
+openmapx-ext bundle \
+  --id openconditions --name "OpenConditions" --version 1.0.0 --platform 1.0 \
+  --service "https://github.com/openconditions/openconditions,v1.0.0,conditions-ingest" \
+  --integration "https://github.com/openconditions/openconditions/releases/download/v1.0.0/conditions.tar.gz,<sha256>,conditions" \
+  --out extension.json
+```
 
-Updates follow the same order: update the service (render + recreate), then
-update the integration artifact and restart the API.
+Publish `extension.json` at an HTTPS URL (and, to make it discoverable as a
+**verified** entry, open a PR adding it to the curated
+[`openmapx/community-extensions`](https://github.com/openmapx/community-extensions)
+catalog).
+
+### End-to-end install
+
+The operator installs the whole bundle in one action — the orchestrator pins and
+starts the service, installs the integration, and reloads the API atomically
+(rolling back on failure):
+
+```sh
+pnpm openmapx ext install https://…/extension.json   # or by catalog id once listed
+```
+
+Updating is the same command against a newer `extension.json` version (or
+`pnpm openmapx ext update <id>`); it re-pins every part together so the coupled
+service, integration, and shared schema stay version-consistent.
 
 ## Caveats
 
