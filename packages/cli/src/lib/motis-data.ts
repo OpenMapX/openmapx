@@ -6,6 +6,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -15,7 +16,8 @@ import {
   type CommandRunner,
   DEFAULT_TRANSITOUS_REPO_URL,
   ensureCatalog,
-  mirrorArtifacts,
+  listMirrorArchives,
+  mirrorArchives,
   parseTransitSource,
   pruneUnresolvableSources,
   rewriteRtUrls,
@@ -95,6 +97,31 @@ function linkOrCopy(source: string, target: string): void {
     linkSync(source, target);
   } catch {
     copyFileSync(source, target);
+  }
+}
+
+/**
+ * Download `url` to `dest` atomically via the runner's `wget`: stream to a
+ * sibling `.tmp` and rename on success. Throws (after cleaning up the temp) on
+ * a non-success response or empty body, so the mirror's gtfs→netex spec probe
+ * can fall through to the next candidate.
+ */
+async function downloadArchive(
+  runner: CommandRunner,
+  url: string,
+  dest: string,
+  cwd: string,
+): Promise<void> {
+  const tmp = `${dest}.tmp`;
+  try {
+    await runner("wget", ["--no-verbose", "-O", tmp, url], { cwd, stdio: "pipe" });
+    if (!existsSync(tmp) || statSync(tmp).size === 0) {
+      throw new Error(`empty download: ${url}`);
+    }
+    renameSync(tmp, dest);
+  } catch (err) {
+    if (existsSync(tmp)) rmSync(tmp, { force: true });
+    throw err;
   }
 }
 
@@ -401,19 +428,35 @@ export async function buildMotisData(
   clearPreparedFeedProxyInputs(feedProxyDir);
   linkOrCopy(sourcePbf, join(motisDir, basename(sourcePbf)));
 
-  // Mirror mode: download Transitous's already-cleaned GTFS archives into the
-  // gtfs dir (skipping fetch.py + gtfsclean). The config + attribution are still
-  // generated from the catalog below, so osm/tiles/RT handling is identical to
-  // build mode.
+  const catalogDir = resolve(dataDir, TRANSITOUS_CATALOG_DIR);
+
+  // Mirror mode: clone the catalog up front (it tells us which archives to
+  // download), then fetch each feed source's already-cleaned archive directly by
+  // URL (`<region>_<name>.<spec>.zip`), skipping fetch.py + gtfsclean. The config
+  // + attribution are still generated from the catalog below, so the osm/tiles/RT
+  // rewrites apply identically to build mode.
+  let transitousCatalogDir: string | undefined;
   if (source === "mirror") {
+    transitousCatalogDir = await ensureCatalog({
+      dataDir,
+      catalogDir,
+      repoUrl: transitousRepoUrl,
+      runner,
+      stdio: "inherit",
+    });
     mkdirSync(gtfsDir, { recursive: true });
-    await mirrorArtifacts({
+    const archives = listMirrorArchives(transitousCatalogDir, countries);
+    const { fetched, missing } = await mirrorArchives({
+      archives,
       baseUrl: artifactBaseUrl,
       destDir: gtfsDir,
-      countries,
-      runner,
+      download: (url, dest) => downloadArchive(runner, url, dest, paths.root),
       logger: cliLogger,
     });
+    cliLogger.info(
+      `transitous-mirror: fetched ${fetched}/${archives.length} archive(s)` +
+        (missing.length ? `; ${missing.length} missing` : ""),
+    );
   }
 
   const gtfsFeeds = stageGtfsFeeds(gtfsDir, motisDir);
@@ -427,14 +470,18 @@ export async function buildMotisData(
       gtfsFeeds,
       feedProxyConfigPath: emptyFeedProxyConfigPath,
       feedProxyFeedCount: emptyFeedProxyFeedCount,
+      transitousCatalogDir,
       transitousRepoUrl,
       image,
     };
   }
 
-  const transitousCatalogDir = await ensureCatalog({
+  // Build mode hasn't needed the catalog until now (with 0 feeds it returns
+  // above without cloning); ensure it here — a no-op reuse if mirror mode above
+  // already cloned it.
+  transitousCatalogDir ??= await ensureCatalog({
     dataDir,
-    catalogDir: resolve(dataDir, TRANSITOUS_CATALOG_DIR),
+    catalogDir,
     repoUrl: transitousRepoUrl,
     runner,
     stdio: "inherit",

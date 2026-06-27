@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { TRANSITOUS_ARTIFACT_BASE_URL } from "@openmapx/transitous-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   buildMotisData,
@@ -353,10 +354,12 @@ describe("buildMotisData", () => {
     expect(calls).toEqual([]);
   });
 
-  it("seeds from the mirror (source=mirror): downloads cleaned archives, then generates config", async () => {
+  it("seeds from the mirror (source=mirror): downloads each cleaned archive by URL, then generates config", async () => {
     writeFileSync(join(tmp, "infra", "docker", "data", "osm", "planet.osm.pbf"), "PBF");
-    const gtfsDir = join(tmp, "infra", "docker", "data", "gtfs");
-    let wgetCalled = false;
+    const dataDir = join(tmp, "infra", "docker", "data");
+    const gtfsDir = join(dataDir, "gtfs");
+    const catalogDir = join(dataDir, ".transitous-catalog");
+    const wgetUrls: string[] = [];
     const dockerActions: string[] = [];
 
     const result = await buildMotisData({
@@ -364,12 +367,19 @@ describe("buildMotisData", () => {
       region: "planet",
       source: "mirror",
       runner: async (command, args) => {
-        if (command === "wget") {
-          // Mirror downloads Transitous's already-cleaned archives (no fetch.py).
-          wgetCalled = true;
-          if (args.includes("--recursive")) {
-            writeFileSync(join(gtfsDir, "de_bvg.gtfs.zip"), "GTFS");
-          }
+        if (command === "git" && args.includes("clone")) {
+          // Simulate the catalog clone: lay down a feed file the mirror reads to
+          // learn which archives to download.
+          mkdirSync(join(catalogDir, "feeds"), { recursive: true });
+          writeFileSync(
+            join(catalogDir, "feeds", "de.json"),
+            JSON.stringify({ sources: [{ name: "bvg" }] }),
+          );
+        } else if (command === "wget") {
+          // Direct per-archive download to the atomic temp path (-O <tmp>).
+          const out = args[args.indexOf("-O") + 1];
+          wgetUrls.push(String(args.at(-1)));
+          writeFileSync(String(out), "GTFS");
         } else if (command === "docker" && args[0] === "run") {
           dockerActions.push(String(args.at(-1)));
           if (args.at(-1) === "generate-config") {
@@ -381,13 +391,13 @@ describe("buildMotisData", () => {
       },
     });
 
-    // Mirror skips fetch.py (wgets cleaned archives) but still generates the
-    // config + attribution from the catalog — so the osm/tiles/rt rewrites apply.
-    expect(wgetCalled).toBe(true);
+    // Mirror skips fetch.py: it downloads the catalog's feed source archives
+    // directly by URL (no recursive autoindex crawl), then still generates the
+    // config + attribution from the catalog so the osm/tiles/rt rewrites apply.
+    expect(wgetUrls).toContain(`${TRANSITOUS_ARTIFACT_BASE_URL}de_bvg.gtfs.zip`);
+    expect(existsSync(join(gtfsDir, "de_bvg.gtfs.zip"))).toBe(true);
     expect(dockerActions).toContain("generate-config");
     expect(dockerActions).toContain("generate-feed-proxy-vars");
-    expect(result.configPath).toBe(
-      join(tmp, "infra", "docker", "data", MOTIS_DATA_DIR, "config.yml"),
-    );
+    expect(result.configPath).toBe(join(dataDir, MOTIS_DATA_DIR, "config.yml"));
   });
 });

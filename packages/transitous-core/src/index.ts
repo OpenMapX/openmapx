@@ -16,9 +16,10 @@ export {
 } from "./constants.js";
 export type { TransitousFeedFile, TransitousFeedSource } from "./feed-source.js";
 export {
-  buildMirrorCommands,
-  type MirrorCommand,
-  mirrorArtifacts,
+  type ArchiveDownloader,
+  listMirrorArchives,
+  type MirrorArchive,
+  mirrorArchives,
   rewriteRtUrls,
   TRANSITOUS_FEED_PROXY_URL,
 } from "./mirror.js";

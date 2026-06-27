@@ -1,28 +1,139 @@
-import { describe, expect, it } from "vitest";
-import { buildMirrorCommands, rewriteRtUrls, TRANSITOUS_FEED_PROXY_URL } from "../src/mirror.js";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  listMirrorArchives,
+  type MirrorArchive,
+  mirrorArchives,
+  rewriteRtUrls,
+  TRANSITOUS_FEED_PROXY_URL,
+} from "../src/mirror.js";
 
-describe("buildMirrorCommands", () => {
-  it("recursively mirrors all archives globally (no config/license/scripts)", () => {
-    const cmds = buildMirrorCommands("https://api.transitous.org/gtfs/", "/out");
-    expect(cmds).toHaveLength(1);
-    expect(cmds[0]?.args).toContain("https://api.transitous.org/gtfs/");
-    const accept = cmds[0]?.args[cmds[0].args.indexOf("-A") + 1];
-    expect(accept).toBe("*.gtfs.zip,*.netex.zip");
+let tmp: string | undefined;
+
+afterEach(() => {
+  if (tmp) {
+    rmSync(tmp, { recursive: true, force: true });
+    tmp = undefined;
+  }
+});
+
+function catalogWithFeeds(feeds: Record<string, unknown>): string {
+  tmp = mkdtempSync(join(tmpdir(), "openmapx-mirror-core-"));
+  const feedsDir = join(tmp, "feeds");
+  mkdirSync(feedsDir, { recursive: true });
+  for (const [file, content] of Object.entries(feeds)) {
+    writeFileSync(join(feedsDir, file), JSON.stringify(content));
+  }
+  return tmp;
+}
+
+describe("listMirrorArchives", () => {
+  it("lists schedule sources for the requested countries", () => {
+    const catalog = catalogWithFeeds({
+      "de.json": { sources: [{ name: "DELFI" }, { name: "VBB", spec: "gtfs" }] },
+      "fr.json": { sources: [{ name: "SNCF" }] },
+    });
+    const archives = listMirrorArchives(catalog, ["de"]);
+    expect(archives).toEqual([
+      { region: "de", name: "DELFI" },
+      { region: "de", name: "VBB" },
+    ]);
   });
 
-  it("adds a trailing slash to the base url", () => {
-    const cmds = buildMirrorCommands("https://api.transitous.org/gtfs", "/out");
-    expect(cmds[0]?.args).toContain("https://api.transitous.org/gtfs/");
+  it("matches a region's country code prefix (us-pa belongs to us)", () => {
+    const catalog = catalogWithFeeds({
+      "us-pa.json": { sources: [{ name: "SEPTA" }] },
+      "de.json": { sources: [{ name: "DELFI" }] },
+    });
+    expect(listMirrorArchives(catalog, ["us"])).toEqual([{ region: "us-pa", name: "SEPTA" }]);
   });
 
-  it("scopes the archive accept-list to the requested countries", () => {
-    const cmds = buildMirrorCommands("https://x/gtfs/", "/out", ["de", "ch"]);
-    const accept = cmds[0]?.args[cmds[0].args.indexOf("-A") + 1] ?? "";
-    expect(accept).toContain("de_*.gtfs.zip");
-    expect(accept).toContain("de-*.gtfs.zip");
-    expect(accept).toContain("ch_*.gtfs.zip");
-    // No unscoped global archive wildcard as a standalone token.
-    expect(accept.split(",")).not.toContain("*.gtfs.zip");
+  it("skips skip:true sources, gbfs specs, and nameless sources", () => {
+    const catalog = catalogWithFeeds({
+      "de.json": {
+        sources: [
+          { name: "Good" },
+          { name: "Gone", skip: true },
+          { name: "Bikes", spec: "gbfs" },
+          { spec: "gtfs" },
+        ],
+      },
+    });
+    expect(listMirrorArchives(catalog, ["de"])).toEqual([{ region: "de", name: "Good" }]);
+  });
+
+  it("returns every region when no countries are given", () => {
+    const catalog = catalogWithFeeds({
+      "de.json": { sources: [{ name: "DELFI" }] },
+      "fr.json": { sources: [{ name: "SNCF" }] },
+    });
+    expect(
+      listMirrorArchives(catalog)
+        .map((a) => a.region)
+        .sort(),
+    ).toEqual(["de", "fr"]);
+  });
+});
+
+describe("mirrorArchives", () => {
+  function destDir(): string {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-mirror-dest-"));
+    return tmp;
+  }
+
+  const archives: MirrorArchive[] = [{ region: "de", name: "DELFI" }];
+  const logger = { info() {}, warn() {}, error() {} };
+
+  it("downloads each archive directly by URL (gtfs hit)", async () => {
+    const dest = destDir();
+    const urls: string[] = [];
+    const result = await mirrorArchives({
+      archives,
+      baseUrl: "https://api.transitous.org/gtfs/",
+      destDir: dest,
+      download: async (url, d) => {
+        urls.push(url);
+        writeFileSync(d, "data");
+      },
+      logger,
+    });
+    expect(urls).toEqual(["https://api.transitous.org/gtfs/de_DELFI.gtfs.zip"]);
+    expect(result).toEqual({ fetched: 1, missing: [] });
+  });
+
+  it("falls back from gtfs to netex on 404", async () => {
+    const dest = destDir();
+    const urls: string[] = [];
+    const result = await mirrorArchives({
+      archives,
+      baseUrl: "https://x/gtfs",
+      destDir: dest,
+      download: async (url, d) => {
+        urls.push(url);
+        if (url.endsWith(".gtfs.zip")) throw new Error("404");
+        writeFileSync(d, "data");
+      },
+      logger,
+    });
+    expect(urls).toEqual(["https://x/gtfs/de_DELFI.gtfs.zip", "https://x/gtfs/de_DELFI.netex.zip"]);
+    expect(result.fetched).toBe(1);
+  });
+
+  it("reports archives missing when no spec downloads", async () => {
+    const dest = destDir();
+    const result = await mirrorArchives({
+      archives,
+      baseUrl: "https://x/gtfs/",
+      destDir: dest,
+      download: async () => {
+        throw new Error("404");
+      },
+      logger,
+    });
+    expect(result.fetched).toBe(0);
+    expect(result.missing).toEqual(archives);
   });
 });
 
