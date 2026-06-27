@@ -75,7 +75,10 @@ export interface TransitJobStage {
   finishedAt: string;
   durationMs: number;
   message: string | null;
-  error: string | null;
+  // Persisted as a jsonb column; the data-manager writes a structured
+  // `{ message, stack }` object, so this is NOT guaranteed to be a string.
+  // Render it via `formatStageError` — never directly as a React child.
+  error: unknown;
   artifacts: unknown;
 }
 

@@ -16,7 +16,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
-import { jobStatusColor } from "@/components/admin/shared/jobStatus";
+import { formatStageError, jobStatusColor } from "@/components/admin/shared/jobStatus";
 import { useTransitJobDetail, useTransitJobs } from "@/lib/admin/transitHooks";
 
 function formatTime(iso: string | null): string {
@@ -186,11 +186,14 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
                                   {stage.message}
                                 </Typography>
                               )}
-                              {stage.error && (
-                                <Typography variant="caption" color="error">
-                                  {stage.error}
-                                </Typography>
-                              )}
+                              {(() => {
+                                const errorText = formatStageError(stage.error);
+                                return errorText ? (
+                                  <Typography variant="caption" color="error">
+                                    {errorText}
+                                  </Typography>
+                                ) : null;
+                              })()}
                             </Stack>
                           </TableCell>
                           <TableCell>

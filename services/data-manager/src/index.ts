@@ -16,6 +16,7 @@ import {
 } from "./jobs/poi-ingest/otel-metrics.js";
 import { type PoiSchedulerHandles, setupPoiIngestCron } from "./jobs/poi-ingest/scheduler.js";
 import { createPoiSingleFlight } from "./jobs/poi-ingest/single-flight.js";
+import { reconcileOrphanedJobs } from "./jobs/reconcile.js";
 import { parseTransitousCountriesEnv } from "./jobs/transitous/internal.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
 import { discoverPoiSources } from "./poi-source-discovery.js";
@@ -113,6 +114,23 @@ app
   .listen({ port, host })
   .then(async (addr) => {
     app.log.info(`data-manager listening on ${addr}`);
+
+    // Reconcile zombie jobs BEFORE wiring cron / accepting work: the
+    // single-flight lock is in-memory, so on a fresh boot nothing is genuinely
+    // running — any job still `running` in the DB was orphaned by a previous
+    // process that died mid-run (restart / redeploy / OOM). Left alone they
+    // pin the admin "Sync in progress" banner to a phantom job forever.
+    try {
+      const interrupted = await reconcileOrphanedJobs();
+      if (interrupted.length > 0) {
+        app.log.warn(
+          { count: interrupted.length, jobIds: interrupted },
+          "data-manager: marked orphaned running jobs as interrupted on startup",
+        );
+      }
+    } catch (err) {
+      app.log.error({ err }, "data-manager: failed to reconcile orphaned running jobs");
+    }
 
     // Wire cron _after_ listen so an early Fastify failure doesn't leave
     // dangling cron timers and so the in-process singleFlight controller is
