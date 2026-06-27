@@ -16,6 +16,8 @@ import {
   TRANSITOUS_CATALOG_DIR,
   TRANSITOUS_DOWNLOADS_DIR,
 } from "./internal.js";
+import * as mirrorStage from "./mirror.js";
+import * as mirrorConfigStage from "./mirror-config.js";
 import * as motisHealthStage from "./motis-health.js";
 import * as motisImportStage from "./motis-import.js";
 import * as prepareStage from "./prepare.js";
@@ -28,11 +30,14 @@ import type {
   StageName,
   StageResult,
   StageStatus,
+  TransitSource,
 } from "./types.js";
 import * as validateStage from "./validate.js";
 
-/** Order matters: this is the canonical pipeline ordering for E2. */
-const STAGES: ReadonlyArray<{ name: StageName; run: StageFn; hardStop?: boolean }> = [
+type StageEntry = { name: StageName; run: StageFn; hardStop?: boolean };
+
+/** Build mode (TRANSIT_SOURCE=build): clone the catalog + run Transitous scripts. */
+const BUILD_STAGES: ReadonlyArray<StageEntry> = [
   { name: "prepare", run: prepareStage.run, hardStop: true },
   { name: "filter", run: filterStage.run, hardStop: true },
   { name: "fetch", run: fetchStage.run },
@@ -46,6 +51,27 @@ const STAGES: ReadonlyArray<{ name: StageName; run: StageFn; hardStop?: boolean 
   { name: "promote", run: promoteStage.run },
   { name: "gc", run: gcStage.run },
 ];
+
+/**
+ * Mirror mode (TRANSIT_SOURCE=mirror, default): consume Transitous's published
+ * artifacts. `prepare` still clones the catalog (mirror-config needs its
+ * realtime metadata), then `mirror` downloads the processed gtfs + config +
+ * license and `mirror-config` adapts the config to our infra. The
+ * assemble→import→health→promote tail is shared with build mode.
+ */
+const MIRROR_STAGES: ReadonlyArray<StageEntry> = [
+  { name: "prepare", run: prepareStage.run, hardStop: true },
+  { name: "mirror", run: mirrorStage.run, hardStop: true },
+  { name: "mirror-config", run: mirrorConfigStage.run, hardStop: true },
+  { name: "assemble-staging", run: assembleStagingStage.run },
+  { name: "motis-import", run: motisImportStage.run },
+  { name: "motis-health", run: motisHealthStage.run },
+  { name: "promote", run: promoteStage.run },
+];
+
+export function stagesFor(source: TransitSource): ReadonlyArray<StageEntry> {
+  return source === "mirror" ? MIRROR_STAGES : BUILD_STAGES;
+}
 
 export interface RunPipelineOptions {
   startAt?: StageName;
@@ -77,17 +103,18 @@ export async function runTransitousPipeline(
   options: RunPipelineOptions = {},
 ): Promise<RunPipelineResult> {
   const results: StageResult[] = [];
-  const startIdx = options.startAt ? STAGES.findIndex((s) => s.name === options.startAt) : 0;
+  const stages = stagesFor(ctx.source);
+  const startIdx = options.startAt ? stages.findIndex((s) => s.name === options.startAt) : 0;
   const stopIdx = options.stopAt
-    ? STAGES.findIndex((s) => s.name === options.stopAt)
-    : STAGES.length - 1;
+    ? stages.findIndex((s) => s.name === options.stopAt)
+    : stages.length - 1;
   if (startIdx < 0) throw new Error(`Unknown startAt stage: ${options.startAt}`);
   if (stopIdx < 0) throw new Error(`Unknown stopAt stage: ${options.stopAt}`);
 
   let hardStopError: Error | undefined;
   try {
     for (let i = startIdx; i <= stopIdx; i++) {
-      const entry = STAGES[i];
+      const entry = stages[i];
       if (!entry) continue;
       if (ctx.abortSignal.aborted) {
         ctx.logger.warn(`transitous-pipeline: aborted before ${entry.name}`);
@@ -151,6 +178,10 @@ export interface BuildJobContextOptions {
   abortSignal?: AbortSignal;
   onStageComplete?: (result: StageResult) => Promise<void>;
   jobId?: string;
+  /** Acquisition mode. Defaults to `build` (callers pass the operator setting). */
+  source?: TransitSource;
+  artifactBaseUrl?: string;
+  feedProxyUrl?: string;
 }
 
 /** Build a `JobContext` with safe defaults; used by API + tests. */
@@ -169,6 +200,9 @@ export function buildJobContext(opts: BuildJobContextOptions): JobContext {
     motisStagingDataDir: join(opts.dataDir, "motis", "staging"),
     motisDataDir: join(opts.dataDir, "motis", "live"),
     countries: normaliseCountries(opts.countries ?? []),
+    source: opts.source ?? "build",
+    artifactBaseUrl: opts.artifactBaseUrl,
+    feedProxyUrl: opts.feedProxyUrl,
     logger,
     abortSignal: opts.abortSignal ?? new AbortController().signal,
     onStageComplete: opts.onStageComplete ?? (async () => {}),

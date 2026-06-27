@@ -13,6 +13,7 @@ import {
   type RunPipelineResult,
   runTransitousPipeline,
 } from "./jobs/transitous/index.js";
+import { parseTransitSourceEnv } from "./jobs/transitous/internal.js";
 import { FEED_PROXY_CONTAINER } from "./jobs/transitous/motis-containers.js";
 import { finalizeJobRow, makePersistingOnStageComplete } from "./jobs/transitous/persistence.js";
 import type { SingleFlightController } from "./jobs/transitous/single-flight.js";
@@ -227,6 +228,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
           store: options.store,
           countries: options.countries,
           repoRoot: options.repoRoot,
+          source: parseTransitSourceEnv(),
           jobId: start.jobId,
           onStageComplete: makePersistingOnStageComplete(start.jobId, {
             info: (m) => log.info(m),

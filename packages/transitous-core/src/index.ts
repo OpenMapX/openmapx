@@ -12,6 +12,16 @@ export {
   TRANSITOUS_DOWNLOADS_DIR,
 } from "./constants.js";
 export type { TransitousFeedFile, TransitousFeedSource } from "./feed-source.js";
+export {
+  buildMirrorCommands,
+  isMirrorPublishInProgress,
+  type LicenseEntry,
+  type MirrorCommand,
+  mirrorArtifacts,
+  parseLicenseManifest,
+  rewriteRtUrls,
+  TRANSITOUS_FEED_PROXY_URL,
+} from "./mirror.js";
 export type { CommandRunner, TransitousLogger } from "./runner.js";
 export {
   type PruneUnresolvableSourcesOptions,

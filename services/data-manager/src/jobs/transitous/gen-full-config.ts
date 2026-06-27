@@ -31,7 +31,7 @@ out.mkdir(parents=True, exist_ok=True)
 (out / "feed-proxy-vars.json").write_text(json.dumps(feed_vars, indent=2, sort_keys=True) + "\\n")
 `;
 
-async function generateFeedProxyConfig(
+export async function generateFeedProxyConfig(
   ctx: JobContext,
   catalogDir: string,
 ): Promise<{

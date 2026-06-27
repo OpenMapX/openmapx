@@ -22,7 +22,7 @@ import {
 } from "@openmapx/transitous-core";
 import { execa } from "execa";
 import type { FeedDownloadFailure } from "../download-gtfs.js";
-import type { CommandRunner, FeedFileEntry, JobLogger } from "./types.js";
+import type { CommandRunner, FeedFileEntry, JobLogger, TransitSource } from "./types.js";
 
 export type { PruneUnresolvableSourcesOptions, TransitousFeedFile, TransitousFeedSource };
 // Shared Transitous helpers now live in @openmapx/transitous-core; re-export the
@@ -76,6 +76,16 @@ export function parseTransitousCountriesEnv(env: NodeJS.ProcessEnv = process.env
     .split(",")
     .map((c) => c.trim())
     .filter(Boolean);
+}
+
+/**
+ * Resolve the transit acquisition mode from `TRANSIT_SOURCE`. Defaults to
+ * `mirror` (consume Transitous's published artifacts); set `TRANSIT_SOURCE=build`
+ * to clone the catalog and run its scripts. Operators flip this in
+ * `infra/docker/.env`.
+ */
+export function parseTransitSourceEnv(env: NodeJS.ProcessEnv = process.env): TransitSource {
+  return env.TRANSIT_SOURCE?.trim().toLowerCase() === "build" ? "build" : "mirror";
 }
 
 interface TransitlandAtlasFeedFile {

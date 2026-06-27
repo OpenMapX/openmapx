@@ -15,7 +15,18 @@ export type StageName =
   | "gen-full-config"
   | "gen-attribution"
   | "promote"
-  | "gc";
+  | "gc"
+  // Mirror-mode stages (TRANSIT_SOURCE=mirror): consume Transitous's published
+  // artifacts instead of cloning + running its scripts.
+  | "mirror"
+  | "mirror-config";
+
+/**
+ * Where the transit data comes from:
+ * - `mirror`: download Transitous's pre-processed output (gtfs + config + license).
+ * - `build`: clone the catalog and run Transitous's scripts (fetch + config-gen).
+ */
+export type TransitSource = "mirror" | "build";
 
 export interface StageResult {
   stage: StageName;
@@ -111,6 +122,12 @@ export interface JobContext {
   motisDataDir: string;
   /** `TRANSITOUS_COUNTRIES` filter, lowercased + deduplicated. */
   countries: string[];
+  /** Acquisition mode (default `mirror`). Selects the pipeline's stage list. */
+  source: TransitSource;
+  /** Mirror-mode: base URL of Transitous's published artifacts. */
+  artifactBaseUrl?: string;
+  /** Mirror-mode: URL the live MOTIS config's RT feeds are rewritten to (our proxy). */
+  feedProxyUrl?: string;
   logger: JobLogger;
   abortSignal: AbortSignal;
   /** Persistence hook — called as each stage completes. */

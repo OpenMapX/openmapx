@@ -16,7 +16,7 @@ import {
   runTransitousPipeline,
   toDownloadGtfsResult,
 } from "./jobs/transitous/index.js";
-import { parseTransitousCountriesEnv } from "./jobs/transitous/internal.js";
+import { parseTransitousCountriesEnv, parseTransitSourceEnv } from "./jobs/transitous/internal.js";
 import { PRIMARY_CONTAINER } from "./jobs/transitous/motis-containers.js";
 import { finalizeJobRow, makePersistingOnStageComplete } from "./jobs/transitous/persistence.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
@@ -142,6 +142,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
           store,
           countries,
           repoRoot: process.env.OPENMAPX_ROOT_DIR,
+          source: parseTransitSourceEnv(),
         });
         await runTransitousPipeline(ctx);
         result = toDownloadGtfsResult(ctx, []);
@@ -435,6 +436,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
           store,
           countries,
           repoRoot,
+          source: parseTransitSourceEnv(),
           jobId,
           onStageComplete: persistingHook,
         });
