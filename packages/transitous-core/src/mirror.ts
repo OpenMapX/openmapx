@@ -32,6 +32,9 @@ export type ArchiveDownloader = (url: string, dest: string) => Promise<void>;
 // probe gtfs then netex per source.
 const ARCHIVE_SPECS = ["gtfs", "netex"] as const;
 
+/** Default max concurrent archive downloads — matches data-manager's downloadGtfs. */
+const DEFAULT_MIRROR_CONCURRENCY = 5;
+
 // Source `spec` values that are not schedule data (no `.gtfs/.netex.zip`
 // archive to mirror) — skip them so we don't 404-probe e.g. bikeshare feeds.
 const NON_SCHEDULE_SPECS = new Set(["gbfs"]);
@@ -76,10 +79,11 @@ export function listMirrorArchives(
 }
 
 /**
- * Download each archive directly from `baseUrl`, probing gtfs then netex.
+ * Download each archive directly from `baseUrl`, probing gtfs then netex, in
+ * fixed-size concurrent batches (default {@link DEFAULT_MIRROR_CONCURRENCY}).
  * Returns the count fetched and the archives for which no published archive
- * exists. Never throws for a single missing archive — the caller decides how a
- * partial/empty result is handled.
+ * exists (in input order). Never throws for a single missing archive — the
+ * caller decides how a partial/empty result is handled.
  */
 export async function mirrorArchives(opts: {
   archives: readonly MirrorArchive[];
@@ -87,31 +91,41 @@ export async function mirrorArchives(opts: {
   destDir: string;
   download: ArchiveDownloader;
   logger: TransitousLogger;
+  /** Max concurrent downloads. Defaults to {@link DEFAULT_MIRROR_CONCURRENCY}. */
+  concurrency?: number;
 }): Promise<{ fetched: number; missing: MirrorArchive[] }> {
   const base = opts.baseUrl.endsWith("/") ? opts.baseUrl : `${opts.baseUrl}/`;
-  let fetched = 0;
-  const missing: MirrorArchive[] = [];
-  for (const archive of opts.archives) {
-    let ok = false;
+  const concurrency = Math.max(1, opts.concurrency ?? DEFAULT_MIRROR_CONCURRENCY);
+
+  const fetchOne = async (archive: MirrorArchive): Promise<boolean> => {
     for (const spec of ARCHIVE_SPECS) {
       const name = `${archive.region}_${archive.name}.${spec}.zip`;
       try {
         await opts.download(`${base}${name}`, join(opts.destDir, name));
-        if (existsSync(join(opts.destDir, name))) {
-          ok = true;
-          break;
-        }
+        if (existsSync(join(opts.destDir, name))) return true;
       } catch {
         // No archive for this spec (404) — try the next, else count missing.
       }
     }
-    if (ok) {
-      fetched += 1;
-    } else {
-      missing.push(archive);
-      opts.logger.warn(
-        `transitous-mirror: no published archive for ${archive.region}_${archive.name}`,
-      );
+    return false;
+  };
+
+  let fetched = 0;
+  const missing: MirrorArchive[] = [];
+  for (let i = 0; i < opts.archives.length; i += concurrency) {
+    const batch = opts.archives.slice(i, i + concurrency);
+    const results = await Promise.all(
+      batch.map(async (archive) => ({ archive, ok: await fetchOne(archive) })),
+    );
+    for (const { archive, ok } of results) {
+      if (ok) {
+        fetched += 1;
+      } else {
+        missing.push(archive);
+        opts.logger.warn(
+          `transitous-mirror: no published archive for ${archive.region}_${archive.name}`,
+        );
+      }
     }
   }
   return { fetched, missing };

@@ -103,6 +103,34 @@ describe("mirrorArchives", () => {
     expect(result).toEqual({ fetched: 1, missing: [] });
   });
 
+  it("downloads concurrently, bounded by `concurrency`", async () => {
+    const dest = destDir();
+    const many: MirrorArchive[] = Array.from({ length: 7 }, (_, i) => ({
+      region: "de",
+      name: `f${i}`,
+    }));
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const result = await mirrorArchives({
+      archives: many,
+      baseUrl: "https://x/gtfs/",
+      destDir: dest,
+      concurrency: 3,
+      download: async (_url, d) => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await Promise.resolve();
+        await Promise.resolve();
+        writeFileSync(d, "x");
+        inFlight -= 1;
+      },
+      logger,
+    });
+    expect(result.fetched).toBe(7);
+    expect(maxInFlight).toBeGreaterThan(1); // genuinely concurrent, not serial
+    expect(maxInFlight).toBeLessThanOrEqual(3); // never exceeds the cap
+  });
+
   it("falls back from gtfs to netex on 404", async () => {
     const dest = destDir();
     const urls: string[] = [];

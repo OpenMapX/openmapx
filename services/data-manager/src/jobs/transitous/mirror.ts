@@ -1,14 +1,16 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { TRANSITOUS_ARTIFACT_BASE_URL } from "@openmapx/transitous-core";
+import {
+  type MirrorArchive,
+  mirrorArchives,
+  TRANSITOUS_ARTIFACT_BASE_URL,
+} from "@openmapx/transitous-core";
 import { curlAtomic } from "../atomic-download.js";
 import type { FeedDownloadFailure } from "../download-gtfs.js";
 import { feedKeyForSource, recordFetchOutcome } from "./feed-state-writer.js";
 import type { StageFn, StageResult, StageStatus } from "./types.js";
 
-// Transitous publishes each cleaned feed as `<region>_<name>.<spec>.zip`. We
-// don't reliably know gtfs vs netex up front (catalog spec can differ from what
-// upstream actually published), so try gtfs then netex and keep the first hit.
+// Transitous publishes each cleaned feed as `<region>_<name>.<spec>.zip`.
 const ARCHIVE_SPECS = ["gtfs", "netex"] as const;
 
 /**
@@ -19,13 +21,14 @@ const ARCHIVE_SPECS = ["gtfs", "netex"] as const;
  * gen-full-config, gen-attribution, assemble, import, promote) is identical to
  * build mode and runs against the catalog clone + the mirrored archives.
  *
- * Each selected source's archive is fetched directly by URL (the published
- * filenames match fetch.py's `<region>_<name>.<spec>.zip` convention). Direct
- * per-file download is deterministic and incremental (curlAtomic sends
- * If-Modified-Since for archives already on disk) — unlike a recursive wget,
- * which has to parse the multi-thousand-entry autoindex and silently fetched
- * nothing against it. Per-source `feed_state` is recorded from the download
- * outcome so the admin feed tables + staleness cron behave as in build mode.
+ * The download itself is the shared `mirrorArchives` (direct per-archive by URL,
+ * concurrent, gtfs→netex probe) — deterministic and incremental (curlAtomic
+ * sends If-Modified-Since for archives already on disk), unlike a recursive wget
+ * that has to parse the multi-thousand-entry autoindex and silently fetched
+ * nothing. `feed_state` is then recorded from on-disk presence (NOT the download
+ * result) so a stale archive that survives a transient upstream 404 still counts
+ * — same crash-resume robustness as build mode — keeping the admin feed tables +
+ * staleness cron consistent across modes.
  */
 export const run: StageFn = async (ctx): Promise<StageResult> => {
   const startedAt = ctx.now();
@@ -35,39 +38,36 @@ export const run: StageFn = async (ctx): Promise<StageResult> => {
     mkdirSync(gtfsDir, { recursive: true });
     // `||` (not `??`): compose injects `${VAR:-}` as an empty string when the
     // operator hasn't set it, and "" must fall through to the default.
-    const rawBase =
+    const baseUrl =
       ctx.artifactBaseUrl ||
       process.env.TRANSITOUS_ARTIFACT_BASE_URL ||
       TRANSITOUS_ARTIFACT_BASE_URL;
-    const baseUrl = rawBase.endsWith("/") ? rawBase : `${rawBase}/`;
     const download = ctx.artifactDownloader ?? curlAtomic;
     const selectedFeedFiles = ctx.state.selectedFeedFiles ?? [];
+
+    // Download every selected source's archive concurrently via the shared
+    // core helper. We re-derive per-source outcome from disk below, so the
+    // returned counts are advisory here.
+    const archives: MirrorArchive[] = selectedFeedFiles.flatMap((feed) =>
+      feed.activeScheduleSources.map((source) => ({ region: feed.id, name: source.name })),
+    );
+    await mirrorArchives({ archives, baseUrl, destDir: gtfsDir, download, logger: ctx.logger });
 
     const failures: FeedDownloadFailure[] = [];
     for (const feed of selectedFeedFiles) {
       for (const source of feed.activeScheduleSources) {
-        let ok = false;
-        for (const spec of ARCHIVE_SPECS) {
-          const name = `${feed.id}_${source.name}.${spec}.zip`;
-          try {
-            await download(`${baseUrl}${name}`, join(gtfsDir, name));
-            if (existsSync(join(gtfsDir, name))) {
-              ok = true;
-              break;
-            }
-          } catch {
-            // No archive for this spec (404) — try the next, else count missing.
-          }
-        }
+        const present = ARCHIVE_SPECS.some((spec) =>
+          existsSync(join(gtfsDir, `${feed.id}_${source.name}.${spec}.zip`)),
+        );
         const key = feedKeyForSource(feed, source.name);
         try {
-          await recordFetchOutcome({ region: key.region, name: key.name, ok });
+          await recordFetchOutcome({ region: key.region, name: key.name, ok: present });
         } catch (err) {
           ctx.logger.warn(
             `transitous-mirror: feed_state write failed for ${key.region}/${key.name}: ${(err as Error).message}`,
           );
         }
-        if (!ok) {
+        if (!present) {
           failures.push({
             id: source.id,
             country: feed.country,
