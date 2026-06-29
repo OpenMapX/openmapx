@@ -133,6 +133,7 @@ async function applyClosureExclusions(
   ctx: IntegrationContext,
   waypoints: [number, number][],
   wantClosureAvoidance: boolean,
+  at?: Date,
 ): Promise<ClosureExclusionResult> {
   const empty = { points: [] as [number, number][], polygons: [] as [number, number][][] };
   if (!wantClosureAvoidance) {
@@ -150,7 +151,7 @@ async function applyClosureExclusions(
 
   let exclusions = empty;
   try {
-    exclusions = await activeClosuresForBbox(ctx, bbox);
+    exclusions = await activeClosuresForBbox(ctx, bbox, at);
   } catch (err) {
     ctx.log.warn("[routing] failed to fetch closures; routing without exclusions", err as Error);
   }
@@ -241,10 +242,23 @@ export function setup(ctx: IntegrationContext): void {
 
     const wantClosureAvoidance = avoidClosures === "true" || avoidClosures === "1";
 
+    // Only avoid closures actually in effect at the chosen travel time: the
+    // selected departure (or arrival) instant, falling back to "now" for an
+    // immediate trip. Without this a planned-but-not-yet-active closure would
+    // wrongly detour a trip planned for before it starts. departAt/arriveBy are
+    // already part of the route cache key, so time-varied exclusions stay
+    // correctly cached.
+    const closureRefTime = departAt
+      ? new Date(departAt)
+      : arriveBy
+        ? new Date(arriveBy)
+        : undefined;
+
     const { exclusions, hasExclusions, exclusionsHash } = await applyClosureExclusions(
       ctx,
       waypoints,
       wantClosureAvoidance,
+      closureRefTime,
     );
 
     const keyParams = {
@@ -395,10 +409,23 @@ export function setup(ctx: IntegrationContext): void {
 
     const wantClosureAvoidance = avoidClosures === "true" || avoidClosures === "1";
 
+    // Only avoid closures actually in effect at the chosen travel time: the
+    // selected departure (or arrival) instant, falling back to "now" for an
+    // immediate trip. Without this a planned-but-not-yet-active closure would
+    // wrongly detour a trip planned for before it starts. departAt/arriveBy are
+    // already part of the route cache key, so time-varied exclusions stay
+    // correctly cached.
+    const closureRefTime = departAt
+      ? new Date(departAt)
+      : arriveBy
+        ? new Date(arriveBy)
+        : undefined;
+
     const { exclusions, hasExclusions, exclusionsHash } = await applyClosureExclusions(
       ctx,
       waypoints,
       wantClosureAvoidance,
+      closureRefTime,
     );
 
     const keyParams = {

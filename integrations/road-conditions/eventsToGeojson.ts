@@ -39,6 +39,7 @@ export function eventsToFeatureCollection(
         roads: e.roads ?? null,
         validFrom: e.validFrom ?? null,
         validTo: e.validTo ?? null,
+        schedule: e.schedule ?? null,
         dataUpdatedAt: e.dataUpdatedAt ?? null,
         attribution: e.attribution ?? null,
       },

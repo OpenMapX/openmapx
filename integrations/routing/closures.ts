@@ -1,6 +1,10 @@
 import type { BBox } from "@openmapx/core";
 import { haversineDistance } from "@openmapx/core";
-import type { IntegrationContext, RoadConditionsProvider } from "@openmapx/integration-framework";
+import type {
+  IntegrationContext,
+  RoadConditionScheduleWindow,
+  RoadConditionsProvider,
+} from "@openmapx/integration-framework";
 
 export type LngLat = [number, number];
 
@@ -53,6 +57,81 @@ function isClosure(type: string, severity: string): boolean {
   // and instead return critical-severity events of any type (e.g. "accident"),
   // so we treat those as blockages too rather than silently ignoring them.
   return CLOSURE_TYPES.has(type) || severity === CRITICAL_SEVERITY;
+}
+
+function parseHhMm(s: string | undefined): number | null {
+  if (!s) return null;
+  const m = s.match(/^(\d{1,2}):(\d{2})/);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+
+/**
+ * Whether the travel instant `at` lands inside a recurring window. Window dates
+ * and times are LOCAL to the source; we compare against `at`'s UTC components,
+ * which equal the user's chosen wall-clock for a pinned departure (see
+ * `isActiveAt`). Overnight bands (timeEnd < timeStart) wrap past midnight — the
+ * morning tail is attributed to the previous day's window.
+ */
+function withinWindow(win: RoadConditionScheduleWindow, at: Date): boolean {
+  const dateOf = (d: Date) => d.toISOString().slice(0, 10);
+  const inDateRange = (d: Date) =>
+    (!win.dateStart || dateOf(d) >= win.dateStart) && (!win.dateEnd || dateOf(d) <= win.dateEnd);
+  const dayOk = (d: Date) =>
+    !win.dayOfWeek || win.dayOfWeek.length === 0 || win.dayOfWeek.includes(d.getUTCDay());
+
+  const ts = parseHhMm(win.timeStart);
+  const te = parseHhMm(win.timeEnd);
+  // Date-only window (no time band) → active any time on an in-range day.
+  if (ts == null || te == null) return inDateRange(at) && dayOk(at);
+
+  const tod = at.getUTCHours() * 60 + at.getUTCMinutes();
+  if (ts <= te) return inDateRange(at) && dayOk(at) && tod >= ts && tod <= te;
+  // Overnight band: evening part on this day; morning part belongs to the
+  // previous day's window.
+  const prev = new Date(at.getTime() - 86_400_000);
+  return (
+    (tod >= ts && inDateRange(at) && dayOk(at)) || (tod <= te && inDateRange(prev) && dayOk(prev))
+  );
+}
+
+/**
+ * Whether a closure is in effect at the requested travel time `at`. Many feeds
+ * publish planned closures days ahead, and some (e.g. nightly roadworks) are
+ * active only inside recurring windows; without this check the router would
+ * detour around a closure that hasn't started, has ended, or is only active at
+ * night. `at` is the chosen departure/arrival time, or "now" for an immediate
+ * trip. A closure with no temporal info is treated as ongoing (always in
+ * effect).
+ *
+ * When a `schedule` is present it is the precise definition of when the closure
+ * is in effect and supersedes the coarse `validFrom`/`validTo` span (those are
+ * just the outer bounds). `validFrom`/`validTo` are absolute instants; the
+ * comparison is accurate to within the origin's UTC offset for a pinned
+ * departure — the same approximation already used when handing the time to
+ * Valhalla, fine for windows measured in hours-to-days.
+ */
+function isActiveAt(
+  event: {
+    validFrom?: string | null;
+    validTo?: string | null;
+    schedule?: RoadConditionScheduleWindow[];
+  },
+  at: Date,
+): boolean {
+  const t = at.getTime();
+  if (Number.isNaN(t)) return true; // unparseable travel time → don't suppress
+  if (event.schedule && event.schedule.length > 0) {
+    return event.schedule.some((w) => withinWindow(w, at));
+  }
+  if (event.validFrom) {
+    const from = Date.parse(event.validFrom);
+    if (!Number.isNaN(from) && t < from) return false; // not yet in effect at travel time
+  }
+  if (event.validTo) {
+    const to = Date.parse(event.validTo);
+    if (!Number.isNaN(to) && t > to) return false; // already ended by travel time
+  }
+  return true;
 }
 
 function toLngLat(coord: number[]): LngLat | null {
@@ -177,7 +256,9 @@ function geometryToExclusions(
 export async function activeClosuresForBbox(
   ctx: IntegrationContext,
   bbox: BBox,
+  at?: Date,
 ): Promise<ClosureExclusions> {
+  const refTime = at ?? new Date();
   const integrations = ctx.getIntegrationsByDomain("road-conditions");
   if (integrations.length === 0) return { points: [], polygons: [] };
 
@@ -211,6 +292,7 @@ export async function activeClosuresForBbox(
     for (const event of result.value) {
       if (!isClosure(event.type, event.severity)) continue;
       if (event.roadState === "open") continue;
+      if (!isActiveAt(event, refTime)) continue;
       if (!event.geometry) continue;
       geometryToExclusions(event.geometry, points, polygons, ctx);
     }

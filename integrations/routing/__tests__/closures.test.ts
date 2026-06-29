@@ -301,4 +301,96 @@ describe("activeClosuresForBbox", () => {
     expect(result.polygons[0]).toEqual(ring1);
     expect(result.polygons[1]).toEqual(ring2);
   });
+
+  describe("time-aware filtering (validFrom/validTo vs travel time)", () => {
+    // Planned closure in effect 2026-07-10 22:00 → 2026-07-13 05:00 (CEST).
+    const plannedClosure = {
+      id: "planned:1",
+      source: "test",
+      provider: "road-conditions-test",
+      type: "road_closure",
+      severity: "high",
+      geometry: { type: "Point", coordinates: [0.5, 51.5] },
+      headline: "Planned closure",
+      validFrom: "2026-07-10T22:00:00+02:00",
+      validTo: "2026-07-13T05:00:00+02:00",
+    };
+
+    it("skips a closure that has not started by the requested travel time", async () => {
+      const getEvents = vi.fn().mockResolvedValue([plannedClosure]);
+      const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
+      const result = await activeClosuresForBbox(ctx, TEST_BBOX, new Date("2026-07-01T08:00:00Z"));
+      expect(result.points).toHaveLength(0);
+    });
+
+    it("includes the closure when the travel time falls inside its window", async () => {
+      const getEvents = vi.fn().mockResolvedValue([plannedClosure]);
+      const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
+      const result = await activeClosuresForBbox(ctx, TEST_BBOX, new Date("2026-07-11T08:00:00Z"));
+      expect(result.points).toEqual([[0.5, 51.5]]);
+    });
+
+    it("skips a closure whose window already ended by the travel time", async () => {
+      const getEvents = vi.fn().mockResolvedValue([plannedClosure]);
+      const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
+      const result = await activeClosuresForBbox(ctx, TEST_BBOX, new Date("2026-07-20T08:00:00Z"));
+      expect(result.points).toHaveLength(0);
+    });
+
+    it("always includes an unbounded (ongoing, no validFrom/validTo) closure", async () => {
+      const getEvents = vi.fn().mockResolvedValue([
+        {
+          id: "ongoing:1",
+          source: "test",
+          provider: "road-conditions-test",
+          type: "road_closure",
+          severity: "high",
+          geometry: { type: "Point", coordinates: [0.5, 51.5] },
+          headline: "Ongoing construction",
+        },
+      ]);
+      const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
+      const result = await activeClosuresForBbox(ctx, TEST_BBOX, new Date("2026-07-01T08:00:00Z"));
+      expect(result.points).toEqual([[0.5, 51.5]]);
+    });
+  });
+
+  describe("recurring schedule (nightly windows supersede the outer span)", () => {
+    // Nightly 20:00–05:00 closure over 29 Jun–1 Jul; outer span 29 Jun–2 Jul.
+    const nightly = {
+      id: "nightly:1",
+      source: "test",
+      provider: "road-conditions-test",
+      type: "road_closure",
+      severity: "high",
+      geometry: { type: "Point", coordinates: [0.5, 51.5] },
+      headline: "Nightly closure",
+      validFrom: "2026-06-29T18:00:00.000Z",
+      validTo: "2026-07-02T03:00:00.000Z",
+      schedule: [
+        { dateStart: "2026-06-29", dateEnd: "2026-07-01", timeStart: "20:00", timeEnd: "05:00" },
+      ],
+    };
+    const run = (at: string) => {
+      const getEvents = vi.fn().mockResolvedValue([nightly]);
+      const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
+      return activeClosuresForBbox(ctx, TEST_BBOX, new Date(at));
+    };
+
+    it("avoids the closure at night (inside a window)", async () => {
+      expect((await run("2026-06-30T23:00:00Z")).points).toEqual([[0.5, 51.5]]);
+    });
+
+    it("does NOT avoid it during the day, even within the outer from–to span", async () => {
+      expect((await run("2026-06-30T14:00:00Z")).points).toHaveLength(0);
+    });
+
+    it("avoids the early-morning tail of an overnight window (attributed to the prior day)", async () => {
+      expect((await run("2026-07-01T03:00:00Z")).points).toEqual([[0.5, 51.5]]);
+    });
+
+    it("does NOT avoid it on a night outside the window's date range", async () => {
+      expect((await run("2026-07-15T23:00:00Z")).points).toHaveLength(0);
+    });
+  });
 });

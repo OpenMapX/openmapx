@@ -41,6 +41,20 @@ export interface RoadConditionRoadRef {
   direction?: string;
 }
 
+/**
+ * One recurring validity window: within [dateStart, dateEnd] (inclusive ISO
+ * dates), on the listed `dayOfWeek` (0=Sun..6=Sat; all days when absent), active
+ * each day from `timeStart` to `timeEnd` (local "HH:MM"; an overnight band wraps
+ * when timeEnd < timeStart). Mirrors the conditions model's `RecurringWindow`.
+ */
+export interface RoadConditionScheduleWindow {
+  dayOfWeek?: number[];
+  timeStart?: string;
+  timeEnd?: string;
+  dateStart?: string;
+  dateEnd?: string;
+}
+
 export interface RoadConditionEvent {
   /** Globally unique, provider-prefixed (e.g. "ndw:NL123", "tomtom:abc"). */
   id: string;
@@ -58,6 +72,9 @@ export interface RoadConditionEvent {
   roads?: RoadConditionRoadRef[];
   validFrom?: string | null;
   validTo?: string | null;
+  /** Fine-grained recurring windows (e.g. nightly closures); when present, the
+   * event is in effect only inside a window, not across the whole from–to span. */
+  schedule?: RoadConditionScheduleWindow[];
   dataUpdatedAt?: string;
   attribution?: RoadConditionAttribution;
 }

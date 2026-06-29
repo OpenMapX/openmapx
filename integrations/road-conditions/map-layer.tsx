@@ -11,6 +11,7 @@ import { useOverlayLayerVisible } from "@/components/map/overlay/useOverlayStore
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { markerImageData, markerImageId, parseMarkerImageId, representativePoint } from "./markers";
 // Registers the "road-conditions" overlay store the layer selector toggles.
@@ -48,9 +49,61 @@ const POPUP_SPEC: PopupCardSpec = {
   rows: [
     { field: "type", label: "Type", format: "label", variant: "chip" },
     { field: "roadState", label: "Status", format: "label", variant: "chip" },
+    // Structured validity window (from the feed's validFrom/validTo, not the
+    // free-text description — many feeds don't put it in the text). Pre-formatted
+    // into `validity` at click time.
+    { field: "validity", label: "Active", variant: "row" },
     { field: "description", label: "Details", variant: "block" },
   ],
 };
+
+interface ScheduleWindow {
+  timeStart?: string;
+  timeEnd?: string;
+  dateStart?: string;
+  dateEnd?: string;
+}
+
+/**
+ * Format the structured validity for the popup. A recurring `schedule` (e.g. a
+ * nightly closure) is shown as its band + date range, e.g.
+ * "20:00–05:00, 29 Jun 2026 – 3 Jul 2026"; otherwise the absolute from–until
+ * range, e.g. "10 Jul 2026, 22:00 – 13 Jul 2026, 05:00". An open end is shown as
+ * "…". Returns "" when nothing is known (ongoing / undated) so the row drops.
+ * Schedule times are the source's local clock (shown as-is).
+ */
+function formatValidity(
+  scheduleJson: unknown,
+  from: unknown,
+  to: unknown,
+  fmtDateTime: (value: string | number | Date) => string,
+  fmtDate: (value: string | number | Date) => string,
+): string {
+  if (typeof scheduleJson === "string" && scheduleJson) {
+    try {
+      const windows = JSON.parse(scheduleJson) as ScheduleWindow[];
+      const parts = windows
+        .map((w) => {
+          const band = w.timeStart && w.timeEnd ? `${w.timeStart}–${w.timeEnd}` : "";
+          const range =
+            w.dateStart && w.dateEnd
+              ? `${fmtDate(w.dateStart)} – ${fmtDate(w.dateEnd)}`
+              : w.dateStart
+                ? fmtDate(w.dateStart)
+                : "";
+          return [band, range].filter(Boolean).join(", ");
+        })
+        .filter(Boolean);
+      if (parts.length > 0) return parts.join("; ");
+    } catch {
+      // Malformed schedule → fall through to the plain range.
+    }
+  }
+  const f = typeof from === "string" && from ? fmtDateTime(from) : "";
+  const t = typeof to === "string" && to ? fmtDateTime(to) : "";
+  if (!f && !t) return "";
+  return `${f || "…"} – ${t || "…"}`;
+}
 
 /** Collapse the attribution object into a single credit string for the popup. */
 function attributionString(raw: unknown): string {
@@ -96,6 +149,15 @@ function buildSources(features: RawFeature[]): { markers: GeoJsonData; lines: Ge
         _icon: markerImageId(type, severity),
       };
       if (p.roadState) props.roadState = String(p.roadState);
+      // Raw ISO validity bounds + recurring schedule — formatted into a human
+      // "Active …" string at click time (needs the user's locale/time-format
+      // prefs). Carried as primitives/JSON so they survive MapLibre's property
+      // serialization.
+      if (p.validFrom) props.validFrom = String(p.validFrom);
+      if (p.validTo) props.validTo = String(p.validTo);
+      if (Array.isArray(p.schedule) && p.schedule.length > 0) {
+        props.schedule = JSON.stringify(p.schedule);
+      }
       if (p.description) props.description = String(p.description);
       markerFeatures.push({
         type: "Feature",
@@ -123,6 +185,13 @@ export function RoadConditionsLayer() {
   useOverlayExclusion(OVERLAY_ID, layerVisible);
   useLayerReanchor([LINE_LAYER, MARKER_LAYER], layerVisible);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  // Keep the latest formatters in a ref so the imperative popup click handler
+  // (bound once per effect) always formats validity per the current prefs.
+  const dtf = useDateTimeFormat();
+  const dtfRef = useRef(dtf);
+  useEffect(() => {
+    dtfRef.current = dtf;
+  }, [dtf]);
 
   const fetchData = useCallback(async () => {
     const map = mapRef.current;
@@ -273,6 +342,14 @@ export function RoadConditionsLayer() {
         geom?.type === "Point"
           ? (geom.coordinates as [number, number])
           : [e.lngLat.lng, e.lngLat.lat];
+      const validity = formatValidity(
+        props.schedule,
+        props.validFrom,
+        props.validTo,
+        dtfRef.current.dateTime,
+        dtfRef.current.date,
+      );
+      const popupProps = validity ? { ...props, validity } : props;
       popupRef.current?.remove();
       popupRef.current = new maplibregl.Popup({
         closeButton: true,
@@ -280,7 +357,7 @@ export function RoadConditionsLayer() {
         className: "omx-popup",
       })
         .setLngLat(coords)
-        .setHTML(buildPopupCard(POPUP_SPEC, props))
+        .setHTML(buildPopupCard(POPUP_SPEC, popupProps))
         .addTo(map);
     };
 
