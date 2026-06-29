@@ -98,14 +98,9 @@ function FeedStateSection({ detail }: { detail: PoiSourceDetail }) {
   const feedState = detail.feedState;
   if (!feedState) {
     return (
-      <Typography
-        variant="body2"
-        sx={{
-          color: "text.secondary",
-        }}
-      >
+      <Alert severity="info" variant="outlined">
         No ingest has run yet.
-      </Typography>
+      </Alert>
     );
   }
   const hashShort = feedState.lastStaticHash ? feedState.lastStaticHash.slice(0, 12) : "—";
@@ -275,14 +270,9 @@ function LastErrorSection({ detail }: { detail: PoiSourceDetail }) {
 function RecentJobsSection({ detail }: { detail: PoiSourceDetail }) {
   if (detail.recentJobs.length === 0) {
     return (
-      <Typography
-        variant="body2"
-        sx={{
-          color: "text.secondary",
-        }}
-      >
+      <Alert severity="info" variant="outlined">
         No jobs recorded yet.
-      </Typography>
+      </Alert>
     );
   }
   return (

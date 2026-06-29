@@ -1026,7 +1026,7 @@ function GtfsSection({
       {(() => {
         if (allRows.length === 0) {
           return (
-            <Alert severity="info">
+            <Alert severity="info" variant="outlined">
               No GTFS feeds yet. Either run{" "}
               <Box component="code" sx={{ fontFamily: "monospace" }}>
                 pnpm openmapx data download gtfs --countries de

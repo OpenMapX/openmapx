@@ -412,14 +412,9 @@ function ConfigTab({
             Resolved Values
           </Typography>
           {entries.length === 0 ? (
-            <Typography
-              variant="body2"
-              sx={{
-                color: "text.secondary",
-              }}
-            >
+            <Alert severity="info" variant="outlined">
               No configuration keys found.
-            </Typography>
+            </Alert>
           ) : (
             <TableContainer>
               <Table size="small">
@@ -862,14 +857,9 @@ function HealthTab({
                 )}
               </Stack>
             ) : (
-              <Typography
-                variant="body2"
-                sx={{
-                  color: "text.secondary",
-                }}
-              >
+              <Alert severity="info" variant="outlined">
                 No health data available yet. Run a check to populate.
-              </Typography>
+              </Alert>
             )}
           </CardContent>
         </Card>

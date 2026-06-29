@@ -5,6 +5,7 @@ import BlockIcon from "@mui/icons-material/Block";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import DeleteIcon from "@mui/icons-material/Delete";
 import SupervisorAccountIcon from "@mui/icons-material/SupervisorAccount";
+import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -443,23 +444,10 @@ function AccountsTab() {
       >
         Linked OAuth accounts and passkeys are managed by the user via Account Settings.
       </Typography>
-      <Paper variant="outlined">
-        <Box
-          sx={{
-            p: 2,
-          }}
-        >
-          <Typography
-            variant="body2"
-            sx={{
-              color: "text.secondary",
-            }}
-          >
-            No account linking data available at this API surface. Users can manage their linked
-            accounts from their own account settings.
-          </Typography>
-        </Box>
-      </Paper>
+      <Alert severity="info" variant="outlined">
+        No account linking data available at this API surface. Users can manage their linked
+        accounts from their own account settings.
+      </Alert>
     </Stack>
   );
 }

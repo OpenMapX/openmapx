@@ -187,7 +187,7 @@ function BrowseTab() {
       )}
       {isError && <Alert severity="error">Failed to load the extension catalog.</Alert>}
       {!isLoading && !isError && entries.length === 0 && (
-        <Alert severity="info">
+        <Alert severity="info" variant="outlined">
           No extensions found. Add a catalog source under the Sources tab, or install directly from
           an <code>extension.json</code> URL.
         </Alert>
@@ -316,7 +316,9 @@ function InstalledTab() {
     );
   if (rows.length === 0)
     return (
-      <Alert severity="info">No extensions installed yet. Browse the catalog to add one.</Alert>
+      <Alert severity="info" variant="outlined">
+        No extensions installed yet. Browse the catalog to add one.
+      </Alert>
     );
 
   return (
