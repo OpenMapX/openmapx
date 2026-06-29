@@ -161,8 +161,9 @@ export async function installExtension(
         // through to starting on the cached image.
         const pulled = await dockerComposeAction(svc.service, "pull");
         if (pulled.exitCode !== 0) {
+          const reason = pulled.stderr.trim().split("\n").slice(-3).join("; ") || "unknown error";
           await ctx.log(
-            `docker compose pull ${svc.service} failed (exit ${pulled.exitCode}); starting on the cached image`,
+            `docker compose pull ${svc.service} failed (exit ${pulled.exitCode}): ${reason} — starting on the cached image (the container may keep running the previous version)`,
             "stderr",
           );
         }
@@ -293,7 +294,11 @@ async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<
 
   if (ledger.enabledServiceIds.length > 0) {
     for (const svc of ledger.enabledServiceIds) {
-      await dockerComposeAction(svc, "remove").catch(() => ({ exitCode: 1, stdout: "" }));
+      await dockerComposeAction(svc, "remove").catch(() => ({
+        exitCode: 1,
+        stdout: "",
+        stderr: "",
+      }));
     }
     try {
       disableServicesInSelection(ledger.enabledServiceIds);
@@ -342,7 +347,7 @@ export async function removeExtension(
   // Tear down service containers while they're still in the compose file.
   for (const svc of serviceIds) {
     await ctx.log(`Removing service container ${svc}...`);
-    await dockerComposeAction(svc, "remove").catch(() => ({ exitCode: 1, stdout: "" }));
+    await dockerComposeAction(svc, "remove").catch(() => ({ exitCode: 1, stdout: "", stderr: "" }));
   }
   // Remove the repos this extension owns + drop the services from selection.
   if (serviceIds.length > 0) {

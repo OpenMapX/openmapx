@@ -66,6 +66,7 @@
       "ISOCHRONE_PROVIDER": "${ISOCHRONE_PROVIDER:-valhalla}",
       "GITHUB_TOKEN": "${GITHUB_TOKEN:-}",
       "STORE_CATALOG_URL": "${STORE_CATALOG_URL:-}",
+      "DOCKER_CONFIG": "/root/.docker",
       "NODE_OPTIONS": "${OPENMAPX_API_NODE_OPTIONS:---max-old-space-size=1536}"
     },
     "memory": "2g",
@@ -99,6 +100,11 @@
       "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — community integrations are stored under the host checkout}/custom_integrations",
       "target": "${OPENMAPX_CUSTOM_INTEGRATIONS_DIR:-/app/custom_integrations}",
       "readOnly": false
+    },
+    {
+      "source": "${OPENMAPX_DOCKER_CONFIG_DIR:-/root/.docker}",
+      "target": "/root/.docker",
+      "readOnly": true
     }
   ],
   "exposure": {

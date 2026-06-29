@@ -35,7 +35,7 @@ export async function dockerComposePs(): Promise<PsEntry[]> {
 export async function dockerComposeAction(
   serviceId: string,
   action: "start" | "stop" | "restart" | "recreate" | "remove" | "pull",
-): Promise<{ exitCode: number; stdout: string }> {
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   const serviceArgs = serviceId ? [serviceId] : [];
   const args =
     action === "start"
@@ -55,15 +55,25 @@ export async function dockerComposeAction(
                 // extension's service). `-s` stops first, `-f` skips confirmation.
                 ["rm", "-sf", ...serviceArgs]
               : ["restart", ...serviceArgs];
+  // Image pulls fetch from a registry over the network and can legitimately
+  // take several minutes for a large image on a slow link; every other action
+  // is a local container operation that should stay snappy. A too-short pull
+  // budget would surface as an opaque non-zero exit, indistinguishable from a
+  // real registry error.
+  const timeout = action === "pull" ? 600_000 : 120_000;
   try {
-    const { stdout } = await execFile("docker", ["compose", "-f", composePath(), ...args], {
-      timeout: 120_000,
+    const { stdout, stderr } = await execFile("docker", ["compose", "-f", composePath(), ...args], {
+      timeout,
     });
-    return { exitCode: 0, stdout: stdout ?? "" };
+    return { exitCode: 0, stdout: stdout ?? "", stderr: stderr ?? "" };
   } catch (err) {
     const code = (err as NodeJS.ErrnoException & { code?: number }).code ?? 1;
     const stdout = (err as { stdout?: string }).stdout ?? "";
-    return { exitCode: typeof code === "number" ? code : 1, stdout };
+    // The actual reason (e.g. `error from registry: unauthorized`, a network
+    // failure, or a kill on timeout) lands on stderr — surface it so callers
+    // can log *why* a pull/recreate failed instead of a bare exit code.
+    const stderr = (err as { stderr?: string }).stderr ?? "";
+    return { exitCode: typeof code === "number" ? code : 1, stdout, stderr };
   }
 }
 
