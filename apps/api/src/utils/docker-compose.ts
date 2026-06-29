@@ -34,23 +34,27 @@ export async function dockerComposePs(): Promise<PsEntry[]> {
 
 export async function dockerComposeAction(
   serviceId: string,
-  action: "start" | "stop" | "restart" | "recreate" | "remove",
+  action: "start" | "stop" | "restart" | "recreate" | "remove" | "pull",
 ): Promise<{ exitCode: number; stdout: string }> {
   const serviceArgs = serviceId ? [serviceId] : [];
   const args =
     action === "start"
       ? ["up", "-d", ...serviceArgs]
-      : action === "recreate"
-        ? // Force-recreate so a rotated secret (same key/path, new file content)
-          // is always picked up, not just config-shape changes.
-          ["up", "-d", "--force-recreate", ...serviceArgs]
-        : action === "stop"
-          ? ["stop", ...serviceArgs]
-          : action === "remove"
-            ? // Stop + remove the container (clean teardown when uninstalling an
-              // extension's service). `-s` stops first, `-f` skips confirmation.
-              ["rm", "-sf", ...serviceArgs]
-            : ["restart", ...serviceArgs];
+      : action === "pull"
+        ? // Re-fetch the image so a moving tag (e.g. :latest) is refreshed; a
+          // following `up -d` then recreates the container on the new digest.
+          ["pull", ...serviceArgs]
+        : action === "recreate"
+          ? // Force-recreate so a rotated secret (same key/path, new file content)
+            // is always picked up, not just config-shape changes.
+            ["up", "-d", "--force-recreate", ...serviceArgs]
+          : action === "stop"
+            ? ["stop", ...serviceArgs]
+            : action === "remove"
+              ? // Stop + remove the container (clean teardown when uninstalling an
+                // extension's service). `-s` stops first, `-f` skips confirmation.
+                ["rm", "-sf", ...serviceArgs]
+              : ["restart", ...serviceArgs];
   try {
     const { stdout } = await execFile("docker", ["compose", "-f", composePath(), ...args], {
       timeout: 120_000,

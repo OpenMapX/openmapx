@@ -154,6 +154,18 @@ export async function installExtension(
       await ctx.log("Rendering compose...");
       await renderAndPersistCompose();
       for (const svc of serviceComponents) {
+        // Pull first so a moving image tag (e.g. :latest) is refreshed on
+        // update — `up -d` alone won't re-pull a tag already cached on the host,
+        // so without this an updated extension would keep running the old image.
+        // Best-effort: a pull failure (offline / locally-built image) falls
+        // through to starting on the cached image.
+        const pulled = await dockerComposeAction(svc.service, "pull");
+        if (pulled.exitCode !== 0) {
+          await ctx.log(
+            `docker compose pull ${svc.service} failed (exit ${pulled.exitCode}); starting on the cached image`,
+            "stderr",
+          );
+        }
         await serviceStart(svc.service, ctx);
       }
     }
