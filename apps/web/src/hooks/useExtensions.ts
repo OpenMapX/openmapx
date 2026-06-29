@@ -22,7 +22,8 @@ export interface ExtensionCatalogView {
   screenshots?: string[];
   categories?: string[];
   tags?: string[];
-  version: string;
+  /** Resolved live from the manifest; absent if the manifest fetch failed. */
+  version?: string;
   minPlatform?: string;
   lastUpdated?: string;
   trust?: "built-in" | "verified" | "community";

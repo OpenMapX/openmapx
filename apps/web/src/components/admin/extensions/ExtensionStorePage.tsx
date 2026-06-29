@@ -213,8 +213,7 @@ function BrowseTab() {
                   <TrustChip trust={e.trust} />
                 </Stack>
                 <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                  v{e.version}
-                  {e.author ? ` · ${e.author}` : ""}
+                  {[e.version ? `v${e.version}` : null, e.author].filter(Boolean).join(" · ")}
                 </Typography>
                 {e.summary && (
                   <Typography variant="body2" sx={{ color: "text.secondary" }}>

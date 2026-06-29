@@ -75,7 +75,8 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
           platformVersion: PLATFORM_VERSION,
           installed: !!inst,
           installedVersion: inst?.installedVersion ?? null,
-          hasUpdate: !!inst && inst.installedVersion !== e.version,
+          // No spurious update when the live version is unknown (manifest fetch failed).
+          hasUpdate: !!inst && e.version != null && inst.installedVersion !== e.version,
           removed: kill.removed.has(e.id) ? kill.removed.get(e.id) : null,
           critical: kill.critical.has(e.id) ? kill.critical.get(e.id) : null,
         };
@@ -145,7 +146,7 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
           installedAt: ext.installedAt.toISOString(),
           updatedAt: ext.updatedAt.toISOString(),
           components,
-          hasUpdate: !!entry && entry.version !== ext.installedVersion,
+          hasUpdate: !!entry && entry.version != null && entry.version !== ext.installedVersion,
           latestVersion: entry?.version ?? null,
         };
       }),

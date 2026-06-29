@@ -62,4 +62,12 @@ describe("applyLiveVersions", () => {
     expect(a.version).toBe("2");
     expect(b.version).toBe("3");
   });
+
+  it("leaves version undefined when a manifest entry has no fallback and the fetch fails", async () => {
+    const e = entry({ manifest: "https://ex/extension.json" });
+    delete (e as { version?: string }).version;
+    await applyLiveVersions([e], async () => null);
+    // Never invents a version — the catalog needn't carry one; routes guard undefined.
+    expect(e.version).toBeUndefined();
+  });
 });

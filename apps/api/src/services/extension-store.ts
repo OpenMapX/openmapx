@@ -36,7 +36,15 @@ export interface ExtensionCatalogEntry {
   screenshots?: string[];
   categories?: string[];
   tags?: string[];
-  version: string;
+  /**
+   * Developer-controlled, NOT authored in the catalog: resolved live from the
+   * entry's `manifest` (see {@link applyLiveVersions}). Optional so the catalog
+   * doesn't carry — and the catalog manager doesn't maintain — a version. Only
+   * inline entries (no `manifest`) declare it directly. Undefined only when a
+   * manifest entry's fetch fails with no declared fallback.
+   */
+  version?: string;
+  /** Developer-controlled — resolved from the manifest's `platform` (fallback only if declared). */
   minPlatform?: string;
   lastUpdated?: string;
   /** URL of the authoritative extension.json (the components to install). */
