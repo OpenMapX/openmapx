@@ -132,6 +132,59 @@ async function fetchCatalogFromUrl(url: string): Promise<FetchedCatalog> {
   };
 }
 
+/**
+ * Fetch the live `{ version, platform }` from an extension's manifest URL — the
+ * source of truth for "what is currently published". Returns null on any failure
+ * so the catalog build falls back to the entry's declared values.
+ *
+ * This is what lets a catalog entry whose `manifest` points at a MOVING url
+ * (e.g. `…/releases/latest/download/extension.json`) track the source's latest
+ * release without a catalog edit per release — see {@link applyLiveVersions}.
+ */
+export async function fetchManifestMeta(
+  url: string,
+): Promise<{ version?: string; platform?: string } | null> {
+  try {
+    validatePublicUrl(url);
+    const res = await fetch(url, {
+      headers: { "User-Agent": USER_AGENT_ADMIN },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { version?: unknown; platform?: unknown };
+    return {
+      version: typeof data.version === "string" && data.version ? data.version : undefined,
+      platform: typeof data.platform === "string" && data.platform ? data.platform : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Override each catalog entry's `version`/`minPlatform` with the live values from
+ * its `manifest` URL, so an entry pointing `manifest` at a moving "latest release"
+ * url surfaces a new release as an available update with no catalog change.
+ * Entries without a `manifest` url (inline components) keep their declared values;
+ * a fetch failure also falls back to the declared values. Mutates `entries` in
+ * place; runs the fetches concurrently. `fetchMeta` is injectable for tests.
+ */
+export async function applyLiveVersions(
+  entries: ExtensionCatalogEntry[],
+  fetchMeta: (
+    url: string,
+  ) => Promise<{ version?: string; platform?: string } | null> = fetchManifestMeta,
+): Promise<void> {
+  await Promise.all(
+    entries.map(async (entry) => {
+      if (!entry.manifest) return;
+      const meta = await fetchMeta(entry.manifest);
+      if (meta?.version) entry.version = meta.version;
+      if (meta?.platform) entry.minPlatform = meta.platform;
+    }),
+  );
+}
+
 interface CachedCatalog {
   entries: ExtensionCatalogEntry[];
   killSwitch: {
@@ -167,6 +220,11 @@ async function buildCatalog(): Promise<CachedCatalog> {
       console.warn(`[extstore] Failed to fetch catalog from ${source.url}:`, err);
     }
   }
+
+  // The catalog's declared `version` is only a fallback — the manifest URL is the
+  // source of truth. An entry pointing `manifest` at a moving "latest release"
+  // url therefore surfaces new releases without a catalog edit per release.
+  await applyLiveVersions(entries);
 
   return { entries, killSwitch: { removed, critical } };
 }

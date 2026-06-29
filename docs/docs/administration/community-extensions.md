@@ -62,8 +62,8 @@ Open **Extensions** in the admin panel. It has three tabs:
   version. An incompatible, delisted, or security-flagged extension cannot be
   installed.
 - **Installed** — what you have installed, each with its components expanded
-  (service security rating inline), an **Update** action when the catalog has a
-  newer version, and **Uninstall**.
+  (service security rating inline), an **Update** action when a newer version is
+  published, and **Uninstall**.
 - **Sources** — the catalog sources the Browse list is merged from. The default
   OpenMapX catalog is built in and cannot be removed; you can add your own
   (HTTPS only, no credentials in the URL) and they appear as the **community**
@@ -80,7 +80,7 @@ pnpm openmapx ext browse                 # list the catalog
 pnpm openmapx ext install openconditions # install by catalog id…
 pnpm openmapx ext install https://example.com/my-ext/extension.json  # …or by URL
 pnpm openmapx ext list                   # what's installed
-pnpm openmapx ext update <id>            # re-pin to the catalog's current version
+pnpm openmapx ext update <id>            # re-pin to the latest published version
 pnpm openmapx ext remove <id>            # uninstall (removes its services + integrations)
 ```
 
@@ -144,8 +144,13 @@ malformed archive — they are not a substitute for trusting the author.
 
 ## Updating, uninstalling, and the kill-switch
 
-- **Update** re-pins **all** of a bundle's parts to the catalog's current version
+- **Update** re-pins **all** of a bundle's parts to the latest published version
   through the same orchestrated flow, keeping coupled parts version-consistent.
+  The version comes from the extension's own `extension.json` (the manifest the
+  catalog points at), not from a number in the catalog — so an extension that
+  publishes a moving "latest release" manifest surfaces new releases here
+  automatically, and its catalog listing is a one-time inclusion rather than a
+  per-release edit.
 - **Uninstall** removes exactly what the extension installed — stops and removes
   its service containers, drops the cloned repos and the integrations it placed,
   re-renders compose, and reloads the integration host. Standalone installs of

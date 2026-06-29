@@ -415,10 +415,18 @@ openmapx-ext bundle \
   --out extension.json
 ```
 
-Publish `extension.json` at an HTTPS URL (and, to make it discoverable as a
-**verified** entry, open a PR adding it to the curated
+Publish `extension.json` at an HTTPS URL — and point it at a **moving "latest
+release"** location so updates flow from your releases, not from catalog edits.
+The simplest way: attach `extension.json` to each GitHub release (regenerated so
+`version` and the service `ref` are that release's tag) and use the stable
+`https://github.com/<owner>/<repo>/releases/latest/download/extension.json` asset
+url. List it **once** by opening a PR to the curated
 [`openmapx/community-extensions`](https://github.com/openmapx/community-extensions)
-catalog).
+catalog pointing `manifest` at that url (inclusion is what makes it a **verified**
+entry). The store reads the version from your manifest, so **every later release
+surfaces as an available update with no further catalog change**. (If you instead
+pin the manifest url to a specific tag, updates stay gated behind a catalog edit —
+useful when you want each version curated.)
 
 ### End-to-end install
 
@@ -430,9 +438,11 @@ starts the service, installs the integration, and reloads the API atomically
 pnpm openmapx ext install https://…/extension.json   # or by catalog id once listed
 ```
 
-Updating is the same command against a newer `extension.json` version (or
-`pnpm openmapx ext update <id>`); it re-pins every part together so the coupled
-service, integration, and shared schema stay version-consistent.
+For the operator, updating is `pnpm openmapx ext update <id>` (or the **Update**
+action in the admin panel, offered once the store sees your newer release); it
+re-pins every part together so the coupled service, integration, and shared
+schema stay version-consistent. Something installed directly by URL (not via a
+catalog) is updated by re-running `pnpm openmapx ext install <newer extension.json url>`.
 
 ## Caveats
 
