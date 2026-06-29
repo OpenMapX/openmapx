@@ -17,6 +17,7 @@ COPY packages/mobility-formats/package.json packages/mobility-formats/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
 COPY packages/cli/package.json packages/cli/
+COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/integration-framework/package.json packages/integration-framework/
 COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
@@ -41,6 +42,7 @@ COPY packages/mobility-formats/package.json packages/mobility-formats/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
 COPY packages/cli/package.json packages/cli/
+COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/integration-framework/package.json packages/integration-framework/
 COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
@@ -156,6 +158,9 @@ COPY --from=prod-deps /app/packages/presets/node_modules ./packages/presets/node
 # the image-size cost is negligible.
 COPY packages/cli/ packages/cli/
 COPY --from=prod-deps /app/packages/cli/node_modules ./packages/cli/node_modules
+# cli imports @openmapx/transitous-core (transit data jobs); ship its source too
+# (source-only package, no runtime node_modules of its own).
+COPY packages/transitous-core/ packages/transitous-core/
 
 # Integrations with pnpm-resolved node_modules (manifests + code + deps)
 COPY --from=prod-deps /app/integrations ./integrations
