@@ -65,6 +65,16 @@ describe("buildPopupCard", () => {
     expect(html).toContain("#cc0033"); // high severity color, inlined
   });
 
+  it("omits the severity badge when severity is unknown or empty", () => {
+    for (const severity of ["unknown", "Unknown", "", null]) {
+      const html = buildPopupCard(
+        { titleField: "h", severityField: "severity", rows: [] },
+        { h: "T", severity },
+      );
+      expect(html).not.toContain("omx-overlay-popup__badge");
+    }
+  });
+
   it("renders chip-variant rows as chips with humanized values", () => {
     const html = buildPopupCard(
       {

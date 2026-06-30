@@ -98,7 +98,10 @@ export function buildPopupCard(
   let badge = "";
   if (spec.severityField) {
     const sevRaw = properties[spec.severityField];
-    if (sevRaw != null && sevRaw !== "") {
+    // Skip the badge for an unknown/empty severity — many sources (e.g. the
+    // Mobilithek roadworks feed) send `severity=unknown`, and a meaningless
+    // "UNKNOWN" pill is just noise. The marker still carries the unknown color.
+    if (sevRaw != null && sevRaw !== "" && String(sevRaw).toLowerCase() !== "unknown") {
       const style = SEVERITY_STYLE[String(sevRaw).toLowerCase()] ?? SEVERITY_STYLE.unknown;
       badge = `<span class="omx-overlay-popup__badge" style="background:${style.bg};color:${style.fg}">${escapeHtml(humanize(String(sevRaw)))}</span>`;
     }
