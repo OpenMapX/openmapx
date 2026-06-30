@@ -228,21 +228,29 @@ function resolveBackendEntryPoint(directory: string, isBuiltIn: boolean): string
   return existsSync(jsModulePath) ? jsModulePath : null;
 }
 
-// In dev we mtime-bust so editing `index.ts` and hitting `/api/integrations/reload`
-// picks up the change. In prod we never cache-bust — ESM `import()` is
-// process-lifetime cached, so re-importing the same file URL would return the
-// old module *and* leak nothing. Production updates require restarting app-api
-// to load fresh backend code; the install/update job handlers say so in their
-// logs.
+// Cache-bust the dynamic import by the entry file's mtime+size so a reload
+// (`reloadIntegrations` — fired by extension install/update and credential
+// set/delete) picks up CHANGED backend code WITHOUT restarting app-api. ESM
+// `import()` is keyed by URL and process-lifetime cached, so re-importing the
+// same file URL returns the stale module — which is why a store update of an
+// integration whose bundle path is unchanged otherwise silently keeps running
+// the old code until a restart.
+//
+// Keying the bust on mtime+size (in dev AND prod) means an UNCHANGED file
+// reuses the same URL → the cached module is returned, no new module is created;
+// only a CHANGED file mints a new URL → a fresh import. The cost is that ESM
+// modules are never garbage-collected, so each new URL leaks its (tiny,
+// self-contained) module graph for the process lifetime — but the leak is now
+// bounded to one module per actual code change (reloads with no code change,
+// e.g. a credential rotation, reuse the cached URL and leak nothing), which over
+// a process lifetime is negligible and well worth not requiring a restart.
 function backendEntryImportSpecifier(entryPoint: string): string {
   const url = pathToFileURL(entryPoint);
-  if (process.env.NODE_ENV !== "production") {
-    try {
-      const stats = statSync(entryPoint);
-      url.searchParams.set("v", `${stats.mtimeMs}-${stats.size}`);
-    } catch {
-      url.searchParams.set("v", Date.now().toString());
-    }
+  try {
+    const stats = statSync(entryPoint);
+    url.searchParams.set("v", `${stats.mtimeMs}-${stats.size}`);
+  } catch {
+    url.searchParams.set("v", Date.now().toString());
   }
   return url.href;
 }

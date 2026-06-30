@@ -6,6 +6,8 @@
  * All tests exercise only the public API; no internals are imported or patched.
  */
 
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -337,5 +339,60 @@ describe("shutdownIntegrations", () => {
     await shutdownIntegrations();
 
     expect(getAllIntegrations()).toHaveLength(0);
+  });
+});
+
+// Regression guard for the prod cache-bust: a store update of a community
+// integration whose bundle path is unchanged must take effect on reload WITHOUT
+// restarting app-api. Runs under NODE_ENV=production specifically — the old
+// behavior skipped cache-busting in prod, so the re-import returned the stale
+// module and this test would fail.
+describe("reloadIntegrations — re-imports changed backend code in production", () => {
+  it("picks up a rewritten community bundle on reload (no restart)", async () => {
+    const prevEnv = process.env.NODE_ENV;
+    const parent = mkdtempSync(join(tmpdir(), "omx-reload-probe-"));
+    const intgDir = join(parent, "reload-probe");
+    const bundleDir = join(intgDir, "dist", "backend");
+    mkdirSync(bundleDir, { recursive: true });
+    writeFileSync(
+      join(intgDir, "manifest.json"),
+      JSON.stringify({
+        id: "reload-probe",
+        version: "1.0.0",
+        license: "MIT",
+        domains: ["knowledge"],
+        backend: { routes: false },
+        quality: "community-verified",
+      }),
+    );
+    const bundleFile = join(bundleDir, "index.mjs");
+    // Marker is set at MODULE EVALUATION time, so it only changes if the module
+    // is actually re-imported (a fresh URL) — not merely re-`setup()`-ed.
+    const writeBundle = (marker: string) =>
+      writeFileSync(
+        bundleFile,
+        `globalThis.__reloadProbeVersion = ${JSON.stringify(marker)};\nexport function setup() {}\n`,
+      );
+
+    const app = makeApp();
+    const g = globalThis as Record<string, unknown>;
+    try {
+      process.env.NODE_ENV = "production";
+
+      writeBundle("v1");
+      await initIntegrations(app, [{ directory: parent, isBuiltIn: false }]);
+      expect(g.__reloadProbeVersion).toBe("v1");
+
+      // Rewrite the bundle. Different content AND length so the mtime+size key
+      // changes even on a coarse-mtime filesystem.
+      writeBundle("v2-rewritten-and-longer");
+      await reloadIntegrations();
+      expect(g.__reloadProbeVersion).toBe("v2-rewritten-and-longer");
+    } finally {
+      if (prevEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = prevEnv;
+      rmSync(parent, { recursive: true, force: true });
+      delete g.__reloadProbeVersion;
+    }
   });
 });
