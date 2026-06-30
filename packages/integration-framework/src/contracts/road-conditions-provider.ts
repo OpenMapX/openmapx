@@ -42,17 +42,33 @@ export interface RoadConditionRoadRef {
 }
 
 /**
- * One recurring validity window: within [dateStart, dateEnd] (inclusive ISO
- * dates), on the listed `dayOfWeek` (0=Sun..6=Sat; all days when absent), active
- * each day from `timeStart` to `timeEnd` (local "HH:MM"; an overnight band wraps
- * when timeEnd < timeStart). Mirrors the conditions model's `RecurringWindow`.
+ * A recurring validity rule, shaped after schema.org `Schedule`
+ * (https://schema.org/Schedule). Local fields (`startTime`, `startDate`/
+ * `endDate`, `byDay`) are interpreted in `scheduleTimezone` (an IANA name), so
+ * the rule is DST-correct and self-describing. `duration` is the authoritative
+ * occurrence length (overnight-safe, e.g. "PT9H"); `endTime` is an optional
+ * human-readable convenience. Mirrors the conditions model's `Schedule`.
  */
-export interface RoadConditionScheduleWindow {
-  dayOfWeek?: number[];
-  timeStart?: string;
-  timeEnd?: string;
-  dateStart?: string;
-  dateEnd?: string;
+export interface RoadConditionSchedule {
+  /** ISO 8601 duration between occurrences: "P1D" daily, "P1W" weekly. */
+  repeatFrequency?: string;
+  repeatCount?: number;
+  /** Local ISO date the recurrence starts / last starts. */
+  startDate?: string;
+  endDate?: string;
+  /** Local time-of-day each occurrence starts ("HH:MM"[:SS]). */
+  startTime?: string;
+  /** Optional local end time-of-day (human-readable; `duration` is authoritative). */
+  endTime?: string;
+  /** ISO 8601 duration of each occurrence, e.g. "PT9H". */
+  duration?: string;
+  /** Days of week as two-letter iCal codes (SU MO TU WE TH FR SA). */
+  byDay?: string[];
+  byMonth?: number[];
+  byMonthDay?: number[];
+  exceptDate?: string[];
+  /** IANA timezone the local fields above are expressed in. */
+  scheduleTimezone: string;
 }
 
 export interface RoadConditionEvent {
@@ -72,9 +88,9 @@ export interface RoadConditionEvent {
   roads?: RoadConditionRoadRef[];
   validFrom?: string | null;
   validTo?: string | null;
-  /** Fine-grained recurring windows (e.g. nightly closures); when present, the
+  /** Fine-grained recurring schedule (e.g. nightly closures); when present, the
    * event is in effect only inside a window, not across the whole from–to span. */
-  schedule?: RoadConditionScheduleWindow[];
+  schedule?: RoadConditionSchedule[];
   dataUpdatedAt?: string;
   attribution?: RoadConditionAttribution;
 }

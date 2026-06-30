@@ -2,9 +2,10 @@ import type { BBox } from "@openmapx/core";
 import { haversineDistance } from "@openmapx/core";
 import type {
   IntegrationContext,
-  RoadConditionScheduleWindow,
+  RoadConditionSchedule,
   RoadConditionsProvider,
 } from "@openmapx/integration-framework";
+import { localDateInZone, zonedWallClockToInstant } from "./timezone.js";
 
 export type LngLat = [number, number];
 
@@ -65,33 +66,81 @@ function parseHhMm(s: string | undefined): number | null {
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;
 }
 
-/**
- * Whether the travel instant `at` lands inside a recurring window. Window dates
- * and times are LOCAL to the source; we compare against `at`'s UTC components,
- * which equal the user's chosen wall-clock for a pinned departure (see
- * `isActiveAt`). Overnight bands (timeEnd < timeStart) wrap past midnight — the
- * morning tail is attributed to the previous day's window.
- */
-function withinWindow(win: RoadConditionScheduleWindow, at: Date): boolean {
-  const dateOf = (d: Date) => d.toISOString().slice(0, 10);
-  const inDateRange = (d: Date) =>
-    (!win.dateStart || dateOf(d) >= win.dateStart) && (!win.dateEnd || dateOf(d) <= win.dateEnd);
-  const dayOk = (d: Date) =>
-    !win.dayOfWeek || win.dayOfWeek.length === 0 || win.dayOfWeek.includes(d.getUTCDay());
+const ICAL_DAY = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 
-  const ts = parseHhMm(win.timeStart);
-  const te = parseHhMm(win.timeEnd);
-  // Date-only window (no time band) → active any time on an in-range day.
-  if (ts == null || te == null) return inDateRange(at) && dayOk(at);
+/** iCal weekday code for a local "YYYY-MM-DD" date (UTC-parsed → calendar day). */
+function iCalDayOf(localDate: string): string | undefined {
+  const d = new Date(`${localDate}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? undefined : ICAL_DAY[d.getUTCDay()];
+}
 
-  const tod = at.getUTCHours() * 60 + at.getUTCMinutes();
-  if (ts <= te) return inDateRange(at) && dayOk(at) && tod >= ts && tod <= te;
-  // Overnight band: evening part on this day; morning part belongs to the
-  // previous day's window.
-  const prev = new Date(at.getTime() - 86_400_000);
+function addDaysLocal(localDate: string, delta: number): string {
+  const d = new Date(`${localDate}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+/** ISO-8601 duration → milliseconds (PnDTnHnMnS subset). */
+function durationToMs(iso: string | undefined): number | null {
+  if (!iso) return null;
+  const m = iso.match(/^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/);
+  if (!m) return null;
+  const [, d, h, mi, s] = m;
   return (
-    (tod >= ts && inDateRange(at) && dayOk(at)) || (tod <= te && inDateRange(prev) && dayOk(prev))
+    (Number(d ?? 0) * 86_400 + Number(h ?? 0) * 3_600 + Number(mi ?? 0) * 60 + Number(s ?? 0)) *
+    1_000
   );
+}
+
+/** Length of each occurrence: explicit `duration`, else endTime−startTime
+ * (overnight-aware), else the whole day. */
+function occurrenceDurationMs(schedule: RoadConditionSchedule): number {
+  const explicit = durationToMs(schedule.duration);
+  if (explicit != null) return explicit;
+  const s = parseHhMm(schedule.startTime);
+  const e = parseHhMm(schedule.endTime);
+  if (s != null && e != null) {
+    let mins = e - s;
+    if (mins <= 0) mins += 24 * 60;
+    return mins * 60_000;
+  }
+  return 24 * 3_600 * 1_000;
+}
+
+/** Whether the recurrence has an occurrence STARTING on local date `d`. */
+function occurrenceStartsOn(schedule: RoadConditionSchedule, d: string): boolean {
+  if (schedule.startDate && d < schedule.startDate.slice(0, 10)) return false;
+  if (schedule.endDate && d > schedule.endDate.slice(0, 10)) return false;
+  if (schedule.exceptDate?.some((x) => x.slice(0, 10) === d)) return false;
+  if (schedule.byDay && schedule.byDay.length > 0) {
+    const ical = iCalDayOf(d);
+    if (!ical || !schedule.byDay.includes(ical)) return false;
+  }
+  return true;
+}
+
+/**
+ * Whether the instant `at` falls inside an occurrence of a schema.org-shaped
+ * `Schedule`, evaluated in the schedule's OWN `scheduleTimezone` (DST-correct).
+ * Each occurrence starts at `startTime` (local) on a qualifying date and lasts
+ * `occurrenceDurationMs`. We test the occurrence that could contain `at` — one
+ * starting on `at`'s local date, or the previous local date for a window that
+ * runs past midnight.
+ */
+function occursAt(schedule: RoadConditionSchedule, at: Date): boolean {
+  const tz = schedule.scheduleTimezone;
+  if (!tz) return true; // zone-less schedule can't be evaluated → don't suppress
+  const startTime = schedule.startTime ?? "00:00";
+  const durMs = occurrenceDurationMs(schedule);
+  const atLocalDate = localDateInZone(at, tz);
+  for (const startDate of [atLocalDate, addDaysLocal(atLocalDate, -1)]) {
+    if (!occurrenceStartsOn(schedule, startDate)) continue;
+    const start = zonedWallClockToInstant(tz, `${startDate}T${startTime}`);
+    if (!start) continue;
+    const startMs = start.getTime();
+    if (at.getTime() >= startMs && at.getTime() < startMs + durMs) return true;
+  }
+  return false;
 }
 
 /**
@@ -99,29 +148,26 @@ function withinWindow(win: RoadConditionScheduleWindow, at: Date): boolean {
  * publish planned closures days ahead, and some (e.g. nightly roadworks) are
  * active only inside recurring windows; without this check the router would
  * detour around a closure that hasn't started, has ended, or is only active at
- * night. `at` is the chosen departure/arrival time, or "now" for an immediate
- * trip. A closure with no temporal info is treated as ongoing (always in
- * effect).
+ * night. `at` is the chosen departure/arrival instant, or "now" for an immediate
+ * trip. A closure with no temporal info is treated as ongoing (always in effect).
  *
- * When a `schedule` is present it is the precise definition of when the closure
- * is in effect and supersedes the coarse `validFrom`/`validTo` span (those are
- * just the outer bounds). `validFrom`/`validTo` are absolute instants; the
- * comparison is accurate to within the origin's UTC offset for a pinned
- * departure — the same approximation already used when handing the time to
- * Valhalla, fine for windows measured in hours-to-days.
+ * A `schedule` is the precise definition of when the closure is in effect and
+ * supersedes the coarse `validFrom`/`validTo` span (just the outer bounds). It
+ * is evaluated in its own `scheduleTimezone`, so the result is DST-correct and
+ * independent of the server's or the route origin's zone.
  */
 function isActiveAt(
   event: {
     validFrom?: string | null;
     validTo?: string | null;
-    schedule?: RoadConditionScheduleWindow[];
+    schedule?: RoadConditionSchedule[];
   },
   at: Date,
 ): boolean {
   const t = at.getTime();
   if (Number.isNaN(t)) return true; // unparseable travel time → don't suppress
   if (event.schedule && event.schedule.length > 0) {
-    return event.schedule.some((w) => withinWindow(w, at));
+    return event.schedule.some((s) => occursAt(s, at));
   }
   if (event.validFrom) {
     const from = Date.parse(event.validFrom);

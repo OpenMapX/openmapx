@@ -356,7 +356,8 @@ describe("activeClosuresForBbox", () => {
   });
 
   describe("recurring schedule (nightly windows supersede the outer span)", () => {
-    // Nightly 20:00–05:00 closure over 29 Jun–1 Jul; outer span 29 Jun–2 Jul.
+    // Nightly 20:00–05:00 Europe/Berlin (CEST +02:00 in summer) over 29 Jun–1 Jul.
+    // Each occurrence = 20:00 local (18:00Z) for 9h → ends 03:00Z next day.
     const nightly = {
       id: "nightly:1",
       source: "test",
@@ -368,7 +369,14 @@ describe("activeClosuresForBbox", () => {
       validFrom: "2026-06-29T18:00:00.000Z",
       validTo: "2026-07-02T03:00:00.000Z",
       schedule: [
-        { dateStart: "2026-06-29", dateEnd: "2026-07-01", timeStart: "20:00", timeEnd: "05:00" },
+        {
+          repeatFrequency: "P1D",
+          startDate: "2026-06-29",
+          endDate: "2026-07-01",
+          startTime: "20:00",
+          duration: "PT9H",
+          scheduleTimezone: "Europe/Berlin",
+        },
       ],
     };
     const run = (at: string) => {
@@ -378,15 +386,18 @@ describe("activeClosuresForBbox", () => {
     };
 
     it("avoids the closure at night (inside a window)", async () => {
+      // 23:00Z = 01:00 Berlin on Jul 1 — inside the Jun-30 night window.
       expect((await run("2026-06-30T23:00:00Z")).points).toEqual([[0.5, 51.5]]);
     });
 
     it("does NOT avoid it during the day, even within the outer from–to span", async () => {
+      // 14:00Z = 16:00 Berlin — between windows.
       expect((await run("2026-06-30T14:00:00Z")).points).toHaveLength(0);
     });
 
     it("avoids the early-morning tail of an overnight window (attributed to the prior day)", async () => {
-      expect((await run("2026-07-01T03:00:00Z")).points).toEqual([[0.5, 51.5]]);
+      // 02:00Z Jul 1 = 04:00 Berlin — still inside the Jun-30 night window (→03:00Z).
+      expect((await run("2026-07-01T02:00:00Z")).points).toEqual([[0.5, 51.5]]);
     });
 
     it("does NOT avoid it on a night outside the window's date range", async () => {

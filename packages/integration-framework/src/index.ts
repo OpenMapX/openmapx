@@ -100,7 +100,7 @@ export type {
   RoadConditionAttribution,
   RoadConditionEvent,
   RoadConditionRoadRef,
-  RoadConditionScheduleWindow,
+  RoadConditionSchedule,
   RoadConditionSeverity,
   RoadConditionsProvider,
   RoadConditionsQuery,

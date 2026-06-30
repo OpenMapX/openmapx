@@ -1,9 +1,29 @@
 import { createHash } from "node:crypto";
-import { overpassQuerySafe, type TravelMode } from "@openmapx/core";
+import { overpassQuerySafe, type TravelMode, timeZoneAt } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { activeClosuresForBbox } from "./closures.js";
 import { createRoutingOrchestrator } from "./orchestrator.js";
+import { zonedWallClockToInstant } from "./timezone.js";
 import { parseDateTime, parseTravelMode } from "./validation.js";
+
+/**
+ * Resolve the travel instant for closure-time evaluation: the chosen
+ * departAt/arriveBy — a wall-clock "YYYY-MM-DDTHH:mm" local to the route ORIGIN —
+ * turned into an absolute instant via the origin's timezone. Returns undefined
+ * for "leave now" (closures are then evaluated at the current instant). Falls
+ * back to a naive parse if the origin zone can't be resolved.
+ */
+function resolveTravelInstant(
+  waypoints: [number, number][],
+  departAt: string | undefined,
+  arriveBy: string | undefined,
+): Date | undefined {
+  const wall = departAt ?? arriveBy;
+  if (!wall) return undefined;
+  const origin = waypoints[0];
+  const tz = origin ? timeZoneAt(origin[1], origin[0]) : null;
+  return (tz ? zonedWallClockToInstant(tz, wall) : null) ?? new Date(wall);
+}
 
 /** A raw (un-projected) approach alert from OSM, returned by /navigation/alerts. */
 interface RawRoadAlert {
@@ -243,16 +263,12 @@ export function setup(ctx: IntegrationContext): void {
     const wantClosureAvoidance = avoidClosures === "true" || avoidClosures === "1";
 
     // Only avoid closures actually in effect at the chosen travel time: the
-    // selected departure (or arrival) instant, falling back to "now" for an
-    // immediate trip. Without this a planned-but-not-yet-active closure would
-    // wrongly detour a trip planned for before it starts. departAt/arriveBy are
-    // already part of the route cache key, so time-varied exclusions stay
-    // correctly cached.
-    const closureRefTime = departAt
-      ? new Date(departAt)
-      : arriveBy
-        ? new Date(arriveBy)
-        : undefined;
+    // selected departure (or arrival) instant — resolved via the route origin's
+    // timezone — falling back to "now" for an immediate trip. Without this a
+    // planned-but-not-yet-active closure would wrongly detour a trip planned for
+    // before it starts. departAt/arriveBy are already part of the route cache
+    // key, so time-varied exclusions stay correctly cached.
+    const closureRefTime = resolveTravelInstant(waypoints, departAt, arriveBy);
 
     const { exclusions, hasExclusions, exclusionsHash } = await applyClosureExclusions(
       ctx,
@@ -410,16 +426,12 @@ export function setup(ctx: IntegrationContext): void {
     const wantClosureAvoidance = avoidClosures === "true" || avoidClosures === "1";
 
     // Only avoid closures actually in effect at the chosen travel time: the
-    // selected departure (or arrival) instant, falling back to "now" for an
-    // immediate trip. Without this a planned-but-not-yet-active closure would
-    // wrongly detour a trip planned for before it starts. departAt/arriveBy are
-    // already part of the route cache key, so time-varied exclusions stay
-    // correctly cached.
-    const closureRefTime = departAt
-      ? new Date(departAt)
-      : arriveBy
-        ? new Date(arriveBy)
-        : undefined;
+    // selected departure (or arrival) instant — resolved via the route origin's
+    // timezone — falling back to "now" for an immediate trip. Without this a
+    // planned-but-not-yet-active closure would wrongly detour a trip planned for
+    // before it starts. departAt/arriveBy are already part of the route cache
+    // key, so time-varied exclusions stay correctly cached.
+    const closureRefTime = resolveTravelInstant(waypoints, departAt, arriveBy);
 
     const { exclusions, hasExclusions, exclusionsHash } = await applyClosureExclusions(
       ctx,

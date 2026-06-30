@@ -57,20 +57,22 @@ const POPUP_SPEC: PopupCardSpec = {
   ],
 };
 
-interface ScheduleWindow {
-  timeStart?: string;
-  timeEnd?: string;
-  dateStart?: string;
-  dateEnd?: string;
+interface ScheduleEntry {
+  startTime?: string;
+  endTime?: string;
+  startDate?: string;
+  endDate?: string;
+  byDay?: string[];
 }
 
 /**
- * Format the structured validity for the popup. A recurring `schedule` (e.g. a
- * nightly closure) is shown as its band + date range, e.g.
- * "20:00–05:00, 29 Jun 2026 – 3 Jul 2026"; otherwise the absolute from–until
- * range, e.g. "10 Jul 2026, 22:00 – 13 Jul 2026, 05:00". An open end is shown as
- * "…". Returns "" when nothing is known (ongoing / undated) so the row drops.
- * Schedule times are the source's local clock (shown as-is).
+ * Format the structured validity for the popup. A recurring `schedule` (a
+ * schema.org Schedule, e.g. a nightly closure) is shown as its day(s) + band +
+ * date range, e.g. "Mo, Tu, We, 08:00–17:00, 29 Jun 2026 – 1 Jul 2026";
+ * otherwise the absolute from–until range, e.g.
+ * "10 Jul 2026, 22:00 – 13 Jul 2026, 05:00". An open end is shown as "…".
+ * Returns "" when nothing is known (ongoing / undated) so the row drops.
+ * Schedule times are the source's local clock (`scheduleTimezone`), shown as-is.
  */
 function formatValidity(
   scheduleJson: unknown,
@@ -81,17 +83,24 @@ function formatValidity(
 ): string {
   if (typeof scheduleJson === "string" && scheduleJson) {
     try {
-      const windows = JSON.parse(scheduleJson) as ScheduleWindow[];
+      const windows = JSON.parse(scheduleJson) as ScheduleEntry[];
+      const hhmm = (t?: string) => (t ? t.slice(0, 5) : "");
       const parts = windows
         .map((w) => {
-          const band = w.timeStart && w.timeEnd ? `${w.timeStart}–${w.timeEnd}` : "";
-          const range =
-            w.dateStart && w.dateEnd
-              ? `${fmtDate(w.dateStart)} – ${fmtDate(w.dateEnd)}`
-              : w.dateStart
-                ? fmtDate(w.dateStart)
+          const days = w.byDay && w.byDay.length > 0 ? w.byDay.join(", ") : "";
+          const band =
+            w.startTime && w.endTime
+              ? `${hhmm(w.startTime)}–${hhmm(w.endTime)}`
+              : w.startTime
+                ? `from ${hhmm(w.startTime)}`
                 : "";
-          return [band, range].filter(Boolean).join(", ");
+          const range =
+            w.startDate && w.endDate
+              ? `${fmtDate(w.startDate)} – ${fmtDate(w.endDate)}`
+              : w.startDate
+                ? fmtDate(w.startDate)
+                : "";
+          return [days, band, range].filter(Boolean).join(", ");
         })
         .filter(Boolean);
       if (parts.length > 0) return parts.join("; ");
