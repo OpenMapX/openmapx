@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -46,5 +46,10 @@ describe("regenerateServiceSecretFiles", () => {
     regenerateServiceSecretFiles(infraDir, new Map([["ingest", { NY_511_API_KEY: "old" }]]));
     regenerateServiceSecretFiles(infraDir, new Map([["ingest", { NY_511_API_KEY: "new" }]]));
     expect(readFileSync(file("ingest", "NY_511_API_KEY"), "utf8")).toBe("new");
+  });
+
+  it("writes secret files world-readable (0444) so a non-root container user can read the Compose-mounted secret", () => {
+    regenerateServiceSecretFiles(infraDir, new Map([["ingest", { NY_511_API_KEY: "abc" }]]));
+    expect(statSync(file("ingest", "NY_511_API_KEY")).mode & 0o777).toBe(0o444);
   });
 });
