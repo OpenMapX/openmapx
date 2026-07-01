@@ -27,6 +27,7 @@
  * on the operator's `infra/docker/data` tree.
  */
 import {
+  chmodSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -294,6 +295,17 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
     motisDataDir = join(dataDir, "motis", "live");
     mkdirSync(stagingDataDir, { recursive: true });
     mkdirSync(motisDataDir, { recursive: true });
+    // MOTIS runs as `uid=100(motis)` and imports IN PLACE — it writes the compiled
+    // timetable (`data/tt.bin`, …) into the mounted dir. On a native Linux bind
+    // mount (CI) these dirs stay owned by the host runner user (uid 1001, mode
+    // 755), so the container's `motis` user can't write and `motis import` dies
+    // with "basic_ios::clear: iostream error". macOS Docker Desktop hides this by
+    // remapping bind-mount ownership to the container user; production's deploy
+    // step pre-creates the bind dirs container-writable. Replicate that here so a
+    // real cross-uid write is possible — otherwise the canary fails on the runner
+    // for a reason that never reaches production.
+    chmodSync(stagingDataDir, 0o777);
+    chmodSync(motisDataDir, 0o777);
 
     // Build the tiny GTFS fixtures into a sibling dir so the catalog's
     // file:// urls can reference them without leaking host-specific paths
