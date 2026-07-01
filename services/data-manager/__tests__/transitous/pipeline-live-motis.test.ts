@@ -214,6 +214,18 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
       return;
     }
 
+    // The canary's three tiny GTFS feeds import in seconds, so the pipeline's
+    // production-scale health waits — 30 min for staging (motis-health) and
+    // 20 min for the primary after the swap (promote) — dwarf this test's 270s
+    // ceiling. Left at their defaults, ANY failure to become healthy manifests
+    // as an opaque "Test timed out" with the pipeline still mid-poll: the
+    // `failureDiagnostics` calls below (which fold `docker logs motis-staging`
+    // into the assertion message) never run, so CI shows a bare timeout with no
+    // container logs. Cap both waits well under the test timeout so a broken
+    // staging/primary fails fast WITH diagnostics. Respect an explicit override.
+    process.env.MOTIS_IMPORT_TIMEOUT_MS ??= "120000";
+    process.env.MOTIS_PROMOTE_RESTART_TIMEOUT_MS ??= "120000";
+
     tmp = mkdtempSync(join(tmpdir(), "openmapx-e9-live-"));
     dataDir = join(tmp, `data-${process.pid}`);
     mkdirSync(dataDir, { recursive: true });
