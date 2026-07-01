@@ -29,7 +29,7 @@
       "name": "iRail",
       "url": "https://api.irail.be/",
       "license": "AGPL-3.0 (software); CC0 (log data)",
-      "licenseUrl": "https://hello.irail.be/api/",
+      "licenseUrl": "https://docs.irail.be/",
       "commercialUse": "yes",
       "providerCountry": "BE",
       "providerPrivacyUrl": "-",
