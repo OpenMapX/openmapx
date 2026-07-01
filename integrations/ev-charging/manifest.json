@@ -44,13 +44,13 @@
       "afdcApiKey": {
         "type": "string",
         "title": "AFDC/NREL API Key",
-        "description": "NREL (National Renewable Energy Laboratory) developer API key (developer.nrel.gov) covering the AFDC Alternative Fuel Stations dataset for the United States and Canada.",
+        "description": "NREL (National Renewable Energy Laboratory) developer API key (developer.nlr.gov) covering the AFDC Alternative Fuel Stations dataset for the United States and Canada.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
-          "url": "https://developer.nrel.gov/signup/",
+          "url": "https://developer.nlr.gov/signup/",
           "urlLabel": "Sign up for an NREL API key",
           "steps": [
-            "Open developer.nrel.gov/signup/.",
+            "Open developer.nlr.gov/signup/.",
             "Enter your first name, last name, and email, and accept the terms.",
             "Submit the form; the 40-character API key is generated instantly and emailed to you."
           ],
@@ -103,7 +103,7 @@
     {
       "name": "AFDC/NREL (US/CA)",
       "type": "http",
-      "urlTemplate": "https://developer.nrel.gov/api/alt-fuel-stations/v1/nearest.json?api_key=${afdcApiKey}&fuel_type=ELEC&country=all&status=E&access=public&latitude=38.8977&longitude=-77.0365&radius=1&limit=1&format=json",
+      "urlTemplate": "https://developer.nlr.gov/api/alt-fuel-stations/v1/nearest.json?api_key=${afdcApiKey}&fuel_type=ELEC&country=all&status=E&access=public&latitude=38.8977&longitude=-77.0365&radius=1&limit=1&format=json",
       "requiredConfigKeys": ["afdcApiKey"]
     },
     {
@@ -156,7 +156,7 @@
       "sourceId": "afdc",
       "name": "NREL Alternative Fuel Stations (AFDC, US/CA)",
       "url": "https://afdc.energy.gov/stations/",
-      "apiHosts": ["developer.nrel.gov"],
+      "apiHosts": ["developer.nlr.gov"],
       "license": "NREL / Alliance for Sustainable Energy public-data license (free use with attribution; no endorsement)",
       "licenseUrl": "https://www.nlr.gov/disclaimer",
       "attribution": "U.S. DOE / NREL / Alliance — Alternative Fuel Stations (afdc.energy.gov/stations)",
