@@ -26,7 +26,17 @@
  * dir, runs the pipeline, then tears everything down in `afterAll`. No reliance
  * on the operator's `infra/docker/data` tree.
  */
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -180,11 +190,59 @@ async function failureDiagnostics(
 ): Promise<string> {
   const lines = [`${label}${message ? `: ${message}` : ""}`];
   try {
-    const logs = await execa("docker", ["logs", "--tail", "80", service], { reject: false });
+    const logs = await execa("docker", ["logs", "--tail", "200", service], { reject: false });
     if (logs.stdout) lines.push(`--- docker logs ${service} (stdout) ---`, logs.stdout);
     if (logs.stderr) lines.push(`--- docker logs ${service} (stderr) ---`, logs.stderr);
   } catch (err) {
     lines.push(`(could not fetch ${service} logs: ${(err as Error).message})`);
+  }
+  // Container-side view of the mount MOTIS imports from. On an import failure the
+  // container entrypoint drops into a keep-alive sleep (see motisService), so
+  // `exec` still works — this shows the archive sizes MOTIS itself sees, which
+  // reveals a hardlink/bind-mount that resolved to an empty or unreadable file.
+  const view = await execa("docker", ["exec", service, "sh", "-c", "ls -la /motis-data"], {
+    reject: false,
+  });
+  if (view.stdout) lines.push(`--- ${service}:/motis-data (container view) ---`, view.stdout);
+  if (view.exitCode !== 0 && view.stderr) lines.push(`--- ${service} exec stderr ---`, view.stderr);
+  return lines.join("\n");
+}
+
+/**
+ * Host-side view of the assembled staging dir: entry names, byte sizes, and
+ * whether each `*.zip` still opens with a valid local-file-header magic
+ * (`PK\x03\x04`). This distinguishes the two very different roots of a MOTIS
+ * import `iostream error`: assemble-staging produced a bad/zero-byte archive
+ * (the host sees it broken) vs. the container can't read a structurally-valid
+ * archive the host sees intact (a bind-mount/hardlink visibility problem on the
+ * runner's storage driver).
+ */
+function stagingDirReport(dir: string): string {
+  const lines = [`--- host view of staging dir ${dir} ---`];
+  try {
+    for (const name of readdirSync(dir).sort()) {
+      const p = join(dir, name);
+      try {
+        const st = statSync(p);
+        if (st.isDirectory()) {
+          lines.push(`  ${name}/  (dir)`);
+          continue;
+        }
+        let note = "";
+        if (name.endsWith(".zip")) {
+          const head = readFileSync(p).subarray(0, 4);
+          const ok = head[0] === 0x50 && head[1] === 0x4b; // "PK"
+          note = ok
+            ? "  zip-magic OK"
+            : `  BAD zip-magic <${[...head].map((b) => b.toString(16).padStart(2, "0")).join(" ")}>`;
+        }
+        lines.push(`  ${name}  ${st.size}B${note}`);
+      } catch (err) {
+        lines.push(`  ${name}  (stat failed: ${(err as Error).message})`);
+      }
+    }
+  } catch (err) {
+    lines.push(`  (could not read staging dir: ${(err as Error).message})`);
   }
   return lines.join("\n");
 }
@@ -365,7 +423,7 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
       for (const stage of ["motis-import", "motis-health"] as const) {
         if (byStage[stage]?.status !== "ok") {
           const diag = await failureDiagnostics(stage, STAGING_SERVICE, byStage[stage]?.message);
-          expect(byStage[stage]?.status, diag).toBe("ok");
+          expect(byStage[stage]?.status, `${diag}\n${stagingDirReport(stagingDataDir)}`).toBe("ok");
         }
       }
       if (byStage.promote?.status !== "ok") {
