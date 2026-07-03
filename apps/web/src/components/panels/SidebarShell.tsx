@@ -5,11 +5,14 @@ import type { SxProps, Theme } from "@mui/material/styles";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useSidebarStore } from "@openmapx/core";
-import { type ReactNode, useState } from "react";
+import { lazy, type ReactNode, Suspense, useState } from "react";
 import { SidebarCollapseToggle } from "@/components/ui/SidebarCollapseToggle";
 import { PANEL_WIDTH } from "@/lib/layout";
 import { useMobilePanelHeightTracker } from "@/lib/mobilePanelHeight";
-import { MobileBottomSheet } from "./MobileBottomSheet";
+
+const MobileBottomSheet = lazy(() =>
+  import("./MobileBottomSheet").then((m) => ({ default: m.MobileBottomSheet })),
+);
 
 interface SidebarShellProps {
   children: ReactNode;
@@ -23,9 +26,11 @@ export function SidebarShell({ children, contentSx }: SidebarShellProps) {
 
   if (isMobile) {
     return (
-      <MobileBottomSheet id="sidebar" zIndex={11} contentSx={contentSx}>
-        {children}
-      </MobileBottomSheet>
+      <Suspense fallback={null}>
+        <MobileBottomSheet id="sidebar" zIndex={11} contentSx={contentSx}>
+          {children}
+        </MobileBottomSheet>
+      </Suspense>
     );
   }
   return <DesktopSidebar contentSx={contentSx}>{children}</DesktopSidebar>;

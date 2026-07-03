@@ -1,11 +1,31 @@
 import type { SxProps, Theme } from "@mui/material/styles";
 import type { ComponentType } from "react";
-import { CategoryResultsContent } from "./category/CategoryResultsContent";
-import { DataSourceFilterContent } from "./datasource/DataSourceFilterContent";
-import { DirectionsPanelContent } from "./directions/DirectionsPanelContent";
-import { PlaceDetailCard } from "./place/PlaceDetailCard";
-import { PlacePanelContent } from "./place/PlacePanelContent";
-import { SavedPlacesContent } from "./saved/SavedPlacesContent";
+import { lazy } from "react";
+
+const PlacePanelContent = lazy(() =>
+  import("./place/PlacePanelContent").then((m) => ({ default: m.PlacePanelContent })),
+);
+const CategoryResultsContent = lazy(() =>
+  import("./category/CategoryResultsContent").then((m) => ({
+    default: m.CategoryResultsContent,
+  })),
+);
+const DataSourceFilterContent = lazy(() =>
+  import("./datasource/DataSourceFilterContent").then((m) => ({
+    default: m.DataSourceFilterContent,
+  })),
+);
+const DirectionsPanelContent = lazy(() =>
+  import("./directions/DirectionsPanelContent").then((m) => ({
+    default: m.DirectionsPanelContent,
+  })),
+);
+const SavedPlacesContent = lazy(() =>
+  import("./saved/SavedPlacesContent").then((m) => ({ default: m.SavedPlacesContent })),
+);
+const PlaceDetailCard = lazy(() =>
+  import("./place/PlaceDetailCard").then((m) => ({ default: m.PlaceDetailCard })),
+);
 
 interface PanelEntry {
   component: ComponentType;

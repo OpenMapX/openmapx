@@ -4,10 +4,13 @@ import Paper from "@mui/material/Paper";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useSidebarStore } from "@openmapx/core";
-import { type ReactNode, useState } from "react";
+import { lazy, type ReactNode, Suspense, useState } from "react";
 import { PANEL_WIDTH } from "@/lib/layout";
 import { useMobilePanelHeightTracker } from "@/lib/mobilePanelHeight";
-import { MobileBottomSheet } from "./MobileBottomSheet";
+
+const MobileBottomSheet = lazy(() =>
+  import("./MobileBottomSheet").then((m) => ({ default: m.MobileBottomSheet })),
+);
 
 const CARD_GAP = 24;
 
@@ -17,9 +20,11 @@ export function DetailShell({ children }: { children: ReactNode }) {
 
   if (isMobile) {
     return (
-      <MobileBottomSheet id="detail" zIndex={11}>
-        {children}
-      </MobileBottomSheet>
+      <Suspense fallback={null}>
+        <MobileBottomSheet id="detail" zIndex={11}>
+          {children}
+        </MobileBottomSheet>
+      </Suspense>
     );
   }
   return <DesktopDetail>{children}</DesktopDetail>;

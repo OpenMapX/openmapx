@@ -13,7 +13,7 @@ import { useMapStore, useNavigationStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { useMyLocation } from "@/components/command-palette/useMyLocation";
-import { MOBILE_SHEET_FOLLOW_CAP_FRACTION } from "@/components/panels/MobileBottomSheet";
+import { MOBILE_SHEET_FOLLOW_CAP_FRACTION } from "@/components/panels/mobileSheetShared";
 import { useMap } from "@/lib/MapContext";
 import { useMobilePanelMaxHeight } from "@/lib/mobilePanelHeight";
 import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";

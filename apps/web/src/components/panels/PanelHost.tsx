@@ -63,12 +63,16 @@ export function PanelHost() {
       <HideDuringNavigation>
         {sidebarEntry && (
           <SidebarShell contentSx={sidebarEntry.contentSx}>
-            <sidebarEntry.component />
+            <Suspense fallback={null}>
+              <sidebarEntry.component />
+            </Suspense>
           </SidebarShell>
         )}
         {DetailContent && (
           <DetailShell>
-            <DetailContent />
+            <Suspense fallback={null}>
+              <DetailContent />
+            </Suspense>
           </DetailShell>
         )}
       </HideDuringNavigation>

@@ -4,22 +4,13 @@ import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import type { SxProps, Theme } from "@mui/material/styles";
 import { motion, type PanInfo } from "framer-motion";
-import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { haptics } from "@/lib/haptics";
 import { useMobilePanelHeightTracker } from "@/lib/mobilePanelHeight";
 import { useVisualViewport } from "@/lib/useVisualViewport";
+import { FloatingHandleContext, SNAP_FRACTIONS } from "./mobileSheetShared";
 
-// Snap heights as fractions of viewport — a three-step sheet.
-const SNAP_FRACTIONS = [0.3, 0.65, 0.95] as const;
 const DEFAULT_SNAP_INDEX = 1;
-
-/**
- * Fraction of viewport beyond which UI that *follows* the sheet (e.g. the
- * right-side map controls) should stop tracking the sheet's height. Above
- * this point the sheet covers the controls anyway, so anchoring them to its
- * top edge would push them off-screen.
- */
-export const MOBILE_SHEET_FOLLOW_CAP_FRACTION = SNAP_FRACTIONS[1];
 const MIN_HEIGHT_FRACTION = 0.18;
 const MAX_HEIGHT_FRACTION = 0.96;
 // |velocity.y| above which a flick promotes to the next snap rather than
@@ -38,28 +29,6 @@ interface Props {
 
 function clamp(value: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, value));
-}
-
-const FloatingHandleContext = createContext<((floating: boolean) => void) | null>(null);
-
-/**
- * Opt the surrounding mobile bottom sheet into a floating handle layout —
- * the drag pill renders absolutely on top of the content (with a soft scrim
- * so it stays legible) instead of in its own band above the content.
- *
- * Use this in panels whose first child is a full-bleed visual (e.g. a place's
- * photo hero), so the photo can reach the rounded sheet corners. Pass `false`
- * (or stop rendering the panel) to revert to the default banded layout.
- *
- * No-op outside a mobile bottom sheet.
- */
-export function useFloatingMobileSheetHandle(enabled: boolean) {
-  const setFloating = useContext(FloatingHandleContext);
-  useEffect(() => {
-    if (!setFloating) return;
-    setFloating(enabled);
-    return () => setFloating(false);
-  }, [enabled, setFloating]);
 }
 
 export function MobileBottomSheet({ id, zIndex, contentSx, children }: Props) {
