@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { parseTransitSource } from "@openmapx/transitous-core";
@@ -22,6 +23,7 @@ import { PRIMARY_CONTAINER } from "./jobs/transitous/motis-containers.js";
 import { finalizeJobRow, makePersistingOnStageComplete } from "./jobs/transitous/persistence.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
 import type { SingleFlightController } from "./jobs/transitous/single-flight.js";
+import { asJobLogger, jobChildLogger } from "./logger.js";
 import { StateStore } from "./state.js";
 import {
   parseRefShaPair,
@@ -138,12 +140,21 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     try {
       let result: Awaited<ReturnType<typeof downloadGtfs>>;
       if (useTransitousPipeline) {
+        const gtfsJobId = randomUUID();
         const ctx = buildJobContext({
           dataDir,
           store,
           countries,
           repoRoot: process.env.OPENMAPX_ROOT_DIR,
           source: parseTransitSource(),
+          jobId: gtfsJobId,
+          logger: asJobLogger(
+            jobChildLogger({
+              job: "transitous-sync",
+              jobId: gtfsJobId,
+              trigger: "download-gtfs",
+            }),
+          ),
         });
         await runTransitousPipeline(ctx);
         result = toDownloadGtfsResult(ctx, []);
@@ -424,11 +435,8 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
 
     // Kick off the pipeline async — the route returns 202 immediately.
     const jobId = start.jobId;
-    const persistingHook = makePersistingOnStageComplete(jobId, {
-      info: (m) => app.log.info(m),
-      warn: (m) => app.log.warn(m),
-      error: (m) => app.log.error(m),
-    });
+    const jobLog = asJobLogger(jobChildLogger({ job: "transitous-sync", jobId, trigger: "api" }));
+    const persistingHook = makePersistingOnStageComplete(jobId, jobLog);
 
     void (async () => {
       try {
@@ -439,6 +447,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
           repoRoot,
           source: parseTransitSource(),
           jobId,
+          logger: jobLog,
           onStageComplete: persistingHook,
         });
         const result = await runTransitousPipeline(ctx);

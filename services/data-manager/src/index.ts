@@ -19,10 +19,11 @@ import { createPoiSingleFlight } from "./jobs/poi-ingest/single-flight.js";
 import { reconcileOrphanedJobs } from "./jobs/reconcile.js";
 import { parseTransitousCountriesEnv } from "./jobs/transitous/internal.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
+import { rootLogger } from "./logger.js";
 import { discoverPoiSources } from "./poi-source-discovery.js";
 import { StateStore } from "./state.js";
 
-const app = Fastify({ logger: true });
+const app = Fastify({ loggerInstance: rootLogger });
 registerAuth(app, resolveAuthToken(app));
 
 const dataDir = process.env.DATA_DIR ?? "/data";

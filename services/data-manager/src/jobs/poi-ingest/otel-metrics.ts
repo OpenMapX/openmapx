@@ -6,6 +6,7 @@ import {
   MeterProvider,
   MetricReader,
 } from "@opentelemetry/sdk-metrics";
+import { rootLogger } from "../../logger.js";
 import type { PoiIngestMetricsSink, PoiIngestOutcome } from "./metrics.js";
 import type { PoiIngestKind } from "./types.js";
 
@@ -114,8 +115,7 @@ export function initPoiMetrics(): PoiMetricsHandle {
     const collected = await reader.snapshot();
     if (collected.errors.length > 0) {
       // Surface but do not throw — partial collection is fine for scraping.
-      // eslint-disable-next-line no-console
-      console.warn("poi-metrics: collection errors", collected.errors);
+      rootLogger.warn({ errors: collected.errors }, "poi-metrics: collection errors");
     }
     return serializer.serialize(collected.resourceMetrics);
   }

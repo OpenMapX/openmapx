@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
+import { asJobLogger, jobChildLogger } from "../../logger.js";
 import type { StateStore } from "../../state.js";
 import type { DownloadGtfsResult, FeedDownloadFailure } from "../download-gtfs.js";
 import * as assembleStagingStage from "./assemble-staging.js";
@@ -190,7 +191,8 @@ export interface BuildJobContextOptions {
 
 /** Build a `JobContext` with safe defaults; used by API + tests. */
 export function buildJobContext(opts: BuildJobContextOptions): JobContext {
-  const logger: JobLogger = opts.logger ?? wrapConsoleLogger();
+  const logger: JobLogger =
+    opts.logger ?? asJobLogger(jobChildLogger({ job: "transitous", jobId: opts.jobId }));
   const catalogDir = join(opts.dataDir, TRANSITOUS_CATALOG_DIR);
   const downloadsDir = join(opts.dataDir, TRANSITOUS_DOWNLOADS_DIR);
   const outDir = join(opts.dataDir, "gtfs");
@@ -218,14 +220,6 @@ export function buildJobContext(opts: BuildJobContextOptions): JobContext {
     apiKeysPath: opts.apiKeysPath,
     feedsOverlayPath: opts.feedsOverlayPath,
     state: {},
-  };
-}
-
-function wrapConsoleLogger(): JobLogger {
-  return {
-    info: (msg) => console.info(msg),
-    warn: (msg) => console.warn(msg),
-    error: (msg) => console.error(msg),
   };
 }
 

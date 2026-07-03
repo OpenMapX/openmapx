@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { PoiSource } from "@openmapx/poi-source-registry";
+import { asPoiJobLogger, jobChildLogger } from "../../logger.js";
 import * as fetchStage from "./stages/fetch.js";
 import * as parseStage from "./stages/parse.js";
 import * as swapStage from "./stages/swap.js";
@@ -232,21 +233,12 @@ export interface BuildPoiJobContextOptions {
   now?: () => string;
 }
 
-function defaultLogger(): PoiJobLogger {
-  return {
-    info: (msg, extra) => console.info(msg, extra ?? {}),
-    warn: (msg, extra) => console.warn(msg, extra ?? {}),
-    error: (msg, extra) => console.error(msg, extra ?? {}),
-    debug: (msg, extra) => console.debug(msg, extra ?? {}),
-  };
-}
-
 export function buildPoiJobContext(opts: BuildPoiJobContextOptions): PoiJobContext {
   return {
     jobId: opts.jobId ?? randomUUID(),
     source: opts.source,
     kind: opts.kind,
-    logger: opts.logger ?? defaultLogger(),
+    logger: opts.logger ?? asPoiJobLogger(jobChildLogger({ job: "poi-ingest", jobId: opts.jobId })),
     abortSignal: opts.abortSignal ?? new AbortController().signal,
     onStageComplete: opts.onStageComplete,
     sql: opts.sql,

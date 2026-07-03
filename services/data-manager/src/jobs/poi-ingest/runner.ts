@@ -1,6 +1,7 @@
 import type { PoiSource } from "@openmapx/poi-source-registry";
 import type { Redis } from "ioredis";
 import type { Sql } from "postgres";
+import { withPoiBindings } from "../../logger.js";
 import { type PoiIngestMetricsSink, recordRunToSink } from "./metrics.js";
 import {
   finalizePoiJobRow,
@@ -77,6 +78,7 @@ export async function runOneAndPersist(opts: RunOneOptions): Promise<PoiIngestRe
     previousStaticRowCount,
   } = opts;
   const sourceId = source.id;
+  const runLogger = withPoiBindings(logger, { job: "poi-ingest", sourceId, kind, jobId });
 
   let result: PoiIngestResult;
   try {
@@ -86,9 +88,9 @@ export async function runOneAndPersist(opts: RunOneOptions): Promise<PoiIngestRe
       sql,
       redis,
       jobId,
-      logger,
+      logger: runLogger,
       lastStaticHash: previousStaticHash,
-      onStageComplete: makePoiPersistingOnStageComplete(jobId, logger),
+      onStageComplete: makePoiPersistingOnStageComplete(jobId, runLogger),
     });
 
     result =

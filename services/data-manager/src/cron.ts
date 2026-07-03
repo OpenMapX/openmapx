@@ -23,6 +23,7 @@ import {
   emitFeedAlerts,
   type GithubIssueSink,
 } from "./jobs/transitous/staleness-alerts.js";
+import { asJobLogger, jobChildLogger } from "./logger.js";
 import type { StateStore } from "./state.js";
 
 /**
@@ -228,6 +229,9 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       if (options.runPipeline) {
         result = await options.runPipeline(start.jobId);
       } else {
+        const jobLog = asJobLogger(
+          jobChildLogger({ job: "transitous-sync", jobId: start.jobId, trigger: "cron" }),
+        );
         const ctx = buildJobContext({
           dataDir: options.dataDir,
           store: options.store,
@@ -235,11 +239,8 @@ export function setupCron(options: CronSetupOptions): CronHandles {
           repoRoot: options.repoRoot,
           source: parseTransitSource(),
           jobId: start.jobId,
-          onStageComplete: makePersistingOnStageComplete(start.jobId, {
-            info: (m) => log.info(m),
-            warn: (m) => log.warn(m),
-            error: (m) => log.error(m),
-          }),
+          logger: jobLog,
+          onStageComplete: makePersistingOnStageComplete(start.jobId, jobLog),
         });
         result = await runTransitousPipeline(ctx);
       }

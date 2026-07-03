@@ -2073,6 +2073,9 @@ importers:
       ioredis:
         specifier: ^5.11.1
         version: 5.11.1
+      pino:
+        specifier: ^10.3.1
+        version: 10.3.1
       postgres:
         specifier: ^3.4.9
         version: 3.4.9
