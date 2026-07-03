@@ -1,5 +1,5 @@
-import { existsSync } from "node:fs";
-import { isAbsolute, relative, resolve } from "node:path";
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { dump as yamlDump } from "js-yaml";
 import { detectConsumesCycle } from "./resolver";
 import type {
@@ -328,7 +328,37 @@ export function serviceSecretName(serviceId: string, key: string): string {
  * path so the rendered `secrets:` block and the on-disk files never drift.
  */
 export function serviceSecretFilePath(serviceId: string, key: string): string {
-  return `./.generated-secrets/${serviceId}/${key}`;
+  return `./${GENERATED_SECRETS_DIRNAME}/${serviceId}/${key}`;
+}
+
+/**
+ * Directory (under the compose-file directory) where the app-api render step
+ * materialises the decrypted per-service secret files.
+ */
+export const GENERATED_SECRETS_DIRNAME = ".generated-secrets";
+
+/**
+ * Reconstruct the per-service vault secret KEY names from the on-disk
+ * `.generated-secrets/<serviceId>/<KEY>` files. The app-api render step derives
+ * these from the DB (which holds the values + decryption key); the DB-free CLI
+ * render instead reads them back from disk here, so BOTH management surfaces
+ * (CLI and admin panel) emit the same `secrets:` block + `<KEY>_FILE` env and
+ * produce an identical, applyable compose. Only the file NAMES (key names) are
+ * read — never the secret values. Returns an empty map when nothing has been
+ * applied yet, and only ever surfaces keys whose files actually exist, so a CLI
+ * render can never reference a missing secret file.
+ */
+export function readServiceSecretKeysFromDisk(composeOutDir: string): Map<string, string[]> {
+  const root = join(composeOutDir, GENERATED_SECRETS_DIRNAME);
+  const byService = new Map<string, string[]>();
+  if (!existsSync(root)) return byService;
+  for (const serviceId of readdirSync(root)) {
+    const serviceDir = join(root, serviceId);
+    if (!statSync(serviceDir).isDirectory()) continue;
+    const keys = readdirSync(serviceDir).filter((k) => statSync(join(serviceDir, k)).isFile());
+    if (keys.length > 0) byService.set(serviceId, keys.sort());
+  }
+  return byService;
 }
 
 export function renderServiceSnippet(
