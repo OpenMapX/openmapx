@@ -24,15 +24,27 @@ interface AdminAuditBody {
   email?: unknown;
 }
 
+// Minimal structural view of the better-auth middleware context that the audit
+// emitter reads. Declared explicitly so the emitter can be unit-tested with a
+// plain object instead of a full better-auth endpoint context.
+export interface AdminAuditCtx {
+  path: string;
+  body?: unknown;
+  request?: Parameters<typeof writeAuditLog>[0]["request"];
+  context: {
+    returned?: unknown;
+    session?: { user?: { id?: string | null } | null } | null;
+  };
+}
+
 function pickString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-// `hooks.after` middleware for better-auth that records audit log entries
-// for the admin-plugin user-management endpoints. The plugin handles those
-// endpoints internally, so this is the only seam where we can observe them
-// without forking the plugin.
-export const auditAdminActionsHook = createAuthMiddleware(async (ctx) => {
+// Records an audit log entry for the admin-plugin user-management endpoints.
+// Extracted from the `hooks.after` middleware so it can be tested directly; the
+// middleware below delegates to it with the real better-auth context.
+export async function handleAdminAuditEvent(ctx: AdminAuditCtx): Promise<void> {
   const route = ADMIN_AUDIT_ROUTES[ctx.path];
   if (!route) return;
 
@@ -70,6 +82,14 @@ export const auditAdminActionsHook = createAuthMiddleware(async (ctx) => {
     targetType: route.targetType,
     action: route.action,
     details: Object.keys(details).length > 0 ? details : null,
-    request: ctx.request as Parameters<typeof writeAuditLog>[0]["request"],
+    request: ctx.request,
   });
+}
+
+// `hooks.after` middleware for better-auth that records audit log entries
+// for the admin-plugin user-management endpoints. The plugin handles those
+// endpoints internally, so this is the only seam where we can observe them
+// without forking the plugin.
+export const auditAdminActionsHook = createAuthMiddleware(async (ctx) => {
+  await handleAdminAuditEvent(ctx as unknown as AdminAuditCtx);
 });
