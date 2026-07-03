@@ -4,7 +4,7 @@
  * https://ckan.open.nrw.de/dataset/stadtteilauto-munster-carsharing-stationen-und-fahrzeuge-ms
  */
 
-import { type BoundingBox, bboxContains, type LngLat, USER_AGENT } from "@openmapx/core";
+import { type BoundingBox, bboxContains, fetchJson, type LngLat } from "@openmapx/core";
 import { cacheGet, cacheSet, TTL } from "@openmapx/mobility-core/cache";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import type { RegionalCarSharingClient } from "./regional-client-types.js";
@@ -12,7 +12,6 @@ import type { RegionalCarSharingClient } from "./regional-client-types.js";
 const STATIONS_URL = "https://www.muenster01.de/stadtteilauto/stations.json";
 const VEHICLES_URL = "https://www.muenster01.de/stadtteilauto/vehicles.json";
 const FETCH_TIMEOUT_MS = 10_000;
-const HEADERS = { "User-Agent": USER_AGENT };
 const CACHE_KEY = "cache:stadtteilauto:data";
 
 interface StadtteilAutoStation {
@@ -63,27 +62,23 @@ async function fetchData(): Promise<SharedMobilityStation[]> {
   const cached = await cacheGet<SharedMobilityStation[]>(CACHE_KEY);
   if (cached) return cached;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
   try {
-    const [stationsRes, vehiclesRes] = await Promise.all([
-      fetch(STATIONS_URL, { headers: HEADERS, signal: controller.signal }),
-      fetch(VEHICLES_URL, { headers: HEADERS, signal: controller.signal }),
+    const [rawStations, rawVehicles] = await Promise.all([
+      fetchJson<StadtteilAutoStation[]>(STATIONS_URL, {
+        timeoutMs: FETCH_TIMEOUT_MS,
+        nullOnError: true,
+      }),
+      fetchJson<StadtteilAutoVehicle[]>(VEHICLES_URL, {
+        timeoutMs: FETCH_TIMEOUT_MS,
+        nullOnError: true,
+      }),
     ]);
-    clearTimeout(timer);
 
-    if (!stationsRes.ok) {
-      vehiclesRes.body?.cancel();
-      return [];
-    }
-
-    const rawStations = (await stationsRes.json()) as StadtteilAutoStation[];
+    if (!rawStations) return [];
 
     // Build vehicle class enrichment map: displayName → { priceClass, equipment }
     const vehicleEnrichment = new Map<string, { priceClass?: string; equipment?: string[] }>();
-    if (vehiclesRes.ok) {
-      const rawVehicles = (await vehiclesRes.json()) as StadtteilAutoVehicle[];
+    if (rawVehicles) {
       for (const v of rawVehicles) {
         vehicleEnrichment.set(v.displayName, {
           priceClass: v.priceClass?.displayName,
@@ -146,7 +141,6 @@ async function fetchData(): Promise<SharedMobilityStation[]> {
     await cacheSet(CACHE_KEY, stations, TTL.sharedMobility.stations);
     return stations;
   } catch {
-    clearTimeout(timer);
     return [];
   }
 }

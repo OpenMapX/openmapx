@@ -4,12 +4,11 @@
  * https://github.com/ubahnverleih/WoBike/blob/master/Nextbike.md
  */
 
-import { type BoundingBox, bboxContains, type LngLat, USER_AGENT } from "@openmapx/core";
+import { type BoundingBox, bboxContains, fetchJson, type LngLat } from "@openmapx/core";
 import { TTL, withCache } from "./cache.js";
 import type { SharedMobilityStation } from "./types.js";
 
 const NEXTBIKE_URL = "https://maps.nextbike.net/maps/nextbike-live.json";
-const HEADERS = { "User-Agent": USER_AGENT };
 const FETCH_TIMEOUT_MS = 10_000;
 const CACHE_KEY = "shared-mobility:nextbike:all";
 
@@ -55,12 +54,10 @@ export async function searchNextbike(bbox: BoundingBox): Promise<SharedMobilityS
     CACHE_KEY,
     TTL.sharedMobility.stations,
     async () => {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-      const res = await fetch(NEXTBIKE_URL, { headers: HEADERS, signal: controller.signal });
-      clearTimeout(timer);
-      if (!res.ok) throw new Error(`Nextbike API error: ${res.status}`);
-      const json = (await res.json()) as { countries: NextbikeCountry[] };
+      const json = await fetchJson<{ countries: NextbikeCountry[] }>(NEXTBIKE_URL, {
+        timeoutMs: FETCH_TIMEOUT_MS,
+        errorMessage: ({ status }) => `Nextbike API error: ${status}`,
+      });
       return json.countries;
     },
   );

@@ -1,4 +1,4 @@
-import type { BoundingBox } from "@openmapx/core";
+import { type BoundingBox, fetchJson } from "@openmapx/core";
 import type { FuelStation } from "@openmapx/mobility-core/fuel";
 import type { FuelPriceProvider } from "./price-provider";
 
@@ -47,10 +47,10 @@ async function fetchAllStations(): Promise<SpainStation[]> {
   if (_inflight) return _inflight;
 
   _inflight = (async () => {
-    const res = await fetch(API_URL, { headers: { Accept: "application/json" } });
-    if (!res.ok) throw new Error(`Spain fuel API error: ${res.status}`);
-
-    const data = (await res.json()) as SpainResponse;
+    const data = await fetchJson<SpainResponse>(API_URL, {
+      headers: { Accept: "application/json" },
+      errorMessage: ({ status }) => `Spain fuel API error: ${status}`,
+    });
     const stations = data.ListaEESSPrecio;
     _cache = { stations, expires: Date.now() + CACHE_TTL_MS };
     return stations;

@@ -1,4 +1,4 @@
-import { decodePolyline } from "@openmapx/core";
+import { decodePolyline, fetchJson } from "@openmapx/core";
 import type {
   Departure,
   Facility,
@@ -72,11 +72,11 @@ export async function getStops(
   params.set("filter[radius]", String(radiusMeters / 1000));
 
   try {
-    const res = await fetch(`${BASE_URL}/stops?${params}`);
-    if (!res.ok) return [];
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as { data?: any[] };
-    return (data.data ?? []).map(normalizeStop);
+    const data = await fetchJson<{ data?: any[] }>(`${BASE_URL}/stops?${params}`, {
+      nullOnError: true,
+    });
+    return (data?.data ?? []).map(normalizeStop);
   } catch {
     return [];
   }
@@ -87,11 +87,12 @@ export async function getStop(stopId: string): Promise<TransitStop | null> {
   const id = rawId(stopId);
   try {
     const params = authParams();
-    const res = await fetch(`${BASE_URL}/stops/${encodeURIComponent(id)}?${params}`);
-    if (!res.ok) return null;
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as { data?: any };
-    return data.data ? normalizeStop(data.data) : null;
+    const data = await fetchJson<{ data?: any }>(
+      `${BASE_URL}/stops/${encodeURIComponent(id)}?${params}`,
+      { nullOnError: true },
+    );
+    return data?.data ? normalizeStop(data.data) : null;
   } catch {
     return null;
   }
@@ -107,11 +108,13 @@ export async function getDepartures(stopId: string, minutes: number): Promise<De
   params.set("include", "route,schedule");
 
   try {
-    const res = await fetch(`${BASE_URL}/predictions?${params}`);
-    if (!res.ok) return [];
-
-    // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as { data?: any[]; included?: any[] };
+    const data = await fetchJson<{
+      // biome-ignore lint/suspicious/noExplicitAny: external API response
+      data?: any[];
+      // biome-ignore lint/suspicious/noExplicitAny: external API response
+      included?: any[];
+    }>(`${BASE_URL}/predictions?${params}`, { nullOnError: true });
+    if (!data) return [];
 
     // biome-ignore lint/suspicious/noExplicitAny: external API response
     const routesById = new Map<string, any>();
@@ -200,12 +203,11 @@ export async function getAlerts(opts?: {
   if (opts?.routeId) params.set("filter[route]", rawId(opts.routeId));
 
   try {
-    const res = await fetch(`${BASE_URL}/alerts?${params}`);
-    if (!res.ok) return [];
-
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as { data?: any[] };
-    return (data.data ?? []).map(
+    const data = await fetchJson<{ data?: any[] }>(`${BASE_URL}/alerts?${params}`, {
+      nullOnError: true,
+    });
+    return (data?.data ?? []).map(
       // biome-ignore lint/suspicious/noExplicitAny: external API response
       (a: any): ServiceAlert => ({
         id: `mb:${a.id}`,
@@ -243,12 +245,11 @@ export async function getVehiclePositions(routeId: string): Promise<VehiclePosit
   params.set("filter[route]", id);
 
   try {
-    const res = await fetch(`${BASE_URL}/vehicles?${params}`);
-    if (!res.ok) return [];
-
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as { data?: any[] };
-    return (data.data ?? []).map(
+    const data = await fetchJson<{ data?: any[] }>(`${BASE_URL}/vehicles?${params}`, {
+      nullOnError: true,
+    });
+    return (data?.data ?? []).map(
       // biome-ignore lint/suspicious/noExplicitAny: external API response
       (v: any): VehiclePosition => ({
         id: `mb:${v.id}`,
@@ -280,11 +281,11 @@ export async function getRouteShape(
     const params = authParams();
     params.set("filter[route]", id);
 
-    const res = await fetch(`${BASE_URL}/shapes?${params}`);
-    if (!res.ok) return undefined;
-
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as { data?: any[] };
+    const data = await fetchJson<{ data?: any[] }>(`${BASE_URL}/shapes?${params}`, {
+      nullOnError: true,
+    });
+    if (!data) return undefined;
     const shapes = (data.data ?? [])
       // biome-ignore lint/suspicious/noExplicitAny: external API response
       .filter((s: any) => (s.attributes?.priority ?? -1) >= 0)
@@ -312,15 +313,14 @@ export async function getRoute(routeId: string): Promise<TransitRoute | null> {
   try {
     const id = rawId(routeId);
     const params = authParams();
-    const [res, shape] = await Promise.all([
-      fetch(`${BASE_URL}/routes/${encodeURIComponent(id)}?${params}`),
+    const [data, shape] = await Promise.all([
+      // biome-ignore lint/suspicious/noExplicitAny: external API response
+      fetchJson<{ data?: any }>(`${BASE_URL}/routes/${encodeURIComponent(id)}?${params}`, {
+        nullOnError: true,
+      }),
       getRouteShape(id),
     ]);
-    if (!res.ok) return null;
-
-    // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as { data?: any };
-    if (!data.data) return null;
+    if (!data?.data) return null;
 
     const attrs = data.data.attributes;
     return {
@@ -344,12 +344,11 @@ export async function getRouteStops(routeId: string): Promise<RouteStop[]> {
   params.set("filter[route]", id);
 
   try {
-    const res = await fetch(`${BASE_URL}/stops?${params}`);
-    if (!res.ok) return [];
-
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as { data?: any[] };
-    return (data.data ?? []).map(
+    const data = await fetchJson<{ data?: any[] }>(`${BASE_URL}/stops?${params}`, {
+      nullOnError: true,
+    });
+    return (data?.data ?? []).map(
       // biome-ignore lint/suspicious/noExplicitAny: external API response
       (d: any, index: number): RouteStop => ({
         id: `mb:${d.id}`,
@@ -371,12 +370,11 @@ export async function getFacilities(stopId: string): Promise<Facility[]> {
   params.set("filter[stop]", id);
   params.set("filter[type]", "ELEVATOR,ESCALATOR");
 
-  const res = await fetch(`${BASE_URL}/facilities?${params}`);
-  if (!res.ok) return [];
-
   // biome-ignore lint/suspicious/noExplicitAny: external API response
-  const data = (await res.json()) as { data?: any[] };
-  return (data.data ?? []).map(
+  const data = await fetchJson<{ data?: any[] }>(`${BASE_URL}/facilities?${params}`, {
+    nullOnError: true,
+  });
+  return (data?.data ?? []).map(
     // biome-ignore lint/suspicious/noExplicitAny: external API response
     (f: any): Facility => {
       const fType = f.attributes?.type;

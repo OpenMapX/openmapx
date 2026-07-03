@@ -1,4 +1,4 @@
-import { USER_AGENT } from "@openmapx/core";
+import { fetchJson } from "@openmapx/core";
 import type { IntegrationContext, Logger } from "@openmapx/integration-framework";
 
 const FETCH_TIMEOUT_MS = 15_000;
@@ -43,8 +43,6 @@ const SC_VALUE_TYPE_MAP: Record<
   P2: { sensorType: "pm25", unit: "µg/m³", title: "PM2.5" },
   noise_LAeq: { sensorType: "noise", unit: "dB(A)", title: "Noise LAeq" },
 };
-
-const SC_USER_AGENT = USER_AGENT;
 
 // Distance threshold in degrees (~50m at mid-latitudes) for cross-provider deduplication
 const DEDUP_THRESHOLD_DEG = 0.00045;
@@ -162,9 +160,6 @@ async function fetchOpenSenseMap(
   exposure: string | undefined,
   log: Logger,
 ): Promise<Station[]> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
   try {
     const dateNow = new Date().toISOString();
     const url =
@@ -172,18 +167,15 @@ async function fetchOpenSenseMap(
       `&exposure=${exposure ?? "outdoor"}&format=json` +
       `&date=${dateNow}`;
 
-    const res = await fetch(url, {
-      headers: { "User-Agent": SC_USER_AGENT },
-      signal: controller.signal,
+    const boxes = await fetchJson<OpenSenseMapBox[]>(url, {
+      timeoutMs: FETCH_TIMEOUT_MS,
+      nullOnError: true,
     });
-    clearTimeout(timer);
-
-    if (!res.ok) {
-      log.warn("[overlay-environment] openSenseMap returned %d", res.status);
+    if (!boxes) {
+      log.warn("[overlay-environment] openSenseMap request failed");
       return [];
     }
 
-    const boxes = (await res.json()) as OpenSenseMapBox[];
     const sensorTitles = SENSOR_TITLE_MAP[sensorType];
     const stations: Station[] = [];
 
@@ -227,7 +219,6 @@ async function fetchOpenSenseMap(
 
     return stations;
   } catch (err) {
-    clearTimeout(timer);
     log.warn("[overlay-environment] openSenseMap fetch failed: %s", err);
     return [];
   }
@@ -250,29 +241,22 @@ async function fetchSensorCommunity(
 
   // Fetch each hardware type in parallel (usually 1-2 types per sensor)
   const fetches = hwTypes.map(async (hwType) => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
     try {
       // Sensor.Community bbox format: lat_sw,lon_sw,lat_ne,lon_ne
       const url =
         `https://data.sensor.community/airrohr/v1/filter/box=${s},${w},${n},${e}` +
         `&type=${hwType}`;
 
-      const res = await fetch(url, {
-        headers: { "User-Agent": SC_USER_AGENT },
-        signal: controller.signal,
+      const entries = await fetchJson<SensorCommunityEntry[]>(url, {
+        timeoutMs: FETCH_TIMEOUT_MS,
+        nullOnError: true,
       });
-      clearTimeout(timer);
-
-      if (!res.ok) {
-        log.warn("[overlay-environment] Sensor.Community returned %d for %s", res.status, hwType);
+      if (!entries) {
+        log.warn("[overlay-environment] Sensor.Community request failed for %s", hwType);
         return [];
       }
-
-      return (await res.json()) as SensorCommunityEntry[];
+      return entries;
     } catch (err) {
-      clearTimeout(timer);
       log.warn("[overlay-environment] Sensor.Community fetch failed for %s: %s", hwType, err);
       return [];
     }

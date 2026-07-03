@@ -1,4 +1,4 @@
-import { decodePolyline, otpMode } from "@openmapx/core";
+import { decodePolyline, fetchJson, otpMode } from "@openmapx/core";
 import type {
   Departure,
   GeoJSONLineString,
@@ -21,24 +21,13 @@ async function graphqlFetch(
   variables: Record<string, unknown>,
   headers?: Record<string, string>,
 ): Promise<unknown> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...headers,
-      },
-      body: JSON.stringify({ query, variables }),
-      signal: controller.signal,
-    });
-    if (!res.ok) return null;
-    const json = (await res.json()) as { data?: unknown };
-    return json.data ?? null;
-  } finally {
-    clearTimeout(timer);
-  }
+  const json = await fetchJson<{ data?: unknown }>(endpoint, {
+    timeoutMs: TIMEOUT_MS,
+    headers: { "Content-Type": "application/json", ...headers },
+    nullOnError: true,
+    init: { method: "POST", body: JSON.stringify({ query, variables }) },
+  });
+  return json?.data ?? null;
 }
 
 // Queries

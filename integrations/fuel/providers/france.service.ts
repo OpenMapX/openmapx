@@ -1,4 +1,4 @@
-import { type BoundingBox, haversineKm } from "@openmapx/core";
+import { type BoundingBox, fetchJson, haversineKm } from "@openmapx/core";
 import type { FuelStation } from "@openmapx/mobility-core/fuel";
 import type { FuelPriceProvider } from "./price-provider";
 
@@ -63,10 +63,9 @@ export class FranceService implements FuelPriceProvider {
       "id,adresse,ville,geom,gazole_prix,gazole_maj,sp95_prix,sp95_maj,e10_prix,e10_maj,sp98_prix,sp98_maj,e85_prix,e85_maj,gplc_prix,gplc_maj",
     );
 
-    const res = await fetch(url.toString());
-    if (!res.ok) throw new Error(`France fuel API error: ${res.status}`);
-
-    const data = (await res.json()) as FranceResponse;
+    const data = await fetchJson<FranceResponse>(url.toString(), {
+      errorMessage: ({ status }) => `France fuel API error: ${status}`,
+    });
 
     return data.results.map((r) => {
       const address = [r.adresse, r.ville].filter(Boolean).join(", ") || undefined;

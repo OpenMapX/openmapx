@@ -1,14 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@openmapx/core", () => ({
-  decodePolyline: vi.fn(() => []),
-  otpMode: vi.fn((mode: string) => {
-    if (mode === "WALK") return "walking";
-    if (mode === "BUS") return "bus";
-    if (mode === "RAIL") return "rail";
-    return "bus";
-  }),
-}));
+vi.mock("@openmapx/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@openmapx/core")>();
+  return {
+    ...actual,
+    decodePolyline: vi.fn(() => []),
+    otpMode: vi.fn((mode: string) => {
+      if (mode === "WALK") return "walking";
+      if (mode === "BUS") return "bus";
+      if (mode === "RAIL") return "rail";
+      return "bus";
+    }),
+  };
+});
 
 import { isOtpAvailable, motisModesToOtp, plan, setOtpUrl } from "./provider.js";
 

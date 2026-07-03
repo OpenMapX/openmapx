@@ -1,4 +1,4 @@
-import { USER_AGENT } from "@openmapx/core";
+import { fetchJson, USER_AGENT } from "@openmapx/core";
 import type { IntegrationContext, RouteHandler } from "@openmapx/integration-framework";
 
 const FETCH_TIMEOUT_MS = 10_000;
@@ -49,21 +49,17 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-      const res = await fetch("https://api.rainviewer.com/public/weather-maps.json", {
-        headers: { "User-Agent": USER_AGENT },
-        signal: controller.signal,
+      const data = await fetchJson<{
+        host: string;
+        radar: { past: RadarFrame[]; nowcast: RadarFrame[] };
+      }>("https://api.rainviewer.com/public/weather-maps.json", {
+        timeoutMs: FETCH_TIMEOUT_MS,
+        nullOnError: true,
       });
-      clearTimeout(timer);
-      if (!res.ok) {
+      if (!data) {
         reply.status(502).send({ message: "RainViewer unavailable" });
         return;
       }
-      const data = (await res.json()) as {
-        host: string;
-        radar: { past: RadarFrame[]; nowcast: RadarFrame[] };
-      };
       const meta: RadarMeta = {
         host: data.host,
         past: data.radar.past ?? [],

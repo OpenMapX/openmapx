@@ -1,4 +1,4 @@
-import { type BoundingBox, haversineKm } from "@openmapx/core";
+import { type BoundingBox, fetchJson, haversineKm } from "@openmapx/core";
 import type { FuelStation } from "@openmapx/mobility-core/fuel";
 import type { FuelPriceProvider } from "./price-provider";
 
@@ -39,9 +39,9 @@ async function fetchByFuelType(
   url.searchParams.set("includeClosed", "false");
   url.searchParams.set("radius", String(radius));
 
-  const res = await fetch(url.toString());
-  if (!res.ok) throw new Error(`Austria fuel API error: ${res.status}`);
-  return (await res.json()) as AustriaStation[];
+  return fetchJson<AustriaStation[]>(url.toString(), {
+    errorMessage: ({ status }) => `Austria fuel API error: ${status}`,
+  });
 }
 
 export class AustriaService implements FuelPriceProvider {

@@ -1,8 +1,9 @@
-import type {
-  BoundingBox,
-  DataSourceDetail,
-  DataSourceDetailSection,
-  DataSourceResult,
+import {
+  type BoundingBox,
+  type DataSourceDetail,
+  type DataSourceDetailSection,
+  type DataSourceResult,
+  fetchJson,
 } from "@openmapx/core";
 import {
   type I18nToken,
@@ -36,10 +37,10 @@ function mapTflToRaw(cam: TflJamCam): RawWebcam | null {
 }
 
 async function fetchAllJamCams(): Promise<RawWebcam[]> {
-  const res = await fetch(TFL_URL, { signal: AbortSignal.timeout(15_000) });
-  if (!res.ok) throw new Error(`TfL API error: ${res.status} ${res.statusText}`);
-
-  const cams = (await res.json()) as TflJamCam[];
+  const cams = await fetchJson<TflJamCam[]>(TFL_URL, {
+    timeoutMs: 15_000,
+    errorMessage: ({ status, statusText }) => `TfL API error: ${status} ${statusText}`,
+  });
   return cams.map(mapTflToRaw).filter((r): r is RawWebcam => r !== null);
 }
 

@@ -5,7 +5,7 @@ import type {
   DataSourceMeta,
   DataSourceResult,
 } from "@openmapx/core";
-import { CATEGORY_FILTERS, extractSourcePrefix, searchByCategory } from "@openmapx/core";
+import { CATEGORY_FILTERS, extractSourcePrefix, fetchJson, searchByCategory } from "@openmapx/core";
 import type { MobilityDataSourceProvider } from "@openmapx/integration-framework";
 import { createManifestAttribution } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
@@ -176,36 +176,35 @@ class FuelDataSourceProvider implements MobilityDataSourceProvider {
           url.searchParams.set("id", uuid);
           url.searchParams.set("apikey", apiKey);
 
-          const res = await fetch(url.toString());
-          if (res.ok) {
-            const data = (await res.json()) as TankerkoenigDetailResponse;
-            if (data.ok && data.station) {
-              const s = data.station;
-              const cachedStation = this.stationCache.get(itemId);
-              const baseStation: FuelStation = cachedStation ?? {
-                id: itemId,
-                name: s.brand && s.brand !== s.name ? `${s.brand} ${s.name}` : s.name,
-                brand: s.brand || undefined,
-                coordinates: [0, 0], // Will be overridden if cached
-                fuelPrices: {
-                  e5: s.e5 != null && s.e5 !== false ? s.e5 : undefined,
-                  e10: s.e10 != null && s.e10 !== false ? s.e10 : undefined,
-                  diesel: s.diesel != null && s.diesel !== false ? s.diesel : undefined,
-                },
-              };
+          const data = await fetchJson<TankerkoenigDetailResponse>(url.toString(), {
+            nullOnError: true,
+          });
+          if (data?.ok && data.station) {
+            const s = data.station;
+            const cachedStation = this.stationCache.get(itemId);
+            const baseStation: FuelStation = cachedStation ?? {
+              id: itemId,
+              name: s.brand && s.brand !== s.name ? `${s.brand} ${s.name}` : s.name,
+              brand: s.brand || undefined,
+              coordinates: [0, 0], // Will be overridden if cached
+              fuelPrices: {
+                e5: s.e5 != null && s.e5 !== false ? s.e5 : undefined,
+                e10: s.e10 != null && s.e10 !== false ? s.e10 : undefined,
+                diesel: s.diesel != null && s.diesel !== false ? s.diesel : undefined,
+              },
+            };
 
-              return buildTankerkoenigDetail(baseStation, {
-                isOpen: s.isOpen,
-                wholeDay: s.wholeDay,
-                openingTimes: s.openingTimes ?? [],
-                overrides: s.overrides ?? [],
-                fuelPrices: {
-                  e5: s.e5 != null && s.e5 !== false ? s.e5 : undefined,
-                  e10: s.e10 != null && s.e10 !== false ? s.e10 : undefined,
-                  diesel: s.diesel != null && s.diesel !== false ? s.diesel : undefined,
-                },
-              });
-            }
+            return buildTankerkoenigDetail(baseStation, {
+              isOpen: s.isOpen,
+              wholeDay: s.wholeDay,
+              openingTimes: s.openingTimes ?? [],
+              overrides: s.overrides ?? [],
+              fuelPrices: {
+                e5: s.e5 != null && s.e5 !== false ? s.e5 : undefined,
+                e10: s.e10 != null && s.e10 !== false ? s.e10 : undefined,
+                diesel: s.diesel != null && s.diesel !== false ? s.diesel : undefined,
+              },
+            });
           }
         } catch {
           // Fall through to cached/minimal detail

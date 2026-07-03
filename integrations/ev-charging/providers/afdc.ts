@@ -1,4 +1,4 @@
-import { type BoundingBox, USER_AGENT } from "@openmapx/core";
+import { type BoundingBox, fetchJson } from "@openmapx/core";
 import type {
   EvChargingSource,
   EvChargingStation,
@@ -204,7 +204,6 @@ function authHeaders(): Record<string, string> {
   // Pass the key in a header, not a query param, so it never lands in
   // request logs, referers, or browser network panels (per NLR docs).
   return {
-    "User-Agent": USER_AGENT,
     "X-Api-Key": afdcApiKey as string,
   };
 }
@@ -226,11 +225,10 @@ export async function searchAfdcCharging(bbox: BoundingBox): Promise<EvChargingS
     format: "json",
   });
 
-  const response = await fetch(`${AFDC_NEAREST_URL}?${params.toString()}`, {
+  const data = await fetchJson<AfdcResponse>(`${AFDC_NEAREST_URL}?${params.toString()}`, {
     headers: authHeaders(),
+    errorMessage: ({ status }) => `AFDC API error: ${status}`,
   });
-  if (!response.ok) throw new Error(`AFDC API error: ${response.status}`);
-  const data = (await response.json()) as AfdcResponse;
   return (data.fuel_stations ?? [])
     .map(stationToCanonical)
     .filter((station): station is EvChargingStation => Boolean(station))
@@ -240,11 +238,10 @@ export async function searchAfdcCharging(bbox: BoundingBox): Promise<EvChargingS
 export async function fetchAfdcChargingDetail(itemId: string): Promise<EvChargingStation | null> {
   if (!afdcApiKey) return null;
   const id = itemId.startsWith("afdc:") ? itemId.slice("afdc:".length) : itemId;
-  const response = await fetch(`${AFDC_DETAIL_BASE}/${encodeURIComponent(id)}.json`, {
+  const data = await fetchJson<AfdcResponse>(`${AFDC_DETAIL_BASE}/${encodeURIComponent(id)}.json`, {
     headers: authHeaders(),
+    errorMessage: ({ status }) => `AFDC API error: ${status}`,
   });
-  if (!response.ok) throw new Error(`AFDC API error: ${response.status}`);
-  const data = (await response.json()) as AfdcResponse;
   return data.alt_fuel_station ? stationToCanonical(data.alt_fuel_station) : null;
 }
 

@@ -5,7 +5,7 @@
  */
 
 import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@openmapx/core";
-import { USER_AGENT } from "@openmapx/core";
+import { fetchJson } from "@openmapx/core";
 import type {
   ManeuverLane,
   RoutingOptions,
@@ -294,12 +294,9 @@ export const osrmService: RoutingProvider = {
     }
     if (exclude.length > 0) url.searchParams.set("exclude", exclude.join(","));
 
-    const res = await fetch(url.toString(), {
-      headers: { "User-Agent": USER_AGENT },
+    const data = await fetchJson<OsrmResponse>(url.toString(), {
+      errorMessage: ({ status }) => `OSRM error ${status}`,
     });
-    if (!res.ok) throw new Error(`OSRM error ${res.status}`);
-
-    const data = (await res.json()) as OsrmResponse;
     if (data.code !== "Ok" || data.routes.length === 0) {
       throw new Error("OSRM returned no routes");
     }
@@ -333,12 +330,9 @@ export const osrmService: RoutingProvider = {
     url.searchParams.set("roundtrip", "false");
     if (exclude.length > 0) url.searchParams.set("exclude", exclude.join(","));
 
-    const res = await fetch(url.toString(), {
-      headers: { "User-Agent": USER_AGENT },
+    const data = await fetchJson<OsrmTripResponse>(url.toString(), {
+      errorMessage: ({ status }) => `OSRM trip error ${status}`,
     });
-    if (!res.ok) throw new Error(`OSRM trip error ${res.status}`);
-
-    const data = (await res.json()) as OsrmTripResponse;
     if (data.code !== "Ok" || data.trips.length === 0) {
       throw new Error("OSRM returned no trips");
     }

@@ -1,8 +1,9 @@
-import type {
-  BoundingBox,
-  DataSourceDetail,
-  DataSourceDetailSection,
-  DataSourceResult,
+import {
+  type BoundingBox,
+  type DataSourceDetail,
+  type DataSourceDetailSection,
+  type DataSourceResult,
+  fetchJson,
 } from "@openmapx/core";
 import {
   type I18nToken,
@@ -45,10 +46,10 @@ async function fetchDistrict(districtId: number): Promise<RawWebcam[]> {
   const padded = padDistrictId(districtId);
   const url = `https://cwwp2.dot.ca.gov/data/d${districtId}/cctv/cctvStatusD${padded}.json`;
 
-  const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-  if (!res.ok) return [];
-
-  const data = (await res.json()) as CaltransDistrictResponse;
+  const data = await fetchJson<CaltransDistrictResponse>(url, {
+    timeoutMs: 15_000,
+    nullOnError: true,
+  });
   if (!data?.data) return [];
 
   const results: RawWebcam[] = [];

@@ -1,3 +1,4 @@
+import { fetchJson } from "@openmapx/core";
 import type { RawWebcam } from "../types.js";
 import type { StateDotConfig } from "./types.js";
 
@@ -22,12 +23,10 @@ export const ny: StateDotConfig = {
   requiresApiKey: false,
 
   async fetchCameras(): Promise<RawWebcam[]> {
-    const res = await fetch("https://511ny.org/api/getcameras?format=json", {
-      signal: AbortSignal.timeout(15_000),
+    const cams = await fetchJson<Ny511Camera[]>("https://511ny.org/api/getcameras?format=json", {
+      timeoutMs: 15_000,
+      errorMessage: ({ status }) => `NY 511 API error: ${status}`,
     });
-    if (!res.ok) throw new Error(`NY 511 API error: ${res.status}`);
-
-    const cams = (await res.json()) as Ny511Camera[];
     const results: RawWebcam[] = [];
 
     for (const cam of cams) {

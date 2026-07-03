@@ -1,3 +1,4 @@
+import { fetchJson } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 
 interface MapillaryImage {
@@ -27,7 +28,9 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     const url = `https://tiles.mapillary.com/maps/vtp/mly1_public/2/${z}/${x}/${y}?access_token=${token}`;
-    const upstream = await fetch(url);
+    // Raw fetch: forwards the upstream's binary tile body, content-type, and
+    // status verbatim — fetchJson always parses JSON, so it can't express this.
+    const upstream = await fetch(url, { signal: AbortSignal.timeout(10_000) });
     if (!upstream.ok) {
       ctx.log.warn(`Mapillary tile request failed: ${upstream.status}`);
       reply.status(upstream.status).send({ message: "Mapillary tile unavailable" });
@@ -73,22 +76,13 @@ export function setup(ctx: IntegrationContext): void {
 
       const url = `https://graph.mapillary.com/images?bbox=${west},${south},${east},${north}&fields=id,geometry&access_token=${token}&limit=20`;
 
-      let response: Response;
-      try {
-        response = await fetch(url);
-      } catch (err) {
-        ctx.log.warn("Mapillary API unreachable", err as Error);
-        reply.status(502).send({ message: "Mapillary API unreachable" });
-        return;
-      }
-
-      if (!response.ok) {
-        ctx.log.warn(`Mapillary API returned ${response.status}`);
+      const data = await fetchJson<MapillaryImagesResponse>(url, { nullOnError: true });
+      if (!data) {
+        ctx.log.warn("Mapillary API unreachable or returned an error");
         reply.status(502).send({ message: "Mapillary API error" });
         return;
       }
 
-      const data = (await response.json()) as MapillaryImagesResponse;
       if (data.data?.length) {
         images = data.data;
         break;

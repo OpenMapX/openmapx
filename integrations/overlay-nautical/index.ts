@@ -1,4 +1,4 @@
-import { createPlace, USER_AGENT } from "@openmapx/core";
+import { createPlace, fetchJson, USER_AGENT } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import {
   findNearestStation,
@@ -269,13 +269,13 @@ out body;`;
     ? overpass.url
     : `${overpass.url.replace(/\/$/, "")}/api/interpreter`;
 
-  const res = await fetchWithTimeout(upstream, {
-    method: "POST",
+  const data = await fetchJson<OverpassResponse>(upstream, {
+    timeoutMs: FETCH_TIMEOUT_MS,
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `data=${encodeURIComponent(query)}`,
+    nullOnError: true,
+    init: { method: "POST", body: `data=${encodeURIComponent(query)}` },
   });
-  if (!res?.ok) return [];
-  const data = (await res.json()) as OverpassResponse;
+  if (!data) return [];
   const facilities: HarborDetail["facilities"] = [];
   for (const el of data.elements) {
     if (el.type !== "node") continue;

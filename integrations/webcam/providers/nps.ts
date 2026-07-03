@@ -1,8 +1,9 @@
-import type {
-  BoundingBox,
-  DataSourceDetail,
-  DataSourceDetailSection,
-  DataSourceResult,
+import {
+  type BoundingBox,
+  type DataSourceDetail,
+  type DataSourceDetailSection,
+  type DataSourceResult,
+  fetchJson,
 } from "@openmapx/core";
 import {
   type I18nToken,
@@ -95,12 +96,10 @@ async function fetchAllNps(): Promise<RawWebcam[]> {
       api_key: getApiKey(),
     });
 
-    const res = await fetch(`${NPS_BASE}/webcams?${params}`, {
-      signal: AbortSignal.timeout(15_000),
+    const data = await fetchJson<NpsResponse>(`${NPS_BASE}/webcams?${params}`, {
+      timeoutMs: 15_000,
+      errorMessage: ({ status, statusText }) => `NPS API error: ${status} ${statusText}`,
     });
-    if (!res.ok) throw new Error(`NPS API error: ${res.status} ${res.statusText}`);
-
-    const data = (await res.json()) as NpsResponse;
     const total = Number.parseInt(data.total, 10);
 
     for (const cam of data.data) {

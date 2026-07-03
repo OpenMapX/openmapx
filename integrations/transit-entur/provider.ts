@@ -1,5 +1,5 @@
 import type { BBox } from "@openmapx/core";
-import { decodePolyline } from "@openmapx/core";
+import { fetchJson as coreFetchJson, decodePolyline } from "@openmapx/core";
 import type {
   AlertSeverity,
   Departure,
@@ -1902,19 +1902,13 @@ async function fetchGraphQl<T>(
   query: string,
   variables?: Record<string, unknown>,
 ): Promise<T> {
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "ET-Client-Name": clientName,
-    },
-    body: JSON.stringify({ query, variables }),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  const json = await coreFetchJson<GraphQlResponse<T>>(endpoint, {
+    timeoutMs: REQUEST_TIMEOUT_MS,
+    userAgent: null,
+    headers: { "Content-Type": "application/json", "ET-Client-Name": clientName },
+    errorMessage: ({ status }) => `Entur GraphQL error ${status}`,
+    init: { method: "POST", body: JSON.stringify({ query, variables }) },
   });
-  if (!response.ok) {
-    throw new Error(`Entur GraphQL error ${response.status}`);
-  }
-  const json = (await response.json()) as GraphQlResponse<T>;
   if (json.errors?.length) {
     const message = json.errors
       .map((error) => error.message)
@@ -1929,16 +1923,12 @@ async function fetchGraphQl<T>(
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, {
-    headers: {
-      "ET-Client-Name": clientName,
-    },
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  return coreFetchJson<T>(url, {
+    timeoutMs: REQUEST_TIMEOUT_MS,
+    userAgent: null,
+    headers: { "ET-Client-Name": clientName },
+    errorMessage: ({ status }) => `Entur HTTP error ${status}`,
   });
-  if (!response.ok) {
-    throw new Error(`Entur HTTP error ${response.status}`);
-  }
-  return response.json() as Promise<T>;
 }
 
 async function fetchGeocoderAutocomplete(text: string, size: number): Promise<EnturFeature[]> {

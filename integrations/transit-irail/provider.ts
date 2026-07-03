@@ -1,3 +1,4 @@
+import { fetchJson } from "@openmapx/core";
 import type {
   Departure,
   TransitStop,
@@ -25,16 +26,14 @@ async function getAllStations(): Promise<IrailStation[]> {
   if (stationsCache && Date.now() - stationsCachedAt < STATIONS_TTL_MS) {
     return stationsCache;
   }
-  try {
-    const res = await fetch(`${BASE_URL}/stations/?format=json&lang=en`);
-    if (!res.ok) return stationsCache ?? [];
-    const data = (await res.json()) as { station?: IrailStation[] };
-    stationsCache = data.station ?? [];
-    stationsCachedAt = Date.now();
-    return stationsCache;
-  } catch {
-    return stationsCache ?? [];
-  }
+  const data = await fetchJson<{ station?: IrailStation[] }>(
+    `${BASE_URL}/stations/?format=json&lang=en`,
+    { nullOnError: true },
+  );
+  if (!data) return stationsCache ?? [];
+  stationsCache = data.station ?? [];
+  stationsCachedAt = Date.now();
+  return stationsCache;
 }
 
 function stationToStop(s: IrailStation): TransitStop {
@@ -122,25 +121,20 @@ async function fetchLiveboard(
     lang: "en",
     arrdep,
   });
-  try {
-    const res = await fetch(`${BASE_URL}/liveboard/?${params}`);
-    if (!res.ok) return [];
-    const data = (await res.json()) as {
-      // biome-ignore lint/suspicious/noExplicitAny: external API response
-      departures?: { departure?: any };
-      // biome-ignore lint/suspicious/noExplicitAny: external API response
-      arrivals?: { arrival?: any };
-    };
-    const raw2 = arrdep === "departure" ? data.departures?.departure : data.arrivals?.arrival;
+  const data = await fetchJson<{
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const entries: any[] = Array.isArray(raw2) ? raw2 : raw2 ? [raw2] : [];
-    const cutoffMs = Date.now() + minutes * 60 * 1000;
-    return entries
-      .filter((d) => Number.parseInt(d.time, 10) * 1000 <= cutoffMs)
-      .map(normalizeLiveboardEntry);
-  } catch {
-    return [];
-  }
+    departures?: { departure?: any };
+    // biome-ignore lint/suspicious/noExplicitAny: external API response
+    arrivals?: { arrival?: any };
+  }>(`${BASE_URL}/liveboard/?${params}`, { nullOnError: true });
+  if (!data) return [];
+  const raw2 = arrdep === "departure" ? data.departures?.departure : data.arrivals?.arrival;
+  // biome-ignore lint/suspicious/noExplicitAny: external API response
+  const entries: any[] = Array.isArray(raw2) ? raw2 : raw2 ? [raw2] : [];
+  const cutoffMs = Date.now() + minutes * 60 * 1000;
+  return entries
+    .filter((d) => Number.parseInt(d.time, 10) * 1000 <= cutoffMs)
+    .map(normalizeLiveboardEntry);
 }
 
 export async function getDepartures(stopId: string, minutes: number): Promise<Departure[]> {
@@ -159,15 +153,13 @@ export async function getVehicleJourney(vehicleId: string): Promise<VehicleJourn
       format: "json",
       lang: "en",
     });
-    const res = await fetch(`${BASE_URL}/vehicle/?${params}`);
-    if (!res.ok) return null;
-
-    const data = (await res.json()) as {
+    const data = await fetchJson<{
       vehicle: string;
       // biome-ignore lint/suspicious/noExplicitAny: external API response
       stops?: { stop?: any };
       occupancy?: { name: string };
-    };
+    }>(`${BASE_URL}/vehicle/?${params}`, { nullOnError: true });
+    if (!data) return null;
 
     const rawStops = data.stops?.stop;
     // biome-ignore lint/suspicious/noExplicitAny: external API response
@@ -280,12 +272,11 @@ export async function planConnections(
       lang: "en",
       results: String(numItineraries ?? 3),
     });
-    const res = await fetch(`${BASE_URL}/connections/?${params}`);
-    if (!res.ok) return null;
-
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as { connection?: any[] };
-    if (!Array.isArray(data.connection)) return null;
+    const data = await fetchJson<{ connection?: any[] }>(`${BASE_URL}/connections/?${params}`, {
+      nullOnError: true,
+    });
+    if (!data || !Array.isArray(data.connection)) return null;
 
     // Estimate straight-line distance in meters
     function walkMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {

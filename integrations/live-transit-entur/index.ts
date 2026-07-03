@@ -1,5 +1,5 @@
 import type { LiveTransitVehicle } from "@integrations/overlay-live-transit/types.js";
-import type { BBox } from "@openmapx/core";
+import { type BBox, fetchJson } from "@openmapx/core";
 import {
   createManifestAttribution,
   type IntegrationContext,
@@ -210,21 +210,14 @@ async function fetchGraphQl<T>(
   query: string,
   variables?: Record<string, unknown>,
 ): Promise<T> {
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "ET-Client-Name": clientName,
-    },
-    body: JSON.stringify({ query, variables }),
-    signal: AbortSignal.timeout(8_000),
+  const payload = await fetchJson<GraphQlResponse<T>>(endpoint, {
+    timeoutMs: 8_000,
+    userAgent: null,
+    headers: { "Content-Type": "application/json", "ET-Client-Name": clientName },
+    errorMessage: ({ status, statusText }) =>
+      `Entur GraphQL request failed: ${status} ${statusText}`,
+    init: { method: "POST", body: JSON.stringify({ query, variables }) },
   });
-
-  if (!response.ok) {
-    throw new Error(`Entur GraphQL request failed: ${response.status} ${response.statusText}`);
-  }
-
-  const payload = (await response.json()) as GraphQlResponse<T>;
   if (payload.errors?.length) {
     throw new Error(
       payload.errors

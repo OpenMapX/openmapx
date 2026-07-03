@@ -1,12 +1,11 @@
 import {
   fetchCommonsMetadata,
+  fetchJson,
   type KnowledgeProvider,
   type KnowledgeResult,
-  USER_AGENT,
 } from "@openmapx/core";
 
 const HEADERS = {
-  "User-Agent": USER_AGENT,
   Accept: "application/json",
 };
 
@@ -25,19 +24,18 @@ export const wikipediaSource: KnowledgeProvider = {
     const encodedTitle = encodeURIComponent(title.replace(/ /g, "_"));
     const url = `https://${tagLang}.wikipedia.org/api/rest_v1/page/summary/${encodedTitle}`;
 
-    const res = await fetch(url, {
-      headers: HEADERS,
-      signal: AbortSignal.timeout(3000),
-    });
-    if (!res.ok) return null;
-
-    const data = (await res.json()) as {
+    const data = await fetchJson<{
       description?: string;
       extract?: string;
       thumbnail?: { source: string; width: number; height: number };
       originalimage?: { source: string; width: number; height: number };
       content_urls?: { desktop?: { page?: string } };
-    };
+    }>(url, {
+      headers: HEADERS,
+      timeoutMs: 3000,
+      nullOnError: true,
+    });
+    if (!data) return null;
 
     const result: KnowledgeResult = {};
 

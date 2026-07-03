@@ -1,3 +1,4 @@
+import { fetchJson } from "@openmapx/core";
 import { haversineKm } from "@openmapx/core/server";
 import { nameMatches, normalizeName } from "./match.js";
 import type { HotelQuery } from "./types.js";
@@ -116,26 +117,34 @@ const TYPEAHEAD_TIMEOUT_MS = 6000;
  */
 export async function resolveTripcomHotelId(q: HotelQuery): Promise<string | null> {
   try {
-    const res = await fetch("https://www.trip.com/restapi/soa2/34951/getHotelKeywords", {
-      method: "POST",
-      signal: AbortSignal.timeout(TYPEAHEAD_TIMEOUT_MS),
-      headers: { "content-type": "application/json", accept: "application/json", locale: "en-US" },
-      body: JSON.stringify({
-        queryInfo: { keyword: q.name, actionType: "destination" },
-        head: {
-          platform: "PC",
-          bu: "IBU",
-          group: "trip",
+    const json = await fetchJson<TripKeywordsResp>(
+      "https://www.trip.com/restapi/soa2/34951/getHotelKeywords",
+      {
+        timeoutMs: TYPEAHEAD_TIMEOUT_MS,
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json",
           locale: "en-US",
-          region: "US",
-          currency: "USD",
         },
-      }),
-    });
-    if (!res.ok) return null;
-    return (
-      pickKeywordMatch(parseTripcomKeywords((await res.json()) as TripKeywordsResp), q)?.id ?? null
+        nullOnError: true,
+        init: {
+          method: "POST",
+          body: JSON.stringify({
+            queryInfo: { keyword: q.name, actionType: "destination" },
+            head: {
+              platform: "PC",
+              bu: "IBU",
+              group: "trip",
+              locale: "en-US",
+              region: "US",
+              currency: "USD",
+            },
+          }),
+        },
+      },
     );
+    if (!json) return null;
+    return pickKeywordMatch(parseTripcomKeywords(json), q)?.id ?? null;
   } catch {
     return null;
   }

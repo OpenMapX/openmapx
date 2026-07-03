@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@openmapx/core", () => ({
-  decodePolyline: vi.fn(() => []),
-}));
+vi.mock("@openmapx/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@openmapx/core")>();
+  return { ...actual, decodePolyline: vi.fn(() => []) };
+});
 
 import {
   getDepartures,

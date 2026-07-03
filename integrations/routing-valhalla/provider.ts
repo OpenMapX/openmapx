@@ -7,7 +7,7 @@
  */
 
 import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@openmapx/core";
-import { decodePolyline } from "@openmapx/core";
+import { decodePolyline, fetchJson } from "@openmapx/core";
 import type {
   ManeuverLane,
   ManeuverSign,
@@ -478,18 +478,13 @@ export const valhallaService: RoutingProvider = {
       body.alternates = 3;
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
-    const res = await fetch(endpoint("/route"), {
-      method: "POST",
+    const data = await fetchJson<ValhallaResponse>(endpoint("/route"), {
+      timeoutMs: 15_000,
+      userAgent: null,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: controller.signal,
+      errorMessage: ({ status }) => `Valhalla error ${status}`,
+      init: { method: "POST", body: JSON.stringify(body) },
     });
-    clearTimeout(timeout);
-    if (!res.ok) throw new Error(`Valhalla error ${res.status}`);
-
-    const data = (await res.json()) as ValhallaResponse;
     const travelMode = mode as TravelMode;
 
     const routes: Route[] = [transformTrip(data.trip, travelMode)];
@@ -531,18 +526,13 @@ export const valhallaService: RoutingProvider = {
       elevation_interval: ELEVATION_INTERVAL,
     };
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
-    const res = await fetch(endpoint("/optimized_route"), {
-      method: "POST",
+    const data = await fetchJson<ValhallaResponse>(endpoint("/optimized_route"), {
+      timeoutMs: 15_000,
+      userAgent: null,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: controller.signal,
+      errorMessage: ({ status }) => `Valhalla optimized_route error ${status}`,
+      init: { method: "POST", body: JSON.stringify(body) },
     });
-    clearTimeout(timeout);
-    if (!res.ok) throw new Error(`Valhalla optimized_route error ${res.status}`);
-
-    const data = (await res.json()) as ValhallaResponse;
     const travelMode = mode as TravelMode;
 
     const routes: Route[] = [transformTrip(data.trip, travelMode)];
@@ -590,18 +580,13 @@ export const valhallaService: RoutingProvider = {
       filters: { attributes: TRACE_ATTRIBUTE_FILTER, action: "include" },
     };
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
-    const res = await fetch(endpoint("/trace_attributes"), {
-      method: "POST",
+    const data = await fetchJson<ValhallaTraceAttributesResponse>(endpoint("/trace_attributes"), {
+      timeoutMs: 15_000,
+      userAgent: null,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: controller.signal,
+      errorMessage: ({ status }) => `Valhalla trace_attributes error ${status}`,
+      init: { method: "POST", body: JSON.stringify(body) },
     });
-    clearTimeout(timeout);
-    if (!res.ok) throw new Error(`Valhalla trace_attributes error ${res.status}`);
-
-    const data = (await res.json()) as ValhallaTraceAttributesResponse;
 
     return {
       geometry: data.shape ? decodePolyline(data.shape, 6) : [],

@@ -1,4 +1,4 @@
-import { USER_AGENT } from "@openmapx/core";
+import { fetchJson } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 
 const OPEN_METEO_AQ_BASE = "https://air-quality-api.open-meteo.com/v1/air-quality";
@@ -74,26 +74,18 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
       const url = `${OPEN_METEO_AQ_BASE}?latitude=${roundedLat}&longitude=${roundedLng}&current=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone,european_aqi,us_aqi`;
 
-      const res = await fetch(url, {
-        headers: {
-          "User-Agent": USER_AGENT,
-        },
-        signal: controller.signal,
+      const data = await fetchJson<OpenMeteoAirQualityResponse>(url, {
+        timeoutMs: FETCH_TIMEOUT_MS,
+        nullOnError: true,
       });
-      clearTimeout(timer);
 
-      if (!res.ok) {
-        ctx.log.warn(`Open-Meteo AQ API returned ${res.status}`);
+      if (!data) {
+        ctx.log.warn("Open-Meteo AQ API request failed");
         reply.status(502).send({ message: "Upstream air quality API error" });
         return;
       }
-
-      const data = (await res.json()) as OpenMeteoAirQualityResponse;
 
       const result: AirQualityResult = {
         pm25: data.current.pm2_5,

@@ -1,4 +1,4 @@
-import { OverpassRateLimitError, USER_AGENT } from "@openmapx/core";
+import { fetchJson, OverpassRateLimitError, USER_AGENT } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { fetchRouteGeometry } from "./overpass-geometry.js";
 import { searchTrails, trailDetail, trailsByArea } from "./waymarked-trails.js";
@@ -206,11 +206,7 @@ export function setup(ctx: IntegrationContext): void {
         url += `&type_points=${encodeURIComponent(typeFilter)}`;
       }
 
-      const res = await fetch(url, {
-        headers: { "User-Agent": USER_AGENT },
-      });
-      if (!res.ok) throw new Error(`Refuges.info returned ${res.status}`);
-      const raw = (await res.json()) as {
+      const raw = await fetchJson<{
         features: Array<{
           type: string;
           id: number;
@@ -222,7 +218,9 @@ export function setup(ctx: IntegrationContext): void {
           };
           geometry: { type: string; coordinates: [number, number] };
         }>;
-      };
+      }>(url, {
+        errorMessage: ({ status }) => `Refuges.info returned ${status}`,
+      });
 
       const result = {
         type: "FeatureCollection",

@@ -9,11 +9,11 @@ import type { GeocodingProvider as GeocodingProviderImpl } from "@openmapx/integ
 
 import {
   type AutocompleteResult,
+  fetchJson,
   type LngLat,
   type ReverseGeocodingResult,
   resolvePoiIconPath,
   type SearchResult,
-  USER_AGENT,
 } from "@openmapx/core";
 
 // Populated by setup(ctx); see setNominatimUrl.
@@ -90,19 +90,11 @@ async function fetchNominatim(
   url.searchParams.set("addressdetails", "1");
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 4_000);
-  let res: Response;
-  try {
-    res = await fetch(url.toString(), {
-      headers: { "User-Agent": USER_AGENT, "Accept-Language": lang ?? "en" },
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timer);
-  }
-  if (!res.ok) throw new Error(`Nominatim error ${res.status}`);
-  return res.json() as Promise<NominatimResult[]>;
+  return fetchJson<NominatimResult[]>(url.toString(), {
+    timeoutMs: 4_000,
+    headers: { "Accept-Language": lang ?? "en" },
+    errorMessage: ({ status }) => `Nominatim error ${status}`,
+  });
 }
 
 function makeId(r: NominatimResult): string {
@@ -140,19 +132,12 @@ export const nominatimService: GeocodingProviderImpl = {
     url.searchParams.set("lat", String(lat));
     url.searchParams.set("lon", String(lng));
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4_000);
-    let res: Response;
-    try {
-      res = await fetch(url.toString(), {
-        headers: { "User-Agent": USER_AGENT, "Accept-Language": lang ?? "en" },
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-    if (!res.ok) return null;
-    const data = (await res.json()) as NominatimReverseResult;
+    const data = await fetchJson<NominatimReverseResult>(url.toString(), {
+      timeoutMs: 4_000,
+      headers: { "Accept-Language": lang ?? "en" },
+      nullOnError: true,
+    });
+    if (data === null) return null;
     if (data.error) return null;
 
     const a = data.address ?? {};

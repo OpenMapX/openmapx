@@ -4,11 +4,9 @@ import {
   type KnowledgeProvider,
   type KnowledgeResult,
   type PlaceFact,
-  USER_AGENT,
 } from "@openmapx/core";
 
 const HEADERS = {
-  "User-Agent": USER_AGENT,
   Accept: "application/json",
 };
 
@@ -130,13 +128,12 @@ export const wikidataSource: KnowledgeProvider = {
     url.searchParams.set("sitefilter", `${effectiveLang}wiki`);
     url.searchParams.set("format", "json");
 
-    const res = await fetch(url.toString(), {
+    const data = await fetchJson<{ entities?: Record<string, WdEntity> }>(url.toString(), {
       headers: HEADERS,
-      signal: AbortSignal.timeout(4000),
+      timeoutMs: 4000,
+      nullOnError: true,
     });
-    if (!res.ok) return null;
-
-    const data = (await res.json()) as { entities?: Record<string, WdEntity> };
+    if (!data) return null;
     const entity = data.entities?.[qid];
     if (!entity) return null;
 

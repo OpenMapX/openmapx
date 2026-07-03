@@ -1,3 +1,4 @@
+import { fetchJson } from "@openmapx/core";
 import type {
   AlertSeverity,
   Departure,
@@ -79,49 +80,39 @@ export async function getStops(
     app_key: key,
   });
 
-  try {
-    const res = await fetch(`${BASE_URL}/StopPoint?${params}`);
-    if (!res.ok) return [];
-    // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as { stopPoints?: any[] };
-    return (data.stopPoints ?? []).map(normalizeStop);
-  } catch {
-    return [];
-  }
+  // biome-ignore lint/suspicious/noExplicitAny: external API response
+  const data = await fetchJson<{ stopPoints?: any[] }>(`${BASE_URL}/StopPoint?${params}`, {
+    nullOnError: true,
+  });
+  return (data?.stopPoints ?? []).map(normalizeStop);
 }
 
 export async function getStop(stopId: string): Promise<TransitStop | null> {
   const key = apiKey();
   if (!key) return null;
   const naptanId = stopId.startsWith("tfl:") ? stopId.slice(4) : stopId;
-  try {
-    const params = new URLSearchParams({ app_key: key });
-    const res = await fetch(`${BASE_URL}/StopPoint/${encodeURIComponent(naptanId)}?${params}`);
-    if (!res.ok) return null;
-    // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as any;
-    return data ? normalizeStop(data) : null;
-  } catch {
-    return null;
-  }
+  const params = new URLSearchParams({ app_key: key });
+  // biome-ignore lint/suspicious/noExplicitAny: external API response
+  const data = await fetchJson<any>(
+    `${BASE_URL}/StopPoint/${encodeURIComponent(naptanId)}?${params}`,
+    { nullOnError: true },
+  );
+  return data ? normalizeStop(data) : null;
 }
 
 export async function searchByName(query: string, limit = 10): Promise<TransitStop[]> {
   const key = apiKey();
   if (!key) return [];
-  try {
-    const params = new URLSearchParams({
-      maxResults: String(Math.min(limit, 50)),
-      app_key: key,
-    });
-    const res = await fetch(`${BASE_URL}/StopPoint/Search/${encodeURIComponent(query)}?${params}`);
-    if (!res.ok) return [];
-    // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as { matches?: any[] };
-    return (data.matches ?? []).slice(0, limit).map(normalizeStop);
-  } catch {
-    return [];
-  }
+  const params = new URLSearchParams({
+    maxResults: String(Math.min(limit, 50)),
+    app_key: key,
+  });
+  // biome-ignore lint/suspicious/noExplicitAny: external API response
+  const data = await fetchJson<{ matches?: any[] }>(
+    `${BASE_URL}/StopPoint/Search/${encodeURIComponent(query)}?${params}`,
+    { nullOnError: true },
+  );
+  return (data?.matches ?? []).slice(0, limit).map(normalizeStop);
 }
 
 function mapTflSeverity(severityNumber: number): AlertSeverity {
@@ -155,15 +146,13 @@ export async function getAlerts(): Promise<ServiceAlert[]> {
   if (!key) return [];
 
   const params = new URLSearchParams({ app_key: key });
-  const res = await fetch(
-    `${BASE_URL}/Line/Mode/tube,dlr,elizabeth-line,overground,tram/Status?${params}`,
-  );
-  if (!res.ok) return [];
-
   // biome-ignore lint/suspicious/noExplicitAny: external API response
-  const data = (await res.json()) as any[];
+  const data = await fetchJson<any[]>(
+    `${BASE_URL}/Line/Mode/tube,dlr,elizabeth-line,overground,tram/Status?${params}`,
+    { nullOnError: true },
+  );
   const alerts: ServiceAlert[] = [];
-  for (const line of data) {
+  for (const line of data ?? []) {
     const alert = lineToAlert(line);
     if (alert) alerts.push(alert);
   }
@@ -176,13 +165,13 @@ export async function getRouteAlerts(lineId: string): Promise<ServiceAlert[]> {
 
   const rawId = lineId.startsWith("tfl:") ? lineId.slice(4) : lineId;
   const params = new URLSearchParams({ app_key: key });
-  const res = await fetch(`${BASE_URL}/Line/${encodeURIComponent(rawId)}/Status?${params}`);
-  if (!res.ok) return [];
-
   // biome-ignore lint/suspicious/noExplicitAny: external API response
-  const data = (await res.json()) as any[];
+  const data = await fetchJson<any[]>(
+    `${BASE_URL}/Line/${encodeURIComponent(rawId)}/Status?${params}`,
+    { nullOnError: true },
+  );
   const alerts: ServiceAlert[] = [];
-  for (const line of data) {
+  for (const line of data ?? []) {
     const alert = lineToAlert(line);
     if (alert) alerts.push(alert);
   }
@@ -194,69 +183,60 @@ export async function getRouteStopSequence(lineId: string): Promise<RouteStop[]>
   if (!key) return [];
   const rawId = lineId.startsWith("tfl:") ? lineId.slice(4) : lineId;
 
-  try {
-    const params = new URLSearchParams({ app_key: key });
-    const res = await fetch(
-      `${BASE_URL}/Line/${encodeURIComponent(rawId)}/Route/Sequence/outbound?${params}`,
-    );
-    if (!res.ok) return [];
-
+  const params = new URLSearchParams({ app_key: key });
+  const data = await fetchJson<{
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as { stopPointSequences?: any[] };
+    stopPointSequences?: any[];
+  }>(`${BASE_URL}/Line/${encodeURIComponent(rawId)}/Route/Sequence/outbound?${params}`, {
+    nullOnError: true,
+  });
+  // biome-ignore lint/suspicious/noExplicitAny: external API response
+  const stops: any[] = data?.stopPointSequences?.[0]?.stopPoint ?? [];
+  return stops.map(
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const stops: any[] = data.stopPointSequences?.[0]?.stopPoint ?? [];
-    return stops.map(
-      // biome-ignore lint/suspicious/noExplicitAny: external API response
-      (s: any, index: number): RouteStop => ({
-        id: `tfl:${s.id}`,
-        name: s.name,
-        lat: s.lat,
-        lng: s.lon,
-        sequence: index,
-      }),
-    );
-  } catch {
-    return [];
-  }
+    (s: any, index: number): RouteStop => ({
+      id: `tfl:${s.id}`,
+      name: s.name,
+      lat: s.lat,
+      lng: s.lon,
+      sequence: index,
+    }),
+  );
 }
 
 export async function getStopAlerts(stopId: string): Promise<ServiceAlert[]> {
   const key = apiKey();
   if (!key) return [];
   const naptanId = stopId.startsWith("tfl:") ? stopId.slice(4) : stopId;
-  try {
-    const params = new URLSearchParams({ app_key: key });
-    const res = await fetch(`${BASE_URL}/StopPoint/${naptanId}/Disruption?${params}`);
-    if (!res.ok) return [];
-    // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as any[];
-    if (!Array.isArray(data)) return [];
-    return data
-      .map(
-        // biome-ignore lint/suspicious/noExplicitAny: external API response
-        (d: any): ServiceAlert => {
-          // Map TfL disruption category to severity
-          let severity: AlertSeverity = "warning";
-          const cat = (d.category ?? d.categoryDescription ?? "").toLowerCase();
-          if (/closure|suspend|cancel/.test(cat)) severity = "severe";
-          else if (/information|planned/.test(cat)) severity = "info";
+  const params = new URLSearchParams({ app_key: key });
+  // biome-ignore lint/suspicious/noExplicitAny: external API response
+  const data = await fetchJson<any[]>(`${BASE_URL}/StopPoint/${naptanId}/Disruption?${params}`, {
+    nullOnError: true,
+  });
+  if (!Array.isArray(data)) return [];
+  return data
+    .map(
+      // biome-ignore lint/suspicious/noExplicitAny: external API response
+      (d: any): ServiceAlert => {
+        // Map TfL disruption category to severity
+        let severity: AlertSeverity = "warning";
+        const cat = (d.category ?? d.categoryDescription ?? "").toLowerCase();
+        if (/closure|suspend|cancel/.test(cat)) severity = "severe";
+        else if (/information|planned/.test(cat)) severity = "info";
 
-          return {
-            id: `tfl:disruption:${naptanId}:${d.disruptedRouteId ?? d.description?.slice(0, 30) ?? "unknown"}`,
-            providers: ["tfl"],
-            severity,
-            title: d.description ?? "Service disruption",
-            description: d.additionalInfo ?? undefined,
-            affectedRouteIds: d.disruptedRouteId ? [`tfl:${d.disruptedRouteId}`] : [],
-            affectedStopIds: [`tfl:${naptanId}`],
-            activePeriods: [],
-          };
-        },
-      )
-      .filter((a) => a.title);
-  } catch {
-    return [];
-  }
+        return {
+          id: `tfl:disruption:${naptanId}:${d.disruptedRouteId ?? d.description?.slice(0, 30) ?? "unknown"}`,
+          providers: ["tfl"],
+          severity,
+          title: d.description ?? "Service disruption",
+          description: d.additionalInfo ?? undefined,
+          affectedRouteIds: d.disruptedRouteId ? [`tfl:${d.disruptedRouteId}`] : [],
+          affectedStopIds: [`tfl:${naptanId}`],
+          activePeriods: [],
+        };
+      },
+    )
+    .filter((a) => a.title);
 }
 
 export async function getDepartures(stopId: string, minutes: number): Promise<Departure[]> {
@@ -265,47 +245,41 @@ export async function getDepartures(stopId: string, minutes: number): Promise<De
 
   const naptanId = stopId.startsWith("tfl:") ? stopId.slice(4) : stopId;
   const params = new URLSearchParams({ app_key: key });
-  try {
-    const res = await fetch(
-      `${BASE_URL}/StopPoint/${encodeURIComponent(naptanId)}/Arrivals?${params}`,
-    );
-    if (!res.ok) return [];
-
-    // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const arrivals = (await res.json()) as any[];
-    const cutoff = minutes * 60;
-    return (
-      arrivals
-        // Filter to the requested time window
-        .filter((arr) => (arr.timeToStation ?? 0) <= cutoff)
-        // Sort ascending by arrival time
-        .sort((a, b) => (a.timeToStation ?? 0) - (b.timeToStation ?? 0))
-        .map(
-          // biome-ignore lint/suspicious/noExplicitAny: external API response
-          (arr: any): Departure => {
-            // TfL only provides live arrival predictions — no separate scheduled time
-            const expectedAt: string =
-              arr.expectedArrival ??
-              new Date(Date.now() + (arr.timeToStation ?? 0) * 1000).toISOString();
-            return {
-              tripId: arr.vehicleId ?? "",
-              route: {
-                id: `tfl:${arr.lineId ?? ""}`,
-                shortName: arr.lineName ?? arr.lineId ?? "",
-                longName: arr.lineName ?? "",
-                mode: mapTflMode(arr.modeName ?? ""),
-              },
-              headsign: arr.destinationName ?? arr.towards ?? "",
-              // TfL is real-time only; scheduledAt = expectedAt
-              scheduledAt: expectedAt,
-              expectedAt,
-              platform: arr.platformName ?? undefined,
-              canceled: false,
-            };
-          },
-        )
-    );
-  } catch {
-    return [];
-  }
+  // biome-ignore lint/suspicious/noExplicitAny: external API response
+  const arrivals = await fetchJson<any[]>(
+    `${BASE_URL}/StopPoint/${encodeURIComponent(naptanId)}/Arrivals?${params}`,
+    { nullOnError: true },
+  );
+  const cutoff = minutes * 60;
+  return (
+    (arrivals ?? [])
+      // Filter to the requested time window
+      .filter((arr) => (arr.timeToStation ?? 0) <= cutoff)
+      // Sort ascending by arrival time
+      .sort((a, b) => (a.timeToStation ?? 0) - (b.timeToStation ?? 0))
+      .map(
+        // biome-ignore lint/suspicious/noExplicitAny: external API response
+        (arr: any): Departure => {
+          // TfL only provides live arrival predictions — no separate scheduled time
+          const expectedAt: string =
+            arr.expectedArrival ??
+            new Date(Date.now() + (arr.timeToStation ?? 0) * 1000).toISOString();
+          return {
+            tripId: arr.vehicleId ?? "",
+            route: {
+              id: `tfl:${arr.lineId ?? ""}`,
+              shortName: arr.lineName ?? arr.lineId ?? "",
+              longName: arr.lineName ?? "",
+              mode: mapTflMode(arr.modeName ?? ""),
+            },
+            headsign: arr.destinationName ?? arr.towards ?? "",
+            // TfL is real-time only; scheduledAt = expectedAt
+            scheduledAt: expectedAt,
+            expectedAt,
+            platform: arr.platformName ?? undefined,
+            canceled: false,
+          };
+        },
+      )
+  );
 }

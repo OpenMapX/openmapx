@@ -1,8 +1,9 @@
-import type {
-  BoundingBox,
-  DataSourceDetail,
-  DataSourceDetailSection,
-  DataSourceResult,
+import {
+  type BoundingBox,
+  type DataSourceDetail,
+  type DataSourceDetailSection,
+  type DataSourceResult,
+  fetchJson,
 } from "@openmapx/core";
 import {
   type I18nToken,
@@ -114,13 +115,11 @@ export async function searchWindy(bbox: BoundingBox): Promise<RawWebcam[]> {
   });
 
   const url = `${WINDY_BASE}/map/clusters?${params}`;
-  const res = await fetch(url, { headers: windyHeaders() });
-
-  if (!res.ok) {
-    throw new Error(`Windy API error: ${res.status} ${res.statusText}`);
-  }
-
-  const webcams = (await res.json()) as WindyWebcam[];
+  const webcams = await fetchJson<WindyWebcam[]>(url, {
+    headers: windyHeaders(),
+    userAgent: null,
+    errorMessage: ({ status, statusText }) => `Windy API error: ${status} ${statusText}`,
+  });
   return webcams.filter((wc) => wc.status === "active").map(mapWindyToRaw);
 }
 
@@ -128,12 +127,12 @@ export async function getWindyDetail(webcamId: string): Promise<RawWebcam | null
   if (!getApiKey()) return null;
 
   const url = `${WINDY_BASE}/webcams/${webcamId}?include=images,location,player,categories,urls&lang=en`;
-  const res = await fetch(url, { headers: windyHeaders() });
-
-  if (!res.ok) return null;
-
-  const wc = (await res.json()) as WindyWebcam;
-  return mapWindyToRaw(wc);
+  const wc = await fetchJson<WindyWebcam>(url, {
+    headers: windyHeaders(),
+    userAgent: null,
+    nullOnError: true,
+  });
+  return wc ? mapWindyToRaw(wc) : null;
 }
 
 export function mapWindyToDetail(raw: RawWebcam): DataSourceDetail {

@@ -1,3 +1,4 @@
+import { fetchJson } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 
 const USGS_FEED_BASE = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary";
@@ -136,20 +137,17 @@ export function setup(ctx: IntegrationContext): void {
       }
 
       // Fetch from USGS
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-      const res = await fetch(buildFeedUrl(timeRange, threshold), {
-        signal: controller.signal,
+      const raw = await fetchJson<USGSFeatureCollection>(buildFeedUrl(timeRange, threshold), {
+        timeoutMs: FETCH_TIMEOUT_MS,
+        nullOnError: true,
       });
-      clearTimeout(timer);
 
-      if (!res.ok) {
-        ctx.log.warn(`USGS feed returned ${res.status}`);
+      if (!raw) {
+        ctx.log.warn("USGS feed request failed");
         reply.status(503).send({ message: "Earthquake data temporarily unavailable" });
         return;
       }
 
-      const raw = (await res.json()) as USGSFeatureCollection;
       await ctx.cache.set(cacheKey, raw, ttl);
 
       reply.send(enrichFeatures(raw));

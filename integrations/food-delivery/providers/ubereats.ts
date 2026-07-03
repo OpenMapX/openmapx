@@ -1,3 +1,4 @@
+import { fetchJson } from "@openmapx/core";
 import { haversineKm } from "@openmapx/core/server";
 import { withAffiliate } from "../affiliate.js";
 import { enc, foldDiacritics, term } from "../slug.js";
@@ -130,25 +131,31 @@ async function resolveUberEatsStoreUrl(q: DeliveryQuery): Promise<string | null>
   if (!loc) return null;
   const cc = q.countryCode ?? "us";
   try {
-    const res = await fetch(`https://www.ubereats.com/_p/api/getFeedV1?localeCode=${enc(cc)}`, {
-      method: "POST",
-      signal: AbortSignal.timeout(UBEREATS_RESOLVE_TIMEOUT_MS),
-      headers: {
-        "content-type": "application/json",
-        "x-csrf-token": "x",
-        "accept-language": cc,
-        "user-agent": UBEREATS_UA,
-        cookie: `uev2.loc=${encodeURIComponent(JSON.stringify(loc))}`,
+    const json = await fetchJson<UberFeedResponse>(
+      `https://www.ubereats.com/_p/api/getFeedV1?localeCode=${enc(cc)}`,
+      {
+        timeoutMs: UBEREATS_RESOLVE_TIMEOUT_MS,
+        userAgent: null,
+        headers: {
+          "content-type": "application/json",
+          "x-csrf-token": "x",
+          "accept-language": cc,
+          "user-agent": UBEREATS_UA,
+          cookie: `uev2.loc=${encodeURIComponent(JSON.stringify(loc))}`,
+        },
+        nullOnError: true,
+        init: {
+          method: "POST",
+          body: JSON.stringify({
+            userQuery: q.name,
+            pageInfo: { offset: 0, pageSize: 80 },
+            diningMode: "DELIVERY",
+            source: "manual",
+          }),
+        },
       },
-      body: JSON.stringify({
-        userQuery: q.name,
-        pageInfo: { offset: 0, pageSize: 80 },
-        diningMode: "DELIVERY",
-        source: "manual",
-      }),
-    });
-    if (!res.ok) return null;
-    const json = (await res.json()) as UberFeedResponse;
+    );
+    if (!json) return null;
     const items = json.data?.feedItems;
     if (!Array.isArray(items)) return null;
     const target = normalizeName(q.name);

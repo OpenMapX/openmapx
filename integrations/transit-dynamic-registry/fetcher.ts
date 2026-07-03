@@ -1,4 +1,4 @@
-import type { BBox } from "@openmapx/core";
+import { type BBox, fetchJson } from "@openmapx/core";
 import type { CacheClient } from "@openmapx/integration-framework";
 import { COUNTRY_BBOXES } from "./country-bboxes";
 import type { CoverageTier, ProtocolType, RegistryEntry } from "./registry-types";
@@ -190,28 +190,18 @@ export function setGithubToken(value: string | undefined): void {
   githubToken = value && value.length > 0 ? value : undefined;
 }
 
-async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+function githubAuthHeaders(url: string): Record<string, string> {
+  // Only attach the token to the real GitHub API host. A substring check
+  // (url.includes("api.github.com")) would also match e.g.
+  // https://api.github.com.evil.com and leak the credential, so compare the
+  // parsed hostname exactly.
+  let isGithubApiHost = false;
   try {
-    const headers: Record<string, string> = {};
-    // Only attach the token to the real GitHub API host. A substring check
-    // (url.includes("api.github.com")) would also match e.g.
-    // https://api.github.com.evil.com and leak the credential, so compare the
-    // parsed hostname exactly.
-    let isGithubApiHost = false;
-    try {
-      isGithubApiHost = new URL(url).hostname === "api.github.com";
-    } catch {
-      isGithubApiHost = false;
-    }
-    if (githubToken && isGithubApiHost) {
-      headers.Authorization = `token ${githubToken}`;
-    }
-    return await fetch(url, { signal: controller.signal, headers });
-  } finally {
-    clearTimeout(timer);
+    isGithubApiHost = new URL(url).hostname === "api.github.com";
+  } catch {
+    isGithubApiHost = false;
   }
+  return githubToken && isGithubApiHost ? { Authorization: `token ${githubToken}` } : {};
 }
 
 interface JsDelivrFile {
@@ -244,17 +234,21 @@ function collectDataPaths(
 
 /** Fetch file listing via JSDelivr @HEAD (no auth, no rate limits). */
 async function fetchPathsFromJsdelivr(): Promise<string[]> {
-  const res = await fetchWithTimeout(JSDELIVR_PKG_URL, 15_000);
-  if (!res.ok) throw new Error(`JSDelivr listing: ${res.status}`);
-  const json = (await res.json()) as JsDelivrFile;
+  const json = await fetchJson<JsDelivrFile>(JSDELIVR_PKG_URL, {
+    timeoutMs: 15_000,
+    headers: githubAuthHeaders(JSDELIVR_PKG_URL),
+    errorMessage: ({ status }) => `JSDelivr listing: ${status}`,
+  });
   return collectDataPaths(json);
 }
 
 /** Fetch file listing via GitHub Tree API (requires GITHUB_TOKEN for reliable access). */
 async function fetchPathsFromGithub(): Promise<string[]> {
-  const res = await fetchWithTimeout(GITHUB_TREE_URL, 15_000);
-  if (!res.ok) throw new Error(`GitHub tree: ${res.status}`);
-  const tree = (await res.json()) as { tree: GitTreeEntry[] };
+  const tree = await fetchJson<{ tree: GitTreeEntry[] }>(GITHUB_TREE_URL, {
+    timeoutMs: 15_000,
+    headers: githubAuthHeaders(GITHUB_TREE_URL),
+    errorMessage: ({ status }) => `GitHub tree: ${status}`,
+  });
   return tree.tree
     .filter((e) => e.type === "blob" && e.path.startsWith("data/") && e.path.endsWith(".json"))
     .map((e) => e.path);
@@ -266,10 +260,13 @@ async function fetchInBatchesFrom(paths: string[], baseUrl: string): Promise<Reg
     const batch = paths.slice(i, i + MAX_CONCURRENT);
     const results = await Promise.allSettled(
       batch.map(async (path) => {
-        const res = await fetchWithTimeout(`${baseUrl}/${path}`, 10_000);
-        if (!res.ok) return null;
-        const json = await res.json();
-        return parseEntry(path, json);
+        const url = `${baseUrl}/${path}`;
+        const json = await fetchJson(url, {
+          timeoutMs: 10_000,
+          headers: githubAuthHeaders(url),
+          nullOnError: true,
+        });
+        return json ? parseEntry(path, json) : null;
       }),
     );
     for (const result of results) {

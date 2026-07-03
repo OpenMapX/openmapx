@@ -1,4 +1,4 @@
-import { decodePolyline, otpMode } from "@openmapx/core";
+import { decodePolyline, fetchJson, otpMode } from "@openmapx/core";
 import type {
   GeoJSONLineString,
   TransportMode,
@@ -154,12 +154,11 @@ export async function plan(params: TripPlanParams): Promise<TripPlan | null> {
   if (params.arriveBy) url.searchParams.set("arriveBy", "true");
 
   try {
-    const res = await fetch(url.toString());
-    if (!res.ok) return null;
-
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as { plan?: any; error?: any };
-    if (!data.plan || data.error) return null;
+    const data = await fetchJson<{ plan?: any; error?: any }>(url.toString(), {
+      nullOnError: true,
+    });
+    if (!data?.plan || data.error) return null;
 
     return {
       from: {

@@ -1,4 +1,4 @@
-import type { BBox } from "@openmapx/core";
+import { type BBox, fetchJson } from "@openmapx/core";
 import type {
   Departure,
   TransitRoute,
@@ -27,9 +27,9 @@ async function tlFetch<T>(path: string, params: Record<string, string>): Promise
   for (const [k, v] of Object.entries(params)) {
     url.searchParams.set(k, v);
   }
-  const res = await fetch(url.toString());
-  if (!res.ok) throw new Error(`TransitLand ${path} → HTTP ${res.status}`);
-  return res.json() as Promise<T>;
+  return fetchJson<T>(url.toString(), {
+    errorMessage: ({ status }) => `TransitLand ${path} → HTTP ${status}`,
+  });
 }
 
 function mapModes(routeTypes?: number[]): TransportMode[] {

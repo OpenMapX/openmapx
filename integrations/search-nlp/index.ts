@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
+import { fetchJson } from "@openmapx/core";
 import type {
   AiSearchDisclosure,
   CloudAiVendor,
@@ -199,12 +200,17 @@ async function ensureOllamaModel(ctx: IntegrationContext): Promise<void> {
   try {
     const endpoint = ollamaEndpoint(ctx);
     const model = readString(ctx, "ollamaModel") ?? DEFAULT_OLLAMA_MODEL;
-    const tagsRes = await fetch(`${endpoint}/api/tags`);
-    if (!tagsRes.ok) return;
-    const data = (await tagsRes.json()) as { models?: Array<{ name?: string }> };
+    const data = await fetchJson<{ models?: Array<{ name?: string }> }>(`${endpoint}/api/tags`, {
+      nullOnError: true,
+    });
+    if (!data) return;
     const present = (data.models ?? []).some((m) => m.name === model);
     if (present) return;
     ctx.log.info(`[search-nlp] pulling Ollama model ${model}`);
+    // Deliberately unbounded: pulling a model can take many minutes on a slow
+    // connection or a large model, and the response body is never consumed
+    // here (fire-and-forget) — a fetchJson-style timeout would abort a
+    // still-healthy download.
     await fetch(`${endpoint}/api/pull`, {
       method: "POST",
       headers: { "content-type": "application/json" },

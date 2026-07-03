@@ -1,4 +1,4 @@
-import { type BoundingBox, USER_AGENT } from "@openmapx/core";
+import { type BoundingBox, fetchJson } from "@openmapx/core";
 import type {
   EvChargingConnector,
   EvChargingSource,
@@ -203,11 +203,9 @@ function whereForBbox(bbox: BoundingBox): string {
 }
 
 async function fetchRecords(params: URLSearchParams): Promise<FranceIrveResponse> {
-  const response = await fetch(`${RECORDS_URL}?${params.toString()}`, {
-    headers: { "User-Agent": USER_AGENT },
+  return fetchJson<FranceIrveResponse>(`${RECORDS_URL}?${params.toString()}`, {
+    errorMessage: ({ status }) => `France IRVE API error: ${status}`,
   });
-  if (!response.ok) throw new Error(`France IRVE API error: ${response.status}`);
-  return (await response.json()) as FranceIrveResponse;
 }
 
 export async function searchFranceIrveCharging(bbox: BoundingBox): Promise<EvChargingStation[]> {

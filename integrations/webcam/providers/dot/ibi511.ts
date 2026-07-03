@@ -1,3 +1,4 @@
+import { fetchJson } from "@openmapx/core";
 import type { RawWebcam } from "../types.js";
 import type { StateDotConfig } from "./types.js";
 
@@ -57,10 +58,10 @@ function makeIbi511Config(opts: {
       if (!key) return [];
 
       const url = `${opts.baseUrl}/api/v2/get/cameras?key=${encodeURIComponent(key)}&format=json`;
-      const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-      if (!res.ok) throw new Error(`${opts.stateName} 511 API error: ${res.status}`);
-
-      const cams = (await res.json()) as Ibi511Camera[];
+      const cams = await fetchJson<Ibi511Camera[]>(url, {
+        timeoutMs: 15_000,
+        errorMessage: ({ status }) => `${opts.stateName} 511 API error: ${status}`,
+      });
       const results: RawWebcam[] = [];
 
       for (const cam of cams) {

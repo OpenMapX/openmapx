@@ -1,4 +1,4 @@
-import { type BoundingBox, USER_AGENT } from "@openmapx/core";
+import { type BoundingBox, fetchJson } from "@openmapx/core";
 import type { EvChargingSource, EvChargingStation } from "@openmapx/mobility-core/ev-charging";
 import { getEvChargingSourcePriority } from "./source-priority.js";
 import {
@@ -192,11 +192,9 @@ function stationToCanonical(envelope: NobilStationEnvelope): EvChargingStation |
 
 async function fetchNobil(params: URLSearchParams): Promise<unknown> {
   if (!nobilApiKey) return [];
-  const response = await fetch(`${SEARCH_URL}?${params.toString()}`, {
-    headers: { "User-Agent": USER_AGENT },
+  return fetchJson(`${SEARCH_URL}?${params.toString()}`, {
+    errorMessage: ({ status }) => `NOBIL API error: ${status}`,
   });
-  if (!response.ok) throw new Error(`NOBIL API error: ${response.status}`);
-  return response.json();
 }
 
 export async function searchNobilCharging(bbox: BoundingBox): Promise<EvChargingStation[]> {

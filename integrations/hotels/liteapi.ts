@@ -10,6 +10,7 @@
  * it doesn't, `searchOffer` correctly returns null (we never show a neighbour's
  * price), which is common in the sparse sandbox but rare in production.
  */
+import { fetchJson } from "@openmapx/core";
 import { type HotelOffer, haversineKm } from "@openmapx/core/server";
 import { nameMatches, normalizeName } from "./match.js";
 import type { HotelQuery } from "./types.js";
@@ -160,16 +161,16 @@ async function fetchNearbyHotels(apiKey: string, q: HotelQuery): Promise<LiteHot
     radius: String(SEARCH_RADIUS_M),
     limit: "30",
   });
-  const res = await fetch(`${LITEAPI_BASE}/data/hotels?${params.toString()}`, {
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-    headers: { "X-API-Key": apiKey },
-  });
-  if (!res.ok) return [];
   // Verified against the live sandbox (2026-05-31): candidates carry flat
   // `latitude`/`longitude` (not a nested `geoCode`).
-  const json = (await res.json()) as {
+  const json = await fetchJson<{
     data?: Array<{ id?: string; name?: string; latitude?: number; longitude?: number }>;
-  };
+  }>(`${LITEAPI_BASE}/data/hotels?${params.toString()}`, {
+    timeoutMs: TIMEOUT_MS,
+    headers: { "X-API-Key": apiKey },
+    nullOnError: true,
+  });
+  if (!json) return [];
   return (json.data ?? [])
     .filter(
       (h): h is { id: string; name: string; latitude: number; longitude: number } =>
@@ -196,21 +197,23 @@ async function fetchRatesForHotel(
   hotelId: string,
   q: HotelQuery,
 ): Promise<LiteRatesResponse> {
-  const res = await fetch(`${LITEAPI_BASE}/hotels/rates`, {
-    method: "POST",
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+  const json = await fetchJson<LiteRatesResponse>(`${LITEAPI_BASE}/hotels/rates`, {
+    timeoutMs: TIMEOUT_MS,
     headers: { "content-type": "application/json", "X-API-Key": apiKey },
-    body: JSON.stringify({
-      hotelIds: [hotelId],
-      checkin: q.checkIn,
-      checkout: q.checkOut,
-      currency: opts.currency,
-      guestNationality: opts.guestNationality.toUpperCase(),
-      occupancies: buildOccupancies(q.adults ?? 2, q.rooms ?? 1),
-    }),
+    nullOnError: true,
+    init: {
+      method: "POST",
+      body: JSON.stringify({
+        hotelIds: [hotelId],
+        checkin: q.checkIn,
+        checkout: q.checkOut,
+        currency: opts.currency,
+        guestNationality: opts.guestNationality.toUpperCase(),
+        occupancies: buildOccupancies(q.adults ?? 2, q.rooms ?? 1),
+      }),
+    },
   });
-  if (!res.ok) return { data: [] };
-  return (await res.json()) as LiteRatesResponse;
+  return json ?? { data: [] };
 }
 
 /**

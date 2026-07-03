@@ -1,3 +1,4 @@
+import { DEFAULT_FETCH_TIMEOUT_MS } from "@openmapx/core";
 import type {
   CacheClient,
   HttpClient,
@@ -29,14 +30,20 @@ export function createHttpClient(_log: Logger): HttpClient {
           // cache miss
         }
 
-        const res = await fetch(u.toString(), { headers: options?.headers });
+        const res = await fetch(u.toString(), {
+          headers: options?.headers,
+          signal: AbortSignal.timeout(options?.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS),
+        });
         if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
         const data = (await res.json()) as T;
         redis.setex(cacheKey, options.cache.ttl, JSON.stringify(data)).catch(() => {});
         return data;
       }
 
-      const res = await fetch(u.toString(), { headers: options?.headers });
+      const res = await fetch(u.toString(), {
+        headers: options?.headers,
+        signal: AbortSignal.timeout(options?.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS),
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
       return (await res.json()) as T;
     },
@@ -46,6 +53,7 @@ export function createHttpClient(_log: Logger): HttpClient {
         method: "POST",
         headers: { "Content-Type": "application/json", ...options?.headers },
         body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(options?.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
       return (await res.json()) as T;

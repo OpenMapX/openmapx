@@ -1,4 +1,4 @@
-import { type BoundingBox, haversineKm } from "@openmapx/core";
+import { type BoundingBox, fetchJson, haversineKm } from "@openmapx/core";
 import { formatAddress } from "@openmapx/integration-geocoding/format-address";
 import type { FuelStation } from "@openmapx/mobility-core/fuel";
 import type { FuelPriceProvider } from "./price-provider";
@@ -63,10 +63,9 @@ export class TankerkoenigService implements FuelPriceProvider {
     url.searchParams.set("type", "all");
     url.searchParams.set("apikey", this.apiKey);
 
-    const res = await fetch(url.toString());
-    if (!res.ok) throw new Error(`Tankerkoenig API error: ${res.status}`);
-
-    const data = (await res.json()) as TankerkoenigListResponse;
+    const data = await fetchJson<TankerkoenigListResponse>(url.toString(), {
+      errorMessage: ({ status }) => `Tankerkoenig API error: ${status}`,
+    });
     if (!data.ok) throw new Error(`Tankerkoenig: ${data.message ?? "ok=false"}`);
 
     return data.stations.map((s) => {

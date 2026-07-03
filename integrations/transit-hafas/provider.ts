@@ -1,5 +1,6 @@
 import type { BBox } from "@openmapx/core";
 import {
+  fetchJson,
   mapProducts,
   normalizeFptfDeparture,
   normalizeRemarks,
@@ -106,10 +107,11 @@ export async function getStopsNearby(
       results: "30",
       distance: String(Math.round(radiusMeters)),
     });
-    const res = await fetch(`${inst.baseUrl}/locations/nearby?${params}`);
-    if (!res.ok) return [];
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as any[];
+    const data = await fetchJson<any[]>(`${inst.baseUrl}/locations/nearby?${params}`, {
+      nullOnError: true,
+    });
+    if (!data) return [];
     return data.map((s) => normalizeStop(s, inst));
   } catch {
     return [];
@@ -129,10 +131,11 @@ export async function searchByName(
       addresses: "false",
       poi: "false",
     });
-    const res = await fetch(`${inst.baseUrl}/locations?${params}`);
-    if (!res.ok) return [];
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as any[];
+    const data = await fetchJson<any[]>(`${inst.baseUrl}/locations?${params}`, {
+      nullOnError: true,
+    });
+    if (!data) return [];
     return data
       .filter((s) => s.type === "stop" || s.type === "station")
       .map((s) => normalizeStop(s, inst));
@@ -144,10 +147,10 @@ export async function searchByName(
 export async function getStop(inst: HafasInstance, stopId: string): Promise<TransitStop | null> {
   const rawId = stripPrefix(stopId, inst);
   try {
-    const res = await fetch(`${inst.baseUrl}/stops/${encodeURIComponent(rawId)}`);
-    if (!res.ok) return null;
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as any;
+    const data = await fetchJson<any>(`${inst.baseUrl}/stops/${encodeURIComponent(rawId)}`, {
+      nullOnError: true,
+    });
     return data ? normalizeStop(data, inst) : null;
   } catch {
     return null;
@@ -168,11 +171,12 @@ export async function getDepartures(
       results: String(Math.min(500, Math.max(50, minutes * 3))),
       remarks: "true",
     });
-    const res = await fetch(`${inst.baseUrl}/stops/${rawId}/departures?${params}`);
-    if (!res.ok) return [];
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as { departures?: any[] };
-    return (data.departures ?? []).map((d) => normalizeDeparture(d, inst));
+    const data = await fetchJson<{ departures?: any[] }>(
+      `${inst.baseUrl}/stops/${rawId}/departures?${params}`,
+      { nullOnError: true },
+    );
+    return (data?.departures ?? []).map((d) => normalizeDeparture(d, inst));
   } catch {
     return [];
   }
@@ -190,11 +194,12 @@ export async function getArrivals(
       results: String(Math.min(500, Math.max(50, minutes * 3))),
       remarks: "true",
     });
-    const res = await fetch(`${inst.baseUrl}/stops/${rawId}/arrivals?${params}`);
-    if (!res.ok) return [];
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as { arrivals?: any[] };
-    return (data.arrivals ?? []).map((d) => normalizeDeparture(d, inst));
+    const data = await fetchJson<{ arrivals?: any[] }>(
+      `${inst.baseUrl}/stops/${rawId}/arrivals?${params}`,
+      { nullOnError: true },
+    );
+    return (data?.arrivals ?? []).map((d) => normalizeDeparture(d, inst));
   } catch {
     return [];
   }
@@ -298,12 +303,9 @@ export async function planJourney(
     url.searchParams.set("polylines", "true");
     url.searchParams.set("remarks", "true");
 
-    const res = await fetch(url.toString());
-    if (!res.ok) return null;
-
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as { journeys?: any[] };
-    if (!data.journeys?.length) return null;
+    const data = await fetchJson<{ journeys?: any[] }>(url.toString(), { nullOnError: true });
+    if (!data?.journeys?.length) return null;
 
     const itineraries: TripItinerary[] = data.journeys.map(
       // biome-ignore lint/suspicious/noExplicitAny: external API response
@@ -366,11 +368,12 @@ export async function getTrip(inst: HafasInstance, tripId: string): Promise<Vehi
       stopovers: "true",
       remarks: "true",
     });
-    const res = await fetch(`${inst.baseUrl}/trips/${encodeURIComponent(rawId)}?${params}`);
-    if (!res.ok) return null;
-
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as { trip?: any } & Record<string, any>;
+    const data = await fetchJson<{ trip?: any } & Record<string, any>>(
+      `${inst.baseUrl}/trips/${encodeURIComponent(rawId)}?${params}`,
+      { nullOnError: true },
+    );
+    if (!data) return null;
     const trip = data.trip ?? data;
 
     // biome-ignore lint/suspicious/noExplicitAny: external API response
@@ -425,12 +428,11 @@ export async function getRadar(inst: HafasInstance, bbox: BBox): Promise<Vehicle
       duration: "30",
       frames: "1",
     });
-    const res = await fetch(`${inst.baseUrl}/radar?${params}`);
-    if (!res.ok) return [];
-
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as { movements?: any[] };
-    return (data.movements ?? []).map(
+    const data = await fetchJson<{ movements?: any[] }>(`${inst.baseUrl}/radar?${params}`, {
+      nullOnError: true,
+    });
+    return (data?.movements ?? []).map(
       // biome-ignore lint/suspicious/noExplicitAny: external API response
       (m: any): VehiclePosition => ({
         id: `${inst.prefix}${m.tripId ?? ""}`,

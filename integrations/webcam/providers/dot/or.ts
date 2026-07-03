@@ -1,3 +1,4 @@
+import { fetchJson } from "@openmapx/core";
 import type { RawWebcam } from "../types.js";
 import type { StateDotConfig } from "./types.js";
 
@@ -30,12 +31,10 @@ export const or: StateDotConfig = {
   requiresApiKey: false,
 
   async fetchCameras(): Promise<RawWebcam[]> {
-    const res = await fetch("https://tripcheck.com/Scripts/map/data/cctvinventory.js", {
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!res.ok) throw new Error(`Oregon TripCheck error: ${res.status}`);
-
-    const data = (await res.json()) as TripCheckResponse;
+    const data = await fetchJson<TripCheckResponse>(
+      "https://tripcheck.com/Scripts/map/data/cctvinventory.js",
+      { timeoutMs: 15_000, errorMessage: ({ status }) => `Oregon TripCheck error: ${status}` },
+    );
     if (!data?.features) return [];
 
     const results: RawWebcam[] = [];

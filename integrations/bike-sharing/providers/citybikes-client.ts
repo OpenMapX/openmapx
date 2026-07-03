@@ -3,13 +3,17 @@
  * Provides station-based bike sharing data for ~900 networks worldwide.
  */
 
-import { type BoundingBox, bboxContains, type LngLat, USER_AGENT } from "@openmapx/core";
+import {
+  type BoundingBox,
+  bboxContains,
+  fetchJson as coreFetchJson,
+  type LngLat,
+} from "@openmapx/core";
 import { TTL, withCache } from "./cache.js";
 import type { SharedMobilityStation } from "./types.js";
 
 const CITYBIKES_BASE = "https://api.citybik.es";
 const HEADERS = {
-  "User-Agent": USER_AGENT,
   Accept: "application/json",
 };
 const FETCH_TIMEOUT_MS = 10_000;
@@ -55,12 +59,11 @@ interface CityBikesNetworkDetail {
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  const res = await fetch(url, { headers: HEADERS, signal: controller.signal });
-  clearTimeout(timer);
-  if (!res.ok) throw new Error(`CityBikes API error ${res.status}: ${url}`);
-  return res.json() as Promise<T>;
+  return coreFetchJson<T>(url, {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    headers: HEADERS,
+    errorMessage: ({ status }) => `CityBikes API error ${status}: ${url}`,
+  });
 }
 
 /** Cached index of all CityBikes networks. */

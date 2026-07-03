@@ -1,4 +1,4 @@
-import { USER_AGENT } from "@openmapx/core";
+import { fetchJson } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { XMLParser } from "fast-xml-parser";
 
@@ -123,16 +123,17 @@ async function fetchWithTimeout(url: string, headers?: Record<string, string>): 
 
 // NOAA Weather Alerts
 export async function fetchNOAA(log: IntegrationContext["log"]): Promise<NormalizedFeature[]> {
-  const res = await fetchWithTimeout(NOAA_URL, {
-    "User-Agent": USER_AGENT,
-    Accept: "application/geo+json",
+  // biome-ignore lint/suspicious/noExplicitAny: external API response
+  const data = await fetchJson<any>(NOAA_URL, {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    headers: { Accept: "application/geo+json" },
+    nullOnError: true,
   });
-  if (!res.ok) {
-    log.warn(`NOAA API returned ${res.status}`);
+  if (!data) {
+    log.warn("NOAA API request failed");
     return [];
   }
 
-  const data = await res.json();
   const features: NormalizedFeature[] = [];
 
   for (const f of data.features ?? []) {
@@ -168,13 +169,13 @@ export async function fetchNOAA(log: IntegrationContext["log"]): Promise<Normali
 
 // ECCC (Environment and Climate Change Canada)
 export async function fetchECCC(log: IntegrationContext["log"]): Promise<NormalizedFeature[]> {
-  const res = await fetchWithTimeout(ECCC_URL, { "User-Agent": USER_AGENT });
-  if (!res.ok) {
-    log.warn(`ECCC API returned ${res.status}`);
+  // biome-ignore lint/suspicious/noExplicitAny: external API response
+  const data = await fetchJson<any>(ECCC_URL, { timeoutMs: FETCH_TIMEOUT_MS, nullOnError: true });
+  if (!data) {
+    log.warn("ECCC API request failed");
     return [];
   }
 
-  const data = await res.json();
   const features: NormalizedFeature[] = [];
 
   for (const f of data.features ?? []) {
@@ -219,13 +220,17 @@ export async function fetchECCC(log: IntegrationContext["log"]): Promise<Normali
 
 // DWD GeoServer WFS
 export async function fetchDWD(log: IntegrationContext["log"]): Promise<NormalizedFeature[]> {
-  const res = await fetchWithTimeout(DWD_URL);
-  if (!res.ok) {
-    log.warn(`DWD WFS returned ${res.status}`);
+  // biome-ignore lint/suspicious/noExplicitAny: external API response
+  const data = await fetchJson<any>(DWD_URL, {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    userAgent: null,
+    nullOnError: true,
+  });
+  if (!data) {
+    log.warn("DWD WFS request failed");
     return [];
   }
 
-  const data = await res.json();
   const features: NormalizedFeature[] = [];
 
   for (const f of data.features ?? []) {

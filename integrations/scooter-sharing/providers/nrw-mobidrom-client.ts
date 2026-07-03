@@ -13,7 +13,7 @@
  * Dataset: https://www.mobilitaetsdaten.nrw/dataset/e-scooter-sharing-nrw
  */
 
-import { type BoundingBox, bboxContains, type LngLat, USER_AGENT } from "@openmapx/core";
+import { type BoundingBox, bboxContains, fetchJson, type LngLat } from "@openmapx/core";
 import { normalizeFormFactor, normalizeGbfsPropulsion } from "@openmapx/mobility-core/gbfs-catalog";
 import { fetchGbfsSystem } from "@openmapx/mobility-core/gbfs-client";
 import type {
@@ -88,23 +88,16 @@ async function getAccessToken(): Promise<string | null> {
         client_id: clientId(),
         client_secret: clientSecret(),
       });
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-      const res = await fetch(TOKEN_URL, {
-        method: "POST",
-        headers: {
-          "User-Agent": USER_AGENT,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: body.toString(),
-        signal: controller.signal,
+      const json = await fetchJson<TokenResponse>(TOKEN_URL, {
+        timeoutMs: FETCH_TIMEOUT_MS,
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        nullOnError: true,
+        init: { method: "POST", body: body.toString() },
       });
-      clearTimeout(timer);
-      if (!res.ok) {
-        console.warn(`[nrw-mobidrom] token request failed: ${res.status}`);
+      if (!json) {
+        console.warn("[nrw-mobidrom] token request failed");
         return null;
       }
-      const json = (await res.json()) as TokenResponse;
       if (!json.access_token) return null;
       tokenCache = {
         token: json.access_token,
@@ -142,28 +135,20 @@ let inflightFeed: Promise<FeedCache> | null = null;
 const TARGET_V3 = "3.0";
 
 async function fetchManifest(token: string): Promise<ManifestEntry[]> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(MANIFEST_URL, {
-      headers: {
-        "User-Agent": USER_AGENT,
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      signal: controller.signal,
+    const json = await fetchJson<Manifest>(MANIFEST_URL, {
+      timeoutMs: FETCH_TIMEOUT_MS,
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+      nullOnError: true,
     });
-    if (!res.ok) {
-      console.warn(`[nrw-mobidrom] manifest fetch failed: ${res.status}`);
+    if (!json) {
+      console.warn("[nrw-mobidrom] manifest fetch failed");
       return [];
     }
-    const json = (await res.json()) as Manifest;
     return json.data?.datasets ?? [];
   } catch (err) {
     console.warn("[nrw-mobidrom] manifest fetch error:", err);
     return [];
-  } finally {
-    clearTimeout(timer);
   }
 }
 

@@ -11,7 +11,7 @@ import type {
   ReverseGeocodingResult,
   SearchResult,
 } from "@openmapx/core";
-import { resolvePoiIconPath } from "@openmapx/core";
+import { fetchJson, resolvePoiIconPath } from "@openmapx/core";
 
 const BASE_URL = "https://api.maptiler.com/geocoding";
 
@@ -68,15 +68,11 @@ async function fetchMaptiler(
   url.searchParams.set("language", lang ?? "en");
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 4_000);
-  try {
-    const res = await fetch(url.toString(), { signal: controller.signal });
-    if (!res.ok) throw new Error(`MapTiler geocoding error ${res.status}`);
-    return res.json() as Promise<MaptilerResponse>;
-  } finally {
-    clearTimeout(timer);
-  }
+  return fetchJson<MaptilerResponse>(url.toString(), {
+    timeoutMs: 4_000,
+    userAgent: null,
+    errorMessage: ({ status }) => `MapTiler geocoding error ${status}`,
+  });
 }
 
 async function fetchMaptilerReverse(
@@ -93,15 +89,11 @@ async function fetchMaptilerReverse(
   url.searchParams.set("language", lang ?? "en");
   url.searchParams.set("limit", "1");
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 4_000);
-  try {
-    const res = await fetch(url.toString(), { signal: controller.signal });
-    if (!res.ok) throw new Error(`MapTiler reverse geocoding error ${res.status}`);
-    return res.json() as Promise<MaptilerResponse>;
-  } finally {
-    clearTimeout(timer);
-  }
+  return fetchJson<MaptilerResponse>(url.toString(), {
+    timeoutMs: 4_000,
+    userAgent: null,
+    errorMessage: ({ status }) => `MapTiler reverse geocoding error ${status}`,
+  });
 }
 
 export const maptilerGeocodingService: GeocodingProviderImpl = {

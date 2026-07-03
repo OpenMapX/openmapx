@@ -6,7 +6,7 @@
  * provider attribution.
  */
 
-import { fetchJson, USER_AGENT } from "@openmapx/core";
+import { fetchJson } from "@openmapx/core";
 import type { MangroveWireReviewsResponse, MangroveWireSubject } from "./types.js";
 
 export const MANGROVE_API_URL = "https://api.mangrove.reviews";
@@ -57,21 +57,11 @@ export async function mangroveGetSubject(sub: string): Promise<MangroveWireSubje
  */
 export async function mangroveSubmit(jwt: string): Promise<void> {
   const url = `${MANGROVE_API_URL}/submit/${jwt}`;
-  const res = await fetch(url, {
-    method: "PUT",
-    headers: { "User-Agent": USER_AGENT },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  const payload = await fetchJson<unknown>(url, {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    init: { method: "PUT" },
+    errorMessage: ({ status, statusText }) => `Mangrove submit failed: ${status} ${statusText}`,
   });
-  if (!res.ok) {
-    let body = "";
-    try {
-      body = await res.text();
-    } catch {
-      // ignore
-    }
-    throw new Error(`Mangrove submit failed: ${res.status} ${res.statusText} ${body}`);
-  }
-  const payload = await res.json().catch(() => null);
   if (payload !== true) {
     throw new Error(`Mangrove submit returned unexpected body: ${JSON.stringify(payload)}`);
   }
@@ -85,14 +75,11 @@ export async function mangroveSubmit(jwt: string): Promise<void> {
 export async function mangroveUploadImage(blob: Blob, filename: string): Promise<string> {
   const form = new FormData();
   form.append("files", blob, filename);
-  const res = await fetch(MANGROVE_UPLOAD_URL, {
-    method: "PUT",
-    body: form,
-    headers: { "User-Agent": USER_AGENT },
-    signal: AbortSignal.timeout(30_000),
+  const data = await fetchJson<unknown>(MANGROVE_UPLOAD_URL, {
+    timeoutMs: 30_000,
+    init: { method: "PUT", body: form },
+    errorMessage: ({ status, statusText }) => `Mangrove upload failed: ${status} ${statusText}`,
   });
-  if (!res.ok) throw new Error(`Mangrove upload failed: ${res.status} ${res.statusText}`);
-  const data = (await res.json()) as unknown;
   if (!Array.isArray(data) || data.length === 0 || typeof data[0] !== "string") {
     throw new Error("Mangrove upload returned unexpected response");
   }

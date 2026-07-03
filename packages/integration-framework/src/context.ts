@@ -18,6 +18,12 @@ export interface HttpClientOptions {
   params?: Record<string, string | number | boolean | undefined>;
   headers?: Record<string, string>;
   cache?: { ttl: number };
+  /**
+   * Abort the request after this many milliseconds. Defaults to the
+   * host's shared upstream timeout (10 000 ms). Raise it explicitly for
+   * legitimately slow upstreams (bulk downloads, LLM generation).
+   */
+  timeoutMs?: number;
 }
 
 export interface HttpClient {

@@ -1,4 +1,4 @@
-import { USER_AGENT } from "@openmapx/core";
+import { fetchJson } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { find as findTimezone } from "geo-tz";
 
@@ -54,23 +54,17 @@ export function setup(ctx: IntegrationContext): void {
       `${API_BASE}?lat=${round4(latNum)}&lng=${round4(lngNum)}` +
       `&date=${encodeURIComponent(dateParam)}&formatted=0&tzid=${encodeURIComponent(tzid)}`;
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
     try {
-      const res = await fetch(url, {
-        headers: { "User-Agent": USER_AGENT },
-        signal: controller.signal,
+      const body = await fetchJson<SunriseSunsetApiResponse>(url, {
+        timeoutMs: FETCH_TIMEOUT_MS,
+        nullOnError: true,
       });
-      clearTimeout(timer);
 
-      if (!res.ok) {
-        ctx.log.warn(`Sunrise-Sunset API HTTP ${res.status}`);
+      if (!body) {
+        ctx.log.warn("Sunrise-Sunset API request failed");
         reply.status(502).send({ message: "Sunrise-Sunset data unavailable" });
         return;
       }
-
-      const body = (await res.json()) as SunriseSunsetApiResponse;
 
       if (body.status !== "OK") {
         ctx.log.warn(`Sunrise-Sunset API status: ${body.status}`);
@@ -101,7 +95,6 @@ export function setup(ctx: IntegrationContext): void {
       reply.header("Cache-Control", "public, max-age=3600");
       reply.send(result);
     } catch (err) {
-      clearTimeout(timer);
       ctx.log.error("Sunrise-Sunset fetch failed", err);
       reply.status(502).send({ message: "Sunrise-Sunset data unavailable" });
     }

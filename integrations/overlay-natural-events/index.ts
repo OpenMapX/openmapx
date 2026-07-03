@@ -1,4 +1,4 @@
-import { haversineKm } from "@openmapx/core";
+import { fetchJson, haversineKm } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 
 const EONET_BASE = "https://eonet.gsfc.nasa.gov/api/v3/events/geojson";
@@ -180,16 +180,6 @@ function deduplicateFeatures(
   return kept;
 }
 
-async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/events", async (req, reply) => {
     const status = req.query.status ?? "open";
@@ -229,29 +219,29 @@ export function setup(ctx: IntegrationContext): void {
       });
 
       const [eonetRes, gdacsRes] = await Promise.allSettled([
-        fetchWithTimeout(`${EONET_BASE}?${eonetParams}`, FETCH_TIMEOUT_MS),
-        fetchWithTimeout(`${GDACS_BASE}?${gdacsParams}`, FETCH_TIMEOUT_MS),
+        fetchJson<FeatureCollection>(`${EONET_BASE}?${eonetParams}`, {
+          timeoutMs: FETCH_TIMEOUT_MS,
+          nullOnError: true,
+        }),
+        fetchJson<{ features: GDACSFeature[] }>(`${GDACS_BASE}?${gdacsParams}`, {
+          timeoutMs: FETCH_TIMEOUT_MS,
+          nullOnError: true,
+        }),
       ]);
 
       let eonetFeatures: NormalizedFeature[] = [];
       let gdacsFeatures: NormalizedFeature[] = [];
 
-      if (eonetRes.status === "fulfilled" && eonetRes.value.ok) {
-        const raw = (await eonetRes.value.json()) as FeatureCollection;
-        eonetFeatures = enrichEONET(raw.features);
+      if (eonetRes.status === "fulfilled" && eonetRes.value) {
+        eonetFeatures = enrichEONET(eonetRes.value.features);
       } else {
-        ctx.log.warn(
-          `EONET API unavailable: ${eonetRes.status === "fulfilled" ? eonetRes.value.status : eonetRes.reason}`,
-        );
+        ctx.log.warn("EONET API unavailable");
       }
 
-      if (gdacsRes.status === "fulfilled" && gdacsRes.value.ok) {
-        const raw = (await gdacsRes.value.json()) as { features: GDACSFeature[] };
-        gdacsFeatures = enrichGDACS(raw.features ?? []);
+      if (gdacsRes.status === "fulfilled" && gdacsRes.value) {
+        gdacsFeatures = enrichGDACS(gdacsRes.value.features ?? []);
       } else {
-        ctx.log.warn(
-          `GDACS API unavailable: ${gdacsRes.status === "fulfilled" ? gdacsRes.value.status : gdacsRes.reason}`,
-        );
+        ctx.log.warn("GDACS API unavailable");
       }
 
       if (eonetFeatures.length === 0 && gdacsFeatures.length === 0) {

@@ -6,7 +6,7 @@
  * in each provider because every upstream uses a different vocabulary.
  */
 
-import { USER_AGENT } from "@openmapx/core";
+import { fetchJson } from "@openmapx/core";
 
 /** Default HTTP timeout for upstream weather APIs. */
 export const DEFAULT_FETCH_TIMEOUT_MS = 10_000;
@@ -39,16 +39,5 @@ export async function fetchJsonWithTimeout<T>(
   options: FetchWithTimeoutOptions = {},
 ): Promise<T> {
   const { timeoutMs = DEFAULT_FETCH_TIMEOUT_MS, headers, label = "Weather" } = options;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: { "User-Agent": USER_AGENT, ...headers },
-    });
-    if (!res.ok) throw new Error(`${label} HTTP ${res.status}`);
-    return (await res.json()) as T;
-  } finally {
-    clearTimeout(timer);
-  }
+  return fetchJson<T>(url, { timeoutMs, headers, label });
 }

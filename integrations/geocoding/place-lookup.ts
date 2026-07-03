@@ -8,6 +8,7 @@ import {
   type AreaGeometry,
   type BBox,
   createPlace,
+  fetchJson,
   haversineMeters,
   type OsmFilter,
   type OsmIdentity,
@@ -17,7 +18,6 @@ import {
   type Place,
   type PlaceIds,
   parseId,
-  USER_AGENT,
 } from "@openmapx/core";
 import { formatAddress, formatStreetLine } from "./format-address.js";
 import { resolveOsmLabel } from "./osm-label.js";
@@ -137,7 +137,6 @@ export function setPlaceLookupNominatimUrl(value: string | undefined): void {
 }
 
 const DEFAULT_HEADERS = {
-  "User-Agent": USER_AGENT,
   "Accept-Language": "en",
 };
 
@@ -253,9 +252,10 @@ function toPlace(r: NominatimDetailResult, id: string): Place {
 }
 
 async function fetchNominatim<T>(url: URL, lang?: string): Promise<T> {
-  const res = await fetch(url.toString(), { headers: headersForLang(lang) });
-  if (!res.ok) throw new Error(`Nominatim error ${res.status}: ${url.pathname}`);
-  return res.json() as Promise<T>;
+  return fetchJson<T>(url.toString(), {
+    headers: headersForLang(lang),
+    errorMessage: ({ status }) => `Nominatim error ${status}: ${url.pathname}`,
+  });
 }
 
 const OSM_TYPE_PREFIX: Record<string, string> = {
