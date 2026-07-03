@@ -1,6 +1,6 @@
-import type { MatchResult, TravelMode } from "@integrations/routing/types";
 import { extractTrafficSignals } from "../navigation/trafficSignals";
 import type { LngLat } from "../types/geometry";
+import type { MatchResult, TravelMode } from "../types/routing";
 import { apiClient } from "./client";
 import { API_ENDPOINTS } from "./endpoints";
 

@@ -1,5 +1,5 @@
-import type { Route } from "@integrations/routing/types";
 import { describe, expect, it } from "vitest";
+import type { Route } from "../../types/routing";
 import { advanceStepGate, type StepGateState } from "../stepGate";
 
 // Three 100 m steps; cumulative ends at 100, 200, 300.

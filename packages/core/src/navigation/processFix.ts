@@ -1,5 +1,5 @@
-import type { Route } from "@integrations/routing/types";
 import type { LngLat } from "../types/geometry";
+import type { Route } from "../types/routing";
 import { haversineDistance } from "../utils/coordinates";
 import { eta } from "./eta";
 import { computeProgress, upcomingManeuverIndex } from "./progress";

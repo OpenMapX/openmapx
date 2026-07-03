@@ -1,5 +1,5 @@
-import type { IsochroneGeometry } from "@integrations/routing/types";
 import type { LngLat } from "../types/geometry";
+import type { IsochroneGeometry } from "../types/routing";
 
 function pointInRing(point: LngLat, ring: number[][]): boolean {
   const [x, y] = point;

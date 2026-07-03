@@ -1,21 +1,6 @@
-import type { BoundingBox, LngLat, OpeningHoursInfo, OverpassFilter, Place } from "@openmapx/core";
+import type { BoundingBox, OverpassFilter, Place, PoiSearchResult } from "@openmapx/core";
 
-export interface PoiSearchResult {
-  id: string;
-  /** GERS id when the result originated from (or was matched to) Overture Places. */
-  gersId?: string;
-  name: string;
-  coordinates: LngLat;
-  category?: string;
-  address?: string;
-  phone?: string;
-  website?: string;
-  openingHours?: string;
-  isOpen?: boolean;
-  osmTags?: Record<string, string>;
-  /** Set by the orchestrator after the provider returns results. */
-  openingHoursInfo?: OpeningHoursInfo;
-}
+export type { PoiSearchResult } from "@openmapx/core";
 
 export interface PoiSearchProvider {
   readonly id: string;

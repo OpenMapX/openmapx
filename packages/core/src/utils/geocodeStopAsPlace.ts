@@ -1,8 +1,8 @@
-import type { SearchResult } from "@integrations/geocoding/types";
 import type { TransitStop } from "@openmapx/mobility-core/transit";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import { isTransitRawCategory } from "../hooks/transit/transitEligibility";
+import type { SearchResult } from "../types/geocoding";
 import type { LngLat } from "../types/geometry";
 import { parseId } from "../types/identified";
 import type { Place, PlaceIds } from "../types/place";

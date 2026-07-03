@@ -1,4 +1,4 @@
-import type { Route } from "@integrations/routing/types";
+import type { Route } from "../types/routing";
 import type { ProgressResult } from "./types";
 
 /**

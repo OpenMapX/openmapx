@@ -1,9 +1,9 @@
-import type { Route } from "@integrations/routing/types";
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
 import { createQueryWrapper } from "../../test/queryWrapper";
+import type { Route } from "../../types/routing";
 import { useElevation } from "../useElevation";
 
 function makeRoute(overrides: Partial<Route> = {}): Route {

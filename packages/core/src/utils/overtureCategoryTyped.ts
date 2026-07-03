@@ -1,4 +1,4 @@
-import type { CategoryId } from "@integrations/poi-search/types";
+import type { CategoryId } from "../types/category";
 import {
   OVERTURE_COMMERCIAL_CATEGORIES as _OVERTURE_COMMERCIAL_CATEGORIES,
   openMapXCategoryToOverture as _openMapXCategoryToOverture,

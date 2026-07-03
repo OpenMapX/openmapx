@@ -1,7 +1,7 @@
-import type { CategoryPlace } from "@integrations/poi-search/types";
 import { useMemo } from "react";
 import { useCategoryFacetStore } from "../stores/categoryFacetStore";
 import { useOpeningHoursStore } from "../stores/openingHoursStore";
+import type { CategoryPlace } from "../types/category";
 import { applyFacetFilters } from "../utils/categoryFacets";
 import { applyHoursFilter } from "../utils/categoryFilter";
 

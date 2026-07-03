@@ -1,10 +1,10 @@
-import type { Route, TravelMode } from "@integrations/routing/types";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { create } from "zustand";
 import type { TransitProgress } from "../navigation/transitProgress";
 import type { CameraMode, NavProgress, NavStatus } from "../navigation/types";
 import { getStorage } from "../platform/storage";
 import type { LngLat } from "../types/geometry";
+import type { Route, TravelMode } from "../types/routing";
 
 const VOICE_STORAGE_KEY = "openmapx:nav:voiceEnabled";
 const KEEP_SCREEN_ON_STORAGE_KEY = "openmapx:nav:keepScreenOn";

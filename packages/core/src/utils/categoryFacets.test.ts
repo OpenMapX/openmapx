@@ -1,5 +1,5 @@
-import type { CategoryPlace } from "@integrations/poi-search/types";
 import { describe, expect, it } from "vitest";
+import type { CategoryPlace } from "../types/category";
 import { applyFacetFilters, cuisineOptions, facetsForCategory } from "./categoryFacets";
 
 function place(id: string, osmTags?: Record<string, string>): CategoryPlace {

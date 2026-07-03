@@ -1,4 +1,4 @@
-import type { MatchResult } from "@integrations/routing/types";
+import type { MatchResult } from "../types/routing";
 
 /**
  * Posted speed limit (km/h) for each matched trace point of a map-match window,

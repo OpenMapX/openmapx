@@ -1,7 +1,7 @@
-import type { SearchResult } from "@integrations/geocoding/types";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
+import type { SearchResult } from "../types/geocoding";
 
 export function useGeocoding(query: string, lang?: string) {
   return useQuery({

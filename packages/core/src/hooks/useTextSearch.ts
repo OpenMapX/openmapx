@@ -1,9 +1,9 @@
-import type { CategorySearchResponse } from "@integrations/poi-search/types";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import { useCategorySearchStore } from "../stores/categorySearchStore";
+import type { CategorySearchResponse } from "../types/category";
 import { detectDominantCategory } from "../utils/categoryFacets";
 import { useExploreFilters } from "./useExploreFilters";
 

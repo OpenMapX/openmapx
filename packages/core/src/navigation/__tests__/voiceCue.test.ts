@@ -1,5 +1,5 @@
-import type { RouteStep } from "@integrations/routing/types";
 import { describe, expect, it } from "vitest";
+import type { RouteStep } from "../../types/routing";
 import type { VoiceScheduleConfig } from "../types";
 import { nextVoiceCue } from "../voiceCue";
 

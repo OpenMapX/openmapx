@@ -1,8 +1,8 @@
-import type { DataSourceDetail, DataSourceResult } from "@openmapx/integration-framework";
 import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
+import type { DataSourceDetail, DataSourceResult } from "../types/dataSource";
 import type { Place } from "../types/place";
 import { haversineDistance } from "../utils/coordinates";
 

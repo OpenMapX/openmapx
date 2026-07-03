@@ -1,4 +1,4 @@
-import type { Route } from "@integrations/routing/types";
+import type { Route } from "../types/routing";
 
 export interface StepGateState {
   /** The step committed for display/announcement. Monotonic — never decreases. */

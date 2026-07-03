@@ -1,5 +1,5 @@
-import type { IsochroneGeometry } from "@integrations/routing/types";
 import { describe, expect, it } from "vitest";
+import type { IsochroneGeometry } from "../types/routing";
 import { pointInIsochroneGeometry } from "./pointInPolygon";
 
 const square: IsochroneGeometry = {

@@ -1,5 +1,5 @@
-import type { CategoryId } from "@integrations/poi-search/types";
-import { CATEGORY_DEFINITIONS } from "@integrations/poi-search/types";
+import type { CategoryId } from "../types/category";
+import { CATEGORY_DEFINITIONS } from "../types/category";
 
 /**
  * Maps raw category strings from geocoding providers to internal CategoryId values.

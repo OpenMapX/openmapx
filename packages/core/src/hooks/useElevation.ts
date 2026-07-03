@@ -1,9 +1,9 @@
-import type { Route } from "@integrations/routing/types";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import type { ElevationApiResponse, ElevationProfile } from "../types/elevation";
+import type { Route } from "../types/routing";
 import { buildElevationProfile, buildElevationProfileFromApi } from "../utils/elevation";
 
 interface UseElevationParams {

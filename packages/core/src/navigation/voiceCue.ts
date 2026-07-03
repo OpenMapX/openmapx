@@ -1,4 +1,4 @@
-import type { RouteStep } from "@integrations/routing/types";
+import type { RouteStep } from "../types/routing";
 import type { CueTier, VoiceCue, VoiceScheduleConfig } from "./types";
 
 /**

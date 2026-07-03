@@ -1,10 +1,10 @@
-import type { CategoryPlace } from "@integrations/poi-search/types";
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "../../api/client";
 import { useCategorySearchStore } from "../../stores/categorySearchStore";
 import { useOpeningHoursStore } from "../../stores/openingHoursStore";
 import { createQueryWrapper } from "../../test/queryWrapper";
+import type { CategoryPlace } from "../../types/category";
 import type { BoundingBox } from "../../types/geometry";
 import type { OverpassFilter } from "../../utils/overpassFilter";
 import { useFilteredCategoryResults } from "../useFilteredCategoryResults";

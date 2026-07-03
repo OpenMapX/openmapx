@@ -1,5 +1,5 @@
-import type { CategoryPlace } from "@integrations/poi-search/types";
 import type { OpeningHoursFilter } from "../stores/openingHoursStore";
+import type { CategoryPlace } from "../types/category";
 import { isOpenAtSlot } from "./openingHoursClient";
 
 /**

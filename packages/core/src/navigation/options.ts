@@ -1,4 +1,4 @@
-import type { TravelMode } from "@integrations/routing/types";
+import type { TravelMode } from "../types/routing";
 import type { NavTickOptions } from "./types";
 
 /** Per-mode tuning for off-route sensitivity, voice cadence, and arrival. */

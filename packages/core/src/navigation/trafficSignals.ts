@@ -1,5 +1,5 @@
-import type { MatchResult } from "@integrations/routing/types";
 import type { LngLat } from "../types/geometry";
+import type { MatchResult } from "../types/routing";
 import { cumulativeDistances } from "./deadReckon";
 
 /**

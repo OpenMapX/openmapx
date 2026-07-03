@@ -1,7 +1,7 @@
-import type { ReverseGeocodingResult } from "@integrations/geocoding/types";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
+import type { ReverseGeocodingResult } from "../types/geocoding";
 import type { LngLat } from "../types/geometry";
 
 export function useReverseGeocoding(lngLat: LngLat | null, lang?: string) {

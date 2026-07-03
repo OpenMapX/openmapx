@@ -1,6 +1,6 @@
-import type { WeatherResponse } from "@integrations/weather/types";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
+import type { WeatherResponse } from "../types/weather";
 
 export function useCurrentWeather(lat: number | null, lng: number | null, enabled = true) {
   return useQuery({

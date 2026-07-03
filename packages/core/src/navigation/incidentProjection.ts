@@ -1,9 +1,9 @@
+import type { LngLat } from "../types/geometry";
 import type {
   RoadConditionEvent,
   RoadConditionSeverity,
   RoadConditionType,
-} from "@integrations/road-conditions/types";
-import type { LngLat } from "../types/geometry";
+} from "../types/roadConditions";
 import type { RoadAlert } from "./alerts";
 import { snapToRoute } from "./snap";
 

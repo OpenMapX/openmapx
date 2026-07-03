@@ -1,7 +1,7 @@
-import type { TravelMode } from "@integrations/routing/types";
 import { useQuery } from "@tanstack/react-query";
 import { fetchDirections } from "../api/directions";
 import type { LngLat } from "../types/geometry";
+import type { TravelMode } from "../types/routing";
 
 interface UseDirectionsParams {
   waypoints: LngLat[];

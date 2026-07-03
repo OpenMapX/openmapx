@@ -1,4 +1,4 @@
-import type { Route, TravelMode } from "@integrations/routing/types";
+import type { Route, TravelMode } from "../types/routing";
 import { navOptionsForMode } from "./options";
 import { processFix } from "./processFix";
 import type { FixInput, NavTickResult, NavTickState } from "./types";

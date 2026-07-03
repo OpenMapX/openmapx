@@ -1,4 +1,4 @@
-import type { PoiSearchResult } from "@openmapx/integration-framework";
+import type { PoiSearchResult } from "../types/category";
 import { parsePhones, websiteDomain } from "./geo-server";
 import { type ConflationPoint, type ConflationThresholds, conflate } from "./poiConflation";
 

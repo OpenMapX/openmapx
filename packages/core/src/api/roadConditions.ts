@@ -1,9 +1,9 @@
+import type { BBox } from "../types/geometry";
 import type {
   RoadConditionEvent,
   RoadConditionSeverity,
   RoadConditionType,
-} from "@integrations/road-conditions/types";
-import type { BBox } from "../types/geometry";
+} from "../types/roadConditions";
 import { apiClient } from "./client";
 import { API_ENDPOINTS } from "./endpoints";
 

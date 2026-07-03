@@ -1,8 +1,8 @@
-import type { IsochroneResult, IsochroneTravelMode } from "@integrations/routing/types";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import type { LngLat } from "../types/geometry";
+import type { IsochroneResult, IsochroneTravelMode } from "../types/routing";
 
 interface UseIsochroneParams {
   origin: LngLat | null;

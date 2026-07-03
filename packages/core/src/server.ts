@@ -13,7 +13,6 @@
  *   ```
  */
 
-export { categoryPlaceToPlace } from "@integrations/poi-search/types";
 export { fetchCapabilities, isServiceAvailable } from "./api/capabilities";
 export {
   type AiSearchDisclosure,
@@ -40,6 +39,7 @@ export { findRepoRoot, type RepoPaths, repoPaths } from "./repo-paths";
 export * as services from "./services";
 // Subprocess helper used by git-clone and the community-integration build step
 export { type SpawnWithBufferedLogsOptions, spawnWithBufferedLogs } from "./spawn";
+export { categoryPlaceToPlace } from "./types/category";
 // Shared food-delivery wire contract (also re-exported from the client barrel).
 export type { DeliveryProviderInfo } from "./types/delivery";
 export type { HotelOffer, HotelOffersResponse, HotelProviderInfo } from "./types/hotel";

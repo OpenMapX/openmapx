@@ -1,5 +1,5 @@
-import type { MatchResult } from "@integrations/routing/types";
 import { describe, expect, it } from "vitest";
+import type { MatchResult } from "../../types/routing";
 import { matchSpeedLimitsByPoint, pickSpeedLimit } from "../speedLimits";
 
 function match(partial: Partial<MatchResult>): MatchResult {

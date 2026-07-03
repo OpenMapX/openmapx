@@ -1,5 +1,5 @@
-import type { PoiSearchResult } from "@openmapx/integration-framework";
 import { describe, expect, it } from "vitest";
+import type { PoiSearchResult } from "../../types/category";
 import {
   type ConflationPoint,
   type ConflationThresholds,

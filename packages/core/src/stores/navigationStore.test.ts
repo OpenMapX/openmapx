@@ -1,9 +1,9 @@
-import type { Route } from "@integrations/routing/types";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { TransitProgress } from "../navigation/transitProgress";
 import type { NavProgress } from "../navigation/types";
 import { configureStorage, type StorageAdapter } from "../platform/storage";
+import type { Route } from "../types/routing";
 import { useNavigationStore } from "./navigationStore";
 
 function makeMemoryStorage(): StorageAdapter {

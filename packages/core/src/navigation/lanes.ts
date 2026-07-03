@@ -1,4 +1,4 @@
-import type { ManeuverLane } from "@integrations/routing/types";
+import type { ManeuverLane } from "../types/routing";
 
 /** Normalize a lane/turn token: trim, lowercase, underscores → spaces. */
 function norm(token: string): string {

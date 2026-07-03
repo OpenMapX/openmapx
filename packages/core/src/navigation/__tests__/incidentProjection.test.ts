@@ -1,9 +1,6 @@
-import type {
-  RoadConditionEvent,
-  RoadConditionSeverity,
-} from "@integrations/road-conditions/types";
 import { describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
+import type { RoadConditionEvent, RoadConditionSeverity } from "../../types/roadConditions";
 import { projectEventsToRoute } from "../incidentProjection";
 
 // A straight ~6.85 km west→east route at latitude 52.

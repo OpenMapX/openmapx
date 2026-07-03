@@ -1,8 +1,5 @@
-import type { CategoryPlace } from "@integrations/poi-search/types";
-import {
-  FOOD_FILTER_CATEGORY_IDS,
-  HOURS_FILTER_CATEGORY_IDS,
-} from "@integrations/poi-search/types";
+import type { CategoryPlace } from "../types/category";
+import { FOOD_FILTER_CATEGORY_IDS, HOURS_FILTER_CATEGORY_IDS } from "../types/category";
 import { CATEGORY_FILTERS } from "./overpass.service";
 
 export type FacetType = "toggle" | "multi";

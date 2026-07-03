@@ -1,4 +1,3 @@
-import type { TravelMode, Waypoint } from "@integrations/routing/types";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { create } from "zustand";
 import type {
@@ -7,6 +6,7 @@ import type {
   TransitRoutePreference,
 } from "../constants/transit";
 import type { LngLat } from "../types/geometry";
+import type { TravelMode, Waypoint } from "../types/routing";
 
 let waypointCounter = 0;
 function newWaypointId(): string {

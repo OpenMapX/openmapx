@@ -1,5 +1,5 @@
-import type { DirectionsResult, TravelMode } from "@integrations/routing/types";
 import type { LngLat } from "../types/geometry";
+import type { DirectionsResult, TravelMode } from "../types/routing";
 import { apiClient } from "./client";
 import { API_ENDPOINTS } from "./endpoints";
 

@@ -1594,6 +1594,9 @@ importers:
       '@turf/nearest-point-on-line':
         specifier: ^7.3.5
         version: 7.3.5
+      '@types/geojson':
+        specifier: ^7946.0.16
+        version: 7946.0.16
       '@types/js-yaml':
         specifier: ^4.0.9
         version: 4.0.9

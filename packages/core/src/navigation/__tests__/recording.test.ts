@@ -1,5 +1,5 @@
-import type { Route } from "@integrations/routing/types";
 import { describe, expect, it } from "vitest";
+import type { Route } from "../../types/routing";
 import { extractTimeline, type NavRecording, type ReplayStep, replayRecording } from "../recording";
 import { simulatePositions } from "../simulatePositions";
 

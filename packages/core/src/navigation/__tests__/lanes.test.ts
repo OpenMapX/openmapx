@@ -1,5 +1,5 @@
-import type { ManeuverLane } from "@integrations/routing/types";
 import { describe, expect, it } from "vitest";
+import type { ManeuverLane } from "../../types/routing";
 import { resolveRecommendedLanes } from "../lanes";
 
 const lane = (indications: string[], valid = false): ManeuverLane => ({ indications, valid });

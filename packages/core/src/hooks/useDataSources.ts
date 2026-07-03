@@ -1,3 +1,7 @@
+import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
+import { useQuery } from "@tanstack/react-query";
+import { apiClient } from "../api/client";
+import { API_ENDPOINTS } from "../api/endpoints";
 import type {
   DataSourceDetail,
   DataSourceFilterDef,
@@ -5,11 +9,7 @@ import type {
   DataSourceMapContextSelection,
   DataSourceMeta,
   DataSourceResult,
-} from "@openmapx/integration-framework";
-import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
-import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "../api/client";
-import { API_ENDPOINTS } from "../api/endpoints";
+} from "../types/dataSource";
 import type { BoundingBox } from "../types/geometry";
 import {
   type MobilityEnvelopeQueryResult,

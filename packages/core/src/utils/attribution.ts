@@ -1,4 +1,4 @@
-import type { DataSourceAttribution } from "@openmapx/integration-framework";
+import type { DataSourceAttribution } from "../types/dataSource";
 import type { IntegrationDataSource } from "../types/integrationMeta";
 
 function escapeHtml(value: string): string {
