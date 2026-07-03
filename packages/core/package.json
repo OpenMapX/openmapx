@@ -73,7 +73,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/tz-lookup": "^6.1.2",
     "better-auth": "^1.6.18",
-    "js-yaml": "^4.1.2",
+    "js-yaml": "^5.2.1",
     "opening_hours": "^3.13.0",
     "react": "19.2.7",
     "tz-lookup": "^6.1.25",
