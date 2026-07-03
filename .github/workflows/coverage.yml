@@ -1,0 +1,43 @@
+name: Coverage
+
+# Repo-wide V8 coverage baseline, deliberately non-gating (no thresholds in
+# vitest.config.ts). Removed from the PR gate: the report is only consumed by
+# humans downloading the artifact, so a weekly run is enough. test:coverage
+# sets OPENMAPX_SKIP_SLOW_CRYPTO=1 because v8 instrumentation inflates the
+# real scrypt KDF tests ~4x past their timeout; the plain CI gate runs them
+# for real.
+on:
+  schedule:
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm test:coverage
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: ignore
+          retention-days: 14

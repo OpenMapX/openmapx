@@ -62,16 +62,24 @@ pnpm test           # Vitest
 
 Git hooks enforce a two-stage local gate:
 
-- **pre-commit** — fast checks only: `pnpm lint`, `pnpm check-types`, and the
-  legal/license/data-flow audits (`check-legal-tables`, `check-legal-updated`,
-  `check-data-flows`, `check-license-metadata`). No Docker required; typically
-  completes in under a minute.
-- **pre-push** — full test suite (`pnpm test`). Requires Docker for the
-  testcontainers-based suites; set `SKIP_TESTCONTAINERS=1` to bypass those
-  when the daemon isn't running.
+- **pre-commit** — scoped to what you're committing: Biome on staged files
+  only (`biome check --staged`), `pnpm check-translations`, a type check
+  scoped to the workspace packages affected by your uncommitted changes
+  (`turbo run check-types --filter='...[HEAD]'`, falling back to the full
+  workspace when staged files lie outside `apps/`, `packages/`,
+  `integrations/`, or `services/data-manager/`), and the audit gates:
+  `check-legal-tables`, `check-legal-updated`, `check-data-flows`,
+  `check-license-metadata`, and `check-toolchain-pins`. No Docker required.
+  A small in-package commit takes seconds; one touching root config or a
+  widely-depended-on package pays a full type check.
+- **pre-push** — full workspace type check (`pnpm check-types`) as the
+  backstop for the scoped pre-commit check, then the full test suite
+  (`pnpm test`). Requires Docker for the testcontainers-based suites; set
+  `SKIP_TESTCONTAINERS=1` to bypass those when the daemon isn't running.
 
-CI re-runs lint, types, and the full test suite on every push and PR, so the
-safety net is always present.
+CI runs lint, types, and the node/web test projects as parallel jobs on every
+push and PR, aggregated under the required `lint / types / test` check;
+repo-wide coverage runs on a weekly schedule (non-gating).
 
 ### Testing
 

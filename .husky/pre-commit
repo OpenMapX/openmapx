@@ -1,1 +1,20 @@
-pnpm lint && pnpm check-types && pnpm check-legal-tables && pnpm check-legal-updated && pnpm check-data-flows && pnpm check-license-metadata && pnpm check-toolchain-pins
+# Staged-scoped fast gate. Biome lints only the staged files (native --staged
+# support, no lint-staged needed); check-translations is cheap and global.
+pnpm exec biome check --staged --no-errors-on-unmatched || exit 1
+pnpm check-translations || exit 1
+
+# Type-check only the workspace packages affected by uncommitted changes.
+# Turbo's [HEAD] selector diffs the working tree against HEAD and `...` pulls
+# in dependents. Files outside the workspace globs (apps/*, packages/*,
+# integrations/*, services/data-manager) can't be attributed to a package —
+# root configs, scripts/, the lockfile — so any such staged path falls back to
+# the full workspace check. pre-push re-runs the full check as a backstop.
+if git diff --cached --name-only | grep -qvE '^(apps|packages|integrations)/[^/]+/|^services/data-manager/'; then
+  echo "pre-commit: staged changes outside workspace packages -> full check-types"
+  pnpm check-types || exit 1
+else
+  echo "pre-commit: affected-only check-types"
+  pnpm exec turbo run check-types --filter='...[HEAD]' || exit 1
+fi
+
+pnpm check-legal-tables && pnpm check-legal-updated && pnpm check-data-flows && pnpm check-license-metadata && pnpm check-toolchain-pins

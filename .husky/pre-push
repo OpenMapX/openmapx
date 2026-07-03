@@ -1,4 +1,6 @@
-# Full test suite before anything leaves the machine. Needs Docker for the
-# testcontainers-based suites; skip those with SKIP_TESTCONTAINERS=1 if the
-# daemon isn't running.
-pnpm test
+# Full workspace gates before anything leaves the machine. check-types runs
+# unscoped here as the backstop for the affected-only pre-commit check (turbo's
+# local cache makes an unchanged re-run near-instant). Tests need Docker for
+# the testcontainers-based suites; skip those with SKIP_TESTCONTAINERS=1 if
+# the daemon isn't running.
+pnpm check-types && pnpm test

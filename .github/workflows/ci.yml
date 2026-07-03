@@ -12,19 +12,63 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+
+# The gate jobs (lint, types, test-node, test-web) run in parallel; the final
+# `ci` job aggregates them under the job name `lint / types / test`, which is
+# the required status check in the "main protection" ruleset. Renaming that
+# job (or letting it skip) breaks branch protection — see
+# docs/plans/2026-06-12-branch-protection.md.
 jobs:
-  ci:
-    name: lint / types / test
+  lint:
+    name: lint
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-    env:
-      TURBO_TELEMETRY_DISABLED: 1
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          # Needed so commitlint can walk the PR's commit range.
+          # Needed so commitlint can walk the PR's commit range (and so
+          # origin/main exists for the changeset gate).
           # Quoted because `&& 0 || 1` short-circuits past the falsy 0 and always returns 1.
           fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Lint commit messages (PR only)
+        if: github.event_name == 'pull_request'
+        run: pnpm exec commitlint --from "${BASE_SHA}" --to "${HEAD_SHA}" --verbose
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+      - run: pnpm lint
+
+      - name: Require changeset for publishable-package changes (PR only)
+        # Skip for Dependabot: it can't author changesets, and mechanical
+        # dependency bumps don't need a release entry. Human PRs still must add
+        # one (an empty changeset for test-only/infra/internal: `pnpm exec
+        # changeset --empty`). Keyed off the PR author, not github.actor, so it
+        # still skips when a maintainer updates/rebases the bot's branch.
+        if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
+        # Exits non-zero if a publishable package changed since main without
+        # an accompanying changeset. The baseBranch is "main" per
+        # .changeset/config.json — keep these in sync.
+        run: pnpm exec changeset status --since=origin/main
+
+  types:
+    name: types
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
 
@@ -45,38 +89,65 @@ jobs:
           restore-keys: |
             turbo-${{ runner.os }}-
 
-      - name: Lint commit messages (PR only)
-        if: github.event_name == 'pull_request'
-        run: pnpm exec commitlint --from "${BASE_SHA}" --to "${HEAD_SHA}" --verbose
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-
-      - run: pnpm lint
-
       - run: pnpm check-types
 
-      # Collect coverage repo-wide but non-gating for now (no thresholds) to
-      # establish an honest baseline; the report is uploaded as an artifact.
-      - run: pnpm test:coverage
+  test-node:
+    name: test (node)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Upload coverage report
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          name: coverage
-          path: coverage/
-          if-no-files-found: ignore
-          retention-days: 7
+          node-version-file: .nvmrc
+          cache: pnpm
 
-      - name: Require changeset for publishable-package changes (PR only)
-        # Skip for Dependabot: it can't author changesets, and mechanical
-        # dependency bumps don't need a release entry. Human PRs still must add
-        # one (an empty changeset for test-only/infra/internal: `pnpm exec
-        # changeset --empty`). Keyed off the PR author, not github.actor, so it
-        # still skips when a maintainer updates/rebases the bot's branch.
-        if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
-        # Exits non-zero if a publishable package changed since main without
-        # an accompanying changeset. The baseBranch is "main" per
-        # .changeset/config.json — keep these in sync.
-        run: pnpm exec changeset status --since=origin/main
+      - run: pnpm install --frozen-lockfile
+
+      # Plain (uninstrumented) run — coverage is collected by the scheduled
+      # coverage.yml workflow, not the PR gate. No OPENMAPX_SKIP_SLOW_CRYPTO:
+      # that flag only compensates for v8 coverage instrumentation, so the
+      # gate exercises the real crypto path.
+      - run: pnpm test --project node
+
+  test-web:
+    name: test (web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm test --project web
+
+  # Aggregate gate. Keeps the required-status-check context stable at
+  # `lint / types / test` while the real work runs in parallel above.
+  # `if: always()` so it reports (red) even when a dependency fails instead of
+  # being skipped — a skipped required check would block the PR forever.
+  ci:
+    name: lint / types / test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [lint, types, test-node, test-web]
+    if: always()
+    steps:
+      - name: Fail if any gate job did not succeed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: |
+          echo "One or more gate jobs failed:"
+          echo '${{ toJSON(needs.*.result) }}'
+          exit 1
+
+      - name: All gate jobs succeeded
+        run: echo "lint, types, test-node, test-web all green"
