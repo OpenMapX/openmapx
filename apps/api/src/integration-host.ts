@@ -933,16 +933,48 @@ export function getIntegrationProviders<T>(id: string, domain: string): T[] {
   return (integrations.get(id)?.providers.get(domain) ?? []) as T[];
 }
 
+// A `type` (not `interface`) so it keeps an implicit index signature and stays
+// assignable to Record<string, unknown> — the integration.reload job handler
+// casts the result, and an interface would break that at the call site.
+type ReloadResult = {
+  message: string;
+  reloaded: number;
+  enabled: number;
+};
+
+let activeReload: Promise<ReloadResult> | null = null;
+let pendingReload: Promise<ReloadResult> | null = null;
+
+/**
+ * Serialized reload. If a reload is in flight, callers share ONE trailing full
+ * pass that starts after it finishes — a caller that just wrote new integration
+ * files is guaranteed a discover+setup pass starting at or after its call,
+ * while N concurrent callers cause at most one queued rebuild.
+ */
+export async function reloadIntegrations(): Promise<ReloadResult> {
+  if (!activeReload) {
+    activeReload = doReloadIntegrations().finally(() => {
+      activeReload = null;
+    });
+    return activeReload;
+  }
+  if (!pendingReload) {
+    pendingReload = activeReload
+      .catch(() => undefined)
+      .then(() => {
+        pendingReload = null;
+        return reloadIntegrations();
+      });
+  }
+  return pendingReload;
+}
+
 /**
  * Reload all integrations: shutdown existing, re-discover manifests, re-setup.
  * Note: Fastify routes registered by integrations cannot be removed at runtime,
  * so only provider re-registration and lifecycle hooks are re-executed.
  */
-export async function reloadIntegrations(): Promise<{
-  message: string;
-  reloaded: number;
-  enabled: number;
-}> {
+async function doReloadIntegrations(): Promise<ReloadResult> {
   if (!_fastify) throw new Error("Integration host not initialized");
 
   const previousCount = integrations.size;
@@ -960,9 +992,13 @@ export async function reloadIntegrations(): Promise<{
     }
   }
 
-  integrations.clear();
   eventBus.removeAll();
   resetIntegrationRoutes();
+
+  // Rebuild into a detached map, then swap the shared map's CONTENTS in one
+  // synchronous burst after the loop — readers keep seeing the old registry
+  // (and the route dispatcher keeps its shared reference) until then.
+  const next = new Map<string, LoadedIntegration>();
 
   // 2. Re-discover and re-setup (topological sort by dependencies, same as cold start)
   const discovered = await discoverManifests(_integrationDirs);
@@ -1011,7 +1047,7 @@ export async function reloadIntegrations(): Promise<{
     const manifest = raw as IntegrationManifest;
     const id = manifest.id;
 
-    if (integrations.has(id)) {
+    if (next.has(id)) {
       _fastify.log.warn(`Skipping duplicate integration: ${id}`);
       continue;
     }
@@ -1048,7 +1084,7 @@ export async function reloadIntegrations(): Promise<{
     };
 
     if (!integration.enabled) {
-      integrations.set(id, integration);
+      next.set(id, integration);
       continue;
     }
 
@@ -1093,19 +1129,26 @@ export async function reloadIntegrations(): Promise<{
         }
       }
 
-      integrations.set(id, integration);
+      next.set(id, integration);
       log.info(`Integration ${id} v${manifest.version ?? "unknown"} reloaded successfully`);
       eventBus.emit({ type: "integration.loaded", integrationId: id });
     } catch (err) {
       _fastify.log.error(err, `Failed to reload integration ${id}`);
       integration.enabled = false;
-      integrations.set(id, integration);
+      next.set(id, integration);
       eventBus.emit({
         type: "integration.error",
         integrationId: id,
         error: err instanceof Error ? err : new Error(String(err)),
       });
     }
+  }
+
+  // Swap contents atomically (no awaits): readers never observe a partially
+  // rebuilt registry — they see the old set until this point, the new set after.
+  integrations.clear();
+  for (const [id, integration] of next) {
+    integrations.set(id, integration);
   }
 
   const enabledCount = Array.from(integrations.values()).filter((i) => i.enabled).length;

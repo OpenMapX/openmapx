@@ -172,7 +172,10 @@ export async function installExtension(
     }
     await ctx.setProgress(60);
 
-    // 3. Install each integration artifact, then hot-reload once.
+    // 3. Install each integration artifact, then hot-reload once. The
+    // bookkeeping rows are collected here and written in the step-4 transaction
+    // so nothing is persisted until the whole record set can land atomically.
+    const pendingIntegrationRows: Array<{ id: string; repository: string }> = [];
     for (const intg of integrationComponents) {
       const existed = await integrationInstalledExists(intg.id);
       await ctx.log(`Installing integration ${intg.id} from ${intg.artifact}...`);
@@ -189,29 +192,10 @@ export async function installExtension(
       });
       if (!existed) ledger.installedIntegrationIds.push(intg.id);
 
-      const now = new Date();
-      await db
-        .insert(installedIntegration)
-        .values({
-          id: intg.id,
-          repository: opts.sourceUrl ?? intg.artifact,
-          installedVersion: manifest.version,
-          sourceType: "registry",
-          installedAt: now,
-          updatedAt: now,
-          installedBy,
-          managedByExtension: manifest.id,
-        })
-        .onConflictDoUpdate({
-          target: installedIntegration.id,
-          set: {
-            repository: opts.sourceUrl ?? intg.artifact,
-            installedVersion: manifest.version,
-            sourceType: "registry",
-            updatedAt: now,
-            managedByExtension: manifest.id,
-          },
-        });
+      pendingIntegrationRows.push({
+        id: intg.id,
+        repository: opts.sourceUrl ?? intg.artifact,
+      });
     }
     if (integrationComponents.length > 0) {
       await ctx.log("Reloading integrations...");
@@ -220,46 +204,77 @@ export async function installExtension(
     }
     await ctx.setProgress(90);
 
-    // 4. Record the parent + component links (idempotent for update/re-install).
+    // 4. Record all bookkeeping in one transaction: the deferred per-integration
+    // rows, the parent record, and the component links. A crash at any point
+    // then leaves either the whole consistent record set (update case) or none
+    // of this run's rows (fresh install), never a parent with zero components —
+    // which removeExtension reads to decide what to tear down.
     const now = new Date();
-    await db
-      .insert(installedExtension)
-      .values({
-        id: manifest.id,
-        name: manifest.name,
-        sourceUrl: opts.sourceUrl ?? null,
-        sourceTrust: opts.sourceTrust,
-        installedVersion: manifest.version,
-        manifest: manifest as unknown as Record<string, unknown>,
-        installedAt: now,
-        updatedAt: now,
-        installedBy,
-      })
-      .onConflictDoUpdate({
-        target: installedExtension.id,
-        set: {
+    const components = coreServices.extensionComponentSummary(manifest);
+    await db.transaction(async (tx) => {
+      for (const row of pendingIntegrationRows) {
+        await tx
+          .insert(installedIntegration)
+          .values({
+            id: row.id,
+            repository: row.repository,
+            installedVersion: manifest.version,
+            sourceType: "registry",
+            installedAt: now,
+            updatedAt: now,
+            installedBy,
+            managedByExtension: manifest.id,
+          })
+          .onConflictDoUpdate({
+            target: installedIntegration.id,
+            set: {
+              repository: row.repository,
+              installedVersion: manifest.version,
+              sourceType: "registry",
+              updatedAt: now,
+              managedByExtension: manifest.id,
+            },
+          });
+      }
+
+      await tx
+        .insert(installedExtension)
+        .values({
+          id: manifest.id,
           name: manifest.name,
           sourceUrl: opts.sourceUrl ?? null,
           sourceTrust: opts.sourceTrust,
           installedVersion: manifest.version,
           manifest: manifest as unknown as Record<string, unknown>,
+          installedAt: now,
           updatedAt: now,
-        },
-      });
+          installedBy,
+        })
+        .onConflictDoUpdate({
+          target: installedExtension.id,
+          set: {
+            name: manifest.name,
+            sourceUrl: opts.sourceUrl ?? null,
+            sourceTrust: opts.sourceTrust,
+            installedVersion: manifest.version,
+            manifest: manifest as unknown as Record<string, unknown>,
+            updatedAt: now,
+          },
+        });
 
-    await db
-      .delete(installedExtensionComponent)
-      .where(eq(installedExtensionComponent.extensionId, manifest.id));
-    const components = coreServices.extensionComponentSummary(manifest);
-    if (components.length > 0) {
-      await db.insert(installedExtensionComponent).values(
-        components.map((c) => ({
-          extensionId: manifest.id,
-          kind: c.kind,
-          componentId: c.id,
-        })),
-      );
-    }
+      await tx
+        .delete(installedExtensionComponent)
+        .where(eq(installedExtensionComponent.extensionId, manifest.id));
+      if (components.length > 0) {
+        await tx.insert(installedExtensionComponent).values(
+          components.map((c) => ({
+            extensionId: manifest.id,
+            kind: c.kind,
+            componentId: c.id,
+          })),
+        );
+      }
+    });
 
     await ctx.setProgress(100);
     await ctx.log(`Extension "${manifest.id}" installed (${components.length} component(s)).`);

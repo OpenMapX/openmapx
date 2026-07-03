@@ -396,3 +396,110 @@ describe("reloadIntegrations — re-imports changed backend code in production",
     }
   });
 });
+
+// The reload mutex + atomic contents-swap are exercised end-to-end through the
+// public reloadIntegrations, using a gate fixture whose setup() parks on a
+// test-controlled promise so we can inspect the registry mid-reload.
+describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
+  function writeGateFixture(): string {
+    const parent = mkdtempSync(join(tmpdir(), "omx-gate-probe-"));
+    const bundleDir = join(parent, "gate-probe", "dist", "backend");
+    mkdirSync(bundleDir, { recursive: true });
+    writeFileSync(
+      join(parent, "gate-probe", "manifest.json"),
+      JSON.stringify({
+        id: "gate-probe",
+        version: "1.0.0",
+        license: "MIT",
+        domains: ["knowledge"],
+        backend: { routes: false },
+        quality: "community-verified",
+      }),
+    );
+    // Parks inside setup() only when armed; the setup count advances after the
+    // park so each reload pass that runs gate-probe is observable.
+    writeFileSync(
+      join(bundleDir, "index.mjs"),
+      [
+        "export async function setup() {",
+        "  const g = globalThis;",
+        "  if (g.__omxGateArmed) {",
+        "    g.__omxGateArmed = false;",
+        "    await new Promise((resolve) => {",
+        "      g.__omxGateRelease = resolve;",
+        "      if (typeof g.__omxGateEntered === 'function') g.__omxGateEntered();",
+        "    });",
+        "  }",
+        "  g.__omxGateSetupCount = (g.__omxGateSetupCount ?? 0) + 1;",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    return parent;
+  }
+
+  it("never exposes an empty/partial registry mid-reload and coalesces N callers into one trailing pass", async () => {
+    const parent = writeGateFixture();
+    const g = globalThis as Record<string, unknown>;
+    const app = makeApp();
+    try {
+      await initIntegrations(app, [FIXTURES_DIR, { directory: parent, isBuiltIn: false }]);
+      expect(g.__omxGateSetupCount).toBe(1);
+
+      // Arm so the next reload parks inside gate-probe's setup, mid-rebuild.
+      g.__omxGateArmed = true;
+      const entered = new Promise<void>((resolve) => {
+        g.__omxGateEntered = resolve;
+      });
+
+      const p1 = reloadIntegrations();
+      await entered;
+
+      // While the rebuild is parked, the OLD registry is still fully visible —
+      // under the previous clear-then-fill this would be empty/partial.
+      const midIds = getAllIntegrations().map((i) => i.id);
+      expect(midIds).toContain("alpha");
+      expect(midIds).toContain("beta");
+      expect(midIds).toContain("gate-probe");
+
+      // Two more callers arriving during the in-flight pass share ONE trailing pass.
+      const p2 = reloadIntegrations();
+      const p3 = reloadIntegrations();
+
+      (g.__omxGateRelease as () => void)();
+      const results = await Promise.all([p1, p2, p3]);
+      for (const r of results) expect(r.message).toBe("Integrations reloaded");
+
+      // init(1) + in-flight reload(1) + exactly one shared trailing pass(1).
+      // A naive per-caller queue would give 4; pure coalescing would give 2.
+      expect(g.__omxGateSetupCount).toBe(3);
+
+      const finalIds = getAllIntegrations().map((i) => i.id);
+      expect(finalIds).toContain("alpha");
+      expect(finalIds).toContain("beta");
+      expect(finalIds).toContain("gate-probe");
+    } finally {
+      delete g.__omxGateArmed;
+      delete g.__omxGateRelease;
+      delete g.__omxGateEntered;
+      delete g.__omxGateSetupCount;
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  it("runs two overlapping gateless reloads and keeps routes dispatching", async () => {
+    const app = makeApp();
+    await initIntegrations(app, [FIXTURES_DIR]);
+
+    const [r1, r2] = await Promise.all([reloadIntegrations(), reloadIntegrations()]);
+    expect(r1.reloaded).toBeGreaterThanOrEqual(2);
+    expect(r2.reloaded).toBeGreaterThanOrEqual(2);
+
+    const ids = getAllIntegrations().map((i) => i.id);
+    expect(ids).toContain("alpha");
+    expect(ids).toContain("beta");
+
+    const res = await app.inject({ method: "GET", url: "/api/integrations/alpha/hello" });
+    expect(res.statusCode).toBe(200);
+  });
+});
