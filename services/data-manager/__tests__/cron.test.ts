@@ -258,6 +258,129 @@ describe("tryStartSync", () => {
     };
   }
 
+  /**
+   * A controller whose INSERT can be held open, so tests can simulate two
+   * `tryStartSync` calls racing inside the same in-flight window.
+   */
+  function makeGatedController() {
+    let counter = 0;
+    let releaseInsert: (() => void) | undefined;
+    let failNextInsert = false;
+    const gate = () =>
+      new Promise<void>((resolve) => {
+        releaseInsert = resolve;
+      });
+    let pendingGate: Promise<void> | null = null;
+
+    const stub = {
+      select() {
+        return {
+          from() {
+            return {
+              where() {
+                return {
+                  orderBy() {
+                    return { limit: () => Promise.resolve([]) };
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+      insert() {
+        return {
+          values() {
+            return {
+              returning: async () => {
+                if (pendingGate) await pendingGate;
+                if (failNextInsert) {
+                  failNextInsert = false;
+                  throw new Error("insert failed");
+                }
+                return [{ id: `job-${++counter}` }];
+              },
+            };
+          },
+        };
+      },
+    };
+
+    return {
+      controller: createSingleFlightController({ db: stub as never }),
+      holdInserts: () => {
+        pendingGate = gate();
+      },
+      releaseInserts: () => {
+        releaseInsert?.();
+        pendingGate = null;
+      },
+      failNext: () => {
+        failNextInsert = true;
+      },
+    };
+  }
+
+  it("only lets one of two concurrent calls start (latches before the first await)", async () => {
+    const { controller, holdInserts, releaseInserts } = makeGatedController();
+    holdInserts();
+
+    const first = controller.tryStartSync({ trigger: "cron", triggeredBy: "x" });
+    const second = await controller.tryStartSync({ trigger: "api", triggeredBy: "y" });
+
+    expect(second.ok).toBe(false);
+    if (!second.ok) {
+      expect(second.reason).toBe("in-flight");
+      expect(second.existingJobId).toBeNull();
+    }
+
+    releaseInserts();
+    const firstResult = await first;
+    expect(firstResult.ok).toBe(true);
+  });
+
+  it("clears the latch when the INSERT rejects, so the next call can start", async () => {
+    const { controller, failNext } = makeGatedController();
+    failNext();
+
+    await expect(controller.tryStartSync({ trigger: "cron", triggeredBy: "x" })).rejects.toThrow(
+      "insert failed",
+    );
+    expect(controller.getInflight()).toBeNull();
+
+    const retry = await controller.tryStartSync({ trigger: "cron", triggeredBy: "x" });
+    expect(retry.ok).toBe(true);
+  });
+
+  it("surfaces concurrent same-idempotency-key calls as in-flight, not duplicate-idempotency-key", async () => {
+    const { controller, holdInserts, releaseInserts } = makeGatedController();
+    holdInserts();
+
+    const first = controller.tryStartSync({
+      trigger: "api",
+      triggeredBy: "alice",
+      idempotencyKey: "same-key",
+    });
+    const second = await controller.tryStartSync({
+      trigger: "api",
+      triggeredBy: "bob",
+      idempotencyKey: "same-key",
+    });
+
+    // The `duplicate-idempotency-key` reason is reserved for replays that
+    // arrive after the first insert has already landed; a concurrent
+    // collision inside the starting window surfaces as "in-flight".
+    expect(second.ok).toBe(false);
+    if (!second.ok) {
+      expect(second.reason).toBe("in-flight");
+      expect(second.existingJobId).toBeNull();
+    }
+
+    releaseInserts();
+    const firstResult = await first;
+    expect(firstResult.ok).toBe(true);
+  });
+
   it("returns in-flight error when a prior call has not finished", async () => {
     const { controller } = makeController();
     const first = await controller.tryStartSync({ trigger: "cron", triggeredBy: "x" });

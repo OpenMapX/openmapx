@@ -11,6 +11,9 @@ import type { db as defaultDb } from "../../db/index.js";
  * The in-memory `inflight` flag is process-local — the data-manager runs as
  * a single instance, so this is sufficient. If we ever scale horizontally
  * this needs to move to a Postgres advisory lock.
+ *
+ * The latch is taken synchronously before any `await`, so two concurrent
+ * callers in the same tick cannot both pass the guard and both start a sync.
  */
 
 export type SyncTrigger = "cron" | "manual" | "api";
@@ -25,7 +28,9 @@ export interface TryStartSyncOptions {
 
 export type TryStartSyncResult =
   | { ok: true; jobId: string }
-  | { ok: false; reason: "in-flight"; existingJobId: string }
+  // `existingJobId` is `null` when another call is mid-start and its job
+  // row has not been created yet.
+  | { ok: false; reason: "in-flight"; existingJobId: string | null }
   | { ok: false; reason: "duplicate-idempotency-key"; existingJobId: string };
 
 export interface SingleFlightDeps {
@@ -53,42 +58,51 @@ export function createSingleFlightController(deps: SingleFlightDeps): SingleFlig
   const db = deps.db;
   const now = deps.now ?? Date.now;
   let inflight: { jobId: string; startedAt: Date } | null = null;
+  let starting = false;
 
   async function tryStartSync(opts: TryStartSyncOptions): Promise<TryStartSyncResult> {
     if (inflight) {
       return { ok: false, reason: "in-flight", existingJobId: inflight.jobId };
     }
-
-    if (opts.idempotencyKey) {
-      const cutoff = new Date(now() - IDEMPOTENCY_WINDOW_MS);
-      const existing = await db
-        .select({ id: jobs.id })
-        .from(jobs)
-        .where(and(eq(jobs.idempotencyKey, opts.idempotencyKey), gt(jobs.startedAt, cutoff)))
-        .orderBy(desc(jobs.startedAt))
-        .limit(1);
-      const row = existing[0];
-      if (row) {
-        return { ok: false, reason: "duplicate-idempotency-key", existingJobId: row.id };
-      }
+    if (starting) {
+      return { ok: false, reason: "in-flight", existingJobId: null };
     }
 
-    const inserted = await db
-      .insert(jobs)
-      .values({
-        kind: opts.kind ?? "transitous-sync",
-        status: "running",
-        triggeredBy: `${opts.trigger}:${opts.triggeredBy}`,
-        idempotencyKey: opts.idempotencyKey ?? null,
-        metadata: opts.metadata ?? null,
-      })
-      .returning({ id: jobs.id });
+    starting = true;
+    try {
+      if (opts.idempotencyKey) {
+        const cutoff = new Date(now() - IDEMPOTENCY_WINDOW_MS);
+        const existing = await db
+          .select({ id: jobs.id })
+          .from(jobs)
+          .where(and(eq(jobs.idempotencyKey, opts.idempotencyKey), gt(jobs.startedAt, cutoff)))
+          .orderBy(desc(jobs.startedAt))
+          .limit(1);
+        const row = existing[0];
+        if (row) {
+          return { ok: false, reason: "duplicate-idempotency-key", existingJobId: row.id };
+        }
+      }
 
-    const row = inserted[0];
-    if (!row) throw new Error("Failed to create data_manager.jobs row");
+      const inserted = await db
+        .insert(jobs)
+        .values({
+          kind: opts.kind ?? "transitous-sync",
+          status: "running",
+          triggeredBy: `${opts.trigger}:${opts.triggeredBy}`,
+          idempotencyKey: opts.idempotencyKey ?? null,
+          metadata: opts.metadata ?? null,
+        })
+        .returning({ id: jobs.id });
 
-    inflight = { jobId: row.id, startedAt: new Date(now()) };
-    return { ok: true, jobId: row.id };
+      const row = inserted[0];
+      if (!row) throw new Error("Failed to create data_manager.jobs row");
+
+      inflight = { jobId: row.id, startedAt: new Date(now()) };
+      return { ok: true, jobId: row.id };
+    } finally {
+      starting = false;
+    }
   }
 
   function markSyncFinished(): void {
