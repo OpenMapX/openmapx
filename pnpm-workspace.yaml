@@ -52,13 +52,16 @@ overrides:
   "fast-uri": ">=3.1.2"
   "kysely": ">=0.28.17"
   "fast-xml-builder": ">=1.1.7"
-  # >=4.1.2 closes GHSA-h67p-54hq-rp68 (quadratic-complexity DoS via merge-key
-  # aliases). Pulled in transitively by @changesets/cli.
-  "js-yaml": "^4.1.2"
-  # read-yaml-file@1.1.0 (a @changesets/cli transitive) calls js-yaml's
-  # `safeLoad`, removed in js-yaml 4 — so the js-yaml override above crashes
-  # `changeset status`. 2.1.0 is the newest CJS release that uses js-yaml 4's
-  # `load` API (3.0.0 is ESM-only and breaks the CJS changesets requires).
+  # js-yaml 5.2.x is a dual CJS/ESM package that addresses the merge-key DoS
+  # (GHSA-h67p-54hq-rp68) structurally: load() defaults to CORE_SCHEMA (no
+  # `!!merge`), plus the maxTotalMergeKeys/maxAliases caps added in 5.2.0.
+  # Pinned to keep one version workspace-wide — our compose-renderer and the
+  # @changesets/cli transitive both resolve to 5.2.x.
+  "js-yaml": "^5.2.1"
+  # read-yaml-file@2.1.0 is a @changesets/cli transitive that does a CJS
+  # `require("js-yaml").load(...)`. It works with js-yaml 5's `require` entry
+  # (5.x is a dual package) and its `load`. 3.0.0 is ESM-only and breaks the
+  # CJS changesets requires, so stay on 2.1.0.
   "read-yaml-file": "^2.1.0"
   # ^7.28.0 closes the 7 advisories pnpm audit reports against undici 7.27.2,
   # incl. GHSA-vmh5-mc38-953g, GHSA-vxpw-j846-p89q and GHSA-hm92-r4w5-c3mj
