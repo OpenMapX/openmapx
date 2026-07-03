@@ -1,5 +1,6 @@
 import { USER_AGENT } from "@openmapx/core";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
+import { envString } from "../utils/env.js";
 
 const MAPTILER_ORIGIN = "https://api.maptiler.com";
 
@@ -15,7 +16,7 @@ const FONT_TEMPLATE_RE = /^fonts\/(?:\{fontstack\}|[^/]+)\/(?:\{range\}|\d+-\d+)
 type JsonRecord = Record<string, unknown>;
 
 function maptilerKey(): string {
-  return process.env.MAPTILER_KEY ?? process.env.NEXT_PUBLIC_MAPTILER_KEY ?? "";
+  return envString("MAPTILER_KEY", envString("NEXT_PUBLIC_MAPTILER_KEY", ""));
 }
 
 function isAllowedMaptilerPath(path: string): boolean {

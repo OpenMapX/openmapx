@@ -6,15 +6,18 @@ import { stops } from "@motis-project/motis-client";
 import { type BBox, USER_AGENT } from "@openmapx/core";
 import { safeDownload } from "@openmapx/core/server";
 import { cacheGet, cacheSet } from "../../utils/cache.js";
+import { envString } from "../../utils/env.js";
 import { serviceUrl } from "../service-registry.js";
 
 const DEFAULT_MOTIS_URL = "http://localhost:8081";
-const MOTIS_DATA_DIR =
-  process.env.MOTIS_DATA_DIR ?? join(process.cwd(), "../../infra/docker/data/motis/live");
+const MOTIS_DATA_DIR = envString(
+  "MOTIS_DATA_DIR",
+  join(process.cwd(), "../../infra/docker/data/motis/live"),
+);
 const STATE_FILE = "openmapx-feeds.json";
 
 function getMotisUrl(): string {
-  return serviceUrl("motis") ?? process.env.MOTIS_URL ?? DEFAULT_MOTIS_URL;
+  return serviceUrl("motis") ?? envString("MOTIS_URL", DEFAULT_MOTIS_URL);
 }
 
 interface FeedState {

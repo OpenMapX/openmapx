@@ -5,6 +5,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../db/index.js";
 import { dataManagerFeedState, dataManagerJobStages, dataManagerJobs } from "../db/schema.js";
 import { getProviderHealth } from "../services/provider-health/registry.js";
+import { envString } from "../utils/env.js";
 import { tryAdminSession } from "../utils/require-admin.js";
 import { safeEqual } from "../utils/safe-equal.js";
 
@@ -76,9 +77,9 @@ async function proxyToDataManager(
   path: string,
   body?: unknown,
 ): Promise<FastifyJsonResponse> {
-  const baseUrl = process.env.DATA_MANAGER_URL ?? DATA_MANAGER_URL_DEFAULT;
+  const baseUrl = envString("DATA_MANAGER_URL", DATA_MANAGER_URL_DEFAULT);
   const url = `${baseUrl.replace(/\/$/, "")}${path}`;
-  const token = process.env.DATA_MANAGER_AUTH_TOKEN ?? "";
+  const token = envString("DATA_MANAGER_AUTH_TOKEN", "");
   const res = await fetch(url, {
     method,
     headers: {
@@ -104,7 +105,7 @@ interface LockSummary {
 }
 
 function readLockSummary(): LockSummary {
-  const repoRoot = process.env.OPENMAPX_ROOT_DIR ?? process.cwd();
+  const repoRoot = envString("OPENMAPX_ROOT_DIR", process.cwd());
   const lockPath = join(repoRoot, "infra", "docker", "transitous.lock.json");
   if (!existsSync(lockPath)) {
     return { ref: null, lockedAt: null, lockedBy: null };

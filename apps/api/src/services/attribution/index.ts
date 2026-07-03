@@ -4,6 +4,7 @@ import type { Logger } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { TTL } from "@openmapx/mobility-core/policy";
 import type Redis from "ioredis";
+import { envString } from "../../utils/env.js";
 import { loadAttributionIndex } from "./index-loader.js";
 import type { ManifestDataSource, MotisLicenseEntry, ResolvedAttribution } from "./types.js";
 
@@ -279,7 +280,7 @@ export class AttributionIndex {
 export function defaultMotisLicenseFile(): string {
   const fromEnv = process.env.MOTIS_LICENSE_FILE;
   if (fromEnv) return fromEnv;
-  const rootDir = process.env.OPENMAPX_ROOT_DIR ?? process.cwd();
+  const rootDir = envString("OPENMAPX_ROOT_DIR", process.cwd());
   return join(rootDir, "infra", "docker", "data", "motis", "live", "license.json");
 }
 

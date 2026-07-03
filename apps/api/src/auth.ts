@@ -16,6 +16,7 @@ import {
   twoFactorOtpEmail,
   verifyEmailEmail,
 } from "./utils/emailTemplates";
+import { envString } from "./utils/env";
 
 const secret = process.env.BETTER_AUTH_SECRET;
 if (!secret) throw new Error("BETTER_AUTH_SECRET env var is required");
@@ -46,10 +47,12 @@ export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "pg",
   }),
-  baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3001",
+  baseURL: envString("BETTER_AUTH_URL", "http://localhost:3001"),
   secret,
   trustedOrigins: [
-    ...(process.env.CORS_ORIGIN ?? "http://localhost:3000").split(",").map((o) => o.trim()),
+    ...envString("CORS_ORIGIN", "http://localhost:3000")
+      .split(",")
+      .map((o) => o.trim()),
     "openmapx://",
     ...(process.env.NODE_ENV === "development"
       ? ["exp://", "exp://**", "exp://192.168.*.*:*/**"]
@@ -213,7 +216,7 @@ export const auth = betterAuth({
     expo(),
     emailHarmony({ allowNormalizedSignin: true }),
     passkey({
-      rpID: process.env.PASSKEY_RP_ID ?? "localhost",
+      rpID: envString("PASSKEY_RP_ID", "localhost"),
       rpName: "OpenMapX",
       origin: process.env.PASSKEY_ORIGIN
         ? process.env.PASSKEY_ORIGIN.split(",").map((o) => o.trim())
@@ -224,8 +227,8 @@ export const auth = betterAuth({
         {
           providerId: "openstreetmap",
           discoveryUrl: "https://www.openstreetmap.org/.well-known/openid-configuration",
-          clientId: process.env.OSM_CLIENT_ID ?? "",
-          clientSecret: process.env.OSM_CLIENT_SECRET ?? "",
+          clientId: envString("OSM_CLIENT_ID", ""),
+          clientSecret: envString("OSM_CLIENT_SECRET", ""),
           scopes: ["openid", "read_prefs"],
           pkce: true,
           async getUserInfo({ accessToken }) {
@@ -250,20 +253,20 @@ export const auth = betterAuth({
           providerId: "mapillary",
           authorizationUrl: "https://www.mapillary.com/connect",
           tokenUrl: "https://graph.mapillary.com/token",
-          clientId: process.env.MAPILLARY_CLIENT_ID ?? "",
-          clientSecret: process.env.MAPILLARY_CLIENT_SECRET ?? "",
+          clientId: envString("MAPILLARY_CLIENT_ID", ""),
+          clientSecret: envString("MAPILLARY_CLIENT_SECRET", ""),
           scopes: ["read"],
           async getToken({ code, redirectURI }) {
             const res = await fetch("https://graph.mapillary.com/token", {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                Authorization: `OAuth ${process.env.MAPILLARY_CLIENT_SECRET ?? ""}`,
+                Authorization: `OAuth ${envString("MAPILLARY_CLIENT_SECRET", "")}`,
               },
               body: JSON.stringify({
                 grant_type: "authorization_code",
                 code,
-                client_id: process.env.MAPILLARY_CLIENT_ID ?? "",
+                client_id: envString("MAPILLARY_CLIENT_ID", ""),
                 redirect_uri: redirectURI,
               }),
             });

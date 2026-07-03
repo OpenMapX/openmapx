@@ -5,6 +5,7 @@ import { appLogger } from "../services/app-logger";
 import { invalidateDataUsePolicy, refreshDataUsePolicy } from "../services/data-use-policy";
 import { writeAuditLog } from "../utils/audit-log";
 import { loadEmailConfig, sendViaEmailLabs, sendViaLettermint, sendViaSmtp } from "../utils/email";
+import { envString } from "../utils/env";
 import { emailTestLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 
@@ -482,9 +483,7 @@ export async function adminSettingsRoute(app: FastifyInstance) {
 
       const rows = await db.select().from(systemSettings);
       const dbMap = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-      const instanceName = (process.env.INSTANCE_NAME ??
-        dbMap.instanceName ??
-        "OpenMapX") as string;
+      const instanceName = envString("INSTANCE_NAME", (dbMap.instanceName ?? "OpenMapX") as string);
 
       const subject = `[${instanceName}] Test Email`;
       const sentAt = new Date().toISOString();

@@ -72,6 +72,7 @@ import { pruneOldRecords } from "./services/health-history";
 import { jobRunner } from "./services/job-runner";
 import { motisManager } from "./services/motis/manager";
 import { initServiceRegistry } from "./services/service-registry";
+import { envInt, envString } from "./utils/env";
 import {
   authLimit,
   expensivePublicApiLimit,
@@ -107,7 +108,7 @@ function trustProxyConfig(): number | boolean {
 const { default: pino } = await import("pino");
 const server = Fastify({
   loggerInstance: pino(
-    { level: process.env.LOG_LEVEL ?? "info" },
+    { level: envString("LOG_LEVEL", "info") },
     pino.multistream([{ stream: process.stdout }, { stream: appLogger.createPinoStream() }]),
   ),
   trustProxy: trustProxyConfig(),
@@ -175,7 +176,9 @@ if (existsSync(migrationsDir)) {
 
 await server.register(helmet);
 await server.register(cors, {
-  origin: (process.env.CORS_ORIGIN ?? "http://localhost:3000").split(",").map((o) => o.trim()),
+  origin: envString("CORS_ORIGIN", "http://localhost:3000")
+    .split(",")
+    .map((o) => o.trim()),
   credentials: true,
   exposedHeaders: ["X-Tile-Source"],
 });
@@ -429,8 +432,8 @@ await jobRunner.initialize();
 
 // Prune old health history records daily
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-const AUDIT_RETENTION_DAYS = Number(process.env.AUDIT_LOG_RETENTION_DAYS ?? 90);
-const JOB_RETENTION_DAYS = Number(process.env.ADMIN_JOB_RETENTION_DAYS ?? 30);
+const AUDIT_RETENTION_DAYS = envInt("AUDIT_LOG_RETENTION_DAYS", 90);
+const JOB_RETENTION_DAYS = envInt("ADMIN_JOB_RETENTION_DAYS", 30);
 
 setInterval(
   () =>
@@ -510,8 +513,8 @@ server.get("/api/transit/registry", async (req) => {
 // request — and start the background refresh.
 await startDataUsePolicyRefresh();
 
-const port = Number(process.env.PORT ?? 3000);
-const host = process.env.HOST ?? "0.0.0.0";
+const port = envInt("PORT", 3000);
+const host = envString("HOST", "0.0.0.0");
 
 try {
   await server.listen({ port, host });

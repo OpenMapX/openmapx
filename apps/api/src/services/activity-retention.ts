@@ -10,6 +10,12 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  * table doesn't grow unbounded over a long-lived deployment.
  */
 export async function pruneAuditLog(days: number): Promise<number> {
+  if (!Number.isFinite(days) || days <= 0) {
+    console.warn(
+      `Skipping audit log prune: retention days must be a positive finite number, got ${days}`,
+    );
+    return 0;
+  }
   const cutoff = new Date(Date.now() - days * MS_PER_DAY);
   const result = await db
     .delete(adminAuditLog)
@@ -24,6 +30,12 @@ export async function pruneAuditLog(days: number): Promise<number> {
  * cutoff is never deleted out from under the runner.
  */
 export async function pruneCompletedJobs(days: number): Promise<number> {
+  if (!Number.isFinite(days) || days <= 0) {
+    console.warn(
+      `Skipping admin job prune: retention days must be a positive finite number, got ${days}`,
+    );
+    return 0;
+  }
   const cutoff = new Date(Date.now() - days * MS_PER_DAY);
   // adminJobLog has ON DELETE CASCADE so deleting parent rows clears logs.
   const result = await db

@@ -1,6 +1,7 @@
 import { resolveGooglePhotosLink } from "@integrations/photos/orchestrator";
 import { fetchWithRedirects, USER_AGENT } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
+import { envString } from "../utils/env.js";
 
 /**
  * Allowed upstream hostname patterns for the image proxy.
@@ -90,7 +91,9 @@ export function isAllowedHost(hostname: string): boolean {
 
 /** Allowed frontend origins that may use the proxy. */
 function getAllowedOrigins(): string[] {
-  return (process.env.CORS_ORIGIN ?? "http://localhost:3000").split(",").map((o) => o.trim());
+  return envString("CORS_ORIGIN", "http://localhost:3000")
+    .split(",")
+    .map((o) => o.trim());
 }
 
 const MAX_SIZE = 15 * 1024 * 1024; // 15 MB

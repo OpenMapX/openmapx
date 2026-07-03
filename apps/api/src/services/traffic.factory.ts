@@ -1,3 +1,4 @@
+import { envString } from "../utils/env";
 import { tomtomTrafficService } from "./tomtom-traffic.service";
 import type { TrafficProvider } from "./traffic.provider";
 
@@ -12,7 +13,7 @@ function isTrafficProviderName(value: string): value is TrafficProviderName {
 }
 
 export function getTrafficProvider(): TrafficProvider {
-  const raw = (process.env.TRAFFIC_PROVIDER ?? "tomtom").toLowerCase();
+  const raw = envString("TRAFFIC_PROVIDER", "tomtom").toLowerCase();
   if (!isTrafficProviderName(raw)) {
     throw new Error(`Unknown TRAFFIC_PROVIDER: "${raw}". Valid options: tomtom`);
   }

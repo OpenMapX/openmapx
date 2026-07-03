@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { services as coreServices, repoPaths } from "@openmapx/core/server";
 import { dockerComposeAction } from "../utils/docker-compose";
+import { envString } from "../utils/env";
 import type { JobContext } from "./job-runner";
 import { resolveAllServiceConfigs } from "./service-config-resolver";
 import { getServiceRegistry } from "./service-registry";
@@ -128,7 +129,7 @@ export async function renderAndPersistCompose(): Promise<void> {
   );
 
   const rendered = renderCompose(enabled, {
-    domain: process.env.DOMAIN ?? "localhost",
+    domain: envString("DOMAIN", "localhost"),
     composeOutDir: paths.infraDir,
     allServices: registry.list(),
     resolvedServiceConfigs,

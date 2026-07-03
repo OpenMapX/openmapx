@@ -4,6 +4,7 @@ import { applyHardlinksFromPlan, renderAndPersistCompose } from "../services/adm
 import { resolveAllServiceConfigs } from "../services/service-config-resolver";
 import { getServiceRegistry } from "../services/service-registry";
 import { dockerComposeAction } from "../utils/docker-compose";
+import { envString } from "../utils/env";
 import { requireAdmin } from "../utils/require-admin";
 
 const { buildAppApiServiceEnv, renderCompose } = services;
@@ -29,7 +30,7 @@ export async function registerAdminComposeRoutes(
       reply.status(503);
       return { error: "Service registry not available" };
     }
-    const domain = process.env.DOMAIN ?? "localhost";
+    const domain = envString("DOMAIN", "localhost");
     const enabled = registry.enabled();
     // Resolve the full config cascade (defaults + DB + env) for every enabled
     // service before rendering, so `SERVICE_<ID>_<KEY>=...` on the host and

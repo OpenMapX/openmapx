@@ -1,4 +1,5 @@
 import { serviceUrl } from "../services/service-registry.js";
+import { envString } from "./env.js";
 
 /**
  * Default public Valhalla provider. The former FOSSGIS demo
@@ -11,7 +12,7 @@ const DEFAULT_VALHALLA_URL = "https://api.stadiamaps.com";
 
 /** Resolved Valhalla base URL: service registry → VALHALLA_URL env → Stadia default. */
 export function valhallaBaseUrl(): string {
-  return serviceUrl("valhalla") ?? process.env.VALHALLA_URL ?? DEFAULT_VALHALLA_URL;
+  return serviceUrl("valhalla") ?? envString("VALHALLA_URL", DEFAULT_VALHALLA_URL);
 }
 
 /**
