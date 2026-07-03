@@ -7,7 +7,6 @@ import {
   runTransitousPipeline,
   stagesFor,
 } from "../../src/jobs/transitous/pipeline.js";
-import type { StageResult } from "../../src/jobs/transitous/types.js";
 import { StateStore } from "../../src/state.js";
 
 let tmp: string | undefined;
