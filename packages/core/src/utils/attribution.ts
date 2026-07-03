@@ -21,10 +21,96 @@ function safeExternalUrl(value: string | undefined): string | undefined {
 }
 
 /**
+ * Allowlist HTML sanitizer for manifest `dataSources[].attribution` strings.
+ *
+ * Parse-and-rebuild: output contains only escapeHtml()-escaped text plus
+ * tags reconstructed here. Allowed elements:
+ * - `<a>` — href must be http(s) (validated via safeExternalUrl); rebuilt
+ *   as `<a href="…" target="_blank" rel="noopener noreferrer">`. All other
+ *   attributes are dropped. Anchors with a missing/invalid href are
+ *   unwrapped (children kept).
+ * - `<code>` — rebuilt with no attributes.
+ * Any other element is unwrapped (tag dropped, children kept), matching the
+ * DOMParser sanitizer in apps/web/src/lib/useMapAttributions.ts. Tag-shaped
+ * input that is not a valid tag (e.g. "a < b") is escaped as text.
+ * Unclosed allowed tags are auto-closed at the end of the string.
+ */
+export function sanitizeAttributionHtml(html: string): string {
+  let out = "";
+  const stack: { tag: "a" | "code"; emitted: boolean }[] = [];
+  let i = 0;
+  while (i < html.length) {
+    const lt = html.indexOf("<", i);
+    if (lt === -1) {
+      out += escapeHtml(html.slice(i));
+      break;
+    }
+    out += escapeHtml(html.slice(i, lt));
+    const gt = html.indexOf(">", lt + 1);
+    if (gt === -1) {
+      out += escapeHtml(html.slice(lt));
+      break;
+    }
+    const raw = html.slice(lt + 1, gt).trim();
+    const isClosing = raw.startsWith("/");
+    const body = isClosing ? raw.slice(1).trim() : raw;
+    const nameMatch = /^[a-zA-Z][a-zA-Z0-9]*/.exec(body);
+    if (!nameMatch) {
+      out += escapeHtml(html.slice(lt, gt + 1));
+      i = gt + 1;
+      continue;
+    }
+    const tag = nameMatch[0].toLowerCase();
+    if (isClosing) {
+      let idx = -1;
+      for (let j = stack.length - 1; j >= 0; j--) {
+        if (stack[j].tag === tag) {
+          idx = j;
+          break;
+        }
+      }
+      if (idx !== -1) {
+        for (let j = stack.length - 1; j > idx; j--) {
+          if (stack[j].emitted) out += `</${stack[j].tag}>`;
+        }
+        if (stack[idx].emitted) out += `</${tag}>`;
+        stack.length = idx;
+      }
+    } else if (tag === "a") {
+      const href = safeExternalUrl(extractHref(body.slice(nameMatch[0].length)));
+      if (href) {
+        out += `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">`;
+        stack.push({ tag: "a", emitted: true });
+      } else {
+        stack.push({ tag: "a", emitted: false });
+      }
+    } else if (tag === "code") {
+      out += "<code>";
+      stack.push({ tag: "code", emitted: true });
+    }
+    i = gt + 1;
+  }
+  for (let j = stack.length - 1; j >= 0; j--) {
+    if (stack[j].emitted) out += `</${stack[j].tag}>`;
+  }
+  return out;
+}
+
+function extractHref(attrs: string): string | undefined {
+  const match = /(?:^|\s)href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/i.exec(attrs);
+  if (!match) return undefined;
+  return match[1] ?? match[2] ?? match[3];
+}
+
+/**
  * Build an HTML attribution string for a single data source.
  *
- * If `ds.attribution` is set (custom HTML), returns it directly.
- * Otherwise generates: `<a href="{url}">{name}</a> (<a href="{licenseUrl}">{license}</a>)`
+ * If `ds.attribution` is set (custom HTML from the integration manifest),
+ * returns it sanitized through the allowlist sanitizer — manifests may
+ * embed publisher links, but community-installed extensions feed the same
+ * field, so it is never trusted verbatim.
+ * Otherwise generates `© <a href="{url}">{name}</a> (<a href="{licenseUrl}">{license}</a>)`
+ * with every field escaped and URLs validated, via buildRuntimeAttributionHtml.
  */
 export function buildAttributionHtml(ds: {
   name: string;
@@ -33,16 +119,13 @@ export function buildAttributionHtml(ds: {
   licenseUrl?: string;
   attribution?: string;
 }): string {
-  if (ds.attribution) return ds.attribution;
-
-  const nameLink = `<a href="${ds.url}" target="_blank" rel="noopener noreferrer">${ds.name}</a>`;
-  if (!ds.license) return `© ${nameLink}`;
-
-  const licenseLink = ds.licenseUrl
-    ? `<a href="${ds.licenseUrl}" target="_blank" rel="noopener noreferrer">${ds.license}</a>`
-    : ds.license;
-
-  return `© ${nameLink} (${licenseLink})`;
+  if (ds.attribution) return sanitizeAttributionHtml(ds.attribution);
+  return buildRuntimeAttributionHtml({
+    text: ds.name,
+    url: ds.url,
+    license: ds.license || undefined,
+    licenseUrl: ds.licenseUrl,
+  });
 }
 
 /**
