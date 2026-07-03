@@ -1,15 +1,52 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // extension-store imports the db client + redis at module load; neither is used
 // by applyLiveVersions (it only calls the injected fetcher), so stub them out.
 vi.mock("../../db", () => ({ db: {} }));
 vi.mock("../../redis", () => ({ redis: null }));
+vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
 
-import { applyLiveVersions, type ExtensionCatalogEntry } from "../extension-store.js";
+import { lookup as dnsLookup } from "node:dns/promises";
+import {
+  applyLiveVersions,
+  type ExtensionCatalogEntry,
+  fetchManifestMeta,
+  resolveExtensionManifest,
+} from "../extension-store.js";
+
+// dnsLookup has overloads that confuse vi.mocked; cast to a simple mock.
+const lookupMock = dnsLookup as unknown as ReturnType<typeof vi.fn>;
 
 function entry(over: Partial<ExtensionCatalogEntry>): ExtensionCatalogEntry {
   return { id: "x", name: "X", version: "0.0.0", ...over };
 }
+
+function makeResponse(opts: {
+  status?: number;
+  headers?: Record<string, string>;
+  bodyText?: string;
+}): Response {
+  const status = opts.status ?? 200;
+  return {
+    status,
+    ok: status >= 200 && status < 300,
+    url: "",
+    headers: new Headers(opts.headers ?? {}),
+    body: new Response(opts.bodyText ?? "").body,
+  } as unknown as Response;
+}
+
+function stubFetchSequence(...responses: Response[]): ReturnType<typeof vi.fn> {
+  const fn = vi.fn();
+  for (const r of responses) fn.mockResolvedValueOnce(r);
+  vi.stubGlobal("fetch", fn);
+  return fn;
+}
+
+afterEach(() => {
+  lookupMock.mockReset();
+  vi.unstubAllGlobals();
+});
 
 describe("applyLiveVersions", () => {
   it("overrides version + platform from the manifest url (the source of truth)", async () => {
@@ -69,5 +106,80 @@ describe("applyLiveVersions", () => {
     await applyLiveVersions([e], async () => null);
     // Never invents a version — the catalog needn't carry one; routes guard undefined.
     expect(e.version).toBeUndefined();
+  });
+});
+
+describe("fetchManifestMeta (real safeFetchJson SSRF path)", () => {
+  it("resolves version/platform on the happy path", async () => {
+    lookupMock.mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(
+      makeResponse({
+        status: 200,
+        headers: { "content-type": "application/json" },
+        bodyText: JSON.stringify({ version: "2.0.0", platform: "1.1" }),
+      }),
+    );
+    await expect(fetchManifestMeta("https://ex.test/extension.json")).resolves.toEqual({
+      version: "2.0.0",
+      platform: "1.1",
+    });
+  });
+
+  it("returns null for a private-resolving host without making a network request", async () => {
+    lookupMock.mockResolvedValueOnce([{ address: "10.0.0.5", family: 4 }]);
+    const fetchMock = stubFetchSequence();
+    await expect(fetchManifestMeta("https://sneaky.test/extension.json")).resolves.toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("returns null when a redirect targets a private/link-local address", async () => {
+    lookupMock.mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(
+      makeResponse({
+        status: 302,
+        headers: { location: "http://169.254.169.254/latest/meta-data/" },
+      }),
+    );
+    await expect(fetchManifestMeta("https://ex.test/extension.json")).resolves.toBeNull();
+  });
+});
+
+describe("resolveExtensionManifest (real safeFetchJson SSRF path)", () => {
+  it("rejects a private-resolving manifest host without a network request, IP-free", async () => {
+    lookupMock.mockResolvedValueOnce([{ address: "10.0.0.5", family: 4 }]);
+    const fetchMock = stubFetchSequence();
+    const e = entry({
+      id: "e",
+      name: "E",
+      version: "1",
+      manifest: "https://sneaky.test/extension.json",
+    });
+    let caught: Error | undefined;
+    try {
+      await resolveExtensionManifest(e);
+    } catch (err) {
+      caught = err as Error;
+    }
+    expect(caught).toBeDefined();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(caught?.message).not.toMatch(/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/);
+  });
+
+  it("rejects an oversized manifest response", async () => {
+    lookupMock.mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(
+      makeResponse({
+        status: 200,
+        headers: { "content-length": "10000000000", "content-type": "application/json" },
+        bodyText: "{}",
+      }),
+    );
+    const e = entry({
+      id: "e",
+      name: "E",
+      version: "1",
+      manifest: "https://ex.test/extension.json",
+    });
+    await expect(resolveExtensionManifest(e)).rejects.toThrow(/too large/i);
   });
 });

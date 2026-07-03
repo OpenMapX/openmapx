@@ -1,5 +1,5 @@
 import { USER_AGENT_ADMIN, validatePublicUrl } from "@openmapx/core";
-import { services as coreServices } from "@openmapx/core/server";
+import { services as coreServices, safeFetchJson } from "@openmapx/core/server";
 import { PLATFORM_VERSION, satisfiesPlatformVersion } from "@openmapx/integration-framework";
 import { db } from "../db";
 import {
@@ -122,13 +122,10 @@ interface FetchedCatalog {
 }
 
 async function fetchCatalogFromUrl(url: string): Promise<FetchedCatalog> {
-  validatePublicUrl(url);
-  const res = await fetch(url, {
+  const data = await safeFetchJson<unknown>(url, {
     headers: { "User-Agent": USER_AGENT_ADMIN },
-    signal: AbortSignal.timeout(15_000),
+    timeoutMs: 15_000,
   });
-  if (!res.ok) throw new Error(`Catalog fetch failed: HTTP ${res.status}`);
-  const data = (await res.json()) as unknown;
   // Accept either a bare array of entries or `{ extensions, removed, critical }`.
   if (Array.isArray(data)) {
     return { entries: data as ExtensionCatalogEntry[], control: {} };
@@ -153,13 +150,10 @@ export async function fetchManifestMeta(
   url: string,
 ): Promise<{ version?: string; platform?: string } | null> {
   try {
-    validatePublicUrl(url);
-    const res = await fetch(url, {
+    const data = await safeFetchJson<{ version?: unknown; platform?: unknown }>(url, {
       headers: { "User-Agent": USER_AGENT_ADMIN },
-      signal: AbortSignal.timeout(15_000),
+      timeoutMs: 15_000,
     });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { version?: unknown; platform?: unknown };
     return {
       version: typeof data.version === "string" && data.version ? data.version : undefined,
       platform: typeof data.platform === "string" && data.platform ? data.platform : undefined,
@@ -279,13 +273,10 @@ export async function resolveExtensionManifest(
 ): Promise<ExtensionManifest> {
   let raw: unknown;
   if (entry.manifest) {
-    validatePublicUrl(entry.manifest);
-    const res = await fetch(entry.manifest, {
+    raw = await safeFetchJson<unknown>(entry.manifest, {
       headers: { "User-Agent": USER_AGENT_ADMIN },
-      signal: AbortSignal.timeout(15_000),
+      timeoutMs: 15_000,
     });
-    if (!res.ok) throw new Error(`extension.json fetch failed: HTTP ${res.status}`);
-    raw = await res.json();
   } else {
     raw = {
       id: entry.id,

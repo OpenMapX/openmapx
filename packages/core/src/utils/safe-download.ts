@@ -185,3 +185,116 @@ export async function safeDownload(
     contentType: response.headers.get("content-type"),
   };
 }
+
+export interface SafeFetchJsonOptions {
+  /** Maximum bytes to buffer before rejecting. Default: 5 MB. */
+  maxBytes?: number;
+  /** Per-request timeout forwarded to the initial and each redirect fetch. Default: 15s. */
+  timeoutMs?: number;
+  /** Cap on redirect hops. Default: 5. */
+  maxRedirects?: number;
+  /** Extra headers (e.g. `User-Agent`) to send on the first request. */
+  headers?: Record<string, string>;
+}
+
+/**
+ * Resolve `hostname` and reject private targets, rethrowing without the
+ * resolved IP so an operator-facing error never echoes an internal address.
+ */
+async function assertPublicHostOrThrow(hostname: string): Promise<void> {
+  try {
+    await assertResolvesToPublicIp(hostname);
+  } catch {
+    throw new Error(
+      `URL host "${hostname}" is not allowed (private, internal, or unresolvable address)`,
+    );
+  }
+}
+
+/**
+ * Fetch and JSON-parse a URL with the same SSRF protection as `safeDownload`:
+ * textual public-URL validation, DNS resolution of the initial and final host
+ * (rejecting private/link-local/reserved addresses), per-redirect re-validation
+ * through `fetchWithRedirects`, and a byte cap (declared Content-Length + a
+ * streaming counter). For fetching third-party-author-influenced JSON
+ * (catalogs, manifests) from server-side code.
+ */
+export async function safeFetchJson<T = unknown>(
+  url: string,
+  opts: SafeFetchJsonOptions = {},
+): Promise<T> {
+  const maxBytes = opts.maxBytes ?? 5 * 1024 * 1024;
+  const timeoutMs = opts.timeoutMs ?? 15_000;
+  const maxRedirects = opts.maxRedirects ?? 5;
+
+  validatePublicUrl(url);
+  const { hostname } = new URL(url);
+  await assertPublicHostOrThrow(hostname);
+
+  const response = await fetchWithRedirects(url, {
+    headers: opts.headers,
+    maxRedirects,
+    timeoutMs,
+    validateRedirectUrl: (nextUrl) => {
+      validatePublicUrl(nextUrl.toString());
+      return true;
+    },
+  });
+
+  if (!response.ok) {
+    try {
+      await response.body?.cancel();
+    } catch {
+      // ignore
+    }
+    throw new Error(`Request failed: HTTP ${response.status} for ${url}`);
+  }
+
+  const finalUrl = response.url || url;
+  const finalHostname = new URL(finalUrl).hostname;
+  if (finalHostname !== hostname) {
+    await assertPublicHostOrThrow(finalHostname);
+  }
+
+  const contentLengthHeader = response.headers.get("content-length");
+  if (contentLengthHeader) {
+    const declared = Number(contentLengthHeader);
+    if (Number.isFinite(declared) && declared > maxBytes) {
+      try {
+        await response.body?.cancel();
+      } catch {
+        // ignore
+      }
+      throw new Error(`Response too large (declared ${declared} > ${maxBytes} bytes)`);
+    }
+  }
+
+  if (!response.body) {
+    throw new Error(`Empty response body for ${finalUrl}`);
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        throw new Error(`Response too large (exceeded ${maxBytes} bytes)`);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+
+  const text = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`Invalid JSON response from ${finalUrl}`);
+  }
+}

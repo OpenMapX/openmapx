@@ -76,6 +76,8 @@ export {
   assertResolvesToPublicIp,
   type SafeDownloadOptions,
   type SafeDownloadResult,
+  type SafeFetchJsonOptions,
   safeDownload,
+  safeFetchJson,
 } from "./utils/safe-download";
 export { sectionSlug } from "./utils/sectionSlug";
