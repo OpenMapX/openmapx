@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { readServiceSecretKeysFromDisk, renderServiceSnippet } from "../compose-renderer";
+import { readServiceSecretKeysFromCompose, renderServiceSnippet } from "../compose-renderer";
 import type { LoadedService } from "../types";
 
 function makeService(container: LoadedService["manifest"]["container"]): LoadedService {
@@ -57,33 +57,42 @@ describe("renderServiceSnippet GPU support", () => {
   });
 });
 
-describe("readServiceSecretKeysFromDisk — CLI/admin secrets-block parity", () => {
+describe("readServiceSecretKeysFromCompose — CLI/admin secrets-block parity", () => {
   let dir: string;
+  let composePath: string;
   beforeAll(() => {
     dir = mkdtempSync(join(tmpdir(), "omx-secrets-"));
-    const ingest = join(dir, ".generated-secrets", "openconditions-ingest");
-    mkdirSync(ingest, { recursive: true });
-    writeFileSync(join(ingest, "NH_API_KEY"), "x");
-    writeFileSync(join(ingest, "MOBILITHEK_CERT"), "y");
-    const api = join(dir, ".generated-secrets", "app-api");
-    mkdirSync(api, { recursive: true });
-    writeFileSync(join(api, "SOME_KEY"), "z");
+    composePath = join(dir, "docker-compose.generated.yml");
+    writeFileSync(
+      composePath,
+      [
+        "services:",
+        "  openconditions-ingest:",
+        "    image: x",
+        "secrets:",
+        "  openconditions-ingest__NH_API_KEY:",
+        "    file: ./.generated-secrets/openconditions-ingest/NH_API_KEY",
+        "  openconditions-ingest__MOBILITHEK_CERT:",
+        "    file: ./.generated-secrets/openconditions-ingest/MOBILITHEK_CERT",
+        "  app-api__SOME_KEY:",
+        "    file: ./.generated-secrets/app-api/SOME_KEY",
+        "",
+      ].join("\n"),
+    );
   });
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-  it("reconstructs per-service secret key names from the on-disk files (sorted)", () => {
-    const map = readServiceSecretKeysFromDisk(dir);
+  it("reconstructs per-service secret key names from the compose secrets block (sorted)", () => {
+    const map = readServiceSecretKeysFromCompose(composePath);
     expect(map.get("openconditions-ingest")).toEqual(["MOBILITHEK_CERT", "NH_API_KEY"]);
     expect(map.get("app-api")).toEqual(["SOME_KEY"]);
   });
 
-  it("returns an empty map when no secrets have been applied", () => {
-    const empty = mkdtempSync(join(tmpdir(), "omx-nosecrets-"));
-    try {
-      expect(readServiceSecretKeysFromDisk(empty).size).toBe(0);
-    } finally {
-      rmSync(empty, { recursive: true, force: true });
-    }
+  it("returns an empty map for a missing or secrets-less compose (never throws)", () => {
+    expect(readServiceSecretKeysFromCompose(join(dir, "nope.yml")).size).toBe(0);
+    const noSecrets = join(dir, "no-secrets.yml");
+    writeFileSync(noSecrets, "services:\n  x:\n    image: y\n");
+    expect(readServiceSecretKeysFromCompose(noSecrets).size).toBe(0);
   });
 
   it("wires disk-derived keys into the service's secret mounts + <KEY>_FILE env", () => {

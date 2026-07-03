@@ -12,7 +12,7 @@ import { applyServiceSelection } from "../lib/service-selection";
 const {
   buildAppApiServiceEnv,
   flattenResolvedConfig,
-  readServiceSecretKeysFromDisk,
+  readServiceSecretKeysFromCompose,
   renderCompose,
   resolveServiceConfigFromEnv,
   ServiceRegistry,
@@ -77,10 +77,11 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
     composeOutDir,
     allServices: registry.list(),
     resolvedServiceConfigs,
-    // Reconstruct vault secret mounts from the on-disk `.generated-secrets/`
-    // files the app-api render step wrote, so a CLI render preserves the same
-    // `secrets:` block the admin panel produces instead of silently dropping it.
-    serviceSecretKeys: readServiceSecretKeysFromDisk(composeOutDir),
+    // Preserve vault secret mounts by reading them from the existing generated
+    // compose (world-readable) the admin render last wrote, rather than the
+    // 0700 `.generated-secrets/` dir a non-root CLI can't scan — so a CLI
+    // re-render keeps the `secrets:` block instead of silently dropping it.
+    serviceSecretKeys: readServiceSecretKeysFromCompose(paths.composeOutPath),
   });
 
   writeFileSync(paths.composeOutPath, result.composeYaml, "utf-8");

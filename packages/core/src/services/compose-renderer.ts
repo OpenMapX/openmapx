@@ -1,6 +1,6 @@
-import { existsSync, readdirSync, statSync } from "node:fs";
-import { isAbsolute, join, relative, resolve } from "node:path";
-import { dump as yamlDump } from "js-yaml";
+import { existsSync, readFileSync } from "node:fs";
+import { isAbsolute, relative, resolve } from "node:path";
+import { dump as yamlDump, load as yamlLoad } from "js-yaml";
 import { detectConsumesCycle } from "./resolver";
 import type {
   HardlinkEntry,
@@ -338,26 +338,44 @@ export function serviceSecretFilePath(serviceId: string, key: string): string {
 export const GENERATED_SECRETS_DIRNAME = ".generated-secrets";
 
 /**
- * Reconstruct the per-service vault secret KEY names from the on-disk
- * `.generated-secrets/<serviceId>/<KEY>` files. The app-api render step derives
- * these from the DB (which holds the values + decryption key); the DB-free CLI
- * render instead reads them back from disk here, so BOTH management surfaces
- * (CLI and admin panel) emit the same `secrets:` block + `<KEY>_FILE` env and
- * produce an identical, applyable compose. Only the file NAMES (key names) are
- * read — never the secret values. Returns an empty map when nothing has been
- * applied yet, and only ever surfaces keys whose files actually exist, so a CLI
- * render can never reference a missing secret file.
+ * Reconstruct the per-service vault secret KEY names from an EXISTING generated
+ * compose file's top-level `secrets:` block (each entry named
+ * `<serviceId>__<KEY>` per {@link serviceSecretName}). The app-api render step
+ * derives these from the DB (which holds the values + decryption key); the
+ * DB-free CLI reads them back from the compose it last wrote, so a CLI re-render
+ * preserves the same `secrets:` block + `<KEY>_FILE` env the admin render
+ * produced instead of silently dropping it — both management surfaces converge
+ * on an identical, applyable compose.
+ *
+ * Deliberately reads the compose (world-readable) rather than scanning
+ * `.generated-secrets/`, which is created 0700 (root-only) as the real
+ * host-side secret boundary and is unreadable by a non-root CLI. Only key names
+ * are recovered — never values. Tolerant of a missing / secrets-less /
+ * unparseable compose (returns an empty map), so it never crashes a render.
  */
-export function readServiceSecretKeysFromDisk(composeOutDir: string): Map<string, string[]> {
-  const root = join(composeOutDir, GENERATED_SECRETS_DIRNAME);
+export function readServiceSecretKeysFromCompose(composePath: string): Map<string, string[]> {
   const byService = new Map<string, string[]>();
-  if (!existsSync(root)) return byService;
-  for (const serviceId of readdirSync(root)) {
-    const serviceDir = join(root, serviceId);
-    if (!statSync(serviceDir).isDirectory()) continue;
-    const keys = readdirSync(serviceDir).filter((k) => statSync(join(serviceDir, k)).isFile());
-    if (keys.length > 0) byService.set(serviceId, keys.sort());
+  if (!existsSync(composePath)) return byService;
+  let doc: { secrets?: Record<string, unknown> } | null;
+  try {
+    doc = yamlLoad(readFileSync(composePath, "utf8")) as {
+      secrets?: Record<string, unknown>;
+    } | null;
+  } catch {
+    return byService;
   }
+  const secrets = doc?.secrets;
+  if (!secrets || typeof secrets !== "object") return byService;
+  for (const name of Object.keys(secrets)) {
+    const sep = name.indexOf("__");
+    if (sep <= 0) continue;
+    const serviceId = name.slice(0, sep);
+    const key = name.slice(sep + 2);
+    const list = byService.get(serviceId) ?? [];
+    list.push(key);
+    byService.set(serviceId, list);
+  }
+  for (const [id, keys] of byService) byService.set(id, keys.sort());
   return byService;
 }
 
