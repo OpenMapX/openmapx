@@ -26,8 +26,6 @@ const MARKER_SOURCE = "omx-road-conditions-markers";
 const LINE_SOURCE = "omx-road-conditions-lines";
 const LINE_LAYER = "omx-road-conditions-line";
 const MARKER_LAYER = "omx-road-conditions-markers";
-const CLUSTER_LAYER = "omx-road-conditions-clusters";
-const CLUSTER_COUNT_LAYER = "omx-road-conditions-cluster-count";
 const MIN_ZOOM = 5;
 
 /** Affected-segment line color by severity (matches the marker disc ramp). */
@@ -228,7 +226,7 @@ export function RoadConditionsLayer() {
   const layerVisible = useOverlayLayerVisible(OVERLAY_ID);
   useIntegrationAttribution(OVERLAY_ID, layerVisible);
   useOverlayExclusion(OVERLAY_ID, layerVisible);
-  useLayerReanchor([LINE_LAYER, MARKER_LAYER, CLUSTER_LAYER, CLUSTER_COUNT_LAYER], layerVisible);
+  useLayerReanchor([LINE_LAYER, MARKER_LAYER], layerVisible);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   // Keep the latest formatters/translator in refs so the imperative popup click
   // handler (bound once per effect) always uses the current prefs + locale.
@@ -297,8 +295,6 @@ export function RoadConditionsLayer() {
     const sync = () => {
       if (!layerVisible) {
         try {
-          if (map.getLayer(CLUSTER_COUNT_LAYER)) map.removeLayer(CLUSTER_COUNT_LAYER);
-          if (map.getLayer(CLUSTER_LAYER)) map.removeLayer(CLUSTER_LAYER);
           if (map.getLayer(MARKER_LAYER)) map.removeLayer(MARKER_LAYER);
           if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER);
           if (map.getSource(MARKER_SOURCE)) map.removeSource(MARKER_SOURCE);
@@ -324,11 +320,6 @@ export function RoadConditionsLayer() {
           map.addSource(MARKER_SOURCE, {
             type: "geojson",
             data: { type: "FeatureCollection", features: [] },
-            // Collapse dense/coincident incidents (many events land on the same
-            // junction) into counted clusters that split as you zoom in.
-            cluster: true,
-            clusterMaxZoom: 13,
-            clusterRadius: 44,
           });
         }
         const before = getFirstSymbolLayerId(map);
@@ -356,9 +347,6 @@ export function RoadConditionsLayer() {
               type: "symbol",
               source: MARKER_SOURCE,
               minzoom: MIN_ZOOM,
-              // Only unclustered incidents get a disc+glyph marker; clusters are
-              // drawn by the count layers below.
-              filter: ["!", ["has", "point_count"]],
               layout: {
                 "icon-image": ["get", "_icon"],
                 "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.42, 10, 0.55, 16, 0.75],
@@ -369,45 +357,6 @@ export function RoadConditionsLayer() {
             before,
           );
           INTERACTIVE_LAYER_IDS.add(MARKER_LAYER);
-        }
-        if (!map.getLayer(CLUSTER_LAYER)) {
-          map.addLayer(
-            {
-              id: CLUSTER_LAYER,
-              type: "circle",
-              source: MARKER_SOURCE,
-              minzoom: MIN_ZOOM,
-              filter: ["has", "point_count"],
-              paint: {
-                "circle-color": "#cc0033",
-                "circle-opacity": 0.9,
-                "circle-stroke-color": "#ffffff",
-                "circle-stroke-width": 2,
-                "circle-radius": ["step", ["get", "point_count"], 14, 10, 18, 50, 24],
-              },
-            },
-            before,
-          );
-          INTERACTIVE_LAYER_IDS.add(CLUSTER_LAYER);
-        }
-        if (!map.getLayer(CLUSTER_COUNT_LAYER)) {
-          map.addLayer(
-            {
-              id: CLUSTER_COUNT_LAYER,
-              type: "symbol",
-              source: MARKER_SOURCE,
-              minzoom: MIN_ZOOM,
-              filter: ["has", "point_count"],
-              layout: {
-                "text-field": ["get", "point_count_abbreviated"],
-                "text-font": ["Noto Sans Bold"],
-                "text-size": 12,
-                "text-allow-overlap": true,
-              },
-              paint: { "text-color": "#ffffff" },
-            },
-            before,
-          );
         }
         void fetchData();
       } catch {
@@ -468,32 +417,16 @@ export function RoadConditionsLayer() {
         .addTo(map);
     };
 
-    // Click a cluster → zoom to the level where it breaks apart.
-    const onClusterClick = (e: MapLayerMouseEvent) => {
-      const f = e.features?.[0];
-      const clusterId = f?.properties?.cluster_id;
-      const src = map.getSource(MARKER_SOURCE) as GeoJSONSource | undefined;
-      if (clusterId == null || !src || f?.geometry?.type !== "Point") return;
-      const center = f.geometry.coordinates as [number, number];
-      void src
-        .getClusterExpansionZoom(clusterId)
-        .then((zoom) => map.easeTo({ center, zoom: Math.min(zoom, 17) }))
-        .catch(() => {});
-    };
-
     const onMouseMove = (e: maplibregl.MapMouseEvent) => {
-      const layers = [MARKER_LAYER, CLUSTER_LAYER].filter((l) => map.getLayer(l));
-      if (layers.length === 0) return;
-      const hit = map.queryRenderedFeatures(e.point, { layers });
+      if (!map.getLayer(MARKER_LAYER)) return;
+      const hit = map.queryRenderedFeatures(e.point, { layers: [MARKER_LAYER] });
       map.getCanvasContainer().style.cursor = hit.length > 0 ? "pointer" : "";
     };
 
     map.on("click", MARKER_LAYER, onClick);
-    map.on("click", CLUSTER_LAYER, onClusterClick);
     map.on("mousemove", onMouseMove);
     return () => {
       map.off("click", MARKER_LAYER, onClick);
-      map.off("click", CLUSTER_LAYER, onClusterClick);
       map.off("mousemove", onMouseMove);
       map.getCanvasContainer().style.cursor = "";
       popupRef.current?.remove();
