@@ -87,7 +87,7 @@ export function RoadConditionsLegend() {
                 onClick={() => toggleType(type)}
                 color={selected ? "primary" : "default"}
                 variant={selected ? "filled" : "outlined"}
-                sx={{ fontSize: 10.5, height: 24, "& .MuiChip-icon": { ml: 0.5 } }}
+                sx={{ fontSize: 10.5, height: 24, "& .MuiChip-icon": { ml: 0.75, mr: -0.25 } }}
               />
             );
           })}
