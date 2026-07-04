@@ -7,7 +7,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
-import { buildPopupCard, type PopupCardSpec } from "@/components/map/overlay/popupCard";
+import { buildStackedPopupCard, type PopupCardSpec } from "@/components/map/overlay/popupCard";
 import { useOverlayLayerVisible } from "@/components/map/overlay/useOverlayStoreState";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
@@ -58,6 +58,16 @@ const POPUP_SPEC: PopupCardSpec = {
     { field: "validity", labelKey: "panel.validity", variant: "row" },
     { field: "description", labelKey: "panel.description", variant: "block" },
   ],
+};
+
+/** Numeric severity rank — drives `symbol-sort-key` so the worst condition
+ * renders on top where markers overlap, and orders the stacked popup. */
+const SEVERITY_RANK: Record<string, number> = {
+  critical: 4,
+  high: 3,
+  medium: 2,
+  low: 1,
+  unknown: 0,
 };
 
 interface ScheduleEntry {
@@ -177,6 +187,10 @@ function buildSources(features: RawFeature[]): { markers: GeoJsonData; lines: Ge
         severity,
         attribution: attributionString(p.attribution),
         _icon: markerImageId(type, severity),
+        // Stable id to dedupe overlapping markers into one popup, and a numeric
+        // severity rank for symbol-sort-key (worst on top) + popup ordering.
+        _id: p.id != null ? String(p.id) : String(p.headline ?? ""),
+        _sev: SEVERITY_RANK[severity] ?? 0,
       };
       if (p.roadState) props.roadState = String(p.roadState);
       // Raw ISO validity bounds + recurring schedule — formatted into a human
@@ -352,6 +366,9 @@ export function RoadConditionsLayer() {
                 "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.42, 10, 0.55, 16, 0.75],
                 "icon-allow-overlap": true,
                 "icon-ignore-placement": true,
+                // Higher sort-key is drawn last (on top), so key by severity rank
+                // — the worst condition's disc sits on top where markers overlap.
+                "symbol-sort-key": ["get", "_sev"],
               },
             },
             before,
@@ -390,22 +407,47 @@ export function RoadConditionsLayer() {
     if (!map || !mapReady || !layerVisible) return;
 
     const onClick = (e: MapLayerMouseEvent) => {
-      const f = e.features?.[0];
-      if (!f) return;
-      const props = (f.properties ?? {}) as Record<string, unknown>;
-      const geom = f.geometry;
+      // Collect every marker near the click — not just the top one — so several
+      // conditions stacked at the same spot all stay reachable in a single popup
+      // (linked works often share a segment: roadworks + its lane closure land on
+      // the same point). The radius is ~one marker-width so touching/overlapping
+      // discs are grouped while genuinely separate incidents stay independent.
+      const r = 24;
+      const box: [[number, number], [number, number]] = [
+        [e.point.x - r, e.point.y - r],
+        [e.point.x + r, e.point.y + r],
+      ];
+      const hits = map.getLayer(MARKER_LAYER)
+        ? map.queryRenderedFeatures(box, { layers: [MARKER_LAYER] })
+        : (e.features ?? []);
+      if (hits.length === 0) return;
+
+      // Dedupe by event id (one MultiPoint event renders a marker per endpoint),
+      // format each condition's validity, then order most-severe first.
+      const seen = new Set<string>();
+      const entries: Record<string, unknown>[] = [];
+      for (const h of hits) {
+        const p = (h.properties ?? {}) as Record<string, unknown>;
+        const id = String(p._id ?? p.headline ?? "");
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const validity = formatValidity(
+          p.schedule,
+          p.validFrom,
+          p.validTo,
+          dtfRef.current.dateTime,
+          dtfRef.current.date,
+        );
+        entries.push(validity ? { ...p, validity } : p);
+      }
+      entries.sort((a, b) => (Number(b._sev) || 0) - (Number(a._sev) || 0));
+
+      const top = e.features?.[0];
       const coords: [number, number] =
-        geom?.type === "Point"
-          ? (geom.coordinates as [number, number])
+        top?.geometry?.type === "Point"
+          ? (top.geometry.coordinates as [number, number])
           : [e.lngLat.lng, e.lngLat.lat];
-      const validity = formatValidity(
-        props.schedule,
-        props.validFrom,
-        props.validTo,
-        dtfRef.current.dateTime,
-        dtfRef.current.date,
-      );
-      const popupProps = validity ? { ...props, validity } : props;
+
       popupRef.current?.remove();
       popupRef.current = new maplibregl.Popup({
         closeButton: true,
@@ -413,7 +455,14 @@ export function RoadConditionsLayer() {
         className: "omx-popup",
       })
         .setLngLat(coords)
-        .setHTML(buildPopupCard(POPUP_SPEC, popupProps, (k) => tRef.current(k)))
+        .setHTML(
+          buildStackedPopupCard(
+            POPUP_SPEC,
+            entries,
+            (k) => tRef.current(k),
+            tRef.current("panel.conditionsHere", { count: entries.length }),
+          ),
+        )
         .addTo(map);
     };
 

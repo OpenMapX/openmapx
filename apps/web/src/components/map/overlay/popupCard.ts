@@ -81,14 +81,14 @@ function attributionText(raw: unknown): string {
 }
 
 /**
- * Render an overlay popup as a structured card (HTML string) with EVERY value
- * and label escaped. The card has a header (title), a meta line (colored
- * severity badge + chips), label/value rows, full-width text blocks, and a
- * muted attribution footer. Rows whose field is absent/empty (or holds an
- * object) are omitted. Styled by the `.omx-overlay-popup*` classes in
- * globals.css.
+ * Renders the card body — header (title), a meta line (colored severity badge +
+ * chips), label/value rows, full-width text blocks, and a muted attribution
+ * footer — as an HTML string with EVERY value and label escaped. Rows whose
+ * field is absent/empty (or holds an object) are omitted. Returned WITHOUT the
+ * outer `.omx-overlay-popup` wrapper so it can be rendered standalone or stacked.
+ * Styled by the `.omx-overlay-popup*` classes in globals.css.
  */
-export function buildPopupCard(
+function renderCardBody(
   spec: PopupCardSpec,
   properties: Record<string, unknown>,
   resolveLabel?: (key: string) => string,
@@ -140,5 +140,41 @@ export function buildPopupCard(
     if (attr) footer = `<div class="omx-overlay-popup__footer">${escapeHtml(attr)}</div>`;
   }
 
-  return `<div class="omx-overlay-popup">${header}${chipsHtml}${rows.join("")}${blocks.join("")}${footer}</div>`;
+  return `${header}${chipsHtml}${rows.join("")}${blocks.join("")}${footer}`;
+}
+
+/** A single overlay popup card. */
+export function buildPopupCard(
+  spec: PopupCardSpec,
+  properties: Record<string, unknown>,
+  resolveLabel?: (key: string) => string,
+): string {
+  return `<div class="omx-overlay-popup">${renderCardBody(spec, properties, resolveLabel)}</div>`;
+}
+
+/**
+ * A popup listing several features that share (nearly) the same location — used
+ * when markers overlap so all of them stay reachable in one click. `countLabel`
+ * heads the stack (e.g. "3 conditions here"); each entry is a full card body
+ * separated by a divider, and the whole stack scrolls if tall. Pass the entries
+ * already ordered (most severe first) — this does not sort.
+ */
+export function buildStackedPopupCard(
+  spec: PopupCardSpec,
+  entries: Record<string, unknown>[],
+  resolveLabel?: (key: string) => string,
+  countLabel?: string,
+): string {
+  if (entries.length === 1)
+    return buildPopupCard(spec, entries[0] as Record<string, unknown>, resolveLabel);
+  const head = countLabel
+    ? `<div class="omx-overlay-popup__count">${escapeHtml(countLabel)}</div>`
+    : "";
+  const sections = entries
+    .map(
+      (e) =>
+        `<div class="omx-overlay-popup__section">${renderCardBody(spec, e, resolveLabel)}</div>`,
+    )
+    .join("");
+  return `<div class="omx-overlay-popup omx-overlay-popup--stack">${head}${sections}</div>`;
 }

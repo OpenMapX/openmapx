@@ -254,7 +254,8 @@
       "roadState": "Status",
       "roads": "Roads affected",
       "validity": "Active",
-      "description": "Details"
+      "description": "Details",
+      "conditionsHere": "{count, plural, one {# condition here} other {# conditions here}}"
     }
   },
   "earthquakes": {

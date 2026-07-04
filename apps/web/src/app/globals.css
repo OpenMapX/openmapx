@@ -177,6 +177,25 @@ main {
     font-size: 10px;
     opacity: 0.55;
   }
+  /* Stacked popup: several conditions at one spot, listed in a single card. */
+  .omx-overlay-popup--stack {
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+  .omx-overlay-popup__count {
+    /* Reserve room on the right for the absolute close button. */
+    padding-right: 22px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    opacity: 0.55;
+  }
+  .omx-overlay-popup__section {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--omx-border-light);
+  }
 
   /* MapLibre's built-in AttributionControl host: stay anchored to the right
    * edge (respecting mobile safe-area insets) and cap width so the text can't
