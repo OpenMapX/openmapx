@@ -262,7 +262,17 @@ export function SearchBar() {
   // Voice search (Web Speech API). Feature-detected — the mic button only
   // renders when the browser exposes SpeechRecognition. Dictation fills the
   // input and, on a final result, runs through the normal submit path.
-  const speechCtor = useMemo(() => getSpeechRecognition(), []);
+  // Resolved in an effect (not during render) so the first client render matches
+  // the server, which has no `window`: rendering the mic button at hydration
+  // time would otherwise diverge from the SSR markup (hydration mismatch). The
+  // button appears immediately after mount.
+  const [speechCtor, setSpeechCtor] = useState<SpeechRecognitionCtor | undefined>(undefined);
+  useEffect(() => {
+    // Updater form: the value we store IS a function (the constructor), which
+    // React would otherwise treat as a state updater and invoke (throws — the
+    // ctor needs `new`).
+    setSpeechCtor(() => getSpeechRecognition());
+  }, []);
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const [voicePendingSubmit, setVoicePendingSubmit] = useState(false);
