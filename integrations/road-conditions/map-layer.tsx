@@ -153,8 +153,26 @@ function buildSources(features: RawFeature[]): { markers: GeoJsonData; lines: Ge
     const type = String(p.type ?? "other");
     const severity = String(p.severity ?? "unknown");
 
-    const rep = representativePoint(geom);
-    if (rep) {
+    // Marker placement points. A MultiPoint from these feeds carries only the
+    // endpoints of a linear event ("zwischen X und Y") with NO road path between
+    // them — often the two ends of a motorway closure kilometres apart. Drop a
+    // marker at each real endpoint rather than a lone centroid plus a straight
+    // chord: the chord cuts across a road that curves between the points, which
+    // misrepresents the closure. Two honest points read better. All other
+    // geometries → one representative point.
+    let points: [number, number][] = [];
+    if (
+      geom?.type === "MultiPoint" &&
+      Array.isArray(geom.coordinates) &&
+      geom.coordinates.length > 0
+    ) {
+      points = geom.coordinates as [number, number][];
+    } else {
+      const rep = representativePoint(geom);
+      if (rep) points = [rep];
+    }
+
+    if (points.length > 0) {
       const props: Record<string, unknown> = {
         headline: String(p.headline ?? ""),
         type,
@@ -180,29 +198,21 @@ function buildSources(features: RawFeature[]): { markers: GeoJsonData; lines: Ge
           .filter(Boolean);
         if (names.length > 0) props.roads = [...new Set(names)].join(", ");
       }
-      markerFeatures.push({
-        type: "Feature",
-        geometry: { type: "Point", coordinates: rep },
-        properties: props,
-      });
+      for (const pt of points) {
+        markerFeatures.push({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: pt },
+          properties: props,
+        });
+      }
     }
 
+    // Only genuine line geometry (a `gmlLineString` that follows the road) is
+    // drawn as a line. We deliberately do NOT synthesise a chord for a 2-point
+    // MultiPoint — there's no road path in the data, and the endpoint markers
+    // above convey the extent without misrepresenting the road.
     if (geom && (geom.type === "LineString" || geom.type === "MultiLineString")) {
       lineFeatures.push({ type: "Feature", geometry: geom, properties: { severity } });
-    } else if (
-      geom?.type === "MultiPoint" &&
-      Array.isArray(geom.coordinates) &&
-      geom.coordinates.length === 2
-    ) {
-      // A 2-point MultiPoint is a DATEX "between X and Y" linear extent — draw
-      // the affected span as a line (the marker still sits at its midpoint).
-      // Restricted to exactly 2 points so a set of genuinely separate incidents
-      // from a future provider is never wrongly joined into one segment.
-      lineFeatures.push({
-        type: "Feature",
-        geometry: { type: "LineString", coordinates: geom.coordinates as [number, number][] },
-        properties: { severity },
-      });
     }
   }
 
