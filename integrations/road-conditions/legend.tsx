@@ -38,9 +38,12 @@ const SEVERITY_STEPS: { value: MinSeverity; color?: string }[] = [
   { value: "critical", color: SEVERITY_COLORS.critical },
 ];
 
-function Glyph({ type }: { type: string }) {
+// Forward `className` so MUI's Chip can tag the svg with `.MuiChip-icon`
+// (it clones the icon element and injects the class) — otherwise the icon
+// styling, including the left-margin below, never applies.
+function Glyph({ type, className }: { type: string; className?: string }) {
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">
+    <svg className={className} width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">
       <path d={TYPE_GLYPHS[type] ?? (TYPE_GLYPHS.other as string)} fill="currentColor" />
     </svg>
   );
