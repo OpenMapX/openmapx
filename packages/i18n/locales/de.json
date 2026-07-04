@@ -225,6 +225,38 @@
     "mountainPass": "Bergpass",
     "attribution": "Daten"
   },
+  "roadConditions": {
+    "trafficIncidents": "Verkehrsstörungen",
+    "toggleOverlay": "Verkehrsstörungen umschalten",
+    "filterByType": "Typ",
+    "severity": "Schwere",
+    "reset": "Zurücksetzen",
+    "all": "Alle",
+    "sev": {
+      "low": "Niedrig",
+      "medium": "Mittel",
+      "high": "Hoch",
+      "critical": "Kritisch",
+      "unknown": "Unbekannt"
+    },
+    "type": {
+      "roadworks": "Baustelle",
+      "road_closure": "Sperrung",
+      "lane_closure": "Spursperrung",
+      "accident": "Unfall",
+      "congestion": "Stau",
+      "detour": "Umleitung",
+      "hazard": "Gefahr",
+      "obstruction": "Hindernis"
+    },
+    "panel": {
+      "type": "Typ",
+      "roadState": "Status",
+      "roads": "Betroffene Straßen",
+      "validity": "Aktiv",
+      "description": "Details"
+    }
+  },
   "earthquakes": {
     "earthquakes": "Erdbeben",
     "toggleOverlay": "Erdbeben-Overlay umschalten",

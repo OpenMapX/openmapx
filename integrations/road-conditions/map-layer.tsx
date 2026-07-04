@@ -3,6 +3,7 @@
 import { useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
@@ -14,8 +15,9 @@ import { useMap } from "@/lib/MapContext";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { markerImageData, markerImageId, parseMarkerImageId, representativePoint } from "./markers";
-// Registers the "road-conditions" overlay store the layer selector toggles.
-import "./store";
+// The named import also runs the module side-effect that registers the
+// "road-conditions" overlay store (shared by the layer selector + legend).
+import { useRoadConditionsStore } from "./store";
 
 type GeoJsonData = Parameters<GeoJSONSource["setData"]>[0];
 
@@ -24,6 +26,8 @@ const MARKER_SOURCE = "omx-road-conditions-markers";
 const LINE_SOURCE = "omx-road-conditions-lines";
 const LINE_LAYER = "omx-road-conditions-line";
 const MARKER_LAYER = "omx-road-conditions-markers";
+const CLUSTER_LAYER = "omx-road-conditions-clusters";
+const CLUSTER_COUNT_LAYER = "omx-road-conditions-cluster-count";
 const MIN_ZOOM = 5;
 
 /** Affected-segment line color by severity (matches the marker disc ramp). */
@@ -47,13 +51,14 @@ const POPUP_SPEC: PopupCardSpec = {
   severityField: "severity",
   attributionField: "attribution",
   rows: [
-    { field: "type", label: "Type", format: "label", variant: "chip" },
-    { field: "roadState", label: "Status", format: "label", variant: "chip" },
+    { field: "type", labelKey: "panel.type", format: "label", variant: "chip" },
+    { field: "roadState", labelKey: "panel.roadState", format: "label", variant: "chip" },
+    { field: "roads", labelKey: "panel.roads", variant: "row" },
     // Structured validity window (from the feed's validFrom/validTo, not the
     // free-text description — many feeds don't put it in the text). Pre-formatted
     // into `validity` at click time.
-    { field: "validity", label: "Active", variant: "row" },
-    { field: "description", label: "Details", variant: "block" },
+    { field: "validity", labelKey: "panel.validity", variant: "row" },
+    { field: "description", labelKey: "panel.description", variant: "block" },
   ],
 };
 
@@ -168,6 +173,13 @@ function buildSources(features: RawFeature[]): { markers: GeoJsonData; lines: Ge
         props.schedule = JSON.stringify(p.schedule);
       }
       if (p.description) props.description = String(p.description);
+      // Flatten affected-road refs into a compact label for the popup row.
+      if (Array.isArray(p.roads) && p.roads.length > 0) {
+        const names = (p.roads as Array<{ name?: unknown; ref?: unknown }>)
+          .map((r) => String(r.ref ?? r.name ?? "").trim())
+          .filter(Boolean);
+        if (names.length > 0) props.roads = [...new Set(names)].join(", ");
+      }
       markerFeatures.push({
         type: "Feature",
         geometry: { type: "Point", coordinates: rep },
@@ -177,6 +189,20 @@ function buildSources(features: RawFeature[]): { markers: GeoJsonData; lines: Ge
 
     if (geom && (geom.type === "LineString" || geom.type === "MultiLineString")) {
       lineFeatures.push({ type: "Feature", geometry: geom, properties: { severity } });
+    } else if (
+      geom?.type === "MultiPoint" &&
+      Array.isArray(geom.coordinates) &&
+      geom.coordinates.length === 2
+    ) {
+      // A 2-point MultiPoint is a DATEX "between X and Y" linear extent — draw
+      // the affected span as a line (the marker still sits at its midpoint).
+      // Restricted to exactly 2 points so a set of genuinely separate incidents
+      // from a future provider is never wrongly joined into one segment.
+      lineFeatures.push({
+        type: "Feature",
+        geometry: { type: "LineString", coordinates: geom.coordinates as [number, number][] },
+        properties: { severity },
+      });
     }
   }
 
@@ -192,23 +218,36 @@ export function RoadConditionsLayer() {
   const layerVisible = useOverlayLayerVisible(OVERLAY_ID);
   useIntegrationAttribution(OVERLAY_ID, layerVisible);
   useOverlayExclusion(OVERLAY_ID, layerVisible);
-  useLayerReanchor([LINE_LAYER, MARKER_LAYER], layerVisible);
+  useLayerReanchor([LINE_LAYER, MARKER_LAYER, CLUSTER_LAYER, CLUSTER_COUNT_LAYER], layerVisible);
   const popupRef = useRef<maplibregl.Popup | null>(null);
-  // Keep the latest formatters in a ref so the imperative popup click handler
-  // (bound once per effect) always formats validity per the current prefs.
+  // Keep the latest formatters/translator in refs so the imperative popup click
+  // handler (bound once per effect) always uses the current prefs + locale.
   const dtf = useDateTimeFormat();
   const dtfRef = useRef(dtf);
   useEffect(() => {
     dtfRef.current = dtf;
   }, [dtf]);
+  const t = useTranslations("roadConditions");
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
+  // Legend filter state — threaded into the events query so filtering runs
+  // server-side across every provider, not as client-side hiding.
+  const filterTypes = useRoadConditionsStore((s) => s.types);
+  const minSeverity = useRoadConditionsStore((s) => s.minSeverity);
 
   const fetchData = useCallback(async () => {
     const map = mapRef.current;
     if (!map || map.getZoom() < MIN_ZOOM) return;
     const b = map.getBounds();
     const base = apiUrl.replace(/\/$/, "");
-    const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
-    const url = `${base}/api/integrations/road-conditions/events?bbox=${bbox}`;
+    const params = new URLSearchParams({
+      bbox: `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`,
+    });
+    if (filterTypes.length > 0) params.set("types", filterTypes.join(","));
+    if (minSeverity !== "all") params.set("minSeverity", minSeverity);
+    const url = `${base}/api/integrations/road-conditions/events?${params.toString()}`;
     try {
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) return;
@@ -219,7 +258,7 @@ export function RoadConditionsLayer() {
     } catch {
       // Silent fetch failure — overlay stays as-is.
     }
-  }, [apiUrl, mapRef]);
+  }, [apiUrl, mapRef, filterTypes, minSeverity]);
 
   // Bake a disc+glyph marker image on demand for each (type, severity) the
   // symbol layer requests. Synchronous canvas render → no flicker, no warnings.
@@ -248,6 +287,8 @@ export function RoadConditionsLayer() {
     const sync = () => {
       if (!layerVisible) {
         try {
+          if (map.getLayer(CLUSTER_COUNT_LAYER)) map.removeLayer(CLUSTER_COUNT_LAYER);
+          if (map.getLayer(CLUSTER_LAYER)) map.removeLayer(CLUSTER_LAYER);
           if (map.getLayer(MARKER_LAYER)) map.removeLayer(MARKER_LAYER);
           if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER);
           if (map.getSource(MARKER_SOURCE)) map.removeSource(MARKER_SOURCE);
@@ -273,6 +314,11 @@ export function RoadConditionsLayer() {
           map.addSource(MARKER_SOURCE, {
             type: "geojson",
             data: { type: "FeatureCollection", features: [] },
+            // Collapse dense/coincident incidents (many events land on the same
+            // junction) into counted clusters that split as you zoom in.
+            cluster: true,
+            clusterMaxZoom: 13,
+            clusterRadius: 44,
           });
         }
         const before = getFirstSymbolLayerId(map);
@@ -300,6 +346,9 @@ export function RoadConditionsLayer() {
               type: "symbol",
               source: MARKER_SOURCE,
               minzoom: MIN_ZOOM,
+              // Only unclustered incidents get a disc+glyph marker; clusters are
+              // drawn by the count layers below.
+              filter: ["!", ["has", "point_count"]],
               layout: {
                 "icon-image": ["get", "_icon"],
                 "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.42, 10, 0.55, 16, 0.75],
@@ -310,6 +359,45 @@ export function RoadConditionsLayer() {
             before,
           );
           INTERACTIVE_LAYER_IDS.add(MARKER_LAYER);
+        }
+        if (!map.getLayer(CLUSTER_LAYER)) {
+          map.addLayer(
+            {
+              id: CLUSTER_LAYER,
+              type: "circle",
+              source: MARKER_SOURCE,
+              minzoom: MIN_ZOOM,
+              filter: ["has", "point_count"],
+              paint: {
+                "circle-color": "#cc0033",
+                "circle-opacity": 0.9,
+                "circle-stroke-color": "#ffffff",
+                "circle-stroke-width": 2,
+                "circle-radius": ["step", ["get", "point_count"], 14, 10, 18, 50, 24],
+              },
+            },
+            before,
+          );
+          INTERACTIVE_LAYER_IDS.add(CLUSTER_LAYER);
+        }
+        if (!map.getLayer(CLUSTER_COUNT_LAYER)) {
+          map.addLayer(
+            {
+              id: CLUSTER_COUNT_LAYER,
+              type: "symbol",
+              source: MARKER_SOURCE,
+              minzoom: MIN_ZOOM,
+              filter: ["has", "point_count"],
+              layout: {
+                "text-field": ["get", "point_count_abbreviated"],
+                "text-font": ["Noto Sans Bold"],
+                "text-size": 12,
+                "text-allow-overlap": true,
+              },
+              paint: { "text-color": "#ffffff" },
+            },
+            before,
+          );
         }
         void fetchData();
       } catch {
@@ -366,20 +454,36 @@ export function RoadConditionsLayer() {
         className: "omx-popup",
       })
         .setLngLat(coords)
-        .setHTML(buildPopupCard(POPUP_SPEC, popupProps))
+        .setHTML(buildPopupCard(POPUP_SPEC, popupProps, (k) => tRef.current(k)))
         .addTo(map);
     };
 
+    // Click a cluster → zoom to the level where it breaks apart.
+    const onClusterClick = (e: MapLayerMouseEvent) => {
+      const f = e.features?.[0];
+      const clusterId = f?.properties?.cluster_id;
+      const src = map.getSource(MARKER_SOURCE) as GeoJSONSource | undefined;
+      if (clusterId == null || !src || f?.geometry?.type !== "Point") return;
+      const center = f.geometry.coordinates as [number, number];
+      void src
+        .getClusterExpansionZoom(clusterId)
+        .then((zoom) => map.easeTo({ center, zoom: Math.min(zoom, 17) }))
+        .catch(() => {});
+    };
+
     const onMouseMove = (e: maplibregl.MapMouseEvent) => {
-      if (!map.getLayer(MARKER_LAYER)) return;
-      const hit = map.queryRenderedFeatures(e.point, { layers: [MARKER_LAYER] });
+      const layers = [MARKER_LAYER, CLUSTER_LAYER].filter((l) => map.getLayer(l));
+      if (layers.length === 0) return;
+      const hit = map.queryRenderedFeatures(e.point, { layers });
       map.getCanvasContainer().style.cursor = hit.length > 0 ? "pointer" : "";
     };
 
     map.on("click", MARKER_LAYER, onClick);
+    map.on("click", CLUSTER_LAYER, onClusterClick);
     map.on("mousemove", onMouseMove);
     return () => {
       map.off("click", MARKER_LAYER, onClick);
+      map.off("click", CLUSTER_LAYER, onClusterClick);
       map.off("mousemove", onMouseMove);
       map.getCanvasContainer().style.cursor = "";
       popupRef.current?.remove();

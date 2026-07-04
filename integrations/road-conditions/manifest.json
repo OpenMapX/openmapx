@@ -11,23 +11,14 @@
   "category": "Navigation",
   "frontend": {
     "mapLayer": true,
+    "legend": true,
     "layerSelector": {
       "group": "map-details",
       "labelKey": "trafficIncidents",
       "icon": "warning"
     },
     "overlay": {
-      "minZoom": 5,
-      "legend": {
-        "kind": "categorical",
-        "title": "Road conditions",
-        "items": [
-          { "color": "#7e0023", "label": "Critical" },
-          { "color": "#cc0033", "label": "High" },
-          { "color": "#ff9933", "label": "Medium" },
-          { "color": "#ffde33", "label": "Low" }
-        ]
-      }
+      "minZoom": 5
     }
   }
 }

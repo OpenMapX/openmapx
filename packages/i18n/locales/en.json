@@ -225,6 +225,38 @@
     "mountainPass": "Mountain pass",
     "attribution": "Data"
   },
+  "roadConditions": {
+    "trafficIncidents": "Traffic incidents",
+    "toggleOverlay": "Toggle traffic incidents",
+    "filterByType": "Type",
+    "severity": "Severity",
+    "reset": "Reset",
+    "all": "All",
+    "sev": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "critical": "Critical",
+      "unknown": "Unknown"
+    },
+    "type": {
+      "roadworks": "Roadworks",
+      "road_closure": "Closure",
+      "lane_closure": "Lane closure",
+      "accident": "Accident",
+      "congestion": "Congestion",
+      "detour": "Detour",
+      "hazard": "Hazard",
+      "obstruction": "Obstruction"
+    },
+    "panel": {
+      "type": "Type",
+      "roadState": "Status",
+      "roads": "Roads affected",
+      "validity": "Active",
+      "description": "Details"
+    }
+  },
   "earthquakes": {
     "earthquakes": "Earthquakes",
     "toggleOverlay": "Toggle earthquake overlay",
