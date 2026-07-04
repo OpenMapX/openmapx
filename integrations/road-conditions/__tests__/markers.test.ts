@@ -37,6 +37,24 @@ describe("representativePoint", () => {
     expect(p?.[1]).toBeCloseTo(50.01, 4);
   });
 
+  it("returns the centroid of a MultiPoint (the geometry DATEX2 feeds emit)", () => {
+    // Two affected points (e.g. the ends of a "between X and Y" closure) → marker
+    // placed midway between them.
+    expect(
+      representativePoint({
+        type: "MultiPoint",
+        coordinates: [
+          [12.0, 49.0],
+          [12.2, 49.2],
+        ],
+      }),
+    ).toEqual([12.1, 49.1]);
+  });
+
+  it("returns null for an empty MultiPoint", () => {
+    expect(representativePoint({ type: "MultiPoint", coordinates: [] })).toBeNull();
+  });
+
   it("returns null for unknown/empty geometry", () => {
     expect(representativePoint(null)).toBeNull();
     expect(representativePoint({ type: "GeometryCollection", coordinates: [] })).toBeNull();
