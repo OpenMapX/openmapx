@@ -86,7 +86,7 @@ not a routed mode at all; it is a deep-link feature, described
 
 For driving, OpenMapX maps avoid options onto each engine's native vocabulary:
 avoiding highways, tolls, and ferries on Valhalla, and the equivalent excludes on
-OSRM. Highway and toll avoidance apply to driving; ferries can be avoided on foot
+OSRM. Highway and toll avoidance apply to driving; ferries and closures can be avoided on foot
 and bike too.
 
 ### Departure and arrival times
@@ -100,11 +100,17 @@ the leave-now / depart-at / arrive-by picker is surfaced for transit journeys; t
 time-aware capability is available to driving, cycling, and walking through the
 API.
 
+When a timed route is requested, the routing system dynamically evaluates active
+road closures. Planned closures are only avoided if they are actually in effect at the
+selected travel time. The system evaluates these in the closure's local timezone (supporting
+fine-grained recurring schedule windows). This prevents routing detours around
+future closures that haven't started yet or nightly closures during daytime trips.
+
 ## Route options
 
 The directions panel exposes the tuning knobs that map onto the routing API:
 
-- **Avoid** — highways and tolls (driving only) and ferries (any ground mode).
+- **Avoid** — highways and tolls (driving only), and ferries and closures (any ground mode).
 - **Units** — kilometers or miles, a per-user setting that also controls how
   distances and elevation read throughout the app.
 - **Alternatives** — returned automatically for a straight two-point trip (no

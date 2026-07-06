@@ -226,7 +226,8 @@ Schedules and tuning for the daily Transitous transit-data sync.
 
 | Variable                              | Description                                                                                                  | Required / Default            |
 | ------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| `TRANSITOUS_SYNC_CRON`                | Cron schedule for the daily Transitous sync. Set to `disabled` to turn it off (e.g. on a staging host where you trigger manually). | Optional. Commented `0 3 * * *` |
+| `TRANSITOUS_SYNC_CRON`                | Cron schedule for the daily Transitous sync. Set to `disabled` (or `off`/`false`) to turn it off (e.g. on a staging host where you trigger manually). | Optional. Commented `0 3 * * *` |
+| `TRANSITOUS_STALENESS_CHECK_CRON`     | Cron schedule for the staleness sweep that flags feeds that have stopped updating. Set to `disabled` (or `off`/`false`) to turn it off. | Optional. Commented `0 4 * * *` |
 | `TRANSITOUS_FEED_PROXY_RELOAD_CRON`   | Cron schedule for the feed-proxy nginx-reload heartbeat — a safety net against a missed reload during sync. | Optional. Commented `*/15 * * * *` |
 
 :::note[Transitous feed-proxy key]

@@ -142,7 +142,7 @@ for the trust model.
 | `ext browse` | List catalog extensions. Flags: `-q, --query <text>`, `--trust <verified\|community>`, `--type <service\|integration>`. |
 | `ext list` | List installed extensions, their components, and available updates. |
 | `ext install <id\|url>` | Install by catalog id, or by `extension.json` URL (the latter installs as the **community** tier). |
-| `ext update <id>` | Re-pin an installed extension to the catalog's current version. |
+| `ext update <id>` | Re-pin an installed extension to the latest published version. |
 | `ext remove <id>` | Uninstall an extension — removes its services and integrations. |
 
 Install is one orchestrated, atomic job: it registers and pins each service repo,

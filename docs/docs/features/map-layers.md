@@ -78,9 +78,18 @@ The built-in overlays group into a few themes.
 
 The traffic overlay needs a TomTom API key (set in the admin panel or via
 `.env`), and only renders above a minimum zoom. The live-transit overlay picks
-one vehicle-position provider per visible region. These overlays complement the
-dedicated [public transit](./public-transit.md) and [directions](./directions.md)
-features rather than replacing them.
+one vehicle-position provider per visible region. The **Road conditions** overlay
+plots traffic incidents, roadworks, hazards, and closures. It features an
+interactive, filterable legend allowing users to filter by incident
+type (roadworks, closures, lane closures, accidents, congestion, detours, hazards,
+obstructions) and minimum severity (low, medium, high, critical). Clicking an
+incident displays a localized popup showing affected roads, descriptions, and
+structured validity times (including recurring schedule windows in the source's
+local timezone). Overlapping markers are automatically grouped into a single scrollable
+popup (ordered most-severe first) so all incidents at the same spot stay reachable, and
+linear events (such as segment closures) render as line segments directly on the map.
+These overlays complement the dedicated [public transit](./public-transit.md) and
+[directions](./directions.md) features rather than replacing them.
 
 ### Environment & weather
 

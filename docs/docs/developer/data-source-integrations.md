@@ -160,13 +160,14 @@ import { setOverpassUrl } from "@openmapx/core";
 import { createDataSourceResolver } from "@openmapx/integration-data-source/resolver";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { registerPlaceResolver } from "@openmapx/place-ids";
-import { setTankerkoenigApiKey } from "./providers/factory.js";
+import { setFuelLogger, setTankerkoenigApiKey } from "./providers/factory.js";
 import { fuelProvider, setManifestDataSources } from "./providers/provider.js";
 
 export function setup(ctx: IntegrationContext): void {
-  const overpass = ctx.getRequiredService("overpass");
-  if (overpass?.url) setOverpassUrl(overpass.url);
-  setTankerkoenigApiKey(ctx.config.apiKey as string | undefined);
+  const resolved = ctx.getRequiredService("overpass");
+  if (resolved?.url) setOverpassUrl(resolved.url);
+  setFuelLogger(ctx.log);
+  setTankerkoenigApiKey(ctx.config.tankerkoenigApiKey as string | undefined);
 
   // Load attribution from the manifest *before* registering the provider,
   // so its `attribution` getter has data when the framework reads it.
