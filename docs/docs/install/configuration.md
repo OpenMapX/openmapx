@@ -284,6 +284,15 @@ for what each class covers.
 | `OPENMAPX_ALLOW_NONCOMMERCIAL` | Set to `false`/`0` to exclude sources whose licence forbids commercial use (`commercialUse: "no"`). Overrides the admin toggle. | Optional. Default `true`  |
 | `OPENMAPX_ALLOW_GREY_AREA`     | Set to `false`/`0` to exclude sources with unclear or undocumented terms (`commercialUse: "unknown"`). Overrides the admin toggle. | Optional. Default `true`  |
 
+## Overture Maps POIs
+
+Schedules and switches for the monthly Overture Maps POI data ingestion.
+
+| Variable           | Description                                                                                  | Required / Default        |
+| ------------------ | ------------------------------------------------------------------------------------------- | ------------------------- |
+| `OVERTURE_ENABLED`  | Set to `true` to enable the monthly download and ingestion of Overture Maps POI data.        | Optional. Default unset   |
+| `OVERTURE_SYNC_CRON`| Cron schedule for the monthly Overture POI ingestion run.                                  | Optional. Default `0 5 1 * *` (monthly) |
+
 ## Natural-language search
 
 [Natural-language search](../features/natural-language-search.md) (the
