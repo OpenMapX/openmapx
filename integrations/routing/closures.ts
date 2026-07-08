@@ -286,6 +286,25 @@ function geometryToExclusions(
       }
       break;
     }
+    case "MultiPoint": {
+      // Push each point as its own exclusion — do NOT collapse to a centroid,
+      // which can sit off-road between the two ends of a "between X and Y"
+      // closure (the shape DATEX2 feeds emit for this case).
+      for (const c of geometry.coordinates as number[][]) {
+        const p = toLngLat(c);
+        if (p) points.push(p);
+      }
+      break;
+    }
+    case "GeometryCollection": {
+      const geometries =
+        (geometry as { geometries?: Array<{ type: string; coordinates?: unknown }> }).geometries ??
+        [];
+      for (const g of geometries) {
+        geometryToExclusions(g, points, polygons, ctx);
+      }
+      break;
+    }
     default:
       break;
   }

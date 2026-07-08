@@ -4,10 +4,31 @@ import { eventsToFeatureCollection } from "./eventsToGeojson.js";
 import { aggregateRoadConditions } from "./orchestrator.js";
 import type { RoadConditionSeverity, RoadConditionType } from "./types.js";
 
-function parseBbox(raw: string | undefined): BBox | null {
+/**
+ * Parse a `west,south,east,north` query param into a BBox, rejecting malformed
+ * or out-of-domain input rather than silently substituting a wrong value.
+ *
+ * NOTE: this is a byte-identical copy of `parseBbox` in OpenConditions'
+ * `services/ingest/src/publish-routes.ts` — there is no shared package either
+ * side imports from, so any future change here must be mirrored there too.
+ */
+export function parseBbox(raw: string | undefined): BBox | null {
   if (!raw) return null;
-  const parts = raw.split(",").map(Number);
-  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) return null;
+  const segments = raw.split(",");
+  // Reject blank segments explicitly — `Number("")` is `0` (finite), so
+  // "1,,3,4" would otherwise silently parse to [1, 0, 3, 4] instead of
+  // being rejected as malformed.
+  if (segments.length !== 4 || segments.some((s) => s.trim() === "")) return null;
+  const parts = segments.map(Number);
+  if (parts.some((n) => !Number.isFinite(n))) return null;
+  const [west, south, east, north] = parts as BBox;
+  if (west < -180 || west > 180 || east < -180 || east > 180) return null;
+  if (south < -90 || south > 90 || north < -90 || north > 90) return null;
+  if (south > north) return null;
+  // west > east would describe an antimeridian-crossing box; those are not
+  // supported downstream (bbox intersection assumes west <= east), so reject
+  // rather than silently returning empty/wrong results.
+  if (west > east) return null;
   return parts as BBox;
 }
 

@@ -138,7 +138,8 @@ function midpointOfLine(coords: number[][]): LngLat | null {
  * One representative point per incident, so a single marker is placed regardless
  * of geometry: the point itself, the centroid of a MultiPoint's affected points
  * (e.g. the two ends of a "between X and Y" closure), a line's length-midpoint,
- * the longest line of a MultiLineString, or a polygon's first vertex.
+ * the longest line of a MultiLineString, a polygon's first vertex, or (for a
+ * GeometryCollection) the first member geometry that yields a point.
  */
 export function representativePoint(
   geometry: { type: string; coordinates: unknown } | null | undefined,
@@ -177,6 +178,19 @@ export function representativePoint(
   if (type === "MultiPolygon") {
     const ring = (coordinates as number[][][][])[0]?.[0];
     return ring && ring.length > 0 ? (ring[0] as LngLat) : null;
+  }
+  if (type === "GeometryCollection") {
+    const geometries =
+      (
+        geometry as unknown as {
+          geometries?: Array<{ type: string; coordinates: unknown }>;
+        }
+      ).geometries ?? [];
+    for (const g of geometries) {
+      const rep = representativePoint(g);
+      if (rep) return rep;
+    }
+    return null;
   }
   return null;
 }

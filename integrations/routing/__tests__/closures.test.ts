@@ -268,6 +268,70 @@ describe("activeClosuresForBbox", () => {
     ]);
   });
 
+  it("handles MultiPoint geometry by pushing each point as its own exclusion (no centroid)", async () => {
+    // DATEX2 "closure between junction X and Y" is emitted as a MultiPoint of
+    // the two ends — collapsing to a centroid could land off-road, so each
+    // point must reach the router individually.
+    const getEvents = vi.fn().mockResolvedValue([
+      {
+        id: "test:mpt",
+        source: "test",
+        provider: "test",
+        type: "road_closure",
+        severity: "high",
+        geometry: {
+          type: "MultiPoint",
+          coordinates: [
+            [12.0, 49.0],
+            [12.2, 49.2],
+          ],
+        },
+        headline: "Closure between junction X and Y",
+      },
+    ]);
+    const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
+    const result = await activeClosuresForBbox(ctx, TEST_BBOX);
+    expect(result.points).toEqual([
+      [12.0, 49.0],
+      [12.2, 49.2],
+    ]);
+    expect(result.polygons).toHaveLength(0);
+  });
+
+  it("handles GeometryCollection geometry by recursing into every member geometry", async () => {
+    const getEvents = vi.fn().mockResolvedValue([
+      {
+        id: "test:gc",
+        source: "test",
+        provider: "test",
+        type: "road_closure",
+        severity: "high",
+        geometry: {
+          type: "GeometryCollection",
+          geometries: [
+            { type: "Point", coordinates: [0.5, 51.5] },
+            {
+              type: "LineString",
+              coordinates: [
+                [0.1, 51.1],
+                [0.1001, 51.1001],
+              ],
+            },
+          ],
+        },
+        headline: "Collection closure",
+      },
+    ]);
+    const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
+    const result = await activeClosuresForBbox(ctx, TEST_BBOX);
+    expect(result.points).toEqual([
+      [0.5, 51.5],
+      [0.1, 51.1],
+      [0.1001, 51.1001],
+    ]);
+    expect(result.polygons).toHaveLength(0);
+  });
+
   it("handles MultiPolygon geometry by pushing each outer ring", async () => {
     const ring1 = [
       [0.0, 51.0],

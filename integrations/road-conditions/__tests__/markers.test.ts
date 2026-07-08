@@ -57,7 +57,45 @@ describe("representativePoint", () => {
 
   it("returns null for unknown/empty geometry", () => {
     expect(representativePoint(null)).toBeNull();
-    expect(representativePoint({ type: "GeometryCollection", coordinates: [] })).toBeNull();
+  });
+
+  it("returns the representative point of the first member geometry for GeometryCollection", () => {
+    const p = representativePoint({
+      type: "GeometryCollection",
+      coordinates: [],
+      geometries: [
+        { type: "Point", coordinates: [7.1, 50.7] },
+        {
+          type: "LineString",
+          coordinates: [
+            [7.0, 50.7],
+            [7.0, 50.72],
+          ],
+        },
+      ],
+    } as unknown as { type: string; coordinates: unknown });
+    expect(p).toEqual([7.1, 50.7]);
+  });
+
+  it("recurses past a member geometry that yields no point (empty MultiPoint)", () => {
+    const p = representativePoint({
+      type: "GeometryCollection",
+      coordinates: [],
+      geometries: [
+        { type: "MultiPoint", coordinates: [] },
+        { type: "Point", coordinates: [7.1, 50.7] },
+      ],
+    } as unknown as { type: string; coordinates: unknown });
+    expect(p).toEqual([7.1, 50.7]);
+  });
+
+  it("returns null for an empty GeometryCollection", () => {
+    const p = representativePoint({
+      type: "GeometryCollection",
+      coordinates: [],
+      geometries: [],
+    } as unknown as { type: string; coordinates: unknown });
+    expect(p).toBeNull();
   });
 });
 
