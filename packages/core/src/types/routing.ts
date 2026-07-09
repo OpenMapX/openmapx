@@ -166,6 +166,14 @@ export interface RoutingOptions {
   excludeLocations?: LngLat[];
   /** Polygon rings the router must not enter, e.g. road-closure boundaries. */
   excludePolygons?: LngLat[][];
+  /**
+   * Include live ("current") speed observations in Valhalla's `speed_types`
+   * costing, on top of `freeflow`/`constrained`/`predicted`. Callers should
+   * default this on for motorised costings (auto/motorcycle/bus) and off for
+   * bike/pedestrian; that policy lives at the apps/api route-handler layer,
+   * not here.
+   */
+  useLiveTraffic?: boolean;
 }
 
 /** A single point in a recorded GPS trace, optionally tagged with capture time. */

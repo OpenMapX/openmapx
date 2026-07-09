@@ -422,6 +422,13 @@ export function buildCostingOptions(
   if (costing === "auto" || costing === "motorcycle") {
     costingOptions.maneuver_penalty = MANEUVER_PENALTY_SECONDS;
   }
+  // Valhalla enables all four speed sources (incl. "current"/live) by default
+  // when speed_types is omitted, so the false branch here is what actually
+  // matters: it deliberately excludes live speeds. Callers decide the default
+  // per costing (motorised on, bike/pedestrian off) — this fn just honours it.
+  costingOptions.speed_types = options.useLiveTraffic
+    ? ["freeflow", "constrained", "predicted", "current"]
+    : ["freeflow", "constrained", "predicted"];
   return costingOptions;
 }
 
