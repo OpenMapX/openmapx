@@ -1,7 +1,8 @@
 import type { BBox } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { eventsToFeatureCollection } from "./eventsToGeojson.js";
-import { aggregateRoadConditions } from "./orchestrator.js";
+import { flowToFeatureCollection } from "./flowToGeojson.js";
+import { aggregateRoadConditions, aggregateRoadFlow } from "./orchestrator.js";
 import type { RoadConditionSeverity, RoadConditionType } from "./types.js";
 
 /**
@@ -67,6 +68,34 @@ export function setup(ctx: IntegrationContext): void {
       reply.send(fc);
     } catch (err) {
       ctx.log.error("road-conditions aggregation failed", err);
+      reply.header("Cache-Control", "no-cache");
+      reply.send({ type: "FeatureCollection", features: [] });
+    }
+  });
+
+  // GET /flow?bbox=west,south,east,north
+  // Non-tile fallback: aggregates every provider's live speed/congestion
+  // segments into one GeoJSON FeatureCollection — the Martin vector tiles
+  // (Task 2) are the primary path, this route backs providers/consumers
+  // that can't speak MVT.
+  ctx.registerRoute("GET", "/flow", async (req, reply) => {
+    const bbox = parseBbox(req.query.bbox);
+    if (!bbox) {
+      reply.status(400).send({ error: "bbox required: west,south,east,north" });
+      return;
+    }
+
+    const key = `conditions:query:flow:${bboxKey(bbox)}`;
+
+    try {
+      const fc = await ctx.cache.withCache(key, 60, async () => {
+        const segments = await aggregateRoadFlow(ctx, bbox);
+        return flowToFeatureCollection(segments);
+      });
+      reply.header("Cache-Control", "public, max-age=60");
+      reply.send(fc);
+    } catch (err) {
+      ctx.log.error("road-conditions flow aggregation failed", err);
       reply.header("Cache-Control", "no-cache");
       reply.send({ type: "FeatureCollection", features: [] });
     }

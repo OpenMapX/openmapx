@@ -1,7 +1,19 @@
 import type { BBox } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { dedupeRoadConditionEvents } from "./dedupe.js";
-import type { RoadConditionEvent, RoadConditionsProvider, RoadConditionsQuery } from "./types.js";
+import type {
+  RoadConditionEvent,
+  RoadConditionsProvider,
+  RoadConditionsQuery,
+  RoadFlowQuery,
+  RoadFlowSegment,
+} from "./types.js";
+
+/** A flow segment stamped with the producing integration id, mirroring
+ * `RoadConditionEvent.provider` — not part of the `RoadFlowSegment` contract
+ * type itself (segments have no such field), so it is added here at the
+ * aggregation boundary rather than on the wire type. */
+export type RoadFlowSegmentWithProvider = RoadFlowSegment & { provider: string };
 
 /** All road-conditions providers registered across enabled integrations. */
 export function collectProviders(ctx: IntegrationContext): RoadConditionsProvider[] {
@@ -46,4 +58,39 @@ export async function aggregateRoadConditions(
   const allowed = disallowed.size > 0 ? merged.filter((e) => !disallowed.has(e.source)) : merged;
 
   return dedupeRoadConditionEvents(allowed);
+}
+
+/**
+ * Fans the flow query out to every enabled provider that implements the
+ * optional `getFlow` capability, tolerating individual failures
+ * (`Promise.allSettled`), and stamps each segment with the producing
+ * integration id. Unlike {@link aggregateRoadConditions} this is a plain
+ * merge with no dedup step — segments are already unique by `segment_id`
+ * (the producing provider owns that uniqueness), so there is nothing to
+ * collapse across providers.
+ */
+export async function aggregateRoadFlow(
+  ctx: IntegrationContext,
+  bbox: BBox,
+  opts?: RoadFlowQuery,
+): Promise<RoadFlowSegmentWithProvider[]> {
+  const providers = collectProviders(ctx).filter(
+    (p) => coversBbox(p.coverage, bbox) && typeof p.getFlow === "function",
+  );
+  const settled = await Promise.allSettled(providers.map((p) => p.getFlow!(bbox, opts)));
+
+  const merged: RoadFlowSegmentWithProvider[] = [];
+  settled.forEach((res, i) => {
+    const providerId = providers[i]!.id;
+    if (res.status === "fulfilled") {
+      for (const s of res.value) merged.push({ ...s, provider: providerId });
+    } else {
+      ctx.log.warn(`[road-conditions] provider ${providerId} failed getFlow`, res.reason);
+    }
+  });
+
+  const disallowed = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
+  return disallowed.size > 0
+    ? merged.filter((s) => !s.source || !disallowed.has(s.source))
+    : merged;
 }

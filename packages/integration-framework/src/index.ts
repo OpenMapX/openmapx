@@ -105,6 +105,8 @@ export type {
   RoadConditionsProvider,
   RoadConditionsQuery,
   RoadConditionType,
+  RoadFlowQuery,
+  RoadFlowSegment,
   RoadState,
   Route,
   RouteLeg,

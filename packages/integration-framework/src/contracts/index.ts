@@ -68,6 +68,8 @@ export type {
   RoadConditionsProvider,
   RoadConditionsQuery,
   RoadConditionType,
+  RoadFlowQuery,
+  RoadFlowSegment,
   RoadState,
 } from "./road-conditions-provider.js";
 export type {

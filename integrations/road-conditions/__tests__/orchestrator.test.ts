@@ -1,8 +1,8 @@
 import type { BBox } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { describe, expect, it } from "vitest";
-import { aggregateRoadConditions, collectProviders } from "../orchestrator.js";
-import type { RoadConditionEvent, RoadConditionsProvider } from "../types.js";
+import { aggregateRoadConditions, aggregateRoadFlow, collectProviders } from "../orchestrator.js";
+import type { RoadConditionEvent, RoadConditionsProvider, RoadFlowSegment } from "../types.js";
 
 const BBOX: BBox = [13.39, 52.49, 13.41, 52.51];
 
@@ -25,6 +25,29 @@ function provider(
   getEvents: RoadConditionsProvider["getEvents"],
 ): RoadConditionsProvider {
   return { id, getEvents };
+}
+
+function seg(over: Partial<RoadFlowSegment> & Pick<RoadFlowSegment, "id">): RoadFlowSegment {
+  return {
+    geometry: {
+      type: "LineString",
+      coordinates: [
+        [13.4, 52.5],
+        [13.41, 52.51],
+      ],
+    },
+    los: "heavy",
+    confidence: "measured",
+    direction: "f",
+    ...over,
+  };
+}
+
+function flowProvider(
+  id: string,
+  getFlow: NonNullable<RoadConditionsProvider["getFlow"]>,
+): RoadConditionsProvider {
+  return { id, getEvents: async () => [], getFlow };
 }
 
 function ctxWith(
@@ -132,5 +155,31 @@ describe("aggregateRoadConditions", () => {
     const out = await aggregateRoadConditions(ctx, BBOX);
     expect(called).toBe(false);
     expect(out).toEqual([]);
+  });
+});
+
+describe("aggregateRoadFlow", () => {
+  it("returns segments only from providers implementing getFlow, tagged with provider", async () => {
+    const ctx = ctxWith([
+      flowProvider("flow-provider", async () => [seg({ id: "1:f" }), seg({ id: "2:f" })]),
+      provider("no-flow-provider", async () => []),
+    ]);
+    const out = await aggregateRoadFlow(ctx, BBOX);
+    expect(out.map((s) => s.id).sort()).toEqual(["1:f", "2:f"]);
+    expect(out.every((s) => s.provider === "flow-provider")).toBe(true);
+  });
+
+  it("filters out segments whose source is disallowed by the data-use policy", async () => {
+    const ctx = ctxWith(
+      [
+        flowProvider("p", async () => [
+          seg({ id: "1:f", source: "ndw" }),
+          seg({ id: "2:f", source: "greyfeed" }),
+        ]),
+      ],
+      { disallowed: ["greyfeed"] },
+    );
+    const out = await aggregateRoadFlow(ctx, BBOX);
+    expect(out.map((s) => s.id)).toEqual(["1:f"]);
   });
 });
