@@ -15,15 +15,22 @@ import {
   isTrafficExtractStale,
 } from "./jobs/traffic/ensure-extract.js";
 import {
+  loadWaysToEdges as loadWaysToEdgesDefault,
   type RefreshWaysToEdgesResult,
   refreshWaysToEdges as refreshWaysToEdgesDefault,
+  type WayEdge,
 } from "./jobs/traffic/ways-to-edges.js";
+import {
+  type WriteLiveTrafficResult,
+  writeLiveTraffic as writeLiveTrafficDefault,
+} from "./jobs/traffic/write-live.js";
 import {
   buildJobContext,
   type RunPipelineResult,
   runTransitousPipeline,
 } from "./jobs/transitous/index.js";
 import { FEED_PROXY_CONTAINER } from "./jobs/transitous/motis-containers.js";
+import { fetchWithTimeout } from "./jobs/transitous/motis-probe.js";
 import { finalizeJobRow, makePersistingOnStageComplete } from "./jobs/transitous/persistence.js";
 import type { SingleFlightController } from "./jobs/transitous/single-flight.js";
 import {
@@ -34,6 +41,7 @@ import {
 } from "./jobs/transitous/staleness-alerts.js";
 import { asJobLogger, jobChildLogger } from "./logger.js";
 import type { StateStore } from "./state.js";
+import { envString } from "./utils/env.js";
 
 /**
  * Default cron expressions. The sync runs once daily at 03:00 UTC — late
@@ -60,6 +68,16 @@ const TRANSITOUS_STALENESS_CHECK_CRON_DEFAULT = "0 4 * * *";
  * `ensureTrafficExtract`'s ordering-constraint doc comment).
  */
 const TRAFFIC_EXTRACT_CRON_DEFAULT = "0 5 * * *";
+/**
+ * Live-speed writer cron: fetches the OpenConditions speed feed and pokes
+ * the current values straight into `traffic.tar`'s mmapped records. Every 2
+ * minutes — frequent enough that live speeds feel current, infrequent enough
+ * that a slow OpenConditions response never overlaps the next tick under
+ * `protect: true`.
+ */
+const TRAFFIC_LIVE_CRON_DEFAULT = "*/2 * * * *";
+/** Bounds a single OpenConditions speed-feed fetch; mirrors `fetchJson`'s default. */
+const TRAFFIC_LIVE_FETCH_TIMEOUT_MS = 10_000;
 
 // Sentinel values that disable a cron entirely. Empty string is NOT one of
 // them: compose injects `${VAR:-}` as "" when the operator hasn't set the var,
@@ -144,6 +162,49 @@ export interface CronSetupOptions {
     coveredWayIds: Set<number>,
     deps?: { logger?: { info: (msg: string, extra?: Record<string, unknown>) => void } },
   ) => Promise<RefreshWaysToEdgesResult>;
+  /** Override the live-traffic writer cron schedule (e.g. for tests). */
+  trafficLiveCronExpression?: string;
+  /**
+   * Base URL of the OpenConditions ingest extension's speed feed (`GET
+   * {url}/segments/speed.csv`). Defaults to `OPENCONDITIONS_URL`; when
+   * neither is configured the live-traffic cron isn't scheduled at all —
+   * OpenConditions is an optional community extension, not every deployment
+   * has it installed.
+   */
+  openConditionsUrl?: string;
+  /**
+   * data-manager's own view of the same `traffic.tar` file the Valhalla
+   * container mmaps (they don't share a container filesystem, only the
+   * bind-mounted `osm-pbf` data directory both see). Defaults to
+   * `TRAFFIC_TAR_PATH`, then `<dataDir>/osm/traffic.tar` — the path Valhalla's
+   * `/custom_files/traffic.tar` resolves to through the shared `osm-pbf` bind
+   * mount (see `services/data-manager/service.json`'s `produces` entry and
+   * `services/valhalla/service.json`'s `consumes` entry).
+   */
+  trafficTarPath?: string;
+  /** Where `writeLiveTraffic` persists its staleness state. Test seam; production uses the function's own default. */
+  trafficLiveStatePath?: string;
+  /**
+   * Test seam: invoked instead of a real `fetch()` against
+   * `${openConditionsUrl}/segments/speed.csv`.
+   */
+  fetchLiveTrafficCsv?: () => Promise<string>;
+  /**
+   * Test seam: invoked instead of the real `loadWaysToEdges` (which reads
+   * the JSON map `refreshWaysToEdges` last wrote to disk).
+   */
+  loadWaysToEdges?: () => Promise<Map<number, WayEdge[]>>;
+  /**
+   * Test seam: invoked instead of the real `writeLiveTraffic` (which opens
+   * `trafficTarPath` for in-place writes).
+   */
+  writeLiveTraffic?: (deps: {
+    tarPath: string;
+    csv: string;
+    waysToEdges: Map<number, WayEdge[]>;
+    statePath?: string;
+    logger?: { warn: (msg: string, extra?: Record<string, unknown>) => void };
+  }) => Promise<WriteLiveTrafficResult>;
 }
 
 export interface CronHandles {
@@ -153,6 +214,8 @@ export interface CronHandles {
   overtureCron: Cron | null;
   /** Slow guard cron that rebuilds the Valhalla traffic.tar when it's stale. */
   trafficExtractCron: Cron | null;
+  /** Live-traffic writer cron; null when OpenConditions isn't configured. */
+  trafficLiveCron: Cron | null;
   /** Stop all cron jobs; awaitable shutdown lives on the caller. */
   stop: () => void;
   /** Test seam: directly invoke the sync handler as if the cron fired. */
@@ -165,15 +228,17 @@ export interface CronHandles {
   runOvertureNow: () => Promise<void>;
   /**
    * Run once at data-manager startup (before any job that depends on
-   * traffic.tar existing, e.g. the future live-speed writer). Callers invoke
-   * this explicitly right after `setupCron` returns — it is not fired by
-   * `setupCron` itself so construction stays side-effect-free for tests.
+   * traffic.tar existing, e.g. the live-speed writer cron below). Callers
+   * invoke this explicitly right after `setupCron` returns — it is not fired
+   * by `setupCron` itself so construction stays side-effect-free for tests.
    */
   runTrafficExtractStartupNow: () => Promise<void>;
   /** Test seam: directly invoke the traffic-extract guard as if the cron fired. */
   runTrafficExtractGuardNow: () => Promise<void>;
   /** Test seam: directly invoke the way_id-to-GraphId map refresh. */
   runWaysToEdgesRefreshNow: () => Promise<void>;
+  /** Test seam: directly invoke the live-traffic writer as if the cron fired. */
+  runTrafficLiveNow: () => Promise<void>;
 }
 
 function pickCronExpression(
@@ -540,6 +605,93 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   if (!trafficExtractCron) log.info("traffic-extract: guard cron disabled by env");
   else log.info("traffic-extract: guard cron scheduled", { expression: trafficExtractExpr });
 
+  const openConditionsUrl = options.openConditionsUrl ?? envString("OPENCONDITIONS_URL", "");
+  const trafficTarPath =
+    options.trafficTarPath ??
+    envString("TRAFFIC_TAR_PATH", join(options.dataDir, "osm", "traffic.tar"));
+
+  const fetchLiveTrafficCsv =
+    options.fetchLiveTrafficCsv ??
+    (async (): Promise<string> => {
+      const res = await fetchWithTimeout(
+        `${openConditionsUrl}/segments/speed.csv`,
+        TRAFFIC_LIVE_FETCH_TIMEOUT_MS,
+      );
+      if (!res.ok) {
+        throw new Error(`traffic-live: OpenConditions speed feed responded ${res.status}`);
+      }
+      return res.text();
+    });
+
+  const loadCoveredWaysToEdges = options.loadWaysToEdges ?? (() => loadWaysToEdgesDefault());
+  const writeLive = options.writeLiveTraffic ?? writeLiveTrafficDefault;
+
+  // The writer's own module owns the covered-way-id staleness state; this
+  // cron just wires fetch → load → write together and logs the match rate.
+  // A falling matched/total ratio over time signals OSM-vintage drift
+  // between OpenConditions' spine and this deployment's Valhalla graph.
+  const runTrafficLive = async (): Promise<void> => {
+    if (!openConditionsUrl) {
+      log.info("traffic-live: skipped (OPENCONDITIONS_URL not configured)");
+      return;
+    }
+    try {
+      const csv = await fetchLiveTrafficCsv();
+      const waysToEdges = await loadCoveredWaysToEdges();
+      const result = await writeLive({
+        tarPath: trafficTarPath,
+        csv,
+        waysToEdges,
+        statePath: options.trafficLiveStatePath,
+        logger: log,
+      });
+      const matchRatePct =
+        result.total > 0 ? Number(((result.matched / result.total) * 100).toFixed(1)) : null;
+      log.info("traffic-live: cycle complete", {
+        written: result.written,
+        matched: result.matched,
+        total: result.total,
+        matchRatePct,
+        outOfBounds: result.outOfBounds,
+      });
+      // A non-zero out-of-bounds count means waysToEdges references edges the
+      // current traffic.tar doesn't have — a version mismatch the daily
+      // extract-guard cron resolves by rebuilding both.
+      if (result.outOfBounds > 0) {
+        log.warn("traffic-live: skipped out-of-range edges (traffic.tar/waysToEdges mismatch)", {
+          outOfBounds: result.outOfBounds,
+        });
+      }
+    } catch (err) {
+      log.error("traffic-live: cycle failed", { err: (err as Error).message });
+    }
+  };
+
+  const trafficLiveExpr = pickCronExpression(
+    options.trafficLiveCronExpression,
+    "TRAFFIC_LIVE_CRON",
+    TRAFFIC_LIVE_CRON_DEFAULT,
+  );
+
+  const trafficLiveCron =
+    trafficLiveExpr && openConditionsUrl
+      ? new Cron(trafficLiveExpr, { name: "traffic-live", protect: true }, () => {
+          void runTrafficLive().catch((err) => {
+            log.error("traffic-live: cron threw", { err: (err as Error).message });
+          });
+        })
+      : null;
+
+  if (!trafficLiveCron) {
+    log.info(
+      !trafficLiveExpr
+        ? "traffic-live: disabled by env"
+        : "traffic-live: disabled (OPENCONDITIONS_URL not configured)",
+    );
+  } else {
+    log.info("traffic-live: scheduled", { expression: trafficLiveExpr });
+  }
+
   if (!syncCron) log.info("transitous-cron: sync disabled by env");
   else log.info("transitous-cron: sync scheduled", { expression: syncExpr });
   if (!feedProxyReloadCron) log.info("transitous-cron: feed-proxy reload disabled by env");
@@ -560,6 +712,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     stalenessCheckCron?.stop();
     overtureCron?.stop();
     trafficExtractCron?.stop();
+    trafficLiveCron?.stop();
   }
 
   return {
@@ -568,6 +721,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     stalenessCheckCron,
     overtureCron,
     trafficExtractCron,
+    trafficLiveCron,
     stop,
     runSyncNow: runSync,
     runFeedProxyReloadNow: runFeedProxyReload,
@@ -576,6 +730,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     runTrafficExtractStartupNow: runTrafficExtractStartup,
     runTrafficExtractGuardNow: runTrafficExtractGuard,
     runWaysToEdgesRefreshNow: runWaysToEdgesRefresh,
+    runTrafficLiveNow: runTrafficLive,
     // `activeJobId` is exposed indirectly through singleFlight.getInflight()
     // for the shutdown helper — no need to surface it here.
   };

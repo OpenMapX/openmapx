@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { awaitInflightSync, setupCron } from "../src/cron.js";
+import { awaitInflightSync, type CronSetupOptions, setupCron } from "../src/cron.js";
 import {
   createSingleFlightController,
   type SingleFlightController,
@@ -241,6 +241,109 @@ describe("setupCron", () => {
     await handles.runFeedProxyReloadNow();
     expect(reload).not.toHaveBeenCalled();
     handles.stop();
+  });
+
+  describe("traffic-live cron", () => {
+    function baseOptions(extra: Partial<CronSetupOptions>): CronSetupOptions {
+      return {
+        dataDir,
+        repoRoot: "/tmp/nope",
+        countries: [],
+        store: {} as never,
+        singleFlight: makeController(),
+        logger: { info: () => {}, warn: () => {}, error: () => {} },
+        syncCronExpression: "disabled",
+        feedProxyReloadCronExpression: "disabled",
+        ...extra,
+      };
+    }
+
+    it("is not scheduled when OPENCONDITIONS_URL isn't configured, even with a valid cron expression", () => {
+      const handles = setupCron(baseOptions({ trafficLiveCronExpression: "0 0 1 1 *" }));
+      expect(handles.trafficLiveCron).toBeNull();
+      handles.stop();
+    });
+
+    it("respects TRAFFIC_LIVE_CRON=disabled by returning a null trafficLiveCron", () => {
+      const handles = setupCron(
+        baseOptions({
+          trafficLiveCronExpression: "disabled",
+          openConditionsUrl: "http://openconditions-ingest:8080",
+        }),
+      );
+      expect(handles.trafficLiveCron).toBeNull();
+      handles.stop();
+    });
+
+    it("schedules the cron once both a schedule and OPENCONDITIONS_URL are configured", () => {
+      const handles = setupCron(
+        baseOptions({
+          trafficLiveCronExpression: "0 0 1 1 *",
+          openConditionsUrl: "http://openconditions-ingest:8080",
+        }),
+      );
+      expect(handles.trafficLiveCron).not.toBeNull();
+      handles.stop();
+    });
+
+    it("fetches the CSV, loads waysToEdges, writes live traffic, and logs the match rate", async () => {
+      const fetchLiveTrafficCsv = vi
+        .fn()
+        .mockResolvedValue("way_id,dir,current_kph,free_flow_kph,los\n123,f,50,60,moderate");
+      const waysToEdges = new Map([[123, [{ forward: true, level: 0, tile: 1, index: 0 }]]]);
+      const loadWaysToEdges = vi.fn().mockResolvedValue(waysToEdges);
+      const writeLiveTraffic = vi
+        .fn()
+        .mockResolvedValue({ written: 1, matched: 1, total: 1, outOfBounds: 0 });
+      const infoLog = vi.fn();
+
+      const handles = setupCron(
+        baseOptions({
+          trafficLiveCronExpression: "0 0 1 1 *",
+          openConditionsUrl: "http://openconditions-ingest:8080",
+          trafficTarPath: "/data/osm/traffic.tar",
+          fetchLiveTrafficCsv,
+          loadWaysToEdges,
+          writeLiveTraffic,
+          logger: { info: infoLog, warn: () => {}, error: () => {} },
+        }),
+      );
+
+      await handles.runTrafficLiveNow();
+
+      expect(fetchLiveTrafficCsv).toHaveBeenCalledTimes(1);
+      expect(loadWaysToEdges).toHaveBeenCalledTimes(1);
+      expect(writeLiveTraffic).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tarPath: "/data/osm/traffic.tar",
+          csv: "way_id,dir,current_kph,free_flow_kph,los\n123,f,50,60,moderate",
+          waysToEdges,
+          statePath: undefined,
+        }),
+      );
+      expect(infoLog).toHaveBeenCalledWith(
+        "traffic-live: cycle complete",
+        expect.objectContaining({
+          written: 1,
+          matched: 1,
+          total: 1,
+          matchRatePct: 100,
+          outOfBounds: 0,
+        }),
+      );
+
+      handles.stop();
+    });
+
+    it("skips the cycle without fetching when OPENCONDITIONS_URL is unset (direct runTrafficLiveNow call)", async () => {
+      const fetchLiveTrafficCsv = vi.fn();
+      const handles = setupCron(baseOptions({ fetchLiveTrafficCsv }));
+
+      await handles.runTrafficLiveNow();
+
+      expect(fetchLiveTrafficCsv).not.toHaveBeenCalled();
+      handles.stop();
+    });
   });
 });
 
