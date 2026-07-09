@@ -332,14 +332,19 @@ export async function activeClosuresForBbox(
   );
   if (providers.length === 0) return { points: [], polygons: [] };
 
+  // No `minSeverity` floor: road/lane closures are route-blocking regardless
+  // of severity (e.g. OC derives an undeclared-severity lane_closure as
+  // "medium"), so pre-filtering by severity here would drop real closures
+  // before isClosure() ever sees them. isClosure() remains the sole gate.
   const settled = await Promise.allSettled(
     providers.map((p) =>
       p.getEvents(bbox, {
         types: ["road_closure", "lane_closure"],
-        minSeverity: "high",
       }),
     ),
   );
+
+  const disallowed = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
 
   const points: LngLat[] = [];
   const polygons: LngLat[][] = [];
@@ -355,6 +360,7 @@ export async function activeClosuresForBbox(
       continue;
     }
     for (const event of result.value) {
+      if (disallowed.has(event.source)) continue;
       if (!isClosure(event.type, event.severity)) continue;
       if (event.roadState === "open") continue;
       if (!isActiveAt(event, refTime)) continue;

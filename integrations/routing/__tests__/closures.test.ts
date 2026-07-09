@@ -11,6 +11,7 @@ type RoadConditionsProvider = {
 function makeRoadConditionsCtx(
   providers: RoadConditionsProvider[],
   domain = "road-conditions",
+  disallowedSourceIds?: Set<string>,
 ): IntegrationContext {
   return {
     getIntegrationsByDomain: (d: string) => {
@@ -26,6 +27,7 @@ function makeRoadConditionsCtx(
       error: vi.fn(),
       debug: vi.fn(),
     },
+    ...(disallowedSourceIds ? { getDisallowedSourceIds: async () => disallowedSourceIds } : {}),
   } as unknown as IntegrationContext;
 }
 
@@ -222,14 +224,119 @@ describe("activeClosuresForBbox", () => {
     expect(result.points).toEqual([[0.1, 51.1]]);
   });
 
-  it("calls getEvents with closure types and minSeverity high", async () => {
+  it("calls getEvents with closure types and no severity floor", async () => {
+    // A medium-severity lane_closure (OC's derived default when no severity is
+    // declared) must reach isClosure() rather than being pre-filtered by the
+    // provider query — road/lane closures are route-blocking regardless of
+    // severity.
     const getEvents = vi.fn().mockResolvedValue([]);
     const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
     await activeClosuresForBbox(ctx, TEST_BBOX);
     expect(getEvents).toHaveBeenCalledWith(TEST_BBOX, {
       types: ["road_closure", "lane_closure"],
-      minSeverity: "high",
     });
+  });
+
+  it("includes a medium-severity lane_closure as a routing exclusion", async () => {
+    // The mock HONORS the `minSeverity` it is passed, exactly as a real provider
+    // does — so this test only passes when the query omits the "high" floor.
+    // Reinstating `minSeverity: "high"` drops the medium event here and turns
+    // this test RED, making it genuinely diagnostic of the fix.
+    const SEVERITY_RANK: Record<string, number> = { low: 0, medium: 1, high: 2, critical: 3 };
+    const event = {
+      id: "test:medium-lane",
+      source: "test",
+      provider: "test",
+      type: "lane_closure",
+      severity: "medium",
+      geometry: { type: "Point", coordinates: [0.5, 51.5] },
+      headline: "Lane closed",
+    };
+    const getEvents = vi.fn(async (_bbox: BBox, opts?: { minSeverity?: string }) => {
+      const floor = opts?.minSeverity;
+      if (floor && (SEVERITY_RANK[event.severity] ?? 0) < (SEVERITY_RANK[floor] ?? 0)) return [];
+      return [event];
+    });
+    const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
+    const result = await activeClosuresForBbox(ctx, TEST_BBOX);
+    expect(result.points).toEqual([[0.5, 51.5]]);
+  });
+
+  it("does not exclude a non-closure event at a non-critical severity", async () => {
+    const getEvents = vi.fn().mockResolvedValue([
+      {
+        id: "test:non-closure",
+        source: "test",
+        provider: "test",
+        type: "accident",
+        severity: "medium",
+        geometry: { type: "Point", coordinates: [0.5, 51.5] },
+        headline: "Minor accident",
+      },
+    ]);
+    const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
+    const result = await activeClosuresForBbox(ctx, TEST_BBOX);
+    expect(result.points).toHaveLength(0);
+  });
+
+  it("excludes closures whose source the operator has disallowed", async () => {
+    const getEvents = vi.fn().mockResolvedValue([
+      {
+        id: "blocked:1",
+        source: "blocked-feed",
+        provider: "test",
+        type: "road_closure",
+        severity: "high",
+        geometry: { type: "Point", coordinates: [0.5, 51.5] },
+        headline: "Closed",
+      },
+    ]);
+    const ctx = makeRoadConditionsCtx(
+      [{ id: "road-conditions-test", getEvents }],
+      "road-conditions",
+      new Set(["blocked-feed"]),
+    );
+    const result = await activeClosuresForBbox(ctx, TEST_BBOX);
+    expect(result.points).toHaveLength(0);
+  });
+
+  it("still includes closures from allowed sources when other sources are disallowed", async () => {
+    const getEvents = vi.fn().mockResolvedValue([
+      {
+        id: "allowed:1",
+        source: "allowed-feed",
+        provider: "test",
+        type: "road_closure",
+        severity: "high",
+        geometry: { type: "Point", coordinates: [0.5, 51.5] },
+        headline: "Closed",
+      },
+    ]);
+    const ctx = makeRoadConditionsCtx(
+      [{ id: "road-conditions-test", getEvents }],
+      "road-conditions",
+      new Set(["blocked-feed"]),
+    );
+    const result = await activeClosuresForBbox(ctx, TEST_BBOX);
+    expect(result.points).toEqual([[0.5, 51.5]]);
+  });
+
+  it("treats an absent getDisallowedSourceIds method as no sources disallowed", async () => {
+    const getEvents = vi.fn().mockResolvedValue([
+      {
+        id: "test:no-policy",
+        source: "test",
+        provider: "test",
+        type: "road_closure",
+        severity: "high",
+        geometry: { type: "Point", coordinates: [0.5, 51.5] },
+        headline: "Closed",
+      },
+    ]);
+    const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
+    expect(ctx.getDisallowedSourceIds).toBeUndefined();
+    const result = await activeClosuresForBbox(ctx, TEST_BBOX);
+    expect(result.points).toEqual([[0.5, 51.5]]);
   });
 
   it("handles MultiLineString geometry by densifying all lines into points", async () => {
