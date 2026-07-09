@@ -21,6 +21,8 @@ export interface ClientEnv {
   trafficTileUrlTemplate: string;
   cyclOsmTileUrlTemplate: string;
   terrainTileUrlTemplate: string;
+  /** Martin vector-tile server base (Traefik-proxied at `/martin`); first consumer is overlay-traffic-flow. */
+  martinBaseUrl: string;
 }
 
 /**
@@ -57,5 +59,7 @@ export function buildClientEnv(): ClientEnv {
       (apiBase
         ? `${apiBase}/api/tiles/terrain/{z}/{x}/{y}.png`
         : "/api/tiles/terrain/{z}/{x}/{y}.png"),
+    martinBaseUrl:
+      process.env.NEXT_PUBLIC_MARTIN_URL || (apiBase ? `${apiBase}/martin` : "/martin"),
   };
 }

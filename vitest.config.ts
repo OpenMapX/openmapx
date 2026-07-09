@@ -89,6 +89,10 @@ export default defineConfig({
             "apps/web/src/**/*.test.ts?(x)",
             "packages/core/src/hooks/**/*.test.ts?(x)",
             "packages/mangrove-react/**/*.test.ts?(x)",
+            // Integration map-layer/legend components render React against jsdom
+            // and import the web app's `@/*` aliases, so they belong here rather
+            // than in the plain-node `integrations/**/*.test.ts` suite above.
+            "integrations/**/*.test.tsx",
           ],
           exclude: ["**/node_modules/**"],
         },

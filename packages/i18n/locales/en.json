@@ -167,6 +167,7 @@
     "satellite": "Satellite",
     "terrain": "Terrain",
     "traffic": "Traffic",
+    "trafficFlow": "Traffic flow",
     "transit": "Transit",
     "streetLevelImagery": "Street-level imagery",
     "airQuality": "Air Quality",
@@ -257,6 +258,24 @@
       "description": "Details",
       "conditionsHere": "{count, plural, one {# condition here} other {# conditions here}}"
     }
+  },
+  "trafficFlow": {
+    "trafficFlow": "Traffic flow",
+    "toggleOverlay": "Toggle traffic flow",
+    "band": {
+      "freeFlow": "Free flow",
+      "light": "Light",
+      "moderate": "Moderate",
+      "heavy": "Heavy",
+      "severe": "Severe"
+    },
+    "confidence": {
+      "label": "Confidence",
+      "measured": "Measured",
+      "estimated": "Estimated",
+      "typical": "Typical"
+    },
+    "coverageNote": "Live speeds: NL · SE · FI · NYC"
   },
   "earthquakes": {
     "earthquakes": "Earthquakes",

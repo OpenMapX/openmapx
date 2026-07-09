@@ -1,0 +1,17 @@
+{
+  "id": "overlay-traffic-flow",
+  "version": "1.0.0",
+  "domains": ["map-overlay"],
+  "frontend": {
+    "mapLayer": true,
+    "legend": true,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "trafficFlow",
+      "icon": "traffic",
+      "quickSelector": true
+    },
+    "overlay": { "minZoom": 6, "excludes": ["traffic"] }
+  },
+  "backend": { "routes": false }
+}
