@@ -10,6 +10,32 @@ http:
         customResponseHeaders:
           Cache-Control: "public, max-age=86400, stale-while-revalidate=604800"
 
+    # Override of `tiles-cache` above for ONE Martin source: `segment_flow`,
+    # the traffic-flow overlay's live tiles (see
+    # docs/plans/conditions/speed-congestion/10-traffic-flow-overlay.md).
+    # That source is rebuilt from PostGIS every ~5 minutes by the congestion
+    # sweep, so the 24h `tiles-cache` max-age above would leave browsers
+    # showing a day-old snapshot. Wired to `/martin/segment_flow` only, via
+    # the higher-priority `martin-r1` router that `additionalRoutes` on
+    # `services/martin/service.json` generates (Traefik defaults to
+    # rule-length-based router priority when none is set explicitly, and
+    # `PathPrefix('/martin/segment_flow')` is strictly longer/more specific
+    # than the `/martin` rule the 24h router below matches, so it wins
+    # without needing a manual priority number) — every other `/martin/*`
+    # source keeps the 24h behavior above.
+    #
+    # `max-age=240` (4 min, just under the sweep cadence) is a browser-facing
+    # complement to Martin's own internal cache expiry
+    # (`services/martin/config/martin.yaml` `cache.expiry: "4m"`), which
+    # fixes the same staleness problem server-side. With a short max-age,
+    # MapLibre's `refreshExpiredTiles` (default on) re-requests each tile
+    # once it elapses; Martin's strong ETags make an unchanged tile a cheap
+    # 304, so this doesn't add real re-render load.
+    tiles-cache-live:
+      headers:
+        customResponseHeaders:
+          Cache-Control: "public, max-age=240"
+
     # Service worker file. Browsers cap SW max-age at 24h regardless, but
     # an explicit no-store + must-revalidate makes intent clear and prevents
     # any intermediate proxy/CDN from holding a stale `sw.js` that would

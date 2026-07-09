@@ -13,17 +13,27 @@
     "environment": {
       "DATABASE_URL": "postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgis:5432/openmapx"
     },
+    "command": ["--config", "/etc/martin/martin.yaml"],
     "restart": "unless-stopped",
     "dependsOn": [{ "service": "postgis", "condition": "service_healthy" }]
   },
   "provides": ["tile-server"],
+  "bindMounts": [
+    { "source": "config/martin.yaml", "target": "/etc/martin/martin.yaml", "readOnly": true }
+  ],
   "exposure": {
     "hostPorts": [{ "container": 3000, "host": 3002, "bindAddress": "127.0.0.1" }],
     "proxy": {
       "enabled": true,
       "pathPrefix": "/martin",
       "stripPrefix": true,
-      "middleware": ["tiles-cache@file"]
+      "middleware": ["tiles-cache@file"],
+      "additionalRoutes": [
+        {
+          "pathPrefix": "/martin/segment_flow",
+          "middleware": ["martin-strip", "tiles-cache-live@file"]
+        }
+      ]
     }
   },
   "ui": { "category": "tiles" }
