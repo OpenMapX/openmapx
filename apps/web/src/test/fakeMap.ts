@@ -133,6 +133,7 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       getNorth: () => 90,
     }),
     getCanvas: () => ({ style: {} }),
+    getCanvasContainer: () => ({ style: {} }),
     addControl: () => {},
     removeControl: () => {},
     flyTo: () => {},

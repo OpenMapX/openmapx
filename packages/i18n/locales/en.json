@@ -168,6 +168,7 @@
     "terrain": "Terrain",
     "traffic": "Traffic",
     "trafficFlow": "Traffic flow",
+    "trafficTomtom": "Traffic (TomTom)",
     "transit": "Transit",
     "streetLevelImagery": "Street-level imagery",
     "airQuality": "Air Quality",
@@ -273,7 +274,21 @@
       "label": "Confidence",
       "measured": "Measured",
       "estimated": "Estimated",
-      "typical": "Typical"
+      "typical": "Typical",
+      "unknown": "Unknown"
+    },
+    "los": {
+      "free_flow": "Free flow",
+      "heavy": "Heavy traffic",
+      "queuing": "Queuing",
+      "stationary": "Stationary",
+      "unknown": "Unknown"
+    },
+    "panel": {
+      "currentSpeed": "Current speed",
+      "freeFlowSpeed": "Free-flow speed",
+      "ratio": "Of free flow",
+      "los": "Traffic"
     },
     "coverageNote": "Live speeds: NL · SE · FI · NYC"
   },

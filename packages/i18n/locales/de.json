@@ -168,6 +168,7 @@
     "terrain": "Gelände",
     "traffic": "Verkehr",
     "trafficFlow": "Verkehrsfluss",
+    "trafficTomtom": "Verkehr (TomTom)",
     "transit": "Nahverkehr",
     "streetLevelImagery": "Straßenansicht",
     "airQuality": "Luftqualität",
@@ -273,7 +274,21 @@
       "label": "Zuverlässigkeit",
       "measured": "Gemessen",
       "estimated": "Geschätzt",
-      "typical": "Typisch"
+      "typical": "Typisch",
+      "unknown": "Unbekannt"
+    },
+    "los": {
+      "free_flow": "Freie Fahrt",
+      "heavy": "Starker Verkehr",
+      "queuing": "Rückstau",
+      "stationary": "Stillstand",
+      "unknown": "Unbekannt"
+    },
+    "panel": {
+      "currentSpeed": "Aktuelle Geschwindigkeit",
+      "freeFlowSpeed": "Geschwindigkeit bei freier Fahrt",
+      "ratio": "Von freier Fahrt",
+      "los": "Verkehr"
     },
     "coverageNote": "Live-Geschwindigkeiten: NL · SE · FI · NYC"
   },

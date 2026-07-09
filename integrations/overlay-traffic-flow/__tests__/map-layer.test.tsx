@@ -1,4 +1,6 @@
+import type { MapLayerMouseEvent } from "maplibre-gl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { createFakeMap, type FakeMap, render } from "@/test";
 import { useTrafficFlowStore } from "../store";
 
@@ -14,6 +16,31 @@ vi.mock("@/lib/MapContext", () => ({
 
 vi.mock("@/lib/EnvProvider", () => ({
   useEnv: () => ({ martinBaseUrl: "https://api.test/martin" }),
+}));
+
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
+
+// `t(key)` under the mock above returns "trafficFlow.<key>" — assertions below
+// check for those stable keys rather than the real translated copy.
+const popupState = vi.hoisted(() => ({ html: "" }));
+vi.mock("maplibre-gl", () => ({
+  default: {
+    Popup: class FakePopup {
+      setLngLat() {
+        return this;
+      }
+      setHTML(html: string) {
+        popupState.html = html;
+        return this;
+      }
+      addTo() {
+        return this;
+      }
+      remove() {
+        return this;
+      }
+    },
+  },
 }));
 
 import { TrafficFlowLayer } from "../map-layer";
@@ -41,6 +68,8 @@ const COLOR_EXPR = [
 beforeEach(() => {
   fake = createFakeMap();
   useTrafficFlowStore.setState({ panelOpen: false, layerVisible: false });
+  popupState.html = "";
+  INTERACTIVE_LAYER_IDS.delete(COLOR);
 });
 
 describe("TrafficFlowLayer", () => {
@@ -50,6 +79,7 @@ describe("TrafficFlowLayer", () => {
     expect(fake.state.sources.has(SRC)).toBe(false);
     expect(fake.state.layers.has(COLOR)).toBe(false);
     expect(fake.state.layers.has(CASING)).toBe(false);
+    expect(INTERACTIVE_LAYER_IDS.has(COLOR)).toBe(false);
   });
 
   it("registers a vector source plus casing + color line layers when visible", () => {
@@ -72,5 +102,51 @@ describe("TrafficFlowLayer", () => {
 
     const paint = color?.paint as Record<string, unknown>;
     expect(paint["line-color"]).toEqual(COLOR_EXPR);
+  });
+
+  it("registers COLOR as an interactive layer and opens a popup with speed/LOS/confidence on click", () => {
+    useTrafficFlowStore.setState({ panelOpen: true, layerVisible: true });
+    const { unmount } = render(<TrafficFlowLayer />);
+
+    expect(INTERACTIVE_LAYER_IDS.has(COLOR)).toBe(true);
+
+    const clickEvent = {
+      lngLat: { lng: 5, lat: 52 },
+      point: { x: 10, y: 10 },
+      features: [
+        {
+          properties: {
+            highway: "motorway",
+            speed_ratio: 0.42,
+            los: "heavy",
+            confidence: "measured",
+            current_kph: 42,
+            free_flow_kph: 100,
+          },
+        },
+      ],
+    } as unknown as MapLayerMouseEvent;
+    fake.emit("click", clickEvent);
+
+    expect(popupState.html).toContain("42 km/h");
+    expect(popupState.html).toContain("100 km/h");
+    expect(popupState.html).toContain("42%");
+    expect(popupState.html).toContain("trafficFlow.los.heavy");
+    expect(popupState.html).toContain("trafficFlow.confidence.measured");
+
+    unmount();
+    expect(INTERACTIVE_LAYER_IDS.has(COLOR)).toBe(false);
+  });
+
+  it("does not open a popup when the click carries no feature", () => {
+    useTrafficFlowStore.setState({ panelOpen: true, layerVisible: true });
+    render(<TrafficFlowLayer />);
+
+    fake.emit("click", {
+      lngLat: { lng: 5, lat: 52 },
+      features: [],
+    } as unknown as MapLayerMouseEvent);
+
+    expect(popupState.html).toBe("");
   });
 });

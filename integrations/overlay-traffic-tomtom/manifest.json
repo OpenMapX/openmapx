@@ -11,12 +11,12 @@
     "panel": false,
     "layerSelector": {
       "group": "map-details",
-      "labelKey": "traffic",
+      "labelKey": "trafficTomtom",
       "icon": "traffic",
       "quickSelector": true
     },
     "overlay": {
-      "excludes": []
+      "excludes": ["traffic-flow"]
     }
   },
   "backend": {
