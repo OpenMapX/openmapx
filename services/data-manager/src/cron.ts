@@ -15,6 +15,10 @@ import {
   isTrafficExtractStale,
 } from "./jobs/traffic/ensure-extract.js";
 import {
+  type RefreshWaysToEdgesResult,
+  refreshWaysToEdges as refreshWaysToEdgesDefault,
+} from "./jobs/traffic/ways-to-edges.js";
+import {
   buildJobContext,
   type RunPipelineResult,
   runTransitousPipeline,
@@ -124,6 +128,22 @@ export interface CronSetupOptions {
   isTrafficExtractStale?: (deps: {
     logger?: { info: (msg: string, extra?: Record<string, unknown>) => void };
   }) => Promise<boolean>;
+  /**
+   * Resolves the set of OSM way ids the live-speed writer currently covers.
+   * No default is wired: until the live-speed writer job supplies this (it
+   * already fetches the source feed, so it owns the covered-way-id list),
+   * the guard cron logs and skips the way-to-edge refresh rather than
+   * writing a map filtered down to nothing.
+   */
+  getCoveredWayIds?: () => Promise<Set<number>>;
+  /**
+   * Test seam: invoked instead of the real `refreshWaysToEdges` (which
+   * shells out to `docker exec`).
+   */
+  refreshWaysToEdges?: (
+    coveredWayIds: Set<number>,
+    deps?: { logger?: { info: (msg: string, extra?: Record<string, unknown>) => void } },
+  ) => Promise<RefreshWaysToEdgesResult>;
 }
 
 export interface CronHandles {
@@ -152,6 +172,8 @@ export interface CronHandles {
   runTrafficExtractStartupNow: () => Promise<void>;
   /** Test seam: directly invoke the traffic-extract guard as if the cron fired. */
   runTrafficExtractGuardNow: () => Promise<void>;
+  /** Test seam: directly invoke the way_id-to-GraphId map refresh. */
+  runWaysToEdgesRefreshNow: () => Promise<void>;
 }
 
 function pickCronExpression(
@@ -454,6 +476,28 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     }
   };
 
+  const refreshWaysToEdges = options.refreshWaysToEdges ?? refreshWaysToEdgesDefault;
+
+  // The way_id → GraphId map only changes when the graph rebuilds (a rebuild
+  // renumbers GraphIds), so it's refreshed alongside the traffic-extract
+  // rebuild rather than on its own schedule.
+  const runWaysToEdgesRefresh = async (): Promise<void> => {
+    if (!options.getCoveredWayIds) {
+      log.info("ways-to-edges: refresh skipped (no covered-way-id source configured)");
+      return;
+    }
+    try {
+      const coveredWayIds = await options.getCoveredWayIds();
+      const result = await refreshWaysToEdges(coveredWayIds, { logger: log });
+      log.info("ways-to-edges: refresh complete", {
+        wayCount: result.wayCount,
+        edgeCount: result.edgeCount,
+      });
+    } catch (err) {
+      log.error("ways-to-edges: refresh failed", { err: (err as Error).message });
+    }
+  };
+
   const runTrafficExtractGuard = async (): Promise<void> => {
     try {
       const stale = await checkExtractStale({ logger: log });
@@ -469,6 +513,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       log.info("traffic-extract: graph tiles newer than traffic.tar, rebuilding");
       const result = await ensureExtract({ logger: log, force: true });
       log.info("traffic-extract: guard rebuild complete", { built: result.built });
+      if (result.built) await runWaysToEdgesRefresh();
     } catch (err) {
       log.error("traffic-extract: guard check failed", { err: (err as Error).message });
     }
@@ -530,6 +575,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     runOvertureNow: runOvertureSync,
     runTrafficExtractStartupNow: runTrafficExtractStartup,
     runTrafficExtractGuardNow: runTrafficExtractGuard,
+    runWaysToEdgesRefreshNow: runWaysToEdgesRefresh,
     // `activeJobId` is exposed indirectly through singleFlight.getInflight()
     // for the shutdown helper — no need to surface it here.
   };

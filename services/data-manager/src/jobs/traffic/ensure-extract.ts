@@ -8,12 +8,15 @@ import { execa } from "execa";
  * convention. Overridable via `VALHALLA_CONTAINER` for non-default compose
  * project names.
  */
-const DEFAULT_VALHALLA_CONTAINER = "docker-valhalla-1";
-const DEFAULT_VALHALLA_CONFIG_PATH = "/custom_files/valhalla.json";
+// Exported so sibling traffic jobs (e.g. `ways-to-edges.ts`, which also shells
+// out to the Valhalla container) share these constants instead of duplicating
+// values that would silently drift.
+export const DEFAULT_VALHALLA_CONTAINER = "docker-valhalla-1";
+export const DEFAULT_VALHALLA_CONFIG_PATH = "/custom_files/valhalla.json";
 /** Must match `mjolnir.traffic_extract` in services/valhalla/config/valhalla.json. */
 const TRAFFIC_TAR_PATH = "/custom_files/traffic.tar";
 /** Must match `mjolnir.tile_dir` in services/valhalla/config/valhalla.json. */
-const TILE_DIR_PATH = "/custom_files/valhalla_tiles";
+export const TILE_DIR_PATH = "/custom_files/valhalla_tiles";
 
 export interface DockerRunResult {
   exitCode: number;
@@ -54,7 +57,13 @@ async function defaultRunDocker(args: string[]): Promise<DockerRunResult> {
   return { exitCode: result.exitCode ?? 1, stdout: result.stdout ?? "" };
 }
 
-function resolveContainer(deps: EnsureTrafficExtractDeps): string {
+/**
+ * Resolves the Valhalla container name from an explicit override, falling
+ * back to `VALHALLA_CONTAINER` and then the default compose-project naming
+ * convention. Exported for reuse by sibling traffic jobs that also shell out
+ * to the same container (e.g. `ways-to-edges.ts`).
+ */
+export function resolveContainer(deps: { container?: string }): string {
   if (deps.container) return deps.container;
   const envValue = process.env.VALHALLA_CONTAINER;
   return envValue && envValue.trim() !== "" ? envValue.trim() : DEFAULT_VALHALLA_CONTAINER;
