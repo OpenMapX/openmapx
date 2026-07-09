@@ -10,6 +10,11 @@ import { db } from "./db/index.js";
 import { applyOvertureChangelog } from "./jobs/overture/changelog.js";
 import { OVERTURE_RELEASE } from "./jobs/overture/pull.js";
 import {
+  type BakePredictedDeps,
+  type BakePredictedResult,
+  bakePredicted as bakePredictedDefault,
+} from "./jobs/traffic/bake-predicted.js";
+import {
   type EnsureTrafficExtractResult,
   ensureTrafficExtract,
   isTrafficExtractStale,
@@ -78,6 +83,18 @@ const TRAFFIC_EXTRACT_CRON_DEFAULT = "0 5 * * *";
 const TRAFFIC_LIVE_CRON_DEFAULT = "*/2 * * * *";
 /** Bounds a single OpenConditions speed-feed fetch; mirrors `fetchJson`'s default. */
 const TRAFFIC_LIVE_FETCH_TIMEOUT_MS = 10_000;
+/**
+ * Predicted-traffic bake cron: fetches OpenConditions' historical speed
+ * profiles and bakes them into Valhalla's loose graph tiles, then rebuilds
+ * the traffic.tar extract + way-to-edge map and restarts Valhalla. Weekly,
+ * Monday 06:00 UTC — after the OpenConditions profile-derive job (Monday
+ * 03:30) has had time to publish a fresh `segments/profiles.json`, and well
+ * past the 05:00 daily extract-guard cron so the two rebuild chains don't
+ * race the same `traffic.tar`/way-to-edge map. Unlike the every-2-minute live
+ * writer, this bake shells out to a slow tile-rewriting tool and restarts
+ * Valhalla, so it runs far less often.
+ */
+const TRAFFIC_PREDICTED_CRON_DEFAULT = "0 6 * * 1";
 
 // Sentinel values that disable a cron entirely. Empty string is NOT one of
 // them: compose injects `${VAR:-}` as "" when the operator hasn't set the var,
@@ -174,12 +191,13 @@ export interface CronSetupOptions {
   openConditionsUrl?: string;
   /**
    * data-manager's own view of the same `traffic.tar` file the Valhalla
-   * container mmaps (they don't share a container filesystem, only the
-   * bind-mounted `osm-pbf` data directory both see). Defaults to
-   * `TRAFFIC_TAR_PATH`, then `<dataDir>/osm/traffic.tar` — the path Valhalla's
-   * `/custom_files/traffic.tar` resolves to through the shared `osm-pbf` bind
-   * mount (see `services/data-manager/service.json`'s `produces` entry and
-   * `services/valhalla/service.json`'s `consumes` entry).
+   * container mmaps. They don't share a container filesystem — Valhalla mounts
+   * host `data/valhalla/osm-pbf` at `/custom_files` (its `osm-pbf` consume
+   * mount), and data-manager reaches that SAME host dir through its own `/data`
+   * mount. Defaults to `TRAFFIC_TAR_PATH`, then `<dataDir>/valhalla/osm-pbf/
+   * traffic.tar` — the host path Valhalla's `/custom_files/traffic.tar`
+   * resolves to. NOT data-manager's `/data/osm` produce dir (a separate
+   * hardlink target Valhalla only sees after an explicit `POST /link`).
    */
   trafficTarPath?: string;
   /** Where `writeLiveTraffic` persists its staleness state. Test seam; production uses the function's own default. */
@@ -205,6 +223,14 @@ export interface CronSetupOptions {
     statePath?: string;
     logger?: { warn: (msg: string, extra?: Record<string, unknown>) => void };
   }) => Promise<WriteLiveTrafficResult>;
+  /** Override the predicted-traffic bake cron schedule (e.g. for tests). */
+  trafficPredictedCronExpression?: string;
+  /**
+   * Test seam: invoked instead of the real `bakePredicted` (which shells out
+   * to `docker exec`/`docker restart` and writes CSVs to disk). Gated on
+   * `openConditionsUrl` exactly like the live-traffic writer above.
+   */
+  bakePredicted?: (deps: BakePredictedDeps) => Promise<BakePredictedResult>;
 }
 
 export interface CronHandles {
@@ -216,6 +242,8 @@ export interface CronHandles {
   trafficExtractCron: Cron | null;
   /** Live-traffic writer cron; null when OpenConditions isn't configured. */
   trafficLiveCron: Cron | null;
+  /** Predicted-traffic bake cron; null when OpenConditions isn't configured. */
+  trafficPredictedCron: Cron | null;
   /** Stop all cron jobs; awaitable shutdown lives on the caller. */
   stop: () => void;
   /** Test seam: directly invoke the sync handler as if the cron fired. */
@@ -239,6 +267,8 @@ export interface CronHandles {
   runWaysToEdgesRefreshNow: () => Promise<void>;
   /** Test seam: directly invoke the live-traffic writer as if the cron fired. */
   runTrafficLiveNow: () => Promise<void>;
+  /** Test seam: directly invoke the predicted-traffic bake as if the cron fired. */
+  runTrafficPredictedNow: () => Promise<void>;
 }
 
 function pickCronExpression(
@@ -608,7 +638,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   const openConditionsUrl = options.openConditionsUrl ?? envString("OPENCONDITIONS_URL", "");
   const trafficTarPath =
     options.trafficTarPath ??
-    envString("TRAFFIC_TAR_PATH", join(options.dataDir, "osm", "traffic.tar"));
+    envString("TRAFFIC_TAR_PATH", join(options.dataDir, "valhalla", "osm-pbf", "traffic.tar"));
 
   const fetchLiveTrafficCsv =
     options.fetchLiveTrafficCsv ??
@@ -692,6 +722,50 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     log.info("traffic-live: scheduled", { expression: trafficLiveExpr });
   }
 
+  const bake = options.bakePredicted ?? bakePredictedDefault;
+
+  // Bakes OpenConditions' historical profiles into the loose graph tiles and
+  // runs the full downstream rebuild chain (traffic.tar + way-to-edge map +
+  // Valhalla restart) itself — this cron just gates on configuration and logs
+  // the result, mirroring the live-traffic cron's shape above.
+  const runTrafficPredicted = async (): Promise<void> => {
+    if (!openConditionsUrl) {
+      log.info("traffic-predicted: skipped (OPENCONDITIONS_URL not configured)");
+      return;
+    }
+    try {
+      const result = await bake({ openConditionsUrl, logger: log });
+      log.info("traffic-predicted: cycle complete", { ...result });
+    } catch (err) {
+      log.error("traffic-predicted: cycle failed", { err: (err as Error).message });
+    }
+  };
+
+  const trafficPredictedExpr = pickCronExpression(
+    options.trafficPredictedCronExpression,
+    "TRAFFIC_PREDICTED_CRON",
+    TRAFFIC_PREDICTED_CRON_DEFAULT,
+  );
+
+  const trafficPredictedCron =
+    trafficPredictedExpr && openConditionsUrl
+      ? new Cron(trafficPredictedExpr, { name: "traffic-predicted", protect: true }, () => {
+          void runTrafficPredicted().catch((err) => {
+            log.error("traffic-predicted: cron threw", { err: (err as Error).message });
+          });
+        })
+      : null;
+
+  if (!trafficPredictedCron) {
+    log.info(
+      !trafficPredictedExpr
+        ? "traffic-predicted: disabled by env"
+        : "traffic-predicted: disabled (OPENCONDITIONS_URL not configured)",
+    );
+  } else {
+    log.info("traffic-predicted: scheduled", { expression: trafficPredictedExpr });
+  }
+
   if (!syncCron) log.info("transitous-cron: sync disabled by env");
   else log.info("transitous-cron: sync scheduled", { expression: syncExpr });
   if (!feedProxyReloadCron) log.info("transitous-cron: feed-proxy reload disabled by env");
@@ -713,6 +787,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     overtureCron?.stop();
     trafficExtractCron?.stop();
     trafficLiveCron?.stop();
+    trafficPredictedCron?.stop();
   }
 
   return {
@@ -722,6 +797,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     overtureCron,
     trafficExtractCron,
     trafficLiveCron,
+    trafficPredictedCron,
     stop,
     runSyncNow: runSync,
     runFeedProxyReloadNow: runFeedProxyReload,
@@ -731,6 +807,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     runTrafficExtractGuardNow: runTrafficExtractGuard,
     runWaysToEdgesRefreshNow: runWaysToEdgesRefresh,
     runTrafficLiveNow: runTrafficLive,
+    runTrafficPredictedNow: runTrafficPredicted,
     // `activeJobId` is exposed indirectly through singleFlight.getInflight()
     // for the shutdown helper — no need to surface it here.
   };
