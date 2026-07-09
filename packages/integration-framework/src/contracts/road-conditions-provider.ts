@@ -3,6 +3,8 @@ import type {
   RoadConditionAttribution,
   RoadConditionEvent,
   RoadConditionsQuery,
+  RoadFlowQuery,
+  RoadFlowSegment,
 } from "@openmapx/core";
 
 export type {
@@ -13,6 +15,8 @@ export type {
   RoadConditionSeverity,
   RoadConditionsQuery,
   RoadConditionType,
+  RoadFlowQuery,
+  RoadFlowSegment,
   RoadState,
 } from "@openmapx/core";
 
@@ -34,4 +38,6 @@ export interface RoadConditionsProvider {
   /** When set, the orchestrator skips this provider for non-overlapping bboxes. */
   readonly coverage?: { bbox: BBox } | { all: true };
   getEvents(bbox: BBox, opts?: RoadConditionsQuery): Promise<RoadConditionEvent[]>;
+  /** Optional live speed/congestion segments for the traffic-flow overlay. */
+  getFlow?(bbox: BBox, opts?: RoadFlowQuery): Promise<RoadFlowSegment[]>;
 }

@@ -1,4 +1,4 @@
-import type { Geometry } from "geojson";
+import type { Geometry, LineString } from "geojson";
 
 export type RoadConditionType =
   | "accident"
@@ -86,4 +86,26 @@ export interface RoadConditionEvent {
 export interface RoadConditionsQuery {
   types?: RoadConditionType[];
   minSeverity?: RoadConditionSeverity;
+}
+
+export interface RoadFlowSegment {
+  /** segment_id */
+  id: string;
+  geometry: LineString;
+  currentSpeedKph?: number;
+  freeFlowSpeedKph?: number;
+  /** 0..~1.2 */
+  speedRatio?: number;
+  los: "free_flow" | "heavy" | "queuing" | "stationary" | "unknown";
+  confidence: "measured" | "estimated" | "typical" | "unknown";
+  direction: "f" | "b";
+  /** ref */
+  roads?: string;
+  source?: string;
+  /** ISO */
+  observedAt?: string;
+}
+
+export interface RoadFlowQuery {
+  minLos?: string;
 }

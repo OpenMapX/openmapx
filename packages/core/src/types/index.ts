@@ -110,6 +110,8 @@ export type {
   RoadConditionSeverity,
   RoadConditionsQuery,
   RoadConditionType,
+  RoadFlowQuery,
+  RoadFlowSegment,
   RoadState,
 } from "./roadConditions";
 export type {
