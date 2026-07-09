@@ -147,6 +147,13 @@ app
       logger: app.log,
     });
 
+    // Ensure the Valhalla traffic.tar extract exists before any job that
+    // depends on it (the future live-speed writer) could try to mmap it.
+    // Fire-and-forget: `runTrafficExtractStartupNow` never rejects (errors
+    // are logged internally), and a slow first-time extract build shouldn't
+    // block the rest of startup.
+    void cronHandles.runTrafficExtractStartupNow();
+
     // Discover POI sources from each integration's poi-sources.{js,ts} file
     // BEFORE setupPoiIngestCron — the scheduler reads the registry snapshot
     // at boot, so anything that hasn't been registered yet won't get a cron.

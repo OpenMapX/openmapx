@@ -10,6 +10,11 @@ import { db } from "./db/index.js";
 import { applyOvertureChangelog } from "./jobs/overture/changelog.js";
 import { OVERTURE_RELEASE } from "./jobs/overture/pull.js";
 import {
+  type EnsureTrafficExtractResult,
+  ensureTrafficExtract,
+  isTrafficExtractStale,
+} from "./jobs/traffic/ensure-extract.js";
+import {
   buildJobContext,
   type RunPipelineResult,
   runTransitousPipeline,
@@ -43,6 +48,14 @@ const TRANSITOUS_FEED_PROXY_RELOAD_CRON_DEFAULT = "*/15 * * * *";
  * `consecutive_failures`. Same disable sentinels apply.
  */
 const TRANSITOUS_STALENESS_CHECK_CRON_DEFAULT = "0 4 * * *";
+/**
+ * Slow guard cron for the Valhalla traffic.tar extract. Daily at 05:00 UTC —
+ * well past the 03:00 Transitous sync and any operator-triggered Overture/OSM
+ * tile rebuild, so a same-day graph rebuild is caught before the next
+ * request could hit a stale, edge-count-mismatched extract (see
+ * `ensureTrafficExtract`'s ordering-constraint doc comment).
+ */
+const TRAFFIC_EXTRACT_CRON_DEFAULT = "0 5 * * *";
 
 // Sentinel values that disable a cron entirely. Empty string is NOT one of
 // them: compose injects `${VAR:-}` as "" when the operator hasn't set the var,
@@ -95,6 +108,22 @@ export interface CronSetupOptions {
    * OVERTURE_ENABLED. When omitted, the env var governs.
    */
   overtureEnabled?: boolean;
+  /** Override the traffic-extract guard cron schedule (e.g. for tests). */
+  trafficExtractCronExpression?: string;
+  /**
+   * Test seam: invoked instead of the real `ensureTrafficExtract` (which
+   * shells out to `docker exec`/`docker restart`).
+   */
+  ensureTrafficExtract?: (deps: {
+    logger?: { info: (msg: string, extra?: Record<string, unknown>) => void };
+    force?: boolean;
+  }) => Promise<EnsureTrafficExtractResult>;
+  /**
+   * Test seam: invoked instead of the real `isTrafficExtractStale`.
+   */
+  isTrafficExtractStale?: (deps: {
+    logger?: { info: (msg: string, extra?: Record<string, unknown>) => void };
+  }) => Promise<boolean>;
 }
 
 export interface CronHandles {
@@ -102,6 +131,8 @@ export interface CronHandles {
   feedProxyReloadCron: Cron | null;
   stalenessCheckCron: Cron | null;
   overtureCron: Cron | null;
+  /** Slow guard cron that rebuilds the Valhalla traffic.tar when it's stale. */
+  trafficExtractCron: Cron | null;
   /** Stop all cron jobs; awaitable shutdown lives on the caller. */
   stop: () => void;
   /** Test seam: directly invoke the sync handler as if the cron fired. */
@@ -112,6 +143,15 @@ export interface CronHandles {
   runStalenessCheckNow: () => Promise<void>;
   /** Test seam: directly invoke the Overture monthly sync handler. */
   runOvertureNow: () => Promise<void>;
+  /**
+   * Run once at data-manager startup (before any job that depends on
+   * traffic.tar existing, e.g. the future live-speed writer). Callers invoke
+   * this explicitly right after `setupCron` returns — it is not fired by
+   * `setupCron` itself so construction stays side-effect-free for tests.
+   */
+  runTrafficExtractStartupNow: () => Promise<void>;
+  /** Test seam: directly invoke the traffic-extract guard as if the cron fired. */
+  runTrafficExtractGuardNow: () => Promise<void>;
 }
 
 function pickCronExpression(
@@ -402,6 +442,59 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     log.info("overture-cron: scheduled", { expression: overtureExpr });
   }
 
+  const ensureExtract = options.ensureTrafficExtract ?? ensureTrafficExtract;
+  const checkExtractStale = options.isTrafficExtractStale ?? isTrafficExtractStale;
+
+  const runTrafficExtractStartup = async (): Promise<void> => {
+    try {
+      const result = await ensureExtract({ logger: log });
+      log.info("traffic-extract: startup check complete", { built: result.built });
+    } catch (err) {
+      log.error("traffic-extract: startup ensure failed", { err: (err as Error).message });
+    }
+  };
+
+  const runTrafficExtractGuard = async (): Promise<void> => {
+    try {
+      const stale = await checkExtractStale({ logger: log });
+      if (!stale) {
+        log.info("traffic-extract: guard check found no rebuild needed");
+        return;
+      }
+      // A stale extract doesn't fail soft — Valhalla throws mid-request when
+      // the traffic tile's directed_edge_count disagrees with the graph
+      // tile, so rebuild eagerly rather than wait for a request to surface
+      // it. `force` skips the redundant presence check: we already know the
+      // file exists, just that it's outdated.
+      log.info("traffic-extract: graph tiles newer than traffic.tar, rebuilding");
+      const result = await ensureExtract({ logger: log, force: true });
+      log.info("traffic-extract: guard rebuild complete", { built: result.built });
+    } catch (err) {
+      log.error("traffic-extract: guard check failed", { err: (err as Error).message });
+    }
+  };
+
+  const trafficExtractExpr = pickCronExpression(
+    options.trafficExtractCronExpression,
+    "TRAFFIC_EXTRACT_CRON",
+    TRAFFIC_EXTRACT_CRON_DEFAULT,
+  );
+
+  const trafficExtractCron = trafficExtractExpr
+    ? new Cron(
+        trafficExtractExpr,
+        { name: "valhalla-traffic-extract-guard", protect: true },
+        () => {
+          void runTrafficExtractGuard().catch((err) => {
+            log.error("traffic-extract: guard cron threw", { err: (err as Error).message });
+          });
+        },
+      )
+    : null;
+
+  if (!trafficExtractCron) log.info("traffic-extract: guard cron disabled by env");
+  else log.info("traffic-extract: guard cron scheduled", { expression: trafficExtractExpr });
+
   if (!syncCron) log.info("transitous-cron: sync disabled by env");
   else log.info("transitous-cron: sync scheduled", { expression: syncExpr });
   if (!feedProxyReloadCron) log.info("transitous-cron: feed-proxy reload disabled by env");
@@ -421,6 +514,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     feedProxyReloadCron?.stop();
     stalenessCheckCron?.stop();
     overtureCron?.stop();
+    trafficExtractCron?.stop();
   }
 
   return {
@@ -428,11 +522,14 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     feedProxyReloadCron,
     stalenessCheckCron,
     overtureCron,
+    trafficExtractCron,
     stop,
     runSyncNow: runSync,
     runFeedProxyReloadNow: runFeedProxyReload,
     runStalenessCheckNow: runStalenessCheck,
     runOvertureNow: runOvertureSync,
+    runTrafficExtractStartupNow: runTrafficExtractStartup,
+    runTrafficExtractGuardNow: runTrafficExtractGuard,
     // `activeJobId` is exposed indirectly through singleFlight.getInflight()
     // for the shutdown helper — no need to surface it here.
   };

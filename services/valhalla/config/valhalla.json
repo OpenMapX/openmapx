@@ -1,6 +1,7 @@
 {
   "mjolnir": {
     "tile_dir": "/custom_files/valhalla_tiles",
+    "traffic_extract": "/custom_files/traffic.tar",
     "concurrency": 8
   },
   "additional_data": {
