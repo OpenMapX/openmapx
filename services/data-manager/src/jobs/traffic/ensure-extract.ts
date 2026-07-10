@@ -99,13 +99,22 @@ export async function ensureTrafficExtract(
   }
 
   deps.logger?.info("traffic-extract: building", { container });
-  // `-t`/`--with-traffic` is a flag, not a path — the output path comes from
-  // `mjolnir.traffic_extract` in the config. This deployment configures
-  // `mjolnir.tile_dir` (a tile DIRECTORY, "/custom_files/valhalla_tiles"), not
-  // a `mjolnir.tile_extract` tar — `valhalla_build_extract -t` reads the tile
-  // directory directly, so the plan's tile_extract-orphaning concern does not
-  // apply here (there is no graph-tile extract tar to leave stale).
-  const build = await run(["exec", container, "valhalla_build_extract", "-c", configPath, "-t"]);
+  // `valhalla_build_extract` (re)writes `mjolnir.tile_extract` from the loose
+  // tiles in `mjolnir.tile_dir`; `-t`/`--with-traffic` additionally emits the
+  // `mjolnir.traffic_extract` (traffic.tar) skeleton the live writer mmaps.
+  // `-O`/`--overwrite` is required whenever a `tile_extract` tar already exists
+  // (the normal packaged-tile deployment) — without it the tool aborts with
+  // "File exists. Specify --overwrite". The restart below re-mmaps the freshly
+  // written tars.
+  const build = await run([
+    "exec",
+    container,
+    "valhalla_build_extract",
+    "-c",
+    configPath,
+    "-t",
+    "-O",
+  ]);
   if (build.exitCode !== 0) {
     // Don't restart the container or claim success on a failed build — that
     // would mask the failure until the next daily guard sweep and bounce

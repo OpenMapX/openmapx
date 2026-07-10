@@ -35,6 +35,7 @@ describe("ensureTrafficExtract", () => {
         "-c",
         "/custom_files/valhalla.json",
         "-t",
+        "-O",
       ],
       ["restart", "docker-valhalla-1"],
     ]);
@@ -77,6 +78,7 @@ describe("ensureTrafficExtract", () => {
         "-c",
         "/custom_files/valhalla.json",
         "-t",
+        "-O",
       ],
       ["restart", "docker-valhalla-1"],
     ]);
@@ -107,6 +109,7 @@ describe("ensureTrafficExtract", () => {
         "-c",
         "/custom_files/valhalla.json",
         "-t",
+        "-O",
       ],
     ]);
   });
@@ -165,6 +168,7 @@ describe("ensureTrafficExtract", () => {
       "-c",
       "/custom_files/valhalla-override.json",
       "-t",
+      "-O",
     ]);
   });
 });
