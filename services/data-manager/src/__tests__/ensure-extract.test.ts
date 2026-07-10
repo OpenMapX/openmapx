@@ -7,6 +7,8 @@ import {
 
 describe("ensureTrafficExtract", () => {
   const originalContainerEnv = process.env.VALHALLA_CONTAINER;
+  // The build chowns traffic.tar to the data-manager process's own uid/gid.
+  const CHOWN_ID = `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`;
 
   beforeEach(() => {
     if (originalContainerEnv === undefined) delete process.env.VALHALLA_CONTAINER;
@@ -37,6 +39,7 @@ describe("ensureTrafficExtract", () => {
         "-t",
         "-O",
       ],
+      ["exec", "docker-valhalla-1", "chown", CHOWN_ID, "/custom_files/traffic.tar"],
       ["restart", "docker-valhalla-1"],
     ]);
   });
@@ -80,8 +83,24 @@ describe("ensureTrafficExtract", () => {
         "-t",
         "-O",
       ],
+      ["exec", "docker-valhalla-1", "chown", CHOWN_ID, "/custom_files/traffic.tar"],
       ["restart", "docker-valhalla-1"],
     ]);
+  });
+
+  it("does not restart when the post-build chown fails", async () => {
+    const calls: string[][] = [];
+    const runDocker: DockerRunner = vi.fn(async (args: string[]) => {
+      calls.push(args);
+      if (args[0] === "exec" && args[2] === "test") return { exitCode: 1, stdout: "" };
+      if (args[2] === "chown") return { exitCode: 1, stdout: "" };
+      return { exitCode: 0, stdout: "" };
+    });
+
+    await expect(
+      ensureTrafficExtract({ runDocker, container: "docker-valhalla-1" }),
+    ).rejects.toThrow(/chown traffic\.tar exited 1/);
+    expect(calls.some((c) => c[0] === "restart")).toBe(false);
   });
 
   it("does not restart or report success when the build exec fails", async () => {

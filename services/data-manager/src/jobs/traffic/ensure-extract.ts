@@ -123,6 +123,19 @@ export async function ensureTrafficExtract(
       `traffic-extract: valhalla_build_extract exited ${build.exitCode} on container "${container}"`,
     );
   }
+  // valhalla_build_extract runs as the Valhalla container's user (root), so the
+  // fresh traffic.tar is root-owned — but the live-speed writer runs as the
+  // data-manager process's own (non-root) uid and opens that SAME file for
+  // in-place mmap writes through the shared data mount. Chown it to that uid/gid
+  // so the writer isn't locked out with EACCES.
+  const uid = process.getuid?.() ?? 1000;
+  const gid = process.getgid?.() ?? 1000;
+  const chown = await run(["exec", container, "chown", `${uid}:${gid}`, TRAFFIC_TAR_PATH]);
+  if (chown.exitCode !== 0) {
+    throw new Error(
+      `traffic-extract: chown traffic.tar exited ${chown.exitCode} on container "${container}"`,
+    );
+  }
   await run(["restart", container]);
   return { built: true };
 }
