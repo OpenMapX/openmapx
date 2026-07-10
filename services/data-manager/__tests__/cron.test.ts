@@ -344,6 +344,82 @@ describe("setupCron", () => {
       expect(fetchLiveTrafficCsv).not.toHaveBeenCalled();
       handles.stop();
     });
+
+    it("bootstraps the way-to-edge map on startup when it is missing", async () => {
+      const prev = process.env.DATA_DIR;
+      // The map path derives from DATA_DIR; a fresh tmp dir has no traffic/ subdir.
+      process.env.DATA_DIR = dataDir;
+      try {
+        const getCoveredWayIds = vi.fn().mockResolvedValue(new Set([123]));
+        const refreshWaysToEdges = vi.fn().mockResolvedValue({ wayCount: 1, edgeCount: 2 });
+        const handles = setupCron(
+          baseOptions({
+            openConditionsUrl: "http://openconditions-ingest:8080",
+            ensureTrafficExtract: vi.fn().mockResolvedValue({ built: false }),
+            getCoveredWayIds,
+            refreshWaysToEdges,
+          }),
+        );
+
+        await handles.runTrafficExtractStartupNow();
+
+        expect(getCoveredWayIds).toHaveBeenCalledTimes(1);
+        expect(refreshWaysToEdges).toHaveBeenCalledWith(new Set([123]), expect.anything());
+        handles.stop();
+      } finally {
+        if (prev === undefined) delete process.env.DATA_DIR;
+        else process.env.DATA_DIR = prev;
+      }
+    });
+
+    it("does not bootstrap the map on startup when it already exists", async () => {
+      const prev = process.env.DATA_DIR;
+      process.env.DATA_DIR = dataDir;
+      try {
+        mkdirSync(join(dataDir, "traffic"), { recursive: true });
+        writeFileSync(join(dataDir, "traffic", "ways_to_edges.json"), "{}");
+        const refreshWaysToEdges = vi.fn();
+        const handles = setupCron(
+          baseOptions({
+            openConditionsUrl: "http://openconditions-ingest:8080",
+            ensureTrafficExtract: vi.fn().mockResolvedValue({ built: false }),
+            getCoveredWayIds: vi.fn().mockResolvedValue(new Set([123])),
+            refreshWaysToEdges,
+          }),
+        );
+
+        await handles.runTrafficExtractStartupNow();
+
+        expect(refreshWaysToEdges).not.toHaveBeenCalled();
+        handles.stop();
+      } finally {
+        if (prev === undefined) delete process.env.DATA_DIR;
+        else process.env.DATA_DIR = prev;
+      }
+    });
+
+    it("skips the startup map bootstrap when no covered-way-id source is configured", async () => {
+      const prev = process.env.DATA_DIR;
+      process.env.DATA_DIR = dataDir;
+      try {
+        const refreshWaysToEdges = vi.fn();
+        const handles = setupCron(
+          baseOptions({
+            openConditionsUrl: "http://openconditions-ingest:8080",
+            ensureTrafficExtract: vi.fn().mockResolvedValue({ built: false }),
+            refreshWaysToEdges,
+          }),
+        );
+
+        await handles.runTrafficExtractStartupNow();
+
+        expect(refreshWaysToEdges).not.toHaveBeenCalled();
+        handles.stop();
+      } finally {
+        if (prev === undefined) delete process.env.DATA_DIR;
+        else process.env.DATA_DIR = prev;
+      }
+    });
   });
 });
 

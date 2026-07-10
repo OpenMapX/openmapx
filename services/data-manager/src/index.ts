@@ -17,6 +17,7 @@ import {
 import { type PoiSchedulerHandles, setupPoiIngestCron } from "./jobs/poi-ingest/scheduler.js";
 import { createPoiSingleFlight } from "./jobs/poi-ingest/single-flight.js";
 import { reconcileOrphanedJobs } from "./jobs/reconcile.js";
+import { fetchCoveredWayIds } from "./jobs/traffic/covered-ways.js";
 import { parseTransitousCountriesEnv } from "./jobs/transitous/internal.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
 import { rootLogger } from "./logger.js";
@@ -138,6 +139,12 @@ app
     // fully ready before the first scheduled fire.
     const store = new StateStore(dataDir);
     const countries = parseTransitousCountriesEnv();
+    // The way→edge refresh restricts `valhalla_ways_to_edges` to the ways the
+    // live-traffic writer can update. Its covered-way-id source is the same
+    // OpenConditions speed feed the writer consumes, so it's only wired when
+    // OpenConditions is configured; otherwise the refresh (and the whole
+    // live-traffic chain) stays disabled.
+    const openConditionsUrl = process.env.OPENCONDITIONS_URL?.trim() ?? "";
     cronHandles = setupCron({
       dataDir,
       repoRoot,
@@ -145,6 +152,7 @@ app
       store,
       singleFlight,
       logger: app.log,
+      getCoveredWayIds: openConditionsUrl ? () => fetchCoveredWayIds(openConditionsUrl) : undefined,
     });
 
     // Ensure the Valhalla traffic.tar extract exists before any job that

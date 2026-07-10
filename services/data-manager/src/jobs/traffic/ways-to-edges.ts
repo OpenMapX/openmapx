@@ -87,7 +87,8 @@ async function* defaultReadWayEdgesLines(container: string, path: string): Async
   }
 }
 
-function defaultOutputPath(): string {
+/** Path of the JSON way→edge map `refreshWaysToEdges` writes and `loadWaysToEdges` reads. */
+export function defaultOutputPath(): string {
   return join(process.env.DATA_DIR ?? "/data", "traffic", "ways_to_edges.json");
 }
 

@@ -24,6 +24,7 @@ import {
   type RefreshWaysToEdgesResult,
   refreshWaysToEdges as refreshWaysToEdgesDefault,
   type WayEdge,
+  defaultOutputPath as waysToEdgesMapPath,
 } from "./jobs/traffic/ways-to-edges.js";
 import {
   type WriteLiveTrafficResult,
@@ -165,10 +166,11 @@ export interface CronSetupOptions {
   }) => Promise<boolean>;
   /**
    * Resolves the set of OSM way ids the live-speed writer currently covers.
-   * No default is wired: until the live-speed writer job supplies this (it
-   * already fetches the source feed, so it owns the covered-way-id list),
-   * the guard cron logs and skips the way-to-edge refresh rather than
-   * writing a map filtered down to nothing.
+   * The entrypoint wires this to `fetchCoveredWayIds` (the same OpenConditions
+   * speed feed the writer consumes) when OpenConditions is configured; when
+   * absent, the startup/guard way-to-edge refresh logs and skips rather than
+   * writing a map filtered down to nothing — the whole live-traffic chain then
+   * stays disabled.
    */
   getCoveredWayIds?: () => Promise<Set<number>>;
   /**
@@ -562,15 +564,6 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   const ensureExtract = options.ensureTrafficExtract ?? ensureTrafficExtract;
   const checkExtractStale = options.isTrafficExtractStale ?? isTrafficExtractStale;
 
-  const runTrafficExtractStartup = async (): Promise<void> => {
-    try {
-      const result = await ensureExtract({ logger: log });
-      log.info("traffic-extract: startup check complete", { built: result.built });
-    } catch (err) {
-      log.error("traffic-extract: startup ensure failed", { err: (err as Error).message });
-    }
-  };
-
   const refreshWaysToEdges = options.refreshWaysToEdges ?? refreshWaysToEdgesDefault;
 
   // The way_id → GraphId map only changes when the graph rebuilds (a rebuild
@@ -590,6 +583,23 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       });
     } catch (err) {
       log.error("ways-to-edges: refresh failed", { err: (err as Error).message });
+    }
+  };
+
+  const runTrafficExtractStartup = async (): Promise<void> => {
+    try {
+      const result = await ensureExtract({ logger: log });
+      log.info("traffic-extract: startup check complete", { built: result.built });
+    } catch (err) {
+      log.error("traffic-extract: startup ensure failed", { err: (err as Error).message });
+    }
+    // A build (above, or the guard's rebuild) refreshes the way→edge map, but a
+    // traffic.tar that already exists from a prior boot leaves the map ungenerated
+    // on first run — the live writer then can't load it. Bootstrap it here when
+    // it's missing so the chain works without waiting for the next graph rebuild.
+    if (options.getCoveredWayIds && !existsSync(waysToEdgesMapPath())) {
+      log.info("ways-to-edges: map missing at startup, bootstrapping");
+      await runWaysToEdgesRefresh();
     }
   };
 
