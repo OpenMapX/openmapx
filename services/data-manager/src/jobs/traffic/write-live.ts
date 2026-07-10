@@ -30,7 +30,11 @@ const USTAR_SIZE_FIELD_OFFSET = 124;
 const USTAR_SIZE_FIELD_LENGTH = 12;
 const INDEX_BIN_ENTRY_SIZE = 16;
 const TRAFFIC_TILE_HEADER_SIZE = 32;
-const TRAFFIC_TILE_LAST_UPDATE_OFFSET = 16;
+// `last_update` (u64) follows `tile_id` (u64) — offset 8, NOT 16. Offset 16 is
+// `directed_edge_count`; an 8-byte write there corrupts the count (and the
+// version u32 after it) so Valhalla reads a garbage edge count and discards the
+// whole traffic tile — silently dropping every live speed in it.
+const TRAFFIC_TILE_LAST_UPDATE_OFFSET = 8;
 const TRAFFIC_SPEED_RECORD_SIZE = 8;
 
 interface TrafficLogger {
@@ -354,8 +358,10 @@ export async function writeLiveTraffic(
       }
     }
 
-    // Cosmetic, ops-facing only: Valhalla doesn't require an accurate
-    // last_update, but it's useful for operators inspecting tile freshness.
+    // Stamp each touched tile's `last_update` (offset 8) with the current epoch
+    // seconds so operators can see tile freshness — and, critically, so the
+    // write lands on `last_update` rather than clobbering `directed_edge_count`
+    // at offset 16.
     if (touchedTileDataOffsets.size > 0) {
       const nowBuf = Buffer.alloc(8);
       nowBuf.writeBigUInt64LE(BigInt(Math.floor(Date.now() / 1000)), 0);

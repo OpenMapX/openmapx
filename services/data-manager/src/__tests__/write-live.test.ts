@@ -180,6 +180,34 @@ describe("writeLiveTraffic", () => {
     expect(breakpoint1).toBe(255); // whole-edge breakpoint, valid record
   });
 
+  it("stamps last_update (offset 8) without clobbering directed_edge_count (offset 16)", async () => {
+    const wayId = 5001;
+    const waysToEdges = new Map<number, WayEdge[]>([
+      [wayId, [{ forward: true, level: LEVEL, tile: TILE, index: FORWARD_INDEX }]],
+    ]);
+
+    await writeLiveTraffic({
+      tarPath,
+      statePath,
+      waysToEdges,
+      csv: `way_id,dir,current_kph,free_flow_kph,los\n${wayId},f,100,120,heavy`,
+    });
+
+    const fd = openSync(tarPath, "r");
+    try {
+      const header = Buffer.alloc(TRAFFIC_TILE_HEADER_SIZE);
+      readSync(fd, header, 0, TRAFFIC_TILE_HEADER_SIZE, TILE_DATA_OFFSET);
+      // directed_edge_count (offset 16) must survive — Valhalla discards the
+      // whole traffic tile if it reads a garbage count.
+      expect(header.readUInt32LE(16)).toBe(EDGE_COUNT);
+      expect(header.readUInt32LE(20)).toBe(3); // traffic_tile_version untouched
+      // last_update (offset 8) is stamped with a plausible recent epoch.
+      expect(header.readBigUInt64LE(8)).toBeGreaterThan(1_700_000_000n);
+    } finally {
+      closeSync(fd);
+    }
+  });
+
   it("zeroes a previously-written record once it disappears from a later CSV (staleness)", async () => {
     const wayId = 5002;
     const waysToEdges = new Map<number, WayEdge[]>([
