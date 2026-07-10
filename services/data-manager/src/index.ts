@@ -152,6 +152,10 @@ app
       store,
       singleFlight,
       logger: app.log,
+      // Pass the trimmed URL as the single source of truth so the getCoveredWayIds
+      // gate here and the live/predicted crons inside setupCron can't diverge on
+      // whitespace (a padded value would otherwise enable one and break the other).
+      openConditionsUrl,
       getCoveredWayIds: openConditionsUrl ? () => fetchCoveredWayIds(openConditionsUrl) : undefined,
     });
 

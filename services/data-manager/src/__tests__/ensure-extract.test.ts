@@ -9,6 +9,14 @@ describe("ensureTrafficExtract", () => {
   const originalContainerEnv = process.env.VALHALLA_CONTAINER;
   // The build chowns traffic.tar to the data-manager process's own uid/gid.
   const CHOWN_ID = `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`;
+  // Post-build sanity probe: reads index.bin's byte size to reject an empty extract.
+  const PROBE_CALL = [
+    "exec",
+    "docker-valhalla-1",
+    "sh",
+    "-c",
+    "tar xOf /custom_files/traffic.tar index.bin 2>/dev/null | wc -c",
+  ];
 
   beforeEach(() => {
     if (originalContainerEnv === undefined) delete process.env.VALHALLA_CONTAINER;
@@ -39,6 +47,7 @@ describe("ensureTrafficExtract", () => {
         "-t",
         "-O",
       ],
+      PROBE_CALL,
       ["exec", "docker-valhalla-1", "chown", CHOWN_ID, "/custom_files/traffic.tar"],
       ["restart", "docker-valhalla-1"],
     ]);
@@ -83,9 +92,27 @@ describe("ensureTrafficExtract", () => {
         "-t",
         "-O",
       ],
+      PROBE_CALL,
       ["exec", "docker-valhalla-1", "chown", CHOWN_ID, "/custom_files/traffic.tar"],
       ["restart", "docker-valhalla-1"],
     ]);
+  });
+
+  it("refuses to chown or restart when the built extract has an empty index.bin", async () => {
+    const calls: string[][] = [];
+    const runDocker: DockerRunner = vi.fn(async (args: string[]) => {
+      calls.push(args);
+      if (args[0] === "exec" && args[2] === "test") return { exitCode: 1, stdout: "" };
+      // The post-build probe reports a zero-byte index.bin (degenerate extract).
+      if (args[2] === "sh") return { exitCode: 0, stdout: "0\n" };
+      return { exitCode: 0, stdout: "" };
+    });
+
+    await expect(
+      ensureTrafficExtract({ runDocker, container: "docker-valhalla-1" }),
+    ).rejects.toThrow(/empty index\.bin/);
+    // Neither chown nor restart runs once the extract is judged degenerate.
+    expect(calls.some((c) => c[2] === "chown" || c[0] === "restart")).toBe(false);
   });
 
   it("does not restart when the post-build chown fails", async () => {

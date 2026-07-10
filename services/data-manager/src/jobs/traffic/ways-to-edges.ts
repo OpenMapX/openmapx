@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { execa } from "execa";
@@ -159,7 +159,13 @@ export async function refreshWaysToEdges(
 
   const outputPath = deps.outputPath ?? defaultOutputPath();
   await mkdir(dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, JSON.stringify(result), "utf8");
+  // Write + atomic rename so the live writer's every-2-min `loadWaysToEdges`
+  // never reads a half-written map (truncate-then-write would expose torn JSON
+  // during the ~large serialize), and so an overlapping refresh — the startup
+  // bootstrap racing the 05:00 guard — can't interleave two writers on one path.
+  const tmpPath = `${outputPath}.tmp`;
+  await writeFile(tmpPath, JSON.stringify(result), "utf8");
+  await rename(tmpPath, outputPath);
 
   const wayCount = Object.keys(result).length;
   deps.logger?.info("ways-to-edges: refreshed", { wayCount, edgeCount, outputPath });

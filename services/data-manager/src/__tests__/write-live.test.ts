@@ -135,6 +135,40 @@ const EDGE_COUNT = 6;
 const FORWARD_INDEX = 2;
 const BACKWARD_INDEX = 3;
 
+/** Reads a 32-byte TrafficTileHeader off disk, independent of the writer's own offsets. */
+function readTileHeader(tarPath: string, dataOffset: number) {
+  const fd = openSync(tarPath, "r");
+  try {
+    const h = Buffer.alloc(TRAFFIC_TILE_HEADER_SIZE);
+    readSync(fd, h, 0, TRAFFIC_TILE_HEADER_SIZE, dataOffset);
+    return {
+      tileId: h.readBigUInt64LE(0),
+      lastUpdate: h.readBigUInt64LE(8),
+      directedEdgeCount: h.readUInt32LE(16),
+      version: h.readUInt32LE(20),
+    };
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
+ * The invariants a real Valhalla checks when it loads a traffic tile — if any
+ * drift, Valhalla silently DISCARDS the whole tile (bug #4's signature). Any
+ * write path that corrupts the header fails here even though the unit under
+ * test never runs Valhalla.
+ */
+function expectTileValhallaValid(
+  tarPath: string,
+  dataOffset: number,
+  expected: { baseGraphId: bigint; edgeCount: number; version: number },
+): void {
+  const h = readTileHeader(tarPath, dataOffset);
+  expect(h.tileId).toBe(expected.baseGraphId);
+  expect(h.directedEdgeCount).toBe(expected.edgeCount);
+  expect(h.version).toBe(expected.version);
+}
+
 function forwardRecordOffset(): number {
   return TILE_DATA_OFFSET + TRAFFIC_TILE_HEADER_SIZE + TRAFFIC_SPEED_RECORD_SIZE * FORWARD_INDEX;
 }
@@ -180,32 +214,36 @@ describe("writeLiveTraffic", () => {
     expect(breakpoint1).toBe(255); // whole-edge breakpoint, valid record
   });
 
-  it("stamps last_update (offset 8) without clobbering directed_edge_count (offset 16)", async () => {
+  it("keeps the tile header Valhalla-valid across write then staleness-clear cycles", async () => {
+    const baseGraphId = (BigInt(TILE) << 3n) | BigInt(LEVEL);
     const wayId = 5001;
     const waysToEdges = new Map<number, WayEdge[]>([
       [wayId, [{ forward: true, level: LEVEL, tile: TILE, index: FORWARD_INDEX }]],
     ]);
+    const valid = { baseGraphId, edgeCount: EDGE_COUNT, version: 3 };
 
+    // Cycle 1 — write a live speed.
     await writeLiveTraffic({
       tarPath,
       statePath,
       waysToEdges,
       csv: `way_id,dir,current_kph,free_flow_kph,los\n${wayId},f,100,120,heavy`,
     });
+    // directed_edge_count (offset 16), version (20), tile_id (0) must all survive
+    // — Valhalla silently discards the entire tile if the count is garbage.
+    expectTileValhallaValid(tarPath, TILE_DATA_OFFSET, valid);
+    // last_update (offset 8), not offset 16, is stamped with a recent epoch.
+    expect(readTileHeader(tarPath, TILE_DATA_OFFSET).lastUpdate).toBeGreaterThan(1_700_000_000n);
 
-    const fd = openSync(tarPath, "r");
-    try {
-      const header = Buffer.alloc(TRAFFIC_TILE_HEADER_SIZE);
-      readSync(fd, header, 0, TRAFFIC_TILE_HEADER_SIZE, TILE_DATA_OFFSET);
-      // directed_edge_count (offset 16) must survive — Valhalla discards the
-      // whole traffic tile if it reads a garbage count.
-      expect(header.readUInt32LE(16)).toBe(EDGE_COUNT);
-      expect(header.readUInt32LE(20)).toBe(3); // traffic_tile_version untouched
-      // last_update (offset 8) is stamped with a plausible recent epoch.
-      expect(header.readBigUInt64LE(8)).toBeGreaterThan(1_700_000_000n);
-    } finally {
-      closeSync(fd);
-    }
+    // Cycle 2 — the edge disappears, so the staleness path clears it. That write
+    // path must not corrupt the header either.
+    await writeLiveTraffic({
+      tarPath,
+      statePath,
+      waysToEdges,
+      csv: "way_id,dir,current_kph,free_flow_kph,los",
+    });
+    expectTileValhallaValid(tarPath, TILE_DATA_OFFSET, valid);
   });
 
   it("zeroes a previously-written record once it disappears from a later CSV (staleness)", async () => {

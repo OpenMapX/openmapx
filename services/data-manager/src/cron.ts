@@ -677,7 +677,19 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     }
     try {
       const csv = await fetchLiveTrafficCsv();
-      const waysToEdges = await loadCoveredWaysToEdges();
+      let waysToEdges: Map<number, WayEdge[]>;
+      try {
+        waysToEdges = await loadCoveredWaysToEdges();
+      } catch (err) {
+        // Expected transient right after boot: the startup way→edge bootstrap
+        // runs fire-and-forget, so an early cron fire can precede the map write.
+        // Skip quietly (info, not error) — the next cycle picks it up.
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+          log.info("traffic-live: way-to-edge map not ready yet, skipping cycle");
+          return;
+        }
+        throw err;
+      }
       const result = await writeLive({
         tarPath: trafficTarPath,
         csv,

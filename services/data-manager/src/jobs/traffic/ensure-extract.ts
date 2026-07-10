@@ -99,13 +99,13 @@ export async function ensureTrafficExtract(
   }
 
   deps.logger?.info("traffic-extract: building", { container });
-  // `valhalla_build_extract` (re)writes `mjolnir.tile_extract` from the loose
-  // tiles in `mjolnir.tile_dir`; `-t`/`--with-traffic` additionally emits the
-  // `mjolnir.traffic_extract` (traffic.tar) skeleton the live writer mmaps.
-  // `-O`/`--overwrite` is required whenever a `tile_extract` tar already exists
-  // (the normal packaged-tile deployment) — without it the tool aborts with
-  // "File exists. Specify --overwrite". The restart below re-mmaps the freshly
-  // written tars.
+  // `valhalla_build_extract -t`/`--with-traffic` writes the `mjolnir.traffic_extract`
+  // (traffic.tar) skeleton the live writer mmaps, built from the tiles in
+  // `mjolnir.tile_dir` (plus a `mjolnir.tile_extract` tar where one is configured).
+  // `-O`/`--overwrite` is required on any rebuild: the force/guard path runs with
+  // traffic.tar (and any tile_extract) already present, and without `-O` the tool
+  // aborts with "File exists. Specify --overwrite". The restart below re-mmaps the
+  // fresh tar.
   const build = await run([
     "exec",
     container,
@@ -123,6 +123,37 @@ export async function ensureTrafficExtract(
       `traffic-extract: valhalla_build_extract exited ${build.exitCode} on container "${container}"`,
     );
   }
+  // Guard against a successful-but-degenerate rebuild: the tool can exit 0 yet
+  // emit an extract with no tiles (an empty `tile_dir`, or a fire mid graph
+  // rebuild), and restarting Valhalla onto it silently disables ALL live traffic
+  // — the same invisible signature as the header-corruption bug. index.bin holds
+  // one 16-byte entry per tile, so an empty index.bin means an empty extract.
+  // A definitively-empty result is fatal; an inconclusive probe is logged, not blocking.
+  const probe = await run([
+    "exec",
+    container,
+    "sh",
+    "-c",
+    `tar xOf ${TRAFFIC_TAR_PATH} index.bin 2>/dev/null | wc -c`,
+  ]);
+  const indexBytesRaw = probe.stdout.trim();
+  const indexBytes = Number(indexBytesRaw);
+  // Only a definitive "0" from `wc -c` (index.bin present but empty) is fatal;
+  // an empty/failed probe is inconclusive and must not block a legitimate build.
+  if (
+    probe.exitCode === 0 &&
+    indexBytesRaw !== "" &&
+    Number.isFinite(indexBytes) &&
+    indexBytes === 0
+  ) {
+    throw new Error(
+      `traffic-extract: built ${TRAFFIC_TAR_PATH} has an empty index.bin — refusing to ` +
+        `restart Valhalla onto a degenerate extract (empty tile_dir?)`,
+    );
+  }
+  deps.logger?.info("traffic-extract: build validated", {
+    tiles: Number.isFinite(indexBytes) && indexBytesRaw !== "" ? indexBytes / 16 : null,
+  });
   // valhalla_build_extract runs as the Valhalla container's user (root), so the
   // fresh traffic.tar is root-owned — but the live-speed writer runs as the
   // data-manager process's own (non-root) uid and opens that SAME file for
