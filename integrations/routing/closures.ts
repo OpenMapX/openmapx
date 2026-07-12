@@ -60,6 +60,26 @@ function isClosure(type: string, severity: string): boolean {
   return CLOSURE_TYPES.has(type) || severity === CRITICAL_SEVERITY;
 }
 
+/**
+ * Whether a crowd-origin event must be withheld from routing. A user-reported
+ * closure becomes a Valhalla exclusion ONLY once it is `routingEligible` (an
+ * external resolution corroborated it — peer votes never do). This mirrors the
+ * OpenConditions export gate (`eventsToExclusions`) exactly.
+ *
+ * The gate is DELIBERATELY asymmetric: the ONLY thing it can drop is an
+ * explicit `originKind === "crowd"` event that is not routing-eligible. A `feed`
+ * event, or one with NO `originKind` at all, always keeps routing — this path
+ * aggregates many providers (TomTom/HERE/DATEX feeds) that never stamp
+ * `originKind`, and silently dropping their closures would route a car into a
+ * real closed road (a worse hazard than surfacing an over-eager crowd report).
+ * The burden is on the crowd provider to stamp `originKind === "crowd"`, which
+ * the OpenConditions provider does, so the crowd-drop fires correctly while
+ * official events are never regressed.
+ */
+function isCrowdNonRoutable(event: { originKind?: string; routingEligible?: boolean }): boolean {
+  return event.originKind === "crowd" && event.routingEligible !== true;
+}
+
 function parseHhMm(s: string | undefined): number | null {
   if (!s) return null;
   const m = s.match(/^(\d{1,2}):(\d{2})/);
@@ -361,6 +381,9 @@ export async function activeClosuresForBbox(
     }
     for (const event of result.value) {
       if (disallowed.has(event.source)) continue;
+      // Withhold an unconfirmed crowd report from routing (fail-open on unknown
+      // origin — feed/undefined always route). See isCrowdNonRoutable.
+      if (isCrowdNonRoutable(event)) continue;
       if (!isClosure(event.type, event.severity)) continue;
       if (event.roadState === "open") continue;
       if (!isActiveAt(event, refTime)) continue;

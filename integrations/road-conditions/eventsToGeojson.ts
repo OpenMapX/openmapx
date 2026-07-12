@@ -42,6 +42,13 @@ export function eventsToFeatureCollection(
         schedule: e.schedule ?? null,
         dataUpdatedAt: e.dataUpdatedAt ?? null,
         attribution: e.attribution ?? null,
+        // Evidence provenance — carried to the overlay so a crowd/unconfirmed
+        // report can be labeled distinctly (see `isUnconfirmedCrowd`). Absent
+        // for official third-party providers that don't set them.
+        originKind: e.originKind ?? null,
+        evidenceState: e.evidenceState ?? null,
+        routingEligible: e.routingEligible ?? null,
+        confidenceScore: e.confidenceScore ?? null,
       },
     })),
   };

@@ -14,6 +14,7 @@ import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
+import { isUnconfirmedCrowd } from "./evidence";
 import { markerImageData, markerImageId, parseMarkerImageId, representativePoint } from "./markers";
 // The named import also runs the module side-effect that registers the
 // "road-conditions" overlay store (shared by the layer selector + legend).
@@ -191,6 +192,13 @@ function buildSources(features: RawFeature[]): { markers: GeoJsonData; lines: Ge
         // severity rank for symbol-sort-key (worst on top) + popup ordering.
         _id: p.id != null ? String(p.id) : String(p.headline ?? ""),
         _sev: SEVERITY_RANK[severity] ?? 0,
+        // Flag an unconfirmed crowd report so styling/labeling can distinguish it
+        // from a corroborated official condition. Booleans survive MapLibre's
+        // property serialization; the actual dashed/badged rendering is pending.
+        _unconfirmed: isUnconfirmedCrowd({
+          originKind: typeof p.originKind === "string" ? p.originKind : null,
+          evidenceState: typeof p.evidenceState === "string" ? p.evidenceState : null,
+        }),
       };
       if (p.roadState) props.roadState = String(p.roadState);
       // Raw ISO validity bounds + recurring schedule — formatted into a human

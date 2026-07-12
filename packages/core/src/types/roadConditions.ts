@@ -81,6 +81,29 @@ export interface RoadConditionEvent {
   schedule?: RoadConditionSchedule[];
   dataUpdatedAt?: string;
   attribution?: RoadConditionAttribution;
+  /**
+   * Provenance kind, set by crowd-aware providers (e.g. OpenConditions):
+   * `"feed"` = an authoritative official source, `"crowd"` = a user report.
+   * Official third-party providers that predate this field leave it undefined.
+   * Drives the routing gate (only a crowd event can be withheld from routing)
+   * and the overlay's "unconfirmed" labeling. See `integrations/routing/closures.ts`.
+   */
+  originKind?: "feed" | "crowd";
+  /**
+   * Whether a crowd-origin event has been corroborated strongly enough to affect
+   * routing (an external resolution — peer corroboration alone never sets it).
+   * Feed events are authoritative and leave this undefined. Only meaningful when
+   * `originKind === "crowd"`.
+   */
+  routingEligible?: boolean;
+  /**
+   * Evidence maturity of a crowd report (e.g. `"self_reported"`,
+   * `"externally_resolved"`). Used by the overlay to label unconfirmed crowd
+   * events distinctly; undefined for feed events.
+   */
+  evidenceState?: string;
+  /** Aggregate confidence score for a crowd event (0..1); undefined for feeds. */
+  confidenceScore?: number;
 }
 
 export interface RoadConditionsQuery {

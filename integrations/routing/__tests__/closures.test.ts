@@ -473,6 +473,102 @@ describe("activeClosuresForBbox", () => {
     expect(result.polygons[1]).toEqual(ring2);
   });
 
+  describe("origin-aware routing gate (crowd non-routing events are dropped)", () => {
+    it("drops a crowd road_closure that is not routingEligible", async () => {
+      const getEvents = vi.fn().mockResolvedValue([
+        {
+          id: "crowd:1",
+          source: "openconditions",
+          provider: "road-conditions-openconditions",
+          type: "road_closure",
+          severity: "high",
+          geometry: { type: "Point", coordinates: [0.5, 51.5] },
+          headline: "User-reported closure",
+          originKind: "crowd",
+          routingEligible: false,
+        },
+      ]);
+      const ctx = makeRoadConditionsCtx([{ id: "road-conditions-openconditions", getEvents }]);
+      const result = await activeClosuresForBbox(ctx, TEST_BBOX);
+      expect(result.points).toHaveLength(0);
+    });
+
+    it("drops a crowd road_closure whose routingEligible is undefined", async () => {
+      const getEvents = vi.fn().mockResolvedValue([
+        {
+          id: "crowd:2",
+          source: "openconditions",
+          provider: "road-conditions-openconditions",
+          type: "road_closure",
+          severity: "high",
+          geometry: { type: "Point", coordinates: [0.5, 51.5] },
+          headline: "User-reported closure",
+          originKind: "crowd",
+        },
+      ]);
+      const ctx = makeRoadConditionsCtx([{ id: "road-conditions-openconditions", getEvents }]);
+      const result = await activeClosuresForBbox(ctx, TEST_BBOX);
+      expect(result.points).toHaveLength(0);
+    });
+
+    it("keeps a crowd road_closure once it is routingEligible", async () => {
+      const getEvents = vi.fn().mockResolvedValue([
+        {
+          id: "crowd:3",
+          source: "openconditions",
+          provider: "road-conditions-openconditions",
+          type: "road_closure",
+          severity: "high",
+          geometry: { type: "Point", coordinates: [0.5, 51.5] },
+          headline: "Externally-confirmed closure",
+          originKind: "crowd",
+          routingEligible: true,
+        },
+      ]);
+      const ctx = makeRoadConditionsCtx([{ id: "road-conditions-openconditions", getEvents }]);
+      const result = await activeClosuresForBbox(ctx, TEST_BBOX);
+      expect(result.points).toEqual([[0.5, 51.5]]);
+    });
+
+    it("keeps a feed road_closure regardless of routingEligible", async () => {
+      const getEvents = vi.fn().mockResolvedValue([
+        {
+          id: "feed:1",
+          source: "ndw",
+          provider: "road-conditions-openconditions",
+          type: "road_closure",
+          severity: "high",
+          geometry: { type: "Point", coordinates: [0.5, 51.5] },
+          headline: "Official closure",
+          originKind: "feed",
+        },
+      ]);
+      const ctx = makeRoadConditionsCtx([{ id: "road-conditions-openconditions", getEvents }]);
+      const result = await activeClosuresForBbox(ctx, TEST_BBOX);
+      expect(result.points).toEqual([[0.5, 51.5]]);
+    });
+
+    it("keeps a closure with no originKind (fail-open on unknown origin — never regress official events)", async () => {
+      // Third-party providers (TomTom/HERE) never stamp originKind; dropping
+      // their closures would route a car into a real closed road. Only an
+      // explicit crowd-non-routing event is withheld.
+      const getEvents = vi.fn().mockResolvedValue([
+        {
+          id: "unknown:1",
+          source: "tomtom",
+          provider: "road-conditions-tomtom",
+          type: "road_closure",
+          severity: "high",
+          geometry: { type: "Point", coordinates: [0.5, 51.5] },
+          headline: "Closure from a provider that does not stamp originKind",
+        },
+      ]);
+      const ctx = makeRoadConditionsCtx([{ id: "road-conditions-tomtom", getEvents }]);
+      const result = await activeClosuresForBbox(ctx, TEST_BBOX);
+      expect(result.points).toEqual([[0.5, 51.5]]);
+    });
+  });
+
   describe("time-aware filtering (validFrom/validTo vs travel time)", () => {
     // Planned closure in effect 2026-07-10 22:00 → 2026-07-13 05:00 (CEST).
     const plannedClosure = {
