@@ -57,6 +57,7 @@ const APACHE_PACKAGES = new Set([
   "hardlinks",
   "mangrove-client",
   "mangrove-react",
+  "openconditions-contrib-client", // reusable ES256 crowd-report signing lib (mirrors Apache-2.0 contrib-core)
   "noaa-coops-data",
   "ourairports-data",
 ]);

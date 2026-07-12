@@ -1,4 +1,41 @@
 {
+  "crowdReports": {
+    "reportButton": "Report a condition",
+    "reportTitle": "Report a condition",
+    "categoryLabel": "What did you see?",
+    "category": {
+      "road_closure": "Road closed",
+      "accident": "Accident",
+      "hazard_object": "Object on road",
+      "hazard_weather": "Weather hazard",
+      "hazard_animal": "Animal on road",
+      "jam": "Traffic jam",
+      "roadworks": "Roadworks",
+      "transit_disruption": "Transit disruption",
+      "micromobility": "Bike/scooter issue",
+      "accessibility": "Accessibility issue",
+      "other": "Other"
+    },
+    "fuzzinessLabel": "Where is it?",
+    "fuzziness": {
+      "here": "Here",
+      "ahead": "Somewhere ahead",
+      "back_of_queue": "Back of the queue",
+      "all_along": "All along here"
+    },
+    "severityLabel": "Severity (optional)",
+    "locationLabel": "Location",
+    "locationMissing": "No location set",
+    "pickOnMap": "Pick on map",
+    "submit": "Submit",
+    "submitError": "Could not submit your report. Please try again.",
+    "cancel": "Cancel",
+    "approachStillThere": "Reported condition ahead",
+    "approachPrompt": "Is it still there?",
+    "confirm": "Still there",
+    "negate": "Gone",
+    "dismiss": "Dismiss"
+  },
   "navigation": {
     "start": "Start",
     "end": "End",

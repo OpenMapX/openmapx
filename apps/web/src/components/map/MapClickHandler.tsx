@@ -1,5 +1,6 @@
 "use client";
 
+import { useCrowdReportStore } from "@integrations/crowd-reports/store";
 import { useMeasurementStore } from "@integrations/overlay-tool-measurement/store";
 import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
 import {
@@ -28,6 +29,12 @@ export function MapClickHandler() {
     if (!map || !mapReady) return;
 
     const onClick = (e: MapMouseEvent) => {
+      // Crowd-report location picking: consume the tap to place the report point
+      // and re-open the dialog, instead of the normal place/waypoint behavior.
+      if (useCrowdReportStore.getState().picking) {
+        useCrowdReportStore.getState().setLocation([e.lngLat.lng, e.lngLat.lat]);
+        return;
+      }
       if (useMeasurementStore.getState().isActive) return;
       if (useTravelTimeStore.getState().isActive) return;
 

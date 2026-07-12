@@ -11,6 +11,7 @@ publicHoistPattern:
   - "maplibre-gl"
   - "next-intl"
   - "@turf/*"
+  - "@tanstack/react-query"
 
 # Supply-chain hardening. Keep these explicit so pnpm upgrades or local
 # defaults cannot silently relax install-time protections.

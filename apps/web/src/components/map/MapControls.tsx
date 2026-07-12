@@ -10,13 +10,15 @@ import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
 import Tooltip from "@mui/material/Tooltip";
 import { useMapStore, useNavigationStore } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useMyLocation } from "@/components/command-palette/useMyLocation";
 import { MOBILE_SHEET_FOLLOW_CAP_FRACTION } from "@/components/panels/mobileSheetShared";
 import { useMap } from "@/lib/MapContext";
 import { useMobilePanelMaxHeight } from "@/lib/mobilePanelHeight";
 import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
+import { CrowdApproachPromptLazy, ReportDialogLazy, ReportFabLazy } from "./crowdReportsLazy";
 import { Pegman } from "./Pegman";
 
 const BASE_BOTTOM = 48;
@@ -39,6 +41,8 @@ export function MapControls() {
   const bearing = useMapStore((s) => s.bearing);
   const pitch = useMapStore((s) => s.pitch);
   const handleMyLocation = useMyLocation();
+  const registry = useIntegrationRegistry();
+  const crowdReportsEnabled = Boolean(registry.get("crowd-reports"));
   const mobilePanelHeight = useMobilePanelMaxHeight();
   const [vh, setVh] = useState(0);
   useEffect(() => {
@@ -55,109 +59,124 @@ export function MapControls() {
     vh > 0 ? Math.min(mobilePanelHeight, vh * MOBILE_SHEET_FOLLOW_CAP_FRACTION) : mobilePanelHeight;
 
   return (
-    <Box
-      sx={{
-        position: "absolute",
-        bottom: navigating
-          ? `calc(${NAV_BOTTOM}px + var(--omx-safe-bottom))`
-          : {
-              xs:
-                followHeight > 0
-                  ? `calc(${followHeight + PANEL_GAP}px + var(--omx-safe-bottom))`
-                  : `calc(${BASE_BOTTOM}px + var(--omx-safe-bottom))`,
-              sm: `calc(${BASE_BOTTOM}px + var(--omx-safe-bottom))`,
-            },
-        right: "calc(12px + var(--omx-safe-right))",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 1,
-        zIndex: 10,
-        transition: "bottom 0.25s ease",
-      }}
-    >
-      {/* Search along route (ground navigation only) — top of the stack. */}
-      {showRouteSearchButton && (
-        <Tooltip title={tNav("searchAlongRoute")} placement="left">
-          <Paper elevation={2} sx={{ borderRadius: "50%", overflow: "hidden" }}>
+    <>
+      {crowdReportsEnabled && (
+        <Suspense fallback={null}>
+          <CrowdApproachPromptLazy />
+          <ReportDialogLazy />
+        </Suspense>
+      )}
+      <Box
+        sx={{
+          position: "absolute",
+          bottom: navigating
+            ? `calc(${NAV_BOTTOM}px + var(--omx-safe-bottom))`
+            : {
+                xs:
+                  followHeight > 0
+                    ? `calc(${followHeight + PANEL_GAP}px + var(--omx-safe-bottom))`
+                    : `calc(${BASE_BOTTOM}px + var(--omx-safe-bottom))`,
+                sm: `calc(${BASE_BOTTOM}px + var(--omx-safe-bottom))`,
+              },
+          right: "calc(12px + var(--omx-safe-right))",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 1,
+          zIndex: 10,
+          transition: "bottom 0.25s ease",
+        }}
+      >
+        {/* Search along route (ground navigation only) — top of the stack. */}
+        {showRouteSearchButton && (
+          <Tooltip title={tNav("searchAlongRoute")} placement="left">
+            <Paper elevation={2} sx={{ borderRadius: "50%", overflow: "hidden" }}>
+              <IconButton
+                size="small"
+                onClick={openRouteSearch}
+                sx={{ width: 36, height: 36 }}
+                aria-label={tNav("searchAlongRoute")}
+              >
+                <SearchIcon sx={{ fontSize: 18, color: "primary.main" }} />
+              </IconButton>
+            </Paper>
+          </Tooltip>
+        )}
+
+        {/* Report a condition (crowd-reports) */}
+        {crowdReportsEnabled && (
+          <Suspense fallback={null}>
+            <ReportFabLazy />
+          </Suspense>
+        )}
+
+        {/* My location */}
+        <Tooltip title={t("myLocation")} placement="left">
+          <Paper elevation={2} sx={{ borderRadius: "12px", overflow: "hidden" }}>
             <IconButton
               size="small"
-              onClick={openRouteSearch}
+              onClick={handleMyLocation}
               sx={{ width: 36, height: 36 }}
-              aria-label={tNav("searchAlongRoute")}
+              aria-label={t("goToMyLocationAriaLabel")}
             >
-              <SearchIcon sx={{ fontSize: 18, color: "primary.main" }} />
+              <MyLocationIcon sx={{ fontSize: 18, color: "primary.main" }} />
             </IconButton>
           </Paper>
         </Tooltip>
-      )}
 
-      {/* My location */}
-      <Tooltip title={t("myLocation")} placement="left">
+        {/* Zoom in / zoom out */}
         <Paper elevation={2} sx={{ borderRadius: "12px", overflow: "hidden" }}>
-          <IconButton
-            size="small"
-            onClick={handleMyLocation}
-            sx={{ width: 36, height: 36 }}
-            aria-label={t("goToMyLocationAriaLabel")}
-          >
-            <MyLocationIcon sx={{ fontSize: 18, color: "primary.main" }} />
-          </IconButton>
+          <Tooltip title={t("zoomIn")} placement="left">
+            <IconButton
+              size="small"
+              onClick={zoomIn}
+              sx={{ width: 36, height: 36, borderRadius: 0 }}
+              aria-label={t("zoomInAriaLabel")}
+            >
+              <AddIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          <Box sx={{ height: "1px", bgcolor: "divider", mx: 1 }} />
+          <Tooltip title={t("zoomOut")} placement="left">
+            <IconButton
+              size="small"
+              onClick={zoomOut}
+              sx={{ width: 36, height: 36, borderRadius: 0 }}
+              aria-label={t("zoomOutAriaLabel")}
+            >
+              <RemoveIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
         </Paper>
-      </Tooltip>
 
-      {/* Zoom in / zoom out */}
-      <Paper elevation={2} sx={{ borderRadius: "12px", overflow: "hidden" }}>
-        <Tooltip title={t("zoomIn")} placement="left">
-          <IconButton
-            size="small"
-            onClick={zoomIn}
-            sx={{ width: 36, height: 36, borderRadius: 0 }}
-            aria-label={t("zoomInAriaLabel")}
-          >
-            <AddIcon sx={{ fontSize: 18 }} />
-          </IconButton>
-        </Tooltip>
-        <Box sx={{ height: "1px", bgcolor: "divider", mx: 1 }} />
-        <Tooltip title={t("zoomOut")} placement="left">
-          <IconButton
-            size="small"
-            onClick={zoomOut}
-            sx={{ width: 36, height: 36, borderRadius: 0 }}
-            aria-label={t("zoomOutAriaLabel")}
-          >
-            <RemoveIcon sx={{ fontSize: 18 }} />
-          </IconButton>
-        </Tooltip>
-      </Paper>
+        {/* Street View pegman is irrelevant during turn-by-turn navigation. */}
+        {!navigating && <Pegman />}
 
-      {/* Street View pegman is irrelevant during turn-by-turn navigation. */}
-      {!navigating && <Pegman />}
-
-      {/* Compass — while navigating it appears only when the user has panned
+        {/* Compass — while navigating it appears only when the user has panned
           off-track and recenters/resumes tracking; otherwise it resets bearing
           and is only visible when the map is rotated. */}
-      {(navigating ? navCameraMode === "free" : Math.abs(bearing) > 0.5 || pitch > 0.5) && (
-        <Tooltip title={navigating ? tNav("recenter") : t("resetBearing")} placement="left">
-          <Paper elevation={2} sx={{ borderRadius: "50%", overflow: "hidden" }}>
-            <IconButton
-              size="medium"
-              onClick={navigating ? () => setCameraMode("follow") : resetBearing}
-              sx={{ width: 40, height: 40 }}
-              aria-label={navigating ? tNav("recenter") : t("resetBearingAriaLabel")}
-            >
-              <ExploreIcon
-                sx={{
-                  transform: `rotate(${-bearing}deg)`,
-                  transition: "transform 0.2s",
-                  color: "error.main",
-                  fontSize: 22,
-                }}
-              />
-            </IconButton>
-          </Paper>
-        </Tooltip>
-      )}
-    </Box>
+        {(navigating ? navCameraMode === "free" : Math.abs(bearing) > 0.5 || pitch > 0.5) && (
+          <Tooltip title={navigating ? tNav("recenter") : t("resetBearing")} placement="left">
+            <Paper elevation={2} sx={{ borderRadius: "50%", overflow: "hidden" }}>
+              <IconButton
+                size="medium"
+                onClick={navigating ? () => setCameraMode("follow") : resetBearing}
+                sx={{ width: 40, height: 40 }}
+                aria-label={navigating ? tNav("recenter") : t("resetBearingAriaLabel")}
+              >
+                <ExploreIcon
+                  sx={{
+                    transform: `rotate(${-bearing}deg)`,
+                    transition: "transform 0.2s",
+                    color: "error.main",
+                    fontSize: 22,
+                  }}
+                />
+              </IconButton>
+            </Paper>
+          </Tooltip>
+        )}
+      </Box>
+    </>
   );
 }

@@ -1,0 +1,27 @@
+{
+  "name": "@openmapx/openconditions-contrib-client",
+  "license": "Apache-2.0",
+  "version": "1.0.0",
+  "description": "Client-side ES256 signing for OpenConditions crowd reports — byte-parity with @openconditions/contrib-core (RFC 8785 JCS + RFC 7638 thumbprint + WebCrypto P-256)",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "canonicalize": "3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  }
+}

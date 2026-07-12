@@ -1,0 +1,4 @@
+{
+  "name": "Crowd reports",
+  "description": "Lets people report live road, transit and accessibility conditions from the map, signed device-side and relayed to the self-hosted OpenConditions contributions service. Includes confirm-on-approach voting while navigating."
+}

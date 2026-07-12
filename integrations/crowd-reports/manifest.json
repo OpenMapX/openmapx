@@ -1,0 +1,21 @@
+{
+  "id": "crowd-reports",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "AGPL-3.0-or-later",
+  "domains": ["crowd-reports"],
+  "backend": {
+    "routes": true
+  },
+  "quality": "built-in",
+  "category": "Navigation",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  }
+}

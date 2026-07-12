@@ -1,0 +1,29 @@
+{
+  "name": "@openmapx/integration-crowd-reports",
+  "license": "AGPL-3.0-or-later",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "default": "./index.ts"
+    },
+    "./claim": {
+      "types": "./claim.ts",
+      "default": "./claim.ts"
+    }
+  },
+  "dependencies": {
+    "@openmapx/core": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/openconditions-contrib-client": "workspace:^",
+    "zustand": "^5.0.14"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "^5",
+    "react": ">=19"
+  }
+}

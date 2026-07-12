@@ -1,4 +1,41 @@
 {
+  "crowdReports": {
+    "reportButton": "Zustand melden",
+    "reportTitle": "Zustand melden",
+    "categoryLabel": "Was hast du gesehen?",
+    "category": {
+      "road_closure": "Straße gesperrt",
+      "accident": "Unfall",
+      "hazard_object": "Objekt auf der Fahrbahn",
+      "hazard_weather": "Wettergefahr",
+      "hazard_animal": "Tier auf der Fahrbahn",
+      "jam": "Stau",
+      "roadworks": "Baustelle",
+      "transit_disruption": "Störung im ÖPNV",
+      "micromobility": "Problem mit Rad/Roller",
+      "accessibility": "Barrierefreiheitsproblem",
+      "other": "Sonstiges"
+    },
+    "fuzzinessLabel": "Wo ist es?",
+    "fuzziness": {
+      "here": "Hier",
+      "ahead": "Irgendwo voraus",
+      "back_of_queue": "Am Stauende",
+      "all_along": "Auf dem ganzen Abschnitt"
+    },
+    "severityLabel": "Schweregrad (optional)",
+    "locationLabel": "Standort",
+    "locationMissing": "Kein Standort gesetzt",
+    "pickOnMap": "Auf Karte wählen",
+    "submit": "Senden",
+    "submitError": "Meldung konnte nicht gesendet werden. Bitte erneut versuchen.",
+    "cancel": "Abbrechen",
+    "approachStillThere": "Gemeldeter Zustand voraus",
+    "approachPrompt": "Ist es noch da?",
+    "confirm": "Noch da",
+    "negate": "Weg",
+    "dismiss": "Schließen"
+  },
   "navigation": {
     "start": "Starten",
     "end": "Beenden",

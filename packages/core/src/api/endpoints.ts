@@ -9,6 +9,11 @@ export const API_ENDPOINTS = {
   routingMatch: "/api/integrations/routing/match",
   navigationAlerts: "/api/integrations/routing/navigation/alerts",
   roadConditions: "/api/integrations/road-conditions/events",
+  crowdReportsSubmit: "/api/integrations/crowd-reports/reports",
+  crowdReportsVote: "/api/integrations/crowd-reports/reports", // used as `${base}/${id}/${action}`
+  crowdReportsEnroll: "/api/integrations/crowd-reports/enroll",
+  crowdReportsTokens: "/api/integrations/crowd-reports/tokens",
+  crowdReportsIssuerKeys: "/api/integrations/crowd-reports/issuer-keys",
   flights: "/api/integrations/flights", // used as `${base}/${provider}/open`
   flightProviders: "/api/integrations/flights/providers",
   airportNearest: "/api/integrations/knowledge-ourairports/nearest",
