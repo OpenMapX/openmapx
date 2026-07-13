@@ -123,7 +123,7 @@ importers:
         version: 5.1.9(hafas-client@6.3.6)(prom-client@15.1.3)
       db-vendo-client:
         specifier: ^6.10.11
-        version: 6.10.12
+        version: 6.10.13
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(kysely@0.29.2)(postgres@3.4.9)
@@ -1284,7 +1284,7 @@ importers:
         version: link:../../packages/mobility-core
       db-vendo-client:
         specifier: ^6.10.11
-        version: 6.10.12
+        version: 6.10.13
 
   integrations/transit-dynamic-registry:
     dependencies:
@@ -5116,8 +5116,8 @@ packages:
     resolution: {integrity: sha512-GjcqpZhs+HeOvc2dnAJs2Uy3/b8zRNlvTfLCvqFe9J2JYOlQVyuYCjjdsPBTOmJol42sPToPs71wr03kTMVJDw==}
     engines: {node: '>=18'}
 
-  db-vendo-client@6.10.12:
-    resolution: {integrity: sha512-zqIcTXGFxi0vilND9xSEpwoKzM2KiBOnmwfXGp7h5dYb9CGTIJ7VSPakWg9hbiYPj9kCUVVt9TFTWfxZYTCmQQ==}
+  db-vendo-client@6.10.13:
+    resolution: {integrity: sha512-la1QZmO0RA6zV7MNF+Bshk/qWe6uPfIKa5lNyQoNyFmX+d0zIjNrM0sPiS5WoXaTrhi02qd/JWzcPlWOTgnjhQ==}
     engines: {node: '>=18'}
 
   debug@4.4.3:
@@ -10673,7 +10673,7 @@ snapshots:
       ndjson: 2.0.0
       qs: 6.15.3
 
-  db-vendo-client@6.10.12:
+  db-vendo-client@6.10.13:
     dependencies:
       content-type: 1.0.5
       cross-fetch: 4.1.0
