@@ -21,6 +21,7 @@ COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/integration-framework/package.json packages/integration-framework/
 COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
+COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
 COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/place-ids/package.json packages/place-ids/
 COPY packages/poi-source-registry/package.json packages/poi-source-registry/
@@ -46,6 +47,7 @@ COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/integration-framework/package.json packages/integration-framework/
 COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
+COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
 COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/place-ids/package.json packages/place-ids/
 COPY packages/poi-source-registry/package.json packages/poi-source-registry/
@@ -76,6 +78,7 @@ COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
 COPY packages/integration-framework/ packages/integration-framework/
 COPY packages/mangrove-client/ packages/mangrove-client/
 COPY packages/noaa-coops-data/ packages/noaa-coops-data/
+COPY packages/openconditions-contrib-client/ packages/openconditions-contrib-client/
 COPY packages/ourairports-data/ packages/ourairports-data/
 COPY packages/place-ids/ packages/place-ids/
 COPY packages/poi-source-registry/ packages/poi-source-registry/
@@ -136,6 +139,7 @@ COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
 COPY packages/integration-framework/ packages/integration-framework/
 COPY packages/mangrove-client/ packages/mangrove-client/
 COPY packages/noaa-coops-data/ packages/noaa-coops-data/
+COPY packages/openconditions-contrib-client/ packages/openconditions-contrib-client/
 COPY packages/ourairports-data/ packages/ourairports-data/
 COPY packages/place-ids/ packages/place-ids/
 COPY packages/poi-source-registry/ packages/poi-source-registry/
@@ -147,6 +151,7 @@ COPY --from=prod-deps /app/packages/mobility-formats/node_modules ./packages/mob
 COPY --from=prod-deps /app/packages/integration-framework/node_modules ./packages/integration-framework/node_modules
 COPY --from=prod-deps /app/packages/mangrove-client/node_modules ./packages/mangrove-client/node_modules
 COPY --from=prod-deps /app/packages/noaa-coops-data/node_modules ./packages/noaa-coops-data/node_modules
+COPY --from=prod-deps /app/packages/openconditions-contrib-client/node_modules ./packages/openconditions-contrib-client/node_modules
 COPY --from=prod-deps /app/packages/ourairports-data/node_modules ./packages/ourairports-data/node_modules
 COPY --from=prod-deps /app/packages/presets/node_modules ./packages/presets/node_modules
 

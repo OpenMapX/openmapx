@@ -39,6 +39,7 @@ COPY packages/mobility-formats/package.json packages/mobility-formats/
 COPY packages/poi-source-registry/package.json packages/poi-source-registry/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/core/package.json packages/core/
+COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 
 RUN pnpm install --filter @openmapx/data-manager... --frozen-lockfile
 
@@ -55,6 +56,7 @@ COPY packages/mobility-formats/package.json packages/mobility-formats/
 COPY packages/poi-source-registry/package.json packages/poi-source-registry/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/core/package.json packages/core/
+COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 
 RUN pnpm install --filter @openmapx/data-manager... --frozen-lockfile --prod --ignore-scripts
 
@@ -69,6 +71,7 @@ COPY packages/mobility-formats/ packages/mobility-formats/
 COPY packages/poi-source-registry/ packages/poi-source-registry/
 COPY packages/transitous-core/ packages/transitous-core/
 COPY packages/core/ packages/core/
+COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
 COPY services/data-manager/ services/data-manager/
 
 WORKDIR /app/services/data-manager
@@ -145,6 +148,7 @@ COPY packages/poi-source-registry/ ./packages/poi-source-registry/
 COPY packages/transitous-core/ ./packages/transitous-core/
 COPY --from=prod-deps /app/packages/transitous-core/node_modules ./packages/transitous-core/node_modules
 COPY packages/core/ ./packages/core/
+COPY packages/hey-api-client-fetch/ ./packages/hey-api-client-fetch/
 COPY --from=builder /app/services/data-manager/dist ./services/data-manager/dist
 COPY services/data-manager/package.json ./services/data-manager/
 
