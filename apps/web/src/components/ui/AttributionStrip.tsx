@@ -4,6 +4,7 @@ import Box from "@mui/material/Box";
 import Link from "@mui/material/Link";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import { sanitizeAttributionHtml } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { useTranslations } from "next-intl";
 import { type JSX, useState } from "react";
@@ -127,7 +128,16 @@ export function AttributionStrip({
       )}
       {visibleItems.map((attr, idx) => {
         const labelText = displayLabel(attr);
-        const tooltip = attr.attributionText ?? attr.publisher?.name ?? attr.url ?? attr.name;
+        const tooltip = attr.attributionText ? (
+          <Box
+            component="span"
+            sx={{ "& a": { color: "inherit" } }}
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: the shared allowlist sanitizer keeps only safe attribution links and text
+            dangerouslySetInnerHTML={{ __html: sanitizeAttributionHtml(attr.attributionText) }}
+          />
+        ) : (
+          (attr.publisher?.name ?? attr.url ?? attr.name)
+        );
         const chipSx = {
           display: "inline-flex",
           alignItems: "center",

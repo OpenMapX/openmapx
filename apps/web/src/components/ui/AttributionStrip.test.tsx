@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { AttributionStrip } from "./AttributionStrip";
@@ -87,6 +87,28 @@ describe("AttributionStrip", () => {
     );
     expect(markup).not.toContain("<a ");
     expect(markup).toContain("DELFI");
+  });
+
+  it("renders HTML attribution text as sanitized links in the tooltip", async () => {
+    const routing: Attribution = {
+      sourceId: "valhalla-stadia",
+      name: "Valhalla (Stadia Maps)",
+      url: "https://stadiamaps.com/",
+      attributionText:
+        'Routing © <a href="https://stadiamaps.com/">Stadia Maps</a>, © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+    };
+    const { container } = render(<AttributionStrip attributions={[routing]} />);
+
+    fireEvent.mouseOver(container.querySelector("[data-idx]") as HTMLElement);
+
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip.textContent).toContain("Routing © Stadia Maps, © OpenStreetMap contributors");
+    expect(tooltip.querySelectorAll("a").length).toBe(2);
+    expect(tooltip.querySelector('a[href="https://stadiamaps.com/"]')).not.toBeNull();
+    expect(
+      tooltip.querySelector('a[href="https://www.openstreetmap.org/copyright"]'),
+    ).not.toBeNull();
+    expect(tooltip.textContent).not.toContain("<a href=");
   });
 
   it("collapses to maxVisible with a toggle that expands and collapses", () => {

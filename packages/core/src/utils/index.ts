@@ -7,6 +7,7 @@ export {
   combineAttributions,
   extractSourcePrefix,
   pickIntegrationForSources,
+  sanitizeAttributionHtml,
 } from "./attribution";
 export { bboxAroundPoint, geoJsonBBox } from "./bbox";
 export { withCache } from "./cache-helpers";
