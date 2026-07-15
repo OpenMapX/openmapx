@@ -83,6 +83,13 @@ describe("useNavigationEngine", () => {
       await Promise.resolve();
     });
     expect(fetchDirections).toHaveBeenCalled();
+    expect(fetchDirections).toHaveBeenCalledWith(
+      expect.objectContaining({
+        // The fifth fix reaches the score threshold. A reroute must start at
+        // that raw GPS position, not its projection onto the obsolete route.
+        waypoints: [offFixes[4].coords, [0.004, 0]],
+      }),
+    );
     expect(useNavigationStore.getState().route?.distance).toBe(999);
   });
 });

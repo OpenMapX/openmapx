@@ -146,13 +146,15 @@ export function useNavigationEngine(): void {
         reroutingRef.current = true;
         haptics.warn();
         store.beginReroute();
-        const from = result.progress.snapped;
-        // Re-anchor at the current position and drop intermediate stops already
-        // behind us, so a multi-stop reroute doesn't route back to a passed stop.
+        // Re-anchor at the actual GPS position. The progress position is snapped
+        // onto the obsolete route; using it here would ask the router for the
+        // same route again and leave a genuinely off-route traveller stranded in
+        // a reroute → waiting-for-GPS loop. Keep the old route projection only
+        // for deciding which intermediate stops are already behind us.
         const waypoints = remainingWaypoints(
           route.geometry,
           destinationWaypoints,
-          from,
+          fix.coords,
           result.progress.alongMeters,
         );
         fetchDirections({
