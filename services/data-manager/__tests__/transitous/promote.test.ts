@@ -2,6 +2,10 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  CANDIDATE_PROXY_DIRNAME,
+  createCandidateManifest,
+} from "../../src/jobs/transitous/candidate.js";
 import { IMPORT_MARKER_FILE } from "../../src/jobs/transitous/internal.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import { run as promoteRun } from "../../src/jobs/transitous/promote.js";
@@ -83,12 +87,45 @@ function setupFixture(opts: FixtureOptions): {
     mkdirSync(join(currentDir, "data"), { recursive: true });
     writeFileSync(join(currentDir, "data", "tt.bin"), "tt-old");
   }
+  if (opts.staging || opts.stagingWithoutMarker) {
+    writeFileSync(
+      join(stagingDir, "config.yml"),
+      "timetable:\n  datasets:\n    demo:\n      path: demo.gtfs.zip\n",
+    );
+    writeFileSync(join(stagingDir, "demo.gtfs.zip"), "gtfs");
+    writeFileSync(join(stagingDir, "license.json"), "{}\n");
+    const proxy = join(stagingDir, CANDIDATE_PROXY_DIRNAME);
+    mkdirSync(join(proxy, "conf"), { recursive: true });
+    writeFileSync(join(proxy, "conf", "default.conf"), "server {}\n");
+    writeFileSync(join(proxy, "feed-proxy-vars.json"), "{}\n");
+    const manifest = createCandidateManifest(stagingDir, "test-epoch", "2026-05-01T00:00:00.000Z");
+    writeFileSync(
+      join(stagingDir, "mobility-capabilities.json"),
+      `${JSON.stringify({
+        schemaVersion: 1,
+        testedAt: "2026-05-01T00:00:00.000Z",
+        epoch: manifest.epoch,
+        pins: { motis: "2.10.2", transitous: "test" },
+        artifacts: manifest.artifacts,
+        expectations: manifest.expectations,
+        health: { rt: true },
+        probes: [],
+      })}\n`,
+    );
+  }
   return {
     dataDir: tmp,
     stagingDir,
     currentDir,
     previousDir: `${currentDir}.previous`,
   };
+}
+
+function successfulBody(url: string): unknown {
+  if (url.includes("/health")) return { rt: true };
+  if (url.includes("/map/initial")) return { lat: 1, lon: 2, zoom: 3, serverConfig: {} };
+  if (url.includes("/map/stops")) return [];
+  return { itineraries: [{}], direct: [], requestParameters: {}, debugOutput: {} };
 }
 
 function makeCtx(opts: {
@@ -143,7 +180,10 @@ describe("promote stage", () => {
   it("performs the atomic swap on smoke + restart success", async () => {
     const fx = setupFixture({ staging: true, current: true });
 
-    globalThis.fetch = vi.fn(async () => jsonResponse({ ok: true })) as unknown as typeof fetch;
+    globalThis.fetch = vi.fn(async (input: unknown) => {
+      const url = typeof input === "string" ? input : (input as Request | URL).toString();
+      return jsonResponse(successfulBody(url));
+    }) as unknown as typeof fetch;
 
     const runnerCalls: Array<{ command: string; args: string[] }> = [];
     const ctx = makeCtx({
@@ -177,7 +217,10 @@ describe("promote stage", () => {
 
   it("rolls back the rename when docker restart fails", async () => {
     const fx = setupFixture({ staging: true, current: true });
-    globalThis.fetch = vi.fn(async () => jsonResponse({ ok: true })) as unknown as typeof fetch;
+    globalThis.fetch = vi.fn(async (input: unknown) => {
+      const url = typeof input === "string" ? input : (input as Request | URL).toString();
+      return jsonResponse(successfulBody(url));
+    }) as unknown as typeof fetch;
 
     let restartCalls = 0;
     const ctx = makeCtx({
@@ -203,7 +246,10 @@ describe("promote stage", () => {
 
   it("works with no pre-existing current dir (first-ever promotion)", async () => {
     const fx = setupFixture({ staging: true });
-    globalThis.fetch = vi.fn(async () => jsonResponse({ ok: true })) as unknown as typeof fetch;
+    globalThis.fetch = vi.fn(async (input: unknown) => {
+      const url = typeof input === "string" ? input : (input as Request | URL).toString();
+      return jsonResponse(successfulBody(url));
+    }) as unknown as typeof fetch;
 
     const ctx = makeCtx({
       dataDir: fx.dataDir,
@@ -234,7 +280,10 @@ describe("promote stage", () => {
 
   it("promotes via the MOTIS sentinel fallback when the marker file is absent", async () => {
     const fx = setupFixture({ stagingWithoutMarker: true, current: true });
-    globalThis.fetch = vi.fn(async () => jsonResponse({ ok: true })) as unknown as typeof fetch;
+    globalThis.fetch = vi.fn(async (input: unknown) => {
+      const url = typeof input === "string" ? input : (input as Request | URL).toString();
+      return jsonResponse(successfulBody(url));
+    }) as unknown as typeof fetch;
     const ctx = makeCtx({
       dataDir: fx.dataDir,
       runner: async () => {},

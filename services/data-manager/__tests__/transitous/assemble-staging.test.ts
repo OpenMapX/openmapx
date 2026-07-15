@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { parseConfigInputs, run } from "../../src/jobs/transitous/assemble-staging.js";
+import { CANDIDATE_PROXY_DIRNAME } from "../../src/jobs/transitous/candidate.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import { StateStore } from "../../src/state.js";
 
@@ -180,6 +181,10 @@ function setupFixture(opts: FixtureOptions): {
   mkdirSync(scriptsDir, { recursive: true });
   writeFileSync(join(scriptsDir, "coloring.lua"), "-- lua script\n");
   writeFileSync(join(outDir, "license.json"), JSON.stringify({ licenses: [] }));
+  const proxyDir = join(outDir, CANDIDATE_PROXY_DIRNAME);
+  mkdirSync(join(proxyDir, "conf"), { recursive: true });
+  writeFileSync(join(proxyDir, "conf", "default.conf"), "server { listen 80; }\n");
+  writeFileSync(join(proxyDir, "feed-proxy-vars.json"), "{}\n");
 
   if (opts.staleArchiveInStaging) {
     mkdirSync(stagingDir, { recursive: true });
@@ -375,6 +380,10 @@ describe("assemble-staging run()", () => {
     writeFileSync(join(outDir, "config.yml"), buildConfig(["feed.gtfs.zip"]));
     writeFileSync(join(outDir, "feed.gtfs.zip"), "feed-content");
     writeFileSync(join(outDir, "license.json"), "[]\n");
+    const proxyDir = join(outDir, CANDIDATE_PROXY_DIRNAME);
+    mkdirSync(join(proxyDir, "conf"), { recursive: true });
+    writeFileSync(join(proxyDir, "conf", "default.conf"), "server { listen 80; }\n");
+    writeFileSync(join(proxyDir, "feed-proxy-vars.json"), "{}\n");
 
     const ctx = buildJobContext({
       dataDir,

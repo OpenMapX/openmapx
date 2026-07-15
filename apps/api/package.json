@@ -33,6 +33,7 @@
     "@openmapx/mobility-formats": "workspace:^",
     "@openmapx/place-ids": "workspace:^",
     "@openmapx/poi-source-registry": "workspace:^",
+    "@openmapx/transitous-core": "workspace:^",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/exporter-prometheus": "^0.219.0",
     "@opentelemetry/sdk-metrics": "^2.8.0",

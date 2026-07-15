@@ -1,5 +1,6 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { verifyCandidateManifest } from "./candidate.js";
 import { IMPORT_MARKER_FILE } from "./internal.js";
 import { STAGING_CONTAINER as STAGING_CONTAINER_NAME } from "./motis-containers.js";
 import type { StageFn, StageResult } from "./types.js";
@@ -56,6 +57,7 @@ export const run: StageFn = async (ctx) => {
         message: `staging config not generated at ${expectedConfig}`,
       } satisfies StageResult;
     }
+    const manifest = verifyCandidateManifest(ctx.motisStagingDataDir);
 
     // Re-run the staging container's import+serve entrypoint against the freshly
     // assembled config. `docker restart` covers every state the container can be
@@ -103,6 +105,8 @@ export const run: StageFn = async (ctx) => {
             finishedAt,
             action,
             container: STAGING_CONTAINER_NAME,
+            candidateEpoch: manifest.epoch,
+            configHash: manifest.artifacts.config.sha256,
           },
           null,
           2,
@@ -122,6 +126,8 @@ export const run: StageFn = async (ctx) => {
       artifacts: {
         action,
         container: STAGING_CONTAINER_NAME,
+        candidateEpoch: manifest.epoch,
+        configHash: manifest.artifacts.config.sha256,
       },
     } satisfies StageResult;
   } catch (error) {

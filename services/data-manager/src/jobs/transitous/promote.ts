@@ -1,15 +1,17 @@
 import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { verifyCandidateManifest } from "./candidate.js";
+import { runFunctionalProbes, verifyCapabilitySnapshot } from "./functional-probes.js";
 import { IMPORT_MARKER_FILE } from "./internal.js";
 import { PRIMARY_CONTAINER, STAGING_CONTAINER } from "./motis-containers.js";
-import { healthUrl, mapInitialUrl, mapStopsUrl, planUrl } from "./motis-endpoints.js";
-import { DEFAULT_PROBE_TIMEOUT_MS, parseIntEnv, pollUntilHealthy, probe } from "./motis-probe.js";
+import { mapInitialUrl } from "./motis-endpoints.js";
+import { parseIntEnv, pollUntilHealthy } from "./motis-probe.js";
+import { commitProxyTransaction } from "./proxy-transaction.js";
 import type { JobContext, StageFn, StageResult } from "./types.js";
 
 const PRIMARY_URL = process.env.MOTIS_URL ?? "http://localhost:8081";
 const STAGING_URL = process.env.MOTIS_STAGING_URL ?? "http://localhost:8082";
 
-const PROBE_TIMEOUT_MS = DEFAULT_PROBE_TIMEOUT_MS;
 const SMOKE_BUDGET_MS = 30_000;
 // How long to wait for the primary to come back healthy after the swap+restart.
 // The restarted container re-loads the promoted dataset before it binds its
@@ -18,10 +20,6 @@ const SMOKE_BUDGET_MS = 30_000;
 // Override with MOTIS_PROMOTE_RESTART_TIMEOUT_MS.
 const RESTART_BUDGET_MS = parseIntEnv("MOTIS_PROMOTE_RESTART_TIMEOUT_MS", 20 * 60 * 1000);
 const RESTART_POLL_INTERVAL_MS = 5_000;
-
-// Smoke-probe targets — the same German station references motis-health uses.
-const SMOKE_BBOX = { minLat: 52.515, minLng: 13.359, maxLat: 52.535, maxLng: 13.379 };
-const SMOKE_PLAN = { fromLat: 52.525, fromLng: 13.369, toLat: 48.14, toLng: 11.558 };
 
 /**
  * Artifacts MOTIS writes into the working dir's `data/` subdir during a
@@ -55,22 +53,6 @@ interface PromoteArtifacts {
  * boundary even if `motis-health` was skipped. Returns the failure reason or
  * `null` when all probes pass.
  */
-async function runSmokeProbes(deadline: number): Promise<string | null> {
-  const probes: Array<{ name: string; url: string }> = [
-    { name: "health", url: healthUrl(STAGING_URL) },
-    { name: "initial", url: mapInitialUrl(STAGING_URL) },
-    { name: "stops", url: mapStopsUrl(STAGING_URL, SMOKE_BBOX) },
-    { name: "plan", url: planUrl(STAGING_URL, SMOKE_PLAN) },
-  ];
-  for (const p of probes) {
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) return `total smoke-test budget exceeded before probe "${p.name}"`;
-    const fail = await probe(p.name, p.url, Math.min(PROBE_TIMEOUT_MS, remaining));
-    if (fail) return `staging probe "${p.name}" failed: ${fail.reason}`;
-  }
-  return null;
-}
-
 /**
  * Decide whether `dir` looks like a freshly-finished MOTIS import worth
  * promoting. Three gates, in priority order:
@@ -219,19 +201,24 @@ export const run: StageFn = async (ctx) => {
       } satisfies StageResult;
     }
 
+    const manifest = verifyCandidateManifest(stagingDir);
+    verifyCapabilitySnapshot(stagingDir, manifest);
     const smokeStart = Date.now();
-    const smokeDeadline = smokeStart + SMOKE_BUDGET_MS;
-    const smokeFail = await runSmokeProbes(smokeDeadline);
+    const smokeReport = await runFunctionalProbes(
+      STAGING_URL,
+      manifest,
+      smokeStart + SMOKE_BUDGET_MS,
+    );
     const smokeTestDurationMs = Date.now() - smokeStart;
-    if (smokeFail) {
+    if (!smokeReport.ok) {
       return {
         stage: "promote",
         status: "error",
         startedAt,
         finishedAt: ctx.now(),
         durationMs: Date.now() - start,
-        message: `aborting promote: ${smokeFail}`,
-        artifacts: { smokeTestDurationMs, rollback: false },
+        message: `aborting promote: staging probe "${smokeReport.failure?.name}" failed: ${smokeReport.failure?.evidence}`,
+        artifacts: { smokeTestDurationMs, rollback: false, probes: smokeReport.outcomes },
       } satisfies StageResult;
     }
 
@@ -372,6 +359,52 @@ export const run: StageFn = async (ctx) => {
       } satisfies StageResult;
     }
 
+    // Activation is not committed until the primary passes the identical
+    // immutable-manifest gate. Any failure immediately restores the old dir.
+    const primaryReport = await runFunctionalProbes(
+      PRIMARY_URL,
+      manifest,
+      Date.now() + SMOKE_BUDGET_MS,
+    );
+    if (!primaryReport.ok) {
+      const rb = tryRollback(currentDir, stagingDir, previousDir);
+      const secondRestartErr = await restartPrimary(ctx);
+      const rollbackMsg = rb.ok ? "ok" : `failed: ${(rb as { reason: string }).reason}`;
+      const restartMsg = secondRestartErr ? `; rollback restart failed: ${secondRestartErr}` : "";
+      return {
+        stage: "promote",
+        status: "error",
+        startedAt,
+        finishedAt: ctx.now(),
+        durationMs: Date.now() - start,
+        message: `primary probe "${primaryReport.failure?.name}" failed: ${primaryReport.failure?.evidence}; rollback ${rollbackMsg}${restartMsg}`,
+        artifacts: {
+          smokeTestDurationMs,
+          restartDurationMs,
+          rollback: rb.ok,
+          rollbackReason: rb.ok ? undefined : (rb as { reason: string }).reason,
+          probes: primaryReport.outcomes,
+          candidateEpoch: manifest.epoch,
+        },
+      } satisfies StageResult;
+    }
+
+    try {
+      await commitProxyTransaction(ctx);
+    } catch (error) {
+      const rb = tryRollback(currentDir, stagingDir, previousDir);
+      await restartPrimary(ctx);
+      return {
+        stage: "promote",
+        status: "error",
+        startedAt,
+        finishedAt: ctx.now(),
+        durationMs: Date.now() - start,
+        message: `${(error as Error).message}; data rollback ${rb.ok ? "ok" : "failed"}`,
+        artifacts: { rollback: rb.ok, candidateEpoch: manifest.epoch },
+      } satisfies StageResult;
+    }
+
     const artifacts: PromoteArtifacts = {
       promotedAt: ctx.now(),
       smokeTestDurationMs,
@@ -387,7 +420,14 @@ export const run: StageFn = async (ctx) => {
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,
       message: `promoted staging -> ${currentDir}; primary restarted in ${restartDurationMs}ms`,
-      artifacts: artifacts as unknown as Record<string, unknown>,
+      artifacts: {
+        ...(artifacts as unknown as Record<string, unknown>),
+        candidateEpoch: manifest.epoch,
+        activeEpoch: manifest.epoch,
+        configHash: manifest.artifacts.config.sha256,
+        licenseHash: manifest.artifacts.license.sha256,
+        probes: primaryReport.outcomes,
+      },
     } satisfies StageResult;
   } catch (error) {
     const err = error as Error;

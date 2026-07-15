@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -242,12 +242,19 @@ timetable:
     expect(updated).not.toContain("https://rt.triptix.tech");
     expect(
       JSON.parse(
-        readFileSync(join(fx.dataDir, "motis-feed-proxy", "feed-proxy-vars.json"), "utf-8"),
+        readFileSync(
+          join(fx.catalogDir, "out", ".openmapx-feed-proxy", "feed-proxy-vars.json"),
+          "utf-8",
+        ),
       ),
     ).toHaveProperty("de-bvg-0");
     expect(
-      readFileSync(join(fx.dataDir, "motis-feed-proxy", "conf", "default.conf"), "utf-8"),
+      readFileSync(
+        join(fx.catalogDir, "out", ".openmapx-feed-proxy", "conf", "default.conf"),
+        "utf-8",
+      ),
     ).toContain('location "/feed/de-bvg-0"');
+    expect(existsSync(join(fx.dataDir, "motis-feed-proxy"))).toBe(false);
   });
 
   it("fails instead of promoting GBFS entries absent from the local proxy", async () => {

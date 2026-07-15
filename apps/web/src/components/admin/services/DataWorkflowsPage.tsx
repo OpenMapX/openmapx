@@ -102,6 +102,16 @@ interface MotisTransitousStatus {
   feedProxyConfigFound: boolean;
   feedProxyVarsFound: boolean;
   feedProxyFeedCount: number;
+  capabilityState: "healthy" | "stale" | "missing" | "error";
+  capabilityError?: string;
+  activeEpoch: string | null;
+  candidateEpoch: string | null;
+  testedAt: string | null;
+  configHash: string | null;
+  licenseHash: string | null;
+  rentalProviderCount: number;
+  rentalProviderGroupCount: number;
+  rollbackAvailable: boolean;
 }
 
 interface DataResponse {
@@ -1322,6 +1332,12 @@ function MotisTransitousSection({ status }: { status: MotisTransitousStatus }) {
               color={motisProxyModeColor(status.feedProxyMode)}
               size="small"
             />
+            <Chip
+              label={`Capabilities: ${status.capabilityState}`}
+              color={status.capabilityState === "healthy" ? "success" : "error"}
+              size="small"
+            />
+            <Chip label={`${status.rentalProviderCount} rental provider(s)`} size="small" />
           </Stack>
           <Typography
             variant="caption"
@@ -1333,6 +1349,20 @@ function MotisTransitousSection({ status }: { status: MotisTransitousStatus }) {
             {status.feedProxyVarsFound ? "present" : "missing"} · {status.feedProxyFeedCount} mapped
             feed endpoint(s) · GBFS proxy {status.gbfsProxyUrl ?? "not configured"}
           </Typography>
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
+            Active epoch {status.activeEpoch ?? "unknown"} · candidate{" "}
+            {status.candidateEpoch ?? "none"} · tested{" "}
+            {status.testedAt ? formatDate(status.testedAt) : "never"} · rollback{" "}
+            {status.rollbackAvailable ? "available" : "unavailable"}
+          </Typography>
+          {status.capabilityState !== "healthy" && (
+            <Alert severity="error">
+              Promoted MOTIS capability evidence is {status.capabilityState}.
+              {status.capabilityError
+                ? ` ${status.capabilityError}`
+                : " Re-run the transactional import before trusting configured counts."}
+            </Alert>
+          )}
           {(status.feedProxyMode === "transitous-cloud" || status.feedProxyMode === "mixed") && (
             <Alert severity={status.feedProxyMode === "mixed" ? "warning" : "error"}>
               MOTIS config still references Transitous cloud feed-proxy URLs. Rebuild MOTIS data to

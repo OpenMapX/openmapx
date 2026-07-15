@@ -16,7 +16,7 @@
  *   - Default (`OPENMAPX_E9_LIVE_MOTIS` unset): the whole suite is skipped
  *     silently. The default `pnpm test` invocation never spins up Docker.
  *   - `OPENMAPX_E9_LIVE_MOTIS=true` + Docker daemon reachable + the
- *     `ghcr.io/motis-project/motis:latest` image already cached locally:
+ *     `ghcr.io/motis-project/motis:2.10.2` image already cached locally:
  *     the suite runs. If the image is missing we additionally `it.skip(...)`
  *     the actual probes with a clear log so CI can surface the missing
  *     prerequisite without failing.
@@ -54,7 +54,7 @@ const STUB_SCRIPTS_DIR = resolve(HERE, "fixtures", "stub-catalog-scripts");
 const LIVE = process.env.OPENMAPX_E9_LIVE_MOTIS === "true";
 const describeLive = LIVE ? describe : describe.skip;
 
-const MOTIS_IMAGE = "ghcr.io/motis-project/motis:latest";
+const MOTIS_IMAGE = "ghcr.io/motis-project/motis:2.10.2";
 const STAGING_SERVICE = "motis-staging";
 const STAGING_PORT = 8082;
 // The promote stage restarts the primary `motis` container (`docker restart
@@ -63,6 +63,7 @@ const STAGING_PORT = 8082;
 // for real, ending in a direct HTTP probe of the promoted timetable.
 const PRIMARY_SERVICE = "motis";
 const PRIMARY_PORT = 8081;
+const FEED_PROXY_SERVICE = "motis-feed-proxy";
 // Generous wall-clock ceiling for the whole pipeline. It performs TWO MOTIS
 // imports + boots on a cold-cache runner — the staging import (motis-import) and
 // the primary's re-import on promote's `docker restart motis` — so a tight
@@ -79,12 +80,12 @@ const ORDERED_STAGES: StageName[] = [
   "filter",
   "fetch",
   "validate",
-  "gen-motis-config",
-  "assemble-staging",
-  "motis-import",
-  "motis-health",
   "gen-full-config",
   "gen-attribution",
+  "assemble-staging",
+  "stage-proxy",
+  "motis-import",
+  "motis-health",
   "promote",
   "gc",
 ];
@@ -144,6 +145,12 @@ function writeStagingCompose(
     "services:",
     ...motisService(STAGING_SERVICE, STAGING_PORT, stagingDataDir),
     ...motisService(PRIMARY_SERVICE, PRIMARY_PORT, motisDataDir),
+    `  ${FEED_PROXY_SERVICE}:`,
+    "    image: nginx:1.27-alpine",
+    `    container_name: ${FEED_PROXY_SERVICE}`,
+    "    volumes:",
+    `      - ${join(dataDir, "motis-feed-proxy", "conf")}:/etc/nginx/conf.d`,
+    '    restart: "no"',
     "",
   ].join("\n");
   writeFileSync(composeFile, yaml);
@@ -284,6 +291,10 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
     // staging/primary fails fast WITH diagnostics. Respect an explicit override.
     process.env.MOTIS_IMPORT_TIMEOUT_MS ??= "120000";
     process.env.MOTIS_PROMOTE_RESTART_TIMEOUT_MS ??= "120000";
+    process.env.MOTIS_HEALTH_PLAN_FROM_LAT ??= "52.525";
+    process.env.MOTIS_HEALTH_PLAN_FROM_LNG ??= "13.369";
+    process.env.MOTIS_HEALTH_PLAN_TO_LAT ??= "52.521";
+    process.env.MOTIS_HEALTH_PLAN_TO_LNG ??= "13.413";
 
     tmp = mkdtempSync(join(tmpdir(), "openmapx-e9-live-"));
     dataDir = join(tmp, `data-${process.pid}`);
@@ -295,6 +306,7 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
     motisDataDir = join(dataDir, "motis", "live");
     mkdirSync(stagingDataDir, { recursive: true });
     mkdirSync(motisDataDir, { recursive: true });
+    mkdirSync(join(dataDir, "motis-feed-proxy", "conf"), { recursive: true });
     // MOTIS runs as `uid=100(motis)` and imports IN PLACE — it writes the compiled
     // timetable (`data/tt.bin`, …) into the mounted dir. On a native Linux bind
     // mount (CI) these dirs stay owned by the host runner user (uid 1001, mode
@@ -358,7 +370,7 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
     // crashed earlier run can leave pinned `motis`/`motis-staging` containers
     // under a different project that would collide with our `up`. Force-remove
     // them by name first — best effort, ignore "no such container".
-    await execa("docker", ["rm", "-f", PRIMARY_SERVICE, STAGING_SERVICE], {
+    await execa("docker", ["rm", "-f", PRIMARY_SERVICE, STAGING_SERVICE, FEED_PROXY_SERVICE], {
       stdio: "pipe",
     }).catch(() => {});
     await composeDown(composeFile, dataDir);
@@ -432,7 +444,7 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
         ["ok", "partial"].includes(byStage["assemble-staging"]?.status ?? ""),
         byStage["assemble-staging"]?.message ?? "assemble-staging",
       ).toBe(true);
-      for (const stage of ["motis-import", "motis-health"] as const) {
+      for (const stage of ["stage-proxy", "motis-import", "motis-health"] as const) {
         if (byStage[stage]?.status !== "ok") {
           const diag = await failureDiagnostics(stage, STAGING_SERVICE, byStage[stage]?.message);
           expect(byStage[stage]?.status, `${diag}\n${stagingDirReport(stagingDataDir)}`).toBe("ok");

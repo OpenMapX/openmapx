@@ -26,6 +26,10 @@ export {
   rewriteRtUrls,
   TRANSITOUS_FEED_PROXY_URL,
 } from "./mirror.js";
+export {
+  type MotisConfigExpectations,
+  parseMotisConfigExpectations,
+} from "./motis-config.js";
 export type { CommandRunner, TransitousLogger } from "./runner.js";
 export {
   type PruneUnresolvableSourcesOptions,

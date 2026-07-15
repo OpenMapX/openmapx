@@ -21,6 +21,7 @@ import * as motisHealthStage from "./motis-health.js";
 import * as motisImportStage from "./motis-import.js";
 import * as prepareStage from "./prepare.js";
 import * as promoteStage from "./promote.js";
+import * as proxyTransactionStage from "./proxy-transaction.js";
 import type {
   CommandRunner,
   JobContext,
@@ -56,6 +57,7 @@ const BUILD_STAGES: ReadonlyArray<StageEntry> = [
   // from a prior run is preserved on disk; that archive still gets assembled,
   // so the guard belongs here, on the staged count — not on the fetch result.)
   { name: "assemble-staging", run: assembleStagingStage.run, criticality: "critical" },
+  { name: "stage-proxy", run: proxyTransactionStage.run, criticality: "critical" },
   { name: "motis-import", run: motisImportStage.run, criticality: "critical" },
   { name: "motis-health", run: motisHealthStage.run, criticality: "critical" },
   { name: "promote", run: promoteStage.run, criticality: "critical" },
@@ -152,6 +154,18 @@ export async function runTransitousPipeline(
       }
     }
   } finally {
+    if (hardStopError) {
+      try {
+        await proxyTransactionStage.rollbackProxyTransaction(ctx);
+      } catch (error) {
+        ctx.logger.error(
+          `transitous-pipeline: feed-proxy rollback failed: ${(error as Error).message}`,
+        );
+        hardStopError = new Error(
+          `${hardStopError.message}; feed-proxy rollback also failed: ${(error as Error).message}`,
+        );
+      }
+    }
     try {
       const catalogDir = ctx.state.catalogDir ?? ctx.catalogDir;
       await resetTransitousCatalog(catalogDir, ctx.runner);

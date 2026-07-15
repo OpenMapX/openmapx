@@ -2,6 +2,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  CANDIDATE_PROXY_DIRNAME,
+  createCandidateManifest,
+} from "../../src/jobs/transitous/candidate.js";
 import { run as motisHealthRun } from "../../src/jobs/transitous/motis-health.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import { StateStore } from "../../src/state.js";
@@ -32,8 +36,17 @@ function makeStagingDir(): string {
   tmp = mkdtempSync(join(tmpdir(), "openmapx-motis-health-"));
   const stagingDir = join(tmp, "motis", "staging");
   mkdirSync(stagingDir, { recursive: true });
-  // Drop a single file so the readyness gate doesn't short-circuit.
-  writeFileSync(join(stagingDir, "config.yml"), "server:\n  port: 8080\n");
+  writeFileSync(
+    join(stagingDir, "config.yml"),
+    "timetable:\n  datasets:\n    demo:\n      path: demo.gtfs.zip\n",
+  );
+  writeFileSync(join(stagingDir, "demo.gtfs.zip"), "gtfs");
+  writeFileSync(join(stagingDir, "license.json"), "{}\n");
+  const proxy = join(stagingDir, CANDIDATE_PROXY_DIRNAME);
+  mkdirSync(join(proxy, "conf"), { recursive: true });
+  writeFileSync(join(proxy, "conf", "default.conf"), "server {}\n");
+  writeFileSync(join(proxy, "feed-proxy-vars.json"), "{}\n");
+  createCandidateManifest(stagingDir, "test-epoch", "2026-05-01T00:00:00.000Z");
   return tmp;
 }
 
@@ -51,6 +64,13 @@ function ctxFor(dataDir: string) {
     runner: async () => {},
     now: () => "2026-05-01T00:00:00.000Z",
   });
+}
+
+function successfulBody(url: string): unknown {
+  if (url.includes("/health")) return { rt: true };
+  if (url.includes("/map/initial")) return { lat: 1, lon: 2, zoom: 3, serverConfig: {} };
+  if (url.includes("/map/stops")) return [];
+  return { itineraries: [{}], direct: [], requestParameters: {}, debugOutput: {} };
 }
 
 describe("motis-health stage", () => {
@@ -73,22 +93,20 @@ describe("motis-health stage", () => {
     globalThis.fetch = vi.fn(async (input: unknown) => {
       const url = typeof input === "string" ? input : (input as Request | URL).toString();
       calls.push(url);
-      return jsonResponse({ ok: true });
+      return jsonResponse(successfulBody(url));
     }) as unknown as typeof fetch;
 
     const result = await motisHealthRun(ctxFor(dataDir));
     expect(result.status).toBe("ok");
-    expect(calls.length).toBe(4);
+    expect(calls.length).toBe(5);
     expect(calls[0]).toMatch(/\/api\/v1\/health$/);
-    expect(calls[1]).toMatch(/\/api\/v1\/map\/initial$/);
-    expect(calls[2]).toMatch(/\/api\/v1\/map\/stops\?/);
-    expect(calls[3]).toMatch(/\/api\/v1\/plan\?/);
-    expect((result.artifacts as { probes?: string[] }).probes).toEqual([
-      "health",
-      "initial",
-      "stops",
-      "plan",
-    ]);
+    expect(calls[1]).toMatch(/\/api\/v1\/health$/);
+    expect(calls[2]).toMatch(/\/api\/v1\/map\/initial$/);
+    expect(calls[3]).toMatch(/\/api\/v1\/map\/stops\?/);
+    expect(calls[4]).toMatch(/\/api\/v1\/plan\?/);
+    expect(
+      (result.artifacts as { probes?: Array<{ name: string }> }).probes?.map((p) => p.name),
+    ).toEqual(["health", "initial", "stops", "plan"]);
   });
 
   it("errors with the last failure when staging never becomes healthy", async () => {
@@ -112,11 +130,12 @@ describe("motis-health stage", () => {
     process.env.MOTIS_IMPORT_TIMEOUT_MS = "6000";
     const dataDir = makeStagingDir();
     let n = 0;
-    globalThis.fetch = vi.fn(async () => {
+    globalThis.fetch = vi.fn(async (input: unknown) => {
       n += 1;
       // First health probe: not ready yet. Everything after: ready + JSON.
       if (n === 1) return new Response("not ready", { status: 400 });
-      return jsonResponse({ ok: true });
+      const url = typeof input === "string" ? input : (input as Request | URL).toString();
+      return jsonResponse(successfulBody(url));
     }) as unknown as typeof fetch;
 
     const result = await motisHealthRun(ctxFor(dataDir));

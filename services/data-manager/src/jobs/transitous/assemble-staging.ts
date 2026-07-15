@@ -9,6 +9,7 @@ import {
   rmSync,
 } from "node:fs";
 import { join } from "node:path";
+import { CANDIDATE_PROXY_DIRNAME, createCandidateManifest } from "./candidate.js";
 import { GTFS_ARCHIVE_RE } from "./internal.js";
 import type { StageFn, StageResult } from "./types.js";
 
@@ -148,6 +149,14 @@ export const run: StageFn = async (ctx) => {
     }
     linkOrCopy(licenseSrc, join(stagingDir, "license.json"));
 
+    const proxyCandidateSrc = join(outDir, CANDIDATE_PROXY_DIRNAME);
+    if (!existsSync(proxyCandidateSrc)) {
+      return finish("error", `required feed-proxy candidate missing at ${proxyCandidateSrc}`);
+    }
+    const proxyCandidateDest = join(stagingDir, CANDIDATE_PROXY_DIRNAME);
+    rmSync(proxyCandidateDest, { recursive: true, force: true });
+    cpSync(proxyCandidateSrc, proxyCandidateDest, { recursive: true });
+
     // Empty staging guard (hardStop): a config that stages 0 feeds would import
     // an empty timetable and promote it over the live one. Refuse — the pipeline
     // halts here, leaving live untouched. (A config genuinely referencing no
@@ -164,6 +173,8 @@ export const run: StageFn = async (ctx) => {
       );
     }
 
+    const manifest = createCandidateManifest(stagingDir, ctx.jobId, ctx.now());
+
     const status = missingFeeds.length > 0 || osmSource === "missing" ? "partial" : "ok";
     return finish(
       status,
@@ -178,6 +189,9 @@ export const run: StageFn = async (ctx) => {
         missingFeeds,
         osm: osm ?? null,
         osmSource,
+        candidateEpoch: manifest.epoch,
+        configHash: manifest.artifacts.config.sha256,
+        licenseHash: manifest.artifacts.license.sha256,
       },
     );
   } catch (error) {

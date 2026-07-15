@@ -13,6 +13,7 @@ export type StageName =
   | "validate"
   | "gen-motis-config"
   | "assemble-staging"
+  | "stage-proxy"
   | "motis-import"
   | "motis-health"
   | "gen-full-config"
@@ -89,6 +90,18 @@ export interface JobState {
   downloaded?: DatasetMetadata[];
   /** When non-zero some fetches succeeded but others did not. */
   partialSuccess?: boolean;
+  proxyTransaction?: ProxyTransactionState;
+}
+
+export interface ProxyTransactionState {
+  epoch: string;
+  activeConfigPath: string;
+  activeVarsPath: string;
+  previousConfig: { existed: boolean; text: string };
+  previousVars: { existed: boolean; text: string };
+  candidateConfig: string;
+  candidateVars: string;
+  phase: "staged" | "committed" | "rolled-back";
 }
 
 export interface JobContext {

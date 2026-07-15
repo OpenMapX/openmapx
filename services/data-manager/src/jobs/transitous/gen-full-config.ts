@@ -8,8 +8,8 @@ import {
   writeFeedProxyVarsFile,
 } from "@openmapx/motis-feed-proxy-config";
 import { findHostedGbfsFeedIds, rewriteHostedFeedProxy } from "@openmapx/transitous-core";
+import { CANDIDATE_PROXY_DIRNAME } from "./candidate.js";
 import { applyConfigOverrides } from "./config-overrides.js";
-import { FEED_PROXY_CONTAINER } from "./motis-containers.js";
 import type { JobContext, StageFn, StageResult } from "./types.js";
 
 const DEFAULT_FEED_PROXY_URL = "http://motis-feed-proxy";
@@ -100,7 +100,7 @@ export async function generateFeedProxyConfig(
     varsJson && typeof varsJson === "object"
       ? Object.keys(varsJson as Record<string, unknown>)
       : [];
-  const proxyRoot = join(ctx.dataDir, "motis-feed-proxy");
+  const proxyRoot = join(catalogDir, "out", CANDIDATE_PROXY_DIRNAME);
   const targetPath = join(proxyRoot, FEED_PROXY_CONFIG_SUBDIR, FEED_PROXY_CONFIG_FILENAME);
   const persistedVarsPath = join(proxyRoot, FEED_PROXY_VARS_FILENAME);
   let entries = 0;
@@ -115,32 +115,17 @@ export async function generateFeedProxyConfig(
     return { configPath: null, written: false, reloaded: false, entries: 0, feedIds: [] };
   }
 
-  // Signal nginx reload — best effort. If the container isn't running or the
-  // data-manager process can't reach the docker socket, we log a warning and
-  // leave the freshly-written config on disk for the next container start.
-  let reloaded = false;
-  let reloadError: string | undefined;
-  try {
-    await ctx.runner("docker", ["exec", FEED_PROXY_CONTAINER, "nginx", "-s", "reload"], {
-      cwd: ctx.dataDir,
-      stdio: "pipe",
-    });
-    reloaded = true;
-  } catch (error) {
-    reloadError = (error as Error).message;
-    ctx.logger.warn(
-      `transitous-pipeline: feed-proxy nginx reload failed (${reloadError}); config written but not yet active`,
-    );
-  }
-
-  return { configPath: targetPath, written: true, reloaded, reloadError, entries, feedIds };
+  // This is an immutable candidate artifact. Plan 002's proxy transaction
+  // validates and activates a union with the current live routes only after
+  // assembly; config generation must never mutate live nginx state.
+  return { configPath: targetPath, written: true, reloaded: false, entries, feedIds };
 }
 
 /**
  * Run Transitous's `src/generate-motis-config.py` (without `--import-only`).
  * Produces the runtime config the MOTIS server will load after promotion, and
- * additionally renders the feed-proxy nginx config from `--feed-proxy` output
- * + signals `nginx -s reload` in the `motis-feed-proxy` container (best effort).
+ * additionally renders an immutable feed-proxy candidate from `--feed-proxy`
+ * output. Activation is owned by the later transactional proxy stage.
  */
 export const run: StageFn = async (ctx) => {
   const startedAt = ctx.now();
