@@ -22,6 +22,9 @@ export interface DataSourceBranding {
 export interface DataSourceMapContextSelection {
   systemIds?: string[];
   vehicleTypeIds?: string[];
+  providerIds?: string[];
+  providerGroupIds?: string[];
+  formFactors?: string[];
 }
 
 export type DataSourceGeoJsonGeometry =
@@ -239,6 +242,18 @@ export interface DataSourceDetail {
   usageInfo?: { type: Translatable; cost?: Translatable; membershipRequired?: boolean };
   /** OSM-format opening hours string (e.g., "Mo-Fr 06:00-20:00; Sa-Su 08:00-20:00"). */
   openingHours?: string;
+  actions?: {
+    primaryRental?: {
+      label: I18nToken;
+      web?: string;
+      ios?: string;
+      android?: string;
+    };
+    mapContext?: {
+      label: I18nToken;
+      contextId: string;
+    };
+  };
   sections: DataSourceDetailSection[];
   osmTags?: Record<string, string>;
   /**

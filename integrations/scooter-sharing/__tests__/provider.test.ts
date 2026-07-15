@@ -21,7 +21,10 @@ vi.mock("@openmapx/mobility-core/gbfs-provider-base", () => ({
 
 vi.mock("@openmapx/mobility-core/entur-mobility", () => ({
   enrichEnturMobilityItems: vi.fn().mockResolvedValue(undefined),
-  buildEnturGeofencingMapContext: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock("@openmapx/mobility-core/shared-mobility-context", () => ({
+  buildSharedMobilityMapContext: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@openmapx/mobility-core/motis-rentals", () => ({
@@ -43,10 +46,7 @@ vi.mock("@openmapx/mobility-core/mapper", () => ({
 }));
 
 import { dedupStations } from "@openmapx/mobility-core/dedup";
-import {
-  buildEnturGeofencingMapContext,
-  enrichEnturMobilityItems,
-} from "@openmapx/mobility-core/entur-mobility";
+import { enrichEnturMobilityItems } from "@openmapx/mobility-core/entur-mobility";
 import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
@@ -58,6 +58,7 @@ import {
   mapVehicleToResult,
 } from "@openmapx/mobility-core/mapper";
 import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
+import { buildSharedMobilityMapContext } from "@openmapx/mobility-core/shared-mobility-context";
 import { searchFelyx } from "../providers/felyx-client.js";
 import { searchNrwMobidrom } from "../providers/nrw-mobidrom-client.js";
 import { scooterSharingProvider } from "../providers/provider.js";
@@ -327,12 +328,16 @@ describe("scooterSharingProvider.getDetail", () => {
     expect(result).toBeNull();
   });
 
-  it("delegates map context to Entur geofencing builder", async () => {
+  it("delegates map context to the MOTIS-first shared builder", async () => {
     const bbox = makeBbox();
     const options = { systemIds: ["voioslo"], vehicleTypeIds: ["scooter"] };
 
     await scooterSharingProvider.getMapContext(bbox, {}, options);
 
-    expect(buildEnturGeofencingMapContext).toHaveBeenCalledWith(bbox, options);
+    expect(buildSharedMobilityMapContext).toHaveBeenCalledWith(
+      bbox,
+      new Set(["scooter_standing", "scooter_seated", "moped"]),
+      options,
+    );
   });
 });

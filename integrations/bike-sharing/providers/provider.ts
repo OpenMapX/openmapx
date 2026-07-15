@@ -7,6 +7,7 @@ import type {
   BoundingBox,
   DataSourceDetail,
   DataSourceFilterDef,
+  DataSourceMapContextSelection,
   DataSourceMeta,
   DataSourceResult,
 } from "@openmapx/core";
@@ -19,10 +20,7 @@ import {
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { dedupStations, dedupVehicles } from "@openmapx/mobility-core/dedup";
 import { SharedMobilityDetailStore } from "@openmapx/mobility-core/detail-store";
-import {
-  buildEnturGeofencingMapContext,
-  enrichEnturMobilityItems,
-} from "@openmapx/mobility-core/entur-mobility";
+import { enrichEnturMobilityItems } from "@openmapx/mobility-core/entur-mobility";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import {
   fetchGbfsData,
@@ -41,6 +39,7 @@ import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
 } from "@openmapx/mobility-core/shared-mobility";
+import { buildSharedMobilityMapContext } from "@openmapx/mobility-core/shared-mobility-context";
 import { searchCityBikes } from "./citybikes-client.js";
 import { searchDbBikes } from "./db-bike-client.js";
 import { searchDonkey } from "./donkey-client.js";
@@ -215,9 +214,12 @@ class BikeSharingProvider implements MobilityDataSourceProvider {
   async getMapContext(
     bbox: BoundingBox,
     _filters?: Record<string, unknown>,
-    options?: { systemIds?: string[]; vehicleTypeIds?: string[] },
+    options?: DataSourceMapContextSelection,
   ) {
-    return wrapStatic(await buildEnturGeofencingMapContext(bbox, options), attribution.all());
+    return wrapStatic(
+      await buildSharedMobilityMapContext(bbox, BIKE_FORM_FACTORS, options),
+      attribution.all(),
+    );
   }
 }
 

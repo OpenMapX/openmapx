@@ -27,7 +27,7 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type maplibregl from "maplibre-gl";
 import type { Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
 import { usePinMarker } from "@/hooks/usePinMarker";
 import { translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
@@ -35,6 +35,13 @@ import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
 import { createMarkerSvg } from "@/lib/markerSvg";
 import { useMapAttributions } from "@/lib/useMapAttributions";
+import { pickDataSourceContextAction } from "./dataSourceContextInteraction";
+import {
+  contextColorExpression,
+  contextFillOpacityExpression,
+  contextLineWidthExpression,
+  contextSortKeyExpression,
+} from "./dataSourceContextStyle";
 import { pickHoveredDataSourceItemId } from "./dataSourceHover";
 import { getFirstSymbolLayerId, upsertGeoJsonSource } from "./layerStyleUtils";
 import { useLayerReanchor } from "./useLayerReanchor";
@@ -109,6 +116,9 @@ function runtimeAttributionToAttribution(attr: DataSourceAttribution): Attributi
 function buildMapContextSelection(results: DataSourceResult[]): DataSourceMapContextSelection {
   const systemIds = new Set<string>();
   const vehicleTypeIds = new Set<string>();
+  const providerIds = new Set<string>();
+  const providerGroupIds = new Set<string>();
+  const formFactors = new Set<string>();
 
   for (const result of results) {
     for (const systemId of result.mapContext?.systemIds ?? []) {
@@ -117,11 +127,19 @@ function buildMapContextSelection(results: DataSourceResult[]): DataSourceMapCon
     for (const vehicleTypeId of result.mapContext?.vehicleTypeIds ?? []) {
       vehicleTypeIds.add(vehicleTypeId);
     }
+    for (const providerId of result.mapContext?.providerIds ?? []) providerIds.add(providerId);
+    for (const groupId of result.mapContext?.providerGroupIds ?? []) {
+      providerGroupIds.add(groupId);
+    }
+    for (const formFactor of result.mapContext?.formFactors ?? []) formFactors.add(formFactor);
   }
 
   return {
     systemIds: [...systemIds].sort(),
     vehicleTypeIds: [...vehicleTypeIds].sort(),
+    providerIds: [...providerIds].sort(),
+    providerGroupIds: [...providerGroupIds].sort(),
+    formFactors: [...formFactors].sort(),
   };
 }
 
@@ -188,6 +206,7 @@ export function DataSourceLayer() {
   const setMapMoved = useDataSourceStore((s) => s.setMapMoved);
   const hoveredItemId = useDataSourceStore((s) => s.hoveredItemId);
   const setHoveredItemId = useDataSourceStore((s) => s.setHoveredItemId);
+  const [inspectedContext, setInspectedContext] = useState<Record<string, unknown> | null>(null);
   const reanchorIds = useMemo(
     () => (activeSource ? [markersLayerId(activeSource)] : []),
     [activeSource],
@@ -200,11 +219,17 @@ export function DataSourceLayer() {
     if (!activeSource) return;
     const markersLid = markersLayerId(activeSource);
     const labelsLid = labelsLayerId(activeSource);
+    const contextFillLid = mapContextFillLayerId(activeSource);
+    const contextOutlineLid = mapContextOutlineLayerId(activeSource);
     INTERACTIVE_LAYER_IDS.add(markersLid);
     INTERACTIVE_LAYER_IDS.add(labelsLid);
+    INTERACTIVE_LAYER_IDS.add(contextFillLid);
+    INTERACTIVE_LAYER_IDS.add(contextOutlineLid);
     return () => {
       INTERACTIVE_LAYER_IDS.delete(markersLid);
       INTERACTIVE_LAYER_IDS.delete(labelsLid);
+      INTERACTIVE_LAYER_IDS.delete(contextFillLid);
+      INTERACTIVE_LAYER_IDS.delete(contextOutlineLid);
     };
   }, [activeSource]);
 
@@ -439,42 +464,18 @@ export function DataSourceLayer() {
         upsertGeoJsonSource(map, mapContextSid, mapContextData);
 
         if (!map.getLayer(mapContextFillLid)) {
+          const isDark = document.documentElement.classList.contains("dark");
           map.addLayer(
             {
               id: mapContextFillLid,
               type: "fill",
               source: mapContextSid,
+              layout: {
+                "fill-sort-key": contextSortKeyExpression,
+              },
               paint: {
-                "fill-color": [
-                  "match",
-                  ["get", "zoneClass"],
-                  "no_ride",
-                  "#C62828",
-                  "no_parking",
-                  "#EF6C00",
-                  "no_start",
-                  "#8E24AA",
-                  "slow_zone",
-                  "#1565C0",
-                  "parking_hub",
-                  "#2E7D32",
-                  "#546E7A",
-                ] as unknown as maplibregl.ExpressionSpecification,
-                "fill-opacity": [
-                  "match",
-                  ["get", "zoneClass"],
-                  "no_ride",
-                  0.16,
-                  "no_parking",
-                  0.12,
-                  "no_start",
-                  0.1,
-                  "slow_zone",
-                  0.08,
-                  "parking_hub",
-                  0.08,
-                  0.08,
-                ] as unknown as maplibregl.ExpressionSpecification,
+                "fill-color": contextColorExpression(isDark),
+                "fill-opacity": contextFillOpacityExpression,
               },
             },
             beforeLayer,
@@ -482,42 +483,15 @@ export function DataSourceLayer() {
         }
 
         if (!map.getLayer(mapContextOutlineLid)) {
+          const isDark = document.documentElement.classList.contains("dark");
           map.addLayer(
             {
               id: mapContextOutlineLid,
               type: "line",
               source: mapContextSid,
               paint: {
-                "line-color": [
-                  "match",
-                  ["get", "zoneClass"],
-                  "no_ride",
-                  "#C62828",
-                  "no_parking",
-                  "#EF6C00",
-                  "no_start",
-                  "#8E24AA",
-                  "slow_zone",
-                  "#1565C0",
-                  "parking_hub",
-                  "#2E7D32",
-                  "#546E7A",
-                ] as unknown as maplibregl.ExpressionSpecification,
-                "line-width": [
-                  "match",
-                  ["get", "zoneClass"],
-                  "no_ride",
-                  2.5,
-                  "no_parking",
-                  2.25,
-                  "no_start",
-                  2,
-                  "slow_zone",
-                  2,
-                  "parking_hub",
-                  2.25,
-                  2,
-                ] as unknown as maplibregl.ExpressionSpecification,
+                "line-color": contextColorExpression(isDark),
+                "line-width": contextLineWidthExpression,
                 "line-opacity": 0.85,
               },
             },
@@ -644,6 +618,45 @@ export function DataSourceLayer() {
 
   const { setSelectedPlace } = usePlaceStore();
 
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapContext) return;
+    const onFocusContext = (event: Event) => {
+      const contextId = (event as CustomEvent<{ contextId?: string }>).detail?.contextId;
+      if (!contextId) return;
+      const feature = mapContext.geojson.features.find(
+        (candidate) => candidate.properties?.contextId === contextId,
+      );
+      if (!feature) return;
+      const positions: number[][] = [];
+      const collect = (value: unknown): void => {
+        if (
+          Array.isArray(value) &&
+          value.length >= 2 &&
+          typeof value[0] === "number" &&
+          typeof value[1] === "number"
+        ) {
+          positions.push(value as number[]);
+          return;
+        }
+        if (Array.isArray(value)) for (const child of value) collect(child);
+      };
+      collect(feature.geometry.coordinates);
+      if (positions.length === 0) return;
+      const lngs = positions.map((position) => position[0]);
+      const lats = positions.map((position) => position[1]);
+      map.fitBounds(
+        [
+          [Math.min(...lngs), Math.min(...lats)],
+          [Math.max(...lngs), Math.max(...lats)],
+        ],
+        { padding: 48, maxZoom: 17 },
+      );
+    };
+    window.addEventListener("openmapx:focus-data-source-context", onFocusContext);
+    return () => window.removeEventListener("openmapx:focus-data-source-context", onFocusContext);
+  }, [mapContext, mapRef]);
+
   // Click + cursor handlers — bind to both markers and labels layers
   useEffect(() => {
     void styleVersion;
@@ -652,6 +665,7 @@ export function DataSourceLayer() {
 
     const markersLid = markersLayerId(activeSource);
     const labelsLid = labelsLayerId(activeSource);
+    const contextFillLid = mapContextFillLayerId(activeSource);
     const currentSource = activeSource;
 
     const onClick = (e: MapMouseEvent) => {
@@ -701,17 +715,36 @@ export function DataSourceLayer() {
       }
     };
 
+    const onContextClick = (e: MapMouseEvent) => {
+      const markerLayers = [markersLid, labelsLid].filter((id) => !!map.getLayer(id));
+      const markerHitCount = map.queryRenderedFeatures(e.point, { layers: markerLayers }).length;
+      if (!map.getLayer(contextFillLid)) return;
+      const feature = map.queryRenderedFeatures(e.point, { layers: [contextFillLid] })[0];
+      const action = pickDataSourceContextAction(
+        markerHitCount,
+        feature?.properties as Record<string, unknown> | undefined,
+      );
+      if (action.type === "select-station") {
+        selectItem(currentSource, action.stationId);
+        useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
+        return;
+      }
+      if (action.type === "inspect") setInspectedContext(action.properties);
+    };
+
     // Bind to markers layer
     map.on("click", markersLid, onClick);
 
     // Also bind to labels layer (for icon mode) — MapLibre no-ops on nonexistent layers
     map.on("click", labelsLid, onClick);
+    map.on("click", contextFillLid, onContextClick);
 
     map.on("mousemove", onMouseMove);
 
     return () => {
       map.off("click", markersLid, onClick);
       map.off("click", labelsLid, onClick);
+      map.off("click", contextFillLid, onContextClick);
       map.off("mousemove", onMouseMove);
       map.getCanvasContainer().style.cursor = "";
       setHoveredItemId(null);
@@ -737,5 +770,112 @@ export function DataSourceLayer() {
     };
   }, [mapRef]);
 
-  return null;
+  const hasContext = (mapContext?.geojson.features.length ?? 0) > 0;
+  if (!hasContext) return null;
+  const legendItems = [
+    ["no_ride", t("contextNoRide")],
+    ["no_parking", t("contextNoParking")],
+    ["no_start", t("contextNoStart")],
+    ["parking_hub", t("contextStationParking")],
+    ["slow_zone", t("contextSlowZone")],
+    ["station_area", t("contextStationArea")],
+  ] as const;
+  const inspectContextFeature = (properties: Record<string, unknown>) => {
+    if (
+      activeSource &&
+      properties.contextKind === "station_area" &&
+      typeof properties.stationId === "string"
+    ) {
+      selectItem(activeSource, properties.stationId);
+      useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
+      return;
+    }
+    setInspectedContext(properties);
+  };
+  return (
+    <aside
+      className="pointer-events-auto absolute bottom-24 left-3 z-20 max-w-xs rounded-lg bg-background/95 p-3 text-xs shadow-lg backdrop-blur"
+      aria-label={t("contextLegend")}
+    >
+      <div className="font-medium">{t("contextLegend")}</div>
+      <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+        {legendItems.map(([zoneClass, label]) => (
+          <li key={zoneClass} className="flex items-center gap-1.5">
+            <span
+              className="size-2.5 rounded-sm border border-current"
+              data-zone-class={zoneClass}
+              aria-hidden="true"
+            />
+            {label}
+          </li>
+        ))}
+      </ul>
+      <details className="mt-2 border-t pt-2">
+        <summary className="cursor-pointer">{t("contextInspectAreas")}</summary>
+        <ul className="mt-1 max-h-32 space-y-1 overflow-y-auto">
+          {mapContext?.geojson.features.map((feature, index) => {
+            const properties = (feature.properties ?? {}) as Record<string, unknown>;
+            const label = String(
+              properties.zoneName ??
+                properties.stationName ??
+                properties.providerName ??
+                t("contextArea"),
+            );
+            return (
+              <li key={String(properties.contextId ?? index)}>
+                <button
+                  type="button"
+                  className="w-full truncate text-left underline"
+                  onClick={() => inspectContextFeature(properties)}
+                >
+                  {label}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </details>
+      {inspectedContext && (
+        <div className="mt-3 border-t pt-2" role="status">
+          <div className="font-medium">
+            {String(
+              inspectedContext.zoneName ??
+                inspectedContext.stationName ??
+                inspectedContext.providerName ??
+                t("contextArea"),
+            )}
+          </div>
+          {inspectedContext.providerName != null && (
+            <div>{String(inspectedContext.providerName)}</div>
+          )}
+          {Array.isArray(inspectedContext.formFactors) &&
+            inspectedContext.formFactors.length > 0 && (
+              <div>
+                {t("contextVehicles", {
+                  vehicles: inspectedContext.formFactors.join(", "),
+                })}
+              </div>
+            )}
+          <dl className="mt-1 grid grid-cols-2 gap-x-2">
+            <dt>{t("contextRideStart")}</dt>
+            <dd>{inspectedContext.rideStartAllowed === false ? t("no") : t("yes")}</dd>
+            <dt>{t("contextRideEnd")}</dt>
+            <dd>{inspectedContext.rideEndAllowed === false ? t("no") : t("yes")}</dd>
+            <dt>{t("contextRideThrough")}</dt>
+            <dd>{inspectedContext.rideThroughAllowed === false ? t("no") : t("yes")}</dd>
+          </dl>
+          {typeof inspectedContext.maximumSpeedKph === "number" && (
+            <div>{t("contextMaximumSpeed", { speed: inspectedContext.maximumSpeedKph })}</div>
+          )}
+          <button
+            type="button"
+            className="mt-2 underline"
+            onClick={() => setInspectedContext(null)}
+          >
+            {t("close")}
+          </button>
+        </div>
+      )}
+    </aside>
+  );
 }

@@ -2,6 +2,11 @@ import { createHash } from "node:crypto";
 import type { BoundingBox } from "@openmapx/core";
 import { TTL, withCache } from "./cache.js";
 import { filterCatalogByBbox, loadCatalog, normalizeFormFactor } from "./gbfs-catalog.js";
+import {
+  applicableMobilityRules,
+  classifyMobilityRules,
+  normalizeAndClipMobilityGeometry,
+} from "./mobility-context-geometry.js";
 import { normalizeRentalReturnConstraint } from "./rental-constraints.js";
 import type {
   PricingDetail,
@@ -862,313 +867,6 @@ async function resolveEnturGeofencingSystemIds(
   ].sort();
 }
 
-type RingPosition = [number, number];
-type PolygonCoordinates = RingPosition[][];
-type MultiPolygonCoordinates = RingPosition[][][];
-type SharedMobilityGeometry = SharedMobilityMapContext["geojson"]["features"][number]["geometry"];
-type ClipBoundary = "west" | "east" | "south" | "north";
-
-function samePoint(a: RingPosition, b: RingPosition): boolean {
-  return a[0] === b[0] && a[1] === b[1];
-}
-
-function stripClosingPoint(ring: RingPosition[]): RingPosition[] {
-  if (ring.length > 1 && samePoint(ring[0], ring[ring.length - 1])) {
-    return ring.slice(0, -1);
-  }
-  return ring.slice();
-}
-
-function dedupeAdjacentPoints(ring: RingPosition[]): RingPosition[] {
-  const deduped: RingPosition[] = [];
-  for (const point of ring) {
-    if (deduped.length === 0 || !samePoint(deduped[deduped.length - 1], point)) {
-      deduped.push(point);
-    }
-  }
-  if (deduped.length > 1 && samePoint(deduped[0], deduped[deduped.length - 1])) {
-    deduped.pop();
-  }
-  return deduped;
-}
-
-function ringArea(ring: RingPosition[]): number {
-  let area = 0;
-  for (let index = 0; index < ring.length; index += 1) {
-    const current = ring[index];
-    const next = ring[(index + 1) % ring.length];
-    area += current[0] * next[1] - next[0] * current[1];
-  }
-  return area / 2;
-}
-
-function finalizeRing(ring: RingPosition[]): RingPosition[] | null {
-  const normalized = dedupeAdjacentPoints(stripClosingPoint(ring));
-  if (normalized.length < 3 || Math.abs(ringArea(normalized)) < 1e-10) return null;
-  return [...normalized, [normalized[0][0], normalized[0][1]]];
-}
-
-function parseRingPosition(value: unknown): RingPosition | null {
-  if (!Array.isArray(value) || value.length < 2) return null;
-  const [lng, lat] = value;
-  if (typeof lng !== "number" || typeof lat !== "number") return null;
-  return [lng, lat];
-}
-
-function normalizeRingCoordinates(value: unknown): RingPosition[] | null {
-  if (!Array.isArray(value)) return null;
-  const ring: RingPosition[] = [];
-  for (const point of value) {
-    const parsed = parseRingPosition(point);
-    if (!parsed) return null;
-    ring.push(parsed);
-  }
-  return ring.length > 0 ? stripClosingPoint(ring) : null;
-}
-
-function normalizePolygonCoordinates(value: unknown): PolygonCoordinates | null {
-  if (!Array.isArray(value)) return null;
-  const polygon: PolygonCoordinates = [];
-  for (const ring of value) {
-    const normalizedRing = normalizeRingCoordinates(ring);
-    if (!normalizedRing) continue;
-    polygon.push(normalizedRing);
-  }
-  return polygon.length > 0 ? polygon : null;
-}
-
-function normalizeMultiPolygonCoordinates(value: unknown): MultiPolygonCoordinates | null {
-  if (!Array.isArray(value)) return null;
-  const polygons: MultiPolygonCoordinates = [];
-  for (const polygon of value) {
-    const normalizedPolygon = normalizePolygonCoordinates(polygon);
-    if (!normalizedPolygon) continue;
-    polygons.push(normalizedPolygon);
-  }
-  return polygons.length > 0 ? polygons : null;
-}
-
-function geometryPolygons(
-  geometry: { type: "Polygon" | "MultiPolygon"; coordinates: unknown } | null | undefined,
-): MultiPolygonCoordinates | null {
-  if (!geometry) return null;
-  if (geometry.type === "Polygon") {
-    const polygon = normalizePolygonCoordinates(geometry.coordinates);
-    return polygon ? [polygon] : null;
-  }
-  return normalizeMultiPolygonCoordinates(geometry.coordinates);
-}
-
-function geometryBounds(
-  geometry: { type: "Polygon" | "MultiPolygon"; coordinates: unknown } | null | undefined,
-): { west: number; south: number; east: number; north: number } | null {
-  const polygons = geometryPolygons(geometry);
-  if (!polygons) return null;
-
-  let west = Number.POSITIVE_INFINITY;
-  let south = Number.POSITIVE_INFINITY;
-  let east = Number.NEGATIVE_INFINITY;
-  let north = Number.NEGATIVE_INFINITY;
-
-  for (const polygon of polygons) {
-    for (const ring of polygon) {
-      for (const [lng, lat] of ring) {
-        west = Math.min(west, lng);
-        south = Math.min(south, lat);
-        east = Math.max(east, lng);
-        north = Math.max(north, lat);
-      }
-    }
-  }
-
-  if (
-    !Number.isFinite(west) ||
-    !Number.isFinite(south) ||
-    !Number.isFinite(east) ||
-    !Number.isFinite(north)
-  ) {
-    return null;
-  }
-
-  return { west, south, east, north };
-}
-
-function geometryIntersectsBbox(
-  geometry: { type: "Polygon" | "MultiPolygon"; coordinates: unknown } | null | undefined,
-  bbox: BoundingBox,
-): boolean {
-  const bounds = geometryBounds(geometry);
-  if (!bounds) return false;
-  return !(
-    bounds.east < bbox.west ||
-    bounds.west > bbox.east ||
-    bounds.north < bbox.south ||
-    bounds.south > bbox.north
-  );
-}
-
-function isInsideBoundary(point: RingPosition, bbox: BoundingBox, boundary: ClipBoundary): boolean {
-  switch (boundary) {
-    case "west":
-      return point[0] >= bbox.west;
-    case "east":
-      return point[0] <= bbox.east;
-    case "south":
-      return point[1] >= bbox.south;
-    case "north":
-      return point[1] <= bbox.north;
-  }
-}
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, value));
-}
-
-function boundaryIntersection(
-  start: RingPosition,
-  end: RingPosition,
-  bbox: BoundingBox,
-  boundary: ClipBoundary,
-): RingPosition {
-  const [x1, y1] = start;
-  const [x2, y2] = end;
-
-  if (boundary === "west" || boundary === "east") {
-    const x = boundary === "west" ? bbox.west : bbox.east;
-    if (x1 === x2) return [x, clamp(y1, bbox.south, bbox.north)];
-    const t = (x - x1) / (x2 - x1);
-    return [x, clamp(y1 + (y2 - y1) * t, bbox.south, bbox.north)];
-  }
-
-  const y = boundary === "south" ? bbox.south : bbox.north;
-  if (y1 === y2) return [clamp(x1, bbox.west, bbox.east), y];
-  const t = (y - y1) / (y2 - y1);
-  return [clamp(x1 + (x2 - x1) * t, bbox.west, bbox.east), y];
-}
-
-function clipRingAgainstBoundary(
-  ring: RingPosition[],
-  bbox: BoundingBox,
-  boundary: ClipBoundary,
-): RingPosition[] {
-  if (ring.length === 0) return [];
-
-  const output: RingPosition[] = [];
-  let previous = ring[ring.length - 1];
-  let previousInside = isInsideBoundary(previous, bbox, boundary);
-
-  for (const current of ring) {
-    const currentInside = isInsideBoundary(current, bbox, boundary);
-
-    if (currentInside) {
-      if (!previousInside) {
-        output.push(boundaryIntersection(previous, current, bbox, boundary));
-      }
-      output.push(current);
-    } else if (previousInside) {
-      output.push(boundaryIntersection(previous, current, bbox, boundary));
-    }
-
-    previous = current;
-    previousInside = currentInside;
-  }
-
-  return dedupeAdjacentPoints(output);
-}
-
-function clipRingToBbox(ring: RingPosition[], bbox: BoundingBox): RingPosition[] | null {
-  let clipped = stripClosingPoint(ring);
-  for (const boundary of ["west", "east", "south", "north"] as const) {
-    clipped = clipRingAgainstBoundary(clipped, bbox, boundary);
-    if (clipped.length === 0) return null;
-  }
-  return finalizeRing(clipped);
-}
-
-function clipPolygonToBbox(
-  polygon: PolygonCoordinates,
-  bbox: BoundingBox,
-): PolygonCoordinates | null {
-  if (polygon.length === 0) return null;
-  const clippedOuter = clipRingToBbox(polygon[0], bbox);
-  if (!clippedOuter) return null;
-
-  const clippedPolygon: PolygonCoordinates = [clippedOuter];
-  for (const hole of polygon.slice(1)) {
-    const clippedHole = clipRingToBbox(hole, bbox);
-    if (clippedHole) clippedPolygon.push(clippedHole);
-  }
-
-  return clippedPolygon;
-}
-
-function clipGeometryToBbox(
-  geometry: { type: "Polygon" | "MultiPolygon"; coordinates: unknown } | null | undefined,
-  bbox: BoundingBox,
-): SharedMobilityGeometry | null {
-  if (!geometry) return null;
-
-  if (geometry.type === "Polygon") {
-    const polygon = normalizePolygonCoordinates(geometry.coordinates);
-    const clippedPolygon = polygon ? clipPolygonToBbox(polygon, bbox) : null;
-    return clippedPolygon ? { type: "Polygon", coordinates: clippedPolygon } : null;
-  }
-
-  const polygons = normalizeMultiPolygonCoordinates(geometry.coordinates);
-  if (!polygons) return null;
-
-  const clippedPolygons = polygons
-    .map((polygon) => clipPolygonToBbox(polygon, bbox))
-    .filter((polygon): polygon is PolygonCoordinates => !!polygon);
-
-  if (clippedPolygons.length === 0) return null;
-  return { type: "MultiPolygon", coordinates: clippedPolygons };
-}
-
-type ZoneClass = "no_ride" | "no_parking" | "no_start" | "slow_zone" | "parking_hub";
-
-function applicableRules(
-  rules: Array<EnturGeofencingRule | null> | null | undefined,
-  vehicleTypeIds: Set<string>,
-): EnturGeofencingRule[] {
-  const normalized = (rules ?? []).filter((rule): rule is EnturGeofencingRule => !!rule);
-  if (vehicleTypeIds.size === 0) return normalized;
-  return normalized.filter((rule) => {
-    if (!rule.vehicleTypeIds || rule.vehicleTypeIds.length === 0) return true;
-    return rule.vehicleTypeIds.some((vehicleTypeId) => vehicleTypeIds.has(vehicleTypeId));
-  });
-}
-
-function classifyZone(
-  rules: EnturGeofencingRule[],
-): { zoneClass: ZoneClass; summary: string } | null {
-  if (rules.length === 0) return null;
-  const minimumSpeed = rules
-    .map((rule) => rule.maximumSpeedKph)
-    .filter((speed): speed is number => typeof speed === "number")
-    .reduce<number | undefined>(
-      (current, speed) => (current === undefined ? speed : Math.min(current, speed)),
-      undefined,
-    );
-
-  if (rules.some((rule) => !rule.rideThroughAllowed || rule.maximumSpeedKph === 0)) {
-    return { zoneClass: "no_ride", summary: "No riding" };
-  }
-  if (rules.some((rule) => !rule.rideEndAllowed)) {
-    return { zoneClass: "no_parking", summary: "No parking" };
-  }
-  if (rules.some((rule) => !rule.rideStartAllowed)) {
-    return { zoneClass: "no_start", summary: "No ride start" };
-  }
-  if (rules.some((rule) => rule.stationParking === true)) {
-    return { zoneClass: "parking_hub", summary: "Parking hub" };
-  }
-  if (minimumSpeed !== undefined && minimumSpeed < DEFAULT_SLOW_ZONE_KPH) {
-    return { zoneClass: "slow_zone", summary: `Slow zone ${minimumSpeed} km/h` };
-  }
-  return null;
-}
-
 export async function buildEnturGeofencingMapContext(
   bbox: BoundingBox,
   options?: { systemIds?: string[]; vehicleTypeIds?: string[] },
@@ -1183,29 +881,37 @@ export async function buildEnturGeofencingMapContext(
   for (const system of geofencing) {
     const systemId = system.systemId ?? undefined;
     for (const feature of system.geojson?.features ?? []) {
-      if (!feature?.geometry || !geometryIntersectsBbox(feature.geometry, bbox)) continue;
-      const clippedGeometry = clipGeometryToBbox(feature.geometry, bbox);
+      if (!feature?.geometry) continue;
+      const clippedGeometry = normalizeAndClipMobilityGeometry(feature.geometry, bbox);
       if (!clippedGeometry) continue;
-      const rules = applicableRules(feature.properties?.rules, vehicleTypeIds);
-      const zone = classifyZone(rules);
+      const rules = applicableMobilityRules(feature.properties?.rules, vehicleTypeIds);
+      const zone = classifyMobilityRules(rules, DEFAULT_SLOW_ZONE_KPH);
       if (!zone) continue;
-      const maximumSpeed = rules
-        .map((rule) => rule.maximumSpeedKph)
-        .filter((speed): speed is number => typeof speed === "number")
-        .reduce<number | undefined>(
-          (current, speed) => (current === undefined ? speed : Math.min(current, speed)),
-          undefined,
-        );
 
       features.push({
         type: "Feature",
         geometry: clippedGeometry,
         properties: {
+          contextKind: "restriction_zone",
+          contextId: `entur:${hashParts([
+            systemId ?? "unknown",
+            feature.properties?.name ?? "unnamed",
+            JSON.stringify(clippedGeometry),
+          ])}`,
           systemId,
+          providerId: null,
+          providerName: systemId ?? null,
+          providerGroupId: null,
+          providerGroupName: null,
           zoneClass: zone.zoneClass,
           zoneName: feature.properties?.name ?? null,
-          zoneSummary: zone.summary,
-          maximumSpeedKph: maximumSpeed ?? null,
+          z: 0,
+          formFactors: [],
+          vehicleTypeIds: [...new Set(rules.flatMap((rule) => rule.vehicleTypeIds ?? []))].sort(),
+          maximumSpeedKph: zone.maximumSpeedKph ?? null,
+          rideStartAllowed: rules.every((rule) => rule.rideStartAllowed),
+          rideEndAllowed: rules.every((rule) => rule.rideEndAllowed),
+          rideThroughAllowed: rules.every((rule) => rule.rideThroughAllowed),
           stationParking: rules.some((rule) => rule.stationParking === true),
         },
       });

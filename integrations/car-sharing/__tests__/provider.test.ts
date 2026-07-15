@@ -17,7 +17,10 @@ vi.mock("@openmapx/mobility-core/gbfs-provider-base", () => ({
 
 vi.mock("@openmapx/mobility-core/entur-mobility", () => ({
   enrichEnturMobilityItems: vi.fn().mockResolvedValue(undefined),
-  buildEnturGeofencingMapContext: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock("@openmapx/mobility-core/shared-mobility-context", () => ({
+  buildSharedMobilityMapContext: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@openmapx/mobility-core/motis-rentals", () => ({
@@ -43,10 +46,7 @@ vi.mock("../providers/merge-stations.js", () => ({
 }));
 
 import { dedupStations } from "@openmapx/mobility-core/dedup";
-import {
-  buildEnturGeofencingMapContext,
-  enrichEnturMobilityItems,
-} from "@openmapx/mobility-core/entur-mobility";
+import { enrichEnturMobilityItems } from "@openmapx/mobility-core/entur-mobility";
 import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
@@ -58,6 +58,7 @@ import {
   mapVehicleToResult,
 } from "@openmapx/mobility-core/mapper";
 import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
+import { buildSharedMobilityMapContext } from "@openmapx/mobility-core/shared-mobility-context";
 import { mergeRegionalStations } from "../providers/merge-stations.js";
 import { carSharingProvider } from "../providers/provider.js";
 import { searchRegionalClients } from "../providers/registry.js";
@@ -293,12 +294,12 @@ describe("carSharingProvider.getDetail", () => {
     expect(result).toBeNull();
   });
 
-  it("delegates map context to Entur geofencing builder", async () => {
+  it("delegates map context to the MOTIS-first shared builder", async () => {
     const bbox = makeBbox();
     const options = { systemIds: ["bilkollektivet"], vehicleTypeIds: ["car"] };
 
     await carSharingProvider.getMapContext(bbox, {}, options);
 
-    expect(buildEnturGeofencingMapContext).toHaveBeenCalledWith(bbox, options);
+    expect(buildSharedMobilityMapContext).toHaveBeenCalledWith(bbox, new Set(["car"]), options);
   });
 });

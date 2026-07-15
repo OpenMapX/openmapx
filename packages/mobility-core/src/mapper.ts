@@ -173,11 +173,25 @@ function brandingFromVehicle(vehicle: SharedMobilityVehicle): DataSourceBranding
 function mapContextSelection(
   systemId?: string,
   vehicleTypeIds?: string[],
+  providerId?: string,
+  providerGroupId?: string,
+  formFactors?: string[],
 ): DataSourceResult["mapContext"] | undefined {
-  if (!systemId && (!vehicleTypeIds || vehicleTypeIds.length === 0)) return undefined;
+  if (
+    !systemId &&
+    !providerId &&
+    !providerGroupId &&
+    (!vehicleTypeIds || vehicleTypeIds.length === 0) &&
+    (!formFactors || formFactors.length === 0)
+  ) {
+    return undefined;
+  }
   return {
     ...(systemId ? { systemIds: [systemId] } : {}),
     ...(vehicleTypeIds && vehicleTypeIds.length > 0 ? { vehicleTypeIds } : {}),
+    ...(providerId ? { providerIds: [providerId] } : {}),
+    ...(providerGroupId ? { providerGroupIds: [providerGroupId] } : {}),
+    ...(formFactors && formFactors.length > 0 ? { formFactors } : {}),
   };
 }
 
@@ -212,7 +226,13 @@ export function mapStationToResult(station: SharedMobilityStation): DataSourceRe
     summary: t("summary.available", { count: station.availableVehicles }),
     operator: station.operator,
     branding: brandingFromStation(station),
-    mapContext: mapContextSelection(station.systemId, station.vehicleTypeIds),
+    mapContext: mapContextSelection(
+      station.systemId,
+      station.vehicleTypeIds,
+      station.providerId,
+      station.providerGroupId,
+      station.vehicleTypes,
+    ),
     sortValues: {
       available: station.availableVehicles,
       slots: station.emptySlots ?? 0,
@@ -455,6 +475,24 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
           }
         : undefined,
     usageInfo,
+    actions: {
+      ...(station.rentalUris?.web || station.rentalUris?.ios || station.rentalUris?.android
+        ? {
+            primaryRental: {
+              label: t("action.openRentalApp"),
+              ...station.rentalUris,
+            },
+          }
+        : {}),
+      ...(station.stationArea
+        ? {
+            mapContext: {
+              label: t("action.showServiceArea"),
+              contextId: `station-area:${station.id}`,
+            },
+          }
+        : {}),
+    },
     sections,
   };
 }
@@ -511,6 +549,9 @@ export function mapVehicleToResult(vehicle: SharedMobilityVehicle): DataSourceRe
     mapContext: mapContextSelection(
       vehicle.systemId,
       vehicle.vehicleTypeId ? [vehicle.vehicleTypeId] : undefined,
+      vehicle.providerId,
+      vehicle.providerGroupId,
+      [vehicle.formFactor],
     ),
     sortValues: {
       ...(vehicle.batteryLevel !== undefined ? { battery: vehicle.batteryLevel } : {}),
@@ -608,6 +649,15 @@ export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDe
             name: vehicle.operator ?? vehicle.branding?.name ?? "Operator",
             url: vehicle.rentalUris?.web,
             legalName: vehicle.branding?.legalName,
+          }
+        : undefined,
+    actions:
+      vehicle.rentalUris?.web || vehicle.rentalUris?.ios || vehicle.rentalUris?.android
+        ? {
+            primaryRental: {
+              label: t("action.openRentalApp"),
+              ...vehicle.rentalUris,
+            },
           }
         : undefined,
     sections,

@@ -96,6 +96,18 @@
     "co2PerKm": "{value} g/km",
     "accessMethod": "Zugang: {method}"
   },
+  "action": {
+    "openRentalApp": "Verleih-App öffnen",
+    "showServiceArea": "Service-/Parkbereich anzeigen"
+  },
+  "context": {
+    "noRide": "Fahren verboten",
+    "noParking": "Abstellen verboten",
+    "noStart": "Ausleihe verboten",
+    "stationParking": "Nur an Stationen abstellen",
+    "slowZone": "Langsamfahrzone",
+    "stationArea": "Stationsbereich"
+  },
   "dataSources": {
     "cambio": {
       "purpose": "Stationsbasiertes Carsharing in Deutschland und Belgien",

@@ -61,6 +61,14 @@
       "types": "./src/motis-rentals.ts",
       "default": "./src/motis-rentals.ts"
     },
+    "./mobility-context-geometry": {
+      "types": "./src/mobility-context-geometry.ts",
+      "default": "./src/mobility-context-geometry.ts"
+    },
+    "./shared-mobility-context": {
+      "types": "./src/shared-mobility-context.ts",
+      "default": "./src/shared-mobility-context.ts"
+    },
     "./nominatim": {
       "types": "./src/nominatim.ts",
       "default": "./src/nominatim.ts"

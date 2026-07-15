@@ -96,6 +96,18 @@
     "co2PerKm": "{value} g/km",
     "accessMethod": "Access: {method}"
   },
+  "action": {
+    "openRentalApp": "Open rental app",
+    "showServiceArea": "Show service/parking area"
+  },
+  "context": {
+    "noRide": "No driving",
+    "noParking": "No parking",
+    "noStart": "No rental start",
+    "stationParking": "Station-only parking",
+    "slowZone": "Slow zone",
+    "stationArea": "Station area"
+  },
   "dataSources": {
     "cambio": {
       "purpose": "Station-based car sharing in Germany and Belgium",

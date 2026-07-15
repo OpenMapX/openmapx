@@ -153,6 +153,7 @@ describe("mapStationToResult", () => {
       expect(result.mapContext).toEqual({
         systemIds: ["voioslo"],
         vehicleTypeIds: ["bike-type"],
+        formFactors: ["bicycle"],
       });
     });
   });
@@ -332,6 +333,7 @@ describe("mapVehicleToResult", () => {
       expect(result.mapContext).toEqual({
         systemIds: ["bilkollektivet"],
         vehicleTypeIds: ["car-type"],
+        formFactors: ["scooter_standing"],
       });
     });
   });
@@ -441,6 +443,36 @@ describe("mapStationToDetail", () => {
     expect(findRow(section, "row.systemWebsite")?.[1]).toBe("https://example.test");
     expect(findRow(section, "row.membership")?.[1]).toBe("https://example.test/join");
     expect(findRow(section, "row.crossStreet")?.[1]).toBe("Central Avenue");
+  });
+
+  it("promotes native rental and station-area actions", () => {
+    const detail = mapStationToDetail(
+      makeStation({
+        rentalUris: { web: "https://example.test", ios: "example://station" },
+        stationArea: {
+          type: "Polygon",
+          coordinates: [
+            [
+              [0, 0],
+              [1, 0],
+              [1, 1],
+              [0, 0],
+            ],
+          ],
+        },
+      }),
+    );
+    expect(detail.actions).toEqual({
+      primaryRental: {
+        label: { $t: "action.openRentalApp" },
+        web: "https://example.test",
+        ios: "example://station",
+      },
+      mapContext: {
+        label: { $t: "action.showServiceArea" },
+        contextId: "station-area:station-1",
+      },
+    });
   });
 
   it("includes Transit section when transitInfo has lines", () => {

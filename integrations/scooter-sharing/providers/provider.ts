@@ -8,6 +8,7 @@ import type {
   BoundingBox,
   DataSourceDetail,
   DataSourceFilterDef,
+  DataSourceMapContextSelection,
   DataSourceMeta,
   DataSourceResult,
 } from "@openmapx/core";
@@ -19,10 +20,7 @@ import {
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { dedupStations, dedupVehicles } from "@openmapx/mobility-core/dedup";
 import { SharedMobilityDetailStore } from "@openmapx/mobility-core/detail-store";
-import {
-  buildEnturGeofencingMapContext,
-  enrichEnturMobilityItems,
-} from "@openmapx/mobility-core/entur-mobility";
+import { enrichEnturMobilityItems } from "@openmapx/mobility-core/entur-mobility";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import {
   fetchGbfsData,
@@ -41,6 +39,7 @@ import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
 } from "@openmapx/mobility-core/shared-mobility";
+import { buildSharedMobilityMapContext } from "@openmapx/mobility-core/shared-mobility-context";
 import { searchFelyx } from "./felyx-client.js";
 import { searchNrwMobidrom } from "./nrw-mobidrom-client.js";
 
@@ -193,9 +192,12 @@ class ScooterSharingProvider implements MobilityDataSourceProvider {
   async getMapContext(
     bbox: BoundingBox,
     _filters?: Record<string, unknown>,
-    options?: { systemIds?: string[]; vehicleTypeIds?: string[] },
+    options?: DataSourceMapContextSelection,
   ) {
-    return wrapStatic(await buildEnturGeofencingMapContext(bbox, options), attribution.all());
+    return wrapStatic(
+      await buildSharedMobilityMapContext(bbox, SCOOTER_FORM_FACTORS, options),
+      attribution.all(),
+    );
   }
 }
 
