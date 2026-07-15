@@ -1,10 +1,12 @@
 import { execFile as execFileCb } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { services as coreServices, repoPaths } from "@openmapx/core/server";
+import { parseMotisConfigExpectations } from "@openmapx/transitous-core";
 import { dockerComposeAction } from "../utils/docker-compose";
 import { envString } from "../utils/env";
 import type { JobContext } from "./job-runner";
@@ -491,55 +493,159 @@ export interface MotisTransitousStatus {
   realtimeFeedCount: number;
   gbfsFeedCount: number;
   feedProxyUrlCount: number;
+  gbfsProxyUrl: string | null;
   feedProxyMode: "none" | "self-hosted" | "transitous-cloud" | "mixed";
   feedProxyConfigFound: boolean;
   feedProxyVarsFound: boolean;
   feedProxyFeedCount: number;
+  capabilityState: "healthy" | "stale" | "missing" | "error";
+  capabilityError?: string;
+  activeEpoch: string | null;
+  candidateEpoch: string | null;
+  testedAt: string | null;
+  configHash: string | null;
+  licenseHash: string | null;
+  rentalProviderCount: number;
+  rentalProviderGroupCount: number;
+  rollbackAvailable: boolean;
+  operationsProfile: "regional-assisted" | "regional-sovereign" | "planet" | "unknown";
+  activeSlot: "A" | "B" | null;
+  previousHealthySlot: "A" | "B" | null;
+  preflightState: "passed" | "blocked" | "missing";
+  preflightRequiredDiskBytes: number | null;
+  preflightFreeDiskBytes: number | null;
+  pinProposalPending: boolean;
+  crowdsourceState: "disabled-pending-review";
+  gbfsCatalog: {
+    state: "active" | "missing" | "error";
+    commit: string | null;
+    lockedAt: string | null;
+    registryRows: number;
+    registryAdded: number;
+    transitousPreferred: number;
+    quarantined: number;
+    validationFailed: number;
+    sources: Array<{
+      sourceId: string;
+      country: string;
+      status: "configured" | "excluded";
+      observation: "validated" | "unknown";
+      errorClass?: string;
+      lastObservedSuccess?: string;
+      lastErrorAt?: string;
+      dataAge: "unknown";
+    }>;
+  };
 }
 
-function countGbfsFeeds(configText: string): number {
-  const lines = configText.split(/\r?\n/);
-  let inGbfs = false;
-  let inFeeds = false;
-  let feedsIndent = 0;
-  let count = 0;
+interface MobilityCapabilitySnapshot {
+  schemaVersion: 1;
+  testedAt: string;
+  epoch: string;
+  artifacts: { config: { sha256: string }; license: { sha256: string } };
+  rentals?: { providerIds?: string[]; providerGroupIds?: string[] };
+}
 
-  for (const line of lines) {
-    const indent = (line.match(/^\s*/) ?? [""])[0].length;
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-
-    if (!inGbfs && trimmed === "gbfs:") {
-      inGbfs = true;
-      inFeeds = false;
-      continue;
-    }
-
-    if (inGbfs && !inFeeds && trimmed === "feeds:") {
-      inFeeds = true;
-      feedsIndent = indent;
-      continue;
-    }
-
-    if (inGbfs && inFeeds) {
-      if (indent <= feedsIndent) {
-        inGbfs = false;
-        inFeeds = false;
-        continue;
-      }
-      if (/^[^#\s][^:]*:\s*$/.test(trimmed)) {
-        count += 1;
-      }
-      continue;
-    }
-
-    if (inGbfs && indent === 0 && trimmed.endsWith(":") && trimmed !== "gbfs:") {
-      inGbfs = false;
-      inFeeds = false;
-    }
+function readGbfsCatalogStatus(motisDir: string): MotisTransitousStatus["gbfsCatalog"] {
+  const missing: MotisTransitousStatus["gbfsCatalog"] = {
+    state: "missing",
+    commit: null,
+    lockedAt: null,
+    registryRows: 0,
+    registryAdded: 0,
+    transitousPreferred: 0,
+    quarantined: 0,
+    validationFailed: 0,
+    sources: [],
+  };
+  const path = join(motisDir, "gbfs-source-index.json");
+  if (!existsSync(path)) return missing;
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf-8")) as {
+      schemaVersion?: unknown;
+      lock?: { commit?: unknown; lockedAt?: unknown };
+      summary?: Record<string, unknown>;
+      validations?: Array<{ sourceId?: unknown; ok?: unknown }>;
+      sources?: Array<{
+        sourceId?: unknown;
+        country?: unknown;
+        status?: unknown;
+        exclusionReason?: unknown;
+        observation?: {
+          state?: unknown;
+          lastObservedSuccess?: unknown;
+          lastErrorAt?: unknown;
+          lastErrorClass?: unknown;
+          dataAge?: unknown;
+        };
+      }>;
+    };
+    if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.sources))
+      throw new Error("unsupported source index");
+    const validated = new Set(
+      (parsed.validations ?? [])
+        .filter((entry) => entry.ok === true && typeof entry.sourceId === "string")
+        .map((entry) => entry.sourceId as string),
+    );
+    const sources = parsed.sources
+      .filter((entry) => entry.status === "included" || entry.exclusionReason === "validation")
+      .slice(0, 500)
+      .map((entry) => ({
+        sourceId: typeof entry.sourceId === "string" ? entry.sourceId : "unknown",
+        country: typeof entry.country === "string" ? entry.country : "unknown",
+        status: entry.status === "included" ? ("configured" as const) : ("excluded" as const),
+        observation:
+          entry.observation?.state === "validated" ||
+          (typeof entry.sourceId === "string" && validated.has(entry.sourceId))
+            ? ("validated" as const)
+            : ("unknown" as const),
+        errorClass:
+          typeof entry.observation?.lastErrorClass === "string"
+            ? entry.observation.lastErrorClass
+            : typeof entry.exclusionReason === "string"
+              ? entry.exclusionReason
+              : undefined,
+        lastObservedSuccess:
+          typeof entry.observation?.lastObservedSuccess === "string"
+            ? entry.observation.lastObservedSuccess
+            : undefined,
+        lastErrorAt:
+          typeof entry.observation?.lastErrorAt === "string"
+            ? entry.observation.lastErrorAt
+            : undefined,
+        dataAge: "unknown" as const,
+      }));
+    const number = (key: string): number =>
+      typeof parsed.summary?.[key] === "number" ? (parsed.summary[key] as number) : 0;
+    return {
+      state: "active",
+      commit: typeof parsed.lock?.commit === "string" ? parsed.lock.commit : null,
+      lockedAt: typeof parsed.lock?.lockedAt === "string" ? parsed.lock.lockedAt : null,
+      registryRows: number("registryRows"),
+      registryAdded: number("healthy"),
+      transitousPreferred: number("duplicate"),
+      quarantined: number("quarantined"),
+      validationFailed: number("failed"),
+      sources,
+    };
+  } catch {
+    return { ...missing, state: "error" };
   }
+}
 
-  return count;
+function hashFile(path: string): string | null {
+  if (!existsSync(path)) return null;
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function readEpoch(path: string): string | null {
+  if (!existsSync(path)) return null;
+  try {
+    const value = JSON.parse(readFileSync(path, "utf-8")) as { epoch?: unknown };
+    return typeof value.epoch === "string" ? value.epoch : null;
+  } catch {
+    return null;
+  }
 }
 
 export function getMotisTransitousStatus(): MotisTransitousStatus {
@@ -548,6 +654,79 @@ export function getMotisTransitousStatus(): MotisTransitousStatus {
   const configPath = join(motisDir, "config.yml");
   const feedProxyConfigPath = join(feedProxyDir, "conf", "default.conf");
   const feedProxyVarsPath = join(feedProxyDir, "feed-proxy-vars.json");
+  const snapshotPath = join(motisDir, "mobility-capabilities.json");
+  const candidateEpoch = readEpoch(
+    join(DATA_DIR, "motis", "staging", "motis-candidate-manifest.json"),
+  );
+  const slotStatePath = join(DATA_DIR, "motis", "slot-state.json");
+  const activeManifestPath = join(motisDir, "motis-candidate-manifest.json");
+  const preflightPath = join(DATA_DIR, "motis", "preflight.json");
+  const parsedJson = (path: string): Record<string, unknown> | null => {
+    try {
+      const value = JSON.parse(readFileSync(path, "utf-8"));
+      return value && typeof value === "object" && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  };
+  const slotState = parsedJson(slotStatePath);
+  const activeManifest = parsedJson(activeManifestPath);
+  const preflight = parsedJson(preflightPath);
+  const operationsPolicy = activeManifest?.operationsPolicy as Record<string, unknown> | undefined;
+  const profile = operationsPolicy?.profile;
+  const operationsProfile = ["regional-assisted", "regional-sovereign", "planet"].includes(
+    String(profile),
+  )
+    ? (profile as MotisTransitousStatus["operationsProfile"])
+    : "unknown";
+  const activeSlot = ["A", "B"].includes(String(slotState?.activeSlot))
+    ? (slotState?.activeSlot as "A" | "B")
+    : null;
+  const previousHealthySlot = ["A", "B"].includes(String(slotState?.previousHealthySlot))
+    ? (slotState?.previousHealthySlot as "A" | "B")
+    : null;
+  const estimate = preflight?.estimate as Record<string, unknown> | undefined;
+  const capacity = preflight?.capacity as Record<string, unknown> | undefined;
+  const operationsStatus = {
+    operationsProfile,
+    activeSlot,
+    previousHealthySlot,
+    preflightState: preflight ? (preflight.ok === true ? "passed" : "blocked") : "missing",
+    preflightRequiredDiskBytes:
+      typeof estimate?.requiredDiskBytes === "number" ? estimate.requiredDiskBytes : null,
+    preflightFreeDiskBytes:
+      typeof capacity?.freeDiskBytes === "number" ? capacity.freeDiskBytes : null,
+    pinProposalPending: existsSync(join(INFRA_DIR, "transitous.lock.proposed.json")),
+    crowdsourceState: "disabled-pending-review" as const,
+  } satisfies Pick<
+    MotisTransitousStatus,
+    | "operationsProfile"
+    | "activeSlot"
+    | "previousHealthySlot"
+    | "preflightState"
+    | "preflightRequiredDiskBytes"
+    | "preflightFreeDiskBytes"
+    | "pinProposalPending"
+    | "crowdsourceState"
+  >;
+  const rollbackAvailable = Boolean(previousHealthySlot) || existsSync(`${motisDir}.previous`);
+  const gbfsCatalog = readGbfsCatalogStatus(motisDir);
+
+  let snapshot: MobilityCapabilitySnapshot | null = null;
+  let capabilityError: string | undefined;
+  if (existsSync(snapshotPath)) {
+    try {
+      const parsed = JSON.parse(readFileSync(snapshotPath, "utf-8")) as MobilityCapabilitySnapshot;
+      if (parsed.schemaVersion !== 1 || typeof parsed.epoch !== "string") {
+        throw new Error("unsupported capability snapshot schema");
+      }
+      snapshot = parsed;
+    } catch (error) {
+      capabilityError = (error as Error).message;
+    }
+  }
 
   const feedProxyConfigFound = existsSync(feedProxyConfigPath);
   const feedProxyVarsFound = existsSync(feedProxyVarsPath);
@@ -570,24 +749,50 @@ export function getMotisTransitousStatus(): MotisTransitousStatus {
       realtimeFeedCount: 0,
       gbfsFeedCount: 0,
       feedProxyUrlCount: 0,
+      gbfsProxyUrl: null,
       feedProxyMode: "none",
       feedProxyConfigFound,
       feedProxyVarsFound,
       feedProxyFeedCount,
+      capabilityState: capabilityError ? "error" : "missing",
+      capabilityError,
+      activeEpoch: snapshot?.epoch ?? null,
+      candidateEpoch,
+      testedAt: snapshot?.testedAt ?? null,
+      configHash: null,
+      licenseHash: hashFile(join(motisDir, "license.json")),
+      rentalProviderCount: snapshot?.rentals?.providerIds?.length ?? 0,
+      rentalProviderGroupCount: snapshot?.rentals?.providerGroupIds?.length ?? 0,
+      rollbackAvailable,
+      ...operationsStatus,
+      gbfsCatalog,
     };
   }
 
   const configText = readFileSync(configPath, "utf-8");
-  const datasetCount = (configText.match(/^\s*path:\s+/gm) ?? []).length;
-  const realtimeFeedCount = (configText.match(/^\s*protocol:\s+/gm) ?? []).length;
-  const gbfsFeedCount = countGbfsFeeds(configText);
+  let expectations: ReturnType<typeof parseMotisConfigExpectations>;
+  try {
+    expectations = parseMotisConfigExpectations(configText);
+  } catch (error) {
+    expectations = {
+      timetableDatasets: 0,
+      realtimeFeeds: 0,
+      gbfsFeeds: 0,
+      expectsGbfs: false,
+      tilesEnabled: false,
+      elevationEnabled: false,
+      routedTransfersEnabled: false,
+      gbfsProxyUrl: null,
+      feedProxyUrls: [],
+    };
+    capabilityError ??= `invalid MOTIS config: ${(error as Error).message}`;
+  }
+  const datasetCount = expectations.timetableDatasets;
+  const realtimeFeedCount = expectations.realtimeFeeds;
+  const gbfsFeedCount = expectations.gbfsFeeds;
 
-  const feedProxyHosts = Array.from(
-    configText.matchAll(/url:\s*(https?:\/\/[^\s"']*\/feed\/[^\s"']*)/g),
-  )
-    .map((match) => {
-      const raw = match[1];
-      if (!raw) return null;
+  const feedProxyHosts = expectations.feedProxyUrls
+    .map((raw) => {
       try {
         return new URL(raw).hostname.toLowerCase();
       } catch {
@@ -597,17 +802,36 @@ export function getMotisTransitousStatus(): MotisTransitousStatus {
     .filter((host): host is string => Boolean(host));
 
   const uniqueHosts = new Set(feedProxyHosts);
+  const gbfsProxyUrl = expectations.gbfsProxyUrl;
+  if (gbfsProxyUrl) {
+    try {
+      uniqueHosts.add(new URL(gbfsProxyUrl).hostname.toLowerCase());
+    } catch {
+      // Invalid operator YAML remains visible via gbfsProxyUrl; it is not
+      // classified as a healthy self-hosted endpoint.
+    }
+  }
   const feedProxyUrlCount = feedProxyHosts.length;
   const hasTransitousProxy = uniqueHosts.has("rt.triptix.tech");
   const hasOtherProxy = [...uniqueHosts].some((host) => host !== "rt.triptix.tech");
   const feedProxyMode: MotisTransitousStatus["feedProxyMode"] =
-    feedProxyUrlCount === 0
+    uniqueHosts.size === 0
       ? "none"
       : hasTransitousProxy && hasOtherProxy
         ? "mixed"
         : hasTransitousProxy
           ? "transitous-cloud"
           : "self-hosted";
+  const configHash = hashFile(configPath);
+  const licenseHash = hashFile(join(motisDir, "license.json"));
+  const capabilityState: MotisTransitousStatus["capabilityState"] = capabilityError
+    ? "error"
+    : !snapshot
+      ? "missing"
+      : snapshot.artifacts.config.sha256 !== configHash ||
+          snapshot.artifacts.license.sha256 !== licenseHash
+        ? "stale"
+        : "healthy";
 
   return {
     configFound: true,
@@ -615,9 +839,22 @@ export function getMotisTransitousStatus(): MotisTransitousStatus {
     realtimeFeedCount,
     gbfsFeedCount,
     feedProxyUrlCount,
+    gbfsProxyUrl,
     feedProxyMode,
     feedProxyConfigFound,
     feedProxyVarsFound,
     feedProxyFeedCount,
+    capabilityState,
+    capabilityError,
+    activeEpoch: snapshot?.epoch ?? null,
+    candidateEpoch,
+    testedAt: snapshot?.testedAt ?? null,
+    configHash,
+    licenseHash,
+    rentalProviderCount: snapshot?.rentals?.providerIds?.length ?? 0,
+    rentalProviderGroupCount: snapshot?.rentals?.providerGroupIds?.length ?? 0,
+    rollbackAvailable,
+    ...operationsStatus,
+    gbfsCatalog,
   };
 }

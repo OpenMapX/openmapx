@@ -106,6 +106,87 @@ describe("enrichDeparturesWithRealtime", () => {
     expect(getTripUpdate).not.toHaveBeenCalled();
   });
 
+  it("makes zero enrichment calls for MOTIS realtime-merged on-time departures", async () => {
+    const getTripUpdate = vi.fn();
+    const getTripUpdates = vi.fn();
+    const provider = makeProvider({ getTripUpdate, getTripUpdates });
+    const base: MobilityResult<Departure[]> = {
+      data: Array.from({ length: 10 }, (_, index) =>
+        dep({
+          tripId: `ms:trip-${index}`,
+          provenance: {
+            baselineSource: "motis",
+            instance: "local",
+            datasetEpoch: "epoch-1",
+            realtimeCompleteness: "merged",
+            observedAt: "2026-05-22T08:00:00Z",
+          },
+        }),
+      ),
+      attributions: [],
+      freshness: fresh({ hasRealtimeData: true }),
+    };
+
+    const out = await enrichDeparturesWithRealtime({ ctx: makeCtx([provider]), timed }, base, {
+      stopId: "ms:s",
+    });
+
+    expect(out).toBe(base);
+    expect(getTripUpdate).not.toHaveBeenCalled();
+    expect(getTripUpdates).not.toHaveBeenCalled();
+  });
+
+  it("deduplicates duplicate trip identities into one batch lookup", async () => {
+    const getTripUpdates = vi.fn().mockResolvedValue({
+      data: { "ms:trip-1": { tripId: "ms:trip-1", delaySeconds: 60 } },
+      attributions: [],
+      freshness: fresh({ hasRealtimeData: true }),
+    });
+    const provider = makeProvider({ getTripUpdate: undefined, getTripUpdates });
+    const base: MobilityResult<Departure[]> = {
+      data: [dep({ tripId: "ms:trip-1" }), dep({ tripId: "ms:trip-1" })],
+      attributions: [],
+      freshness: fresh(),
+    };
+
+    const out = await enrichDeparturesWithRealtime({ ctx: makeCtx([provider]), timed }, base, {
+      stopId: "ms:s",
+    });
+
+    expect(getTripUpdates).toHaveBeenCalledOnce();
+    expect(getTripUpdates).toHaveBeenCalledWith(["ms:trip-1"], "ms:s");
+    expect(out.data.every((departure) => departure.delaySeconds === 60)).toBe(true);
+  });
+
+  it("bounds non-batch enrichment concurrency to four calls", async () => {
+    let active = 0;
+    let maxActive = 0;
+    const getTripUpdate = vi.fn(async (tripId: string) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await Promise.resolve();
+      active -= 1;
+      return {
+        data: { tripId, delaySeconds: 30 },
+        attributions: [],
+        freshness: fresh({ hasRealtimeData: true }),
+      };
+    });
+    const provider = makeProvider({ getTripUpdate });
+    const base: MobilityResult<Departure[]> = {
+      data: Array.from({ length: 10 }, (_, index) => dep({ tripId: `ms:trip-${index}` })),
+      attributions: [],
+      freshness: fresh(),
+    };
+
+    await enrichDeparturesWithRealtime({ ctx: makeCtx([provider]), timed }, base, {
+      stopId: "ms:s",
+    });
+
+    expect(getTripUpdate).toHaveBeenCalledTimes(10);
+    expect(maxActive).toBeLessThanOrEqual(4);
+  });
+
   it("applies a TripUpdate delta and flips freshness.hasRealtimeData", async () => {
     const delta: TripUpdate = {
       tripId: "ms:trip-1",

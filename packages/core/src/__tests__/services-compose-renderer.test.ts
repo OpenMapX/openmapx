@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { load as parseYaml } from "js-yaml";
 import { describe, expect, it } from "vitest";
 import { renderCompose, renderServiceSnippet } from "../services/compose-renderer";
@@ -20,6 +22,35 @@ function svc(id: string, opts: Partial<LoadedService["manifest"]> = {}): LoadedS
 }
 
 describe("renderServiceSnippet", () => {
+  it("forwards the complete MOTIS pipeline environment contract", () => {
+    const manifest = JSON.parse(
+      readFileSync(join(process.cwd(), "services/data-manager/service.json"), "utf-8"),
+    ) as LoadedService["manifest"];
+    const environment = renderServiceSnippet(
+      { ...svc("data-manager"), manifest: { ...manifest, bindMounts: [] } },
+      {},
+    ).environment;
+    for (const key of [
+      "TRANSITOUS_API_KEYS_PATH",
+      "TRANSITOUS_FEEDS_OVERLAY_PATH",
+      "MOTIS_ELEVATORS_URL",
+      "MOTIS_ELEVATORS_AUTH",
+      "MOTIS_OSR_FOOTPATH",
+      "MOTIS_TILES",
+      "MOTIS_INCREMENTAL_RT_UPDATE",
+      "MOTIS_IMPORT_TIMEOUT_MS",
+      "MOTIS_HEALTH_BBOX_MIN_LAT",
+      "MOTIS_HEALTH_BBOX_MIN_LNG",
+      "MOTIS_HEALTH_BBOX_MAX_LAT",
+      "MOTIS_HEALTH_BBOX_MAX_LNG",
+      "MOTIS_HEALTH_PLAN_FROM_LAT",
+      "MOTIS_HEALTH_PLAN_FROM_LNG",
+      "MOTIS_HEALTH_PLAN_TO_LAT",
+      "MOTIS_HEALTH_PLAN_TO_LNG",
+    ]) {
+      expect(environment?.[key]).toBe(`\${${key}:-}`);
+    }
+  });
   it("renders image:tag, expose, restart, network", () => {
     const snippet = renderServiceSnippet(
       svc("alpha", {

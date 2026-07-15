@@ -14,6 +14,10 @@ export type { MobilityEnvelopeQueryResult } from "./useMobilityEnvelope";
 export { wrapMobilityEnvelope } from "./useMobilityEnvelope";
 export { usePlaceStopInfrastructure } from "./usePlaceStopInfrastructure";
 export { useReachableStops } from "./useReachableStops";
+export {
+  type TransitRefreshResult,
+  useRefreshTransitItinerary,
+} from "./useRefreshTransitItinerary";
 export { useRouteAlerts } from "./useRouteAlerts";
 export { useRouteLive } from "./useRouteLive";
 export { useRouteStops } from "./useRouteStops";
@@ -26,6 +30,10 @@ export { useStopSearch } from "./useStopSearch";
 export { useStopsNearby } from "./useStopsNearby";
 export { useStopTimetable } from "./useStopTimetable";
 export { useTransitPlan } from "./useTransitPlan";
+export {
+  type TransitPlanningCapabilityProvider,
+  useTransitPlanningCapabilities,
+} from "./useTransitPlanningCapabilities";
 export { useTransitRoute } from "./useTransitRoute";
 export { useTransitStops } from "./useTransitStops";
 export { useVehicleJourney } from "./useVehicleJourney";

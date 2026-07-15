@@ -9,7 +9,8 @@
     "book": "Book",
     "apps": "Apps",
     "directions": "Directions",
-    "notes": "Notes"
+    "notes": "Notes",
+    "provider": "Provider"
   },
   "row": {
     "availableVehicles": "Available Cars",
@@ -29,7 +30,15 @@
     "ios": "iOS",
     "iosApp": "iOS App",
     "androidApp": "Android App",
-    "pricing": "Pricing"
+    "pricing": "Pricing",
+    "renting": "Rentals available",
+    "returning": "Returns available",
+    "returnConstraint": "Return requirement",
+    "provider": "Provider",
+    "providerGroup": "Provider group",
+    "crossStreet": "Cross street",
+    "systemWebsite": "System website",
+    "membership": "Membership"
   },
   "value": {
     "fixedStation": "Fixed Station",
@@ -39,6 +48,13 @@
     "disabled": "Disabled",
     "available": "Available",
     "vehicleFallback": "Vehicle",
+    "yes": "Yes",
+    "no": "No",
+    "returnConstraint": {
+      "none": "No station requirement",
+      "any_station": "Return at any station",
+      "roundtrip_station": "Return at the origin station"
+    },
     "formFactor": {
       "bicycle": "Bicycle",
       "cargo_bicycle": "Cargo Bicycle",
@@ -79,6 +95,18 @@
     "distanceKm": "{value} km",
     "co2PerKm": "{value} g/km",
     "accessMethod": "Access: {method}"
+  },
+  "action": {
+    "openRentalApp": "Open rental app",
+    "showServiceArea": "Show service/parking area"
+  },
+  "context": {
+    "noRide": "No driving",
+    "noParking": "No parking",
+    "noStart": "No rental start",
+    "stationParking": "Station-only parking",
+    "slowZone": "Slow zone",
+    "stationArea": "Station area"
   },
   "dataSources": {
     "cambio": {

@@ -12,6 +12,7 @@ import PedalBikeIcon from "@mui/icons-material/PedalBike";
 import TrainIcon from "@mui/icons-material/Train";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
@@ -266,6 +267,29 @@ function safeExternalUrl(url: string | undefined): string | undefined {
   }
 }
 
+export function pickRentalActionUrl(
+  action: NonNullable<NonNullable<DataSourceDetail["actions"]>["primaryRental"]>,
+  userAgent: string,
+): string | undefined {
+  const platformUrl = /android/i.test(userAgent)
+    ? action.android
+    : /iphone|ipad|ipod/i.test(userAgent)
+      ? action.ios
+      : undefined;
+  return platformUrl ?? action.web ?? action.ios ?? action.android;
+}
+
+function safeRentalUri(uri: string | undefined): string | undefined {
+  if (!uri) return undefined;
+  try {
+    const protocol = new URL(uri).protocol.toLowerCase();
+    if (["javascript:", "data:", "file:", "vbscript:"].includes(protocol)) return undefined;
+    return uri;
+  } catch {
+    return undefined;
+  }
+}
+
 function DetailAttribution({ attribution }: { attribution: DataSourceAttribution }) {
   const providerUrl = safeExternalUrl(attribution.url);
   const licenseUrl = safeExternalUrl(attribution.licenseUrl);
@@ -327,6 +351,14 @@ export function DataSourceSections({ detail, domain }: Props) {
     detail.operator.legalName !== detail.branding?.name
       ? detail.operator.legalName
       : null;
+  const rentalUri = safeRentalUri(
+    detail.actions?.primaryRental
+      ? pickRentalActionUrl(
+          detail.actions.primaryRental,
+          typeof navigator === "undefined" ? "" : navigator.userAgent,
+        )
+      : undefined,
+  );
 
   return (
     <Box>
@@ -344,6 +376,35 @@ export function DataSourceSections({ detail, domain }: Props) {
           {header.titleKey ? t(header.titleKey) : header.titleFallback}
         </Typography>
       </Box>
+      {(rentalUri || detail.actions?.mapContext) && (
+        <Box sx={{ display: "flex", gap: 1, px: 2, py: 1, flexWrap: "wrap" }}>
+          {rentalUri && detail.actions?.primaryRental && (
+            <Button
+              variant="contained"
+              component="a"
+              href={rentalUri}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {resolveT(detail.actions.primaryRental.label)}
+            </Button>
+          )}
+          {detail.actions?.mapContext && (
+            <Button
+              variant="outlined"
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent("openmapx:focus-data-source-context", {
+                    detail: { contextId: detail.actions?.mapContext?.contextId },
+                  }),
+                )
+              }
+            >
+              {resolveT(detail.actions.mapContext.label)}
+            </Button>
+          )}
+        </Box>
+      )}
       {/* Operator */}
       {detail.operator && (
         <Box sx={{ display: "flex", gap: 2, alignItems: "center", py: 1.25, px: 2 }}>

@@ -9,11 +9,15 @@ import {
   listGbfsManifestDatasetVersions,
   parseCsvRecords,
 } from "@openmapx/mobility-formats";
+import { MOBILITYDATA_GBFS_CATALOG_URL } from "@openmapx/transitous-core";
 import { TTL, withCache } from "./cache.js";
 import { fetchGbfsSystem, type GbfsSystemData } from "./gbfs-client.js";
 import type { GbfsCatalogEntry, VehicleFormFactor } from "./types/shared-mobility.js";
 
-const CATALOG_URL = "https://raw.githubusercontent.com/MobilityData/gbfs/master/systems.csv";
+// Runtime fallback stays enabled until the MOTIS-first rollout (Plan 006), but
+// it consumes the same immutable registry revision as the import compiler.
+// Bumped transactionally by `openmapx transitous bump`; never point this at master.
+const CATALOG_URL = MOBILITYDATA_GBFS_CATALOG_URL;
 const CATALOG_CACHE_KEY = "shared-mobility:gbfs-catalog";
 const ENTUR_CATALOG_CACHE_KEY = "shared-mobility:gbfs-catalog:entur";
 const SYSTEM_CACHE_TTL = 300; // 5min for system data

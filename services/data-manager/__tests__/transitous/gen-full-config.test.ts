@@ -1,8 +1,9 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { run as genFullConfigRun } from "../../src/jobs/transitous/gen-full-config.js";
+import { resolveOperationsProfile } from "../../src/jobs/transitous/operations-profile.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import { StateStore } from "../../src/state.js";
 
@@ -60,7 +61,11 @@ function ctxFor(dataDir: string, catalogDir: string, countries: string[] = []) {
     countries,
     // Stub: the stage already wrote config.yml in setup. The feed-proxy
     // sub-step's vars JSON is intentionally absent → it warns and no-ops.
-    runner: async () => {},
+    runner: async (command, args) => {
+      if (command === "python3" && args.includes("-c")) {
+        writeFileSync(join(catalogDir, "out", "feed-proxy-vars.json"), "{}");
+      }
+    },
     now: () => "2026-05-01T00:00:00.000Z",
   });
   ctx.state.catalogDir = catalogDir;
@@ -222,5 +227,58 @@ timetable:
     const fx = setupCatalog(TEMPLATE_WITH_RT);
     await genFullConfigRun(ctxWithProxyVars(fx.catalogDir, fx.dataDir, ["de-bvg-0"]));
     expect(readFileSync(fx.configPath, "utf-8")).toContain("http://motis-feed-proxy/feed/de-bvg-0");
+  });
+
+  it("rewrites the GBFS scalar and persists normalized proxy vars beside the config", async () => {
+    const fx = setupCatalog(
+      `${TEMPLATE_WITH_RT}gbfs:\n  proxy: https://rt.triptix.tech\n  feeds:\n    bvg:\n      url: https://rt.triptix.tech/feed/de-bvg-0\n`,
+    );
+    const result = await genFullConfigRun(
+      ctxWithProxyVars(fx.catalogDir, fx.dataDir, ["de-bvg-0", "de-vbb-0"]),
+    );
+    expect(result.status).toBe("ok");
+    expect(result.artifacts).toMatchObject({ rtRewritten: 3, gbfsProxyRewritten: 1 });
+    const updated = readFileSync(fx.configPath, "utf-8");
+    expect(updated).toContain("  proxy: http://motis-feed-proxy");
+    expect(updated).not.toContain("https://rt.triptix.tech");
+    expect(
+      JSON.parse(
+        readFileSync(
+          join(fx.catalogDir, "out", ".openmapx-feed-proxy", "feed-proxy-vars.json"),
+          "utf-8",
+        ),
+      ),
+    ).toHaveProperty("de-bvg-0");
+    expect(
+      readFileSync(
+        join(fx.catalogDir, "out", ".openmapx-feed-proxy", "conf", "default.conf"),
+        "utf-8",
+      ),
+    ).toContain('location "/feed/de-bvg-0"');
+    expect(existsSync(join(fx.dataDir, "motis-feed-proxy"))).toBe(false);
+  });
+
+  it("fails instead of promoting GBFS entries absent from the local proxy", async () => {
+    const fx = setupCatalog(
+      `gbfs:\n  proxy: https://rt.triptix.tech\n  feeds:\n    missing:\n      url: https://rt.triptix.tech/feed/de-missing-0\n`,
+    );
+    const result = await genFullConfigRun(ctxWithProxyVars(fx.catalogDir, fx.dataDir, []));
+    expect(result.status).toBe("error");
+    expect(result.message).toContain("de-missing-0");
+  });
+
+  it("fails closed when a sovereign config retains a hosted realtime URL", async () => {
+    const fx = setupCatalog(TEMPLATE_WITH_RT);
+    const ctx = ctxWithProxyVars(fx.catalogDir, fx.dataDir, ["de-bvg-0"]);
+    ctx.operationsPolicy = resolveOperationsProfile({
+      profile: "regional-sovereign",
+      countries: ["de"],
+      source: "build",
+      osmInput: "germany.osm.pbf",
+    });
+    const result = await genFullConfigRun(ctx);
+    expect(result.status).toBe("error");
+    expect(result.message).toMatch(/sovereign.*prohibited hosted runtime URLs/);
+    expect(result.message).toContain("rt.triptix.tech/feed/de-vbb-0");
   });
 });

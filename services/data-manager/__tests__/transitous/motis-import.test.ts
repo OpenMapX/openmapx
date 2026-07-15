@@ -2,6 +2,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  CANDIDATE_PROXY_DIRNAME,
+  createCandidateManifest,
+} from "../../src/jobs/transitous/candidate.js";
 import { run as motisImportRun } from "../../src/jobs/transitous/motis-import.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import { StateStore } from "../../src/state.js";
@@ -17,6 +21,16 @@ afterEach(() => {
 /** The dir the motis-staging container bind-mounts (plain bind, pipeline-owned). */
 function stagingDirOf(dataDir: string): string {
   return join(dataDir, "motis", "staging");
+}
+
+function primeCandidate(stagingDir: string): void {
+  mkdirSync(join(stagingDir, CANDIDATE_PROXY_DIRNAME, "conf"), { recursive: true });
+  writeFileSync(join(stagingDir, "config.yml"), "timetable:\n  datasets:\n    demo: {}\n");
+  writeFileSync(join(stagingDir, "demo.gtfs.zip"), "gtfs");
+  writeFileSync(join(stagingDir, "license.json"), "{}\n");
+  writeFileSync(join(stagingDir, CANDIDATE_PROXY_DIRNAME, "conf", "default.conf"), "server {}\n");
+  writeFileSync(join(stagingDir, CANDIDATE_PROXY_DIRNAME, "feed-proxy-vars.json"), "{}\n");
+  createCandidateManifest(stagingDir, "test-epoch", "2026-05-01T00:00:00.000Z");
 }
 
 function makeCtx(opts: {
@@ -66,8 +80,7 @@ describe("motis-import stage", () => {
   it("restarts the staging container to re-import and drops the marker", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-motis-import-ok-"));
     const stagingDir = stagingDirOf(tmp);
-    mkdirSync(stagingDir, { recursive: true });
-    writeFileSync(join(stagingDir, "config.yml"), "server:\n  port: 8080\n");
+    primeCandidate(stagingDir);
 
     const calls: Array<{ command: string; args: string[] }> = [];
     const ctx = makeCtx({
@@ -82,20 +95,27 @@ describe("motis-import stage", () => {
     // covers running / stopped / waiting-for-config, with no concurrent
     // `docker exec /motis import` and no `docker compose` (no plugin in the image).
     expect(calls).toEqual([{ command: "docker", args: ["restart", "motis-staging"] }]);
-    expect(result.artifacts).toMatchObject({ action: "restarted", container: "motis-staging" });
+    expect(result.artifacts).toMatchObject({
+      action: "restarted",
+      container: "motis-staging",
+      candidateEpoch: "test-epoch",
+    });
     // The promote stage relies on this marker as its strong "import done"
     // signal — assert we drop it whenever the (re)start succeeds.
     const markerPath = join(stagingDir, ".data-manager-import.ok.json");
     expect(existsSync(markerPath)).toBe(true);
     const marker = JSON.parse(readFileSync(markerPath, "utf-8"));
-    expect(marker).toMatchObject({ container: "motis-staging", action: "restarted" });
+    expect(marker).toMatchObject({
+      container: "motis-staging",
+      action: "restarted",
+      candidateEpoch: "test-epoch",
+    });
   });
 
   it("returns error when the staging container can't be (re)started", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-motis-import-startfail-"));
     const stagingDir = stagingDirOf(tmp);
-    mkdirSync(stagingDir, { recursive: true });
-    writeFileSync(join(stagingDir, "config.yml"), "x");
+    primeCandidate(stagingDir);
 
     const ctx = makeCtx({
       dataDir: tmp,

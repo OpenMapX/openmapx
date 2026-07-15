@@ -17,6 +17,10 @@
       "types": "./src/dedup.ts",
       "default": "./src/dedup.ts"
     },
+    "./detail-store": {
+      "types": "./src/detail-store.ts",
+      "default": "./src/detail-store.ts"
+    },
     "./entur-mobility": {
       "types": "./src/entur-mobility.ts",
       "default": "./src/entur-mobility.ts"
@@ -57,6 +61,18 @@
       "types": "./src/motis-rentals.ts",
       "default": "./src/motis-rentals.ts"
     },
+    "./mobility-context-geometry": {
+      "types": "./src/mobility-context-geometry.ts",
+      "default": "./src/mobility-context-geometry.ts"
+    },
+    "./shared-mobility-context": {
+      "types": "./src/shared-mobility-context.ts",
+      "default": "./src/shared-mobility-context.ts"
+    },
+    "./shared-mobility-orchestrator": {
+      "types": "./src/shared-mobility-orchestrator.ts",
+      "default": "./src/shared-mobility-orchestrator.ts"
+    },
     "./nominatim": {
       "types": "./src/nominatim.ts",
       "default": "./src/nominatim.ts"
@@ -87,6 +103,7 @@
     "@motis-project/motis-client": "^2.10.2",
     "@openmapx/core": "workspace:^",
     "@openmapx/mobility-formats": "workspace:^",
+    "@openmapx/transitous-core": "workspace:^",
     "spdx-license-list": "^6.11.0"
   }
 }

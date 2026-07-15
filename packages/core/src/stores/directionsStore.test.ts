@@ -32,9 +32,21 @@ describe("directionsStore transit options", () => {
 
   it("setTransitRoutePreference updates and resets the active itinerary index", () => {
     useDirectionsStore.setState({ activeItineraryIndex: 3 });
-    useDirectionsStore.getState().setTransitRoutePreference("wheelchair");
-    expect(useDirectionsStore.getState().transitRoutePreference).toBe("wheelchair");
+    useDirectionsStore.getState().setTransitRoutePreference("fewerTransfers");
+    expect(useDirectionsStore.getState().transitRoutePreference).toBe("fewerTransfers");
     expect(useDirectionsStore.getState().activeItineraryIndex).toBe(0);
+  });
+
+  it("keeps wheelchair and hard planner controls independent from ranking", () => {
+    useDirectionsStore.getState().setWheelchairRequired(true);
+    useDirectionsStore.getState().setMaxTransfers(2);
+    useDirectionsStore.getState().setTransferBuffer("relaxed");
+    expect(useDirectionsStore.getState()).toMatchObject({
+      transitRoutePreference: "best",
+      wheelchairRequired: true,
+      maxTransfers: 2,
+      transferBuffer: "relaxed",
+    });
   });
 
   it("defaults deutschlandticketOnly to false and toggles it", () => {

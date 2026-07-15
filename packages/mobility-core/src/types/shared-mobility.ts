@@ -20,14 +20,88 @@ export interface SharedMobilityRentalApps {
 
 export interface SharedMobilityAreaGeometry {
   type: "Polygon" | "MultiPolygon";
-  coordinates: unknown;
+  coordinates: number[][][] | number[][][][];
+}
+
+export interface SharedMobilityMultiPolygonGeometry {
+  type: "MultiPolygon";
+  coordinates: number[][][][];
+}
+
+export type RentalServingOrigin = "motis-local" | "transitous";
+
+export type RentalReturnConstraint = "none" | "any_station" | "roundtrip_station";
+
+export interface SharedMobilityRestriction {
+  vehicleTypeIds: string[];
+  rideStartAllowed: boolean;
+  rideEndAllowed: boolean;
+  rideThroughAllowed: boolean;
+  stationParking?: boolean;
+}
+
+export interface SharedMobilityProviderGroup {
+  id: string;
+  nativeId: string;
+  name: string;
+  color?: string;
+  providerIds: string[];
+  formFactors: VehicleFormFactor[];
+}
+
+export interface SharedMobilityProvider {
+  id: string;
+  nativeId: string;
+  name: string;
+  operator?: string;
+  groupId: string;
+  url?: string;
+  purchaseUrl?: string;
+  color?: string;
+  branding?: SharedMobilityBranding;
+  bbox: [number, number, number, number];
+  formFactors: VehicleFormFactor[];
+  vehicleTypes: VehicleTypeDetail[];
+  defaultRestrictions: SharedMobilityRestriction;
+  globalRestrictions: SharedMobilityRestriction[];
+  sourceId: string;
+  servingOrigin: RentalServingOrigin;
+}
+
+export interface SharedMobilityZone {
+  id: string;
+  providerId: string;
+  providerGroupId: string;
+  name?: string;
+  z: number;
+  bbox: [number, number, number, number];
+  area: SharedMobilityMultiPolygonGeometry;
+  rules: SharedMobilityRestriction[];
+  sourceId: string;
+  servingOrigin: RentalServingOrigin;
+}
+
+export interface MotisRentalSnapshotCompleteness {
+  providers: boolean;
+  providerGroups: boolean;
+  stations: boolean;
+  vehicles: boolean;
+  zones: boolean;
+  warnings: string[];
+}
+
+export interface MotisRentalSnapshot {
+  origin: RentalServingOrigin;
+  providers: SharedMobilityProvider[];
+  providerGroups: SharedMobilityProviderGroup[];
+  stations: SharedMobilityStation[];
+  vehicles: SharedMobilityVehicle[];
+  zones: SharedMobilityZone[];
+  completeness: MotisRentalSnapshotCompleteness;
 }
 
 export interface SharedMobilityStation {
-  /**
-   * Canonical `scheme:value` id, typically `<system-id>:<native>`. See
-   * `primaryScheme` / `ids` for the underlying multi-id map.
-   */
+  /** Collision-safe OpenMapX id containing origin, provider, kind and native id. */
   id: string;
   /** Scheme key in `ids` that is canonical for this station. */
   primaryScheme?: string;
@@ -43,6 +117,13 @@ export interface SharedMobilityStation {
   capacity?: number;
   systemId?: string;
   nativeId?: string;
+  providerId?: string;
+  providerGroupId?: string;
+  providerName?: string;
+  providerGroupName?: string;
+  providerUrl?: string;
+  purchaseUrl?: string;
+  servingOrigin?: RentalServingOrigin;
   operator?: string;
   branding?: SharedMobilityBranding;
   /** Vehicle form factor(s) available at this station. */
@@ -51,6 +132,9 @@ export interface SharedMobilityStation {
   vehicleTypeIds?: string[];
   /** Whether the station is currently operational. */
   isActive: boolean;
+  isRenting?: boolean;
+  isReturning?: boolean;
+  returnConstraint?: RentalReturnConstraint;
   /** Source system identifiers — all data sources that contributed to this station. */
   sources: string[];
   /** How to access the station (e.g., "App", "Chipkarte", "Bordcomputer"). */
@@ -70,6 +154,7 @@ export interface SharedMobilityStation {
     postcode?: string;
     country?: string;
   };
+  crossStreet?: string;
   /** Operator notes (e.g., "Always bring the charging cable!"). */
   operatorNotes?: string;
   /** Per-station website or booking URL. */
@@ -90,6 +175,7 @@ export interface SharedMobilityStation {
 
 export interface VehicleTypeDetail {
   id?: string;
+  nativeId?: string;
   name: string;
   formFactor?: VehicleFormFactor;
   make?: string;
@@ -98,7 +184,8 @@ export interface VehicleTypeDetail {
   accessories?: string[];
   co2PerKm?: number;
   riderCapacity?: number;
-  returnConstraint?: string;
+  returnConstraint?: RentalReturnConstraint;
+  returnConstraintGuessed?: boolean;
   imageUrl?: string;
   iconUrl?: string;
   iconUrlDark?: string;
@@ -116,7 +203,7 @@ export interface PricingDetail {
 }
 
 export interface SharedMobilityVehicle {
-  /** Canonical `scheme:value` id, typically `<system-id>:<native>`. */
+  /** Collision-safe OpenMapX id containing origin, provider, kind and native id. */
   id: string;
   /** Scheme key in `ids` that is canonical for this vehicle. */
   primaryScheme?: string;
@@ -134,6 +221,16 @@ export interface SharedMobilityVehicle {
   systemId?: string;
   nativeId?: string;
   vehicleTypeId?: string;
+  providerId?: string;
+  providerGroupId?: string;
+  providerName?: string;
+  providerGroupName?: string;
+  providerUrl?: string;
+  purchaseUrl?: string;
+  servingOrigin?: RentalServingOrigin;
+  returnConstraint?: RentalReturnConstraint;
+  stationId?: string;
+  homeStationId?: string;
   /** Whether currently reserved. */
   isReserved: boolean;
   /** Whether currently disabled. */

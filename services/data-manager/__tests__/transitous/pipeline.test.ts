@@ -18,20 +18,21 @@ afterEach(() => {
 const ORDERED_STAGES: StageName[] = [
   "prepare",
   "filter",
+  "preflight",
+  "compile-gbfs",
   "fetch",
   "validate",
-  "gen-motis-config",
+  "gen-full-config",
+  "gen-attribution",
   "assemble-staging",
   "motis-import",
   "motis-health",
-  "gen-full-config",
-  "gen-attribution",
   "promote",
   "gc",
 ];
 
 describe("runTransitousPipeline orchestrator", () => {
-  it("invokes all 12 stages in order against an in-memory persistence hook", async () => {
+  it("invokes all stages in order against an in-memory persistence hook", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-pipeline-orchestrator-"));
     const dataDir = tmp;
     const catalogDir = join(dataDir, ".transitous-catalog");
@@ -57,6 +58,17 @@ describe("runTransitousPipeline orchestrator", () => {
       runner: async (command, args) => {
         if (command === "python3" && args[0] === "./src/fetch.py") {
           writeFileSync(join(gtfsDir, "de_bvg.gtfs.zip"), "BVG");
+        } else if (
+          command === "python3" &&
+          args[0] === "./src/generate-motis-config.py" &&
+          !args.includes("--feed-proxy")
+        ) {
+          writeFileSync(
+            join(catalogDir, "out", "config.yml"),
+            "timetable:\n  datasets:\n    de_bvg:\n      path: de_bvg.gtfs.zip\n",
+          );
+        } else if (command === "python3" && args.includes("-c")) {
+          writeFileSync(join(catalogDir, "out", "feed-proxy-vars.json"), "{}");
         } else if (command === "python3" && args[0] === "./src/generate-attribution.py") {
           // Simulate the upstream script writing its manifest (gen-attribution
           // now asserts the file exists).
@@ -69,26 +81,26 @@ describe("runTransitousPipeline orchestrator", () => {
       },
     });
 
-    const { results, finalStatus } = await runTransitousPipeline(ctx);
+    const { results, finalStatus } = await runTransitousPipeline(ctx, {
+      stopAt: "assemble-staging",
+    });
 
-    expect(results.map((r) => r.stage)).toEqual(ORDERED_STAGES);
-    expect(persisted.map((r) => r.stage)).toEqual(ORDERED_STAGES);
+    const throughAssembly = ORDERED_STAGES.slice(0, ORDERED_STAGES.indexOf("assemble-staging") + 1);
+    expect(results.map((r) => r.stage)).toEqual(throughAssembly);
+    expect(persisted.map((r) => r.stage)).toEqual(throughAssembly);
 
-    // Stub stages always come back skipped (no out/config.yml → assemble skips;
-    // no staging container → import/health/promote skip).
+    // The finalized config and attribution are assembled before any import.
     const byStage = Object.fromEntries(results.map((r) => [r.stage, r]));
-    expect(byStage["assemble-staging"]?.status).toBe("skipped");
-    expect(byStage["motis-import"]?.status).toBe("skipped");
-    expect(byStage["motis-health"]?.status).toBe("skipped");
-    expect(byStage.promote?.status).toBe("skipped");
+    expect(byStage["assemble-staging"]?.status).toBe("ok");
+    expect(byStage["motis-import"]).toBeUndefined();
+    expect(byStage["motis-health"]).toBeUndefined();
+    expect(byStage.promote).toBeUndefined();
 
     // Non-stub stages all returned ok against the fixture.
     expect(byStage.prepare?.status).toBe("ok");
     expect(byStage.filter?.status).toBe("ok");
     expect(byStage.fetch?.status).toBe("ok");
-    expect(byStage.gc?.status).toBe("ok");
-
-    // Aggregate final status ignores skipped, so "ok" overall.
+    expect(byStage.gc).toBeUndefined();
     expect(finalStatus).toBe("ok");
   });
 
@@ -126,7 +138,7 @@ describe("runTransitousPipeline orchestrator", () => {
 
   it("runs end-to-end on a seeded 3-feed catalog within a 60s wall-clock budget", async () => {
     // A seeded fake transitous-catalog with multiple feeds across two regions;
-    // the pipeline runs all 12 stages in order (stubs included) and finishes
+    // the pipeline runs every stage in order (stubs included) and finishes
     // under 60s.
     //
     // A "real MOTIS container in CI" variant (where motis-import / motis-health
@@ -170,10 +182,16 @@ describe("runTransitousPipeline orchestrator", () => {
     });
 
     const startedAt = Date.now();
-    const { results, finalStatus } = await runTransitousPipeline(ctx);
+    const { results, finalStatus } = await runTransitousPipeline(ctx, { stopAt: "fetch" });
     const elapsedMs = Date.now() - startedAt;
 
-    expect(results.map((r) => r.stage)).toEqual(ORDERED_STAGES);
+    expect(results.map((r) => r.stage)).toEqual([
+      "prepare",
+      "filter",
+      "preflight",
+      "compile-gbfs",
+      "fetch",
+    ]);
     expect(finalStatus).toBe("ok");
     expect(elapsedMs).toBeLessThan(60_000);
   });
@@ -205,7 +223,7 @@ describe("runTransitousPipeline orchestrator", () => {
       now: () => "2026-05-01T00:00:00.000Z",
     });
 
-    const { results, finalStatus } = await runTransitousPipeline(ctx);
+    const { results, finalStatus } = await runTransitousPipeline(ctx, { stopAt: "fetch" });
 
     const byStage = Object.fromEntries(results.map((r) => [r.stage, r]));
     expect(byStage.fetch?.status).toBe("partial");

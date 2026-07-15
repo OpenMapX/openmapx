@@ -45,3 +45,7 @@ export const GTFSCLEAN_COMMIT = "bb3ea74f66ef9bc07dc1bd038c3f653e10f0ade0";
  * integration seam Transitous itself designed for downstream consumers.
  */
 export const TRANSITOUS_ARTIFACT_BASE_URL = "https://api.transitous.org/gtfs/";
+
+/** Immutable MobilityData registry revision paired with gbfs-catalog.lock.json. */
+export const MOBILITYDATA_GBFS_CATALOG_COMMIT = "39a290ed5c5b8f62b720d5715a31bc3f0c0725d9";
+export const MOBILITYDATA_GBFS_CATALOG_URL = `https://raw.githubusercontent.com/MobilityData/gbfs/${MOBILITYDATA_GBFS_CATALOG_COMMIT}/systems.csv`;

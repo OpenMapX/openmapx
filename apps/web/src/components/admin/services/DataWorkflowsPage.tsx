@@ -97,10 +97,49 @@ interface MotisTransitousStatus {
   realtimeFeedCount: number;
   gbfsFeedCount: number;
   feedProxyUrlCount: number;
+  gbfsProxyUrl: string | null;
   feedProxyMode: "none" | "self-hosted" | "transitous-cloud" | "mixed";
   feedProxyConfigFound: boolean;
   feedProxyVarsFound: boolean;
   feedProxyFeedCount: number;
+  capabilityState: "healthy" | "stale" | "missing" | "error";
+  capabilityError?: string;
+  activeEpoch: string | null;
+  candidateEpoch: string | null;
+  testedAt: string | null;
+  configHash: string | null;
+  licenseHash: string | null;
+  rentalProviderCount: number;
+  rentalProviderGroupCount: number;
+  rollbackAvailable: boolean;
+  operationsProfile: "regional-assisted" | "regional-sovereign" | "planet" | "unknown";
+  activeSlot: "A" | "B" | null;
+  previousHealthySlot: "A" | "B" | null;
+  preflightState: "passed" | "blocked" | "missing";
+  preflightRequiredDiskBytes: number | null;
+  preflightFreeDiskBytes: number | null;
+  pinProposalPending: boolean;
+  crowdsourceState: "disabled-pending-review";
+  gbfsCatalog: {
+    state: "active" | "missing" | "error";
+    commit: string | null;
+    lockedAt: string | null;
+    registryRows: number;
+    registryAdded: number;
+    transitousPreferred: number;
+    quarantined: number;
+    validationFailed: number;
+    sources: Array<{
+      sourceId: string;
+      country: string;
+      status: "configured" | "excluded";
+      observation: "validated" | "unknown";
+      errorClass?: string;
+      lastObservedSuccess?: string;
+      lastErrorAt?: string;
+      dataAge: "unknown";
+    }>;
+  };
 }
 
 interface DataResponse {
@@ -115,6 +154,21 @@ interface DataResponse {
 interface DataActionResponse {
   ok: boolean;
   jobId: string;
+}
+
+interface SharedMobilityOperationsState {
+  rollbackCategories: Array<"bike" | "scooter" | "car">;
+  decisions: Array<{
+    category: "bike" | "scooter" | "car";
+    recordedAt: string;
+    decision: {
+      policy: "fanout" | "shadow" | "motis-first";
+      local: "healthy" | "partial" | "error";
+      calledAdapters: string[];
+      skippedAdapters: string[];
+      partial: boolean;
+    };
+  }>;
 }
 
 function formatDate(iso: string): string {
@@ -1321,6 +1375,32 @@ function MotisTransitousSection({ status }: { status: MotisTransitousStatus }) {
               color={motisProxyModeColor(status.feedProxyMode)}
               size="small"
             />
+            <Chip
+              label={`Capabilities: ${status.capabilityState}`}
+              color={status.capabilityState === "healthy" ? "success" : "error"}
+              size="small"
+            />
+            <Chip label={`${status.rentalProviderCount} rental provider(s)`} size="small" />
+            <Chip
+              label={`Profile: ${status.operationsProfile}`}
+              color={status.operationsProfile === "planet" ? "warning" : "default"}
+              size="small"
+            />
+            <Chip
+              label={`Slot: ${status.activeSlot ?? "legacy"}`}
+              color={status.activeSlot ? "success" : "default"}
+              size="small"
+            />
+            <Chip
+              label={`Preflight: ${status.preflightState}`}
+              color={status.preflightState === "passed" ? "success" : "warning"}
+              size="small"
+            />
+            <Chip
+              label={`Pinned GBFS: ${status.gbfsCatalog.state}`}
+              color={status.gbfsCatalog.state === "active" ? "success" : "default"}
+              size="small"
+            />
           </Stack>
           <Typography
             variant="caption"
@@ -1330,8 +1410,46 @@ function MotisTransitousSection({ status }: { status: MotisTransitousStatus }) {
           >
             Proxy artifacts: config {status.feedProxyConfigFound ? "present" : "missing"} · vars{" "}
             {status.feedProxyVarsFound ? "present" : "missing"} · {status.feedProxyFeedCount} mapped
-            feed endpoint(s)
+            feed endpoint(s) · GBFS proxy {status.gbfsProxyUrl ?? "not configured"}
           </Typography>
+          {status.gbfsCatalog.state === "active" && (
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>
+              Registry {status.gbfsCatalog.commit?.slice(0, 12)} ·{" "}
+              {status.gbfsCatalog.registryAdded} added · {status.gbfsCatalog.transitousPreferred}{" "}
+              Transitous-preferred duplicate(s) · {status.gbfsCatalog.quarantined} quarantined ·{" "}
+              {status.gbfsCatalog.validationFailed} validation failure(s)
+            </Typography>
+          )}
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
+            Active epoch {status.activeEpoch ?? "unknown"} · candidate{" "}
+            {status.candidateEpoch ?? "none"} · tested{" "}
+            {status.testedAt ? formatDate(status.testedAt) : "never"} · rollback{" "}
+            {status.rollbackAvailable ? "available" : "unavailable"}
+          </Typography>
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
+            Capacity:{" "}
+            {status.preflightRequiredDiskBytes != null
+              ? `${formatBytes(status.preflightRequiredDiskBytes)} required`
+              : "not estimated"}{" "}
+            ·{" "}
+            {status.preflightFreeDiskBytes != null
+              ? `${formatBytes(status.preflightFreeDiskBytes)} free`
+              : "free disk unknown"}{" "}
+            · previous healthy slot {status.previousHealthySlot ?? "none"}
+            {status.pinProposalPending ? " · pin proposal awaiting review" : ""}
+          </Typography>
+          <Alert severity="info">
+            Crowdsource sidecars are disabled pending authoritative provenance, protocol, license,
+            privacy-controller, moderation, and deletion approval.
+          </Alert>
+          {status.capabilityState !== "healthy" && (
+            <Alert severity="error">
+              Promoted MOTIS capability evidence is {status.capabilityState}.
+              {status.capabilityError
+                ? ` ${status.capabilityError}`
+                : " Re-run the transactional import before trusting configured counts."}
+            </Alert>
+          )}
           {(status.feedProxyMode === "transitous-cloud" || status.feedProxyMode === "mixed") && (
             <Alert severity={status.feedProxyMode === "mixed" ? "warning" : "error"}>
               MOTIS config still references Transitous cloud feed-proxy URLs. Rebuild MOTIS data to
@@ -1340,6 +1458,85 @@ function MotisTransitousSection({ status }: { status: MotisTransitousStatus }) {
           )}
         </Stack>
       )}
+    </Paper>
+  );
+}
+
+function SharedMobilityPolicySection({ apiUrl }: { apiUrl: string }) {
+  const queryClient = useQueryClient();
+  const { data } = useQuery<SharedMobilityOperationsState>({
+    queryKey: ["admin-shared-mobility-policy"],
+    queryFn: async () => {
+      const response = await fetch(`${apiUrl}/api/admin/shared-mobility`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to load shared mobility policy");
+      return response.json();
+    },
+    refetchInterval: 30_000,
+  });
+  const rollback = useMutation({
+    mutationFn: async ({ category, enabled }: { category: string; enabled: boolean }) => {
+      const response = await fetch(
+        `${apiUrl}/api/admin/shared-mobility/${encodeURIComponent(category)}/rollback`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ enabled }),
+        },
+      );
+      if (!response.ok) throw new Error("Failed to update shared mobility rollback");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin-shared-mobility-policy"] }),
+  });
+
+  return (
+    <Paper variant="outlined" sx={{ p: 2.5 }}>
+      <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+        Shared mobility source policy
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        MOTIS-first decisions contain category-level operational state only; no coordinates or
+        vehicle IDs are recorded. Enable rollback to restore fan-out immediately.
+      </Typography>
+      <Stack spacing={1.5}>
+        {(["bike", "scooter", "car"] as const).map((category) => {
+          const record = data?.decisions.find((decision) => decision.category === category);
+          const enabled = data?.rollbackCategories.includes(category) ?? false;
+          return (
+            <Stack
+              key={category}
+              direction={{ xs: "column", sm: "row" }}
+              spacing={1}
+              sx={{ alignItems: { sm: "center" } }}
+            >
+              <Typography sx={{ minWidth: 80, textTransform: "capitalize" }}>{category}</Typography>
+              <Chip
+                size="small"
+                label={record ? `${record.decision.policy} · ${record.decision.local}` : "no data"}
+                color={record?.decision.partial ? "warning" : "success"}
+              />
+              {record && (
+                <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
+                  called {record.decision.calledAdapters.join(", ") || "MOTIS only"}; skipped{" "}
+                  {record.decision.skippedAdapters.join(", ") || "none"}
+                </Typography>
+              )}
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={enabled}
+                    disabled={rollback.isPending}
+                    onChange={(_, checked) => rollback.mutate({ category, enabled: checked })}
+                  />
+                }
+                label="Fan-out rollback"
+              />
+            </Stack>
+          );
+        })}
+      </Stack>
     </Paper>
   );
 }
@@ -1410,6 +1607,7 @@ export function DataWorkflowsPage() {
           apiUrl={apiUrl}
         />
         <MotisTransitousSection status={data.motisTransitous} />
+        <SharedMobilityPolicySection apiUrl={apiUrl} />
         <BuildsSection builds={data.builds} />
       </Stack>
     </Box>

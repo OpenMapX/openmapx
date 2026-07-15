@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   buildJobContext,
   runTransitousPipeline,
+  stagePolicyFor,
   stagesFor,
 } from "../../src/jobs/transitous/pipeline.js";
 import { StateStore } from "../../src/state.js";
@@ -22,20 +23,43 @@ describe("stagesFor", () => {
   const BUILD = [
     "prepare",
     "filter",
+    "preflight",
+    "compile-gbfs",
     "fetch",
     "validate",
-    "gen-motis-config",
-    "assemble-staging",
-    "motis-import",
-    "motis-health",
     "gen-full-config",
     "gen-attribution",
+    "assemble-staging",
+    "stage-proxy",
+    "motis-import",
+    "motis-health",
     "promote",
     "gc",
   ];
 
   it("selects the build pipeline for source=build", () => {
     expect(stagesFor("build").map((s) => s.name)).toEqual(BUILD);
+  });
+
+  it("declares every mutation-sensitive stage critical", () => {
+    expect(
+      Object.fromEntries(stagePolicyFor("build").map((stage) => [stage.name, stage.criticality])),
+    ).toMatchObject({
+      prepare: "critical",
+      filter: "critical",
+      preflight: "critical",
+      "compile-gbfs": "critical",
+      validate: "critical",
+      "gen-full-config": "critical",
+      "gen-attribution": "critical",
+      "assemble-staging": "critical",
+      "stage-proxy": "critical",
+      "motis-import": "critical",
+      "motis-health": "critical",
+      promote: "critical",
+      fetch: "advisory",
+      gc: "advisory",
+    });
   });
 
   it("selects the mirror pipeline (build with fetch -> mirror) for source=mirror", () => {
@@ -84,7 +108,13 @@ describe("mirror-mode pipeline", () => {
     // Stop after `mirror` to avoid the docker/import tail (covered elsewhere).
     const { results } = await runTransitousPipeline(ctx, { stopAt: "mirror" });
 
-    expect(results.map((r) => r.stage)).toEqual(["prepare", "filter", "mirror"]);
+    expect(results.map((r) => r.stage)).toEqual([
+      "prepare",
+      "filter",
+      "preflight",
+      "compile-gbfs",
+      "mirror",
+    ]);
     expect(results.find((r) => r.stage === "mirror")?.status).toBe("ok");
     // Direct per-file download against the published artifact base, NOT a
     // recursive autoindex crawl.

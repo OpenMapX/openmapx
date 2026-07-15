@@ -1,6 +1,10 @@
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { feedState } from "@openmapx/db-schema";
+import {
+  FEED_PROXY_CONFIG_FILENAME,
+  FEED_PROXY_CONFIG_SUBDIR,
+} from "@openmapx/motis-feed-proxy-config";
 import { parseTransitSource } from "@openmapx/transitous-core";
 import { Cron } from "croner";
 import { and, eq } from "drizzle-orm";
@@ -37,6 +41,7 @@ import {
 } from "./jobs/transitous/index.js";
 import { FEED_PROXY_CONTAINER } from "./jobs/transitous/motis-containers.js";
 import { fetchWithTimeout } from "./jobs/transitous/motis-probe.js";
+import type { MotisOperationsPolicy } from "./jobs/transitous/operations-profile.js";
 import { finalizeJobRow, makePersistingOnStageComplete } from "./jobs/transitous/persistence.js";
 import type { SingleFlightController } from "./jobs/transitous/single-flight.js";
 import {
@@ -54,7 +59,7 @@ import { envString } from "./utils/env.js";
  * enough that European feed publishers have rolled their nightly bundles,
  * early enough that operators see the result before their morning. The
  * feed-proxy reload heartbeat fires every 15 minutes so a freshly-written
- * `feed-proxy.conf` from a previous sync stage is picked up within a quarter
+ * `conf/default.conf` from a previous sync stage is picked up within a quarter
  * hour even if the sync's own `nginx -s reload` failed (network glitch,
  * container restart, etc.).
  */
@@ -113,6 +118,7 @@ export interface CronSetupOptions {
   dataDir: string;
   repoRoot: string;
   countries: string[];
+  operationsPolicy?: MotisOperationsPolicy;
   store: StateStore;
   singleFlight: SingleFlightController;
   logger: FastifyBaseLogger | CronLogger;
@@ -367,7 +373,12 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         );
 
   let lastFeedProxyReloadAt: number | null = null;
-  const feedProxyConfPath = join(options.dataDir, "motis-feed-proxy", "conf", "feed-proxy.conf");
+  const feedProxyConfPath = join(
+    options.dataDir,
+    "motis-feed-proxy",
+    FEED_PROXY_CONFIG_SUBDIR,
+    FEED_PROXY_CONFIG_FILENAME,
+  );
 
   const runSync = async (): Promise<void> => {
     const start = await options.singleFlight.tryStartSync({
@@ -397,6 +408,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
           countries: options.countries,
           repoRoot: options.repoRoot,
           source: parseTransitSource(),
+          operationsPolicy: options.operationsPolicy,
           jobId: start.jobId,
           logger: jobLog,
           onStageComplete: makePersistingOnStageComplete(start.jobId, jobLog),
@@ -469,7 +481,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     try {
       mtimeMs = statSync(feedProxyConfPath).mtimeMs;
     } catch (err) {
-      log.warn("transitous-cron: feed-proxy.conf stat failed", {
+      log.warn(`transitous-cron: ${FEED_PROXY_CONFIG_FILENAME} stat failed`, {
         err: (err as Error).message,
       });
       return;

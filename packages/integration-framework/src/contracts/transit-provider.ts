@@ -8,6 +8,7 @@ import type {
   TransitRoute,
   TransitStop,
   TransitStopInfrastructure,
+  TripItinerary,
   TripPlan,
   VehicleJourney,
   VehiclePosition,
@@ -48,6 +49,8 @@ export interface TransitCapabilities {
     geometry: boolean;
   };
   planning: boolean;
+  /** Explicit planning matrix. Missing means every advanced constraint is unsupported. */
+  planningFeatures?: TransitPlanningCapabilities;
   vehiclePositions: boolean;
   vehicleJourney: boolean;
   alerts: {
@@ -56,6 +59,55 @@ export interface TransitCapabilities {
     byBbox: boolean;
   };
   facilities: boolean;
+}
+
+export interface TransitPlanningMetadata {
+  source: string;
+  instance: string;
+  datasetEpoch: string;
+  rentalFormFactors: TransitRentalFormFactor[];
+}
+
+export type TransitProviderRole = "baseline" | "fallback" | "enrichment" | "regional";
+
+export interface TransitPlanningCapabilities {
+  maxTransfers: boolean;
+  transferBuffer: boolean;
+  wheelchairRequired: boolean;
+  bikeTransport: boolean;
+  elevation: boolean;
+  rentalFilters: boolean;
+  detailedTransfers: boolean;
+  paging: boolean;
+  refresh: boolean;
+}
+
+export type TransitRentalFormFactor =
+  | "BICYCLE"
+  | "CARGO_BICYCLE"
+  | "SCOOTER_STANDING"
+  | "SCOOTER_SEATED"
+  | "CAR"
+  | "MOPED";
+export type TransitRentalPropulsion =
+  | "HUMAN"
+  | "ELECTRIC_ASSIST"
+  | "ELECTRIC"
+  | "COMBUSTION"
+  | "HYBRID";
+export interface TransitRentalFilter {
+  formFactors?: TransitRentalFormFactor[];
+  propulsionTypes?: TransitRentalPropulsion[];
+  providerIds?: string[];
+  groupIds?: string[];
+  source: string;
+  instance: string;
+  datasetEpoch: string;
+}
+export interface TransitRentalFilters {
+  direct?: TransitRentalFilter;
+  preTransit?: TransitRentalFilter;
+  postTransit?: TransitRentalFilter;
 }
 
 export interface TripPlanRequest {
@@ -67,6 +119,14 @@ export interface TripPlanRequest {
   modes?: string[];
   /** When true, request wheelchair-accessible routing (MOTIS pedestrianProfile=WHEELCHAIR). */
   wheelchair?: boolean;
+  wheelchairRequired?: boolean;
+  maxTransfers?: number;
+  transferBuffer?: "standard" | "relaxed" | "extra";
+  requireBikeTransport?: boolean;
+  bikeHillPreference?: "default" | "avoid" | "strongly-avoid";
+  rentalFilters?: TransitRentalFilters;
+  capabilityEpoch?: string;
+  pageCursor?: string;
   /** MOTIS `preTransitModes` — first-mile access modes (e.g. ["BIKE"], ["CAR_PARKING"]). */
   preTransitModes?: string[];
   /** MOTIS `postTransitModes` — last-mile egress modes. */
@@ -82,6 +142,15 @@ export interface TripPlanRequest {
    * "Nur Deutschlandticket-Verbindungen" filter.
    */
   deutschlandticketOnly?: boolean;
+}
+
+export interface TripRefreshRequest {
+  itineraryId: string;
+  datasetEpoch: string;
+  modes?: string[];
+  wheelchairRequired?: boolean;
+  requireBikeTransport?: boolean;
+  detailedTransfers?: boolean;
 }
 
 // Re-exported so consumers of the framework barrel don't need a separate
@@ -100,7 +169,10 @@ export interface TransitProvider {
   readonly prefix: string;
   readonly coverage: { bbox: BBox } | { all: true };
   readonly priority: number;
+  /** Operation policy role; legacy providers default to `enrichment`. */
+  readonly role?: TransitProviderRole;
   readonly capabilities: TransitCapabilities;
+  readonly planningMetadata?: TransitPlanningMetadata;
   readonly attribution: Attribution[];
 
   getStop?(id: string): Promise<MobilityResult<TransitStop | null>>;
@@ -131,6 +203,7 @@ export interface TransitProvider {
   ): Promise<MobilityResult<LineString | null>>;
 
   planTrip?(opts: TripPlanRequest): Promise<MobilityResult<TripPlan[]>>;
+  refreshTrip?(opts: TripRefreshRequest): Promise<MobilityResult<TripItinerary | null>>;
   getVehicleJourney?(
     tripId: string,
     fallbackIds?: string[],
@@ -148,7 +221,7 @@ export interface TransitProvider {
    * because no consumer drives them today; kept on the interface so providers
    * (e.g. transit-overpass for route geometry) can opt in incrementally.
    */
-  getRoutesInBbox?(bbox: BBox): Promise<MobilityResult<TransitRoute[]>>;
+  getRoutesInBbox?(bbox: BBox, zoom?: number): Promise<MobilityResult<TransitRoute[]>>;
   getReachableStops?(
     lat: number,
     lng: number,

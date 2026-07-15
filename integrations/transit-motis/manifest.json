@@ -38,6 +38,31 @@
         "type": "string",
         "title": "MOTIS data directory",
         "description": "Filesystem path to the MOTIS data directory (for `license.json` attribution lookup)."
+      },
+      "providerPolicy": {
+        "type": "boolean",
+        "default": true,
+        "description": "Use explicit baseline/regional/fallback provider policy. Disable for rollback."
+      },
+      "localRouteOverlay": {
+        "type": "boolean",
+        "default": true,
+        "description": "Serve operated route-network geometry from local MOTIS. Disable for cloud rollback."
+      },
+      "realtimeCompletenessSkip": {
+        "type": "boolean",
+        "default": true,
+        "description": "Skip duplicate agency lookups for MOTIS realtime-merged departures."
+      },
+      "itineraryRefresh": {
+        "type": "boolean",
+        "default": true,
+        "description": "Issue and accept safe, epoch-bound MOTIS itinerary refreshes."
+      },
+      "hostedRuntimeFallback": {
+        "type": "boolean",
+        "default": true,
+        "description": "Allow hosted Transitous runtime fallback. Must be disabled for regional-sovereign deployments."
       }
     }
   },
@@ -45,11 +70,6 @@
     "routes": true
   },
   "healthCheck": [
-    {
-      "name": "Transitous",
-      "type": "http",
-      "url": "https://api.transitous.org/api/v1/geocode?text=test"
-    },
     {
       "name": "MOTIS self-hosted",
       "type": "ping",
@@ -66,7 +86,7 @@
       "licenseUrl": "https://transitous.org/sources/",
       "commercialUse": "conditional",
       "attribution": "Public transport data via Transitous — see transitous.org/sources/",
-      "notes": "The Transitous public API (api.transitous.org) is 'not intended for commercial or for-profit purposes' — commercial use is decided case-by-case on request, and open-source clients must publish their source and visibly link transitous.org/sources/ for attribution (see transitous.org/api/). The MOTIS routing software is AGPL-3.0-or-later, but that licenses the software, not the data; the aggregated timetable data is per upstream feed (mostly CC-BY / CC-BY-SA / open-government licences).",
+      "notes": "The Transitous public API (api.transitous.org) is 'not intended for commercial or for-profit purposes' — commercial use is decided case-by-case on request, and open-source clients must publish their source and visibly link transitous.org/sources/ for attribution (see transitous.org/api/). Upstream MOTIS is MIT licensed; that software license is separate from OpenMapX integration code, Transitous tooling, and the per-source timetable data licenses (mostly CC-BY / CC-BY-SA / open-government licences).",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://transitous.org/privacy/",
       "endUserExposure": "server-only",

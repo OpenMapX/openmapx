@@ -21,7 +21,10 @@ vi.mock("@openmapx/mobility-core/gbfs-provider-base", () => ({
 
 vi.mock("@openmapx/mobility-core/entur-mobility", () => ({
   enrichEnturMobilityItems: vi.fn().mockResolvedValue(undefined),
-  buildEnturGeofencingMapContext: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock("@openmapx/mobility-core/shared-mobility-context", () => ({
+  buildSharedMobilityMapContext: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@openmapx/mobility-core/motis-rentals", () => ({
@@ -43,10 +46,7 @@ vi.mock("@openmapx/mobility-core/mapper", () => ({
 }));
 
 import { dedupStations } from "@openmapx/mobility-core/dedup";
-import {
-  buildEnturGeofencingMapContext,
-  enrichEnturMobilityItems,
-} from "@openmapx/mobility-core/entur-mobility";
+import { enrichEnturMobilityItems } from "@openmapx/mobility-core/entur-mobility";
 import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
@@ -58,6 +58,7 @@ import {
   mapVehicleToResult,
 } from "@openmapx/mobility-core/mapper";
 import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
+import { buildSharedMobilityMapContext } from "@openmapx/mobility-core/shared-mobility-context";
 import { searchFelyx } from "../providers/felyx-client.js";
 import { searchNrwMobidrom } from "../providers/nrw-mobidrom-client.js";
 import { scooterSharingProvider } from "../providers/provider.js";
@@ -132,10 +133,7 @@ describe("scooterSharingProvider.search", () => {
     const dedupCall = vi.mocked(dedupStations).mock.calls[0][0] as SharedMobilityStation[];
     expect(fetchSwissSharedMobilityDataForBbox).toHaveBeenCalledOnce();
     expect(dedupCall).toHaveLength(3);
-    expect(dedupCall[0].id).toBe("gbfs1");
-    // Aggregator sources are appended last (NRW, then MOTIS) so direct GBFS takes dedup priority
-    expect(dedupCall[1].id).toBe("nrw1");
-    expect(dedupCall[2].id).toBe("mo1");
+    expect(dedupCall.map((station) => station.id)).toEqual(["mo1", "gbfs1", "nrw1"]);
   });
 
   it("vehicles from all 4 sources collected (GBFS, Felyx, NRW, MOTIS)", async () => {
@@ -265,7 +263,7 @@ describe("scooterSharingProvider.search", () => {
 
     await scooterSharingProvider.search(makeBbox());
 
-    expect(enrichEnturMobilityItems).toHaveBeenCalledWith([station], [vehicle]);
+    expect(enrichEnturMobilityItems).toHaveBeenCalledWith([station], [vehicle], { scope: "map" });
   });
 });
 
@@ -327,12 +325,16 @@ describe("scooterSharingProvider.getDetail", () => {
     expect(result).toBeNull();
   });
 
-  it("delegates map context to Entur geofencing builder", async () => {
+  it("delegates map context to the MOTIS-first shared builder", async () => {
     const bbox = makeBbox();
     const options = { systemIds: ["voioslo"], vehicleTypeIds: ["scooter"] };
 
     await scooterSharingProvider.getMapContext(bbox, {}, options);
 
-    expect(buildEnturGeofencingMapContext).toHaveBeenCalledWith(bbox, options);
+    expect(buildSharedMobilityMapContext).toHaveBeenCalledWith(
+      bbox,
+      new Set(["scooter_standing", "scooter_seated", "moped"]),
+      options,
+    );
   });
 });

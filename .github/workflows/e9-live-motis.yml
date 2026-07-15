@@ -38,7 +38,9 @@ jobs:
         # Pulling here (rather than letting the test do it) gives us a
         # clean error if the registry is unreachable, separate from a
         # legitimate pipeline failure.
-        run: docker pull ghcr.io/motis-project/motis:latest
+        run: |
+          docker pull ghcr.io/motis-project/motis:2.10.2
+          docker pull nginx:1.27-alpine
 
       - name: Run live MOTIS pipeline test
         # Runs from the repo root against the single root Vitest config; the

@@ -17,6 +17,7 @@ import {
   formatDistance,
   formatDuration,
   useNavigationStore,
+  useRefreshTransitItinerary,
   useVehicleJourney,
 } from "@openmapx/core";
 import type { OccupancyLevel, TripItinerary, TripLeg } from "@openmapx/mobility-core/transit";
@@ -227,6 +228,7 @@ export function TransitItineraryCard({
   replanOptions,
   onSelect,
   onDetails,
+  onRefreshed,
 }: {
   itinerary: TripItinerary;
   active: boolean;
@@ -234,6 +236,7 @@ export function TransitItineraryCard({
   replanOptions?: TransitReplanOptions;
   onSelect: () => void;
   onDetails: () => void;
+  onRefreshed?: (itinerary: TripItinerary, changed: boolean, fallbackOccurred: boolean) => void;
 }) {
   const t = useTranslations("directions");
   const tc = useTranslations("common");
@@ -242,6 +245,7 @@ export function TransitItineraryCard({
   const locale = useLocale();
   const fmt = useDateTimeFormat();
   const startTransitNavigation = useNavigationStore((s) => s.startTransitNavigation);
+  const refreshMutation = useRefreshTransitItinerary();
   const fareSummary = extractFareSummary(itinerary.fare);
   const occupancy = worstOccupancy(itinerary);
   const startTime = fmt.time(itinerary.startTime);
@@ -375,8 +379,34 @@ export function TransitItineraryCard({
             size="small"
             variant="contained"
             startIcon={<NavigationIcon />}
-            onClick={(e) => {
+            disabled={refreshMutation.isPending}
+            onClick={async (e) => {
               e.stopPropagation();
+              const plannedAt = itinerary.refreshedAt ?? itinerary.plannedAt;
+              const oldEnough = !plannedAt || Date.now() - new Date(plannedAt).getTime() >= 60_000;
+              if (itinerary.refreshToken && oldEnough) {
+                try {
+                  const response = await refreshMutation.mutateAsync(itinerary.refreshToken);
+                  const next = response.data.itinerary;
+                  const changed =
+                    next.startTime !== itinerary.startTime ||
+                    next.endTime !== itinerary.endTime ||
+                    next.legs.length !== itinerary.legs.length ||
+                    next.legs.some(
+                      (leg, index) =>
+                        leg.startTime !== itinerary.legs[index]?.startTime ||
+                        leg.endTime !== itinerary.legs[index]?.endTime ||
+                        leg.from.platformCode !== itinerary.legs[index]?.from.platformCode ||
+                        leg.to.platformCode !== itinerary.legs[index]?.to.platformCode,
+                    );
+                  onRefreshed?.(next, changed, response.data.fallbackOccurred);
+                  startTransitNavigation(next, replanOptions);
+                  return;
+                } catch {
+                  // A failed optional refresh must not block navigation; the
+                  // existing missed-connection path still performs a full replan.
+                }
+              }
               startTransitNavigation(itinerary, replanOptions);
             }}
             sx={{

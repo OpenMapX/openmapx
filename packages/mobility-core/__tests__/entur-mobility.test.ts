@@ -294,6 +294,31 @@ describe("buildEnturGeofencingMapContext", () => {
 });
 
 describe("enrichEnturMobilityItems", () => {
+  it("omits pricing and full vehicle-type resources from map-time enrichment", async () => {
+    vi.mocked(loadCatalog).mockResolvedValue([
+      {
+        countryCode: "NO",
+        location: "Norway",
+        name: "Entur test",
+        systemId: "entur-system",
+        url: "https://example.com/feed",
+        autoDiscoveryUrl: "https://api.entur.io/mobility/v2/gbfs/v3/manifest.json",
+      },
+    ]);
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { stations: [], vehicles: [] } }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await enrichEnturMobilityItems([makeStation()], [], { scope: "map" });
+
+    const requestBody = String(fetchSpy.mock.calls[0]?.[1]?.body);
+    expect(requestBody).not.toContain("pricingPlans");
+    expect(requestBody).not.toContain("vehicleTypesAvailable");
+    expect(requestBody).toContain("brandAssets");
+  });
+
   it("merges Entur pricing into existing pricing without overwriting current details", async () => {
     vi.mocked(loadCatalog).mockResolvedValue([
       {

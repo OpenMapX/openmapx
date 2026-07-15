@@ -1,13 +1,39 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildFeedProxyConfig } from "@openmapx/motis-feed-proxy-config";
-import { rewriteRtUrls } from "@openmapx/transitous-core";
+import {
+  buildFeedProxyConfig,
+  FEED_PROXY_CONFIG_FILENAME,
+  FEED_PROXY_CONFIG_SUBDIR,
+  FEED_PROXY_VARS_FILENAME,
+  writeFeedProxyVarsFile,
+} from "@openmapx/motis-feed-proxy-config";
+import { findHostedGbfsFeedIds, rewriteHostedFeedProxy } from "@openmapx/transitous-core";
+import { CANDIDATE_PROXY_DIRNAME } from "./candidate.js";
 import { applyConfigOverrides } from "./config-overrides.js";
-import { FEED_PROXY_CONTAINER } from "./motis-containers.js";
 import type { JobContext, StageFn, StageResult } from "./types.js";
 
-const FEED_PROXY_CONF_REL = "motis-feed-proxy/conf/feed-proxy.conf";
 const DEFAULT_FEED_PROXY_URL = "http://motis-feed-proxy";
+const HOSTED_TRANSIT_RUNTIME_DOMAINS = ["transitous.org", "triptix.tech"] as const;
+
+function assertSovereignRuntimeConfig(config: string): void {
+  const prohibited = [...config.matchAll(/https?:\/\/[^\s"'<>]+/g)]
+    .map((match) => match[0].replace(/[),\]}]+$/, ""))
+    .filter((url) => {
+      try {
+        const hostname = new URL(url).hostname.toLowerCase();
+        return HOSTED_TRANSIT_RUNTIME_DOMAINS.some(
+          (domain) => hostname === domain || hostname.endsWith(`.${domain}`),
+        );
+      } catch {
+        return true;
+      }
+    });
+  if (prohibited.length > 0) {
+    throw new Error(
+      `regional-sovereign config contains prohibited hosted runtime URLs: ${[...new Set(prohibited)].join(", ")}`,
+    );
+  }
+}
 
 // Mirrors services/motis/tools/transitous/run.sh: merge the `--feed-proxy`
 // output (/tmp/feed-proxy-vars.yml) with the catalog's curated feed-whitelist
@@ -95,10 +121,13 @@ export async function generateFeedProxyConfig(
     varsJson && typeof varsJson === "object"
       ? Object.keys(varsJson as Record<string, unknown>)
       : [];
-  const targetPath = join(ctx.dataDir, FEED_PROXY_CONF_REL);
+  const proxyRoot = join(catalogDir, "out", CANDIDATE_PROXY_DIRNAME);
+  const targetPath = join(proxyRoot, FEED_PROXY_CONFIG_SUBDIR, FEED_PROXY_CONFIG_FILENAME);
+  const persistedVarsPath = join(proxyRoot, FEED_PROXY_VARS_FILENAME);
   let entries = 0;
   try {
-    const result = await buildFeedProxyConfig({ varsJson, outputPath: targetPath });
+    const normalizedVars = writeFeedProxyVarsFile(persistedVarsPath, varsJson);
+    const result = await buildFeedProxyConfig({ varsJson: normalizedVars, outputPath: targetPath });
     entries = result.entries;
   } catch (error) {
     ctx.logger.warn(
@@ -107,32 +136,17 @@ export async function generateFeedProxyConfig(
     return { configPath: null, written: false, reloaded: false, entries: 0, feedIds: [] };
   }
 
-  // Signal nginx reload — best effort. If the container isn't running or the
-  // data-manager process can't reach the docker socket, we log a warning and
-  // leave the freshly-written config on disk for the next container start.
-  let reloaded = false;
-  let reloadError: string | undefined;
-  try {
-    await ctx.runner("docker", ["exec", FEED_PROXY_CONTAINER, "nginx", "-s", "reload"], {
-      cwd: ctx.dataDir,
-      stdio: "pipe",
-    });
-    reloaded = true;
-  } catch (error) {
-    reloadError = (error as Error).message;
-    ctx.logger.warn(
-      `transitous-pipeline: feed-proxy nginx reload failed (${reloadError}); config written but not yet active`,
-    );
-  }
-
-  return { configPath: targetPath, written: true, reloaded, reloadError, entries, feedIds };
+  // This is an immutable candidate artifact. Plan 002's proxy transaction
+  // validates and activates a union with the current live routes only after
+  // assembly; config generation must never mutate live nginx state.
+  return { configPath: targetPath, written: true, reloaded: false, entries, feedIds };
 }
 
 /**
  * Run Transitous's `src/generate-motis-config.py` (without `--import-only`).
  * Produces the runtime config the MOTIS server will load after promotion, and
- * additionally renders the feed-proxy nginx config from `--feed-proxy` output
- * + signals `nginx -s reload` in the `motis-feed-proxy` container (best effort).
+ * additionally renders an immutable feed-proxy candidate from `--feed-proxy`
+ * output. Activation is owned by the later transactional proxy stage.
  */
 export const run: StageFn = async (ctx) => {
   const startedAt = ctx.now();
@@ -159,6 +173,9 @@ export const run: StageFn = async (ctx) => {
       { cwd: catalogDir, stdio: "pipe" },
     );
     const configPath = join(catalogDir, "out", "config.yml");
+    if (!existsSync(configPath)) {
+      throw new Error(`generate-motis-config.py did not produce ${configPath}`);
+    }
     // Apply the SAME post-processors as gen-motis-config so the runtime config
     // the live MOTIS serves agrees with the import-only config staging built
     // against — most importantly the `osm:` extract, whose mismatch (a stale
@@ -166,6 +183,11 @@ export const run: StageFn = async (ctx) => {
     const overrides = applyConfigOverrides(configPath, ctx.logger);
 
     const feedProxy = await generateFeedProxyConfig(ctx, catalogDir);
+    if (!feedProxy.written || !feedProxy.configPath) {
+      throw new Error(
+        "Feed proxy candidate could not be rendered; refusing an unproxied MOTIS config",
+      );
+    }
 
     // Repoint the runtime config's realtime URLs (Transitous's hosted
     // rt.triptix.tech) onto OUR feed-proxy so realtime is independent of
@@ -177,14 +199,27 @@ export const run: StageFn = async (ctx) => {
     const feedProxyUrl =
       ctx.feedProxyUrl || process.env.OPENMAPX_TRANSITOUS_FEED_PROXY_URL || DEFAULT_FEED_PROXY_URL;
     let rtRewritten = 0;
+    let gbfsProxyRewritten = 0;
     if (existsSync(configPath)) {
-      const result = rewriteRtUrls(
+      const result = rewriteHostedFeedProxy(
         readFileSync(configPath, "utf-8"),
         feedProxyUrl,
         new Set(feedProxy.feedIds),
       );
-      rtRewritten = result.replaced;
-      if (rtRewritten > 0) writeFileSync(configPath, result.text, "utf-8");
+      rtRewritten = result.counts.realtimeUrls;
+      gbfsProxyRewritten = result.counts.gbfsProxy;
+      const missingGbfsFeedIds = findHostedGbfsFeedIds(result.text);
+      if (missingGbfsFeedIds.length > 0) {
+        throw new Error(
+          `Local feed proxy is missing configured GBFS feeds: ${missingGbfsFeedIds.join(", ")}`,
+        );
+      }
+      if (rtRewritten > 0 || gbfsProxyRewritten > 0) {
+        writeFileSync(configPath, result.text, "utf-8");
+      }
+      if (ctx.operationsPolicy.profile === "regional-sovereign") {
+        assertSovereignRuntimeConfig(result.text);
+      }
     }
 
     return {
@@ -198,6 +233,7 @@ export const run: StageFn = async (ctx) => {
         configPath,
         ...overrides,
         rtRewritten,
+        gbfsProxyRewritten,
         feedProxyConfigPath: feedProxy.configPath,
         feedProxyWritten: feedProxy.written,
         feedProxyEntries: feedProxy.entries,

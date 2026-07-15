@@ -55,7 +55,7 @@ describe("readFeedOverlay", () => {
     const path = join(tmp, "feeds-overlay.json");
     writeFileSync(path, JSON.stringify({ comment: "no patches yet" }));
     const overlay = readFeedOverlay(path);
-    expect(overlay).toEqual({ patches: [] });
+    expect(overlay).toEqual({ schemaVersion: 2, patches: [], additions: [], quarantine: [] });
   });
 
   it("throws when patches is not an array", () => {
@@ -90,6 +90,9 @@ describe("applyFeedOverlay", () => {
       },
     ];
     const result = applyFeedOverlay(feeds, {
+      schemaVersion: 2,
+      additions: [],
+      quarantine: [],
       patches: [
         {
           region: "de",
@@ -120,6 +123,9 @@ describe("applyFeedOverlay", () => {
       },
     ];
     const result = applyFeedOverlay(feeds, {
+      schemaVersion: 2,
+      additions: [],
+      quarantine: [],
       patches: [
         // Region missing entirely.
         { region: "fr", name: "sncf", patch: { url: "https://override.example" } },
@@ -146,10 +152,51 @@ describe("applyFeedOverlay", () => {
       },
     ];
     const result = applyFeedOverlay(feeds, {
+      schemaVersion: 2,
+      additions: [],
+      quarantine: [],
       patches: [{ region: "de", name: "duplicate", patch: { "api-key": "shared" } }],
     });
     expect(result.applied).toBe(2);
     expect(feeds[0].sources?.[0]).toMatchObject({ "api-key": "shared" });
     expect(feeds[0].sources?.[1]).toMatchObject({ "api-key": "shared" });
+  });
+
+  it("adds GBFS sources before patches and excludes quarantined IDs", () => {
+    const feeds: FeedFile[] = [{ region: "de", sources: [] }];
+    const result = applyFeedOverlay(feeds, {
+      schemaVersion: 2,
+      additions: [
+        {
+          region: "de",
+          name: "added",
+          spec: "gbfs",
+          type: "url",
+          url: "https://example.test/gbfs.json",
+          sourceId: "one",
+        },
+        {
+          region: "de",
+          name: "blocked",
+          spec: "gbfs",
+          type: "url",
+          url: "https://blocked.test/gbfs.json",
+          sourceId: "two",
+        },
+      ],
+      patches: [{ region: "de", name: "added", patch: { license: "ODbL" } }],
+      quarantine: [
+        {
+          sourceId: "two",
+          reason: "invalid",
+          firstSeen: "2026-01-01T00:00:00Z",
+          lastChecked: "2026-01-02T00:00:00Z",
+        },
+      ],
+    });
+    expect(result).toMatchObject({ added: 1, applied: 1, quarantined: 1 });
+    expect(feeds[0].sources).toEqual([
+      expect.objectContaining({ name: "added", spec: "gbfs", license: "ODbL" }),
+    ]);
   });
 });

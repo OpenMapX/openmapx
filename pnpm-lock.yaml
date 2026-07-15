@@ -103,6 +103,9 @@ importers:
       '@openmapx/poi-source-registry':
         specifier: workspace:^
         version: link:../../packages/poi-source-registry
+      '@openmapx/transitous-core':
+        specifier: workspace:^
+        version: link:../../packages/transitous-core
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
@@ -1916,6 +1919,9 @@ importers:
       '@openmapx/mobility-formats':
         specifier: workspace:^
         version: link:../mobility-formats
+      '@openmapx/transitous-core':
+        specifier: workspace:^
+        version: link:../transitous-core
       spdx-license-list:
         specifier: ^6.11.0
         version: 6.11.0
@@ -2074,6 +2080,13 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.0.16(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))
 
   packages/transitous-core:
+    dependencies:
+      '@openmapx/mobility-formats':
+        specifier: workspace:^
+        version: link:../mobility-formats
+      js-yaml:
+        specifier: ^5.2.1
+        version: 5.2.1
     devDependencies:
       '@types/node':
         specifier: ^24.13.2
@@ -2087,6 +2100,9 @@ importers:
 
   services/data-manager:
     dependencies:
+      '@motis-project/motis-client':
+        specifier: 2.10.2
+        version: 2.10.2
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core

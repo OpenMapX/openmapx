@@ -16,13 +16,19 @@ export const run: StageFn = async (ctx) => {
     const catalogDir = ctx.state.catalogDir ?? ctx.catalogDir;
     const scriptPath = join(catalogDir, "src", "generate-attribution.py");
     if (!existsSync(scriptPath)) {
+      const configPath = join(catalogDir, "out", "config.yml");
       return {
         stage: "gen-attribution",
-        status: "skipped",
+        // A deliberately partial dev/test catalog has no candidate at all.
+        // Once a config exists, however, attribution is part of the immutable
+        // tuple and must fail closed.
+        status: existsSync(configPath) ? "error" : "skipped",
         startedAt,
         finishedAt: ctx.now(),
         durationMs: Date.now() - start,
-        message: `generate-attribution.py not present at ${scriptPath}`,
+        message: existsSync(configPath)
+          ? `generate-attribution.py not present at ${scriptPath}; candidate attribution is required`
+          : `generate-attribution.py not present at ${scriptPath}; no candidate config was generated`,
       } satisfies StageResult;
     }
     await ctx.runner("python3", ["./src/generate-attribution.py"], {

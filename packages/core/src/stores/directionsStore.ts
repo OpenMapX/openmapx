@@ -64,6 +64,11 @@ export interface DirectionsState {
   transitRoutePreference: TransitRoutePreference;
   /** First/last-mile access mode for intermodal transit (walk/bike/car). */
   transitAccessMode: TransitAccessMode;
+  wheelchairRequired: boolean;
+  maxTransfers: number | null;
+  transferBuffer: "standard" | "relaxed" | "extra";
+  requireBikeTransport: boolean;
+  bikeHillPreference: "default" | "avoid" | "strongly-avoid";
   /** Germany-only: restrict transit to Deutschlandticket-covered services. */
   deutschlandticketOnly: boolean;
 
@@ -96,6 +101,11 @@ export interface DirectionsState {
   toggleTransitPreferredMode: (key: TransitPreferKey) => void;
   setTransitRoutePreference: (p: TransitRoutePreference) => void;
   setTransitAccessMode: (m: TransitAccessMode) => void;
+  setWheelchairRequired: (v: boolean) => void;
+  setMaxTransfers: (v: number | null) => void;
+  setTransferBuffer: (v: "standard" | "relaxed" | "extra") => void;
+  setRequireBikeTransport: (v: boolean) => void;
+  setBikeHillPreference: (v: "default" | "avoid" | "strongly-avoid") => void;
   setDeutschlandticketOnly: (v: boolean) => void;
 }
 
@@ -124,6 +134,11 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     transitPreferredModes: [],
     transitRoutePreference: "best" as const,
     transitAccessMode: "walk" as const,
+    wheelchairRequired: false,
+    maxTransfers: null,
+    transferBuffer: "standard" as const,
+    requireBikeTransport: false,
+    bikeHillPreference: "default" as const,
     deutschlandticketOnly: false,
 
     open: () => set({ isOpen: true }),
@@ -141,6 +156,11 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
         transitPreferredModes: [],
         transitRoutePreference: "best" as const,
         transitAccessMode: "walk" as const,
+        wheelchairRequired: false,
+        maxTransfers: null,
+        transferBuffer: "standard" as const,
+        requireBikeTransport: false,
+        bikeHillPreference: "default" as const,
         deutschlandticketOnly: false,
       });
     },
@@ -218,7 +238,19 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     setTransitRoutePreference: (transitRoutePreference) =>
       set({ transitRoutePreference, activeItineraryIndex: 0 }),
     setTransitAccessMode: (transitAccessMode) =>
-      set({ transitAccessMode, activeItineraryIndex: 0 }),
+      set({
+        transitAccessMode,
+        activeItineraryIndex: 0,
+        ...(transitAccessMode !== "bike" ? { requireBikeTransport: false } : {}),
+      }),
+    setWheelchairRequired: (wheelchairRequired) =>
+      set({ wheelchairRequired, activeItineraryIndex: 0 }),
+    setMaxTransfers: (maxTransfers) => set({ maxTransfers, activeItineraryIndex: 0 }),
+    setTransferBuffer: (transferBuffer) => set({ transferBuffer, activeItineraryIndex: 0 }),
+    setRequireBikeTransport: (requireBikeTransport) =>
+      set({ requireBikeTransport, activeItineraryIndex: 0 }),
+    setBikeHillPreference: (bikeHillPreference) =>
+      set({ bikeHillPreference, activeItineraryIndex: 0 }),
     setDeutschlandticketOnly: (deutschlandticketOnly) =>
       set({ deutschlandticketOnly, activeItineraryIndex: 0 }),
   };

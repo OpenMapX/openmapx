@@ -6,6 +6,10 @@ import RadioButtonCheckedIcon from "@mui/icons-material/RadioButtonChecked";
 import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
 import Typography from "@mui/material/Typography";
 import {
   TRANSIT_ACCESS_OPTIONS,
@@ -15,6 +19,7 @@ import {
   useDirectionsStore,
   useRouteInGermany,
   useSettingsStore,
+  useTransitPlanningCapabilities,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { TEAL } from "@/lib/theme";
@@ -47,6 +52,15 @@ function CheckRow({
   return (
     <Box
       onClick={() => onChange(!checked)}
+      role="checkbox"
+      aria-checked={checked}
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === " " || event.key === "Enter") {
+          event.preventDefault();
+          onChange(!checked);
+        }
+      }}
       sx={{
         display: "flex",
         alignItems: "center",
@@ -70,20 +84,33 @@ function RadioRow({
   label,
   selected,
   onSelect,
+  disabled = false,
 }: {
   label: string;
   selected: boolean;
   onSelect: () => void;
+  disabled?: boolean;
 }) {
   return (
     <Box
-      onClick={onSelect}
+      onClick={disabled ? undefined : onSelect}
+      role="radio"
+      aria-checked={selected}
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled}
+      onKeyDown={(event) => {
+        if (!disabled && (event.key === " " || event.key === "Enter")) {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
       sx={{
         display: "flex",
         alignItems: "center",
         gap: 1,
         py: 0.5,
-        cursor: "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.45 : 1,
         "&:hover": { color: TEAL },
       }}
     >
@@ -108,12 +135,14 @@ const ROUTE_PREFERENCE_KEYS: { value: TransitRoutePreference; labelKey: string }
   { value: "best", labelKey: "bestRoute" },
   { value: "fewerTransfers", labelKey: "fewerTransfers" },
   { value: "lessWalking", labelKey: "lessWalking" },
-  { value: "wheelchair", labelKey: "wheelchairAccessible" },
 ];
 
 const ACCESS_MODE_LABEL_KEYS: Record<TransitAccessMode, string> = {
   walk: "accessWalk",
-  bike: "accessBike",
+  bike: "accessOwnBike",
+  bike_share: "accessBikeShare",
+  scooter_share: "accessScooterShare",
+  car_share: "accessCarShare",
   car: "accessCar",
 };
 
@@ -127,8 +156,24 @@ function TransitRouteOptions() {
   const setTransitRoutePreference = useDirectionsStore((s) => s.setTransitRoutePreference);
   const transitAccessMode = useDirectionsStore((s) => s.transitAccessMode);
   const setTransitAccessMode = useDirectionsStore((s) => s.setTransitAccessMode);
+  const wheelchairRequired = useDirectionsStore((s) => s.wheelchairRequired);
+  const setWheelchairRequired = useDirectionsStore((s) => s.setWheelchairRequired);
+  const maxTransfers = useDirectionsStore((s) => s.maxTransfers);
+  const setMaxTransfers = useDirectionsStore((s) => s.setMaxTransfers);
+  const transferBuffer = useDirectionsStore((s) => s.transferBuffer);
+  const setTransferBuffer = useDirectionsStore((s) => s.setTransferBuffer);
+  const requireBikeTransport = useDirectionsStore((s) => s.requireBikeTransport);
+  const setRequireBikeTransport = useDirectionsStore((s) => s.setRequireBikeTransport);
+  const bikeHillPreference = useDirectionsStore((s) => s.bikeHillPreference);
+  const setBikeHillPreference = useDirectionsStore((s) => s.setBikeHillPreference);
   const deutschlandticketOnly = useDirectionsStore((s) => s.deutschlandticketOnly);
   const setDeutschlandticketOnly = useDirectionsStore((s) => s.setDeutschlandticketOnly);
+  const { data: planningCapabilities } = useTransitPlanningCapabilities();
+  const availableRentalFactors = new Set(
+    planningCapabilities?.providers.flatMap(
+      (provider) => provider.metadata?.rentalFormFactors ?? [],
+    ) ?? [],
+  );
 
   // The Deutschlandticket is a German nationwide pass, so the option only makes
   // sense — and is only shown — when both endpoints resolve to Germany.
@@ -162,6 +207,49 @@ function TransitRouteOptions() {
       </Box>
       <Box>
         <Divider sx={{ mb: 1, mx: -2 }} />
+        <CheckRow
+          label={t("wheelchairRequired")}
+          checked={wheelchairRequired}
+          onChange={setWheelchairRequired}
+        />
+        <Box sx={{ display: "flex", gap: 1.5, mt: 1, flexWrap: "wrap" }}>
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <InputLabel id="max-transfers-label">{t("maximumTransfers")}</InputLabel>
+            <Select
+              labelId="max-transfers-label"
+              label={t("maximumTransfers")}
+              value={maxTransfers === null ? "" : String(maxTransfers)}
+              onChange={(event) =>
+                setMaxTransfers(event.target.value === "" ? null : Number(event.target.value))
+              }
+            >
+              <MenuItem value="">{t("maximumTransfersAny")}</MenuItem>
+              {[0, 1, 2, 3, 4].map((count) => (
+                <MenuItem key={count} value={String(count)}>
+                  {count}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 165 }}>
+            <InputLabel id="transfer-buffer-label">{t("connectionBuffer")}</InputLabel>
+            <Select
+              labelId="transfer-buffer-label"
+              label={t("connectionBuffer")}
+              value={transferBuffer}
+              onChange={(event) =>
+                setTransferBuffer(event.target.value as "standard" | "relaxed" | "extra")
+              }
+            >
+              <MenuItem value="standard">{t("bufferStandard")}</MenuItem>
+              <MenuItem value="relaxed">{t("bufferRelaxed")}</MenuItem>
+              <MenuItem value="extra">{t("bufferExtra")}</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
+      </Box>
+      <Box>
+        <Divider sx={{ mb: 1, mx: -2 }} />
         <ColumnHeading label={t("gettingThere")} />
         <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
           {TRANSIT_ACCESS_OPTIONS.map((m) => (
@@ -170,10 +258,47 @@ function TransitRouteOptions() {
               label={t(ACCESS_MODE_LABEL_KEYS[m])}
               selected={transitAccessMode === m}
               onSelect={() => setTransitAccessMode(m)}
+              disabled={
+                m === "bike_share"
+                  ? !["BICYCLE", "CARGO_BICYCLE"].some((factor) =>
+                      availableRentalFactors.has(factor),
+                    )
+                  : m === "scooter_share"
+                    ? !["SCOOTER_STANDING", "SCOOTER_SEATED", "MOPED"].some((factor) =>
+                        availableRentalFactors.has(factor),
+                      )
+                    : m === "car_share"
+                      ? !availableRentalFactors.has("CAR")
+                      : false
+              }
             />
           ))}
         </Box>
       </Box>
+      {transitAccessMode === "bike" && (
+        <Box>
+          <CheckRow
+            label={t("takeBikeAboard")}
+            checked={requireBikeTransport}
+            onChange={setRequireBikeTransport}
+          />
+          <FormControl size="small" sx={{ minWidth: 220, mt: 1 }}>
+            <InputLabel id="bike-hills-label">{t("bikeHillPreference")}</InputLabel>
+            <Select
+              labelId="bike-hills-label"
+              label={t("bikeHillPreference")}
+              value={bikeHillPreference}
+              onChange={(event) =>
+                setBikeHillPreference(event.target.value as "default" | "avoid" | "strongly-avoid")
+              }
+            >
+              <MenuItem value="default">{t("bikeHillsDefault")}</MenuItem>
+              <MenuItem value="avoid">{t("bikeHillsAvoid")}</MenuItem>
+              <MenuItem value="strongly-avoid">{t("bikeHillsStronglyAvoid")}</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
+      )}
       {bothInGermany && (
         <Box>
           <Divider sx={{ mb: 1, mx: -2 }} />

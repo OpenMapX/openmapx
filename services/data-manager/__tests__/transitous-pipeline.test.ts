@@ -269,7 +269,7 @@ describe("runTransitousPipeline (integration)", () => {
     );
 
     const ctx = buildJobContext({
-      countries: [],
+      countries: ["de", "us"],
       dataDir,
       store: new StateStore(dataDir),
       runner: async (command, args) => {

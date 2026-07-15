@@ -16,6 +16,7 @@ export interface TransitousLock {
 }
 
 export const TRANSITOUS_LOCK_RELATIVE_PATH = "infra/docker/transitous.lock.json";
+export const TRANSITOUS_PROPOSED_LOCK_RELATIVE_PATH = "infra/docker/transitous.lock.proposed.json";
 
 /**
  * Read the lockfile from `<repoRoot>/infra/docker/transitous.lock.json`.
@@ -24,7 +25,11 @@ export const TRANSITOUS_LOCK_RELATIVE_PATH = "infra/docker/transitous.lock.json"
  * first `transitous bump` run).
  */
 export function readTransitousLock(repoRoot: string): TransitousLock | null {
-  const lockPath = join(repoRoot, TRANSITOUS_LOCK_RELATIVE_PATH);
+  return readTransitousLockAt(repoRoot, TRANSITOUS_LOCK_RELATIVE_PATH);
+}
+
+function readTransitousLockAt(repoRoot: string, relativePath: string): TransitousLock | null {
+  const lockPath = join(repoRoot, relativePath);
   if (!existsSync(lockPath)) return null;
   const raw = readFileSync(lockPath, "utf-8");
   let parsed: unknown;
@@ -76,7 +81,15 @@ export function readTransitousLock(repoRoot: string): TransitousLock | null {
  * even though we do not currently ship a schema file alongside it.
  */
 export function writeTransitousLock(repoRoot: string, lock: TransitousLock): void {
-  const lockPath = join(repoRoot, TRANSITOUS_LOCK_RELATIVE_PATH);
+  writeTransitousLockAt(repoRoot, TRANSITOUS_LOCK_RELATIVE_PATH, lock);
+}
+
+export function writeTransitousLockProposal(repoRoot: string, lock: TransitousLock): void {
+  writeTransitousLockAt(repoRoot, TRANSITOUS_PROPOSED_LOCK_RELATIVE_PATH, lock);
+}
+
+function writeTransitousLockAt(repoRoot: string, relativePath: string, lock: TransitousLock): void {
+  const lockPath = join(repoRoot, relativePath);
   const payload = {
     $schema: "./transitous.lock.schema.json",
     ref: lock.ref,
@@ -86,6 +99,10 @@ export function writeTransitousLock(repoRoot: string, lock: TransitousLock): voi
     ...(lock.comment ? { comment: lock.comment } : {}),
   };
   writeFileSync(lockPath, `${JSON.stringify(payload, null, 2)}\n`, "utf-8");
+}
+
+export function readTransitousLockProposal(repoRoot: string): TransitousLock | null {
+  return readTransitousLockAt(repoRoot, TRANSITOUS_PROPOSED_LOCK_RELATIVE_PATH);
 }
 
 /**

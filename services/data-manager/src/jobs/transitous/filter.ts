@@ -151,25 +151,32 @@ function applyFeedsOverlayToCatalog(
   try {
     overlay = readFeedOverlay(overlayPath);
   } catch (error) {
-    logger.warn(
-      `transitous-pipeline: failed to read feeds overlay at ${overlayPath} (${(error as Error).message}); skipping overlay`,
+    throw new Error(
+      `transitous-pipeline: failed to read feeds overlay at ${overlayPath}: ${(error as Error).message}`,
     );
-    return 0;
   }
-  if (!overlay || overlay.patches.length === 0) return 0;
+  if (!overlay || (overlay.patches.length === 0 && overlay.additions.length === 0)) return 0;
   logger.info(
-    `transitous-pipeline: applying ${overlay.patches.length} feeds-overlay patch${overlay.patches.length === 1 ? "" : "es"} from ${overlayPath}`,
+    `transitous-pipeline: applying ${overlay.patches.length} feeds-overlay patch(es) and ${overlay.additions.length} addition(s) from ${overlayPath}`,
   );
 
-  const regionsToPatch = new Set(overlay.patches.map((entry) => entry.region));
+  const regionsToPatch = new Set([
+    ...overlay.patches.map((entry) => entry.region),
+    ...overlay.additions.map((entry) => entry.region),
+  ]);
   const feedFiles: FeedFile[] = [];
   const feedPaths = new Map<string, string>();
   for (const region of regionsToPatch) {
     const feedPath = join(catalogDir, "feeds", `${region}.json`);
     if (!existsSync(feedPath)) {
-      logger.warn(
-        `transitous-pipeline: feeds-overlay region "${region}" has no matching catalog file (${feedPath})`,
-      );
+      if (overlay.additions.some((entry) => entry.region === region)) {
+        feedFiles.push({ region, sources: [] });
+        feedPaths.set(region, feedPath);
+      } else {
+        logger.warn(
+          `transitous-pipeline: feeds-overlay region "${region}" has no matching catalog file (${feedPath})`,
+        );
+      }
       continue;
     }
     try {
@@ -198,5 +205,5 @@ function applyFeedsOverlayToCatalog(
       `transitous-pipeline: feeds-overlay patch (region=${unmatched.region}, name=${unmatched.name}) had no matching source — silently no-oped`,
     );
   }
-  return overlay.patches.length;
+  return overlay.patches.length + overlay.additions.length;
 }

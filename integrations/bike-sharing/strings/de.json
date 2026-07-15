@@ -9,7 +9,8 @@
     "book": "Buchen",
     "apps": "Apps",
     "directions": "Wegbeschreibung",
-    "notes": "Hinweise"
+    "notes": "Hinweise",
+    "provider": "Anbieter"
   },
   "row": {
     "availableVehicles": "Verfügbare Fahrräder",
@@ -29,7 +30,15 @@
     "ios": "iOS",
     "iosApp": "iOS-App",
     "androidApp": "Android-App",
-    "pricing": "Preise"
+    "pricing": "Preise",
+    "renting": "Ausleihe möglich",
+    "returning": "Rückgabe möglich",
+    "returnConstraint": "Rückgaberegel",
+    "provider": "Anbieter",
+    "providerGroup": "Anbietergruppe",
+    "crossStreet": "Querstraße",
+    "systemWebsite": "Systemwebsite",
+    "membership": "Mitgliedschaft"
   },
   "value": {
     "fixedStation": "Feste Station",
@@ -39,6 +48,13 @@
     "disabled": "Deaktiviert",
     "available": "Verfügbar",
     "vehicleFallback": "Fahrrad",
+    "yes": "Ja",
+    "no": "Nein",
+    "returnConstraint": {
+      "none": "Keine Stationsbindung",
+      "any_station": "Rückgabe an beliebiger Station",
+      "roundtrip_station": "Rückgabe an der Ausgangsstation"
+    },
     "formFactor": {
       "bicycle": "Fahrrad",
       "cargo_bicycle": "Lastenrad",
@@ -79,6 +95,18 @@
     "distanceKm": "{value} km",
     "co2PerKm": "{value} g/km",
     "accessMethod": "Zugang: {method}"
+  },
+  "action": {
+    "openRentalApp": "Verleih-App öffnen",
+    "showServiceArea": "Service-/Parkbereich anzeigen"
+  },
+  "context": {
+    "noRide": "Fahren verboten",
+    "noParking": "Abstellen verboten",
+    "noStart": "Ausleihe verboten",
+    "stationParking": "Nur an Stationen abstellen",
+    "slowZone": "Langsamfahrzone",
+    "stationArea": "Stationsbereich"
   },
   "dataSources": {
     "citybikes": {

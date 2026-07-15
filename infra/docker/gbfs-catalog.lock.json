@@ -1,0 +1,10 @@
+{
+  "$schema": "./gbfs-catalog.lock.schema.json",
+  "schemaVersion": 1,
+  "source": "mobilitydata-gbfs",
+  "commit": "39a290ed5c5b8f62b720d5715a31bc3f0c0725d9",
+  "url": "https://raw.githubusercontent.com/MobilityData/gbfs/39a290ed5c5b8f62b720d5715a31bc3f0c0725d9/systems.csv",
+  "sha256": "f2498400cf3fdfc8b794d4b6368a5f06ea6e15b497603485e64f73d3ade99d51",
+  "lockedAt": "2026-07-15T09:52:32Z",
+  "lockedBy": "openmapx"
+}

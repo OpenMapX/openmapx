@@ -5,9 +5,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   parseRefShaPair,
   readTransitousLock,
+  readTransitousLockProposal,
   TRANSITOUS_LOCK_RELATIVE_PATH,
+  TRANSITOUS_PROPOSED_LOCK_RELATIVE_PATH,
   type TransitousLock,
   writeTransitousLock,
+  writeTransitousLockProposal,
 } from "../src/transitous-lock.js";
 
 let tmp: string | undefined;
@@ -67,6 +70,28 @@ describe("readTransitousLock / writeTransitousLock", () => {
       readFileSync(join(root, TRANSITOUS_LOCK_RELATIVE_PATH), "utf-8"),
     ) as Record<string, unknown>;
     expect(onDisk.$schema).toBe("./transitous.lock.schema.json");
+  });
+
+  it("writes a proposal without mutating the active lock", () => {
+    const root = makeRepoRoot();
+    const active: TransitousLock = {
+      ref: "main@099af198526dc192dd294a100ca4db29477e9133",
+      submodules: {},
+      lockedAt: "2026-05-22T00:00:00Z",
+      lockedBy: "active@example.test",
+    };
+    const proposed: TransitousLock = {
+      ...active,
+      ref: "main@4a8495c498107b7281d4a7e0611b84ffba313112",
+      lockedBy: "reviewer@example.test",
+    };
+    writeTransitousLock(root, active);
+    writeTransitousLockProposal(root, proposed);
+    expect(readTransitousLock(root)).toEqual(active);
+    expect(readTransitousLockProposal(root)).toEqual(proposed);
+    expect(readFileSync(join(root, TRANSITOUS_PROPOSED_LOCK_RELATIVE_PATH), "utf-8")).toContain(
+      proposed.ref,
+    );
   });
 
   it("throws on a malformed lockfile", () => {

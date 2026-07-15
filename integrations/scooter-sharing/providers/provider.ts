@@ -8,19 +8,18 @@ import type {
   BoundingBox,
   DataSourceDetail,
   DataSourceFilterDef,
+  DataSourceMapContextSelection,
   DataSourceMeta,
   DataSourceResult,
 } from "@openmapx/core";
 import {
+  type CacheClient,
   createManifestAttribution,
   type MobilityDataSourceProvider,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import { dedupStations, dedupVehicles } from "@openmapx/mobility-core/dedup";
-import {
-  buildEnturGeofencingMapContext,
-  enrichEnturMobilityItems,
-} from "@openmapx/mobility-core/entur-mobility";
+import { SharedMobilityDetailStore } from "@openmapx/mobility-core/detail-store";
+import { enrichEnturMobilityItems } from "@openmapx/mobility-core/entur-mobility";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import {
   fetchGbfsData,
@@ -33,18 +32,14 @@ import {
   mapVehicleToResult,
   stripMobilityKindPrefix,
 } from "@openmapx/mobility-core/mapper";
-import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
 import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
-import type {
-  SharedMobilityStation,
-  SharedMobilityVehicle,
-} from "@openmapx/mobility-core/shared-mobility";
+import { buildSharedMobilityMapContext } from "@openmapx/mobility-core/shared-mobility-context";
+import { orchestrateSharedMobility } from "@openmapx/mobility-core/shared-mobility-orchestrator";
 import { searchFelyx } from "./felyx-client.js";
 import { searchNrwMobidrom } from "./nrw-mobidrom-client.js";
 
-// In-memory cache for detail lookups
-const itemCache = new Map<string, SharedMobilityStation | SharedMobilityVehicle>();
-const MAX_CACHE_SIZE = 5000;
+const detailStore = new SharedMobilityDetailStore(600, 5_000);
+export const setDetailCache = (cache: CacheClient): void => detailStore.setCache(cache);
 
 const META: DataSourceMeta = {
   minZoom: 13,
@@ -102,79 +97,59 @@ class ScooterSharingProvider implements MobilityDataSourceProvider {
   }
 
   async search(bbox: BoundingBox): Promise<MobilityResult<DataSourceResult[]>> {
-    const bboxArray: [number, number, number, number] = [
-      bbox.west,
-      bbox.south,
-      bbox.east,
-      bbox.north,
-    ];
-
-    // Fetch from all sources in parallel
-    const [gbfsResult, swissGbfsResult, felyxResult, nrwResult, motisResult] =
-      await Promise.allSettled([
-        fetchGbfsData(bbox, SCOOTER_FORM_FACTORS, "other"),
-        fetchSwissSharedMobilityDataForBbox(bbox, SCOOTER_FORM_FACTORS, "other"),
-        searchFelyx(bbox),
-        searchNrwMobidrom(bbox),
-        fetchMotisRentals(bboxArray, ["scooter_standing", "scooter_seated", "moped"]),
-      ]);
-
-    const results: DataSourceResult[] = [];
-
-    // Collect stations from all sources for deduplication
-    const allStations: SharedMobilityStation[] = [];
-    if (gbfsResult.status === "fulfilled") {
-      allStations.push(...gbfsResult.value.stations);
-    }
-    if (swissGbfsResult.status === "fulfilled") {
-      allStations.push(...swissGbfsResult.value.stations);
-    }
-    // Aggregator stations (appended last so direct GBFS takes dedup priority)
-    if (nrwResult.status === "fulfilled") {
-      allStations.push(...nrwResult.value.stations);
-    }
-    if (motisResult.status === "fulfilled") {
-      allStations.push(...motisResult.value.stations);
-    }
-
-    // Collect all free-floating vehicles: direct sources first, aggregators last.
-    // dedupVehicles drops aggregator (NRW Mobidrom, MOTIS/Transitous) vehicles that have a
-    // direct-source counterpart with the same raw vehicle ID.
-    const allVehicles: SharedMobilityVehicle[] = [];
-    if (gbfsResult.status === "fulfilled") allVehicles.push(...gbfsResult.value.vehicles);
-    if (swissGbfsResult.status === "fulfilled") allVehicles.push(...swissGbfsResult.value.vehicles);
-    if (felyxResult.status === "fulfilled") allVehicles.push(...felyxResult.value);
-    if (nrwResult.status === "fulfilled") allVehicles.push(...nrwResult.value.vehicles);
-    if (motisResult.status === "fulfilled") allVehicles.push(...motisResult.value.vehicles);
-
-    const dedupedStations = dedupStations(allStations);
-    const dedupedVehicles = dedupVehicles(allVehicles);
+    const inventory = await orchestrateSharedMobility(bbox, {
+      category: "scooter",
+      formFactors: SCOOTER_FORM_FACTORS,
+      motisFormFactors: ["scooter_standing", "scooter_seated", "moped"],
+      adapters: [
+        {
+          id: "direct-gbfs",
+          kind: "fallback",
+          fetch: (bounds) => fetchGbfsData(bounds, SCOOTER_FORM_FACTORS, "other"),
+        },
+        {
+          id: "swiss-gbfs",
+          kind: "fallback",
+          fetch: (bounds) =>
+            fetchSwissSharedMobilityDataForBbox(bounds, SCOOTER_FORM_FACTORS, "other"),
+        },
+        {
+          id: "felyx",
+          kind: "proprietary",
+          fetch: async (bounds) => ({ stations: [], vehicles: await searchFelyx(bounds) }),
+        },
+        {
+          id: "nrw-mobidrom",
+          kind: "proprietary",
+          fetch: searchNrwMobidrom,
+        },
+      ],
+    });
 
     try {
-      await enrichEnturMobilityItems(dedupedStations, dedupedVehicles);
+      await enrichEnturMobilityItems(inventory.stations, inventory.vehicles, { scope: "map" });
     } catch (error) {
       console.warn("[scooter-sharing] Entur enrichment failed", error);
     }
 
-    for (const station of dedupedStations) {
-      updateCache(station.id, station);
-      results.push(mapStationToResult(station));
-    }
-
-    for (const vehicle of dedupedVehicles) {
-      updateCache(vehicle.id, vehicle);
-      results.push(mapVehicleToResult(vehicle));
-    }
-
+    await detailStore.store([...inventory.stations, ...inventory.vehicles]);
+    const results = [
+      ...inventory.stations.map((station) => mapStationToResult(station)),
+      ...inventory.vehicles.map((vehicle) => mapVehicleToResult(vehicle)),
+    ];
     return wrapRT(
       results,
-      attribution.forResults(results, (r) => r.sources ?? r.source),
+      attribution.forResults(results, (result) => result.sources ?? result.source),
     );
   }
-
   async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
-    const cached = itemCache.get(stripMobilityKindPrefix(itemId));
+    const cached = await detailStore.get(stripMobilityKindPrefix(itemId));
     if (cached) {
+      await enrichEnturMobilityItems(
+        "availableVehicles" in cached ? [cached] : [],
+        "availableVehicles" in cached ? [] : [cached],
+        { scope: "detail" },
+      ).catch(() => undefined);
       const attrs = attribution.forResults([cached], (c) => c.sources);
       if ("availableVehicles" in cached) return wrapRT(mapStationToDetail(cached), attrs);
       return wrapRT(mapVehicleToDetail(cached), attrs);
@@ -186,18 +161,13 @@ class ScooterSharingProvider implements MobilityDataSourceProvider {
   async getMapContext(
     bbox: BoundingBox,
     _filters?: Record<string, unknown>,
-    options?: { systemIds?: string[]; vehicleTypeIds?: string[] },
+    options?: DataSourceMapContextSelection,
   ) {
-    return wrapStatic(await buildEnturGeofencingMapContext(bbox, options), attribution.all());
+    return wrapStatic(
+      await buildSharedMobilityMapContext(bbox, SCOOTER_FORM_FACTORS, options),
+      attribution.all(),
+    );
   }
-}
-
-function updateCache(id: string, item: SharedMobilityStation | SharedMobilityVehicle): void {
-  if (itemCache.size >= MAX_CACHE_SIZE) {
-    const firstKey = itemCache.keys().next().value;
-    if (firstKey) itemCache.delete(firstKey);
-  }
-  itemCache.set(id, item);
 }
 
 export const scooterSharingProvider = new ScooterSharingProvider();

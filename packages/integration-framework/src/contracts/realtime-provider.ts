@@ -56,6 +56,11 @@ export interface RealtimeProvider {
    * provider (e.g. id prefix not recognized).
    */
   getTripUpdate?(tripId: string, stopId?: string): Promise<MobilityResult<TripUpdate | null>>;
+  /** Optional bounded batch equivalent; results are keyed by requested trip id. */
+  getTripUpdates?(
+    tripIds: string[],
+    stopId?: string,
+  ): Promise<MobilityResult<Record<string, TripUpdate | null>>>;
 
   /** Optional. Providers that have no meaningful self-check may omit this
    *  and rely on `ctx.registerHealthCheck()` declared at integration setup. */

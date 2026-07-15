@@ -35,6 +35,10 @@ def main(argv: list[str]) -> int:
     for source in data.get("sources", []):
         if source.get("skip"):
             continue
+        # GBFS entries are runtime-polled by MOTIS and do not produce a GTFS
+        # archive during Transitous acquisition.
+        if source.get("spec") == "gbfs":
+            continue
         if source.get("type") != "url":
             continue
         url = source.get("url", "")

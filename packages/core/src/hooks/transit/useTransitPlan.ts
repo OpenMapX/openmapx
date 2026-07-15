@@ -21,6 +21,12 @@ interface UseTransitPlanParams {
   modes?: string[];
   /** When true, requests wheelchair-accessible routing (MOTIS pedestrianProfile=WHEELCHAIR). */
   wheelchair?: boolean;
+  wheelchairRequired?: boolean;
+  maxTransfers?: number;
+  transferBuffer?: "standard" | "relaxed" | "extra";
+  requireBikeTransport?: boolean;
+  bikeHillPreference?: "default" | "avoid" | "strongly-avoid";
+  rentalFormFactors?: string[];
   /** MOTIS first-mile access modes (e.g. ["BIKE"], ["CAR_PARKING"]). */
   preTransitModes?: string[];
   /** MOTIS last-mile egress modes. */
@@ -29,6 +35,11 @@ interface UseTransitPlanParams {
   directModes?: string[];
   /** Restrict results to Deutschlandticket-valid (regional/local) connections. */
   deutschlandticketOnly?: boolean;
+  /** Signed OpenMapX paging token; never an upstream cursor. */
+  pageToken?: string;
+  capabilityEpoch?: string;
+  rentalSource?: string;
+  rentalInstance?: string;
 }
 
 /** Floor a Date to the nearest minute so queries within the same minute share a cache key. */
@@ -45,10 +56,20 @@ export function useTransitPlan({
   lang,
   modes,
   wheelchair,
+  wheelchairRequired,
+  maxTransfers,
+  transferBuffer,
+  requireBikeTransport,
+  bikeHillPreference,
+  rentalFormFactors,
   preTransitModes,
   postTransitModes,
   directModes,
   deutschlandticketOnly,
+  pageToken,
+  capabilityEpoch,
+  rentalSource,
+  rentalInstance,
 }: UseTransitPlanParams): MobilityEnvelopeQueryResult<TripPlan> {
   // Stable, order-independent key for the modes allow-list so toggling the same
   // set in a different order reuses the cached query.
@@ -56,6 +77,9 @@ export function useTransitPlan({
   const preKey = preTransitModes?.length ? [...preTransitModes].sort().join(",") : undefined;
   const postKey = postTransitModes?.length ? [...postTransitModes].sort().join(",") : undefined;
   const directKey = directModes?.length ? [...directModes].sort().join(",") : undefined;
+  const rentalFormFactorsKey = rentalFormFactors?.length
+    ? [...new Set(rentalFormFactors)].sort().join(",")
+    : undefined;
   // When no explicit time is set, floor "now" to the current minute so that
   // React Query can serve cached results for up to staleTime (2 min) instead
   // of treating every refetch as a new query due to a fresh timestamp.
@@ -72,10 +96,20 @@ export function useTransitPlan({
       lang,
       modesKey,
       !!wheelchair,
+      !!wheelchairRequired,
+      maxTransfers,
+      transferBuffer,
+      !!requireBikeTransport,
+      bikeHillPreference,
+      rentalFormFactorsKey,
       preKey,
       postKey,
       directKey,
       !!deutschlandticketOnly,
+      pageToken,
+      capabilityEpoch,
+      rentalSource,
+      rentalInstance,
     ],
     queryFn: () => {
       if (!origin || !destination) throw new Error("Origin and destination required");
@@ -98,9 +132,18 @@ export function useTransitPlan({
       if (modesKey) {
         params.modes = modesKey;
       }
-      if (wheelchair) {
+      if (wheelchair || wheelchairRequired) {
         params.wheelchair = "true";
       }
+      if (maxTransfers !== undefined) params.max_transfers = String(maxTransfers);
+      if (transferBuffer && transferBuffer !== "standard") {
+        params.transfer_buffer = transferBuffer;
+      }
+      if (requireBikeTransport) params.require_bike_transport = "true";
+      if (bikeHillPreference && bikeHillPreference !== "default") {
+        params.bike_hill_preference = bikeHillPreference;
+      }
+      if (rentalFormFactorsKey) params.rental_form_factors = rentalFormFactorsKey;
       if (preKey) {
         params.pre_modes = preKey;
       }
@@ -113,6 +156,10 @@ export function useTransitPlan({
       if (deutschlandticketOnly) {
         params.deutschlandticket = "true";
       }
+      if (pageToken) params.page_token = pageToken;
+      if (capabilityEpoch) params.capability_epoch = capabilityEpoch;
+      if (rentalSource) params.rental_source = rentalSource;
+      if (rentalInstance) params.rental_instance = rentalInstance;
       return apiClient.get<MobilityEnvelope<TripPlan>>(API_ENDPOINTS.transitPlan, params);
     },
     enabled: origin !== null && destination !== null,

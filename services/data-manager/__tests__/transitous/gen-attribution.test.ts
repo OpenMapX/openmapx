@@ -63,9 +63,11 @@ describe("gen-attribution", () => {
     expect(result.message).toMatch(/did not produce/i);
   });
 
-  it("skips when the catalog ships no generate-attribution.py", async () => {
+  it("fails closed when the catalog ships no generate-attribution.py", async () => {
     const fx = setupCatalog(false);
+    writeFileSync(join(fx.outDir, "config.yml"), "timetable: {}\n");
     const result = await genAttributionRun(ctxFor(fx.dataDir, fx.catalogDir, async () => {}));
-    expect(result.status).toBe("skipped");
+    expect(result.status).toBe("error");
+    expect(result.message).toContain("candidate attribution is required");
   });
 });

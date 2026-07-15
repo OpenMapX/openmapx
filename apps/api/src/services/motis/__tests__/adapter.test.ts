@@ -4,7 +4,7 @@ vi.mock("@motis-project/motis-client", () => ({
   stops: vi.fn(),
   stoptimes: vi.fn(),
   plan: vi.fn(),
-  trips: vi.fn(),
+  refreshItinerary: vi.fn(),
   trip: vi.fn(),
   geocode: vi.fn(),
 }));
@@ -27,8 +27,8 @@ import {
   getStopById,
   getStops,
   getTrip,
-  getVehicleRadar,
   planTrip,
+  refreshTrip,
   searchByName,
 } from "@integrations/transit-motis/adapter";
 import type { MotisInstance } from "@integrations/transit-motis/instances";
@@ -37,8 +37,8 @@ import {
   stops as motisStops,
   trip as motisTrip,
   plan,
+  refreshItinerary,
   stoptimes,
-  trips,
 } from "@motis-project/motis-client";
 
 const testInstance: MotisInstance = {
@@ -678,90 +678,57 @@ describe("planTrip", () => {
   });
 });
 
-// getVehicleRadar
-
-describe("getVehicleRadar", () => {
-  it("maps TripSegment[] to VehiclePosition[] with prefixed IDs", async () => {
-    vi.mocked(trips).mockResolvedValueOnce({
-      data: [
-        {
-          trips: [{ tripId: "trip:bus1", displayName: "Bus 200" }],
-          from: { lat: 52.5, lon: 13.4, stopId: "stop:1" },
-          departure: "2026-03-21T10:01:00Z",
-        },
-      ],
+describe("refreshTrip", () => {
+  it("uses the pinned refresh endpoint and normalizes through the itinerary mapper", async () => {
+    vi.mocked(refreshItinerary).mockResolvedValueOnce({
+      data: {
+        id: "refresh-ref-2",
+        duration: 300,
+        transfers: 0,
+        legs: [
+          {
+            mode: "WALK",
+            startTime: "2026-03-21T10:00:00Z",
+            endTime: "2026-03-21T10:05:00Z",
+            from: { name: "Origin", lat: 52.5, lon: 13.4 },
+            to: { name: "Station", lat: 52.51, lon: 13.41, stopId: "stop-1" },
+            legGeometry: null,
+            intermediateStops: [],
+            distance: 250,
+          },
+        ],
+      },
       error: undefined,
     } as never);
 
-    const result = await getVehicleRadar(testInstance, [13.0, 52.0, 14.0, 53.0]);
+    const result = await refreshTrip(testInstance, "refresh-ref-1", {
+      modes: ["RAIL"],
+      wheelchair: true,
+      detailedTransfers: true,
+      datasetEpoch: "epoch-1",
+    });
 
-    expect(result).toHaveLength(1);
-    const vp = result[0];
-    expect(vp.id).toBe("test:trip:bus1");
-    expect(vp.provider).toBe("test-provider");
-    expect(vp.tripId).toBe("test:trip:bus1");
-    expect(vp.lat).toBe(52.5);
-    expect(vp.lng).toBe(13.4);
-    expect(vp.label).toBe("Bus 200");
-    expect(vp.currentStopId).toBe("test:stop:1");
-    expect(vp.updatedAt).toBe("2026-03-21T10:01:00Z");
-  });
-
-  it("skips segments without lat/lon", async () => {
-    vi.mocked(trips).mockResolvedValueOnce({
-      data: [
-        {
-          trips: [{ tripId: "trip:a", displayName: "A" }],
-          from: { lat: undefined, lon: undefined, stopId: undefined },
-          departure: undefined,
-        },
-        {
-          trips: [{ tripId: "trip:b", displayName: "B" }],
-          from: { lat: 52.5, lon: 13.4, stopId: "stop:b" },
-          departure: "2026-03-21T10:00:00Z",
-        },
-      ],
-      error: undefined,
-    } as never);
-
-    const result = await getVehicleRadar(testInstance, [13.0, 52.0, 14.0, 53.0]);
-
-    expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("test:trip:b");
-  });
-
-  it("uses seg-N fallback id when tripId is missing", async () => {
-    vi.mocked(trips).mockResolvedValueOnce({
-      data: [
-        {
-          trips: [],
-          from: { lat: 52.5, lon: 13.4, stopId: undefined },
-          departure: undefined,
-        },
-      ],
-      error: undefined,
-    } as never);
-
-    const result = await getVehicleRadar(testInstance, [13.0, 52.0, 14.0, 53.0]);
-
-    expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("test:seg-0");
-  });
-
-  it("returns empty array when data is null", async () => {
-    vi.mocked(trips).mockResolvedValueOnce({ data: null, error: undefined } as never);
-
-    const result = await getVehicleRadar(testInstance, [13.0, 52.0, 14.0, 53.0]);
-
-    expect(result).toEqual([]);
-  });
-
-  it("returns empty array on error", async () => {
-    vi.mocked(trips).mockRejectedValueOnce(new Error("fail"));
-
-    const result = await getVehicleRadar(testInstance, [13.0, 52.0, 14.0, 53.0]);
-
-    expect(result).toEqual([]);
+    expect(refreshItinerary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.objectContaining({
+          itineraryId: "refresh-ref-1",
+          detailedLegs: true,
+          detailedTransfers: true,
+          withFares: true,
+          transitModes: ["RAIL"],
+          pedestrianProfile: "WHEELCHAIR",
+          useRoutedTransfers: true,
+        }),
+      }),
+    );
+    expect(result).toMatchObject({
+      id: "refresh-ref-2",
+      source: "test-provider",
+      datasetEpoch: "epoch-1",
+      walkDistance: 250,
+      legs: [{ mode: "walking" }],
+    });
+    expect(result?.refreshedAt).toBeTruthy();
   });
 });
 

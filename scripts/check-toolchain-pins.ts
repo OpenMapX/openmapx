@@ -9,7 +9,11 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { GTFSCLEAN_COMMIT, MOTIS_VERSION } from "@openmapx/transitous-core";
+import {
+  GTFSCLEAN_COMMIT,
+  MOBILITYDATA_GBFS_CATALOG_COMMIT,
+  MOTIS_VERSION,
+} from "@openmapx/transitous-core";
 
 const HERE = typeof __dirname !== "undefined" ? __dirname : dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
@@ -51,6 +55,19 @@ for (const rel of [
   if (!read(rel).includes(`gtfsclean@${GTFSCLEAN_COMMIT}`)) {
     errors.push(`${rel}: gtfsclean commit != ${GTFSCLEAN_COMMIT}`);
   }
+}
+
+const gbfsLock = JSON.parse(read("infra/docker/gbfs-catalog.lock.json")) as {
+  commit?: string;
+  url?: string;
+};
+if (gbfsLock.commit !== MOBILITYDATA_GBFS_CATALOG_COMMIT) {
+  errors.push(
+    `infra/docker/gbfs-catalog.lock.json: commit "${gbfsLock.commit}" != MOBILITYDATA_GBFS_CATALOG_COMMIT "${MOBILITYDATA_GBFS_CATALOG_COMMIT}"`,
+  );
+}
+if (!gbfsLock.url?.includes(`/${MOBILITYDATA_GBFS_CATALOG_COMMIT}/systems.csv`)) {
+  errors.push("infra/docker/gbfs-catalog.lock.json: URL is not pinned to the catalog commit");
 }
 
 if (errors.length > 0) {

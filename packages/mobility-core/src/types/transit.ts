@@ -218,6 +218,15 @@ export interface Departure {
   formation?: TransitFormationReference[];
   remarks?: TripRemark[];
   serviceInfo?: TransitServiceInfo;
+  provenance?: TransitObservationProvenance;
+}
+
+export interface TransitObservationProvenance {
+  baselineSource: string;
+  instance: string;
+  datasetEpoch?: string;
+  realtimeCompleteness: "none" | "merged" | "changed" | "unknown";
+  observedAt: string;
 }
 
 export interface FareProduct {
@@ -263,10 +272,42 @@ export interface TransitRentalInfo {
   color?: string;
   /** GBFS form factor, e.g. "BICYCLE", "SCOOTER_STANDING", "CAR". */
   formFactor?: string;
+  propulsionType?: string;
+  providerId?: string;
+  providerGroupId?: string;
+  /** Where the rental must be returned; absent means MOTIS did not report it. */
+  returnConstraint?: "NONE" | "ANY_STATION" | "ROUNDTRIP_STATION";
   fromStationName?: string;
   toStationName?: string;
   /** Best booking deep-link (web URI, falling back to the system URL). */
   bookingUrl?: string;
+}
+
+export interface TransitPlace {
+  name: string;
+  lat: number;
+  lng: number;
+  stopId?: string;
+  /** OSM floor/level. Absence is distinct from ground level (0). */
+  level?: number;
+  platformCode?: string;
+}
+
+export interface TransitStep {
+  /** Stable MOTIS direction code; presentation layers localize it. */
+  instruction: string;
+  streetName?: string;
+  coordinates?: [number, number][];
+  fromLevel?: number;
+  toLevel?: number;
+  distanceMeters: number;
+  durationSeconds?: number;
+  stairs?: boolean;
+  elevator?: boolean;
+  accessibility?: "accessible" | "restricted" | "unknown";
+  accessRestriction?: string;
+  ascentMeters?: number;
+  descentMeters?: number;
 }
 
 /**
@@ -299,10 +340,22 @@ export interface TripLeg {
   mode: TransportMode;
   startTime: string;
   endTime: string;
-  from: { name: string; lat: number; lng: number; stopId?: string };
-  to: { name: string; lat: number; lng: number; stopId?: string };
+  from: TransitPlace;
+  to: TransitPlace;
   route?: Pick<TransitRoute, "shortName" | "longName" | "color">;
   geometry: { type: "LineString"; coordinates: [number, number][] };
+  distanceMeters?: number;
+  durationSeconds?: number;
+  /** Whether MOTIS had realtime data for this leg. */
+  realtime?: boolean;
+  cancelled?: boolean;
+  interlineWithPrevious?: boolean;
+  bikesAllowed?: boolean;
+  /** Absence means MOTIS did not report the restriction. */
+  wheelchairAccessible?: boolean;
+  steps?: TransitStep[];
+  ascentMeters?: number;
+  descentMeters?: number;
   /** Prefixed trip ID (e.g. "db:1234567"). Present on transit legs. Enables live trip tracking. */
   tripId?: string;
   /** Prefixed route ID (e.g. "db:line-123"). Enables route alerts and live vehicle display. */
@@ -340,6 +393,10 @@ export interface TripLeg {
 }
 
 export interface TripItinerary {
+  id?: string;
+  source?: string;
+  instance?: string;
+  datasetEpoch?: string;
   duration: number;
   startTime: string;
   endTime: string;
@@ -348,6 +405,14 @@ export interface TripItinerary {
   distanceMeters?: number;
   /** Estimated CO2 emissions for the itinerary in grams, when the provider supplies it. */
   co2Grams?: number;
+  ascentMeters?: number;
+  descentMeters?: number;
+  /** Hard requirements contradicted by provider output. */
+  invalidRequirements?: string[];
+  /** Opaque OpenMapX handle; never a raw MOTIS itinerary reference. */
+  refreshToken?: string;
+  refreshedAt?: string;
+  plannedAt?: string;
   legs: TripLeg[];
   fare?: TripFare;
 }
@@ -357,6 +422,14 @@ export interface TripPlan {
   to: { name: string; lat: number; lng: number };
   itineraries: TripItinerary[];
   provider?: string;
+  source?: string;
+  instance?: string;
+  datasetEpoch?: string;
+  /** Provider-native cursors are internal and must be replaced by signed BFF tokens. */
+  previousPageCursor?: string;
+  nextPageCursor?: string;
+  previousPageToken?: string;
+  nextPageToken?: string;
 }
 
 export type AlertSeverity = "info" | "warning" | "severe" | "critical";

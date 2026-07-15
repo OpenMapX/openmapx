@@ -7,6 +7,7 @@ import RouteIcon from "@mui/icons-material/Route";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import ShareIcon from "@mui/icons-material/Share";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
@@ -26,6 +27,7 @@ import {
   preferredModesToMotis,
   rankItineraries,
   TRANSIT_ACCESS_MOTIS_MODES,
+  TRANSIT_ACCESS_RENTAL_FORM_FACTORS,
   useAutocomplete,
   useCapabilities,
   useDebounce,
@@ -38,6 +40,7 @@ import {
   useSettingsStore,
   useSidebarStore,
   useTransitPlan,
+  useTransitPlanningCapabilities,
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
@@ -89,6 +92,11 @@ export function DirectionsPanelContent() {
     transitPreferredModes,
     transitRoutePreference,
     transitAccessMode,
+    wheelchairRequired,
+    maxTransfers,
+    transferBuffer,
+    requireBikeTransport,
+    bikeHillPreference,
     deutschlandticketOnly,
     setWaypoint,
     addWaypoint,
@@ -111,6 +119,7 @@ export function DirectionsPanelContent() {
   const { services: caps } = useCapabilities();
   const queryClient = useQueryClient();
   const optimizeMutation = useOptimizeRoute();
+  const { data: transitPlanningCapabilities } = useTransitPlanningCapabilities();
 
   const [showOptions, setShowOptions] = useState(false);
   const [detailsRouteIndex, setDetailsRouteIndex] = useState<number | null>(null);
@@ -122,6 +131,8 @@ export function DirectionsPanelContent() {
   const [drivingTimeMode, setDrivingTimeMode] = useState<TimeMode>("now");
   const [drivingTime, setDrivingTime] = useState<Date | null>(null);
   const [numItineraries, setNumItineraries] = useState(3);
+  const [transitPageToken, setTransitPageToken] = useState<string | undefined>();
+  const [transitPageDirection, setTransitPageDirection] = useState<"previous" | "next">("next");
   const [focusedField, setFocusedField] = useState<number | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
 
@@ -218,19 +229,36 @@ export function DirectionsPanelContent() {
   );
 
   const accessModes = TRANSIT_ACCESS_MOTIS_MODES[transitAccessMode];
+  const rentalFormFactors = TRANSIT_ACCESS_RENTAL_FORM_FACTORS[transitAccessMode];
+  const activePlanningMetadata = transitPlanningCapabilities?.providers.find(
+    (provider) => provider.id === "transit-motis-local",
+  )?.metadata;
 
   // Snapshot of the resolved MOTIS options to hand to navigation, so an on-trip
   // replan reuses the same modes/access/wheelchair/D-Ticket gate the plan used.
   const transitReplanOptions = useMemo<TransitReplanOptions>(
     () => ({
       modes: effectiveMotisModes,
-      wheelchair: transitRoutePreference === "wheelchair",
+      wheelchairRequired,
+      maxTransfers: maxTransfers ?? undefined,
+      transferBuffer,
+      requireBikeTransport,
+      bikeHillPreference,
       preTransitModes: accessModes.preTransitModes,
       postTransitModes: accessModes.postTransitModes,
       directModes: accessModes.directModes,
       deutschlandticketOnly: deutschlandticketActive,
     }),
-    [effectiveMotisModes, transitRoutePreference, accessModes, deutschlandticketActive],
+    [
+      effectiveMotisModes,
+      wheelchairRequired,
+      maxTransfers,
+      transferBuffer,
+      requireBikeTransport,
+      bikeHillPreference,
+      accessModes,
+      deutschlandticketActive,
+    ],
   );
 
   const transitPlanQuery = useTransitPlan({
@@ -240,11 +268,20 @@ export function DirectionsPanelContent() {
     arriveBy: transitArriveByStr,
     numItineraries: effectiveNumItineraries,
     modes: effectiveMotisModes,
-    wheelchair: transitRoutePreference === "wheelchair",
+    wheelchairRequired,
+    maxTransfers: maxTransfers ?? undefined,
+    transferBuffer,
+    requireBikeTransport,
+    bikeHillPreference,
+    rentalFormFactors,
+    capabilityEpoch: activePlanningMetadata?.datasetEpoch,
+    rentalSource: rentalFormFactors ? activePlanningMetadata?.source : undefined,
+    rentalInstance: rentalFormFactors ? activePlanningMetadata?.instance : undefined,
     preTransitModes: accessModes.preTransitModes,
     postTransitModes: accessModes.postTransitModes,
     directModes: accessModes.directModes,
     deutschlandticketOnly: deutschlandticketActive,
+    pageToken: transitPageToken,
   });
   const {
     data: transitPlanData,
@@ -255,13 +292,38 @@ export function DirectionsPanelContent() {
 
   useEffect(() => {
     if (transitPlanData?.itineraries) {
-      setTransitItineraries(rankItineraries(transitPlanData.itineraries, transitRoutePreference));
+      const incoming = transitPlanData.itineraries;
+      const existing = transitPageToken ? useDirectionsStore.getState().transitItineraries : [];
+      const combined =
+        transitPageToken && transitPageDirection === "previous"
+          ? [...incoming, ...existing]
+          : [...existing, ...incoming];
+      const seen = new Set<string>();
+      const deduped = combined.filter((itinerary) => {
+        const fallback = `${itinerary.startTime}|${itinerary.endTime}|${itinerary.legs
+          .map((leg) => `${leg.tripId ?? leg.mode}:${leg.from.stopId ?? leg.from.name}`)
+          .join("|")}`;
+        const key = `${itinerary.source ?? transitPlanData.provider ?? "unknown"}:${
+          itinerary.id ?? fallback
+        }`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      setTransitItineraries(rankItineraries(deduped, transitRoutePreference));
     }
-  }, [transitPlanData, transitRoutePreference, setTransitItineraries]);
+  }, [
+    transitPlanData,
+    transitRoutePreference,
+    setTransitItineraries,
+    transitPageToken,
+    transitPageDirection,
+  ]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional trigger deps
   useEffect(() => {
     setNumItineraries(3);
+    setTransitPageToken(undefined);
   }, [origin, destination]);
 
   // Autocomplete for the currently focused waypoint input
@@ -823,25 +885,45 @@ export function DirectionsPanelContent() {
                     replanOptions={transitReplanOptions}
                     onSelect={() => setActiveItineraryIndex(i)}
                     onDetails={() => setTransitDetailsIndex(i)}
+                    onRefreshed={(updated, changed, fallbackOccurred) => {
+                      const current = useDirectionsStore.getState().transitItineraries;
+                      setTransitItineraries(
+                        current.map((candidate, index) => (index === i ? updated : candidate)),
+                      );
+                      if (changed || fallbackOccurred) {
+                        setSnackbar(
+                          fallbackOccurred ? t("connectionReplanned") : t("connectionUpdated"),
+                        );
+                      }
+                    }}
                   />
                   {i < transitItineraries.length - 1 && <Divider />}
                 </Box>
               ))}
-              {numItineraries < 9 && (
+              {(transitPlanData?.previousPageToken || transitPlanData?.nextPageToken) && (
                 <Box sx={{ px: 2, py: 1, borderTop: "1px solid", borderColor: "divider" }}>
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: TEAL,
-                      cursor: "pointer",
-                      fontWeight: 500,
-                      display: "inline-block",
-                      "&:hover": { textDecoration: "underline" },
-                    }}
-                    onClick={() => setNumItineraries((n) => Math.min(n + 3, 9))}
-                  >
-                    {t("moreOptions")}
-                  </Typography>
+                  <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
+                    <Button
+                      size="small"
+                      disabled={!transitPlanData.previousPageToken || transitLoading}
+                      onClick={() => {
+                        setTransitPageDirection("previous");
+                        setTransitPageToken(transitPlanData.previousPageToken);
+                      }}
+                    >
+                      {t("earlierConnections")}
+                    </Button>
+                    <Button
+                      size="small"
+                      disabled={!transitPlanData.nextPageToken || transitLoading}
+                      onClick={() => {
+                        setTransitPageDirection("next");
+                        setTransitPageToken(transitPlanData.nextPageToken);
+                      }}
+                    >
+                      {t("laterConnections")}
+                    </Button>
+                  </Box>
                 </Box>
               )}
               <AttributionStrip

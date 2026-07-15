@@ -186,10 +186,29 @@ export interface ProviderHealthHandle {
  */
 export type ProviderCallOutcome = "ok" | "empty" | "error" | "skipped";
 
+export type TransitDecisionOperation = "plan" | "routes" | "refresh" | "realtime";
+export type TransitDecisionReason =
+  | "selected"
+  | "authoritative_empty"
+  | "transport_failure"
+  | "unsupported"
+  | "refresh_success"
+  | "refresh_fallback"
+  | "realtime_complete";
+
 export interface MetricsRecorder {
   recordProviderCall(
     labels: { providerId: string; method: string; outcome: ProviderCallOutcome },
     latencyMs: number,
+  ): void;
+  recordTransitDecision?(
+    labels: {
+      operation: TransitDecisionOperation;
+      providerId: string;
+      role: "baseline" | "fallback" | "enrichment" | "regional" | "none";
+      reason: TransitDecisionReason;
+    },
+    value?: number,
   ): void;
 }
 

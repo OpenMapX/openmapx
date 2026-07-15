@@ -9,7 +9,9 @@ import {
   rmSync,
 } from "node:fs";
 import { join } from "node:path";
+import { CANDIDATE_PROXY_DIRNAME, createCandidateManifest } from "./candidate.js";
 import { GTFS_ARCHIVE_RE } from "./internal.js";
+import { SOVEREIGN_SOURCE_MANIFEST_FILENAME } from "./source-manifest.js";
 import type { StageFn, StageResult } from "./types.js";
 
 /**
@@ -134,7 +136,8 @@ export const run: StageFn = async (ctx) => {
       }
     }
 
-    // Per-feed colouring scripts + license metadata — best effort.
+    // Per-feed colouring scripts are optional; attribution is an immutable,
+    // required candidate artifact and must have been finalized before assembly.
     const scriptsSrc = join(outDir, "scripts");
     if (existsSync(scriptsSrc)) {
       const scriptsDest = join(stagingDir, "scripts");
@@ -142,7 +145,32 @@ export const run: StageFn = async (ctx) => {
       cpSync(scriptsSrc, scriptsDest, { recursive: true });
     }
     const licenseSrc = join(outDir, "license.json");
-    if (existsSync(licenseSrc)) linkOrCopy(licenseSrc, join(stagingDir, "license.json"));
+    if (!existsSync(licenseSrc)) {
+      return finish("error", `required attribution artifact missing at ${licenseSrc}`);
+    }
+    linkOrCopy(licenseSrc, join(stagingDir, "license.json"));
+    const sourceIndexSrc = join(outDir, "gbfs-source-index.json");
+    if (existsSync(sourceIndexSrc)) {
+      linkOrCopy(sourceIndexSrc, join(stagingDir, "gbfs-source-index.json"));
+    }
+    const sovereignSourceManifest = join(outDir, SOVEREIGN_SOURCE_MANIFEST_FILENAME);
+    if (ctx.operationsPolicy.profile === "regional-sovereign") {
+      if (!existsSync(sovereignSourceManifest)) {
+        return finish(
+          "error",
+          `required sovereign source manifest missing at ${sovereignSourceManifest}`,
+        );
+      }
+      linkOrCopy(sovereignSourceManifest, join(stagingDir, SOVEREIGN_SOURCE_MANIFEST_FILENAME));
+    }
+
+    const proxyCandidateSrc = join(outDir, CANDIDATE_PROXY_DIRNAME);
+    if (!existsSync(proxyCandidateSrc)) {
+      return finish("error", `required feed-proxy candidate missing at ${proxyCandidateSrc}`);
+    }
+    const proxyCandidateDest = join(stagingDir, CANDIDATE_PROXY_DIRNAME);
+    rmSync(proxyCandidateDest, { recursive: true, force: true });
+    cpSync(proxyCandidateSrc, proxyCandidateDest, { recursive: true });
 
     // Empty staging guard (hardStop): a config that stages 0 feeds would import
     // an empty timetable and promote it over the live one. Refuse — the pipeline
@@ -160,6 +188,13 @@ export const run: StageFn = async (ctx) => {
       );
     }
 
+    const manifest = createCandidateManifest(
+      stagingDir,
+      ctx.jobId,
+      ctx.now(),
+      ctx.operationsPolicy,
+    );
+
     const status = missingFeeds.length > 0 || osmSource === "missing" ? "partial" : "ok";
     return finish(
       status,
@@ -174,6 +209,9 @@ export const run: StageFn = async (ctx) => {
         missingFeeds,
         osm: osm ?? null,
         osmSource,
+        candidateEpoch: manifest.epoch,
+        configHash: manifest.artifacts.config.sha256,
+        licenseHash: manifest.artifacts.license.sha256,
       },
     );
   } catch (error) {

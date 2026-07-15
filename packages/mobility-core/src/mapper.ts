@@ -76,6 +76,14 @@ const T = {
     ios: t("row.ios"),
     iosApp: t("row.iosApp"),
     androidApp: t("row.androidApp"),
+    renting: t("row.renting"),
+    returning: t("row.returning"),
+    returnConstraint: t("row.returnConstraint"),
+    provider: t("row.provider"),
+    providerGroup: t("row.providerGroup"),
+    crossStreet: t("row.crossStreet"),
+    systemWebsite: t("row.systemWebsite"),
+    membership: t("row.membership"),
   },
   value: {
     fixedStation: t("value.fixedStation"),
@@ -85,6 +93,8 @@ const T = {
     disabled: t("value.disabled"),
     available: t("value.available"),
     vehicleFallback: t("value.vehicleFallback"),
+    yes: t("value.yes"),
+    no: t("value.no"),
   },
 } as const;
 
@@ -131,6 +141,10 @@ function propulsionToken(propulsion: string): I18nTokenLike {
   return t(`value.propulsionKind.${propulsion}`);
 }
 
+function returnConstraintToken(constraint: string): I18nTokenLike {
+  return t(`value.returnConstraint.${constraint}`);
+}
+
 function brandingFromStation(station: SharedMobilityStation): DataSourceBranding | undefined {
   if (!station.branding) return undefined;
   return {
@@ -159,11 +173,25 @@ function brandingFromVehicle(vehicle: SharedMobilityVehicle): DataSourceBranding
 function mapContextSelection(
   systemId?: string,
   vehicleTypeIds?: string[],
+  providerId?: string,
+  providerGroupId?: string,
+  formFactors?: string[],
 ): DataSourceResult["mapContext"] | undefined {
-  if (!systemId && (!vehicleTypeIds || vehicleTypeIds.length === 0)) return undefined;
+  if (
+    !systemId &&
+    !providerId &&
+    !providerGroupId &&
+    (!vehicleTypeIds || vehicleTypeIds.length === 0) &&
+    (!formFactors || formFactors.length === 0)
+  ) {
+    return undefined;
+  }
   return {
     ...(systemId ? { systemIds: [systemId] } : {}),
     ...(vehicleTypeIds && vehicleTypeIds.length > 0 ? { vehicleTypeIds } : {}),
+    ...(providerId ? { providerIds: [providerId] } : {}),
+    ...(providerGroupId ? { providerGroupIds: [providerGroupId] } : {}),
+    ...(formFactors && formFactors.length > 0 ? { formFactors } : {}),
   };
 }
 
@@ -198,7 +226,13 @@ export function mapStationToResult(station: SharedMobilityStation): DataSourceRe
     summary: t("summary.available", { count: station.availableVehicles }),
     operator: station.operator,
     branding: brandingFromStation(station),
-    mapContext: mapContextSelection(station.systemId, station.vehicleTypeIds),
+    mapContext: mapContextSelection(
+      station.systemId,
+      station.vehicleTypeIds,
+      station.providerId,
+      station.providerGroupId,
+      station.vehicleTypes,
+    ),
     sortValues: {
       available: station.availableVehicles,
       slots: station.emptySlots ?? 0,
@@ -227,6 +261,15 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
   }
   if (station.pricingSummary) {
     rows.push([T.row.pricing, station.pricingSummary]);
+  }
+  if (station.isRenting !== undefined) {
+    rows.push([T.row.renting, station.isRenting ? T.value.yes : T.value.no]);
+  }
+  if (station.isReturning !== undefined) {
+    rows.push([T.row.returning, station.isReturning ? T.value.yes : T.value.no]);
+  }
+  if (station.returnConstraint) {
+    rows.push([T.row.returnConstraint, returnConstraintToken(station.returnConstraint)]);
   }
 
   sections.push({
@@ -341,6 +384,24 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
     }
   }
 
+  const providerRows: [I18nTokenLike, Translatable][] = [];
+  if (station.providerName) providerRows.push([T.row.provider, station.providerName]);
+  if (station.providerGroupName) {
+    providerRows.push([T.row.providerGroup, station.providerGroupName]);
+  }
+  if (station.crossStreet) providerRows.push([T.row.crossStreet, station.crossStreet]);
+  if (station.providerUrl) providerRows.push([T.row.systemWebsite, station.providerUrl]);
+  if (station.purchaseUrl) providerRows.push([T.row.membership, station.purchaseUrl]);
+  if (providerRows.length > 0) {
+    sections.push({
+      title: t("section.provider"),
+      type: "table",
+      rows: providerRows,
+      sectionIcon: "info",
+      collapsed: true,
+    });
+  }
+
   if (station.rentalApps) {
     const appRows: [I18nTokenLike, Translatable][] = [];
     if (station.rentalApps.ios?.storeUri)
@@ -414,6 +475,24 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
           }
         : undefined,
     usageInfo,
+    actions: {
+      ...(station.rentalUris?.web || station.rentalUris?.ios || station.rentalUris?.android
+        ? {
+            primaryRental: {
+              label: t("action.openRentalApp"),
+              ...station.rentalUris,
+            },
+          }
+        : {}),
+      ...(station.stationArea
+        ? {
+            mapContext: {
+              label: t("action.showServiceArea"),
+              contextId: `station-area:${station.id}`,
+            },
+          }
+        : {}),
+    },
     sections,
   };
 }
@@ -470,6 +549,9 @@ export function mapVehicleToResult(vehicle: SharedMobilityVehicle): DataSourceRe
     mapContext: mapContextSelection(
       vehicle.systemId,
       vehicle.vehicleTypeId ? [vehicle.vehicleTypeId] : undefined,
+      vehicle.providerId,
+      vehicle.providerGroupId,
+      [vehicle.formFactor],
     ),
     sortValues: {
       ...(vehicle.batteryLevel !== undefined ? { battery: vehicle.batteryLevel } : {}),
@@ -494,6 +576,9 @@ export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDe
       T.row.range,
       t("format.distanceKm", { value: (vehicle.rangeMeters / 1000).toFixed(1) }),
     ]);
+  }
+  if (vehicle.returnConstraint) {
+    rows.push([T.row.returnConstraint, returnConstraintToken(vehicle.returnConstraint)]);
   }
   rows.push([
     T.row.status,
@@ -532,6 +617,23 @@ export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDe
     }
   }
 
+  const providerRows: [I18nTokenLike, Translatable][] = [];
+  if (vehicle.providerName) providerRows.push([T.row.provider, vehicle.providerName]);
+  if (vehicle.providerGroupName) {
+    providerRows.push([T.row.providerGroup, vehicle.providerGroupName]);
+  }
+  if (vehicle.providerUrl) providerRows.push([T.row.systemWebsite, vehicle.providerUrl]);
+  if (vehicle.purchaseUrl) providerRows.push([T.row.membership, vehicle.purchaseUrl]);
+  if (providerRows.length > 0) {
+    sections.push({
+      title: t("section.provider"),
+      type: "table",
+      rows: providerRows,
+      sectionIcon: "info",
+      collapsed: true,
+    });
+  }
+
   const branding = brandingFromVehicle(vehicle);
   const formLabel = formFactorLabelFallback(vehicle.formFactor);
   return {
@@ -547,6 +649,15 @@ export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDe
             name: vehicle.operator ?? vehicle.branding?.name ?? "Operator",
             url: vehicle.rentalUris?.web,
             legalName: vehicle.branding?.legalName,
+          }
+        : undefined,
+    actions:
+      vehicle.rentalUris?.web || vehicle.rentalUris?.ios || vehicle.rentalUris?.android
+        ? {
+            primaryRental: {
+              label: t("action.openRentalApp"),
+              ...vehicle.rentalUris,
+            },
           }
         : undefined,
     sections,

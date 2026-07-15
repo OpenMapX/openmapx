@@ -30,6 +30,7 @@ vi.mock("@openmapx/core", () => ({
   formatDistance: (distance: number) => `${distance} m`,
   formatDuration: (duration: number) => `${duration}s`,
   useVehicleJourney: () => ({ data: null }),
+  useRefreshTransitItinerary: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useNavigationStore: Object.assign(
     (sel: (s: { startTransitNavigation: () => void }) => unknown) =>
       sel({ startTransitNavigation: () => {} }),

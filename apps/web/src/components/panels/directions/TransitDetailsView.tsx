@@ -101,6 +101,58 @@ function legToMergedDeparture(leg: TripLeg, provider?: string): MergedDeparture 
   };
 }
 
+function LegStatusDetails({ leg }: { leg: TripLeg }) {
+  const t = useTranslations("directions");
+  const statuses: string[] = [];
+  if (leg.cancelled) statuses.push(t("journeyCancelled"));
+  if (leg.realtime === true) statuses.push(t("realtimeSupported"));
+  if (leg.bikesAllowed === true) statuses.push(t("bikesSupported"));
+  if (leg.bikesAllowed === false) statuses.push(t("bikesNotSupported"));
+  if (leg.wheelchairAccessible === true) statuses.push(t("wheelchairSupported"));
+  if (leg.wheelchairAccessible === false) statuses.push(t("wheelchairNotSupported"));
+  if (leg.rental?.returnConstraint === "ANY_STATION") statuses.push(t("returnAnyStation"));
+  if (leg.rental?.returnConstraint === "ROUNDTRIP_STATION") {
+    statuses.push(t("returnSameStation"));
+  }
+  if (leg.ascentMeters) statuses.push(t("ascent", { meters: Math.round(leg.ascentMeters) }));
+
+  return (
+    <>
+      {statuses.length > 0 && (
+        <Typography
+          variant="caption"
+          sx={{ color: leg.cancelled ? "error.main" : "text.secondary", display: "block", mt: 0.5 }}
+        >
+          {statuses.join(" · ")}
+        </Typography>
+      )}
+      {leg.steps && leg.steps.length > 0 && (
+        <Box component="ol" sx={{ pl: 2.5, my: 0.75 }} aria-label={t("routeInstructions")}>
+          {leg.steps.map((step) => (
+            <Typography
+              component="li"
+              variant="caption"
+              key={`${step.instruction}-${step.fromLevel}-${step.toLevel}-${step.distanceMeters}-${step.streetName ?? ""}`}
+            >
+              {t("routeStep", {
+                instruction: step.instruction.replaceAll("_", " ").toLocaleLowerCase(),
+                street: step.streetName ?? "",
+                distance: formatDistance(step.distanceMeters),
+              })}
+              {step.fromLevel !== step.toLevel && step.toLevel !== undefined
+                ? ` · ${t("levelChange", { level: step.toLevel })}`
+                : ""}
+              {step.elevator ? ` · ${t("elevator")}` : ""}
+              {step.stairs ? ` · ${t("stairs")}` : ""}
+              {step.accessRestriction ? ` · ${t("accessRestricted")}` : ""}
+            </Typography>
+          ))}
+        </Box>
+      )}
+    </>
+  );
+}
+
 export function TransitDetailsView({
   itinerary,
   isLowestCo2 = false,
@@ -243,6 +295,13 @@ export function TransitDetailsView({
             }}
           >
             {summaryBits.join(" · ")}
+          </Typography>
+        )}
+        {itinerary.invalidRequirements && itinerary.invalidRequirements.length > 0 && (
+          <Typography role="alert" variant="body2" sx={{ color: "error.main", mt: 1 }}>
+            {t("requirementsContradicted", {
+              requirements: itinerary.invalidRequirements.join(", "),
+            })}
           </Typography>
         )}
         {itinerary.co2Grams !== undefined && (
@@ -536,6 +595,7 @@ export function TransitDetailsView({
                       )}
                     </Box>
                   )}
+                  <LegStatusDetails leg={leg} />
                 </Box>
               </Box>
               {/* Arrival point (only for last leg) */}

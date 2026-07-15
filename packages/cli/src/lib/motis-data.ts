@@ -13,14 +13,21 @@ import {
 } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import {
+  FEED_PROXY_CONFIG_FILENAME,
+  FEED_PROXY_CONFIG_SUBDIR,
+  FEED_PROXY_VARS_FILENAME,
+  writeFeedProxyVarsFile,
+} from "@openmapx/motis-feed-proxy-config";
+import {
   type CommandRunner,
   DEFAULT_TRANSITOUS_REPO_URL,
   ensureCatalog,
+  findHostedGbfsFeedIds,
   listMirrorArchives,
   mirrorArchives,
   parseTransitSource,
   pruneUnresolvableSources,
-  rewriteRtUrls,
+  rewriteHostedFeedProxy,
   TRANSITOUS_ARTIFACT_BASE_URL,
   TRANSITOUS_CATALOG_DIR,
   TRANSITOUS_DOWNLOADS_DIR,
@@ -38,10 +45,10 @@ import { repoPaths } from "./paths";
 // staging→promote pipeline refreshes it via an atomic swap from data/motis/staging.
 export const MOTIS_DATA_DIR = "motis/live";
 export const MOTIS_FEED_PROXY_DIR = "motis-feed-proxy";
-export const MOTIS_FEED_PROXY_CONF_SUBDIR = "conf";
+export const MOTIS_FEED_PROXY_CONF_SUBDIR = FEED_PROXY_CONFIG_SUBDIR;
 export const MOTIS_CONFIG_FILENAME = "config.yml";
 export const MOTIS_LICENSE_FILENAME = "license.json";
-export const MOTIS_FEED_PROXY_CONFIG_FILENAME = "default.conf";
+export const MOTIS_FEED_PROXY_CONFIG_FILENAME = FEED_PROXY_CONFIG_FILENAME;
 export { DEFAULT_TRANSITOUS_REPO_URL };
 // CI publishes a multi-arch transitous-tools image (.github/workflows/docker.yml).
 // Default to the registry image; ensureTransitousToolsImage falls back to a
@@ -52,7 +59,6 @@ export const OPENMAPX_TRANSITOUS_FEED_PROXY_URL_ENV = "OPENMAPX_TRANSITOUS_FEED_
 export const DEFAULT_OPENMAPX_TRANSITOUS_FEED_PROXY_URL = "http://motis-feed-proxy";
 export const TRANSITOUS_FEED_PROXY_KEY_FILE_ENV = "TRANSITOUS_FEED_PROXY_KEY_FILE";
 
-const FEED_PROXY_VARS_FILENAME = "feed-proxy-vars.json";
 const TRANSITOUS_FEED_PROXY_KEY_CONTAINER_PATH = "/run/secrets/transitous-feed-proxy.key";
 const EMPTY_FEED_PROXY_KEY_FILENAME = ".empty-feed-proxy.key";
 
@@ -317,7 +323,13 @@ function patchMotisConfig(
     .trimEnd()}\n`;
   // Repoint realtime onto our own feed-proxy via the shared helper (same logic
   // the daemon uses), scoped to the feeds our proxy actually serves.
-  const { text } = rewriteRtUrls(normalized, feedProxyUrl, feedProxyFeedIds);
+  const { text } = rewriteHostedFeedProxy(normalized, feedProxyUrl, feedProxyFeedIds);
+  const missingGbfsFeedIds = findHostedGbfsFeedIds(text);
+  if (missingGbfsFeedIds.length > 0) {
+    throw new Error(
+      `Local feed proxy is missing configured GBFS feeds: ${missingGbfsFeedIds.join(", ")}`,
+    );
+  }
   writeFileSync(configPath, text, "utf-8");
 }
 
@@ -328,6 +340,7 @@ function renderMotisFeedProxyConfig(feedProxyDir: string): {
 } {
   const varsPath = join(feedProxyDir, FEED_PROXY_VARS_FILENAME);
   const vars = readFeedProxyVars(varsPath);
+  writeFeedProxyVarsFile(varsPath, vars);
   const configText = renderFeedProxyNginxConfig(vars);
   const confDir = join(feedProxyDir, MOTIS_FEED_PROXY_CONF_SUBDIR);
   mkdirSync(confDir, { recursive: true });

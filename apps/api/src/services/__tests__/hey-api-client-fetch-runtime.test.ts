@@ -263,8 +263,43 @@ describe("@hey-api/client-fetch runtime integrations", () => {
         expect(url.searchParams.get("withProviders")).toBe("true");
         expect(url.searchParams.get("withStations")).toBe("true");
         expect(url.searchParams.get("withVehicles")).toBe("true");
+        expect(url.searchParams.get("withZones")).toBe("true");
         return jsonResponse({
-          providers: [{ id: "nextbike", name: "nextbike" }],
+          providerGroups: [
+            {
+              id: "bike-group",
+              name: "Bike group",
+              color: "#00aa00",
+              providers: ["nextbike"],
+              formFactors: ["BICYCLE"],
+            },
+          ],
+          providers: [
+            {
+              id: "nextbike",
+              name: "Nextbike",
+              groupId: "bike-group",
+              bbox: [13.3, 52.4, 13.5, 52.6],
+              formFactors: ["BICYCLE"],
+              vehicleTypes: [
+                {
+                  id: "BICYCLE",
+                  name: "Bike",
+                  formFactor: "BICYCLE",
+                  propulsionType: "HUMAN",
+                  returnConstraint: "ANY_STATION",
+                  returnConstraintGuessed: false,
+                },
+              ],
+              defaultRestrictions: {
+                vehicleTypeIdxs: [],
+                rideStartAllowed: true,
+                rideEndAllowed: true,
+                rideThroughAllowed: true,
+              },
+              globalGeofencingRules: [],
+            },
+          ],
           stations: [
             {
               formFactors: ["BICYCLE"],
@@ -275,6 +310,7 @@ describe("@hey-api/client-fetch runtime integrations", () => {
               lon: 13.4,
               name: "Station 1",
               providerId: "nextbike",
+              providerGroupId: "bike-group",
               rentalUriWeb: "https://nextbike.example",
               vehicleDocksAvailable: { BICYCLE: 3 },
               vehicleTypesAvailable: { BICYCLE: 5 },
@@ -290,8 +326,12 @@ describe("@hey-api/client-fetch runtime integrations", () => {
               lon: 13.4001,
               propulsionType: "HUMAN",
               providerId: "nextbike",
+              providerGroupId: "bike-group",
+              typeId: "BICYCLE",
+              returnConstraint: "ANY_STATION",
             },
           ],
+          zones: [],
         });
       }
 
@@ -299,41 +339,45 @@ describe("@hey-api/client-fetch runtime integrations", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const { fetchMotisRentals, setSharedMobilityMotisUrl, setSharedMobilityTransitousUrl } =
-      await import("../../../../../packages/mobility-core/src/motis-rentals.js");
+    const {
+      fetchMotisRentals,
+      setMotisRentalSourceIndex,
+      setSharedMobilityMotisUrl,
+      setSharedMobilityTransitousUrl,
+    } = await import("../../../../../packages/mobility-core/src/motis-rentals.js");
 
     setSharedMobilityMotisUrl("http://local.example");
     setSharedMobilityTransitousUrl("https://cloud.example");
+    setMotisRentalSourceIndex([{ sourceId: "gbfs/nextbike", registrySystemId: "nextbike" }]);
 
     const rentals = await fetchMotisRentals([13.3, 52.4, 13.5, 52.6], ["bicycle"]);
 
-    expect(rentals).toEqual({
+    expect(rentals).toMatchObject({
+      origin: "transitous",
+      completeness: { providers: true, stations: true, vehicles: true, zones: true },
+      providers: [{ nativeId: "nextbike", sourceId: "gbfs/nextbike" }],
+      providerGroups: [{ nativeId: "bike-group" }],
       stations: [
         {
+          nativeId: "station-1",
           availableVehicles: 5,
-          coordinates: [13.4, 52.5],
           emptySlots: 3,
-          id: "motis:station-1",
-          isActive: true,
-          name: "Station 1",
-          operator: "Nextbike",
-          sources: ["transitous"],
-          vehicleTypes: ["bicycle"],
-          website: "https://nextbike.example",
+          capacity: 8,
+          isRenting: true,
+          isReturning: true,
+          sources: ["gbfs/nextbike"],
         },
       ],
       vehicles: [
         {
-          coordinates: [13.4001, 52.5001],
+          nativeId: "vehicle-1",
           formFactor: "bicycle",
-          id: "motis:vehicle-1",
-          isDisabled: false,
-          isReserved: false,
-          operator: "Nextbike",
           propulsion: "human",
-          sources: ["transitous"],
+          returnConstraint: "any_station",
+          sources: ["gbfs/nextbike"],
         },
       ],
+      zones: [],
     });
   });
 });

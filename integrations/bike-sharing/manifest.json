@@ -210,7 +210,7 @@
       "licenseUrl": "https://transitous.org/sources/",
       "commercialUse": "conditional",
       "attribution": "Public transport data via Transitous — see transitous.org/sources/",
-      "notes": "The Transitous public API (api.transitous.org) is 'not intended for commercial or for-profit purposes' — commercial use is decided case-by-case on request, and open-source clients must publish their source and visibly link transitous.org/sources/ for attribution (see transitous.org/api/). The MOTIS routing software is AGPL-3.0-or-later, but that licenses the software, not the data; the aggregated timetable data is per upstream feed (mostly CC-BY / CC-BY-SA / open-government licences).",
+      "notes": "The Transitous public API (api.transitous.org) is 'not intended for commercial or for-profit purposes' — commercial use is decided case-by-case on request, and open-source clients must publish their source and visibly link transitous.org/sources/ for attribution (see transitous.org/api/). Upstream MOTIS is MIT licensed; that software license is separate from OpenMapX integration code, Transitous tooling, and the per-source timetable data licenses (mostly CC-BY / CC-BY-SA / open-government licences).",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://transitous.org/privacy/",
       "endUserExposure": "server-only",
