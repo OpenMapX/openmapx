@@ -413,6 +413,36 @@ describe("mapStationToDetail", () => {
     expect(findRow(section, "row.pricing")?.[1]).toBe("from 1.50 €/h");
   });
 
+  it("keeps rent and return state separate and localizes the return constraint", () => {
+    const detail = mapStationToDetail(
+      makeStation({ isRenting: true, isReturning: false, returnConstraint: "any_station" }),
+    );
+    const section = findSection(detail.sections, "shared.section.availability");
+    expect(findRow(section, "row.renting")?.[1]).toEqual({ $t: "value.yes" });
+    expect(findRow(section, "row.returning")?.[1]).toEqual({ $t: "value.no" });
+    expect(findRow(section, "row.returnConstraint")?.[1]).toEqual({
+      $t: "value.returnConstraint.any_station",
+    });
+  });
+
+  it("renders provider, group, membership, system URL, and cross street", () => {
+    const detail = mapStationToDetail(
+      makeStation({
+        providerName: "Example Bikes",
+        providerGroupName: "Example Mobility",
+        providerUrl: "https://example.test",
+        purchaseUrl: "https://example.test/join",
+        crossStreet: "Central Avenue",
+      }),
+    );
+    const section = findSection(detail.sections, "section.provider");
+    expect(findRow(section, "row.provider")?.[1]).toBe("Example Bikes");
+    expect(findRow(section, "row.providerGroup")?.[1]).toBe("Example Mobility");
+    expect(findRow(section, "row.systemWebsite")?.[1]).toBe("https://example.test");
+    expect(findRow(section, "row.membership")?.[1]).toBe("https://example.test/join");
+    expect(findRow(section, "row.crossStreet")?.[1]).toBe("Central Avenue");
+  });
+
   it("includes Transit section when transitInfo has lines", () => {
     const detail = mapStationToDetail(
       makeStation({ transitInfo: { lines: "U5, U8", stops: "Alexanderplatz" } }),
@@ -682,6 +712,25 @@ describe("mapVehicleToDetail", () => {
       $t: "format.distanceKm",
       values: { value: "15.5" },
     });
+  });
+
+  it("renders vehicle return constraints and provider membership", () => {
+    const detail = mapVehicleToDetail(
+      makeVehicle({
+        returnConstraint: "roundtrip_station",
+        providerName: "Example Cars",
+        providerGroupName: "Example Mobility",
+        providerUrl: "https://example.test",
+        purchaseUrl: "https://example.test/join",
+      }),
+    );
+    const info = findSection(detail.sections, "section.vehicleInfo");
+    expect(findRow(info, "row.returnConstraint")?.[1]).toEqual({
+      $t: "value.returnConstraint.roundtrip_station",
+    });
+    const provider = findSection(detail.sections, "section.provider");
+    expect(findRow(provider, "row.provider")?.[1]).toBe("Example Cars");
+    expect(findRow(provider, "row.membership")?.[1]).toBe("https://example.test/join");
   });
 
   it("status shows Reserved token when isReserved", () => {

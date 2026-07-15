@@ -17,6 +17,10 @@
       "types": "./src/dedup.ts",
       "default": "./src/dedup.ts"
     },
+    "./detail-store": {
+      "types": "./src/detail-store.ts",
+      "default": "./src/detail-store.ts"
+    },
     "./entur-mobility": {
       "types": "./src/entur-mobility.ts",
       "default": "./src/entur-mobility.ts"

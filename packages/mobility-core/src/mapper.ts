@@ -76,6 +76,14 @@ const T = {
     ios: t("row.ios"),
     iosApp: t("row.iosApp"),
     androidApp: t("row.androidApp"),
+    renting: t("row.renting"),
+    returning: t("row.returning"),
+    returnConstraint: t("row.returnConstraint"),
+    provider: t("row.provider"),
+    providerGroup: t("row.providerGroup"),
+    crossStreet: t("row.crossStreet"),
+    systemWebsite: t("row.systemWebsite"),
+    membership: t("row.membership"),
   },
   value: {
     fixedStation: t("value.fixedStation"),
@@ -85,6 +93,8 @@ const T = {
     disabled: t("value.disabled"),
     available: t("value.available"),
     vehicleFallback: t("value.vehicleFallback"),
+    yes: t("value.yes"),
+    no: t("value.no"),
   },
 } as const;
 
@@ -129,6 +139,10 @@ function formFactorToken(formFactor: string): I18nTokenLike {
 
 function propulsionToken(propulsion: string): I18nTokenLike {
   return t(`value.propulsionKind.${propulsion}`);
+}
+
+function returnConstraintToken(constraint: string): I18nTokenLike {
+  return t(`value.returnConstraint.${constraint}`);
 }
 
 function brandingFromStation(station: SharedMobilityStation): DataSourceBranding | undefined {
@@ -227,6 +241,15 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
   }
   if (station.pricingSummary) {
     rows.push([T.row.pricing, station.pricingSummary]);
+  }
+  if (station.isRenting !== undefined) {
+    rows.push([T.row.renting, station.isRenting ? T.value.yes : T.value.no]);
+  }
+  if (station.isReturning !== undefined) {
+    rows.push([T.row.returning, station.isReturning ? T.value.yes : T.value.no]);
+  }
+  if (station.returnConstraint) {
+    rows.push([T.row.returnConstraint, returnConstraintToken(station.returnConstraint)]);
   }
 
   sections.push({
@@ -339,6 +362,24 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
         collapsed: true,
       });
     }
+  }
+
+  const providerRows: [I18nTokenLike, Translatable][] = [];
+  if (station.providerName) providerRows.push([T.row.provider, station.providerName]);
+  if (station.providerGroupName) {
+    providerRows.push([T.row.providerGroup, station.providerGroupName]);
+  }
+  if (station.crossStreet) providerRows.push([T.row.crossStreet, station.crossStreet]);
+  if (station.providerUrl) providerRows.push([T.row.systemWebsite, station.providerUrl]);
+  if (station.purchaseUrl) providerRows.push([T.row.membership, station.purchaseUrl]);
+  if (providerRows.length > 0) {
+    sections.push({
+      title: t("section.provider"),
+      type: "table",
+      rows: providerRows,
+      sectionIcon: "info",
+      collapsed: true,
+    });
   }
 
   if (station.rentalApps) {
@@ -495,6 +536,9 @@ export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDe
       t("format.distanceKm", { value: (vehicle.rangeMeters / 1000).toFixed(1) }),
     ]);
   }
+  if (vehicle.returnConstraint) {
+    rows.push([T.row.returnConstraint, returnConstraintToken(vehicle.returnConstraint)]);
+  }
   rows.push([
     T.row.status,
     vehicle.isReserved
@@ -530,6 +574,23 @@ export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDe
         collapsed: true,
       });
     }
+  }
+
+  const providerRows: [I18nTokenLike, Translatable][] = [];
+  if (vehicle.providerName) providerRows.push([T.row.provider, vehicle.providerName]);
+  if (vehicle.providerGroupName) {
+    providerRows.push([T.row.providerGroup, vehicle.providerGroupName]);
+  }
+  if (vehicle.providerUrl) providerRows.push([T.row.systemWebsite, vehicle.providerUrl]);
+  if (vehicle.purchaseUrl) providerRows.push([T.row.membership, vehicle.purchaseUrl]);
+  if (providerRows.length > 0) {
+    sections.push({
+      title: t("section.provider"),
+      type: "table",
+      rows: providerRows,
+      sectionIcon: "info",
+      collapsed: true,
+    });
   }
 
   const branding = brandingFromVehicle(vehicle);

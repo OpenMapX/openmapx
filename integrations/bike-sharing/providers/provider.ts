@@ -12,11 +12,13 @@ import type {
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
 import {
+  type CacheClient,
   createManifestAttribution,
   type MobilityDataSourceProvider,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { dedupStations, dedupVehicles } from "@openmapx/mobility-core/dedup";
+import { SharedMobilityDetailStore } from "@openmapx/mobility-core/detail-store";
 import {
   buildEnturGeofencingMapContext,
   enrichEnturMobilityItems,
@@ -58,17 +60,8 @@ const wrapRT = <T>(data: T, attributions: Attribution[]): MobilityResult<T> =>
 const wrapStatic = <T>(data: T, attributions: Attribution[]): MobilityResult<T> =>
   withAttribution(data, attributions, freshnessNow({ hasRealtimeData: false }));
 
-// In-memory cache for detail lookups (stations + free-floating)
-const itemCache = new Map<string, SharedMobilityStation | SharedMobilityVehicle>();
-const MAX_CACHE_SIZE = 5000;
-
-function updateCache(id: string, item: SharedMobilityStation | SharedMobilityVehicle): void {
-  if (itemCache.size >= MAX_CACHE_SIZE) {
-    const firstKey = itemCache.keys().next().value;
-    if (firstKey) itemCache.delete(firstKey);
-  }
-  itemCache.set(id, item);
-}
+const detailStore = new SharedMobilityDetailStore(600, 5_000);
+export const setDetailCache = (cache: CacheClient): void => detailStore.setCache(cache);
 
 const META: DataSourceMeta = {
   minZoom: 12,
@@ -186,13 +179,19 @@ class BikeSharingProvider implements MobilityDataSourceProvider {
       console.warn("[bike-sharing] Entur enrichment failed", error);
     }
 
+    await detailStore.store([
+      ...dedupedStations,
+      ...dedupedVehicles,
+      ...(motisResult.status === "fulfilled"
+        ? [...motisResult.value.stations, ...motisResult.value.vehicles]
+        : []),
+    ]);
+
     for (const s of dedupedStations) {
-      updateCache(s.id, s);
       results.push(mapStationToResult(s));
     }
 
     for (const v of dedupedVehicles) {
-      updateCache(v.id, v);
       results.push(mapVehicleToResult(v));
     }
 
@@ -203,7 +202,7 @@ class BikeSharingProvider implements MobilityDataSourceProvider {
   }
 
   async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
-    const cached = itemCache.get(stripMobilityKindPrefix(itemId));
+    const cached = await detailStore.get(stripMobilityKindPrefix(itemId));
     if (cached) {
       const attrs = attribution.forResults([cached], (c) => c.sources);
       if ("availableVehicles" in cached) return wrapRT(mapStationToDetail(cached), attrs);

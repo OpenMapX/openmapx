@@ -12,11 +12,13 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import {
+  type CacheClient,
   createManifestAttribution,
   type MobilityDataSourceProvider,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { dedupStations, dedupVehicles } from "@openmapx/mobility-core/dedup";
+import { SharedMobilityDetailStore } from "@openmapx/mobility-core/detail-store";
 import {
   buildEnturGeofencingMapContext,
   enrichEnturMobilityItems,
@@ -42,9 +44,8 @@ import type {
 import { searchFelyx } from "./felyx-client.js";
 import { searchNrwMobidrom } from "./nrw-mobidrom-client.js";
 
-// In-memory cache for detail lookups
-const itemCache = new Map<string, SharedMobilityStation | SharedMobilityVehicle>();
-const MAX_CACHE_SIZE = 5000;
+const detailStore = new SharedMobilityDetailStore(600, 5_000);
+export const setDetailCache = (cache: CacheClient): void => detailStore.setCache(cache);
 
 const META: DataSourceMeta = {
   minZoom: 13,
@@ -156,13 +157,19 @@ class ScooterSharingProvider implements MobilityDataSourceProvider {
       console.warn("[scooter-sharing] Entur enrichment failed", error);
     }
 
+    await detailStore.store([
+      ...dedupedStations,
+      ...dedupedVehicles,
+      ...(motisResult.status === "fulfilled"
+        ? [...motisResult.value.stations, ...motisResult.value.vehicles]
+        : []),
+    ]);
+
     for (const station of dedupedStations) {
-      updateCache(station.id, station);
       results.push(mapStationToResult(station));
     }
 
     for (const vehicle of dedupedVehicles) {
-      updateCache(vehicle.id, vehicle);
       results.push(mapVehicleToResult(vehicle));
     }
 
@@ -173,7 +180,7 @@ class ScooterSharingProvider implements MobilityDataSourceProvider {
   }
 
   async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
-    const cached = itemCache.get(stripMobilityKindPrefix(itemId));
+    const cached = await detailStore.get(stripMobilityKindPrefix(itemId));
     if (cached) {
       const attrs = attribution.forResults([cached], (c) => c.sources);
       if ("availableVehicles" in cached) return wrapRT(mapStationToDetail(cached), attrs);
@@ -190,14 +197,6 @@ class ScooterSharingProvider implements MobilityDataSourceProvider {
   ) {
     return wrapStatic(await buildEnturGeofencingMapContext(bbox, options), attribution.all());
   }
-}
-
-function updateCache(id: string, item: SharedMobilityStation | SharedMobilityVehicle): void {
-  if (itemCache.size >= MAX_CACHE_SIZE) {
-    const firstKey = itemCache.keys().next().value;
-    if (firstKey) itemCache.delete(firstKey);
-  }
-  itemCache.set(id, item);
 }
 
 export const scooterSharingProvider = new ScooterSharingProvider();

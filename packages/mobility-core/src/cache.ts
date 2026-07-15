@@ -8,7 +8,7 @@ import { TTL as TTL_POLICY } from "./policy.js";
 // Any cache instance that satisfies this shape - including the one the host
 // passes to integrations via `IntegrationContext.cache` - can be supplied
 // to `initCache()`.
-interface CacheClient {
+export interface CacheClient {
   get<T = unknown>(key: string): Promise<T | null>;
   set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
   del(key: string): Promise<void>;

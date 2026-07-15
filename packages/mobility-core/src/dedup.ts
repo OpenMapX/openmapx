@@ -149,17 +149,30 @@ function mergeStation(existing: SharedMobilityStation, incoming: SharedMobilityS
  */
 export function dedupStations(stations: SharedMobilityStation[]): SharedMobilityStation[] {
   const byCoordKey = new Map<string, SharedMobilityStation>();
+  const byIdentity = new Map<string, SharedMobilityStation>();
   const result: SharedMobilityStation[] = [];
 
   for (const s of stations) {
-    const key = coordKey(s.coordinates[0], s.coordinates[1]);
+    const scope = s.systemId ?? s.providerId ?? [...s.sources].sort().join("+");
+    const nativeId = s.nativeId;
+    const identity = nativeId ? `${scope}\0${nativeId}` : undefined;
+    const identityMatch = identity ? byIdentity.get(identity) : undefined;
+    if (identityMatch) {
+      mergeStation(identityMatch, s);
+      continue;
+    }
+    const key = `${scope}\0${coordKey(s.coordinates[0], s.coordinates[1])}`;
     const exactMatch = byCoordKey.get(key);
     if (exactMatch) {
       mergeStation(exactMatch, s);
+      if (identity) byIdentity.set(identity, exactMatch);
       continue;
     }
 
     const fuzzyMatch = result.find((existing) => {
+      const existingScope =
+        existing.systemId ?? existing.providerId ?? [...existing.sources].sort().join("+");
+      if (existingScope !== scope) return false;
       const dist = haversineMeters(
         s.coordinates[1],
         s.coordinates[0],
@@ -174,10 +187,12 @@ export function dedupStations(stations: SharedMobilityStation[]): SharedMobility
 
     if (fuzzyMatch) {
       mergeStation(fuzzyMatch, s);
+      if (identity) byIdentity.set(identity, fuzzyMatch);
       continue;
     }
 
     byCoordKey.set(key, s);
+    if (identity) byIdentity.set(identity, s);
     result.push(s);
   }
 
@@ -192,6 +207,8 @@ export function dedupStations(stations: SharedMobilityStation[]): SharedMobility
 const AGGREGATOR_SOURCES = new Set(["transitous", "motis", "nrw-mobidrom-scooter"]);
 
 function isAggregator(vehicle: SharedMobilityVehicle): boolean {
+  if (vehicle.servingOrigin === "motis-local" || vehicle.servingOrigin === "transitous")
+    return true;
   return vehicle.sources.length > 0 && vehicle.sources.every((s) => AGGREGATOR_SOURCES.has(s));
 }
 
@@ -207,6 +224,12 @@ function extractRawId(id: string): string {
   const colonIdx = id.lastIndexOf(":");
   if (colonIdx >= 0) return id.slice(colonIdx + 1);
   return id;
+}
+
+function canonicalVehicleIdentity(vehicle: SharedMobilityVehicle): string {
+  const provider = vehicle.systemId ?? vehicle.providerId ?? [...vehicle.sources].sort().join("+");
+  const native = vehicle.nativeId ?? extractRawId(vehicle.id);
+  return `${provider}\0${native}`;
 }
 
 /**
@@ -236,28 +259,28 @@ export function dedupVehicles(vehicles: SharedMobilityVehicle[]): SharedMobility
   for (const v of vehicles) {
     if (isAggregator(v)) continue;
     result.push(v);
-    directById.set(extractRawId(v.id), v);
+    directById.set(canonicalVehicleIdentity(v), v);
   }
 
   // Pass 2: merge aggregator vehicles into their direct-source counterpart, or keep them.
   for (const v of vehicles) {
     if (!isAggregator(v)) continue;
-    const rawId = extractRawId(v.id);
-    const directMatch = directById.get(rawId);
+    const identity = canonicalVehicleIdentity(v);
+    const directMatch = directById.get(identity);
     if (directMatch) {
       for (const src of v.sources) {
         if (!directMatch.sources.includes(src)) directMatch.sources.push(src);
       }
       continue;
     }
-    const aggMatch = keptAggById.get(rawId);
+    const aggMatch = keptAggById.get(identity);
     if (aggMatch) {
       for (const src of v.sources) {
         if (!aggMatch.sources.includes(src)) aggMatch.sources.push(src);
       }
     } else {
       result.push(v);
-      keptAggById.set(rawId, v);
+      keptAggById.set(identity, v);
     }
   }
 

@@ -16,6 +16,7 @@ import {
 } from "./gbfs-catalog.js";
 import { fetchGbfsSystem, type GbfsSystemData } from "./gbfs-client.js";
 import { reverseGeocodeCity } from "./nominatim.js";
+import { normalizeRentalReturnConstraint } from "./rental-constraints.js";
 import type {
   PricingDetail,
   SharedMobilityStation,
@@ -335,7 +336,7 @@ async function fetchSystemData(
         accessories: vt.vehicleAccessories,
         co2PerKm: vt.co2PerKm,
         riderCapacity: vt.riderCapacity,
-        returnConstraint: vt.returnConstraint,
+        returnConstraint: normalizeRentalReturnConstraint(vt.returnConstraint),
       });
       if (vt.defaultPricingPlanId) pricingPlanIds.add(vt.defaultPricingPlanId);
       for (const pid of vt.pricingPlanIds ?? []) pricingPlanIds.add(pid);

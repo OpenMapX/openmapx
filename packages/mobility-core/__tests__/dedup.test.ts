@@ -26,6 +26,7 @@ function makeStation(
     availableVehicles: 3,
     vehicleTypes: ["bicycle"],
     isActive: true,
+    systemId: "shared-test-system",
     sources: ["citybikes/test"],
     ...overrides,
   };
@@ -290,6 +291,7 @@ function makeVehicle(
     formFactor: "scooter_standing",
     isReserved: false,
     isDisabled: false,
+    systemId: "shared-test-system",
     ...overrides,
   };
 }
@@ -360,11 +362,13 @@ describe("dedupVehicles", () => {
     // Same UUID appearing in two different GBFS systems would be unusual but must not be deduped
     const a = makeVehicle({
       id: "gbfs/dott-berlin/uuid-1",
+      systemId: "dott-berlin",
       coordinates: [13.41, 52.52],
       sources: ["gbfs/dott-berlin"],
     });
     const b = makeVehicle({
       id: "gbfs/dott-aachen/uuid-1",
+      systemId: "dott-aachen",
       coordinates: [13.41, 52.52],
       sources: ["gbfs/dott-aachen"],
     });
@@ -372,6 +376,26 @@ describe("dedupVehicles", () => {
     const result = dedupVehicles([a, b]);
     expect(result).toHaveLength(2);
     expect(result.map((v) => v.id)).toEqual(["gbfs/dott-berlin/uuid-1", "gbfs/dott-aachen/uuid-1"]);
+  });
+
+  it("never merges identical native IDs from competing providers", () => {
+    const direct = makeVehicle({
+      id: "gbfs/operator-a/shared-id",
+      nativeId: "shared-id",
+      systemId: "operator-a",
+      coordinates: [13.41, 52.52],
+      sources: ["gbfs/operator-a"],
+    });
+    const aggregator = makeVehicle({
+      id: "motis-local/operator-b/vehicle/shared-id",
+      nativeId: "shared-id",
+      systemId: "operator-b",
+      servingOrigin: "motis-local",
+      coordinates: [13.41, 52.52],
+      sources: ["mobilitydata:operator-b"],
+    });
+
+    expect(dedupVehicles([direct, aggregator])).toHaveLength(2);
   });
 
   it("treats 'motis' source the same as 'transitous'", () => {

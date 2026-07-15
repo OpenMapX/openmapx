@@ -2,14 +2,44 @@ import { createHash } from "node:crypto";
 import type { BoundingBox } from "@openmapx/core";
 import { TTL, withCache } from "./cache.js";
 import { filterCatalogByBbox, loadCatalog, normalizeFormFactor } from "./gbfs-catalog.js";
+import { normalizeRentalReturnConstraint } from "./rental-constraints.js";
 import type {
   PricingDetail,
+  SharedMobilityAreaGeometry,
   SharedMobilityBranding,
   SharedMobilityRentalApps,
   SharedMobilityStation,
   SharedMobilityVehicle,
   VehicleTypeDetail,
 } from "./types/shared-mobility.js";
+
+function normalizeAreaGeometry(
+  geometry: EnturStation["stationArea"],
+): SharedMobilityAreaGeometry | undefined {
+  if (!geometry || !Array.isArray(geometry.coordinates)) return undefined;
+  const isPosition = (value: unknown): value is number[] =>
+    Array.isArray(value) &&
+    value.length >= 2 &&
+    typeof value[0] === "number" &&
+    typeof value[1] === "number" &&
+    Number.isFinite(value[0]) &&
+    Number.isFinite(value[1]);
+  const isRing = (value: unknown): value is number[][] =>
+    Array.isArray(value) && value.length >= 4 && value.every(isPosition);
+  const isPolygon = (value: unknown): value is number[][][] =>
+    Array.isArray(value) && value.length > 0 && value.every(isRing);
+  if (geometry.type === "Polygon" && isPolygon(geometry.coordinates)) {
+    return { type: "Polygon", coordinates: geometry.coordinates };
+  }
+  if (
+    geometry.type === "MultiPolygon" &&
+    geometry.coordinates.length > 0 &&
+    geometry.coordinates.every(isPolygon)
+  ) {
+    return { type: "MultiPolygon", coordinates: geometry.coordinates as number[][][][] };
+  }
+  return undefined;
+}
 
 const ENTUR_CLIENT_NAME = "openmapx-server";
 const ENTUR_GRAPHQL_URL = "https://api.entur.io/mobility/v2/graphql";
@@ -328,7 +358,7 @@ function mapVehicleTypeDetail(vehicleType: EnturVehicleType): VehicleTypeDetail 
       .filter((value): value is string => !!value),
     co2PerKm: vehicleType.gCO2km ?? undefined,
     riderCapacity: vehicleType.riderCapacity ?? undefined,
-    returnConstraint: vehicleType.returnConstraint?.toLowerCase() ?? undefined,
+    returnConstraint: normalizeRentalReturnConstraint(vehicleType.returnConstraint),
     imageUrl: vehicleType.vehicleImage ?? undefined,
     iconUrl: vehicleType.vehicleAssets?.iconUrl ?? undefined,
     iconUrlDark: vehicleType.vehicleAssets?.iconUrlDark ?? undefined,
@@ -700,7 +730,7 @@ export async function enrichEnturMobilityItems(
       android: enturStation.rentalUris?.android ?? undefined,
     };
     station.stationType = station.stationType ?? (enturStation.isVirtualStation ? "free" : "fixed");
-    station.stationArea = station.stationArea ?? enturStation.stationArea ?? undefined;
+    station.stationArea = station.stationArea ?? normalizeAreaGeometry(enturStation.stationArea);
     station.accessMethod = station.accessMethod ?? mapRentalMethods(enturStation.rentalMethods);
     station.address = station.address ?? {
       street: enturStation.address ?? undefined,
