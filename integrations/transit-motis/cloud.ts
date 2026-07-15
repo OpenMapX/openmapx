@@ -1,3 +1,4 @@
+import { applyDeutschlandticketFilter } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
@@ -17,6 +18,7 @@ function withPrefix(id: string, prefix: "mo:"): string {
 }
 
 export function setupCloud(ctx: IntegrationContext): void {
+  const providerPolicyEnabled = ctx.config.providerPolicy !== false;
   configureTransitous({
     url: ctx.config.transitousUrl as string | undefined,
     userAgent: ctx.config.transitousUserAgent as string | undefined,
@@ -31,6 +33,7 @@ export function setupCloud(ctx: IntegrationContext): void {
     prefix: "mo:",
     coverage: { all: true },
     priority: 7,
+    role: providerPolicyEnabled ? "fallback" : undefined,
     attribution: attributionTransitous(),
     capabilities: {
       stops: {
@@ -45,29 +48,78 @@ export function setupCloud(ctx: IntegrationContext): void {
       departures: true,
       arrivals: true,
       routes: { lookup: false, forStop: false, stops: false, geometry: false },
-      planning: false,
+      planning: true,
+      planningFeatures: {
+        maxTransfers: true,
+        transferBuffer: true,
+        wheelchairRequired: true,
+        bikeTransport: true,
+        elevation: true,
+        rentalFilters: true,
+        detailedTransfers: true,
+        paging: true,
+        refresh: false,
+      },
       vehiclePositions: false,
       vehicleJourney: true,
       alerts: { byStop: false, byRoute: false, byBbox: false },
       facilities: false,
     },
-    // Transit route network for the line-network map overlay. Only the
-    // always-on cloud provider implements this (the local provider keeps
-    // bbox methods off to avoid orchestrator fan-out across both instances).
-    async getRoutesInBbox(bbox) {
-      return wrapTransitous(await motis.getRoutesInBbox(transitousInstance, bbox));
+    // Hosted fallback for viewports the local instance cannot serve.
+    async getRoutesInBbox(bbox, zoom) {
+      return wrapTransitous(await motis.getRoutesInBbox(transitousInstance, bbox, zoom));
+    },
+    async planTrip(params) {
+      const arriveBy = params.arrivalTime != null;
+      const dateTime = params.arrivalTime ?? params.departureTime ?? new Date().toISOString();
+      const planned = await motis.planTrip(
+        transitousInstance,
+        params.from.lat,
+        params.from.lng,
+        params.to.lat,
+        params.to.lng,
+        dateTime.slice(0, 10),
+        dateTime.slice(11, 19),
+        arriveBy,
+        params.numItineraries,
+        {
+          modes: params.deutschlandticketOnly
+            ? applyDeutschlandticketFilter(params.modes)
+            : params.modes,
+          wheelchair: params.wheelchairRequired ?? params.wheelchair,
+          preTransitModes: params.preTransitModes,
+          postTransitModes: params.postTransitModes,
+          directModes: params.directModes,
+          maxTransfers: params.maxTransfers,
+          transferBuffer: params.transferBuffer,
+          requireBikeTransport: params.requireBikeTransport,
+          bikeHillPreference: params.bikeHillPreference,
+          rentalFilters: params.rentalFilters,
+          pageCursor: params.pageCursor,
+          detailedLegs: true,
+          detailedTransfers: true,
+          useRoutedTransfers: true,
+          datasetEpoch: params.capabilityEpoch,
+          throwOnError: true,
+        },
+      );
+      return wrapTransitousRT(planned ? [planned] : []);
     },
     async getStop(id) {
       return wrapTransitous(await motis.getStopById(transitousInstance, withPrefix(id, "mo:")));
     },
     async getDepartures(id, min) {
       return wrapTransitousRT(
-        await motis.getDepartures(transitousInstance, withPrefix(id, "mo:"), min),
+        await motis.getDepartures(transitousInstance, withPrefix(id, "mo:"), min, {
+          realtimeEnabled: true,
+        }),
       );
     },
     async getArrivals(id, min) {
       return wrapTransitousRT(
-        await motis.getArrivals(transitousInstance, withPrefix(id, "mo:"), min),
+        await motis.getArrivals(transitousInstance, withPrefix(id, "mo:"), min, {
+          realtimeEnabled: true,
+        }),
       );
     },
     async getVehicleJourney(tripId) {

@@ -6,6 +6,7 @@ import type {
   ProviderHealthHandle,
   TransitProvider,
   TripPlanRequest,
+  TripRefreshRequest,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { Freshness } from "@openmapx/mobility-core/freshness";
@@ -18,6 +19,7 @@ import type {
   TransitRoute,
   TransitStop,
   TransitStopInfrastructure,
+  TripItinerary,
   TripPlan,
   VehicleJourney,
   VehiclePosition,
@@ -65,6 +67,22 @@ function providerOverlapsBbox(p: TransitProvider, bbox: BBox): boolean {
   const pBbox = getProviderBbox(p);
   if (!pBbox) return true; // `{ all: true }` matches everywhere
   return bboxesOverlap(bbox, pBbox);
+}
+
+function providerRole(
+  provider: TransitProvider,
+): "baseline" | "fallback" | "enrichment" | "regional" {
+  return provider.role ?? (provider.capabilities.planning ? "regional" : "enrichment");
+}
+
+const ROLE_RANK = { baseline: 0, regional: 1, fallback: 2, enrichment: 3 } as const;
+
+function compareProviderPolicy(a: TransitProvider, b: TransitProvider): number {
+  return (
+    ROLE_RANK[providerRole(a)] - ROLE_RANK[providerRole(b)] ||
+    a.priority - b.priority ||
+    a.id.localeCompare(b.id)
+  );
 }
 
 export class UnsupportedTransitPlanningCapabilitiesError extends Error {
@@ -241,6 +259,25 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   const providerHealth: ProviderHealthHandle = ctx.providerHealth ?? noopHealth;
   const metricsRecorder: MetricsRecorder = ctx.metricsRecorder ?? noopMetrics;
 
+  function recordDecision(
+    operation: "plan" | "routes" | "refresh",
+    provider: TransitProvider | undefined,
+    reason:
+      | "selected"
+      | "authoritative_empty"
+      | "transport_failure"
+      | "unsupported"
+      | "refresh_success"
+      | "refresh_fallback",
+  ): void {
+    metricsRecorder.recordTransitDecision?.({
+      operation,
+      providerId: provider?.id ?? "none",
+      role: provider ? providerRole(provider) : "none",
+      reason,
+    });
+  }
+
   /** Lazily collect all transit providers from registered integrations. */
   function collectProviders(): TransitProvider[] {
     const integrations = ctx.getIntegrationsByDomain("transit");
@@ -328,7 +365,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   async function getProvidersForBbox(bbox: BBox): Promise<TransitProvider[]> {
     const overlapping = collectProviders()
       .filter((p) => providerOverlapsBbox(p, bbox))
-      .sort((a, b) => a.priority - b.priority);
+      .sort(compareProviderPolicy);
     return filterHealthy(overlapping);
   }
 
@@ -489,8 +526,11 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 
     const matching = (await getProvidersForBbox(tripBbox)).filter((p) => p.planTrip);
     const required = requiredPlanningCapabilities(params);
-    const eligible = matching.filter((provider) => supportsPlanningRequest(provider, required));
+    const eligible = matching
+      .filter((provider) => supportsPlanningRequest(provider, required))
+      .sort(compareProviderPolicy);
     if (matching.length > 0 && eligible.length === 0 && required.length > 0) {
+      recordDecision("plan", undefined, "unsupported");
       throw new UnsupportedTransitPlanningCapabilitiesError(required);
     }
 
@@ -502,18 +542,64 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       const outcome = await timed(providerHealth, metricsRecorder, provider.id, "planTrip", () =>
         bound(params),
       );
-      if (!outcome.ok) continue;
+      if (!outcome.ok) {
+        recordDecision("plan", provider, "transport_failure");
+        continue;
+      }
       const res = outcome.value;
       const first = res?.data?.[0];
       if (first?.itineraries?.length) {
+        recordDecision("plan", provider, "selected");
         return {
           data: { ...first, provider: first.provider ?? provider.prefix.replace(/:$/, "") },
           attributions: res?.attributions ?? [],
           freshness: res?.freshness ?? freshnessNow(),
         };
       }
+      // A healthy, covered baseline returning no itinerary is authoritative.
+      // Hosted/regional fallback is reserved for coverage/health/transport evidence.
+      if (providerRole(provider) === "baseline") {
+        recordDecision("plan", provider, "authoritative_empty");
+        return {
+          data: {
+            from: { name: "", ...params.from },
+            to: { name: "", ...params.to },
+            itineraries: [],
+            provider: provider.prefix.replace(/:$/, ""),
+          },
+          attributions: res?.attributions ?? [],
+          freshness: res?.freshness ?? freshnessNow(),
+        };
+      }
     }
     return emptyResult<TripPlan | null>(null);
+  }
+
+  async function refreshTrip(
+    providerId: string,
+    params: TripRefreshRequest,
+  ): Promise<MobilityResult<TripItinerary | null>> {
+    const provider = collectProviders().find((candidate) => candidate.id === providerId);
+    if (
+      !provider?.refreshTrip ||
+      provider.capabilities.planningFeatures?.refresh !== true ||
+      !(await providerHealth.isHealthy(provider.id))
+    ) {
+      recordDecision("refresh", provider, "refresh_fallback");
+      return emptyResult<TripItinerary | null>(null, { hasRealtimeData: true });
+    }
+    const fn = provider.refreshTrip.bind(provider);
+    const outcome = await timed(providerHealth, metricsRecorder, provider.id, "refreshTrip", () =>
+      fn(params),
+    );
+    if (!outcome.ok || !outcome.value.data) {
+      recordDecision("refresh", provider, "refresh_fallback");
+      return outcome.ok
+        ? outcome.value
+        : emptyResult<TripItinerary | null>(null, { hasRealtimeData: true });
+    }
+    recordDecision("refresh", provider, "refresh_success");
+    return outcome.value;
   }
 
   async function getVehicleRadar(bbox: BBox): Promise<MobilityResult<VehiclePosition[]>> {
@@ -686,29 +772,35 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     };
   }
 
-  async function getRoutesInBbox(bbox: BBox): Promise<MobilityResult<TransitRoute[]>> {
-    const matching = (await getProvidersForBbox(bbox)).filter((p) => p.getRoutesInBbox);
-    const results = await Promise.allSettled(
-      matching.map(async (p) => {
-        if (!p.getRoutesInBbox) return null;
-        const fn = p.getRoutesInBbox.bind(p);
-        const outcome = await timed(providerHealth, metricsRecorder, p.id, "getRoutesInBbox", () =>
-          fn(bbox),
-        );
-        return outcome.ok ? outcome.value : null;
-      }),
-    );
-    const ok = results
-      .map((r) => (r.status === "fulfilled" ? r.value : null))
-      .filter((v): v is MobilityResult<TransitRoute[]> => v != null);
-    return {
-      data: ok.flatMap((r) => r.data),
-      attributions: mergeAttributions(
-        ctx.attributionIndex,
-        ...resultsWithData(ok).map((r) => r.attributions),
-      ),
-      freshness: mergeFreshness(...ok.map((r) => r.freshness)),
-    };
+  async function getRoutesInBbox(
+    bbox: BBox,
+    zoom?: number,
+  ): Promise<MobilityResult<TransitRoute[]>> {
+    const matching = (await getProvidersForBbox(bbox))
+      .filter((p) => p.getRoutesInBbox)
+      .sort(compareProviderPolicy);
+    for (const provider of matching) {
+      const fn = provider.getRoutesInBbox;
+      if (!fn) continue;
+      const outcome = await timed(
+        providerHealth,
+        metricsRecorder,
+        provider.id,
+        "getRoutesInBbox",
+        () => fn.call(provider, bbox, zoom),
+      );
+      if (!outcome.ok) {
+        recordDecision("routes", provider, "transport_failure");
+        continue;
+      }
+      recordDecision(
+        "routes",
+        provider,
+        outcome.value.data.length === 0 ? "authoritative_empty" : "selected",
+      );
+      return outcome.value;
+    }
+    return emptyResult<TransitRoute[]>([]);
   }
 
   async function getRoute(routeId: string): Promise<MobilityResult<TransitRoute | null>> {
@@ -977,6 +1069,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     searchByName,
     searchByNameRaw,
     planTrip,
+    refreshTrip,
     getVehicleRadar,
     getAlerts,
     getStopPlatforms,

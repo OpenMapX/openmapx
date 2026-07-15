@@ -32,7 +32,11 @@ function getConfig(): ApiClientConfig {
 }
 
 export class ApiClient {
-  async get<T>(path: string, params?: Record<string, string>): Promise<T> {
+  async get<T>(
+    path: string,
+    params?: Record<string, string>,
+    options?: { signal?: AbortSignal },
+  ): Promise<T> {
     const cfg = getConfig();
     const url = new URL(path, cfg.baseUrl);
     if (params) {
@@ -43,6 +47,7 @@ export class ApiClient {
     const res = await fetch(url.toString(), {
       headers: { Accept: "application/json", ...cfg.headerInterceptor?.() },
       credentials: cfg.credentials ?? "omit",
+      signal: options?.signal,
     });
     if (!res.ok) {
       throw new Error(`API error ${res.status}: ${await res.text()}`);

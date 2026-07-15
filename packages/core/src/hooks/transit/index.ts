@@ -14,6 +14,10 @@ export type { MobilityEnvelopeQueryResult } from "./useMobilityEnvelope";
 export { wrapMobilityEnvelope } from "./useMobilityEnvelope";
 export { usePlaceStopInfrastructure } from "./usePlaceStopInfrastructure";
 export { useReachableStops } from "./useReachableStops";
+export {
+  type TransitRefreshResult,
+  useRefreshTransitItinerary,
+} from "./useRefreshTransitItinerary";
 export { useRouteAlerts } from "./useRouteAlerts";
 export { useRouteLive } from "./useRouteLive";
 export { useRouteStops } from "./useRouteStops";

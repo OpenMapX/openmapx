@@ -486,6 +486,8 @@
     "stairs": "stairs",
     "accessRestricted": "access restriction reported",
     "requirementsContradicted": "This result contradicts: {requirements}",
+    "connectionUpdated": "Connection updated with current times and platforms",
+    "connectionReplanned": "Connection changed and was replanned",
     "fare": "Fare",
     "fareApprox": "~{amount}",
     "co2Emissions": "CO2",

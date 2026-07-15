@@ -8,6 +8,7 @@ import type {
   TransitRoute,
   TransitStop,
   TransitStopInfrastructure,
+  TripItinerary,
   TripPlan,
   VehicleJourney,
   VehiclePosition,
@@ -66,6 +67,8 @@ export interface TransitPlanningMetadata {
   datasetEpoch: string;
   rentalFormFactors: TransitRentalFormFactor[];
 }
+
+export type TransitProviderRole = "baseline" | "fallback" | "enrichment" | "regional";
 
 export interface TransitPlanningCapabilities {
   maxTransfers: boolean;
@@ -141,6 +144,15 @@ export interface TripPlanRequest {
   deutschlandticketOnly?: boolean;
 }
 
+export interface TripRefreshRequest {
+  itineraryId: string;
+  datasetEpoch: string;
+  modes?: string[];
+  wheelchairRequired?: boolean;
+  requireBikeTransport?: boolean;
+  detailedTransfers?: boolean;
+}
+
 // Re-exported so consumers of the framework barrel don't need a separate
 // @openmapx/core import just for this one return type.
 export type { VehicleJourney };
@@ -157,6 +169,8 @@ export interface TransitProvider {
   readonly prefix: string;
   readonly coverage: { bbox: BBox } | { all: true };
   readonly priority: number;
+  /** Operation policy role; legacy providers default to `enrichment`. */
+  readonly role?: TransitProviderRole;
   readonly capabilities: TransitCapabilities;
   readonly planningMetadata?: TransitPlanningMetadata;
   readonly attribution: Attribution[];
@@ -189,6 +203,7 @@ export interface TransitProvider {
   ): Promise<MobilityResult<LineString | null>>;
 
   planTrip?(opts: TripPlanRequest): Promise<MobilityResult<TripPlan[]>>;
+  refreshTrip?(opts: TripRefreshRequest): Promise<MobilityResult<TripItinerary | null>>;
   getVehicleJourney?(
     tripId: string,
     fallbackIds?: string[],
@@ -206,7 +221,7 @@ export interface TransitProvider {
    * because no consumer drives them today; kept on the interface so providers
    * (e.g. transit-overpass for route geometry) can opt in incrementally.
    */
-  getRoutesInBbox?(bbox: BBox): Promise<MobilityResult<TransitRoute[]>>;
+  getRoutesInBbox?(bbox: BBox, zoom?: number): Promise<MobilityResult<TransitRoute[]>>;
   getReachableStops?(
     lat: number,
     lng: number,

@@ -98,15 +98,17 @@ describe("motis-health stage", () => {
 
     const result = await motisHealthRun(ctxFor(dataDir));
     expect(result.status).toBe("ok");
-    expect(calls.length).toBe(5);
+    expect(calls.length).toBe(7);
     expect(calls[0]).toMatch(/\/api\/v1\/health$/);
     expect(calls[1]).toMatch(/\/api\/v1\/health$/);
     expect(calls[2]).toMatch(/\/api\/v1\/map\/initial$/);
     expect(calls[3]).toMatch(/\/api\/v1\/map\/stops\?/);
     expect(calls[4]).toMatch(/\/api\/v1\/plan\?/);
+    expect(calls[5]).toMatch(/\/api\/v1\/plan\?/);
+    expect(calls[6]).toMatch(/\/api\/v1\/plan\?/);
     expect(
       (result.artifacts as { probes?: Array<{ name: string }> }).probes?.map((p) => p.name),
-    ).toEqual(["health", "initial", "stops", "plan"]);
+    ).toEqual(["health", "initial", "stops", "plan", "plan-routed-transfers", "plan-elevation"]);
   });
 
   it("errors with the last failure when staging never becomes healthy", async () => {

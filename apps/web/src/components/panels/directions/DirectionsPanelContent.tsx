@@ -885,6 +885,17 @@ export function DirectionsPanelContent() {
                     replanOptions={transitReplanOptions}
                     onSelect={() => setActiveItineraryIndex(i)}
                     onDetails={() => setTransitDetailsIndex(i)}
+                    onRefreshed={(updated, changed, fallbackOccurred) => {
+                      const current = useDirectionsStore.getState().transitItineraries;
+                      setTransitItineraries(
+                        current.map((candidate, index) => (index === i ? updated : candidate)),
+                      );
+                      if (changed || fallbackOccurred) {
+                        setSnackbar(
+                          fallbackOccurred ? t("connectionReplanned") : t("connectionUpdated"),
+                        );
+                      }
+                    }}
                   />
                   {i < transitItineraries.length - 1 && <Divider />}
                 </Box>

@@ -218,6 +218,15 @@ export interface Departure {
   formation?: TransitFormationReference[];
   remarks?: TripRemark[];
   serviceInfo?: TransitServiceInfo;
+  provenance?: TransitObservationProvenance;
+}
+
+export interface TransitObservationProvenance {
+  baselineSource: string;
+  instance: string;
+  datasetEpoch?: string;
+  realtimeCompleteness: "none" | "merged" | "changed" | "unknown";
+  observedAt: string;
 }
 
 export interface FareProduct {
@@ -400,6 +409,10 @@ export interface TripItinerary {
   descentMeters?: number;
   /** Hard requirements contradicted by provider output. */
   invalidRequirements?: string[];
+  /** Opaque OpenMapX handle; never a raw MOTIS itinerary reference. */
+  refreshToken?: string;
+  refreshedAt?: string;
+  plannedAt?: string;
   legs: TripLeg[];
   fare?: TripFare;
 }

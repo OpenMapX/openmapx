@@ -21,6 +21,7 @@ import {
   transitVehicleIconExpression,
 } from "@/lib/transitMarkers";
 import { useIntegrationDomainAttribution } from "@/lib/useIntegrationAttribution";
+import { isFreshVehicleObservation } from "./freshness.js";
 import { useLiveTransitStore } from "./store";
 import type { LiveTransitSnapshot, LiveTransitVehicle } from "./types.js";
 
@@ -125,12 +126,14 @@ function collectVehicleAlerts(
 
 function toParsedVehicles(snapshot: LiveTransitSnapshot | null): ParsedVehicle[] {
   if (!snapshot) return [];
-  return snapshot.vehicles.map((vehicle) => ({
-    ...vehicle,
-    speedKmh: vehicle.speed != null ? Math.round(vehicle.speed * 3.6) : null,
-    color: modeColor(vehicle.mode),
-    alerts: collectVehicleAlerts(vehicle, snapshot.alerts),
-  }));
+  return snapshot.vehicles
+    .filter((vehicle) => isFreshVehicleObservation(vehicle.updatedAt))
+    .map((vehicle) => ({
+      ...vehicle,
+      speedKmh: vehicle.speed != null ? Math.round(vehicle.speed * 3.6) : null,
+      color: modeColor(vehicle.mode),
+      alerts: collectVehicleAlerts(vehicle, snapshot.alerts),
+    }));
 }
 
 function toFeature(vehicle: ParsedVehicle): VehicleFeature {

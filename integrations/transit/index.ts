@@ -1,9 +1,10 @@
+import { randomUUID } from "node:crypto";
 import type { BBox } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import type { IntegrationContext, TripPlanRequest } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { Freshness } from "@openmapx/mobility-core/freshness";
 import type { MobilityEnvelope, MobilityResult } from "@openmapx/mobility-core/result";
-import type { GeoJSONLineString } from "@openmapx/mobility-core/transit";
+import type { GeoJSONLineString, TripItinerary } from "@openmapx/mobility-core/transit";
 import {
   createTransitOrchestrator,
   UnsupportedTransitPlanningCapabilitiesError,
@@ -14,6 +15,7 @@ import {
   verifyTransitPageToken,
 } from "./page-token.js";
 import { createPlaceTransit } from "./place-transit.js";
+import { signRefreshHandle, verifyRefreshHandle } from "./refresh-token.js";
 
 /**
  * Strip the server-only `trace` field from a MobilityResult and return the
@@ -92,6 +94,31 @@ function parseBoundedList(raw: string | undefined, allowed?: ReadonlySet<string>
   ].slice(0, 50);
 }
 
+export function routeZoomBucket(raw: string | undefined): number {
+  const parsed = Number(raw ?? 12);
+  const zoom = Number.isFinite(parsed) ? Math.min(18, Math.max(0, Math.floor(parsed))) : 12;
+  if (zoom >= 16) return 16;
+  if (zoom >= 14) return 14;
+  if (zoom >= 12) return 12;
+  return 10;
+}
+
+/** MOTIS refresh is only safe for station-to-station or walk-ended itineraries. */
+export function isRefreshEligible(itinerary: TripItinerary): boolean {
+  if (!itinerary.id || itinerary.legs.length === 0) return false;
+  if (itinerary.legs.some((leg) => leg.rental || ["cycling", "driving"].includes(leg.mode))) {
+    return false;
+  }
+  const first = itinerary.legs[0];
+  const last = itinerary.legs.at(-1);
+  return Boolean(
+    first &&
+      last &&
+      ((first.mode === "walking" && last.mode === "walking") ||
+        (first.from.stopId && last.to.stopId)),
+  );
+}
+
 function utcDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -102,6 +129,40 @@ function utcTime(): string {
 
 export function setup(ctx: IntegrationContext): void {
   const orchestrator = createTransitOrchestrator(ctx);
+  const refreshSecret = process.env.BETTER_AUTH_SECRET ?? "";
+  const refreshTtlSeconds = 15 * 60;
+
+  interface RefreshState {
+    providerId: string;
+    instance: string;
+    datasetEpoch: string;
+    requestFingerprint: string;
+    itineraryId: string;
+    request: TripPlanRequest;
+  }
+
+  async function issueRefreshToken(
+    itinerary: TripItinerary,
+    providerId: string,
+    instance: string,
+    datasetEpoch: string,
+    requestFingerprint: string,
+    request: TripPlanRequest,
+  ): Promise<string | undefined> {
+    if (!isRefreshEligible(itinerary) || !refreshSecret || !itinerary.id) return undefined;
+    const id = randomUUID();
+    const expiresAt = Math.floor(Date.now() / 1000) + refreshTtlSeconds;
+    const state: RefreshState = {
+      providerId,
+      instance,
+      datasetEpoch,
+      requestFingerprint,
+      itineraryId: itinerary.id,
+      request,
+    };
+    await ctx.cache.set(`transit-refresh:${id}`, state, refreshTtlSeconds);
+    return signRefreshHandle(id, refreshSecret, expiresAt);
+  }
 
   ctx.registerRoute("GET", "/planning-capabilities", async (_req, reply) => {
     const providers = orchestrator
@@ -306,9 +367,10 @@ export function setup(ctx: IntegrationContext): void {
     // viewports onto one upstream MOTIS call instead of hammering the always-on
     // cloud instance.
     reply.header("Cache-Control", "public, max-age=120, s-maxage=120");
-    const cacheKey = `transit:routes-bbox:${bbox.map((n) => n.toFixed(3)).join(",")}`;
+    const zoom = routeZoomBucket(req.query.zoom);
+    const cacheKey = `transit:routes-bbox:${zoom}:${bbox.map((n) => n.toFixed(3)).join(",")}`;
     const routes = await ctx.cache.withCache(cacheKey, 120, async () => {
-      const res = await orchestrator.getRoutesInBbox(bbox);
+      const res = await orchestrator.getRoutesInBbox(bbox, zoom);
       return toEnvelope(res);
     });
     reply.send(routes);
@@ -551,30 +613,31 @@ export function setup(ctx: IntegrationContext): void {
         return;
       }
     }
+    const planRequest: TripPlanRequest = {
+      from: { lat: fromLat, lng: fromLng },
+      to: { lat: toLat, lng: toLng },
+      ...(arriveBy ? { arrivalTime: when } : { departureTime: when }),
+      numItineraries,
+      modes: (q.modes ?? "TRANSIT").split(",").map((m) => m.trim()),
+      wheelchair: q.wheelchair === "true",
+      wheelchairRequired: q.wheelchair === "true",
+      maxTransfers: maxTransfersRaw,
+      transferBuffer: transferBuffer as "standard" | "relaxed" | "extra",
+      requireBikeTransport: q.require_bike_transport === "true",
+      bikeHillPreference: bikeHillPreference as "default" | "avoid" | "strongly-avoid",
+      rentalFilters: rentalFilter
+        ? { direct: rentalFilter, preTransit: rentalFilter, postTransit: rentalFilter }
+        : undefined,
+      capabilityEpoch: q.capability_epoch,
+      pageCursor,
+      preTransitModes: parseModes(q.pre_modes),
+      postTransitModes: parseModes(q.post_modes),
+      directModes: parseModes(q.direct_modes),
+      deutschlandticketOnly: q.deutschlandticket === "true",
+    };
     let planRes: Awaited<ReturnType<typeof orchestrator.planTrip>>;
     try {
-      planRes = await orchestrator.planTrip({
-        from: { lat: fromLat, lng: fromLng },
-        to: { lat: toLat, lng: toLng },
-        ...(arriveBy ? { arrivalTime: when } : { departureTime: when }),
-        numItineraries,
-        modes: (q.modes ?? "TRANSIT").split(",").map((m) => m.trim()),
-        wheelchair: q.wheelchair === "true",
-        wheelchairRequired: q.wheelchair === "true",
-        maxTransfers: maxTransfersRaw,
-        transferBuffer: transferBuffer as "standard" | "relaxed" | "extra",
-        requireBikeTransport: q.require_bike_transport === "true",
-        bikeHillPreference: bikeHillPreference as "default" | "avoid" | "strongly-avoid",
-        rentalFilters: rentalFilter
-          ? { direct: rentalFilter, preTransit: rentalFilter, postTransit: rentalFilter }
-          : undefined,
-        capabilityEpoch: q.capability_epoch,
-        pageCursor,
-        preTransitModes: parseModes(q.pre_modes),
-        postTransitModes: parseModes(q.post_modes),
-        directModes: parseModes(q.direct_modes),
-        deutschlandticketOnly: q.deutschlandticket === "true",
-      });
+      planRes = await orchestrator.planTrip(planRequest);
     } catch (error) {
       if (error instanceof UnsupportedTransitPlanningCapabilitiesError) {
         reply.status(422).send({
@@ -614,8 +677,79 @@ export function setup(ctx: IntegrationContext): void {
       }
       delete plan.previousPageCursor;
       delete plan.nextPageCursor;
+      if (plan.source === "transit-motis-local" && plan.datasetEpoch) {
+        for (const itinerary of plan.itineraries) {
+          itinerary.refreshToken = await issueRefreshToken(
+            itinerary,
+            "transit-motis-local",
+            plan.instance ?? "ms",
+            plan.datasetEpoch,
+            pageFingerprint,
+            planRequest,
+          );
+        }
+      }
     }
     reply.send(toEnvelope(planRes));
+  });
+
+  // POST /plan/refresh — opaque, one-time, server-side-bound MOTIS refresh.
+  ctx.registerRoute("POST", "/plan/refresh", async (req, reply) => {
+    const body = req.body as { token?: unknown } | null;
+    if (typeof body?.token !== "string") {
+      reply.status(400).send({ error: "Required: token" });
+      return;
+    }
+    let handle: { id: string };
+    try {
+      handle = verifyRefreshHandle(body.token, refreshSecret);
+    } catch {
+      reply.status(400).send({ error: "Invalid or expired itinerary refresh token" });
+      return;
+    }
+    const cacheKey = `transit-refresh:${handle.id}`;
+    const state = await ctx.cache.get<RefreshState>(cacheKey);
+    if (!state) {
+      reply.status(409).send({ error: "Itinerary refresh state expired" });
+      return;
+    }
+    await ctx.cache.del(cacheKey);
+
+    const refreshed = await orchestrator.refreshTrip(state.providerId, {
+      itineraryId: state.itineraryId,
+      datasetEpoch: state.datasetEpoch,
+      modes: state.request.modes,
+      wheelchairRequired: state.request.wheelchairRequired,
+      requireBikeTransport: state.request.requireBikeTransport,
+      detailedTransfers: true,
+    });
+    let itinerary = refreshed.data;
+    let fallbackOccurred = false;
+    let resultAttributions = refreshed.attributions;
+    let resultFreshness = refreshed.freshness;
+
+    if (!itinerary) {
+      fallbackOccurred = true;
+      const fallback = await orchestrator.planTrip({ ...state.request, pageCursor: undefined });
+      itinerary = fallback.data?.itineraries[0] ?? null;
+      resultAttributions = fallback.attributions;
+      resultFreshness = fallback.freshness;
+    }
+    if (!itinerary) {
+      reply.status(409).send({ error: "Itinerary can no longer be refreshed or replanned" });
+      return;
+    }
+    if (itinerary.source === "transit-motis-local") {
+      itinerary.refreshToken = await issueRefreshToken(
+        itinerary,
+        state.providerId,
+        state.instance,
+        itinerary.datasetEpoch ?? state.datasetEpoch,
+        state.requestFingerprint,
+        state.request,
+      );
+    }
+    reply.send(envelope({ itinerary, fallbackOccurred }, resultAttributions, resultFreshness));
   });
 
   // GET /reachable

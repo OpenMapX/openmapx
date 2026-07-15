@@ -57,6 +57,7 @@ export interface MetricsHandle {
   reader: CollectableMetricReader;
   providerCallCounter: Counter;
   providerCallLatency: Histogram;
+  transitDecisionCounter: Counter;
   /** Render the current metric state as Prometheus text format. */
   renderPrometheus(): Promise<string>;
   /** Shut the meter provider down (idempotent). */
@@ -85,6 +86,9 @@ export function initMetrics(): MetricsHandle {
     description: "Transit provider call duration in milliseconds",
     unit: "ms",
   });
+  const transitDecisionCounter = meter.createCounter("transit_provider_decisions_total", {
+    description: "Bounded transit orchestration decisions and avoided calls",
+  });
 
   const serializer = new PrometheusSerializer();
 
@@ -108,6 +112,7 @@ export function initMetrics(): MetricsHandle {
     reader,
     providerCallCounter,
     providerCallLatency,
+    transitDecisionCounter,
     renderPrometheus,
     close,
   };
@@ -152,6 +157,29 @@ export function recordProviderCall(labels: ProviderCallLabels, latencyMs: number
   const promLabels = toPromLabels(labels);
   handle.providerCallCounter.add(1, promLabels);
   handle.providerCallLatency.record(latencyMs, promLabels);
+}
+
+export interface TransitDecisionLabels {
+  operation: "plan" | "routes" | "refresh" | "realtime";
+  providerId: string;
+  role: "baseline" | "fallback" | "enrichment" | "regional" | "none";
+  reason:
+    | "selected"
+    | "authoritative_empty"
+    | "transport_failure"
+    | "unsupported"
+    | "refresh_success"
+    | "refresh_fallback"
+    | "realtime_complete";
+}
+
+export function recordTransitDecision(labels: TransitDecisionLabels, value = 1): void {
+  getMetrics().transitDecisionCounter.add(value, {
+    operation: labels.operation,
+    provider_id: labels.providerId,
+    role: labels.role,
+    reason: labels.reason,
+  });
 }
 
 /** Test-only reset. Production code never calls this. */

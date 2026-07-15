@@ -1,5 +1,5 @@
 import type { MetricsRecorder } from "@openmapx/integration-framework";
-import { recordProviderCall } from "./index.js";
+import { recordProviderCall, recordTransitDecision } from "./index.js";
 
 /**
  * Bridge between the integration-framework's structural `MetricsRecorder`
@@ -15,6 +15,9 @@ export function getMetricsRecorder(): MetricsRecorder {
   return {
     recordProviderCall(labels, latencyMs) {
       recordProviderCall(labels, latencyMs);
+    },
+    recordTransitDecision(labels, value) {
+      recordTransitDecision(labels, value);
     },
   };
 }

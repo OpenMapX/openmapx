@@ -38,6 +38,26 @@
         "type": "string",
         "title": "MOTIS data directory",
         "description": "Filesystem path to the MOTIS data directory (for `license.json` attribution lookup)."
+      },
+      "providerPolicy": {
+        "type": "boolean",
+        "default": true,
+        "description": "Use explicit baseline/regional/fallback provider policy. Disable for rollback."
+      },
+      "localRouteOverlay": {
+        "type": "boolean",
+        "default": true,
+        "description": "Serve operated route-network geometry from local MOTIS. Disable for cloud rollback."
+      },
+      "realtimeCompletenessSkip": {
+        "type": "boolean",
+        "default": true,
+        "description": "Skip duplicate agency lookups for MOTIS realtime-merged departures."
+      },
+      "itineraryRefresh": {
+        "type": "boolean",
+        "default": true,
+        "description": "Issue and accept safe, epoch-bound MOTIS itinerary refreshes."
       }
     }
   },

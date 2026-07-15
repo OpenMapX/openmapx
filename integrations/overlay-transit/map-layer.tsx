@@ -128,6 +128,7 @@ export function TransitLayer() {
     let disposed = false;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     let requestSeq = 0;
+    let requestController: AbortController | null = null;
 
     const ensureLayer = () => {
       if (!map.isStyleLoaded() || map.getSource(MOTIS_SOURCE_ID)) return;
@@ -162,6 +163,8 @@ export function TransitLayer() {
       }
       const b = map.getBounds();
       const seq = ++requestSeq;
+      requestController?.abort();
+      requestController = new AbortController();
       try {
         const env = await apiClient.get<MobilityEnvelope<TransitRoute[]>>(
           API_ENDPOINTS.transitRoutes,
@@ -170,7 +173,9 @@ export function TransitLayer() {
             sw_lng: String(b.getWest()),
             ne_lat: String(b.getNorth()),
             ne_lng: String(b.getEast()),
+            zoom: String(Math.floor(map.getZoom())),
           },
+          { signal: requestController.signal },
         );
         // Ignore stale responses (user kept panning) and post-unmount results.
         if (disposed || seq !== requestSeq) return;
@@ -214,6 +219,7 @@ export function TransitLayer() {
 
     return () => {
       disposed = true;
+      requestController?.abort();
       if (debounceTimer) clearTimeout(debounceTimer);
       map.off("moveend", onMoveEnd);
       map.off("styledata", ensureLayer);

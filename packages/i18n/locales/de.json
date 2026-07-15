@@ -486,6 +486,8 @@
     "stairs": "Treppe",
     "accessRestricted": "Zugangseinschränkung gemeldet",
     "requirementsContradicted": "Dieses Ergebnis widerspricht: {requirements}",
+    "connectionUpdated": "Verbindung mit aktuellen Zeiten und Gleisen aktualisiert",
+    "connectionReplanned": "Verbindung geändert und neu geplant",
     "fare": "Fahrpreis",
     "fareApprox": "~{amount}",
     "co2Emissions": "CO₂",

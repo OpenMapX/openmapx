@@ -39,7 +39,7 @@ function bboxesOverlap(a: BBox, b: BBox): boolean {
 
 function providerMatches(provider: RealtimeProvider, bbox: BBox | undefined): boolean {
   if (!provider.capabilities.tripUpdates) return false;
-  if (!provider.getTripUpdate) return false;
+  if (!provider.getTripUpdate && !provider.getTripUpdates) return false;
   if ("all" in provider.coverage) return true;
   if (!bbox) return false;
   return bboxesOverlap(bbox, provider.coverage.bbox);
@@ -56,6 +56,8 @@ function collectRealtimeProviders(ctx: IntegrationContext): RealtimeProvider[] {
 }
 
 function isAlreadyRealtime(dep: Departure): boolean {
+  if (dep.provenance?.realtimeCompleteness === "merged") return true;
+  if (dep.provenance?.realtimeCompleteness === "changed") return true;
   return Boolean(dep.expectedAt) || dep.delaySeconds !== undefined || Boolean(dep.canceled);
 }
 
@@ -76,6 +78,13 @@ function applyDelta(dep: Departure, delta: TripUpdate): boolean {
   if (delta.platform && delta.platform !== dep.platform) {
     dep.platform = delta.platform;
     changed = true;
+  }
+  if (changed && dep.provenance) {
+    dep.provenance = {
+      ...dep.provenance,
+      realtimeCompleteness: "changed",
+      observedAt: new Date().toISOString(),
+    };
   }
   return changed;
 }
@@ -119,30 +128,93 @@ export async function enrichDeparturesWithRealtime(
 
   // Skip departures the base provider already enriched (typical for MOTIS,
   // which returns RT-merged stoptimes natively).
+  const alreadyComplete = base.data.filter((departure) => isAlreadyRealtime(departure)).length;
+  if (alreadyComplete > 0) {
+    deps.ctx.metricsRecorder?.recordTransitDecision?.(
+      {
+        operation: "realtime",
+        providerId: "baseline",
+        role: "baseline",
+        reason: "realtime_complete",
+      },
+      alreadyComplete,
+    );
+  }
   const targets = base.data.filter((d) => d.tripId && !isAlreadyRealtime(d));
   if (targets.length === 0) return base;
+
+  const byTrip = new Map<string, Departure[]>();
+  for (const departure of targets) {
+    const group = byTrip.get(departure.tripId) ?? [];
+    group.push(departure);
+    byTrip.set(departure.tripId, group);
+  }
 
   const newAttributions: Attribution[] = [];
   const newFreshness: Freshness[] = [];
   let anyApplied = false;
 
-  for (const dep of targets) {
-    for (const provider of candidates) {
-      const getTripUpdate = provider.getTripUpdate;
-      if (!getTripUpdate) continue;
-      const outcome = await deps.timed(provider.id, "getTripUpdate", () =>
-        getTripUpdate.call(provider, dep.tripId, opts.stopId),
-      );
-      if (!outcome.ok) continue;
-      const result = outcome.value;
-      if (!result.data) continue;
-      const applied = applyDelta(dep, result.data);
-      if (applied) {
+  const remaining = new Set(byTrip.keys());
+  for (const provider of candidates) {
+    if (!provider.getTripUpdates || remaining.size === 0) continue;
+    const ids = [...remaining];
+    const outcome = await deps.timed(
+      provider.id,
+      "getTripUpdates",
+      () =>
+        provider.getTripUpdates?.(ids, opts.stopId) as ReturnType<
+          NonNullable<typeof provider.getTripUpdates>
+        >,
+    );
+    if (!outcome.ok) continue;
+    for (const id of ids) {
+      const delta = outcome.value.data[id];
+      if (!delta) continue;
+      let applied = false;
+      for (const departure of byTrip.get(id) ?? [])
+        applied = applyDelta(departure, delta) || applied;
+      if (!applied) continue;
+      anyApplied = true;
+      remaining.delete(id);
+    }
+    if (ids.some((id) => outcome.value.data[id])) {
+      newAttributions.push(...outcome.value.attributions);
+      newFreshness.push(outcome.value.freshness);
+    }
+  }
+
+  const deadline = Date.now() + 1_500;
+  const queue = [...remaining];
+  const workers = Array.from({ length: Math.min(4, queue.length) }, async () => {
+    while (queue.length > 0 && Date.now() < deadline) {
+      const tripId = queue.shift();
+      if (!tripId) return;
+      for (const provider of candidates) {
+        const getTripUpdate = provider.getTripUpdate;
+        if (!getTripUpdate || Date.now() >= deadline) continue;
+        const outcome = await deps.timed(provider.id, "getTripUpdate", () =>
+          getTripUpdate.call(provider, tripId, opts.stopId),
+        );
+        if (!outcome.ok || !outcome.value.data) continue;
+        let applied = false;
+        for (const departure of byTrip.get(tripId) ?? []) {
+          applied = applyDelta(departure, outcome.value.data) || applied;
+        }
+        if (!applied) continue;
         anyApplied = true;
-        newAttributions.push(...result.attributions);
-        newFreshness.push(result.freshness);
-        break; // first useful delta wins
+        newAttributions.push(...outcome.value.attributions);
+        newFreshness.push(outcome.value.freshness);
+        break;
       }
+    }
+  });
+  await Promise.all(workers);
+
+  // Mark records we inspected but could not enrich explicitly rather than
+  // making absence look like a complete realtime merge.
+  for (const departure of targets) {
+    if (departure.provenance && departure.provenance.realtimeCompleteness === "none") {
+      departure.provenance = { ...departure.provenance, realtimeCompleteness: "unknown" };
     }
   }
 

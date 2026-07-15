@@ -27,6 +27,7 @@ const LOCAL_REACHABILITY_TTL_MS = 15_000;
 
 interface ActiveMotisCapabilities {
   epoch?: string;
+  health?: { rt?: boolean };
   rentals?: { formFactors?: string[] };
   planningFeatures?: { hasRoutedTransfers?: boolean; hasElevation?: boolean };
 }
@@ -254,11 +255,16 @@ async function planWithInstance(
       detailedTransfers: capabilities?.planningFeatures?.hasRoutedTransfers === true,
       useRoutedTransfers: capabilities?.planningFeatures?.hasRoutedTransfers === true,
       datasetEpoch: capabilities?.epoch ?? params.capabilityEpoch,
+      throwOnError: true,
     },
   );
 }
 
 export function setupLocal(ctx: IntegrationContext): void {
+  const providerPolicyEnabled = ctx.config.providerPolicy !== false;
+  const localRouteOverlayEnabled = ctx.config.localRouteOverlay !== false;
+  const realtimeCompletenessSkipEnabled = ctx.config.realtimeCompletenessSkip !== false;
+  const itineraryRefreshEnabled = ctx.config.itineraryRefresh !== false;
   // Resolution order: service registry → manifest config → MOTIS_URL env →
   // localhost fallback. The env var matches the one services/data-manager
   // and live-transit-motis honour, so a single deployment-wide
@@ -289,6 +295,7 @@ export function setupLocal(ctx: IntegrationContext): void {
     prefix: "ms:",
     coverage: { all: true },
     priority: 1,
+    role: providerPolicyEnabled ? "baseline" : undefined,
     attribution: attributionLocal(),
     capabilities: {
       stops: {
@@ -313,7 +320,7 @@ export function setupLocal(ctx: IntegrationContext): void {
         rentalFilters: Boolean(activeCapabilities?.rentals?.formFactors?.length),
         detailedTransfers: activeCapabilities?.planningFeatures?.hasRoutedTransfers === true,
         paging: true,
-        refresh: true,
+        refresh: itineraryRefreshEnabled,
       },
       vehiclePositions: false,
       vehicleJourney: true,
@@ -346,6 +353,16 @@ export function setupLocal(ctx: IntegrationContext): void {
           ),
         }
       : undefined,
+    ...(localRouteOverlayEnabled
+      ? {
+          async getRoutesInBbox(bbox, zoom) {
+            if (!(await isMotisReachableCached())) {
+              throw new Error("local MOTIS unavailable");
+            }
+            return wrapLocal(await motis.getRoutesInBbox(motisLocalInstance, bbox, zoom));
+          },
+        }
+      : {}),
     async getStopsNearby(lat, lng, radiusMeters) {
       const deg = radiusMeters / 111_320;
       if (await isMotisReachableCached()) {
@@ -355,7 +372,7 @@ export function setupLocal(ctx: IntegrationContext): void {
           lng + deg,
           lat + deg,
         ]);
-        if (local.length > 0) return wrapLocal(local);
+        return wrapLocal(local);
       }
       return wrapTransitous(
         await motis.getStops(transitousInstance, [lng - deg, lat - deg, lng + deg, lat + deg]),
@@ -366,7 +383,7 @@ export function setupLocal(ctx: IntegrationContext): void {
       const cloudId = withPrefix(id, "mo:");
       if (await isMotisReachableCached()) {
         const local = await motis.getStopById(motisLocalInstance, localId);
-        if (local) return wrapLocal(local);
+        return wrapLocal(local);
       }
       return wrapTransitous(await motis.getStopById(transitousInstance, cloudId));
     },
@@ -374,8 +391,12 @@ export function setupLocal(ctx: IntegrationContext): void {
       const localId = withPrefix(id, "ms:");
       const cloudId = withPrefix(id, "mo:");
       if (await isMotisReachableCached()) {
-        const local = await motis.getDepartures(motisLocalInstance, localId, min);
-        if (local.length > 0) return wrapLocalRT(local);
+        const local = await motis.getDepartures(motisLocalInstance, localId, min, {
+          datasetEpoch: activeCapabilities?.epoch,
+          realtimeEnabled:
+            realtimeCompletenessSkipEnabled && activeCapabilities?.health?.rt === true,
+        });
+        return wrapLocalRT(local);
       }
       return wrapTransitousRT(await motis.getDepartures(transitousInstance, cloudId, min));
     },
@@ -383,8 +404,12 @@ export function setupLocal(ctx: IntegrationContext): void {
       const localId = withPrefix(id, "ms:");
       const cloudId = withPrefix(id, "mo:");
       if (await isMotisReachableCached()) {
-        const local = await motis.getArrivals(motisLocalInstance, localId, min);
-        if (local.length > 0) return wrapLocalRT(local);
+        const local = await motis.getArrivals(motisLocalInstance, localId, min, {
+          datasetEpoch: activeCapabilities?.epoch,
+          realtimeEnabled:
+            realtimeCompletenessSkipEnabled && activeCapabilities?.health?.rt === true,
+        });
+        return wrapLocalRT(local);
       }
       return wrapTransitousRT(await motis.getArrivals(transitousInstance, cloudId, min));
     },
@@ -392,32 +417,38 @@ export function setupLocal(ctx: IntegrationContext): void {
       const lim = limit ?? 10;
       if (await isMotisReachableCached()) {
         const local = await motis.searchByName(motisLocalInstance, q, lim);
-        if (local.length > 0) return wrapLocal(local);
+        return wrapLocal(local);
       }
       return wrapTransitous(await motis.searchByName(transitousInstance, q, lim));
     },
     async planTrip(params) {
-      if (await isMotisReachableCached()) {
-        const local = await planWithInstance(motisLocalInstance, params, activeCapabilities);
-        if (local?.itineraries?.length) {
-          const annotated: TripPlan = {
-            ...local,
-            itineraries: annotateLegsWithAttribution(local.itineraries, attributionIndex),
-          };
-          return wrapLocalRT([annotated]);
-        }
-      }
-      const cloudPlan = await planWithInstance(transitousInstance, params, {
-        planningFeatures: { hasRoutedTransfers: true, hasElevation: true },
-      });
-      if (!cloudPlan) return wrapTransitousRT([]);
+      if (!(await isMotisReachableCached())) throw new Error("local MOTIS unavailable");
+      const local = await planWithInstance(motisLocalInstance, params, activeCapabilities);
+      if (!local) return wrapLocalRT([]);
       const annotated: TripPlan = {
-        ...cloudPlan,
-        provider: "mo",
-        itineraries: annotateLegsWithAttribution(cloudPlan.itineraries, attributionIndex),
+        ...local,
+        itineraries: annotateLegsWithAttribution(local.itineraries, attributionIndex),
       };
-      return wrapTransitousRT([annotated]);
+      return wrapLocalRT([annotated]);
     },
+    ...(itineraryRefreshEnabled
+      ? {
+          async refreshTrip(params) {
+            if (!(await isMotisReachableCached())) throw new Error("local MOTIS unavailable");
+            if (!activeCapabilities?.epoch || activeCapabilities.epoch !== params.datasetEpoch) {
+              return wrapLocalRT(null);
+            }
+            const refreshed = await motis.refreshTrip(motisLocalInstance, params.itineraryId, {
+              modes: params.modes,
+              wheelchair: params.wheelchairRequired,
+              requireBikeTransport: params.requireBikeTransport,
+              detailedTransfers: params.detailedTransfers,
+              datasetEpoch: params.datasetEpoch,
+            });
+            return wrapLocalRT(refreshed);
+          },
+        }
+      : {}),
     async getVehicleJourney(tripId) {
       const localId = withPrefix(tripId, "ms:");
       const cloudId = withPrefix(tripId, "mo:");
@@ -430,7 +461,7 @@ export function setupLocal(ctx: IntegrationContext): void {
     async getReachableStops(lat, lng, maxMinutes, modes) {
       if (await isMotisReachableCached()) {
         const local = await motis.getReachable(motisLocalInstance, lat, lng, maxMinutes, { modes });
-        if (local.length > 0) return wrapLocalRT(local);
+        return wrapLocalRT(local);
       }
       return wrapTransitousRT(
         await motis.getReachable(transitousInstance, lat, lng, maxMinutes, { modes }),

@@ -12,17 +12,16 @@ import type {
   Place,
   Rental,
   StopTime,
-  TripSegment,
 } from "@motis-project/motis-client";
 import {
   geocode,
+  refreshItinerary as motisRefreshItinerary,
   routes as motisRoutesApi,
   stops as motisStops,
   trip as motisTrip,
   oneToAll,
   plan,
   stoptimes,
-  trips,
 } from "@motis-project/motis-client";
 import { type BBox, decodePolyline } from "@openmapx/core";
 import type {
@@ -41,7 +40,6 @@ import type {
   TripPlan,
   VehicleJourney,
   VehicleJourneyStop,
-  VehiclePosition,
 } from "@openmapx/mobility-core/transit";
 import type { MotisInstance } from "./instances.js";
 import { motisLegMode, motisMode, uniqueModes } from "./mode-map.js";
@@ -231,6 +229,7 @@ export function normalizeStoptime(
   instance: MotisInstance,
   st: StopTime,
   mode: "departure" | "arrival",
+  provenance?: { datasetEpoch?: string; realtimeEnabled?: boolean },
 ): Departure {
   const place = st.place;
 
@@ -272,6 +271,13 @@ export function normalizeStoptime(
     delaySeconds,
     platform,
     canceled: st.cancelled || st.tripCancelled || false,
+    provenance: {
+      baselineSource: instance.provider === "ms" ? "transit-motis-local" : "transitous",
+      instance: instance.provider,
+      datasetEpoch: provenance?.datasetEpoch,
+      realtimeCompleteness: provenance?.realtimeEnabled || st.realTime === true ? "merged" : "none",
+      observedAt: new Date().toISOString(),
+    },
   };
 }
 
@@ -280,6 +286,7 @@ export async function getDepartures(
   instance: MotisInstance,
   stopId: string,
   minutes: number,
+  provenance?: { datasetEpoch?: string; realtimeEnabled?: boolean },
 ): Promise<Departure[]> {
   const id = rawId(instance, stopId);
   try {
@@ -294,7 +301,7 @@ export async function getDepartures(
       },
     });
     if (!data?.stopTimes) return [];
-    return data.stopTimes.map((st) => normalizeStoptime(instance, st, "departure"));
+    return data.stopTimes.map((st) => normalizeStoptime(instance, st, "departure", provenance));
   } catch {
     return [];
   }
@@ -305,6 +312,7 @@ export async function getArrivals(
   instance: MotisInstance,
   stopId: string,
   minutes: number,
+  provenance?: { datasetEpoch?: string; realtimeEnabled?: boolean },
 ): Promise<Departure[]> {
   const id = rawId(instance, stopId);
   try {
@@ -319,7 +327,7 @@ export async function getArrivals(
       },
     });
     if (!data?.stopTimes) return [];
-    return data.stopTimes.map((st) => normalizeStoptime(instance, st, "arrival"));
+    return data.stopTimes.map((st) => normalizeStoptime(instance, st, "arrival", provenance));
   } catch {
     return [];
   }
@@ -573,6 +581,7 @@ function mapItinerary(instance: MotisInstance, it: Itinerary): TripItinerary {
 
   const result: TripItinerary = {
     id: it.id,
+    plannedAt: new Date().toISOString(),
     source: instance.provider,
     instance: instance.provider,
     duration: it.duration ?? 0,
@@ -591,6 +600,41 @@ function mapItinerary(instance: MotisInstance, it: Itinerary): TripItinerary {
   }
 
   return result;
+}
+
+export async function refreshTrip(
+  instance: MotisInstance,
+  itineraryId: string,
+  opts?: {
+    modes?: string[];
+    wheelchair?: boolean;
+    requireBikeTransport?: boolean;
+    detailedTransfers?: boolean;
+    datasetEpoch?: string;
+  },
+): Promise<TripItinerary | null> {
+  try {
+    const { data } = await motisRefreshItinerary({
+      client: instance.client,
+      query: {
+        itineraryId,
+        detailedLegs: true,
+        detailedTransfers: opts?.detailedTransfers ?? false,
+        withFares: true,
+        ...(opts?.modes?.length ? { transitModes: opts.modes as Mode[] } : {}),
+        ...(opts?.wheelchair ? { pedestrianProfile: "WHEELCHAIR" as const } : {}),
+        ...(opts?.requireBikeTransport ? { requireBikeTransport: true } : {}),
+        ...(opts?.detailedTransfers ? { useRoutedTransfers: true } : {}),
+      },
+    });
+    if (!data) return null;
+    const mapped = mapItinerary(instance, data);
+    mapped.datasetEpoch = opts?.datasetEpoch;
+    mapped.refreshedAt = new Date().toISOString();
+    return mapped;
+  } catch {
+    return null;
+  }
 }
 
 /** Plan a trip between two coordinates. */
@@ -620,6 +664,7 @@ export async function planTrip(
     detailedTransfers?: boolean;
     useRoutedTransfers?: boolean;
     datasetEpoch?: string;
+    throwOnError?: boolean;
   },
 ): Promise<TripPlan | null> {
   try {
@@ -763,57 +808,9 @@ export async function planTrip(
       previousPageCursor: data.previousPageCursor || undefined,
       nextPageCursor: data.nextPageCursor || undefined,
     };
-  } catch {
+  } catch (error) {
+    if (opts?.throwOnError) throw error;
     return null;
-  }
-}
-
-/**
- * Fetch live vehicle positions from the MOTIS map/trips endpoint.
- * Uses the departure stop location as an approximation of the current position.
- */
-export async function getVehicleRadar(
-  instance: MotisInstance,
-  bbox: BBox,
-): Promise<VehiclePosition[]> {
-  const [west, south, east, north] = bbox;
-  try {
-    const now = new Date();
-    const windowEnd = new Date(now.getTime() + 5 * 60 * 1000);
-
-    const { data } = await trips({
-      client: instance.client,
-      query: {
-        min: `${south},${west}`,
-        max: `${north},${east}`,
-        startTime: now.toISOString(),
-        endTime: windowEnd.toISOString(),
-        zoom: 12,
-      },
-    });
-    if (!data || !Array.isArray(data)) return [];
-
-    return data
-      .map((seg: TripSegment, idx: number): VehiclePosition | null => {
-        const tripInfo = seg.trips?.[0];
-        const from = seg.from;
-
-        if (!from.lat || !from.lon) return null;
-
-        return {
-          id: `${instance.prefix}${tripInfo?.tripId ?? `seg-${idx}`}`,
-          provider: instance.provider,
-          tripId: tripInfo?.tripId ? `${instance.prefix}${tripInfo.tripId}` : undefined,
-          lat: from.lat,
-          lng: from.lon,
-          label: (tripInfo?.displayName ?? "") || undefined,
-          currentStopId: from.stopId ? `${instance.prefix}${from.stopId}` : undefined,
-          updatedAt: seg.departure ?? now.toISOString(),
-        };
-      })
-      .filter((v): v is VehiclePosition => v !== null);
-  } catch {
-    return [];
   }
 }
 

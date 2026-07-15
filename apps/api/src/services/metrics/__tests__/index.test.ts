@@ -1,7 +1,13 @@
 import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { internalMetricsRoute } from "../../../routes/internal-metrics.js";
-import { getMetrics, initMetrics, recordProviderCall, resetMetricsForTests } from "../index.js";
+import {
+  getMetrics,
+  initMetrics,
+  recordProviderCall,
+  recordTransitDecision,
+  resetMetricsForTests,
+} from "../index.js";
 
 /**
  * G3 metrics unit tests. The implementation lazy-initialises a singleton
@@ -68,6 +74,25 @@ describe("metrics service", () => {
     expect(text).toMatch(/outcome="ok"/);
     expect(text).toMatch(/outcome="error"/);
     expect(text).toMatch(/outcome="empty"/);
+  });
+
+  it("records only bounded provider-policy labels", async () => {
+    recordTransitDecision(
+      {
+        operation: "refresh",
+        providerId: "transit-motis-local",
+        role: "baseline",
+        reason: "refresh_fallback",
+      },
+      2,
+    );
+    const text = await getMetrics().renderPrometheus();
+    expect(text).toContain("transit_provider_decisions_total");
+    expect(text).toContain('operation="refresh"');
+    expect(text).toContain('role="baseline"');
+    expect(text).toContain('reason="refresh_fallback"');
+    expect(text).not.toContain("token");
+    expect(text).not.toContain("latitude");
   });
 });
 

@@ -10,6 +10,7 @@ export {
   useLinkedTransitStops,
   usePlaceStopInfrastructure,
   useReachableStops,
+  useRefreshTransitItinerary,
   useRouteAlerts,
   useRouteLive,
   useRouteStops,
