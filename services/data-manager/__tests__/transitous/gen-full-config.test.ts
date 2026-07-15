@@ -60,7 +60,11 @@ function ctxFor(dataDir: string, catalogDir: string, countries: string[] = []) {
     countries,
     // Stub: the stage already wrote config.yml in setup. The feed-proxy
     // sub-step's vars JSON is intentionally absent → it warns and no-ops.
-    runner: async () => {},
+    runner: async (command, args) => {
+      if (command === "python3" && args.includes("-c")) {
+        writeFileSync(join(catalogDir, "out", "feed-proxy-vars.json"), "{}");
+      }
+    },
     now: () => "2026-05-01T00:00:00.000Z",
   });
   ctx.state.catalogDir = catalogDir;

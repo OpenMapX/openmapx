@@ -18,11 +18,11 @@ export const run: StageFn = async (ctx) => {
     if (!existsSync(scriptPath)) {
       return {
         stage: "gen-attribution",
-        status: "skipped",
+        status: "error",
         startedAt,
         finishedAt: ctx.now(),
         durationMs: Date.now() - start,
-        message: `generate-attribution.py not present at ${scriptPath}`,
+        message: `generate-attribution.py not present at ${scriptPath}; candidate attribution is required`,
       } satisfies StageResult;
     }
     await ctx.runner("python3", ["./src/generate-attribution.py"], {

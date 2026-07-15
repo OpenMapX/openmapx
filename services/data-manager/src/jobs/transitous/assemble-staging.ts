@@ -134,7 +134,8 @@ export const run: StageFn = async (ctx) => {
       }
     }
 
-    // Per-feed colouring scripts + license metadata — best effort.
+    // Per-feed colouring scripts are optional; attribution is an immutable,
+    // required candidate artifact and must have been finalized before assembly.
     const scriptsSrc = join(outDir, "scripts");
     if (existsSync(scriptsSrc)) {
       const scriptsDest = join(stagingDir, "scripts");
@@ -142,7 +143,10 @@ export const run: StageFn = async (ctx) => {
       cpSync(scriptsSrc, scriptsDest, { recursive: true });
     }
     const licenseSrc = join(outDir, "license.json");
-    if (existsSync(licenseSrc)) linkOrCopy(licenseSrc, join(stagingDir, "license.json"));
+    if (!existsSync(licenseSrc)) {
+      return finish("error", `required attribution artifact missing at ${licenseSrc}`);
+    }
+    linkOrCopy(licenseSrc, join(stagingDir, "license.json"));
 
     // Empty staging guard (hardStop): a config that stages 0 feeds would import
     // an empty timetable and promote it over the live one. Refuse — the pipeline

@@ -9,7 +9,6 @@ import * as filterStage from "./filter.js";
 import * as gcStage from "./gc.js";
 import * as genAttributionStage from "./gen-attribution.js";
 import * as genFullConfigStage from "./gen-full-config.js";
-import * as genMotisConfigStage from "./gen-motis-config.js";
 import {
   defaultRunner,
   normaliseCountries,
@@ -34,28 +33,33 @@ import type {
 } from "./types.js";
 import * as validateStage from "./validate.js";
 
-type StageEntry = { name: StageName; run: StageFn; hardStop?: boolean };
+export type StageCriticality = "critical" | "advisory";
+type StageEntry = { name: StageName; run: StageFn; criticality: StageCriticality };
 
 /** Build mode (TRANSIT_SOURCE=build): clone the catalog + run Transitous scripts. */
 const BUILD_STAGES: ReadonlyArray<StageEntry> = [
-  { name: "prepare", run: prepareStage.run, hardStop: true },
-  { name: "filter", run: filterStage.run, hardStop: true },
-  { name: "fetch", run: fetchStage.run },
-  { name: "validate", run: validateStage.run },
-  { name: "gen-motis-config", run: genMotisConfigStage.run },
-  // hardStop: assemble-staging returns "error" when it would stage 0 feeds.
+  { name: "prepare", run: prepareStage.run, criticality: "critical" },
+  { name: "filter", run: filterStage.run, criticality: "critical" },
+  // Acquisition may report individual failures while preserving known-good
+  // archives from the previous run. Assembly remains the authoritative empty
+  // or incomplete candidate boundary.
+  { name: "fetch", run: fetchStage.run, criticality: "advisory" },
+  { name: "validate", run: validateStage.run, criticality: "critical" },
+  // Generate the one final runtime config and attribution before assembly.
+  // The exact candidate imported and probed is therefore the tuple promoted.
+  { name: "gen-full-config", run: genFullConfigStage.run, criticality: "critical" },
+  { name: "gen-attribution", run: genAttributionStage.run, criticality: "critical" },
+  // critical: assemble-staging returns "error" when it would stage 0 feeds.
   // That's the real empty-import guard — halt before the container import +
   // promote so a total acquisition failure can't swap an empty timetable over
   // the live one. (fetch/mirror can legitimately "error" while a stale archive
   // from a prior run is preserved on disk; that archive still gets assembled,
   // so the guard belongs here, on the staged count — not on the fetch result.)
-  { name: "assemble-staging", run: assembleStagingStage.run, hardStop: true },
-  { name: "motis-import", run: motisImportStage.run },
-  { name: "motis-health", run: motisHealthStage.run },
-  { name: "gen-full-config", run: genFullConfigStage.run },
-  { name: "gen-attribution", run: genAttributionStage.run },
-  { name: "promote", run: promoteStage.run },
-  { name: "gc", run: gcStage.run },
+  { name: "assemble-staging", run: assembleStagingStage.run, criticality: "critical" },
+  { name: "motis-import", run: motisImportStage.run, criticality: "critical" },
+  { name: "motis-health", run: motisHealthStage.run, criticality: "critical" },
+  { name: "promote", run: promoteStage.run, criticality: "critical" },
+  { name: "gc", run: gcStage.run, criticality: "advisory" },
 ];
 
 /**
@@ -68,12 +72,19 @@ const BUILD_STAGES: ReadonlyArray<StageEntry> = [
  */
 const MIRROR_STAGES: ReadonlyArray<StageEntry> = BUILD_STAGES.map((stage) =>
   stage.name === "fetch"
-    ? { name: "mirror", run: mirrorStage.run, hardStop: stage.hardStop }
+    ? { name: "mirror", run: mirrorStage.run, criticality: stage.criticality }
     : stage,
 );
 
 export function stagesFor(source: TransitSource): ReadonlyArray<StageEntry> {
   return source === "mirror" ? MIRROR_STAGES : BUILD_STAGES;
+}
+
+export function stagePolicyFor(source: TransitSource): ReadonlyArray<{
+  name: StageName;
+  criticality: StageCriticality;
+}> {
+  return stagesFor(source).map(({ name, criticality }) => ({ name, criticality }));
 }
 
 export interface RunPipelineOptions {
@@ -91,7 +102,7 @@ export interface RunPipelineResult {
  * Run the staged Transitous pipeline.
  *
  * - Stages 1-11 run in order; each result is persisted via `ctx.onStageComplete`.
- * - If a `hardStop` stage (prepare, filter) returns `status: "error"`, the
+ * - If a critical stage returns `status: "error"`, the
  *   underlying Error is rethrown after the catalog is reset. Soft-stop stages
  *   record their error in the result list and the pipeline continues.
  * - `motis-import` / `motis-health` / `promote` exec against the staging MOTIS
@@ -132,7 +143,7 @@ export async function runTransitousPipeline(
           `transitous-pipeline: onStageComplete threw for ${entry.name}: ${(err as Error).message}`,
         );
       }
-      if (result.status === "error" && entry.hardStop) {
+      if (result.status === "error" && entry.criticality === "critical") {
         hardStopError = new Error(
           result.error?.message ?? result.message ?? `${entry.name} failed`,
         );

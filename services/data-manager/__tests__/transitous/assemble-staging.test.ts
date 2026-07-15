@@ -374,6 +374,7 @@ describe("assemble-staging run()", () => {
     mkdirSync(liveDir, { recursive: true });
     writeFileSync(join(outDir, "config.yml"), buildConfig(["feed.gtfs.zip"]));
     writeFileSync(join(outDir, "feed.gtfs.zip"), "feed-content");
+    writeFileSync(join(outDir, "license.json"), "[]\n");
 
     const ctx = buildJobContext({
       dataDir,

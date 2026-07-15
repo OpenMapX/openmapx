@@ -167,6 +167,9 @@ export const run: StageFn = async (ctx) => {
       { cwd: catalogDir, stdio: "pipe" },
     );
     const configPath = join(catalogDir, "out", "config.yml");
+    if (!existsSync(configPath)) {
+      throw new Error(`generate-motis-config.py did not produce ${configPath}`);
+    }
     // Apply the SAME post-processors as gen-motis-config so the runtime config
     // the live MOTIS serves agrees with the import-only config staging built
     // against — most importantly the `osm:` extract, whose mismatch (a stale
@@ -174,6 +177,11 @@ export const run: StageFn = async (ctx) => {
     const overrides = applyConfigOverrides(configPath, ctx.logger);
 
     const feedProxy = await generateFeedProxyConfig(ctx, catalogDir);
+    if (!feedProxy.written || !feedProxy.configPath) {
+      throw new Error(
+        "Feed proxy candidate could not be rendered; refusing an unproxied MOTIS config",
+      );
+    }
 
     // Repoint the runtime config's realtime URLs (Transitous's hosted
     // rt.triptix.tech) onto OUR feed-proxy so realtime is independent of

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   buildJobContext,
   runTransitousPipeline,
+  stagePolicyFor,
   stagesFor,
 } from "../../src/jobs/transitous/pipeline.js";
 import { StateStore } from "../../src/state.js";
@@ -24,18 +25,35 @@ describe("stagesFor", () => {
     "filter",
     "fetch",
     "validate",
-    "gen-motis-config",
+    "gen-full-config",
+    "gen-attribution",
     "assemble-staging",
     "motis-import",
     "motis-health",
-    "gen-full-config",
-    "gen-attribution",
     "promote",
     "gc",
   ];
 
   it("selects the build pipeline for source=build", () => {
     expect(stagesFor("build").map((s) => s.name)).toEqual(BUILD);
+  });
+
+  it("declares every mutation-sensitive stage critical", () => {
+    expect(
+      Object.fromEntries(stagePolicyFor("build").map((stage) => [stage.name, stage.criticality])),
+    ).toMatchObject({
+      prepare: "critical",
+      filter: "critical",
+      validate: "critical",
+      "gen-full-config": "critical",
+      "gen-attribution": "critical",
+      "assemble-staging": "critical",
+      "motis-import": "critical",
+      "motis-health": "critical",
+      promote: "critical",
+      fetch: "advisory",
+      gc: "advisory",
+    });
   });
 
   it("selects the mirror pipeline (build with fetch -> mirror) for source=mirror", () => {
