@@ -223,4 +223,35 @@ timetable:
     await genFullConfigRun(ctxWithProxyVars(fx.catalogDir, fx.dataDir, ["de-bvg-0"]));
     expect(readFileSync(fx.configPath, "utf-8")).toContain("http://motis-feed-proxy/feed/de-bvg-0");
   });
+
+  it("rewrites the GBFS scalar and persists normalized proxy vars beside the config", async () => {
+    const fx = setupCatalog(
+      `${TEMPLATE_WITH_RT}gbfs:\n  proxy: https://rt.triptix.tech\n  feeds:\n    bvg:\n      url: https://rt.triptix.tech/feed/de-bvg-0\n`,
+    );
+    const result = await genFullConfigRun(
+      ctxWithProxyVars(fx.catalogDir, fx.dataDir, ["de-bvg-0", "de-vbb-0"]),
+    );
+    expect(result.status).toBe("ok");
+    expect(result.artifacts).toMatchObject({ rtRewritten: 3, gbfsProxyRewritten: 1 });
+    const updated = readFileSync(fx.configPath, "utf-8");
+    expect(updated).toContain("  proxy: http://motis-feed-proxy");
+    expect(updated).not.toContain("https://rt.triptix.tech");
+    expect(
+      JSON.parse(
+        readFileSync(join(fx.dataDir, "motis-feed-proxy", "feed-proxy-vars.json"), "utf-8"),
+      ),
+    ).toHaveProperty("de-bvg-0");
+    expect(
+      readFileSync(join(fx.dataDir, "motis-feed-proxy", "conf", "default.conf"), "utf-8"),
+    ).toContain('location "/feed/de-bvg-0"');
+  });
+
+  it("fails instead of promoting GBFS entries absent from the local proxy", async () => {
+    const fx = setupCatalog(
+      `gbfs:\n  proxy: https://rt.triptix.tech\n  feeds:\n    missing:\n      url: https://rt.triptix.tech/feed/de-missing-0\n`,
+    );
+    const result = await genFullConfigRun(ctxWithProxyVars(fx.catalogDir, fx.dataDir, []));
+    expect(result.status).toBe("error");
+    expect(result.message).toContain("de-missing-0");
+  });
 });

@@ -491,10 +491,38 @@ export interface MotisTransitousStatus {
   realtimeFeedCount: number;
   gbfsFeedCount: number;
   feedProxyUrlCount: number;
+  gbfsProxyUrl: string | null;
   feedProxyMode: "none" | "self-hosted" | "transitous-cloud" | "mixed";
   feedProxyConfigFound: boolean;
   feedProxyVarsFound: boolean;
   feedProxyFeedCount: number;
+}
+
+function getTopLevelGbfsProxyUrl(configText: string): string | null {
+  const lines = configText.split(/\r?\n/);
+  const start = lines.findIndex((line) => /^gbfs:\s*(?:#.*)?$/.test(line));
+  if (start === -1) return null;
+  const body: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^[^\s#][^:]*:\s*/.test(line)) break;
+    body.push(line);
+  }
+  const directIndent = body
+    .filter((line) => line.trim() && !line.trimStart().startsWith("#"))
+    .map((line) => line.match(/^\s*/)?.[0].length ?? 0)
+    .filter((indent) => indent > 0)
+    .reduce<number | undefined>(
+      (minimum, indent) => (minimum === undefined ? indent : Math.min(minimum, indent)),
+      undefined,
+    );
+  if (directIndent === undefined) return null;
+  const line = body.find(
+    (candidate) =>
+      (candidate.match(/^\s*/)?.[0].length ?? 0) === directIndent &&
+      /^\s*proxy:\s*/.test(candidate),
+  );
+  const value = line?.match(/^\s*proxy:\s*["']?([^"'#\s]+)["']?(?:\s*#.*)?$/)?.[1];
+  return value ?? null;
 }
 
 function countGbfsFeeds(configText: string): number {
@@ -570,6 +598,7 @@ export function getMotisTransitousStatus(): MotisTransitousStatus {
       realtimeFeedCount: 0,
       gbfsFeedCount: 0,
       feedProxyUrlCount: 0,
+      gbfsProxyUrl: null,
       feedProxyMode: "none",
       feedProxyConfigFound,
       feedProxyVarsFound,
@@ -597,11 +626,20 @@ export function getMotisTransitousStatus(): MotisTransitousStatus {
     .filter((host): host is string => Boolean(host));
 
   const uniqueHosts = new Set(feedProxyHosts);
+  const gbfsProxyUrl = getTopLevelGbfsProxyUrl(configText);
+  if (gbfsProxyUrl) {
+    try {
+      uniqueHosts.add(new URL(gbfsProxyUrl).hostname.toLowerCase());
+    } catch {
+      // Invalid operator YAML remains visible via gbfsProxyUrl; it is not
+      // classified as a healthy self-hosted endpoint.
+    }
+  }
   const feedProxyUrlCount = feedProxyHosts.length;
   const hasTransitousProxy = uniqueHosts.has("rt.triptix.tech");
   const hasOtherProxy = [...uniqueHosts].some((host) => host !== "rt.triptix.tech");
   const feedProxyMode: MotisTransitousStatus["feedProxyMode"] =
-    feedProxyUrlCount === 0
+    uniqueHosts.size === 0
       ? "none"
       : hasTransitousProxy && hasOtherProxy
         ? "mixed"
@@ -615,6 +653,7 @@ export function getMotisTransitousStatus(): MotisTransitousStatus {
     realtimeFeedCount,
     gbfsFeedCount,
     feedProxyUrlCount,
+    gbfsProxyUrl,
     feedProxyMode,
     feedProxyConfigFound,
     feedProxyVarsFound,

@@ -136,26 +136,28 @@ export const TRANSITOUS_FEED_PROXY_URL = "https://rt.triptix.tech";
 
 const RT_FEED_URL_RE = /https:\/\/rt\.triptix\.tech\/feed\/([^\s"']+)/g;
 
+export interface HostedFeedProxyRewriteCounts {
+  realtimeUrls: number;
+  gbfsProxy: number;
+}
+
 /**
- * Rewrite the MOTIS `config.yml` so realtime feeds flow through OUR feed-proxy
- * instead of Transitous's hosted one (`rt.triptix.tech`) — keeping realtime
- * independent of Transitous infrastructure. Used by both the daemon (build +
- * mirror) and the CLI seed.
+ * Rewrite Transitous-hosted MOTIS feed-proxy references to a local proxy.
  *
- * When `feedIds` is given, only `/feed/<id>` URLs whose id our proxy actually
- * serves are repointed (others are left on the origin proxy, so we never break
- * realtime for a feed our proxy has no config for). When omitted, every
- * `rt.triptix.tech/feed/...` URL is repointed. Returns the rewritten text and
- * the number of URLs replaced.
+ * In addition to scoped `/feed/<id>` realtime URLs, MOTIS uses the `proxy`
+ * scalar directly inside the top-level `gbfs` block for discovery and every
+ * discovered sub-resource request. The transform is deliberately line based:
+ * it preserves comments, quoting, line endings and unrelated/nested `proxy`
+ * keys instead of parsing and re-serializing the complete upstream YAML.
  */
-export function rewriteRtUrls(
+export function rewriteHostedFeedProxy(
   configText: string,
   feedProxyUrl: string,
   feedIds?: ReadonlySet<string>,
-): { text: string; replaced: number } {
+): { text: string; counts: HostedFeedProxyRewriteCounts } {
   const target = feedProxyUrl.trim().replace(/\/+$/, "");
-  let replaced = 0;
-  const text = configText.replace(RT_FEED_URL_RE, (match, rawId: string) => {
+  let realtimeUrls = 0;
+  let text = configText.replace(RT_FEED_URL_RE, (match, rawId: string) => {
     if (feedIds) {
       let decoded = rawId;
       try {
@@ -165,8 +167,88 @@ export function rewriteRtUrls(
       }
       if (!feedIds.has(rawId) && !feedIds.has(decoded)) return match;
     }
-    replaced += 1;
+    realtimeUrls += 1;
     return `${target}/feed/${rawId}`;
   });
-  return { text, replaced };
+
+  let gbfsProxy = 0;
+  const newline = text.includes("\r\n") ? "\r\n" : "\n";
+  const lines = text.split(/\r?\n/);
+  const gbfsStart = lines.findIndex((line) => /^gbfs:\s*(?:#.*)?$/.test(line));
+  if (gbfsStart !== -1) {
+    let gbfsEnd = lines.length;
+    for (let index = gbfsStart + 1; index < lines.length; index += 1) {
+      const line = lines[index] ?? "";
+      if (/^[^\s#][^:]*:\s*/.test(line)) {
+        gbfsEnd = index;
+        break;
+      }
+    }
+
+    const directIndent = lines
+      .slice(gbfsStart + 1, gbfsEnd)
+      .filter((line) => line.trim() && !line.trimStart().startsWith("#"))
+      .map((line) => line.match(/^\s*/)?.[0].length ?? 0)
+      .filter((indent) => indent > 0)
+      .reduce<number | undefined>(
+        (minimum, indent) => (minimum === undefined ? indent : Math.min(minimum, indent)),
+        undefined,
+      );
+
+    if (directIndent !== undefined) {
+      for (let index = gbfsStart + 1; index < gbfsEnd; index += 1) {
+        const line = lines[index] ?? "";
+        if ((line.match(/^\s*/)?.[0].length ?? 0) !== directIndent) continue;
+        const match = line.match(/^(\s*proxy:\s*)(["']?)([^"'#]*?)(\2)(\s*(?:#.*)?)$/);
+        if (!match) continue;
+        const value = match[3]?.trim();
+        if (value !== TRANSITOUS_FEED_PROXY_URL) break;
+        const quote = match[2] ?? "";
+        lines[index] = `${match[1]}${quote}${target}${quote}${match[5] ?? ""}`;
+        gbfsProxy = 1;
+        break;
+      }
+    }
+    text = lines.join(newline);
+  }
+
+  return { text, counts: { realtimeUrls, gbfsProxy } };
+}
+
+/** Return hosted `/feed/<id>` references that remain inside top-level GBFS. */
+export function findHostedGbfsFeedIds(configText: string): string[] {
+  const lines = configText.split(/\r?\n/);
+  const start = lines.findIndex((line) => /^gbfs:\s*(?:#.*)?$/.test(line));
+  if (start === -1) return [];
+  let end = lines.length;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (/^[^\s#][^:]*:\s*/.test(lines[index] ?? "")) {
+      end = index;
+      break;
+    }
+  }
+  const ids = new Set<string>();
+  for (const match of lines
+    .slice(start + 1, end)
+    .join("\n")
+    .matchAll(RT_FEED_URL_RE)) {
+    const rawId = match[1];
+    if (!rawId) continue;
+    try {
+      ids.add(decodeURIComponent(rawId));
+    } catch {
+      ids.add(rawId);
+    }
+  }
+  return [...ids].sort();
+}
+
+/** @deprecated Use {@link rewriteHostedFeedProxy}. */
+export function rewriteRtUrls(
+  configText: string,
+  feedProxyUrl: string,
+  feedIds?: ReadonlySet<string>,
+): { text: string; replaced: number } {
+  const result = rewriteHostedFeedProxy(configText, feedProxyUrl, feedIds);
+  return { text: result.text, replaced: result.counts.realtimeUrls };
 }

@@ -97,6 +97,7 @@ interface MotisTransitousStatus {
   realtimeFeedCount: number;
   gbfsFeedCount: number;
   feedProxyUrlCount: number;
+  gbfsProxyUrl: string | null;
   feedProxyMode: "none" | "self-hosted" | "transitous-cloud" | "mixed";
   feedProxyConfigFound: boolean;
   feedProxyVarsFound: boolean;
@@ -1330,7 +1331,7 @@ function MotisTransitousSection({ status }: { status: MotisTransitousStatus }) {
           >
             Proxy artifacts: config {status.feedProxyConfigFound ? "present" : "missing"} · vars{" "}
             {status.feedProxyVarsFound ? "present" : "missing"} · {status.feedProxyFeedCount} mapped
-            feed endpoint(s)
+            feed endpoint(s) · GBFS proxy {status.gbfsProxyUrl ?? "not configured"}
           </Typography>
           {(status.feedProxyMode === "transitous-cloud" || status.feedProxyMode === "mixed") && (
             <Alert severity={status.feedProxyMode === "mixed" ? "warning" : "error"}>

@@ -6,6 +6,7 @@ import {
   listMirrorArchives,
   type MirrorArchive,
   mirrorArchives,
+  rewriteHostedFeedProxy,
   rewriteRtUrls,
   TRANSITOUS_FEED_PROXY_URL,
 } from "../src/mirror.js";
@@ -198,5 +199,52 @@ describe("rewriteRtUrls", () => {
     expect(text).toContain("http://motis-feed-proxy/feed/de-bvg-0");
     // Not in our proxy set → left on the origin proxy rather than broken.
     expect(text).toContain(`${TRANSITOUS_FEED_PROXY_URL}/feed/de-vbb-0`);
+  });
+});
+
+describe("rewriteHostedFeedProxy", () => {
+  it.each([
+    ["unquoted", "https://rt.triptix.tech", "http://motis-feed-proxy"],
+    ["double quoted", '"https://rt.triptix.tech"', '"http://motis-feed-proxy"'],
+    ["single quoted", "'https://rt.triptix.tech'", "'http://motis-feed-proxy'"],
+  ])("rewrites the top-level gbfs proxy when %s", (_label, source, expected) => {
+    const config = `gbfs:\n  proxy: ${source} # keep\n  feeds: {}\nother:\n  proxy: https://rt.triptix.tech\n`;
+    const result = rewriteHostedFeedProxy(config, "http://motis-feed-proxy");
+    expect(result.counts).toEqual({ realtimeUrls: 0, gbfsProxy: 1 });
+    expect(result.text).toContain(`  proxy: ${expected} # keep`);
+    expect(result.text).toContain("other:\n  proxy: https://rt.triptix.tech");
+  });
+
+  it("preserves nested proxies, CRLF and feed-id scoping", () => {
+    const config = [
+      "gbfs:",
+      "  proxy: https://rt.triptix.tech",
+      "  nested:",
+      "    proxy: https://rt.triptix.tech",
+      "  feeds:",
+      "    one:",
+      "      url: https://rt.triptix.tech/feed/one",
+      "    two:",
+      "      url: https://rt.triptix.tech/feed/two",
+      "",
+    ].join("\r\n");
+    const result = rewriteHostedFeedProxy(config, "http://motis-feed-proxy/", new Set(["one"]));
+    expect(result.counts).toEqual({ realtimeUrls: 1, gbfsProxy: 1 });
+    expect(result.text).toContain("\r\n");
+    expect(result.text).toContain("    proxy: https://rt.triptix.tech");
+    expect(result.text).toContain("http://motis-feed-proxy/feed/one");
+    expect(result.text).toContain("https://rt.triptix.tech/feed/two");
+  });
+
+  it("is idempotent and leaves absent or operator proxies untouched", () => {
+    const config = "gbfs:\n  proxy: https://operator.example\n  feeds: {}\n";
+    const first = rewriteHostedFeedProxy(config, "http://motis-feed-proxy");
+    const second = rewriteHostedFeedProxy(first.text, "http://motis-feed-proxy");
+    expect(first.counts).toEqual({ realtimeUrls: 0, gbfsProxy: 0 });
+    expect(second.counts).toEqual({ realtimeUrls: 0, gbfsProxy: 0 });
+    expect(second.text).toBe(config);
+    expect(rewriteHostedFeedProxy("osm: region.pbf\n", "http://proxy").text).toBe(
+      "osm: region.pbf\n",
+    );
   });
 });

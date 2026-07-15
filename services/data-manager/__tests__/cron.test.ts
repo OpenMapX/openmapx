@@ -188,10 +188,10 @@ describe("setupCron", () => {
     handles.stop();
   });
 
-  it("reloads the feed-proxy when feed-proxy.conf is newer than the last reload", async () => {
+  it("reloads the feed-proxy when default.conf is newer than the last reload", async () => {
     const confDir = join(dataDir, "motis-feed-proxy", "conf");
     mkdirSync(confDir, { recursive: true });
-    const confPath = join(confDir, "feed-proxy.conf");
+    const confPath = join(confDir, "default.conf");
     writeFileSync(confPath, "server { listen 80; }\n", "utf-8");
 
     const reload = vi.fn().mockResolvedValue(undefined);
@@ -225,7 +225,7 @@ describe("setupCron", () => {
     handles.stop();
   });
 
-  it("does nothing when feed-proxy.conf does not exist", async () => {
+  it("does nothing when default.conf does not exist", async () => {
     const reload = vi.fn().mockResolvedValue(undefined);
     const handles = setupCron({
       dataDir,

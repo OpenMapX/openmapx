@@ -1,12 +1,17 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildFeedProxyConfig } from "@openmapx/motis-feed-proxy-config";
-import { rewriteRtUrls } from "@openmapx/transitous-core";
+import {
+  buildFeedProxyConfig,
+  FEED_PROXY_CONFIG_FILENAME,
+  FEED_PROXY_CONFIG_SUBDIR,
+  FEED_PROXY_VARS_FILENAME,
+  writeFeedProxyVarsFile,
+} from "@openmapx/motis-feed-proxy-config";
+import { findHostedGbfsFeedIds, rewriteHostedFeedProxy } from "@openmapx/transitous-core";
 import { applyConfigOverrides } from "./config-overrides.js";
 import { FEED_PROXY_CONTAINER } from "./motis-containers.js";
 import type { JobContext, StageFn, StageResult } from "./types.js";
 
-const FEED_PROXY_CONF_REL = "motis-feed-proxy/conf/feed-proxy.conf";
 const DEFAULT_FEED_PROXY_URL = "http://motis-feed-proxy";
 
 // Mirrors services/motis/tools/transitous/run.sh: merge the `--feed-proxy`
@@ -95,10 +100,13 @@ export async function generateFeedProxyConfig(
     varsJson && typeof varsJson === "object"
       ? Object.keys(varsJson as Record<string, unknown>)
       : [];
-  const targetPath = join(ctx.dataDir, FEED_PROXY_CONF_REL);
+  const proxyRoot = join(ctx.dataDir, "motis-feed-proxy");
+  const targetPath = join(proxyRoot, FEED_PROXY_CONFIG_SUBDIR, FEED_PROXY_CONFIG_FILENAME);
+  const persistedVarsPath = join(proxyRoot, FEED_PROXY_VARS_FILENAME);
   let entries = 0;
   try {
-    const result = await buildFeedProxyConfig({ varsJson, outputPath: targetPath });
+    const normalizedVars = writeFeedProxyVarsFile(persistedVarsPath, varsJson);
+    const result = await buildFeedProxyConfig({ varsJson: normalizedVars, outputPath: targetPath });
     entries = result.entries;
   } catch (error) {
     ctx.logger.warn(
@@ -177,14 +185,24 @@ export const run: StageFn = async (ctx) => {
     const feedProxyUrl =
       ctx.feedProxyUrl || process.env.OPENMAPX_TRANSITOUS_FEED_PROXY_URL || DEFAULT_FEED_PROXY_URL;
     let rtRewritten = 0;
+    let gbfsProxyRewritten = 0;
     if (existsSync(configPath)) {
-      const result = rewriteRtUrls(
+      const result = rewriteHostedFeedProxy(
         readFileSync(configPath, "utf-8"),
         feedProxyUrl,
         new Set(feedProxy.feedIds),
       );
-      rtRewritten = result.replaced;
-      if (rtRewritten > 0) writeFileSync(configPath, result.text, "utf-8");
+      rtRewritten = result.counts.realtimeUrls;
+      gbfsProxyRewritten = result.counts.gbfsProxy;
+      const missingGbfsFeedIds = findHostedGbfsFeedIds(result.text);
+      if (missingGbfsFeedIds.length > 0) {
+        throw new Error(
+          `Local feed proxy is missing configured GBFS feeds: ${missingGbfsFeedIds.join(", ")}`,
+        );
+      }
+      if (rtRewritten > 0 || gbfsProxyRewritten > 0) {
+        writeFileSync(configPath, result.text, "utf-8");
+      }
     }
 
     return {
@@ -198,6 +216,7 @@ export const run: StageFn = async (ctx) => {
         configPath,
         ...overrides,
         rtRewritten,
+        gbfsProxyRewritten,
         feedProxyConfigPath: feedProxy.configPath,
         feedProxyWritten: feedProxy.written,
         feedProxyEntries: feedProxy.entries,

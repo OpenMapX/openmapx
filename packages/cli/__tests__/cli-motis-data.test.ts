@@ -55,6 +55,11 @@ describe("buildMotisData", () => {
             "  enabled: true",
             "data_attribution_link: https://transitous.org/sources/",
             "web_folder: /transitous/web",
+            "gbfs:",
+            "  proxy: https://rt.triptix.tech",
+            "  feeds:",
+            "    de-BVG:",
+            "      url: https://rt.triptix.tech/feed/de-BVG-0",
             "datasets:",
             "  - path: de_bvg.gtfs.zip",
             "proxy_url: https://rt.triptix.tech/feed/de-BVG-0",
@@ -102,6 +107,12 @@ describe("buildMotisData", () => {
     );
     expect(readFileSync(join(motisDir, MOTIS_CONFIG_FILENAME), "utf-8")).toContain(
       "http://motis-feed-proxy/feed/de-BVG-0",
+    );
+    expect(readFileSync(join(motisDir, MOTIS_CONFIG_FILENAME), "utf-8")).toContain(
+      "  proxy: http://motis-feed-proxy",
+    );
+    expect(readFileSync(join(motisDir, MOTIS_CONFIG_FILENAME), "utf-8")).not.toContain(
+      "https://rt.triptix.tech",
     );
     expect(readFileSync(join(motisDir, MOTIS_CONFIG_FILENAME), "utf-8")).not.toContain("tiles:");
     expect(readFileSync(join(motisDir, MOTIS_CONFIG_FILENAME), "utf-8")).not.toContain(

@@ -1,5 +1,9 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+
+export const FEED_PROXY_CONFIG_SUBDIR = "conf";
+export const FEED_PROXY_CONFIG_FILENAME = "default.conf";
+export const FEED_PROXY_VARS_FILENAME = "feed-proxy-vars.json";
 
 /**
  * Pure-data render of the Transitous-style feed-proxy nginx config.
@@ -130,6 +134,17 @@ export function normalizeFeedProxyVars(raw: unknown): FeedProxyVars {
   }
 
   return normalized;
+}
+
+/** Atomically persist the normalized vars artifact shared by CLI, daemon and admin. */
+export function writeFeedProxyVarsFile(outputPath: string, raw: unknown): FeedProxyVars {
+  const normalized = normalizeFeedProxyVars(raw);
+  const sorted = Object.fromEntries(sortedEntries(normalized));
+  mkdirSync(dirname(outputPath), { recursive: true });
+  const temporaryPath = `${outputPath}.tmp-${process.pid}`;
+  writeFileSync(temporaryPath, `${JSON.stringify(sorted, null, 2)}\n`, "utf-8");
+  renameSync(temporaryPath, outputPath);
+  return sorted;
 }
 
 function renderPrimaryServer(entries: Array<[string, FeedProxyEntry]>): string[] {

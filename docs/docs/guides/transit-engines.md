@@ -237,9 +237,10 @@ Both modes scope to `TRANSITOUS_COUNTRIES` and are otherwise identical — the
 MOTIS `config.yml` and attribution are generated locally from the catalog in
 **both** modes (not taken from upstream), followed by the same staging →
 smoke-test → atomic promote tail. **Realtime flows through your own feed-proxy**:
-the generated config's `rt.triptix.tech` URLs are repointed onto it — only for
-the feeds your proxy actually serves, so the rest stay on the origin rather than
-break — keeping realtime independent of Transitous infrastructure. Switch modes
+the generated config repoints mapped `rt.triptix.tech/feed/...` URLs and the
+top-level `gbfs.proxy` that MOTIS uses for every discovered GBFS sub-resource.
+The admin status reports hosted, mixed, and self-hosted modes from both values,
+so operators can verify that no hidden hosted dependency remains. Switch modes
 by setting `TRANSIT_SOURCE` and recreating the data-manager service.
 
 A few specifics worth knowing as an operator:

@@ -17,9 +17,12 @@ export {
 export type { TransitousFeedFile, TransitousFeedSource } from "./feed-source.js";
 export {
   type ArchiveDownloader,
+  findHostedGbfsFeedIds,
+  type HostedFeedProxyRewriteCounts,
   listMirrorArchives,
   type MirrorArchive,
   mirrorArchives,
+  rewriteHostedFeedProxy,
   rewriteRtUrls,
   TRANSITOUS_FEED_PROXY_URL,
 } from "./mirror.js";
