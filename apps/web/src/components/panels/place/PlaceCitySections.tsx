@@ -33,6 +33,15 @@ const MAX_HOTEL_CARDS = 10;
 /** Half-span (degrees) of the fallback search box when a place has no bbox. */
 const FALLBACK_HALF_SPAN = 0.05;
 
+const LODGING_TYPE_KEYS: Record<string, "hotel" | "hostel" | "motel" | "guestHouse" | "apartment"> =
+  {
+    hotel: "hotel",
+    hostel: "hostel",
+    motel: "motel",
+    guest_house: "guestHouse",
+    apartment: "apartment",
+  };
+
 /** City bounding box for hotel search, derived from the admin boundary bbox. */
 function cityBoundingBox(place: Place): BoundingBox {
   if (place.boundingBox) {
@@ -117,7 +126,7 @@ function Hotels({ place }: { place: Place }) {
         <CityCard
           key={hotel.id}
           name={hotel.name}
-          subtitle={hotel.category}
+          subtitle={t(LODGING_TYPE_KEYS[hotel.category ?? ""] ?? "hotel")}
           imageUrl={osmPhotoUrl(hotel.osmTags)}
           placeholder={<HotelIcon sx={{ fontSize: 32 }} />}
           onClick={() => openHotel(hotel)}
