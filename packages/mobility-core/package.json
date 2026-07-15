@@ -69,6 +69,10 @@
       "types": "./src/shared-mobility-context.ts",
       "default": "./src/shared-mobility-context.ts"
     },
+    "./shared-mobility-orchestrator": {
+      "types": "./src/shared-mobility-orchestrator.ts",
+      "default": "./src/shared-mobility-orchestrator.ts"
+    },
     "./nominatim": {
       "types": "./src/nominatim.ts",
       "default": "./src/nominatim.ts"

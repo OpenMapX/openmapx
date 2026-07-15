@@ -2,6 +2,11 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
+import {
+  getSharedMobilityOperationsState,
+  type SharedMobilityCategory,
+  setSharedMobilityRollback,
+} from "@openmapx/mobility-core/shared-mobility-orchestrator";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
@@ -58,6 +63,33 @@ function toIdList(input: unknown): string[] {
 export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   app.addHook("preHandler", async (request, _reply) => {
     request.adminSession = await requireAdmin(request);
+  });
+
+  app.get("/admin/shared-mobility", async () => getSharedMobilityOperationsState());
+
+  app.post<{
+    Params: { category: string };
+    Body: { enabled?: boolean };
+  }>("/admin/shared-mobility/:category/rollback", async (req, reply) => {
+    if (!(["bike", "scooter", "car"] as string[]).includes(req.params.category)) {
+      reply.status(400);
+      return { error: "Unknown shared-mobility category" };
+    }
+    if (typeof req.body?.enabled !== "boolean") {
+      reply.status(400);
+      return { error: "enabled must be a boolean" };
+    }
+    const category = req.params.category as SharedMobilityCategory;
+    setSharedMobilityRollback(category, req.body.enabled);
+    await writeAuditLog({
+      action: "shared-mobility.rollback",
+      actorId: getAdminSession(req).user.id,
+      targetId: category,
+      targetType: "shared-mobility-category",
+      details: { enabled: req.body.enabled },
+      request: req,
+    });
+    return getSharedMobilityOperationsState();
   });
 
   // GET /admin/services — list all services from registry with docker ps status

@@ -18,7 +18,6 @@ import {
   type MobilityDataSourceProvider,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import { dedupStations, dedupVehicles } from "@openmapx/mobility-core/dedup";
 import { SharedMobilityDetailStore } from "@openmapx/mobility-core/detail-store";
 import { enrichEnturMobilityItems } from "@openmapx/mobility-core/entur-mobility";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
@@ -33,13 +32,9 @@ import {
   mapVehicleToResult,
   stripMobilityKindPrefix,
 } from "@openmapx/mobility-core/mapper";
-import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
 import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
-import type {
-  SharedMobilityStation,
-  SharedMobilityVehicle,
-} from "@openmapx/mobility-core/shared-mobility";
 import { buildSharedMobilityMapContext } from "@openmapx/mobility-core/shared-mobility-context";
+import { orchestrateSharedMobility } from "@openmapx/mobility-core/shared-mobility-orchestrator";
 import { mergeRegionalStations } from "./merge-stations.js";
 import { searchRegionalClients } from "./registry.js";
 
@@ -94,91 +89,56 @@ class CarSharingProvider implements MobilityDataSourceProvider {
   }
 
   async search(bbox: BoundingBox): Promise<MobilityResult<DataSourceResult[]>> {
-    const bboxArray: [number, number, number, number] = [
-      bbox.west,
-      bbox.south,
-      bbox.east,
-      bbox.north,
-    ];
-
-    // Fetch from registered regional clients and GBFS in parallel
-    const [regionalResult, gbfsResult, swissGbfsResult, motisResult] = await Promise.allSettled([
-      searchRegionalClients(bbox),
-      fetchGbfsData(bbox, CAR_FORM_FACTORS),
-      fetchSwissSharedMobilityDataForBbox(bbox, CAR_FORM_FACTORS),
-      fetchMotisRentals(bboxArray, ["car"]),
-    ]);
-
-    const allStations: SharedMobilityStation[] = [];
-    const regionalStations: SharedMobilityStation[] = [];
-    const results: DataSourceResult[] = [];
-
-    // Regional clients first (known reliable sources, higher priority for dedup).
-    // mergeRegionalStations keeps the first occurrence's live availability data
-    // but enriches it with extra fields (address, website, description) from
-    // later occurrences at the same coordinates.
-    if (regionalResult.status === "fulfilled") {
-      const merged = mergeRegionalStations(regionalResult.value);
-      regionalStations.push(...merged);
-      for (const station of merged) {
-        results.push(mapStationToResult(station));
-      }
-    }
-
-    // GBFS stations (collected for dedup with MOTIS)
-    if (gbfsResult.status === "fulfilled") {
-      allStations.push(...gbfsResult.value.stations);
-    }
-    if (swissGbfsResult.status === "fulfilled") {
-      allStations.push(...swissGbfsResult.value.stations);
-    }
-
-    // MOTIS/Transitous stations (appended last so existing sources take dedup priority)
-    if (motisResult.status === "fulfilled") {
-      allStations.push(...motisResult.value.stations);
-    }
-
-    // Collect all free-floating vehicles: GBFS first, MOTIS last.
-    const allVehicles: SharedMobilityVehicle[] = [];
-    if (gbfsResult.status === "fulfilled") allVehicles.push(...gbfsResult.value.vehicles);
-    if (swissGbfsResult.status === "fulfilled") allVehicles.push(...swissGbfsResult.value.vehicles);
-    if (motisResult.status === "fulfilled") allVehicles.push(...motisResult.value.vehicles);
-
-    const dedupedStations = dedupStations(allStations);
-    const dedupedVehicles = dedupVehicles(allVehicles);
+    const inventory = await orchestrateSharedMobility(bbox, {
+      category: "car",
+      formFactors: CAR_FORM_FACTORS,
+      motisFormFactors: ["car"],
+      adapters: [
+        {
+          id: "direct-gbfs",
+          kind: "fallback",
+          fetch: (bounds) => fetchGbfsData(bounds, CAR_FORM_FACTORS),
+        },
+        {
+          id: "swiss-gbfs",
+          kind: "fallback",
+          fetch: (bounds) => fetchSwissSharedMobilityDataForBbox(bounds, CAR_FORM_FACTORS),
+        },
+        {
+          id: "regional",
+          kind: "proprietary",
+          fetch: async (bounds) => ({
+            stations: mergeRegionalStations(await searchRegionalClients(bounds)),
+            vehicles: [],
+          }),
+        },
+      ],
+    });
 
     try {
-      await enrichEnturMobilityItems(dedupedStations, dedupedVehicles);
+      await enrichEnturMobilityItems(inventory.stations, inventory.vehicles, { scope: "map" });
     } catch (error) {
       console.warn("[car-sharing] Entur enrichment failed", error);
     }
 
-    await detailStore.store([
-      ...regionalStations,
-      ...dedupedStations,
-      ...dedupedVehicles,
-      ...(motisResult.status === "fulfilled"
-        ? [...motisResult.value.stations, ...motisResult.value.vehicles]
-        : []),
-    ]);
-
-    for (const station of dedupedStations) {
-      results.push(mapStationToResult(station));
-    }
-
-    for (const vehicle of dedupedVehicles) {
-      results.push(mapVehicleToResult(vehicle));
-    }
-
+    await detailStore.store([...inventory.stations, ...inventory.vehicles]);
+    const results = [
+      ...inventory.stations.map((station) => mapStationToResult(station)),
+      ...inventory.vehicles.map((vehicle) => mapVehicleToResult(vehicle)),
+    ];
     return wrapRT(
       results,
-      attribution.forResults(results, (r) => r.sources ?? r.source),
+      attribution.forResults(results, (result) => result.sources ?? result.source),
     );
   }
-
   async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
     const cached = await detailStore.get(stripMobilityKindPrefix(itemId));
     if (cached) {
+      await enrichEnturMobilityItems(
+        "availableVehicles" in cached ? [cached] : [],
+        "availableVehicles" in cached ? [] : [cached],
+        { scope: "detail" },
+      ).catch(() => undefined);
       const attrs = attribution.forResults([cached], (c) => c.sources);
       if ("availableVehicles" in cached) return wrapRT(mapStationToDetail(cached), attrs);
       return wrapRT(mapVehicleToDetail(cached), attrs);

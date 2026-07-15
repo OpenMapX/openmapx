@@ -3,6 +3,7 @@ import type { IntegrationContext } from "@openmapx/integration-framework";
 import { initCache } from "@openmapx/mobility-core/cache";
 import { setSharedMobilityMotisUrl } from "@openmapx/mobility-core/motis-rentals";
 import { setSharedMobilityNominatimUrl } from "@openmapx/mobility-core/nominatim";
+import { setSharedMobilityDecisionObserver } from "@openmapx/mobility-core/shared-mobility-orchestrator";
 import { registerPlaceResolver } from "@openmapx/place-ids";
 import { bielefeldClient } from "./providers/bielefeld-client.js";
 import { cambioClient } from "./providers/cambio-client.js";
@@ -30,6 +31,16 @@ export function setup(ctx: IntegrationContext): void {
   registerCarSharingClient(bielefeldClient);
 
   setManifestDataSources(ctx.manifest.dataSources ?? []);
+  setSharedMobilityDecisionObserver((category, decision) => {
+    ctx.metricsRecorder?.recordProviderCall(
+      {
+        providerId: `shared-mobility-${category}`,
+        method: "source-policy",
+        outcome: decision.partial ? "error" : decision.calledAdapters.length ? "ok" : "skipped",
+      },
+      0,
+    );
+  });
   ctx.registerMobilityDataSource(carSharingProvider);
   registerPlaceResolver(carSharingProvider.id, createDataSourceResolver(carSharingProvider));
 }

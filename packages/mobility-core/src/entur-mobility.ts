@@ -543,6 +543,7 @@ async function loadEnturSystemIds(): Promise<Set<string>> {
 export async function enrichEnturMobilityItems(
   stations: SharedMobilityStation[],
   vehicles: SharedMobilityVehicle[],
+  options: { scope?: "map" | "detail" } = {},
 ): Promise<void> {
   const enturSystemIds = await loadEnturSystemIds();
 
@@ -567,6 +568,54 @@ export async function enrichEnturMobilityItems(
 
   if (stationIds.length === 0 && vehicleIds.length === 0) return;
 
+  const detailStationFields =
+    options.scope === "map"
+      ? ""
+      : `
+        pricingPlans {
+          name { translation { language value } }
+          description { translation { language value } }
+          currency price
+          perKmPricing { rate interval }
+          perMinPricing { rate interval }
+        }
+        vehicleTypesAvailable {
+          count
+          vehicleType {
+            id formFactor name { translation { language value } }
+            description { translation { language value } }
+            make model color propulsionType riderCapacity vehicleAccessories gCO2km
+            returnConstraint vehicleImage vehicleAssets { iconUrl iconUrlDark }
+            defaultPricingPlan {
+              name { translation { language value } }
+              description { translation { language value } }
+              currency price perKmPricing { rate interval } perMinPricing { rate interval }
+            }
+            pricingPlans {
+              name { translation { language value } }
+              description { translation { language value } }
+              currency price perKmPricing { rate interval } perMinPricing { rate interval }
+            }
+          }
+        }`;
+  const vehicleTypeFields =
+    options.scope === "map"
+      ? "id propulsionType vehicleImage vehicleAssets { iconUrl iconUrlDark }"
+      : `
+          id formFactor name { translation { language value } }
+          description { translation { language value } }
+          make model color propulsionType riderCapacity vehicleAccessories gCO2km
+          returnConstraint vehicleImage vehicleAssets { iconUrl iconUrlDark }
+          defaultPricingPlan {
+            name { translation { language value } }
+            description { translation { language value } }
+            currency price perKmPricing { rate interval } perMinPricing { rate interval }
+          }
+          pricingPlans {
+            name { translation { language value } }
+            description { translation { language value } }
+            currency price perKmPricing { rate interval } perMinPricing { rate interval }
+          }`;
   const query = `
     query EnturMobilityEnrichment($stationIds: [String!], $vehicleIds: [String!]) {
       stations(ids: $stationIds) {
@@ -578,14 +627,7 @@ export async function enrichEnturMobilityItems(
         isVirtualStation
         stationArea { type coordinates }
         rentalUris { web ios android }
-        pricingPlans {
-          name { translation { language value } }
-          description { translation { language value } }
-          currency
-          price
-          perKmPricing { rate interval }
-          perMinPricing { rate interval }
-        }
+        ${detailStationFields}
         system {
           id
           url
@@ -596,41 +638,6 @@ export async function enrichEnturMobilityItems(
           rentalApps {
             ios { storeUri discoveryUri }
             android { storeUri discoveryUri }
-          }
-        }
-        vehicleTypesAvailable {
-          count
-          vehicleType {
-            id
-            formFactor
-            name { translation { language value } }
-            description { translation { language value } }
-            make
-            model
-            color
-            propulsionType
-            riderCapacity
-            vehicleAccessories
-            gCO2km
-            returnConstraint
-            vehicleImage
-            vehicleAssets { iconUrl iconUrlDark }
-            defaultPricingPlan {
-              name { translation { language value } }
-              description { translation { language value } }
-              currency
-              price
-              perKmPricing { rate interval }
-              perMinPricing { rate interval }
-            }
-            pricingPlans {
-              name { translation { language value } }
-              description { translation { language value } }
-              currency
-              price
-              perKmPricing { rate interval }
-              perMinPricing { rate interval }
-            }
           }
         }
       }
@@ -652,36 +659,7 @@ export async function enrichEnturMobilityItems(
           }
         }
         vehicleType {
-          id
-          formFactor
-          name { translation { language value } }
-          description { translation { language value } }
-          make
-          model
-          color
-          propulsionType
-          riderCapacity
-          vehicleAccessories
-          gCO2km
-          returnConstraint
-          vehicleImage
-          vehicleAssets { iconUrl iconUrlDark }
-          defaultPricingPlan {
-            name { translation { language value } }
-            description { translation { language value } }
-            currency
-            price
-            perKmPricing { rate interval }
-            perMinPricing { rate interval }
-          }
-          pricingPlans {
-            name { translation { language value } }
-            description { translation { language value } }
-            currency
-            price
-            perKmPricing { rate interval }
-            perMinPricing { rate interval }
-          }
+          ${vehicleTypeFields}
         }
       }
     }
@@ -690,7 +668,10 @@ export async function enrichEnturMobilityItems(
   const data = await fetchEnturGraphQl<EnturEnrichmentData>(
     query,
     { stationIds, vehicleIds },
-    `shared-mobility:entur:items:${hashParts([...stationIds.sort(), ...vehicleIds.sort()])}`,
+    `shared-mobility:entur:items:${options.scope ?? "detail"}:${hashParts([
+      ...stationIds.sort(),
+      ...vehicleIds.sort(),
+    ])}`,
   );
 
   const stationById = new Map((data.stations ?? []).map((station) => [station.id, station]));

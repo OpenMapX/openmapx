@@ -184,7 +184,7 @@ describe("bikeSharingProvider.search", () => {
     expect(results).toEqual([makeResult("ch-station-1")]);
   });
 
-  it("station order: Nextbike > CityBikes > Donkey > GBFS > DB > MOTIS", async () => {
+  it("station order: MOTIS is authoritative before direct metadata/fallback sources", async () => {
     vi.mocked(mapStationToResult).mockImplementation((s) => makeResult(s.id));
     vi.mocked(searchNextbike).mockResolvedValue([makeStation("nb1", "nextbike")]);
     vi.mocked(searchCityBikes).mockResolvedValue([makeStation("cb1", "citybikes")]);
@@ -205,12 +205,14 @@ describe("bikeSharingProvider.search", () => {
     await bikeSharingProvider.search(makeBbox());
 
     const dedupCall = vi.mocked(dedupStations).mock.calls[0][0] as SharedMobilityStation[];
-    expect(dedupCall[0].id).toBe("nb1");
-    expect(dedupCall[1].id).toBe("cb1");
-    expect(dedupCall[2].id).toBe("dk1");
-    expect(dedupCall[3].id).toBe("gbfs1");
-    expect(dedupCall[4].id).toBe("db1");
-    expect(dedupCall[5].id).toBe("mo1");
+    expect(dedupCall.map((station) => station.id)).toEqual([
+      "mo1",
+      "nb1",
+      "cb1",
+      "dk1",
+      "gbfs1",
+      "db1",
+    ]);
   });
 
   it("individual source failures handled gracefully", async () => {
@@ -287,7 +289,7 @@ describe("bikeSharingProvider.search", () => {
 
     await bikeSharingProvider.search(makeBbox());
 
-    expect(enrichEnturMobilityItems).toHaveBeenCalledWith([station], [vehicle]);
+    expect(enrichEnturMobilityItems).toHaveBeenCalledWith([station], [vehicle], { scope: "map" });
   });
 });
 

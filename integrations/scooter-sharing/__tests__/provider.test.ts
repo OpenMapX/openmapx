@@ -133,10 +133,7 @@ describe("scooterSharingProvider.search", () => {
     const dedupCall = vi.mocked(dedupStations).mock.calls[0][0] as SharedMobilityStation[];
     expect(fetchSwissSharedMobilityDataForBbox).toHaveBeenCalledOnce();
     expect(dedupCall).toHaveLength(3);
-    expect(dedupCall[0].id).toBe("gbfs1");
-    // Aggregator sources are appended last (NRW, then MOTIS) so direct GBFS takes dedup priority
-    expect(dedupCall[1].id).toBe("nrw1");
-    expect(dedupCall[2].id).toBe("mo1");
+    expect(dedupCall.map((station) => station.id)).toEqual(["mo1", "gbfs1", "nrw1"]);
   });
 
   it("vehicles from all 4 sources collected (GBFS, Felyx, NRW, MOTIS)", async () => {
@@ -266,7 +263,7 @@ describe("scooterSharingProvider.search", () => {
 
     await scooterSharingProvider.search(makeBbox());
 
-    expect(enrichEnturMobilityItems).toHaveBeenCalledWith([station], [vehicle]);
+    expect(enrichEnturMobilityItems).toHaveBeenCalledWith([station], [vehicle], { scope: "map" });
   });
 });
 

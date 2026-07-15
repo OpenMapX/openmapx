@@ -65,6 +65,8 @@ import { searchRegionalClients } from "../providers/registry.js";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(dedupStations).mockImplementation((items) => items);
+  vi.mocked(mergeRegionalStations).mockImplementation((items) => items);
   vi.mocked(fetchSwissSharedMobilityDataForBbox).mockResolvedValue({
     stations: [],
     vehicles: [],
@@ -124,7 +126,6 @@ describe("carSharingProvider.search", () => {
     vi.mocked(mergeRegionalStations).mockReturnValue(regional);
     vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [], vehicles: [] });
     vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
-    vi.mocked(dedupStations).mockReturnValue([]);
 
     const results = (await carSharingProvider.search(makeBbox())).data;
 
@@ -147,8 +148,8 @@ describe("carSharingProvider.search", () => {
 
     const dedupCall = vi.mocked(dedupStations).mock.calls[0][0] as SharedMobilityStation[];
     expect(dedupCall).toHaveLength(2);
-    expect(dedupCall[0].id).toBe("gbfs1");
-    expect(dedupCall[1].id).toBe("mo1");
+    expect(dedupCall[0].id).toBe("mo1");
+    expect(dedupCall[1].id).toBe("gbfs1");
   });
 
   it("vehicles from GBFS + MOTIS added after stations", async () => {
@@ -186,7 +187,6 @@ describe("carSharingProvider.search", () => {
     vi.mocked(mergeRegionalStations).mockReturnValue([regStation]);
     vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [gbfsStation], vehicles: [] });
     vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [motisVehicle] });
-    vi.mocked(dedupStations).mockReturnValue([gbfsStation]);
 
     const results = (await carSharingProvider.search(makeBbox())).data;
 
@@ -214,7 +214,6 @@ describe("carSharingProvider.search", () => {
     vi.mocked(searchRegionalClients).mockRejectedValue(new Error("down"));
     vi.mocked(fetchGbfsData).mockRejectedValue(new Error("down"));
     vi.mocked(fetchMotisRentals).mockRejectedValue(new Error("down"));
-    vi.mocked(dedupStations).mockReturnValue([]);
 
     const results = (await carSharingProvider.search(makeBbox())).data;
     expect(results).toEqual([]);
@@ -234,7 +233,7 @@ describe("carSharingProvider.search", () => {
 
     await carSharingProvider.search(makeBbox());
 
-    expect(enrichEnturMobilityItems).toHaveBeenCalledWith([station], [vehicle]);
+    expect(enrichEnturMobilityItems).toHaveBeenCalledWith([station], [vehicle], { scope: "map" });
   });
 });
 
@@ -248,7 +247,6 @@ describe("carSharingProvider.getDetail", () => {
     vi.mocked(mergeRegionalStations).mockReturnValue([station]);
     vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [], vehicles: [] });
     vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
-    vi.mocked(dedupStations).mockReturnValue([]);
     vi.mocked(mapStationToResult).mockReturnValue(makeResult("cs-cached-station"));
     await carSharingProvider.search(makeBbox());
 
