@@ -508,6 +508,26 @@ export interface MotisTransitousStatus {
   rentalProviderCount: number;
   rentalProviderGroupCount: number;
   rollbackAvailable: boolean;
+  gbfsCatalog: {
+    state: "active" | "missing" | "error";
+    commit: string | null;
+    lockedAt: string | null;
+    registryRows: number;
+    registryAdded: number;
+    transitousPreferred: number;
+    quarantined: number;
+    validationFailed: number;
+    sources: Array<{
+      sourceId: string;
+      country: string;
+      status: "configured" | "excluded";
+      observation: "validated" | "unknown";
+      errorClass?: string;
+      lastObservedSuccess?: string;
+      lastErrorAt?: string;
+      dataAge: "unknown";
+    }>;
+  };
 }
 
 interface MobilityCapabilitySnapshot {
@@ -516,6 +536,93 @@ interface MobilityCapabilitySnapshot {
   epoch: string;
   artifacts: { config: { sha256: string }; license: { sha256: string } };
   rentals?: { providerIds?: string[]; providerGroupIds?: string[] };
+}
+
+function readGbfsCatalogStatus(motisDir: string): MotisTransitousStatus["gbfsCatalog"] {
+  const missing: MotisTransitousStatus["gbfsCatalog"] = {
+    state: "missing",
+    commit: null,
+    lockedAt: null,
+    registryRows: 0,
+    registryAdded: 0,
+    transitousPreferred: 0,
+    quarantined: 0,
+    validationFailed: 0,
+    sources: [],
+  };
+  const path = join(motisDir, "gbfs-source-index.json");
+  if (!existsSync(path)) return missing;
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf-8")) as {
+      schemaVersion?: unknown;
+      lock?: { commit?: unknown; lockedAt?: unknown };
+      summary?: Record<string, unknown>;
+      validations?: Array<{ sourceId?: unknown; ok?: unknown }>;
+      sources?: Array<{
+        sourceId?: unknown;
+        country?: unknown;
+        status?: unknown;
+        exclusionReason?: unknown;
+        observation?: {
+          state?: unknown;
+          lastObservedSuccess?: unknown;
+          lastErrorAt?: unknown;
+          lastErrorClass?: unknown;
+          dataAge?: unknown;
+        };
+      }>;
+    };
+    if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.sources))
+      throw new Error("unsupported source index");
+    const validated = new Set(
+      (parsed.validations ?? [])
+        .filter((entry) => entry.ok === true && typeof entry.sourceId === "string")
+        .map((entry) => entry.sourceId as string),
+    );
+    const sources = parsed.sources
+      .filter((entry) => entry.status === "included" || entry.exclusionReason === "validation")
+      .slice(0, 500)
+      .map((entry) => ({
+        sourceId: typeof entry.sourceId === "string" ? entry.sourceId : "unknown",
+        country: typeof entry.country === "string" ? entry.country : "unknown",
+        status: entry.status === "included" ? ("configured" as const) : ("excluded" as const),
+        observation:
+          entry.observation?.state === "validated" ||
+          (typeof entry.sourceId === "string" && validated.has(entry.sourceId))
+            ? ("validated" as const)
+            : ("unknown" as const),
+        errorClass:
+          typeof entry.observation?.lastErrorClass === "string"
+            ? entry.observation.lastErrorClass
+            : typeof entry.exclusionReason === "string"
+              ? entry.exclusionReason
+              : undefined,
+        lastObservedSuccess:
+          typeof entry.observation?.lastObservedSuccess === "string"
+            ? entry.observation.lastObservedSuccess
+            : undefined,
+        lastErrorAt:
+          typeof entry.observation?.lastErrorAt === "string"
+            ? entry.observation.lastErrorAt
+            : undefined,
+        dataAge: "unknown" as const,
+      }));
+    const number = (key: string): number =>
+      typeof parsed.summary?.[key] === "number" ? (parsed.summary[key] as number) : 0;
+    return {
+      state: "active",
+      commit: typeof parsed.lock?.commit === "string" ? parsed.lock.commit : null,
+      lockedAt: typeof parsed.lock?.lockedAt === "string" ? parsed.lock.lockedAt : null,
+      registryRows: number("registryRows"),
+      registryAdded: number("healthy"),
+      transitousPreferred: number("duplicate"),
+      quarantined: number("quarantined"),
+      validationFailed: number("failed"),
+      sources,
+    };
+  } catch {
+    return { ...missing, state: "error" };
+  }
 }
 
 function hashFile(path: string): string | null {
@@ -544,6 +651,7 @@ export function getMotisTransitousStatus(): MotisTransitousStatus {
     join(DATA_DIR, "motis", "staging", "motis-candidate-manifest.json"),
   );
   const rollbackAvailable = existsSync(`${motisDir}.previous`);
+  const gbfsCatalog = readGbfsCatalogStatus(motisDir);
 
   let snapshot: MobilityCapabilitySnapshot | null = null;
   let capabilityError: string | undefined;
@@ -595,6 +703,7 @@ export function getMotisTransitousStatus(): MotisTransitousStatus {
       rentalProviderCount: snapshot?.rentals?.providerIds?.length ?? 0,
       rentalProviderGroupCount: snapshot?.rentals?.providerGroupIds?.length ?? 0,
       rollbackAvailable,
+      gbfsCatalog,
     };
   }
 
@@ -683,5 +792,6 @@ export function getMotisTransitousStatus(): MotisTransitousStatus {
     rentalProviderCount: snapshot?.rentals?.providerIds?.length ?? 0,
     rentalProviderGroupCount: snapshot?.rentals?.providerGroupIds?.length ?? 0,
     rollbackAvailable,
+    gbfsCatalog,
   };
 }

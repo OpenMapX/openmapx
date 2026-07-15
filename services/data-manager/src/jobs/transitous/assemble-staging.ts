@@ -148,6 +148,10 @@ export const run: StageFn = async (ctx) => {
       return finish("error", `required attribution artifact missing at ${licenseSrc}`);
     }
     linkOrCopy(licenseSrc, join(stagingDir, "license.json"));
+    const sourceIndexSrc = join(outDir, "gbfs-source-index.json");
+    if (existsSync(sourceIndexSrc)) {
+      linkOrCopy(sourceIndexSrc, join(stagingDir, "gbfs-source-index.json"));
+    }
 
     const proxyCandidateSrc = join(outDir, CANDIDATE_PROXY_DIRNAME);
     if (!existsSync(proxyCandidateSrc)) {

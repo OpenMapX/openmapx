@@ -4,6 +4,7 @@ import { asJobLogger, jobChildLogger } from "../../logger.js";
 import type { StateStore } from "../../state.js";
 import type { DownloadGtfsResult, FeedDownloadFailure } from "../download-gtfs.js";
 import * as assembleStagingStage from "./assemble-staging.js";
+import * as compileGbfsStage from "./compile-gbfs.js";
 import * as fetchStage from "./fetch.js";
 import * as filterStage from "./filter.js";
 import * as gcStage from "./gc.js";
@@ -41,6 +42,7 @@ type StageEntry = { name: StageName; run: StageFn; criticality: StageCriticality
 const BUILD_STAGES: ReadonlyArray<StageEntry> = [
   { name: "prepare", run: prepareStage.run, criticality: "critical" },
   { name: "filter", run: filterStage.run, criticality: "critical" },
+  { name: "compile-gbfs", run: compileGbfsStage.run, criticality: "critical" },
   // Acquisition may report individual failures while preserving known-good
   // archives from the previous run. Assembly remains the authoritative empty
   // or incomplete candidate boundary.

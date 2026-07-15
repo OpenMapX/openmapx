@@ -9,6 +9,7 @@ export type StageStatus = "ok" | "skipped" | "error" | "partial";
 export type StageName =
   | "prepare"
   | "filter"
+  | "compile-gbfs"
   | "fetch"
   | "validate"
   | "gen-motis-config"
@@ -91,6 +92,12 @@ export interface JobState {
   /** When non-zero some fetches succeeded but others did not. */
   partialSuccess?: boolean;
   proxyTransaction?: ProxyTransactionState;
+  gbfsCompilation?: {
+    output: string;
+    healthy: number;
+    failed: number;
+    registrySha256: string;
+  };
 }
 
 export interface ProxyTransactionState {

@@ -26,6 +26,8 @@
  * dir, runs the pipeline, then tears everything down in `afterAll`. No reliance
  * on the operator's `infra/docker/data` tree.
  */
+
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   cpSync,
@@ -64,6 +66,7 @@ const STAGING_PORT = 8082;
 const PRIMARY_SERVICE = "motis";
 const PRIMARY_PORT = 8081;
 const FEED_PROXY_SERVICE = "motis-feed-proxy";
+const GBFS_FIXTURE_SERVICE = "gbfs-fixture";
 // Generous wall-clock ceiling for the whole pipeline. It performs TWO MOTIS
 // imports + boots on a cold-cache runner — the staging import (motis-import) and
 // the primary's re-import on promote's `docker restart motis` — so a tight
@@ -78,6 +81,7 @@ const PIPELINE_BUDGET_MS = 4 * 60_000;
 const ORDERED_STAGES: StageName[] = [
   "prepare",
   "filter",
+  "compile-gbfs",
   "fetch",
   "validate",
   "gen-full-config",
@@ -127,6 +131,8 @@ function motisService(name: string, hostPort: number, hostDataDir: string): stri
     `      - "127.0.0.1:${hostPort}:8080"`,
     "    volumes:",
     `      - ${hostDataDir}:/motis-data`,
+    "    extra_hosts:",
+    '      - "rt.triptix.tech:127.0.0.1"',
     '    restart: "no"',
   ];
 }
@@ -139,6 +145,7 @@ function writeStagingCompose(
   dataDir: string,
   stagingDataDir: string,
   motisDataDir: string,
+  gbfsFixtureDir: string,
 ): string {
   const composeFile = join(dataDir, "docker-compose.yml");
   const yaml = [
@@ -150,11 +157,151 @@ function writeStagingCompose(
     `    container_name: ${FEED_PROXY_SERVICE}`,
     "    volumes:",
     `      - ${join(dataDir, "motis-feed-proxy", "conf")}:/etc/nginx/conf.d`,
+    "    extra_hosts:",
+    '      - "rt.triptix.tech:127.0.0.1"',
+    '    restart: "no"',
+    `  ${GBFS_FIXTURE_SERVICE}:`,
+    "    image: nginx:1.27-alpine",
+    `    container_name: ${GBFS_FIXTURE_SERVICE}`,
+    "    volumes:",
+    `      - ${gbfsFixtureDir}:/usr/share/nginx/html:ro`,
     '    restart: "no"',
     "",
   ].join("\n");
   writeFileSync(composeFile, yaml);
   return composeFile;
+}
+
+function writeTinyGbfsFixture(directory: string): void {
+  mkdirSync(directory, { recursive: true });
+  const writeJson = (name: string, value: unknown): void =>
+    writeFileSync(join(directory, name), `${JSON.stringify(value, null, 2)}\n`);
+  const base = `http://${GBFS_FIXTURE_SERVICE}`;
+  const timestamp = Math.floor(Date.now() / 1_000);
+  writeJson("gbfs.json", {
+    last_updated: timestamp,
+    ttl: 60,
+    version: "2.3",
+    data: {
+      en: {
+        feeds: [
+          { name: "system_information", url: `${base}/system_information.json` },
+          { name: "station_information", url: `${base}/station_information.json` },
+          { name: "station_status", url: `${base}/station_status.json` },
+          { name: "vehicle_types", url: `${base}/vehicle_types.json` },
+          { name: "geofencing_zones", url: `${base}/geofencing_zones.json` },
+        ],
+      },
+    },
+  });
+  writeJson("system_information.json", {
+    last_updated: timestamp,
+    ttl: 60,
+    version: "2.3",
+    data: {
+      system_id: "openmapx-e9-rentals",
+      language: "en",
+      name: "OpenMapX E9 Rentals",
+      operator: "OpenMapX test fixture",
+      timezone: "Europe/Berlin",
+      license_id: "CC0-1.0",
+      url: "https://openmapx.example.test/e9",
+    },
+  });
+  writeJson("vehicle_types.json", {
+    last_updated: timestamp,
+    ttl: 60,
+    version: "2.3",
+    data: {
+      vehicle_types: [
+        {
+          vehicle_type_id: "bike",
+          form_factor: "bicycle",
+          propulsion_type: "human",
+          return_constraint: "any_station",
+        },
+      ],
+    },
+  });
+  writeJson("station_information.json", {
+    last_updated: timestamp,
+    ttl: 60,
+    version: "2.3",
+    data: {
+      stations: [
+        {
+          station_id: "e9-station",
+          name: "E9 Hauptbahnhof Bikes",
+          lat: 52.525,
+          lon: 13.369,
+          capacity: 8,
+          rental_uris: { web: "https://openmapx.example.test/rent/e9-station" },
+          vehicle_type_capacity: { bike: 8 },
+        },
+      ],
+    },
+  });
+  writeJson("station_status.json", {
+    last_updated: timestamp,
+    ttl: 60,
+    version: "2.3",
+    data: {
+      stations: [
+        {
+          station_id: "e9-station",
+          num_vehicles_available: 2,
+          vehicle_types_available: [{ vehicle_type_id: "bike", count: 2 }],
+          num_docks_available: 6,
+          vehicle_docks_available: [{ vehicle_type_ids: ["bike"], count: 6 }],
+          is_installed: true,
+          is_renting: true,
+          is_returning: true,
+          last_reported: timestamp,
+        },
+      ],
+    },
+  });
+  writeJson("geofencing_zones.json", {
+    last_updated: timestamp,
+    ttl: 60,
+    version: "2.3",
+    data: {
+      geofencing_zones: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: {
+              type: "MultiPolygon",
+              coordinates: [
+                [
+                  [
+                    [13.36, 52.51],
+                    [13.39, 52.51],
+                    [13.39, 52.54],
+                    [13.36, 52.54],
+                    [13.36, 52.51],
+                  ],
+                ],
+              ],
+            },
+            properties: {
+              name: "E9 service area",
+              rules: [
+                {
+                  vehicle_type_ids: ["bike"],
+                  ride_allowed: true,
+                  ride_through_allowed: true,
+                  maximum_speed_kph: 15,
+                  station_parking: true,
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  });
 }
 
 async function composeDown(composeFile: string, cwd: string): Promise<void> {
@@ -263,6 +410,8 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
   let daemonAvailable = false;
   let stagingDataDir: string | undefined;
   let motisDataDir: string | undefined;
+  let gbfsFixtureDir: string | undefined;
+  let gbfsRegistryCsv = "";
 
   beforeAll(async () => {
     daemonAvailable = await dockerDaemonReachable();
@@ -324,6 +473,8 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
     // into the catalog's own working tree.
     const fixturesDir = join(tmp, "tiny-gtfs");
     const built = await buildTinyGtfsFeeds(fixturesDir);
+    gbfsFixtureDir = join(tmp, "tiny-gbfs");
+    writeTinyGbfsFixture(gbfsFixtureDir);
 
     // Materialise a stub Transitous catalog. The data-manager's prepare
     // stage probes for `<catalog>/.git`; if present, no clone happens and
@@ -365,14 +516,55 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
       );
     }
 
-    composeFile = writeStagingCompose(dataDir, stagingDataDir, motisDataDir);
+    // The versioned overlay remains available for operator patches/quarantine;
+    // the E9 feed itself is injected by the pinned registry compiler below.
+    const feedsOverlayPath = join(dataDir, "feeds-overlay.json");
+    writeFileSync(
+      feedsOverlayPath,
+      `${JSON.stringify(
+        {
+          schemaVersion: 2,
+          patches: [],
+          additions: [],
+          quarantine: [],
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    const registryCommit = "1".repeat(40);
+    gbfsRegistryCsv =
+      `Country Code,Name,Location,System ID,URL,Auto-Discovery URL,Supported Versions,Authentication Info URL\n` +
+      `DE,OpenMapX E9 Rentals,Berlin,openmapx-e9-rentals,https://openmapx.example.test/e9,http://${GBFS_FIXTURE_SERVICE}/gbfs.json,2.3,\n`;
+    mkdirSync(join(tmp, "infra", "docker"), { recursive: true });
+    writeFileSync(
+      join(tmp, "infra", "docker", "gbfs-catalog.lock.json"),
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          source: "mobilitydata-gbfs",
+          commit: registryCommit,
+          url: `https://raw.githubusercontent.com/MobilityData/gbfs/${registryCommit}/systems.csv`,
+          sha256: createHash("sha256").update(gbfsRegistryCsv).digest("hex"),
+          lockedAt: "2026-07-15T00:00:00.000Z",
+          lockedBy: "e9-fixture",
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    composeFile = writeStagingCompose(dataDir, stagingDataDir, motisDataDir, gbfsFixtureDir);
     // Clean slate. `compose down` only reaps containers in THIS run's project; a
     // crashed earlier run can leave pinned `motis`/`motis-staging` containers
     // under a different project that would collide with our `up`. Force-remove
     // them by name first — best effort, ignore "no such container".
-    await execa("docker", ["rm", "-f", PRIMARY_SERVICE, STAGING_SERVICE, FEED_PROXY_SERVICE], {
-      stdio: "pipe",
-    }).catch(() => {});
+    await execa(
+      "docker",
+      ["rm", "-f", PRIMARY_SERVICE, STAGING_SERVICE, FEED_PROXY_SERVICE, GBFS_FIXTURE_SERVICE],
+      { stdio: "pipe" },
+    ).catch(() => {});
     await composeDown(composeFile, dataDir);
     // Bring BOTH containers up. They block in their wait-for-config loop (empty
     // dirs) until the pipeline assembles staging (motis-import restarts staging)
@@ -405,7 +597,7 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
         testCtx.skip();
         return;
       }
-      if (!dataDir || !stagingDataDir || !motisDataDir || !composeFile) {
+      if (!dataDir || !stagingDataDir || !motisDataDir || !composeFile || !gbfsFixtureDir || !tmp) {
         throw new Error("test setup did not complete");
       }
 
@@ -423,14 +615,39 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
 
       const ctx = buildJobContext({
         dataDir,
+        repoRoot: tmp,
         store: new StateStore(dataDir),
         countries: ["de", "ch", "at"],
+        feedsOverlayPath: join(dataDir, "feeds-overlay.json"),
         runner,
         now: () => new Date().toISOString(),
       });
 
       const started = Date.now();
-      const { results } = await runTransitousPipeline(ctx);
+      const nativeFetch = globalThis.fetch;
+      process.env.MOTIS_GBFS_CATALOG_ENABLED = "true";
+      process.env.MOTIS_GBFS_CATALOG_MAX_ADDITIONS = "5";
+      globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("raw.githubusercontent.com/MobilityData/gbfs/")) {
+          return new Response(gbfsRegistryCsv, { headers: { "content-type": "text/csv" } });
+        }
+        if (url.startsWith(`http://${GBFS_FIXTURE_SERVICE}/`)) {
+          const filename = new URL(url).pathname.slice(1);
+          return new Response(readFileSync(join(gbfsFixtureDir as string, filename)), {
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return nativeFetch(input, init);
+      }) as typeof fetch;
+      let results: Awaited<ReturnType<typeof runTransitousPipeline>>["results"];
+      try {
+        ({ results } = await runTransitousPipeline(ctx));
+      } finally {
+        globalThis.fetch = nativeFetch;
+        delete process.env.MOTIS_GBFS_CATALOG_ENABLED;
+        delete process.env.MOTIS_GBFS_CATALOG_MAX_ADDITIONS;
+      }
       const elapsed = Date.now() - started;
 
       expect(results.map((r) => r.stage)).toEqual(ORDERED_STAGES);
@@ -472,6 +689,27 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
         const diag = await failureDiagnostics("primary serves promoted data", PRIMARY_SERVICE);
         expect(primaryServes, diag).toBe(true);
       }
+
+      const rentalsResponse = await fetch(
+        `http://127.0.0.1:${PRIMARY_PORT}/api/v1/rentals?min=52.51,13.35&max=52.54,13.40&withProviders=true&withStations=true&withVehicles=true&withZones=true`,
+      );
+      expect(rentalsResponse.ok).toBe(true);
+      const rentals = (await rentalsResponse.json()) as {
+        providers?: unknown[];
+        stations?: unknown[];
+        zones?: unknown[];
+      };
+      expect(rentals.providers?.length ?? 0).toBeGreaterThan(0);
+      expect(rentals.stations?.length ?? 0).toBeGreaterThan(0);
+      expect(rentals.zones?.length ?? 0).toBeGreaterThan(0);
+      expect(existsSync(join(motisDataDir, "gbfs-source-index.json"))).toBe(true);
+
+      const proxyLogs = await execa("docker", ["logs", FEED_PROXY_SERVICE], { reject: false });
+      expect(`${proxyLogs.stdout}\n${proxyLogs.stderr}`).toContain("/gbfs.json");
+      expect(`${proxyLogs.stdout}\n${proxyLogs.stderr}`).toContain("/station_status.json");
+      expect(readFileSync(join(motisDataDir, "config.yml"), "utf-8")).not.toContain(
+        "rt.triptix.tech",
+      );
 
       // Sanity cap only — see PIPELINE_BUDGET_MS. Two real MOTIS imports+boots,
       // so we don't assert a tight wall-clock; just guard against a hang.

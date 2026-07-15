@@ -252,7 +252,12 @@ export interface CapabilitySnapshot {
   schemaVersion: 1;
   testedAt: string;
   epoch: string;
-  pins: { motis: string; transitous: string; atlas?: string };
+  pins: {
+    motis: string;
+    transitous: string;
+    atlas?: string;
+    gbfsRegistry?: { commit: string; sha256: string };
+  };
   artifacts: MotisCandidateManifest["artifacts"];
   expectations: MotisCandidateManifest["expectations"];
   health: HealthResponse;
@@ -270,6 +275,22 @@ export function writeCapabilitySnapshot(
   if (!report.ok || !report.health)
     throw new Error("cannot persist an unsuccessful capability report");
   const lock = readTransitousLock(repoRoot);
+  let gbfsRegistry: { commit: string; sha256: string } | undefined;
+  if (manifest.artifacts.sourceIndex) {
+    try {
+      const index = JSON.parse(
+        readFileSync(join(stagingDir, manifest.artifacts.sourceIndex.path), "utf-8"),
+      ) as {
+        lock?: { commit?: unknown; sha256?: unknown };
+      };
+      if (typeof index.lock?.commit === "string" && typeof index.lock.sha256 === "string") {
+        gbfsRegistry = { commit: index.lock.commit, sha256: index.lock.sha256 };
+      }
+    } catch {
+      // The source-index hash remains promotion-gated; malformed optional pin
+      // metadata is surfaced by admin rather than exposing secrets here.
+    }
+  }
   const snapshot: CapabilitySnapshot = {
     schemaVersion: 1,
     testedAt,
@@ -278,6 +299,7 @@ export function writeCapabilitySnapshot(
       motis: MOTIS_VERSION,
       transitous: lock?.ref ?? "unlocked",
       atlas: lock?.submodules["transitland-atlas"],
+      gbfsRegistry,
     },
     artifacts: manifest.artifacts,
     expectations: manifest.expectations,

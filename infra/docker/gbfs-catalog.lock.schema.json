@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schemaVersion", "source", "commit", "url", "sha256", "lockedAt", "lockedBy"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "source": { "const": "mobilitydata-gbfs" },
+    "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "url": {
+      "type": "string",
+      "pattern": "^https://raw\\.githubusercontent\\.com/MobilityData/gbfs/[0-9a-f]{40}/systems\\.csv$"
+    },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "lockedAt": { "type": "string", "format": "date-time" },
+    "lockedBy": { "type": "string", "minLength": 1 }
+  },
+  "additionalProperties": false
+}

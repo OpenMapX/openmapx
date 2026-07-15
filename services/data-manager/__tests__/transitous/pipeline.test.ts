@@ -18,6 +18,7 @@ afterEach(() => {
 const ORDERED_STAGES: StageName[] = [
   "prepare",
   "filter",
+  "compile-gbfs",
   "fetch",
   "validate",
   "gen-full-config",
@@ -183,7 +184,7 @@ describe("runTransitousPipeline orchestrator", () => {
     const { results, finalStatus } = await runTransitousPipeline(ctx, { stopAt: "fetch" });
     const elapsedMs = Date.now() - startedAt;
 
-    expect(results.map((r) => r.stage)).toEqual(["prepare", "filter", "fetch"]);
+    expect(results.map((r) => r.stage)).toEqual(["prepare", "filter", "compile-gbfs", "fetch"]);
     expect(finalStatus).toBe("ok");
     expect(elapsedMs).toBeLessThan(60_000);
   });

@@ -112,6 +112,26 @@ interface MotisTransitousStatus {
   rentalProviderCount: number;
   rentalProviderGroupCount: number;
   rollbackAvailable: boolean;
+  gbfsCatalog: {
+    state: "active" | "missing" | "error";
+    commit: string | null;
+    lockedAt: string | null;
+    registryRows: number;
+    registryAdded: number;
+    transitousPreferred: number;
+    quarantined: number;
+    validationFailed: number;
+    sources: Array<{
+      sourceId: string;
+      country: string;
+      status: "configured" | "excluded";
+      observation: "validated" | "unknown";
+      errorClass?: string;
+      lastObservedSuccess?: string;
+      lastErrorAt?: string;
+      dataAge: "unknown";
+    }>;
+  };
 }
 
 interface DataResponse {
@@ -1338,6 +1358,11 @@ function MotisTransitousSection({ status }: { status: MotisTransitousStatus }) {
               size="small"
             />
             <Chip label={`${status.rentalProviderCount} rental provider(s)`} size="small" />
+            <Chip
+              label={`Pinned GBFS: ${status.gbfsCatalog.state}`}
+              color={status.gbfsCatalog.state === "active" ? "success" : "default"}
+              size="small"
+            />
           </Stack>
           <Typography
             variant="caption"
@@ -1349,6 +1374,14 @@ function MotisTransitousSection({ status }: { status: MotisTransitousStatus }) {
             {status.feedProxyVarsFound ? "present" : "missing"} · {status.feedProxyFeedCount} mapped
             feed endpoint(s) · GBFS proxy {status.gbfsProxyUrl ?? "not configured"}
           </Typography>
+          {status.gbfsCatalog.state === "active" && (
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>
+              Registry {status.gbfsCatalog.commit?.slice(0, 12)} ·{" "}
+              {status.gbfsCatalog.registryAdded} added · {status.gbfsCatalog.transitousPreferred}{" "}
+              Transitous-preferred duplicate(s) · {status.gbfsCatalog.quarantined} quarantined ·{" "}
+              {status.gbfsCatalog.validationFailed} validation failure(s)
+            </Typography>
+          )}
           <Typography variant="caption" sx={{ color: "text.secondary" }}>
             Active epoch {status.activeEpoch ?? "unknown"} · candidate{" "}
             {status.candidateEpoch ?? "none"} · tested{" "}

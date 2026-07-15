@@ -1919,6 +1919,9 @@ importers:
       '@openmapx/mobility-formats':
         specifier: workspace:^
         version: link:../mobility-formats
+      '@openmapx/transitous-core':
+        specifier: workspace:^
+        version: link:../transitous-core
       spdx-license-list:
         specifier: ^6.11.0
         version: 6.11.0
@@ -2078,6 +2081,9 @@ importers:
 
   packages/transitous-core:
     dependencies:
+      '@openmapx/mobility-formats':
+        specifier: workspace:^
+        version: link:../mobility-formats
       js-yaml:
         specifier: ^5.2.1
         version: 5.2.1
@@ -10032,7 +10038,7 @@ snapshots:
       obug: 2.1.3
       std-env: 4.1.0
       tinyrainbow: 3.1.0
-      vitest: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.0.16(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))
+      vitest: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@25.9.4)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.0.16(@types/node@25.9.4)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))
 
   '@vitest/expect@4.1.9':
     dependencies:

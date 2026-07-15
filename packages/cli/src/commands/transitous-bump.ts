@@ -1,18 +1,144 @@
-import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
+import { parseMobilityDataGbfsCsv } from "@openmapx/transitous-core";
 import type { Command } from "commander";
 import { execa } from "execa";
+import {
+  decodeGbfsCatalogLock,
+  type GbfsCatalogLock,
+  readGbfsCatalogLock,
+} from "../../../../services/data-manager/src/gbfs-catalog-lock";
 import {
   parseRefShaPair,
   readTransitousLock,
   type TransitousLock,
-  writeTransitousLock,
 } from "../../../../services/data-manager/src/transitous-lock";
 import { log } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 
 const TRANSITOUS_CATALOG_DIR = ".transitous-catalog";
+const MOBILITYDATA_REPO_API = "https://api.github.com/repos/MobilityData/gbfs/commits/master";
+
+export async function resolveGbfsCandidate(
+  lockedBy: string,
+  fetchImpl: typeof fetch = fetch,
+  now: () => Date = () => new Date(),
+): Promise<{ lock: GbfsCatalogLock; countryCounts: Map<string, number> }> {
+  const commitResponse = await fetchImpl(MOBILITYDATA_REPO_API, {
+    headers: { "User-Agent": "openmapx-transitous-bump" },
+  });
+  if (!commitResponse.ok)
+    throw new Error(`MobilityData commit lookup failed: HTTP ${commitResponse.status}`);
+  const commitJson = (await commitResponse.json()) as { sha?: unknown };
+  if (typeof commitJson.sha !== "string" || !/^[0-9a-f]{40}$/.test(commitJson.sha)) {
+    throw new Error("MobilityData commit lookup returned an invalid SHA");
+  }
+  const url = `https://raw.githubusercontent.com/MobilityData/gbfs/${commitJson.sha}/systems.csv`;
+  const csvResponse = await fetchImpl(url, {
+    headers: { "User-Agent": "openmapx-transitous-bump" },
+  });
+  if (!csvResponse.ok)
+    throw new Error(`MobilityData systems.csv failed: HTTP ${csvResponse.status}`);
+  const csv = await csvResponse.text();
+  const countryCounts = new Map<string, number>();
+  for (const row of parseMobilityDataGbfsCsv(csv)) {
+    countryCounts.set(row.countryCode, (countryCounts.get(row.countryCode) ?? 0) + 1);
+  }
+  return {
+    lock: {
+      schemaVersion: 1,
+      source: "mobilitydata-gbfs",
+      commit: commitJson.sha,
+      url,
+      sha256: createHash("sha256").update(csv).digest("hex"),
+      lockedAt: now().toISOString(),
+      lockedBy,
+    },
+    countryCounts,
+  };
+}
+
+export function combinedPinsAreCurrent(
+  transitous: TransitousLock | null,
+  gbfs: GbfsCatalogLock | null,
+  transitousSha: string,
+  gbfsCommit: string,
+): boolean {
+  return (
+    (transitous ? parseRefShaPair(transitous.ref).sha : null) === transitousSha &&
+    gbfs?.commit === gbfsCommit
+  );
+}
+
+function transitousLockJson(lock: TransitousLock): string {
+  return `${JSON.stringify(
+    {
+      $schema: "./transitous.lock.schema.json",
+      ref: lock.ref,
+      submodules: lock.submodules,
+      lockedAt: lock.lockedAt,
+      lockedBy: lock.lockedBy,
+      ...(lock.comment ? { comment: lock.comment } : {}),
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+function gbfsLockJson(lock: GbfsCatalogLock): string {
+  decodeGbfsCatalogLock(lock);
+  return `${JSON.stringify({ $schema: "./gbfs-catalog.lock.schema.json", ...lock }, null, 2)}\n`;
+}
+
+/** Stage and replace the compatible Transitous/MobilityData pin set together. */
+export function writeCombinedCatalogLocks(
+  repoRoot: string,
+  transitous: TransitousLock,
+  gbfs: GbfsCatalogLock,
+  operations: {
+    write?: typeof writeFileSync;
+    rename?: typeof renameSync;
+    remove?: typeof unlinkSync;
+  } = {},
+): void {
+  const write = operations.write ?? writeFileSync;
+  const rename = operations.rename ?? renameSync;
+  const remove = operations.remove ?? unlinkSync;
+  const transitousPath = join(repoRoot, "infra", "docker", "transitous.lock.json");
+  const gbfsPath = join(repoRoot, "infra", "docker", "gbfs-catalog.lock.json");
+  const suffix = `.candidate-${process.pid}`;
+  const stagedTransitous = `${transitousPath}${suffix}`;
+  const stagedGbfs = `${gbfsPath}${suffix}`;
+  const previousTransitous = existsSync(transitousPath) ? readFileSync(transitousPath) : null;
+  const previousGbfs = existsSync(gbfsPath) ? readFileSync(gbfsPath) : null;
+  let transitousReplaced = false;
+  let gbfsReplaced = false;
+  try {
+    write(stagedTransitous, transitousLockJson(transitous), "utf-8");
+    write(stagedGbfs, gbfsLockJson(gbfs), "utf-8");
+    rename(stagedTransitous, transitousPath);
+    transitousReplaced = true;
+    rename(stagedGbfs, gbfsPath);
+    gbfsReplaced = true;
+  } catch (error) {
+    if (transitousReplaced) {
+      if (previousTransitous) write(transitousPath, previousTransitous);
+      else if (existsSync(transitousPath)) remove(transitousPath);
+    }
+    if (gbfsReplaced) {
+      if (previousGbfs) write(gbfsPath, previousGbfs);
+      else if (existsSync(gbfsPath)) remove(gbfsPath);
+    }
+    for (const path of [stagedTransitous, stagedGbfs]) {
+      if (existsSync(path)) remove(path);
+    }
+    throw new Error(
+      `Combined catalog lock update failed; previous pins restored: ${(error as Error).message}`,
+    );
+  }
+}
 
 interface FeedFile {
   sources?: Array<{ name?: string }>;
@@ -205,17 +331,38 @@ export function registerTransitousCommands(program: Command): void {
       );
 
       const existing = readTransitousLock(paths.root);
-      const previousSha = existing ? parseRefShaPair(existing.ref).sha : null;
-
-      if (previousSha === newSha) {
-        log.ok(`Already pinned to ${options.branch}@${newSha.slice(0, 12)} — nothing to do.`);
+      const lockedBy = await resolveLockedBy();
+      let gbfsCandidate: Awaited<ReturnType<typeof resolveGbfsCandidate>>;
+      try {
+        gbfsCandidate = await resolveGbfsCandidate(lockedBy);
+      } catch (error) {
+        log.err(
+          `GBFS registry candidate failed validation; preserving all current pins: ${(error as Error).message}`,
+        );
+        process.exit(1);
+      }
+      let existingGbfs: GbfsCatalogLock | null = null;
+      try {
+        existingGbfs = readGbfsCatalogLock(paths.root);
+      } catch {
+        // First combined bump creates it after confirmation.
+      }
+      if (combinedPinsAreCurrent(existing, existingGbfs, newSha, gbfsCandidate.lock.commit)) {
+        log.ok(
+          `Already pinned to Transitous ${newSha.slice(0, 12)} and GBFS ${gbfsCandidate.lock.commit.slice(0, 12)} — nothing to do.`,
+        );
         return;
       }
 
       log.info(`New ref: ${options.branch}@${newSha}`);
       log.info(`New transitland-atlas: ${newSubmoduleSha}`);
+      log.info(`New MobilityData GBFS registry: ${gbfsCandidate.lock.commit}`);
+      log.info(
+        `  GBFS systems: ${[...gbfsCandidate.countryCounts.values()].reduce((sum, count) => sum + count, 0)} across ${gbfsCandidate.countryCounts.size} countries; DACH DE=${gbfsCandidate.countryCounts.get("de") ?? 0}, AT=${gbfsCandidate.countryCounts.get("at") ?? 0}, CH=${gbfsCandidate.countryCounts.get("ch") ?? 0}`,
+      );
 
-      if (previousSha) {
+      if (existing) {
+        const previousSha = parseRefShaPair(existing.ref).sha;
         log.info(`Diff vs current pin ${previousSha.slice(0, 12)}:`);
         const [oldFeeds, newFeeds] = await Promise.all([
           listFeedsAtRevision(catalogDir, previousSha),
@@ -246,13 +393,13 @@ export function registerTransitousCommands(program: Command): void {
         ref: `${options.branch}@${newSha}`,
         submodules: { "transitland-atlas": newSubmoduleSha },
         lockedAt: new Date().toISOString(),
-        lockedBy: await resolveLockedBy(),
+        lockedBy,
         comment:
           "Pinned commit of public-transport/transitous consumed by services/data-manager. Bump via `pnpm openmapx transitous bump`.",
       };
-      writeTransitousLock(paths.root, lock);
+      writeCombinedCatalogLocks(paths.root, lock, gbfsCandidate.lock);
 
-      log.ok(`Updated ${join("infra", "docker", "transitous.lock.json")}`);
+      log.ok(`Updated Transitous and GBFS catalog lock set under ${join("infra", "docker")}`);
       log.dim("Restart data-manager to pick up the new ref, or wait for next cron sync.");
     });
 

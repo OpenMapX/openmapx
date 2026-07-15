@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schemaVersion", "patches", "additions", "quarantine"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "comment": { "type": "string" },
+    "patches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["region", "name", "patch"],
+        "properties": {
+          "region": { "type": "string", "pattern": "^[a-z]{2}(?:-[a-z0-9]+)?$" },
+          "name": { "type": "string", "minLength": 1 },
+          "patch": { "type": "object" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "additions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["region", "name", "spec", "type", "url"],
+        "properties": {
+          "region": { "type": "string", "pattern": "^[a-z]{2}(?:-[a-z0-9]+)?$" },
+          "name": { "type": "string", "minLength": 1 },
+          "spec": { "const": "gbfs" },
+          "type": { "const": "url" },
+          "url": { "type": "string", "format": "uri" },
+          "sourceId": { "type": "string", "minLength": 1 },
+          "license": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "quarantine": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sourceId", "reason", "firstSeen", "lastChecked"],
+        "properties": {
+          "sourceId": { "type": "string", "minLength": 1 },
+          "reason": { "type": "string", "minLength": 1 },
+          "firstSeen": { "type": "string", "format": "date-time" },
+          "lastChecked": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": true
+}

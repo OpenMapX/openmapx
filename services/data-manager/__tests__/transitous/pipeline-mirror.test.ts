@@ -23,6 +23,7 @@ describe("stagesFor", () => {
   const BUILD = [
     "prepare",
     "filter",
+    "compile-gbfs",
     "fetch",
     "validate",
     "gen-full-config",
@@ -45,6 +46,7 @@ describe("stagesFor", () => {
     ).toMatchObject({
       prepare: "critical",
       filter: "critical",
+      "compile-gbfs": "critical",
       validate: "critical",
       "gen-full-config": "critical",
       "gen-attribution": "critical",
@@ -104,7 +106,7 @@ describe("mirror-mode pipeline", () => {
     // Stop after `mirror` to avoid the docker/import tail (covered elsewhere).
     const { results } = await runTransitousPipeline(ctx, { stopAt: "mirror" });
 
-    expect(results.map((r) => r.stage)).toEqual(["prepare", "filter", "mirror"]);
+    expect(results.map((r) => r.stage)).toEqual(["prepare", "filter", "compile-gbfs", "mirror"]);
     expect(results.find((r) => r.stage === "mirror")?.status).toBe("ok");
     // Direct per-file download against the published artifact base, NOT a
     // recursive autoindex crawl.

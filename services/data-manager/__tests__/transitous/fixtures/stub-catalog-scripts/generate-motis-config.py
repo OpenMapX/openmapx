@@ -17,6 +17,7 @@ Recognises:
 from __future__ import annotations
 
 import re
+import json
 import sys
 from pathlib import Path
 
@@ -68,6 +69,14 @@ def main(argv: list[str]) -> int:
 
     feeds = sorted(p.name for p in out_dir.glob("*.gtfs.zip"))
     datasets = assign_dataset_ids(feeds)
+    gbfs_sources: list[tuple[str, str]] = []
+    for feed_file in sorted(Path("feeds").glob("*.json")):
+        parsed = json.loads(feed_file.read_text(encoding="utf-8"))
+        for source in parsed.get("sources", []):
+            if source.get("skip") or source.get("spec") != "gbfs":
+                continue
+            if source.get("type") == "url" and isinstance(source.get("url"), str):
+                gbfs_sources.append((source.get("name", "gbfs"), source["url"]))
 
     # Serialise as YAML by hand to avoid pulling in PyYAML — keeps the stub
     # self-contained on a stock python3 install. MOTIS infers the dataset name
@@ -77,13 +86,28 @@ def main(argv: list[str]) -> int:
     for ident, name in datasets:
         yaml_lines.append(f"    {ident}:")
         yaml_lines.append(f"      path: {name}")
+    if gbfs_sources:
+        yaml_lines.extend(["gbfs:", "  proxy: http://motis-feed-proxy", "  feeds:"])
+        for name, url in gbfs_sources:
+            yaml_lines.extend([f"    {dataset_identifier(name)}:", f"      url: {url}"])
     yaml_text = "\n".join(yaml_lines) + "\n"
 
     cfg_path = out_dir / "config.yml"
     cfg_path.write_text(yaml_text, encoding="utf-8")
 
     if flag_feed_proxy:
-        (out_dir / "feed-proxy-vars.json").write_text("{}\n", encoding="utf-8")
+        proxy_vars = {
+            dataset_identifier(name): {"url": url, "gbfs": True}
+            for name, url in gbfs_sources
+        }
+        # The production generator writes YAML here; gen-full-config consumes
+        # and normalizes it into the candidate's JSON artifact.
+        lines: list[str] = []
+        for key, value in sorted(proxy_vars.items()):
+            lines.extend([f"{key}:", f"  url: {value['url']}", "  gbfs: true"])
+        Path("/tmp/feed-proxy-vars.yml").write_text(
+            "\n".join(lines) + ("\n" if lines else "{}\n"), encoding="utf-8"
+        )
 
     sys.stderr.write(
         f"stub generate-motis-config.py: wrote out/config.yml referencing {len(feeds)} feed(s)\n"
