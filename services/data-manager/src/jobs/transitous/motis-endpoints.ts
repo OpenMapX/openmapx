@@ -44,6 +44,28 @@ export function planUrl(base: string, q: PlanQuery): string {
   return `${base}/api/v1/plan?fromPlace=${q.fromLat},${q.fromLng}&toPlace=${q.toLat},${q.toLng}`;
 }
 
+export function routedTransferPlanUrl(base: string, q: PlanQuery): string {
+  const params = new URLSearchParams({
+    fromPlace: `${q.fromLat},${q.fromLng}`,
+    toPlace: `${q.toLat},${q.toLng}`,
+    useRoutedTransfers: "true",
+    detailedTransfers: "true",
+    numItineraries: "1",
+  });
+  return `${base}/api/v1/plan?${params}`;
+}
+
+export function elevationPlanUrl(base: string, q: PlanQuery): string {
+  const params = new URLSearchParams({
+    fromPlace: `${q.fromLat},${q.fromLng}`,
+    toPlace: `${q.toLat},${q.toLng}`,
+    directModes: "BIKE",
+    elevationCosts: "LOW",
+    numItineraries: "1",
+  });
+  return `${base}/api/v1/plan?${params}`;
+}
+
 export function rentalsUrl(base: string, q: BboxQuery): string {
   const params = new URLSearchParams({
     min: `${q.minLat},${q.minLng}`,

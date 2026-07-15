@@ -33,6 +33,7 @@ import type {
   TransitLegAlternative,
   TransitRentalInfo,
   TransitRoute,
+  TransitStep,
   TransitStop,
   TripFare,
   TripItinerary,
@@ -387,6 +388,10 @@ function mapRental(rental: Rental): TransitRentalInfo {
     // Stored hash-stripped, matching route/leg colours; consumers prepend `#`.
     color: rental.color ? rental.color.replace(/^#/, "") : undefined,
     formFactor: rental.formFactor ?? undefined,
+    propulsionType: rental.propulsionType ?? undefined,
+    providerId: rental.providerId,
+    providerGroupId: rental.providerGroupId,
+    returnConstraint: rental.returnConstraint ?? undefined,
     fromStationName: rental.fromStationName ?? undefined,
     toStationName: rental.toStationName ?? undefined,
     bookingUrl: rental.rentalUriWeb ?? rental.url ?? undefined,
@@ -479,12 +484,16 @@ function mapLeg(instance: MotisInstance, leg: Leg): TripLeg {
       lat: fromPlace.lat ?? 0,
       lng: fromPlace.lon ?? 0,
       stopId: fromPlace.stopId ? `${instance.prefix}${fromPlace.stopId}` : undefined,
+      level: fromPlace.level,
+      platformCode: fromPlace.track ?? fromPlace.scheduledTrack ?? undefined,
     },
     to: {
       name: toPlace.name ?? "",
       lat: toPlace.lat ?? 0,
       lng: toPlace.lon ?? 0,
       stopId: toPlace.stopId ? `${instance.prefix}${toPlace.stopId}` : undefined,
+      level: toPlace.level,
+      platformCode: toPlace.track ?? toPlace.scheduledTrack ?? undefined,
     },
     route: isTransit
       ? {
@@ -494,6 +503,39 @@ function mapLeg(instance: MotisInstance, leg: Leg): TripLeg {
         }
       : undefined,
     geometry,
+    distanceMeters: leg.distance,
+    durationSeconds: leg.duration,
+    realtime: leg.realTime,
+    cancelled: leg.cancelled,
+    interlineWithPrevious: leg.interlineWithPreviousLeg,
+    bikesAllowed: leg.bikesAllowed,
+    wheelchairAccessible:
+      leg.wheelchairAccessible === "ACCESSIBLE"
+        ? true
+        : leg.wheelchairAccessible === "NOT_ACCESSIBLE"
+          ? false
+          : undefined,
+    steps: leg.steps?.map((step): TransitStep => {
+      const coordinates = step.polyline?.points
+        ? decodePolyline(step.polyline.points, step.polyline.precision ?? 6)
+        : undefined;
+      return {
+        instruction: step.relativeDirection,
+        streetName: step.streetName || undefined,
+        coordinates: coordinates?.length ? coordinates : undefined,
+        fromLevel: step.fromLevel,
+        toLevel: step.toLevel,
+        distanceMeters: step.distance,
+        stairs: step.relativeDirection === "STAIRS",
+        elevator: step.relativeDirection === "ELEVATOR",
+        accessibility: step.accessRestriction ? "restricted" : "unknown",
+        accessRestriction: step.accessRestriction,
+        ascentMeters: step.elevationUp,
+        descentMeters: step.elevationDown,
+      };
+    }),
+    ascentMeters: leg.steps?.reduce((sum, step) => sum + (step.elevationUp ?? 0), 0),
+    descentMeters: leg.steps?.reduce((sum, step) => sum + (step.elevationDown ?? 0), 0),
     tripId: isTransit && leg.tripId ? `${instance.prefix}${leg.tripId}` : undefined,
     routeId: isTransit && leg.routeId ? `${instance.prefix}${leg.routeId}` : undefined,
     rental: leg.rental ? mapRental(leg.rental) : undefined,
@@ -530,12 +572,18 @@ function mapItinerary(instance: MotisInstance, it: Itinerary): TripItinerary {
   );
 
   const result: TripItinerary = {
+    id: it.id,
+    source: instance.provider,
+    instance: instance.provider,
     duration: it.duration ?? 0,
     startTime,
     endTime,
     transfers,
     walkDistance: Math.round(walkDistance),
     legs,
+    distanceMeters: it.legs.reduce((sum, leg) => sum + (leg.distance ?? 0), 0),
+    ascentMeters: legs.reduce((sum, leg) => sum + (leg.ascentMeters ?? 0), 0),
+    descentMeters: legs.reduce((sum, leg) => sum + (leg.descentMeters ?? 0), 0),
   };
 
   if (it.fareTransfers?.length) {
@@ -562,6 +610,16 @@ export async function planTrip(
     preTransitModes?: string[];
     postTransitModes?: string[];
     directModes?: string[];
+    maxTransfers?: number;
+    transferBuffer?: "standard" | "relaxed" | "extra";
+    requireBikeTransport?: boolean;
+    bikeHillPreference?: "default" | "avoid" | "strongly-avoid";
+    rentalFilters?: import("@openmapx/integration-framework").TransitRentalFilters;
+    pageCursor?: string;
+    detailedLegs?: boolean;
+    detailedTransfers?: boolean;
+    useRoutedTransfers?: boolean;
+    datasetEpoch?: string;
   },
 ): Promise<TripPlan | null> {
   try {
@@ -576,6 +634,21 @@ export async function planTrip(
       ? (opts.postTransitModes as Mode[])
       : undefined;
     const directModes = opts?.directModes?.length ? (opts.directModes as Mode[]) : undefined;
+    const transferPreset =
+      opts?.transferBuffer === "extra"
+        ? { minTransferTime: 5, additionalTransferTime: 5 }
+        : opts?.transferBuffer === "relaxed"
+          ? { minTransferTime: 3, additionalTransferTime: 2 }
+          : {};
+    const elevationCosts =
+      opts?.bikeHillPreference === "strongly-avoid"
+        ? ("HIGH" as const)
+        : opts?.bikeHillPreference === "avoid"
+          ? ("LOW" as const)
+          : undefined;
+    const directRental = opts?.rentalFilters?.direct;
+    const preRental = opts?.rentalFilters?.preTransit;
+    const postRental = opts?.rentalFilters?.postTransit;
 
     const { data } = await plan({
       client: instance.client,
@@ -592,6 +665,50 @@ export async function planTrip(
         ...(preTransitModes ? { preTransitModes } : {}),
         ...(postTransitModes ? { postTransitModes } : {}),
         ...(directModes ? { directModes } : {}),
+        ...(opts?.maxTransfers !== undefined ? { maxTransfers: opts.maxTransfers } : {}),
+        ...transferPreset,
+        ...(opts?.requireBikeTransport ? { requireBikeTransport: true } : {}),
+        ...(elevationCosts ? { elevationCosts } : {}),
+        ...(opts?.pageCursor ? { pageCursor: opts.pageCursor } : {}),
+        ...(opts?.detailedLegs ? { detailedLegs: true } : {}),
+        ...(opts?.detailedTransfers ? { detailedTransfers: true } : {}),
+        ...(opts?.useRoutedTransfers ? { useRoutedTransfers: true } : {}),
+        ...(directRental?.formFactors?.length
+          ? { directRentalFormFactors: directRental.formFactors }
+          : {}),
+        ...(directRental?.propulsionTypes?.length
+          ? { directRentalPropulsionTypes: directRental.propulsionTypes }
+          : {}),
+        ...(directRental?.providerIds?.length
+          ? { directRentalProviders: directRental.providerIds }
+          : {}),
+        ...(directRental?.groupIds?.length
+          ? { directRentalProviderGroups: directRental.groupIds }
+          : {}),
+        ...(preRental?.formFactors?.length
+          ? { preTransitRentalFormFactors: preRental.formFactors }
+          : {}),
+        ...(preRental?.propulsionTypes?.length
+          ? { preTransitRentalPropulsionTypes: preRental.propulsionTypes }
+          : {}),
+        ...(preRental?.providerIds?.length
+          ? { preTransitRentalProviders: preRental.providerIds }
+          : {}),
+        ...(preRental?.groupIds?.length
+          ? { preTransitRentalProviderGroups: preRental.groupIds }
+          : {}),
+        ...(postRental?.formFactors?.length
+          ? { postTransitRentalFormFactors: postRental.formFactors }
+          : {}),
+        ...(postRental?.propulsionTypes?.length
+          ? { postTransitRentalPropulsionTypes: postRental.propulsionTypes }
+          : {}),
+        ...(postRental?.providerIds?.length
+          ? { postTransitRentalProviders: postRental.providerIds }
+          : {}),
+        ...(postRental?.groupIds?.length
+          ? { postTransitRentalProviderGroups: postRental.groupIds }
+          : {}),
         ...(opts?.wheelchair ? { pedestrianProfile: "WHEELCHAIR" as const } : {}),
         withFares: true,
       },
@@ -601,10 +718,27 @@ export async function planTrip(
     // Transit itineraries first; append `direct` (door-to-door bike/car) options
     // only when the caller explicitly requested directModes — MOTIS otherwise
     // always computes a WALK direct trip we don't want cluttering transit results.
-    const transitItins = (data?.itineraries ?? []).map((it) => mapItinerary(instance, it));
-    const directItins = directModes
-      ? (data?.direct ?? []).map((it) => mapItinerary(instance, it))
-      : [];
+    const normalizeItinerary = (it: Itinerary): TripItinerary => {
+      const mapped = mapItinerary(instance, it);
+      mapped.datasetEpoch = opts?.datasetEpoch;
+      const invalidRequirements: string[] = [];
+      if (opts?.wheelchair && mapped.legs.some((leg) => leg.wheelchairAccessible === false)) {
+        invalidRequirements.push("wheelchairRequired");
+      }
+      if (
+        opts?.requireBikeTransport &&
+        mapped.legs.some((leg) => leg.route && leg.bikesAllowed === false)
+      ) {
+        invalidRequirements.push("bikeTransport");
+      }
+      if (opts?.maxTransfers !== undefined && mapped.transfers > opts.maxTransfers) {
+        invalidRequirements.push("maxTransfers");
+      }
+      if (invalidRequirements.length > 0) mapped.invalidRequirements = invalidRequirements;
+      return mapped;
+    };
+    const transitItins = (data?.itineraries ?? []).map(normalizeItinerary);
+    const directItins = directModes ? (data?.direct ?? []).map(normalizeItinerary) : [];
     const itineraries = [...transitItins, ...directItins];
 
     const from = data.from;
@@ -622,6 +756,12 @@ export async function planTrip(
         lng: to?.lon ?? toLng,
       },
       itineraries,
+      provider: instance.provider,
+      source: instance.provider === "ms" ? "transit-motis-local" : "transitous",
+      instance: instance.provider,
+      datasetEpoch: opts?.datasetEpoch,
+      previousPageCursor: data.previousPageCursor || undefined,
+      nextPageCursor: data.nextPageCursor || undefined,
     };
   } catch {
     return null;

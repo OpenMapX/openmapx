@@ -5,6 +5,7 @@ import type {
   ProviderCallOutcome,
   ProviderHealthHandle,
   TransitProvider,
+  TripPlanRequest,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { Freshness } from "@openmapx/mobility-core/freshness";
@@ -64,6 +65,35 @@ function providerOverlapsBbox(p: TransitProvider, bbox: BBox): boolean {
   const pBbox = getProviderBbox(p);
   if (!pBbox) return true; // `{ all: true }` matches everywhere
   return bboxesOverlap(bbox, pBbox);
+}
+
+export class UnsupportedTransitPlanningCapabilitiesError extends Error {
+  constructor(readonly capabilities: string[]) {
+    super(`No transit planner supports: ${capabilities.join(", ")}`);
+    this.name = "UnsupportedTransitPlanningCapabilitiesError";
+  }
+}
+
+export function requiredPlanningCapabilities(request: TripPlanRequest): string[] {
+  const required: string[] = [];
+  if (request.maxTransfers !== undefined) required.push("maxTransfers");
+  if (request.transferBuffer && request.transferBuffer !== "standard") {
+    required.push("transferBuffer");
+  }
+  if (request.wheelchairRequired || request.wheelchair) required.push("wheelchairRequired");
+  if (request.requireBikeTransport) required.push("bikeTransport");
+  if (request.bikeHillPreference && request.bikeHillPreference !== "default") {
+    required.push("elevation");
+  }
+  if (request.rentalFilters) required.push("rentalFilters");
+  if (request.pageCursor) required.push("paging");
+  return required;
+}
+
+function supportsPlanningRequest(provider: TransitProvider, required: string[]): boolean {
+  if (required.length === 0) return true;
+  const features = provider.capabilities.planningFeatures;
+  return required.every((capability) => features?.[capability as keyof typeof features] === true);
 }
 
 /**
@@ -449,19 +479,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     };
   }
 
-  async function planTrip(params: {
-    from: { lat: number; lng: number };
-    to: { lat: number; lng: number };
-    departureTime?: string;
-    arrivalTime?: string;
-    modes?: string[];
-    wheelchair?: boolean;
-    preTransitModes?: string[];
-    postTransitModes?: string[];
-    directModes?: string[];
-    numItineraries?: number;
-    deutschlandticketOnly?: boolean;
-  }): Promise<MobilityResult<TripPlan | null>> {
+  async function planTrip(params: TripPlanRequest): Promise<MobilityResult<TripPlan | null>> {
     const tripBbox: BBox = [
       Math.min(params.from.lng, params.to.lng) - 0.5,
       Math.min(params.from.lat, params.to.lat) - 0.5,
@@ -470,9 +488,14 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     ];
 
     const matching = (await getProvidersForBbox(tripBbox)).filter((p) => p.planTrip);
+    const required = requiredPlanningCapabilities(params);
+    const eligible = matching.filter((provider) => supportsPlanningRequest(provider, required));
+    if (matching.length > 0 && eligible.length === 0 && required.length > 0) {
+      throw new UnsupportedTransitPlanningCapabilitiesError(required);
+    }
 
     // Waterfall: try each in priority order, return first success
-    for (const provider of matching) {
+    for (const provider of eligible) {
       const planFn = provider.planTrip;
       if (!planFn) continue;
       const bound = planFn.bind(provider);

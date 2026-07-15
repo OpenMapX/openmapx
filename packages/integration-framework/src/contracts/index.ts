@@ -112,7 +112,13 @@ export type {
   ProviderAttribution,
   TimetableEntry,
   TransitCapabilities,
+  TransitPlanningCapabilities,
+  TransitPlanningMetadata,
   TransitProvider,
+  TransitRentalFilter,
+  TransitRentalFilters,
+  TransitRentalFormFactor,
+  TransitRentalPropulsion,
   TripPlanRequest,
   VehicleJourney,
 } from "./transit-provider.js";

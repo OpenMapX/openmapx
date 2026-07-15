@@ -89,10 +89,6 @@ describe("rankItineraries", () => {
     expect(rankItineraries(list, "best")).toBe(list);
   });
 
-  it("'wheelchair' does not reorder (handled server-side)", () => {
-    expect(rankItineraries(list, "wheelchair")).toBe(list);
-  });
-
   it("'fewerTransfers' sorts by transfers then duration", () => {
     const ranked = rankItineraries(list, "fewerTransfers");
     expect(ranked.map((i) => i.transfers)).toEqual([0, 1, 3]);
@@ -125,12 +121,18 @@ describe("TRANSIT_ACCESS_MOTIS_MODES", () => {
     expect(TRANSIT_ACCESS_MOTIS_MODES.walk).toEqual({});
   });
 
-  it("bike uses BIKE + RENTAL for access legs and direct", () => {
+  it("own bike never enables unconstrained rental access", () => {
     expect(TRANSIT_ACCESS_MOTIS_MODES.bike).toEqual({
-      preTransitModes: ["BIKE", "RENTAL"],
-      postTransitModes: ["BIKE", "RENTAL"],
-      directModes: ["BIKE", "RENTAL"],
+      preTransitModes: ["BIKE"],
+      postTransitModes: ["BIKE"],
+      directModes: ["BIKE"],
     });
+  });
+
+  it("shared modes use RENTAL but remain explicit form-factor choices", () => {
+    expect(TRANSIT_ACCESS_MOTIS_MODES.bike_share.preTransitModes).toEqual(["RENTAL"]);
+    expect(TRANSIT_ACCESS_MOTIS_MODES.scooter_share.preTransitModes).toEqual(["RENTAL"]);
+    expect(TRANSIT_ACCESS_MOTIS_MODES.car_share.preTransitModes).toEqual(["RENTAL"]);
   });
 
   it("car uses CAR_PARKING for access (park-and-ride) and CAR for direct", () => {

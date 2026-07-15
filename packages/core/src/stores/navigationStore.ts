@@ -34,6 +34,12 @@ export type NavKind = "ground" | "transit";
 export interface TransitReplanOptions {
   modes?: string[];
   wheelchair?: boolean;
+  wheelchairRequired?: boolean;
+  maxTransfers?: number;
+  transferBuffer?: "standard" | "relaxed" | "extra";
+  requireBikeTransport?: boolean;
+  bikeHillPreference?: "default" | "avoid" | "strongly-avoid";
+  rentalFormFactors?: string[];
   preTransitModes?: string[];
   postTransitModes?: string[];
   directModes?: string[];

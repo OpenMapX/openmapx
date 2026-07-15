@@ -1,6 +1,12 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { stops } from "@motis-project/motis-client";
 import { applyDeutschlandticketFilter } from "@openmapx/core";
-import type { AttributionIndexHandle, IntegrationContext } from "@openmapx/integration-framework";
+import type {
+  AttributionIndexHandle,
+  IntegrationContext,
+  TripPlanRequest,
+} from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
@@ -18,6 +24,28 @@ let cachedLocalReachable = false;
 let cachedLocalReachableAt = 0;
 
 const LOCAL_REACHABILITY_TTL_MS = 15_000;
+
+interface ActiveMotisCapabilities {
+  epoch?: string;
+  rentals?: { formFactors?: string[] };
+  planningFeatures?: { hasRoutedTransfers?: boolean; hasElevation?: boolean };
+}
+
+function readActiveMotisCapabilities(): ActiveMotisCapabilities | null {
+  const configuredPath = process.env.MOTIS_CAPABILITY_SNAPSHOT_PATH;
+  const dataDir = process.env.MOTIS_DATA_DIR;
+  if (!configuredPath && !dataDir) return null;
+  const path = configuredPath ?? join(dataDir as string, "mobility-capabilities.json");
+  try {
+    if (!existsSync(path)) return null;
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as ActiveMotisCapabilities & {
+      schemaVersion?: unknown;
+    };
+    return parsed.schemaVersion === 1 && typeof parsed.epoch === "string" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 function wrapTransitous<T>(data: T) {
   return withAttribution(data, attributionTransitous(), freshnessNow());
@@ -189,19 +217,8 @@ function resolveDateTime(departureTime?: string): { date: string; time: string }
 
 async function planWithInstance(
   instance: MotisInstance,
-  params: {
-    from: { lat: number; lng: number };
-    to: { lat: number; lng: number };
-    departureTime?: string;
-    arrivalTime?: string;
-    modes?: string[];
-    wheelchair?: boolean;
-    preTransitModes?: string[];
-    postTransitModes?: string[];
-    directModes?: string[];
-    numItineraries?: number;
-    deutschlandticketOnly?: boolean;
-  },
+  params: TripPlanRequest,
+  capabilities?: ActiveMotisCapabilities | null,
 ) {
   // Arrive-by when an arrival time is given; otherwise plan a departure.
   const arriveBy = params.arrivalTime != null;
@@ -223,10 +240,20 @@ async function planWithInstance(
     params.numItineraries,
     {
       modes,
-      wheelchair: params.wheelchair,
+      wheelchair: params.wheelchairRequired ?? params.wheelchair,
       preTransitModes: params.preTransitModes,
       postTransitModes: params.postTransitModes,
       directModes: params.directModes,
+      maxTransfers: params.maxTransfers,
+      transferBuffer: params.transferBuffer,
+      requireBikeTransport: params.requireBikeTransport,
+      bikeHillPreference: params.bikeHillPreference,
+      rentalFilters: params.rentalFilters,
+      pageCursor: params.pageCursor,
+      detailedLegs: true,
+      detailedTransfers: capabilities?.planningFeatures?.hasRoutedTransfers === true,
+      useRoutedTransfers: capabilities?.planningFeatures?.hasRoutedTransfers === true,
+      datasetEpoch: capabilities?.epoch ?? params.capabilityEpoch,
     },
   );
 }
@@ -250,6 +277,7 @@ export function setupLocal(ctx: IntegrationContext): void {
   // responses resolve feed-level attribution by looking up extracted feed
   // tags against it; without an index they fall back to ATTRIBUTION_LOCAL.
   const attributionIndex = ctx.attributionIndex;
+  const activeCapabilities = readActiveMotisCapabilities();
 
   const wrapLocal = <T>(data: T) => wrapLocalWithFeedAttribution(data, attributionIndex, false);
   const wrapLocalRT = <T>(data: T) => wrapLocalWithFeedAttribution(data, attributionIndex, true);
@@ -276,11 +304,48 @@ export function setupLocal(ctx: IntegrationContext): void {
       arrivals: true,
       routes: { lookup: false, forStop: false, stops: false, geometry: false },
       planning: true,
+      planningFeatures: {
+        maxTransfers: true,
+        transferBuffer: true,
+        wheelchairRequired: true,
+        bikeTransport: true,
+        elevation: activeCapabilities?.planningFeatures?.hasElevation === true,
+        rentalFilters: Boolean(activeCapabilities?.rentals?.formFactors?.length),
+        detailedTransfers: activeCapabilities?.planningFeatures?.hasRoutedTransfers === true,
+        paging: true,
+        refresh: true,
+      },
       vehiclePositions: false,
       vehicleJourney: true,
       alerts: { byStop: false, byRoute: false, byBbox: false },
       facilities: false,
     },
+    planningMetadata: activeCapabilities?.epoch
+      ? {
+          source: "transit-motis-local",
+          instance: "ms",
+          datasetEpoch: activeCapabilities.epoch,
+          rentalFormFactors: (activeCapabilities.rentals?.formFactors ?? []).filter(
+            (
+              value,
+            ): value is
+              | "BICYCLE"
+              | "CARGO_BICYCLE"
+              | "SCOOTER_STANDING"
+              | "SCOOTER_SEATED"
+              | "CAR"
+              | "MOPED" =>
+              [
+                "BICYCLE",
+                "CARGO_BICYCLE",
+                "SCOOTER_STANDING",
+                "SCOOTER_SEATED",
+                "CAR",
+                "MOPED",
+              ].includes(value),
+          ),
+        }
+      : undefined,
     async getStopsNearby(lat, lng, radiusMeters) {
       const deg = radiusMeters / 111_320;
       if (await isMotisReachableCached()) {
@@ -333,7 +398,7 @@ export function setupLocal(ctx: IntegrationContext): void {
     },
     async planTrip(params) {
       if (await isMotisReachableCached()) {
-        const local = await planWithInstance(motisLocalInstance, params);
+        const local = await planWithInstance(motisLocalInstance, params, activeCapabilities);
         if (local?.itineraries?.length) {
           const annotated: TripPlan = {
             ...local,
@@ -342,7 +407,9 @@ export function setupLocal(ctx: IntegrationContext): void {
           return wrapLocalRT([annotated]);
         }
       }
-      const cloudPlan = await planWithInstance(transitousInstance, params);
+      const cloudPlan = await planWithInstance(transitousInstance, params, {
+        planningFeatures: { hasRoutedTransfers: true, hasElevation: true },
+      });
       if (!cloudPlan) return wrapTransitousRT([]);
       const annotated: TripPlan = {
         ...cloudPlan,

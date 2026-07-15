@@ -37,7 +37,14 @@ export function routeColor(
  * from stops plus a `direct` (door-to-door) option so a pure bike/drive
  * alternative shows up next to the transit itineraries.
  */
-export const TRANSIT_ACCESS_OPTIONS = ["walk", "bike", "car"] as const;
+export const TRANSIT_ACCESS_OPTIONS = [
+  "walk",
+  "bike",
+  "bike_share",
+  "scooter_share",
+  "car_share",
+  "car",
+] as const;
 export type TransitAccessMode = (typeof TRANSIT_ACCESS_OPTIONS)[number];
 
 export interface TransitAccessMotisModes {
@@ -52,15 +59,36 @@ export const TRANSIT_ACCESS_MOTIS_MODES: Record<TransitAccessMode, TransitAccess
   // `RENTAL` brings GBFS bike/scooter-share into first/last-mile + direct legs
   // alongside the user's own bike (no-op where no GBFS feeds are configured).
   bike: {
-    preTransitModes: ["BIKE", "RENTAL"],
-    postTransitModes: ["BIKE", "RENTAL"],
-    directModes: ["BIKE", "RENTAL"],
+    preTransitModes: ["BIKE"],
+    postTransitModes: ["BIKE"],
+    directModes: ["BIKE"],
+  },
+  bike_share: {
+    preTransitModes: ["RENTAL"],
+    postTransitModes: ["RENTAL"],
+    directModes: ["RENTAL"],
+  },
+  scooter_share: {
+    preTransitModes: ["RENTAL"],
+    postTransitModes: ["RENTAL"],
+    directModes: ["RENTAL"],
+  },
+  car_share: {
+    preTransitModes: ["RENTAL"],
+    postTransitModes: ["RENTAL"],
+    directModes: ["RENTAL"],
   },
   car: {
     preTransitModes: ["CAR_PARKING"],
     postTransitModes: ["CAR_PARKING"],
     directModes: ["CAR"],
   },
+};
+
+export const TRANSIT_ACCESS_RENTAL_FORM_FACTORS: Partial<Record<TransitAccessMode, string[]>> = {
+  bike_share: ["BICYCLE", "CARGO_BICYCLE"],
+  scooter_share: ["SCOOTER_STANDING", "SCOOTER_SEATED", "MOPED"],
+  car_share: ["CAR"],
 };
 
 /**
@@ -154,7 +182,7 @@ export function applyDeutschlandticketFilter(modes: string[] | undefined): strin
  * and `lessWalking` re-rank the Pareto front MOTIS returns (see
  * {@link rankItineraries}); `best` keeps the engine's own order.
  */
-export type TransitRoutePreference = "best" | "fewerTransfers" | "lessWalking" | "wheelchair";
+export type TransitRoutePreference = "best" | "fewerTransfers" | "lessWalking";
 
 /**
  * Re-order itineraries client-side to honour the selected route preference.

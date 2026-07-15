@@ -6,7 +6,7 @@ import type {
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
-import type { Departure } from "@openmapx/mobility-core/transit";
+import type { Departure, TripPlan } from "@openmapx/mobility-core/transit";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createTransitOrchestrator } from "../orchestrator.js";
 
@@ -134,5 +134,72 @@ describe("orchestrator prefix routing honours provider health", () => {
 
     expect(departures).toHaveBeenCalledOnce();
     expect(res.data).toEqual([{ tripId: "tp:trip-ok" }]);
+  });
+});
+
+describe("orchestrator hard planning capability selection", () => {
+  const plan: TripPlan = {
+    from: { name: "A", lat: 1, lng: 1 },
+    to: { name: "B", lat: 2, lng: 2 },
+    itineraries: [
+      { duration: 1, startTime: "a", endTime: "b", transfers: 0, walkDistance: 0, legs: [] },
+    ],
+  };
+
+  it("skips an equal-priority provider that cannot honor a hard constraint", async () => {
+    const incapablePlan = vi.fn();
+    const capablePlan = vi.fn().mockResolvedValue(withAttribution([plan], ATTR, freshnessNow()));
+    const incapable = makeProvider({
+      id: "incapable",
+      capabilities: { ...makeProvider({}).capabilities, planning: true },
+      planTrip: incapablePlan,
+    });
+    const capable = makeProvider({
+      id: "capable",
+      capabilities: {
+        ...makeProvider({}).capabilities,
+        planning: true,
+        planningFeatures: {
+          maxTransfers: true,
+          transferBuffer: true,
+          wheelchairRequired: true,
+          bikeTransport: true,
+          elevation: true,
+          rentalFilters: true,
+          detailedTransfers: true,
+          paging: true,
+          refresh: true,
+        },
+      },
+      planTrip: capablePlan,
+    });
+    const orchestrator = createTransitOrchestrator(
+      makeCtx([incapable, capable], { isHealthy: () => Promise.resolve(true) }),
+    );
+    const result = await orchestrator.planTrip({
+      from: { lat: 1, lng: 1 },
+      to: { lat: 2, lng: 2 },
+      maxTransfers: 1,
+    });
+    expect(incapablePlan).not.toHaveBeenCalled();
+    expect(capablePlan).toHaveBeenCalledOnce();
+    expect(result.data).not.toBeNull();
+  });
+
+  it("rejects instead of silently dropping unsupported constraints", async () => {
+    const provider = makeProvider({
+      capabilities: { ...makeProvider({}).capabilities, planning: true },
+      planTrip: vi.fn(),
+    });
+    const orchestrator = createTransitOrchestrator(
+      makeCtx([provider], { isHealthy: () => Promise.resolve(true) }),
+    );
+    await expect(
+      orchestrator.planTrip({
+        from: { lat: 1, lng: 1 },
+        to: { lat: 2, lng: 2 },
+        wheelchairRequired: true,
+      }),
+    ).rejects.toMatchObject({ capabilities: ["wheelchairRequired"] });
   });
 });

@@ -11,12 +11,14 @@ import { MOTIS_VERSION } from "@openmapx/transitous-core";
 import { readTransitousLock } from "../../transitous-lock.js";
 import { CAPABILITY_SNAPSHOT_FILENAME, type MotisCandidateManifest } from "./candidate.js";
 import {
+  elevationPlanUrl,
   healthUrl,
   mapInitialUrl,
   mapStopsUrl,
   planUrl,
   rentalPlanUrl,
   rentalsUrl,
+  routedTransferPlanUrl,
 } from "./motis-endpoints.js";
 import { DEFAULT_PROBE_TIMEOUT_MS, fetchWithTimeout } from "./motis-probe.js";
 
@@ -43,6 +45,7 @@ export interface FunctionalProbeReport {
   outcomes: ProbeOutcome[];
   health?: HealthResponse;
   rentals?: ObservedRentalCapabilities;
+  planningFeatures: { hasRoutedTransfers: boolean; hasElevation: boolean };
   failure?: ProbeOutcome;
 }
 
@@ -187,11 +190,13 @@ export async function runFunctionalProbes(
   const outcomes: ProbeOutcome[] = [];
   let health: HealthResponse | undefined;
   let rentals: ObservedRentalCapabilities | undefined;
+  const planningFeatures = { hasRoutedTransfers: false, hasElevation: false };
   const specs: Array<{
     name: string;
     url: string;
     decode: (value: unknown) => unknown;
     accept: (value: unknown) => void;
+    required?: boolean;
   }> = [
     {
       name: "health",
@@ -219,6 +224,24 @@ export async function runFunctionalProbes(
       decode: (v) => decodePlan(v, true),
       accept: () => undefined,
     },
+    {
+      name: "plan-routed-transfers",
+      url: routedTransferPlanUrl(baseUrl, manifest.canary.plan),
+      decode: (v) => decodePlan(v, false),
+      accept: () => {
+        planningFeatures.hasRoutedTransfers = true;
+      },
+      required: false,
+    },
+    {
+      name: "plan-elevation",
+      url: elevationPlanUrl(baseUrl, manifest.canary.plan),
+      decode: (v) => decodePlan(v, false),
+      accept: () => {
+        planningFeatures.hasElevation = true;
+      },
+      required: false,
+    },
   ];
   if (manifest.expectations.expectsGbfs) {
     specs.push({
@@ -241,11 +264,20 @@ export async function runFunctionalProbes(
   for (const spec of specs) {
     const result = await execute(spec.name, spec.url, deadline, spec.decode);
     outcomes.push(result.outcome);
-    if (!result.outcome.ok)
-      return { ok: false, outcomes, failure: result.outcome, health, rentals };
+    if (!result.outcome.ok) {
+      if (spec.required === false) continue;
+      return {
+        ok: false,
+        outcomes,
+        failure: result.outcome,
+        health,
+        rentals,
+        planningFeatures,
+      };
+    }
     spec.accept(result.value);
   }
-  return { ok: true, outcomes, health, rentals };
+  return { ok: true, outcomes, health, rentals, planningFeatures };
 }
 
 export interface CapabilitySnapshot {
@@ -262,6 +294,7 @@ export interface CapabilitySnapshot {
   expectations: MotisCandidateManifest["expectations"];
   health: HealthResponse;
   rentals?: ObservedRentalCapabilities;
+  planningFeatures: { hasRoutedTransfers: boolean; hasElevation: boolean };
   probes: ProbeOutcome[];
 }
 
@@ -305,6 +338,7 @@ export function writeCapabilitySnapshot(
     expectations: manifest.expectations,
     health: report.health,
     rentals: report.rentals,
+    planningFeatures: report.planningFeatures,
     probes: report.outcomes,
   };
   const output = join(stagingDir, CAPABILITY_SNAPSHOT_FILENAME);
