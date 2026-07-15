@@ -58,6 +58,11 @@
         "type": "boolean",
         "default": true,
         "description": "Issue and accept safe, epoch-bound MOTIS itinerary refreshes."
+      },
+      "hostedRuntimeFallback": {
+        "type": "boolean",
+        "default": true,
+        "description": "Allow hosted Transitous runtime fallback. Must be disabled for regional-sovereign deployments."
       }
     }
   },
@@ -65,11 +70,6 @@
     "routes": true
   },
   "healthCheck": [
-    {
-      "name": "Transitous",
-      "type": "http",
-      "url": "https://api.transitous.org/api/v1/geocode?text=test"
-    },
     {
       "name": "MOTIS self-hosted",
       "type": "ping",

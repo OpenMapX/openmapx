@@ -2,6 +2,7 @@ import { statSync } from "node:fs";
 import type { FeedDownloadFailure } from "../download-gtfs.js";
 import { feedKeyForFailure, feedKeyForSource, recordFetchOutcome } from "./feed-state-writer.js";
 import { runFetchPipeline, scanGtfsArchives } from "./internal.js";
+import { finalizeSovereignSourceManifest } from "./source-manifest.js";
 import type { FeedFileEntry, JobContext, StageFn, StageResult, StageStatus } from "./types.js";
 
 /**
@@ -45,6 +46,7 @@ export const run: StageFn = async (ctx) => {
     );
     const failures: FeedDownloadFailure[] = [...parseFailures, ...fetchFailures];
     ctx.state.fetchFailures = failures;
+    finalizeSovereignSourceManifest(ctx);
 
     // Persist per-feed fetch outcomes so the staleness-alert cron (G2) sees
     // which feeds successfully refreshed and which failed. Best-effort: a DB

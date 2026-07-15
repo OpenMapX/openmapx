@@ -1,12 +1,18 @@
 import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { verifyCandidateManifest } from "./candidate.js";
+import { type MotisCandidateManifest, verifyCandidateManifest } from "./candidate.js";
 import { runFunctionalProbes, verifyCapabilitySnapshot } from "./functional-probes.js";
 import { IMPORT_MARKER_FILE } from "./internal.js";
 import { PRIMARY_CONTAINER, STAGING_CONTAINER } from "./motis-containers.js";
 import { mapInitialUrl } from "./motis-endpoints.js";
 import { parseIntEnv, pollUntilHealthy } from "./motis-probe.js";
 import { commitProxyTransaction } from "./proxy-transaction.js";
+import {
+  aliasSlot,
+  commitMotisSlotActivation,
+  flipMotisSlotAliases,
+  type MotisSlot,
+} from "./slot-state.js";
 import type { JobContext, StageFn, StageResult } from "./types.js";
 
 const PRIMARY_URL = process.env.MOTIS_URL ?? "http://localhost:8081";
@@ -114,7 +120,16 @@ async function stopContainer(ctx: JobContext, container: string): Promise<void> 
 
 async function restartPrimary(ctx: JobContext): Promise<string | null> {
   try {
-    await ctx.runner("docker", ["restart", PRIMARY_CONTAINER], {
+    const composeFile = ctx.repoRoot
+      ? join(ctx.repoRoot, "infra", "docker", "docker-compose.generated.yml")
+      : "";
+    const args =
+      composeFile && existsSync(composeFile)
+        ? ["compose", "-f", composeFile, "up", "-d", "--force-recreate", PRIMARY_CONTAINER]
+        : ["restart", PRIMARY_CONTAINER];
+    // Recreate in production: Docker resolves a bind-mount symlink when the
+    // container is created, so restart alone can keep the old A/B target.
+    await ctx.runner("docker", args, {
       cwd: ctx.dataDir,
       stdio: "pipe",
     });
@@ -155,6 +170,113 @@ function tryRollback(
   } catch (error) {
     return { ok: false, reason: (error as Error).message };
   }
+}
+
+async function promoteTwoSlot(
+  ctx: JobContext,
+  manifest: MotisCandidateManifest,
+  startedAt: string,
+  start: number,
+  smokeTestDurationMs: number,
+): Promise<StageResult> {
+  const layout = ctx.slotLayout;
+  if (!layout) throw new Error("two-slot layout missing");
+  const previous = aliasSlot(layout, "live");
+  const candidate = aliasSlot(layout, "staging");
+  if (!previous || !candidate || previous === candidate) {
+    throw new Error("MOTIS slot aliases do not identify distinct active/inactive slots");
+  }
+  const rollback = async (): Promise<string | null> => {
+    flipMotisSlotAliases(layout, previous);
+    return restartPrimary(ctx);
+  };
+
+  await stopContainer(ctx, PRIMARY_CONTAINER);
+  await stopContainer(ctx, STAGING_CONTAINER);
+  flipMotisSlotAliases(layout, candidate);
+  const restartStart = Date.now();
+  const restartError = await restartPrimary(ctx);
+  if (restartError) {
+    const rollbackError = await rollback();
+    return {
+      stage: "promote",
+      status: "error",
+      startedAt,
+      finishedAt: ctx.now(),
+      durationMs: Date.now() - start,
+      message: `slot ${candidate} restart failed: ${restartError}; rollback ${rollbackError ?? "ok"}`,
+      artifacts: {
+        rollback: rollbackError === null,
+        activeSlot: previous,
+        candidateSlot: candidate,
+      },
+    };
+  }
+  const healthError = await waitForPrimaryHealthy(restartStart + RESTART_BUDGET_MS);
+  const primaryReport = healthError
+    ? null
+    : await runFunctionalProbes(PRIMARY_URL, manifest, Date.now() + SMOKE_BUDGET_MS);
+  if (healthError || !primaryReport?.ok) {
+    const rollbackError = await rollback();
+    return {
+      stage: "promote",
+      status: "error",
+      startedAt,
+      finishedAt: ctx.now(),
+      durationMs: Date.now() - start,
+      message: `${healthError ?? `post-activation probe ${primaryReport?.failure?.name} failed`}; rollback ${rollbackError ?? "ok"}`,
+      artifacts: {
+        rollback: rollbackError === null,
+        activeSlot: previous,
+        candidateSlot: candidate,
+      },
+    };
+  }
+  try {
+    await commitProxyTransaction(ctx);
+  } catch (error) {
+    const rollbackError = await rollback();
+    return {
+      stage: "promote",
+      status: "error",
+      startedAt,
+      finishedAt: ctx.now(),
+      durationMs: Date.now() - start,
+      message: `${(error as Error).message}; slot rollback ${rollbackError ?? "ok"}`,
+      artifacts: {
+        rollback: rollbackError === null,
+        activeSlot: previous,
+        candidateSlot: candidate,
+      },
+    };
+  }
+  const record = commitMotisSlotActivation(layout, {
+    activeSlot: candidate as MotisSlot,
+    datasetEpoch: manifest.epoch,
+    manifestHash: manifest.artifacts.config.sha256,
+    imageDigest: process.env.MOTIS_IMAGE_DIGEST,
+    activatedAt: ctx.now(),
+  });
+  return {
+    stage: "promote",
+    status: "ok",
+    startedAt,
+    finishedAt: ctx.now(),
+    durationMs: Date.now() - start,
+    message: `activated MOTIS slot ${candidate} behind stable live alias`,
+    artifacts: {
+      activeSlot: candidate,
+      previousHealthySlot: previous,
+      activeEpoch: manifest.epoch,
+      configHash: manifest.artifacts.config.sha256,
+      licenseHash: manifest.artifacts.license.sha256,
+      restartDurationMs: Date.now() - restartStart,
+      smokeTestDurationMs,
+      rollback: false,
+      slotRecord: record,
+      probes: primaryReport.outcomes,
+    },
+  };
 }
 
 /**
@@ -220,6 +342,10 @@ export const run: StageFn = async (ctx) => {
         message: `aborting promote: staging probe "${smokeReport.failure?.name}" failed: ${smokeReport.failure?.evidence}`,
         artifacts: { smokeTestDurationMs, rollback: false, probes: smokeReport.outcomes },
       } satisfies StageResult;
+    }
+
+    if (ctx.slotLayout) {
+      return await promoteTwoSlot(ctx, manifest, startedAt, start, smokeTestDurationMs);
     }
 
     // Clear the leftover previous from the last cycle (we only keep one cycle

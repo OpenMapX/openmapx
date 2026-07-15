@@ -18,9 +18,14 @@ import {
   runTransitousPipeline,
   toDownloadGtfsResult,
 } from "./jobs/transitous/index.js";
-import { parseTransitousCountriesEnv } from "./jobs/transitous/internal.js";
 import { PRIMARY_CONTAINER } from "./jobs/transitous/motis-containers.js";
+import {
+  type MotisOperationsPolicy,
+  publicOperationsPolicy,
+  resolveOperationsProfileFromEnv,
+} from "./jobs/transitous/operations-profile.js";
 import { finalizeJobRow, makePersistingOnStageComplete } from "./jobs/transitous/persistence.js";
+import { runMotisPreflight } from "./jobs/transitous/preflight.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
 import type { SingleFlightController } from "./jobs/transitous/single-flight.js";
 import { asJobLogger, jobChildLogger } from "./logger.js";
@@ -28,8 +33,10 @@ import { StateStore } from "./state.js";
 import {
   parseRefShaPair,
   readTransitousLock,
+  readTransitousLockProposal,
   type TransitousLock,
   writeTransitousLock,
+  writeTransitousLockProposal,
 } from "./transitous-lock.js";
 
 export interface ApiOptions {
@@ -41,6 +48,7 @@ export interface ApiOptions {
    * cron + `/transit/sync` share state; tests inject an isolated controller.
    */
   singleFlight?: SingleFlightController;
+  operationsPolicy?: MotisOperationsPolicy;
 }
 
 const startedAt = Date.now();
@@ -66,6 +74,9 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   const repoRoot = opts.repoRoot ?? process.env.OPENMAPX_ROOT_DIR ?? "";
   const singleFlight = opts.singleFlight ?? getSingleFlightController();
   const store = new StateStore(dataDir);
+  const operationsPolicy =
+    opts.operationsPolicy ??
+    resolveOperationsProfileFromEnv(process.env, { allowEmptyRegional: true });
 
   app.get("/status", async () => ({
     ok: true,
@@ -74,6 +85,42 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   }));
 
   app.get("/datasets", async () => ({ datasets: store.getAll() }));
+
+  app.get("/transit/profile", async () => ({ policy: publicOperationsPolicy(operationsPolicy) }));
+
+  app.post<{
+    Body?: {
+      feedCount?: number;
+      measuredCompressedBytes?: number;
+      osmBytes?: number;
+      osmAvailable?: boolean;
+      freeDiskBytes?: number;
+      freeInodes?: number;
+      slotMemoryGb?: number;
+      slotCpu?: number;
+      fileDescriptorLimit?: number;
+      buildTimeoutHours?: number;
+    };
+  }>("/transit/preflight", async (req, reply) => {
+    const body = req.body ?? {};
+    const result = runMotisPreflight({
+      policy: operationsPolicy,
+      feedCount: Math.max(0, Math.floor(body.feedCount ?? 0)),
+      measuredCompressedBytes: body.measuredCompressedBytes,
+      osmBytes: body.osmBytes,
+      osmAvailable: body.osmAvailable === true,
+      capacity: {
+        freeDiskBytes: body.freeDiskBytes ?? 0,
+        freeInodes: body.freeInodes,
+        slotMemoryGb: body.slotMemoryGb ?? 0,
+        slotCpu: body.slotCpu ?? 0,
+        fileDescriptorLimit: body.fileDescriptorLimit ?? 0,
+        buildTimeoutHours: body.buildTimeoutHours ?? 0,
+      },
+    });
+    if (!result.ok) reply.code(422);
+    return result;
+  });
 
   app.post("/datasets/reload", async () => {
     const result = store.reload();
@@ -114,7 +161,8 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   app.post<{
     Body: { feeds?: FeedDescriptor[]; countries?: string[]; source?: "transitous" };
   }>("/download/gtfs", async (req, reply) => {
-    const { feeds, countries = [], source } = req.body;
+    const { feeds, source } = req.body;
+    const countries = req.body.countries ?? operationsPolicy.countries;
     if (Array.isArray(feeds) && feeds.length === 0 && source !== "transitous") {
       throw new Error("download/gtfs: either `feeds` or `source: 'transitous'` is required");
     }
@@ -147,6 +195,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
           countries,
           repoRoot: process.env.OPENMAPX_ROOT_DIR,
           source: parseTransitSource(),
+          operationsPolicy: { ...operationsPolicy, countries },
           jobId: gtfsJobId,
           logger: asJobLogger(
             jobChildLogger({
@@ -411,7 +460,16 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     // Default to the deployment's configured countries (same as the cron) when
     // the caller doesn't specify any — an empty list means "every country",
     // which would kick off a global multi-GB fetch by accident.
-    const countries = body.countries ?? parseTransitousCountriesEnv();
+    const countries = body.countries ?? operationsPolicy.countries;
+    const outsideScope = countries.filter(
+      (country) => !operationsPolicy.countries.includes(country.toLowerCase()),
+    );
+    if (operationsPolicy.profile !== "planet" && outsideScope.length > 0) {
+      return reply.code(422).send({
+        ok: false,
+        reason: `countries outside configured operations profile: ${outsideScope.join(", ")}`,
+      });
+    }
     const start = await singleFlight.tryStartSync({
       trigger: "api",
       triggeredBy: body.triggeredBy ?? "api",
@@ -446,6 +504,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
           countries,
           repoRoot,
           source: parseTransitSource(),
+          operationsPolicy: { ...operationsPolicy, countries },
           jobId,
           logger: jobLog,
           onStageComplete: persistingHook,
@@ -491,10 +550,8 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     }
   });
 
-  // POST /transit/bump — fetch upstream Transitous catalog ref and write a
-  // new lockfile. This is admin-only at the apps/api layer (token clients
-  // are rejected upstream) so the data-manager just performs the mechanical
-  // git work without re-checking auth.
+  // POST /transit/bump — propose a new pin set. It never activates the lock;
+  // operators must review diffs/build the inactive slot before approval.
   app.post<{
     Body?: { branch?: string; force?: boolean; lockedBy?: string };
   }>("/transit/bump", async (req, reply) => {
@@ -582,11 +639,12 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       comment:
         "Pinned commit of public-transport/transitous consumed by services/data-manager. Bumped via POST /transit/bump.",
     };
-    writeTransitousLock(repoRoot, lock);
+    writeTransitousLockProposal(repoRoot, lock);
 
     return {
       ok: true,
       unchanged: false,
+      proposed: true,
       ref: lock.ref,
       previousRef: existing?.ref ?? null,
       submoduleSha,
@@ -594,4 +652,28 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       lockedBy: lock.lockedBy,
     };
   });
+
+  app.post<{ Body?: { approveRef?: string; approvedBy?: string } }>(
+    "/transit/bump/approve",
+    async (req, reply) => {
+      const proposal = readTransitousLockProposal(repoRoot);
+      if (!proposal) return reply.code(404).send({ ok: false, error: "no-proposal" });
+      if (req.body?.approveRef !== proposal.ref) {
+        return reply.code(422).send({
+          ok: false,
+          error: "typed-confirmation-mismatch",
+          expected: proposal.ref,
+        });
+      }
+      const approved: TransitousLock = {
+        ...proposal,
+        lockedAt: new Date().toISOString(),
+        lockedBy: req.body?.approvedBy?.trim() || "api-approval",
+        comment: "Approved after compatibility review and inactive-slot validation.",
+      };
+      writeTransitousLock(repoRoot, approved);
+      rmSync(join(repoRoot, "infra/docker/transitous.lock.proposed.json"), { force: true });
+      return { ok: true, activated: true, ref: approved.ref, lockedAt: approved.lockedAt };
+    },
+  );
 }

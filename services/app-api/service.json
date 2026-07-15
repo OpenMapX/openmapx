@@ -25,6 +25,7 @@
       "VALHALLA_URL": "${VALHALLA_URL:-https://api.stadiamaps.com}",
       "VALHALLA_API_KEY": "${VALHALLA_API_KEY:-}",
       "MOTIS_URL": "${MOTIS_URL:-https://api.transitous.org}",
+      "MOTIS_OPERATIONS_PROFILE": "${MOTIS_OPERATIONS_PROFILE:-regional-assisted}",
       "TRANSITOUS_URL": "${TRANSITOUS_URL:-https://api.transitous.org}",
       "NOMINATIM_URL": "${NOMINATIM_URL:-https://nominatim.openstreetmap.org}",
       "OVERPASS_URL": "${OVERPASS_URL:-https://overpass-api.de}",

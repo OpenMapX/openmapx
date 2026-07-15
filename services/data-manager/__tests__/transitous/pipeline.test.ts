@@ -18,6 +18,7 @@ afterEach(() => {
 const ORDERED_STAGES: StageName[] = [
   "prepare",
   "filter",
+  "preflight",
   "compile-gbfs",
   "fetch",
   "validate",
@@ -31,7 +32,7 @@ const ORDERED_STAGES: StageName[] = [
 ];
 
 describe("runTransitousPipeline orchestrator", () => {
-  it("invokes all 12 stages in order against an in-memory persistence hook", async () => {
+  it("invokes all stages in order against an in-memory persistence hook", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-pipeline-orchestrator-"));
     const dataDir = tmp;
     const catalogDir = join(dataDir, ".transitous-catalog");
@@ -137,7 +138,7 @@ describe("runTransitousPipeline orchestrator", () => {
 
   it("runs end-to-end on a seeded 3-feed catalog within a 60s wall-clock budget", async () => {
     // A seeded fake transitous-catalog with multiple feeds across two regions;
-    // the pipeline runs all 12 stages in order (stubs included) and finishes
+    // the pipeline runs every stage in order (stubs included) and finishes
     // under 60s.
     //
     // A "real MOTIS container in CI" variant (where motis-import / motis-health
@@ -184,7 +185,13 @@ describe("runTransitousPipeline orchestrator", () => {
     const { results, finalStatus } = await runTransitousPipeline(ctx, { stopAt: "fetch" });
     const elapsedMs = Date.now() - startedAt;
 
-    expect(results.map((r) => r.stage)).toEqual(["prepare", "filter", "compile-gbfs", "fetch"]);
+    expect(results.map((r) => r.stage)).toEqual([
+      "prepare",
+      "filter",
+      "preflight",
+      "compile-gbfs",
+      "fetch",
+    ]);
     expect(finalStatus).toBe("ok");
     expect(elapsedMs).toBeLessThan(60_000);
   });

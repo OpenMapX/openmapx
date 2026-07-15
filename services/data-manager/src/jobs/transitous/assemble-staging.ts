@@ -11,6 +11,7 @@ import {
 import { join } from "node:path";
 import { CANDIDATE_PROXY_DIRNAME, createCandidateManifest } from "./candidate.js";
 import { GTFS_ARCHIVE_RE } from "./internal.js";
+import { SOVEREIGN_SOURCE_MANIFEST_FILENAME } from "./source-manifest.js";
 import type { StageFn, StageResult } from "./types.js";
 
 /**
@@ -152,6 +153,16 @@ export const run: StageFn = async (ctx) => {
     if (existsSync(sourceIndexSrc)) {
       linkOrCopy(sourceIndexSrc, join(stagingDir, "gbfs-source-index.json"));
     }
+    const sovereignSourceManifest = join(outDir, SOVEREIGN_SOURCE_MANIFEST_FILENAME);
+    if (ctx.operationsPolicy.profile === "regional-sovereign") {
+      if (!existsSync(sovereignSourceManifest)) {
+        return finish(
+          "error",
+          `required sovereign source manifest missing at ${sovereignSourceManifest}`,
+        );
+      }
+      linkOrCopy(sovereignSourceManifest, join(stagingDir, SOVEREIGN_SOURCE_MANIFEST_FILENAME));
+    }
 
     const proxyCandidateSrc = join(outDir, CANDIDATE_PROXY_DIRNAME);
     if (!existsSync(proxyCandidateSrc)) {
@@ -177,7 +188,12 @@ export const run: StageFn = async (ctx) => {
       );
     }
 
-    const manifest = createCandidateManifest(stagingDir, ctx.jobId, ctx.now());
+    const manifest = createCandidateManifest(
+      stagingDir,
+      ctx.jobId,
+      ctx.now(),
+      ctx.operationsPolicy,
+    );
 
     const status = missingFeeds.length > 0 || osmSource === "missing" ? "partial" : "ok";
     return finish(

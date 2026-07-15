@@ -112,6 +112,14 @@ interface MotisTransitousStatus {
   rentalProviderCount: number;
   rentalProviderGroupCount: number;
   rollbackAvailable: boolean;
+  operationsProfile: "regional-assisted" | "regional-sovereign" | "planet" | "unknown";
+  activeSlot: "A" | "B" | null;
+  previousHealthySlot: "A" | "B" | null;
+  preflightState: "passed" | "blocked" | "missing";
+  preflightRequiredDiskBytes: number | null;
+  preflightFreeDiskBytes: number | null;
+  pinProposalPending: boolean;
+  crowdsourceState: "disabled-pending-review";
   gbfsCatalog: {
     state: "active" | "missing" | "error";
     commit: string | null;
@@ -1374,6 +1382,21 @@ function MotisTransitousSection({ status }: { status: MotisTransitousStatus }) {
             />
             <Chip label={`${status.rentalProviderCount} rental provider(s)`} size="small" />
             <Chip
+              label={`Profile: ${status.operationsProfile}`}
+              color={status.operationsProfile === "planet" ? "warning" : "default"}
+              size="small"
+            />
+            <Chip
+              label={`Slot: ${status.activeSlot ?? "legacy"}`}
+              color={status.activeSlot ? "success" : "default"}
+              size="small"
+            />
+            <Chip
+              label={`Preflight: ${status.preflightState}`}
+              color={status.preflightState === "passed" ? "success" : "warning"}
+              size="small"
+            />
+            <Chip
               label={`Pinned GBFS: ${status.gbfsCatalog.state}`}
               color={status.gbfsCatalog.state === "active" ? "success" : "default"}
               size="small"
@@ -1403,6 +1426,22 @@ function MotisTransitousSection({ status }: { status: MotisTransitousStatus }) {
             {status.testedAt ? formatDate(status.testedAt) : "never"} · rollback{" "}
             {status.rollbackAvailable ? "available" : "unavailable"}
           </Typography>
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
+            Capacity:{" "}
+            {status.preflightRequiredDiskBytes != null
+              ? `${formatBytes(status.preflightRequiredDiskBytes)} required`
+              : "not estimated"}{" "}
+            ·{" "}
+            {status.preflightFreeDiskBytes != null
+              ? `${formatBytes(status.preflightFreeDiskBytes)} free`
+              : "free disk unknown"}{" "}
+            · previous healthy slot {status.previousHealthySlot ?? "none"}
+            {status.pinProposalPending ? " · pin proposal awaiting review" : ""}
+          </Typography>
+          <Alert severity="info">
+            Crowdsource sidecars are disabled pending authoritative provenance, protocol, license,
+            privacy-controller, moderation, and deletion approval.
+          </Alert>
           {status.capabilityState !== "healthy" && (
             <Alert severity="error">
               Promoted MOTIS capability evidence is {status.capabilityState}.

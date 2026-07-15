@@ -14,6 +14,7 @@ export interface TransitousFeedSource {
   "url-override"?: string;
   "transitland-atlas-id"?: string;
   "mdb-id"?: string | number;
+  license?: Record<string, unknown>;
 }
 
 export interface TransitousFeedFile {

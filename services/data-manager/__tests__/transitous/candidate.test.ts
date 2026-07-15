@@ -8,6 +8,7 @@ import {
   parseMotisConfigExpectations,
   verifyCandidateManifest,
 } from "../../src/jobs/transitous/candidate.js";
+import { resolveOperationsProfile } from "../../src/jobs/transitous/operations-profile.js";
 
 let tmp: string | undefined;
 
@@ -78,6 +79,14 @@ describe("candidate manifest", () => {
     expect(manifest.epoch).toBe("epoch-1");
     expect(manifest.artifacts.datasets).toHaveLength(1);
     expect(verifyCandidateManifest(dir)).toEqual(manifest);
+  });
+
+  it("binds the resolved operations policy into the promoted candidate", () => {
+    const dir = fixture();
+    const policy = resolveOperationsProfile({ countries: ["de"], source: "mirror" });
+    const manifest = createCandidateManifest(dir, "epoch-1", "2026-07-15T00:00:00.000Z", policy);
+    expect(manifest.operationsPolicy).toEqual(policy);
+    expect(verifyCandidateManifest(dir).operationsPolicy?.profile).toBe("regional-assisted");
   });
 
   it("detects mutation after the manifest is written", () => {

@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,6 +17,7 @@ import {
 import { IMPORT_MARKER_FILE } from "../../src/jobs/transitous/internal.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import { run as promoteRun } from "../../src/jobs/transitous/promote.js";
+import { aliasSlot, ensureMotisSlotLayout } from "../../src/jobs/transitous/slot-state.js";
 import { StateStore } from "../../src/state.js";
 
 let tmp: string | undefined;
@@ -242,6 +251,47 @@ describe("promote stage", () => {
     expect(existsSync(fx.previousDir)).toBe(false);
     const artifacts = result.artifacts as { rollback?: boolean };
     expect(artifacts.rollback).toBe(true);
+  });
+
+  it("rolls A/B aliases back without committing slot state when activation restart fails", async () => {
+    const fx = setupFixture({ staging: true, current: true });
+    globalThis.fetch = vi.fn(async (input: unknown) => {
+      const url = typeof input === "string" ? input : (input as Request | URL).toString();
+      return jsonResponse(successfulBody(url));
+    }) as unknown as typeof fetch;
+
+    let restartCalls = 0;
+    const ctx = makeCtx({
+      dataDir: fx.dataDir,
+      runner: async (_command, args) => {
+        if (args[0] !== "compose") return;
+        restartCalls++;
+        if (restartCalls === 1) throw new Error("injected activation failure");
+      },
+    });
+    ctx.repoRoot = fx.dataDir;
+    mkdirSync(join(ctx.repoRoot, "infra", "docker"), { recursive: true });
+    writeFileSync(
+      join(ctx.repoRoot, "infra", "docker", "docker-compose.generated.yml"),
+      "services: {}\n",
+    );
+    ctx.slotLayout = ensureMotisSlotLayout(fx.dataDir);
+    expect(aliasSlot(ctx.slotLayout, "live")).toBe("A");
+    expect(aliasSlot(ctx.slotLayout, "staging")).toBe("B");
+
+    const result = await promoteRun(ctx);
+
+    expect(result.status).toBe("error");
+    expect(result.message).toMatch(/slot B restart failed.*rollback ok/);
+    expect(restartCalls).toBe(2);
+    expect(aliasSlot(ctx.slotLayout, "live")).toBe("A");
+    expect(aliasSlot(ctx.slotLayout, "staging")).toBe("B");
+    expect(ctx.slotLayout.record.activeSlot).toBe("A");
+    const persisted = JSON.parse(readFileSync(ctx.slotLayout.statePath, "utf-8")) as {
+      activeSlot: string;
+      previousHealthySlot?: string;
+    };
+    expect(persisted).toEqual({ schemaVersion: 1, activeSlot: "A" });
   });
 
   it("works with no pre-existing current dir (first-ever promotion)", async () => {

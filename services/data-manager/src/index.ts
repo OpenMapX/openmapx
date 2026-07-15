@@ -18,7 +18,7 @@ import { type PoiSchedulerHandles, setupPoiIngestCron } from "./jobs/poi-ingest/
 import { createPoiSingleFlight } from "./jobs/poi-ingest/single-flight.js";
 import { reconcileOrphanedJobs } from "./jobs/reconcile.js";
 import { fetchCoveredWayIds } from "./jobs/traffic/covered-ways.js";
-import { parseTransitousCountriesEnv } from "./jobs/transitous/internal.js";
+import { resolveOperationsProfileFromEnv } from "./jobs/transitous/operations-profile.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
 import { rootLogger } from "./logger.js";
 import { discoverPoiSources } from "./poi-source-discovery.js";
@@ -30,8 +30,9 @@ registerAuth(app, resolveAuthToken(app));
 const dataDir = process.env.DATA_DIR ?? "/data";
 const repoRoot = process.env.OPENMAPX_ROOT_DIR ?? "";
 const singleFlight = getSingleFlightController();
+const operationsPolicy = resolveOperationsProfileFromEnv();
 
-registerApi(app, { dataDir, repoRoot, singleFlight });
+registerApi(app, { dataDir, repoRoot, singleFlight, operationsPolicy });
 
 // E6.1c — Validate the age private-key file early so operators get a clear
 // error at startup rather than a confusing "encrypted feed skipped" log
@@ -138,7 +139,7 @@ app
     // dangling cron timers and so the in-process singleFlight controller is
     // fully ready before the first scheduled fire.
     const store = new StateStore(dataDir);
-    const countries = parseTransitousCountriesEnv();
+    const countries = operationsPolicy.countries;
     // The way→edge refresh restricts `valhalla_ways_to_edges` to the ways the
     // live-traffic writer can update. Its covered-way-id source is the same
     // OpenConditions speed feed the writer consumes, so it's only wired when
@@ -149,6 +150,7 @@ app
       dataDir,
       repoRoot,
       countries,
+      operationsPolicy,
       store,
       singleFlight,
       logger: app.log,

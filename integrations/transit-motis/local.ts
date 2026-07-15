@@ -265,6 +265,13 @@ export function setupLocal(ctx: IntegrationContext): void {
   const localRouteOverlayEnabled = ctx.config.localRouteOverlay !== false;
   const realtimeCompletenessSkipEnabled = ctx.config.realtimeCompletenessSkip !== false;
   const itineraryRefreshEnabled = ctx.config.itineraryRefresh !== false;
+  const hostedFallbackEnabled =
+    ctx.config.hostedRuntimeFallback !== false &&
+    process.env.MOTIS_OPERATIONS_PROFILE !== "regional-sovereign";
+  const requireHostedFallback = (): void => {
+    if (!hostedFallbackEnabled)
+      throw new Error("hosted MOTIS fallback disabled by operations profile");
+  };
   // Resolution order: service registry → manifest config → MOTIS_URL env →
   // localhost fallback. The env var matches the one services/data-manager
   // and live-transit-motis honour, so a single deployment-wide
@@ -374,6 +381,7 @@ export function setupLocal(ctx: IntegrationContext): void {
         ]);
         return wrapLocal(local);
       }
+      requireHostedFallback();
       return wrapTransitous(
         await motis.getStops(transitousInstance, [lng - deg, lat - deg, lng + deg, lat + deg]),
       );
@@ -385,6 +393,7 @@ export function setupLocal(ctx: IntegrationContext): void {
         const local = await motis.getStopById(motisLocalInstance, localId);
         return wrapLocal(local);
       }
+      requireHostedFallback();
       return wrapTransitous(await motis.getStopById(transitousInstance, cloudId));
     },
     async getDepartures(id, min) {
@@ -398,6 +407,7 @@ export function setupLocal(ctx: IntegrationContext): void {
         });
         return wrapLocalRT(local);
       }
+      requireHostedFallback();
       return wrapTransitousRT(await motis.getDepartures(transitousInstance, cloudId, min));
     },
     async getArrivals(id, min) {
@@ -411,6 +421,7 @@ export function setupLocal(ctx: IntegrationContext): void {
         });
         return wrapLocalRT(local);
       }
+      requireHostedFallback();
       return wrapTransitousRT(await motis.getArrivals(transitousInstance, cloudId, min));
     },
     async searchStopsByName(q, limit) {
@@ -419,6 +430,7 @@ export function setupLocal(ctx: IntegrationContext): void {
         const local = await motis.searchByName(motisLocalInstance, q, lim);
         return wrapLocal(local);
       }
+      requireHostedFallback();
       return wrapTransitous(await motis.searchByName(transitousInstance, q, lim));
     },
     async planTrip(params) {
@@ -456,6 +468,7 @@ export function setupLocal(ctx: IntegrationContext): void {
         const local = await motis.getTrip(motisLocalInstance, localId);
         if (local) return wrapLocalRT(local);
       }
+      requireHostedFallback();
       return wrapTransitousRT(await motis.getTrip(transitousInstance, cloudId));
     },
     async getReachableStops(lat, lng, maxMinutes, modes) {
@@ -463,6 +476,7 @@ export function setupLocal(ctx: IntegrationContext): void {
         const local = await motis.getReachable(motisLocalInstance, lat, lng, maxMinutes, { modes });
         return wrapLocalRT(local);
       }
+      requireHostedFallback();
       return wrapTransitousRT(
         await motis.getReachable(transitousInstance, lat, lng, maxMinutes, { modes }),
       );

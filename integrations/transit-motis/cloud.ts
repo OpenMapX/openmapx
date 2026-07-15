@@ -19,6 +19,12 @@ function withPrefix(id: string, prefix: "mo:"): string {
 
 export function setupCloud(ctx: IntegrationContext): void {
   const providerPolicyEnabled = ctx.config.providerPolicy !== false;
+  if (
+    ctx.config.hostedRuntimeFallback === false ||
+    process.env.MOTIS_OPERATIONS_PROFILE === "regional-sovereign"
+  ) {
+    return;
+  }
   configureTransitous({
     url: ctx.config.transitousUrl as string | undefined,
     userAgent: ctx.config.transitousUserAgent as string | undefined,

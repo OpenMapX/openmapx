@@ -1,6 +1,8 @@
 import type { TransitSource } from "@openmapx/transitous-core";
 import type { DatasetMetadata, StateStore } from "../../state.js";
 import type { FeedDownloadFailure } from "../download-gtfs.js";
+import type { MotisOperationsPolicy } from "./operations-profile.js";
+import type { MotisSlotLayout } from "./slot-state.js";
 
 export type { TransitSource };
 
@@ -9,6 +11,7 @@ export type StageStatus = "ok" | "skipped" | "error" | "partial";
 export type StageName =
   | "prepare"
   | "filter"
+  | "preflight"
   | "compile-gbfs"
   | "fetch"
   | "validate"
@@ -63,7 +66,12 @@ export interface FeedFileEntry {
   country: string;
   path: string;
   url: string;
-  activeScheduleSources: Array<{ id: string; name: string }>;
+  activeScheduleSources: Array<{
+    id: string;
+    name: string;
+    originUrl?: string;
+    license?: Record<string, unknown>;
+  }>;
   parseFailure?: FeedDownloadFailure;
 }
 
@@ -139,6 +147,9 @@ export interface JobContext {
   countries: string[];
   /** Acquisition mode (default `mirror`). Selects the pipeline's stage list. */
   source: TransitSource;
+  /** Explicit deployment policy; empty regional scope is never interpreted as planet. */
+  operationsPolicy: MotisOperationsPolicy;
+  slotLayout?: MotisSlotLayout;
   /** Mirror-mode: base URL of Transitous's published artifacts. */
   artifactBaseUrl?: string;
   /** Mirror-mode: per-archive downloader (default curlAtomic); injected by tests. */

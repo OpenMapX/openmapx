@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   combinedPinsAreCurrent,
+  diffFeedFiles,
   resolveGbfsCandidate,
+  writeCombinedCatalogLockProposal,
   writeCombinedCatalogLocks,
 } from "../src/commands/transitous-bump.js";
 
@@ -81,5 +83,43 @@ describe("Transitous combined catalog bump", () => {
     ).toThrow(/previous pins restored/);
     expect(readFileSync(transitousPath, "utf-8")).toBe("old-transitous\n");
     expect(readFileSync(gbfsPath, "utf-8")).toBe("old-gbfs\n");
+  });
+
+  it("reports removed feeds and license changes for compatibility review", () => {
+    const summary = diffFeedFiles(
+      new Map([
+        [
+          "de",
+          {
+            sources: [
+              { name: "BVG", license: { "spdx-identifier": "CC-BY-4.0" } },
+              { name: "Removed" },
+            ],
+          },
+        ],
+      ]),
+      new Map([["de", { sources: [{ name: "BVG", license: { "spdx-identifier": "ODbL-1.0" } }] }]]),
+    );
+    expect(summary.removedSources).toBe(1);
+    expect(summary.licenseChanges).toEqual([{ region: "de", source: "BVG" }]);
+  });
+
+  it("writes paired proposals without changing active pins", () => {
+    temporaryRoot = mkdtempSync(join(tmpdir(), "openmapx-bump-proposal-"));
+    const directory = join(temporaryRoot, "infra", "docker");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, "transitous.lock.json"), "active-transitous\n");
+    writeFileSync(join(directory, "gbfs-catalog.lock.json"), "active-gbfs\n");
+    writeCombinedCatalogLockProposal(temporaryRoot, TRANSITOUS, GBFS);
+    expect(readFileSync(join(directory, "transitous.lock.json"), "utf-8")).toBe(
+      "active-transitous\n",
+    );
+    expect(readFileSync(join(directory, "gbfs-catalog.lock.json"), "utf-8")).toBe("active-gbfs\n");
+    expect(readFileSync(join(directory, "transitous.lock.proposed.json"), "utf-8")).toContain(
+      TRANSITOUS.ref,
+    );
+    expect(readFileSync(join(directory, "gbfs-catalog.lock.proposed.json"), "utf-8")).toContain(
+      GBFS.commit,
+    );
   });
 });

@@ -20,9 +20,12 @@ import {
 import * as mirrorStage from "./mirror.js";
 import * as motisHealthStage from "./motis-health.js";
 import * as motisImportStage from "./motis-import.js";
+import { type MotisOperationsPolicy, resolveOperationsProfile } from "./operations-profile.js";
+import * as preflightStage from "./preflight.js";
 import * as prepareStage from "./prepare.js";
 import * as promoteStage from "./promote.js";
 import * as proxyTransactionStage from "./proxy-transaction.js";
+import { ensureMotisSlotLayout } from "./slot-state.js";
 import type {
   CommandRunner,
   JobContext,
@@ -42,6 +45,7 @@ type StageEntry = { name: StageName; run: StageFn; criticality: StageCriticality
 const BUILD_STAGES: ReadonlyArray<StageEntry> = [
   { name: "prepare", run: prepareStage.run, criticality: "critical" },
   { name: "filter", run: filterStage.run, criticality: "critical" },
+  { name: "preflight", run: preflightStage.run, criticality: "critical" },
   { name: "compile-gbfs", run: compileGbfsStage.run, criticality: "critical" },
   // Acquisition may report individual failures while preserving known-good
   // archives from the previous run. Assembly remains the authoritative empty
@@ -214,6 +218,11 @@ export interface BuildJobContextOptions {
   feedProxyUrl?: string;
   /** Mirror-mode archive downloader (default: curlAtomic). Injected by tests. */
   artifactDownloader?: (url: string, dest: string) => Promise<void>;
+  operationsPolicy?: MotisOperationsPolicy;
+  operationsProfile?: string;
+  feedAllowList?: string[];
+  confirmPlanet?: boolean;
+  osmInput?: string;
 }
 
 /** Build a `JobContext` with safe defaults; used by API + tests. */
@@ -223,6 +232,24 @@ export function buildJobContext(opts: BuildJobContextOptions): JobContext {
   const catalogDir = join(opts.dataDir, TRANSITOUS_CATALOG_DIR);
   const downloadsDir = join(opts.dataDir, TRANSITOUS_DOWNLOADS_DIR);
   const outDir = join(opts.dataDir, "gtfs");
+  const countries = normaliseCountries(opts.countries ?? []);
+  const source = opts.source ?? "build";
+  const operationsPolicy =
+    opts.operationsPolicy ??
+    resolveOperationsProfile({
+      profile: opts.operationsProfile,
+      countries,
+      feedAllowList: opts.feedAllowList,
+      source,
+      artifactBaseUrl: opts.artifactBaseUrl,
+      confirmPlanet: opts.confirmPlanet,
+      osmInput: opts.osmInput,
+      // Direct stage tests historically construct an empty-scope context.
+      // The mandatory pipeline preflight remains the enforcement boundary.
+      allowEmptyRegional: true,
+    });
+  const slotLayout =
+    process.env.MOTIS_TWO_SLOT === "true" ? ensureMotisSlotLayout(opts.dataDir) : undefined;
   return {
     jobId: opts.jobId ?? randomUUID(),
     repoRoot: opts.repoRoot ?? "",
@@ -232,8 +259,10 @@ export function buildJobContext(opts: BuildJobContextOptions): JobContext {
     outDir,
     motisStagingDataDir: join(opts.dataDir, "motis", "staging"),
     motisDataDir: join(opts.dataDir, "motis", "live"),
-    countries: normaliseCountries(opts.countries ?? []),
-    source: opts.source ?? "build",
+    countries,
+    source,
+    operationsPolicy,
+    slotLayout,
     artifactBaseUrl: opts.artifactBaseUrl,
     feedProxyUrl: opts.feedProxyUrl,
     artifactDownloader: opts.artifactDownloader,

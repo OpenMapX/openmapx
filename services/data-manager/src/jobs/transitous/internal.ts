@@ -81,8 +81,16 @@ export function parseTransitousCountriesEnv(env: NodeJS.ProcessEnv = process.env
 interface TransitlandAtlasFeedFile {
   feeds?: Array<{
     id?: string;
+    spec?: string;
     urls?: Record<string, string | undefined>;
+    license?: Record<string, unknown>;
   }>;
+}
+
+interface AtlasSourceMetadata {
+  spec: string;
+  originUrl?: string;
+  license?: Record<string, unknown>;
 }
 
 export interface GtfsArchiveSnapshot {
@@ -188,8 +196,8 @@ export function sourceIdForFailure(
   return `${country}_${base || fallback.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
 }
 
-function buildTransitlandAtlasSpecIndex(catalogDir: string): Map<string, string> {
-  const index = new Map<string, string>();
+function buildTransitlandAtlasSpecIndex(catalogDir: string): Map<string, AtlasSourceMetadata> {
+  const index = new Map<string, AtlasSourceMetadata>();
   const atlasFeedsDir = join(catalogDir, "transitland-atlas", "feeds");
   if (!existsSync(atlasFeedsDir)) return index;
 
@@ -206,11 +214,13 @@ function buildTransitlandAtlasSpecIndex(catalogDir: string): Map<string, string>
     for (const feed of payload.feeds ?? []) {
       if (!feed.id) continue;
       const urls = feed.urls ?? {};
-      if (urls.static_current) {
-        index.set(feed.id, "gtfs");
-      } else if (urls.gbfs_auto_discovery) {
-        index.set(feed.id, "gbfs");
-      }
+      const spec = feed.spec?.toLowerCase() ?? (urls.static_current ? "gtfs" : undefined);
+      if (!spec && !urls.gbfs_auto_discovery) continue;
+      index.set(feed.id, {
+        spec: spec ?? "gbfs",
+        originUrl: urls.static_current ?? urls.gbfs_auto_discovery,
+        license: feed.license,
+      });
     }
   }
 
@@ -219,13 +229,13 @@ function buildTransitlandAtlasSpecIndex(catalogDir: string): Map<string, string>
 
 function resolveSourceSpec(
   source: TransitousFeedSource,
-  atlasSpecIndex: Map<string, string>,
+  atlasSpecIndex: Map<string, AtlasSourceMetadata>,
 ): string {
   if (source.spec?.trim()) return source.spec.trim().toLowerCase();
   if (source.type === "transitland-atlas") {
     const atlasId = source["transitland-atlas-id"];
     if (atlasId) {
-      const atlasSpec = atlasSpecIndex.get(atlasId);
+      const atlasSpec = atlasSpecIndex.get(atlasId)?.spec;
       if (atlasSpec) return atlasSpec;
     }
   }
@@ -234,7 +244,7 @@ function resolveSourceSpec(
 
 function isSupportedScheduleSource(
   source: TransitousFeedSource,
-  atlasSpecIndex: Map<string, string>,
+  atlasSpecIndex: Map<string, AtlasSourceMetadata>,
 ): boolean {
   const spec = resolveSourceSpec(source, atlasSpecIndex);
   return spec === "gtfs" || spec === "netex";
@@ -244,15 +254,20 @@ function activeScheduleSources(
   feedId: string,
   country: string,
   feed: TransitousFeedFile,
-  atlasSpecIndex: Map<string, string>,
-): Array<{ id: string; name: string }> {
+  atlasSpecIndex: Map<string, AtlasSourceMetadata>,
+): FeedFileEntry["activeScheduleSources"] {
   return (feed.sources ?? []).flatMap((source, index) => {
     if (source.skip || !isSupportedScheduleSource(source, atlasSpecIndex)) return [];
     const fallback = `${feedId}_${index + 1}`;
+    const atlas = source["transitland-atlas-id"]
+      ? atlasSpecIndex.get(source["transitland-atlas-id"])
+      : undefined;
     return [
       {
         id: sourceIdForFailure(country, source.name, fallback),
         name: source.name ?? fallback,
+        originUrl: source["url-override"] ?? source.url ?? atlas?.originUrl,
+        license: source.license ?? atlas?.license,
       },
     ];
   });

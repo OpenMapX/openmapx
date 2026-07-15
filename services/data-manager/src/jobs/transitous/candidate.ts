@@ -13,6 +13,8 @@ import {
   parseMotisConfigExpectations,
 } from "@openmapx/transitous-core";
 import { GTFS_ARCHIVE_RE } from "./internal.js";
+import type { MotisOperationsPolicy } from "./operations-profile.js";
+import { SOVEREIGN_SOURCE_MANIFEST_FILENAME } from "./source-manifest.js";
 
 export const CANDIDATE_MANIFEST_FILENAME = "motis-candidate-manifest.json";
 export const CAPABILITY_SNAPSHOT_FILENAME = "mobility-capabilities.json";
@@ -30,6 +32,7 @@ export interface MotisCandidateManifest {
   schemaVersion: 1;
   epoch: string;
   createdAt: string;
+  operationsPolicy?: MotisOperationsPolicy;
   expectations: MotisConfigExpectations;
   canary: {
     bbox: { minLat: number; minLng: number; maxLat: number; maxLng: number };
@@ -52,6 +55,7 @@ export interface MotisCandidateManifest {
     proxyVars: CandidateArtifactHash;
     datasets: CandidateArtifactHash[];
     sourceIndex?: CandidateArtifactHash;
+    sovereignSources?: CandidateArtifactHash;
   };
 }
 
@@ -113,6 +117,7 @@ export function createCandidateManifest(
   stagingDir: string,
   epoch: string,
   createdAt: string,
+  operationsPolicy?: MotisOperationsPolicy,
 ): MotisCandidateManifest {
   const configPath = join(stagingDir, "config.yml");
   const licensePath = join(stagingDir, "license.json");
@@ -130,10 +135,12 @@ export function createCandidateManifest(
     .map((entry) => sha256File(join(stagingDir, entry), stagingDir));
   if (datasets.length === 0) throw new Error("Candidate contains no timetable datasets");
   const sourceIndexPath = join(stagingDir, "gbfs-source-index.json");
+  const sovereignSourcesPath = join(stagingDir, SOVEREIGN_SOURCE_MANIFEST_FILENAME);
   const manifest: MotisCandidateManifest = {
     schemaVersion: 1,
     epoch,
     createdAt,
+    operationsPolicy,
     expectations: parseMotisConfigExpectations(readFileSync(configPath, "utf-8")),
     canary: resolveCandidateCanary(),
     artifacts: {
@@ -144,6 +151,9 @@ export function createCandidateManifest(
       datasets,
       ...(existsSync(sourceIndexPath)
         ? { sourceIndex: sha256File(sourceIndexPath, stagingDir) }
+        : {}),
+      ...(existsSync(sovereignSourcesPath)
+        ? { sovereignSources: sha256File(sovereignSourcesPath, stagingDir) }
         : {}),
     },
   };
@@ -172,6 +182,7 @@ export function verifyCandidateManifest(stagingDir: string): MotisCandidateManif
     manifest.artifacts.proxyVars,
     ...manifest.artifacts.datasets,
     ...(manifest.artifacts.sourceIndex ? [manifest.artifacts.sourceIndex] : []),
+    ...(manifest.artifacts.sovereignSources ? [manifest.artifacts.sovereignSources] : []),
   ];
   for (const expected of artifacts) {
     const current = sha256File(join(stagingDir, expected.path), stagingDir);

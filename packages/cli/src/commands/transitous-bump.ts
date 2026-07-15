@@ -140,16 +140,32 @@ export function writeCombinedCatalogLocks(
   }
 }
 
-interface FeedFile {
-  sources?: Array<{ name?: string }>;
+/** Write a reviewable pin-set proposal without mutating active lockfiles. */
+export function writeCombinedCatalogLockProposal(
+  repoRoot: string,
+  transitous: TransitousLock,
+  gbfs: GbfsCatalogLock,
+): void {
+  const transitousPath = join(repoRoot, "infra", "docker", "transitous.lock.proposed.json");
+  const gbfsPath = join(repoRoot, "infra", "docker", "gbfs-catalog.lock.proposed.json");
+  const suffix = `.candidate-${process.pid}`;
+  writeFileSync(`${transitousPath}${suffix}`, transitousLockJson(transitous), "utf-8");
+  writeFileSync(`${gbfsPath}${suffix}`, gbfsLockJson(gbfs), "utf-8");
+  renameSync(`${transitousPath}${suffix}`, transitousPath);
+  renameSync(`${gbfsPath}${suffix}`, gbfsPath);
 }
 
-interface FeedDiffSummary {
+export interface FeedFile {
+  sources?: Array<{ name?: string; license?: Record<string, unknown> }>;
+}
+
+export interface FeedDiffSummary {
   addedRegions: string[];
   removedRegions: string[];
   modifiedRegions: string[];
   addedSources: number;
   removedSources: number;
+  licenseChanges: Array<{ region: string; source: string }>;
 }
 
 function gitArgs(catalogDir: string, ...rest: string[]): string[] {
@@ -192,7 +208,7 @@ async function listFeedsAtRevision(
   return out;
 }
 
-function diffFeedFiles(
+export function diffFeedFiles(
   oldFeeds: Map<string, FeedFile>,
   newFeeds: Map<string, FeedFile>,
 ): FeedDiffSummary {
@@ -203,6 +219,7 @@ function diffFeedFiles(
   const modifiedRegions: string[] = [];
   let addedSources = 0;
   let removedSources = 0;
+  const licenseChanges: FeedDiffSummary["licenseChanges"] = [];
 
   for (const region of newRegions) {
     if (!oldRegions.has(region)) {
@@ -232,13 +249,35 @@ function diffFeedFiles(
         regionChanged = true;
       }
     }
+    const oldByName = new Map(
+      (oldFeeds.get(region)?.sources ?? []).flatMap((source) =>
+        source.name ? [[source.name, source] as const] : [],
+      ),
+    );
+    for (const source of newFeeds.get(region)?.sources ?? []) {
+      if (!source.name || !oldByName.has(source.name)) continue;
+      const previous = oldByName.get(source.name);
+      if (JSON.stringify(previous?.license ?? null) !== JSON.stringify(source.license ?? null)) {
+        licenseChanges.push({ region, source: source.name });
+        regionChanged = true;
+      }
+    }
     if (regionChanged) modifiedRegions.push(region);
   }
   for (const region of removedRegions) {
     removedSources += (oldFeeds.get(region)?.sources ?? []).length;
   }
   modifiedRegions.sort();
-  return { addedRegions, removedRegions, modifiedRegions, addedSources, removedSources };
+  return {
+    addedRegions,
+    removedRegions,
+    modifiedRegions,
+    addedSources,
+    removedSources,
+    licenseChanges: licenseChanges.sort((a, b) =>
+      `${a.region}/${a.source}`.localeCompare(`${b.region}/${b.source}`),
+    ),
+  };
 }
 
 function printDiffSummary(summary: FeedDiffSummary): void {
@@ -253,6 +292,9 @@ function printDiffSummary(summary: FeedDiffSummary): void {
   );
   log.info(`  added sources:    ${summary.addedSources}`);
   log.info(`  removed sources:  ${summary.removedSources}`);
+  log.info(
+    `  license changes:  ${summary.licenseChanges.length}${summary.licenseChanges.length > 0 ? `  (${summary.licenseChanges.map((entry) => `${entry.region}/${entry.source}`).join(", ")})` : ""}`,
+  );
 }
 
 async function readSubmoduleSha(catalogDir: string, ref: string, path: string): Promise<string> {
@@ -299,7 +341,7 @@ export function registerTransitousCommands(program: Command): void {
   transitous
     .command("bump")
     .description(
-      "Fetch origin/main of the Transitous catalog, summarize feed changes, and update infra/docker/transitous.lock.json",
+      "Fetch upstream pins, summarize feed changes, and write a reviewable inactive-slot proposal",
     )
     .option("--yes", "Skip the interactive confirmation prompt", false)
     .option("--branch <name>", "Branch to track (default: main)", "main")
@@ -380,9 +422,7 @@ export function registerTransitousCommands(program: Command): void {
       }
 
       if (!options.yes) {
-        const ok = await promptConfirm(
-          "Write this pin to infra/docker/transitous.lock.json? [y/N]",
-        );
+        const ok = await promptConfirm("Write this pin set as an inactive-slot proposal? [y/N]");
         if (!ok) {
           log.info("Aborted — no lockfile changes.");
           return;
@@ -397,10 +437,10 @@ export function registerTransitousCommands(program: Command): void {
         comment:
           "Pinned commit of public-transport/transitous consumed by services/data-manager. Bump via `pnpm openmapx transitous bump`.",
       };
-      writeCombinedCatalogLocks(paths.root, lock, gbfsCandidate.lock);
+      writeCombinedCatalogLockProposal(paths.root, lock, gbfsCandidate.lock);
 
-      log.ok(`Updated Transitous and GBFS catalog lock set under ${join("infra", "docker")}`);
-      log.dim("Restart data-manager to pick up the new ref, or wait for next cron sync.");
+      log.ok(`Proposed Transitous and GBFS catalog lock set under ${join("infra", "docker")}`);
+      log.dim("Review diffs and validate an inactive MOTIS slot before activating the proposal.");
     });
 
   transitous

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { run as genFullConfigRun } from "../../src/jobs/transitous/gen-full-config.js";
+import { resolveOperationsProfile } from "../../src/jobs/transitous/operations-profile.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import { StateStore } from "../../src/state.js";
 
@@ -264,5 +265,20 @@ timetable:
     const result = await genFullConfigRun(ctxWithProxyVars(fx.catalogDir, fx.dataDir, []));
     expect(result.status).toBe("error");
     expect(result.message).toContain("de-missing-0");
+  });
+
+  it("fails closed when a sovereign config retains a hosted realtime URL", async () => {
+    const fx = setupCatalog(TEMPLATE_WITH_RT);
+    const ctx = ctxWithProxyVars(fx.catalogDir, fx.dataDir, ["de-bvg-0"]);
+    ctx.operationsPolicy = resolveOperationsProfile({
+      profile: "regional-sovereign",
+      countries: ["de"],
+      source: "build",
+      osmInput: "germany.osm.pbf",
+    });
+    const result = await genFullConfigRun(ctx);
+    expect(result.status).toBe("error");
+    expect(result.message).toMatch(/sovereign.*prohibited hosted runtime URLs/);
+    expect(result.message).toContain("rt.triptix.tech/feed/de-vbb-0");
   });
 });

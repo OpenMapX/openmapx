@@ -2,7 +2,7 @@
   "id": "motis",
   "name": "MOTIS",
   "version": "1.0.0",
-  "description": "Multi-modal transit + routing engine. Handles planet-scale + hundreds of GTFS feeds (~16GB RAM).",
+  "description": "Multi-modal transit + routing engine. Regional by default; planet deployments require an explicit experimental profile and measured capacity.",
   "license": "MIT",
   "quality": "built-in",
   "homepage": "https://github.com/motis-project/motis",
@@ -18,7 +18,7 @@
       "until [ -f /motis-data/config.yml ]; do echo 'motis: waiting for /motis-data/config.yml'; sleep 5; done; /motis import && /motis server || { echo 'motis: import/serve failed; holding (a pipeline restart will retry)'; while true; do sleep 3600; done; }"
     ],
     "dependsOn": [{ "service": "motis-feed-proxy", "condition": "service_started" }],
-    "memory": "16g",
+    "memory": "${MOTIS_SLOT_MEMORY:-16g}",
     "restart": "unless-stopped",
     "healthcheck": {
       "type": "http",

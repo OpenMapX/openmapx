@@ -13,6 +13,27 @@ import { applyConfigOverrides } from "./config-overrides.js";
 import type { JobContext, StageFn, StageResult } from "./types.js";
 
 const DEFAULT_FEED_PROXY_URL = "http://motis-feed-proxy";
+const HOSTED_TRANSIT_RUNTIME_DOMAINS = ["transitous.org", "triptix.tech"] as const;
+
+function assertSovereignRuntimeConfig(config: string): void {
+  const prohibited = [...config.matchAll(/https?:\/\/[^\s"'<>]+/g)]
+    .map((match) => match[0].replace(/[),\]}]+$/, ""))
+    .filter((url) => {
+      try {
+        const hostname = new URL(url).hostname.toLowerCase();
+        return HOSTED_TRANSIT_RUNTIME_DOMAINS.some(
+          (domain) => hostname === domain || hostname.endsWith(`.${domain}`),
+        );
+      } catch {
+        return true;
+      }
+    });
+  if (prohibited.length > 0) {
+    throw new Error(
+      `regional-sovereign config contains prohibited hosted runtime URLs: ${[...new Set(prohibited)].join(", ")}`,
+    );
+  }
+}
 
 // Mirrors services/motis/tools/transitous/run.sh: merge the `--feed-proxy`
 // output (/tmp/feed-proxy-vars.yml) with the catalog's curated feed-whitelist
@@ -195,6 +216,9 @@ export const run: StageFn = async (ctx) => {
       }
       if (rtRewritten > 0 || gbfsProxyRewritten > 0) {
         writeFileSync(configPath, result.text, "utf-8");
+      }
+      if (ctx.operationsPolicy.profile === "regional-sovereign") {
+        assertSovereignRuntimeConfig(result.text);
       }
     }
 

@@ -41,6 +41,7 @@ import {
 } from "./jobs/transitous/index.js";
 import { FEED_PROXY_CONTAINER } from "./jobs/transitous/motis-containers.js";
 import { fetchWithTimeout } from "./jobs/transitous/motis-probe.js";
+import type { MotisOperationsPolicy } from "./jobs/transitous/operations-profile.js";
 import { finalizeJobRow, makePersistingOnStageComplete } from "./jobs/transitous/persistence.js";
 import type { SingleFlightController } from "./jobs/transitous/single-flight.js";
 import {
@@ -117,6 +118,7 @@ export interface CronSetupOptions {
   dataDir: string;
   repoRoot: string;
   countries: string[];
+  operationsPolicy?: MotisOperationsPolicy;
   store: StateStore;
   singleFlight: SingleFlightController;
   logger: FastifyBaseLogger | CronLogger;
@@ -406,6 +408,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
           countries: options.countries,
           repoRoot: options.repoRoot,
           source: parseTransitSource(),
+          operationsPolicy: options.operationsPolicy,
           jobId: start.jobId,
           logger: jobLog,
           onStageComplete: makePersistingOnStageComplete(start.jobId, jobLog),

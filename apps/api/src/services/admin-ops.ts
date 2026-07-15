@@ -508,6 +508,14 @@ export interface MotisTransitousStatus {
   rentalProviderCount: number;
   rentalProviderGroupCount: number;
   rollbackAvailable: boolean;
+  operationsProfile: "regional-assisted" | "regional-sovereign" | "planet" | "unknown";
+  activeSlot: "A" | "B" | null;
+  previousHealthySlot: "A" | "B" | null;
+  preflightState: "passed" | "blocked" | "missing";
+  preflightRequiredDiskBytes: number | null;
+  preflightFreeDiskBytes: number | null;
+  pinProposalPending: boolean;
+  crowdsourceState: "disabled-pending-review";
   gbfsCatalog: {
     state: "active" | "missing" | "error";
     commit: string | null;
@@ -650,7 +658,60 @@ export function getMotisTransitousStatus(): MotisTransitousStatus {
   const candidateEpoch = readEpoch(
     join(DATA_DIR, "motis", "staging", "motis-candidate-manifest.json"),
   );
-  const rollbackAvailable = existsSync(`${motisDir}.previous`);
+  const slotStatePath = join(DATA_DIR, "motis", "slot-state.json");
+  const activeManifestPath = join(motisDir, "motis-candidate-manifest.json");
+  const preflightPath = join(DATA_DIR, "motis", "preflight.json");
+  const parsedJson = (path: string): Record<string, unknown> | null => {
+    try {
+      const value = JSON.parse(readFileSync(path, "utf-8"));
+      return value && typeof value === "object" && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  };
+  const slotState = parsedJson(slotStatePath);
+  const activeManifest = parsedJson(activeManifestPath);
+  const preflight = parsedJson(preflightPath);
+  const operationsPolicy = activeManifest?.operationsPolicy as Record<string, unknown> | undefined;
+  const profile = operationsPolicy?.profile;
+  const operationsProfile = ["regional-assisted", "regional-sovereign", "planet"].includes(
+    String(profile),
+  )
+    ? (profile as MotisTransitousStatus["operationsProfile"])
+    : "unknown";
+  const activeSlot = ["A", "B"].includes(String(slotState?.activeSlot))
+    ? (slotState?.activeSlot as "A" | "B")
+    : null;
+  const previousHealthySlot = ["A", "B"].includes(String(slotState?.previousHealthySlot))
+    ? (slotState?.previousHealthySlot as "A" | "B")
+    : null;
+  const estimate = preflight?.estimate as Record<string, unknown> | undefined;
+  const capacity = preflight?.capacity as Record<string, unknown> | undefined;
+  const operationsStatus = {
+    operationsProfile,
+    activeSlot,
+    previousHealthySlot,
+    preflightState: preflight ? (preflight.ok === true ? "passed" : "blocked") : "missing",
+    preflightRequiredDiskBytes:
+      typeof estimate?.requiredDiskBytes === "number" ? estimate.requiredDiskBytes : null,
+    preflightFreeDiskBytes:
+      typeof capacity?.freeDiskBytes === "number" ? capacity.freeDiskBytes : null,
+    pinProposalPending: existsSync(join(INFRA_DIR, "transitous.lock.proposed.json")),
+    crowdsourceState: "disabled-pending-review" as const,
+  } satisfies Pick<
+    MotisTransitousStatus,
+    | "operationsProfile"
+    | "activeSlot"
+    | "previousHealthySlot"
+    | "preflightState"
+    | "preflightRequiredDiskBytes"
+    | "preflightFreeDiskBytes"
+    | "pinProposalPending"
+    | "crowdsourceState"
+  >;
+  const rollbackAvailable = Boolean(previousHealthySlot) || existsSync(`${motisDir}.previous`);
   const gbfsCatalog = readGbfsCatalogStatus(motisDir);
 
   let snapshot: MobilityCapabilitySnapshot | null = null;
@@ -703,6 +764,7 @@ export function getMotisTransitousStatus(): MotisTransitousStatus {
       rentalProviderCount: snapshot?.rentals?.providerIds?.length ?? 0,
       rentalProviderGroupCount: snapshot?.rentals?.providerGroupIds?.length ?? 0,
       rollbackAvailable,
+      ...operationsStatus,
       gbfsCatalog,
     };
   }
@@ -792,6 +854,7 @@ export function getMotisTransitousStatus(): MotisTransitousStatus {
     rentalProviderCount: snapshot?.rentals?.providerIds?.length ?? 0,
     rentalProviderGroupCount: snapshot?.rentals?.providerGroupIds?.length ?? 0,
     rollbackAvailable,
+    ...operationsStatus,
     gbfsCatalog,
   };
 }
