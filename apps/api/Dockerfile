@@ -80,6 +80,7 @@ COPY packages/ourairports-data/ packages/ourairports-data/
 COPY packages/place-ids/ packages/place-ids/
 COPY packages/poi-source-registry/ packages/poi-source-registry/
 COPY packages/presets/ packages/presets/
+COPY packages/transitous-core/ packages/transitous-core/
 COPY apps/api/ apps/api/
 COPY tsconfig.base.json ./
 COPY turbo.json ./
@@ -161,6 +162,7 @@ COPY --from=prod-deps /app/packages/cli/node_modules ./packages/cli/node_modules
 # cli imports @openmapx/transitous-core (transit data jobs); ship its source too
 # (source-only package, no runtime node_modules of its own).
 COPY packages/transitous-core/ packages/transitous-core/
+COPY --from=prod-deps /app/packages/transitous-core/node_modules ./packages/transitous-core/node_modules
 
 # Integrations with pnpm-resolved node_modules (manifests + code + deps)
 COPY --from=prod-deps /app/integrations ./integrations

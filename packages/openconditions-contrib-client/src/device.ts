@@ -1,4 +1,4 @@
-import { keyIdFromJwk } from "./thumbprint.js";
+import { keyIdFromJwk } from "./thumbprint";
 
 /**
  * A device-local, pseudonymous signing identity for crowd reports. There is no

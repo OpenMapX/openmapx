@@ -1,5 +1,5 @@
-import { toBase64Url } from "./base64url.js";
-import { canonicalClaimBytes } from "./jcs.js";
+import { toBase64Url } from "./base64url";
+import { canonicalClaimBytes } from "./jcs";
 
 /**
  * RFC 7638 section 3.2: the REQUIRED members hashed per key type, in the

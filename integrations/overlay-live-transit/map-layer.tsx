@@ -21,7 +21,7 @@ import {
   transitVehicleIconExpression,
 } from "@/lib/transitMarkers";
 import { useIntegrationDomainAttribution } from "@/lib/useIntegrationAttribution";
-import { isFreshVehicleObservation } from "./freshness.js";
+import { isFreshVehicleObservation } from "./freshness";
 import { useLiveTransitStore } from "./store";
 import type { LiveTransitSnapshot, LiveTransitVehicle } from "./types.js";
 

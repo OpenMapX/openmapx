@@ -35,6 +35,7 @@ COPY services/data-manager/package.json services/data-manager/
 COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
 COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
+COPY packages/mobility-formats/package.json packages/mobility-formats/
 COPY packages/poi-source-registry/package.json packages/poi-source-registry/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/core/package.json packages/core/
@@ -50,6 +51,7 @@ COPY services/data-manager/package.json services/data-manager/
 COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
 COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
+COPY packages/mobility-formats/package.json packages/mobility-formats/
 COPY packages/poi-source-registry/package.json packages/poi-source-registry/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/core/package.json packages/core/
@@ -63,6 +65,7 @@ COPY tsconfig.base.json ./
 COPY packages/db-schema/ packages/db-schema/
 COPY packages/hardlinks/ packages/hardlinks/
 COPY packages/motis-feed-proxy-config/ packages/motis-feed-proxy-config/
+COPY packages/mobility-formats/ packages/mobility-formats/
 COPY packages/poi-source-registry/ packages/poi-source-registry/
 COPY packages/transitous-core/ packages/transitous-core/
 COPY packages/core/ packages/core/
@@ -136,8 +139,11 @@ COPY packages/db-schema/ ./packages/db-schema/
 COPY --from=prod-deps /app/packages/db-schema/node_modules ./packages/db-schema/node_modules
 COPY packages/hardlinks/ ./packages/hardlinks/
 COPY packages/motis-feed-proxy-config/ ./packages/motis-feed-proxy-config/
+COPY packages/mobility-formats/ ./packages/mobility-formats/
+COPY --from=prod-deps /app/packages/mobility-formats/node_modules ./packages/mobility-formats/node_modules
 COPY packages/poi-source-registry/ ./packages/poi-source-registry/
 COPY packages/transitous-core/ ./packages/transitous-core/
+COPY --from=prod-deps /app/packages/transitous-core/node_modules ./packages/transitous-core/node_modules
 COPY packages/core/ ./packages/core/
 COPY --from=builder /app/services/data-manager/dist ./services/data-manager/dist
 COPY services/data-manager/package.json ./services/data-manager/

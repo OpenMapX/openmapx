@@ -1,9 +1,9 @@
-import { toBase64Url } from "./base64url.js";
-import type { DeviceKey } from "./device.js";
-import { boundedCanonicalBytes } from "./jcs.js";
-import { normalizeLowS } from "./lowS.js";
-import type { ReportClaim, SignedReport, SignedSubClaim, SubClaimBody } from "./types.js";
-import { validateReportClaim, validateSubClaimBody } from "./validate.js";
+import { toBase64Url } from "./base64url";
+import type { DeviceKey } from "./device";
+import { boundedCanonicalBytes } from "./jcs";
+import { normalizeLowS } from "./lowS";
+import type { ReportClaim, SignedReport, SignedSubClaim, SubClaimBody } from "./types";
+import { validateReportClaim, validateSubClaimBody } from "./validate";
 
 /** WebCrypto ES256 signing parameters (ECDSA P-256 + SHA-256). */
 const ECDSA_SIGN_PARAMS = { name: "ECDSA", hash: "SHA-256" } as const;

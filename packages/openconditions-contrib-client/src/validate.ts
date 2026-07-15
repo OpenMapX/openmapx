@@ -1,4 +1,4 @@
-import type { GeoJsonGeometry, ReportClaim, SubClaimBody } from "./types.js";
+import type { GeoJsonGeometry, ReportClaim, SubClaimBody } from "./types";
 
 /**
  * Structural and I-JSON validation for report claims and sub-claim bodies.
