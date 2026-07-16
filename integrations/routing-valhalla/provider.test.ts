@@ -37,9 +37,9 @@ describe("valhallaManeuverType", () => {
     [19, { type: "fork", modifier: "left" }], // kRampLeft
     [20, { type: "fork", modifier: "right" }], // kExitRight
     [21, { type: "fork", modifier: "left" }], // kExitLeft
-    [22, { type: "turn", modifier: "straight" }], // kStayStraight
-    [23, { type: "fork", modifier: "right" }], // kStayRight
-    [24, { type: "fork", modifier: "left" }], // kStayLeft
+    [22, { type: "keep", modifier: "straight" }], // kStayStraight
+    [23, { type: "keep", modifier: "right" }], // kStayRight
+    [24, { type: "keep", modifier: "left" }], // kStayLeft
     [25, { type: "merge" }], // kMerge
     [26, { type: "roundabout" }], // kRoundaboutEnter
     [27, { type: "roundabout" }], // kRoundaboutExit
@@ -142,6 +142,25 @@ describe("valhallaLanes", () => {
     });
     expect(lanes?.[0]).toEqual({ indications: ["through", "right"], valid: true, active: "right" });
     expect(lanes?.[1]).toEqual({ indications: ["left"], valid: false });
+  });
+
+  it("decodes current Valhalla direction and active bitmasks", () => {
+    const lanes = valhallaLanes({
+      type: 24,
+      instruction: "Keep left",
+      length: 0,
+      time: 0,
+      begin_shape_index: 0,
+      end_shape_index: 0,
+      lanes: [
+        { directions: 10, valid: 8, active: 8 }, // through + left; left active
+        { directions: 64, valid: 0, active: 0 },
+      ],
+    });
+    expect(lanes).toEqual([
+      { indications: ["through", "left"], valid: true, active: "left" },
+      { indications: ["right"], valid: false },
+    ]);
   });
 });
 
@@ -339,5 +358,15 @@ describe("valhallaService.getRoute exclusion body params", () => {
     await valhallaService.getRoute(WPS, "driving", {});
     expect(capturedBody).not.toHaveProperty("exclude_locations");
     expect(capturedBody).not.toHaveProperty("exclude_polygons");
+  });
+
+  it("requests turn-lane data", async () => {
+    await valhallaService.getRoute(WPS, "driving", {});
+    expect(capturedBody.turn_lanes).toBe(true);
+  });
+
+  it("requests turn-lane data for optimized routes", async () => {
+    await valhallaService.optimizeRoute(WPS, "driving", {});
+    expect(capturedBody.turn_lanes).toBe(true);
   });
 });

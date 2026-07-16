@@ -36,6 +36,7 @@ export {
   type IncidentAlert,
   isOverSpeed,
   isReroutingTooOften,
+  laneGuidanceTriggerMeters,
   matchSpeedLimitsByPoint,
   NAV_RECORDING_VERSION,
   type NavRecording,

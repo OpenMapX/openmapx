@@ -18,7 +18,7 @@ import {
 export function LaneGuidance({ lanes, maneuver }: { lanes?: ManeuverLane[]; maneuver?: Maneuver }) {
   // Trust the engine's valid/active lanes; otherwise recommend them from the
   // maneuver (exact → same-side → unrestricted) so under-tagged lanes still light up.
-  const resolved = resolveRecommendedLanes(lanes, maneuver?.modifier);
+  const resolved = resolveRecommendedLanes(lanes, maneuver);
   if (resolved.length === 0) return null;
   return (
     <Box

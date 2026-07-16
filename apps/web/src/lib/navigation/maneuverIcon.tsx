@@ -69,6 +69,12 @@ export function maneuverIconFor(maneuver: Maneuver | undefined): ResolvedIcon {
         : { component: RoundaboutRight, name: "RoundaboutRight" };
     case "merge":
       return MERGE_ICON;
+    // Staying on the current road is not taking a fork. Use a gentle diagonal
+    // arrow for keep-left/right and a straight arrow for keep-straight.
+    case "keep":
+      if (m.includes("left")) return ARROW_ICONS["slight left"];
+      if (m.includes("right")) return ARROW_ICONS["slight right"];
+      return ARROW_ICONS.straight;
     // Forks and ramps both branch off the through road; OSRM emits `on ramp`/
     // `off ramp` (Valhalla ramps/exits are normalized to `fork`).
     case "fork":

@@ -41,4 +41,19 @@ describe("LaneGuidance", () => {
     );
     expect(html).toContain('data-active="true"');
   });
+
+  it("highlights through lanes for a keep-left instruction", () => {
+    const html = renderToStaticMarkup(
+      <LaneGuidance
+        maneuver={{ type: "keep", modifier: "left" }}
+        lanes={[
+          { indications: ["through"], valid: false },
+          { indications: ["through"], valid: false },
+          { indications: ["slight_right"], valid: false },
+        ]}
+      />,
+    );
+    expect(html.match(/data-valid="true"/g)?.length).toBe(2);
+    expect(html.match(/data-valid="false"/g)?.length).toBe(1);
+  });
 });

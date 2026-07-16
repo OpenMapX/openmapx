@@ -8,7 +8,7 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import {
   geoJsonBBox,
   isOverSpeed,
-  navOptionsForMode,
+  laneGuidanceTriggerMeters,
   upcomingManeuverIndex,
   useNavigationStore,
   useSettingsStore,
@@ -81,9 +81,10 @@ export function NavigationView() {
   const nextStep = route ? route.steps[upcomingIndex + 1] : undefined;
   const awaitingFix = status !== "arrived" && !progress;
   const distanceToManeuver = progress?.distanceToNextManeuver ?? step?.distance ?? 0;
-  // Only surface lane guidance as the maneuver approaches.
+  // Surface lanes near the maneuver, scaling the lead distance with speed so
+  // motorway guidance appears earlier than urban guidance.
   const showLanes =
-    !!step?.lanes && distanceToManeuver <= navOptionsForMode(mode).laneGuidanceMeters;
+    !!step?.lanes && distanceToManeuver <= laneGuidanceTriggerMeters(mode, progress?.speedMps ?? 0);
   const distanceRemaining = progress?.distanceRemaining ?? route?.distance ?? 0;
   const durationRemaining = progress?.durationRemaining ?? route?.duration ?? 0;
   const etaEpochMs = progress?.etaEpochMs ?? Date.now() + durationRemaining * 1000;

@@ -86,7 +86,7 @@ export interface NavTickOptions {
   /** Scales every voice trigger earlier (>1) or later (<1) per user preference. */
   announceMultiplier: number;
   arrivalThresholdMeters: number;
-  /** Show lane guidance only within this distance (m) of the next maneuver. */
+  /** Minimum lane-guidance distance (m), used at/below the mode's reference speed. */
   laneGuidanceMeters: number;
   /** Step-advance gate: come within this distance (m) of a step's end (entry). */
   stepGateEntryMeters: number;

@@ -58,14 +58,14 @@ const MANEUVER_PENALTY_SECONDS = 10;
 const ELEVATION_INTERVAL = 30; // metres between elevation samples
 
 /**
- * Valhalla turn-lane fields vary by version: `valid`/`active` may be plain
- * booleans, a single indication string, or an array of indication strings. We
- * accept all three so lane validity and the active indication survive either way.
+ * Current Valhalla releases encode lane directions and validity as bitmasks.
+ * Older/hosted variants have also returned strings, arrays, or booleans, so the
+ * compatibility forms stay accepted at this integration boundary.
  */
-type ValhallaLaneFlag = boolean | string | string[];
+type ValhallaLaneFlag = number | boolean | string | string[];
 
 interface ValhallaLaneRaw {
-  directions?: string[];
+  directions?: number | string[];
   active?: ValhallaLaneFlag;
   valid?: ValhallaLaneFlag;
 }
@@ -198,11 +198,15 @@ export function valhallaManeuverType(t: number): { type: string; modifier?: stri
     case 19: // kRampLeft
     case 21: // kExitLeft
       return { type: "fork", modifier: "left" };
-    // Keep right/left at a fork (23/24).
+    // Staying on the current road is distinct from taking a branch. Preserve
+    // that distinction so the UI can use a gentle directional arrow and prefer
+    // through lanes rather than drawing a fork/exit glyph.
+    case 22: // kStayStraight
+      return { type: "keep", modifier: "straight" };
     case 23: // kStayRight
-      return { type: "fork", modifier: "right" };
+      return { type: "keep", modifier: "right" };
     case 24: // kStayLeft
-      return { type: "fork", modifier: "left" };
+      return { type: "keep", modifier: "left" };
     // Merges (25 kMerge, 37 kMergeRight, 38 kMergeLeft).
     case 25:
     case 37:
@@ -213,24 +217,53 @@ export function valhallaManeuverType(t: number): { type: string; modifier?: stri
     case 27:
       return { type: "roundabout" };
     // Everything else proceeds straight, with no dedicated glyph: kNone (0),
-    // kBecomes (7), kContinue (8), kRampStraight (17), kStayStraight (22),
+    // kBecomes (7), kContinue (8), kRampStraight (17),
     // ferry (28-29), transit (30-36), and indoor/pedestrian (39-43).
     default:
       return { type: "turn", modifier: "straight" };
   }
 }
 
-/** True when a Valhalla lane flag is set (boolean true, non-empty string/array). */
+const VALHALLA_LANE_BITS = [
+  [1, "none"],
+  [2, "through"],
+  [4, "sharp_left"],
+  [8, "left"],
+  [16, "slight_left"],
+  [32, "slight_right"],
+  [64, "right"],
+  [128, "sharp_right"],
+  [256, "reverse"],
+  [512, "merge_to_left"],
+  [1024, "merge_to_right"],
+] as const;
+
+/** Decode Valhalla's documented lane-direction bitmask (or a legacy array). */
+function laneDirections(value: ValhallaLaneRaw["directions"]): string[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "number" || !Number.isFinite(value)) return [];
+  return VALHALLA_LANE_BITS.filter(([bit]) => (value & bit) !== 0).map(([, token]) => token);
+}
+
+/** True when a Valhalla lane flag is set (positive bitmask or legacy value). */
 function laneFlagSet(flag: ValhallaLaneFlag | undefined): boolean {
   if (Array.isArray(flag)) return flag.length > 0;
   if (typeof flag === "string") return flag.length > 0;
+  if (typeof flag === "number") return flag > 0;
   return Boolean(flag);
 }
 
 /** The active indication string from a Valhalla lane flag, when it carries one. */
-function laneFlagIndication(flag: ValhallaLaneFlag | undefined): string | undefined {
+function laneFlagIndication(
+  flag: ValhallaLaneFlag | undefined,
+  directions: string[],
+): string | undefined {
   if (Array.isArray(flag)) return flag[0];
   if (typeof flag === "string" && flag.length > 0) return flag;
+  if (typeof flag === "number") {
+    const active = laneDirections(flag);
+    return active.find((candidate) => directions.includes(candidate)) ?? active[0];
+  }
   return undefined;
 }
 
@@ -238,11 +271,13 @@ function laneFlagIndication(flag: ValhallaLaneFlag | undefined): string | undefi
 export function valhallaLanes(maneuver: ValhallaManeuver): ManeuverLane[] | undefined {
   if (!maneuver.lanes || maneuver.lanes.length === 0) return undefined;
   return maneuver.lanes.map((l) => {
+    const indications = laneDirections(l.directions);
     const lane: ManeuverLane = {
-      indications: l.directions ?? [],
+      indications,
       valid: laneFlagSet(l.valid) || laneFlagSet(l.active),
     };
-    const active = laneFlagIndication(l.active) ?? laneFlagIndication(l.valid);
+    const active =
+      laneFlagIndication(l.active, indications) ?? laneFlagIndication(l.valid, indications);
     if (active) lane.active = active;
     return lane;
   });
@@ -475,6 +510,7 @@ export const valhallaService: RoutingProvider = {
         units: options.units === "imperial" ? "miles" : "km",
         language: options.lang ?? "en",
       },
+      turn_lanes: true,
       date_time: buildDateTime(options),
       elevation_interval: ELEVATION_INTERVAL,
       ...buildExclusions(options),
@@ -529,6 +565,7 @@ export const valhallaService: RoutingProvider = {
         units: options.units === "imperial" ? "miles" : "km",
         language: options.lang ?? "en",
       },
+      turn_lanes: true,
       date_time: buildDateTime(options),
       elevation_interval: ELEVATION_INTERVAL,
     };

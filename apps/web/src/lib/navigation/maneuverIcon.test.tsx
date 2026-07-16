@@ -34,6 +34,12 @@ describe("maneuverIconFor", () => {
     expect(maneuverIconFor({ type: "merge", modifier: "slight left" }).name).toBe("MergeType");
   });
 
+  it("maps keep maneuvers to gentle directional arrows instead of fork glyphs", () => {
+    expect(maneuverIconFor({ type: "keep", modifier: "left" }).name).toBe("TurnSlightLeft");
+    expect(maneuverIconFor({ type: "keep", modifier: "right" }).name).toBe("TurnSlightRight");
+    expect(maneuverIconFor({ type: "keep", modifier: "straight" }).name).toBe("Straight");
+  });
+
   it("maps OSRM end-of-road / continue / new name to a directional arrow", () => {
     expect(maneuverIconFor({ type: "end of road", modifier: "left" }).name).toBe("TurnLeft");
     expect(maneuverIconFor({ type: "continue", modifier: "slight right" }).name).toBe(
