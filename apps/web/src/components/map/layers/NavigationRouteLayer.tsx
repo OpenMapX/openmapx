@@ -13,7 +13,8 @@ type GeoJSONSource = maplibregl.GeoJSONSource;
 
 const SOURCE = "nav-route-source";
 const TRAVELED = "nav-route-traveled";
-const REMAINING = "nav-route-remaining";
+export const NAV_ROUTE_REMAINING_LAYER_ID = "nav-route-remaining";
+export const NAV_ROUTE_REMAINING_WIDTH = 8;
 const REMAINING_CASING = "nav-route-remaining-casing";
 
 const ALT_SOURCE = "nav-route-alts-source";
@@ -86,12 +87,12 @@ export function NavigationRouteLayer() {
       paint: { "line-color": TRAVELED_COLOR, "line-width": 7, "line-opacity": 0.7 },
     });
     map.addLayer({
-      id: REMAINING,
+      id: NAV_ROUTE_REMAINING_LAYER_ID,
       type: "line",
       source: SOURCE,
       filter: ["==", ["get", "kind"], "remaining"],
       layout: { "line-cap": "round", "line-join": "round" },
-      paint: { "line-color": REMAINING_COLOR, "line-width": 8 },
+      paint: { "line-color": REMAINING_COLOR, "line-width": NAV_ROUTE_REMAINING_WIDTH },
     });
   }, [mapRef, mapReady, styleVersion]);
 

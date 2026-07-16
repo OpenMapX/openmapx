@@ -15,6 +15,8 @@ export interface IncidentAlert extends RoadAlert {
   eventType: RoadConditionType;
   severity: RoadConditionSeverity;
   headline: string;
+  /** Original affected-road geometry, retained for navigation-map rendering. */
+  geometry: RoadConditionEvent["geometry"];
   approach: { leadSec: number; minM: number; maxM: number };
 }
 
@@ -350,6 +352,7 @@ export function projectEventsToRoute(
       eventType: event.type,
       severity: event.severity,
       headline: event.headline,
+      geometry: event.geometry,
       approach: SEVERITY_APPROACH[event.severity] ?? SEVERITY_APPROACH.unknown,
     });
   }

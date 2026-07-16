@@ -12,6 +12,7 @@ function incident(id: string, alongMeters: number): IncidentAlert {
     eventType: "hazard",
     severity: "medium",
     headline: "Hazard",
+    geometry: { type: "Point", coordinates: [0, 0] },
     approach: { leadSec: 14, minM: 250, maxM: 1000 },
   };
 }
