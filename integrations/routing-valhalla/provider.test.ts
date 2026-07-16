@@ -291,6 +291,7 @@ const MINIMAL_VALHALLA_RESPONSE = {
           {
             type: 1,
             instruction: "Start",
+            street_names: ["A 57", "E 31"],
             length: 0.5,
             time: 30,
             begin_shape_index: 0,
@@ -363,6 +364,11 @@ describe("valhallaService.getRoute exclusion body params", () => {
   it("requests turn-lane data", async () => {
     await valhallaService.getRoute(WPS, "driving", {});
     expect(capturedBody.turn_lanes).toBe(true);
+  });
+
+  it("preserves maneuver road names for incident matching", async () => {
+    const result = await valhallaService.getRoute(WPS, "driving", {});
+    expect(result.routes[0]?.steps[0]?.roadNames).toEqual(["A 57", "E 31"]);
   });
 
   it("requests turn-lane data for optimized routes", async () => {

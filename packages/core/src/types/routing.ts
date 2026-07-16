@@ -44,6 +44,8 @@ export interface RouteStep {
   distance: number;
   duration: number;
   coordinates: LngLat[];
+  /** Road names and refs for this step, used to match direction-specific incidents to the route. */
+  roadNames?: string[];
   /** Normalized maneuver for icon + voice phrasing. Optional — populated when the engine provides it. */
   maneuver?: { type: string; modifier?: string };
   /** Speed limit in km/h for this step, when known. */

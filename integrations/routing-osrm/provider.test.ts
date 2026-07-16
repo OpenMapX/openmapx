@@ -35,6 +35,11 @@ describe("transformOsrmStep", () => {
     expect(s.maneuver).toEqual({ type: "turn", modifier: "right" });
   });
 
+  it("carries the road name and split refs for incident matching", () => {
+    const s = transformOsrmStep({ ...osrmStep, ref: "A 57; E 31" });
+    expect(s.roadNames).toEqual(["Main St", "A 57", "E 31"]);
+  });
+
   it("carries lanes from the first intersection with lanes", () => {
     const s = transformOsrmStep(osrmStep);
     expect(s.lanes).toEqual([

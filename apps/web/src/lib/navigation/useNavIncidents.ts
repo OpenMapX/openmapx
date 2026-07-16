@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState } from "react";
 
 /** Refetch incidents this often so new ones appear mid-drive. */
 const REFRESH_MS = 120_000;
+const LOOKAHEAD_M = 25_000;
 
 export interface NavIncidentsResult {
   incidents: IncidentAlert[];
@@ -81,9 +82,26 @@ export function useNavIncidents(): NavIncidentsResult {
     };
   }, [route, fetchEnabled]);
 
+  // Geometry/road/direction matching is intentionally independent of the live
+  // GPS position, so perform the expensive route match only when events or the
+  // route change. The cheap ahead-window filter may then run on every fix.
+  const projected = useMemo(
+    () =>
+      route
+        ? projectEventsToRoute(events, route.geometry, 0, {
+            routeSteps: route.steps,
+            lookaheadMeters: Number.POSITIVE_INFINITY,
+          })
+        : [],
+    [events, route],
+  );
   const incidents = useMemo(
-    () => (route ? projectEventsToRoute(events, route.geometry, along) : []),
-    [events, route, along],
+    () =>
+      projected.filter((incident) => {
+        const ahead = incident.alongMeters - along;
+        return ahead > 0 && ahead <= LOOKAHEAD_M;
+      }),
+    [projected, along],
   );
 
   return useMemo(() => ({ incidents, ready }), [incidents, ready]);

@@ -309,6 +309,7 @@ function transformLeg(leg: ValhallaLeg): RouteLeg {
     distance: m.length * 1000, // km -> metres
     duration: m.time,
     coordinates: coords.slice(m.begin_shape_index, m.end_shape_index + 1),
+    roadNames: m.street_names?.length ? m.street_names : undefined,
     maneuver: valhallaManeuverType(m.type),
     lanes: valhallaLanes(m),
     verbalAlert: m.verbal_transition_alert_instruction,

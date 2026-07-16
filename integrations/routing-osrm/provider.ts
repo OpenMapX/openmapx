@@ -215,11 +215,15 @@ export function joinSegmentSpeedLimits(
  * maneuver, lane guidance, and speed limit when present. Exported for testing.
  */
 export function transformOsrmStep(step: OsrmStep): RouteStep {
+  const roadNames = [step.name, ...(step.ref?.split(/[/,;]/) ?? [])]
+    .map((name) => name.trim())
+    .filter(Boolean);
   return {
     instruction: generateInstruction(step.maneuver, step.name, step.ref),
     distance: step.distance,
     duration: step.duration,
     coordinates: step.geometry.coordinates,
+    roadNames: roadNames.length > 0 ? [...new Set(roadNames)] : undefined,
     maneuver: { type: step.maneuver.type, modifier: step.maneuver.modifier },
     lanes: osrmLanes(step),
     speedLimit: osrmSpeedLimit(step),
