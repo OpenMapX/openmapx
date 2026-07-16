@@ -64,9 +64,11 @@ import { registerRepo, removeRepo } from "../service-repositories";
 // factory reads `dbMock.db` only once `dbMock` is initialized — a static import
 // hoists above the const and hits the temporal dead zone.
 let installExtension: typeof import("../extension-installer.js").installExtension;
+// A cold full-suite run can spend over 10s transforming this API import graph
+// under worker saturation. Keep the larger budget local to this setup hook.
 beforeAll(async () => {
   ({ installExtension } = await import("../extension-installer.js"));
-});
+}, 30_000);
 
 type ExtensionManifest = coreServices.ExtensionManifest;
 
