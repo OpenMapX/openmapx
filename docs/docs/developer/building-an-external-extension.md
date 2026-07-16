@@ -203,7 +203,12 @@ manifest:
 {
   "domains": ["map-overlay"],
   "frontend": {
-    "layerSelector": { "group": "map-details", "labelKey": "myOverlay", "icon": "warning" },
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "myOverlay",
+      "icon": "warning",
+      "preview": "preview.svg"
+    },
     "overlay": {
       "source": { "kind": "geojson-bbox", "route": "/observations", "bboxParam": "bbox" },
       "layers": [{ "id": "points", "type": "circle", "interactive": true, "paint": { "circle-color": "#cc0033" } }],
@@ -213,6 +218,24 @@ manifest:
   }
 }
 ```
+
+Place the preview beside the manifest so the integration-root-relative path
+resolves directly:
+
+```text
+integrations/
+└── conditions/
+    ├── manifest.json
+    ├── preview.svg
+    ├── index.ts
+    └── strings/
+        └── en.json
+```
+
+The preview must be an SVG no larger than 64 KiB. The package command includes
+this static asset automatically, and declaring it does not create or require a
+frontend bundle. If the preview is omitted or cannot be loaded, the layer
+selector displays its generic placeholder.
 
 The host fetches your integration's `route` (here `/observations`) as the user
 pans, draws the Style-Spec `layers`, and renders the legend and click popup — no

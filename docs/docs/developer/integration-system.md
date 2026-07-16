@@ -128,7 +128,12 @@ described in [Capability requirement resolution](#capability-requirement-resolut
     legend?: boolean;        // ships a code legend component
     panel?: boolean;         // ships a code side-panel component
     searchCategory?: { id: string; label?: string; showInChipBar?: boolean; iconPath?: string };
-    layerSelector?: { group: "map-details" | "map-tools" | "map-types"; labelKey: string; icon?: string; /* … */ };
+    layerSelector?: {
+      group: "map-details" | "map-tools" | "map-types";
+      labelKey: string;
+      icon?: string;
+      preview?: string | null; // integration-root-relative SVG, e.g. "preview.svg"
+    };
     overlay?: {
       excludes?: string[];   // overlay ids this one is mutually exclusive with
       minZoom?: number;
@@ -171,6 +176,15 @@ entry). `overlay` carries mutual-exclusion rules (`excludes`) and `minZoom`,
 draws from the manifest with no shipped code. `backend.routes` signals that the
 integration registers HTTP routes; `backend.cron` declares a recurring task. How
 the two overlay paths render is detailed in [Map overlays](#map-overlays).
+
+When `layerSelector.preview` is set, it names an SVG file relative to the
+integration root, such as `preview.svg` or `assets/layer-preview.svg`. The host
+serves the file and renders it as an external decorative image; it does not
+execute preview code or insert the SVG markup into the page. Preview assets must
+be SVG files no larger than 64 KiB. Remote URLs, data URLs, inline SVG values,
+absolute paths, and paths that escape the integration directory are not
+accepted. If `preview` is omitted or `null`, or if the image cannot be loaded at
+runtime, the layer selector uses its generic placeholder.
 
 ### Config schema
 
