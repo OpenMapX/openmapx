@@ -186,6 +186,7 @@ export function DirectionsPanelContent() {
     avoidFerries,
     avoidClosures: avoidIncidents,
     units,
+    lang: locale,
     departAt: drivingDepartAtStr,
     arriveBy: drivingArriveByStr,
   });
@@ -366,6 +367,7 @@ export function DirectionsPanelContent() {
         avoidFerries,
         avoidClosures: avoidIncidents,
         units,
+        lang: locale,
         departAt: m === "driving" ? drivingDepartAtStr : undefined,
         arriveBy: m === "driving" ? drivingArriveByStr : undefined,
       }),

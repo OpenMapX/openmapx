@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createQueryWrapper, fireEvent, render, screen, waitFor } from "@/test";
 
-vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
+vi.mock("next-intl", async () =>
+  (await import("@/test/intl")).mockNextIntl({ useLocale: () => "de" }),
+);
 
 const useDirectionsMock = vi.fn();
 const useTransitPlanMock = vi.fn();
@@ -40,6 +42,7 @@ function lastArg<T>(mockFn: { mock: { calls: unknown[][] } }): T {
 interface DirectionsCallArgs {
   waypoints: [number, number][];
   mode: string;
+  lang: string;
   departAt?: string;
   arriveBy?: string;
 }
@@ -95,6 +98,7 @@ describe("DirectionsPanelContent", () => {
       [11.5, 48.1],
     ]);
     expect(arg.mode).toBe("driving");
+    expect(arg.lang).toBe("de");
   });
 
   it("add stop: adds an empty waypoint (suppressing the re-plan) then fills it via autocomplete selection", async () => {

@@ -4,6 +4,7 @@ import type { LngLat } from "@openmapx/core";
 import { useDirections, useDirectionsStore, useSettingsStore } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type maplibregl from "maplibre-gl";
+import { useLocale } from "next-intl";
 import { useEffect, useMemo } from "react";
 import { attributionsForProviders } from "@/lib/attributionForProviders";
 import { useMap } from "@/lib/MapContext";
@@ -20,6 +21,7 @@ const LAYER_ACTIVE_LINE = "route-active-line";
 
 export function RouteLayer() {
   const { mapRef, mapReady, styleVersion, fitBounds } = useMap();
+  const locale = useLocale();
   const {
     waypoints,
     mode,
@@ -52,6 +54,7 @@ export function RouteLayer() {
     avoidFerries,
     avoidClosures: avoidIncidents,
     units,
+    lang: locale,
   });
 
   // Credit the routing engine that served the drawn route, on the map's

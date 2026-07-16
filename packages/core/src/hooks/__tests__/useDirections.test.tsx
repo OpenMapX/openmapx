@@ -56,7 +56,14 @@ describe("useDirections", () => {
     fetchDirections.mockResolvedValue({ routes: [] });
 
     const { result } = renderHook(
-      () => useDirections({ waypoints, mode: "cycling", avoidHighways: true, avoidTolls: true }),
+      () =>
+        useDirections({
+          waypoints,
+          mode: "cycling",
+          avoidHighways: true,
+          avoidTolls: true,
+          lang: "de",
+        }),
       { wrapper: createQueryWrapper() },
     );
 
@@ -67,7 +74,7 @@ describe("useDirections", () => {
   });
 
   it("does not fire with fewer than two waypoints", () => {
-    const { result } = renderHook(() => useDirections({ waypoints: [[13.4, 52.5]] }), {
+    const { result } = renderHook(() => useDirections({ waypoints: [[13.4, 52.5]], lang: "de" }), {
       wrapper: createQueryWrapper(),
     });
 
@@ -110,13 +117,14 @@ describe("directionsQueryKey", () => {
       mode: "cycling",
       avoidHighways: true,
       avoidTolls: true,
+      lang: "de",
     });
     expect(key[3]).toBe(false);
     expect(key[4]).toBe(false);
   });
 
   it("produces identical keys for identical params", () => {
-    const p = { waypoints, mode: "driving" as const, avoidClosures: true };
+    const p = { waypoints, mode: "driving" as const, avoidClosures: true, lang: "de" };
     expect(directionsQueryKey(p)).toEqual(directionsQueryKey(p));
   });
 });

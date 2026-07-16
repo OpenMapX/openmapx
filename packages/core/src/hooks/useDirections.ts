@@ -12,7 +12,8 @@ interface UseDirectionsParams {
   /** When true, the server injects active road closures as Valhalla exclusions. */
   avoidClosures?: boolean;
   units?: "metric" | "imperial";
-  lang?: string;
+  /** Active UI locale, required so engine-authored maneuver text is localized. */
+  lang: string;
   /** Wall-clock departure time `YYYY-MM-DDTHH:mm`. Mutually exclusive with `arriveBy`. */
   departAt?: string;
   /** Wall-clock arrival time `YYYY-MM-DDTHH:mm`. Mutually exclusive with `departAt`. */
