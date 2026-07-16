@@ -32,6 +32,7 @@ import {
  */
 export const INTEGRATION_PREVIEWS: Record<string, ReactNode> = {
   traffic: trafficPreview,
+  "traffic-flow": trafficPreview,
   "road-conditions": roadConditionsPreview,
   transit: transitPreview,
   hiking: hikingPreview,
