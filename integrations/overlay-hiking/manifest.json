@@ -13,7 +13,8 @@
       "group": "map-details",
       "labelKey": "hiking",
       "icon": "hiking",
-      "quickSelector": true
+      "quickSelector": true,
+      "preview": "preview.svg"
     },
     "overlay": {
       "excludes": ["street-view", "winter-sports"]

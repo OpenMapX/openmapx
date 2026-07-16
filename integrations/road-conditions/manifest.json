@@ -15,7 +15,8 @@
     "layerSelector": {
       "group": "map-details",
       "labelKey": "trafficIncidents",
-      "icon": "warning"
+      "icon": "warning",
+      "preview": "preview.svg"
     },
     "overlay": {
       "minZoom": 5

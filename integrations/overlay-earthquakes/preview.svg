@@ -1,0 +1,28 @@
+<svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+  >
+    <rect width="80" height="80" fill="#e8eef4" />
+    <!-- map background -->
+    <path d="M0 26 Q22 22 44 28 Q66 34 80 26 L80 80 L0 80Z" fill="#dde5ec" opacity="0.5" />
+    <!-- seismograph zigzag line -->
+    <polyline
+      points="0,42 8,42 14,42 16,24 19,54 22,30 25,48 28,36 31,44 34,34 37,50 40,28 43,56 46,32 49,46 52,40 56,42 62,42 80,42"
+      fill="none"
+      stroke="#ef4444"
+      stroke-width="1.8"
+      stroke-linejoin="round"
+    />
+    <!-- epicenter marker -->
+    <circle cx="42" cy="42" r="10" fill="#ef4444" opacity="0.12" />
+    <circle cx="42" cy="42" r="6" fill="#ef4444" opacity="0.2" />
+    <!-- concentric shockwave rings -->
+    <circle cx="42" cy="42" r="18" fill="none" stroke="#ef4444" stroke-width="0.8" opacity="0.3" />
+    <circle cx="42" cy="42" r="28" fill="none" stroke="#ef4444" stroke-width="0.6" opacity="0.15" />
+    <!-- magnitude label -->
+    <text x="56" y="66" font-size="7" fill="#dc2626" font-family="sans-serif" font-weight="700">
+      M 5.2
+    </text>
+  </svg>

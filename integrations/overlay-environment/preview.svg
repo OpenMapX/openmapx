@@ -1,0 +1,91 @@
+<svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+  >
+    <rect width="80" height="80" fill="#e4eef2" />
+    <!-- subtle roads -->
+    <line x1="0" y1="32" x2="80" y2="32" stroke="#d5dce6" stroke-width="2.5" />
+    <line x1="50" y1="0" x2="50" y2="80" stroke="#d5dce6" stroke-width="2" />
+    <line x1="20" y1="0" x2="20" y2="80" stroke="#d5dce6" stroke-width="1.5" />
+    <!-- sensor stations — colored circles with value labels -->
+    <circle cx="14" cy="20" r="6" fill="#42A5F5" opacity="0.8" />
+    <text
+      x="14"
+      y="22.5"
+      font-size="5.5"
+      fill="#fff"
+      font-family="sans-serif"
+      font-weight="700"
+      text-anchor="middle"
+    >
+      8°
+    </text>
+    <circle cx="38" cy="16" r="6" fill="#66BB6A" opacity="0.8" />
+    <text
+      x="38"
+      y="18.5"
+      font-size="5.5"
+      fill="#fff"
+      font-family="sans-serif"
+      font-weight="700"
+      text-anchor="middle"
+    >
+      15°
+    </text>
+    <circle cx="62" cy="24" r="6" fill="#FFA726" opacity="0.85" />
+    <text
+      x="62"
+      y="26.5"
+      font-size="5.5"
+      fill="#fff"
+      font-family="sans-serif"
+      font-weight="700"
+      text-anchor="middle"
+    >
+      24°
+    </text>
+    <circle cx="26" cy="50" r="7" fill="#E53935" opacity="0.8" />
+    <text
+      x="26"
+      y="52.5"
+      font-size="6"
+      fill="#fff"
+      font-family="sans-serif"
+      font-weight="700"
+      text-anchor="middle"
+    >
+      32°
+    </text>
+    <circle cx="56" cy="54" r="5.5" fill="#66BB6A" opacity="0.75" />
+    <text
+      x="56"
+      y="56.2"
+      font-size="5"
+      fill="#fff"
+      font-family="sans-serif"
+      font-weight="700"
+      text-anchor="middle"
+    >
+      17°
+    </text>
+    <circle cx="42" cy="68" r="5" fill="#4FC3F7" opacity="0.75" />
+    <text
+      x="42"
+      y="70.2"
+      font-size="5"
+      fill="#fff"
+      font-family="sans-serif"
+      font-weight="700"
+      text-anchor="middle"
+    >
+      11°
+    </text>
+    <!-- wifi-like sensor icon in corner -->
+    <g transform="translate(66, 62)" opacity="0.4">
+      <circle cx="4" cy="8" r="1.5" fill="#546E7A" />
+      <path d="M0 4 Q4 0 8 4" fill="none" stroke="#546E7A" stroke-width="1.2" />
+      <path d="M-2 1 Q4 -4 10 1" fill="none" stroke="#546E7A" stroke-width="1" />
+    </g>
+  </svg>

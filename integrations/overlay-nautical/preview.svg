@@ -1,0 +1,66 @@
+<svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+  >
+    <!-- deep sea — gradient from deep to shallow -->
+    <defs>
+      <linearGradient id="nauticalSea" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#1a4a7a" />
+        <stop offset="55%" stop-color="#3677b0" />
+        <stop offset="100%" stop-color="#9fc6e8" />
+      </linearGradient>
+    </defs>
+    <rect width="80" height="80" fill="url(#nauticalSea)" />
+    <!-- depth contour lines -->
+    <path
+      d="M0 18 Q20 14 40 18 Q60 22 80 18"
+      stroke="#dfeefb"
+      stroke-width="0.6"
+      fill="none"
+      opacity="0.55"
+    />
+    <path
+      d="M0 30 Q20 26 40 30 Q60 34 80 30"
+      stroke="#dfeefb"
+      stroke-width="0.6"
+      fill="none"
+      opacity="0.55"
+    />
+    <path
+      d="M0 42 Q20 38 40 42 Q60 46 80 42"
+      stroke="#dfeefb"
+      stroke-width="0.6"
+      fill="none"
+      opacity="0.45"
+    />
+    <!-- coastline at bottom-right -->
+    <path d="M52 80 Q56 70 64 66 Q72 62 80 66 L80 80 Z" fill="#e8dcb7" />
+    <path
+      d="M52 80 Q56 70 64 66 Q72 62 80 66"
+      stroke="#a39568"
+      stroke-width="0.8"
+      fill="none"
+      opacity="0.65"
+    />
+    <!-- lateral buoy — red (port hand, IALA region A) -->
+    <circle cx="22" cy="46" r="3.2" fill="#d6336c" stroke="#fff" stroke-width="0.8" />
+    <line x1="22" y1="42.8" x2="22" y2="38" stroke="#d6336c" stroke-width="1" />
+    <circle cx="22" cy="37" r="1.4" fill="#d6336c" />
+    <!-- lateral buoy — green (starboard hand) -->
+    <circle cx="38" cy="56" r="3.2" fill="#22a564" stroke="#fff" stroke-width="0.8" />
+    <polygon points="38,52.8 36,49 40,49" fill="#22a564" />
+    <!-- cardinal mark (yellow/black, north) -->
+    <line x1="54" y1="56" x2="54" y2="40" stroke="#1f1f1f" stroke-width="1" />
+    <polygon points="54,38 51,42 57,42" fill="#1f1f1f" />
+    <polygon points="54,38 51,42 57,42" fill="none" stroke="#f6c945" stroke-width="0.5" />
+    <!-- lighthouse on the coast -->
+    <rect x="66" y="56" width="3" height="8" fill="#fff" stroke="#94a3b8" stroke-width="0.5" />
+    <rect x="66" y="59" width="3" height="2" fill="#d6336c" />
+    <polygon points="64.5,56 70.5,56 67.5,53" fill="#1f1f1f" />
+    <circle cx="67.5" cy="54" r="0.8" fill="#f6c945" />
+    <!-- compass rose hint top-right -->
+    <circle cx="68" cy="14" r="4" fill="none" stroke="#fff" stroke-width="0.5" opacity="0.6" />
+    <polygon points="68,10 66.8,14 68,18 69.2,14" fill="#fff" opacity="0.65" />
+  </svg>

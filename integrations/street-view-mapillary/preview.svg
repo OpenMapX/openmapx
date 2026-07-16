@@ -1,0 +1,33 @@
+<svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+  >
+    <rect width="80" height="80" fill="#d4e5eb" />
+    <!-- streets -->
+    <line x1="0" y1="40" x2="80" y2="40" stroke="#c0d4db" stroke-width="4" />
+    <line x1="40" y1="0" x2="40" y2="80" stroke="#c0d4db" stroke-width="4" />
+    <line x1="0" y1="22" x2="80" y2="22" stroke="#c0d4db" stroke-width="2" />
+    <line x1="0" y1="60" x2="80" y2="60" stroke="#c0d4db" stroke-width="2" />
+    <!-- street view coverage lines - blue -->
+    <line x1="0" y1="40" x2="80" y2="40" stroke="#4285f4" stroke-width="2.5" opacity="0.6" />
+    <line x1="40" y1="0" x2="40" y2="80" stroke="#4285f4" stroke-width="2.5" opacity="0.6" />
+    <!-- pegman figure -->
+    <circle cx="40" cy="25" r="5" fill="#f6a623" />
+    <path d="M40 30 L40 41" stroke="#f6a623" stroke-width="4" stroke-linecap="round" />
+    <path
+      d="M32 35 L40 32 L48 35"
+      stroke="#f6a623"
+      stroke-width="3.5"
+      stroke-linecap="round"
+      fill="none"
+    />
+    <path
+      d="M36 49 L40 41 L44 49"
+      stroke="#f6a623"
+      stroke-width="3.5"
+      stroke-linecap="round"
+      fill="none"
+    />
+  </svg>

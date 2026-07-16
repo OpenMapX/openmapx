@@ -1,0 +1,24 @@
+<svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+  >
+    <rect width="80" height="80" fill="#e8eef4" />
+    <!-- railway tracks -->
+    <line x1="10" y1="60" x2="70" y2="20" stroke="#999" stroke-width="1.5" stroke-dasharray="4,3" />
+    <line x1="5" y1="40" x2="75" y2="45" stroke="#999" stroke-width="1.5" stroke-dasharray="4,3" />
+    <line x1="30" y1="10" x2="50" y2="70" stroke="#999" stroke-width="1" stroke-dasharray="4,3" />
+    <!-- train dots -->
+    <circle cx="28" cy="46" r="5" fill="#EC0016" />
+    <circle cx="52" cy="32" r="5" fill="#FF6600" />
+    <circle cx="60" cy="44" r="4" fill="#15A3DB" />
+    <circle cx="38" cy="22" r="3.5" fill="#059500" />
+    <!-- labels -->
+    <text x="28" y="58" font-size="6" fill="#333" font-family="sans-serif" text-anchor="middle">
+      ICE
+    </text>
+    <text x="52" y="27" font-size="6" fill="#333" font-family="sans-serif" text-anchor="middle">
+      IC
+    </text>
+  </svg>

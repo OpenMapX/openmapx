@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
+const developmentImageSources = process.env.NODE_ENV === "production" ? "" : " http:";
 
 // Enforced now: object/base/frame/form hardening. Resource directives stay
 // permissive because tiles and overlays load from many runtime-configured
@@ -15,7 +16,7 @@ const contentSecurityPolicy = [
   "object-src 'none'",
   "frame-ancestors 'self'",
   "form-action 'self'",
-  "img-src 'self' data: blob: https:",
+  `img-src 'self' data: blob: https:${developmentImageSources}`,
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
   "worker-src 'self' blob:",

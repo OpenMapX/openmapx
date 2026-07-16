@@ -12,7 +12,8 @@
     "layerSelector": {
       "group": "map-details",
       "labelKey": "winterSports",
-      "icon": "ac_unit"
+      "icon": "ac_unit",
+      "preview": "preview.svg"
     },
     "overlay": {
       "excludes": ["street-view", "hiking"]

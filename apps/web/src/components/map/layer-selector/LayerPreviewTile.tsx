@@ -47,11 +47,12 @@ export function LayerPreviewTile({
           overflow: "hidden",
           border: selected ? `2px solid ${TEAL}` : "1px solid rgba(60,64,67,0.1)",
           boxShadow: selected ? "0 0 0 1px rgba(11,125,139,0.22)" : "0 1px 3px rgba(0,0,0,0.06)",
-          "& > svg": {
+          "& > svg, & > img": {
             display: "block",
             width: "100%",
             height: "100%",
           },
+          "& > img": { objectFit: "cover" },
         }}
       >
         {preview}

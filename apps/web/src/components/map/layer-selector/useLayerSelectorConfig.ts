@@ -3,7 +3,7 @@
 import Icon from "@mui/material/Icon";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { createElement, type ReactNode, useMemo } from "react";
-import { genericPreview, INTEGRATION_PREVIEWS } from "./integrationPreviews";
+import { genericPreview, IntegrationLayerPreview } from "./IntegrationLayerPreview";
 
 export interface GeneratedLayerEntry {
   id: string;
@@ -41,7 +41,13 @@ export function useLayerSelectorConfig() {
         labelKey: ls.labelKey,
         overlayId,
         serviceId: integration.id,
-        preview: INTEGRATION_PREVIEWS[overlayId] ?? genericPreview,
+        preview:
+          typeof ls.preview === "string" && ls.preview.length > 0
+            ? createElement(IntegrationLayerPreview, {
+                key: integration.id,
+                integrationId: integration.id,
+              })
+            : genericPreview,
         icon: iconName
           ? createElement(Icon, { sx: { fontSize: 14 } }, iconName)
           : createElement(Icon, { sx: { fontSize: 14 } }, "layers"),

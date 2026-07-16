@@ -1,0 +1,43 @@
+<svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+  >
+    <rect width="80" height="80" fill="#e3f2fd" />
+    <!-- mountain -->
+    <polygon points="40,8 10,60 70,60" fill="#bbdefb" />
+    <polygon points="40,8 30,26 50,26" fill="#e8f4fd" />
+    <!-- snow cap -->
+    <polygon points="40,8 32,22 48,22" fill="#fff" />
+    <!-- blue piste -->
+    <path
+      d="M36 22 Q32 34 30 44 Q28 52 24 60"
+      stroke="#2196F3"
+      stroke-width="2.5"
+      fill="none"
+      stroke-linecap="round"
+    />
+    <!-- red piste -->
+    <path
+      d="M44 22 Q48 34 52 44 Q54 50 58 60"
+      stroke="#F44336"
+      stroke-width="2.5"
+      fill="none"
+      stroke-linecap="round"
+    />
+    <!-- black piste -->
+    <path
+      d="M40 24 Q40 36 40 48 Q40 54 40 60"
+      stroke="#333"
+      stroke-width="1.8"
+      fill="none"
+      stroke-linecap="round"
+    />
+    <!-- lift line -->
+    <line x1="18" y1="56" x2="34" y2="18" stroke="#666" stroke-width="1" stroke-dasharray="3,2" />
+    <!-- lift tower -->
+    <line x1="26" y1="36" x2="26" y2="40" stroke="#666" stroke-width="1.5" />
+    <!-- snow base -->
+    <rect x="0" y="60" width="80" height="20" fill="#f0f7ff" />
+  </svg>

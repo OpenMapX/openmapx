@@ -1,0 +1,34 @@
+<svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+  >
+    <rect width="80" height="80" fill="#d5e8dc" />
+    <!-- park/green area -->
+    <ellipse cx="62" cy="18" rx="22" ry="18" fill="#c0dcc0" />
+    <ellipse cx="12" cy="64" rx="18" ry="16" fill="#c0dcc0" />
+    <!-- road -->
+    <path d="M0 44 Q22 38 40 42 Q58 46 80 40" stroke="#fff" stroke-width="6" fill="none" />
+    <!-- cycling lane alongside road — green solid -->
+    <path d="M0 50 Q22 44 40 48 Q58 52 80 46" stroke="#0D7C3D" stroke-width="3" fill="none" />
+    <!-- second bike path through park -->
+    <path
+      d="M60 0 Q54 24 48 36 Q42 48 34 80"
+      stroke="#0D7C3D"
+      stroke-width="2"
+      fill="none"
+      stroke-dasharray="5,3"
+    />
+    <!-- bike lane diamond marker -->
+    <g transform="translate(36,44)">
+      <polygon points="4,0 8,4 4,8 0,4" fill="#fff" stroke="#0D7C3D" stroke-width="1" />
+      <circle cx="4" cy="4" r="1.5" fill="#0D7C3D" />
+    </g>
+    <!-- trees in park -->
+    <circle cx="56" cy="14" r="4" fill="#7ab87a" />
+    <circle cx="64" cy="12" r="3.5" fill="#6aaa6a" />
+    <circle cx="68" cy="18" r="3" fill="#7ab87a" />
+    <circle cx="10" cy="60" r="3.5" fill="#7ab87a" />
+    <circle cx="16" cy="64" r="3" fill="#6aaa6a" />
+  </svg>

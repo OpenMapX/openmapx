@@ -11,7 +11,8 @@
     "layerSelector": {
       "group": "map-details",
       "labelKey": "3dBuildings",
-      "icon": "view_in_ar"
+      "icon": "view_in_ar",
+      "preview": "preview.svg"
     },
     "overlay": {
       "excludes": []

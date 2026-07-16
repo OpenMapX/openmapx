@@ -12,7 +12,8 @@
     "layerSelector": {
       "group": "map-details",
       "labelKey": "streetLevelImagery",
-      "icon": "streetview"
+      "icon": "streetview",
+      "preview": "preview.svg"
     },
     "overlay": {
       "excludes": ["air-quality", "earthquakes", "wildfires", "winter-sports", "hiking"]

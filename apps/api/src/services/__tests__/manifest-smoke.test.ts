@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateManifest } from "@openmapx/integration-framework";
+import { resolveLayerSelectorPreview } from "@openmapx/integration-framework/installer";
 import { describe, expect, it } from "vitest";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -52,6 +53,15 @@ describe("Integration manifests", () => {
             expect(["built-in", "community-verified", "community"]).toContain(raw.quality);
           }
         });
+
+        if (raw.frontend?.layerSelector) {
+          it("owns a valid layer-selector preview", () => {
+            expect(raw.frontend.layerSelector.preview).toBe("preview.svg");
+            const preview = resolveLayerSelectorPreview(join(INTEGRATIONS_DIR, dir), raw);
+            expect(preview).not.toBeNull();
+            expect(preview?.endsWith("preview.svg")).toBe(true);
+          });
+        }
 
         it("has an entry point or is frontend-only", () => {
           const indexTs = join(INTEGRATIONS_DIR, dir, "index.ts");

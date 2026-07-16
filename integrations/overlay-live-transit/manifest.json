@@ -12,7 +12,8 @@
     "layerSelector": {
       "group": "map-details",
       "labelKey": "liveTransit",
-      "icon": "train"
+      "icon": "train",
+      "preview": "preview.svg"
     },
     "overlay": {
       "excludes": []

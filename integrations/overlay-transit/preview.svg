@@ -1,0 +1,51 @@
+<svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+  >
+    <rect width="80" height="80" fill="#e4ecf6" />
+    <!-- background streets -->
+    <line x1="0" y1="40" x2="80" y2="40" stroke="#d5dce6" stroke-width="3" />
+    <line x1="40" y1="0" x2="40" y2="80" stroke="#d5dce6" stroke-width="3" />
+    <!-- transit line blue -->
+    <path
+      d="M0 24 Q22 22 40 34 Q58 44 80 42"
+      stroke="#1a73e8"
+      stroke-width="3"
+      fill="none"
+      stroke-linecap="round"
+    />
+    <!-- transit line red -->
+    <path
+      d="M12 0 Q16 24 22 40 Q28 56 34 80"
+      stroke="#ea4335"
+      stroke-width="2.5"
+      fill="none"
+      stroke-linecap="round"
+    />
+    <!-- transit line green -->
+    <path
+      d="M54 0 Q56 22 62 40 Q68 58 72 80"
+      stroke="#34a853"
+      stroke-width="2"
+      fill="none"
+      stroke-linecap="round"
+    />
+    <!-- station markers -->
+    <circle cx="40" cy="34" r="4" fill="#fff" stroke="#1a73e8" stroke-width="2" />
+    <circle cx="22" cy="40" r="3.5" fill="#fff" stroke="#ea4335" stroke-width="1.8" />
+    <!-- M label -->
+    <rect x="34" y="28" width="12" height="12" rx="2" fill="#1a73e8" />
+    <text
+      x="40"
+      y="37"
+      font-size="8"
+      fill="#fff"
+      text-anchor="middle"
+      font-weight="bold"
+      font-family="sans-serif"
+    >
+      M
+    </text>
+  </svg>

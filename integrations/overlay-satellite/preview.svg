@@ -1,0 +1,34 @@
+<svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+  >
+    <!-- dark space/ocean background -->
+    <rect width="80" height="80" fill="#1a2744" />
+    <!-- Earth-like land masses in satellite green/brown tones -->
+    <path
+      d="M8 16 Q18 10 30 18 Q38 24 46 18 L56 14 Q64 20 72 16 L80 22 L80 38 Q66 34 52 38 L38 36 Q26 40 14 34 L0 38Z"
+      fill="#3a6b35"
+      opacity="0.7"
+    />
+    <path
+      d="M0 50 Q14 44 28 52 Q42 58 58 50 Q70 44 80 52 L80 80 L0 80Z"
+      fill="#3a6b35"
+      opacity="0.6"
+    />
+    <!-- desert/arid region -->
+    <ellipse cx="52" cy="30" rx="10" ry="6" fill="#a67c52" opacity="0.5" />
+    <!-- snow/ice caps -->
+    <path d="M0 0 L80 0 L80 8 Q60 12 40 8 Q20 4 0 10Z" fill="#dce8f0" opacity="0.5" />
+    <!-- cloud wisps -->
+    <ellipse cx="22" cy="38" rx="12" ry="3" fill="#fff" opacity="0.35" />
+    <ellipse cx="60" cy="54" rx="10" ry="2.5" fill="#fff" opacity="0.3" />
+    <ellipse cx="44" cy="68" rx="14" ry="3" fill="#fff" opacity="0.25" />
+    <!-- satellite icon accent -->
+    <g transform="translate(62, 8)" opacity="0.7">
+      <rect x="0" y="2" width="8" height="4" rx="1" fill="#90caf9" />
+      <rect x="-4" y="3" width="4" height="2" rx="0.5" fill="#64b5f6" />
+      <rect x="8" y="3" width="4" height="2" rx="0.5" fill="#64b5f6" />
+    </g>
+  </svg>

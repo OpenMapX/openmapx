@@ -1,0 +1,27 @@
+<svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+  >
+    <rect width="80" height="80" fill="#dce4e8" />
+    <!-- map background blocks -->
+    <rect x="0" y="0" width="29" height="28" rx="3" fill="#e8eef2" />
+    <rect x="51" y="0" width="29" height="28" rx="3" fill="#e8eef2" />
+    <rect x="0" y="50" width="29" height="30" rx="3" fill="#e8eef2" />
+    <rect x="51" y="50" width="29" height="30" rx="3" fill="#e8eef2" />
+    <!-- road base - gray -->
+    <line x1="40" y1="0" x2="40" y2="80" stroke="#c8cdd2" stroke-width="8" />
+    <line x1="0" y1="39" x2="80" y2="39" stroke="#c8cdd2" stroke-width="8" />
+    <!-- intersection -->
+    <rect x="36" y="35" width="8" height="8" fill="#c8cdd2" />
+    <!-- traffic colors on vertical road -->
+    <line x1="40" y1="0" x2="40" y2="34" stroke="#34a853" stroke-width="4" />
+    <line x1="40" y1="44" x2="40" y2="62" stroke="#ea4335" stroke-width="4" />
+    <line x1="40" y1="62" x2="40" y2="80" stroke="#7f1d1d" stroke-width="4" />
+    <!-- traffic colors on horizontal road -->
+    <line x1="0" y1="39" x2="20" y2="39" stroke="#34a853" stroke-width="4" />
+    <line x1="20" y1="39" x2="35" y2="39" stroke="#fbbc04" stroke-width="4" />
+    <line x1="45" y1="39" x2="62" y2="39" stroke="#ea4335" stroke-width="4" />
+    <line x1="62" y1="39" x2="80" y2="39" stroke="#fbbc04" stroke-width="4" />
+  </svg>

@@ -13,7 +13,8 @@
       "group": "map-details",
       "labelKey": "trafficTomtom",
       "icon": "traffic",
-      "quickSelector": true
+      "quickSelector": true,
+      "preview": "preview.svg"
     },
     "overlay": {
       "excludes": ["traffic-flow"]

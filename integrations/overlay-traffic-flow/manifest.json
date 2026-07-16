@@ -9,7 +9,8 @@
       "group": "map-details",
       "labelKey": "trafficFlow",
       "icon": "traffic",
-      "quickSelector": true
+      "quickSelector": true,
+      "preview": "preview.svg"
     },
     "overlay": { "minZoom": 6, "excludes": ["traffic"] }
   },

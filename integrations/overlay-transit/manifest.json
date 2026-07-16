@@ -13,7 +13,8 @@
       "group": "map-details",
       "labelKey": "transit",
       "icon": "directions_transit",
-      "quickSelector": true
+      "quickSelector": true,
+      "preview": "preview.svg"
     },
     "overlay": {
       "excludes": []

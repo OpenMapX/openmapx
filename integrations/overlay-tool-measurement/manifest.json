@@ -11,7 +11,8 @@
     "layerSelector": {
       "group": "map-tools",
       "labelKey": "measure",
-      "icon": "straighten"
+      "icon": "straighten",
+      "preview": "preview.svg"
     },
     "overlay": {
       "excludes": []

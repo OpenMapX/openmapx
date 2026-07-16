@@ -1,0 +1,35 @@
+<svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+  >
+    <rect width="80" height="80" fill="#c6e7d8" />
+    <!-- land areas -->
+    <rect x="0" y="0" width="80" height="44" fill="#c7efd8" />
+    <rect x="0" y="44" width="80" height="36" fill="#bde2cd" />
+    <!-- large flame -->
+    <g transform="translate(18,12) scale(1.5)">
+      <path
+        d="M8 22 C3 20 0 15 1 10 C2 12 4 12 5 10 C4 6 7 0 10 0 C9 4 11 6 12 5 C13 3 15 2 17 4 C15 7 16 10 15 12 C16 12 18 12 19 10 C20 15 17 20 12 22Z"
+        fill="#ef4444"
+      />
+      <path d="M7 22 C5 19 6 15 8 13 C8 16 10 15 10 13 C10 16 12 18 13 22Z" fill="#ff8c00" />
+    </g>
+    <!-- medium flame -->
+    <g transform="translate(48,36) scale(1.0)">
+      <path
+        d="M8 22 C3 20 0 15 1 10 C2 12 4 12 5 10 C4 6 7 0 10 0 C9 4 11 6 12 5 C13 3 15 2 17 4 C15 7 16 10 15 12 C16 12 18 12 19 10 C20 15 17 20 12 22Z"
+        fill="#f97316"
+      />
+      <path d="M7 22 C5 19 6 15 8 13 C8 16 10 15 10 13 C10 16 12 18 13 22Z" fill="#fbbf24" />
+    </g>
+    <!-- small flame -->
+    <g transform="translate(10,50) scale(0.75)">
+      <path
+        d="M8 22 C3 20 0 15 1 10 C2 12 4 12 5 10 C4 6 7 0 10 0 C9 4 11 6 12 5 C13 3 15 2 17 4 C15 7 16 10 15 12 C16 12 18 12 19 10 C20 15 17 20 12 22Z"
+        fill="#ef4444"
+      />
+      <path d="M7 22 C5 19 6 15 8 13 C8 16 10 15 10 13 C10 16 12 18 13 22Z" fill="#ff8c00" />
+    </g>
+  </svg>

@@ -1,0 +1,59 @@
+<svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+  >
+    <rect width="80" height="80" fill="#eaf2f7" />
+    <!-- simplified land outline -->
+    <path
+      d="M0 30 Q14 24 28 28 Q42 32 56 24 Q66 18 80 22 L80 64 Q66 70 50 64 Q34 58 20 64 L0 60Z"
+      fill="#d6e3ec"
+      opacity="0.7"
+    />
+    <!-- a couple of runway strips behind markers -->
+    <g opacity="0.55">
+      <rect
+        x="30"
+        y="46"
+        width="22"
+        height="3"
+        rx="1"
+        fill="#94a3b8"
+        transform="rotate(-22 41 47.5)"
+      />
+      <rect
+        x="36"
+        y="56"
+        width="14"
+        height="2.4"
+        rx="1"
+        fill="#94a3b8"
+        transform="rotate(40 43 57)"
+      />
+    </g>
+    <!-- large airport — big sky-blue marker (e.g. DUS) -->
+    <circle cx="44" cy="40" r="9" fill="#0ea5e9" opacity="0.18" />
+    <circle cx="44" cy="40" r="5.5" fill="#0ea5e9" stroke="#fff" stroke-width="1.4" />
+    <!-- medium airport — blue marker -->
+    <circle cx="22" cy="22" r="3.8" fill="#3b82f6" stroke="#fff" stroke-width="1.2" />
+    <!-- small airport — indigo marker -->
+    <circle cx="62" cy="22" r="2.8" fill="#6366f1" stroke="#fff" stroke-width="1.1" />
+    <!-- heliport — orange marker -->
+    <circle cx="62" cy="60" r="3" fill="#f97316" stroke="#fff" stroke-width="1.1" />
+    <!-- seaplane base — cyan marker -->
+    <circle cx="18" cy="56" r="2.8" fill="#0891b2" stroke="#fff" stroke-width="1.1" />
+    <!-- IATA code chip below the headline marker -->
+    <rect x="34" y="52" width="20" height="9" rx="2" fill="#fff" opacity="0.85" />
+    <text
+      x="44"
+      y="59"
+      font-size="6.5"
+      font-family="ui-monospace, Menlo, monospace"
+      font-weight="700"
+      fill="#0284c7"
+      text-anchor="middle"
+    >
+      DUS
+    </text>
+  </svg>

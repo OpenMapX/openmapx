@@ -13,7 +13,8 @@
       "group": "map-details",
       "labelKey": "airports",
       "icon": "flight",
-      "iconPath": "M2.5 19h19v2h-19zm7.18-1.73L12 18l2.32-.73L21.5 5.5 19 4 12 8 5 4 2.5 5.5z"
+      "iconPath": "M2.5 19h19v2h-19zm7.18-1.73L12 18l2.32-.73L21.5 5.5 19 4 12 8 5 4 2.5 5.5z",
+      "preview": "preview.svg"
     },
     "overlay": {
       "minZoom": 4
