@@ -7,7 +7,12 @@
   "frontend": {
     "mapLayer": false,
     "legend": false,
-    "panel": false
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "alpha",
+      "preview": "preview.svg"
+    }
   },
   "backend": {
     "routes": true

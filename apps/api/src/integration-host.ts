@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -21,6 +22,7 @@ import {
 import {
   integrationBackendBundlePath,
   integrationFrontendBundlePath,
+  resolveLayerSelectorPreview,
 } from "@openmapx/integration-framework/installer";
 import { sharedStrings } from "@openmapx/integration-framework/strings";
 import { registerPoiSources as registerPoiSourcesInStore } from "@openmapx/poi-source-registry";
@@ -799,6 +801,50 @@ export async function initIntegrations(
       frameworkStrings: sharedStrings,
       disclosures,
     };
+  });
+
+  const warnedPreviewIds = new Set<string>();
+  fastify.get<{ Params: { id: string } }>("/api/integrations/:id/preview", async (req, reply) => {
+    const integration = integrations.get(req.params.id);
+    if (!integration?.enabled) {
+      return reply.status(404).send({ error: "Not found" });
+    }
+
+    let previewPath: string | null;
+    try {
+      previewPath = resolveLayerSelectorPreview(
+        integration.directory,
+        integration.manifest as Record<string, unknown>,
+      );
+    } catch (error) {
+      if (!warnedPreviewIds.has(integration.id)) {
+        warnedPreviewIds.add(integration.id);
+        fastify.log.warn(
+          { integrationId: integration.id, err: error },
+          "Integration layer preview is unavailable",
+        );
+      }
+      return reply.status(404).send({ error: "Not found" });
+    }
+    if (!previewPath) {
+      return reply.status(404).send({ error: "Not found" });
+    }
+
+    const bytes = readFileSync(previewPath);
+    const etag = `"${createHash("sha256").update(bytes).digest("hex")}"`;
+    reply.header("Content-Type", "image/svg+xml; charset=utf-8");
+    reply.header("X-Content-Type-Options", "nosniff");
+    reply.header("Cross-Origin-Resource-Policy", "cross-origin");
+    reply.header(
+      "Content-Security-Policy",
+      "default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'none'; style-src 'unsafe-inline'; sandbox",
+    );
+    reply.header("Cache-Control", "public, max-age=0, must-revalidate");
+    reply.header("ETag", etag);
+    if (req.headers["if-none-match"] === etag) {
+      return reply.status(304).send();
+    }
+    return reply.send(bytes);
   });
 
   // Serve community integration frontend bundles

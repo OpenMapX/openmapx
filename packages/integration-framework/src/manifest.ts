@@ -134,11 +134,25 @@ const healthCheckSchema = z.object({
   category: z.string().optional(),
 });
 
+export const layerSelectorPreviewPathSchema = z
+  .string()
+  .min(1)
+  .max(256)
+  .refine((path) => !path.includes("\\"), "Preview path must use forward slashes")
+  .refine((path) => !/^[a-z][a-z0-9+.-]*:/i.test(path), "Preview path must not be a URL")
+  .refine((path) => !path.startsWith("/"), "Preview path must be relative")
+  .refine(
+    (path) =>
+      path.split("/").every((segment) => segment !== "" && segment !== "." && segment !== ".."),
+    "Preview path contains an invalid segment",
+  )
+  .refine((path) => path.toLowerCase().endsWith(".svg"), "Preview path must reference an SVG");
+
 const layerSelectorSchema = z.object({
   group: z.enum(["map-details", "map-tools", "map-types"]),
   labelKey: z.string(),
   icon: z.string().optional(),
-  preview: z.string().nullable().optional(),
+  preview: layerSelectorPreviewPathSchema.nullable().optional(),
   quickSelector: z.boolean().optional(),
 });
 

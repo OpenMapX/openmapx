@@ -17,6 +17,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
@@ -88,6 +89,7 @@ function customDir(rootDir: string): string {
 
 const STAGING_DIR_NAME = ".staging";
 const DEFAULT_MAX_ARTIFACT_BYTES = 200 * 1024 * 1024;
+const MAX_LAYER_SELECTOR_PREVIEW_BYTES = 64 * 1024;
 
 function stagingDir(rootDir: string): string {
   return join(customDir(rootDir), STAGING_DIR_NAME);
@@ -184,16 +186,68 @@ export interface ValidateResult {
   errors: string[];
 }
 
+/**
+ * Resolve and validate the static layer-selector preview declared by a manifest.
+ * The returned path is canonical and guaranteed to remain inside the integration root.
+ */
+export function resolveLayerSelectorPreview(
+  directory: string,
+  manifest: Record<string, unknown>,
+): string | null {
+  const frontend = manifest.frontend;
+  if (!frontend || typeof frontend !== "object") return null;
+  const layerSelector = (frontend as Record<string, unknown>).layerSelector;
+  if (!layerSelector || typeof layerSelector !== "object") return null;
+  const preview = (layerSelector as Record<string, unknown>).preview;
+  if (preview === undefined || preview === null) return null;
+
+  const prefix = "frontend.layerSelector.preview";
+  if (typeof preview !== "string" || !preview.toLowerCase().endsWith(".svg")) {
+    throw new Error(`${prefix} must reference an SVG file`);
+  }
+
+  const root = resolve(directory);
+  const candidate = resolve(root, preview);
+  if (candidate === root || !candidate.startsWith(`${root}${sep}`)) {
+    throw new Error(`${prefix} escapes the integration directory`);
+  }
+  if (!existsSync(candidate)) {
+    throw new Error(`${prefix} file is missing`);
+  }
+
+  const canonicalRoot = realpathSync(root);
+  const canonical = realpathSync(candidate);
+  if (canonical === canonicalRoot || !canonical.startsWith(`${canonicalRoot}${sep}`)) {
+    throw new Error(`${prefix} escapes the integration directory through a symlink`);
+  }
+  const stats = statSync(canonical);
+  if (!stats.isFile()) {
+    throw new Error(`${prefix} must be a regular file`);
+  }
+  if (stats.size > MAX_LAYER_SELECTOR_PREVIEW_BYTES) {
+    throw new Error(`${prefix} exceeds the 64 KiB size limit`);
+  }
+  return canonical;
+}
+
 export function validateIntegrationDirectory(directory: string): ValidateResult {
   const manifest = readManifest(directory);
   if (!manifest) {
     return { id: directory, valid: false, errors: ["manifest.json missing or invalid JSON"] };
   }
   const result = validateManifest(manifest);
+  const errors = [...result.errors];
+  if (result.valid) {
+    try {
+      resolveLayerSelectorPreview(directory, manifest);
+    } catch (error) {
+      errors.push((error as Error).message);
+    }
+  }
   return {
     id: typeof manifest.id === "string" ? manifest.id : directory,
-    valid: result.valid,
-    errors: result.errors,
+    valid: result.valid && errors.length === 0,
+    errors,
   };
 }
 
@@ -325,6 +379,7 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
     if (!validation.valid) {
       throw new Error(`Manifest validation failed:\n  - ${validation.errors.join("\n  - ")}`);
     }
+    resolveLayerSelectorPreview(stage, manifest);
 
     // The schema regex already enforces the slug shape, but resolveInstallTarget
     // (via assertSafeId) gives a single point of defense if the schema ever
@@ -990,6 +1045,7 @@ export async function packageIntegration(opts: PackageOptions): Promise<PackageR
   if (!validation.valid) {
     throw new Error(`Manifest validation failed:\n  - ${validation.errors.join("\n  - ")}`);
   }
+  resolveLayerSelectorPreview(directory, manifest);
 
   if (opts.buildFrontend) {
     await buildIntegrationDirectory({

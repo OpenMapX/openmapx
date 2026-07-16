@@ -138,6 +138,32 @@ describe("validateIntegration", () => {
     expect(result.valid).toBe(false);
     expect(result.errors[0]).toMatch(/manifest\.json/);
   });
+
+  it.each([
+    ["missing", "missing"],
+    ["directory", "directory"],
+    ["oversized", "oversized"],
+  ])("rejects a declared %s preview", (_label, kind) => {
+    const dir = join(tmp, "custom_integrations", `bad-preview-${kind}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "manifest.json"),
+      JSON.stringify({
+        ...baseManifest,
+        id: `bad-preview-${kind}`,
+        frontend: {
+          layerSelector: { group: "map-details", labelKey: "example", preview: "preview.svg" },
+        },
+      }),
+      "utf-8",
+    );
+    if (kind === "directory") mkdirSync(join(dir, "preview.svg"));
+    if (kind === "oversized") writeFileSync(join(dir, "preview.svg"), "x".repeat(64 * 1024 + 1));
+
+    const result = validateIntegration(dir);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(" ")).toMatch(/frontend\.layerSelector\.preview/);
+  });
 });
 
 describe("installIntegration (local source)", () => {
@@ -156,6 +182,56 @@ describe("installIntegration (local source)", () => {
     expect(result.replaced).toBe(false);
     expect(existsSync(join(tmp, "custom_integrations", "ads-b", "manifest.json"))).toBe(true);
     expect(existsSync(join(tmp, "custom_integrations", "ads-b", "index.ts"))).toBe(true);
+  });
+
+  it("copies a declared static preview without building frontend code", async () => {
+    const src = join(tmp, "preview-int");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      join(src, "manifest.json"),
+      JSON.stringify({
+        ...baseManifest,
+        id: "preview-demo",
+        frontend: {
+          layerSelector: { group: "map-details", labelKey: "example", preview: "preview.svg" },
+        },
+      }),
+      "utf-8",
+    );
+    writeFileSync(join(src, "preview.svg"), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+
+    const result = await installIntegration({ source: src, rootDir: tmp, buildFrontend: true });
+    expect(result.build).toMatchObject({ skipped: true });
+    expect(
+      readFileSync(join(tmp, "custom_integrations", "preview-demo", "preview.svg"), "utf-8"),
+    ).toContain("<svg");
+    expect(
+      existsSync(join(tmp, "custom_integrations", "preview-demo", "dist", "frontend", "index.js")),
+    ).toBe(false);
+  });
+
+  it("rejects a declared missing preview before replacing an existing install", async () => {
+    const src = join(tmp, "missing-preview-int");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      join(src, "manifest.json"),
+      JSON.stringify({
+        ...baseManifest,
+        id: "preview-demo",
+        frontend: {
+          layerSelector: { group: "map-details", labelKey: "example", preview: "preview.svg" },
+        },
+      }),
+      "utf-8",
+    );
+    const installed = join(tmp, "custom_integrations", "preview-demo");
+    mkdirSync(installed, { recursive: true });
+    writeFileSync(join(installed, "keep.txt"), "existing");
+
+    await expect(installIntegration({ source: src, rootDir: tmp })).rejects.toThrow(
+      /frontend\.layerSelector\.preview.*missing/,
+    );
+    expect(readFileSync(join(installed, "keep.txt"), "utf-8")).toBe("existing");
   });
 
   it("builds frontend bundles before installing when requested", async () => {
@@ -598,6 +674,39 @@ describe("packageIntegration", () => {
       existsSync(join(tmp, "custom_integrations", "package-demo", "dist", "backend", "index.mjs")),
     ).toBe(true);
   });
+
+  it("preserves a static preview without creating a frontend bundle", async () => {
+    const src = join(tmp, "package-preview-src");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      join(src, "manifest.json"),
+      JSON.stringify({
+        ...baseManifest,
+        id: "package-preview",
+        frontend: {
+          layerSelector: { group: "map-details", labelKey: "example", preview: "preview.svg" },
+        },
+      }),
+      "utf-8",
+    );
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="2"/></svg>';
+    writeFileSync(join(src, "preview.svg"), svg);
+
+    const artifact = join(tmp, "package-preview.tar.gz");
+    const result = await packageIntegration({
+      rootDir: tmp,
+      source: src,
+      outFile: artifact,
+      buildFrontend: true,
+    });
+    expect(result.validation.hasFrontendBundle).toBe(false);
+    expect(existsSync(join(src, "dist", "frontend", "index.js"))).toBe(false);
+
+    await installIntegration({ rootDir: tmp, source: artifact, sourceKind: "artifact" });
+    const installed = join(tmp, "custom_integrations", "package-preview");
+    expect(readFileSync(join(installed, "preview.svg"), "utf-8")).toBe(svg);
+    expect(existsSync(join(installed, "dist", "frontend", "index.js"))).toBe(false);
+  });
 });
 
 describe("removeIntegration", () => {
@@ -626,6 +735,28 @@ describe("removeIntegration", () => {
 });
 
 describe("installIntegration security", () => {
+  it("rejects a preview symlink that escapes the integration", async () => {
+    const outside = join(tmp, "outside.svg");
+    writeFileSync(outside, '<svg xmlns="http://www.w3.org/2000/svg"/>');
+    const src = join(tmp, "escaping-preview-link");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      join(src, "manifest.json"),
+      JSON.stringify({
+        ...baseManifest,
+        id: "escaping-preview-link",
+        frontend: {
+          layerSelector: { group: "map-details", labelKey: "example", preview: "preview.svg" },
+        },
+      }),
+    );
+    symlinkSync(outside, join(src, "preview.svg"));
+
+    await expect(installIntegration({ source: src, rootDir: tmp })).rejects.toThrow(
+      /frontend\.layerSelector\.preview.*symlink/,
+    );
+  });
+
   it("rejects a manifest with a path-traversal id", async () => {
     const src = join(tmp, "evil");
     mkdirSync(src, { recursive: true });

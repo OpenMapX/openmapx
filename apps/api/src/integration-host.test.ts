@@ -6,7 +6,7 @@
  * All tests exercise only the public API; no internals are imported or patched.
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -288,6 +288,54 @@ describe("initIntegrations — route dispatch", () => {
     expect(res.json()).toMatchObject({
       error: "Integration handler produced no response",
     });
+  });
+});
+
+describe("integration layer previews", () => {
+  it("serves a built-in preview with security and revalidation headers", async () => {
+    const app = makeApp();
+    await initIntegrations(app, [FIXTURES_DIR]);
+    const expected = readFileSync(join(FIXTURES_DIR, "alpha", "preview.svg"), "utf-8");
+
+    const response = await app.inject({ method: "GET", url: "/api/integrations/alpha/preview" });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toBe(expected);
+    expect(response.headers["content-type"]).toBe("image/svg+xml; charset=utf-8");
+    expect(response.headers["x-content-type-options"]).toBe("nosniff");
+    expect(response.headers["cross-origin-resource-policy"]).toBe("cross-origin");
+    expect(response.headers["content-security-policy"]).toBe(
+      "default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'none'; style-src 'unsafe-inline'; sandbox",
+    );
+    expect(response.headers["cache-control"]).toBe("public, max-age=0, must-revalidate");
+    expect(response.headers.etag).toMatch(/^"[a-f0-9]{64}"$/);
+
+    const revalidated = await app.inject({
+      method: "GET",
+      url: "/api/integrations/alpha/preview",
+      headers: { "if-none-match": response.headers.etag as string },
+    });
+    expect(revalidated.statusCode).toBe(304);
+    expect(revalidated.body).toBe("");
+  });
+
+  it("returns 404 when the integration or preview declaration is missing", async () => {
+    const app = makeApp();
+    await initIntegrations(app, [FIXTURES_DIR]);
+
+    const undeclared = await app.inject({ method: "GET", url: "/api/integrations/beta/preview" });
+    expect(undeclared.statusCode).toBe(404);
+    const unknown = await app.inject({ method: "GET", url: "/api/integrations/unknown/preview" });
+    expect(unknown.statusCode).toBe(404);
+  });
+
+  it("serves the same preview for a community integration", async () => {
+    const app = makeApp();
+    await initIntegrations(app, [{ directory: FIXTURES_DIR, isBuiltIn: false }]);
+
+    const response = await app.inject({ method: "GET", url: "/api/integrations/alpha/preview" });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["cross-origin-resource-policy"]).toBe("cross-origin");
+    expect(response.body).toBe(readFileSync(join(FIXTURES_DIR, "alpha", "preview.svg"), "utf-8"));
   });
 });
 
