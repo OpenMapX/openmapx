@@ -5,6 +5,7 @@ import {
   fuzzinessForChoice,
   generateNonce,
   REPORT_CATEGORIES,
+  typeForCategory,
 } from "../claim.js";
 
 describe("fuzzinessForChoice", () => {
@@ -57,9 +58,57 @@ describe("buildReportClaim", () => {
       type: "accident",
       geometry: { type: "Point", coordinates: [6.1, 51.2] },
       fuzziness: "end_unknown",
+      attributes: { reportCategory: "accident" },
       reportedAt: "2026-07-11T10:00:00.000Z",
       nonce: "fixednonce_1234567890",
     });
+  });
+
+  // `ReportClaim.type` is a CANONICAL taxonomy value. The evidence matcher only
+  // pairs a report with an official feed observation when their `type` matches
+  // exactly, so a dialog-vocabulary type can never be confirmed by a feed and
+  // can never become routing-eligible.
+  it.each([
+    ["jam", "congestion"],
+    ["hazard_object", "obstruction"],
+    ["hazard_animal", "hazard"],
+    ["hazard_weather", "weather"],
+    ["road_closure", "road_closure"],
+    ["accident", "accident"],
+    ["roadworks", "roadworks"],
+    ["transit_disruption", "transit_disruption"],
+    ["micromobility", "other"],
+    ["accessibility", "other"],
+    ["other", "other"],
+  ] as const)("maps the %s category onto the canonical type %s", (category, expected) => {
+    expect(typeForCategory(category)).toBe(expected);
+    expect(
+      buildReportClaim({
+        category,
+        fuzziness: "here",
+        lon: 0,
+        lat: 0,
+        reportedAt: "2026-07-11T10:00:00.000Z",
+        nonce: "fixednonce_1234567890",
+      }).type,
+    ).toBe(expected);
+  });
+
+  it("keeps the reporter's exact category when several collapse onto one canonical type", () => {
+    // micromobility/accessibility/other all report as `other`; the choice the
+    // reporter actually made must survive that collapse.
+    for (const category of ["micromobility", "accessibility", "other"] as const) {
+      const claim = buildReportClaim({
+        category,
+        fuzziness: "here",
+        lon: 0,
+        lat: 0,
+        reportedAt: "2026-07-11T10:00:00.000Z",
+        nonce: "fixednonce_1234567890",
+      });
+      expect(claim.type).toBe("other");
+      expect(claim.attributes).toEqual({ reportCategory: category });
+    }
   });
 
   it("includes severityLevel only when provided", () => {

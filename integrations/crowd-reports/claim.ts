@@ -58,12 +58,50 @@ const DOMAIN_BY_CATEGORY: Record<ReportCategory, ReportClaim["domain"]> = {
   other: "roads",
 };
 
+/**
+ * The CANONICAL taxonomy value each category reports as — `ReportClaim.type` is
+ * a canonical value, not our dialog's vocabulary.
+ *
+ * This is what lets a crowd report be cross-validated: the evidence matcher
+ * pairs a report with an official feed observation only when their `type` is
+ * identical, and the feeds speak OpenConditions' road-event taxonomy
+ * (`congestion`, `obstruction`, `hazard`, `weather`, …). Sending the raw UI
+ * category meant "jam" could never meet the feeds' "congestion", so those
+ * reports could never be confirmed by a feed and never became routing-eligible.
+ *
+ * Mappings follow what the feed normalizers actually emit, so a report lands on
+ * the same value an official row would: an object on the road is DATEX
+ * `generalobstruction` → `obstruction`, while animals are mapped to `hazard`
+ * ("Animals on the road", "plant/animal hazards"), NOT `obstruction`.
+ *
+ * `micromobility` and `accessibility` have no canonical road equivalent and
+ * collapse to `other`; the dialog's own choice is preserved verbatim in
+ * `attributes.reportCategory`, so nothing the user picked is lost.
+ */
+const TYPE_BY_CATEGORY: Record<ReportCategory, ReportClaim["type"]> = {
+  road_closure: "road_closure",
+  accident: "accident",
+  hazard_object: "obstruction",
+  hazard_weather: "weather",
+  hazard_animal: "hazard",
+  jam: "congestion",
+  roadworks: "roadworks",
+  transit_disruption: "transit_disruption",
+  micromobility: "other",
+  accessibility: "other",
+  other: "other",
+};
+
 export function fuzzinessForChoice(choice: FuzzinessChoice): Fuzziness {
   return FUZZINESS_BY_CHOICE[choice];
 }
 
 export function domainForCategory(category: ReportCategory): ReportClaim["domain"] {
   return DOMAIN_BY_CATEGORY[category];
+}
+
+export function typeForCategory(category: ReportCategory): ReportClaim["type"] {
+  return TYPE_BY_CATEGORY[category];
 }
 
 const NONCE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
@@ -107,9 +145,13 @@ export interface BuildReportClaimInput {
 export function buildReportClaim(input: BuildReportClaimInput): ReportClaim {
   const claim: ReportClaim = {
     domain: domainForCategory(input.category),
-    type: input.category,
+    type: typeForCategory(input.category),
     geometry: { type: "Point", coordinates: [input.lon, input.lat] },
     fuzziness: fuzzinessForChoice(input.fuzziness),
+    // The canonical `type` is what the matcher pairs on, so several categories
+    // share one value. Keep the exact choice the reporter made — it is the only
+    // record of it once the type is canonicalized.
+    attributes: { reportCategory: input.category },
     reportedAt: input.reportedAt ?? new Date().toISOString(),
     nonce: input.nonce ?? generateNonce(),
   };
