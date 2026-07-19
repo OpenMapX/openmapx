@@ -2,8 +2,10 @@
 
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Box from "@mui/material/Box";
 import Collapse from "@mui/material/Collapse";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useVehicleJourney } from "@openmapx/core";
 import { useTranslations } from "next-intl";
@@ -23,6 +25,7 @@ interface TransitLegStopsProps {
 
 export function TransitLegStops({ tripId, stopCount, fromStopId, toStopId }: TransitLegStopsProps) {
   const tc = useTranslations("common");
+  const tNav = useTranslations("navigation");
   const fmt = useDateTimeFormat();
   const [expanded, setExpanded] = useState(false);
   // Fetch eagerly — React Query deduplicates with any other useVehicleJourney(tripId) call
@@ -130,14 +133,31 @@ export function TransitLegStops({ tripId, stopCount, fromStopId, toStopId }: Tra
                     </Typography>
                   )}
                 </Box>
-                <Typography
-                  variant="caption"
-                  color={stop.canceled ? "error.main" : "text.secondary"}
-                  noWrap
-                  sx={{ flex: 1 }}
-                >
-                  {stop.name}
-                </Typography>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
+                    <Typography
+                      variant="caption"
+                      color={stop.canceled ? "error.main" : "text.secondary"}
+                      noWrap
+                      sx={{ textDecoration: stop.canceled ? "line-through" : "none" }}
+                    >
+                      {stop.name}
+                    </Typography>
+                    {stop.alerts && stop.alerts.length > 0 && (
+                      <Tooltip title={stop.alerts[0].title} placement="top" arrow>
+                        <WarningAmberIcon sx={{ fontSize: 13, color: "#E65100", flexShrink: 0 }} />
+                      </Tooltip>
+                    )}
+                  </Box>
+                  {stop.canceled && (
+                    <Typography
+                      variant="caption"
+                      sx={{ color: "error.main", fontWeight: 600, fontSize: "0.6rem" }}
+                    >
+                      {tNav("stopSkipped")}
+                    </Typography>
+                  )}
+                </Box>
               </Box>
             );
           })}
