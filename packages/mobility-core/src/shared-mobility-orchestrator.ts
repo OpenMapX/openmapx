@@ -203,6 +203,28 @@ function inventory(snapshot: MotisRentalSnapshot | null): SharedMobilityInventor
   return { stations: snapshot?.stations ?? [], vehicles: snapshot?.vehicles ?? [] };
 }
 
+/** Wall-clock bounds so a hung/orphaned upstream fetch can't stall orchestration. */
+const MOTIS_FETCH_TIMEOUT_MS = 12_000;
+const ADAPTER_FETCH_TIMEOUT_MS = 15_000;
+
+/**
+ * Race a fetch against an independent timer that resolves to `fallback`. A
+ * malformed upstream response can crash undici's HTTP parser and leave the
+ * originating fetch permanently unsettled (its own AbortController can't rescue
+ * a dead parser); this top-level bound guarantees each adapter — and the MOTIS
+ * snapshot — settles regardless of any orphan inside it, so a single flaky feed
+ * can't hang the whole shared-mobility request.
+ */
+function boundFetch<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
 export async function orchestrateSharedMobility(
   bbox: BoundingBox,
   config: SharedMobilityOrchestratorConfig,
@@ -216,12 +238,17 @@ export async function orchestrateSharedMobility(
   let snapshot: MotisRentalSnapshot | null = null;
   let local: SharedMobilitySourceDecision["local"] = "error";
   try {
-    snapshot = await fetchLocal(
-      [bbox.west, bbox.south, bbox.east, bbox.north],
-      config.motisFormFactors,
+    snapshot = await boundFetch(
+      fetchLocal([bbox.west, bbox.south, bbox.east, bbox.north], config.motisFormFactors),
+      MOTIS_FETCH_TIMEOUT_MS,
+      null,
     );
     local =
-      snapshot.completeness?.stations && snapshot.completeness?.vehicles ? "healthy" : "partial";
+      snapshot?.completeness?.stations && snapshot?.completeness?.vehicles
+        ? "healthy"
+        : snapshot
+          ? "partial"
+          : "error";
   } catch {
     snapshot = null;
   }
@@ -232,7 +259,11 @@ export async function orchestrateSharedMobility(
   };
   const called = config.adapters.filter(shouldCall);
   const skipped = config.adapters.filter((adapter) => !shouldCall(adapter));
-  const settled = await Promise.allSettled(called.map((adapter) => adapter.fetch(bbox)));
+  const settled = await Promise.allSettled(
+    called.map((adapter) =>
+      boundFetch(adapter.fetch(bbox), ADAPTER_FETCH_TIMEOUT_MS, { stations: [], vehicles: [] }),
+    ),
+  );
   const supplements = settled.flatMap((result) =>
     result.status === "fulfilled" ? [result.value] : [],
   );
