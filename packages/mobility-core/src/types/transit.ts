@@ -406,6 +406,12 @@ export interface TripLeg {
   boardNameSuffix?: string;
   alightNameSuffix?: string;
   /**
+   * Service alerts/disruptions affecting this leg or its board/alight stops
+   * (from MOTIS `Leg.alerts` + endpoint `Place.alerts`). Surfaced during
+   * navigation so a cancellation or disruption on the ridden line is visible.
+   */
+  alerts?: ServiceAlert[];
+  /**
    * Per-leg attribution: which upstream feeds contributed this specific leg.
    * Typically a subset of the envelope-level attributions; the orchestrator
    * fans it out so the UI can render per-leg credits inline. Optional —
@@ -461,8 +467,16 @@ export interface ServiceAlert {
   providers: string[];
   severity: AlertSeverity;
   effect?: string;
+  /** Disruption cause (e.g. MAINTENANCE, ACCIDENT), when the feed provides it. */
+  cause?: string;
   title: string;
   description?: string;
+  /** Text-to-speech-optimized header/description for voice guidance. */
+  ttsTitle?: string;
+  ttsDescription?: string;
+  /** Operator's disruption page for "more info". */
+  url?: string;
+  imageUrl?: string;
   affectedRouteIds: string[];
   affectedStopIds: string[];
   activePeriods: { start: string; end?: string }[];

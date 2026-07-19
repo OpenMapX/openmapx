@@ -57,6 +57,10 @@
       "types": "./src/mapper.ts",
       "default": "./src/mapper.ts"
     },
+    "./motis-alerts": {
+      "types": "./src/motis-alerts.ts",
+      "default": "./src/motis-alerts.ts"
+    },
     "./motis-rentals": {
       "types": "./src/motis-rentals.ts",
       "default": "./src/motis-rentals.ts"

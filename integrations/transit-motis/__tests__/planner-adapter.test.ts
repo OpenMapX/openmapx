@@ -189,6 +189,16 @@ describe("MOTIS planner request mapping", () => {
     // Scheduled leg times kept alongside realtime, so a 4-min delay is derivable.
     expect(leg?.scheduledStartTime).toBe("2026-07-15T10:00:00Z");
     expect(leg?.scheduledEndTime).toBe("2026-07-15T10:15:00Z");
+    // Service alerts are attached to the leg (previously dropped in planning),
+    // keeping the url + cause the old mapper discarded.
+    expect(leg?.alerts).toHaveLength(1);
+    expect(leg?.alerts?.[0]).toMatchObject({
+      title: "Elevator out of service",
+      severity: "warning",
+      cause: "MAINTENANCE",
+      url: "https://example.test/alert",
+      affectedRouteIds: [],
+    });
   });
 
   it("preserves MOTIS identifiers, paging, levels, steps, flags, elevation, and rental returns", async () => {

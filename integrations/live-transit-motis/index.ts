@@ -1,6 +1,5 @@
 import { type Client, createClient } from "@hey-api/client-fetch";
 import {
-  type AlertSeverityLevel,
   type Itinerary,
   type Leg,
   type Alert as MotisAlert,
@@ -16,12 +15,12 @@ import {
   type TripUpdate,
 } from "@openmapx/integration-framework";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
+import { mapMotisAlert, mapMotisAlertSeverity } from "@openmapx/mobility-core/motis-alerts";
 import { withAttribution } from "@openmapx/mobility-core/result";
 
 const attribution = createManifestAttribution();
 
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import type { AlertSeverity, ServiceAlert } from "@openmapx/mobility-core/transit";
 
 /**
  * Final fallback when neither the `motis` service registry entry nor
@@ -162,44 +161,6 @@ function deltaFromItinerary(
   };
 }
 
-function mapMotisAlertSeverity(level?: AlertSeverityLevel): AlertSeverity {
-  switch (level) {
-    case "SEVERE":
-      return "severe";
-    case "WARNING":
-      return "warning";
-    case "INFO":
-      return "info";
-    default:
-      return "info";
-  }
-}
-
-function mapMotisAlert(alert: MotisAlert, index: number): ServiceAlert {
-  const idSeed = alert.code ?? `${alert.headerText}-${index}`;
-  const periods = (alert.impactPeriod ?? []).flatMap((range) => {
-    if (!range.start) return [];
-    return [
-      {
-        start: range.start,
-        end: range.end ?? undefined,
-      },
-    ];
-  });
-
-  return {
-    id: `${ALERT_PREFIX}${idSeed}`,
-    providers: [SOURCE_ID],
-    severity: mapMotisAlertSeverity(alert.severityLevel),
-    effect: alert.effect ?? alert.effectDetail ?? undefined,
-    title: alert.headerText,
-    description: alert.descriptionText || undefined,
-    affectedRouteIds: [],
-    affectedStopIds: [],
-    activePeriods: periods,
-  };
-}
-
 export function setup(ctx: IntegrationContext): void {
   attribution.set(ctx.manifest.dataSources ?? []);
   localClient.setConfig({
@@ -229,7 +190,14 @@ export function setup(ctx: IntegrationContext): void {
           query: { stopId: stripPrefix(stopId), n: 0, window: 0, withAlerts: true },
         });
         const motisAlerts: MotisAlert[] = data?.place?.alerts ?? [];
-        const mapped = motisAlerts.map((alert, index) => mapMotisAlert(alert, index));
+        const mapped = motisAlerts.map((alert, index) =>
+          mapMotisAlert(alert, {
+            index,
+            idPrefix: ALERT_PREFIX,
+            providers: [SOURCE_ID],
+            affectedStopIds: [stopId],
+          }),
+        );
         return withAttribution(mapped, attr, freshnessNow({ hasRealtimeData: true }));
       } catch {
         return withAttribution([], attr, freshnessNow({ hasRealtimeData: true }));

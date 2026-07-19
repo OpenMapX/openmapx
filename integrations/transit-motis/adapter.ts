@@ -24,10 +24,12 @@ import {
   stoptimes,
 } from "@motis-project/motis-client";
 import { type BBox, decodePolyline } from "@openmapx/core";
+import { mapMotisAlert } from "@openmapx/mobility-core/motis-alerts";
 import type {
   Departure,
   FareProduct,
   GeoJSONLineString,
+  ServiceAlert,
   TransitFlexInfo,
   TransitLegAlternative,
   TransitRentalInfo,
@@ -447,6 +449,34 @@ function mapFlex(leg: Leg): TransitFlexInfo | null {
   };
 }
 
+/**
+ * Collect the service alerts affecting a leg — from the leg itself plus its
+ * board/alight `Place.alerts` — into a deduped list. MOTIS attaches the same
+ * alert to the leg and its endpoint places, so we key by id and keep the first.
+ */
+function mapLegAlerts(instance: MotisInstance, leg: Leg): ServiceAlert[] | undefined {
+  const idPrefix = `${instance.prefix}alert:`;
+  const providers = [instance.provider === "ms" ? "transit-motis-local" : "transitous"];
+  const routeId = leg.routeId ? `${instance.prefix}${leg.routeId}` : undefined;
+  const byId = new Map<string, ServiceAlert>();
+  const add = (alerts: Leg["alerts"], affectedStopId?: string) => {
+    (alerts ?? []).forEach((alert, index) => {
+      const mapped = mapMotisAlert(alert, {
+        index,
+        idPrefix,
+        providers,
+        affectedRouteIds: routeId ? [routeId] : [],
+        affectedStopIds: affectedStopId ? [affectedStopId] : [],
+      });
+      if (!byId.has(mapped.id)) byId.set(mapped.id, mapped);
+    });
+  };
+  add(leg.alerts);
+  add(leg.from.alerts, leg.from.stopId ? `${instance.prefix}${leg.from.stopId}` : undefined);
+  add(leg.to.alerts, leg.to.stopId ? `${instance.prefix}${leg.to.stopId}` : undefined);
+  return byId.size > 0 ? Array.from(byId.values()) : undefined;
+}
+
 /** Map a single MOTIS Leg to our TripLeg. */
 function mapLeg(instance: MotisInstance, leg: Leg): TripLeg {
   // Rental legs report mode `RENTAL`; motisLegMode refines car-like form factors
@@ -563,6 +593,7 @@ function mapLeg(instance: MotisInstance, leg: Leg): TripLeg {
       : undefined,
     fareTransferIndex: leg.fareTransferIndex,
     effectiveFareLegIndex: leg.effectiveFareLegIndex,
+    alerts: mapLegAlerts(instance, leg),
   };
 }
 

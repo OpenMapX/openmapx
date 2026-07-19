@@ -130,7 +130,7 @@ describe("live-transit-motis provider", () => {
         title: "Track closure",
         description: "Track 3 closed for maintenance",
         affectedRouteIds: [],
-        affectedStopIds: [],
+        affectedStopIds: ["ms:DE:8000105"],
         activePeriods: [{ start: "2026-05-22T08:00:00Z", end: "2026-05-22T18:00:00Z" }],
       }),
     ]);
