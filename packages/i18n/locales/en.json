@@ -66,6 +66,14 @@
     "delayMinutes": "+{minutes} min",
     "overview": "Route overview",
     "moreOptions": "More options",
+    "menu": {
+      "addReport": "Add a report",
+      "directions": "Directions",
+      "showTraffic": "Show traffic",
+      "showSatellite": "Show satellite",
+      "showRaisedBuildings": "Show raised buildings",
+      "settings": "Settings"
+    },
     "rerouteFailed": "Couldn't find a new route. Retrying…",
     "then": "Then {instruction}",
     "thenLabel": "Then",

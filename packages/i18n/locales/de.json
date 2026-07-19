@@ -66,6 +66,14 @@
     "delayMinutes": "+{minutes} Min.",
     "overview": "Routenübersicht",
     "moreOptions": "Weitere Optionen",
+    "menu": {
+      "addReport": "Zustand melden",
+      "directions": "Wegbeschreibung",
+      "showTraffic": "Verkehr anzeigen",
+      "showSatellite": "Satellit anzeigen",
+      "showRaisedBuildings": "3D-Gebäude anzeigen",
+      "settings": "Einstellungen"
+    },
     "rerouteFailed": "Keine neue Route gefunden. Wird erneut versucht…",
     "then": "Dann {instruction}",
     "thenLabel": "Dann",
