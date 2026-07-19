@@ -9,7 +9,25 @@ import { loadTrafficLightImage, TRAFFIC_LIGHT_IMAGE_ID } from "@/lib/trafficLigh
 type GeoJSONSource = maplibregl.GeoJSONSource;
 
 const SOURCE = "nav-traffic-signals-source";
-const LAYER = "nav-traffic-signals";
+export const NAV_TRAFFIC_SIGNALS_LAYER_ID = "nav-traffic-signals";
+const LAYER = NAV_TRAFFIC_SIGNALS_LAYER_ID;
+
+interface LayerOrderMap {
+  getLayer(id: string): unknown;
+  moveLayer(id: string, beforeId?: string): unknown;
+}
+
+/**
+ * Keep the traffic-light symbols above the blue route line. Without this the
+ * layer's stacking is decided by whichever create-effect (route vs. signals)
+ * ran last, so the icons intermittently rendered beneath the route. Re-asserting
+ * the order after each create and data update makes it deterministic across
+ * style swaps. The user-location puck is a DOM marker, so moving to the top of
+ * the canvas layers never covers it.
+ */
+export function orderNavTrafficSignalsLayer(map: LayerOrderMap): void {
+  if (map.getLayer(LAYER)) map.moveLayer(LAYER);
+}
 
 export function NavTrafficSignalsLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
@@ -38,6 +56,7 @@ export function NavTrafficSignalsLayer() {
         "icon-anchor": "center",
       },
     });
+    orderNavTrafficSignalsLayer(map);
   }, [mapRef, mapReady, styleVersion]);
 
   // Push signal points into the source. `styleVersion` is a required dep, not
@@ -46,7 +65,8 @@ export function NavTrafficSignalsLayer() {
   useEffect(() => {
     void styleVersion;
     const map = mapRef.current;
-    const raw = map?.getSource(SOURCE);
+    if (!map) return;
+    const raw = map.getSource(SOURCE);
     if (raw?.type !== "geojson") return;
     const source = raw as GeoJSONSource;
     source.setData({
@@ -57,6 +77,7 @@ export function NavTrafficSignalsLayer() {
         geometry: { type: "Point", coordinates: coord },
       })),
     });
+    orderNavTrafficSignalsLayer(map);
   }, [mapRef, signals, styleVersion]);
 
   return null;
