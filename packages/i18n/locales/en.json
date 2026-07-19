@@ -64,6 +64,8 @@
     "alightSoon": "Get off at the next stop",
     "changeAt": "Change at {stop}",
     "transferWalk": "{minutes} min to transfer",
+    "restOfJourney": "Rest of journey",
+    "boardAt": "Board at {place}",
     "legCounter": "Leg {current}/{total}",
     "arriveAt": "Arrive {time}",
     "delayMinutes": "+{minutes} min",

@@ -10,32 +10,26 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { haptics } from "@/lib/haptics";
+import { sliceJourneyToLeg } from "@/lib/navigation/legJourneyStops";
 import type { TransitTransfer } from "@/lib/navigation/transitTransfer";
 import { NavBannerShell } from "./NavBannerShell";
 import { PlatformBadge } from "./PlatformBadge";
 import { TransitTransferCard } from "./TransitTransferCard";
 
 /**
- * Slice the full vehicle journey down to the stops for this leg, between the
- * board and alight stop ids. Mirrors the logic in TransitLegStops so the
- * countdown matches what the itinerary detail view shows.
+ * Slice the full vehicle journey down to the stops for this leg (board → alight)
+ * and project to the shape stopsUntilAlight needs, so the countdown matches the
+ * itinerary detail view.
  */
 function legStopsFor(
   stops: { stopId: string; name: string; lat: number; lng: number }[],
   leg: TripLeg,
 ): { lat: number; lng: number; name: string }[] {
-  const fromId = leg.from.stopId;
-  const toId = leg.to.stopId;
-  const fromIdx = fromId ? stops.findIndex((s) => s.stopId === fromId) : -1;
-  const toIdx =
-    fromIdx !== -1 && toId
-      ? stops.findIndex((s, i) => i > fromIdx && s.stopId === toId)
-      : toId
-        ? stops.findIndex((s) => s.stopId === toId)
-        : -1;
-  const sliced =
-    fromIdx !== -1 && toIdx !== -1 && toIdx > fromIdx ? stops.slice(fromIdx, toIdx + 1) : stops;
-  return sliced.map((s) => ({ lat: s.lat, lng: s.lng, name: s.name }));
+  return sliceJourneyToLeg(stops, leg.from.stopId, leg.to.stopId).map((s) => ({
+    lat: s.lat,
+    lng: s.lng,
+    name: s.name,
+  }));
 }
 
 /**

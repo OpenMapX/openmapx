@@ -5,12 +5,13 @@ import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useNavigationStore, useSidebarStore } from "@openmapx/core";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { nextTransferFor } from "@/lib/navigation/transitTransfer";
 import { useTransitNavigationEngine } from "@/lib/navigation/useTransitNavigationEngine";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { ArrivalCard } from "./ArrivalCard";
-import { NavBottomSheet } from "./NavBottomSheet";
+import { NavSwipeSheet } from "./NavSwipeSheet";
+import { TransitJourneySheet } from "./TransitJourneySheet";
 import { TransitLegBanner } from "./TransitLegBanner";
 import { TransitNavBottomBar } from "./TransitNavBottomBar";
 
@@ -25,6 +26,7 @@ export function TransitNavigationView() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const active = status !== "idle" && status !== "arrived" && kind === "transit";
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   // Hooks must run before any early return.
   useTransitNavigationEngine();
@@ -90,9 +92,17 @@ export function TransitNavigationView() {
 
           <Box sx={{ display: "flex", flexDirection: "column" }}>
             {isMobile ? (
-              <NavBottomSheet>
-                <TransitNavBottomBar itinerary={itinerary} currentLeg={currentLeg} />
-              </NavBottomSheet>
+              <NavSwipeSheet
+                expanded={sheetOpen}
+                onExpandedChange={setSheetOpen}
+                header={<TransitNavBottomBar itinerary={itinerary} currentLeg={currentLeg} />}
+              >
+                <TransitJourneySheet
+                  itinerary={itinerary}
+                  currentLegIndex={currentLegIndex}
+                  transitProgress={transitProgress}
+                />
+              </NavSwipeSheet>
             ) : (
               <Box
                 sx={{

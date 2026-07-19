@@ -8,6 +8,7 @@ import Typography from "@mui/material/Typography";
 import { useVehicleJourney } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { sliceJourneyToLeg } from "@/lib/navigation/legJourneyStops";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 
 interface TransitLegStopsProps {
@@ -33,17 +34,7 @@ export function TransitLegStops({ tripId, stopCount, fromStopId, toStopId }: Tra
   // For circular routes (Ringlinie), a stop ID can appear multiple times.
   // Always search for the to-stop AFTER the from-stop to get the correct segment.
   const allStops = journey?.stops ?? [];
-  const fromIdx = fromStopId ? allStops.findIndex((s) => s.stopId === fromStopId) : -1;
-  const toIdx =
-    fromIdx !== -1 && toStopId
-      ? allStops.findIndex((s, i) => i > fromIdx && s.stopId === toStopId)
-      : toStopId
-        ? allStops.findIndex((s) => s.stopId === toStopId)
-        : -1;
-  const legStops =
-    fromIdx !== -1 && toIdx !== -1 && toIdx > fromIdx
-      ? allStops.slice(fromIdx, toIdx + 1)
-      : allStops;
+  const legStops = sliceJourneyToLeg(allStops, fromStopId, toStopId);
 
   const intermediateStops = legStops.slice(1, -1);
 

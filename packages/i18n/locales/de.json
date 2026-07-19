@@ -64,6 +64,8 @@
     "alightSoon": "Am nächsten Halt aussteigen",
     "changeAt": "Umsteigen an {stop}",
     "transferWalk": "{minutes} Min. zum Umstieg",
+    "restOfJourney": "Restliche Fahrt",
+    "boardAt": "Einsteigen an {place}",
     "legCounter": "Abschnitt {current}/{total}",
     "arriveAt": "Ankunft {time}",
     "delayMinutes": "+{minutes} Min.",
