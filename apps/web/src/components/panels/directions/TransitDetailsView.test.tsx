@@ -63,6 +63,10 @@ vi.mock("@/components/panels/transit/TransitLegStops", () => ({
   TransitLegStops: () => null,
 }));
 
+vi.mock("@/components/panels/directions/TransitTransferSummary", () => ({
+  TransitTransferSummary: () => null,
+}));
+
 vi.mock("@/components/panels/transit/TripDetailView", () => ({
   TripDetailView: () => null,
 }));
