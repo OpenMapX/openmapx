@@ -1,7 +1,5 @@
 import type { SvgIconComponent } from "@mui/icons-material";
 import Flag from "@mui/icons-material/Flag";
-import ForkLeft from "@mui/icons-material/ForkLeft";
-import ForkRight from "@mui/icons-material/ForkRight";
 import MergeType from "@mui/icons-material/MergeType";
 import RoundaboutLeft from "@mui/icons-material/RoundaboutLeft";
 import RoundaboutRight from "@mui/icons-material/RoundaboutRight";
@@ -52,6 +50,24 @@ export function normalizeLaneToken(token: string): string {
 }
 
 /**
+ * Fork, ramp and exit maneuvers branch off the through road at a shallow angle;
+ * you can't drive straight *and* turn, so a single diagonal arrow on the
+ * modifier side reads correctly and the lane-guidance strip shows where the
+ * other branches go. This replaces MUI's fork glyph, which draws a straight and
+ * a turning branch at once and can't communicate which way the exit leaves.
+ * A bare `left`/`right` is promoted to its slight (diagonal) variant since a
+ * diverge is gentler than a junction turn.
+ */
+function rampArrowFor(modifier: string): ResolvedIcon {
+  const m = normalizeLaneToken(modifier);
+  if (m.includes("sharp left")) return ARROW_ICONS["sharp left"];
+  if (m.includes("sharp right")) return ARROW_ICONS["sharp right"];
+  if (m.includes("left")) return ARROW_ICONS["slight left"];
+  if (m.includes("right")) return ARROW_ICONS["slight right"];
+  return ARROW_ICONS.straight;
+}
+
+/**
  * Resolve a normalized maneuver to an MUI icon component. Falls back to Straight.
  */
 export function maneuverIconFor(maneuver: Maneuver | undefined): ResolvedIcon {
@@ -76,13 +92,13 @@ export function maneuverIconFor(maneuver: Maneuver | undefined): ResolvedIcon {
       if (m.includes("right")) return ARROW_ICONS["slight right"];
       return ARROW_ICONS.straight;
     // Forks and ramps both branch off the through road; OSRM emits `on ramp`/
-    // `off ramp` (Valhalla ramps/exits are normalized to `fork`).
+    // `off ramp` (Valhalla ramps/exits are normalized to `fork`). Show a single
+    // diagonal arrow on the modifier side rather than a fork glyph — lane
+    // guidance conveys the split.
     case "fork":
     case "on ramp":
     case "off ramp":
-      return m.includes("left")
-        ? { component: ForkLeft, name: "ForkLeft" }
-        : { component: ForkRight, name: "ForkRight" };
+      return rampArrowFor(m);
   }
   // `turn`, `end of road`, `continue`, `new name`, `roundabout turn`,
   // `notification`, `use lane`, `depart` → a directional arrow from the modifier.

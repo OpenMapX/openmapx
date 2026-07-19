@@ -13,12 +13,22 @@ describe("maneuverIconFor", () => {
     expect(maneuverIconFor({ type: "arrive" }).name).toContain("Flag");
   });
 
-  it("maps forks and ramps (OSRM on/off ramp) to a fork on the modifier side", () => {
-    expect(maneuverIconFor({ type: "fork", modifier: "right" }).name).toBe("ForkRight");
-    expect(maneuverIconFor({ type: "off ramp", modifier: "slight right" }).name).toBe("ForkRight");
-    expect(maneuverIconFor({ type: "off ramp", modifier: "left" }).name).toBe("ForkLeft");
-    expect(maneuverIconFor({ type: "on ramp", modifier: "right" }).name).toBe("ForkRight");
-    expect(maneuverIconFor({ type: "on ramp", modifier: "slight left" }).name).toBe("ForkLeft");
+  it("maps forks and ramps (OSRM on/off ramp) to a diagonal arrow, not a fork glyph", () => {
+    // Bare left/right are promoted to their slight (diagonal) variant.
+    expect(maneuverIconFor({ type: "fork", modifier: "right" }).name).toBe("TurnSlightRight");
+    expect(maneuverIconFor({ type: "off ramp", modifier: "left" }).name).toBe("TurnSlightLeft");
+    expect(maneuverIconFor({ type: "on ramp", modifier: "right" }).name).toBe("TurnSlightRight");
+    // Explicit slight/sharp granularity is preserved.
+    expect(maneuverIconFor({ type: "off ramp", modifier: "slight right" }).name).toBe(
+      "TurnSlightRight",
+    );
+    expect(maneuverIconFor({ type: "on ramp", modifier: "slight left" }).name).toBe(
+      "TurnSlightLeft",
+    );
+    expect(maneuverIconFor({ type: "fork", modifier: "sharp left" }).name).toBe("TurnSharpLeft");
+    // A straight/unspecified fork stays a straight arrow.
+    expect(maneuverIconFor({ type: "fork", modifier: "straight" }).name).toBe("Straight");
+    expect(maneuverIconFor({ type: "fork" }).name).toBe("Straight");
   });
 
   it("maps roundabouts/rotaries (incl. OSRM exit variants) to a roundabout icon", () => {
