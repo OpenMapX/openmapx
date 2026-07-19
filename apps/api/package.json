@@ -52,7 +52,8 @@
     "pino": "^10.3.1",
     "postgres": "^3.4.9",
     "simple-git": "^3.36.0",
-    "tsx": "4.23.0"
+    "tsx": "4.23.0",
+    "undici": "^8.7.0"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",

@@ -1,3 +1,6 @@
+// Must run first: swap the process's global fetch onto the fixed standalone
+// undici before any module captures or uses it (see undici-fetch.ts).
+import "./undici-fetch";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import cors from "@fastify/cors";
