@@ -8,10 +8,10 @@ import Typography from "@mui/material/Typography";
 import { type TransitProgress, useVehicleJourney } from "@openmapx/core";
 import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
+import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { sliceJourneyToLeg } from "@/lib/navigation/legJourneyStops";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
-import { PlatformBadge } from "./PlatformBadge";
 import { TransitBoardingDepartures } from "./TransitBoardingDepartures";
 
 /** Best available time for a stop: realtime departure/arrival, else scheduled. */

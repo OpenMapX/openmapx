@@ -8,9 +8,9 @@ import Typography from "@mui/material/Typography";
 import { useStopTransfers } from "@openmapx/core";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
+import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { changedFromPlatform } from "@/lib/navigation/platformChange";
-import { PlatformBadge } from "./PlatformBadge";
 
 /**
  * "Change here" card shown beneath the leg banner as the rider approaches the

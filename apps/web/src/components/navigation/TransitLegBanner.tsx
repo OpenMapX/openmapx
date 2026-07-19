@@ -17,6 +17,7 @@ import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
+import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { haptics } from "@/lib/haptics";
 import { sliceJourneyToLeg } from "@/lib/navigation/legJourneyStops";
@@ -25,7 +26,6 @@ import { changedFromPlatform } from "@/lib/navigation/platformChange";
 import type { TransitTransfer } from "@/lib/navigation/transitTransfer";
 import { useNavigationVoice } from "@/lib/navigation/useNavigationVoice";
 import { NavBannerShell } from "./NavBannerShell";
-import { PlatformBadge } from "./PlatformBadge";
 import { TransitTransferCard } from "./TransitTransferCard";
 
 /**
