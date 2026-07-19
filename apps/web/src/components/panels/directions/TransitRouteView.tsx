@@ -4,6 +4,7 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import DirectionsBikeIcon from "@mui/icons-material/DirectionsBike";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
 import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
+import DirectionsRunIcon from "@mui/icons-material/DirectionsRun";
 import DirectionsTransitIcon from "@mui/icons-material/DirectionsTransit";
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
 import NavigationIcon from "@mui/icons-material/Navigation";
@@ -24,6 +25,7 @@ import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicat
 import { RemarkChip } from "@/components/panels/transit/RemarkChip";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
+import { itineraryTransferRisk } from "@/lib/navigation/connectionRisk";
 import { ensureNotificationPermission } from "@/lib/navigation/navNotify";
 import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
 import { TEAL, TEAL_HEX } from "@/lib/theme";
@@ -248,6 +250,8 @@ export function TransitItineraryCard({
   const refreshMutation = useRefreshTransitItinerary();
   const fareSummary = extractFareSummary(itinerary.fare);
   const occupancy = worstOccupancy(itinerary);
+  // Plan-time robustness cue: a very short scheduled transfer buffer.
+  const tightTransfer = itineraryTransferRisk(itinerary.legs) !== null;
   const startTime = fmt.time(itinerary.startTime);
   const endTime = fmt.time(itinerary.endTime);
   const metaBits: string[] = [];
@@ -341,6 +345,26 @@ export function TransitItineraryCard({
         >
           {metaBits.join(" · ")}
         </Typography>
+      )}
+      {tightTransfer && (
+        <Box
+          sx={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 0.5,
+            mt: 0.75,
+            px: 0.75,
+            py: 0.25,
+            borderRadius: 99,
+            bgcolor: "warning.main",
+            color: "warning.contrastText",
+          }}
+        >
+          <DirectionsRunIcon sx={{ fontSize: 14 }} />
+          <Typography variant="caption" sx={{ fontWeight: 600, fontSize: 10.5 }}>
+            {tNav("tightTransfer")}
+          </Typography>
+        </Box>
       )}
       {itinerary.co2Grams !== undefined && (
         <Box sx={{ mt: metaBits.length > 0 ? 0.75 : 0.5 }}>

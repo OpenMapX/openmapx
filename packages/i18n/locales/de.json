@@ -81,6 +81,7 @@
     "voiceTransfer": "Steig an {stop} aus und in die {line} um",
     "stepFree": "Barrierefrei · {minutes} Min.",
     "stepFreeElevator": "Barrierefrei per Aufzug · {minutes} Min.",
+    "tightTransfer": "Knapper Umstieg",
     "connectionTight": "Knapper Umstieg · {minutes} Min.",
     "connectionMissed": "Anschluss wahrscheinlich verpasst",
     "connectionAlternative": "Nächste Option {time}",
