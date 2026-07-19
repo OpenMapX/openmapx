@@ -69,6 +69,7 @@
     "transferWalk": "{minutes} min to transfer",
     "restOfJourney": "Rest of journey",
     "stopSkipped": "Does not stop",
+    "departuresAt": "Departures · {stop}",
     "boardAt": "Board at {place}",
     "legCancelled": "{line} is cancelled",
     "platformChanged": "{line}: platform {platform} (was {scheduled})",

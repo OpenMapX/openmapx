@@ -12,6 +12,7 @@ import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { sliceJourneyToLeg } from "@/lib/navigation/legJourneyStops";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { PlatformBadge } from "./PlatformBadge";
+import { TransitBoardingDepartures } from "./TransitBoardingDepartures";
 
 /** Best available time for a stop: realtime departure/arrival, else scheduled. */
 function stopTime(stop: VehicleJourneyStop): string | undefined {
@@ -198,8 +199,22 @@ export function TransitJourneySheet({
 
   const upcomingLegs = legs.slice(currentLegIndex + 1);
 
+  // While walking to (or waiting at) the next boarding point, show its live
+  // departure board so the rider knows if their service is next.
+  const nextTransitLeg = legs.slice(currentLegIndex).find((l) => l.mode !== "walking" && l.route);
+  const boardingSoon =
+    currentLeg?.mode === "walking" && nextTransitLeg && nextTransitLeg !== currentLeg;
+
   return (
     <Box sx={{ maxHeight: "56vh", overflowY: "auto" }}>
+      {boardingSoon && nextTransitLeg?.from.stopId && (
+        <TransitBoardingDepartures
+          stopId={nextTransitLeg.from.stopId}
+          stopName={nextTransitLeg.from.name}
+          targetTripId={nextTransitLeg.tripId}
+          targetRouteShortName={nextTransitLeg.route?.shortName}
+        />
+      )}
       {legStops.length > 0 && <StopTimeline stops={legStops} nextIdx={nextIdx} />}
       {upcomingLegs.length > 0 && (
         <>
