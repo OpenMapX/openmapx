@@ -65,7 +65,7 @@ const STEM_CENTER_X: Record<string, number> = {
   TurnSharpLeft: 17,
   TurnSharpRight: 7,
   UTurnLeft: 17,
-  MergeType: 11,
+  MergeType: 12,
 };
 
 /**

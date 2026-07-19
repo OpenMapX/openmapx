@@ -82,6 +82,26 @@ describe("laneArrowStemShiftEm", () => {
   it("falls back to no shift for an unknown glyph", () => {
     expect(laneArrowStemShiftEm("Nope")).toBe(0);
   });
+
+  // Guards the full stem-center table: every glyph that can share a lane cell
+  // must resolve to the shift that lands its stem on the centerline (x=12 in the
+  // 24-unit viewBox). A wrong entry silently misaligns one two-arrow combo.
+  it("aligns every arrow glyph's stem to the centerline", () => {
+    const measuredStemCenter: Record<string, number> = {
+      Straight: 12,
+      TurnSlightLeft: 14,
+      TurnSlightRight: 10,
+      TurnLeft: 16,
+      TurnRight: 8,
+      TurnSharpLeft: 17,
+      TurnSharpRight: 7,
+      UTurnLeft: 17,
+      MergeType: 12,
+    };
+    for (const [name, center] of Object.entries(measuredStemCenter)) {
+      expect(laneArrowStemShiftEm(name)).toBeCloseTo((12 - center) / 24);
+    }
+  });
 });
 
 describe("laneIndicationIcon", () => {
