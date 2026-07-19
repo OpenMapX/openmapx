@@ -216,9 +216,17 @@ export function valhallaManeuverType(t: number): { type: string; modifier?: stri
     case 26:
     case 27:
       return { type: "roundabout" };
+    // Pedestrian/indoor: 39 kElevatorEnter, 40 kStepsEnter, 41 kEscalatorEnter.
+    // Surface a dedicated glyph (escalator maps to stairs — closest icon) so foot
+    // routing shows "take the lift/stairs" instead of a bare straight arrow.
+    case 39:
+      return { type: "elevator" };
+    case 40:
+    case 41:
+      return { type: "stairs" };
     // Everything else proceeds straight, with no dedicated glyph: kNone (0),
-    // kBecomes (7), kContinue (8), kRampStraight (17),
-    // ferry (28-29), transit (30-36), and indoor/pedestrian (39-43).
+    // kBecomes (7), kContinue (8), kRampStraight (17), ferry (28-29),
+    // transit (30-36), and building enter/exit (42-43).
     default:
       return { type: "turn", modifier: "straight" };
   }

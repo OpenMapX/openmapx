@@ -13,6 +13,7 @@ interface VitestExpectation {
   toContain(expected: unknown): void;
   toHaveLength(expected: number): void;
   toEqual(expected: unknown): void;
+  toMatchObject(expected: unknown): void;
   toHaveBeenCalled(): void;
   toHaveBeenCalledTimes(times: number): void;
   toHaveBeenCalledWith(...args: unknown[]): void;

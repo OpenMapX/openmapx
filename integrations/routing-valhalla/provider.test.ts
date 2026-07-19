@@ -49,7 +49,9 @@ describe("valhallaManeuverType", () => {
     [36, { type: "turn", modifier: "straight" }], // kPostTransitConnectionDestination
     [37, { type: "merge" }], // kMergeRight
     [38, { type: "merge" }], // kMergeLeft
-    [39, { type: "turn", modifier: "straight" }], // kElevatorEnter
+    [39, { type: "elevator" }], // kElevatorEnter
+    [40, { type: "stairs" }], // kStepsEnter
+    [41, { type: "stairs" }], // kEscalatorEnter
     [43, { type: "turn", modifier: "straight" }], // kBuildingExit
   ];
 

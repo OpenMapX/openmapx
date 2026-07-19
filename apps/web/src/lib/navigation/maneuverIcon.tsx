@@ -1,8 +1,10 @@
 import type { SvgIconComponent } from "@mui/icons-material";
+import Elevator from "@mui/icons-material/Elevator";
 import Flag from "@mui/icons-material/Flag";
 import MergeType from "@mui/icons-material/MergeType";
 import RoundaboutLeft from "@mui/icons-material/RoundaboutLeft";
 import RoundaboutRight from "@mui/icons-material/RoundaboutRight";
+import Stairs from "@mui/icons-material/Stairs";
 import Straight from "@mui/icons-material/Straight";
 import TurnLeft from "@mui/icons-material/TurnLeft";
 import TurnRight from "@mui/icons-material/TurnRight";
@@ -103,6 +105,11 @@ export function maneuverIconFor(maneuver: Maneuver | undefined): ResolvedIcon {
   switch (maneuver?.type) {
     case "arrive":
       return { component: Flag, name: "Flag" };
+    // Pedestrian / indoor maneuvers (transit walk legs; Valhalla foot routing).
+    case "stairs":
+      return { component: Stairs, name: "Stairs" };
+    case "elevator":
+      return { component: Elevator, name: "Elevator" };
     // OSRM uses `exit roundabout`/`exit rotary` for the leaving maneuver.
     case "roundabout":
     case "rotary":

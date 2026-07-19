@@ -7,7 +7,7 @@ import Collapse from "@mui/material/Collapse";
 import IconButton from "@mui/material/IconButton";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { geoJsonBBox, useNavigationStore, useSidebarStore } from "@openmapx/core";
+import { geoJsonBBox, useNavigationStore, useSettingsStore, useSidebarStore } from "@openmapx/core";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
@@ -25,6 +25,7 @@ import { TransitJourneySheet } from "./TransitJourneySheet";
 import { TransitLegBanner } from "./TransitLegBanner";
 import { TransitNavBottomBar } from "./TransitNavBottomBar";
 import { TransitNavMenu } from "./TransitNavMenu";
+import { TransitWalkBanner } from "./TransitWalkBanner";
 
 export function TransitNavigationView() {
   const status = useNavigationStore((s) => s.status);
@@ -34,6 +35,7 @@ export function TransitNavigationView() {
   const keepScreenOn = useNavigationStore((s) => s.keepScreenOn);
   const setCameraMode = useNavigationStore((s) => s.setCameraMode);
   const stopNavigation = useNavigationStore((s) => s.stopNavigation);
+  const units = useSettingsStore((s) => s.units);
 
   const mapCtx = useMapOptional();
   const t = useTranslations("navigation");
@@ -63,6 +65,13 @@ export function TransitNavigationView() {
   const currentLegIndex = Math.min(transitProgress?.currentLegIndex ?? 0, legs.length - 1);
   const currentLeg = legs[currentLegIndex] as TripLeg | undefined;
   const transfer = nextTransferFor(legs, currentLegIndex);
+  // A walk leg with step-level directions gets turn-by-turn guidance; other legs
+  // (and detail-less walks) use the standard leg banner.
+  const isGuidedWalk =
+    !!currentLeg &&
+    currentLeg.mode === "walking" &&
+    !!currentLeg.steps &&
+    currentLeg.steps.length > 0;
 
   // Release the follow camera and frame the whole itinerary. The MapControls
   // recenter compass (shown while cameraMode === "free") resumes following.
@@ -136,15 +145,22 @@ export function TransitNavigationView() {
                   }),
             }}
           >
-            {currentLeg && (
-              <TransitLegBanner
-                leg={currentLeg}
-                legIndex={currentLegIndex}
-                totalLegs={legs.length}
-                transitProgress={transitProgress}
-                transfer={transfer}
-              />
-            )}
+            {currentLeg &&
+              (isGuidedWalk ? (
+                <TransitWalkBanner
+                  leg={currentLeg}
+                  transitProgress={transitProgress}
+                  units={units}
+                />
+              ) : (
+                <TransitLegBanner
+                  leg={currentLeg}
+                  legIndex={currentLegIndex}
+                  totalLegs={legs.length}
+                  transitProgress={transitProgress}
+                  transfer={transfer}
+                />
+              ))}
             <TransitAlertBanner
               itinerary={itinerary}
               currentLegIndex={currentLegIndex}
