@@ -1,7 +1,12 @@
 "use client";
 
 import type { LngLat } from "@openmapx/core";
-import { useDirections, useDirectionsStore, useSettingsStore } from "@openmapx/core";
+import {
+  useDirections,
+  useDirectionsStore,
+  useNavigationStore,
+  useSettingsStore,
+} from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type maplibregl from "maplibre-gl";
 import { useLocale } from "next-intl";
@@ -33,6 +38,11 @@ export function RouteLayer() {
   } = useDirectionsStore();
   const units = useSettingsStore((s) => s.units);
   const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
+  // Once turn-by-turn navigation starts, NavigationRouteLayer owns the on-map
+  // route (traveled/remaining split, live reroutes). Keep the directions preview
+  // dark so a reroute doesn't leave the original planned line stranded on the
+  // map — and so this layer's fitBounds never fights the navigation camera.
+  const navigating = useNavigationStore((s) => s.status) !== "idle";
 
   const routeWaypoints = useMemo(
     () =>
@@ -47,7 +57,9 @@ export function RouteLayer() {
   const { data } = useDirections({
     // Transit uses the transit-plan endpoint and flights deep-link out — neither
     // routes through the ground engines, so skip the directions query for both.
-    waypoints: mode === "transit" || mode === "flying" ? [] : allFilled ? routeWaypoints : [],
+    // Skip it while navigating too: the nav layer draws the live route.
+    waypoints:
+      navigating || mode === "transit" || mode === "flying" ? [] : allFilled ? routeWaypoints : [],
     mode,
     avoidHighways,
     avoidTolls,
@@ -62,8 +74,8 @@ export function RouteLayer() {
   // closed (the panel shows the same credit while open).
   const registry = useIntegrationRegistry();
   const routeAttributions = useMemo(
-    () => attributionsForProviders(registry, [data?.provider]),
-    [registry, data?.provider],
+    () => (navigating ? [] : attributionsForProviders(registry, [data?.provider])),
+    [registry, data?.provider, navigating],
   );
   useMapAttributions("route", routeAttributions);
 
@@ -163,7 +175,7 @@ export function RouteLayer() {
     if (raw?.type !== "geojson") return;
     const source = raw as GeoJSONSource;
 
-    if (mode === "transit" || mode === "flying") {
+    if (navigating || mode === "transit" || mode === "flying") {
       source.setData({ type: "FeatureCollection", features: [] });
       return;
     }
@@ -209,7 +221,7 @@ export function RouteLayer() {
         80,
       );
     }
-  }, [data, activeRouteIndex, mode, mapRef, fitBounds]);
+  }, [data, activeRouteIndex, mode, mapRef, fitBounds, navigating]);
 
   // Clear routes when all waypoints are empty (panel closed)
   useEffect(() => {
