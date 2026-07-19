@@ -16,20 +16,33 @@ import {
  * is drawn brightest, other arrows mid, and arrows in lanes you must not take
  * are dimmed. A lane with no real indication (`none`) renders as a blank cell.
  */
-export function LaneGuidance({ lanes, maneuver }: { lanes?: ManeuverLane[]; maneuver?: Maneuver }) {
+export function LaneGuidance({
+  lanes,
+  maneuver,
+  variant = "standalone",
+}: {
+  lanes?: ManeuverLane[];
+  maneuver?: Maneuver;
+  /**
+   * "standalone" = its own light card. "banner" = embedded in the maneuver
+   * banner's darkened sub-row: transparent, white arrows keyed by opacity.
+   */
+  variant?: "standalone" | "banner";
+}) {
   // Trust the engine's valid/active lanes; otherwise recommend them from the
   // maneuver (exact → same-side → unrestricted) so under-tagged lanes still light up.
   const resolved = resolveRecommendedLanes(lanes, maneuver);
   if (resolved.length === 0) return null;
+  const banner = variant === "banner";
+  const cell = banner ? 34 : 32;
+  const arrowSize = banner ? 28 : 26;
   return (
     <Box
       sx={{
         display: "flex",
-        gap: 0.75,
+        gap: 0.5,
         justifyContent: "center",
-        p: 1,
-        bgcolor: "background.paper",
-        borderRadius: 2,
+        ...(banner ? { flex: 1 } : { p: 1, bgcolor: "background.paper", borderRadius: 2 }),
       }}
     >
       {resolved.map((lane, i) => {
@@ -45,19 +58,28 @@ export function LaneGuidance({ lanes, maneuver }: { lanes?: ManeuverLane[]; mane
             data-arrow-count={String(arrows.length)}
             sx={{
               position: "relative",
-              width: 28,
-              height: 28,
+              width: cell,
+              height: cell,
               borderRadius: 1,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              bgcolor: lane.valid ? "action.selected" : "transparent",
+              bgcolor: lane.valid
+                ? banner
+                  ? "rgba(255, 255, 255, 0.16)"
+                  : "action.selected"
+                : "transparent",
             }}
           >
             {arrows.length === 0 ? (
               <Box
                 data-empty="true"
-                sx={{ width: 12, height: 2, borderRadius: 1, bgcolor: "text.disabled" }}
+                sx={{
+                  width: 12,
+                  height: 2,
+                  borderRadius: 1,
+                  bgcolor: banner ? "rgba(255, 255, 255, 0.5)" : "text.disabled",
+                }}
               />
             ) : (
               arrows.map(({ ind, icon }) => {
@@ -74,13 +96,27 @@ export function LaneGuidance({ lanes, maneuver }: { lanes?: ManeuverLane[]; mane
                     data-active={String(isActive)}
                     sx={{
                       position: "absolute",
-                      fontSize: 22,
-                      color: !lane.valid
-                        ? "text.disabled"
-                        : isActive
-                          ? "primary.main"
-                          : "text.primary",
-                      opacity: lane.valid ? (isActive ? 1 : 0.55) : 0.3,
+                      fontSize: arrowSize,
+                      // On the dark banner the arrows are white throughout; state
+                      // reads from opacity. Standalone keeps the tinted palette.
+                      color: banner
+                        ? "primary.contrastText"
+                        : !lane.valid
+                          ? "text.disabled"
+                          : isActive
+                            ? "primary.main"
+                            : "text.primary",
+                      opacity: banner
+                        ? lane.valid
+                          ? isActive
+                            ? 1
+                            : 0.6
+                          : 0.35
+                        : lane.valid
+                          ? isActive
+                            ? 1
+                            : 0.55
+                          : 0.3,
                       transform: stemShift ? `translateX(${stemShift}em)` : undefined,
                     }}
                   />

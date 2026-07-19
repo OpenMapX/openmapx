@@ -12,6 +12,8 @@ vi.mock("@openmapx/core", () => ({
   formatDistance: (m: number) => `${m} m`,
   formatMeasurementDistance: (m: number, sys: string) =>
     sys === "imperial" ? `${m} ft` : `${m} m`,
+  // Passthrough: the lanes already carry valid/active flags in these tests.
+  resolveRecommendedLanes: (lanes?: unknown[]) => lanes ?? [],
 }));
 
 import { lowercaseFirstWord, ManeuverBanner } from "./ManeuverBanner";
@@ -67,5 +69,26 @@ describe("ManeuverBanner", () => {
       />,
     );
     expect(html).toContain("Then turn left onto 2nd Ave");
+  });
+
+  it("shows lane guidance in the sub-row instead of the next-step preview", () => {
+    const html = renderToStaticMarkup(
+      <ManeuverBanner
+        instruction="Turn right onto Main St"
+        distanceToManeuver={300}
+        maneuver={{ type: "turn", modifier: "right" }}
+        nextInstruction="Turn left onto 2nd Ave"
+        nextManeuver={{ type: "turn", modifier: "left" }}
+        lanes={[
+          { indications: ["through"], valid: false },
+          { indications: ["right"], valid: true, active: "right" },
+        ]}
+        units="metric"
+      />,
+    );
+    // Lanes take the sub-row…
+    expect(html).toContain('data-valid="true"');
+    // …and the "Then …" preview is suppressed.
+    expect(html).not.toContain("Then ");
   });
 });

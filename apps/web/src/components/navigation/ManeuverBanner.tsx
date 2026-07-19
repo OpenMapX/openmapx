@@ -1,9 +1,10 @@
 "use client";
 
 import Typography from "@mui/material/Typography";
-import { formatMeasurementDistance } from "@openmapx/core";
+import { formatMeasurementDistance, type ManeuverLane } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { type Maneuver, maneuverIconFor } from "@/lib/navigation/maneuverIcon";
+import { LaneGuidance } from "./LaneGuidance";
 import { NavBannerShell } from "./NavBannerShell";
 
 /**
@@ -31,6 +32,11 @@ interface Props {
   /** The step after the current one, previewed as "Then …". Omitted at the end. */
   nextInstruction?: string;
   nextManeuver?: Maneuver;
+  /**
+   * Turn-lane guidance for the upcoming maneuver. When present it takes the
+   * banner's sub-row (like Google Maps), replacing the "Then …" preview.
+   */
+  lanes?: ManeuverLane[];
   units: "metric" | "imperial";
 }
 
@@ -40,25 +46,26 @@ export function ManeuverBanner({
   maneuver,
   nextInstruction,
   nextManeuver,
+  lanes,
   units,
 }: Props) {
   const t = useTranslations("navigation");
   const Icon = maneuverIconFor(maneuver).component;
   const NextIcon = nextInstruction ? maneuverIconFor(nextManeuver).component : null;
+  // Lane guidance wins the sub-row over the "Then …" preview when we have it.
+  const secondary =
+    lanes && lanes.length > 0 ? (
+      <LaneGuidance variant="banner" lanes={lanes} maneuver={maneuver} />
+    ) : NextIcon && nextInstruction ? (
+      <>
+        <NextIcon sx={{ fontSize: 20, opacity: 0.85 }} />
+        <Typography variant="body2" sx={{ opacity: 0.85 }} noWrap>
+          {t("then", { instruction: lowercaseFirstWord(nextInstruction) })}
+        </Typography>
+      </>
+    ) : undefined;
   return (
-    <NavBannerShell
-      leading={<Icon sx={{ fontSize: 44 }} />}
-      secondary={
-        NextIcon && nextInstruction ? (
-          <>
-            <NextIcon sx={{ fontSize: 20, opacity: 0.85 }} />
-            <Typography variant="body2" sx={{ opacity: 0.85 }} noWrap>
-              {t("then", { instruction: lowercaseFirstWord(nextInstruction) })}
-            </Typography>
-          </>
-        ) : undefined
-      }
-    >
+    <NavBannerShell leading={<Icon sx={{ fontSize: 44 }} />} secondary={secondary}>
       <Typography variant="h6" sx={{ lineHeight: 1.1 }}>
         {t("in", { distance: formatMeasurementDistance(distanceToManeuver, units) })}
       </Typography>

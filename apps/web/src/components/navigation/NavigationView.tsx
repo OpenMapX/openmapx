@@ -22,7 +22,6 @@ import { useNavigationEngine } from "@/lib/navigation/useNavigationEngine";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { AlertWidget } from "./AlertWidget";
 import { ArrivalCard } from "./ArrivalCard";
-import { LaneGuidance } from "./LaneGuidance";
 import { ManeuverBanner } from "./ManeuverBanner";
 import { NavBottomBar } from "./NavBottomBar";
 import { NavBottomSheet } from "./NavBottomSheet";
@@ -163,11 +162,9 @@ export function NavigationView() {
                 maneuver={step.maneuver}
                 nextInstruction={nextStep?.instruction}
                 nextManeuver={nextStep?.maneuver}
+                lanes={showLanes ? step.lanes : undefined}
                 units={units}
               />
-            )}
-            {showLanes && step?.lanes && (
-              <LaneGuidance lanes={step.lanes} maneuver={step.maneuver} />
             )}
             {activeAlert && <AlertWidget alert={activeAlert} />}
             {rerouting && (
