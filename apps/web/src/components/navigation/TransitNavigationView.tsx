@@ -6,6 +6,7 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import { useNavigationStore, useSidebarStore } from "@openmapx/core";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useEffect, useState } from "react";
+import { NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
 import { nextTransferFor } from "@/lib/navigation/transitTransfer";
 import { useTransitNavigationEngine } from "@/lib/navigation/useTransitNavigationEngine";
 import { useWakeLock } from "@/lib/useWakeLock";
@@ -77,6 +78,15 @@ export function TransitNavigationView() {
               // Match the driving banner's inset below the safe-area top so the
               // gap to the top equals the gap to the sides.
               pt: "calc(var(--omx-safe-top) + 16px)",
+              // On wide screens keep the chrome in a left-hand column (like the
+              // driving view) so the map stays clear on the right.
+              ...(isMobile
+                ? {}
+                : {
+                    alignSelf: "flex-start",
+                    width: 1,
+                    maxWidth: NAV_LANDSCAPE_PANEL_WIDTH + 32,
+                  }),
             }}
           >
             {currentLeg && (
@@ -108,8 +118,10 @@ export function TransitNavigationView() {
                 sx={{
                   pointerEvents: "auto",
                   width: "100%",
-                  maxWidth: 480,
-                  mx: "auto",
+                  maxWidth: NAV_LANDSCAPE_PANEL_WIDTH,
+                  // Left-aligned (16px in, matching the banner) rather than
+                  // centered, so the map stays clear on the right.
+                  ml: 2,
                   mb: 2,
                   bgcolor: "background.paper",
                   borderRadius: 3,

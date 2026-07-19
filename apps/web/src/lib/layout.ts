@@ -2,6 +2,14 @@
 export const PANEL_WIDTH = 400;
 
 /**
+ * Width of the left-hand nav-chrome column on wide viewports (desktop and
+ * phone-landscape, both above the `sm` breakpoint). Both the driving and transit
+ * navigation views confine their banner + bottom panel to this width so the map
+ * stays visible on the right, mirroring Google Maps' landscape layout.
+ */
+export const NAV_LANDSCAPE_PANEL_WIDTH = 400;
+
+/**
  * Whether the left sidebar panel is currently occupying horizontal space, so
  * bottom-anchored map chrome (the legal footer, the MapLibre attribution) must
  * clear it by shifting right `PANEL_WIDTH`.

@@ -21,6 +21,7 @@ import {
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { NavigationSettingsDialog } from "@/components/settings/NavigationSettingsDialog";
+import { NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
 import { useMapOptional } from "@/lib/MapContext";
 import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
 import { useNavAlerts } from "@/lib/navigation/useNavAlerts";
@@ -37,12 +38,6 @@ import { NavSimControl } from "./NavSimControl";
 import { NavSwipeSheet } from "./NavSwipeSheet";
 import { RouteSearchControl } from "./RouteSearchControl";
 import { SpeedLimitBadge } from "./SpeedLimitBadge";
-
-// On wide viewports (desktop and phone-landscape, both above the `sm`
-// breakpoint) the nav chrome is confined to a left-hand column of this width so
-// the map stays visible on the right — mirroring Google Maps' landscape layout.
-// Portrait mobile keeps its full-width banner and bottom sheet.
-const LANDSCAPE_PANEL_WIDTH = 400;
 
 export function NavigationView() {
   const status = useNavigationStore((s) => s.status);
@@ -193,7 +188,7 @@ export function NavigationView() {
               // horizontal padding so the card itself is LANDSCAPE_PANEL_WIDTH).
               ...(isMobile
                 ? {}
-                : { alignSelf: "flex-start", width: 1, maxWidth: LANDSCAPE_PANEL_WIDTH + 32 }),
+                : { alignSelf: "flex-start", width: 1, maxWidth: NAV_LANDSCAPE_PANEL_WIDTH + 32 }),
             }}
           >
             {step && (
@@ -279,7 +274,7 @@ export function NavigationView() {
                   sx={{
                     pointerEvents: "auto",
                     width: "100%",
-                    maxWidth: LANDSCAPE_PANEL_WIDTH,
+                    maxWidth: NAV_LANDSCAPE_PANEL_WIDTH,
                     // Left-aligned (16px in, matching the top banner) rather than
                     // centered, so the map stays clear on the right.
                     ml: 2,
