@@ -59,6 +59,8 @@
     "ride": "{line} nach {to}",
     "towards": "Richtung {headsign}",
     "stopCode": "Haltestelle {code}",
+    "bikesAllowed": "Fahrradmitnahme",
+    "wheelchairAccessible": "Rollstuhlgerecht",
     "nextStop": "Nächster Halt: {stop}",
     "alightAt": "Aussteigen an {place}",
     "alightAtCount": "Aussteigen an {place} · {count, plural, one {noch # Halt} other {noch # Halte}}",

@@ -1,8 +1,11 @@
 "use client";
 
+import AccessibleIcon from "@mui/icons-material/Accessible";
+import DirectionsBikeIcon from "@mui/icons-material/DirectionsBike";
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
 import NotificationImportantIcon from "@mui/icons-material/NotificationImportant";
 import Box from "@mui/material/Box";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import {
   stopsUntilAlight,
@@ -181,7 +184,21 @@ export function TransitLegBanner({
         leading={leading}
         secondary={secondary}
         trailing={
-          isTransitLeg && occupancy ? <OccupancyIndicator level={occupancy} size={24} /> : undefined
+          isTransitLeg && (occupancy || leg.bikesAllowed || leg.wheelchairAccessible) ? (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexShrink: 0 }}>
+              {occupancy && <OccupancyIndicator level={occupancy} size={24} />}
+              {leg.bikesAllowed && (
+                <Tooltip title={t("bikesAllowed")} placement="left" arrow>
+                  <DirectionsBikeIcon aria-label={t("bikesAllowed")} sx={{ fontSize: 20 }} />
+                </Tooltip>
+              )}
+              {leg.wheelchairAccessible && (
+                <Tooltip title={t("wheelchairAccessible")} placement="left" arrow>
+                  <AccessibleIcon aria-label={t("wheelchairAccessible")} sx={{ fontSize: 20 }} />
+                </Tooltip>
+              )}
+            </Box>
+          ) : undefined
         }
       >
         <Typography variant="h6" sx={{ lineHeight: 1.15 }} noWrap>
