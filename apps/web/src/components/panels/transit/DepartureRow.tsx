@@ -1,6 +1,5 @@
 "use client";
 
-import AirlineSeatReclineNormalIcon from "@mui/icons-material/AirlineSeatReclineNormal";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
@@ -8,8 +7,8 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { Departure, TripRemark } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
-import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
+import { OccupancyIndicator } from "./OccupancyIndicator";
 import { REMARK_PRIORITY, RemarkChip } from "./RemarkChip";
 import { RouteBadge } from "./RouteBadge";
 
@@ -75,13 +74,7 @@ export function DepartureRow({
             )}
           </Box>
         </Box>
-        {departure.occupancy && (
-          <Tooltip title={t(OCCUPANCY_KEY[departure.occupancy])} placement="left" arrow>
-            <AirlineSeatReclineNormalIcon
-              sx={{ fontSize: 16, color: OCCUPANCY_COLOR[departure.occupancy], flexShrink: 0 }}
-            />
-          </Tooltip>
-        )}
+        {departure.occupancy && <OccupancyIndicator level={departure.occupancy} size={16} />}
         <Box sx={{ textAlign: "right", flexShrink: 0 }}>
           <Typography
             variant="body2"

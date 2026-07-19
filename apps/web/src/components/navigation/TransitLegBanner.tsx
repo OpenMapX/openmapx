@@ -8,6 +8,7 @@ import { stopsUntilAlight, type TransitProgress, useVehicleJourney } from "@open
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
+import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { haptics } from "@/lib/haptics";
 import { sliceJourneyToLeg } from "@/lib/navigation/legJourneyStops";
@@ -76,6 +77,8 @@ export function TransitLegBanner({
   // Show the vehicle's destination sign when it adds information beyond the
   // alight stop already named in the title.
   const headsign = leg.headsign && leg.headsign !== leg.to.name ? leg.headsign : undefined;
+  // Prefer the live vehicle's crowding, falling back to the planned leg value.
+  const occupancy = journey?.occupancy ?? leg.occupancy;
 
   // Fire the haptic pulse once per entry into the alight window; reset when we
   // leave it so a re-entry can buzz again.
@@ -124,7 +127,13 @@ export function TransitLegBanner({
 
   return (
     <>
-      <NavBannerShell leading={leading} secondary={secondary}>
+      <NavBannerShell
+        leading={leading}
+        secondary={secondary}
+        trailing={
+          isTransitLeg && occupancy ? <OccupancyIndicator level={occupancy} size={24} /> : undefined
+        }
+      >
         <Typography variant="h6" sx={{ lineHeight: 1.15 }} noWrap>
           {title}
         </Typography>
