@@ -15,6 +15,7 @@ import { NavigationSettingsDialog } from "@/components/settings/NavigationSettin
 import { NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
 import { useMapOptional } from "@/lib/MapContext";
 import { nextTransferFor } from "@/lib/navigation/transitTransfer";
+import { useTransitLiveRefresh } from "@/lib/navigation/useTransitLiveRefresh";
 import { useTransitNavigationEngine } from "@/lib/navigation/useTransitNavigationEngine";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { ArrivalCard } from "./ArrivalCard";
@@ -44,6 +45,7 @@ export function TransitNavigationView() {
 
   // Hooks must run before any early return.
   useTransitNavigationEngine();
+  useTransitLiveRefresh(active);
   useWakeLock(active && keepScreenOn);
 
   // Collapse the route-planning sidebar while navigating; restore on exit.

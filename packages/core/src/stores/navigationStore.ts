@@ -112,6 +112,13 @@ interface NavigationState {
   setTransitRerouteNeeded: (v: boolean) => void;
   /** Swap in a freshly-planned itinerary (on-trip replan) and clear the flag. */
   replaceItinerary: (itinerary: TripItinerary) => void;
+  /**
+   * Update the itinerary in place with a live-refreshed copy (same leg
+   * structure, updated realtime times/platforms/cancellations). Unlike
+   * {@link replaceItinerary} it keeps the current transit progress, since the
+   * geometry is unchanged — no need to blank the banner until the next fix.
+   */
+  updateItinerary: (itinerary: TripItinerary) => void;
   applyProgress: (progress: NavProgress) => void;
   setSpeedLimit: (v: number | null) => void;
   setLiveSpeedLimits: (v: (number | null)[] | null) => void;
@@ -215,6 +222,7 @@ export const useNavigationStore = create<NavigationState>((set) => ({
   setTransitRerouteNeeded: (transitRerouteNeeded) => set({ transitRerouteNeeded }),
   replaceItinerary: (itinerary) =>
     set({ itinerary, transitProgress: null, transitRerouteNeeded: false }),
+  updateItinerary: (itinerary) => set({ itinerary }),
   applyProgress: (progress) => set({ progress }),
   setSpeedLimit: (currentSpeedLimit) => set({ currentSpeedLimit }),
   setLiveSpeedLimits: (liveSpeedLimits) => set({ liveSpeedLimits }),

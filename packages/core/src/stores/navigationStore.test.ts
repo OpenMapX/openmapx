@@ -202,6 +202,29 @@ describe("navigationStore", () => {
     expect(s.transitProgress).toBeNull();
   });
 
+  it("updateItinerary swaps the itinerary but keeps progress; replaceItinerary clears it", () => {
+    const store = useNavigationStore.getState();
+    store.startTransitNavigation(itinerary);
+    const tp: TransitProgress = {
+      currentLegIndex: 1,
+      snapped: [1, 2],
+      fractionAlongLeg: 0.4,
+      deviationMeters: 0,
+      arrived: false,
+    };
+    store.applyTransitProgress(tp);
+    const refreshed = { ...itinerary, refreshToken: "next-token" };
+
+    store.updateItinerary(refreshed);
+    let s = useNavigationStore.getState();
+    expect(s.itinerary?.refreshToken).toBe("next-token");
+    expect(s.transitProgress).toEqual(tp);
+
+    store.replaceItinerary(refreshed);
+    s = useNavigationStore.getState();
+    expect(s.transitProgress).toBeNull();
+  });
+
   it("startGroundNavigation resets transit bits", () => {
     const store = useNavigationStore.getState();
     store.startTransitNavigation(itinerary);
