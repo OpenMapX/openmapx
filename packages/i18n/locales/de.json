@@ -66,6 +66,7 @@
     "transferWalk": "{minutes} Min. zum Umstieg",
     "restOfJourney": "Restliche Fahrt",
     "boardAt": "Einsteigen an {place}",
+    "legCancelled": "{line} fällt aus",
     "legCounter": "Abschnitt {current}/{total}",
     "arriveAt": "Ankunft {time}",
     "delayMinutes": "+{minutes} Min.",

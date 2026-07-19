@@ -20,6 +20,7 @@ import { useTransitNavigationEngine } from "@/lib/navigation/useTransitNavigatio
 import { useWakeLock } from "@/lib/useWakeLock";
 import { ArrivalCard } from "./ArrivalCard";
 import { NavSwipeSheet } from "./NavSwipeSheet";
+import { TransitAlertBanner } from "./TransitAlertBanner";
 import { TransitJourneySheet } from "./TransitJourneySheet";
 import { TransitLegBanner } from "./TransitLegBanner";
 import { TransitNavBottomBar } from "./TransitNavBottomBar";
@@ -144,6 +145,7 @@ export function TransitNavigationView() {
                 transfer={transfer}
               />
             )}
+            <TransitAlertBanner itinerary={itinerary} currentLegIndex={currentLegIndex} />
           </Box>
 
           <Box sx={{ display: "flex", flexDirection: "column" }}>

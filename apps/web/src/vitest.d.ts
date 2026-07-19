@@ -11,6 +11,7 @@ interface VitestExpectation {
   toBeUndefined(): void;
   toBeNull(): void;
   toContain(expected: unknown): void;
+  toHaveLength(expected: number): void;
   toEqual(expected: unknown): void;
   toHaveBeenCalled(): void;
   toHaveBeenCalledTimes(times: number): void;

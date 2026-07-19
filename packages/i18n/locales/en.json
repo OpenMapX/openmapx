@@ -66,6 +66,7 @@
     "transferWalk": "{minutes} min to transfer",
     "restOfJourney": "Rest of journey",
     "boardAt": "Board at {place}",
+    "legCancelled": "{line} is cancelled",
     "legCounter": "Leg {current}/{total}",
     "arriveAt": "Arrive {time}",
     "delayMinutes": "+{minutes} min",
