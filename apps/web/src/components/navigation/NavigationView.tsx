@@ -31,10 +31,10 @@ import { AlertWidget } from "./AlertWidget";
 import { ArrivalCard } from "./ArrivalCard";
 import { ManeuverBanner } from "./ManeuverBanner";
 import { NavBottomBar } from "./NavBottomBar";
-import { NavBottomSheet } from "./NavBottomSheet";
 import { NavDirectionsDialog } from "./NavDirectionsDialog";
 import { NavMenu } from "./NavMenu";
 import { NavSimControl } from "./NavSimControl";
+import { NavSwipeSheet } from "./NavSwipeSheet";
 import { RouteSearchControl } from "./RouteSearchControl";
 import { SpeedLimitBadge } from "./SpeedLimitBadge";
 
@@ -125,42 +125,31 @@ export function NavigationView() {
     );
   };
 
-  const navPanel = route && (
-    <>
-      <NavBottomBar
-        distanceRemaining={distanceRemaining}
-        durationRemaining={durationRemaining}
-        etaEpochMs={etaEpochMs}
-        onSearch={routeSearchOpen ? undefined : openRouteSearch}
-        onEnd={stopNavigation}
-        units={units}
-        menuToggle={
-          <IconButton
-            onClick={() => setMenuOpen((o) => !o)}
-            aria-label={t("moreOptions")}
-            aria-expanded={menuOpen}
-          >
-            {menuOpen ? <ExpandMoreIcon /> : <ExpandLessIcon />}
-          </IconButton>
-        }
-      />
-      <Collapse in={menuOpen} unmountOnExit>
-        <NavMenu
-          onOpenDirections={() => {
-            setMenuOpen(false);
-            setDirectionsOpen(true);
-          }}
-          onOverview={() => {
-            setMenuOpen(false);
-            handleOverview();
-          }}
-          onOpenSettings={() => {
-            setMenuOpen(false);
-            setSettingsOpen(true);
-          }}
-        />
-      </Collapse>
-    </>
+  const navMenu = (
+    <NavMenu
+      onOpenDirections={() => {
+        setMenuOpen(false);
+        setDirectionsOpen(true);
+      }}
+      onOverview={() => {
+        setMenuOpen(false);
+        handleOverview();
+      }}
+      onOpenSettings={() => {
+        setMenuOpen(false);
+        setSettingsOpen(true);
+      }}
+    />
+  );
+  // Desktop reveals the menu with a chevron (no swipe); mobile drags the sheet.
+  const desktopMenuToggle = (
+    <IconButton
+      onClick={() => setMenuOpen((o) => !o)}
+      aria-label={t("moreOptions")}
+      aria-expanded={menuOpen}
+    >
+      {menuOpen ? <ExpandMoreIcon /> : <ExpandLessIcon />}
+    </IconButton>
   );
 
   return (
@@ -257,9 +246,24 @@ export function NavigationView() {
                 />
               </Box>
             )}
-            {navPanel &&
+            {route &&
               (isMobile ? (
-                <NavBottomSheet onToggle={() => setMenuOpen((o) => !o)}>{navPanel}</NavBottomSheet>
+                <NavSwipeSheet
+                  expanded={menuOpen}
+                  onExpandedChange={setMenuOpen}
+                  header={
+                    <NavBottomBar
+                      distanceRemaining={distanceRemaining}
+                      durationRemaining={durationRemaining}
+                      etaEpochMs={etaEpochMs}
+                      onSearch={routeSearchOpen ? undefined : openRouteSearch}
+                      onEnd={stopNavigation}
+                      units={units}
+                    />
+                  }
+                >
+                  {navMenu}
+                </NavSwipeSheet>
               ) : (
                 <Box
                   sx={{
@@ -273,7 +277,18 @@ export function NavigationView() {
                     boxShadow: 6,
                   }}
                 >
-                  {navPanel}
+                  <NavBottomBar
+                    distanceRemaining={distanceRemaining}
+                    durationRemaining={durationRemaining}
+                    etaEpochMs={etaEpochMs}
+                    onSearch={routeSearchOpen ? undefined : openRouteSearch}
+                    onEnd={stopNavigation}
+                    units={units}
+                    menuToggle={desktopMenuToggle}
+                  />
+                  <Collapse in={menuOpen} unmountOnExit>
+                    {navMenu}
+                  </Collapse>
                 </Box>
               ))}
           </Box>

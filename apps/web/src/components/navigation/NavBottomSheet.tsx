@@ -11,14 +11,7 @@ import type { ReactNode } from "react";
  * than a draggable multi-snap sheet, since the nav summary is a single fixed
  * row. Full-bleed to the screen edges and padded for the bottom safe area.
  */
-export function NavBottomSheet({
-  children,
-  onToggle,
-}: {
-  children: ReactNode;
-  /** Tapping the drag handle runs this (expand/collapse the nav menu). */
-  onToggle?: () => void;
-}) {
+export function NavBottomSheet({ children }: { children: ReactNode }) {
   return (
     <Paper
       elevation={6}
@@ -31,16 +24,7 @@ export function NavBottomSheet({
         ...theme.applyStyles("dark", { bgcolor: "background.default" }),
       })}
     >
-      <Box
-        onClick={onToggle}
-        sx={{
-          display: "flex",
-          justifyContent: "center",
-          pt: 1,
-          pb: 0.5,
-          cursor: onToggle ? "pointer" : "default",
-        }}
-      >
+      <Box sx={{ display: "flex", justifyContent: "center", pt: 1, pb: 0.5 }}>
         <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: "action.disabled" }} />
       </Box>
       {children}
