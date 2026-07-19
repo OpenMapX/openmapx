@@ -25,6 +25,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { RemarkChip } from "@/components/panels/transit/RemarkChip";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
+import { ensureNotificationPermission } from "@/lib/navigation/navNotify";
 import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
 import { TEAL, TEAL_HEX } from "@/lib/theme";
 import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
@@ -385,6 +386,9 @@ export function TransitItineraryCard({
               e.stopPropagation();
               // Unlock TTS from this gesture so board/alight cues can speak on iOS.
               primeSpeechSynthesis();
+              // Ask for notification permission so the background get-off alarm
+              // can fire when the screen is locked.
+              void ensureNotificationPermission();
               const plannedAt = itinerary.refreshedAt ?? itinerary.plannedAt;
               const oldEnough = !plannedAt || Date.now() - new Date(plannedAt).getTime() >= 60_000;
               if (itinerary.refreshToken && oldEnough) {

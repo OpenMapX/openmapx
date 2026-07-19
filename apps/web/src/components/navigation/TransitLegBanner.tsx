@@ -17,6 +17,7 @@ import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicat
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { haptics } from "@/lib/haptics";
 import { sliceJourneyToLeg } from "@/lib/navigation/legJourneyStops";
+import { notifyGetOff, playAlarmTone } from "@/lib/navigation/navNotify";
 import { changedFromPlatform } from "@/lib/navigation/platformChange";
 import type { TransitTransfer } from "@/lib/navigation/transitTransfer";
 import { useNavigationVoice } from "@/lib/navigation/useNavigationVoice";
@@ -98,6 +99,12 @@ export function TransitLegBanner({
     if (alightSoon && !alertedRef.current) {
       alertedRef.current = true;
       haptics.warn();
+      // Get-off alarm: an attention tone always, and a system notification when
+      // the app is backgrounded / screen locked so the rider is woken in time.
+      playAlarmTone();
+      if (typeof document !== "undefined" && document.hidden) {
+        void notifyGetOff(t("alightSoon"), t("alightAt", { place: leg.to.name }));
+      }
       if (voiceEnabled) {
         speak(
           transfer
