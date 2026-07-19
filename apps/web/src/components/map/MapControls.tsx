@@ -4,6 +4,8 @@ import AddIcon from "@mui/icons-material/Add";
 import ExploreIcon from "@mui/icons-material/Explore";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 import RemoveIcon from "@mui/icons-material/Remove";
+import VolumeOffIcon from "@mui/icons-material/VolumeOff";
+import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
@@ -29,8 +31,14 @@ export function MapControls() {
   const tNav = useTranslations("navigation");
   const { zoomIn, zoomOut, resetBearing } = useMap();
   const navigating = useNavigationStore((s) => s.status !== "idle");
+  const navKind = useNavigationStore((s) => s.kind);
   const navCameraMode = useNavigationStore((s) => s.cameraMode);
   const setCameraMode = useNavigationStore((s) => s.setCameraMode);
+  // Voice guidance toggle rides this stack during ground navigation (transit has
+  // no voice); its counterpart, search-along-route, sits in the nav bottom bar.
+  const voiceEnabled = useNavigationStore((s) => s.voiceEnabled);
+  const toggleVoice = useNavigationStore((s) => s.toggleVoice);
+  const showVoiceButton = navigating && navKind === "ground";
   const bearing = useMapStore((s) => s.bearing);
   const pitch = useMapStore((s) => s.pitch);
   const handleMyLocation = useMyLocation();
@@ -80,6 +88,26 @@ export function MapControls() {
           transition: "bottom 0.25s ease",
         }}
       >
+        {/* Voice guidance toggle (ground navigation only) — top of the stack. */}
+        {showVoiceButton && (
+          <Tooltip title={tNav(voiceEnabled ? "muteVoice" : "unmuteVoice")} placement="left">
+            <Paper elevation={2} sx={{ borderRadius: "12px", overflow: "hidden" }}>
+              <IconButton
+                size="small"
+                onClick={toggleVoice}
+                sx={{ width: 36, height: 36 }}
+                aria-label={tNav(voiceEnabled ? "muteVoice" : "unmuteVoice")}
+              >
+                {voiceEnabled ? (
+                  <VolumeUpIcon sx={{ fontSize: 18, color: "primary.main" }} />
+                ) : (
+                  <VolumeOffIcon sx={{ fontSize: 18, color: "primary.main" }} />
+                )}
+              </IconButton>
+            </Paper>
+          </Tooltip>
+        )}
+
         {/* Report a condition (crowd-reports) */}
         {crowdReportsEnabled && (
           <Suspense fallback={null}>

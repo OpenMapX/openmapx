@@ -41,9 +41,7 @@ export function NavigationView() {
   const coasting = useNavigationStore((s) => s.coasting);
   const rerouteFailedNonce = useNavigationStore((s) => s.rerouteFailedNonce);
   const currentSpeedLimit = useNavigationStore((s) => s.currentSpeedLimit);
-  const voiceEnabled = useNavigationStore((s) => s.voiceEnabled);
   const keepScreenOn = useNavigationStore((s) => s.keepScreenOn);
-  const toggleVoice = useNavigationStore((s) => s.toggleVoice);
   const toggleKeepScreenOn = useNavigationStore((s) => s.toggleKeepScreenOn);
   const setCameraMode = useNavigationStore((s) => s.setCameraMode);
   const stopNavigation = useNavigationStore((s) => s.stopNavigation);
@@ -123,9 +121,7 @@ export function NavigationView() {
       distanceRemaining={distanceRemaining}
       durationRemaining={durationRemaining}
       etaEpochMs={etaEpochMs}
-      voiceEnabled={voiceEnabled}
       keepScreenOn={keepScreenOn}
-      onToggleVoice={toggleVoice}
       onToggleKeepScreenOn={toggleKeepScreenOn}
       onOverview={handleOverview}
       onSearch={routeSearchOpen ? undefined : openRouteSearch}

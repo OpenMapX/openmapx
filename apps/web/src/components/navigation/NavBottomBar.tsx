@@ -5,8 +5,6 @@ import MapIcon from "@mui/icons-material/Map";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import ScreenLockPortraitIcon from "@mui/icons-material/ScreenLockPortrait";
 import SearchIcon from "@mui/icons-material/Search";
-import VolumeOffIcon from "@mui/icons-material/VolumeOff";
-import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 import Box from "@mui/material/Box";
 import Checkbox from "@mui/material/Checkbox";
 import IconButton from "@mui/material/IconButton";
@@ -29,9 +27,6 @@ interface Props {
   /** Distance remaining; omit for transit, which has no single trip distance. */
   distanceRemaining?: number;
   units?: "metric" | "imperial";
-  /** Voice toggle; omit to hide the voice button (transit has no voice guidance). */
-  voiceEnabled?: boolean;
-  onToggleVoice?: () => void;
   /** Overview action; omit to drop the "Route overview" menu item. */
   onOverview?: () => void;
   /** Search-along-route action; omit to hide the search button (transit has none). */
@@ -51,8 +46,6 @@ export function NavBottomBar({
   onEnd,
   distanceRemaining,
   units = "metric",
-  voiceEnabled,
-  onToggleVoice,
   onOverview,
   onSearch,
   secondary,
@@ -108,14 +101,6 @@ export function NavBottomBar({
           }}
         >
           <SearchIcon />
-        </IconButton>
-      )}
-      {onToggleVoice && (
-        <IconButton
-          onClick={onToggleVoice}
-          aria-label={t(voiceEnabled ? "muteVoice" : "unmuteVoice")}
-        >
-          {voiceEnabled ? <VolumeUpIcon /> : <VolumeOffIcon />}
         </IconButton>
       )}
       <IconButton

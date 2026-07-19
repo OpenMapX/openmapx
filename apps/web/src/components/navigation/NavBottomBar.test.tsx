@@ -28,9 +28,7 @@ describe("NavBottomBar", () => {
         distanceRemaining={1200}
         durationRemaining={300}
         etaEpochMs={0}
-        voiceEnabled
         keepScreenOn
-        onToggleVoice={() => {}}
         onToggleKeepScreenOn={() => {}}
         onOverview={() => {}}
         onEnd={() => {}}
@@ -48,9 +46,7 @@ describe("NavBottomBar", () => {
         distanceRemaining={1200}
         durationRemaining={300}
         etaEpochMs={0}
-        voiceEnabled
         keepScreenOn
-        onToggleVoice={() => {}}
         onToggleKeepScreenOn={() => {}}
         onOverview={() => {}}
         onEnd={() => {}}
