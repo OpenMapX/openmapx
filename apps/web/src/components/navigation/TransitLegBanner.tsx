@@ -102,6 +102,9 @@ export function TransitLegBanner({
     .join(" · ");
   // Bus-stop signage code, shown while boarding when there's no platform.
   const boardingStopCode = leg.from.stopCode;
+  // OSM floor of the board/alight platform (0 = ground, hidden as implicit).
+  const boardingLevel = leg.from.level != null && leg.from.level !== 0 ? leg.from.level : null;
+  const alightLevel = leg.to.level != null && leg.to.level !== 0 ? leg.to.level : null;
 
   // Fire the haptic pulse — and, when voice is on, the alight/transfer cue —
   // once per entry into the alight window; reset when we leave it so a re-entry
@@ -204,26 +207,33 @@ export function TransitLegBanner({
         <Typography variant="h6" sx={{ lineHeight: 1.15 }} noWrap>
           {title}
         </Typography>
-        {isTransitLeg && (headsign || (!departed && (boardingPlatform || boardingStopCode))) && (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.25, minWidth: 0 }}>
-            {headsign && (
-              <Typography variant="caption" sx={{ opacity: 0.9 }} noWrap>
-                {t("towards", { headsign })}
-              </Typography>
-            )}
-            {!departed && boardingPlatform ? (
-              <PlatformBadge
-                code={boardingPlatform}
-                tone="onBanner"
-                changed={!!changedFromPlatform(leg.from)}
-              />
-            ) : !departed && boardingStopCode ? (
-              <Typography variant="caption" sx={{ opacity: 0.9 }} noWrap>
-                {t("stopCode", { code: boardingStopCode })}
-              </Typography>
-            ) : null}
-          </Box>
-        )}
+        {isTransitLeg &&
+          (headsign ||
+            (!departed && (boardingPlatform || boardingStopCode || boardingLevel != null))) && (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.25, minWidth: 0 }}>
+              {headsign && (
+                <Typography variant="caption" sx={{ opacity: 0.9 }} noWrap>
+                  {t("towards", { headsign })}
+                </Typography>
+              )}
+              {!departed && boardingPlatform ? (
+                <PlatformBadge
+                  code={boardingPlatform}
+                  tone="onBanner"
+                  changed={!!changedFromPlatform(leg.from)}
+                />
+              ) : !departed && boardingStopCode ? (
+                <Typography variant="caption" sx={{ opacity: 0.9 }} noWrap>
+                  {t("stopCode", { code: boardingStopCode })}
+                </Typography>
+              ) : null}
+              {!departed && boardingLevel != null && (
+                <Typography variant="caption" sx={{ opacity: 0.9 }} noWrap>
+                  {t("levelShort", { level: boardingLevel })}
+                </Typography>
+              )}
+            </Box>
+          )}
         {isTransitLeg && identity && (
           <Typography variant="caption" sx={{ opacity: 0.8, display: "block", mt: 0.25 }} noWrap>
             {identity}
@@ -266,6 +276,11 @@ export function TransitLegBanner({
                 {t("alightAt", { place: leg.to.name })}
               </Typography>
               {alightPlatform && <PlatformBadge code={alightPlatform} tone="onBanner" />}
+              {alightLevel != null && (
+                <Typography variant="caption" noWrap>
+                  {t("levelShort", { level: alightLevel })}
+                </Typography>
+              )}
             </Box>
           </Box>
         </Box>

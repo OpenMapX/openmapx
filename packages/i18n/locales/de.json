@@ -59,6 +59,8 @@
     "ride": "{line} nach {to}",
     "towards": "Richtung {headsign}",
     "stopCode": "Haltestelle {code}",
+    "levelShort": "E{level}",
+    "levelChange": "Ebene {from} → {to}",
     "bikesAllowed": "Fahrradmitnahme",
     "wheelchairAccessible": "Rollstuhlgerecht",
     "nextStop": "Nächster Halt: {stop}",

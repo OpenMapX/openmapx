@@ -59,6 +59,8 @@
     "ride": "{line} to {to}",
     "towards": "towards {headsign}",
     "stopCode": "Stop {code}",
+    "levelShort": "L{level}",
+    "levelChange": "Level {from} → {to}",
     "bikesAllowed": "Bikes allowed",
     "wheelchairAccessible": "Wheelchair accessible",
     "nextStop": "Next: {stop}",

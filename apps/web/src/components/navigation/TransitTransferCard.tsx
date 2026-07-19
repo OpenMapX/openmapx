@@ -34,6 +34,13 @@ export function TransitTransferCard({
     nextLeg.headsign && nextLeg.headsign !== nextLeg.to.name ? nextLeg.headsign : undefined;
   const boardPlatform = nextLeg.from.platformCode;
   const platformChanged = !!changedFromPlatform(nextLeg.from);
+  // Level change across the transfer (e.g. down to the U-Bahn), when both known.
+  const levelChange =
+    fromLeg.to.level != null &&
+    nextLeg.from.level != null &&
+    fromLeg.to.level !== nextLeg.from.level
+      ? { from: fromLeg.to.level, to: nextLeg.from.level }
+      : null;
 
   // Step-free transfer info (MOTIS transfers): the accessibility-annotated
   // option from the alight stop to the next boarding stop.
@@ -86,6 +93,11 @@ export function TransitTransferCard({
             <DirectionsWalkIcon sx={{ fontSize: 15 }} />
             <Typography variant="caption">{t("transferWalk", { minutes: walkMinutes })}</Typography>
           </Box>
+        )}
+        {levelChange && (
+          <Typography variant="caption" sx={{ display: "block", mt: 0.25 }}>
+            {t("levelChange", { from: levelChange.from, to: levelChange.to })}
+          </Typography>
         )}
         {stepFree && (
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 0.5 }}>
