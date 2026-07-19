@@ -58,6 +58,7 @@
     "walkTo": "Zu Fuß nach {place}",
     "ride": "{line} nach {to}",
     "towards": "Richtung {headsign}",
+    "stopCode": "Haltestelle {code}",
     "nextStop": "Nächster Halt: {stop}",
     "alightAt": "Aussteigen an {place}",
     "alightAtCount": "Aussteigen an {place} · {count, plural, one {noch # Halt} other {noch # Halte}}",

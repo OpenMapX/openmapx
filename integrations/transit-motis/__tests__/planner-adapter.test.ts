@@ -137,6 +137,7 @@ describe("MOTIS planner request mapping", () => {
                   lat: 1,
                   lon: 2,
                   stopId: "aachen",
+                  stopCode: "AACHN",
                   track: "3",
                   scheduledTrack: "5",
                 },
@@ -156,6 +157,9 @@ describe("MOTIS planner request mapping", () => {
                 realTime: true,
                 scheduled: true,
                 headsign: "Köln Messe/Deutz",
+                category: { id: "re", name: "Regional", shortName: "RE" },
+                tripShortName: "10123",
+                agencyName: "DB Regio",
                 routeShortName: "RE1",
                 routeColor: "#0000ff",
                 routeTextColor: "#ffffff",
@@ -180,6 +184,11 @@ describe("MOTIS planner request mapping", () => {
     const mapped = await planTrip(instance, 1, 2, 3, 4, "2026-07-15", "10:00:00");
     const leg = mapped?.itineraries[0]?.legs[0];
     expect(leg?.headsign).toBe("Köln Messe/Deutz");
+    // Vehicle identity + stop signage code kept (previously dropped).
+    expect(leg?.category).toBe("RE");
+    expect(leg?.tripShortName).toBe("10123");
+    expect(leg?.operatorName).toBe("DB Regio");
+    expect(leg?.from.stopCode).toBe("AACHN");
     // Realtime track wins for the displayed platform, but the scheduled track
     // is kept separately so a platform change (5 → 3) is derivable.
     expect(leg?.from.platformCode).toBe("3");

@@ -294,6 +294,8 @@ export interface TransitPlace {
   level?: number;
   /** Current platform/track (realtime if available, else scheduled). */
   platformCode?: string;
+  /** Short user-facing stop code from signage (GTFS `stop_code`). */
+  stopCode?: string;
   /**
    * Scheduled platform/track from the static timetable. Kept distinct from
    * {@link platformCode} so a realtime platform change is derivable
@@ -365,6 +367,12 @@ export interface TripLeg {
    * "towards …" text riders match against at the platform. Transit legs only.
    */
   headsign?: string;
+  /** Vehicle category, e.g. "ICE", "RE", "S" (MOTIS `Leg.category`). */
+  category?: string;
+  /** Trip/train number, e.g. "597" (MOTIS `Leg.tripShortName`). */
+  tripShortName?: string;
+  /** Operating agency/operator display name (MOTIS `Leg.agencyName`). */
+  operatorName?: string;
   geometry: { type: "LineString"; coordinates: [number, number][] };
   distanceMeters?: number;
   durationSeconds?: number;

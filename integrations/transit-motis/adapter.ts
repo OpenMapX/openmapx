@@ -535,6 +535,7 @@ function mapLeg(instance: MotisInstance, leg: Leg): TripLeg {
       level: fromPlace.level,
       platformCode: fromPlace.track ?? fromPlace.scheduledTrack ?? undefined,
       scheduledPlatformCode: fromPlace.scheduledTrack ?? undefined,
+      stopCode: fromPlace.stopCode ?? undefined,
     },
     to: {
       name: toPlace.name ?? "",
@@ -544,6 +545,7 @@ function mapLeg(instance: MotisInstance, leg: Leg): TripLeg {
       level: toPlace.level,
       platformCode: toPlace.track ?? toPlace.scheduledTrack ?? undefined,
       scheduledPlatformCode: toPlace.scheduledTrack ?? undefined,
+      stopCode: toPlace.stopCode ?? undefined,
     },
     route: isTransit
       ? {
@@ -554,6 +556,9 @@ function mapLeg(instance: MotisInstance, leg: Leg): TripLeg {
         }
       : undefined,
     headsign: isTransit ? (leg.headsign ?? undefined) : undefined,
+    category: isTransit ? leg.category?.shortName || leg.category?.name || undefined : undefined,
+    tripShortName: isTransit ? (leg.tripShortName ?? undefined) : undefined,
+    operatorName: isTransit ? (leg.agencyName ?? undefined) : undefined,
     geometry,
     distanceMeters: leg.distance,
     durationSeconds: leg.duration,

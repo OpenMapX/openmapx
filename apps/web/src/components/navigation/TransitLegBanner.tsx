@@ -90,6 +90,15 @@ export function TransitLegBanner({
   const headsign = leg.headsign && leg.headsign !== leg.to.name ? leg.headsign : undefined;
   // Prefer the live vehicle's crowding, falling back to the planned leg value.
   const occupancy = journey?.occupancy ?? leg.occupancy;
+  // Specific vehicle identity ("RE 10123 · DB Regio") to find the right train.
+  const identity = [
+    [leg.category, leg.tripShortName].filter(Boolean).join(" ").trim(),
+    leg.operatorName,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  // Bus-stop signage code, shown while boarding when there's no platform.
+  const boardingStopCode = leg.from.stopCode;
 
   // Fire the haptic pulse — and, when voice is on, the alight/transfer cue —
   // once per entry into the alight window; reset when we leave it so a re-entry
@@ -178,21 +187,30 @@ export function TransitLegBanner({
         <Typography variant="h6" sx={{ lineHeight: 1.15 }} noWrap>
           {title}
         </Typography>
-        {isTransitLeg && (headsign || (!departed && boardingPlatform)) && (
+        {isTransitLeg && (headsign || (!departed && (boardingPlatform || boardingStopCode))) && (
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.25, minWidth: 0 }}>
             {headsign && (
               <Typography variant="caption" sx={{ opacity: 0.9 }} noWrap>
                 {t("towards", { headsign })}
               </Typography>
             )}
-            {!departed && boardingPlatform && (
+            {!departed && boardingPlatform ? (
               <PlatformBadge
                 code={boardingPlatform}
                 tone="onBanner"
                 changed={!!changedFromPlatform(leg.from)}
               />
-            )}
+            ) : !departed && boardingStopCode ? (
+              <Typography variant="caption" sx={{ opacity: 0.9 }} noWrap>
+                {t("stopCode", { code: boardingStopCode })}
+              </Typography>
+            ) : null}
           </Box>
+        )}
+        {isTransitLeg && identity && (
+          <Typography variant="caption" sx={{ opacity: 0.8, display: "block", mt: 0.25 }} noWrap>
+            {identity}
+          </Typography>
         )}
         <Typography variant="caption" sx={{ opacity: 0.85, display: "block", mt: 0.25 }}>
           {t("legCounter", { current: legIndex + 1, total: totalLegs })}
