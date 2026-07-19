@@ -13,6 +13,7 @@ import type { ExpressionSpecification } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
 import { useMap } from "@/lib/MapContext";
 import { PRIMARY_BLUE_HEX } from "@/lib/theme";
+import { shouldRefineLegGeometry } from "./legGeometryRefine";
 
 // Non-transit "street" legs (walk plus intermodal bike/car access) render as
 // dashed lines — like the panel's street-leg styling — vs solid transit lines.
@@ -57,7 +58,10 @@ export function TransitItineraryLayer() {
     const gen = ++fetchGenRef.current;
     setLegGeometries({});
 
-    const transitLegs = itinerary.legs.filter((leg) => leg.tripId && leg.mode !== "walking");
+    // Only legs whose inline geometry is coarse (stop-connected) benefit from a
+    // `/leg-geometry` refinement. MOTIS already embeds the full track polyline
+    // and has no leg-geometry endpoint, so refining those would just 404.
+    const transitLegs = itinerary.legs.filter(shouldRefineLegGeometry);
     if (transitLegs.length === 0) return;
 
     void Promise.allSettled(

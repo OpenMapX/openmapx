@@ -128,11 +128,12 @@ function LegStatusDetails({ leg }: { leg: TripLeg }) {
       )}
       {leg.steps && leg.steps.length > 0 && (
         <Box component="ol" sx={{ pl: 2.5, my: 0.75 }} aria-label={t("routeInstructions")}>
-          {leg.steps.map((step) => (
+          {leg.steps.map((step, stepIndex) => (
             <Typography
               component="li"
               variant="caption"
-              key={`${step.instruction}-${step.fromLevel}-${step.toLevel}-${step.distanceMeters}-${step.streetName ?? ""}`}
+              // biome-ignore lint/suspicious/noArrayIndexKey: steps have no stable id and identical steps repeat within a leg; the index disambiguates them
+              key={`${stepIndex}-${step.instruction}-${step.fromLevel}-${step.toLevel}-${step.distanceMeters}-${step.streetName ?? ""}`}
             >
               {t("routeStep", {
                 instruction: step.instruction.replaceAll("_", " ").toLocaleLowerCase(),
