@@ -2,6 +2,7 @@
 
 import type { SvgIconComponent } from "@mui/icons-material";
 import AccessibleIcon from "@mui/icons-material/Accessible";
+import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import CarCrashIcon from "@mui/icons-material/CarCrash";
 import CarRepairIcon from "@mui/icons-material/CarRepair";
 import DirectionsTransitIcon from "@mui/icons-material/DirectionsTransit";
@@ -9,12 +10,14 @@ import DoNotDisturbOnIcon from "@mui/icons-material/DoNotDisturbOn";
 import EditLocationAltIcon from "@mui/icons-material/EditLocationAlt";
 import ElectricScooterIcon from "@mui/icons-material/ElectricScooter";
 import EngineeringIcon from "@mui/icons-material/Engineering";
+import LinearScaleIcon from "@mui/icons-material/LinearScale";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 import PetsIcon from "@mui/icons-material/Pets";
+import PlaceIcon from "@mui/icons-material/Place";
 import RemoveRoadIcon from "@mui/icons-material/RemoveRoad";
 import ThunderstormIcon from "@mui/icons-material/Thunderstorm";
-import TrafficIcon from "@mui/icons-material/Traffic";
+import VerticalAlignBottomIcon from "@mui/icons-material/VerticalAlignBottom";
 import WarningIcon from "@mui/icons-material/Warning";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -27,6 +30,7 @@ import Stack from "@mui/material/Stack";
 import { alpha } from "@mui/material/styles";
 import ToggleButton from "@mui/material/ToggleButton";
 import Typography from "@mui/material/Typography";
+import { createSvgIcon } from "@mui/material/utils";
 import { useMapStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
@@ -58,6 +62,13 @@ const SEVERITY_COLORS: Record<(typeof SEVERITY_LEVELS)[number], string> = {
   5: "#7e0023",
 };
 
+// A queue of cars (the map's `congestion` glyph) — a better fit for "Stau" than
+// a traffic light. Kept in sync with integrations/road-conditions/markers.ts.
+const CongestionIcon = createSvgIcon(
+  <path d="M20 10h-3V8.86c1.72-.45 3-2 3-3.86h-3V4c0-.55-.45-1-1-1H8c-.55 0-1 .45-1 1v1H4c0 1.86 1.28 3.41 3 3.86V10H4c0 1.86 1.28 3.41 3 3.86V15H4c0 1.86 1.28 3.41 3 3.86V20c0 .55.45 1 1 1h8c.55 0 1-.45 1-1v-1.14c1.72-.45 3-2 3-3.86h-3v-1.14c1.72-.45 3-2 3-3.86m-8 9c-1.11 0-2-.9-2-2s.89-2 2-2c1.1 0 2 .9 2 2s-.89 2-2 2m0-5c-1.11 0-2-.9-2-2s.89-2 2-2c1.1 0 2 .9 2 2s-.89 2-2 2m0-5c-1.11 0-2-.9-2-2 0-1.11.89-2 2-2 1.1 0 2 .89 2 2 0 1.1-.89 2-2 2" />,
+  "Congestion",
+);
+
 /** Per-category icon, echoing the map's incident glyphs where one exists. */
 const CATEGORY_ICONS: Record<ReportCategory, SvgIconComponent> = {
   road_closure: DoNotDisturbOnIcon,
@@ -67,12 +78,23 @@ const CATEGORY_ICONS: Record<ReportCategory, SvgIconComponent> = {
   hazard_object: WarningIcon,
   hazard_weather: ThunderstormIcon,
   hazard_animal: PetsIcon,
-  jam: TrafficIcon,
+  jam: CongestionIcon,
   roadworks: EngineeringIcon,
   transit_disruption: DirectionsTransitIcon,
   micromobility: ElectricScooterIcon,
   accessibility: AccessibleIcon,
   other: MoreHorizIcon,
+};
+
+/**
+ * Per-fuzziness icon, sketching where the condition sits: a pin here, an arrow
+ * up the road ahead, the tail of a queue, or a whole segment.
+ */
+const FUZZINESS_ICONS: Record<FuzzinessChoice, SvgIconComponent> = {
+  here: PlaceIcon,
+  ahead: ArrowUpwardIcon,
+  back_of_queue: VerticalAlignBottomIcon,
+  all_along: LinearScaleIcon,
 };
 
 /** A glyph color legible on a `#rrggbb` disc — dark on light fills (yellow), white otherwise. */
@@ -191,18 +213,22 @@ export function ReportDialog() {
                 connected group's merged borders and end-only rounding break
                 when items wrap to a second row. Mirrors the category control. */}
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-              {FUZZINESS_CHOICES.map((f) => (
-                <ToggleButton
-                  key={f}
-                  value={f}
-                  size="small"
-                  selected={fuzziness === f}
-                  onChange={() => setFuzziness(f)}
-                  sx={{ textTransform: "none" }}
-                >
-                  {t(`fuzziness.${f}`)}
-                </ToggleButton>
-              ))}
+              {FUZZINESS_CHOICES.map((f) => {
+                const Icon = FUZZINESS_ICONS[f];
+                return (
+                  <ToggleButton
+                    key={f}
+                    value={f}
+                    size="small"
+                    selected={fuzziness === f}
+                    onChange={() => setFuzziness(f)}
+                    sx={{ textTransform: "none", gap: 0.5, pl: 1, pr: 1.25 }}
+                  >
+                    <Icon sx={{ fontSize: 18, color: "text.secondary" }} />
+                    {t(`fuzziness.${f}`)}
+                  </ToggleButton>
+                );
+              })}
             </Box>
           </Box>
 
@@ -237,23 +263,25 @@ export function ReportDialog() {
                       p: 0,
                       borderRadius: "50%",
                       border: "2px solid",
-                      borderColor: alpha(color, isSelected ? 1 : 0.45),
-                      bgcolor: alpha(color, isSelected ? 0.4 : 0.14),
-                      color: "text.primary",
+                      // Selected reads as a solid colored disc (with legible
+                      // number); unselected stays a faint tint.
+                      borderColor: isSelected ? color : alpha(color, 0.45),
+                      bgcolor: isSelected ? color : alpha(color, 0.14),
+                      color: isSelected ? readableOn(color) : "text.primary",
                       fontSize: "1.2rem",
-                      fontWeight: 600,
+                      fontWeight: 700,
                       transition: (theme) =>
                         theme.transitions.create([
                           "background-color",
                           "border-color",
                           "box-shadow",
                         ]),
-                      boxShadow: isSelected ? `0 0 0 3px ${alpha(color, 0.25)}` : "none",
-                      "&:hover": { bgcolor: alpha(color, isSelected ? 0.48 : 0.26) },
+                      boxShadow: isSelected ? `0 0 0 3px ${alpha(color, 0.3)}` : "none",
+                      "&:hover": { bgcolor: isSelected ? color : alpha(color, 0.26) },
                       "&.Mui-selected": {
-                        bgcolor: alpha(color, 0.4),
-                        color: "text.primary",
-                        "&:hover": { bgcolor: alpha(color, 0.48) },
+                        bgcolor: color,
+                        color: readableOn(color),
+                        "&:hover": { bgcolor: color },
                       },
                     }}
                   >
