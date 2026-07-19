@@ -125,6 +125,11 @@ export function useNavCamera(): void {
   const displayedZoomRef = useRef<number | null>(null);
   const userZoomedRef = useRef(false);
   const userCamActivityUntilRef = useRef(0);
+  // True while a finger/mouse button is down on the map. The follow loop yields
+  // for the whole interaction so its per-frame jumpTo can't reset MapLibre's
+  // in-progress gesture before it crosses the pan/zoom threshold — the reason a
+  // pinch or drag wouldn't take hold while the puck (and camera) were moving.
+  const userInteractingRef = useRef(false);
 
   const active = status === "navigating" || status === "rerouting";
 
@@ -258,11 +263,12 @@ export function useNavCamera(): void {
       if (
         camMode !== "follow" ||
         now < settleUntilRef.current ||
-        now < userCamActivityUntilRef.current
+        now < userCamActivityUntilRef.current ||
+        userInteractingRef.current
       ) {
         // Released, still settling the enter-ease, or the user is actively
-        // panning/zooming: do NOT run jumpTo — it calls stop() and would cancel
-        // the user's gesture or zoom animation. Re-center on the next free frame.
+        // touching/panning/zooming: do NOT run jumpTo — it calls stop() and would
+        // cancel the user's gesture or zoom animation. Re-center on a free frame.
         lastCamRef.current = null;
       } else {
         // Follow center + bearing. Auto-zoom toward the speed-derived target,
@@ -304,6 +310,7 @@ export function useNavCamera(): void {
       mapRef?.current?.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
       userZoomedRef.current = false;
       userCamActivityUntilRef.current = 0;
+      userInteractingRef.current = false;
     }
   }, [active, mapRef]);
 
@@ -333,12 +340,32 @@ export function useNavCamera(): void {
       if (e?.programmatic) return;
       suspend();
     };
+    // Yield the moment a pointer goes down — before MapLibre has classified the
+    // gesture as a pan or zoom — and for the whole time it stays down. Without
+    // this the moving follow loop keeps calling jumpTo and the nascent gesture
+    // never crosses its threshold (dragstart/zoomstart never fire).
+    const onPointerDown = () => {
+      userInteractingRef.current = true;
+      suspend();
+    };
+    const onPointerUp = (e?: { originalEvent?: { touches?: ArrayLike<unknown> } }) => {
+      // A multi-touch gesture fires touchend as each finger lifts; only release
+      // once none remain.
+      if ((e?.originalEvent?.touches?.length ?? 0) > 0) return;
+      userInteractingRef.current = false;
+    };
     map.on("dragstart", onPanRotatePitch);
     map.on("rotatestart", onPanRotatePitch);
     map.on("pitchstart", onPanRotatePitch);
     map.on("zoomstart", onZoomStart);
     map.on("zoom", onUserMove);
     map.on("move", onUserMove);
+    map.on("touchstart", onPointerDown);
+    map.on("mousedown", onPointerDown);
+    map.on("touchend", onPointerUp);
+    map.on("touchcancel", onPointerUp);
+    map.on("mouseup", onPointerUp);
+    map.on("wheel", onUserMove);
     return () => {
       map.off("dragstart", onPanRotatePitch);
       map.off("rotatestart", onPanRotatePitch);
@@ -346,6 +373,13 @@ export function useNavCamera(): void {
       map.off("zoomstart", onZoomStart);
       map.off("zoom", onUserMove);
       map.off("move", onUserMove);
+      map.off("touchstart", onPointerDown);
+      map.off("mousedown", onPointerDown);
+      map.off("touchend", onPointerUp);
+      map.off("touchcancel", onPointerUp);
+      map.off("mouseup", onPointerUp);
+      map.off("wheel", onUserMove);
+      userInteractingRef.current = false;
     };
   }, [mapRef, active]);
 }
