@@ -10,8 +10,10 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { haptics } from "@/lib/haptics";
+import type { TransitTransfer } from "@/lib/navigation/transitTransfer";
 import { NavBannerShell } from "./NavBannerShell";
 import { PlatformBadge } from "./PlatformBadge";
+import { TransitTransferCard } from "./TransitTransferCard";
 
 /**
  * Slice the full vehicle journey down to the stops for this leg, between the
@@ -49,11 +51,14 @@ export function TransitLegBanner({
   legIndex,
   totalLegs,
   transitProgress,
+  transfer,
 }: {
   leg: TripLeg;
   legIndex: number;
   totalLegs: number;
   transitProgress: TransitProgress | null;
+  /** The upcoming change onto another line, when this ride is not the last. */
+  transfer?: TransitTransfer | null;
 }) {
   const t = useTranslations("navigation");
   const isTransitLeg = leg.mode !== "walking" && !!leg.route;
@@ -144,7 +149,13 @@ export function TransitLegBanner({
           {t("legCounter", { current: legIndex + 1, total: totalLegs })}
         </Typography>
       </NavBannerShell>
-      {alightSoon && (
+      {alightSoon && transfer ? (
+        <TransitTransferCard
+          fromLeg={leg}
+          nextLeg={transfer.nextLeg}
+          walkSeconds={transfer.walkSeconds}
+        />
+      ) : alightSoon ? (
         <Box
           role="status"
           aria-live="polite"
@@ -174,7 +185,7 @@ export function TransitLegBanner({
             </Box>
           </Box>
         </Box>
-      )}
+      ) : null}
     </>
   );
 }

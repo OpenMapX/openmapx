@@ -62,6 +62,8 @@
     "alightAt": "Aussteigen an {place}",
     "alightAtCount": "Aussteigen an {place} · {count, plural, one {noch # Halt} other {noch # Halte}}",
     "alightSoon": "Am nächsten Halt aussteigen",
+    "changeAt": "Umsteigen an {stop}",
+    "transferWalk": "{minutes} Min. zum Umstieg",
     "legCounter": "Abschnitt {current}/{total}",
     "arriveAt": "Ankunft {time}",
     "delayMinutes": "+{minutes} Min.",

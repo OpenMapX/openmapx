@@ -6,6 +6,7 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import { useNavigationStore, useSidebarStore } from "@openmapx/core";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useEffect } from "react";
+import { nextTransferFor } from "@/lib/navigation/transitTransfer";
 import { useTransitNavigationEngine } from "@/lib/navigation/useTransitNavigationEngine";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { ArrivalCard } from "./ArrivalCard";
@@ -42,6 +43,7 @@ export function TransitNavigationView() {
   const legs = itinerary.legs;
   const currentLegIndex = Math.min(transitProgress?.currentLegIndex ?? 0, legs.length - 1);
   const currentLeg = legs[currentLegIndex] as TripLeg | undefined;
+  const transfer = nextTransferFor(legs, currentLegIndex);
 
   return (
     <Box
@@ -81,6 +83,7 @@ export function TransitNavigationView() {
                 legIndex={currentLegIndex}
                 totalLegs={legs.length}
                 transitProgress={transitProgress}
+                transfer={transfer}
               />
             )}
           </Box>

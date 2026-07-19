@@ -62,6 +62,8 @@
     "alightAt": "Alight at {place}",
     "alightAtCount": "Alight at {place} · {count, plural, one {# stop} other {# stops}}",
     "alightSoon": "Get off at the next stop",
+    "changeAt": "Change at {stop}",
+    "transferWalk": "{minutes} min to transfer",
     "legCounter": "Leg {current}/{total}",
     "arriveAt": "Arrive {time}",
     "delayMinutes": "+{minutes} min",

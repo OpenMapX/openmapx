@@ -1,0 +1,86 @@
+"use client";
+
+import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
+import TransferWithinAStationIcon from "@mui/icons-material/TransferWithinAStation";
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import type { TripLeg } from "@openmapx/mobility-core/transit";
+import { useTranslations } from "next-intl";
+import { RouteBadge } from "@/components/panels/transit/RouteBadge";
+import { PlatformBadge } from "./PlatformBadge";
+
+/**
+ * "Change here" card shown beneath the leg banner as the rider approaches the
+ * end of a transit leg that is followed by another ride. Amber (vs the red
+ * final-alight card) so a transfer reads distinctly from arriving. Names the
+ * change stop, the line to board next (with its destination sign) and the
+ * boarding platform — flagged if it changed from the scheduled track.
+ */
+export function TransitTransferCard({
+  fromLeg,
+  nextLeg,
+  walkSeconds,
+}: {
+  fromLeg: TripLeg;
+  nextLeg: TripLeg;
+  walkSeconds: number;
+}) {
+  const t = useTranslations("navigation");
+  const walkMinutes = walkSeconds > 0 ? Math.max(1, Math.round(walkSeconds / 60)) : 0;
+  const nextHeadsign =
+    nextLeg.headsign && nextLeg.headsign !== nextLeg.to.name ? nextLeg.headsign : undefined;
+  const boardPlatform = nextLeg.from.platformCode;
+  const platformChanged =
+    !!boardPlatform &&
+    !!nextLeg.from.scheduledPlatformCode &&
+    boardPlatform !== nextLeg.from.scheduledPlatformCode;
+
+  return (
+    <Box
+      role="status"
+      aria-live="polite"
+      sx={{
+        pointerEvents: "auto",
+        display: "flex",
+        gap: 1.5,
+        px: 2,
+        py: 1.25,
+        bgcolor: "warning.main",
+        color: "warning.contrastText",
+        borderRadius: 2,
+        boxShadow: 2,
+      }}
+    >
+      <TransferWithinAStationIcon sx={{ fontSize: 28, flexShrink: 0 }} />
+      <Box sx={{ minWidth: 0, flex: 1 }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700 }} noWrap>
+          {t("changeAt", { stop: fromLeg.to.name })}
+        </Typography>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.5, flexWrap: "wrap" }}>
+          {nextLeg.route && (
+            <RouteBadge
+              shortName={nextLeg.route.shortName}
+              color={nextLeg.route.color}
+              textColor={nextLeg.route.textColor}
+              mode={nextLeg.mode}
+            />
+          )}
+          {nextHeadsign && (
+            <Typography variant="caption" sx={{ opacity: 0.95 }} noWrap>
+              {t("towards", { headsign: nextHeadsign })}
+            </Typography>
+          )}
+          {boardPlatform && (
+            <PlatformBadge code={boardPlatform} tone="onBanner" changed={platformChanged} />
+          )}
+        </Box>
+        {walkMinutes > 0 && (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 0.5 }}>
+            <DirectionsWalkIcon sx={{ fontSize: 15 }} />
+            <Typography variant="caption">{t("transferWalk", { minutes: walkMinutes })}</Typography>
+          </Box>
+        )}
+      </Box>
+    </Box>
+  );
+}
