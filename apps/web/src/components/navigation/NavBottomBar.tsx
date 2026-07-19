@@ -4,6 +4,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import MapIcon from "@mui/icons-material/Map";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import ScreenLockPortraitIcon from "@mui/icons-material/ScreenLockPortrait";
+import SearchIcon from "@mui/icons-material/Search";
 import VolumeOffIcon from "@mui/icons-material/VolumeOff";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 import Box from "@mui/material/Box";
@@ -33,6 +34,8 @@ interface Props {
   onToggleVoice?: () => void;
   /** Overview action; omit to drop the "Route overview" menu item. */
   onOverview?: () => void;
+  /** Search-along-route action; omit to hide the search button (transit has none). */
+  onSearch?: () => void;
   /**
    * Overrides the default secondary line ("{distance} · ETA {time}"). Transit
    * passes its own "Arrive {time}" here since it shows no distance.
@@ -51,6 +54,7 @@ export function NavBottomBar({
   voiceEnabled,
   onToggleVoice,
   onOverview,
+  onSearch,
   secondary,
 }: Props) {
   const t = useTranslations("navigation");
@@ -91,6 +95,21 @@ export function NavBottomBar({
           {secondaryLine}
         </Typography>
       </Box>
+      {onSearch && (
+        <IconButton
+          onClick={onSearch}
+          aria-label={t("searchAlongRoute")}
+          // Round with a border, matching the end button on the left.
+          sx={{
+            border: "1px solid",
+            borderColor: "divider",
+            color: "text.primary",
+            borderRadius: "50%",
+          }}
+        >
+          <SearchIcon />
+        </IconButton>
+      )}
       {onToggleVoice && (
         <IconButton
           onClick={onToggleVoice}

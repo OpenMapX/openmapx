@@ -17,6 +17,7 @@ import {
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { useMapOptional } from "@/lib/MapContext";
+import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
 import { useNavAlerts } from "@/lib/navigation/useNavAlerts";
 import { useNavCamera } from "@/lib/navigation/useNavCamera";
 import { useNavigationEngine } from "@/lib/navigation/useNavigationEngine";
@@ -46,6 +47,8 @@ export function NavigationView() {
   const toggleKeepScreenOn = useNavigationStore((s) => s.toggleKeepScreenOn);
   const setCameraMode = useNavigationStore((s) => s.setCameraMode);
   const stopNavigation = useNavigationStore((s) => s.stopNavigation);
+  const openRouteSearch = useRouteSearchStore((s) => s.openPicker);
+  const routeSearchOpen = useRouteSearchStore((s) => s.open);
 
   const mapCtx = useMapOptional();
   const units = useSettingsStore((s) => s.units);
@@ -125,6 +128,7 @@ export function NavigationView() {
       onToggleVoice={toggleVoice}
       onToggleKeepScreenOn={toggleKeepScreenOn}
       onOverview={handleOverview}
+      onSearch={routeSearchOpen ? undefined : openRouteSearch}
       onEnd={stopNavigation}
       units={units}
     />

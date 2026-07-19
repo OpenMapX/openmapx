@@ -4,7 +4,6 @@ import AddIcon from "@mui/icons-material/Add";
 import ExploreIcon from "@mui/icons-material/Explore";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 import RemoveIcon from "@mui/icons-material/Remove";
-import SearchIcon from "@mui/icons-material/Search";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
@@ -17,7 +16,6 @@ import { useMyLocation } from "@/components/command-palette/useMyLocation";
 import { MOBILE_SHEET_FOLLOW_CAP_FRACTION } from "@/components/panels/mobileSheetShared";
 import { useMap } from "@/lib/MapContext";
 import { useMobilePanelMaxHeight } from "@/lib/mobilePanelHeight";
-import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
 import { CrowdApproachPromptLazy, ReportDialogLazy, ReportFabLazy } from "./crowdReportsLazy";
 import { Pegman } from "./Pegman";
 
@@ -31,13 +29,8 @@ export function MapControls() {
   const tNav = useTranslations("navigation");
   const { zoomIn, zoomOut, resetBearing } = useMap();
   const navigating = useNavigationStore((s) => s.status !== "idle");
-  const navKind = useNavigationStore((s) => s.kind);
   const navCameraMode = useNavigationStore((s) => s.cameraMode);
   const setCameraMode = useNavigationStore((s) => s.setCameraMode);
-  // Search-along-route is ground-nav only; its button joins this control stack.
-  const routeSearchOpen = useRouteSearchStore((s) => s.open);
-  const openRouteSearch = useRouteSearchStore((s) => s.openPicker);
-  const showRouteSearchButton = navigating && navKind === "ground" && !routeSearchOpen;
   const bearing = useMapStore((s) => s.bearing);
   const pitch = useMapStore((s) => s.pitch);
   const handleMyLocation = useMyLocation();
@@ -87,22 +80,6 @@ export function MapControls() {
           transition: "bottom 0.25s ease",
         }}
       >
-        {/* Search along route (ground navigation only) — top of the stack. */}
-        {showRouteSearchButton && (
-          <Tooltip title={tNav("searchAlongRoute")} placement="left">
-            <Paper elevation={2} sx={{ borderRadius: "50%", overflow: "hidden" }}>
-              <IconButton
-                size="small"
-                onClick={openRouteSearch}
-                sx={{ width: 36, height: 36 }}
-                aria-label={tNav("searchAlongRoute")}
-              >
-                <SearchIcon sx={{ fontSize: 18, color: "primary.main" }} />
-              </IconButton>
-            </Paper>
-          </Tooltip>
-        )}
-
         {/* Report a condition (crowd-reports) */}
         {crowdReportsEnabled && (
           <Suspense fallback={null}>
