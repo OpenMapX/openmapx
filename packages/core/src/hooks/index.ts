@@ -22,6 +22,7 @@ export {
   useStopSearch,
   useStopsNearby,
   useStopTimetable,
+  useStopTransfers,
   useTransitPlan,
   useTransitPlanningCapabilities,
   useTransitRoute,

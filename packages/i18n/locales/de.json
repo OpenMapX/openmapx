@@ -72,6 +72,8 @@
     "voiceBoardPlatform": "Steig in die {line} Richtung {destination} auf Gleis {platform}",
     "voiceAlight": "Steig am nächsten Halt aus, {stop}",
     "voiceTransfer": "Steig an {stop} aus und in die {line} um",
+    "stepFree": "Barrierefrei · {minutes} Min.",
+    "stepFreeElevator": "Barrierefrei per Aufzug · {minutes} Min.",
     "legCounter": "Abschnitt {current}/{total}",
     "arriveAt": "Ankunft {time}",
     "delayMinutes": "+{minutes} Min.",

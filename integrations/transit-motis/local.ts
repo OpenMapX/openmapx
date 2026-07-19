@@ -488,6 +488,15 @@ export function setupLocal(ctx: IntegrationContext): void {
       requireHostedFallback();
       return wrapTransitousRT(await motis.getVehicleRadar(transitousInstance, bbox));
     },
+    async getStopTransfers(stopId) {
+      const localId = withPrefix(stopId, "ms:");
+      const cloudId = withPrefix(stopId, "mo:");
+      if (await isMotisReachableCached()) {
+        return wrapLocal(await motis.getStopTransfers(motisLocalInstance, localId));
+      }
+      requireHostedFallback();
+      return wrapTransitous(await motis.getStopTransfers(transitousInstance, cloudId));
+    },
   });
 }
 

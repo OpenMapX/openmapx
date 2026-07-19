@@ -16,6 +16,7 @@ import type {
   Facility,
   GeoJSONLineString,
   ServiceAlert,
+  StopTransfer,
   TransitRoute,
   TransitStop,
   TransitStopInfrastructure,
@@ -689,6 +690,20 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     return outcome.ok ? outcome.value : emptyResult<TransitStopInfrastructure | null>(null);
   }
 
+  async function getStopTransfers(stopId: string): Promise<MobilityResult<StopTransfer[]>> {
+    const provider = await resolveByPrefix(stopId);
+    if (!provider?.getStopTransfers) return emptyResult<StopTransfer[]>([]);
+    const fn = provider.getStopTransfers.bind(provider);
+    const outcome = await timed(
+      providerHealth,
+      metricsRecorder,
+      provider.id,
+      "getStopTransfers",
+      () => fn(stopId),
+    );
+    return outcome.ok ? outcome.value : emptyResult<StopTransfer[]>([]);
+  }
+
   async function getStopTimetable(
     stopId: string,
     date: string,
@@ -1074,6 +1089,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     getAlerts,
     getStopPlatforms,
     getStopInfrastructure,
+    getStopTransfers,
     getStopTimetable,
     getRoutesForStop,
     getRoutesInBbox,

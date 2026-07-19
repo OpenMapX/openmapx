@@ -5,6 +5,7 @@ import type {
   Departure,
   Facility,
   ServiceAlert,
+  StopTransfer,
   TransitRoute,
   TransitStop,
   TransitStopInfrastructure,
@@ -186,6 +187,8 @@ export interface TransitProvider {
   getStopInfrastructure?(stopId: string): Promise<MobilityResult<TransitStopInfrastructure | null>>;
   getStopPlatforms?(stopId: string): Promise<MobilityResult<TransitStop[]>>;
   getStopTimetable?(stopId: string, date: string): Promise<MobilityResult<TimetableEntry[]>>;
+  /** Accessibility-annotated transfers out of a stop (foot/wheelchair, elevator). */
+  getStopTransfers?(stopId: string): Promise<MobilityResult<StopTransfer[]>>;
 
   getDepartures?(stopId: string, minutes: number): Promise<MobilityResult<Departure[]>>;
   /** Arrivals reuse the {@link Departure} shape; the `direction` field

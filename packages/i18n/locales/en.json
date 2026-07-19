@@ -72,6 +72,8 @@
     "voiceBoardPlatform": "Board the {line} towards {destination} on platform {platform}",
     "voiceAlight": "Get off at the next stop, {stop}",
     "voiceTransfer": "Get off at {stop} and change to the {line}",
+    "stepFree": "Step-free · {minutes} min",
+    "stepFreeElevator": "Step-free via lift · {minutes} min",
     "legCounter": "Leg {current}/{total}",
     "arriveAt": "Arrive {time}",
     "delayMinutes": "+{minutes} min",

@@ -18,6 +18,7 @@ import {
   refreshItinerary as motisRefreshItinerary,
   routes as motisRoutesApi,
   stops as motisStops,
+  transfers as motisTransfers,
   trip as motisTrip,
   trips as motisTrips,
   oneToAll,
@@ -31,6 +32,7 @@ import type {
   FareProduct,
   GeoJSONLineString,
   ServiceAlert,
+  StopTransfer,
   TransitFlexInfo,
   TransitLegAlternative,
   TransitRentalInfo,
@@ -920,6 +922,31 @@ export async function getVehicleRadar(
       },
       data,
     );
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Accessibility-annotated transfers out of a stop via the MOTIS `transfers`
+ * endpoint: per-profile durations (foot / wheelchair) and whether the step-free
+ * path uses an elevator. Powers step-free transfer guidance during navigation.
+ */
+export async function getStopTransfers(
+  instance: MotisInstance,
+  stopId: string,
+): Promise<StopTransfer[]> {
+  const id = rawId(instance, stopId);
+  try {
+    const { data } = await motisTransfers({ client: instance.client, query: { id } });
+    if (!data?.transfers) return [];
+    return data.transfers.map((tr) => ({
+      toStopId: `${instance.prefix}${tr.to.stopId ?? ""}`,
+      toName: tr.to.name ?? "",
+      footMinutes: tr.footRouted ?? tr.foot ?? tr.default ?? undefined,
+      wheelchairMinutes: tr.wheelchairRouted ?? tr.wheelchair ?? undefined,
+      wheelchairUsesElevator: tr.wheelchairUsesElevator ?? undefined,
+    }));
   } catch {
     return [];
   }

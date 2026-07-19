@@ -1,9 +1,11 @@
 "use client";
 
+import AccessibleIcon from "@mui/icons-material/Accessible";
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
 import TransferWithinAStationIcon from "@mui/icons-material/TransferWithinAStation";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
+import { useStopTransfers } from "@openmapx/core";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
@@ -32,6 +34,13 @@ export function TransitTransferCard({
     nextLeg.headsign && nextLeg.headsign !== nextLeg.to.name ? nextLeg.headsign : undefined;
   const boardPlatform = nextLeg.from.platformCode;
   const platformChanged = !!changedFromPlatform(nextLeg.from);
+
+  // Step-free transfer info (MOTIS transfers): the accessibility-annotated
+  // option from the alight stop to the next boarding stop.
+  const { data: transfers } = useStopTransfers(fromLeg.to.stopId ?? null);
+  const stepFree = transfers?.find(
+    (tr) => tr.toStopId === nextLeg.from.stopId && tr.wheelchairMinutes != null,
+  );
 
   return (
     <Box
@@ -76,6 +85,16 @@ export function TransitTransferCard({
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 0.5 }}>
             <DirectionsWalkIcon sx={{ fontSize: 15 }} />
             <Typography variant="caption">{t("transferWalk", { minutes: walkMinutes })}</Typography>
+          </Box>
+        )}
+        {stepFree && (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 0.5 }}>
+            <AccessibleIcon sx={{ fontSize: 15 }} />
+            <Typography variant="caption">
+              {t(stepFree.wheelchairUsesElevator ? "stepFreeElevator" : "stepFree", {
+                minutes: Math.max(1, Math.round(stepFree.wheelchairMinutes ?? 0)),
+              })}
+            </Typography>
           </Box>
         )}
       </Box>

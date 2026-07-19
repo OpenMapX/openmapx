@@ -248,6 +248,20 @@ export function setup(ctx: IntegrationContext): void {
     reply.send(toEnvelope(res));
   });
 
+  // GET /stops/:id/transfers — accessibility-annotated transfers out of a stop.
+  ctx.registerRoute("GET", "/stops/:id/transfers", async (req, reply) => {
+    const stopId = decodeURIComponent(req.params.id);
+    const cacheKey = `stop-transfers:${stopId}`;
+    let env = (await ctx.cache.get(cacheKey)) as MobilityEnvelope<unknown> | null;
+    if (!env) {
+      const res = await orchestrator.getStopTransfers(stopId);
+      env = toEnvelope(res);
+      await ctx.cache.set(cacheKey, env, 3600);
+    }
+    reply.header("Cache-Control", "public, max-age=600, s-maxage=3600");
+    reply.send(env);
+  });
+
   // GET /stops/:id/infrastructure
   ctx.registerRoute("GET", "/stops/:id/infrastructure", async (req, reply) => {
     const stopId = decodeURIComponent(req.params.id);

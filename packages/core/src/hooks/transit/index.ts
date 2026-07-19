@@ -29,6 +29,7 @@ export { useStopPlatforms } from "./useStopPlatforms";
 export { useStopSearch } from "./useStopSearch";
 export { useStopsNearby } from "./useStopsNearby";
 export { useStopTimetable } from "./useStopTimetable";
+export { useStopTransfers } from "./useStopTransfers";
 export { useTransitPlan } from "./useTransitPlan";
 export {
   type TransitPlanningCapabilityProvider,

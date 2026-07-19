@@ -504,6 +504,22 @@ export interface RouteLive {
   alerts: ServiceAlert[];
 }
 
+/**
+ * An accessibility-annotated transfer option between two stops, from the MOTIS
+ * `transfers` endpoint. Durations are in minutes; absence means no path was
+ * found for that profile (e.g. no `wheelchairMinutes` = no step-free route).
+ */
+export interface StopTransfer {
+  toStopId: string;
+  toName: string;
+  /** Walking transfer time for the foot profile. */
+  footMinutes?: number;
+  /** Transfer time for the wheelchair profile; absent = no step-free path. */
+  wheelchairMinutes?: number;
+  /** Whether the step-free path relies on an elevator. */
+  wheelchairUsesElevator?: boolean;
+}
+
 export interface VehicleJourneyStop {
   stopId: string;
   name: string;
