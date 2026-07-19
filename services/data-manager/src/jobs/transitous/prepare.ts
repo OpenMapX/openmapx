@@ -1,6 +1,10 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { ensureCatalog } from "@openmapx/transitous-core";
-import { parseRefShaPair, readTransitousLock } from "../../transitous-lock.js";
+import {
+  parseRefShaPair,
+  readTransitousLock,
+  readTransitousLockProposal,
+} from "../../transitous-lock.js";
 import {
   DEFAULT_TRANSITOUS_REPO_URL,
   ensureTransitousWorkdirs,
@@ -35,7 +39,13 @@ export const run: StageFn = async (ctx) => {
       reset: true,
     });
 
-    await enforceTransitousLock(catalogDir, ctx.repoRoot, ctx.runner, ctx.logger);
+    await enforceTransitousLock(
+      catalogDir,
+      ctx.repoRoot,
+      ctx.runner,
+      ctx.logger,
+      ctx.useProposedLock ?? false,
+    );
     ensureTransitousWorkdirs(catalogDir, ctx.outDir, ctx.downloadsDir);
     pruneOrphanedGtfsDatasets(ctx);
 
@@ -100,6 +110,7 @@ async function enforceTransitousLock(
   repoRoot: string | undefined,
   runner: JobContext["runner"],
   logger: JobLogger,
+  useProposedLock: boolean,
 ): Promise<void> {
   if (!repoRoot) {
     logger.warn(
@@ -109,7 +120,11 @@ async function enforceTransitousLock(
   }
   let lock: ReturnType<typeof readTransitousLock>;
   try {
-    lock = readTransitousLock(repoRoot);
+    // The auto-bump canary validates the proposed ref in the staging slot
+    // before it is activated; every other run enforces the active lock.
+    lock = useProposedLock
+      ? (readTransitousLockProposal(repoRoot) ?? readTransitousLock(repoRoot))
+      : readTransitousLock(repoRoot);
   } catch (error) {
     logger.warn(
       `transitous-pipeline: failed to read lockfile (${(error as Error).message}); continuing without pin`,
@@ -121,6 +136,9 @@ async function enforceTransitousLock(
       "transitous-pipeline: no infra/docker/transitous.lock.json found; running against catalog HEAD (run `pnpm openmapx transitous bump` to pin)",
     );
     return;
+  }
+  if (useProposedLock) {
+    logger.info(`transitous-pipeline: enforcing PROPOSED lock ${lock.ref} (auto-bump canary)`);
   }
   const { sha } = parseRefShaPair(lock.ref);
   const safeArgs = safeDirArgs(catalogDir);

@@ -223,6 +223,8 @@ export interface BuildJobContextOptions {
   feedAllowList?: string[];
   confirmPlanet?: boolean;
   osmInput?: string;
+  /** Build from the proposed lock (auto-bump canary) instead of the active one. */
+  useProposedLock?: boolean;
 }
 
 /** Build a `JobContext` with safe defaults; used by API + tests. */
@@ -275,6 +277,7 @@ export function buildJobContext(opts: BuildJobContextOptions): JobContext {
     transitousRepoUrl: opts.transitousRepoUrl,
     apiKeysPath: opts.apiKeysPath,
     feedsOverlayPath: opts.feedsOverlayPath,
+    useProposedLock: opts.useProposedLock,
     state: {},
   };
 }

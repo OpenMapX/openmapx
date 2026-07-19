@@ -231,9 +231,12 @@ Schedules and tuning for the daily Transitous transit-data sync.
 | ------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------- |
 | `TRANSIT_SOURCE`                      | How the Transitous dataset is obtained: `mirror` (default — download the prebuilt community bundle) or `build` (assemble it locally from feeds). See [Transit engines](../guides/transit-engines.md). | Optional. Default `mirror` |
 | `TRANSITOUS_ARTIFACT_BASE_URL`        | Base URL the `mirror` mode pulls the prebuilt Transitous artifact from. | Optional. Default unset (upstream) |
-| `TRANSITOUS_SYNC_CRON`                | Cron schedule for the daily Transitous sync. Set to `disabled` (or `off`/`false`) to turn it off (e.g. on a staging host where you trigger manually). | Optional. Commented `0 3 * * *` |
+| `TRANSITOUS_SYNC_CRON`                | Cron schedule for the daily Transitous sync. Leaving it unset (or empty) uses the built-in `0 3 * * *`; set it to `disabled` (or `off`/`false`) to turn it off (e.g. on a staging host where you trigger manually). | Optional. Commented `0 3 * * *` |
 | `TRANSITOUS_STALENESS_CHECK_CRON`     | Cron schedule for the staleness sweep that flags feeds that have stopped updating. Set to `disabled` (or `off`/`false`) to turn it off. | Optional. Commented `0 4 * * *` |
 | `TRANSITOUS_FEED_PROXY_RELOAD_CRON`   | Cron schedule for the feed-proxy nginx-reload heartbeat — a safety net against a missed reload during sync. | Optional. Commented `*/15 * * * *` |
+| `TRANSITOUS_AUTO_BUMP_CRON`           | Opt-in cron that advances the pinned Transitous catalog to upstream's latest behind the staging-slot canary — activates the new pin (and promotes) only if the candidate builds and passes the functional probes, otherwise keeps the current pin and alerts. **Unset/empty = disabled** (the pin stays frozen). See [Transit engines](../guides/transit-engines.md). | Optional. Default disabled |
+| `TRANSITOUS_ALERT_GH_TOKEN` / `TRANSITOUS_ALERT_GH_REPO` | When both are set, sync/auto-bump failures and stale feeds open deduped GitHub issues instead of being log-only. Without them a canary rejection can silently freeze the live dataset for days. | Optional. Default log-only |
+| `MOTIS_RENTALS_WARMUP_MS` / `MOTIS_RENTALS_POLL_INTERVAL_MS` | How long the rentals canary re-polls MOTIS `/rentals` while it enumerates zero providers (GBFS warm-up after a restart) before failing, and the interval between polls. | Optional. Default `180000` / `5000` |
 
 :::note[Transitous feed-proxy key]
 The optional age private key used to decrypt `AGE-ENCRYPTED:` feed values has no

@@ -197,6 +197,72 @@ export async function emitFeedAlerts(opts: EmitFeedAlertsOptions): Promise<void>
 }
 
 /**
+ * A whole pipeline run failed (or ended partial) — distinct from a per-feed
+ * staleness alert. This is the signal that catches a canary that keeps
+ * rejecting candidates: in mirror mode `feed_state.last_fetched_at` is written
+ * before the canary runs, so per-feed staleness never fires even while
+ * `promote` is stuck and the live dataset silently ages.
+ */
+export interface PipelineFailureAlert {
+  /** What kicked off the run, e.g. "cron" or "auto-bump". Keeps the issue title stable so nightly failures dedupe. */
+  trigger: string;
+  jobId: string;
+  /** The stage that hard-stopped the run, when known (e.g. "motis-health"). */
+  failedStage?: string;
+  reason: string;
+}
+
+/**
+ * Emit a pipeline-level failure alert. Always logs at error level; when a
+ * GitHub sink is configured, opens (or reuses) a single issue per `trigger`
+ * so a run that fails every night doesn't spam a new issue each time.
+ */
+export async function emitPipelineFailureAlert(opts: {
+  alert: PipelineFailureAlert;
+  log: AlertLogger;
+  githubIssue?: GithubIssueSink;
+}): Promise<void> {
+  const { alert, log, githubIssue } = opts;
+  const base = {
+    trigger: alert.trigger,
+    jobId: alert.jobId,
+    failedStage: alert.failedStage,
+    reason: alert.reason,
+  };
+  log.error("transit pipeline failure", base);
+
+  if (!githubIssue) return;
+  const title = `Transit pipeline failed: ${alert.trigger}`;
+  const body = [
+    "Automatic alert from the openmapx data-manager.",
+    "",
+    `- trigger: \`${alert.trigger}\``,
+    `- jobId: \`${alert.jobId}\``,
+    ...(alert.failedStage ? [`- failedStage: \`${alert.failedStage}\``] : []),
+    `- reason: \`${alert.reason}\``,
+  ].join("\n");
+  try {
+    if (githubIssue.findOpenIssueByTitle) {
+      const existing = await githubIssue.findOpenIssueByTitle(title);
+      if (existing) {
+        log.info("transit pipeline failure: existing GitHub issue, skipped creation", {
+          ...base,
+          existing,
+        });
+        return;
+      }
+    }
+    const issueUrl = await githubIssue.createIssue(title, body);
+    log.info("transit pipeline failure: GitHub issue created", { ...base, issueUrl });
+  } catch (err) {
+    log.error("transit pipeline failure: GitHub issue failed", {
+      ...base,
+      err: (err as Error).message,
+    });
+  }
+}
+
+/**
  * Resolve a GitHub Issue title that uniquely identifies the (region, name, kind)
  * tuple. The dedup path searches for an open issue with this exact title so
  * the format must remain stable across releases.

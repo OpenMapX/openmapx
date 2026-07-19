@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -186,6 +194,181 @@ describe("setupCron", () => {
     await handles.runSyncNow();
     expect(runPipeline).not.toHaveBeenCalled();
     handles.stop();
+  });
+
+  it("opens a pipeline-failure issue when a scheduled sync ends in error", async () => {
+    const createIssue = vi.fn(async (_title: string, _body: string) => "https://x/issues/1");
+    const runPipeline = vi.fn().mockResolvedValue({
+      jobId: "job-x",
+      results: [
+        { stage: "motis-health", status: "error" as const, error: { message: "rentals empty" } },
+      ],
+      finalStatus: "error" as const,
+    });
+    const handles = setupCron({
+      dataDir,
+      repoRoot: "/tmp/nope",
+      countries: [],
+      store: {} as never,
+      singleFlight: makeController(),
+      logger: { info: () => {}, warn: () => {}, error: () => {} },
+      syncCronExpression: "0 0 1 1 *",
+      feedProxyReloadCronExpression: "disabled",
+      stalenessCheckCronExpression: "disabled",
+      runPipeline,
+      runStalenessCheck: async () => {},
+      githubIssueSink: { findOpenIssueByTitle: async () => null, createIssue },
+    });
+
+    await handles.runSyncNow();
+    expect(runPipeline).toHaveBeenCalledTimes(1);
+    expect(createIssue).toHaveBeenCalledTimes(1);
+    const [title, body] = createIssue.mock.calls[0] ?? [];
+    expect(title).toContain("cron");
+    expect(body).toContain("motis-health");
+    handles.stop();
+  });
+
+  describe("auto-bump cron", () => {
+    const ACTIVE = "a".repeat(40);
+    const CANDIDATE = "e".repeat(40);
+    const ATLAS_OLD = "b".repeat(40);
+    const ATLAS_NEW = "c".repeat(40);
+    const newCandidate = {
+      branch: "main",
+      ref: `main@${CANDIDATE}`,
+      transitousSha: CANDIDATE,
+      transitlandAtlasSha: ATLAS_NEW,
+    };
+
+    function seedRepo(): string {
+      const repoRoot = join(dataDir, "repo");
+      const lockDir = join(repoRoot, "infra", "docker");
+      mkdirSync(lockDir, { recursive: true });
+      writeFileSync(
+        join(lockDir, "transitous.lock.json"),
+        JSON.stringify({
+          ref: `main@${ACTIVE}`,
+          submodules: { "transitland-atlas": ATLAS_OLD },
+          lockedAt: "2026-05-01T00:00:00.000Z",
+          lockedBy: "seed",
+        }),
+      );
+      return repoRoot;
+    }
+
+    const activeLock = (repoRoot: string) =>
+      JSON.parse(readFileSync(join(repoRoot, "infra/docker/transitous.lock.json"), "utf-8"));
+    const proposalExists = (repoRoot: string) =>
+      existsSync(join(repoRoot, "infra/docker/transitous.lock.proposed.json"));
+
+    it("is opt-in — an unset schedule leaves the cron disabled", () => {
+      const handles = setupCron({
+        dataDir,
+        repoRoot: seedRepo(),
+        countries: [],
+        store: {} as never,
+        singleFlight: makeController(),
+        logger: { info: () => {}, warn: () => {}, error: () => {} },
+        syncCronExpression: "disabled",
+        feedProxyReloadCronExpression: "disabled",
+        stalenessCheckCronExpression: "disabled",
+      });
+      expect(handles.autoBumpCron).toBeNull();
+      handles.stop();
+    });
+
+    it("activates the new pin when the canary passes", async () => {
+      const repoRoot = seedRepo();
+      const runBumpPipeline = vi.fn(async (_jobId: string) => ({
+        jobId: "j",
+        results: [],
+        finalStatus: "ok" as const,
+      }));
+      const handles = setupCron({
+        dataDir,
+        repoRoot,
+        countries: [],
+        store: {} as never,
+        singleFlight: makeController(),
+        logger: { info: () => {}, warn: () => {}, error: () => {} },
+        syncCronExpression: "disabled",
+        feedProxyReloadCronExpression: "disabled",
+        stalenessCheckCronExpression: "disabled",
+        autoBumpCronExpression: "0 0 1 1 *",
+        resolveBumpCandidate: async () => newCandidate,
+        runBumpPipeline,
+      });
+      await handles.runAutoBumpNow();
+      expect(runBumpPipeline).toHaveBeenCalledTimes(1);
+      const active = activeLock(repoRoot);
+      expect(active.ref).toBe(`main@${CANDIDATE}`);
+      expect(active.submodules["transitland-atlas"]).toBe(ATLAS_NEW);
+      expect(proposalExists(repoRoot)).toBe(false);
+      handles.stop();
+    });
+
+    it("keeps the current pin, retains the proposal, and alerts when the canary rejects", async () => {
+      const repoRoot = seedRepo();
+      const createIssue = vi.fn(async (_t: string, _b: string) => "https://x/issues/1");
+      const runBumpPipeline = vi.fn(async (_jobId: string) => {
+        throw new Error('motis-health probe "rentals" failed: empty');
+      });
+      const handles = setupCron({
+        dataDir,
+        repoRoot,
+        countries: [],
+        store: {} as never,
+        singleFlight: makeController(),
+        logger: { info: () => {}, warn: () => {}, error: () => {} },
+        syncCronExpression: "disabled",
+        feedProxyReloadCronExpression: "disabled",
+        stalenessCheckCronExpression: "disabled",
+        autoBumpCronExpression: "0 0 1 1 *",
+        resolveBumpCandidate: async () => newCandidate,
+        runBumpPipeline,
+        githubIssueSink: { findOpenIssueByTitle: async () => null, createIssue },
+      });
+      await handles.runAutoBumpNow();
+      expect(activeLock(repoRoot).ref).toBe(`main@${ACTIVE}`);
+      expect(proposalExists(repoRoot)).toBe(true);
+      expect(createIssue).toHaveBeenCalledTimes(1);
+      const [title] = createIssue.mock.calls[0] ?? [];
+      expect(title).toContain("auto-bump");
+      handles.stop();
+    });
+
+    it("does nothing when the active pin already matches upstream", async () => {
+      const repoRoot = seedRepo();
+      const runBumpPipeline = vi.fn(async (_jobId: string) => ({
+        jobId: "j",
+        results: [],
+        finalStatus: "ok" as const,
+      }));
+      const handles = setupCron({
+        dataDir,
+        repoRoot,
+        countries: [],
+        store: {} as never,
+        singleFlight: makeController(),
+        logger: { info: () => {}, warn: () => {}, error: () => {} },
+        syncCronExpression: "disabled",
+        feedProxyReloadCronExpression: "disabled",
+        stalenessCheckCronExpression: "disabled",
+        autoBumpCronExpression: "0 0 1 1 *",
+        resolveBumpCandidate: async () => ({
+          branch: "main",
+          ref: `main@${ACTIVE}`,
+          transitousSha: ACTIVE,
+          transitlandAtlasSha: ATLAS_OLD,
+        }),
+        runBumpPipeline,
+      });
+      await handles.runAutoBumpNow();
+      expect(runBumpPipeline).not.toHaveBeenCalled();
+      expect(proposalExists(repoRoot)).toBe(false);
+      handles.stop();
+    });
   });
 
   it("reloads the feed-proxy when default.conf is newer than the last reload", async () => {

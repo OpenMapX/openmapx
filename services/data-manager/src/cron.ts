@@ -1,4 +1,4 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { feedState } from "@openmapx/db-schema";
 import {
@@ -35,6 +35,12 @@ import {
   writeLiveTraffic as writeLiveTrafficDefault,
 } from "./jobs/traffic/write-live.js";
 import {
+  type CatalogBumpCandidate,
+  candidateMatchesLock,
+  lockFromCandidate,
+  resolveCatalogBumpCandidate,
+} from "./jobs/transitous/catalog-bump.js";
+import {
   buildJobContext,
   type RunPipelineResult,
   runTransitousPipeline,
@@ -48,10 +54,17 @@ import {
   buildGithubIssueSink,
   detectStaleFeeds,
   emitFeedAlerts,
+  emitPipelineFailureAlert,
   type GithubIssueSink,
 } from "./jobs/transitous/staleness-alerts.js";
 import { asJobLogger, jobChildLogger } from "./logger.js";
 import type { StateStore } from "./state.js";
+import {
+  readTransitousLock,
+  TRANSITOUS_PROPOSED_LOCK_RELATIVE_PATH,
+  writeTransitousLock,
+  writeTransitousLockProposal,
+} from "./transitous-lock.js";
 import { envString } from "./utils/env.js";
 
 /**
@@ -107,6 +120,11 @@ const TRAFFIC_PREDICTED_CRON_DEFAULT = "0 6 * * 1";
 // and that must fall through to the built-in default (handled in
 // pickCronExpression), not silently disable the schedule.
 const DISABLED_SENTINELS = new Set(["disabled", "off", "false"]);
+
+const AUTO_BUMP_PROPOSAL_COMMENT =
+  "Candidate Transitous pin under auto-bump canary validation (services/data-manager).";
+const AUTO_BUMP_ACTIVATED_COMMENT =
+  "Auto-bumped Transitous pin, activated after the staging-slot canary passed.";
 
 export interface CronLogger {
   info: (msg: string, extra?: Record<string, unknown>) => void;
@@ -239,6 +257,24 @@ export interface CronSetupOptions {
    * `openConditionsUrl` exactly like the live-traffic writer above.
    */
   bakePredicted?: (deps: BakePredictedDeps) => Promise<BakePredictedResult>;
+  /**
+   * Override the auto-bump schedule. Auto-bump is OPT-IN: unlike the daily
+   * sync, an unset/empty value leaves it disabled — operators enable it
+   * explicitly with `TRANSITOUS_AUTO_BUMP_CRON`.
+   */
+  autoBumpCronExpression?: string;
+  /** Test seam: resolve the upstream catalog candidate. */
+  resolveBumpCandidate?: (opts: {
+    catalogDir: string;
+    branch: string;
+  }) => Promise<CatalogBumpCandidate>;
+  /**
+   * Test seam: run the canary + promote pipeline against the proposed lock.
+   * Resolves to the pipeline result; rejects when a critical stage (incl. the
+   * canary) fails. Production callers omit this and get a real pipeline run
+   * with `useProposedLock: true`.
+   */
+  runBumpPipeline?: (jobId: string) => Promise<RunPipelineResult>;
 }
 
 export interface CronHandles {
@@ -252,6 +288,8 @@ export interface CronHandles {
   trafficLiveCron: Cron | null;
   /** Predicted-traffic bake cron; null when OpenConditions isn't configured. */
   trafficPredictedCron: Cron | null;
+  /** Weekly auto-bump cron; null unless `TRANSITOUS_AUTO_BUMP_CRON` is set (opt-in). */
+  autoBumpCron: Cron | null;
   /** Stop all cron jobs; awaitable shutdown lives on the caller. */
   stop: () => void;
   /** Test seam: directly invoke the sync handler as if the cron fired. */
@@ -277,6 +315,8 @@ export interface CronHandles {
   runTrafficLiveNow: () => Promise<void>;
   /** Test seam: directly invoke the predicted-traffic bake as if the cron fired. */
   runTrafficPredictedNow: () => Promise<void>;
+  /** Test seam: directly invoke the auto-bump handler as if the cron fired. */
+  runAutoBumpNow: () => Promise<void>;
 }
 
 function pickCronExpression(
@@ -288,6 +328,20 @@ function pickCronExpression(
   // Unset OR empty (compose `${VAR:-}`) → built-in default. Only an explicit
   // disable sentinel turns the schedule off.
   if (raw === undefined || raw.trim() === "") return fallback;
+  const trimmed = raw.trim().toLowerCase();
+  if (DISABLED_SENTINELS.has(trimmed)) return null;
+  return raw.trim();
+}
+
+/**
+ * Opt-in variant of {@link pickCronExpression}: an unset OR empty value means
+ * DISABLED (returns null), not a built-in default. Used for the auto-bump cron,
+ * which stays off unless an operator sets a schedule — the pinned catalog is a
+ * deliberate safety gate, so tracking upstream is an explicit choice.
+ */
+function pickOptInCronExpression(override: string | undefined, envName: string): string | null {
+  const raw = override ?? process.env[envName];
+  if (raw === undefined || raw.trim() === "") return null;
   const trimmed = raw.trim().toLowerCase();
   if (DISABLED_SENTINELS.has(trimmed)) return null;
   return raw.trim();
@@ -394,6 +448,8 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     }
     log.info("transitous-cron: starting scheduled sync", { jobId: start.jobId });
     let finalStatus: RunPipelineResult["finalStatus"] = "error";
+    let pipelineResult: RunPipelineResult | undefined;
+    let threwReason: string | undefined;
     try {
       let result: RunPipelineResult;
       if (options.runPipeline) {
@@ -415,6 +471,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         });
         result = await runTransitousPipeline(ctx);
       }
+      pipelineResult = result;
       finalStatus = result.finalStatus;
       log.info("transitous-cron: sync completed", {
         jobId: start.jobId,
@@ -422,9 +479,10 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         stageCount: result.results.length,
       });
     } catch (err) {
+      threwReason = (err as Error).message;
       log.error("transitous-cron: sync threw", {
         jobId: start.jobId,
-        err: (err as Error).message,
+        err: threwReason,
       });
       finalStatus = "error";
     } finally {
@@ -437,6 +495,31 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         });
       }
       options.singleFlight.markSyncFinished();
+    }
+
+    // A hard failure means the canary rejected the candidate (or a critical
+    // stage errored) and nothing promoted — the live dataset silently ages.
+    // Per-feed staleness can't catch this in mirror mode (feed_state is written
+    // before the canary), so surface it as its own pipeline-level alert.
+    if (finalStatus === "error") {
+      const failed = pipelineResult?.results.find((stage) => stage.status === "error");
+      try {
+        await emitPipelineFailureAlert({
+          alert: {
+            trigger: "cron",
+            jobId: start.jobId,
+            failedStage: failed?.stage,
+            reason: failed?.error?.message ?? failed?.message ?? threwReason ?? "sync failed",
+          },
+          log,
+          githubIssue: githubIssue ?? undefined,
+        });
+      } catch (err) {
+        log.warn("transitous-cron: pipeline failure alert failed", {
+          jobId: start.jobId,
+          err: (err as Error).message,
+        });
+      }
     }
 
     // Run the staleness check immediately after every sync so an
@@ -465,6 +548,135 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   };
 
   const runStalenessCheck = options.runStalenessCheck ?? defaultStalenessCheck;
+
+  const catalogDir = join(options.dataDir, ".transitous-catalog");
+  const resolveBumpCandidate =
+    options.resolveBumpCandidate ?? ((o) => resolveCatalogBumpCandidate(o));
+  const defaultRunBumpPipeline = async (jobId: string): Promise<RunPipelineResult> => {
+    const jobLog = asJobLogger(
+      jobChildLogger({ job: "transitous-auto-bump", jobId, trigger: "cron" }),
+    );
+    const ctx = buildJobContext({
+      dataDir: options.dataDir,
+      store: options.store,
+      countries: options.countries,
+      repoRoot: options.repoRoot,
+      source: parseTransitSource(),
+      operationsPolicy: options.operationsPolicy,
+      jobId,
+      logger: jobLog,
+      useProposedLock: true,
+      onStageComplete: makePersistingOnStageComplete(jobId, jobLog),
+    });
+    return runTransitousPipeline(ctx);
+  };
+  const runBumpPipeline = options.runBumpPipeline ?? defaultRunBumpPipeline;
+
+  /**
+   * Auto-bump the pinned Transitous catalog behind the pipeline's own canary.
+   * Resolve upstream → propose the candidate → build it into the staging slot
+   * and run the functional-probe canary → activate the pin only if the whole
+   * pipeline (incl. the live promote) succeeds. On rejection the active pin is
+   * untouched, the proposal is retained for review, and a failure alert fires.
+   */
+  const runAutoBump = async (): Promise<void> => {
+    const repoRoot = options.repoRoot;
+    if (!repoRoot) {
+      log.warn("transitous-auto-bump: no repoRoot configured; skipping");
+      return;
+    }
+    const start = await options.singleFlight.tryStartSync({
+      trigger: "cron",
+      triggeredBy: "data-manager-auto-bump",
+      kind: "transitous-auto-bump",
+      metadata: { source: "auto-bump" },
+    });
+    if (!start.ok) {
+      log.warn("transitous-auto-bump: skipped, a sync is in-flight", { reason: start.reason });
+      return;
+    }
+
+    let finalStatus: RunPipelineResult["finalStatus"] = "ok";
+    let pipelineResult: RunPipelineResult | undefined;
+    let threwReason: string | undefined;
+    let ranPipeline = false;
+    try {
+      const candidate = await resolveBumpCandidate({ catalogDir, branch: "main" });
+      const active = readTransitousLock(repoRoot);
+      if (candidateMatchesLock(candidate, active)) {
+        log.info("transitous-auto-bump: already at upstream tip; nothing to do", {
+          ref: candidate.ref,
+        });
+        return;
+      }
+      log.info("transitous-auto-bump: proposing candidate pin", {
+        ref: candidate.ref,
+        previousRef: active?.ref ?? null,
+      });
+      writeTransitousLockProposal(
+        repoRoot,
+        lockFromCandidate(candidate, "auto-bump", AUTO_BUMP_PROPOSAL_COMMENT),
+      );
+
+      ranPipeline = true;
+      pipelineResult = await runBumpPipeline(start.jobId);
+      finalStatus = pipelineResult.finalStatus;
+
+      if (finalStatus === "ok") {
+        writeTransitousLock(
+          repoRoot,
+          lockFromCandidate(candidate, "auto-bump", AUTO_BUMP_ACTIVATED_COMMENT),
+        );
+        rmSync(join(repoRoot, TRANSITOUS_PROPOSED_LOCK_RELATIVE_PATH), { force: true });
+        log.info("transitous-auto-bump: canary passed; activated new catalog pin", {
+          ref: candidate.ref,
+        });
+      } else {
+        log.warn("transitous-auto-bump: canary did not fully pass; keeping current pin", {
+          ref: candidate.ref,
+          finalStatus,
+        });
+      }
+    } catch (err) {
+      // A canary rejection surfaces here (the pipeline rethrows on a critical
+      // stage). Keep the active pin and retain the proposal for review.
+      threwReason = (err as Error).message;
+      finalStatus = "error";
+      log.error("transitous-auto-bump: failed", { err: threwReason });
+    } finally {
+      try {
+        await finalizeJobRow(start.jobId, finalStatus);
+      } catch (err) {
+        log.warn("transitous-auto-bump: finalizeJobRow failed", {
+          jobId: start.jobId,
+          err: (err as Error).message,
+        });
+      }
+      options.singleFlight.markSyncFinished();
+    }
+
+    if (ranPipeline && finalStatus !== "ok") {
+      const failed = pipelineResult?.results.find((stage) => stage.status === "error");
+      try {
+        await emitPipelineFailureAlert({
+          alert: {
+            trigger: "auto-bump",
+            jobId: start.jobId,
+            failedStage: failed?.stage,
+            reason:
+              failed?.error?.message ?? failed?.message ?? threwReason ?? "auto-bump canary failed",
+          },
+          log,
+          githubIssue: githubIssue ?? undefined,
+        });
+      } catch (err) {
+        log.warn("transitous-auto-bump: failure alert failed", {
+          jobId: start.jobId,
+          err: (err as Error).message,
+        });
+      }
+    }
+  };
 
   const defaultReload = async (): Promise<void> => {
     await execa("docker", ["exec", FEED_PROXY_CONTAINER, "nginx", "-s", "reload"], {
@@ -533,6 +745,21 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         });
       })
     : null;
+
+  const autoBumpExpr = pickOptInCronExpression(
+    options.autoBumpCronExpression,
+    "TRANSITOUS_AUTO_BUMP_CRON",
+  );
+  const autoBumpCron = autoBumpExpr
+    ? new Cron(autoBumpExpr, { name: "transitous-auto-bump", protect: true }, () => {
+        void runAutoBump().catch((err) => {
+          log.error("transitous-auto-bump: unexpected rejection", { err: (err as Error).message });
+        });
+      })
+    : null;
+  if (!autoBumpCron)
+    log.info("transitous-auto-bump: disabled (opt-in; set TRANSITOUS_AUTO_BUMP_CRON)");
+  else log.info("transitous-auto-bump: scheduled", { expression: autoBumpExpr });
 
   const overtureEnabled =
     options.overtureEnabled ?? (process.env.OVERTURE_ENABLED || "").trim().toLowerCase() === "true";
@@ -822,6 +1049,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     trafficExtractCron?.stop();
     trafficLiveCron?.stop();
     trafficPredictedCron?.stop();
+    autoBumpCron?.stop();
   }
 
   return {
@@ -832,6 +1060,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     trafficExtractCron,
     trafficLiveCron,
     trafficPredictedCron,
+    autoBumpCron,
     stop,
     runSyncNow: runSync,
     runFeedProxyReloadNow: runFeedProxyReload,
@@ -842,6 +1071,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     runWaysToEdgesRefreshNow: runWaysToEdgesRefresh,
     runTrafficLiveNow: runTrafficLive,
     runTrafficPredictedNow: runTrafficPredicted,
+    runAutoBumpNow: runAutoBump,
     // `activeJobId` is exposed indirectly through singleFlight.getInflight()
     // for the shutdown helper — no need to surface it here.
   };

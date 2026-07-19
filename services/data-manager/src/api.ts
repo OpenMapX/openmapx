@@ -14,6 +14,12 @@ import { extractOsmPois } from "./jobs/overture/extract-osm-pois.js";
 import { ingestOverture } from "./jobs/overture/ingest.js";
 import { assertValidRegion, pullOverture } from "./jobs/overture/pull.js";
 import {
+  CatalogBumpError,
+  candidateMatchesLock,
+  lockFromCandidate,
+  resolveCatalogBumpCandidate,
+} from "./jobs/transitous/catalog-bump.js";
+import {
   buildJobContext,
   runTransitousPipeline,
   toDownloadGtfsResult,
@@ -31,7 +37,6 @@ import type { SingleFlightController } from "./jobs/transitous/single-flight.js"
 import { asJobLogger, jobChildLogger } from "./logger.js";
 import { StateStore } from "./state.js";
 import {
-  parseRefShaPair,
   readTransitousLock,
   readTransitousLockProposal,
   type TransitousLock,
@@ -578,67 +583,35 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     const lockedBy = req.body?.lockedBy?.trim() || "api";
 
     const catalogDir = join(dataDir, ".transitous-catalog");
-    if (!existsSync(join(catalogDir, ".git"))) {
-      reply.code(409);
-      return {
-        ok: false,
-        error: "catalog-not-cloned",
-        message: `Transitous catalog not found at ${catalogDir}; run a sync first to clone it.`,
-      };
-    }
 
+    let candidate: Awaited<ReturnType<typeof resolveCatalogBumpCandidate>>;
     try {
-      await execa("git", ["-C", catalogDir, "fetch", "origin", branch], { stdio: "pipe" });
+      candidate = await resolveCatalogBumpCandidate({ catalogDir, branch });
     } catch (err) {
-      reply.code(502);
-      return {
-        ok: false,
-        error: "git-fetch-failed",
-        message: (err as Error).message,
-      };
+      if (err instanceof CatalogBumpError) {
+        const status =
+          err.code === "catalog-not-cloned" ? 409 : err.code === "git-fetch-failed" ? 502 : 500;
+        reply.code(status);
+        return { ok: false, error: err.code, message: err.message };
+      }
+      throw err;
     }
-
-    const fetchSha = (
-      await execa("git", ["-C", catalogDir, "rev-parse", `origin/${branch}`], { stdio: "pipe" })
-    ).stdout.trim();
-
-    // `git ls-tree <ref> <path>` returns "<mode> commit <sha>\t<path>" for a
-    // submodule entry; rev-parse on the same ref:path would resolve a tree.
-    const submoduleEntry = (
-      await execa("git", ["-C", catalogDir, "ls-tree", `origin/${branch}`, "transitland-atlas"], {
-        stdio: "pipe",
-      })
-    ).stdout;
-    const submoduleMatch = submoduleEntry.match(/^\d+\s+commit\s+([0-9a-f]{40})\s/i);
-    if (!submoduleMatch) {
-      reply.code(500);
-      return {
-        ok: false,
-        error: "submodule-resolution-failed",
-        message: "Could not resolve transitland-atlas submodule SHA",
-      };
-    }
-    const submoduleSha = submoduleMatch[1];
 
     const existing = readTransitousLock(repoRoot);
-    const previousSha = existing ? parseRefShaPair(existing.ref).sha : null;
-    if (previousSha === fetchSha && !force) {
+    if (candidateMatchesLock(candidate, existing) && !force) {
       return {
         ok: true,
         unchanged: true,
-        ref: `${branch}@${fetchSha}`,
+        ref: candidate.ref,
         previousRef: existing?.ref ?? null,
       };
     }
 
-    const lock: TransitousLock = {
-      ref: `${branch}@${fetchSha}`,
-      submodules: { "transitland-atlas": submoduleSha },
-      lockedAt: new Date().toISOString(),
+    const lock = lockFromCandidate(
+      candidate,
       lockedBy,
-      comment:
-        "Pinned commit of public-transport/transitous consumed by services/data-manager. Bumped via POST /transit/bump.",
-    };
+      "Pinned commit of public-transport/transitous consumed by services/data-manager. Bumped via POST /transit/bump.",
+    );
     writeTransitousLockProposal(repoRoot, lock);
 
     return {
@@ -647,7 +620,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       proposed: true,
       ref: lock.ref,
       previousRef: existing?.ref ?? null,
-      submoduleSha,
+      submoduleSha: candidate.transitlandAtlasSha,
       lockedAt: lock.lockedAt,
       lockedBy: lock.lockedBy,
     };

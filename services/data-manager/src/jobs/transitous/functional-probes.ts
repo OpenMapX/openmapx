@@ -20,7 +20,7 @@ import {
   rentalsUrl,
   routedTransferPlanUrl,
 } from "./motis-endpoints.js";
-import { DEFAULT_PROBE_TIMEOUT_MS, fetchWithTimeout } from "./motis-probe.js";
+import { DEFAULT_PROBE_TIMEOUT_MS, fetchWithTimeout, parseIntEnv } from "./motis-probe.js";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -181,12 +181,66 @@ async function execute<T>(
   }
 }
 
+const DEFAULT_RENTALS_WARMUP_MS = 180_000;
+const DEFAULT_RENTALS_POLL_INTERVAL_MS = 5_000;
+
+export interface RunFunctionalProbesOptions {
+  /** Injected in tests so warm-up polling doesn't sleep in real time. */
+  sleep?: (ms: number) => Promise<void>;
+  /**
+   * How long to keep re-polling the `rentals` probe while it enumerates zero
+   * providers. MOTIS answers `/health` as soon as the timetable loads, but
+   * fetches GBFS rentals asynchronously afterward — so a freshly (re)started
+   * instance reports empty rentals for the first few seconds. Default 180s;
+   * override with `MOTIS_RENTALS_WARMUP_MS`.
+   */
+  rentalsWarmupMs?: number;
+  /** Interval between rentals warm-up polls. Override with `MOTIS_RENTALS_POLL_INTERVAL_MS`. */
+  rentalsPollIntervalMs?: number;
+}
+
+const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Run one probe, retrying while it fails for up to `warmupMs` (bounded by attempt
+ * count so it terminates deterministically even under an instant/no-op sleep).
+ * Used for the `rentals` probe, whose failure right after (re)start is expected
+ * GBFS warm-up rather than a real capability regression.
+ */
+async function executeWithWarmup<T>(
+  name: string,
+  url: string,
+  decode: (value: unknown) => T,
+  warmupMs: number,
+  intervalMs: number,
+  sleep: (ms: number) => Promise<void>,
+): Promise<{ outcome: ProbeOutcome; value?: T }> {
+  const interval = Math.max(1, intervalMs);
+  const maxAttempts = Math.max(1, Math.ceil(warmupMs / interval));
+  const warmupDeadline = Date.now() + warmupMs;
+  let result = await execute(name, url, warmupDeadline, decode);
+  let attempts = 1;
+  while (!result.outcome.ok && attempts < maxAttempts && Date.now() < warmupDeadline) {
+    await sleep(interval);
+    result = await execute(name, url, warmupDeadline, decode);
+    attempts++;
+  }
+  return result;
+}
+
 /** Identical, bounded capability gate used before and after dataset activation. */
 export async function runFunctionalProbes(
   baseUrl: string,
   manifest: MotisCandidateManifest,
   deadline: number,
+  options: RunFunctionalProbesOptions = {},
 ): Promise<FunctionalProbeReport> {
+  const sleep = options.sleep ?? realSleep;
+  const rentalsWarmupMs =
+    options.rentalsWarmupMs ?? parseIntEnv("MOTIS_RENTALS_WARMUP_MS", DEFAULT_RENTALS_WARMUP_MS);
+  const rentalsPollIntervalMs =
+    options.rentalsPollIntervalMs ??
+    parseIntEnv("MOTIS_RENTALS_POLL_INTERVAL_MS", DEFAULT_RENTALS_POLL_INTERVAL_MS);
   const outcomes: ProbeOutcome[] = [];
   let health: HealthResponse | undefined;
   let rentals: ObservedRentalCapabilities | undefined;
@@ -197,6 +251,8 @@ export async function runFunctionalProbes(
     decode: (value: unknown) => unknown;
     accept: (value: unknown) => void;
     required?: boolean;
+    /** When set, re-poll on failure for this long to absorb GBFS warm-up. */
+    warmupMs?: number;
   }> = [
     {
       name: "health",
@@ -251,6 +307,7 @@ export async function runFunctionalProbes(
       accept: (v) => {
         rentals = (v as ReturnType<typeof decodeRentals>).observed;
       },
+      warmupMs: rentalsWarmupMs,
     });
   }
   if (manifest.canary.rentalPlan) {
@@ -262,7 +319,17 @@ export async function runFunctionalProbes(
     });
   }
   for (const spec of specs) {
-    const result = await execute(spec.name, spec.url, deadline, spec.decode);
+    const result =
+      spec.warmupMs && spec.warmupMs > 0
+        ? await executeWithWarmup(
+            spec.name,
+            spec.url,
+            spec.decode,
+            spec.warmupMs,
+            rentalsPollIntervalMs,
+            sleep,
+          )
+        : await execute(spec.name, spec.url, deadline, spec.decode);
     outcomes.push(result.outcome);
     if (!result.outcome.ok) {
       if (spec.required === false) continue;

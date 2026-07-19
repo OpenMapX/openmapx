@@ -111,6 +111,107 @@ describe("prepare stage", () => {
     expect(warnings.some((w) => w.includes("no repoRoot supplied"))).toBe(true);
   });
 
+  it("resets the catalog to the PROPOSED lock when ctx.useProposedLock is set", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-prepare-proposed-"));
+    const dataDir = join(tmp, "data");
+    const catalogDir = join(dataDir, ".transitous-catalog");
+    mkdirSync(join(catalogDir, ".git"), { recursive: true });
+    mkdirSync(join(catalogDir, "feeds"), { recursive: true });
+
+    const repoRoot = join(tmp, "repo");
+    const lockDir = join(repoRoot, "infra", "docker");
+    mkdirSync(lockDir, { recursive: true });
+    const ACTIVE = "a".repeat(40);
+    const PROPOSED = "d".repeat(40);
+    writeFileSync(
+      join(lockDir, "transitous.lock.json"),
+      JSON.stringify({
+        ref: `main@${ACTIVE}`,
+        submodules: { "transitland-atlas": "b".repeat(40) },
+        lockedAt: "2026-05-01T00:00:00.000Z",
+        lockedBy: "test",
+      }),
+    );
+    writeFileSync(
+      join(lockDir, "transitous.lock.proposed.json"),
+      JSON.stringify({
+        ref: `main@${PROPOSED}`,
+        submodules: { "transitland-atlas": "c".repeat(40) },
+        lockedAt: "2026-05-01T00:00:00.000Z",
+        lockedBy: "test",
+      }),
+    );
+
+    const calls: string[] = [];
+    const runner = async (command: string, args: string[]) => {
+      calls.push(`${command} ${args.join(" ")}`);
+    };
+
+    const ctx = buildJobContext({
+      dataDir,
+      store: new StateStore(dataDir),
+      repoRoot,
+      useProposedLock: true,
+      runner,
+      now: () => "2026-05-01T00:00:00.000Z",
+    });
+
+    const result = await prepareRun(ctx);
+    expect(result.status).toBe("ok");
+    expect(calls.some((c) => c.includes(`checkout --force ${PROPOSED}`))).toBe(true);
+    expect(calls.some((c) => c.includes(ACTIVE))).toBe(false);
+  });
+
+  it("resets to the ACTIVE lock by default (no proposal enforcement)", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-prepare-active-"));
+    const dataDir = join(tmp, "data");
+    const catalogDir = join(dataDir, ".transitous-catalog");
+    mkdirSync(join(catalogDir, ".git"), { recursive: true });
+    mkdirSync(join(catalogDir, "feeds"), { recursive: true });
+
+    const repoRoot = join(tmp, "repo");
+    const lockDir = join(repoRoot, "infra", "docker");
+    mkdirSync(lockDir, { recursive: true });
+    const ACTIVE = "a".repeat(40);
+    const PROPOSED = "d".repeat(40);
+    writeFileSync(
+      join(lockDir, "transitous.lock.json"),
+      JSON.stringify({
+        ref: `main@${ACTIVE}`,
+        submodules: { "transitland-atlas": "b".repeat(40) },
+        lockedAt: "2026-05-01T00:00:00.000Z",
+        lockedBy: "test",
+      }),
+    );
+    writeFileSync(
+      join(lockDir, "transitous.lock.proposed.json"),
+      JSON.stringify({
+        ref: `main@${PROPOSED}`,
+        submodules: { "transitland-atlas": "c".repeat(40) },
+        lockedAt: "2026-05-01T00:00:00.000Z",
+        lockedBy: "test",
+      }),
+    );
+
+    const calls: string[] = [];
+    const runner = async (command: string, args: string[]) => {
+      calls.push(`${command} ${args.join(" ")}`);
+    };
+
+    const ctx = buildJobContext({
+      dataDir,
+      store: new StateStore(dataDir),
+      repoRoot,
+      runner,
+      now: () => "2026-05-01T00:00:00.000Z",
+    });
+
+    const result = await prepareRun(ctx);
+    expect(result.status).toBe("ok");
+    expect(calls.some((c) => c.includes(`checkout --force ${ACTIVE}`))).toBe(true);
+    expect(calls.some((c) => c.includes(PROPOSED))).toBe(false);
+  });
+
   it("returns an error result when the catalog clone fails", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-prepare-clone-fail-"));
     const dataDir = join(tmp, "fresh-data");

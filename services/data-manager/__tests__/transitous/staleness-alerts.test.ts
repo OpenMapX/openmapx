@@ -4,6 +4,7 @@ import {
   buildGithubIssueSink,
   detectStaleFeeds,
   emitFeedAlerts,
+  emitPipelineFailureAlert,
   type FeedAlert,
   type FeedStateReader,
   type GithubIssueSink,
@@ -286,5 +287,61 @@ describe("buildGithubIssueSink", () => {
     const firstCall = fetchMock.mock.calls[0];
     if (!firstCall) throw new Error("missing first fetch call");
     expect(firstCall[0]).toContain("/repos/foo/bar/issues?state=open");
+  });
+});
+
+describe("emitPipelineFailureAlert", () => {
+  it("logs and opens a GitHub issue when a sync run fails", async () => {
+    const log = buildLogger();
+    const created: Array<{ title: string; body: string }> = [];
+    const sink: GithubIssueSink = {
+      findOpenIssueByTitle: async () => null,
+      createIssue: async (title, body) => {
+        created.push({ title, body });
+        return "https://github.com/foo/bar/issues/9";
+      },
+    };
+    await emitPipelineFailureAlert({
+      alert: {
+        trigger: "cron",
+        jobId: "job-1",
+        failedStage: "motis-health",
+        reason: "rentals empty",
+      },
+      log,
+      githubIssue: sink,
+    });
+    expect(created).toHaveLength(1);
+    expect(created[0]?.title).toContain("cron");
+    expect(created[0]?.body).toContain("motis-health");
+    expect(created[0]?.body).toContain("rentals empty");
+    expect(log.errorCalls).toHaveLength(1);
+  });
+
+  it("dedupes against an already-open issue rather than filing a new one each run", async () => {
+    const log = buildLogger();
+    let createCalls = 0;
+    const sink: GithubIssueSink = {
+      findOpenIssueByTitle: async () => "https://github.com/foo/bar/issues/1",
+      createIssue: async () => {
+        createCalls++;
+        return "https://github.com/foo/bar/issues/2";
+      },
+    };
+    await emitPipelineFailureAlert({
+      alert: { trigger: "cron", jobId: "job-2", reason: "boom" },
+      log,
+      githubIssue: sink,
+    });
+    expect(createCalls).toBe(0);
+  });
+
+  it("logs even without a GitHub sink configured", async () => {
+    const log = buildLogger();
+    await emitPipelineFailureAlert({
+      alert: { trigger: "auto-bump", jobId: "job-3", reason: "canary rejected candidate" },
+      log,
+    });
+    expect(log.errorCalls).toHaveLength(1);
   });
 });

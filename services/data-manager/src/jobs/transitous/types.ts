@@ -167,6 +167,12 @@ export interface JobContext {
   transitousRepoUrl?: string;
   apiKeysPath?: string;
   feedsOverlayPath?: string;
+  /**
+   * Build from `transitous.lock.proposed.json` instead of the active
+   * `transitous.lock.json`. Used by the auto-bump cron to validate a candidate
+   * catalog ref in the staging slot before activating it. Defaults to false.
+   */
+  useProposedLock?: boolean;
   /** Scratch state passed between stages. */
   state: JobState;
 }

@@ -120,9 +120,44 @@ describe("typed MOTIS functional probes", () => {
           : validBody(url),
       );
     }) as typeof fetch;
-    const report = await runFunctionalProbes("http://motis", manifest(), Date.now() + 10_000);
+    const report = await runFunctionalProbes("http://motis", manifest(), Date.now() + 10_000, {
+      sleep: async () => {},
+      rentalsWarmupMs: 30,
+      rentalsPollIntervalMs: 10,
+    });
     expect(report.ok).toBe(false);
     expect(report.failure).toMatchObject({ name: "rentals" });
+  });
+
+  it("retries the rentals probe through GBFS warm-up until inventory appears", async () => {
+    // MOTIS reports healthy before its first GBFS poll lands, so a freshly
+    // (re)started instance enumerates zero rentals for a few seconds. The probe
+    // must tolerate that warm-up window rather than fail the whole promote.
+    let rentalCalls = 0;
+    globalThis.fetch = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("/rentals")) {
+        rentalCalls++;
+        if (rentalCalls <= 2) {
+          return response({
+            providerGroups: [],
+            providers: [],
+            stations: [],
+            vehicles: [],
+            zones: [],
+          });
+        }
+      }
+      return response(validBody(url));
+    }) as typeof fetch;
+    const report = await runFunctionalProbes("http://motis", manifest(), Date.now() + 10_000, {
+      sleep: async () => {},
+      rentalsWarmupMs: 100,
+      rentalsPollIntervalMs: 10,
+    });
+    expect(report.ok).toBe(true);
+    expect(rentalCalls).toBeGreaterThanOrEqual(3);
+    expect(report.rentals?.providerIds).toEqual(["provider-1"]);
   });
 
   it("does not call rentals when the exact candidate has no GBFS configuration", async () => {

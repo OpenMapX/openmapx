@@ -256,11 +256,24 @@ A few specifics worth knowing as an operator:
   run immediately; it's single-flight, so a manual call while a sync is already
   in flight returns the running job's id instead of starting a second one. Track
   progress at `GET /api/data-manager/transit/jobs`.
-- **Pinned ref.** The active Transitous git ref is pinned in
-  `infra/docker/transitous.lock.json` so an upstream catalog change never
-  surprises a running deployment. Bumping it is deliberate and human-driven:
-  `pnpm openmapx transitous show` to see the current ref, `pnpm openmapx transitous bump`
-  to advance it.
+- **Pinned ref.** The active Transitous git ref (and its `transitland-atlas`
+  submodule) is pinned in `infra/docker/transitous.lock.json` so an upstream
+  catalog change never surprises a running deployment. Bump it by hand with
+  `pnpm openmapx transitous show` / `pnpm openmapx transitous bump` (the bump
+  writes a reviewable `*.proposed.json`; approval activates it).
+- **Auto-bump (opt-in).** Set `TRANSITOUS_AUTO_BUMP_CRON` (e.g. `0 2 * * 1`,
+  weekly Monday 02:00 UTC) to have the data-manager track upstream on its own.
+  Each run resolves `origin/main`, proposes the candidate pin, **builds it into
+  the staging slot and runs the same functional-probe canary the daily sync
+  uses**, and activates the new pin + promotes **only if the whole pipeline
+  passes**. On any failure the current pin is kept, the proposal is retained for
+  review, and a failure alert fires (see below). Left unset, the pin stays frozen
+  — the pin is a safety gate, so tracking upstream is a deliberate choice.
+- **Failure alerts.** Set `TRANSITOUS_ALERT_GH_TOKEN` + `TRANSITOUS_ALERT_GH_REPO`
+  so a failed sync or auto-bump opens a deduped GitHub issue. Without them,
+  failures are log-only — and because the canary correctly refuses to promote a
+  bad candidate, a persistent failure can silently freeze the live dataset at its
+  last good build until someone reads the logs.
 - **Rollback.** Promote is an atomic directory rename — the fresh build is staged
   in `data/motis/staging`, swapped over `data/motis/live`, and the old live data
   is parked at `data/motis/live.previous`. If the primary doesn't come back
