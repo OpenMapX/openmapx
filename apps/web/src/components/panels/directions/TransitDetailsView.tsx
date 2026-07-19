@@ -45,12 +45,14 @@ import {
 } from "@/components/panels/directions/TransitRouteView";
 import { LegAlerts } from "@/components/panels/transit/LegAlerts";
 import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
+import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { TransitLegStops } from "@/components/panels/transit/TransitLegStops";
 import { TripDetailView } from "@/components/panels/transit/TripDetailView";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
 import { useMap } from "@/lib/MapContext";
+import { changedFromPlatform } from "@/lib/navigation/platformChange";
 import { composeWalkInstruction, walkStepInfo } from "@/lib/navigation/walkStep";
 import { TEAL } from "@/lib/theme";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
@@ -167,6 +169,7 @@ export function TransitDetailsView({
 }) {
   const t = useTranslations("directions");
   const tc = useTranslations("common");
+  const tNav = useTranslations("navigation");
   const locale = useLocale();
   const fmt = useDateTimeFormat();
   const [activeLegDep, setActiveLegDep] = useState<MergedDeparture | null>(null);
@@ -359,14 +362,22 @@ export function TransitDetailsView({
                     handleStopClick(leg.from.name, leg.from.lat, leg.from.lng, leg.from.stopId)
                   }
                 >
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      fontWeight: 600,
-                    }}
-                  >
-                    {leg.from.name}
-                  </Typography>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {leg.from.name}
+                    </Typography>
+                    {!isWalk && leg.from.platformCode && (
+                      <PlatformBadge
+                        code={leg.from.platformCode}
+                        changed={!!changedFromPlatform(leg.from)}
+                      />
+                    )}
+                    {!isWalk && leg.from.level != null && leg.from.level !== 0 && (
+                      <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                        {tNav("levelShort", { level: leg.from.level })}
+                      </Typography>
+                    )}
+                  </Box>
                 </Box>
               </Box>
               {/* Leg details */}
@@ -507,6 +518,28 @@ export function TransitDetailsView({
                           duration: formatDuration(Math.round(duration) * 60),
                         })}
                       </Typography>
+                      {(() => {
+                        const headsign =
+                          leg.headsign && leg.headsign !== leg.to.name ? leg.headsign : undefined;
+                        const identity = [
+                          [leg.category, leg.tripShortName].filter(Boolean).join(" ").trim(),
+                          leg.operatorName,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ");
+                        if (!headsign && !identity) return null;
+                        return (
+                          <Typography
+                            variant="caption"
+                            noWrap
+                            sx={{ color: "text.secondary", display: "block" }}
+                          >
+                            {[headsign ? tNav("towards", { headsign }) : null, identity || null]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </Typography>
+                        );
+                      })()}
                       {leg.flex && (
                         <Box
                           sx={{
@@ -616,14 +649,24 @@ export function TransitDetailsView({
                       handleStopClick(leg.to.name, leg.to.lat, leg.to.lng, leg.to.stopId)
                     }
                   >
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        fontWeight: 600,
-                      }}
+                    <Box
+                      sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}
                     >
-                      {leg.to.name}
-                    </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {leg.to.name}
+                      </Typography>
+                      {!isWalk && leg.to.platformCode && (
+                        <PlatformBadge
+                          code={leg.to.platformCode}
+                          changed={!!changedFromPlatform(leg.to)}
+                        />
+                      )}
+                      {!isWalk && leg.to.level != null && leg.to.level !== 0 && (
+                        <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                          {tNav("levelShort", { level: leg.to.level })}
+                        </Typography>
+                      )}
+                    </Box>
                   </Box>
                 </Box>
               )}
