@@ -5,6 +5,7 @@ import {
   positionAt,
   stepDeadReckon,
   useNavigationStore,
+  useSettingsStore,
 } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
@@ -291,18 +292,24 @@ export function useNavCamera(): void {
           displayedZoomRef.current = base + (targetZoomForSpeed(speed) - base) * zAlpha;
           zoom = displayedZoomRef.current;
         }
+        // North-up keeps the map oriented north (the puck still rotates to the
+        // travel bearing); the default course-up rotates the map to it.
+        const cameraBearing = useSettingsStore.getState().mapNorthUp ? 0 : brg;
         const last = lastCamRef.current;
         const moved =
           !last ||
           Math.abs(point[0] - last.lng) > 1e-6 ||
           Math.abs(point[1] - last.lat) > 1e-6 ||
-          Math.abs(((brg - last.bearing + 540) % 360) - 180) > 0.05 ||
+          Math.abs(((cameraBearing - last.bearing + 540) % 360) - 180) > 0.05 ||
           (commandZoom && Math.abs(zoom - last.zoom) > 0.004);
         if (moved) {
-          const camOpts: maplibregl.CameraOptions = { center: point as LngLat, bearing: brg };
+          const camOpts: maplibregl.CameraOptions = {
+            center: point as LngLat,
+            bearing: cameraBearing,
+          };
           if (commandZoom) camOpts.zoom = zoom;
           map.jumpTo(camOpts, { programmatic: true });
-          lastCamRef.current = { lng: point[0], lat: point[1], bearing: brg, zoom };
+          lastCamRef.current = { lng: point[0], lat: point[1], bearing: cameraBearing, zoom };
         }
       }
     };
