@@ -50,6 +50,34 @@ export function normalizeLaneToken(token: string): string {
 }
 
 /**
+ * Horizontal center, in the 24-unit MUI viewBox, of each arrow glyph's stem —
+ * the straight base representing the lane you occupy. MUI draws turn arrows with
+ * the stem offset toward the base side (a right turn's stem sits left of center,
+ * a left turn's to the right), so overlaying two indications in one lane leaves
+ * their stems on separate vertical lines. Values measured from the glyph paths.
+ */
+const STEM_CENTER_X: Record<string, number> = {
+  Straight: 12,
+  TurnSlightLeft: 14,
+  TurnSlightRight: 10,
+  TurnLeft: 16,
+  TurnRight: 8,
+  TurnSharpLeft: 17,
+  TurnSharpRight: 7,
+  UTurnLeft: 17,
+  MergeType: 11,
+};
+
+/**
+ * Horizontal shift, in `em` (icon glyphs scale with font-size), that moves an
+ * arrow glyph's stem onto the icon's centerline. Applied when a lane stacks
+ * multiple indications so the stems share one line and only the tips diverge.
+ */
+export function laneArrowStemShiftEm(iconName: string): number {
+  return (12 - (STEM_CENTER_X[iconName] ?? 12)) / 24;
+}
+
+/**
  * Fork, ramp and exit maneuvers branch off the through road at a shallow angle;
  * you can't drive straight *and* turn, so a single diagonal arrow on the
  * modifier side reads correctly and the lane-guidance strip shows where the

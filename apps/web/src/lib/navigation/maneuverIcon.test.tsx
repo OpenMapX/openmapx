@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { laneIndicationIcon, maneuverIconFor } from "./maneuverIcon";
+import { laneArrowStemShiftEm, laneIndicationIcon, maneuverIconFor } from "./maneuverIcon";
 
 describe("maneuverIconFor", () => {
   it("maps left/right modifiers", () => {
@@ -56,6 +56,31 @@ describe("maneuverIconFor", () => {
       "TurnSlightRight",
     );
     expect(maneuverIconFor({ type: "new name", modifier: "straight" }).name).toBe("Straight");
+  });
+});
+
+describe("laneArrowStemShiftEm", () => {
+  it("leaves the centered straight glyph unshifted", () => {
+    expect(laneArrowStemShiftEm("Straight")).toBe(0);
+  });
+
+  it("shifts the slight left/right stems onto the centerline by equal, opposite amounts", () => {
+    const left = laneArrowStemShiftEm("TurnSlightLeft");
+    const right = laneArrowStemShiftEm("TurnSlightRight");
+    // A right-turn glyph's stem sits left of center, so it shifts right (positive).
+    expect(right).toBeGreaterThan(0);
+    expect(left).toBeLessThan(0);
+    expect(left).toBeCloseTo(-right);
+  });
+
+  it("shifts a sharper turn further than a slight one", () => {
+    expect(Math.abs(laneArrowStemShiftEm("TurnSharpRight"))).toBeGreaterThan(
+      Math.abs(laneArrowStemShiftEm("TurnSlightRight")),
+    );
+  });
+
+  it("falls back to no shift for an unknown glyph", () => {
+    expect(laneArrowStemShiftEm("Nope")).toBe(0);
   });
 });
 

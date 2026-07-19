@@ -5,6 +5,8 @@ interface VitestExpectation {
   not: VitestExpectation;
   toBe(expected: unknown): void;
   toBeCloseTo(expected: number, numDigits?: number): void;
+  toBeGreaterThan(expected: number): void;
+  toBeLessThan(expected: number): void;
   toBeDefined(): void;
   toBeNull(): void;
   toContain(expected: unknown): void;

@@ -3,6 +3,7 @@
 import Box from "@mui/material/Box";
 import { type ManeuverLane, resolveRecommendedLanes } from "@openmapx/core";
 import {
+  laneArrowStemShiftEm,
   laneIndicationIcon,
   type Maneuver,
   normalizeLaneToken,
@@ -64,6 +65,9 @@ export function LaneGuidance({ lanes, maneuver }: { lanes?: ManeuverLane[]; mane
                 const isActive =
                   lane.valid &&
                   (activeNorm ? normalizeLaneToken(ind) === activeNorm : arrows.length === 1);
+                // Align the stems of a multi-indication lane onto one line so
+                // only the tips diverge; a lone arrow stays centered as drawn.
+                const stemShift = arrows.length > 1 ? laneArrowStemShiftEm(icon.name) : 0;
                 return (
                   <Icon
                     key={ind}
@@ -77,6 +81,7 @@ export function LaneGuidance({ lanes, maneuver }: { lanes?: ManeuverLane[]; mane
                           ? "primary.main"
                           : "text.primary",
                       opacity: lane.valid ? (isActive ? 1 : 0.55) : 0.3,
+                      transform: stemShift ? `translateX(${stemShift}em)` : undefined,
                     }}
                   />
                 );
