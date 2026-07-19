@@ -887,6 +887,16 @@ export function motisPlaceToJourneyStop(instance: MotisInstance, place: Place): 
     delaySeconds: delaySec,
     canceled: place.cancelled ?? false,
     departed: actual != null && new Date(actual).getTime() < Date.now(),
+    alerts: place.alerts?.length
+      ? place.alerts.map((alert, index) =>
+          mapMotisAlert(alert, {
+            index,
+            idPrefix: `${instance.prefix}alert:`,
+            providers: [instance.provider === "ms" ? "transit-motis-local" : "transitous"],
+            affectedStopIds: place.stopId ? [`${instance.prefix}${place.stopId}`] : [],
+          }),
+        )
+      : undefined,
   };
 }
 

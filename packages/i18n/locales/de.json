@@ -68,6 +68,7 @@
     "changeAt": "Umsteigen an {stop}",
     "transferWalk": "{minutes} Min. zum Umstieg",
     "restOfJourney": "Restliche Fahrt",
+    "stopSkipped": "Hält nicht",
     "boardAt": "Einsteigen an {place}",
     "legCancelled": "{line} fällt aus",
     "platformChanged": "{line}: Gleis {platform} (statt {scheduled})",

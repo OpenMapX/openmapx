@@ -1,7 +1,9 @@
 "use client";
 
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Box from "@mui/material/Box";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { type TransitProgress, useVehicleJourney } from "@openmapx/core";
 import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobility-core/transit";
@@ -23,6 +25,7 @@ function stopTime(stop: VehicleJourneyStop): string | undefined {
 
 function StopTimeline({ stops, nextIdx }: { stops: VehicleJourneyStop[]; nextIdx: number }) {
   const fmt = useDateTimeFormat();
+  const t = useTranslations("navigation");
   return (
     <Box sx={{ px: 2, py: 0.5 }}>
       {stops.map((stop, i) => {
@@ -97,18 +100,30 @@ function StopTimeline({ stops, nextIdx }: { stops: VehicleJourneyStop[]; nextIdx
               />
             </Box>
             <Box sx={{ flex: 1, minWidth: 0, py: 0.35 }}>
-              <Typography
-                variant="body2"
-                noWrap
-                sx={{
-                  fontWeight: emphasized ? 600 : 400,
-                  textDecoration: stop.canceled ? "line-through" : "none",
-                  color: stop.canceled ? "error.main" : "text.primary",
-                }}
-              >
-                {stop.name}
-              </Typography>
-              {stop.platform && (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
+                <Typography
+                  variant="body2"
+                  noWrap
+                  sx={{
+                    fontWeight: emphasized ? 600 : 400,
+                    textDecoration: stop.canceled ? "line-through" : "none",
+                    color: stop.canceled ? "error.main" : "text.primary",
+                  }}
+                >
+                  {stop.name}
+                </Typography>
+                {stop.alerts && stop.alerts.length > 0 && (
+                  <Tooltip title={stop.alerts[0].title} placement="top" arrow>
+                    <WarningAmberIcon sx={{ fontSize: 15, color: "#E65100", flexShrink: 0 }} />
+                  </Tooltip>
+                )}
+              </Box>
+              {stop.canceled && (
+                <Typography variant="caption" sx={{ color: "error.main", fontWeight: 600 }}>
+                  {t("stopSkipped")}
+                </Typography>
+              )}
+              {stop.platform && !stop.canceled && (
                 <Box sx={{ mt: 0.25 }}>
                   <PlatformBadge code={stop.platform} />
                 </Box>

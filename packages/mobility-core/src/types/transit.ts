@@ -543,6 +543,8 @@ export interface VehicleJourneyStop {
   delaySeconds?: number;
   canceled?: boolean;
   departed?: boolean;
+  /** Disruptions affecting this specific stop (e.g. lift out of service). */
+  alerts?: ServiceAlert[];
 }
 
 export interface VehicleJourney {
