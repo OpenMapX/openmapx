@@ -95,7 +95,9 @@ export function useTransitNavigationEngine(): void {
       const tp = computeTransitProgress(itinerary, fix.coords);
       store.applyTransitProgress(tp);
 
-      if (map) {
+      // Follow the snapped position unless the user has released the camera
+      // (e.g. via "Overview"); the MapControls recenter compass sets it back.
+      if (map && store.cameraMode !== "free") {
         map.easeTo(
           { center: tp.snapped, zoom: Math.max(map.getZoom(), 15), duration: 350 },
           { programmatic: true },

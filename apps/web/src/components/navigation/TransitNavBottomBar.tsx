@@ -1,18 +1,10 @@
 "use client";
 
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import ScreenLockPortraitIcon from "@mui/icons-material/ScreenLockPortrait";
 import Box from "@mui/material/Box";
-import Checkbox from "@mui/material/Checkbox";
-import IconButton from "@mui/material/IconButton";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import ListItemText from "@mui/material/ListItemText";
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
 import { useNavigationStore, useVehicleJourney } from "@openmapx/core";
 import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import type { ReactNode } from "react";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { useNow } from "@/lib/useNow";
 import { NavBottomBar } from "./NavBottomBar";
@@ -69,16 +61,17 @@ export function liveArrivalDelayMs(
 export function TransitNavBottomBar({
   itinerary,
   currentLeg,
+  menuToggle,
 }: {
   itinerary: TripItinerary;
   currentLeg?: TripLeg;
+  /** Trailing control that reveals the menu (a chevron on desktop; omitted on
+   * mobile, where the sheet is dragged up instead). */
+  menuToggle?: ReactNode;
 }) {
   const t = useTranslations("navigation");
   const fmt = useDateTimeFormat();
-  const keepScreenOn = useNavigationStore((s) => s.keepScreenOn);
-  const toggleKeepScreenOn = useNavigationStore((s) => s.toggleKeepScreenOn);
   const stopNavigation = useNavigationStore((s) => s.stopNavigation);
-  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const now = useNow(1000);
   const { data: journey } = useVehicleJourney(currentLeg?.tripId ?? null);
 
@@ -92,30 +85,7 @@ export function TransitNavBottomBar({
       durationRemaining={durationRemaining}
       etaEpochMs={arrivalMs}
       onEnd={stopNavigation}
-      menuToggle={
-        <>
-          <IconButton
-            onClick={(e) => setMenuAnchor(e.currentTarget)}
-            aria-label={t("moreOptions")}
-            aria-haspopup="menu"
-          >
-            <MoreVertIcon />
-          </IconButton>
-          <Menu
-            anchorEl={menuAnchor}
-            open={menuAnchor !== null}
-            onClose={() => setMenuAnchor(null)}
-          >
-            <MenuItem onClick={() => toggleKeepScreenOn()}>
-              <ListItemIcon>
-                <ScreenLockPortraitIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText>{t("keepScreenOn")}</ListItemText>
-              <Checkbox edge="end" checked={keepScreenOn} tabIndex={-1} disableRipple />
-            </MenuItem>
-          </Menu>
-        </>
-      }
+      menuToggle={menuToggle}
       secondary={
         <>
           {t("arriveAt", { time: fmt.time(arrivalMs) })}

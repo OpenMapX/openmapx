@@ -1,12 +1,19 @@
 "use client";
 
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Box from "@mui/material/Box";
+import Collapse from "@mui/material/Collapse";
+import IconButton from "@mui/material/IconButton";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { useNavigationStore, useSidebarStore } from "@openmapx/core";
+import { geoJsonBBox, useNavigationStore, useSidebarStore } from "@openmapx/core";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
+import { NavigationSettingsDialog } from "@/components/settings/NavigationSettingsDialog";
 import { NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
+import { useMapOptional } from "@/lib/MapContext";
 import { nextTransferFor } from "@/lib/navigation/transitTransfer";
 import { useTransitNavigationEngine } from "@/lib/navigation/useTransitNavigationEngine";
 import { useWakeLock } from "@/lib/useWakeLock";
@@ -15,6 +22,7 @@ import { NavSwipeSheet } from "./NavSwipeSheet";
 import { TransitJourneySheet } from "./TransitJourneySheet";
 import { TransitLegBanner } from "./TransitLegBanner";
 import { TransitNavBottomBar } from "./TransitNavBottomBar";
+import { TransitNavMenu } from "./TransitNavMenu";
 
 export function TransitNavigationView() {
   const status = useNavigationStore((s) => s.status);
@@ -22,12 +30,17 @@ export function TransitNavigationView() {
   const itinerary = useNavigationStore((s) => s.itinerary);
   const transitProgress = useNavigationStore((s) => s.transitProgress);
   const keepScreenOn = useNavigationStore((s) => s.keepScreenOn);
+  const setCameraMode = useNavigationStore((s) => s.setCameraMode);
   const stopNavigation = useNavigationStore((s) => s.stopNavigation);
 
+  const mapCtx = useMapOptional();
+  const t = useTranslations("navigation");
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const active = status !== "idle" && status !== "arrived" && kind === "transit";
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Hooks must run before any early return.
   useTransitNavigationEngine();
@@ -47,6 +60,37 @@ export function TransitNavigationView() {
   const currentLegIndex = Math.min(transitProgress?.currentLegIndex ?? 0, legs.length - 1);
   const currentLeg = legs[currentLegIndex] as TripLeg | undefined;
   const transfer = nextTransferFor(legs, currentLegIndex);
+
+  // Release the follow camera and frame the whole itinerary. The MapControls
+  // recenter compass (shown while cameraMode === "free") resumes following.
+  const handleOverview = () => {
+    setCameraMode("free");
+    const coords = legs.flatMap((l) => l.geometry?.coordinates ?? []);
+    if (!mapCtx || coords.length < 2) return;
+    const box = geoJsonBBox({ type: "LineString", coordinates: coords } as GeoJSON.LineString);
+    if (!box) return;
+    mapCtx.fitBounds(
+      [
+        [box[0], box[1]],
+        [box[2], box[3]],
+      ],
+      64,
+    );
+  };
+
+  const menu = (
+    <TransitNavMenu onOverview={handleOverview} onOpenSettings={() => setSettingsOpen(true)} />
+  );
+  // Desktop reveals the menu with a chevron; mobile drags the sheet up.
+  const desktopMenuToggle = (
+    <IconButton
+      onClick={() => setMenuOpen((o) => !o)}
+      aria-label={t("moreOptions")}
+      aria-expanded={menuOpen}
+    >
+      {menuOpen ? <ExpandMoreIcon /> : <ExpandLessIcon />}
+    </IconButton>
+  );
 
   return (
     <Box
@@ -112,6 +156,7 @@ export function TransitNavigationView() {
                   currentLegIndex={currentLegIndex}
                   transitProgress={transitProgress}
                 />
+                {menu}
               </NavSwipeSheet>
             ) : (
               <Box
@@ -128,12 +173,25 @@ export function TransitNavigationView() {
                   boxShadow: 6,
                 }}
               >
-                <TransitNavBottomBar itinerary={itinerary} currentLeg={currentLeg} />
+                <TransitNavBottomBar
+                  itinerary={itinerary}
+                  currentLeg={currentLeg}
+                  menuToggle={desktopMenuToggle}
+                />
+                <Collapse in={menuOpen} unmountOnExit>
+                  <TransitJourneySheet
+                    itinerary={itinerary}
+                    currentLegIndex={currentLegIndex}
+                    transitProgress={transitProgress}
+                  />
+                  {menu}
+                </Collapse>
               </Box>
             )}
           </Box>
         </>
       )}
+      <NavigationSettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </Box>
   );
 }
