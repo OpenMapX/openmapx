@@ -21,6 +21,7 @@ import { useWakeLock } from "@/lib/useWakeLock";
 import { NavSwipeSheet } from "./NavSwipeSheet";
 import { TransitAlertBanner } from "./TransitAlertBanner";
 import { TransitArrivalCard } from "./TransitArrivalCard";
+import { TransitConnectionRisk } from "./TransitConnectionRisk";
 import { TransitJourneySheet } from "./TransitJourneySheet";
 import { TransitLegBanner } from "./TransitLegBanner";
 import { TransitNavBottomBar } from "./TransitNavBottomBar";
@@ -166,6 +167,9 @@ export function TransitNavigationView() {
               currentLegIndex={currentLegIndex}
               transitProgress={transitProgress}
             />
+            {currentLeg?.route && transfer && (
+              <TransitConnectionRisk leg={currentLeg} transfer={transfer} />
+            )}
           </Box>
 
           <Box sx={{ display: "flex", flexDirection: "column" }}>

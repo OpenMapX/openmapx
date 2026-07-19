@@ -74,6 +74,9 @@
     "voiceTransfer": "Get off at {stop} and change to the {line}",
     "stepFree": "Step-free · {minutes} min",
     "stepFreeElevator": "Step-free via lift · {minutes} min",
+    "connectionTight": "Tight connection · {minutes} min",
+    "connectionMissed": "Connection likely missed",
+    "connectionAlternative": "Next option {time}",
     "walkOnStreet": "{action} onto {street}",
     "walkToLevel": "{action} to level {level}",
     "walkDir": {

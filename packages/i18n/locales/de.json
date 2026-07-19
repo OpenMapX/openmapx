@@ -74,6 +74,9 @@
     "voiceTransfer": "Steig an {stop} aus und in die {line} um",
     "stepFree": "Barrierefrei · {minutes} Min.",
     "stepFreeElevator": "Barrierefrei per Aufzug · {minutes} Min.",
+    "connectionTight": "Knapper Umstieg · {minutes} Min.",
+    "connectionMissed": "Anschluss wahrscheinlich verpasst",
+    "connectionAlternative": "Nächste Option {time}",
     "walkOnStreet": "{action} auf {street}",
     "walkToLevel": "{action} zu Ebene {level}",
     "walkDir": {
