@@ -11,6 +11,8 @@ const SPEED_CAMERA_ALERTS_STORAGE_KEY = "openmapx:speedCameraAlerts";
 const AI_SEARCH_STORAGE_KEY = "openmapx:aiSearch";
 const INCIDENT_ALERTS_STORAGE_KEY = "openmapx:incidentAlerts";
 const AVOID_INCIDENTS_STORAGE_KEY = "openmapx:avoidIncidents";
+const VOICE_NAME_STORAGE_KEY = "openmapx:voiceName";
+const MAP_NORTH_UP_STORAGE_KEY = "openmapx:mapNorthUp";
 
 const TIME_FORMATS: readonly TimeFormat[] = ["auto", "12h", "24h"];
 const DATE_FORMATS: readonly DateFormat[] = ["auto", "dmy", "mdy", "ymd"];
@@ -76,6 +78,15 @@ function readAvoidIncidents(): boolean {
   return v === null ? true : v === "true";
 }
 
+/** Chosen TTS voice by SpeechSynthesisVoice.name; null follows the locale default. */
+function readVoiceName(): string | null {
+  return getStorage().getString(VOICE_NAME_STORAGE_KEY) || null;
+}
+
+function readMapNorthUp(): boolean {
+  return getStorage().getString(MAP_NORTH_UP_STORAGE_KEY) === "true";
+}
+
 interface SettingsState {
   units: UnitSystem;
   setUnits: (u: UnitSystem) => void;
@@ -100,6 +111,12 @@ interface SettingsState {
   /** Avoid closures/incidents when routing (off by default; Phase-2 routing). */
   avoidIncidents: boolean;
   setAvoidIncidents: (v: boolean) => void;
+  /** Chosen navigation-voice name (SpeechSynthesisVoice.name); null = locale default. */
+  voiceName: string | null;
+  setVoiceName: (v: string | null) => void;
+  /** Keep the map north-up during navigation instead of the default course-up. */
+  mapNorthUp: boolean;
+  setMapNorthUp: (v: boolean) => void;
   /**
    * Re-read the persisted preferences from storage. The store is created at
    * module-eval time, which can run before the platform storage adapter is
@@ -150,6 +167,16 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     getStorage().setString(AVOID_INCIDENTS_STORAGE_KEY, String(avoidIncidents));
     set({ avoidIncidents });
   },
+  voiceName: readVoiceName(),
+  setVoiceName: (voiceName) => {
+    getStorage().setString(VOICE_NAME_STORAGE_KEY, voiceName ?? "");
+    set({ voiceName });
+  },
+  mapNorthUp: readMapNorthUp(),
+  setMapNorthUp: (mapNorthUp) => {
+    getStorage().setString(MAP_NORTH_UP_STORAGE_KEY, String(mapNorthUp));
+    set({ mapNorthUp });
+  },
   hydrate: () =>
     set({
       units: readUnits(),
@@ -160,5 +187,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       aiSearchEnabled: readAiSearch(),
       incidentAlerts: readIncidentAlerts(),
       avoidIncidents: readAvoidIncidents(),
+      voiceName: readVoiceName(),
+      mapNorthUp: readMapNorthUp(),
     }),
 }));
