@@ -62,6 +62,11 @@ interface NavigationState {
   /** True while GPS fixes are arriving too noisy to use (accuracy over the cap). */
   weakGps: boolean;
   /**
+   * True while the shown position is being extrapolated along the route through
+   * a GPS outage (tunnel, garage, urban canyon) rather than read from a fix.
+   */
+  coasting: boolean;
+  /**
    * Monotonic counter bumped each time a reroute attempt fails, so the UI can
    * show a transient toast. A counter (rather than a boolean) lets repeated
    * failures re-trigger the toast.
@@ -112,6 +117,7 @@ interface NavigationState {
   setLiveSpeedLimits: (v: (number | null)[] | null) => void;
   setOffRoute: (v: boolean) => void;
   setWeakGps: (v: boolean) => void;
+  setCoasting: (v: boolean) => void;
   signalRerouteFailed: () => void;
   beginReroute: () => void;
   applyReroute: (route: Route, provider?: string) => void;
@@ -141,6 +147,7 @@ const INITIAL = {
   progress: null,
   offRoute: false,
   weakGps: false,
+  coasting: false,
   rerouteFailedNonce: 0,
   cameraMode: "follow" as CameraMode,
   currentSpeedLimit: null,
@@ -213,6 +220,7 @@ export const useNavigationStore = create<NavigationState>((set) => ({
   setLiveSpeedLimits: (liveSpeedLimits) => set({ liveSpeedLimits }),
   setOffRoute: (offRoute) => set({ offRoute }),
   setWeakGps: (weakGps) => set({ weakGps }),
+  setCoasting: (coasting) => set({ coasting }),
   signalRerouteFailed: () => set((s) => ({ rerouteFailedNonce: s.rerouteFailedNonce + 1 })),
   beginReroute: () => set({ status: "rerouting" }),
   // Clear progress: it belongs to the OLD route. Leaving the previous route's

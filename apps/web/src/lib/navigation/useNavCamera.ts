@@ -102,6 +102,7 @@ export function useNavCamera(): void {
 
   const status = useNavigationStore((s) => s.status);
   const cameraMode = useNavigationStore((s) => s.cameraMode);
+  const coasting = useNavigationStore((s) => s.coasting);
   const mode = useNavigationStore((s) => s.mode);
   const route = useNavigationStore((s) => s.route);
   const progress = useNavigationStore((s) => s.progress);
@@ -160,6 +161,13 @@ export function useNavCamera(): void {
       markerRef.current = null;
     };
   }, []);
+
+  // Fade the puck while coasting so an extrapolated position reads as an estimate
+  // rather than a live fix.
+  useEffect(() => {
+    const el = markerRef.current?.getElement();
+    if (el) el.style.opacity = coasting ? "0.5" : "1";
+  }, [coasting]);
 
   // Cache cumulative distances per route; reset the displayed position so the
   // puck snaps onto a fresh route (e.g. after a reroute) rather than gliding

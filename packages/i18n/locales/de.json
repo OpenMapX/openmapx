@@ -52,6 +52,7 @@
     "voiceUpcoming": "In {distance}, {instruction}",
     "weakGps": "Schwaches GPS-Signal",
     "waitingForGps": "Warte auf GPS-Signal…",
+    "estimatedPosition": "Kein GPS – geschätzte Position",
     "walkTo": "Zu Fuß nach {place}",
     "ride": "{line} nach {to}",
     "nextStop": "Nächster Halt: {stop}",

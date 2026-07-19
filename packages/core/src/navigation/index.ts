@@ -7,6 +7,7 @@ export {
   selectActiveAlert,
   shouldWarnCamera,
 } from "./alerts";
+export { type CoastOptions, type CoastResult, coastState } from "./coast";
 export {
   cumulativeDistances,
   type DeadReckonOptions,

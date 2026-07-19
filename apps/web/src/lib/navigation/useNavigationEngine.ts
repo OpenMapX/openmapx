@@ -1,4 +1,6 @@
 import {
+  coastState,
+  cumulativeDistances,
   type FixInput,
   fetchDirections,
   formatSpokenDistance,
@@ -6,8 +8,10 @@ import {
   type NavTickState,
   navOptionsForMode,
   pickSpeedLimit,
+  positionAt,
   processFix,
   pruneRerouteTimes,
+  type Route,
   remainingWaypoints,
   shouldRerouteForClosure,
   useNavigationStore,
@@ -41,6 +45,15 @@ const REROUTE_CHURN_WINDOW_MS = 120_000; // 2 min
 const REROUTE_CHURN_MAX = 3; // reroutes within the window that trip the cooldown
 const REROUTE_CHURN_COOLDOWN_MS = 30_000;
 
+// Coasting: when real fixes stop (tunnel, garage, urban canyon), extrapolate the
+// position along the route instead of freezing at the outage point. Start after
+// a few fix-less seconds, decelerate to a stop over ~2 min, and never coast more
+// than ~3 km — a straight-tunnel estimate degrades gracefully rather than lying.
+const COAST_START_MS = 3000;
+const COAST_MAX_MS = 120_000;
+const COAST_MAX_METERS = 3000;
+const COAST_TICK_MS = 250;
+
 /** Wires GPS fixes → processFix → navigationStore + side effects (voice, reroute). */
 export function useNavigationEngine(): void {
   const t = useTranslations("navigation");
@@ -60,6 +73,13 @@ export function useNavigationEngine(): void {
   // Resets on route change so we don't fire against stale/empty state.
   const baselineReadyRef = useRef(false);
   const captureFix = useNavRecorder();
+  // Last accepted *real* fix, for the coasting driver: its arc-length and speed
+  // anchor the extrapolation, its timestamp measures the outage.
+  const lastRealFixRef = useRef<{ atMs: number; alongMeters: number; speedMps: number } | null>(
+    null,
+  );
+  // Cached cumulative distances for the coasting driver's positionAt lookups.
+  const cumRef = useRef<{ route: Route; cum: number[] } | null>(null);
 
   const speakCue = useCallback(
     (cue: VoiceCue) => {
@@ -89,7 +109,8 @@ export function useNavigationEngine(): void {
       if ((status !== "navigating" && status !== "rerouting") || !route) return;
 
       // Capture the raw fix stream for the recorder (no-op unless recording).
-      captureFix(fix, route, mode);
+      // Coasted fixes are synthetic — never record them.
+      if (!fix.coasted) captureFix(fix, route, mode);
 
       const opts = navOptionsForMode(mode);
       // Shift voice-cue timing earlier/later per the user's preference.
@@ -107,6 +128,16 @@ export function useNavigationEngine(): void {
 
       store.applyProgress(result.progress);
       store.setOffRoute(result.offRoute);
+
+      // A real accepted fix re-anchors the coasting driver and ends any coast.
+      if (!fix.coasted) {
+        lastRealFixRef.current = {
+          atMs: fix.timestampMs,
+          alongMeters: result.progress.alongMeters,
+          speedMps: result.progress.speedMps,
+        };
+        store.setCoasting(false);
+      }
 
       // Speed limit (driving only): read the limit for the segment the user is
       // on straight from the route. OSRM carries per-segment limits on the route
@@ -216,6 +247,10 @@ export function useNavigationEngine(): void {
     tickRef.current = freshTick();
     knownClosureIdsRef.current = new Set();
     baselineReadyRef.current = false;
+    // The coast anchor's arc-length is relative to the old route; drop it (and
+    // any active coast) so we don't extrapolate onto the new geometry.
+    lastRealFixRef.current = null;
+    useNavigationStore.getState().setCoasting(false);
   }, [activeRoute]);
 
   // Capture the closure baseline only once the first road-conditions fetch for
@@ -235,6 +270,8 @@ export function useNavigationEngine(): void {
     if (navStatus === "idle") {
       rerouteTimesRef.current = [];
       rerouteCooldownUntilRef.current = 0;
+      lastRealFixRef.current = null;
+      cumRef.current = null;
     }
   }, [navStatus]);
 
@@ -327,4 +364,40 @@ export function useNavigationEngine(): void {
   useWatchPosition(active && !simEnabled && !replaying, onFix);
   useSimulatedPosition(active && !replaying, onFix);
   useReplayPosition(onFix);
+
+  // Coasting driver (real GPS only): while fixes are absent, feed the pipeline a
+  // synthetic on-route fix at the extrapolated position so the puck, ETA, and
+  // voice cues keep advancing through the outage instead of freezing. On-route
+  // by construction, so it can never trip an off-route reroute; a real fix
+  // re-anchors it (above). Runs only while navigating — not during a reroute.
+  useEffect(() => {
+    if (!active || simEnabled || replaying) return;
+    const id = window.setInterval(() => {
+      const store = useNavigationStore.getState();
+      const route = store.route;
+      const last = lastRealFixRef.current;
+      if (store.status !== "navigating" || !route || !last) return;
+      const coast = coastState(last.alongMeters, last.speedMps, Date.now() - last.atMs, {
+        startAfterMs: COAST_START_MS,
+        maxCoastMs: COAST_MAX_MS,
+        maxCoastMeters: COAST_MAX_METERS,
+        routeLengthMeters: route.distance,
+      });
+      if (!coast.coasting) return;
+      if (cumRef.current?.route !== route) {
+        cumRef.current = { route, cum: cumulativeDistances(route.geometry) };
+      }
+      const { point, bearing } = positionAt(route.geometry, cumRef.current.cum, coast.alongMeters);
+      store.setCoasting(true);
+      onFix({
+        coords: point,
+        accuracy: 1,
+        heading: bearing,
+        speed: coast.speedMps,
+        timestampMs: Date.now(),
+        coasted: true,
+      });
+    }, COAST_TICK_MS);
+    return () => window.clearInterval(id);
+  }, [active, simEnabled, replaying, onFix]);
 }

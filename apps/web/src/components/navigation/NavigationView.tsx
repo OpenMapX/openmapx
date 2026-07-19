@@ -37,6 +37,7 @@ export function NavigationView() {
   const route = useNavigationStore((s) => s.route);
   const progress = useNavigationStore((s) => s.progress);
   const weakGps = useNavigationStore((s) => s.weakGps);
+  const coasting = useNavigationStore((s) => s.coasting);
   const rerouteFailedNonce = useNavigationStore((s) => s.rerouteFailedNonce);
   const currentSpeedLimit = useNavigationStore((s) => s.currentSpeedLimit);
   const voiceEnabled = useNavigationStore((s) => s.voiceEnabled);
@@ -187,7 +188,7 @@ export function NavigationView() {
                 </Typography>
               </Box>
             )}
-            {(weakGps || awaitingFix) && (
+            {(coasting || weakGps || awaitingFix) && (
               <Box
                 role="status"
                 aria-live="polite"
@@ -200,7 +201,7 @@ export function NavigationView() {
                 }}
               >
                 <Typography variant="caption" color="text.secondary">
-                  {weakGps ? t("weakGps") : t("waitingForGps")}
+                  {coasting ? t("estimatedPosition") : weakGps ? t("weakGps") : t("waitingForGps")}
                 </Typography>
               </Box>
             )}
