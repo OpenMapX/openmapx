@@ -110,19 +110,23 @@ export function MapControls() {
           </Suspense>
         )}
 
-        {/* My location */}
-        <Tooltip title={t("myLocation")} placement="left">
-          <Paper elevation={2} sx={{ borderRadius: "12px", overflow: "hidden" }}>
-            <IconButton
-              size="small"
-              onClick={handleMyLocation}
-              sx={{ width: 36, height: 36 }}
-              aria-label={t("goToMyLocationAriaLabel")}
-            >
-              <MyLocationIcon sx={{ fontSize: 18, color: "primary.main" }} />
-            </IconButton>
-          </Paper>
-        </Tooltip>
+        {/* My location — redundant while navigating (the follow camera and the
+          recenter compass already handle it); only useful for recentering while
+          browsing the map. */}
+        {!navigating && (
+          <Tooltip title={t("myLocation")} placement="left">
+            <Paper elevation={2} sx={{ borderRadius: "12px", overflow: "hidden" }}>
+              <IconButton
+                size="small"
+                onClick={handleMyLocation}
+                sx={{ width: 36, height: 36 }}
+                aria-label={t("goToMyLocationAriaLabel")}
+              >
+                <MyLocationIcon sx={{ fontSize: 18, color: "primary.main" }} />
+              </IconButton>
+            </Paper>
+          </Tooltip>
+        )}
 
         {/* Zoom in / zoom out */}
         <Paper elevation={2} sx={{ borderRadius: "12px", overflow: "hidden" }}>
