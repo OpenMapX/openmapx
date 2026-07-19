@@ -27,6 +27,27 @@ import type {
 
 const SYSTEM_PROBE_CONCURRENCY = 8;
 const MAX_SYSTEMS_PER_SEARCH = 64;
+/** Per-system wall-clock bound so one flaky feed can't stall the whole fan-out. */
+const SYSTEM_PROBE_TIMEOUT_MS = 8_000;
+const SYSTEM_FETCH_TIMEOUT_MS = 12_000;
+
+/**
+ * Bound a promise so an orphaned/hung fetch can't stall the fan-out. A malformed
+ * upstream response can crash undici's HTTP parser, leaving the underlying fetch
+ * permanently unsettled — its own AbortController timeout can't rescue a dead
+ * parser — so racing an independent timer guarantees settlement. Rejections and
+ * timeouts both resolve to `fallback`; the caller then just sees "no data from
+ * that feed" instead of hanging.
+ */
+function settleWithin<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
+  return Promise.race([promise.catch(() => fallback), timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
 
 // Operators covered by dedicated clients or known to be defunct — skip in GBFS catalog
 const EXCLUDED_GBFS_PREFIXES = [
@@ -143,7 +164,7 @@ export async function fetchGbfsData(
     probeCandidates,
     SYSTEM_PROBE_CONCURRENCY,
     async (entry) => {
-      const probe = await probeSystem(entry);
+      const probe = await settleWithin(probeSystem(entry), SYSTEM_PROBE_TIMEOUT_MS, null);
       if (!probe) return null;
       if (!bboxOverlaps(probe.bbox, bbox)) return null;
       if (!probeVehicleTypesMatchTarget(probe.vehicleTypes, targetFormFactors, unknownFormFactor)) {
@@ -164,14 +185,18 @@ export async function fetchGbfsData(
 
   const results = await Promise.allSettled(
     matchingEntries.map(({ entry, systemData }) =>
-      fetchSystemData(
-        entry.systemId,
-        entry.autoDiscoveryUrl,
-        entry.name,
-        bbox,
-        targetFormFactors,
-        unknownFormFactor,
-        systemData,
+      settleWithin(
+        fetchSystemData(
+          entry.systemId,
+          entry.autoDiscoveryUrl,
+          entry.name,
+          bbox,
+          targetFormFactors,
+          unknownFormFactor,
+          systemData,
+        ),
+        SYSTEM_FETCH_TIMEOUT_MS,
+        { stations: [], vehicles: [] },
       ),
     ),
   );
