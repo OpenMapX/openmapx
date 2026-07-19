@@ -51,6 +51,7 @@ import { TripDetailView } from "@/components/panels/transit/TripDetailView";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
 import { useMap } from "@/lib/MapContext";
+import { composeWalkInstruction, walkStepInfo } from "@/lib/navigation/walkStep";
 import { TEAL } from "@/lib/theme";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 
@@ -101,6 +102,7 @@ function legToMergedDeparture(leg: TripLeg, provider?: string): MergedDeparture 
 
 function LegStatusDetails({ leg }: { leg: TripLeg }) {
   const t = useTranslations("directions");
+  const tNav = useTranslations("navigation");
   const statuses: string[] = [];
   if (leg.cancelled) statuses.push(t("journeyCancelled"));
   if (leg.realtime === true) statuses.push(t("realtimeSupported"));
@@ -133,16 +135,8 @@ function LegStatusDetails({ leg }: { leg: TripLeg }) {
               // biome-ignore lint/suspicious/noArrayIndexKey: steps have no stable id and identical steps repeat within a leg; the index disambiguates them
               key={`${stepIndex}-${step.instruction}-${step.fromLevel}-${step.toLevel}-${step.distanceMeters}-${step.streetName ?? ""}`}
             >
-              {t("routeStep", {
-                instruction: step.instruction.replaceAll("_", " ").toLocaleLowerCase(),
-                street: step.streetName ?? "",
-                distance: formatDistance(step.distanceMeters),
-              })}
-              {step.fromLevel !== step.toLevel && step.toLevel !== undefined
-                ? ` · ${t("levelChange", { level: step.toLevel })}`
-                : ""}
-              {step.elevator ? ` · ${t("elevator")}` : ""}
-              {step.stairs ? ` · ${t("stairs")}` : ""}
+              {composeWalkInstruction(walkStepInfo(step), tNav)} ·{" "}
+              {formatDistance(step.distanceMeters)}
               {step.accessRestriction ? ` · ${t("accessRestricted")}` : ""}
             </Typography>
           ))}
