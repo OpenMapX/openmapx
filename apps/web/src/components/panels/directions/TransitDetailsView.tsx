@@ -492,6 +492,7 @@ export function TransitDetailsView({
                             <RouteBadge
                               shortName={leg.route.shortName}
                               color={leg.route.color}
+                              textColor={leg.route.textColor}
                               mode={leg.mode}
                               size="small"
                             />

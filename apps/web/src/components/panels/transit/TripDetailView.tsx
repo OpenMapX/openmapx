@@ -51,6 +51,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
             <RouteBadge
               shortName={departure.route.shortName}
               color={departure.route.color}
+              textColor={departure.route.textColor}
               mode={departure.route.mode}
             />
             <Typography
