@@ -38,6 +38,12 @@ import { NavSwipeSheet } from "./NavSwipeSheet";
 import { RouteSearchControl } from "./RouteSearchControl";
 import { SpeedLimitBadge } from "./SpeedLimitBadge";
 
+// On wide viewports (desktop and phone-landscape, both above the `sm`
+// breakpoint) the nav chrome is confined to a left-hand column of this width so
+// the map stays visible on the right — mirroring Google Maps' landscape layout.
+// Portrait mobile keeps its full-width banner and bottom sheet.
+const LANDSCAPE_PANEL_WIDTH = 400;
+
 export function NavigationView() {
   const status = useNavigationStore((s) => s.status);
   const kind = useNavigationStore((s) => s.kind);
@@ -182,6 +188,12 @@ export function NavigationView() {
               // Match the 16px (`p: 2`) side inset below the safe-area top so the
               // banner's gap to the top equals its gap to the sides.
               pt: "calc(var(--omx-safe-top) + 16px)",
+              // On wide screens keep the banner in a left-hand column instead of
+              // stretching across the whole top edge (maxWidth adds back the 16px
+              // horizontal padding so the card itself is LANDSCAPE_PANEL_WIDTH).
+              ...(isMobile
+                ? {}
+                : { alignSelf: "flex-start", width: 1, maxWidth: LANDSCAPE_PANEL_WIDTH + 32 }),
             }}
           >
             {step && (
@@ -267,8 +279,10 @@ export function NavigationView() {
                   sx={{
                     pointerEvents: "auto",
                     width: "100%",
-                    maxWidth: 480,
-                    mx: "auto",
+                    maxWidth: LANDSCAPE_PANEL_WIDTH,
+                    // Left-aligned (16px in, matching the top banner) rather than
+                    // centered, so the map stays clear on the right.
+                    ml: 2,
                     mb: 2,
                     bgcolor: "background.paper",
                     borderRadius: 3,
