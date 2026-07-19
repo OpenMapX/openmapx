@@ -116,10 +116,26 @@ const server = Fastify({
 // listener (which suppresses Node's default promotion to uncaughtException) — so
 // guard both with the same handler.
 function onFatal(err: unknown): void {
-  if ((err as NodeJS.ErrnoException | undefined)?.code === "ERR_HTTP_HEADERS_SENT") {
+  const e = err as (NodeJS.ErrnoException & { stack?: string }) | undefined;
+  if (e?.code === "ERR_HTTP_HEADERS_SENT") {
     server.log.error(
       { err },
       "Suppressed ERR_HTTP_HEADERS_SENT (double send) — response dropped, process kept alive",
+    );
+    return;
+  }
+  // undici's HTTP response parser can throw an assertion (e.g. "false == true"
+  // from Parser.finish / Socket.onHttpSocketEnd) when an upstream server ends a
+  // response with invalid HTTP framing. It surfaces as an uncaughtException off
+  // the socket, escaping the originating fetch's try/catch, so it can't be
+  // handled at the call site. It is an isolated client-side parse fault of one
+  // outbound request — no app state is corrupted — so drop it and keep serving
+  // instead of crash-looping. Observed with flaky third-party GBFS feeds during
+  // shared-mobility fanout.
+  if (e?.code === "ERR_ASSERTION" && /undici/.test(e.stack ?? "")) {
+    server.log.error(
+      { err },
+      "Suppressed undici HTTP-parser assertion (flaky upstream) — request dropped, process kept alive",
     );
     return;
   }
