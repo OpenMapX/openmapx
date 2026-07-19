@@ -45,7 +45,6 @@
     "done": "Done",
     "arrived": "You have arrived",
     "recenter": "Recenter",
-    "eta": "ETA {time}",
     "in": "In {distance}",
     "now": "Now",
     "rerouting": "Rerouting…",

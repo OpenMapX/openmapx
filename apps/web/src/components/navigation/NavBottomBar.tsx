@@ -56,12 +56,13 @@ export function NavBottomBar({
   const t = useTranslations("navigation");
   const fmt = useDateTimeFormat();
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  // Just the arrival time — no "ETA"/"Ankunft" label, to keep the bar terse.
   const etaTime = fmt.time(etaEpochMs);
   const secondaryLine =
     secondary ??
     (distanceRemaining != null
-      ? `${formatMeasurementDistance(distanceRemaining, units)} · ${t("eta", { time: etaTime })}`
-      : t("eta", { time: etaTime }));
+      ? `${formatMeasurementDistance(distanceRemaining, units)} · ${etaTime}`
+      : etaTime);
 
   const closeMenu = () => setMenuAnchor(null);
 
