@@ -81,7 +81,7 @@ describe("shouldPreviewNextStep", () => {
   });
 
   it("falls back to a distance gap when the engine omits the next-step duration", () => {
-    // 350 m = 25 s × 14 m/s reference.
+    // 420 m = 30 s × 14 m/s reference.
     expect(shouldPreviewNextStep("driving", 14, 300, 0, 200)).toBe(true);
     expect(shouldPreviewNextStep("driving", 14, 300, 0, 800)).toBe(false);
   });
