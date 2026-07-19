@@ -2,7 +2,12 @@
 
 import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
-import { configureStorage, useNavigationStore, useSettingsStore } from "@openmapx/core";
+import {
+  configureStorage,
+  useDirectionsStore,
+  useNavigationStore,
+  useSettingsStore,
+} from "@openmapx/core";
 import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
@@ -118,6 +123,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
     useSettingsStore.getState().hydrate();
     // Same for the navigation voice / keep-screen-on toggle preferences.
     useNavigationStore.getState().hydrate();
+    // And the persisted route-avoidance defaults.
+    useDirectionsStore.getState().hydrateRoutePrefs();
   }, []);
 
   const inner = (

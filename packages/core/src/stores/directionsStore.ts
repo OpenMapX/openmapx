@@ -5,8 +5,19 @@ import type {
   TransitPreferKey,
   TransitRoutePreference,
 } from "../constants/transit";
+import { getStorage } from "../platform/storage";
 import type { LngLat } from "../types/geometry";
 import type { TravelMode, Waypoint } from "../types/routing";
+
+// Route-avoidance defaults persist so a chosen preference (also editable in the
+// nav settings screen) applies to every route rather than resetting each session.
+const AVOID_HIGHWAYS_STORAGE_KEY = "openmapx:avoidHighways";
+const AVOID_TOLLS_STORAGE_KEY = "openmapx:avoidTolls";
+const AVOID_FERRIES_STORAGE_KEY = "openmapx:avoidFerries";
+
+function readBool(key: string): boolean {
+  return getStorage().getString(key) === "true";
+}
 
 let waypointCounter = 0;
 function newWaypointId(): string {
@@ -94,6 +105,8 @@ export interface DirectionsState {
   setAvoidHighways: (v: boolean) => void;
   setAvoidTolls: (v: boolean) => void;
   setAvoidFerries: (v: boolean) => void;
+  /** Re-read the persisted route-avoidance defaults (storage may configure late). */
+  hydrateRoutePrefs: () => void;
   setTransitItineraries: (items: TripItinerary[]) => void;
   setActiveItineraryIndex: (i: number) => void;
   setTransitDepartureTime: (t: "now" | Date) => void;
@@ -124,9 +137,9 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     ...derived(initWps),
     mode: "driving",
     activeRouteIndex: 0,
-    avoidHighways: false,
-    avoidTolls: false,
-    avoidFerries: false,
+    avoidHighways: readBool(AVOID_HIGHWAYS_STORAGE_KEY),
+    avoidTolls: readBool(AVOID_TOLLS_STORAGE_KEY),
+    avoidFerries: readBool(AVOID_FERRIES_STORAGE_KEY),
     transitItineraries: [],
     activeItineraryIndex: 0,
     transitDepartureTime: "now" as const,
@@ -222,9 +235,24 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
 
     setMode: (mode) => set({ mode, activeRouteIndex: 0 }),
     setActiveRouteIndex: (activeRouteIndex) => set({ activeRouteIndex }),
-    setAvoidHighways: (avoidHighways) => set({ avoidHighways }),
-    setAvoidTolls: (avoidTolls) => set({ avoidTolls }),
-    setAvoidFerries: (avoidFerries) => set({ avoidFerries }),
+    setAvoidHighways: (avoidHighways) => {
+      getStorage().setString(AVOID_HIGHWAYS_STORAGE_KEY, String(avoidHighways));
+      set({ avoidHighways });
+    },
+    setAvoidTolls: (avoidTolls) => {
+      getStorage().setString(AVOID_TOLLS_STORAGE_KEY, String(avoidTolls));
+      set({ avoidTolls });
+    },
+    setAvoidFerries: (avoidFerries) => {
+      getStorage().setString(AVOID_FERRIES_STORAGE_KEY, String(avoidFerries));
+      set({ avoidFerries });
+    },
+    hydrateRoutePrefs: () =>
+      set({
+        avoidHighways: readBool(AVOID_HIGHWAYS_STORAGE_KEY),
+        avoidTolls: readBool(AVOID_TOLLS_STORAGE_KEY),
+        avoidFerries: readBool(AVOID_FERRIES_STORAGE_KEY),
+      }),
     setTransitItineraries: (transitItineraries) =>
       set({ transitItineraries, activeItineraryIndex: 0 }),
     setActiveItineraryIndex: (activeItineraryIndex) => set({ activeItineraryIndex }),
