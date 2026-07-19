@@ -101,8 +101,34 @@ const TYPE_BY_CATEGORY: Record<ReportCategory, ReportClaim["type"]> = {
   other: "other",
 };
 
+/**
+ * The severity (1–5) each category preselects when picked, so the common case is
+ * one tap fewer — the reporter can still override it. Rough danger ordering:
+ * a full closure or crash is high; a partial closure, stopped vehicle or hazard
+ * is medium; congestion, roadworks and soft categories are low.
+ */
+const DEFAULT_SEVERITY_BY_CATEGORY: Record<ReportCategory, 1 | 2 | 3 | 4 | 5> = {
+  road_closure: 5,
+  lane_closure: 3,
+  accident: 4,
+  stopped_vehicle: 3,
+  hazard_object: 3,
+  hazard_weather: 3,
+  hazard_animal: 3,
+  jam: 2,
+  roadworks: 2,
+  transit_disruption: 2,
+  micromobility: 2,
+  accessibility: 2,
+  other: 1,
+};
+
 export function fuzzinessForChoice(choice: FuzzinessChoice): Fuzziness {
   return FUZZINESS_BY_CHOICE[choice];
+}
+
+export function defaultSeverityForCategory(category: ReportCategory): 1 | 2 | 3 | 4 | 5 {
+  return DEFAULT_SEVERITY_BY_CATEGORY[category];
 }
 
 export function domainForCategory(category: ReportCategory): ReportClaim["domain"] {

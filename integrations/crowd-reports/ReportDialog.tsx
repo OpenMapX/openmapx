@@ -1,7 +1,21 @@
 "use client";
 
-import AddLocationAltIcon from "@mui/icons-material/AddLocationAlt";
+import type { SvgIconComponent } from "@mui/icons-material";
+import AccessibleIcon from "@mui/icons-material/Accessible";
+import CarCrashIcon from "@mui/icons-material/CarCrash";
+import CarRepairIcon from "@mui/icons-material/CarRepair";
+import ConstructionIcon from "@mui/icons-material/Construction";
+import DirectionsTransitIcon from "@mui/icons-material/DirectionsTransit";
+import DoNotDisturbOnIcon from "@mui/icons-material/DoNotDisturbOn";
 import EditLocationAltIcon from "@mui/icons-material/EditLocationAlt";
+import ElectricScooterIcon from "@mui/icons-material/ElectricScooter";
+import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
+import MyLocationIcon from "@mui/icons-material/MyLocation";
+import PetsIcon from "@mui/icons-material/Pets";
+import RemoveRoadIcon from "@mui/icons-material/RemoveRoad";
+import ThunderstormIcon from "@mui/icons-material/Thunderstorm";
+import TrafficIcon from "@mui/icons-material/Traffic";
+import WarningIcon from "@mui/icons-material/Warning";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -13,12 +27,14 @@ import Stack from "@mui/material/Stack";
 import { alpha } from "@mui/material/styles";
 import ToggleButton from "@mui/material/ToggleButton";
 import Typography from "@mui/material/Typography";
+import { useMapStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { LocationMinimap } from "@/components/map/LocationMinimap";
 import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
 import {
   buildReportClaim,
+  defaultSeverityForCategory,
   type FuzzinessChoice,
   REPORT_CATEGORIES,
   type ReportCategory,
@@ -42,6 +58,31 @@ const SEVERITY_COLORS: Record<(typeof SEVERITY_LEVELS)[number], string> = {
   5: "#7e0023",
 };
 
+/** Per-category icon, echoing the map's incident glyphs where one exists. */
+const CATEGORY_ICONS: Record<ReportCategory, SvgIconComponent> = {
+  road_closure: DoNotDisturbOnIcon,
+  lane_closure: RemoveRoadIcon,
+  accident: CarCrashIcon,
+  stopped_vehicle: CarRepairIcon,
+  hazard_object: WarningIcon,
+  hazard_weather: ThunderstormIcon,
+  hazard_animal: PetsIcon,
+  jam: TrafficIcon,
+  roadworks: ConstructionIcon,
+  transit_disruption: DirectionsTransitIcon,
+  micromobility: ElectricScooterIcon,
+  accessibility: AccessibleIcon,
+  other: MoreHorizIcon,
+};
+
+/** A glyph color legible on a `#rrggbb` disc — dark on light fills (yellow), white otherwise. */
+function readableOn(hex: string): string {
+  const r = Number.parseInt(hex.slice(1, 3), 16);
+  const g = Number.parseInt(hex.slice(3, 5), 16);
+  const b = Number.parseInt(hex.slice(5, 7), 16);
+  return 0.299 * r + 0.587 * g + 0.114 * b > 180 ? "rgba(0,0,0,0.78)" : "#fff";
+}
+
 /**
  * The report dialog: pick a category, how far the condition extends (fuzziness),
  * an optional severity, then submit. Location comes from the store (map center,
@@ -55,11 +96,24 @@ export function ReportDialog() {
   const location = useCrowdReportStore((s) => s.location);
   const closeDialog = useCrowdReportStore((s) => s.closeDialog);
   const startPicking = useCrowdReportStore((s) => s.startPicking);
+  const setLocation = useCrowdReportStore((s) => s.setLocation);
+  const userLocation = useMapStore((s) => s.userLocation);
   const submit = useSubmitReport();
 
   const [category, setCategory] = useState<ReportCategory>("hazard_object");
   const [fuzziness, setFuzziness] = useState<FuzzinessChoice>("here");
-  const [severity, setSeverity] = useState<1 | 2 | 3 | 4 | 5 | null>(null);
+  // Severity is optional but preselected from the category to save a tap; the
+  // user can still change or clear it.
+  const [severity, setSeverity] = useState<1 | 2 | 3 | 4 | 5 | null>(() =>
+    defaultSeverityForCategory("hazard_object"),
+  );
+
+  // Picking a category preselects its typical severity (a deviation stays until
+  // the next category change).
+  const selectCategory = (c: ReportCategory) => {
+    setCategory(c);
+    setSeverity(defaultSeverityForCategory(c));
+  };
 
   const handleSubmit = () => {
     if (!location) return;
@@ -95,18 +149,37 @@ export function ReportDialog() {
               {t("categoryLabel")}
             </Typography>
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-              {REPORT_CATEGORIES.map((c) => (
-                <ToggleButton
-                  key={c}
-                  value={c}
-                  size="small"
-                  selected={category === c}
-                  onChange={() => setCategory(c)}
-                  sx={{ textTransform: "none" }}
-                >
-                  {t(`category.${c}`)}
-                </ToggleButton>
-              ))}
+              {REPORT_CATEGORIES.map((c) => {
+                const Icon = CATEGORY_ICONS[c];
+                const disc = SEVERITY_COLORS[defaultSeverityForCategory(c)];
+                return (
+                  <ToggleButton
+                    key={c}
+                    value={c}
+                    size="small"
+                    selected={category === c}
+                    onChange={() => selectCategory(c)}
+                    sx={{ textTransform: "none", gap: 0.75, pl: 0.75, pr: 1.25 }}
+                  >
+                    <Box
+                      aria-hidden
+                      sx={{
+                        width: 26,
+                        height: 26,
+                        borderRadius: "50%",
+                        flexShrink: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        bgcolor: disc,
+                      }}
+                    >
+                      <Icon sx={{ fontSize: 17, color: readableOn(disc) }} />
+                    </Box>
+                    {t(`category.${c}`)}
+                  </ToggleButton>
+                );
+              })}
             </Box>
           </Box>
 
@@ -196,26 +269,15 @@ export function ReportDialog() {
               {t("locationLabel")}
             </Typography>
             {/* A minimap reads better than raw coordinates (or an address, which
-                is useless on a highway). Tapping it re-picks a point on the map. */}
+                is useless on a highway). The buttons below set the point. */}
             {location ? (
               <Box
-                onClick={startPicking}
-                role="button"
-                tabIndex={0}
-                aria-label={t("pickOnMap")}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    startPicking();
-                  }
-                }}
                 sx={{
                   position: "relative",
                   width: "100%",
                   height: 160,
                   borderRadius: 1,
                   overflow: "hidden",
-                  cursor: "pointer",
                   border: "1px solid",
                   borderColor: "divider",
                 }}
@@ -226,38 +288,45 @@ export function ReportDialog() {
                   zoom={15}
                   sx={{ position: "absolute", inset: 0 }}
                 />
-                <Box
-                  sx={{
-                    position: "absolute",
-                    bottom: 8,
-                    right: 8,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 0.5,
-                    px: 1,
-                    py: 0.5,
-                    borderRadius: 1,
-                    bgcolor: "rgba(0,0,0,0.6)",
-                    color: "#fff",
-                    fontSize: "0.75rem",
-                    pointerEvents: "none",
-                  }}
-                >
-                  <EditLocationAltIcon sx={{ fontSize: "1rem" }} />
-                  {t("pickOnMap")}
-                </Box>
               </Box>
             ) : (
+              <Box
+                sx={{
+                  height: 160,
+                  borderRadius: 1,
+                  border: "1px dashed",
+                  borderColor: "divider",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  {t("locationMissing")}
+                </Typography>
+              </Box>
+            )}
+            <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
               <Button
                 variant="outlined"
                 fullWidth
-                startIcon={<AddLocationAltIcon />}
-                onClick={startPicking}
-                sx={{ height: 160, textTransform: "none", borderStyle: "dashed" }}
+                startIcon={<MyLocationIcon />}
+                disabled={!userLocation}
+                onClick={() => userLocation && setLocation(userLocation)}
+                sx={{ textTransform: "none" }}
               >
-                {t("locationMissing")}
+                {t("useCurrentLocation")}
               </Button>
-            )}
+              <Button
+                variant="outlined"
+                fullWidth
+                startIcon={<EditLocationAltIcon />}
+                onClick={startPicking}
+                sx={{ textTransform: "none" }}
+              >
+                {t("pickOnMap")}
+              </Button>
+            </Stack>
           </Box>
 
           {submit.isError && <Alert severity="error">{t("submitError")}</Alert>}

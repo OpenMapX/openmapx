@@ -29,6 +29,7 @@
     "locationLabel": "Location",
     "locationMissing": "No location set",
     "pickOnMap": "Pick on map",
+    "useCurrentLocation": "Current location",
     "submit": "Submit",
     "submitError": "Could not submit your report. Please try again.",
     "cancel": "Cancel",

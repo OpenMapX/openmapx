@@ -29,6 +29,7 @@
     "locationLabel": "Standort",
     "locationMissing": "Kein Standort gesetzt",
     "pickOnMap": "Auf Karte wählen",
+    "useCurrentLocation": "Aktueller Standort",
     "submit": "Senden",
     "submitError": "Meldung konnte nicht gesendet werden. Bitte erneut versuchen.",
     "cancel": "Abbrechen",

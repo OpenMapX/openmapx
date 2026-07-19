@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildReportClaim,
+  defaultSeverityForCategory,
   domainForCategory,
   fuzzinessForChoice,
   generateNonce,
@@ -28,6 +29,25 @@ describe("domainForCategory", () => {
   it("does not include police in the taxonomy", () => {
     expect(REPORT_CATEGORIES).not.toContain("police");
     expect(REPORT_CATEGORIES.length).toBeLessThanOrEqual(13);
+  });
+});
+
+describe("defaultSeverityForCategory", () => {
+  it("preselects a plausible severity per category so a report is one tap fewer", () => {
+    // A full closure is the most severe; congestion the least.
+    expect(defaultSeverityForCategory("road_closure")).toBe(5);
+    expect(defaultSeverityForCategory("accident")).toBe(4);
+    expect(defaultSeverityForCategory("lane_closure")).toBe(3);
+    expect(defaultSeverityForCategory("jam")).toBe(2);
+    expect(defaultSeverityForCategory("other")).toBe(1);
+  });
+
+  it("returns a valid 1–5 level for every category", () => {
+    for (const c of REPORT_CATEGORIES) {
+      const s = defaultSeverityForCategory(c);
+      expect(s).toBeGreaterThanOrEqual(1);
+      expect(s).toBeLessThanOrEqual(5);
+    }
   });
 });
 
