@@ -35,7 +35,11 @@ export function formatMeasurementDistance(metres: number, system: UnitSystem = "
     return `${(feet / FEET_PER_MILE).toFixed(2)} mi`;
   }
   if (metres < 1000) return `${Math.round(metres)} m`;
-  return `${(metres / 1000).toFixed(2)} km`;
+  // Kilometres carry one decimal while single-digit (5.3 km) but none once
+  // double-digit (10 km) — a second decimal is just noise at that scale. The
+  // boundary keys on the rounded value so 9.96 km reads "10 km", not "10.0 km".
+  const km = metres / 1000;
+  return Math.round(km * 10) / 10 >= 10 ? `${Math.round(km)} km` : `${km.toFixed(1)} km`;
 }
 
 /**
