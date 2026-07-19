@@ -1396,6 +1396,23 @@
       "build-time": "Nur zur Build-Zeit"
     }
   },
+  "navigationSettings": {
+    "title": "Navigationseinstellungen",
+    "sectionVoice": "Sprache & Töne",
+    "sectionAlerts": "Warnungen",
+    "sectionRouting": "Routenführung",
+    "sectionDuringNav": "Während der Navigation",
+    "voiceGuidance": "Sprachnavigation",
+    "voice": "Stimme",
+    "voiceDefault": "Standard (folgt der Sprache)",
+    "voiceTest": "Test abspielen",
+    "voiceTestSample": "In 300 Metern rechts abbiegen.",
+    "avoidClosures": "Sperrungen und Vorfälle vermeiden",
+    "avoidMotorways": "Autobahnen vermeiden",
+    "avoidTolls": "Maut vermeiden",
+    "avoidFerries": "Fähren vermeiden",
+    "mapNorthUp": "Karte nach Norden ausrichten"
+  },
   "settings": {
     "title": "Einstellungen",
     "appearance": "Darstellung",

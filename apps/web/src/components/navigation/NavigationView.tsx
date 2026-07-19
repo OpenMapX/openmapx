@@ -20,7 +20,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
-import { SettingsDialog } from "@/components/settings/SettingsDialog";
+import { NavigationSettingsDialog } from "@/components/settings/NavigationSettingsDialog";
 import { useMapOptional } from "@/lib/MapContext";
 import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
 import { useNavAlerts } from "@/lib/navigation/useNavAlerts";
@@ -308,7 +308,7 @@ export function NavigationView() {
           units={units}
         />
       )}
-      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <NavigationSettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </Box>
   );
 }

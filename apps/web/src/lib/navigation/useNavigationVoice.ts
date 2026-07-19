@@ -1,5 +1,5 @@
 import { useSettingsStore } from "@openmapx/core";
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { hasCapability } from "../platformCapabilities";
 
 // Available TTS voices, cached at module scope. `getVoices()` is often empty on
@@ -50,6 +50,24 @@ export function selectVoice<T extends { name: string; lang: string }>(
 export function getAvailableVoices(): SpeechSynthesisVoice[] {
   ensureVoices();
   return voicesCache;
+}
+
+/** Reactive list of installed voices — updates when the engine populates them late. */
+export function useAvailableVoices(): SpeechSynthesisVoice[] {
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>(() => getAvailableVoices());
+  useEffect(() => {
+    const ss = typeof window !== "undefined" ? window.speechSynthesis : undefined;
+    if (!ss?.addEventListener) return;
+    const onChange = () => setVoices([...getAvailableVoices()]);
+    ss.addEventListener("voiceschanged", onChange);
+    // Some browsers populate voices shortly after load without firing the event.
+    const id = window.setTimeout(onChange, 300);
+    return () => {
+      ss.removeEventListener("voiceschanged", onChange);
+      window.clearTimeout(id);
+    };
+  }, []);
+  return voices;
 }
 
 /** Speak `text` once, interrupting any in-flight prompt. No-op when unsupported. */

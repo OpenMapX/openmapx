@@ -1396,6 +1396,23 @@
       "build-time": "Build-time only"
     }
   },
+  "navigationSettings": {
+    "title": "Navigation settings",
+    "sectionVoice": "Voice & sounds",
+    "sectionAlerts": "Alerts",
+    "sectionRouting": "Routing",
+    "sectionDuringNav": "During navigation",
+    "voiceGuidance": "Voice guidance",
+    "voice": "Voice",
+    "voiceDefault": "Default (follows language)",
+    "voiceTest": "Play test",
+    "voiceTestSample": "In 300 meters, turn right.",
+    "avoidClosures": "Avoid closures and incidents",
+    "avoidMotorways": "Avoid motorways",
+    "avoidTolls": "Avoid tolls",
+    "avoidFerries": "Avoid ferries",
+    "mapNorthUp": "Keep map north-up"
+  },
   "settings": {
     "title": "Settings",
     "appearance": "Appearance",

@@ -1,11 +1,13 @@
 "use client";
 
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import CloseIcon from "@mui/icons-material/Close";
-import Box from "@mui/material/Box";
 import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
+import ListItemButton from "@mui/material/ListItemButton";
+import ListItemText from "@mui/material/ListItemText";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Switch from "@mui/material/Switch";
@@ -18,13 +20,14 @@ import {
   type TimeFormat,
   type UnitSystem,
   useSettingsStore,
-  type VoiceGuidanceTiming,
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
-import type { ReactNode } from "react";
+import { useState } from "react";
 import { localeNames, locales } from "@/i18n/config";
 import { setLocaleAndReload } from "@/lib/setLocale";
 import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
+import { NavigationSettingsDialog } from "./NavigationSettingsDialog";
+import { Section, SettingRow } from "./settingsPrimitives";
 
 // Fixed sample instant (Dec 31, 2025, 13:05 local) used to preview each
 // date/time format option in the dropdowns.
@@ -43,46 +46,10 @@ const DATE_FORMAT_OPTIONS: { value: DateFormat; labelKey: string }[] = [
   { value: "ymd", labelKey: "dateFormatYmd" },
 ];
 
-const VOICE_TIMING_OPTIONS: { value: VoiceGuidanceTiming; labelKey: string }[] = [
-  { value: "early", labelKey: "voiceTimingEarly" },
-  { value: "normal", labelKey: "voiceTimingNormal" },
-  { value: "late", labelKey: "voiceTimingLate" },
-];
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <Box sx={{ mb: 2 }}>
-      <Typography
-        variant="overline"
-        sx={{ color: "text.secondary", fontWeight: 600, display: "block", mb: 0.5 }}
-      >
-        {title}
-      </Typography>
-      {children}
-    </Box>
-  );
-}
-
-function SettingRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <Box
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 2,
-        py: 0.75,
-      }}
-    >
-      <Typography variant="body2">{label}</Typography>
-      <Box sx={{ minWidth: 180 }}>{children}</Box>
-    </Box>
-  );
-}
-
 export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useTranslations("menu");
   const ts = useTranslations("settings");
+  const tn = useTranslations("navigationSettings");
   const tc = useTranslations("common");
   const locale = useLocale();
   const { mode, setMode } = useColorScheme();
@@ -92,15 +59,10 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const setTimeFormat = useSettingsStore((s) => s.setTimeFormat);
   const dateFormat = useSettingsStore((s) => s.dateFormat);
   const setDateFormat = useSettingsStore((s) => s.setDateFormat);
-  const voiceGuidanceTiming = useSettingsStore((s) => s.voiceGuidanceTiming);
-  const setVoiceGuidanceTiming = useSettingsStore((s) => s.setVoiceGuidanceTiming);
-  const speedCameraAlerts = useSettingsStore((s) => s.speedCameraAlerts);
-  const setSpeedCameraAlerts = useSettingsStore((s) => s.setSpeedCameraAlerts);
-  const incidentAlerts = useSettingsStore((s) => s.incidentAlerts);
-  const setIncidentAlerts = useSettingsStore((s) => s.setIncidentAlerts);
   const aiSearchEnabled = useSettingsStore((s) => s.aiSearchEnabled);
   const setAiSearchEnabled = useSettingsStore((s) => s.setAiSearchEnabled);
   const fullScreen = useFullScreenOnMobile();
+  const [navSettingsOpen, setNavSettingsOpen] = useState(false);
 
   return (
     <Dialog
@@ -201,58 +163,25 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
         </Section>
 
         <Section title={ts("navigation")}>
-          <SettingRow label={ts("voiceGuidanceTiming")}>
-            <Select
-              size="small"
-              fullWidth
-              value={voiceGuidanceTiming}
-              onChange={(e) => setVoiceGuidanceTiming(e.target.value as VoiceGuidanceTiming)}
-            >
-              {VOICE_TIMING_OPTIONS.map((o) => (
-                <MenuItem key={o.value} value={o.value}>
-                  {ts(o.labelKey)}
-                </MenuItem>
-              ))}
-            </Select>
-          </SettingRow>
-          <SettingRow label={ts("speedCameraAlerts")}>
-            <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
-              <Switch
-                checked={speedCameraAlerts}
-                onChange={(e) => setSpeedCameraAlerts(e.target.checked)}
-              />
-            </Box>
-          </SettingRow>
-          <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-            {ts("speedCameraAlertsHint")}
-          </Typography>
-          <SettingRow label={ts("incidentAlerts")}>
-            <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
-              <Switch
-                checked={incidentAlerts}
-                onChange={(e) => setIncidentAlerts(e.target.checked)}
-              />
-            </Box>
-          </SettingRow>
-          <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-            {ts("incidentAlertsHint")}
-          </Typography>
+          <ListItemButton onClick={() => setNavSettingsOpen(true)} sx={{ borderRadius: 1, px: 1 }}>
+            <ListItemText primary={tn("title")} />
+            <ChevronRightIcon sx={{ color: "text.secondary" }} />
+          </ListItemButton>
         </Section>
 
         <Section title={ts("search")}>
           <SettingRow label={ts("aiSearch")}>
-            <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
-              <Switch
-                checked={aiSearchEnabled}
-                onChange={(e) => setAiSearchEnabled(e.target.checked)}
-              />
-            </Box>
+            <Switch
+              checked={aiSearchEnabled}
+              onChange={(e) => setAiSearchEnabled(e.target.checked)}
+            />
           </SettingRow>
           <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
             {ts("aiSearchHint")}
           </Typography>
         </Section>
       </DialogContent>
+      <NavigationSettingsDialog open={navSettingsOpen} onClose={() => setNavSettingsOpen(false)} />
     </Dialog>
   );
 }
