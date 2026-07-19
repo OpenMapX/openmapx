@@ -18,9 +18,9 @@ import { nextTransferFor } from "@/lib/navigation/transitTransfer";
 import { useTransitLiveRefresh } from "@/lib/navigation/useTransitLiveRefresh";
 import { useTransitNavigationEngine } from "@/lib/navigation/useTransitNavigationEngine";
 import { useWakeLock } from "@/lib/useWakeLock";
-import { ArrivalCard } from "./ArrivalCard";
 import { NavSwipeSheet } from "./NavSwipeSheet";
 import { TransitAlertBanner } from "./TransitAlertBanner";
+import { TransitArrivalCard } from "./TransitArrivalCard";
 import { TransitJourneySheet } from "./TransitJourneySheet";
 import { TransitLegBanner } from "./TransitLegBanner";
 import { TransitNavBottomBar } from "./TransitNavBottomBar";
@@ -111,7 +111,7 @@ export function TransitNavigationView() {
         <Box
           sx={{ pointerEvents: "auto", m: "auto", bgcolor: "background.paper", borderRadius: 3 }}
         >
-          <ArrivalCard onClose={stopNavigation} />
+          <TransitArrivalCard itinerary={itinerary} onClose={stopNavigation} />
         </Box>
       ) : (
         <>
