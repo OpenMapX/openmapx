@@ -1,6 +1,5 @@
 "use client";
 
-import AirlineSeatReclineNormalIcon from "@mui/icons-material/AirlineSeatReclineNormal";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import DirectionsBikeIcon from "@mui/icons-material/DirectionsBike";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
@@ -10,7 +9,6 @@ import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
 import NavigationIcon from "@mui/icons-material/Navigation";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { TransitReplanOptions } from "@openmapx/core";
 import {
@@ -22,13 +20,13 @@ import {
 } from "@openmapx/core";
 import type { OccupancyLevel, TripItinerary, TripLeg } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
+import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
 import { RemarkChip } from "@/components/panels/transit/RemarkChip";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
 import { ensureNotificationPermission } from "@/lib/navigation/navNotify";
 import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
 import { TEAL, TEAL_HEX } from "@/lib/theme";
-import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { formatCo2Emission } from "../../../lib/formatCo2";
 
@@ -243,7 +241,6 @@ export function TransitItineraryCard({
 }) {
   const t = useTranslations("directions");
   const tc = useTranslations("common");
-  const tt = useTranslations("transit");
   const tNav = useTranslations("navigation");
   const locale = useLocale();
   const fmt = useDateTimeFormat();
@@ -285,13 +282,7 @@ export function TransitItineraryCard({
           </Typography>
         </Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-          {occupancy && (
-            <Tooltip title={tt(OCCUPANCY_KEY[occupancy])} placement="left" arrow>
-              <AirlineSeatReclineNormalIcon
-                sx={{ fontSize: 16, color: OCCUPANCY_COLOR[occupancy], flexShrink: 0 }}
-              />
-            </Tooltip>
-          )}
+          {occupancy && <OccupancyIndicator level={occupancy} size={16} />}
           <Typography
             variant="body2"
             color={active ? TEAL : "text.primary"}

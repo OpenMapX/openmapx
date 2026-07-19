@@ -1,7 +1,6 @@
 "use client";
 
 import type { SvgIconComponent } from "@mui/icons-material";
-import AirlineSeatReclineNormalIcon from "@mui/icons-material/AirlineSeatReclineNormal";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import ConfirmationNumberOutlinedIcon from "@mui/icons-material/ConfirmationNumberOutlined";
@@ -17,7 +16,6 @@ import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
-import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
 import {
@@ -46,6 +44,7 @@ import {
   TransitLiveBadge,
 } from "@/components/panels/directions/TransitRouteView";
 import { LegAlerts } from "@/components/panels/transit/LegAlerts";
+import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { TransitLegStops } from "@/components/panels/transit/TransitLegStops";
 import { TripDetailView } from "@/components/panels/transit/TripDetailView";
@@ -53,7 +52,6 @@ import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
 import { useMap } from "@/lib/MapContext";
 import { TEAL } from "@/lib/theme";
-import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 
 /**
@@ -175,7 +173,6 @@ export function TransitDetailsView({
 }) {
   const t = useTranslations("directions");
   const tc = useTranslations("common");
-  const tt = useTranslations("transit");
   const locale = useLocale();
   const fmt = useDateTimeFormat();
   const [activeLegDep, setActiveLegDep] = useState<MergedDeparture | null>(null);
@@ -502,13 +499,7 @@ export function TransitDetailsView({
                           </Typography>
                         </Box>
                         {leg.tripId && <TransitLiveBadge tripId={leg.tripId} />}
-                        {leg.occupancy && (
-                          <Tooltip title={tt(OCCUPANCY_KEY[leg.occupancy])} placement="top" arrow>
-                            <AirlineSeatReclineNormalIcon
-                              sx={{ fontSize: 14, color: OCCUPANCY_COLOR[leg.occupancy] }}
-                            />
-                          </Tooltip>
-                        )}
+                        {leg.occupancy && <OccupancyIndicator level={leg.occupancy} size={14} />}
                       </Box>
                       <Typography
                         variant="caption"
