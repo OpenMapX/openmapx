@@ -7,8 +7,9 @@ import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import {
   geoJsonBBox,
+  guidanceApproachMeters,
   isOverSpeed,
-  laneGuidanceTriggerMeters,
+  shouldPreviewNextStep,
   upcomingManeuverIndex,
   useNavigationStore,
   useSettingsStore,
@@ -81,10 +82,18 @@ export function NavigationView() {
   const nextStep = route ? route.steps[upcomingIndex + 1] : undefined;
   const awaitingFix = status !== "arrived" && !progress;
   const distanceToManeuver = progress?.distanceToNextManeuver ?? step?.distance ?? 0;
-  // Surface lanes near the maneuver, scaling the lead distance with speed so
-  // motorway guidance appears earlier than urban guidance.
-  const showLanes =
-    !!step?.lanes && distanceToManeuver <= laneGuidanceTriggerMeters(mode, progress?.speedMps ?? 0);
+  const speedMps = progress?.speedMps ?? 0;
+  // Detailed guidance becomes relevant only inside the approach window (a lead
+  // time before the maneuver that stretches on the motorway) — so on a long
+  // stretch neither the lanes nor the "Then …" preview clutter the banner.
+  const approaching = distanceToManeuver <= guidanceApproachMeters(mode, speedMps);
+  const showLanes = !!step?.lanes && approaching;
+  // Preview the maneuver after this one only when it's both relevant (approaching)
+  // and follows closely (a short gap), so back-to-back turns chain but far-apart
+  // ones don't.
+  const showNextStep =
+    !!nextStep &&
+    shouldPreviewNextStep(mode, speedMps, distanceToManeuver, nextStep.duration, nextStep.distance);
   const distanceRemaining = progress?.distanceRemaining ?? route?.distance ?? 0;
   const durationRemaining = progress?.durationRemaining ?? route?.duration ?? 0;
   const etaEpochMs = progress?.etaEpochMs ?? Date.now() + durationRemaining * 1000;
@@ -160,8 +169,8 @@ export function NavigationView() {
                 instruction={step.instruction}
                 distanceToManeuver={distanceToManeuver}
                 maneuver={step.maneuver}
-                nextInstruction={nextStep?.instruction}
-                nextManeuver={nextStep?.maneuver}
+                nextInstruction={showNextStep ? nextStep?.instruction : undefined}
+                nextManeuver={showNextStep ? nextStep?.maneuver : undefined}
                 lanes={showLanes ? step.lanes : undefined}
                 units={units}
               />

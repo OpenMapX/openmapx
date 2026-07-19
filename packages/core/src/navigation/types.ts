@@ -86,8 +86,23 @@ export interface NavTickOptions {
   /** Scales every voice trigger earlier (>1) or later (<1) per user preference. */
   announceMultiplier: number;
   arrivalThresholdMeters: number;
-  /** Minimum lane-guidance distance (m), used at/below the mode's reference speed. */
-  laneGuidanceMeters: number;
+  /**
+   * When "detailed guidance" (lane guidance, the next-step preview) becomes
+   * relevant, expressed as lead TIME before the maneuver so it adapts to where
+   * you're driving: a short window in the city, a long one on the motorway.
+   */
+  guidance: {
+    /** Lead time (s) at/below the mode's reference speed. */
+    leadSeconds: number;
+    /** Lead time (s) at/above `highSpeedMps` — larger, for fast lane changes. */
+    maxLeadSeconds: number;
+    /** Speed (m/s) at which the lead reaches `maxLeadSeconds`. */
+    highSpeedMps: number;
+    /** Absolute floor (m) so a near-stop still shows guidance in time. */
+    minMeters: number;
+    /** Next-step preview: max gap (s) to the following maneuver to be worth previewing. */
+    chainSeconds: number;
+  };
   /** Step-advance gate: come within this distance (m) of a step's end (entry). */
   stepGateEntryMeters: number;
   /** Step-advance gate: then travel this far (m) past it before advancing (exit). */

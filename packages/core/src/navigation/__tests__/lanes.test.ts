@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ManeuverLane } from "../../types/routing";
-import { laneGuidanceTriggerMeters, resolveRecommendedLanes } from "../lanes";
+import { guidanceApproachMeters, resolveRecommendedLanes, shouldPreviewNextStep } from "../lanes";
 
 const lane = (indications: string[], valid = false): ManeuverLane => ({ indications, valid });
 
@@ -40,14 +40,49 @@ describe("resolveRecommendedLanes", () => {
   });
 });
 
-describe("laneGuidanceTriggerMeters", () => {
-  it("keeps the configured city-driving distance at or below reference speed", () => {
-    expect(laneGuidanceTriggerMeters("driving", 0)).toBe(500);
-    expect(laneGuidanceTriggerMeters("driving", 14)).toBe(500);
+describe("guidanceApproachMeters", () => {
+  it("floors at the minimum distance when stopped or slow", () => {
+    expect(guidanceApproachMeters("driving", 0)).toBe(300);
+    expect(guidanceApproachMeters("driving", 5)).toBe(300);
   });
 
-  it("shows guidance earlier at motorway speed without showing it kilometres too early", () => {
-    expect(laneGuidanceTriggerMeters("driving", 35)).toBe(1250);
-    expect(laneGuidanceTriggerMeters("driving", 100)).toBe(1500);
+  it("gives roughly the city lead time around reference speed", () => {
+    // 35 s lead at ~50 km/h → 14 m/s × 35 s.
+    expect(guidanceApproachMeters("driving", 14)).toBe(490);
+  });
+
+  it("stretches the lead TIME on the motorway, not just distance", () => {
+    // 90 s lead at ~120 km/h → 33 m/s × 90 s.
+    expect(guidanceApproachMeters("driving", 33)).toBe(2970);
+    // The implied lead time is far larger at motorway speed than in the city.
+    const cityLead = guidanceApproachMeters("driving", 14) / 14;
+    const autobahnLead = guidanceApproachMeters("driving", 33) / 33;
+    expect(autobahnLead).toBeGreaterThan(cityLead * 2);
+  });
+
+  it("interpolates the lead between city and motorway speed", () => {
+    expect(guidanceApproachMeters("driving", 25)).toBeCloseTo(1671, 0);
+  });
+});
+
+describe("shouldPreviewNextStep", () => {
+  it("hides the preview while the maneuver is still far off", () => {
+    // 2000 m out at city speed is well beyond the ~490 m approach window.
+    expect(shouldPreviewNextStep("driving", 14, 2000, 10)).toBe(false);
+  });
+
+  it("shows the preview when approaching and the next maneuver follows closely", () => {
+    expect(shouldPreviewNextStep("driving", 14, 300, 15)).toBe(true);
+  });
+
+  it("hides the preview when the next maneuver is far after this one", () => {
+    // Approaching, but the gap to the following maneuver is 90 s — not a chain.
+    expect(shouldPreviewNextStep("driving", 14, 300, 90)).toBe(false);
+  });
+
+  it("falls back to a distance gap when the engine omits the next-step duration", () => {
+    // 350 m = 25 s × 14 m/s reference.
+    expect(shouldPreviewNextStep("driving", 14, 300, 0, 200)).toBe(true);
+    expect(shouldPreviewNextStep("driving", 14, 300, 0, 800)).toBe(false);
   });
 });

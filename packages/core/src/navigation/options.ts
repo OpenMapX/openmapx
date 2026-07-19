@@ -26,7 +26,13 @@ export function navOptionsForMode(mode: TravelMode): NavTickOptions {
         },
         announceMultiplier: 1,
         arrivalThresholdMeters: 20,
-        laneGuidanceMeters: 80,
+        guidance: {
+          leadSeconds: 15,
+          maxLeadSeconds: 20,
+          highSpeedMps: 3,
+          minMeters: 40,
+          chainSeconds: 12,
+        },
         stepGateEntryMeters: 20,
         stepGateExitMeters: 3,
       };
@@ -52,7 +58,13 @@ export function navOptionsForMode(mode: TravelMode): NavTickOptions {
         },
         announceMultiplier: 1,
         arrivalThresholdMeters: 25,
-        laneGuidanceMeters: 200,
+        guidance: {
+          leadSeconds: 20,
+          maxLeadSeconds: 30,
+          highSpeedMps: 10,
+          minMeters: 80,
+          chainSeconds: 18,
+        },
         stepGateEntryMeters: 20,
         stepGateExitMeters: 4,
       };
@@ -78,7 +90,13 @@ export function navOptionsForMode(mode: TravelMode): NavTickOptions {
         },
         announceMultiplier: 1,
         arrivalThresholdMeters: 35,
-        laneGuidanceMeters: 500,
+        guidance: {
+          leadSeconds: 35,
+          maxLeadSeconds: 90,
+          highSpeedMps: 33,
+          minMeters: 300,
+          chainSeconds: 25,
+        },
         stepGateEntryMeters: 20,
         stepGateExitMeters: 5,
       };

@@ -22,7 +22,7 @@ export {
   type ProjectEventsOptions,
   projectEventsToRoute,
 } from "./incidentProjection";
-export { laneGuidanceTriggerMeters, resolveRecommendedLanes } from "./lanes";
+export { guidanceApproachMeters, resolveRecommendedLanes, shouldPreviewNextStep } from "./lanes";
 export { navOptionsForMode } from "./options";
 export { processFix } from "./processFix";
 export { computeProgress, upcomingManeuverIndex } from "./progress";

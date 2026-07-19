@@ -18,12 +18,17 @@ describe("navOptionsForMode", () => {
     }
   });
 
-  it("provides a positive lane-guidance distance, wider for driving than walking", () => {
+  it("provides a guidance approach window, with a longer motorway lead for driving", () => {
     for (const m of ["driving", "walking", "cycling"] as const) {
-      expect(navOptionsForMode(m).laneGuidanceMeters).toBeGreaterThan(0);
+      const g = navOptionsForMode(m).guidance;
+      expect(g.leadSeconds).toBeGreaterThan(0);
+      expect(g.maxLeadSeconds).toBeGreaterThanOrEqual(g.leadSeconds);
+      expect(g.minMeters).toBeGreaterThan(0);
+      expect(g.chainSeconds).toBeGreaterThan(0);
     }
-    expect(navOptionsForMode("driving").laneGuidanceMeters).toBeGreaterThan(
-      navOptionsForMode("walking").laneGuidanceMeters,
+    // Driving stretches the most at speed (Autobahn lane changes need warning).
+    expect(navOptionsForMode("driving").guidance.maxLeadSeconds).toBeGreaterThan(
+      navOptionsForMode("walking").guidance.maxLeadSeconds,
     );
   });
 });

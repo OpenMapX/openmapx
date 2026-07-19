@@ -7,16 +7,44 @@ export interface LaneManeuver {
 }
 
 /**
- * Distance at which lane guidance should appear. The configured per-mode value
- * is the city/reference-speed minimum; above that speed it grows linearly, up
- * to 3×, so motorway guidance appears around 1–1.5 km out without lingering
- * for many kilometres.
+ * Distance-to-maneuver at which "detailed guidance" (lane guidance and the
+ * next-step preview) becomes relevant. Modelled as a lead TIME before the
+ * maneuver, converted to distance at the current speed, so it self-adapts: a
+ * short window in the city and a long one on the motorway (up to
+ * `maxLeadSeconds`), where you need more warning to change lanes for an exit.
+ * The lead grows from `leadSeconds` at the reference speed to `maxLeadSeconds`
+ * at `highSpeedMps`, floored at `minMeters` so a near-stop still shows in time.
  */
-export function laneGuidanceTriggerMeters(mode: TravelMode, currentSpeedMps: number): number {
-  const options = navOptionsForMode(mode);
-  const referenceSpeed = options.voice.refSpeedMps;
-  const speedRatio = Math.max(currentSpeedMps, referenceSpeed) / referenceSpeed;
-  return options.laneGuidanceMeters * Math.min(speedRatio, 3);
+export function guidanceApproachMeters(mode: TravelMode, currentSpeedMps: number): number {
+  const { guidance: g, voice } = navOptionsForMode(mode);
+  const low = voice.refSpeedMps;
+  const span = Math.max(g.highSpeedMps - low, 1e-6);
+  const t = Math.min(Math.max((currentSpeedMps - low) / span, 0), 1);
+  const leadSeconds = g.leadSeconds + t * (g.maxLeadSeconds - g.leadSeconds);
+  return Math.max(g.minMeters, Math.max(currentSpeedMps, 0) * leadSeconds);
+}
+
+/**
+ * Whether to preview the maneuver *after* the upcoming one ("Then …"). Two
+ * conditions: we're inside the approach window for the current maneuver (so it's
+ * relevant at all — not shown with many km still to go), AND the following
+ * maneuver comes soon after it (`nextStep.duration ≤ chainSeconds`), so the
+ * chain is worth previewing rather than two far-apart turns. Falls back to a
+ * distance gap when the engine omits the next step's duration.
+ */
+export function shouldPreviewNextStep(
+  mode: TravelMode,
+  currentSpeedMps: number,
+  distanceToManeuver: number,
+  nextStepDurationSec: number,
+  nextStepDistanceMeters?: number,
+): boolean {
+  if (distanceToManeuver > guidanceApproachMeters(mode, currentSpeedMps)) return false;
+  const { guidance: g, voice } = navOptionsForMode(mode);
+  if (Number.isFinite(nextStepDurationSec) && nextStepDurationSec > 0) {
+    return nextStepDurationSec <= g.chainSeconds;
+  }
+  return (nextStepDistanceMeters ?? Number.POSITIVE_INFINITY) <= g.chainSeconds * voice.refSpeedMps;
 }
 
 /** Normalize a lane/turn token: trim, lowercase, underscores → spaces. */
