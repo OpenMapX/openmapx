@@ -36,5 +36,6 @@ export {
 } from "./useTransitPlanningCapabilities";
 export { useTransitRoute } from "./useTransitRoute";
 export { useTransitStops } from "./useTransitStops";
+export { useTransitVehicleRadar } from "./useTransitVehicleRadar";
 export { useVehicleJourney } from "./useVehicleJourney";
 export { useVehiclePositions } from "./useVehiclePositions";

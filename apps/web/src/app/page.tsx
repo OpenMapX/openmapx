@@ -28,6 +28,7 @@ import { SelectedStopInfrastructureLayer } from "@/components/map/layers/Selecte
 import { TransitItineraryLayer } from "@/components/map/layers/TransitItineraryLayer";
 import { TransitRouteLayer } from "@/components/map/layers/TransitRouteLayer";
 import { TransitVehicleLayer } from "@/components/map/layers/TransitVehicleLayer";
+import { TransitVehicleRadarLayer } from "@/components/map/layers/TransitVehicleRadarLayer";
 import { VehicleLiveLayer } from "@/components/map/layers/VehicleLiveLayer";
 import { MapAttributionPositioner } from "@/components/map/MapAttributionPositioner";
 import { MapCanvas } from "@/components/map/MapCanvas";
@@ -147,6 +148,7 @@ export default function HomePage() {
           <VehicleLiveLayer />
           <TransitItineraryLayer />
           <TransitVehicleLayer />
+          <TransitVehicleRadarLayer />
           <CategoryResultMarkers />
           <DataSourceLayer />
           <SavedPlacesLayer />

@@ -481,6 +481,13 @@ export function setupLocal(ctx: IntegrationContext): void {
         await motis.getReachable(transitousInstance, lat, lng, maxMinutes, { modes }),
       );
     },
+    async getVehicleRadar(bbox) {
+      if (await isMotisReachableCached()) {
+        return wrapLocalRT(await motis.getVehicleRadar(motisLocalInstance, bbox));
+      }
+      requireHostedFallback();
+      return wrapTransitousRT(await motis.getVehicleRadar(transitousInstance, bbox));
+    },
   });
 }
 

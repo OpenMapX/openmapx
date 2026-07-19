@@ -491,6 +491,8 @@ export interface VehiclePosition {
   lng: number;
   bearing?: number;
   speed?: number;
+  /** Vehicle's transport mode, for map icon/colour. */
+  mode?: TransportMode;
   label?: string;
   currentStopId?: string;
   currentStopSequence?: number;
