@@ -25,6 +25,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { RemarkChip } from "@/components/panels/transit/RemarkChip";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
+import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
 import { TEAL, TEAL_HEX } from "@/lib/theme";
 import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
@@ -382,6 +383,8 @@ export function TransitItineraryCard({
             disabled={refreshMutation.isPending}
             onClick={async (e) => {
               e.stopPropagation();
+              // Unlock TTS from this gesture so board/alight cues can speak on iOS.
+              primeSpeechSynthesis();
               const plannedAt = itinerary.refreshedAt ?? itinerary.plannedAt;
               const oldEnough = !plannedAt || Date.now() - new Date(plannedAt).getTime() >= 60_000;
               if (itinerary.refreshToken && oldEnough) {

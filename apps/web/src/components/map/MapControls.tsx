@@ -34,11 +34,12 @@ export function MapControls() {
   const navKind = useNavigationStore((s) => s.kind);
   const navCameraMode = useNavigationStore((s) => s.cameraMode);
   const setCameraMode = useNavigationStore((s) => s.setCameraMode);
-  // Voice guidance toggle rides this stack during ground navigation (transit has
-  // no voice); its counterpart, search-along-route, sits in the nav bottom bar.
+  // Voice guidance toggle rides this stack during navigation (both ground
+  // maneuvers and transit board/alight/alert cues); its counterpart,
+  // search-along-route, sits in the ground nav bottom bar.
   const voiceEnabled = useNavigationStore((s) => s.voiceEnabled);
   const toggleVoice = useNavigationStore((s) => s.toggleVoice);
-  const showVoiceButton = navigating && navKind === "ground";
+  const showVoiceButton = navigating && (navKind === "ground" || navKind === "transit");
   const bearing = useMapStore((s) => s.bearing);
   const pitch = useMapStore((s) => s.pitch);
   const handleMyLocation = useMyLocation();

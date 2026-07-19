@@ -1,12 +1,14 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import type { TransitProgress } from "@openmapx/core";
+import { type TransitProgress, useNavigationStore } from "@openmapx/core";
 import type { ServiceAlert, TripItinerary } from "@openmapx/mobility-core/transit";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
+import { useEffect } from "react";
 import { AlertCard } from "@/components/panels/transit/AlertCard";
 import { changedFromPlatform } from "@/lib/navigation/platformChange";
 import { collectActiveAlerts } from "@/lib/navigation/transitAlerts";
+import { useNavigationVoice } from "@/lib/navigation/useNavigationVoice";
 
 /** Cap so a noisy feed can't push the banner over the map. */
 const MAX_CARDS = 2;
@@ -27,6 +29,9 @@ export function TransitAlertBanner({
   transitProgress: TransitProgress | null;
 }) {
   const t = useTranslations("navigation");
+  const locale = useLocale();
+  const speak = useNavigationVoice(locale);
+  const voiceEnabled = useNavigationStore((s) => s.voiceEnabled);
   const legs = itinerary.legs;
   const alerts = collectActiveAlerts(legs, currentLegIndex);
 
@@ -73,6 +78,16 @@ export function TransitAlertBanner({
   cards.push(...alerts);
 
   const shown = cards.slice(0, MAX_CARDS);
+
+  // Announce the most urgent alert once (keyed on its id), using the feed's
+  // TTS-optimized text when present. Effect must precede the early return.
+  const topAlert = shown[0];
+  const topId = topAlert?.id;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: announce once per distinct alert.
+  useEffect(() => {
+    if (topAlert && voiceEnabled) speak(topAlert.ttsTitle ?? topAlert.title);
+  }, [topId]);
+
   if (shown.length === 0) return null;
 
   return (

@@ -4,9 +4,14 @@ import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
 import NotificationImportantIcon from "@mui/icons-material/NotificationImportant";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { stopsUntilAlight, type TransitProgress, useVehicleJourney } from "@openmapx/core";
+import {
+  stopsUntilAlight,
+  type TransitProgress,
+  useNavigationStore,
+  useVehicleJourney,
+} from "@openmapx/core";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
@@ -14,6 +19,7 @@ import { haptics } from "@/lib/haptics";
 import { sliceJourneyToLeg } from "@/lib/navigation/legJourneyStops";
 import { changedFromPlatform } from "@/lib/navigation/platformChange";
 import type { TransitTransfer } from "@/lib/navigation/transitTransfer";
+import { useNavigationVoice } from "@/lib/navigation/useNavigationVoice";
 import { NavBannerShell } from "./NavBannerShell";
 import { PlatformBadge } from "./PlatformBadge";
 import { TransitTransferCard } from "./TransitTransferCard";
@@ -57,9 +63,13 @@ export function TransitLegBanner({
   transfer?: TransitTransfer | null;
 }) {
   const t = useTranslations("navigation");
+  const locale = useLocale();
+  const speak = useNavigationVoice(locale);
+  const voiceEnabled = useNavigationStore((s) => s.voiceEnabled);
   const isTransitLeg = leg.mode !== "walking" && !!leg.route;
   const { data: journey } = useVehicleJourney(isTransitLeg ? (leg.tripId ?? null) : null);
   const alertedRef = useRef(false);
+  const line = leg.route?.shortName || leg.route?.longName || "";
 
   const legStops =
     isTransitLeg && journey?.stops && transitProgress ? legStopsFor(journey.stops, leg) : [];
@@ -80,16 +90,40 @@ export function TransitLegBanner({
   // Prefer the live vehicle's crowding, falling back to the planned leg value.
   const occupancy = journey?.occupancy ?? leg.occupancy;
 
-  // Fire the haptic pulse once per entry into the alight window; reset when we
-  // leave it so a re-entry can buzz again.
+  // Fire the haptic pulse — and, when voice is on, the alight/transfer cue —
+  // once per entry into the alight window; reset when we leave it so a re-entry
+  // can announce again.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: announce on the alightSoon transition only.
   useEffect(() => {
     if (alightSoon && !alertedRef.current) {
       alertedRef.current = true;
       haptics.warn();
+      if (voiceEnabled) {
+        speak(
+          transfer
+            ? t("voiceTransfer", {
+                stop: leg.to.name,
+                line: transfer.nextLeg.route?.shortName || transfer.nextLeg.route?.longName || "",
+              })
+            : t("voiceAlight", { stop: leg.to.name }),
+        );
+      }
     } else if (!alightSoon) {
       alertedRef.current = false;
     }
   }, [alightSoon]);
+
+  // Speak the boarding cue once when a transit leg becomes current, before you've
+  // boarded (it's moot once under way).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: announce once per leg (keyed on tripId).
+  useEffect(() => {
+    if (!isTransitLeg || !voiceEnabled || departed) return;
+    speak(
+      boardingPlatform
+        ? t("voiceBoardPlatform", { line, destination: leg.to.name, platform: boardingPlatform })
+        : t("voiceBoard", { line, destination: leg.to.name }),
+    );
+  }, [leg.tripId]);
 
   const leading =
     leg.mode === "walking" || !leg.route ? (
