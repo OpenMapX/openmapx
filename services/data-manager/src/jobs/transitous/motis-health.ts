@@ -6,7 +6,11 @@ import { parseIntEnv, pollUntilHealthy } from "./motis-probe.js";
 import type { StageFn, StageResult } from "./types.js";
 
 const DEFAULT_STAGING_URL = "http://localhost:8082";
-const DEFAULT_IMPORT_TIMEOUT_MS = 30 * 60_000;
+// 60 min: a route_shapes-augmented dataset is much larger, so staging MOTIS
+// takes longer to load it before it answers health probes. Override with
+// MOTIS_IMPORT_TIMEOUT_MS. The poll exits as soon as staging is healthy, so a
+// fast (no-route_shapes) load still passes quickly — this only raises the ceiling.
+const DEFAULT_IMPORT_TIMEOUT_MS = 60 * 60_000;
 const FUNCTIONAL_BUDGET_MS = 60_000;
 
 /** Poll staging liveness, then apply the exact same typed capability gate used after activation. */

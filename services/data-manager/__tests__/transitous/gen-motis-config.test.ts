@@ -288,9 +288,10 @@ describe("gen-motis-config route_shapes override", () => {
     const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
     expect(result.artifacts).toMatchObject({ routeShapesOverridden: true });
     const written = readFileSync(fx.configPath, "utf-8");
-    // Nested one level under timetable (2-space indent), directly after with_shapes.
+    // Nested one level under timetable (2-space indent), directly after
+    // with_shapes: mode, a rail-scoped clasz block, then the max_stops safeguard.
     expect(written).toMatch(
-      /^ {2}with_shapes: true\n {2}route_shapes:\n {4}mode: missing\n {4}max_stops: 100$/m,
+      /^ {2}with_shapes: true\n {2}route_shapes:\n {4}mode: missing\n {4}clasz:\n {6}BUS: false\n {6}COACH: false\n {4}max_stops: 300$/m,
     );
   });
 

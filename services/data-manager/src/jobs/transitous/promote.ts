@@ -21,10 +21,12 @@ const STAGING_URL = process.env.MOTIS_STAGING_URL ?? "http://localhost:8082";
 const SMOKE_BUDGET_MS = 30_000;
 // How long to wait for the primary to come back healthy after the swap+restart.
 // The restarted container re-loads the promoted dataset before it binds its
-// server — for a real region (e.g. Germany) that's several minutes, so a tight
-// budget false-times-out and triggers an unnecessary rollback of a good build.
+// server — for a real region (e.g. Germany) that's several minutes, and a
+// route_shapes-augmented dataset is larger still, so a tight budget false-times-
+// out and triggers an unnecessary rollback of a good build. 60 min; the check
+// exits as soon as the primary is healthy, so a fast load isn't penalised.
 // Override with MOTIS_PROMOTE_RESTART_TIMEOUT_MS.
-const RESTART_BUDGET_MS = parseIntEnv("MOTIS_PROMOTE_RESTART_TIMEOUT_MS", 20 * 60 * 1000);
+const RESTART_BUDGET_MS = parseIntEnv("MOTIS_PROMOTE_RESTART_TIMEOUT_MS", 60 * 60 * 1000);
 const RESTART_POLL_INTERVAL_MS = 5_000;
 
 /**

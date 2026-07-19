@@ -181,11 +181,17 @@ export function applyOsrFootpathOverride(configPath: string, logger: JobLogger):
  * `all` (recompute every route); `true` is treated as `missing`.
  *
  * Requires `with_shapes: true`, `street_routing: true` and an `osm:` extract —
- * all already set on this deployment. It costs extra import time and RAM (every
- * shape-less trip is routed on the OSM graph), so validate on `motis-staging`
- * before promoting; `max_stops` caps pathologically long routes. The block is
- * inserted after the `with_shapes: true` line so it nests inside `timetable:` at
- * the right indent, and is skipped when a `route_shapes:` block already exists.
+ * all already set on this deployment. Computation is scoped to keep it viable at
+ * scale: `clasz` disables road classes (`BUS`, `COACH`) — buses roughly follow
+ * roads so stop-connected segments read fine, and they vastly outnumber rail, so
+ * matching them all would explode compute (especially beyond a single country).
+ * Rail is where a straight cross-country line is egregiously wrong, so only rail
+ * classes are routed. `max_stops` is a safeguard that skips pathologically long
+ * routes (well above any real rail line) rather than a scoping knob. Still costs
+ * extra import time and dataset load, so validate on `motis-staging` before
+ * promoting. The block is inserted after the `with_shapes: true` line so it nests
+ * inside `timetable:` at the right indent, and is skipped when a `route_shapes:`
+ * block already exists.
  *
  * Returns `true` iff the file was modified.
  */
@@ -227,9 +233,18 @@ export function applyRouteShapesOverride(configPath: string, logger: JobLogger):
   }
   const indent = match[1];
   const child = `${indent}  `;
-  const block = [`${indent}route_shapes:`, `${child}mode: ${mode}`, `${child}max_stops: 100`].join(
-    "\n",
-  );
+  const grandchild = `${child}  `;
+  // Rail-scoped: skip road classes (buses/coaches follow roads and dwarf rail in
+  // count) and cap pathologically long routes. `max_stops` is generous — real
+  // rail lines, even slow all-stations regionals, stay well under it.
+  const block = [
+    `${indent}route_shapes:`,
+    `${child}mode: ${mode}`,
+    `${child}clasz:`,
+    `${grandchild}BUS: false`,
+    `${grandchild}COACH: false`,
+    `${child}max_stops: 300`,
+  ].join("\n");
   const next = text.replace(re, (line) => `${line}\n${block}`);
   if (next === text) return false;
   try {
