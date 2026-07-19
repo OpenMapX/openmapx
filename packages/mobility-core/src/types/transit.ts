@@ -207,7 +207,7 @@ export interface TransitIntermodalLeg {
 
 export interface Departure {
   tripId: string;
-  route: Pick<TransitRoute, "id" | "shortName" | "longName" | "mode" | "color">;
+  route: Pick<TransitRoute, "id" | "shortName" | "longName" | "mode" | "color" | "textColor">;
   headsign: string;
   scheduledAt: string;
   expectedAt?: string;
@@ -359,7 +359,7 @@ export interface TripLeg {
   scheduledEndTime?: string;
   from: TransitPlace;
   to: TransitPlace;
-  route?: Pick<TransitRoute, "shortName" | "longName" | "color">;
+  route?: Pick<TransitRoute, "shortName" | "longName" | "color" | "textColor">;
   /**
    * Destination sign shown on the vehicle (MOTIS `Leg.headsign`), e.g. the
    * "towards …" text riders match against at the platform. Transit legs only.

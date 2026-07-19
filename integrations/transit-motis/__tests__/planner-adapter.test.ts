@@ -199,6 +199,9 @@ describe("MOTIS planner request mapping", () => {
       url: "https://example.test/alert",
       affectedRouteIds: [],
     });
+    // Route text colour kept (hash-stripped) for readable pill contrast.
+    expect(leg?.route?.color).toBe("0000ff");
+    expect(leg?.route?.textColor).toBe("ffffff");
   });
 
   it("preserves MOTIS identifiers, paging, levels, steps, flags, elevation, and rental returns", async () => {

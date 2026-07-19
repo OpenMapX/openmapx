@@ -267,6 +267,7 @@ export function normalizeStoptime(
       longName: st.routeLongName ?? "",
       mode: motisMode(st.mode),
       color: st.routeColor?.replace(/^#/, "") ?? undefined,
+      textColor: st.routeTextColor?.replace(/^#/, "") ?? undefined,
     },
     headsign: st.headsign ?? "",
     scheduledAt,
@@ -544,6 +545,7 @@ function mapLeg(instance: MotisInstance, leg: Leg): TripLeg {
           shortName: leg.displayName ?? leg.routeShortName ?? leg.tripShortName ?? "",
           longName: leg.routeLongName ?? "",
           color: leg.routeColor?.replace(/^#/, "") ?? undefined,
+          textColor: leg.routeTextColor?.replace(/^#/, "") ?? undefined,
         }
       : undefined,
     headsign: isTransit ? (leg.headsign ?? undefined) : undefined,
