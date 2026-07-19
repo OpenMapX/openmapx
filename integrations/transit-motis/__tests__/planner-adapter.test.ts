@@ -180,6 +180,12 @@ describe("MOTIS planner request mapping", () => {
     const mapped = await planTrip(instance, 1, 2, 3, 4, "2026-07-15", "10:00:00");
     const leg = mapped?.itineraries[0]?.legs[0];
     expect(leg?.headsign).toBe("Köln Messe/Deutz");
+    // Realtime track wins for the displayed platform, but the scheduled track
+    // is kept separately so a platform change (5 → 3) is derivable.
+    expect(leg?.from.platformCode).toBe("3");
+    expect(leg?.from.scheduledPlatformCode).toBe("5");
+    expect(leg?.to.platformCode).toBe("9");
+    expect(leg?.to.scheduledPlatformCode).toBe("9");
   });
 
   it("preserves MOTIS identifiers, paging, levels, steps, flags, elevation, and rental returns", async () => {

@@ -255,6 +255,7 @@ export function normalizeStoptime(
   }
 
   const platform = (place.track ?? place.scheduledTrack ?? undefined) as string | undefined;
+  const scheduledPlatform = (place.scheduledTrack ?? undefined) as string | undefined;
 
   return {
     tripId: st.tripId ? `${instance.prefix}${st.tripId}` : "",
@@ -270,6 +271,7 @@ export function normalizeStoptime(
     expectedAt,
     delaySeconds,
     platform,
+    scheduledPlatform,
     canceled: st.cancelled || st.tripCancelled || false,
     provenance: {
       baselineSource: instance.provider === "ms" ? "transit-motis-local" : "transitous",
@@ -494,6 +496,7 @@ function mapLeg(instance: MotisInstance, leg: Leg): TripLeg {
       stopId: fromPlace.stopId ? `${instance.prefix}${fromPlace.stopId}` : undefined,
       level: fromPlace.level,
       platformCode: fromPlace.track ?? fromPlace.scheduledTrack ?? undefined,
+      scheduledPlatformCode: fromPlace.scheduledTrack ?? undefined,
     },
     to: {
       name: toPlace.name ?? "",
@@ -502,6 +505,7 @@ function mapLeg(instance: MotisInstance, leg: Leg): TripLeg {
       stopId: toPlace.stopId ? `${instance.prefix}${toPlace.stopId}` : undefined,
       level: toPlace.level,
       platformCode: toPlace.track ?? toPlace.scheduledTrack ?? undefined,
+      scheduledPlatformCode: toPlace.scheduledTrack ?? undefined,
     },
     route: isTransit
       ? {
@@ -830,6 +834,7 @@ export function motisPlaceToJourneyStop(instance: MotisInstance, place: Place): 
     lat: place.lat ?? 0,
     lng: place.lon ?? 0,
     platform: (place.track ?? place.scheduledTrack ?? undefined) as string | undefined,
+    scheduledPlatform: (place.scheduledTrack ?? undefined) as string | undefined,
     scheduledArrival: place.scheduledArrival ?? undefined,
     scheduledDeparture: place.scheduledDeparture ?? undefined,
     expectedArrival: place.arrival ?? undefined,

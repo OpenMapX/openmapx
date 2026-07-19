@@ -213,6 +213,8 @@ export interface Departure {
   expectedAt?: string;
   delaySeconds?: number;
   platform?: string;
+  /** Scheduled platform/track; distinct from {@link platform} to flag changes. */
+  scheduledPlatform?: string;
   canceled?: boolean;
   occupancy?: OccupancyLevel;
   formation?: TransitFormationReference[];
@@ -290,7 +292,14 @@ export interface TransitPlace {
   stopId?: string;
   /** OSM floor/level. Absence is distinct from ground level (0). */
   level?: number;
+  /** Current platform/track (realtime if available, else scheduled). */
   platformCode?: string;
+  /**
+   * Scheduled platform/track from the static timetable. Kept distinct from
+   * {@link platformCode} so a realtime platform change is derivable
+   * (`platformCode !== scheduledPlatformCode`).
+   */
+  scheduledPlatformCode?: string;
 }
 
 export interface TransitStep {
@@ -477,6 +486,8 @@ export interface VehicleJourneyStop {
   lat: number;
   lng: number;
   platform?: string;
+  /** Scheduled platform/track; distinct from {@link platform} to flag changes. */
+  scheduledPlatform?: string;
   scheduledArrival?: string;
   scheduledDeparture?: string;
   expectedArrival?: string;
