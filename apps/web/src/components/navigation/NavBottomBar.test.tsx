@@ -28,9 +28,6 @@ describe("NavBottomBar", () => {
         distanceRemaining={1200}
         durationRemaining={300}
         etaEpochMs={0}
-        keepScreenOn
-        onToggleKeepScreenOn={() => {}}
-        onOverview={() => {}}
         onEnd={() => {}}
         units="metric"
       />,
@@ -40,19 +37,14 @@ describe("NavBottomBar", () => {
     expect(html).toContain("end"); // i18n key passthrough
   });
 
-  it("exposes a more-options menu trigger", () => {
-    const html = renderToStaticMarkup(
-      <NavBottomBar
-        distanceRemaining={1200}
-        durationRemaining={300}
-        etaEpochMs={0}
-        keepScreenOn
-        onToggleKeepScreenOn={() => {}}
-        onOverview={() => {}}
-        onEnd={() => {}}
-        units="metric"
-      />,
+  it("shows the search button only when onSearch is given", () => {
+    const without = renderToStaticMarkup(
+      <NavBottomBar durationRemaining={300} etaEpochMs={0} onEnd={() => {}} />,
     );
-    expect(html).toContain("moreOptions"); // overflow trigger aria-label
+    expect(without).not.toContain("searchAlongRoute");
+    const withSearch = renderToStaticMarkup(
+      <NavBottomBar durationRemaining={300} etaEpochMs={0} onEnd={() => {}} onSearch={() => {}} />,
+    );
+    expect(withSearch).toContain("searchAlongRoute"); // search aria-label
   });
 });

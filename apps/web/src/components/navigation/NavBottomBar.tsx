@@ -1,39 +1,32 @@
 "use client";
 
 import CloseIcon from "@mui/icons-material/Close";
-import MapIcon from "@mui/icons-material/Map";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import ScreenLockPortraitIcon from "@mui/icons-material/ScreenLockPortrait";
 import SearchIcon from "@mui/icons-material/Search";
 import Box from "@mui/material/Box";
-import Checkbox from "@mui/material/Checkbox";
 import IconButton from "@mui/material/IconButton";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import ListItemText from "@mui/material/ListItemText";
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 import { formatDuration, formatMeasurementDistance } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { type ReactNode, useState } from "react";
+import type { ReactNode } from "react";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 
 interface Props {
   durationRemaining: number;
   etaEpochMs: number;
-  keepScreenOn: boolean;
-  onToggleKeepScreenOn: () => void;
   onEnd: () => void;
   /** Distance remaining; omit for transit, which has no single trip distance. */
   distanceRemaining?: number;
   units?: "metric" | "imperial";
-  /** Overview action; omit to drop the "Route overview" menu item. */
-  onOverview?: () => void;
   /** Search-along-route action; omit to hide the search button (transit has none). */
   onSearch?: () => void;
   /**
-   * Overrides the default secondary line ("{distance} · ETA {time}"). Transit
-   * passes its own "Arrive {time}" here since it shows no distance.
+   * Trailing control for revealing the nav menu (a chevron on desktop). On
+   * mobile the menu is reached by dragging the sheet, so this is omitted.
+   */
+  menuToggle?: ReactNode;
+  /**
+   * Overrides the default secondary line ("{distance} · {time}"). Transit passes
+   * its own "Arrive {time}" here since it shows no distance.
    */
   secondary?: ReactNode;
 }
@@ -41,18 +34,15 @@ interface Props {
 export function NavBottomBar({
   durationRemaining,
   etaEpochMs,
-  keepScreenOn,
-  onToggleKeepScreenOn,
   onEnd,
   distanceRemaining,
   units = "metric",
-  onOverview,
   onSearch,
+  menuToggle,
   secondary,
 }: Props) {
   const t = useTranslations("navigation");
   const fmt = useDateTimeFormat();
-  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   // Just the arrival time — no "ETA"/"Ankunft" label, to keep the bar terse.
   const etaTime = fmt.time(etaEpochMs);
   const secondaryLine =
@@ -60,8 +50,6 @@ export function NavBottomBar({
     (distanceRemaining != null
       ? `${formatMeasurementDistance(distanceRemaining, units)} · ${etaTime}`
       : etaTime);
-
-  const closeMenu = () => setMenuAnchor(null);
 
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 1.5 }}>
@@ -103,35 +91,7 @@ export function NavBottomBar({
           <SearchIcon />
         </IconButton>
       )}
-      <IconButton
-        onClick={(e) => setMenuAnchor(e.currentTarget)}
-        aria-label={t("moreOptions")}
-        aria-haspopup="menu"
-      >
-        <MoreVertIcon />
-      </IconButton>
-      <Menu anchorEl={menuAnchor} open={menuAnchor !== null} onClose={closeMenu}>
-        {onOverview && (
-          <MenuItem
-            onClick={() => {
-              onOverview();
-              closeMenu();
-            }}
-          >
-            <ListItemIcon>
-              <MapIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>{t("overview")}</ListItemText>
-          </MenuItem>
-        )}
-        <MenuItem onClick={() => onToggleKeepScreenOn()}>
-          <ListItemIcon>
-            <ScreenLockPortraitIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>{t("keepScreenOn")}</ListItemText>
-          <Checkbox edge="end" checked={keepScreenOn} tabIndex={-1} disableRipple />
-        </MenuItem>
-      </Menu>
+      {menuToggle}
     </Box>
   );
 }

@@ -3,7 +3,6 @@
 import ApartmentIcon from "@mui/icons-material/Apartment";
 import ListAltIcon from "@mui/icons-material/ListAlt";
 import MapIcon from "@mui/icons-material/Map";
-import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 import SatelliteAltIcon from "@mui/icons-material/SatelliteAlt";
 import ScreenLockPortraitIcon from "@mui/icons-material/ScreenLockPortrait";
 import SettingsIcon from "@mui/icons-material/Settings";
@@ -82,26 +81,20 @@ function OverlayToggleRow({
 }
 
 export interface NavMenuProps {
-  crowdReportsEnabled: boolean;
-  onAddReport: () => void;
   onOpenDirections: () => void;
   onOverview: () => void;
   onOpenSettings: () => void;
 }
 
 /**
- * The navigation menu: actions (report, directions, overview), map-overlay
- * toggles (traffic, satellite, raised buildings), keep-screen-on, and settings.
+ * The navigation menu: actions (directions, overview), map-overlay toggles
+ * (traffic, satellite, raised buildings), keep-screen-on, and settings.
  * Presentational — the container (sheet on mobile, panel on desktop) owns
- * layout; this owns the rows and their store wiring.
+ * layout; this owns the rows and their store wiring. Reporting stays the amber
+ * FAB in the map controls (the crowd-reports integration is kept out of this
+ * program), so it isn't duplicated here.
  */
-export function NavMenu({
-  crowdReportsEnabled,
-  onAddReport,
-  onOpenDirections,
-  onOverview,
-  onOpenSettings,
-}: NavMenuProps) {
+export function NavMenu({ onOpenDirections, onOverview, onOpenSettings }: NavMenuProps) {
   const t = useTranslations("navigation");
   const keepScreenOn = useNavigationStore((s) => s.keepScreenOn);
   const toggleKeepScreenOn = useNavigationStore((s) => s.toggleKeepScreenOn);
@@ -110,13 +103,6 @@ export function NavMenu({
 
   return (
     <List disablePadding>
-      {crowdReportsEnabled && (
-        <ActionRow
-          icon={<ReportProblemOutlinedIcon sx={{ color: "#f9a825" }} />}
-          label={t("menu.addReport")}
-          onClick={onAddReport}
-        />
-      )}
       <ActionRow icon={<ListAltIcon />} label={t("menu.directions")} onClick={onOpenDirections} />
       <ActionRow icon={<MapIcon />} label={t("overview")} onClick={onOverview} />
 

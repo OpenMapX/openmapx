@@ -1,6 +1,10 @@
 "use client";
 
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Box from "@mui/material/Box";
+import Collapse from "@mui/material/Collapse";
+import IconButton from "@mui/material/IconButton";
 import Snackbar from "@mui/material/Snackbar";
 import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
@@ -16,6 +20,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
+import { SettingsDialog } from "@/components/settings/SettingsDialog";
 import { useMapOptional } from "@/lib/MapContext";
 import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
 import { useNavAlerts } from "@/lib/navigation/useNavAlerts";
@@ -27,6 +32,8 @@ import { ArrivalCard } from "./ArrivalCard";
 import { ManeuverBanner } from "./ManeuverBanner";
 import { NavBottomBar } from "./NavBottomBar";
 import { NavBottomSheet } from "./NavBottomSheet";
+import { NavDirectionsDialog } from "./NavDirectionsDialog";
+import { NavMenu } from "./NavMenu";
 import { NavSimControl } from "./NavSimControl";
 import { RouteSearchControl } from "./RouteSearchControl";
 import { SpeedLimitBadge } from "./SpeedLimitBadge";
@@ -42,7 +49,6 @@ export function NavigationView() {
   const rerouteFailedNonce = useNavigationStore((s) => s.rerouteFailedNonce);
   const currentSpeedLimit = useNavigationStore((s) => s.currentSpeedLimit);
   const keepScreenOn = useNavigationStore((s) => s.keepScreenOn);
-  const toggleKeepScreenOn = useNavigationStore((s) => s.toggleKeepScreenOn);
   const setCameraMode = useNavigationStore((s) => s.setCameraMode);
   const stopNavigation = useNavigationStore((s) => s.stopNavigation);
   const openRouteSearch = useRouteSearchStore((s) => s.openPicker);
@@ -62,6 +68,9 @@ export function NavigationView() {
   const activeAlert = useNavAlerts();
 
   const [rerouteToastOpen, setRerouteToastOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [directionsOpen, setDirectionsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   useEffect(() => {
     if (rerouteFailedNonce > 0) setRerouteToastOpen(true);
   }, [rerouteFailedNonce]);
@@ -116,18 +125,42 @@ export function NavigationView() {
     );
   };
 
-  const navBar = route && (
-    <NavBottomBar
-      distanceRemaining={distanceRemaining}
-      durationRemaining={durationRemaining}
-      etaEpochMs={etaEpochMs}
-      keepScreenOn={keepScreenOn}
-      onToggleKeepScreenOn={toggleKeepScreenOn}
-      onOverview={handleOverview}
-      onSearch={routeSearchOpen ? undefined : openRouteSearch}
-      onEnd={stopNavigation}
-      units={units}
-    />
+  const navPanel = route && (
+    <>
+      <NavBottomBar
+        distanceRemaining={distanceRemaining}
+        durationRemaining={durationRemaining}
+        etaEpochMs={etaEpochMs}
+        onSearch={routeSearchOpen ? undefined : openRouteSearch}
+        onEnd={stopNavigation}
+        units={units}
+        menuToggle={
+          <IconButton
+            onClick={() => setMenuOpen((o) => !o)}
+            aria-label={t("moreOptions")}
+            aria-expanded={menuOpen}
+          >
+            {menuOpen ? <ExpandMoreIcon /> : <ExpandLessIcon />}
+          </IconButton>
+        }
+      />
+      <Collapse in={menuOpen} unmountOnExit>
+        <NavMenu
+          onOpenDirections={() => {
+            setMenuOpen(false);
+            setDirectionsOpen(true);
+          }}
+          onOverview={() => {
+            setMenuOpen(false);
+            handleOverview();
+          }}
+          onOpenSettings={() => {
+            setMenuOpen(false);
+            setSettingsOpen(true);
+          }}
+        />
+      </Collapse>
+    </>
   );
 
   return (
@@ -224,9 +257,9 @@ export function NavigationView() {
                 />
               </Box>
             )}
-            {navBar &&
+            {navPanel &&
               (isMobile ? (
-                <NavBottomSheet>{navBar}</NavBottomSheet>
+                <NavBottomSheet onToggle={() => setMenuOpen((o) => !o)}>{navPanel}</NavBottomSheet>
               ) : (
                 <Box
                   sx={{
@@ -240,7 +273,7 @@ export function NavigationView() {
                     boxShadow: 6,
                   }}
                 >
-                  {navBar}
+                  {navPanel}
                 </Box>
               ))}
           </Box>
@@ -252,6 +285,15 @@ export function NavigationView() {
         onClose={() => setRerouteToastOpen(false)}
         message={t("rerouteFailed")}
       />
+      {route && (
+        <NavDirectionsDialog
+          open={directionsOpen}
+          onClose={() => setDirectionsOpen(false)}
+          route={route}
+          units={units}
+        />
+      )}
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </Box>
   );
 }

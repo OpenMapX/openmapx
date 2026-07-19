@@ -15,7 +15,6 @@ vi.mock("@openmapx/core", () => ({
 import { NavMenu } from "./NavMenu";
 
 const baseProps = {
-  onAddReport: () => {},
   onOpenDirections: () => {},
   onOverview: () => {},
   onOpenSettings: () => {},
@@ -23,7 +22,7 @@ const baseProps = {
 
 describe("NavMenu", () => {
   it("renders the core rows and always-available toggles", () => {
-    const html = renderToStaticMarkup(<NavMenu crowdReportsEnabled={false} {...baseProps} />);
+    const html = renderToStaticMarkup(<NavMenu {...baseProps} />);
     expect(html).toContain("menu.directions");
     expect(html).toContain("overview");
     expect(html).toContain("menu.showSatellite");
@@ -31,15 +30,8 @@ describe("NavMenu", () => {
     expect(html).toContain("menu.settings");
   });
 
-  it("hides the report row unless crowd-reports is enabled", () => {
-    const off = renderToStaticMarkup(<NavMenu crowdReportsEnabled={false} {...baseProps} />);
-    expect(off).not.toContain("menu.addReport");
-    const on = renderToStaticMarkup(<NavMenu crowdReportsEnabled={true} {...baseProps} />);
-    expect(on).toContain("menu.addReport");
-  });
-
   it("hides overlay toggles whose integration isn't registered", () => {
-    const html = renderToStaticMarkup(<NavMenu crowdReportsEnabled={false} {...baseProps} />);
+    const html = renderToStaticMarkup(<NavMenu {...baseProps} />);
     expect(html).not.toContain("menu.showTraffic");
     expect(html).not.toContain("menu.showRaisedBuildings");
   });
