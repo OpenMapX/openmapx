@@ -145,7 +145,11 @@ export function TransitNavigationView() {
                 transfer={transfer}
               />
             )}
-            <TransitAlertBanner itinerary={itinerary} currentLegIndex={currentLegIndex} />
+            <TransitAlertBanner
+              itinerary={itinerary}
+              currentLegIndex={currentLegIndex}
+              transitProgress={transitProgress}
+            />
           </Box>
 
           <Box sx={{ display: "flex", flexDirection: "column" }}>

@@ -7,6 +7,7 @@ import Typography from "@mui/material/Typography";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
+import { changedFromPlatform } from "@/lib/navigation/platformChange";
 import { PlatformBadge } from "./PlatformBadge";
 
 /**
@@ -30,10 +31,7 @@ export function TransitTransferCard({
   const nextHeadsign =
     nextLeg.headsign && nextLeg.headsign !== nextLeg.to.name ? nextLeg.headsign : undefined;
   const boardPlatform = nextLeg.from.platformCode;
-  const platformChanged =
-    !!boardPlatform &&
-    !!nextLeg.from.scheduledPlatformCode &&
-    boardPlatform !== nextLeg.from.scheduledPlatformCode;
+  const platformChanged = !!changedFromPlatform(nextLeg.from);
 
   return (
     <Box

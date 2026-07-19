@@ -11,6 +11,7 @@ import { useEffect, useRef } from "react";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { haptics } from "@/lib/haptics";
 import { sliceJourneyToLeg } from "@/lib/navigation/legJourneyStops";
+import { changedFromPlatform } from "@/lib/navigation/platformChange";
 import type { TransitTransfer } from "@/lib/navigation/transitTransfer";
 import { NavBannerShell } from "./NavBannerShell";
 import { PlatformBadge } from "./PlatformBadge";
@@ -135,7 +136,11 @@ export function TransitLegBanner({
               </Typography>
             )}
             {!departed && boardingPlatform && (
-              <PlatformBadge code={boardingPlatform} tone="onBanner" />
+              <PlatformBadge
+                code={boardingPlatform}
+                tone="onBanner"
+                changed={!!changedFromPlatform(leg.from)}
+              />
             )}
           </Box>
         )}

@@ -67,6 +67,7 @@
     "restOfJourney": "Rest of journey",
     "boardAt": "Board at {place}",
     "legCancelled": "{line} is cancelled",
+    "platformChanged": "{line}: platform {platform} (was {scheduled})",
     "legCounter": "Leg {current}/{total}",
     "arriveAt": "Arrive {time}",
     "delayMinutes": "+{minutes} min",
