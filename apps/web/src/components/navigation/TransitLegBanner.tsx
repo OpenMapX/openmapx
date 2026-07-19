@@ -11,6 +11,7 @@ import { useEffect, useRef } from "react";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { haptics } from "@/lib/haptics";
 import { NavBannerShell } from "./NavBannerShell";
+import { PlatformBadge } from "./PlatformBadge";
 
 /**
  * Slice the full vehicle journey down to the stops for this leg, between the
@@ -67,6 +68,14 @@ export function TransitLegBanner({
       : { nextStopName: null as string | null, stopsRemaining: 0 };
 
   const alightSoon = legStops.length > 0 && stopsRemaining > 0 && stopsRemaining <= 1;
+  // Boarding platform is only relevant until you're on board; once under way the
+  // alight platform (surfaced on the "get off" card) is what matters.
+  const departed = (transitProgress?.fractionAlongLeg ?? 0) > 0.12;
+  const boardingPlatform = leg.from.platformCode;
+  const alightPlatform = leg.to.platformCode;
+  // Show the vehicle's destination sign when it adds information beyond the
+  // alight stop already named in the title.
+  const headsign = leg.headsign && leg.headsign !== leg.to.name ? leg.headsign : undefined;
 
   // Fire the haptic pulse once per entry into the alight window; reset when we
   // leave it so a re-entry can buzz again.
@@ -86,6 +95,7 @@ export function TransitLegBanner({
       <RouteBadge
         shortName={leg.route.shortName}
         color={leg.route.color}
+        textColor={leg.route.textColor}
         mode={leg.mode}
         size="medium"
       />
@@ -118,7 +128,19 @@ export function TransitLegBanner({
         <Typography variant="h6" sx={{ lineHeight: 1.15 }} noWrap>
           {title}
         </Typography>
-        <Typography variant="caption" sx={{ opacity: 0.85 }}>
+        {isTransitLeg && (headsign || (!departed && boardingPlatform)) && (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.25, minWidth: 0 }}>
+            {headsign && (
+              <Typography variant="caption" sx={{ opacity: 0.9 }} noWrap>
+                {t("towards", { headsign })}
+              </Typography>
+            )}
+            {!departed && boardingPlatform && (
+              <PlatformBadge code={boardingPlatform} tone="onBanner" />
+            )}
+          </Box>
+        )}
+        <Typography variant="caption" sx={{ opacity: 0.85, display: "block", mt: 0.25 }}>
           {t("legCounter", { current: legIndex + 1, total: totalLegs })}
         </Typography>
       </NavBannerShell>
@@ -144,9 +166,12 @@ export function TransitLegBanner({
             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
               {t("alightSoon")}
             </Typography>
-            <Typography variant="caption" noWrap>
-              {t("alightAt", { place: leg.to.name })}
-            </Typography>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+              <Typography variant="caption" noWrap>
+                {t("alightAt", { place: leg.to.name })}
+              </Typography>
+              {alightPlatform && <PlatformBadge code={alightPlatform} tone="onBanner" />}
+            </Box>
           </Box>
         </Box>
       )}
