@@ -74,13 +74,21 @@ describe("feed proxy transaction", () => {
     expect(readFileSync(join(fx.active, "conf", "default.conf"), "utf-8")).toBe("old bytes\n");
   });
 
-  it("stops on a same-path route collision instead of risking the primary", async () => {
-    setup(
+  it("takes the candidate value when a route's upstream changed (rotated key/URL)", async () => {
+    // The primary keeps the same /feed/<id> location, now pointing at the
+    // refreshed upstream for the same logical feed — mirroring upstream
+    // Transitous. Rollback still restores the old bytes if the candidate is bad.
+    const fx = setup(
       { same: { url: "https://new.example/feed" } },
       { same: { url: "https://old.example/feed" } },
     );
-    const result = await run(ctx(dataDir()));
-    expect(result.status).toBe("error");
-    expect(result.message).toContain("isolated two-slot proxy host is required");
+    const context = ctx(dataDir());
+    expect((await run(context)).status).toBe("ok");
+    const vars = JSON.parse(readFileSync(join(fx.active, "feed-proxy-vars.json"), "utf-8"));
+    expect(vars.same.url).toBe("https://new.example/feed");
+    await rollbackProxyTransaction(context);
+    expect(JSON.parse(readFileSync(join(fx.active, "feed-proxy-vars.json"), "utf-8"))).toEqual({
+      same: { url: "https://old.example/feed" },
+    });
   });
 });

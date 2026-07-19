@@ -46,18 +46,25 @@ function parseVars(text: string, label: string): FeedProxyVars {
   return normalizeFeedProxyVars(value);
 }
 
-function mergeWithoutAmbiguity(current: FeedProxyVars, candidate: FeedProxyVars): FeedProxyVars {
-  const merged: FeedProxyVars = { ...current };
-  for (const [id, entry] of Object.entries(candidate)) {
-    const old = merged[id];
-    if (old && JSON.stringify(old) !== JSON.stringify(entry)) {
-      throw new Error(
-        `feed-proxy route ${id} changed while the primary still uses it; an isolated two-slot proxy host is required`,
-      );
-    }
-    merged[id] = entry;
-  }
-  return merged;
+/**
+ * Merge the live (`current`) and candidate feed-proxy route maps into the union
+ * the shared nginx serves during the staging overlap window.
+ *
+ * Candidate-only routes are added; current-only routes stay live for the
+ * still-running primary; a route present in both takes the CANDIDATE value.
+ * When a feed's upstream changed (e.g. a rotated `de-CallaBike` key or URL) the
+ * primary keeps the same `/feed/<id>` location — now pointing at the refreshed
+ * upstream for the same logical feed, which is what it wants, since the old
+ * value is the stale one. This mirrors upstream Transitous (re-render + reload
+ * of the one config); the difference is the pipeline still restores the exact
+ * previous bytes on any failure downstream, so a bad candidate self-heals.
+ *
+ * (Earlier this refused a changed route and asked for a "two-slot proxy host"
+ * that was never built, which failed the whole pipeline closed whenever any
+ * feed rotated its credentials.)
+ */
+function mergeFeedProxyVars(current: FeedProxyVars, candidate: FeedProxyVars): FeedProxyVars {
+  return { ...current, ...candidate };
 }
 
 async function validateAndReload(ctx: JobContext): Promise<void> {
@@ -139,7 +146,7 @@ export const run: StageFn = async (ctx) => {
     const previousConfig = readOptional(activeConfigPath);
     const previousVars = readOptional(activeVarsPath);
     const current = parseVars(previousVars.text, activeVarsPath);
-    const union = mergeWithoutAmbiguity(current, candidate);
+    const union = mergeFeedProxyVars(current, candidate);
     const unionConfig = renderFeedProxyNginxConfig(union);
     const unionVars = `${JSON.stringify(Object.fromEntries(Object.entries(union).sort(([a], [b]) => a.localeCompare(b))), null, 2)}\n`;
     const state: ProxyTransactionState = {
