@@ -19,6 +19,7 @@ import {
   setMotisLocalUrl,
   transitousInstance,
 } from "./instances.js";
+import { getRentalFormFactors, primeRentalFormFactors } from "./rentals-capability.js";
 
 let cachedLocalReachable = false;
 let cachedLocalReachableAt = 0;
@@ -285,6 +286,9 @@ export function setupLocal(ctx: IntegrationContext): void {
   setMotisLocalUrl(motisUrl);
   cachedLocalReachable = false;
   cachedLocalReachableAt = 0;
+  // Warm the live rental-capability probe so the access options reflect reality
+  // by the time the directions panel opens.
+  primeRentalFormFactors(motisLocalInstance);
 
   // Capture the host's AttributionIndex (when present). All MOTIS-derived
   // responses resolve feed-level attribution by looking up extracted feed
@@ -324,7 +328,9 @@ export function setupLocal(ctx: IntegrationContext): void {
         wheelchairRequired: true,
         bikeTransport: true,
         elevation: activeCapabilities?.planningFeatures?.hasElevation === true,
-        rentalFilters: Boolean(activeCapabilities?.rentals?.formFactors?.length),
+        get rentalFilters() {
+          return getRentalFormFactors(motisLocalInstance).length > 0;
+        },
         detailedTransfers: activeCapabilities?.planningFeatures?.hasRoutedTransfers === true,
         paging: true,
         refresh: itineraryRefreshEnabled,
@@ -334,32 +340,19 @@ export function setupLocal(ctx: IntegrationContext): void {
       alerts: { byStop: false, byRoute: false, byBbox: false },
       facilities: false,
     },
-    planningMetadata: activeCapabilities?.epoch
-      ? {
-          source: "transit-motis-local",
-          instance: "ms",
-          datasetEpoch: activeCapabilities.epoch,
-          rentalFormFactors: (activeCapabilities.rentals?.formFactors ?? []).filter(
-            (
-              value,
-            ): value is
-              | "BICYCLE"
-              | "CARGO_BICYCLE"
-              | "SCOOTER_STANDING"
-              | "SCOOTER_SEATED"
-              | "CAR"
-              | "MOPED" =>
-              [
-                "BICYCLE",
-                "CARGO_BICYCLE",
-                "SCOOTER_STANDING",
-                "SCOOTER_SEATED",
-                "CAR",
-                "MOPED",
-              ].includes(value),
-          ),
-        }
-      : undefined,
+    // Rental form factors come from the live MOTIS `/rentals` endpoint (the
+    // source of truth for what the engine can actually route), not the capability
+    // snapshot — which may be absent/unmounted, leaving every rental access mode
+    // greyed even when MOTIS has shared-mobility feeds loaded. Getters so the
+    // capabilities route serialises the latest cached value.
+    planningMetadata: {
+      source: "transit-motis-local",
+      instance: "ms",
+      datasetEpoch: activeCapabilities?.epoch ?? "",
+      get rentalFormFactors() {
+        return getRentalFormFactors(motisLocalInstance);
+      },
+    },
     ...(localRouteOverlayEnabled
       ? {
           async getRoutesInBbox(bbox, zoom) {

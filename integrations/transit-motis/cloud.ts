@@ -5,6 +5,7 @@ import { withAttribution } from "@openmapx/mobility-core/result";
 import * as motis from "./adapter.js";
 import { attributionTransitous } from "./attributions.js";
 import { configureTransitous, transitousInstance } from "./instances.js";
+import { getRentalFormFactors, primeRentalFormFactors } from "./rentals-capability.js";
 
 function wrapTransitous<T>(data: T) {
   return withAttribution(data, attributionTransitous(), freshnessNow());
@@ -29,6 +30,7 @@ export function setupCloud(ctx: IntegrationContext): void {
     url: ctx.config.transitousUrl as string | undefined,
     userAgent: ctx.config.transitousUserAgent as string | undefined,
   });
+  primeRentalFormFactors(transitousInstance);
 
   // Always-on soft resilience layer for local-MOTIS restarts and dev/cold-start.
   // Intentionally does not expose nearby/search/plan to avoid orchestrator fan-out;
@@ -61,7 +63,9 @@ export function setupCloud(ctx: IntegrationContext): void {
         wheelchairRequired: true,
         bikeTransport: true,
         elevation: true,
-        rentalFilters: true,
+        get rentalFilters() {
+          return getRentalFormFactors(transitousInstance).length > 0;
+        },
         detailedTransfers: true,
         paging: true,
         refresh: false,
@@ -70,6 +74,16 @@ export function setupCloud(ctx: IntegrationContext): void {
       vehicleJourney: true,
       alerts: { byStop: false, byRoute: false, byBbox: false },
       facilities: false,
+    },
+    // Live rental form factors from the Transitous MOTIS `/rentals` (this
+    // provider previously exposed none, so its rentals never reached the UI).
+    planningMetadata: {
+      source: "transit-motis-transitous",
+      instance: "mo",
+      datasetEpoch: "",
+      get rentalFormFactors() {
+        return getRentalFormFactors(transitousInstance);
+      },
     },
     // Hosted fallback for viewports the local instance cannot serve.
     async getRoutesInBbox(bbox, zoom) {
