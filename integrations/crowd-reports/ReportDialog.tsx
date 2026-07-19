@@ -1,5 +1,7 @@
 "use client";
 
+import AddLocationAltIcon from "@mui/icons-material/AddLocationAlt";
+import EditLocationAltIcon from "@mui/icons-material/EditLocationAlt";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -13,6 +15,7 @@ import ToggleButton from "@mui/material/ToggleButton";
 import Typography from "@mui/material/Typography";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { LocationMinimap } from "@/components/map/LocationMinimap";
 import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
 import {
   buildReportClaim,
@@ -192,16 +195,69 @@ export function ReportDialog() {
             <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
               {t("locationLabel")}
             </Typography>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Typography variant="body2" color="text.secondary">
-                {location
-                  ? `${location[1].toFixed(5)}, ${location[0].toFixed(5)}`
-                  : t("locationMissing")}
-              </Typography>
-              <Button size="small" onClick={startPicking}>
-                {t("pickOnMap")}
+            {/* A minimap reads better than raw coordinates (or an address, which
+                is useless on a highway). Tapping it re-picks a point on the map. */}
+            {location ? (
+              <Box
+                onClick={startPicking}
+                role="button"
+                tabIndex={0}
+                aria-label={t("pickOnMap")}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    startPicking();
+                  }
+                }}
+                sx={{
+                  position: "relative",
+                  width: "100%",
+                  height: 160,
+                  borderRadius: 1,
+                  overflow: "hidden",
+                  cursor: "pointer",
+                  border: "1px solid",
+                  borderColor: "divider",
+                }}
+              >
+                <LocationMinimap
+                  lng={location[0]}
+                  lat={location[1]}
+                  zoom={15}
+                  sx={{ position: "absolute", inset: 0 }}
+                />
+                <Box
+                  sx={{
+                    position: "absolute",
+                    bottom: 8,
+                    right: 8,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.5,
+                    px: 1,
+                    py: 0.5,
+                    borderRadius: 1,
+                    bgcolor: "rgba(0,0,0,0.6)",
+                    color: "#fff",
+                    fontSize: "0.75rem",
+                    pointerEvents: "none",
+                  }}
+                >
+                  <EditLocationAltIcon sx={{ fontSize: "1rem" }} />
+                  {t("pickOnMap")}
+                </Box>
+              </Box>
+            ) : (
+              <Button
+                variant="outlined"
+                fullWidth
+                startIcon={<AddLocationAltIcon />}
+                onClick={startPicking}
+                sx={{ height: 160, textTransform: "none", borderStyle: "dashed" }}
+              >
+                {t("locationMissing")}
               </Button>
-            </Stack>
+            )}
           </Box>
 
           {submit.isError && <Alert severity="error">{t("submitError")}</Alert>}

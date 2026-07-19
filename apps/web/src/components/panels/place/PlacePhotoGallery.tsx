@@ -11,7 +11,6 @@ import CircularProgress from "@mui/material/CircularProgress";
 import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Modal from "@mui/material/Modal";
-import { useColorScheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import {
   type PlacePhoto,
@@ -24,10 +23,9 @@ import {
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useEnv } from "@/lib/EnvProvider";
+import { useCallback, useEffect, useState } from "react";
+import { LocationMinimap } from "@/components/map/LocationMinimap";
 import { useMap } from "@/lib/MapContext";
-import { baseMapCustomAttribution, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { PhotoAttribution } from "./PhotoAttribution";
 
@@ -214,9 +212,10 @@ export function PlacePhotoGallery({ open, onClose, placeName, placeId, lat, lng 
                 )}
 
                 {minimapCoords && (
-                  <GalleryMinimap
+                  <LocationMinimap
                     lng={minimapCoords[0]}
                     lat={minimapCoords[1]}
+                    sx={GALLERY_MINIMAP_SX}
                     onClick={() => {
                       onClose();
                       setSelectedPlace(null);
@@ -511,87 +510,17 @@ function MobileThumbnail({
   );
 }
 
-/** Small MapLibre minimap showing the photo capture location. */
-function GalleryMinimap({ lng, lat, onClick }: { lng: number; lat: number; onClick?: () => void }) {
-  const env = useEnv();
-  const { mode, systemMode } = useColorScheme();
-  const variant = (mode === "system" ? systemMode : mode) === "dark" ? "dark" : "light";
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<{ map: unknown; marker: unknown } | null>(null);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: map created once, coords updated by second effect
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    let cancelled = false;
-
-    // Mirror MapCanvas: when the operator runs the openmapx-streets style
-    // off a self-hosted tileserver, fetch the style as a JSON object and
-    // patch in tiles/sprite/glyphs from env. Otherwise use the proxied
-    // MapTiler style URL.
-    (async () => {
-      const [{ default: maplibregl }, style] = await Promise.all([
-        import("maplibre-gl"),
-        env.styleProvider === "openmapx"
-          ? loadOpenMapXStyle(env, variant)
-          : loadMaptilerStyle("bright-v2", env),
-      ]);
-      if (cancelled || !el) return;
-
-      const map = new maplibregl.Map({
-        container: el,
-        style: style as string | maplibregl.StyleSpecification,
-        center: [lng, lat],
-        zoom: 16,
-        interactive: false,
-        attributionControl: { compact: true, customAttribution: baseMapCustomAttribution(env) },
-      });
-
-      const marker = new maplibregl.Marker({ color: "#e53935" }).setLngLat([lng, lat]).addTo(map);
-
-      mapRef.current = { map, marker };
-    })().catch(() => {
-      // Style load or MapLibre import failed — leave the container empty.
-    });
-
-    return () => {
-      cancelled = true;
-      if (mapRef.current) {
-        const { map } = mapRef.current as { map: { remove: () => void } };
-        map.remove();
-        mapRef.current = null;
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!mapRef.current) return;
-    const { map, marker } = mapRef.current as {
-      map: { flyTo: (opts: { center: [number, number]; duration: number }) => void };
-      marker: { setLngLat: (coords: [number, number]) => void };
-    };
-    marker.setLngLat([lng, lat]);
-    map.flyTo({ center: [lng, lat], duration: 300 });
-  }, [lng, lat]);
-
-  return (
-    <Box
-      ref={containerRef}
-      onClick={onClick}
-      sx={{
-        position: "absolute",
-        bottom: 68,
-        right: 16,
-        width: 160,
-        height: 120,
-        borderRadius: 1,
-        overflow: "hidden",
-        cursor: onClick ? "pointer" : "default",
-        border: "2px solid rgba(255,255,255,0.3)",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.5)",
-        display: { xs: "none", md: "block" },
-      }}
-    />
-  );
-}
+/** Fixed overlay styling for the gallery's capture-location minimap. */
+const GALLERY_MINIMAP_SX = {
+  position: "absolute",
+  bottom: 68,
+  right: 16,
+  width: 160,
+  height: 120,
+  borderRadius: 1,
+  overflow: "hidden",
+  cursor: "pointer",
+  border: "2px solid rgba(255,255,255,0.3)",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.5)",
+  display: { xs: "none", md: "block" },
+} as const;
