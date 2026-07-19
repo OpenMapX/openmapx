@@ -1,3 +1,4 @@
+import { useSettingsStore } from "@openmapx/core";
 import { useCallback } from "react";
 import { hasCapability } from "../platformCapabilities";
 
@@ -22,15 +23,47 @@ function ensureVoices(): void {
   }
 }
 
-/** Best-matching installed voice for `locale` ("en-US" → an exact, then any en voice). */
-function pickVoice(locale: string): SpeechSynthesisVoice | undefined {
-  if (voicesCache.length === 0) return undefined;
+/**
+ * Choose a voice: the one the user picked by name if still present, otherwise the
+ * best match for `locale` (exact "en-US", then any "en"). Pure, so it's unit-
+ * tested independently of the SpeechSynthesis engine.
+ */
+export function selectVoice<T extends { name: string; lang: string }>(
+  voices: readonly T[],
+  locale: string,
+  preferredName?: string | null,
+): T | undefined {
+  if (voices.length === 0) return undefined;
+  if (preferredName) {
+    const named = voices.find((v) => v.name === preferredName);
+    if (named) return named;
+  }
   const wanted = locale.toLowerCase();
   const base = wanted.split("-")[0];
   return (
-    voicesCache.find((v) => v.lang?.toLowerCase() === wanted) ??
-    voicesCache.find((v) => v.lang?.toLowerCase().startsWith(base))
+    voices.find((v) => v.lang?.toLowerCase() === wanted) ??
+    voices.find((v) => v.lang?.toLowerCase().startsWith(base))
   );
+}
+
+/** The installed TTS voices (refreshed via `voiceschanged`); for the settings picker. */
+export function getAvailableVoices(): SpeechSynthesisVoice[] {
+  ensureVoices();
+  return voicesCache;
+}
+
+/** Speak `text` once, interrupting any in-flight prompt. No-op when unsupported. */
+export function speakOnce(text: string, locale: string, preferredName?: string | null): void {
+  if (!hasCapability("speech")) return;
+  ensureVoices();
+  const u = new window.SpeechSynthesisUtterance(text);
+  u.lang = locale;
+  const voice = selectVoice(voicesCache, locale, preferredName);
+  if (voice) u.voice = voice;
+  // Cancel any in-flight prompt so a fresh cue interrupts a stale one rather than
+  // queueing behind it (queued prompts otherwise play late and pile up).
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(u);
 }
 
 /**
@@ -52,21 +85,8 @@ export function primeSpeechSynthesis(): void {
   }
 }
 
-/** Returns a `speak(text)` function backed by SpeechSynthesis (locale-aware). No-op when unsupported. */
+/** Returns a `speak(text)` function backed by SpeechSynthesis (locale- and voice-aware). */
 export function useNavigationVoice(locale: string): (text: string) => void {
-  return useCallback(
-    (text: string) => {
-      if (!hasCapability("speech")) return;
-      ensureVoices();
-      const u = new window.SpeechSynthesisUtterance(text);
-      u.lang = locale;
-      const voice = pickVoice(locale);
-      if (voice) u.voice = voice;
-      // Cancel any in-flight prompt so a fresh cue interrupts a stale one rather
-      // than queueing behind it (queued prompts otherwise play late and pile up).
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(u);
-    },
-    [locale],
-  );
+  const voiceName = useSettingsStore((s) => s.voiceName);
+  return useCallback((text: string) => speakOnce(text, locale, voiceName), [locale, voiceName]);
 }

@@ -8,6 +8,7 @@ interface VitestExpectation {
   toBeGreaterThan(expected: number): void;
   toBeLessThan(expected: number): void;
   toBeDefined(): void;
+  toBeUndefined(): void;
   toBeNull(): void;
   toContain(expected: unknown): void;
   toEqual(expected: unknown): void;
