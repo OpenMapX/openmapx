@@ -4,22 +4,31 @@ import Box from "@mui/material/Box";
 import Collapse from "@mui/material/Collapse";
 import Typography from "@mui/material/Typography";
 import { useRouteAlerts } from "@openmapx/core";
+import type { ServiceAlert } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { AlertCard, SEVERITY_PRIORITY } from "./AlertCard";
 
 interface LegAlertsProps {
   routeId?: string;
+  /** Stop-specific alerts carried on the leg (board/alight/intermediate). */
+  legAlerts?: ServiceAlert[];
 }
 
-export function LegAlerts({ routeId }: LegAlertsProps) {
+export function LegAlerts({ routeId, legAlerts }: LegAlertsProps) {
   const t = useTranslations("transit");
   const [expanded, setExpanded] = useState(false);
-  const { data: alerts } = useRouteAlerts(routeId ?? null);
+  const { data: routeAlerts } = useRouteAlerts(routeId ?? null);
 
-  if (!routeId || !alerts || alerts.length === 0) return null;
+  // Merge the leg's inline stop alerts with the route-wide fetch, deduped by id
+  // (the route feed doesn't carry board/alight-stop disruptions).
+  const byId = new Map<string, ServiceAlert>();
+  for (const a of legAlerts ?? []) byId.set(a.id, a);
+  for (const a of routeAlerts ?? []) if (!byId.has(a.id)) byId.set(a.id, a);
+  const merged = [...byId.values()];
+  if (merged.length === 0) return null;
 
-  const sorted = [...alerts].sort(
+  const sorted = merged.sort(
     (a, b) => SEVERITY_PRIORITY[b.severity] - SEVERITY_PRIORITY[a.severity],
   );
   const hiddenCount = sorted.length - 1;

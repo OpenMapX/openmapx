@@ -606,7 +606,7 @@ export function TransitDetailsView({
                         fromStopId={leg.from.stopId}
                         toStopId={leg.to.stopId}
                       />
-                      <LegAlerts routeId={leg.routeId} />
+                      <LegAlerts routeId={leg.routeId} legAlerts={leg.alerts} />
                       {leg.tripId && <LegRemarks tripId={leg.tripId} />}
                       {!isPerLegRedundant(leg.attributions, attributions) && (
                         <Box sx={{ mt: 0.5 }}>
