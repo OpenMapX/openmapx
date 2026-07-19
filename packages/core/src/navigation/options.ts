@@ -63,7 +63,7 @@ export function navOptionsForMode(mode: TravelMode): NavTickOptions {
           maxLeadSeconds: 30,
           highSpeedMps: 10,
           minMeters: 80,
-          chainSeconds: 18,
+          chainSeconds: 20,
         },
         stepGateEntryMeters: 20,
         stepGateExitMeters: 4,
