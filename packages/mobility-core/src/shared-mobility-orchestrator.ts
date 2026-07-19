@@ -97,9 +97,19 @@ const ALLOWED_POLICIES = new Set<SharedMobilitySourcePolicy>(["fanout", "shadow"
 export function resolveSharedMobilitySourcePolicy(
   configured = process.env.SHARED_MOBILITY_SOURCE_POLICY,
 ): SharedMobilitySourcePolicy {
+  // Default to `fanout`, not `motis-first`. MOTIS ingests only a curated subset
+  // of GBFS feeds (the pinned Transitous catalog), whereas the direct GBFS
+  // adapter covers the full MobilityData registry (hundreds of operators per
+  // country). Under `motis-first` the direct adapters are skipped whenever MOTIS
+  // reports "healthy" — including an empty-but-complete result for an area MOTIS
+  // has no feed for — which collapsed map coverage to MOTIS's handful of feeds.
+  // `fanout` queries MOTIS + all direct GBFS + proprietary adapters and dedups
+  // (MOTIS stays authoritative for the operators it does carry), restoring the
+  // broad coverage while keeping MOTIS's curated feeds for intermodal routing.
+  // Operators who genuinely want MOTIS-only can still set the env var.
   return ALLOWED_POLICIES.has(configured as SharedMobilitySourcePolicy)
     ? (configured as SharedMobilitySourcePolicy)
-    : "motis-first";
+    : "fanout";
 }
 
 function canonicalStationIdentity(station: SharedMobilityStation): string | null {

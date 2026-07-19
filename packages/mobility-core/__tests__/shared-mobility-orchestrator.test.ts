@@ -3,6 +3,7 @@ import {
   getSharedMobilityOperationsState,
   mergeMotisFirstInventory,
   orchestrateSharedMobility,
+  resolveSharedMobilitySourcePolicy,
   setSharedMobilityRollback,
 } from "../src/shared-mobility-orchestrator.js";
 import type {
@@ -210,5 +211,19 @@ describe("orchestrateSharedMobility", () => {
     expect(JSON.stringify(state)).not.toContain("10.5");
     expect(JSON.stringify(state)).not.toContain("vehicle-native");
     setSharedMobilityRollback("bike", false);
+  });
+});
+
+describe("resolveSharedMobilitySourcePolicy", () => {
+  it("defaults to fanout so direct GBFS coverage is not suppressed by MOTIS", () => {
+    expect(resolveSharedMobilitySourcePolicy(undefined)).toBe("fanout");
+    expect(resolveSharedMobilitySourcePolicy("")).toBe("fanout");
+    expect(resolveSharedMobilitySourcePolicy("not-a-policy")).toBe("fanout");
+  });
+
+  it("honours an explicit valid policy override", () => {
+    expect(resolveSharedMobilitySourcePolicy("motis-first")).toBe("motis-first");
+    expect(resolveSharedMobilitySourcePolicy("shadow")).toBe("shadow");
+    expect(resolveSharedMobilitySourcePolicy("fanout")).toBe("fanout");
   });
 });
