@@ -1,5 +1,6 @@
 "use client";
 
+import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { formatMeasurementDistance, type ManeuverLane } from "@openmapx/core";
 import { useTranslations } from "next-intl";
@@ -52,20 +53,52 @@ export function ManeuverBanner({
   const t = useTranslations("navigation");
   const Icon = maneuverIconFor(maneuver).component;
   const NextIcon = nextInstruction ? maneuverIconFor(nextManeuver).component : null;
-  // Lane guidance wins the sub-row over the "Then …" preview when we have it.
-  const secondary =
-    lanes && lanes.length > 0 ? (
-      <LaneGuidance variant="banner" lanes={lanes} maneuver={maneuver} />
-    ) : NextIcon && nextInstruction ? (
-      <>
-        <NextIcon sx={{ fontSize: 20, opacity: 0.85 }} />
-        <Typography variant="body2" sx={{ opacity: 0.85 }} noWrap>
-          {t("then", { instruction: lowercaseFirstWord(nextInstruction) })}
+  const hasLanes = !!lanes && lanes.length > 0;
+  const hasNext = NextIcon && nextInstruction;
+  // Lane guidance takes the sub-row. When there's also a following maneuver, the
+  // "Then …" preview can't share the row, so it becomes a compact badge pinned
+  // top-right of the main line (its arrow still shows which way it goes). With no
+  // lanes, the preview keeps the full sub-row line.
+  const secondary = hasLanes ? (
+    <LaneGuidance variant="banner" lanes={lanes} maneuver={maneuver} />
+  ) : hasNext ? (
+    <>
+      <NextIcon sx={{ fontSize: 20, opacity: 0.85 }} />
+      <Typography variant="body2" sx={{ opacity: 0.85 }} noWrap>
+        {t("then", { instruction: lowercaseFirstWord(nextInstruction) })}
+      </Typography>
+    </>
+  ) : undefined;
+  const trailing =
+    hasLanes && hasNext ? (
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 0.25,
+          px: 1,
+          py: 0.5,
+          borderRadius: 2,
+          flexShrink: 0,
+          bgcolor: "rgba(0, 0, 0, 0.18)",
+        }}
+      >
+        <Typography
+          variant="caption"
+          sx={{ fontSize: 10, letterSpacing: "0.04em", textTransform: "uppercase", opacity: 0.7 }}
+        >
+          {t("thenLabel")}
         </Typography>
-      </>
+        <NextIcon sx={{ fontSize: 26 }} />
+      </Box>
     ) : undefined;
   return (
-    <NavBannerShell leading={<Icon sx={{ fontSize: 44 }} />} secondary={secondary}>
+    <NavBannerShell
+      leading={<Icon sx={{ fontSize: 44 }} />}
+      secondary={secondary}
+      trailing={trailing}
+    >
       <Typography variant="h6" sx={{ lineHeight: 1.1 }}>
         {t("in", { distance: formatMeasurementDistance(distanceToManeuver, units) })}
       </Typography>

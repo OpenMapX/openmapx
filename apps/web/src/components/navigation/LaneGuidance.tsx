@@ -34,8 +34,8 @@ export function LaneGuidance({
   const resolved = resolveRecommendedLanes(lanes, maneuver);
   if (resolved.length === 0) return null;
   const banner = variant === "banner";
-  const cell = banner ? 34 : 32;
-  const arrowSize = banner ? 28 : 26;
+  const cell = banner ? 38 : 36;
+  const arrowSize = banner ? 32 : 30;
   return (
     <Box
       sx={{

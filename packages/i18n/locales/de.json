@@ -66,6 +66,7 @@
     "moreOptions": "Weitere Optionen",
     "rerouteFailed": "Keine neue Route gefunden. Wird erneut versucht…",
     "then": "Dann {instruction}",
+    "thenLabel": "Dann",
     "alertTrafficIncident": "Verkehrsstörung",
     "alertSpeedCamera": "Blitzer",
     "alertRailwayCrossing": "Bahnübergang",

@@ -5,6 +5,7 @@ vi.mock("next-intl", () => ({
   useTranslations: () => (key: string, values?: Record<string, unknown>) => {
     if (key === "in") return `In ${String(values?.distance ?? "")}`;
     if (key === "then") return `Then ${String(values?.instruction ?? "")}`;
+    if (key === "thenLabel") return "Then";
     return key;
   },
 }));
@@ -71,7 +72,7 @@ describe("ManeuverBanner", () => {
     expect(html).toContain("Then turn left onto 2nd Ave");
   });
 
-  it("shows lane guidance in the sub-row instead of the next-step preview", () => {
+  it("puts lanes in the sub-row and the next maneuver in a compact badge", () => {
     const html = renderToStaticMarkup(
       <ManeuverBanner
         instruction="Turn right onto Main St"
@@ -88,7 +89,9 @@ describe("ManeuverBanner", () => {
     );
     // Lanes take the sub-row…
     expect(html).toContain('data-valid="true"');
-    // …and the "Then …" preview is suppressed.
-    expect(html).not.toContain("Then ");
+    // …the follow-up shows as the compact "Then" badge (label only, no full line)…
+    expect(html).toContain("Then");
+    // …so the full next-step instruction text is not spelled out.
+    expect(html).not.toContain("2nd Ave");
   });
 });

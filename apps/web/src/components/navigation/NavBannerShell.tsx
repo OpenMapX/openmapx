@@ -5,7 +5,8 @@ import type { ReactNode } from "react";
 
 /**
  * Shared turn-by-turn banner shell: a rounded, primary-colored card with a
- * leading icon/badge, a main text block, and an optional darkened sub-row for a
+ * leading icon/badge, a main text block, an optional trailing badge (e.g. the
+ * compact "then" next-maneuver hint), and an optional darkened sub-row for a
  * secondary preview line.
  *
  * Used by both the driving {@link ManeuverBanner} (its "Then …" preview) and the
@@ -16,10 +17,13 @@ export function NavBannerShell({
   leading,
   children,
   secondary,
+  trailing,
 }: {
   leading: ReactNode;
   children: ReactNode;
   secondary?: ReactNode;
+  /** Optional element pinned to the right of the main row. */
+  trailing?: ReactNode;
 }) {
   return (
     <Box
@@ -34,7 +38,8 @@ export function NavBannerShell({
     >
       <Box sx={{ display: "flex", alignItems: "center", gap: 2, p: 2 }}>
         {leading}
-        <Box sx={{ minWidth: 0 }}>{children}</Box>
+        <Box sx={{ minWidth: 0, flex: 1 }}>{children}</Box>
+        {trailing}
       </Box>
       {secondary != null && (
         <Box
