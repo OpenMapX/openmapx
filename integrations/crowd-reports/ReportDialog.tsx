@@ -98,19 +98,23 @@ export function ReportDialog() {
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
               {t("fuzzinessLabel")}
             </Typography>
-            <ToggleButtonGroup
-              exclusive
-              size="small"
-              value={fuzziness}
-              onChange={(_e, v) => v && setFuzziness(v as FuzzinessChoice)}
-              sx={{ flexWrap: "wrap" }}
-            >
+            {/* Independent wrapping buttons (not a ToggleButtonGroup): a
+                connected group's merged borders and end-only rounding break
+                when items wrap to a second row. Mirrors the category control. */}
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
               {FUZZINESS_CHOICES.map((f) => (
-                <ToggleButton key={f} value={f} sx={{ textTransform: "none" }}>
+                <ToggleButton
+                  key={f}
+                  value={f}
+                  size="small"
+                  selected={fuzziness === f}
+                  onChange={() => setFuzziness(f)}
+                  sx={{ textTransform: "none" }}
+                >
                   {t(`fuzziness.${f}`)}
                 </ToggleButton>
               ))}
-            </ToggleButtonGroup>
+            </Box>
           </Box>
 
           <Box>
