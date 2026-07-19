@@ -8,8 +8,8 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import Stack from "@mui/material/Stack";
+import { alpha } from "@mui/material/styles";
 import ToggleButton from "@mui/material/ToggleButton";
-import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
@@ -25,6 +25,19 @@ import { useSubmitReport } from "./useCrowdReports";
 
 const FUZZINESS_CHOICES: FuzzinessChoice[] = ["here", "ahead", "back_of_queue", "all_along"];
 const SEVERITY_LEVELS = [1, 2, 3, 4, 5] as const;
+
+/**
+ * Low→high severity ramp (green → dark red). Levels 2–5 reuse the incident
+ * overlay palette so a reported severity matches how it's later drawn on the
+ * map; level 1 adds a green low end. Rendered as translucent fills, not solid.
+ */
+const SEVERITY_COLORS: Record<(typeof SEVERITY_LEVELS)[number], string> = {
+  1: "#2e9e4f",
+  2: "#ffde33",
+  3: "#ff9933",
+  4: "#cc0033",
+  5: "#7e0023",
+};
 
 /**
  * The report dialog: pick a category, how far the condition extends (fuzziness),
@@ -121,18 +134,58 @@ export function ReportDialog() {
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
               {t("severityLabel")}
             </Typography>
-            <ToggleButtonGroup
-              exclusive
-              size="small"
-              value={severity}
-              onChange={(_e, v) => setSeverity(v as 1 | 2 | 3 | 4 | 5 | null)}
+            {/* Large round buttons spread across a capped width, each tinted on
+                its severity color with a translucent (not solid) fill. */}
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 1,
+                maxWidth: 360,
+              }}
             >
-              {SEVERITY_LEVELS.map((s) => (
-                <ToggleButton key={s} value={s}>
-                  {s}
-                </ToggleButton>
-              ))}
-            </ToggleButtonGroup>
+              {SEVERITY_LEVELS.map((s) => {
+                const color = SEVERITY_COLORS[s];
+                const isSelected = severity === s;
+                return (
+                  <ToggleButton
+                    key={s}
+                    value={s}
+                    selected={isSelected}
+                    onChange={() => setSeverity(isSelected ? null : s)}
+                    aria-label={`${t("severityLabel")} ${s}`}
+                    sx={{
+                      flex: "0 0 auto",
+                      width: 52,
+                      height: 52,
+                      p: 0,
+                      borderRadius: "50%",
+                      border: "2px solid",
+                      borderColor: alpha(color, isSelected ? 1 : 0.45),
+                      bgcolor: alpha(color, isSelected ? 0.4 : 0.14),
+                      color: "text.primary",
+                      fontSize: "1.2rem",
+                      fontWeight: 600,
+                      transition: (theme) =>
+                        theme.transitions.create([
+                          "background-color",
+                          "border-color",
+                          "box-shadow",
+                        ]),
+                      boxShadow: isSelected ? `0 0 0 3px ${alpha(color, 0.25)}` : "none",
+                      "&:hover": { bgcolor: alpha(color, isSelected ? 0.48 : 0.26) },
+                      "&.Mui-selected": {
+                        bgcolor: alpha(color, 0.4),
+                        color: "text.primary",
+                        "&:hover": { bgcolor: alpha(color, 0.48) },
+                      },
+                    }}
+                  >
+                    {s}
+                  </ToggleButton>
+                );
+              })}
+            </Box>
           </Box>
 
           <Box>
