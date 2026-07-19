@@ -5,12 +5,11 @@ import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
 import TransferWithinAStationIcon from "@mui/icons-material/TransferWithinAStation";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { useStopTransfers } from "@openmapx/core";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
-import { changedFromPlatform } from "@/lib/navigation/platformChange";
+import { useTransferInfo } from "@/lib/navigation/useTransferInfo";
 
 /**
  * "Change here" card shown beneath the leg banner as the rider approaches the
@@ -29,25 +28,8 @@ export function TransitTransferCard({
   walkSeconds: number;
 }) {
   const t = useTranslations("navigation");
-  const walkMinutes = walkSeconds > 0 ? Math.max(1, Math.round(walkSeconds / 60)) : 0;
-  const nextHeadsign =
-    nextLeg.headsign && nextLeg.headsign !== nextLeg.to.name ? nextLeg.headsign : undefined;
-  const boardPlatform = nextLeg.from.platformCode;
-  const platformChanged = !!changedFromPlatform(nextLeg.from);
-  // Level change across the transfer (e.g. down to the U-Bahn), when both known.
-  const levelChange =
-    fromLeg.to.level != null &&
-    nextLeg.from.level != null &&
-    fromLeg.to.level !== nextLeg.from.level
-      ? { from: fromLeg.to.level, to: nextLeg.from.level }
-      : null;
-
-  // Step-free transfer info (MOTIS transfers): the accessibility-annotated
-  // option from the alight stop to the next boarding stop.
-  const { data: transfers } = useStopTransfers(fromLeg.to.stopId ?? null);
-  const stepFree = transfers?.find(
-    (tr) => tr.toStopId === nextLeg.from.stopId && tr.wheelchairMinutes != null,
-  );
+  const { nextHeadsign, boardPlatform, platformChanged, levelChange, stepFree, walkMinutes } =
+    useTransferInfo(fromLeg, nextLeg, walkSeconds);
 
   return (
     <Box

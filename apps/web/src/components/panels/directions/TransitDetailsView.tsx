@@ -43,6 +43,7 @@ import {
   TransitEmissionsBadge,
   TransitLiveBadge,
 } from "@/components/panels/directions/TransitRouteView";
+import { TransitTransferSummary } from "@/components/panels/directions/TransitTransferSummary";
 import { LegAlerts } from "@/components/panels/transit/LegAlerts";
 import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
@@ -53,6 +54,7 @@ import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
 import { useMap } from "@/lib/MapContext";
 import { changedFromPlatform } from "@/lib/navigation/platformChange";
+import { nextTransferFor } from "@/lib/navigation/transitTransfer";
 import { composeWalkInstruction, walkStepInfo } from "@/lib/navigation/walkStep";
 import { TEAL } from "@/lib/theme";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
@@ -618,6 +620,21 @@ export function TransitDetailsView({
                   <LegStatusDetails leg={leg} />
                 </Box>
               </Box>
+              {/* Interchange summary after a ride that changes onto another. When a
+                  walk leg follows, its own row shows the walk, so suppress it here. */}
+              {leg.route &&
+                (() => {
+                  const transfer = nextTransferFor(itinerary.legs, i);
+                  if (!transfer) return null;
+                  const walk = itinerary.legs[i + 1]?.mode === "walking" ? 0 : transfer.walkSeconds;
+                  return (
+                    <TransitTransferSummary
+                      fromLeg={leg}
+                      nextLeg={transfer.nextLeg}
+                      walkSeconds={walk}
+                    />
+                  );
+                })()}
               {/* Arrival point (only for last leg) */}
               {i === itinerary.legs.length - 1 && (
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 0.75 }}>
