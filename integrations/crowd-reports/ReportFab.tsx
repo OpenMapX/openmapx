@@ -33,7 +33,9 @@ export function ReportFab() {
           sx={{ width: 36, height: 36 }}
           aria-label={t("reportButton")}
         >
-          <ReportProblemOutlinedIcon sx={{ fontSize: 18, color: "primary.main" }} />
+          {/* Amber, like Google Maps' report control — a warm cue that stands
+              out from the teal-tinted controls around it. */}
+          <ReportProblemOutlinedIcon sx={{ fontSize: 18, color: "#f9a825" }} />
         </IconButton>
       </Paper>
     </Tooltip>
