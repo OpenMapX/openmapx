@@ -169,6 +169,82 @@ export function applyOsrFootpathOverride(configPath: string, logger: JobLogger):
 }
 
 /**
+ * Post-process the generated `config.yml` to enable MOTIS's `route_shapes`
+ * feature, which map-matches transit trips onto the OSM network to synthesise
+ * leg geometry for feeds that ship no GTFS `shapes.txt`. Without it the national
+ * `de-DELFI` feed (whose long-distance ICE/IC trips carry no shapes) renders as
+ * straight lines between stops, while shaped regional feeds (e.g. `de-VBB`) draw
+ * the real track — the discrepancy this override closes.
+ *
+ * Off by default. The operator opts in with `MOTIS_ROUTE_SHAPES=missing` (only
+ * routes lacking shapes — the common case, preserving feed-provided shapes) or
+ * `all` (recompute every route); `true` is treated as `missing`.
+ *
+ * Requires `with_shapes: true`, `street_routing: true` and an `osm:` extract —
+ * all already set on this deployment. It costs extra import time and RAM (every
+ * shape-less trip is routed on the OSM graph), so validate on `motis-staging`
+ * before promoting; `max_stops` caps pathologically long routes. The block is
+ * inserted after the `with_shapes: true` line so it nests inside `timetable:` at
+ * the right indent, and is skipped when a `route_shapes:` block already exists.
+ *
+ * Returns `true` iff the file was modified.
+ */
+export function applyRouteShapesOverride(configPath: string, logger: JobLogger): boolean {
+  const raw = process.env.MOTIS_ROUTE_SHAPES?.trim().toLowerCase();
+  if (!raw || ["0", "false", "no", "off"].includes(raw)) return false;
+  const mode =
+    raw === "all"
+      ? "all"
+      : raw === "missing" || ["1", "true", "yes", "on"].includes(raw)
+        ? "missing"
+        : null;
+  if (mode === null) {
+    logger.warn(
+      `motis-config: ignoring MOTIS_ROUTE_SHAPES=${process.env.MOTIS_ROUTE_SHAPES} (expected missing|all|true|false)`,
+    );
+    return false;
+  }
+  if (!existsSync(configPath)) return false;
+  let text: string;
+  try {
+    text = readFileSync(configPath, "utf-8");
+  } catch (error) {
+    logger.warn(
+      `motis-config: could not read ${configPath} to apply route_shapes override: ${(error as Error).message}`,
+    );
+    return false;
+  }
+  if (/^\s*route_shapes:/m.test(text)) return false; // already present — idempotent
+  // Anchor on `with_shapes: true`: route_shapes must nest beside it inside
+  // `timetable:`, and the feature is inert unless shapes are enabled.
+  const re = /^([ \t]*)with_shapes:\s*true\s*$/m;
+  const match = text.match(re);
+  if (!match) {
+    logger.warn(
+      `motis-config: 'with_shapes: true' not found in ${configPath}; route_shapes override skipped`,
+    );
+    return false;
+  }
+  const indent = match[1];
+  const child = `${indent}  `;
+  const block = [`${indent}route_shapes:`, `${child}mode: ${mode}`, `${child}max_stops: 100`].join(
+    "\n",
+  );
+  const next = text.replace(re, (line) => `${line}\n${block}`);
+  if (next === text) return false;
+  try {
+    writeFileSync(configPath, next, "utf-8");
+    logger.info(`motis-config: route_shapes enabled (mode: ${mode}) via MOTIS_ROUTE_SHAPES`);
+    return true;
+  } catch (error) {
+    logger.warn(
+      `motis-config: could not write route_shapes override to ${configPath}: ${(error as Error).message}`,
+    );
+    return false;
+  }
+}
+
+/**
  * Point the generated config's `osm:` line at the OSM extract for the
  * deployment's build region, so MOTIS imports the same area as the rest of the
  * stack (osrm/otp/overpass/...). The region resolves from `MOTIS_REGION` then
@@ -269,6 +345,7 @@ export interface ConfigOverrideFlags {
   incrementalRtOverridden: boolean;
   elevatorsOverridden: boolean;
   osrFootpathOverridden: boolean;
+  routeShapesOverridden: boolean;
   tilesDisabled: boolean;
 }
 
@@ -284,6 +361,7 @@ export function applyConfigOverrides(configPath: string, logger: JobLogger): Con
     incrementalRtOverridden: applyIncrementalRtOverride(configPath, logger),
     elevatorsOverridden: applyElevatorsOverride(configPath, logger),
     osrFootpathOverridden: applyOsrFootpathOverride(configPath, logger),
+    routeShapesOverridden: applyRouteShapesOverride(configPath, logger),
     tilesDisabled: applyTilesDisable(configPath, logger),
   };
 }

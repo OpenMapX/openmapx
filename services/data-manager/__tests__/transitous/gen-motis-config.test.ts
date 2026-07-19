@@ -12,6 +12,7 @@ const ENV_KEYS = [
   "MOTIS_ELEVATORS_URL",
   "MOTIS_ELEVATORS_AUTH",
   "MOTIS_OSR_FOOTPATH",
+  "MOTIS_ROUTE_SHAPES",
   "MOTIS_TILES",
   "MOTIS_REGION",
   "OPENMAPX_REGION",
@@ -266,5 +267,52 @@ describe("gen-motis-config osr_footpath override", () => {
     const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
     expect(result.artifacts).toMatchObject({ osrFootpathOverridden: false });
     expect(readFileSync(fx.configPath, "utf-8")).toMatch(/osr_footpath:\s*false/);
+  });
+});
+
+const TEMPLATE_WITH_SHAPES = `server:
+  port: 8080
+street_routing: true
+osm: planet-latest.osm.pbf
+timetable:
+  with_shapes: true
+  datasets:
+    foo:
+      path: foo.gtfs.zip
+`;
+
+describe("gen-motis-config route_shapes override", () => {
+  it("injects a route_shapes block nested in timetable when MOTIS_ROUTE_SHAPES=missing", async () => {
+    process.env.MOTIS_ROUTE_SHAPES = "missing";
+    const fx = setupCatalog(TEMPLATE_WITH_SHAPES);
+    const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
+    expect(result.artifacts).toMatchObject({ routeShapesOverridden: true });
+    const written = readFileSync(fx.configPath, "utf-8");
+    // Nested one level under timetable (2-space indent), directly after with_shapes.
+    expect(written).toMatch(
+      /^ {2}with_shapes: true\n {2}route_shapes:\n {4}mode: missing\n {4}max_stops: 100$/m,
+    );
+  });
+
+  it("maps MOTIS_ROUTE_SHAPES=all to mode: all", async () => {
+    process.env.MOTIS_ROUTE_SHAPES = "all";
+    const fx = setupCatalog(TEMPLATE_WITH_SHAPES);
+    await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
+    expect(readFileSync(fx.configPath, "utf-8")).toMatch(/route_shapes:\n {4}mode: all/);
+  });
+
+  it("leaves the config untouched when MOTIS_ROUTE_SHAPES is unset", async () => {
+    const fx = setupCatalog(TEMPLATE_WITH_SHAPES);
+    const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
+    expect(result.artifacts).toMatchObject({ routeShapesOverridden: false });
+    expect(readFileSync(fx.configPath, "utf-8")).not.toContain("route_shapes:");
+  });
+
+  it("does not inject when with_shapes is absent", async () => {
+    process.env.MOTIS_ROUTE_SHAPES = "missing";
+    const fx = setupCatalog(TEMPLATE_WITH_OSM);
+    const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
+    expect(result.artifacts).toMatchObject({ routeShapesOverridden: false });
+    expect(readFileSync(fx.configPath, "utf-8")).not.toContain("route_shapes:");
   });
 });
