@@ -27,7 +27,7 @@ describe("domainForCategory", () => {
 
   it("does not include police in the taxonomy", () => {
     expect(REPORT_CATEGORIES).not.toContain("police");
-    expect(REPORT_CATEGORIES.length).toBeLessThanOrEqual(12);
+    expect(REPORT_CATEGORIES.length).toBeLessThanOrEqual(13);
   });
 });
 
@@ -74,6 +74,8 @@ describe("buildReportClaim", () => {
     ["hazard_animal", "hazard"],
     ["hazard_weather", "weather"],
     ["road_closure", "road_closure"],
+    ["lane_closure", "lane_closure"],
+    ["stopped_vehicle", "broken_down_vehicle"],
     ["accident", "accident"],
     ["roadworks", "roadworks"],
     ["transit_disruption", "transit_disruption"],

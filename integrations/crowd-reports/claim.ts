@@ -8,7 +8,9 @@ import type { Fuzziness, ReportClaim } from "@openmapx/openconditions-contrib-cl
  */
 export const REPORT_CATEGORIES = [
   "road_closure",
+  "lane_closure",
   "accident",
+  "stopped_vehicle",
   "hazard_object",
   "hazard_weather",
   "hazard_animal",
@@ -46,7 +48,9 @@ const FUZZINESS_BY_CHOICE: Record<FuzzinessChoice, Fuzziness> = {
  */
 const DOMAIN_BY_CATEGORY: Record<ReportCategory, ReportClaim["domain"]> = {
   road_closure: "roads",
+  lane_closure: "roads",
   accident: "roads",
+  stopped_vehicle: "roads",
   hazard_object: "roads",
   hazard_weather: "roads",
   hazard_animal: "roads",
@@ -72,7 +76,10 @@ const DOMAIN_BY_CATEGORY: Record<ReportCategory, ReportClaim["domain"]> = {
  * Mappings follow what the feed normalizers actually emit, so a report lands on
  * the same value an official row would: an object on the road is DATEX
  * `generalobstruction` → `obstruction`, while animals are mapped to `hazard`
- * ("Animals on the road", "plant/animal hazards"), NOT `obstruction`.
+ * ("Animals on the road", "plant/animal hazards"), NOT `obstruction`. A stopped
+ * vehicle is DATEX `vehicleObstruction` → `broken_down_vehicle` (distinct from a
+ * generic object), and a partial closure is `lane_closure` (distinct from a full
+ * `road_closure`) — both first-class canonical types the map already renders.
  *
  * `micromobility` and `accessibility` have no canonical road equivalent and
  * collapse to `other`; the dialog's own choice is preserved verbatim in
@@ -80,7 +87,9 @@ const DOMAIN_BY_CATEGORY: Record<ReportCategory, ReportClaim["domain"]> = {
  */
 const TYPE_BY_CATEGORY: Record<ReportCategory, ReportClaim["type"]> = {
   road_closure: "road_closure",
+  lane_closure: "lane_closure",
   accident: "accident",
+  stopped_vehicle: "broken_down_vehicle",
   hazard_object: "obstruction",
   hazard_weather: "weather",
   hazard_animal: "hazard",

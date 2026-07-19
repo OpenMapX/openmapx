@@ -5,7 +5,9 @@
     "categoryLabel": "Was hast du gesehen?",
     "category": {
       "road_closure": "Straße gesperrt",
+      "lane_closure": "Spur gesperrt",
       "accident": "Unfall",
+      "stopped_vehicle": "Fahrzeug am Straßenrand",
       "hazard_object": "Objekt auf der Fahrbahn",
       "hazard_weather": "Wettergefahr",
       "hazard_animal": "Tier auf der Fahrbahn",

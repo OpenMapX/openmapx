@@ -5,7 +5,9 @@
     "categoryLabel": "What did you see?",
     "category": {
       "road_closure": "Road closed",
+      "lane_closure": "Lane closed",
       "accident": "Accident",
+      "stopped_vehicle": "Stopped vehicle",
       "hazard_object": "Object on road",
       "hazard_weather": "Weather hazard",
       "hazard_animal": "Animal on road",
