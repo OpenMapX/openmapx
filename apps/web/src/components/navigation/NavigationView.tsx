@@ -127,17 +127,15 @@ export function NavigationView() {
 
   const navMenu = (
     <NavMenu
-      onOpenDirections={() => {
-        setMenuOpen(false);
-        setDirectionsOpen(true);
-      }}
+      // Directions/Settings open a full-screen dialog over the sheet; leave the
+      // sheet expanded (don't collapse) so returning shows the menu correctly.
+      // Collapsing while the dialog mounts corrupts the sheet's measured height.
+      onOpenDirections={() => setDirectionsOpen(true)}
+      onOpenSettings={() => setSettingsOpen(true)}
+      // Overview reveals the map, so collapse the sheet (no dialog to interfere).
       onOverview={() => {
         setMenuOpen(false);
         handleOverview();
-      }}
-      onOpenSettings={() => {
-        setMenuOpen(false);
-        setSettingsOpen(true);
       }}
     />
   );
