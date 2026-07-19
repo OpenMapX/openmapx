@@ -343,6 +343,11 @@ export interface TripLeg {
   from: TransitPlace;
   to: TransitPlace;
   route?: Pick<TransitRoute, "shortName" | "longName" | "color">;
+  /**
+   * Destination sign shown on the vehicle (MOTIS `Leg.headsign`), e.g. the
+   * "towards …" text riders match against at the platform. Transit legs only.
+   */
+  headsign?: string;
   geometry: { type: "LineString"; coordinates: [number, number][] };
   distanceMeters?: number;
   durationSeconds?: number;

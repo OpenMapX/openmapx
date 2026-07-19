@@ -118,6 +118,70 @@ describe("MOTIS planner request mapping", () => {
     expect(query.additionalTransferTime).toBe(additional);
   });
 
+  it("maps transit-leg realtime metadata MOTIS otherwise drops", async () => {
+    planMock.mockResolvedValue({
+      data: {
+        ...response().data,
+        itineraries: [
+          {
+            id: "itinerary-2",
+            duration: 900,
+            startTime: "2026-07-15T10:00:00Z",
+            endTime: "2026-07-15T10:15:00Z",
+            transfers: 0,
+            legs: [
+              {
+                mode: "REGIONAL_RAIL",
+                from: {
+                  name: "Aachen Hbf",
+                  lat: 1,
+                  lon: 2,
+                  stopId: "aachen",
+                  track: "3",
+                  scheduledTrack: "5",
+                },
+                to: {
+                  name: "Köln Hbf",
+                  lat: 3,
+                  lon: 4,
+                  stopId: "koeln",
+                  track: "9",
+                  scheduledTrack: "9",
+                },
+                duration: 900,
+                startTime: "2026-07-15T10:04:00Z",
+                endTime: "2026-07-15T10:19:00Z",
+                scheduledStartTime: "2026-07-15T10:00:00Z",
+                scheduledEndTime: "2026-07-15T10:15:00Z",
+                realTime: true,
+                scheduled: true,
+                headsign: "Köln Messe/Deutz",
+                routeShortName: "RE1",
+                routeColor: "#0000ff",
+                routeTextColor: "#ffffff",
+                legGeometry: { points: "", precision: 6, length: 0 },
+                alerts: [
+                  {
+                    headerText: "Elevator out of service",
+                    descriptionText: "Use stairs at platform 5.",
+                    severityLevel: "WARNING",
+                    cause: "MAINTENANCE",
+                    url: "https://example.test/alert",
+                    impactPeriod: [{ start: "2026-07-15T09:00:00Z", end: "2026-07-15T18:00:00Z" }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const mapped = await planTrip(instance, 1, 2, 3, 4, "2026-07-15", "10:00:00");
+    const leg = mapped?.itineraries[0]?.legs[0];
+    expect(leg?.headsign).toBe("Köln Messe/Deutz");
+  });
+
   it("preserves MOTIS identifiers, paging, levels, steps, flags, elevation, and rental returns", async () => {
     planMock.mockResolvedValue({
       data: {

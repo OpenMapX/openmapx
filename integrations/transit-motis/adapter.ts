@@ -510,6 +510,7 @@ function mapLeg(instance: MotisInstance, leg: Leg): TripLeg {
           color: leg.routeColor?.replace(/^#/, "") ?? undefined,
         }
       : undefined,
+    headsign: isTransit ? (leg.headsign ?? undefined) : undefined,
     geometry,
     distanceMeters: leg.distance,
     durationSeconds: leg.duration,
