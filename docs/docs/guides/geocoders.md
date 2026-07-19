@@ -34,7 +34,7 @@ The three engines trade simplicity, completeness, and resource cost differently.
 | | **Photon** | **Nominatim** | **Pelias** |
 | --- | --- | --- | --- |
 | Best at | Search-as-you-type | Completeness, reverse, enrichment | Composite/modular geocoding |
-| Setup | Lowest — one container | Low — one container | High — five containers |
+| Setup | Lowest — one container | Low — one container | High — four containers |
 | Getting data | Auto-downloads a prebuilt index | Imports OSM on first boot | Multi-step build pipeline |
 | Build step | None | None (self-imports) | `openmapx services build pelias` |
 | RAM ceiling (manifest) | 8 GB | 64 GB (import peak) | ~4 GB (Elasticsearch) |
@@ -57,7 +57,7 @@ A few rules of thumb:
   runtime use is far lower.
 - **Pelias is the modular choice.** It combines OpenStreetMap (addresses, venues,
   streets) with Who's On First (administrative boundaries) behind Elasticsearch,
-  and has a dedicated autocomplete endpoint. The cost is operational: it's five
+  and has a dedicated autocomplete endpoint. The cost is operational: it's four
   cooperating containers and a multi-step build.
 
 The RAM ceilings and disk figures above come straight from the service manifests

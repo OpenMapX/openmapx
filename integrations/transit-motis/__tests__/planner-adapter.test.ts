@@ -186,6 +186,9 @@ describe("MOTIS planner request mapping", () => {
     expect(leg?.from.scheduledPlatformCode).toBe("5");
     expect(leg?.to.platformCode).toBe("9");
     expect(leg?.to.scheduledPlatformCode).toBe("9");
+    // Scheduled leg times kept alongside realtime, so a 4-min delay is derivable.
+    expect(leg?.scheduledStartTime).toBe("2026-07-15T10:00:00Z");
+    expect(leg?.scheduledEndTime).toBe("2026-07-15T10:15:00Z");
   });
 
   it("preserves MOTIS identifiers, paging, levels, steps, flags, elevation, and rental returns", async () => {

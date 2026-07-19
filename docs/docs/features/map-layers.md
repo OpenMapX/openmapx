@@ -71,13 +71,21 @@ The built-in overlays group into a few themes.
 | Overlay                | Shows                                                | Data                          |
 | ---------------------- | ---------------------------------------------------- | ----------------------------- |
 | **Traffic**            | Live traffic-flow coloring on roads                  | TomTom Traffic (needs an API key) |
+| **Traffic flow**       | Congestion coloring from your own road-conditions feeds | [OpenConditions](../developer/building-an-external-extension.md) speed data |
 | **Transit lines**      | Public-transport routes and lines                    | OpenStreetMap                 |
 | **Live transit**       | Real-time bus, tram, and train positions             | Live-vehicle feeds (e.g. DB RIS, Entur) |
 | **Airports**           | Airport locations and metadata                       | OurAirports                   |
 | **Road conditions**    | Incidents, roadworks, and closures (community extension) | [OpenConditions](../developer/building-an-external-extension.md) |
 
 The traffic overlay needs a TomTom API key (set in the admin panel or via
-`.env`), and only renders above a minimum zoom. The live-transit overlay picks
+`.env`), and only renders above a minimum zoom. The **Traffic flow** overlay is
+the self-hosted alternative: it colors roads by congestion — a green→dark-red
+gradient (free-flow, light, moderate, heavy, severe) computed from the ratio of
+current to free-flow speed in your own [OpenConditions](../developer/building-an-external-extension.md)
+road-conditions feeds (NDW, Fintraffic, Trafikverket, NYC DOT, and others),
+with line opacity marking whether each reading is measured, estimated, or typical.
+It needs no API key, and because it and the TomTom **Traffic** overlay both color
+flow, turning one on turns the other off. The live-transit overlay picks
 one vehicle-position provider per visible region. The **Road conditions** overlay
 plots traffic incidents, roadworks, hazards, and closures. It features an
 interactive, filterable legend allowing users to filter by incident

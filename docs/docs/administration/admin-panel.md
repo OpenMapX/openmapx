@@ -62,7 +62,8 @@ The landing dashboard. It rolls up system health, user counts, integration
 status (enabled, unhealthy, missing credentials), and — on a self-hosted
 instance — running service counts, alongside an **attention** list of things
 that need a look: failing health checks, failed jobs, unconfigured credentials.
-It's the page to open first when something feels off.
+It's the page to open first when something feels off, and it links out to the
+full `/status` health snapshot (see [Monitoring](./monitoring.md)).
 
 ### Users
 
@@ -117,11 +118,12 @@ sources like EV charging and parking. It shows per-source schedule, last-run and
 row counts, in-flight jobs, recent failures, and a manual **Sync** action for
 triaging a stale or broken source.
 
-### Status
+### Cache
 
-A system-health snapshot — the current state of integrations and (where
-applicable) services in one place, for a quick "is everything up?" check. See
-[Monitoring](./monitoring.md).
+The Redis/Valkey cache inspector — list the cache namespaces (geocoding
+results, provider responses, and the rest) with their key counts, and clear one
+namespace or the whole cache. Handy after switching a provider or credential so
+stale responses don't linger.
 
 ### Activity
 

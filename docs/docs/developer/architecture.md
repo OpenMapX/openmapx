@@ -207,7 +207,8 @@ a code change a developer ships.
 
 Every integration registers into one or more **domains** — `geocoding`,
 `routing`, `transit`, `live-transit`, `data-source`, `poi-search`, `photos`,
-`reviews`, `weather`, `knowledge`, `map-overlay`, `street-view`. Each domain has
+`reviews`, `weather`, `knowledge`, `map-overlay`, `street-view`,
+`road-conditions`, `gtfs-catalog`. Each domain has
 a dedicated **orchestrator integration** (`integrations/geocoding/`,
 `integrations/routing/`, `integrations/transit/`, and so on) that owns the
 domain's public API routes and a registry of providers. Provider integrations

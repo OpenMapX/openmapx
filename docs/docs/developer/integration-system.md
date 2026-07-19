@@ -360,10 +360,12 @@ interface IntegrationContext {
   registerPoiSearchProvider(p: PoiSearchProvider): void;      // → "poi-search"
   registerKnowledgeProvider(p: KnowledgeProvider): void;      // → "knowledge"
   registerGtfsCatalogProvider(p: GtfsCatalogProvider): void;  // → "gtfs-catalog"
+  registerRoadConditionsProvider(p: RoadConditionsProvider): void; // → "road-conditions"
 
   registerPoiSources(sources: readonly PoiSource[]): void;    // → data-manager ingest
   registerRoute(method, path, handler, options?): void;       // → /api/integrations/<id>/…
   registerHealthCheck(fn: CustomHealthCheckFn): void;         // overrides manifest probe
+  registerDisclosure(d: Disclosure): void;                    // surfaces a capability note
 }
 ```
 
@@ -421,6 +423,7 @@ attribution and freshness flow through every call unmodified.
 | `poi-search` | `PoiSearchProvider` | Category and free-text POI search within a bounding box. |
 | `knowledge` | `KnowledgeProvider` | Place enrichment from reference sources. |
 | `gtfs-catalog` | `GtfsCatalogProvider` | List GTFS feeds for the schedule-feed importer to ingest. |
+| `road-conditions` | `RoadConditionsProvider` | Live road/traffic conditions — incidents, roadworks, closures, and per-segment congestion speeds. |
 
 A few patterns recur across the contracts and are worth calling out:
 

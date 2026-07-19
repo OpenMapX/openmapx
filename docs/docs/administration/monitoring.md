@@ -19,8 +19,9 @@ behavior, so you can verify and tune rather than guess.
 
 ## Status dashboard
 
-`/admin/status` is the system-health snapshot — a quick "is everything up?"
-check across the pieces the instance depends on. It calls the API's `/api/status`
+`/status` is the system-health snapshot — a quick "is everything up?"
+check across the pieces the instance depends on, linked from the admin
+**Overview** page. It calls the API's `/api/status`
 endpoint, which probes each dependency live and reports `up`, `down`, or `not
 configured` with a measured response time.
 

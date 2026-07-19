@@ -93,6 +93,10 @@
       "types": "./src/types/transit.ts",
       "default": "./src/types/transit.ts"
     },
+    "./transit-delay": {
+      "types": "./src/transit-delay.ts",
+      "default": "./src/transit-delay.ts"
+    },
     "./shared-mobility": {
       "types": "./src/types/shared-mobility.ts",
       "default": "./src/types/shared-mobility.ts"

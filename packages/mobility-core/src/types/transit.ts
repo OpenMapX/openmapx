@@ -349,6 +349,14 @@ export interface TripLeg {
   mode: TransportMode;
   startTime: string;
   endTime: string;
+  /**
+   * Scheduled leg departure/arrival from the static timetable (MOTIS
+   * `scheduledStartTime`/`scheduledEndTime`). Kept alongside the realtime
+   * {@link startTime}/{@link endTime} so per-leg delay is derivable without a
+   * separate trip fetch. Transit legs only.
+   */
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
   from: TransitPlace;
   to: TransitPlace;
   route?: Pick<TransitRoute, "shortName" | "longName" | "color">;

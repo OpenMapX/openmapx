@@ -125,7 +125,7 @@ The priority tiers look like this:
 | 1 | Self-hosted MOTIS (`transit-motis-local`) | Primary backbone — planet-scale planning, stops, departures. |
 | 1–3 | Regional / agency providers (Entur, MBTA, TfL, iRail, opentransportdata.ch, DB HAFAS/vendo, DB RIS routing, …) | National operators with quirks or live data MOTIS doesn't model, each scoped to its country/city. |
 | 5 | Dynamic registry, self-hosted GTFS feeds | A community-curated catalog of agency APIs, plus per-feed access to feeds you imported yourself. |
-| 7 | MOTIS via Transitous (`transit-motis-cloud`) | Always-on soft fallback — covers local-MOTIS restarts and cold starts. |
+| 7 | MOTIS via Transitous (`transit-motis-transitous`) | Always-on soft fallback — covers local-MOTIS restarts and cold starts. |
 | 9 | Transitland | Global catalog for areas beyond MOTIS coverage. |
 | 10 | Overpass (OSM) | OSM-derived stops only; opt-in fallback, off by default. |
 

@@ -50,7 +50,7 @@ Two engine adapters ship in the box:
 
 | Integration        | Engine    | Modes                       | Scale       | Extras                                                  |
 | ------------------ | --------- | --------------------------- | ----------- | ------------------------------------------------------- |
-| `routing-valhalla` | Valhalla  | driving, cycling, walking   | planet      | elevation profiles, departure/arrival times, map matching |
+| `routing-valhalla` | Valhalla  | driving, motorcycle, cycling, walking | planet | elevation profiles, departure/arrival times, map matching |
 | `routing-osrm`     | OSRM      | driving                     | region only | very fast driving queries                               |
 
 When the app requests directions, the orchestrator looks at the travel mode and
@@ -62,7 +62,7 @@ configured endpoint when no local service is wired up.
 
 The split between the two engines is deliberate:
 
-- **Valhalla** is the general-purpose engine. It routes for all three modes,
+- **Valhalla** is the general-purpose engine. It routes for all non-flying modes,
   handles planet-scale data, and is the only one that produces elevation
   profiles, honors departure/arrival times, and supports map matching. In a
   planet deployment, Valhalla handles everything — including driving.
@@ -78,10 +78,10 @@ guides](#configuration) below.
 
 ### Travel modes
 
-The orchestrator accepts four UI modes for the directions panel: **driving**,
-**cycling**, **walking**, and **flying**. Transit is intentionally not routed
-here — a request for transit mode is redirected to the transit planner. Flying is
-not a routed mode at all; it is a deep-link feature, described
+The orchestrator accepts five UI modes for the directions panel: **driving**,
+**motorcycle**, **cycling**, **walking**, and **flying**. Transit is intentionally
+not routed here — a request for transit mode is redirected to the transit planner.
+Flying is not a routed mode at all; it is a deep-link feature, described
 [below](#flights-a-deep-link-not-live-data).
 
 For driving, OpenMapX maps avoid options onto each engine's native vocabulary:
@@ -96,9 +96,9 @@ time, which Valhalla uses to honor time-conditional access (school zones,
 time-restricted lanes, ferry schedules) and, where available, predicted speeds.
 Engines that ignore time inputs are filtered out of the chain for a timed
 request, so a pinned time never silently returns an untimed route. In the app,
-the leave-now / depart-at / arrive-by picker is surfaced for transit journeys; the
-time-aware capability is available to driving, cycling, and walking through the
-API.
+the leave-now / depart-at / arrive-by picker is surfaced for transit journeys and
+for the driving and motorcycle modes; the same time-aware capability is available
+to cycling and walking through the API.
 
 When a timed route is requested, the routing system dynamically evaluates active
 road closures. Planned closures are only avoided if they are actually in effect at the

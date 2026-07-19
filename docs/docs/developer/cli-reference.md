@@ -1,6 +1,6 @@
 ---
 title: CLI reference
-description: Every command group of the openmapx self-hosting CLI — services, compose, data, repos, integrations, users, backup, cache, check, poi-ingest, and transitous.
+description: Every command group of the openmapx self-hosting CLI — services, integrations, compose, data, poi-ingest, ext, backup, users, check, cache, and transitous.
 sidebar_position: 8
 ---
 
@@ -123,6 +123,10 @@ hardlinks, authenticated feeds — lives in
 | `data remove-feed <slug>` | Remove a single GTFS feed by slug. |
 | `data clean <target>` | Remove local data for one type alias (e.g. `osm`, `gtfs`, `style`, `osrm-graph`) or `all`. |
 | `data generate-api-keys` | Generate the Transitous API-key template for feeds that require keys. Flags: `--repo-url <url>`, `--output <path>`. |
+| `data overture-pull [region]` | Pull Overture Maps places parquet for a region from S3. |
+| `data overture-ingest [region]` | Ingest Overture places parquet into PostGIS for a region. |
+| `data overture-conflate [region]` | Run OSM↔Overture conflation for a region and write link records. |
+| `data overture-extract [region]` | Extract OSM POIs from the local PBF into `overture_places.osm_pois`. |
 
 `data download osm`, `data build`, `data convert`, and `data update` fall back to
 `$OPENMAPX_REGION` when you omit the region; without either, the region-bearing

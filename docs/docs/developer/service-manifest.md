@@ -375,6 +375,14 @@ The form supports `boolean` (switch), `enum` (select), `string`/`number`/
 `integer` (text input), and `format: "url"`. A `default` populates the form when
 no value is persisted.
 
+A property may also carry `"x-openmapx-secret": true` to mark it as sensitive.
+Secret keys are excluded from the env/database cascade below; instead the admin
+panel's credential vault stores them encrypted and the renderer materializes each
+one as a file-based Docker `secret`, mounted into the container and read by the
+service through a `<KEY>_FILE` environment variable. See the
+[service credential vault](../administration/services-administration.md) for the
+operator workflow.
+
 Each declared key resolves through a three-layer cascade at render time, highest
 priority first:
 

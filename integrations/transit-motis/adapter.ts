@@ -489,6 +489,8 @@ function mapLeg(instance: MotisInstance, leg: Leg): TripLeg {
     mode,
     startTime: legStart,
     endTime: legEnd,
+    scheduledStartTime: isTransit ? leg.scheduledStartTime || undefined : undefined,
+    scheduledEndTime: isTransit ? leg.scheduledEndTime || undefined : undefined,
     from: {
       name: fromPlace.name ?? "",
       lat: fromPlace.lat ?? 0,

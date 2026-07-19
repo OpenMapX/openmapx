@@ -182,7 +182,7 @@ Check that every container came back healthy and the API is serving:
 
 ```bash
 pnpm openmapx services status                  # container + health state for all services
-curl -s http://localhost:3001/api/status       # API + integration health JSON
+curl -s https://${DOMAIN}/api/status           # API + integration health JSON (via Traefik)
 ```
 
 Then load the app in a browser and exercise the core paths — search, directions,

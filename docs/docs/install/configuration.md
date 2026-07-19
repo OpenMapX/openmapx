@@ -26,9 +26,10 @@ A few conventions are worth knowing before the tables:
   generated stack as `${VAR:?error}` — Compose refuses to start if they are
   unset, so production can't silently ship with a placeholder. They are marked
   **Required** below.
-- **`.env.example` is the source of truth.** Every key documented here exists in
-  that file, usually with an inline comment and a default. When in doubt, read
-  the template.
+- **`.env.example` is the source of truth.** Nearly every key documented here
+  exists in that file, usually with an inline comment and a default (a few
+  provider-level `INTEGRATION_*` overrides are documented for completeness even
+  when the template omits them). When in doubt, read the template.
 - **Most feature credentials live in the admin UI, not here.** API keys for
   individual integrations (tile providers, transit feeds, weather, fuel prices,
   and so on) are managed at `/admin/integrations`. Anything you *do* set in
@@ -52,7 +53,7 @@ ship the placeholders.
 | `ACME_EMAIL`              | Contact email for Traefik's automatic Let's Encrypt TLS certificates.                                                                   | Default `admin@example.com`   |
 | `POSTGRES_PASSWORD`       | Password for the PostgreSQL/PostGIS database (used by `postgis`, `app-api`, and `data-manager`). Compose refuses to start if unset. Generate with `openssl rand -hex 32`. | **Required**                  |
 | `OPENMAPX_HOST_DIR`       | Absolute host path of the OpenMapX repo checkout. The `app-api` container shells out to `docker compose` from inside the container and bind-mounts this path at the same path on both sides, so generated bind sources like `./data` resolve correctly. Find it with `pwd` from the repo root. | **Required** (no default)     |
-| `DOCKER_GID`              | The host's docker-socket group id. Containers that mount the docker socket run as a non-root user and must join this group, or the data-manager's MOTIS import/promote fails with "permission denied". Host-specific — find it with `stat -c %g /var/run/docker.sock`. | **Required**. Default `999`   |
+| `DOCKER_GID`              | The host's docker-socket group id. Containers that mount the docker socket run as a non-root user and must join this group, or the data-manager's MOTIS import/promote fails with "permission denied". Host-specific — find it with `stat -c %g /var/run/docker.sock`. Compose has no fallback, so it must be set; `.env.example` pre-fills `999`. | **Required**                  |
 
 :::note[Domain and TLS networking]
 Traefik serves HTTP/3 (QUIC) on UDP/443 and the OpenMapX Docker network is
@@ -87,7 +88,8 @@ required pieces of this group are listed under [Core / required](#core--required
 | `UID`                               | Host UID for bind-mounted volumes (Linux). macOS/Windows usually don't need this — Docker Desktop handles ownership. | Optional. Commented `1000`      |
 | `GID`                               | Host GID for bind-mounted volumes (Linux). Same caveat as `UID`.                                                    | Optional. Commented `1000`      |
 | `DATA_MANAGER_URL`                  | Base URL `app-api` uses to reach the data-manager. Compose overrides this to the service-network DNS name automatically. | Default `http://localhost:4000` (`pnpm dev`); compose sets `http://data-manager:4000` |
-| `OPENMAPX_ENABLED_SERVICES`         | Pin a specific service selection (comma- or space-separated) for CI/repeatable deploys. Wins over the `services-selection.json` written by the admin UI / CLI. | Optional. Default: `services-selection.json` |
+| `OPENMAPX_ENABLED_SERVICES`         | Pin a specific service selection (comma- or space-separated) for CI/repeatable deploys. Wins over the `service-selection.json` written by the admin UI / CLI. | Optional. Default: `service-selection.json` |
+| `OPENMAPX_DOCKER_CONFIG_DIR`        | Host directory holding Docker registry credentials, mounted into `app-api` so the extension store's **Update** can pull private GHCR images. On the reference deploy this is `/home/ubuntu/.docker`. | Optional. Default unset |
 
 ## Authentication & OAuth
 
@@ -143,9 +145,10 @@ backend runs outside the Compose stack. All optional and commented by default.
 | Variable            | Description                                                                                                        | Required / Default                  |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
 | `INTEGRATION_ROUTING_OSRM_ENDPOINT` | OSRM endpoint for the routing provider (car routing). Usually unset — a co-deployed `osrm` service is auto-resolved over the internal network. | Optional. Default unset |
+| `OSRM_URL`          | OSRM endpoint used by the `app-api` road-snap helper (distinct from the routing provider above). Usually unset — the co-deployed `osrm` service is used. | Optional. Default unset |
 | `VALHALLA_URL`      | Valhalla endpoint for isochrones, elevation, and road-snap (bus). The default targets Stadia Maps' hosted Valhalla, which requires `VALHALLA_API_KEY`; a self-hosted Valhalla needs no key. The routing/directions **provider** resolves separately — via the co-deployed `valhalla` service or `INTEGRATION_ROUTING_VALHALLA_ENDPOINT` / `INTEGRATION_ROUTING_VALHALLA_APIKEY`. | Optional. Commented `https://api.stadiamaps.com` |
 | `VALHALLA_API_KEY`  | API key for the hosted Valhalla above (free non-commercial tier at [stadiamaps.com](https://stadiamaps.com/)). Leave blank for a self-hosted Valhalla. | Optional. Default unset             |
-| `MOTIS_URL`         | MOTIS endpoint for the transit manager and shared local MOTIS helpers.                                            | Optional. Commented `http://motis:8081` |
+| `MOTIS_URL`         | MOTIS endpoint for the transit manager and shared local MOTIS helpers. Over the internal network MOTIS listens on `8080` (`8081` is only the host-loopback mapping). | Optional. Commented `http://motis:8080` |
 | `OVERPASS_URL`      | Overpass API endpoint used by the core Overpass client.                                                          | Optional. Commented `http://overpass:80` |
 | `NOMINATIM_URL`     | Nominatim endpoint for station reverse-geocoding (bike / scooter / car sharing).                                 | Optional. Commented `http://nominatim:8080` |
 | `TRANSITOUS_URL`    | Transitous endpoint for rental POIs used by shared-mobility integrations.                                        | Optional. Commented `https://api.transitous.org` |
@@ -226,6 +229,8 @@ Schedules and tuning for the daily Transitous transit-data sync.
 
 | Variable                              | Description                                                                                                  | Required / Default            |
 | ------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| `TRANSIT_SOURCE`                      | How the Transitous dataset is obtained: `mirror` (default — download the prebuilt community bundle) or `build` (assemble it locally from feeds). See [Transit engines](../guides/transit-engines.md). | Optional. Default `mirror` |
+| `TRANSITOUS_ARTIFACT_BASE_URL`        | Base URL the `mirror` mode pulls the prebuilt Transitous artifact from. | Optional. Default unset (upstream) |
 | `TRANSITOUS_SYNC_CRON`                | Cron schedule for the daily Transitous sync. Set to `disabled` (or `off`/`false`) to turn it off (e.g. on a staging host where you trigger manually). | Optional. Commented `0 3 * * *` |
 | `TRANSITOUS_STALENESS_CHECK_CRON`     | Cron schedule for the staleness sweep that flags feeds that have stopped updating. Set to `disabled` (or `off`/`false`) to turn it off. | Optional. Commented `0 4 * * *` |
 | `TRANSITOUS_FEED_PROXY_RELOAD_CRON`   | Cron schedule for the feed-proxy nginx-reload heartbeat — a safety net against a missed reload during sync. | Optional. Commented `*/15 * * * *` |

@@ -485,10 +485,14 @@ artifact.
 survives container restarts; removing the integration with
 `pnpm openmapx integrations remove <id>` deletes it cleanly.
 
-**Service secrets.** Credentials for companion services are supplied today via
-environment variables in `infra/docker/.env` — there is no vault integration for
-service containers yet. Document which env vars your service reads in the
-manifest's `envVars` array so they appear in the admin UI.
+**Service secrets.** Non-sensitive service settings are supplied via environment
+variables in `infra/docker/.env` — document which ones your service reads in the
+manifest's `envVars` array so they appear in the admin UI. Sensitive credentials
+should instead be declared as `configSchema` properties marked
+`"x-openmapx-secret": true`: the admin panel's credential vault encrypts them and
+the renderer mounts each as a file-based Docker `secret`, which your service reads
+through the matching `<KEY>_FILE` environment variable. See
+[`configSchema`](./service-manifest.md#configschema).
 
 ## See also
 
