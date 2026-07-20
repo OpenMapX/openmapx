@@ -26,7 +26,7 @@
       "license": "ODbL",
       "licenseUrl": "https://opendatacommons.org/licenses/odbl/",
       "commercialUse": "yes",
-      "attribution": "© OpenStreetMap contributors",
+      "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "providerCountry": "GB",
       "providerPrivacyUrl": "https://wiki.osmfoundation.org/wiki/Privacy_Policy",
       "endUserExposure": "build-time"

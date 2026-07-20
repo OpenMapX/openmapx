@@ -50,7 +50,7 @@
       "url": "https://api.maptiler.com/",
       "license": "Proprietary",
       "licenseUrl": "https://www.maptiler.com/terms/cloud/",
-      "attribution": "© <a href=\"https://www.maptiler.com/copyright/\">MapTiler</a>",
+      "attribution": "© <a href=\"https://www.maptiler.com/copyright/\">MapTiler</a> © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "commercialUse": "conditional",
       "providerCountry": "CH",
       "providerPrivacyUrl": "https://www.maptiler.com/privacy-policy/",

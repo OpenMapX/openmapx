@@ -48,7 +48,7 @@
       "url": "https://tfl.gov.uk/",
       "license": "Proprietary (OGL v2 with TfL amendments)",
       "licenseUrl": "https://tfl.gov.uk/corporate/terms-and-conditions/transport-data-service",
-      "attribution": "Powered by <a href=\"https://tfl.gov.uk/\">TfL Open Data</a>",
+      "attribution": "<a href=\"https://tfl.gov.uk/\">Powered by TfL Open Data</a> Contains OS data © Crown copyright and database rights 2016 and Geomni UK Map data © and database rights [2019]",
       "commercialUse": "yes",
       "providerCountry": "UK",
       "providerPrivacyUrl": "https://tfl.gov.uk/corporate/privacy-and-cookies/privacy-and-data-protection-policy",

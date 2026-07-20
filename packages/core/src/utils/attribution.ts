@@ -109,8 +109,14 @@ function extractHref(attrs: string): string | undefined {
  * returns it sanitized through the allowlist sanitizer — manifests may
  * embed publisher links, but community-installed extensions feed the same
  * field, so it is never trusted verbatim.
- * Otherwise generates `© <a href="{url}">{name}</a> (<a href="{licenseUrl}">{license}</a>)`
+ * Otherwise generates `<a href="{url}">{name}</a> (<a href="{licenseUrl}">{license}</a>)`
  * with every field escaped and URLs validated, via buildRuntimeAttributionHtml.
+ *
+ * No `©` is prepended: copyright is automatic and licenses mandate the credit
+ * (name + license + link), not the symbol, so a blanket `©` would be wrong for
+ * the many public-domain / CC0 / rights-waived sources rendered this way. A
+ * source that genuinely needs a `© Publisher` notice sets it explicitly in its
+ * custom `attribution` string (e.g. OSM, MapTiler, TomTom).
  */
 export function buildAttributionHtml(ds: {
   name: string;
@@ -138,7 +144,7 @@ export function buildRuntimeAttributionHtml(attribution: DataSourceAttribution):
     ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${name}</a>`
     : name;
 
-  if (!attribution.license) return `© ${nameLink}`;
+  if (!attribution.license) return nameLink;
 
   const licenseUrl = safeExternalUrl(attribution.licenseUrl);
   const license = escapeHtml(attribution.license);
@@ -146,7 +152,7 @@ export function buildRuntimeAttributionHtml(attribution: DataSourceAttribution):
     ? `<a href="${escapeHtml(licenseUrl)}" target="_blank" rel="noopener noreferrer">${license}</a>`
     : license;
 
-  return `© ${nameLink} (${licenseLink})`;
+  return `${nameLink} (${licenseLink})`;
 }
 
 /**

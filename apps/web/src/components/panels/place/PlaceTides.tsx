@@ -4,7 +4,6 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import Box from "@mui/material/Box";
-import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import type {
   MetObservation,
@@ -13,8 +12,8 @@ import type {
   TidesResponse,
   WaterLevelObservation,
 } from "@openmapx/core";
-import { safeHref } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { SectionAttribution } from "@/components/ui/SectionAttribution";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { SectionLabel } from "../shared/SectionLabel";
 import { useDataSourceAttribution } from "./useDataSourceAttribution";
@@ -114,48 +113,20 @@ export function PlaceTidesContent({ data }: { data: TidesResponse }) {
         <InfoOutlinedIcon sx={{ fontSize: 14 }} />
         <Typography variant="caption">{t("informationalDisclaimer")}</Typography>
       </Box>
-      {/* Attribution — sourced from the integration manifest, same pattern as PlaceAirportInfo. */}
+      {/* Attribution — rendered via the shared builder (SectionAttribution). */}
       {attributionSource && (
-        <Typography
-          variant="caption"
-          sx={{
-            color: "text.secondary",
-            mt: 0.5,
-            display: "block",
-          }}
-        >
-          {t("attribution")}: ©{" "}
-          <Link
-            href={safeHref(attributionSource.url)}
-            target="_blank"
-            rel="noopener noreferrer"
-            underline="hover"
-            color="inherit"
-          >
-            {attributionSource.name}
-          </Link>
-          {attributionSource.license && (
-            <>
-              {" ("}
-              {attributionSource.licenseUrl ? (
-                <Link
-                  href={safeHref(attributionSource.licenseUrl)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  underline="hover"
-                  color="inherit"
-                >
-                  {attributionSource.license}
-                </Link>
-              ) : (
-                attributionSource.license
-              )}
-              {")"}
-            </>
-          )}
-          {" · "}
-          {t("datumNote")}
-        </Typography>
+        <>
+          <SectionAttribution
+            name={attributionSource.name}
+            url={attributionSource.url}
+            license={attributionSource.license}
+            licenseUrl={attributionSource.licenseUrl}
+            attribution={attributionSource.attribution}
+          />
+          <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
+            {t("datumNote")}
+          </Typography>
+        </>
       )}
     </Box>
   );

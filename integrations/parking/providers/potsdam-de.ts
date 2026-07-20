@@ -5,6 +5,15 @@ import type { BBox } from "@openmapx/poi-source-registry";
 import { getRuntimeContext } from "../runtime.js";
 import { mapPotsdamPayload, mergePotsdamLive } from "./potsdam-de-mapper.js";
 
+/**
+ * Reuse note (Stadtwerke Potsdam / SWP): the CSV feed is publicly reachable on
+ * an Azure-hosted endpoint without an explicit licence, and SWP's impressum
+ * states that all rights to swp-potsdam.de content remain with Stadtwerke
+ * Potsdam GmbH. We surface the data on the assumption that factual occupancy
+ * counts fall outside copyright protection. Operators republishing OpenMapX
+ * should contact SWP for a formal licence.
+ */
+
 const STATION_ID_PREFIX = "potsdam:";
 
 const reader = createTwoTierPoiReader<ParkingFacility>({

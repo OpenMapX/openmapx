@@ -32,10 +32,10 @@
     {
       "sourceId": "ioc-sealevel",
       "name": "IOC Sea Level Station Monitoring Facility",
-      "url": "http://www.ioc-sealevelmonitoring.org/",
+      "url": "https://www.ioc-sealevelmonitoring.org/",
       "license": "UNESCO-IOC public data",
       "licenseUrl": "https://www.unesco.org/en/open-access",
-      "attribution": "Water-level data from the <a href=\"http://www.ioc-sealevelmonitoring.org/\">IOC Sea Level Station Monitoring Facility</a>",
+      "attribution": "Water-level data from the <a href=\"https://www.ioc-sealevelmonitoring.org/\">IOC Sea Level Station Monitoring Facility</a>",
       "commercialUse": "yes",
       "providerCountry": "FR",
       "providerPrivacyUrl": "https://www.unesco.org/en/legal-affairs/privacy-policy",

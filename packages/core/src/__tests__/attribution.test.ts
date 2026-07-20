@@ -174,7 +174,7 @@ describe("buildAttributionHtml", () => {
     expect(html).toContain("CC BY &lt;4.0&gt;");
   });
 
-  it("produces unchanged visible shape for a benign generated fixture (bike-sharing/citybikes)", () => {
+  it("generates a linked name + license credit with no © prefix (bike-sharing/citybikes)", () => {
     const html = buildAttributionHtml({
       name: "CityBikes",
       url: "https://citybik.es/",
@@ -182,8 +182,15 @@ describe("buildAttributionHtml", () => {
     });
 
     expect(html).toBe(
-      '© <a href="https://citybik.es/" target="_blank" rel="noopener noreferrer">CityBikes</a> (Proprietary (custom terms, attribution required))',
+      '<a href="https://citybik.es/" target="_blank" rel="noopener noreferrer">CityBikes</a> (Proprietary (custom terms, attribution required))',
     );
+  });
+
+  it("omits the © prefix on the generated default path (rights-free sources are common)", () => {
+    expect(buildAttributionHtml({ name: "USGS", url: "https://usgs.gov/", license: "" })).toBe(
+      '<a href="https://usgs.gov/" target="_blank" rel="noopener noreferrer">USGS</a>',
+    );
+    expect(buildRuntimeAttributionHtml({ text: "NOAA", url: "", license: "" })).toBe("NOAA");
   });
 
   it("dedups identical attribution strings across dataSources via buildIntegrationAttribution", () => {

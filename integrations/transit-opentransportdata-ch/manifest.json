@@ -224,7 +224,7 @@
       "url": "https://www.openstreetmap.org/copyright",
       "license": "ODbL 1.0",
       "licenseUrl": "https://opendatacommons.org/licenses/odbl/",
-      "attribution": "Contains geometry derived from OpenStreetMap where Swiss OJP uses OSM-backed routing.",
+      "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a> (<a href=\"https://opendatacommons.org/licenses/odbl/\">ODbL</a>) — geometry used by Swiss OJP routing",
       "commercialUse": "yes",
       "providerCountry": "GB",
       "providerPrivacyUrl": "https://osmfoundation.org/wiki/Privacy_Policy",

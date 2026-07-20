@@ -18,6 +18,7 @@ import type {
 } from "@openmapx/core";
 import { safeHref } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { SectionAttribution } from "@/components/ui/SectionAttribution";
 import { TEAL } from "@/lib/theme";
 import { SectionLabel } from "../shared/SectionLabel";
 import { useDataSourceAttribution } from "./useDataSourceAttribution";
@@ -202,45 +203,16 @@ export function PlaceAirportInfo({ airport }: Props) {
         <InfoOutlinedIcon sx={{ fontSize: 14 }} />
         <Typography variant="caption">{t("informationalDisclaimer")}</Typography>
       </Box>
-      {/* Attribution — sourced from the integration manifest, same pattern as PlaceSunTimes. */}
+      {/* Attribution — rendered via the shared builder (SectionAttribution). */}
       {attributionSource && (
         <Box sx={{ px: 2, pt: 0, pb: 1 }}>
-          <Typography
-            variant="caption"
-            sx={{
-              color: "text.secondary",
-            }}
-          >
-            {t("attribution")}: ©{" "}
-            <Link
-              href={safeHref(attributionSource.url)}
-              target="_blank"
-              rel="noopener noreferrer"
-              underline="hover"
-              color="inherit"
-            >
-              {attributionSource.name}
-            </Link>
-            {attributionSource.license && (
-              <>
-                {" ("}
-                {attributionSource.licenseUrl ? (
-                  <Link
-                    href={safeHref(attributionSource.licenseUrl)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    underline="hover"
-                    color="inherit"
-                  >
-                    {attributionSource.license}
-                  </Link>
-                ) : (
-                  attributionSource.license
-                )}
-                {")"}
-              </>
-            )}
-          </Typography>
+          <SectionAttribution
+            name={attributionSource.name}
+            url={attributionSource.url}
+            license={attributionSource.license}
+            licenseUrl={attributionSource.licenseUrl}
+            attribution={attributionSource.attribution}
+          />
         </Box>
       )}
     </Box>

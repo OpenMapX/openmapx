@@ -5,6 +5,15 @@ import type { BBox } from "@openmapx/poi-source-registry";
 import { getRuntimeContext } from "../runtime.js";
 import { mapTrierPayload, mergeTrierLive } from "./trier-de-mapper.js";
 
+/**
+ * Reuse note (Stadtwerke Trier / SWT): the XML feed at service.swt.de is
+ * publicly accessible without an explicit licence, and the operator's
+ * impressum reserves all rights to the website's contents. We surface the
+ * realtime counts on the assumption that factual occupancy data falls outside
+ * copyright protection. Operators republishing OpenMapX should contact SWT
+ * for a formal licence.
+ */
+
 const STATION_ID_PREFIX = "trier:";
 
 const reader = createTwoTierPoiReader<ParkingFacility>({

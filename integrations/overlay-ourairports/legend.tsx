@@ -2,12 +2,12 @@
 
 import Box from "@mui/material/Box";
 import LinearProgress from "@mui/material/LinearProgress";
-import Link from "@mui/material/Link";
 import Paper from "@mui/material/Paper";
 import Switch from "@mui/material/Switch";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
+import { buildAttributionHtml } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { type AirportTypeFilter, useAirportsOverlayStore } from "./store";
@@ -143,42 +143,27 @@ export function AirportsOverlayLegend() {
       {attributionSource && (
         <Typography
           variant="caption"
+          component="div"
           sx={{
             color: "text.secondary",
             mt: 1,
             display: "block",
             fontSize: 10,
+            "& a": { color: "inherit" },
           }}
         >
-          ©{" "}
-          <Link
-            href={attributionSource.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            underline="hover"
-            color="inherit"
-          >
-            {attributionSource.name}
-          </Link>
-          {attributionSource.license && (
-            <>
-              {" ("}
-              {attributionSource.licenseUrl ? (
-                <Link
-                  href={attributionSource.licenseUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  underline="hover"
-                  color="inherit"
-                >
-                  {attributionSource.license}
-                </Link>
-              ) : (
-                attributionSource.license
-              )}
-              {")"}
-            </>
-          )}
+          <Box
+            component="span"
+            dangerouslySetInnerHTML={{
+              __html: buildAttributionHtml({
+                name: attributionSource.name,
+                url: attributionSource.url ?? "",
+                license: attributionSource.license ?? "",
+                licenseUrl: attributionSource.licenseUrl,
+                attribution: attributionSource.attribution,
+              }),
+            }}
+          />
         </Typography>
       )}
     </Paper>

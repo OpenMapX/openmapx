@@ -73,6 +73,7 @@ export function PlaceWeather({ lat, lng, enabled = true }: Props) {
           url={attributionSource.url}
           license={attributionSource.license}
           licenseUrl={attributionSource.licenseUrl}
+          attribution={attributionSource.attribution}
         />
       )}
     </Box>

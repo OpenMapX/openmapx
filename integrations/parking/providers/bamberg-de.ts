@@ -5,6 +5,14 @@ import type { BBox } from "@openmapx/poi-source-registry";
 import { getRuntimeContext } from "../runtime.js";
 import { mapBambergPayload, mergeBambergLive } from "./bamberg-de-mapper.js";
 
+/**
+ * Reuse note (Stadtwerke Bamberg): the operator publishes no reuse licence,
+ * and its impressum states that publication on the internet does not imply
+ * consent for reuse. We surface the data on the assumption that factual
+ * occupancy counts fall outside copyright protection. Operators republishing
+ * OpenMapX should contact Stadtwerke Bamberg for a formal licence.
+ */
+
 const STATION_ID_PREFIX = "bamberg:";
 
 const reader = createTwoTierPoiReader<ParkingFacility>({

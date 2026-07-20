@@ -10,12 +10,11 @@ import WaterDropIcon from "@mui/icons-material/WaterDrop";
 import WcIcon from "@mui/icons-material/Wc";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
-import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
-import { safeHref } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
+import { SectionAttribution } from "@/components/ui/SectionAttribution";
 import { useEnv } from "@/lib/EnvProvider";
 import { useDataSourceAttribution } from "./useDataSourceAttribution";
 
@@ -234,27 +233,13 @@ export function PlaceHarborFacilities({ harbourId, lat, lng, name, category }: P
         )}
 
         {attributionSource && (
-          <Typography
-            variant="caption"
-            sx={{
-              color: "text.secondary",
-              mt: 1,
-              display: "block",
-              fontSize: 10,
-            }}
-          >
-            ©{" "}
-            <Link
-              href={safeHref(attributionSource.url)}
-              target="_blank"
-              rel="noopener noreferrer"
-              underline="hover"
-              color="inherit"
-            >
-              {attributionSource.name}
-            </Link>
-            {attributionSource.license && ` (${attributionSource.license})`}
-          </Typography>
+          <SectionAttribution
+            name={attributionSource.name}
+            url={attributionSource.url}
+            license={attributionSource.license}
+            licenseUrl={attributionSource.licenseUrl}
+            attribution={attributionSource.attribution}
+          />
         )}
       </Box>
     </Box>

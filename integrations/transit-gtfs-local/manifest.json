@@ -38,7 +38,7 @@
       "name": "Local GTFS Feeds",
       "url": "https://gtfs.org/",
       "license": "Per-feed (see getFeedAttribution)",
-      "attribution": "Aggregated set of imported GTFS schedules; per-feed attribution surfaced via getFeedAttribution().",
+      "attribution": "Timetable data from imported GTFS feeds; each feed is credited under its own licence.",
       "commercialUse": "conditional",
       "providerCountry": "XX",
       "providerPrivacyUrl": "https://gtfs.org/",

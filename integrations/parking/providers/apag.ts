@@ -11,6 +11,11 @@ import { makeMobidromMapper, mergeMobidromLive } from "./mobidrom-mapper.js";
  * a backup data lineage going through the NRW Mobilithek exporter. The
  * Mobidrom-shaped payload (see apag-parser.ts) lets us reuse the Mobidrom
  * mapper + live merger verbatim.
+ *
+ * Reuse note: the direct apag.de feed publishes no reuse licence, but the same
+ * dataset is also published under Datenlizenz Deutschland Namensnennung 2.0
+ * via NRW.Mobidrom; that openly-licensed copy ships as the separate
+ * `apag-mobidrom` source.
  */
 
 const STATION_ID_PREFIX = "apag:";

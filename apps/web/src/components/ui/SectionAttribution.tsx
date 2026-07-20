@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
-import { useTranslations } from "next-intl";
-import type { ReactNode } from "react";
+import { buildAttributionHtml } from "@openmapx/core";
+import { AttributionText } from "./AttributionText";
 
 export interface SectionAttributionProps {
   /** Source name (e.g. "Cambio CarSharing"). */
@@ -14,38 +13,42 @@ export interface SectionAttributionProps {
   license?: string;
   /** Optional URL the license string links to. */
   licenseUrl?: string;
-}
-
-function maybeLink(label: string, href: string | undefined): ReactNode {
-  if (!href) return label;
-  return (
-    <Link href={href} target="_blank" rel="noopener noreferrer" underline="hover" color="inherit">
-      {label}
-    </Link>
-  );
+  /**
+   * Optional verbatim attribution HTML from the integration manifest. When set,
+   * it overrides the default `© name (license)` form — e.g. a licence-mandated
+   * wording, or a public-domain source that must not carry a `©`.
+   */
+  attribution?: string;
 }
 
 /**
- * Standardised one-line attribution for place-panel sections. Matches the
- * bottom-of-panel `AttributionFooter` in `DataSourceSections` so every
- * per-section attribution looks identical — same `Data: © Name (License)`
- * shape, font size, and link styling.
+ * Standardised one-line attribution for place-panel sections. Renders through
+ * the shared `buildAttributionHtml` builder — the single place the `©`/format
+ * and any manifest `attribution` override are applied — so no section
+ * hand-assembles its own credit or hardcodes a `©`.
  */
-export function SectionAttribution({ name, url, license, licenseUrl }: SectionAttributionProps) {
-  const tc = useTranslations("common");
+export function SectionAttribution({
+  name,
+  url,
+  license,
+  licenseUrl,
+  attribution,
+}: SectionAttributionProps) {
   if (!name) return null;
+  const html = buildAttributionHtml({
+    name,
+    url: url ?? "",
+    license: license ?? "",
+    licenseUrl,
+    attribution,
+  });
   return (
     <Typography
       variant="caption"
       component="div"
-      sx={{
-        color: "text.secondary",
-        mt: 0.5,
-        display: "block",
-      }}
+      sx={{ color: "text.secondary", mt: 0.5, display: "block" }}
     >
-      {tc("data")}: © {maybeLink(name, url)}
-      {license && <> ({maybeLink(license, licenseUrl)})</>}
+      <AttributionText html={html} />
     </Typography>
   );
 }
