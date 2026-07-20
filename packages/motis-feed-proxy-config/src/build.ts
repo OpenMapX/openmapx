@@ -48,7 +48,19 @@ export interface FeedProxyBuildInput {
 export interface FeedProxyRenderOptions {
   includeGbfsServers?: boolean;
   headerComment?: string;
+  /**
+   * nginx `resolver` value emitted in the http context. The per-GBFS server
+   * blocks use `proxy_pass $feed_upstream` (a variable), which nginx resolves at
+   * REQUEST time and therefore REQUIRES a `resolver` — without it every GBFS
+   * fetch fails with `502 no resolver defined to resolve <host>`. Defaults to
+   * Docker's embedded DNS. Pass an empty string to omit it (e.g. for a host
+   * that already sets one at the http level).
+   */
+  resolver?: string;
 }
+
+/** Docker's embedded DNS on user-defined networks; correct for the compose stack. */
+const DEFAULT_RESOLVER = "127.0.0.11 ipv6=off valid=30s";
 
 export interface FeedProxyBuildResult {
   /** Whether the file was actually written. Always true on success — kept as a
@@ -272,12 +284,16 @@ export function renderFeedProxyNginxConfig(
 ): string {
   const includeGbfsServers = options.includeGbfsServers ?? true;
   const headerComment = options.headerComment ?? DEFAULT_HEADER_COMMENT;
+  const resolver = options.resolver ?? DEFAULT_RESOLVER;
   const entries = sortedEntries(vars);
   const lines = [
     headerComment,
     "proxy_cache_path /var/cache/nginx/feed-proxy max_size=10g keys_zone=feed-proxy:10m inactive=1h;",
     "limit_req_zone $binary_remote_addr zone=feed-proxy-quota:10m rate=10000r/m;",
     "limit_req_status 429;",
+    // Required for the per-GBFS `proxy_pass $feed_upstream` blocks to resolve
+    // upstream hostnames at request time (else 502 "no resolver defined").
+    ...(resolver.trim() ? [`resolver ${resolver.trim()};`] : []),
     "",
     ...renderPrimaryServer(entries),
   ];

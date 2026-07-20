@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -65,6 +65,41 @@ describe("feed proxy transaction", () => {
     await rollbackProxyTransaction(context);
     expect(readFileSync(join(fx.active, "conf", "default.conf"), "utf-8")).toBe("old bytes\n");
     expect(JSON.parse(readFileSync(join(fx.active, "feed-proxy-vars.json"), "utf-8"))).toEqual(old);
+  });
+
+  it("re-links the written config into the container-mounted copy so nginx sees it", async () => {
+    const fx = setup({ "de-x": { url: "https://x.example/gbfs.json", gbfs: true } }, {});
+    if (!tmp) throw new Error("fixture not initialized");
+    // A hardlink plan like the compose renderer emits: producer `conf/` →
+    // consumer `motis-feed-proxy-config/` (the dir the container mounts).
+    const infra = join(tmp, "repo", "infra", "docker");
+    mkdirSync(infra, { recursive: true });
+    writeFileSync(
+      join(infra, "docker-compose.generated.hardlinks.json"),
+      JSON.stringify([
+        {
+          source: "data/motis-feed-proxy/conf",
+          target: "data/motis-feed-proxy/motis-feed-proxy-config",
+          consumerService: "motis-feed-proxy",
+          dataType: "motis-feed-proxy-config",
+        },
+      ]),
+    );
+    const context = buildJobContext({
+      dataDir: tmp,
+      repoRoot: join(tmp, "repo"),
+      store: new StateStore(tmp),
+      runner: async () => {},
+      now: () => "2026-01-01T00:00:00Z",
+    });
+    expect((await run(context)).status).toBe("ok");
+
+    const producerPath = join(fx.active, "conf", "default.conf");
+    const mountedPath = join(tmp, "motis-feed-proxy", "motis-feed-proxy-config", "default.conf");
+    // The container-mounted copy matches the freshly written producer config…
+    expect(readFileSync(mountedPath, "utf-8")).toBe(readFileSync(producerPath, "utf-8"));
+    // …and is a hardlink to it (same inode), so future in-place writes propagate.
+    expect(statSync(mountedPath).ino).toBe(statSync(producerPath).ino);
   });
 
   it("restores exact previous files when nginx validation fails", async () => {

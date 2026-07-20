@@ -114,6 +114,27 @@ describe("buildFeedProxyConfig", () => {
     expect(withoutGbfs).toContain('location "/feed/de-nextbike"');
   });
 
+  it("emits a resolver so variable proxy_pass upstreams resolve at request time", () => {
+    // GBFS blocks use `proxy_pass $feed_upstream` (a variable), which nginx can
+    // only resolve at request time WITH a `resolver` directive. Without it every
+    // GBFS fetch 502s ("no resolver defined to resolve <host>").
+    const out = renderFeedProxyNginxConfig({
+      "de-nextbike": { url: "https://gbfs.nextbike.net/gbfs.json", gbfs: true },
+    });
+    expect(out).toMatch(/^resolver .+;$/m);
+    // Global http context: must precede the first server block.
+    expect(out.indexOf("resolver ")).toBeGreaterThanOrEqual(0);
+    expect(out.indexOf("resolver ")).toBeLessThan(out.indexOf("server {"));
+  });
+
+  it("honours a custom resolver address", () => {
+    const out = renderFeedProxyNginxConfig(
+      { "de-nextbike": { url: "https://gbfs.nextbike.net/gbfs.json", gbfs: true } },
+      { resolver: "10.0.0.53 valid=10s" },
+    );
+    expect(out).toContain("resolver 10.0.0.53 valid=10s;");
+  });
+
   it("CLI helper and shared renderer produce byte-identical output for the same fixture", () => {
     const fixture = {
       "de-vbb-0": {

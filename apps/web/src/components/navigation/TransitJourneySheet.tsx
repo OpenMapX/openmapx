@@ -179,10 +179,17 @@ export function TransitJourneySheet({
   itinerary,
   currentLegIndex,
   transitProgress: _transitProgress,
+  scroll = true,
 }: {
   itinerary: TripItinerary;
   currentLegIndex: number;
   transitProgress: TransitProgress | null;
+  /**
+   * Cap the content at 56vh and scroll internally (mobile swipe-sheet default).
+   * Desktop passes `false` so the parent panel owns a single scroll region and
+   * the menu below stays reachable instead of adding a nested scrollbar.
+   */
+  scroll?: boolean;
 }) {
   const t = useTranslations("navigation");
   const legs = itinerary.legs;
@@ -206,7 +213,7 @@ export function TransitJourneySheet({
     currentLeg?.mode === "walking" && nextTransitLeg && nextTransitLeg !== currentLeg;
 
   return (
-    <Box sx={{ maxHeight: "56vh", overflowY: "auto" }}>
+    <Box sx={scroll ? { maxHeight: "56vh", overflowY: "auto" } : undefined}>
       {boardingSoon && nextTransitLeg?.from.stopId && (
         <TransitBoardingDepartures
           stopId={nextTransitLeg.from.stopId}

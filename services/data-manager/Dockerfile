@@ -107,6 +107,23 @@ RUN set -eux; \
     chmod +x /usr/local/bin/docker; \
     rm -rf /tmp/docker /tmp/docker.tgz; \
     docker --version
+# Compose v2 CLI plugin. The atomic-swap promote recreates the MOTIS container
+# with `docker compose up -d --force-recreate` (a plain `docker restart` keeps
+# the pre-swap bind-mount target), so the plugin — not just the base CLI — must
+# be present, else promote fails with "unknown shorthand flag: 'f'".
+ARG DOCKER_COMPOSE_VERSION=2.32.4
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+      x86_64) compose_arch=x86_64 ;; \
+      aarch64|arm64) compose_arch=aarch64 ;; \
+      *) echo "Unsupported arch $arch for Docker Compose install" >&2; exit 1 ;; \
+    esac; \
+    mkdir -p /usr/local/lib/docker/cli-plugins; \
+    curl -fsSL "https://github.com/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${compose_arch}" \
+      -o /usr/local/lib/docker/cli-plugins/docker-compose; \
+    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose; \
+    docker compose version
 ARG DUCKDB_VERSION=1.3.1
 RUN set -eux; \
     arch="$(uname -m)"; \

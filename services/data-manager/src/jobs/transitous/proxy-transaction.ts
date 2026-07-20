@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { applyHardlinkPlan, type HardlinkEntry } from "@openmapx/hardlinks";
 import {
   type FeedProxyVars,
   normalizeFeedProxyVars,
@@ -67,7 +68,41 @@ function mergeFeedProxyVars(current: FeedProxyVars, candidate: FeedProxyVars): F
   return { ...current, ...candidate };
 }
 
+const FEED_PROXY_DATA_TYPE = "motis-feed-proxy-config";
+
+/**
+ * Re-establish the hardlink from the pipeline-written `conf/` producer dir to
+ * the dir the feed-proxy container actually mounts (`motis-feed-proxy-config/`).
+ *
+ * The container mounts a *hardlinked copy* of the producer dir, not the producer
+ * dir itself. `writeAtomic` (write-tmp + rename) gives each new config a fresh
+ * inode, orphaning the previously-linked copy — so without re-linking here nginx
+ * keeps serving the stale config no matter how often we `nginx -s reload`. This
+ * repairs the link (linkFileAt rm+relinks on inode mismatch) before every
+ * validate/reload. Best-effort: on dev/test hosts with no hardlink plan it's a
+ * no-op and the (already co-located) config is served directly.
+ */
+function relinkFeedProxyConfig(ctx: JobContext): void {
+  if (!ctx.repoRoot) return;
+  const planPath = join(ctx.repoRoot, "infra", "docker", "docker-compose.generated.hardlinks.json");
+  if (!existsSync(planPath)) return;
+  let plan: HardlinkEntry[];
+  try {
+    plan = JSON.parse(readFileSync(planPath, "utf-8")) as HardlinkEntry[];
+  } catch {
+    return;
+  }
+  const entries = plan.filter((entry) => entry?.dataType === FEED_PROXY_DATA_TYPE);
+  if (entries.length === 0) return;
+  // prune: false — never delete container-side files (e.g. an operator resolver
+  // drop-in); we only need the config file itself re-pointed at the fresh inode.
+  applyHardlinkPlan(entries, { rootDir: ctx.dataDir, prune: false });
+}
+
 async function validateAndReload(ctx: JobContext): Promise<void> {
+  // Propagate the just-written config into the container's mounted copy before
+  // asking nginx to validate/reload it.
+  relinkFeedProxyConfig(ctx);
   await ctx.runner("docker", ["exec", FEED_PROXY_CONTAINER, "nginx", "-t"], {
     cwd: ctx.dataDir,
     stdio: "pipe",

@@ -143,6 +143,9 @@ export function TransitNavigationView() {
                     alignSelf: "flex-start",
                     width: 1,
                     maxWidth: NAV_LANDSCAPE_PANEL_WIDTH + 32,
+                    // Never let the always-on instruction banner shrink; only the
+                    // expandable panel below gives up space when the column is short.
+                    flexShrink: 0,
                   }),
             }}
           >
@@ -172,7 +175,16 @@ export function TransitNavigationView() {
             )}
           </Box>
 
-          <Box sx={{ display: "flex", flexDirection: "column" }}>
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              // Desktop: allow this block to give up height so the panel below
+              // caps to the space left under the (non-shrinking) banner and
+              // scrolls instead of running off the bottom of the viewport.
+              ...(isMobile ? {} : { minHeight: 0 }),
+            }}
+          >
             {isMobile ? (
               <NavSwipeSheet
                 expanded={sheetOpen}
@@ -199,21 +211,34 @@ export function TransitNavigationView() {
                   bgcolor: "background.paper",
                   borderRadius: 3,
                   boxShadow: 6,
+                  // Flex column: the header stays put and the panel shrinks to
+                  // the height the (shrinkable) column leaves it, so the menu
+                  // scrolls instead of overflowing the viewport.
+                  display: "flex",
+                  flexDirection: "column",
+                  minHeight: 0,
+                  overflow: "hidden",
                 }}
               >
-                <TransitNavBottomBar
-                  itinerary={itinerary}
-                  currentLeg={currentLeg}
-                  menuToggle={desktopMenuToggle}
-                />
-                <Collapse in={menuOpen} unmountOnExit>
-                  <TransitJourneySheet
+                <Box sx={{ flexShrink: 0 }}>
+                  <TransitNavBottomBar
                     itinerary={itinerary}
-                    currentLegIndex={currentLegIndex}
-                    transitProgress={transitProgress}
+                    currentLeg={currentLeg}
+                    menuToggle={desktopMenuToggle}
                   />
-                  {menu}
-                </Collapse>
+                </Box>
+                {/* Header stays pinned; the expanded journey + menu scroll. */}
+                <Box sx={{ minHeight: 0, overflowY: "auto", overflowX: "hidden" }}>
+                  <Collapse in={menuOpen} unmountOnExit>
+                    <TransitJourneySheet
+                      itinerary={itinerary}
+                      currentLegIndex={currentLegIndex}
+                      transitProgress={transitProgress}
+                      scroll={false}
+                    />
+                    {menu}
+                  </Collapse>
+                </Box>
               </Box>
             )}
           </Box>

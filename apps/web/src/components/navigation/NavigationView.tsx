@@ -188,7 +188,14 @@ export function NavigationView() {
               // horizontal padding so the card itself is LANDSCAPE_PANEL_WIDTH).
               ...(isMobile
                 ? {}
-                : { alignSelf: "flex-start", width: 1, maxWidth: NAV_LANDSCAPE_PANEL_WIDTH + 32 }),
+                : {
+                    alignSelf: "flex-start",
+                    width: 1,
+                    maxWidth: NAV_LANDSCAPE_PANEL_WIDTH + 32,
+                    // Keep the maneuver banner fully visible; only the panel below
+                    // gives up space when the column is short.
+                    flexShrink: 0,
+                  }),
             }}
           >
             {step && (
@@ -241,7 +248,15 @@ export function NavigationView() {
           </Box>
 
           {/* Bottom region: speed limit sits just above the panel, on the left. */}
-          <Box sx={{ display: "flex", flexDirection: "column" }}>
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              // Desktop: let this block shrink so the panel caps under the
+              // (non-shrinking) banner and scrolls rather than overflowing.
+              ...(isMobile ? {} : { minHeight: 0 }),
+            }}
+          >
             {currentSpeedLimit !== null && (
               <Box sx={{ pointerEvents: "auto", alignSelf: "flex-start", pl: 2, pb: 1 }}>
                 <SpeedLimitBadge
@@ -282,20 +297,32 @@ export function NavigationView() {
                     bgcolor: "background.paper",
                     borderRadius: 3,
                     boxShadow: 6,
+                    // Flex column: the header stays put and the panel shrinks to
+                    // the height the (shrinkable) column leaves it, so the menu
+                    // scrolls instead of overflowing the viewport.
+                    display: "flex",
+                    flexDirection: "column",
+                    minHeight: 0,
+                    overflow: "hidden",
                   }}
                 >
-                  <NavBottomBar
-                    distanceRemaining={distanceRemaining}
-                    durationRemaining={durationRemaining}
-                    etaEpochMs={etaEpochMs}
-                    onSearch={routeSearchOpen ? undefined : openRouteSearch}
-                    onEnd={stopNavigation}
-                    units={units}
-                    menuToggle={desktopMenuToggle}
-                  />
-                  <Collapse in={menuOpen} unmountOnExit>
-                    {navMenu}
-                  </Collapse>
+                  <Box sx={{ flexShrink: 0 }}>
+                    <NavBottomBar
+                      distanceRemaining={distanceRemaining}
+                      durationRemaining={durationRemaining}
+                      etaEpochMs={etaEpochMs}
+                      onSearch={routeSearchOpen ? undefined : openRouteSearch}
+                      onEnd={stopNavigation}
+                      units={units}
+                      menuToggle={desktopMenuToggle}
+                    />
+                  </Box>
+                  {/* Header stays pinned; the expanded menu scrolls. */}
+                  <Box sx={{ minHeight: 0, overflowY: "auto", overflowX: "hidden" }}>
+                    <Collapse in={menuOpen} unmountOnExit>
+                      {navMenu}
+                    </Collapse>
+                  </Box>
                 </Box>
               ))}
           </Box>
