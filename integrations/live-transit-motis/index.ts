@@ -1,15 +1,14 @@
 import { type Client, createClient } from "@hey-api/client-fetch";
 import type { LiveTransitVehicle } from "@integrations/overlay-live-transit/types.js";
-import { tripSegmentsToVehicles } from "@integrations/transit-motis/vehicle-radar.js";
+import { getVehicleRadar } from "@integrations/transit-motis/adapter.js";
+import { motisLocalInstance } from "@integrations/transit-motis/instances.js";
 import {
   type Itinerary,
   type Leg,
   type Alert as MotisAlert,
   trip as motisTrip,
-  trips as motisTrips,
   type Place,
   stoptimes,
-  type TripSegment,
 } from "@motis-project/motis-client";
 import { type BBox, USER_AGENT_TRANSIT } from "@openmapx/core";
 import {
@@ -80,10 +79,6 @@ function makeClient(baseUrl: string): Client {
 // vice versa — and mirrors transit-motis's getVehicleJourney prefix handling.
 const localClient = makeClient(FALLBACK_MOTIS_URL);
 const transitousClient = makeClient(TRANSITOUS_URL);
-
-// Temporary diagnostics for the live-transit overlay MOTIS path.
-let debugLog: ((obj: Record<string, unknown>, msg: string) => void) | undefined;
-let debugMotisUrl = FALLBACK_MOTIS_URL;
 
 function routeForId(id: string): { client: Client; attribution: Attribution[] } {
   if (id.startsWith("mo:")) {
@@ -169,51 +164,20 @@ function deltaFromItinerary(
   };
 }
 
-// MOTIS `map/trips` (RailViz) params — must match the polyline `precision` used
-// to decode the segment shapes.
-const RADAR_PRECISION = 6;
-const VEHICLE_RADAR_ZOOM = 13;
-// Self-hosted MOTIS trip ids carry the `ms:` prefix, so interpolated vehicles
-// share the id namespace of the local instance the overlay is enriching.
-const LOCAL_PREFIX = "ms:";
-
 /**
  * Schedule-based (realtime-aware) vehicle positions from MOTIS `map/trips`: for
  * every trip currently between two stops in the viewport, MOTIS returns the leg
- * shape + times and we interpolate the vehicle to "now". These are `interpolated`
+ * shape + times and the vehicle is interpolated to "now". These are `interpolated`
  * positions — the overlay renders them distinctly and prefers a real GPS fix for
- * the same trip. Queried against the self-hosted instance (`ms:`), where most
- * feeds publish no GPS at all, so this is the only way to show moving vehicles.
+ * the same trip. On the self-hosted instance (`ms:`), where most feeds publish no
+ * GPS at all, this is the only way to show moving vehicles.
+ *
+ * Reuses transit-motis's proven `getVehicleRadar` + configured `motisLocalInstance`
+ * client rather than a second MOTIS client of our own.
  */
 async function getInterpolatedVehicles(bbox: BBox): Promise<LiveTransitVehicle[]> {
-  const [west, south, east, north] = bbox;
-  const now = Date.now();
-  let segments: TripSegment[] = [];
-  try {
-    const { data, error, response } = await motisTrips({
-      client: localClient,
-      query: {
-        min: `${south},${west}`,
-        max: `${north},${east}`,
-        startTime: new Date(now - 60_000).toISOString(),
-        endTime: new Date(now + 60_000).toISOString(),
-        zoom: VEHICLE_RADAR_ZOOM,
-        precision: RADAR_PRECISION,
-      },
-    });
-    debugLog?.(
-      { motisUrl: debugMotisUrl, status: response?.status, isArray: Array.isArray(data), error },
-      "live-transit-motis map/trips result",
-    );
-    if (Array.isArray(data)) segments = data as TripSegment[];
-  } catch (err) {
-    debugLog?.({ motisUrl: debugMotisUrl, err: String(err) }, "live-transit-motis map/trips threw");
-    return [];
-  }
-  return tripSegmentsToVehicles(
-    { prefix: LOCAL_PREFIX, provider: SOURCE_ID, precision: RADAR_PRECISION, nowMs: now },
-    segments,
-  ).map((vehicle) => ({
+  const vehicles = await getVehicleRadar(motisLocalInstance, bbox);
+  return vehicles.map((vehicle) => ({
     ...vehicle,
     sourceId: SOURCE_ID,
     mode: vehicle.mode ?? "bus",
@@ -224,10 +188,8 @@ async function getInterpolatedVehicles(bbox: BBox): Promise<LiveTransitVehicle[]
 
 export function setup(ctx: IntegrationContext): void {
   attribution.set(ctx.manifest.dataSources ?? []);
-  debugMotisUrl = resolveMotisUrl(ctx);
-  debugLog = (obj, msg) => ctx.log.info(`${msg}: ${JSON.stringify(obj)}`);
   localClient.setConfig({
-    baseUrl: debugMotisUrl,
+    baseUrl: resolveMotisUrl(ctx),
     headers: { "User-Agent": USER_AGENT_TRANSIT },
   });
   transitousClient.setConfig({
