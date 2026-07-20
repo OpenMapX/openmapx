@@ -4,7 +4,7 @@ import { type MotisCandidateManifest, verifyCandidateManifest } from "./candidat
 import { runFunctionalProbes, verifyCapabilitySnapshot } from "./functional-probes.js";
 import { IMPORT_MARKER_FILE } from "./internal.js";
 import { PRIMARY_CONTAINER, STAGING_CONTAINER } from "./motis-containers.js";
-import { mapInitialUrl } from "./motis-endpoints.js";
+import { healthUrl } from "./motis-endpoints.js";
 import { parseIntEnv, pollUntilHealthy } from "./motis-probe.js";
 import { commitProxyTransaction } from "./proxy-transaction.js";
 import {
@@ -27,7 +27,7 @@ const SMOKE_BUDGET_MS = 30_000;
 // exits as soon as the primary is healthy, so a fast load isn't penalised.
 // Override with MOTIS_PROMOTE_RESTART_TIMEOUT_MS.
 const RESTART_BUDGET_MS = parseIntEnv("MOTIS_PROMOTE_RESTART_TIMEOUT_MS", 60 * 60 * 1000);
-const RESTART_POLL_INTERVAL_MS = 5_000;
+const RESTART_POLL_INTERVAL_MS = parseIntEnv("MOTIS_PROMOTE_RESTART_POLL_INTERVAL_MS", 5_000);
 
 /**
  * Artifacts MOTIS writes into the working dir's `data/` subdir during a
@@ -91,11 +91,17 @@ function isImportShaped(dir: string): boolean {
 }
 
 async function waitForPrimaryHealthy(deadline: number): Promise<string | null> {
-  const fail = await pollUntilHealthy(mapInitialUrl(PRIMARY_URL), deadline, {
+  // Gate on /api/v1/health, NOT /map/initial. MOTIS binds its HTTP server (so
+  // /map/initial answers 200) as soon as it starts, but /health returns HTTP 400
+  // until the timetable finishes loading. Polling /map/initial let the gate pass
+  // prematurely, after which the terminal smoke `health` probe hit a 400 and
+  // rolled back a good build. This mirrors the staging readiness poll in
+  // motis-health, which gates on the same endpoint.
+  const fail = await pollUntilHealthy(healthUrl(PRIMARY_URL), deadline, {
     intervalMs: RESTART_POLL_INTERVAL_MS,
   });
   if (!fail) return null;
-  return `primary MOTIS at ${mapInitialUrl(PRIMARY_URL)} did not become healthy within ${RESTART_BUDGET_MS}ms (${fail.reason})`;
+  return `primary MOTIS at ${healthUrl(PRIMARY_URL)} did not become healthy within ${RESTART_BUDGET_MS}ms (${fail.reason})`;
 }
 
 /**

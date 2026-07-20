@@ -229,6 +229,42 @@ describe("promote stage", () => {
     expect(artifacts.previousDir).toBe(fx.previousDir);
   });
 
+  it("waits for the primary /health to load, not just /map/initial, before smoke-testing", async () => {
+    // MOTIS binds its HTTP server (so /map/initial answers 200) BEFORE the
+    // timetable finishes loading, during which /api/v1/health returns HTTP 400.
+    // The post-swap readiness gate must poll the same /health endpoint the smoke
+    // test then asserts on — otherwise it passes prematurely on /map/initial and
+    // the terminal health probe fails 400, rolling back a perfectly good build.
+    const fx = setupFixture({ staging: true, current: true });
+    const previous = process.env.MOTIS_PROMOTE_RESTART_POLL_INTERVAL_MS;
+    process.env.MOTIS_PROMOTE_RESTART_POLL_INTERVAL_MS = "5";
+    try {
+      // Staging (:8082) is already healthy from the motis-health stage; only the
+      // freshly-restarted primary (:8081) is still loading its timetable.
+      let primaryHealthCalls = 0;
+      globalThis.fetch = vi.fn(async (input: unknown) => {
+        const url = typeof input === "string" ? input : (input as Request | URL).toString();
+        if (url.includes("/health") && url.includes(":8081")) {
+          primaryHealthCalls += 1;
+          // Still importing the timetable for the first couple of polls.
+          if (primaryHealthCalls <= 2) return jsonResponse({ error: "loading" }, 400);
+        }
+        return jsonResponse(successfulBody(url));
+      }) as unknown as typeof fetch;
+
+      const ctx = makeCtx({ dataDir: fx.dataDir, runner: async () => {} });
+      const result = await promoteRun(ctx);
+      expect(result.status).toBe("ok");
+      // The readiness poll kept going past the 400s (>=3 = two 400s + the 200
+      // that opened the gate), proving it gated on /health rather than bailing
+      // to the smoke test after a single premature /map/initial 200.
+      expect(primaryHealthCalls).toBeGreaterThanOrEqual(3);
+    } finally {
+      if (previous === undefined) delete process.env.MOTIS_PROMOTE_RESTART_POLL_INTERVAL_MS;
+      else process.env.MOTIS_PROMOTE_RESTART_POLL_INTERVAL_MS = previous;
+    }
+  });
+
   it("recreates only MOTIS with --no-deps when a compose file is present", async () => {
     const fx = setupFixture({ staging: true, current: true });
     globalThis.fetch = vi.fn(async (input: unknown) => {
