@@ -35,7 +35,7 @@ export default function TermsContent({
           mb: 4,
         }}
       >
-        Last updated: June 12, 2026
+        Last updated: July 20, 2026
       </Typography>
       <Section title="1. Scope and Provider">
         <Typography>
@@ -464,6 +464,11 @@ export default function TermsContent({
           particular, data sourced from OpenStreetMap is available under the ODbL, which requires
           attribution and share-alike for derivative databases.
         </Typography>
+        {integrations.some((i) => i.id === "photos-flickr" && i.enabled) && (
+          <Typography sx={{ mt: 1 }}>
+            This product uses the Flickr API but is not endorsed or certified by SmugMug, Inc.
+          </Typography>
+        )}
       </Section>
       <Section title="13. Severability">
         <Typography>

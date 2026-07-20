@@ -35,7 +35,7 @@ export default function TermsContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 12. Juni 2026
+        Zuletzt aktualisiert: 20. Juli 2026
       </Typography>
       <Section title="1. Geltungsbereich und Anbieter">
         <Typography>
@@ -507,6 +507,11 @@ export default function TermsContentDe({
           stammende Daten unter der ODbL verf&uuml;gbar, die Namensnennung und Share-Alike f&uuml;r
           abgeleitete Datenbanken erfordert.
         </Typography>
+        {integrations.some((i) => i.id === "photos-flickr" && i.enabled) && (
+          <Typography sx={{ mt: 1 }}>
+            This product uses the Flickr API but is not endorsed or certified by SmugMug, Inc.
+          </Typography>
+        )}
       </Section>
       <Section title="13. Salvatorische Klausel">
         <Typography>
