@@ -13,7 +13,7 @@ from pathlib import Path
 def main() -> int:
     out_dir = Path("out")
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "attributions.json").write_text(json.dumps([]) + "\n", encoding="utf-8")
+    (out_dir / "license.json").write_text(json.dumps([]) + "\n", encoding="utf-8")
     return 0
 
 
