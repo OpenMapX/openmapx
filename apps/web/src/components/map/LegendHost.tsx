@@ -4,7 +4,7 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
-import { useNavigationStore, useSidebarStore } from "@openmapx/core";
+import { integrationIdToOverlayId, useNavigationStore, useSidebarStore } from "@openmapx/core";
 import { getCommunityModule } from "@openmapx/integration-framework";
 import {
   useCommunityModulesVersion,
@@ -16,6 +16,7 @@ import { MOBILE_SHEET_FOLLOW_CAP_FRACTION } from "@/components/panels/mobileShee
 import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
 import { useMobilePanelMaxHeight } from "@/lib/mobilePanelHeight";
 import { DeclarativeLegend } from "./overlay/DeclarativeLegend";
+import { useAnyOverlayPanelOpen } from "./overlay/useOverlayStoreState";
 
 const FLUSH_BOTTOM = "var(--omx-safe-bottom)";
 // Clearance above the navigation bottom bar (mirrors MapControls' NAV_BOTTOM).
@@ -110,7 +111,14 @@ export function LegendHost() {
   const declarativeIds = new Set(declarative.map((i) => i.id));
   const codeLegends = registry.getWithLegend().filter((i) => !declarativeIds.has(i.id));
 
-  if (declarative.length === 0 && codeLegends.length === 0) return null;
+  // A legend integration being *enabled* (installed) doesn't mean its overlay is
+  // active — each legend renders only when its overlay panel is open (see
+  // OverlayLegend). Gate the whole host (toggle included) on the same condition
+  // so the toggle never appears over an empty stack.
+  const overlayIds = [...declarative, ...codeLegends].map((i) => integrationIdToOverlayId(i.id));
+  const anyPanelOpen = useAnyOverlayPanelOpen(overlayIds);
+
+  if (!anyPanelOpen) return null;
 
   const bottom = navigating
     ? `calc(${NAV_BOTTOM}px + var(--omx-safe-bottom))`

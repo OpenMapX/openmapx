@@ -44,3 +44,36 @@ export function useOverlayPanelOpen(overlayId: string): boolean {
 export function useOverlaySetLayerVisible(overlayId: string): (visible: boolean) => void {
   return useOverlayStore(overlayId).getState().setLayerVisible;
 }
+
+/**
+ * Reactively report whether any of the given overlays has its panel open — the
+ * same condition each legend uses to decide whether to render (see
+ * OverlayLegend). A single subscription across all listed stores keeps the hook
+ * count stable regardless of how many overlays are passed, so the id list may
+ * vary between renders. Resolving stores lazily mirrors `useOverlayStore`.
+ */
+export function useAnyOverlayPanelOpen(overlayIds: string[]): boolean {
+  // Freeze the id list to a stable reference keyed by content, so the
+  // subscribe/getSnapshot callbacks below only change when the ids actually do.
+  const key = overlayIds.join(",");
+  const ids = useMemo(() => key.split(",").filter(Boolean), [key]);
+
+  const subscribe = useCallback(
+    (cb: () => void) => {
+      const unsubs = ids.map((id) => {
+        const store =
+          getRegisteredOverlayStore(id) ?? createOverlayStore({ overlayId: id, extra: {} });
+        return store.subscribe(cb);
+      });
+      return () => {
+        for (const unsub of unsubs) unsub();
+      };
+    },
+    [ids],
+  );
+  const getSnapshot = useCallback(
+    () => ids.some((id) => getRegisteredOverlayStore(id)?.getState().panelOpen ?? false),
+    [ids],
+  );
+  return useSyncExternalStore(subscribe, getSnapshot, () => false);
+}
