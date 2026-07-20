@@ -1825,7 +1825,7 @@ importers:
         version: 0.14.2
       intl-messageformat:
         specifier: ^11.2.8
-        version: 11.2.11
+        version: 11.2.12
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -2926,6 +2926,9 @@ packages:
 
   '@formatjs/icu-messageformat-parser@3.5.14':
     resolution: {integrity: sha512-jDvgtoLqe3U6yzoBlToMTkWBe38qSi7LN7kFlnXzd5ig8nn+4tSlED0xtEtdYakZVZGJJY2rW1D5xS3BFZh6kA==}
+
+  '@formatjs/icu-messageformat-parser@3.5.15':
+    resolution: {integrity: sha512-5o4grXKotAB3JqQuisLApHG43g17N+paoRTa92Jiz35Zvfemq0cVf4EDvuxyHAzmsJji7igaEowicLO/VmfJ8Q==}
 
   '@formatjs/icu-skeleton-parser@2.1.11':
     resolution: {integrity: sha512-j8cUmOJzVgkHuS0QiQ6ga76UIoLOFSAMWhs7aZJztH3aAdCOAE6vpC8KVvFB4cU10ON0y2/5oOVmPJ43s2lTwA==}
@@ -5858,8 +5861,8 @@ packages:
     resolution: {integrity: sha512-5Hh7Y1wQbvY5ooGgPbDaL5iYLAPzMTUrjMulskHLH6wnv/A+1q5rgEaiuqEjB+oxGXIVZs1FF+R/KPN3ZSQYYg==}
     engines: {node: '>=12'}
 
-  intl-messageformat@11.2.11:
-    resolution: {integrity: sha512-aDG5bvFRbQvRoT2Bh9FV6yV8t7o0MjEGknZ6pnin5Wt52PJwaBOHDfvz+oPEe78Pl3InQYKugBgCdXijLj6viQ==}
+  intl-messageformat@11.2.12:
+    resolution: {integrity: sha512-KW70Xxfcvy7vV3qODfvShWkFDPMqKDAa4N+hSyVBWGNtVhTUFYaqlD/l88DaYPKiVcPP4rPQ3qnH7i5K82Mg7g==}
 
   ioredis@5.11.1:
     resolution: {integrity: sha512-ehuGcf94bQXhfagULNXrJdfnWO38v070jxSx/qE87Kjzmu2fU7ro5EFAb+OPituLqgfyuQaym5DlrNydW2sJ9A==}
@@ -8552,6 +8555,10 @@ snapshots:
   '@formatjs/fast-memoize@3.1.7': {}
 
   '@formatjs/icu-messageformat-parser@3.5.14':
+    dependencies:
+      '@formatjs/icu-skeleton-parser': 2.1.11
+
+  '@formatjs/icu-messageformat-parser@3.5.15':
     dependencies:
       '@formatjs/icu-skeleton-parser': 2.1.11
 
@@ -11322,10 +11329,10 @@ snapshots:
 
   internmap@2.0.3: {}
 
-  intl-messageformat@11.2.11:
+  intl-messageformat@11.2.12:
     dependencies:
       '@formatjs/fast-memoize': 3.1.7
-      '@formatjs/icu-messageformat-parser': 3.5.14
+      '@formatjs/icu-messageformat-parser': 3.5.15
 
   ioredis@5.11.1:
     dependencies:
@@ -12960,7 +12967,7 @@ snapshots:
       '@formatjs/fast-memoize': 3.1.7
       '@schummar/icu-type-parser': 1.21.5
       icu-minify: 4.13.2
-      intl-messageformat: 11.2.11
+      intl-messageformat: 11.2.12
       react: 19.2.7
 
   use-sync-external-store@1.6.0(react@19.2.7):
