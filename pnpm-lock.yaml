@@ -707,7 +707,7 @@ importers:
         version: link:../../packages/integration-framework
       geo-tz:
         specifier: ^8.1.7
-        version: 8.1.7
+        version: 8.1.8
 
   integrations/knowledge-tides-canada:
     dependencies:
@@ -5594,8 +5594,8 @@ packages:
   gbfs-typescript-types@1.0.15:
     resolution: {integrity: sha512-aGMAlo8rX0eqP7JJGO7qrIM5vvbAcZtXg9Ef2zq7HQqNfkm08nmITnXL7UYfEMqUHouAt9sBO9rpJ0HVP5O2NA==}
 
-  geo-tz@8.1.7:
-    resolution: {integrity: sha512-skkwQunTD1hpixwESUv8GeLLl8DElpUmnZfp9trQVgVGVIRTeQJHmCcWELCr8lsiVKdu661TWzR9hsdlGCEEKA==}
+  geo-tz@8.1.8:
+    resolution: {integrity: sha512-i+5koPn3/fzDkEROczIu3QqCEg0uQi2xugDjaVaarK0djuJorLeKHtWrscIGhnsbpPMHc5cLluaRxu3HXtU1ZA==}
     engines: {node: '>=16'}
 
   geobuf@3.0.2:
@@ -11079,7 +11079,7 @@ snapshots:
     dependencies:
       ts-interface-checker: 1.0.2
 
-  geo-tz@8.1.7:
+  geo-tz@8.1.8:
     dependencies:
       '@turf/boolean-point-in-polygon': 7.3.5
       '@turf/helpers': 7.3.5
