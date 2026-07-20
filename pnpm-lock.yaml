@@ -150,7 +150,7 @@ importers:
         version: 9.0.1
       opening_hours:
         specifier: ^3.13.0
-        version: 3.13.0(typescript@6.0.3)
+        version: 3.14.0(typescript@6.0.3)
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -524,7 +524,7 @@ importers:
         version: link:../../packages/place-ids
       opening_hours:
         specifier: ^3.13.0
-        version: 3.13.0(typescript@6.0.3)
+        version: 3.14.0(typescript@6.0.3)
 
   integrations/geocoding:
     dependencies:
@@ -1663,7 +1663,7 @@ importers:
         version: 5.2.1
       opening_hours:
         specifier: ^3.13.0
-        version: 3.13.0(typescript@6.0.3)
+        version: 3.14.0(typescript@6.0.3)
       react:
         specifier: 19.2.7
         version: 19.2.7
@@ -5751,10 +5751,10 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  i18next@26.3.1:
-    resolution: {integrity: sha512-txQqd5EULsqEh9OJqRH15aCaOuy/nLJyhw5EHCSKLKJE1aBbb3Zve2+uQIxgWhPm1QqUQoWyQBm2kfmmIrzkcQ==}
+  i18next@26.3.6:
+    resolution: {integrity: sha512-Bu5Z2nAXgfVyM8xvW3jk9EKRIuX37PudsrBViThNFx7CR7aaYTpP01cxNB/E4c4UUzTDiAZRstEhsRfPOL/8xA==}
     peerDependencies:
-      typescript: ^5 || ^6
+      typescript: ^5 || ^6 || ^7
     peerDependenciesMeta:
       typescript:
         optional: true
@@ -6481,8 +6481,8 @@ packages:
       zod:
         optional: true
 
-  opening_hours@3.13.0:
-    resolution: {integrity: sha512-yQxRzM+ggFvmgML53tcnI3Ugy/OCt4HgyYeTryD2tgahfcjDNSgrU2wTs1ccNhA2ytatNUwKDJcLi2u54nT2Bg==}
+  opening_hours@3.14.0:
+    resolution: {integrity: sha512-pgddpSgUJlbbel2Kk9Y8uYv3cw//fiuM/BNUO7VhtdlHMpaUo3U8uG0jF5DJxsCzIpyeVygNjQJso6T6okiT8g==}
     engines: {node: '>=12'}
 
   outdent@0.5.0:
@@ -7245,8 +7245,8 @@ packages:
     engines: {node: '>=16 || 14 >=14.17'}
     hasBin: true
 
-  suncalc@1.9.0:
-    resolution: {integrity: sha512-vMJ8Byp1uIPoj+wb9c1AdK4jpkSKVAywgHX0lqY7zt6+EWRRC3Z+0Ucfjy/0yxTVO1hwwchZe4uoFNqrIC24+A==}
+  suncalc@2.0.1:
+    resolution: {integrity: sha512-wjujU+HpsP1TUvN3/9dFkVQQCsMZbk7PkdZsASRJR4jVPHCm9Qy0FVkFTqXfs70Ag2yheN7ZUavzCyOjhJDGxQ==}
 
   supports-color@7.2.0:
     resolution: {integrity: sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw==}
@@ -11257,7 +11257,7 @@ snapshots:
 
   husky@9.1.7: {}
 
-  i18next@26.3.1(typescript@6.0.3):
+  i18next@26.3.6(typescript@6.0.3):
     optionalDependencies:
       typescript: 6.0.3
 
@@ -11874,10 +11874,10 @@ snapshots:
     optionalDependencies:
       zod: 4.4.3
 
-  opening_hours@3.13.0(typescript@6.0.3):
+  opening_hours@3.14.0(typescript@6.0.3):
     dependencies:
-      i18next: 26.3.1(typescript@6.0.3)
-      suncalc: 1.9.0
+      i18next: 26.3.6(typescript@6.0.3)
+      suncalc: 2.0.1
     transitivePeerDependencies:
       - typescript
 
@@ -12684,7 +12684,7 @@ snapshots:
       tinyglobby: 0.2.17
       ts-interface-checker: 0.1.13
 
-  suncalc@1.9.0: {}
+  suncalc@2.0.1: {}
 
   supports-color@7.2.0:
     dependencies:
