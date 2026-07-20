@@ -27,14 +27,48 @@ export interface ProbeFailure {
   transient?: boolean;
 }
 
-export async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    return await fetch(url, { signal: ctrl.signal });
-  } finally {
-    clearTimeout(timer);
+// Transient undici/socket faults worth a quick retry. When MOTIS closes a
+// keep-alive connection the pool tried to reuse (common while it is restarting
+// or under load during a sync), `fetch` rejects with "terminated" (and the
+// parser may also throw an ERR_ASSERTION swallowed in index.ts). A deliberate
+// timeout abort ("aborted") is NOT in this set — we don't retry those.
+const TRANSIENT_FETCH_ERROR =
+  /terminated|ECONNRESET|socket hang up|other side closed|UND_ERR|EPIPE|ECONNREFUSED/i;
+
+function isTransientFetchError(error: unknown): boolean {
+  const message = (error as { message?: unknown })?.message;
+  const cause = (error as { cause?: unknown })?.cause;
+  return (
+    TRANSIENT_FETCH_ERROR.test(String(message ?? "")) ||
+    TRANSIENT_FETCH_ERROR.test(String((cause as { message?: unknown })?.message ?? cause ?? ""))
+  );
+}
+
+/**
+ * Fetch with an abort-timeout, retrying only transient socket faults (idempotent
+ * GET probes/polls). Each attempt gets a fresh timeout; a deliberate timeout
+ * abort is not retried.
+ */
+export async function fetchWithTimeout(
+  url: string,
+  timeoutMs: number,
+  retries = 2,
+): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      return await fetch(url, { signal: ctrl.signal });
+    } catch (error) {
+      lastError = error;
+      if (attempt === retries || !isTransientFetchError(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  throw lastError;
 }
 
 /**
