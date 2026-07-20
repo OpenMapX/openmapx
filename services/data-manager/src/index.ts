@@ -248,18 +248,28 @@ for (const sig of ["SIGTERM", "SIGINT"] as const) {
   });
 }
 
-// Diagnostics for an otherwise-silent process exit during a sync: record which
-// path took us down (signal already logged in shutdown(); event-loop drain via
-// beforeExit; a thrown error via the two handlers). Synchronous stderr writes so
-// the line survives even an immediate exit.
-process.on("beforeExit", (code) => {
-  process.stderr.write(`data-manager: beforeExit code=${code} (event loop drained)\n`);
-});
-process.on("exit", (code) => {
-  process.stderr.write(`data-manager: exit code=${code}\n`);
-});
 process.on("uncaughtException", (err) => {
-  process.stderr.write(`data-manager: uncaughtException ${err?.stack ?? String(err)}\n`);
+  const e = err as { code?: string; stack?: string; message?: string };
+  // undici (Node's global `fetch`) asserts `false == true` in
+  // Parser.finish / onHttpSocketEnd when an upstream abruptly closes a socket
+  // (a truncated or keep-alive-reset response). During a Transitous sync this
+  // fires when the pipeline probes MOTIS while it is being recreated in the
+  // promote step — a transient network fault, not a bug in our code. It is
+  // emitted asynchronously on the socket, so a try/catch around the fetch can't
+  // reach it; only this handler can. Swallowing it keeps the process (and the
+  // in-flight sync) alive; probe/poll callers already retry on the resulting
+  // fetch failure. Re-raise anything else so genuine faults still fail fast and
+  // the container restart policy recovers.
+  const isUndiciSocketAssert =
+    e?.code === "ERR_ASSERTION" && /undici|Parser\.finish|onHttpSocketEnd/.test(e?.stack ?? "");
+  if (isUndiciSocketAssert) {
+    process.stderr.write(
+      `data-manager: ignored transient undici socket assertion (${e?.message ?? "?"})\n`,
+    );
+    return;
+  }
+  process.stderr.write(`data-manager: fatal uncaughtException ${e?.stack ?? String(err)}\n`);
+  process.exit(1);
 });
 process.on("unhandledRejection", (reason) => {
   process.stderr.write(`data-manager: unhandledRejection ${String(reason)}\n`);
