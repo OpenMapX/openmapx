@@ -4,7 +4,6 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
-import Paper from "@mui/material/Paper";
 import { useNavigationStore, useSidebarStore } from "@openmapx/core";
 import { getCommunityModule } from "@openmapx/integration-framework";
 import {
@@ -14,10 +13,11 @@ import {
 import { useTranslations } from "next-intl";
 import { type ComponentType, lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { MOBILE_SHEET_FOLLOW_CAP_FRACTION } from "@/components/panels/mobileSheetShared";
+import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
 import { useMobilePanelMaxHeight } from "@/lib/mobilePanelHeight";
 import { DeclarativeLegend } from "./overlay/DeclarativeLegend";
 
-const BASE_BOTTOM = "calc(1rem + var(--omx-safe-bottom))";
+const FLUSH_BOTTOM = "var(--omx-safe-bottom)";
 const PANEL_GAP = 12;
 // Clearance above the navigation bottom bar (mirrors MapControls' NAV_BOTTOM).
 const NAV_BOTTOM = 150;
@@ -60,25 +60,37 @@ export function LegendHost() {
   useCommunityModulesVersion();
   const t = useTranslations("map");
 
-  // Overlay legends are map-browsing chrome: while the map isn't the user's focus
-  // — during navigation, or with a sidebar/detail panel (directions, place card,
-  // or the mobile bottom sheet) expanded over it — hide them by default behind a
-  // small toggle so they don't clutter, but keep them one tap away.
+  const activeSidebarId = useSidebarStore((s) => s.activeSidebarId);
+  const activeDetailId = useSidebarStore((s) => s.activeDetailId);
+  const collapsed = useSidebarStore((s) => s.collapsed);
   const navigating = useNavigationStore((s) => s.status !== "idle");
-  const panelExpanded = useSidebarStore(
-    (s) => (s.activeSidebarId !== null || s.activeDetailId !== null) && !s.collapsed,
-  );
+
+  // Overlay legends are map-browsing chrome. They stay one tap away via the
+  // toggle, but default to hidden while the map isn't the user's focus — during
+  // navigation, or with a sidebar/detail panel (directions, place card, or the
+  // mobile bottom sheet) expanded over it.
+  const panelExpanded = (activeSidebarId !== null || activeDetailId !== null) && !collapsed;
   const guardActive = navigating || panelExpanded;
 
-  const [revealed, setRevealed] = useState(false);
-  // A fresh guarded context (new planning/nav session) starts collapsed.
+  // null = follow the context default; true/false = the user's explicit choice,
+  // which is reset whenever the context (guarded ↔ free) flips so each session
+  // starts from its sensible default.
+  const [override, setOverride] = useState<boolean | null>(null);
   useEffect(() => {
-    if (!guardActive) setRevealed(false);
+    setOverride(null);
   }, [guardActive]);
+  const showLegends = override ?? !guardActive;
 
-  // Follow the mobile bottom sheet so the toggle sits just above it, never behind
-  // it — same follow logic MapControls uses. `mobilePanelHeight` is 0 on desktop,
-  // so the stack stays at the base bottom offset there.
+  // Shift with the left sidebar so the stack stays centred in the visible map,
+  // exactly as the footer/attribution do (same predicate + PANEL_WIDTH).
+  const shifted = isPanelShiftActive({
+    sidebarOpen: activeSidebarId !== null,
+    sidebarCollapsed: collapsed,
+    navigating,
+  });
+
+  // Follow the mobile bottom sheet so the stack sits above it, never behind it —
+  // same follow logic MapControls uses. `mobilePanelHeight` is 0 on desktop.
   const mobilePanelHeight = useMobilePanelMaxHeight();
   const [vh, setVh] = useState(0);
   useEffect(() => {
@@ -98,16 +110,14 @@ export function LegendHost() {
 
   if (declarative.length === 0 && codeLegends.length === 0) return null;
 
-  const showLegends = !guardActive || revealed;
-
   const bottom = navigating
     ? `calc(${NAV_BOTTOM}px + var(--omx-safe-bottom))`
     : {
         xs:
           followHeight > 0
             ? `calc(${followHeight + PANEL_GAP}px + var(--omx-safe-bottom))`
-            : BASE_BOTTOM,
-        sm: BASE_BOTTOM,
+            : FLUSH_BOTTOM,
+        sm: FLUSH_BOTTOM,
       };
 
   return (
@@ -115,35 +125,41 @@ export function LegendHost() {
       sx={{
         position: "absolute",
         bottom,
-        left: "50%",
+        left: { xs: "50%", sm: shifted ? `calc(50% + ${PANEL_WIDTH / 2}px)` : "50%" },
         transform: "translateX(-50%)",
+        transition: "left 0.25s ease, bottom 0.25s ease",
         zIndex: 10,
-        // column-reverse: the toggle (first child) sits at the bottom edge and the
-        // legends stack upward above it.
+        // column-reverse: the toggle (first child) sits flush at the bottom edge
+        // and the legends stack upward above it.
         display: "flex",
         flexDirection: "column-reverse",
         alignItems: "center",
         gap: 1,
         pointerEvents: "none",
         "& > *": { pointerEvents: "auto" },
-        transition: "bottom 0.25s ease",
       }}
     >
-      {guardActive && (
-        <Paper elevation={3} sx={{ borderRadius: "999px" }}>
-          <IconButton
-            size="small"
-            onClick={() => setRevealed((r) => !r)}
-            aria-label={showLegends ? t("hideLegend") : t("showLegend")}
-          >
-            {showLegends ? (
-              <KeyboardArrowDownIcon fontSize="small" />
-            ) : (
-              <KeyboardArrowUpIcon fontSize="small" />
-            )}
-          </IconButton>
-        </Paper>
-      )}
+      <IconButton
+        onClick={() => setOverride(!showLegends)}
+        aria-label={showLegends ? t("hideLegend") : t("showLegend")}
+        sx={{
+          // Square tab flush with the bottom edge, rounded top — mirrors the
+          // sidebar collapse toggle's flush-tab treatment.
+          bgcolor: "background.paper",
+          borderRadius: "6px 6px 0 0",
+          boxShadow: "0 -2px 8px var(--omx-shadow-soft)",
+          width: 54,
+          height: 22,
+          padding: 0,
+          "&:hover": { filter: "brightness(0.92)" },
+        }}
+      >
+        {showLegends ? (
+          <KeyboardArrowDownIcon sx={{ fontSize: 18 }} />
+        ) : (
+          <KeyboardArrowUpIcon sx={{ fontSize: 18 }} />
+        )}
+      </IconButton>
       {showLegends &&
         declarative.map((integration) => (
           <DeclarativeLegend key={integration.id} integration={integration} />
