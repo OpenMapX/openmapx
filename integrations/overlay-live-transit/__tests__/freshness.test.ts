@@ -9,11 +9,18 @@ describe("isFreshVehicleObservation", () => {
   });
 
   it.each([
-    "2026-07-15T11:57:59Z",
+    "2026-07-15T12:00:01Z", // 1s ahead — server/client clock skew
+    "2026-07-15T12:00:45Z", // 45s ahead — still within skew tolerance
+  ])("tolerates near-future timestamps from clock skew (%s)", (timestamp) => {
+    expect(isFreshVehicleObservation(timestamp, now)).toBe(true);
+  });
+
+  it.each([
+    "2026-07-15T11:57:59Z", // >2min old — stale
     "",
     "not-a-date",
-    "2026-07-15T12:00:01Z",
-  ])("rejects stale, missing, invalid, or future timestamps (%s)", (timestamp) => {
+    "2026-07-15T12:01:30Z", // 90s ahead — beyond skew tolerance
+  ])("rejects stale, missing, invalid, or far-future timestamps (%s)", (timestamp) => {
     expect(isFreshVehicleObservation(timestamp, now)).toBe(false);
   });
 });
