@@ -9,10 +9,13 @@ import DirectionsBoatIcon from "@mui/icons-material/DirectionsBoat";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
 import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import SubwayIcon from "@mui/icons-material/Subway";
 import TrainIcon from "@mui/icons-material/Train";
 import TramIcon from "@mui/icons-material/Tram";
 import Box from "@mui/material/Box";
+import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
@@ -107,6 +110,7 @@ function legToMergedDeparture(leg: TripLeg, provider?: string): MergedDeparture 
 function LegStatusDetails({ leg }: { leg: TripLeg }) {
   const t = useTranslations("directions");
   const tNav = useTranslations("navigation");
+  const [stepsExpanded, setStepsExpanded] = useState(false);
   const statuses: string[] = [];
   if (leg.cancelled) statuses.push(t("journeyCancelled"));
   if (leg.realtime === true) statuses.push(t("realtimeSupported"));
@@ -131,19 +135,50 @@ function LegStatusDetails({ leg }: { leg: TripLeg }) {
         </Typography>
       )}
       {leg.steps && leg.steps.length > 0 && (
-        <Box component="ol" sx={{ pl: 2.5, my: 0.75 }} aria-label={t("routeInstructions")}>
-          {leg.steps.map((step, stepIndex) => (
-            <Typography
-              component="li"
-              variant="caption"
-              // biome-ignore lint/suspicious/noArrayIndexKey: steps have no stable id and identical steps repeat within a leg; the index disambiguates them
-              key={`${stepIndex}-${step.instruction}-${step.fromLevel}-${step.toLevel}-${step.distanceMeters}-${step.streetName ?? ""}`}
-            >
-              {composeWalkInstruction(walkStepInfo(step), tNav)} ·{" "}
-              {formatDistance(step.distanceMeters)}
-              {step.accessRestriction ? ` · ${t("accessRestricted")}` : ""}
+        <Box sx={{ mt: 0.5 }}>
+          {/* Collapsed by default: show the total walking distance, expand for the
+              turn-by-turn steps — mirrors the intermediate-stops toggle on rides. */}
+          <Box
+            onClick={() => setStepsExpanded((e) => !e)}
+            sx={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 0.25,
+              cursor: "pointer",
+              color: "text.secondary",
+              userSelect: "none",
+              "&:hover": { color: "text.primary" },
+            }}
+          >
+            {stepsExpanded ? (
+              <ExpandLessIcon sx={{ fontSize: 14 }} />
+            ) : (
+              <ExpandMoreIcon sx={{ fontSize: 14 }} />
+            )}
+            <Typography variant="caption">
+              {t("walkDistance", {
+                distance: formatDistance(
+                  leg.steps.reduce((sum, step) => sum + (step.distanceMeters ?? 0), 0),
+                ),
+              })}
             </Typography>
-          ))}
+          </Box>
+          <Collapse in={stepsExpanded}>
+            <Box component="ol" sx={{ pl: 2.5, my: 0.75 }} aria-label={t("routeInstructions")}>
+              {leg.steps.map((step, stepIndex) => (
+                <Typography
+                  component="li"
+                  variant="caption"
+                  // biome-ignore lint/suspicious/noArrayIndexKey: steps have no stable id and identical steps repeat within a leg; the index disambiguates them
+                  key={`${stepIndex}-${step.instruction}-${step.fromLevel}-${step.toLevel}-${step.distanceMeters}-${step.streetName ?? ""}`}
+                >
+                  {composeWalkInstruction(walkStepInfo(step), tNav)} ·{" "}
+                  {formatDistance(step.distanceMeters)}
+                  {step.accessRestriction ? ` · ${t("accessRestricted")}` : ""}
+                </Typography>
+              ))}
+            </Box>
+          </Collapse>
         </Box>
       )}
     </>
