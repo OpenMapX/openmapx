@@ -127,7 +127,20 @@ async function restartPrimary(ctx: JobContext): Promise<string | null> {
       : "";
     const args =
       composeFile && existsSync(composeFile)
-        ? ["compose", "-f", composeFile, "up", "-d", "--force-recreate", PRIMARY_CONTAINER]
+        ? [
+            "compose",
+            "-f",
+            composeFile,
+            "up",
+            "-d",
+            "--force-recreate",
+            // Only recreate MOTIS. Without --no-deps, compose also recreates its
+            // dependencies (e.g. motis-feed-proxy), and that cascade re-recreates
+            // MOTIS a second time — so the post-swap health probe races a
+            // still-restarting container and gets HTTP 400, failing the promote.
+            "--no-deps",
+            PRIMARY_CONTAINER,
+          ]
         : ["restart", PRIMARY_CONTAINER];
     // Recreate in production: Docker resolves a bind-mount symlink when the
     // container is created, so restart alone can keep the old A/B target.

@@ -224,6 +224,46 @@ describe("promote stage", () => {
     expect(artifacts.previousDir).toBe(fx.previousDir);
   });
 
+  it("recreates only MOTIS with --no-deps when a compose file is present", async () => {
+    const fx = setupFixture({ staging: true, current: true });
+    globalThis.fetch = vi.fn(async (input: unknown) => {
+      const url = typeof input === "string" ? input : (input as Request | URL).toString();
+      return jsonResponse(successfulBody(url));
+    }) as unknown as typeof fetch;
+
+    // A repoRoot with a compose file makes restartPrimary take the
+    // `docker compose up` branch instead of the `docker restart` fallback.
+    const repoRoot = mkdtempSync(join(tmpdir(), "openmapx-promote-repo-"));
+    mkdirSync(join(repoRoot, "infra", "docker"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "infra", "docker", "docker-compose.generated.yml"),
+      "services: {}\n",
+    );
+
+    const runnerCalls: Array<{ command: string; args: string[] }> = [];
+    const ctx = buildJobContext({
+      dataDir: fx.dataDir,
+      repoRoot,
+      store: new StateStore(fx.dataDir),
+      runner: async (command, args) => {
+        runnerCalls.push({ command, args });
+      },
+      now: () => "2026-05-01T00:00:00.000Z",
+    });
+    const result = await promoteRun(ctx);
+    expect(result.status).toBe("ok");
+
+    const recreate = runnerCalls.find((call) => call.args.includes("up"));
+    expect(recreate).toBeDefined();
+    // Must scope the recreate to MOTIS only — otherwise compose recreates the
+    // feed-proxy dependency and cascades into a second MOTIS recreate.
+    expect(recreate?.args).toContain("--no-deps");
+    expect(recreate?.args).toContain("--force-recreate");
+    expect(recreate?.args.at(-1)).toBe("motis");
+
+    rmSync(repoRoot, { recursive: true, force: true });
+  });
+
   it("rolls back the rename when docker restart fails", async () => {
     const fx = setupFixture({ staging: true, current: true });
     globalThis.fetch = vi.fn(async (input: unknown) => {
