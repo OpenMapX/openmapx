@@ -6,7 +6,6 @@ import type { OpeningHoursInfo } from "./openingHoursInfo";
 export interface PlacePhoto {
   url: string;
   thumbnailUrl?: string;
-  attribution: string;
   source: string;
   author?: string;
   authorUrl?: string;

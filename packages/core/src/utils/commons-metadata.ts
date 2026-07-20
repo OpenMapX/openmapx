@@ -41,7 +41,7 @@ export function parseCommonsPage(page: CommonsPage): PlacePhoto | undefined {
   const artistHtml = ext?.Artist?.value;
   const author = artistHtml ? stripHtml(artistHtml) : undefined;
   const authorUrl = artistHtml ? extractHref(artistHtml) : undefined;
-  const license = ext?.LicenseShortName?.value ?? "CC BY-SA";
+  const license = ext?.LicenseShortName?.value;
   const licenseUrl = ext?.LicenseUrl?.value ?? undefined;
   const capturedAt = parseDateTimeOriginal(ext?.DateTimeOriginal?.value);
   const geoCoord = page.coordinates?.[0];
@@ -52,9 +52,6 @@ export function parseCommonsPage(page: CommonsPage): PlacePhoto | undefined {
   return {
     url: imageUrl,
     thumbnailUrl: info.thumburl ?? undefined,
-    attribution: author
-      ? `${author} / Wikimedia Commons (${license})`
-      : `Wikimedia Commons (${license})`,
     source: "wikimedia",
     author,
     authorUrl,

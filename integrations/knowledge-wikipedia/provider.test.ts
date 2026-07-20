@@ -135,8 +135,10 @@ describe("Wikipedia knowledge provider", () => {
       url: "https://upload.wikimedia.org/wikipedia/commons/8/85/Tour_Eiffel.jpg",
       thumbnailUrl:
         "https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Tour_Eiffel.jpg/320px-Tour_Eiffel.jpg",
-      attribution: "© Wikipedia (CC BY-SA 3.0)",
       source: "wikipedia",
+      // Filename WAS extractable, so the file page is known even though the
+      // metadata fetch itself returned nothing.
+      pageUrl: "https://commons.wikimedia.org/wiki/File:Tour_Eiffel.jpg",
     });
   });
 

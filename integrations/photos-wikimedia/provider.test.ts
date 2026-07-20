@@ -84,7 +84,6 @@ describe("Wikimedia photo provider — File: tag", () => {
       authorUrl: "https://commons.wikimedia.org/wiki/User:Jane",
       license: "CC BY-SA 4.0",
       licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0",
-      attribution: "Jane Doe / Wikimedia Commons (CC BY-SA 4.0)",
       coordinates: [2.2945, 48.8584],
     });
     expect(photos[0]?.pageUrl).toContain("commons.wikimedia.org/wiki/File:Eiffel_Tower.jpg");
@@ -104,8 +103,10 @@ describe("Wikimedia photo provider — File: tag", () => {
 
     expect(photos[0]).toEqual({
       url: "https://commons.wikimedia.org/wiki/Special:FilePath/Missing.jpg?width=800",
-      attribution: "© Wikimedia Commons (CC BY-SA)",
       source: "wikimedia",
+      // Metadata fetch failed, so author/license are unknown, but the filename
+      // is known — link to the Commons file page instead.
+      pageUrl: "https://commons.wikimedia.org/wiki/File:Missing.jpg",
     });
   });
 });

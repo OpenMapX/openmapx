@@ -174,8 +174,8 @@ export const wikidataSource: KnowledgeProvider = {
         result.photos = [
           {
             url: commonsUrl(p18Filename),
-            attribution: "© Wikimedia Commons (CC BY-SA)",
             source: "wikimedia",
+            pageUrl: `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(p18Filename.replace(/ /g, "_"))}`,
           },
         ];
       }

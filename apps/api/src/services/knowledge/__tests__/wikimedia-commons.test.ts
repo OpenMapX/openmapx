@@ -33,7 +33,8 @@ function mockNotOk() {
 function makePhoto(url: string) {
   return {
     url,
-    attribution: "Author / Wikimedia Commons (CC BY-SA 4.0)",
+    author: "Author",
+    license: "CC BY-SA 4.0",
     source: "wikimedia",
   };
 }
@@ -78,7 +79,11 @@ describe("wikimediaProvider.searchByTags", () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].url).toContain("Special:FilePath/Berlin_Skyline.jpg");
-    expect(result[0].attribution).toBe("© Wikimedia Commons (CC BY-SA)");
+    // Metadata fetch failed, so author/license are unknown — but the filename
+    // is known, so we still link to the Commons file page.
+    expect(result[0].pageUrl).toBe("https://commons.wikimedia.org/wiki/File:Berlin_Skyline.jpg");
+    expect(result[0].author).toBeUndefined();
+    expect(result[0].license).toBeUndefined();
   });
 
   it('"Category:Name" → category mode, fetches category members via API', async () => {

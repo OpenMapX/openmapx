@@ -89,7 +89,8 @@ describe("wikidataSource", () => {
   it("fetches P18 main image via fetchCommonsMetadata", async () => {
     const richPhoto = {
       url: "https://commons.wikimedia.org/wiki/Special:FilePath/Berlin.jpg?width=800",
-      attribution: "Author / Wikimedia Commons (CC BY-SA 4.0)",
+      author: "Author",
+      license: "CC BY-SA 4.0",
       source: "wikimedia",
     };
     const metadataMap = new Map([["Berlin.jpg", richPhoto]]);
@@ -138,7 +139,13 @@ describe("wikidataSource", () => {
     const result = await wikidataSource.lookup({ wikidata: "Q64" }, "en");
     expect(result?.photos).toHaveLength(1);
     expect(result?.photos?.[0].url).toContain("Special:FilePath/Some_Image.jpg");
-    expect(result?.photos?.[0].attribution).toBe("© Wikimedia Commons (CC BY-SA)");
+    // Metadata fetch failed, so author/license are unknown — but the filename
+    // is known, so we still link to the Commons file page.
+    expect(result?.photos?.[0].pageUrl).toBe(
+      "https://commons.wikimedia.org/wiki/File:Some_Image.jpg",
+    );
+    expect(result?.photos?.[0].author).toBeUndefined();
+    expect(result?.photos?.[0].license).toBeUndefined();
   });
 
   it("formats time: '+1870-01-01T00:00:00Z' → '1870'", async () => {

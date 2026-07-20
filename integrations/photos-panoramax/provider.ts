@@ -66,7 +66,6 @@ export const panoramaxPhotoProvider: PhotoProvider =
           return {
             url: imageUrl,
             thumbnailUrl: thumbUrl,
-            attribution: author ? `${author} / Panoramax (${license})` : `Panoramax (${license})`,
             source: "panoramax",
             author,
             license,

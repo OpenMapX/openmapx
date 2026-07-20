@@ -107,7 +107,6 @@ export const flickrPhotoProvider: PhotoProvider = {
       return {
         url: imageUrl,
         thumbnailUrl: thumbUrl,
-        attribution: `${author} / Flickr (${license})`,
         source: "flickr",
         author,
         authorUrl: `https://www.flickr.com/photos/${photo.owner}`,

@@ -117,7 +117,6 @@ async function extractImageTagPhotos(tags: Record<string, string>): Promise<Plac
       seen.add(url);
       photos.push({
         url,
-        attribution: isGooglePhotos ? "Google Photos" : "OpenStreetMap",
         source: isGooglePhotos ? "google-photos" : "osm",
         pageUrl: isGooglePhotos ? rawValue : undefined,
       });

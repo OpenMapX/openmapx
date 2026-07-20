@@ -54,7 +54,6 @@ describe("Flickr photo provider", () => {
       {
         url: "https://live.staticflickr.com/65535/53000000001_abc123_b.jpg",
         thumbnailUrl: "https://live.staticflickr.com/65535/53000000001_abc123_q.jpg",
-        attribution: "Jane Photographer / Flickr (CC BY 2.0)",
         source: "flickr",
         author: "Jane Photographer",
         authorUrl: "https://www.flickr.com/photos/12345@N00",
@@ -126,7 +125,6 @@ describe("Flickr photo provider", () => {
 
     expect(photo.license).toBe("License 99");
     expect(photo.licenseUrl).toBeUndefined();
-    expect(photo.attribution).toBe("Jane Photographer / Flickr (License 99)");
   });
 
   it("falls back to the owner nsid when no display name is present", async () => {

@@ -50,8 +50,8 @@ async function searchByTags(
     return [
       {
         url: `https://commons.wikimedia.org/wiki/Special:FilePath/${encoded}?width=800`,
-        attribution: "© Wikimedia Commons (CC BY-SA)",
         source: "wikimedia",
+        pageUrl: `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(filename.replace(/ /g, "_"))}`,
       },
     ];
   }

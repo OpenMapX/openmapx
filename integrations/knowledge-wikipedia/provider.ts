@@ -68,8 +68,8 @@ export const wikipediaSource: KnowledgeProvider = {
             {
               url: imgSource,
               thumbnailUrl: data.thumbnail?.source,
-              attribution: "© Wikipedia (CC BY-SA 3.0)",
               source: "wikipedia",
+              pageUrl: `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(filename.replace(/ /g, "_"))}`,
             },
           ];
         }
@@ -78,7 +78,6 @@ export const wikipediaSource: KnowledgeProvider = {
           {
             url: imgSource,
             thumbnailUrl: data.thumbnail?.source,
-            attribution: "© Wikipedia (CC BY-SA 3.0)",
             source: "wikipedia",
           },
         ];

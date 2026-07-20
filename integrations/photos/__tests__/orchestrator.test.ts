@@ -78,13 +78,11 @@ describe("searchHeroPhotos", () => {
     expect(photos).toEqual<PlacePhoto[]>([
       {
         url: "https://example.com/place.jpg",
-        attribution: "OpenStreetMap",
         source: "osm",
         pageUrl: undefined,
       },
       {
         url: "https://commons.wikimedia.org/wiki/Special:FilePath/Example.jpg?width=1200",
-        attribution: "OpenStreetMap",
         source: "osm",
         pageUrl: undefined,
       },

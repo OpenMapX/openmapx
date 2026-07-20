@@ -15,7 +15,7 @@ export function PhotoAttribution({ photo, color = "#fff" }: Props) {
   const ds = registry.findDataSource(photo.source);
 
   const sourceName = ds?.name ?? photo.source;
-  const sourceUrl = ds?.url;
+  const sourceUrl = photo.pageUrl ?? ds?.url;
 
   const linkSx = {
     color,

@@ -61,7 +61,6 @@ const baseProvider = createBboxPhotoProvider<MapillaryImageResponse>({
       return {
         url: img.thumb_1024_url ?? `https://scontent.mapillary.com/${img.id}/thumb-1024.jpg`,
         thumbnailUrl: img.thumb_256_url,
-        attribution: author ? `${author} / Mapillary (CC BY-SA 4.0)` : "Mapillary (CC BY-SA 4.0)",
         source: "mapillary",
         author,
         authorUrl: author ? `https://www.mapillary.com/app/user/${author}` : undefined,

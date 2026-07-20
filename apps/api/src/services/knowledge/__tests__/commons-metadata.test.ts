@@ -123,7 +123,7 @@ describe("parseCommonsPage", () => {
     expect(result?.authorUrl).toBe("https://example.com/author");
   });
 
-  it('attribution with author: "John / Wikimedia Commons (CC BY-SA)"', async () => {
+  it("extracts author from Artist extmetadata", async () => {
     const { parseCommonsPage } = await loadModule();
     const result = parseCommonsPage({
       title: "File:Test.jpg",
@@ -137,10 +137,11 @@ describe("parseCommonsPage", () => {
         },
       ],
     });
-    expect(result?.attribution).toBe("John / Wikimedia Commons (CC BY-SA)");
+    expect(result?.author).toBe("John");
+    expect(result?.license).toBe("CC BY-SA");
   });
 
-  it('attribution without author: "Wikimedia Commons (CC BY-SA)"', async () => {
+  it("author is undefined when Artist extmetadata is absent", async () => {
     const { parseCommonsPage } = await loadModule();
     const result = parseCommonsPage({
       title: "File:Test.jpg",
@@ -153,17 +154,17 @@ describe("parseCommonsPage", () => {
         },
       ],
     });
-    expect(result?.attribution).toBe("Wikimedia Commons (CC BY-SA 4.0)");
+    expect(result?.author).toBeUndefined();
+    expect(result?.license).toBe("CC BY-SA 4.0");
   });
 
-  it('default license "CC BY-SA" when LicenseShortName missing', async () => {
+  it("license is undefined when LicenseShortName is missing — never assume a licence", async () => {
     const { parseCommonsPage } = await loadModule();
     const result = parseCommonsPage({
       title: "File:Test.jpg",
       imageinfo: [{ thumburl: "https://example.com/thumb.jpg" }],
     });
-    expect(result?.attribution).toBe("Wikimedia Commons (CC BY-SA)");
-    expect(result?.license).toBe("CC BY-SA");
+    expect(result?.license).toBeUndefined();
   });
 
   it('DateTimeOriginal "2020-05-15 12:30:00" → ISO 8601', async () => {

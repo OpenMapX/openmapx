@@ -99,7 +99,8 @@ describe("wikipediaSource", () => {
   it("extracts image from originalimage.source, fetches commons metadata", async () => {
     const richPhoto = {
       url: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Berlin.jpg/800px-Berlin.jpg",
-      attribution: "Author / Wikimedia Commons (CC BY-SA 4.0)",
+      author: "Author",
+      license: "CC BY-SA 4.0",
       source: "wikimedia",
     };
     mockFetchCommonsMetadata.mockResolvedValueOnce(new Map([["Berlin.jpg", richPhoto]]));
@@ -144,9 +145,14 @@ describe("wikipediaSource", () => {
     const { wikipediaSource } = await loadModule();
     const result = await wikipediaSource.lookup({ wikipedia: "en:Berlin" }, "en");
 
-    // Falls back to thumbnail-based photo since commons metadata returns empty
+    // Falls back to thumbnail-based photo since commons metadata returns empty.
+    // A filename WAS extractable from the thumb URL, so we still know the
+    // Commons file page even though the metadata fetch failed.
     expect(result?.photos).toHaveLength(1);
     expect(result?.photos?.[0].source).toBe("wikipedia");
+    expect(result?.photos?.[0].pageUrl).toBe("https://commons.wikimedia.org/wiki/File:Berlin.jpg");
+    expect(result?.photos?.[0].author).toBeUndefined();
+    expect(result?.photos?.[0].license).toBeUndefined();
   });
 
   it("creates fallback photo when filename cannot be extracted from URL", async () => {
@@ -166,7 +172,11 @@ describe("wikipediaSource", () => {
     const result = await wikipediaSource.lookup({ wikipedia: "en:Berlin" }, "en");
     expect(result?.photos).toHaveLength(1);
     expect(result?.photos?.[0].url).toBe("https://some-cdn.example.com/image.jpg");
-    expect(result?.photos?.[0].attribution).toBe("© Wikipedia (CC BY-SA 3.0)");
+    // No filename could be extracted, so we don't know the author, license, or
+    // file page — none of those fields (nor a fabricated attribution) are set.
+    expect(result?.photos?.[0].pageUrl).toBeUndefined();
+    expect(result?.photos?.[0].author).toBeUndefined();
+    expect(result?.photos?.[0].license).toBeUndefined();
     expect(mockFetchCommonsMetadata).not.toHaveBeenCalled();
   });
 

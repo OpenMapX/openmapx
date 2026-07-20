@@ -140,8 +140,10 @@ describe("Wikidata knowledge provider", () => {
 
     expect(result?.photos?.[0]).toEqual({
       url: "https://commons.wikimedia.org/wiki/Special:FilePath/Tour_Eiffel_Wikimedia_Commons.jpg?width=800",
-      attribution: "© Wikimedia Commons (CC BY-SA)",
       source: "wikimedia",
+      // Metadata fetch failed, so author/license are unknown, but the filename
+      // is known — link to the Commons file page instead.
+      pageUrl: "https://commons.wikimedia.org/wiki/File:Tour_Eiffel_Wikimedia_Commons.jpg",
     });
   });
 
