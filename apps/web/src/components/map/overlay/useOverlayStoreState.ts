@@ -1,31 +1,29 @@
 "use client";
 
-import { createOverlayStore, getRegisteredOverlayStore } from "@openmapx/core";
+import { getRegisteredOverlayStore, subscribeOverlayStoreChanges } from "@openmapx/core";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 
 /**
- * Resolve the overlay store for an id, creating + registering it if it doesn't
- * exist yet. `initOverlayRegistry` auto-creates declarative overlays' stores in
- * an effect that runs AFTER the map/legend hosts first render, so resolving the
- * store lazily here (memoized per id) avoids a race where the hooks would
- * subscribe to an absent store and never observe the toggle. Idempotent:
- * `initOverlayRegistry`/`toggleOverlay` then find this same instance.
+ * Overlay store instances are replaceable: a lazy-loaded map-layer's
+ * module-scope `createOverlayStore({ overlayId })` overwrites whatever store
+ * was auto-created for that id earlier (by `initOverlayRegistry` or a previous
+ * lookup). Subscribing to a specific instance therefore goes stale — actions
+ * like `toggleOverlay` always operate on the CURRENT registered instance. So
+ * every hook here subscribes to the global overlay change signal (which every
+ * instance, including replacements, feeds) and resolves the store fresh via
+ * `getRegisteredOverlayStore` on each read. An unregistered store reads as
+ * inactive.
  */
-function useOverlayStore(overlayId: string) {
-  return useMemo(
-    () => getRegisteredOverlayStore(overlayId) ?? createOverlayStore({ overlayId, extra: {} }),
-    [overlayId],
-  );
-}
-
 function useOverlayFlag(
   overlayId: string,
   select: (s: { layerVisible: boolean; panelOpen: boolean }) => boolean,
 ) {
-  const store = useOverlayStore(overlayId);
   return useSyncExternalStore(
-    useCallback((cb: () => void) => store.subscribe(cb), [store]),
-    useCallback(() => select(store.getState()), [store, select]),
+    subscribeOverlayStoreChanges,
+    useCallback(() => {
+      const store = getRegisteredOverlayStore(overlayId);
+      return store ? select(store.getState()) : false;
+    }, [overlayId, select]),
     () => false,
   );
 }
@@ -42,38 +40,28 @@ export function useOverlayPanelOpen(overlayId: string): boolean {
 }
 
 export function useOverlaySetLayerVisible(overlayId: string): (visible: boolean) => void {
-  return useOverlayStore(overlayId).getState().setLayerVisible;
+  return useCallback(
+    (visible: boolean) => {
+      getRegisteredOverlayStore(overlayId)?.getState().setLayerVisible(visible);
+    },
+    [overlayId],
+  );
 }
 
 /**
  * Reactively report whether any of the given overlays has its panel open — the
  * same condition each legend uses to decide whether to render (see
- * OverlayLegend). A single subscription across all listed stores keeps the hook
- * count stable regardless of how many overlays are passed, so the id list may
- * vary between renders. Resolving stores lazily mirrors `useOverlayStore`.
+ * OverlayLegend). The id list may vary between renders; it is frozen to a
+ * content-keyed reference so the snapshot callback only changes when the ids
+ * actually do.
  */
 export function useAnyOverlayPanelOpen(overlayIds: string[]): boolean {
-  // Freeze the id list to a stable reference keyed by content, so the
-  // subscribe/getSnapshot callbacks below only change when the ids actually do.
   const key = overlayIds.join(",");
   const ids = useMemo(() => key.split(",").filter(Boolean), [key]);
 
-  const subscribe = useCallback(
-    (cb: () => void) => {
-      const unsubs = ids.map((id) => {
-        const store =
-          getRegisteredOverlayStore(id) ?? createOverlayStore({ overlayId: id, extra: {} });
-        return store.subscribe(cb);
-      });
-      return () => {
-        for (const unsub of unsubs) unsub();
-      };
-    },
-    [ids],
-  );
   const getSnapshot = useCallback(
     () => ids.some((id) => getRegisteredOverlayStore(id)?.getState().panelOpen ?? false),
     [ids],
   );
-  return useSyncExternalStore(subscribe, getSnapshot, () => false);
+  return useSyncExternalStore(subscribeOverlayStoreChanges, getSnapshot, () => false);
 }

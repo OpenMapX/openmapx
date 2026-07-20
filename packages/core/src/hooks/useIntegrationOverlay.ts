@@ -1,28 +1,24 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
-import type { StoreApi, UseBoundStore } from "zustand";
-import type { OverlayStoreBase } from "../stores/createOverlayStore";
-import { getRegisteredOverlayStore } from "../stores/createOverlayStore";
+import {
+  getRegisteredOverlayStore,
+  subscribeOverlayStoreChanges,
+} from "../stores/createOverlayStore";
 
-type OverlayStore = UseBoundStore<StoreApi<OverlayStoreBase>>;
-
+/**
+ * Reactively report whether an overlay is active (panel open + layer visible).
+ * Subscribes to the global overlay change signal and resolves the store fresh
+ * on each read, so it stays correct when the overlay's store is registered
+ * late or its instance is replaced by a lazy-loaded map-layer module.
+ */
 export function useIntegrationOverlayActive(integrationId: string): boolean {
-  const store = getRegisteredOverlayStore(integrationId) as OverlayStore | undefined;
-
-  const subscribe = useCallback(
-    (onStoreChange: () => void) => {
-      if (!store) return () => {};
-      return store.subscribe(onStoreChange);
-    },
-    [store],
-  );
-
   const getSnapshot = useCallback(() => {
+    const store = getRegisteredOverlayStore(integrationId);
     if (!store) return false;
     const s = store.getState();
     return s.panelOpen && s.layerVisible;
-  }, [store]);
+  }, [integrationId]);
 
-  return useSyncExternalStore(subscribe, getSnapshot, () => false);
+  return useSyncExternalStore(subscribeOverlayStoreChanges, getSnapshot, () => false);
 }

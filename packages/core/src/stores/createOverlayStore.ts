@@ -33,6 +33,27 @@ interface OverlayStoreConfig<
  */
 const overlayStoreMap = new Map<string, UseBoundStore<StoreApi<OverlayStoreBase>>>();
 
+const overlayChangeListeners = new Set<() => void>();
+
+function notifyOverlayChangeListeners(): void {
+  for (const listener of overlayChangeListeners) listener();
+}
+
+/**
+ * Subscribe to state changes across ALL overlay stores. Unlike subscribing to a
+ * store instance directly, this signal survives an instance being replaced in
+ * the registry (a lazy-loaded map-layer's module-scope createOverlayStore call
+ * overwrites any store auto-created for the same overlayId earlier) — every
+ * store, including later replacements, forwards its changes here. Pair with
+ * getRegisteredOverlayStore lookups at read time for always-current state.
+ */
+export function subscribeOverlayStoreChanges(listener: () => void): () => void {
+  overlayChangeListeners.add(listener);
+  return () => {
+    overlayChangeListeners.delete(listener);
+  };
+}
+
 /** Get a store by its overlay ID. Used by overlayRegistry.ts. */
 export function getRegisteredOverlayStore(
   overlayId: string,
@@ -78,11 +99,16 @@ export function createOverlayStore<
     } as FullState;
   });
 
+  store.subscribe(notifyOverlayChangeListeners);
+
   if (config.overlayId) {
     overlayStoreMap.set(
       config.overlayId,
       store as unknown as UseBoundStore<StoreApi<OverlayStoreBase>>,
     );
+    // Registering (or replacing) a store changes what lookups resolve to, so
+    // the effective state may change without any store state transition.
+    notifyOverlayChangeListeners();
   }
 
   return store;

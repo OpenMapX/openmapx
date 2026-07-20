@@ -6,6 +6,7 @@ export {
   createOverlayStore,
   getRegisteredOverlayIds,
   getRegisteredOverlayStore,
+  subscribeOverlayStoreChanges,
 } from "./createOverlayStore";
 export { useDataSourceStore } from "./dataSourceStore";
 export type { DirectionsState } from "./directionsStore";
