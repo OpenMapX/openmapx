@@ -41,7 +41,12 @@ const COLOR_EXPR: maplibregl.ExpressionSpecification = [
   "#2ecc40",
 ];
 
-/** Confidence → opacity: measured brightest, typical faintest. */
+/**
+ * Confidence → opacity: measured brightest, typical faintest. The floor (0.6 for
+ * `typical`/no-live-data segments) is kept high enough that covered roads still
+ * read as faint colour rather than letting the casing show through as black —
+ * most segments are `typical` where live flow data is sparse.
+ */
 const OPACITY_EXPR: maplibregl.ExpressionSpecification = [
   "match",
   ["get", "confidence"],
@@ -50,8 +55,8 @@ const OPACITY_EXPR: maplibregl.ExpressionSpecification = [
   "estimated",
   0.7,
   "typical",
-  0.4,
-  0.4,
+  0.6,
+  0.6,
 ];
 
 const COLOR_WIDTH_EXPR: maplibregl.ExpressionSpecification = [
@@ -64,14 +69,16 @@ const COLOR_WIDTH_EXPR: maplibregl.ExpressionSpecification = [
   ["match", ["get", "highway"], "motorway", 7, 3],
 ];
 
+// Only slightly wider than COLOR_WIDTH_EXPR so the casing reads as a thin outline
+// (a fraction of a pixel to ~1px per side), not a slab that dominates the colour.
 const CASING_WIDTH_EXPR: maplibregl.ExpressionSpecification = [
   "interpolate",
   ["exponential", 1.4],
   ["zoom"],
   6,
-  ["match", ["get", "highway"], "motorway", 3.5, 2],
+  ["match", ["get", "highway"], "motorway", 2.2, 1],
   16,
-  ["match", ["get", "highway"], "motorway", 11, 6],
+  ["match", ["get", "highway"], "motorway", 8.5, 4],
 ];
 
 /**
@@ -188,7 +195,10 @@ export function TrafficFlowLayer() {
           minzoom: LAYER_MIN_ZOOM,
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
-            "line-color": "#20242b",
+            // Light, semi-transparent slate — a subtle outline for contrast and
+            // to separate parallel carriageways/ramps, without reading as black.
+            "line-color": "#7a8496",
+            "line-opacity": 0.5,
             "line-width": CASING_WIDTH_EXPR,
             "line-gap-width": 0,
           },
