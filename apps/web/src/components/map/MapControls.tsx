@@ -23,8 +23,6 @@ import { Pegman } from "./Pegman";
 
 const BASE_BOTTOM = 48;
 const PANEL_GAP = 12;
-// Clearance above the navigation bottom bar so the controls don't sit under it.
-const NAV_BOTTOM = 150;
 
 export function MapControls() {
   const t = useTranslations("map");
@@ -71,15 +69,17 @@ export function MapControls() {
       <Box
         sx={{
           position: "absolute",
-          bottom: navigating
-            ? `calc(${NAV_BOTTOM}px + var(--omx-safe-bottom))`
-            : {
-                xs:
-                  followHeight > 0
-                    ? `calc(${followHeight + PANEL_GAP}px + var(--omx-safe-bottom))`
-                    : `calc(${BASE_BOTTOM}px + var(--omx-safe-bottom))`,
-                sm: `calc(${BASE_BOTTOM}px + var(--omx-safe-bottom))`,
-              },
+          // Bottom-anchored mobile sheets (browsing panels and the navigation
+          // swipe sheet) register their live height in the shared registry, so
+          // the controls always sit just above the tallest one — no hard-coded
+          // per-context clearance.
+          bottom: {
+            xs:
+              followHeight > 0
+                ? `calc(${followHeight + PANEL_GAP}px + var(--omx-safe-bottom))`
+                : `calc(${BASE_BOTTOM}px + var(--omx-safe-bottom))`,
+            sm: `calc(${BASE_BOTTOM}px + var(--omx-safe-bottom))`,
+          },
           right: "calc(12px + var(--omx-safe-right))",
           display: "flex",
           flexDirection: "column",

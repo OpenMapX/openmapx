@@ -19,8 +19,6 @@ import { DeclarativeLegend } from "./overlay/DeclarativeLegend";
 import { useAnyOverlayPanelOpen } from "./overlay/useOverlayStoreState";
 
 const FLUSH_BOTTOM = "var(--omx-safe-bottom)";
-// Clearance above the navigation bottom bar (mirrors MapControls' NAV_BOTTOM).
-const NAV_BOTTOM = 150;
 
 function resolveDefault(mod: Record<string, unknown>): { default: ComponentType } {
   const Component = (mod.default ??
@@ -92,8 +90,10 @@ export function LegendHost() {
     navigating,
   });
 
-  // Follow the mobile bottom sheet so the stack sits above it, never behind it —
-  // same follow logic MapControls uses. `mobilePanelHeight` is 0 on desktop.
+  // Follow the bottom-anchored mobile sheet so the stack sits above it, never
+  // behind it — same follow logic MapControls uses. Browsing panels and the
+  // navigation swipe sheet all register their live height in the same registry,
+  // so there is no per-context clearance to keep in sync. 0 on desktop.
   const mobilePanelHeight = useMobilePanelMaxHeight();
   const [vh, setVh] = useState(0);
   useEffect(() => {
@@ -120,13 +120,11 @@ export function LegendHost() {
 
   if (!anyPanelOpen) return null;
 
-  const bottom = navigating
-    ? `calc(${NAV_BOTTOM}px + var(--omx-safe-bottom))`
-    : {
-        // Flush against the top edge of the mobile bottom sheet (no gap).
-        xs: followHeight > 0 ? `calc(${followHeight}px + var(--omx-safe-bottom))` : FLUSH_BOTTOM,
-        sm: FLUSH_BOTTOM,
-      };
+  const bottom = {
+    // Flush against the top edge of the mobile bottom sheet (no gap).
+    xs: followHeight > 0 ? `calc(${followHeight}px + var(--omx-safe-bottom))` : FLUSH_BOTTOM,
+    sm: FLUSH_BOTTOM,
+  };
 
   return (
     <Box

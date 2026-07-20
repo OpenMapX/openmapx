@@ -3,7 +3,8 @@
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import { motion, type PanInfo } from "framer-motion";
-import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useMobilePanelHeightTracker } from "@/lib/mobilePanelHeight";
 
 // Cap the expanded sheet so the maneuver banner up top stays visible.
 const MAX_HEIGHT_FRACTION = 0.9;
@@ -39,6 +40,18 @@ export function NavSwipeSheet({
   const topRef = useRef<HTMLDivElement | null>(null); // handle + header (collapsed height)
   const fullRef = useRef<HTMLDivElement | null>(null); // handle + header + menu (expanded height)
   const dragStartRef = useRef(0);
+
+  // Publish the sheet's live height (collapsed, mid-drag, or expanded) through
+  // the shared mobile-panel registry, so bottom-anchored map chrome (the map
+  // controls, the legend stack) sits flush above the sheet's real top edge
+  // instead of guessing a clearance. State-backed alongside the imperative ref
+  // so the tracker's effect re-runs on attach/detach.
+  const [paperEl, setPaperEl] = useState<HTMLDivElement | null>(null);
+  const attachPaper = useCallback((el: HTMLDivElement | null) => {
+    paperRef.current = el;
+    setPaperEl(el);
+  }, []);
+  useMobilePanelHeightTracker("nav-sheet", paperEl);
 
   const collapsedH = useCallback(() => topRef.current?.offsetHeight ?? 0, []);
   const expandedH = useCallback(
@@ -87,7 +100,7 @@ export function NavSwipeSheet({
 
   return (
     <Paper
-      ref={paperRef}
+      ref={attachPaper}
       elevation={6}
       sx={(theme) => ({
         pointerEvents: "auto",
