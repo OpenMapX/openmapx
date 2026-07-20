@@ -233,7 +233,9 @@
     "language": "Language",
     "themeLight": "Light mode (click for dark)",
     "themeDark": "Dark mode (click for system)",
-    "themeSystem": "System theme (click for light)"
+    "themeSystem": "System theme (click for light)",
+    "showLegend": "Show overlay legend",
+    "hideLegend": "Hide overlay legend"
   },
   "footer": {
     "legalNotice": "Legal Notice",

@@ -233,7 +233,9 @@
     "language": "Sprache",
     "themeLight": "Hellmodus (Klick für Dunkelmodus)",
     "themeDark": "Dunkelmodus (Klick für Systemmodus)",
-    "themeSystem": "Systemmodus (Klick für Hellmodus)"
+    "themeSystem": "Systemmodus (Klick für Hellmodus)",
+    "showLegend": "Legende anzeigen",
+    "hideLegend": "Legende ausblenden"
   },
   "footer": {
     "legalNotice": "Impressum",

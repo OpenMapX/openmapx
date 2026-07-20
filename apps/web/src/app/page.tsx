@@ -181,10 +181,9 @@ export default function HomePage() {
             <TopRightControls />
           </HideDuringNavigation>
           <StreetViewViewer />
-          <div className="absolute bottom-[calc(1rem+var(--omx-safe-bottom))] left-1/2 -translate-x-1/2 z-10 flex flex-col-reverse items-center gap-2 pointer-events-none [&>*]:pointer-events-auto">
-            {/* All legends/toolbars loaded dynamically by LegendHost */}
-            <LegendHost />
-          </div>
+          {/* Overlay legends — self-positioned (sheet-aware), hidden behind a
+              toggle during navigation / when a panel is expanded. */}
+          <LegendHost />
           <HideDuringNavigation>
             <LayerSelector />
           </HideDuringNavigation>
