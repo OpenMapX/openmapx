@@ -7,15 +7,19 @@ import {
   createCandidateManifest,
 } from "../../src/jobs/transitous/candidate.js";
 import { run as motisHealthRun } from "../../src/jobs/transitous/motis-health.js";
+import { probeHttp } from "../../src/jobs/transitous/motis-probe.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import { StateStore } from "../../src/state.js";
 
 let tmp: string | undefined;
 let originalFetch: typeof fetch;
 let originalImportTimeout: string | undefined;
+const originalProbeGet = probeHttp.get;
 
 beforeEach(() => {
   originalFetch = globalThis.fetch;
+  // Probe HTTP goes through the mocked global fetch (prod uses node:http).
+  probeHttp.get = (url) => fetch(url);
   originalImportTimeout = process.env.MOTIS_IMPORT_TIMEOUT_MS;
   // Bound the liveness poll so a never-healthy probe doesn't retry for the
   // 30-min default. Tests that need multiple poll iterations raise this.
@@ -24,6 +28,7 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  probeHttp.get = originalProbeGet;
   if (originalImportTimeout === undefined) delete process.env.MOTIS_IMPORT_TIMEOUT_MS;
   else process.env.MOTIS_IMPORT_TIMEOUT_MS = originalImportTimeout;
   if (tmp) {

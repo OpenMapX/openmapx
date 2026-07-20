@@ -15,6 +15,7 @@ import {
   createCandidateManifest,
 } from "../../src/jobs/transitous/candidate.js";
 import { IMPORT_MARKER_FILE } from "../../src/jobs/transitous/internal.js";
+import { probeHttp } from "../../src/jobs/transitous/motis-probe.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import { run as promoteRun } from "../../src/jobs/transitous/promote.js";
 import { aliasSlot, ensureMotisSlotLayout } from "../../src/jobs/transitous/slot-state.js";
@@ -22,13 +23,17 @@ import { StateStore } from "../../src/state.js";
 
 let tmp: string | undefined;
 let originalFetch: typeof fetch;
+const originalProbeGet = probeHttp.get;
 
 beforeEach(() => {
   originalFetch = globalThis.fetch;
+  // Probe HTTP goes through the mocked global fetch (prod uses node:http).
+  probeHttp.get = (url) => fetch(url);
 });
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  probeHttp.get = originalProbeGet;
   if (tmp) {
     rmSync(tmp, { recursive: true, force: true });
     tmp = undefined;

@@ -5,6 +5,12 @@
  * here.
  */
 
+import { get as httpClientGet } from "node:http";
+import { get as httpsClientGet } from "node:https";
+
+const httpClient = { get: httpClientGet };
+const httpsClient = { get: httpsClientGet };
+
 export const DEFAULT_PROBE_TIMEOUT_MS = 5_000;
 
 /** Parse a positive-integer env var (milliseconds), falling back when unset/invalid. */
@@ -27,11 +33,8 @@ export interface ProbeFailure {
   transient?: boolean;
 }
 
-// Transient undici/socket faults worth a quick retry. When MOTIS closes a
-// keep-alive connection the pool tried to reuse (common while it is restarting
-// or under load during a sync), `fetch` rejects with "terminated" (and the
-// parser may also throw an ERR_ASSERTION swallowed in index.ts). A deliberate
-// timeout abort ("aborted") is NOT in this set — we don't retry those.
+// Transient socket faults worth a quick retry ("terminated" etc.). A deliberate
+// request timeout is NOT in this set.
 const TRANSIENT_FETCH_ERROR =
   /terminated|ECONNRESET|socket hang up|other side closed|UND_ERR|EPIPE|ECONNREFUSED/i;
 
@@ -45,9 +48,62 @@ function isTransientFetchError(error: unknown): boolean {
 }
 
 /**
- * Fetch with an abort-timeout, retrying only transient socket faults (idempotent
- * GET probes/polls). Each attempt gets a fresh timeout; a deliberate timeout
- * abort is not retried.
+ * One GET over `node:http(s)`, resolved to a standard `Response`.
+ *
+ * We deliberately do NOT use the global `fetch` (undici): MOTIS's larger
+ * responses (e.g. a ~300 KB `/plan`) trip a known undici HTTP-parser assertion
+ * (`assert(!this.paused)` in Parser.finish) that rejects the request with
+ * "terminated" AND throws an uncaughtException. `curl` and `node:http` parse the
+ * exact same response fine, so the probe path stays on the classic client. Only
+ * used for our own idempotent GET probes/polls.
+ */
+function rawHttpGet(url: string, timeoutMs: number): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const client = url.startsWith("https:") ? httpsClient : httpClient;
+    let settled = false;
+    const done = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn();
+    };
+    const req = client.get(url, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk) => chunks.push(chunk as Buffer));
+      res.on("end", () =>
+        done(() => {
+          const headers = new Headers();
+          for (const [key, value] of Object.entries(res.headers)) {
+            if (Array.isArray(value)) headers.set(key, value.join(", "));
+            else if (typeof value === "string") headers.set(key, value);
+          }
+          resolve(new Response(Buffer.concat(chunks), { status: res.statusCode ?? 502, headers }));
+        }),
+      );
+      res.on("error", (err) => done(() => reject(err)));
+    });
+    const timer = setTimeout(() => {
+      done(() => reject(new Error("request timed out")));
+      req.destroy();
+    }, timeoutMs);
+    req.on("error", (err) => done(() => reject(err)));
+  });
+}
+
+/**
+ * Test seam. Production uses the `node:http` getter above; the probe-caller
+ * suites (functional-probes / motis-health / promote) override this to route
+ * through their mocked global `fetch`. Kept tiny so the real network path
+ * (retry/timeout) is exercised only by motis-probe's own tests.
+ */
+export const probeHttp: { get: (url: string, timeoutMs: number) => Promise<Response> } = {
+  get: rawHttpGet,
+};
+
+/**
+ * GET with a timeout, retrying only transient socket faults (idempotent
+ * probes/polls). Each attempt gets a fresh timeout; a deliberate timeout is not
+ * retried.
  */
 export async function fetchWithTimeout(
   url: string,
@@ -56,16 +112,12 @@ export async function fetchWithTimeout(
 ): Promise<Response> {
   let lastError: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
-      return await fetch(url, { signal: ctrl.signal });
+      return await probeHttp.get(url, timeoutMs);
     } catch (error) {
       lastError = error;
       if (attempt === retries || !isTransientFetchError(error)) throw error;
       await new Promise((resolve) => setTimeout(resolve, 200));
-    } finally {
-      clearTimeout(timer);
     }
   }
   throw lastError;

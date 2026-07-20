@@ -1,64 +1,70 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import type { AddressInfo } from "node:net";
+import { afterEach, describe, expect, it } from "vitest";
 import { fetchWithTimeout } from "../../src/jobs/transitous/motis-probe.js";
 
-const originalFetch = globalThis.fetch;
-afterEach(() => {
-  globalThis.fetch = originalFetch;
-  vi.restoreAllMocks();
+let server: Server | undefined;
+afterEach(async () => {
+  if (server) {
+    server.closeAllConnections?.();
+    await new Promise<void>((resolve) => server?.close(() => resolve()));
+    server = undefined;
+  }
 });
 
-function okResponse(): Response {
-  return new Response("{}", { headers: { "content-type": "application/json" } });
+function listen(handler: (req: IncomingMessage, res: ServerResponse) => void): Promise<string> {
+  return new Promise((resolve) => {
+    server = createServer(handler);
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server?.address() as AddressInfo;
+      resolve(`http://127.0.0.1:${port}`);
+    });
+  });
 }
 
-describe("fetchWithTimeout", () => {
-  it("retries a transient undici 'terminated' fault and then succeeds", async () => {
-    let calls = 0;
-    globalThis.fetch = vi.fn(async () => {
-      calls++;
-      if (calls < 3) throw new TypeError("terminated");
-      return okResponse();
-    }) as typeof fetch;
-    const res = await fetchWithTimeout("http://motis/api/v1/plan", 1000, 3);
+describe("fetchWithTimeout (node:http, bypassing undici)", () => {
+  it("returns a standard Response for a 200 JSON body", async () => {
+    const base = await listen((_req, res) => {
+      res.setHeader("content-type", "application/json");
+      res.end('{"ok":true}');
+    });
+    const res = await fetchWithTimeout(`${base}/health`, 2000);
+    expect(res.status).toBe(200);
     expect(res.ok).toBe(true);
-    expect(calls).toBe(3);
+    expect(res.headers.get("content-type")).toContain("json");
+    expect(await res.json()).toEqual({ ok: true });
   });
 
-  it("matches the transient error on the error's cause too", async () => {
-    let calls = 0;
-    globalThis.fetch = vi.fn(async () => {
-      calls++;
-      if (calls === 1) {
-        const err = new TypeError("fetch failed");
-        (err as { cause?: unknown }).cause = new Error("other side closed");
-        throw err;
+  it("retries a transient socket fault (server drops the connection) then succeeds", async () => {
+    let n = 0;
+    const base = await listen((_req, res) => {
+      n++;
+      if (n < 3) {
+        res.socket?.destroy(); // abrupt close → ECONNRESET/socket hang up on the client
+        return;
       }
-      return okResponse();
-    }) as typeof fetch;
-    const res = await fetchWithTimeout("http://motis/x", 1000, 2);
-    expect(res.ok).toBe(true);
-    expect(calls).toBe(2);
+      res.end("{}");
+    });
+    const res = await fetchWithTimeout(`${base}/plan`, 2000, 3);
+    expect(res.status).toBe(200);
+    expect(n).toBe(3);
   });
 
-  it("does NOT retry a deliberate timeout abort", async () => {
-    let calls = 0;
-    globalThis.fetch = vi.fn(async () => {
-      calls++;
-      const err = new Error("This operation was aborted");
-      err.name = "AbortError";
-      throw err;
-    }) as typeof fetch;
-    await expect(fetchWithTimeout("http://motis/x", 1000, 3)).rejects.toThrow(/aborted/);
-    expect(calls).toBe(1);
+  it("times out (and does not retry) when the server never responds", async () => {
+    const base = await listen(() => {
+      /* intentionally never responds */
+    });
+    await expect(fetchWithTimeout(`${base}/plan`, 300, 3)).rejects.toThrow(/timed out/);
   });
 
-  it("gives up after exhausting retries on a persistent transient fault", async () => {
-    let calls = 0;
-    globalThis.fetch = vi.fn(async () => {
-      calls++;
-      throw new TypeError("terminated");
-    }) as typeof fetch;
-    await expect(fetchWithTimeout("http://motis/x", 1000, 2)).rejects.toThrow(/terminated/);
-    expect(calls).toBe(3); // initial + 2 retries
+  it("surfaces a non-2xx status without throwing", async () => {
+    const base = await listen((_req, res) => {
+      res.statusCode = 400;
+      res.setHeader("content-type", "application/json");
+      res.end("{}");
+    });
+    const res = await fetchWithTimeout(`${base}/health`, 2000);
+    expect(res.status).toBe(400);
+    expect(res.ok).toBe(false);
   });
 });

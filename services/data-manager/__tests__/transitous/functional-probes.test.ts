@@ -1,10 +1,18 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MotisCandidateManifest } from "../../src/jobs/transitous/candidate.js";
 import { runFunctionalProbes } from "../../src/jobs/transitous/functional-probes.js";
+import { probeHttp } from "../../src/jobs/transitous/motis-probe.js";
 
 const originalFetch = globalThis.fetch;
+const originalProbeGet = probeHttp.get;
+// Route the probe HTTP layer back through the mocked global fetch (production
+// uses node:http to dodge an undici parser bug on large MOTIS responses).
+beforeEach(() => {
+  probeHttp.get = (url) => fetch(url);
+});
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  probeHttp.get = originalProbeGet;
 });
 
 function manifest(expectsGbfs = true): MotisCandidateManifest {
