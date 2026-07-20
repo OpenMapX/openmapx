@@ -4,6 +4,7 @@ import { GlobalKeybindings } from "@/components/command-palette/GlobalKeybinding
 import { ElevationHoverProvider } from "@/components/elevation/ElevationHoverContext";
 import { BaseAttributions } from "@/components/map/BaseAttributions";
 import { CategoryResultMarkers } from "@/components/map/CategoryResultMarkers";
+import { ContextualOverlays } from "@/components/map/ContextualOverlays";
 import { DataSourceDetailBridge } from "@/components/map/DataSourceDetailBridge";
 import { DeepLinkManager } from "@/components/map/DeepLinkManager";
 import { ElevationHoverMarker } from "@/components/map/ElevationHoverMarker";
@@ -17,7 +18,6 @@ import { DataSourceLayer } from "@/components/map/layers/DataSourceLayer";
 import { FlightArcLayer } from "@/components/map/layers/FlightArcLayer";
 import { GlobeProjection } from "@/components/map/layers/GlobeProjection";
 import { ImportedGeometryLayer } from "@/components/map/layers/ImportedGeometryLayer";
-import { NavIncidentsLayer } from "@/components/map/layers/NavIncidentsLayer";
 import { NavigationRouteLayer } from "@/components/map/layers/NavigationRouteLayer";
 import { NavTrafficSignalsLayer } from "@/components/map/layers/NavTrafficSignalsLayer";
 import { PlaceBoundaryLayer } from "@/components/map/layers/PlaceBoundaryLayer";
@@ -28,7 +28,6 @@ import { SelectedStopInfrastructureLayer } from "@/components/map/layers/Selecte
 import { TransitItineraryLayer } from "@/components/map/layers/TransitItineraryLayer";
 import { TransitRouteLayer } from "@/components/map/layers/TransitRouteLayer";
 import { TransitVehicleLayer } from "@/components/map/layers/TransitVehicleLayer";
-import { TransitVehicleRadarLayer } from "@/components/map/layers/TransitVehicleRadarLayer";
 import { VehicleLiveLayer } from "@/components/map/layers/VehicleLiveLayer";
 import { MapAttributionPositioner } from "@/components/map/MapAttributionPositioner";
 import { MapCanvas } from "@/components/map/MapCanvas";
@@ -140,7 +139,6 @@ export default function HomePage() {
           <RouteLayer />
           <NavigationRouteLayer />
           <NavTrafficSignalsLayer />
-          <NavIncidentsLayer />
           <NavigationView />
           <TransitNavigationView />
           <FlightArcLayer />
@@ -148,7 +146,7 @@ export default function HomePage() {
           <VehicleLiveLayer />
           <TransitItineraryLayer />
           <TransitVehicleLayer />
-          <TransitVehicleRadarLayer />
+          <ContextualOverlays />
           <CategoryResultMarkers />
           <DataSourceLayer />
           <SavedPlacesLayer />

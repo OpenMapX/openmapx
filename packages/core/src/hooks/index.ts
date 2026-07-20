@@ -27,7 +27,6 @@ export {
   useTransitPlanningCapabilities,
   useTransitRoute,
   useTransitStops,
-  useTransitVehicleRadar,
   useVehicleJourney,
   useVehiclePositions,
 } from "./transit";

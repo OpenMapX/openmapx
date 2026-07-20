@@ -15,6 +15,29 @@ function dedupeById<T extends { id: string }>(items: T[]): T[] {
   return [...byId.values()];
 }
 
+/**
+ * Drop MOTIS-interpolated vehicles for any trip that also has a real-time
+ * `observed` fix from another provider — a genuine GPS position always wins over
+ * a schedule-based estimate. Interpolated vehicles are kept when no observed fix
+ * exists for their trip, and vehicles without a `tripId` are never dropped.
+ */
+export function preferObservedByTrip(vehicles: LiveTransitVehicle[]): LiveTransitVehicle[] {
+  const observedTripIds = new Set<string>();
+  for (const vehicle of vehicles) {
+    if (vehicle.tripId && vehicle.positionKind !== "interpolated") {
+      observedTripIds.add(vehicle.tripId);
+    }
+  }
+  return vehicles.filter(
+    (vehicle) =>
+      !(
+        vehicle.positionKind === "interpolated" &&
+        vehicle.tripId &&
+        observedTripIds.has(vehicle.tripId)
+      ),
+  );
+}
+
 export function createLiveTransitOrchestrator(ctx: IntegrationContext) {
   function getProviders(): RealtimeProvider[] {
     const providers: RealtimeProvider[] = [];
@@ -56,7 +79,7 @@ export function createLiveTransitOrchestrator(ctx: IntegrationContext) {
     // The realtime contract returns the framework's `VehiclePosition[]`;
     // the underlying providers actually produce the richer `LiveTransitVehicle`
     // shape at runtime (structural superset), so we cast back here.
-    return dedupeById(vehicles as LiveTransitVehicle[]);
+    return preferObservedByTrip(dedupeById(vehicles as LiveTransitVehicle[]));
   }
 
   async function getAlerts(bbox: BBox): Promise<ServiceAlert[]> {

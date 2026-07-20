@@ -74,7 +74,7 @@ describe("live-transit-motis provider", () => {
     expect(provider.coverage).toEqual({ all: true });
     expect(provider.priority).toBe(12);
     expect(provider.capabilities).toEqual({
-      vehiclePositions: false,
+      vehiclePositions: true,
       alerts: { byStop: true, byRoute: false, byBbox: false },
       tripUpdates: true,
     });
@@ -83,7 +83,7 @@ describe("live-transit-motis provider", () => {
     );
     expect(typeof provider.getAlertsForStop).toBe("function");
     expect(typeof provider.getTripUpdate).toBe("function");
-    expect(provider.getVehiclePositions).toBeUndefined();
+    expect(typeof provider.getVehiclePositions).toBe("function");
     expect(provider.getAlertsForRoute).toBeUndefined();
     expect(provider.getAlertsForBbox).toBeUndefined();
   });

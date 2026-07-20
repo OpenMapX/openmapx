@@ -1,13 +1,17 @@
 import { type Client, createClient } from "@hey-api/client-fetch";
+import type { LiveTransitVehicle } from "@integrations/overlay-live-transit/types.js";
+import { tripSegmentsToVehicles } from "@integrations/transit-motis/vehicle-radar.js";
 import {
   type Itinerary,
   type Leg,
   type Alert as MotisAlert,
   trip as motisTrip,
+  trips as motisTrips,
   type Place,
   stoptimes,
+  type TripSegment,
 } from "@motis-project/motis-client";
-import { USER_AGENT_TRANSIT } from "@openmapx/core";
+import { type BBox, USER_AGENT_TRANSIT } from "@openmapx/core";
 import {
   createManifestAttribution,
   type IntegrationContext,
@@ -161,6 +165,54 @@ function deltaFromItinerary(
   };
 }
 
+// MOTIS `map/trips` (RailViz) params — must match the polyline `precision` used
+// to decode the segment shapes.
+const RADAR_PRECISION = 6;
+const VEHICLE_RADAR_ZOOM = 13;
+// Self-hosted MOTIS trip ids carry the `ms:` prefix, so interpolated vehicles
+// share the id namespace of the local instance the overlay is enriching.
+const LOCAL_PREFIX = "ms:";
+
+/**
+ * Schedule-based (realtime-aware) vehicle positions from MOTIS `map/trips`: for
+ * every trip currently between two stops in the viewport, MOTIS returns the leg
+ * shape + times and we interpolate the vehicle to "now". These are `interpolated`
+ * positions — the overlay renders them distinctly and prefers a real GPS fix for
+ * the same trip. Queried against the self-hosted instance (`ms:`), where most
+ * feeds publish no GPS at all, so this is the only way to show moving vehicles.
+ */
+async function getInterpolatedVehicles(bbox: BBox): Promise<LiveTransitVehicle[]> {
+  const [west, south, east, north] = bbox;
+  const now = Date.now();
+  let segments: TripSegment[] = [];
+  try {
+    const { data } = await motisTrips({
+      client: localClient,
+      query: {
+        min: `${south},${west}`,
+        max: `${north},${east}`,
+        startTime: new Date(now - 60_000).toISOString(),
+        endTime: new Date(now + 60_000).toISOString(),
+        zoom: VEHICLE_RADAR_ZOOM,
+        precision: RADAR_PRECISION,
+      },
+    });
+    if (Array.isArray(data)) segments = data as TripSegment[];
+  } catch {
+    return [];
+  }
+  return tripSegmentsToVehicles(
+    { prefix: LOCAL_PREFIX, provider: SOURCE_ID, precision: RADAR_PRECISION, nowMs: now },
+    segments,
+  ).map((vehicle) => ({
+    ...vehicle,
+    sourceId: SOURCE_ID,
+    mode: vehicle.mode ?? "bus",
+    displayLabel: vehicle.label ?? "Transit",
+    positionKind: "interpolated" as const,
+  }));
+}
+
 export function setup(ctx: IntegrationContext): void {
   attribution.set(ctx.manifest.dataSources ?? []);
   localClient.setConfig({
@@ -178,9 +230,14 @@ export function setup(ctx: IntegrationContext): void {
     priority: 12,
     attribution: attribution.all(),
     capabilities: {
-      vehiclePositions: false,
+      vehiclePositions: true,
       alerts: { byStop: true, byRoute: false, byBbox: false },
       tripUpdates: true,
+    },
+    async getVehiclePositions(bbox: BBox) {
+      const attr = attribution.bySource(SOURCE_ID);
+      const data = await getInterpolatedVehicles(bbox);
+      return withAttribution(data, attr ? [attr] : [], freshnessNow({ hasRealtimeData: true }));
     },
     async getAlertsForStop(stopId) {
       const { client, attribution: attr } = routeForId(stopId);
