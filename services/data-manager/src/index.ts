@@ -219,6 +219,9 @@ app
 // path during `docker compose restart data-manager`; without it, a bounce
 // during a multi-hour sync would truncate the catalog write.
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
+  // Synchronous stderr write first: pino may not flush if the process is killed
+  // mid-shutdown, and we want the signal recorded no matter what.
+  process.stderr.write(`data-manager: shutdown signal=${signal}\n`);
   app.log.info({ signal }, "data-manager: shutdown requested");
   cronHandles?.stop();
   poiHandles?.stop();
@@ -244,3 +247,20 @@ for (const sig of ["SIGTERM", "SIGINT"] as const) {
     void shutdown(sig);
   });
 }
+
+// Diagnostics for an otherwise-silent process exit during a sync: record which
+// path took us down (signal already logged in shutdown(); event-loop drain via
+// beforeExit; a thrown error via the two handlers). Synchronous stderr writes so
+// the line survives even an immediate exit.
+process.on("beforeExit", (code) => {
+  process.stderr.write(`data-manager: beforeExit code=${code} (event loop drained)\n`);
+});
+process.on("exit", (code) => {
+  process.stderr.write(`data-manager: exit code=${code}\n`);
+});
+process.on("uncaughtException", (err) => {
+  process.stderr.write(`data-manager: uncaughtException ${err?.stack ?? String(err)}\n`);
+});
+process.on("unhandledRejection", (reason) => {
+  process.stderr.write(`data-manager: unhandledRejection ${String(reason)}\n`);
+});
