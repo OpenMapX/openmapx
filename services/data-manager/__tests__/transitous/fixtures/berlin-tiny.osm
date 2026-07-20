@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Hand-authored minimal OSM extract for the E9 live-MOTIS canary.
+
+     MOTIS 2.x refuses to import a config containing a `gbfs:` section unless
+     `street_routing` is enabled, and street routing needs an OSM extract. This
+     tiny street grid covers the canary's Berlin fixture area (lat 52.50-52.55,
+     lon 13.33-13.43): two east-west residential streets passing exactly through
+     the health-plan endpoints (52.525,13.369 and 52.521,13.413) - which are
+     also the de_demo GTFS stops and the GBFS fixture station - plus two
+     north-south connectors so the graph is a single routable component. -->
+<osm version="0.6" generator="openmapx-e9-fixture">
+  <bounds minlat="52.5000" minlon="13.3300" maxlat="52.5500" maxlon="13.4300"/>
+  <node id="1" lat="52.5250" lon="13.3400" version="1"/>
+  <node id="2" lat="52.5250" lon="13.3600" version="1"/>
+  <node id="3" lat="52.5250" lon="13.3690" version="1"/>
+  <node id="4" lat="52.5250" lon="13.3800" version="1"/>
+  <node id="5" lat="52.5250" lon="13.3900" version="1"/>
+  <node id="6" lat="52.5250" lon="13.4000" version="1"/>
+  <node id="7" lat="52.5250" lon="13.4130" version="1"/>
+  <node id="8" lat="52.5250" lon="13.4200" version="1"/>
+  <node id="11" lat="52.5210" lon="13.3400" version="1"/>
+  <node id="12" lat="52.5210" lon="13.3600" version="1"/>
+  <node id="13" lat="52.5210" lon="13.3690" version="1"/>
+  <node id="14" lat="52.5210" lon="13.3800" version="1"/>
+  <node id="15" lat="52.5210" lon="13.3900" version="1"/>
+  <node id="16" lat="52.5210" lon="13.4000" version="1"/>
+  <node id="17" lat="52.5210" lon="13.4130" version="1"/>
+  <node id="18" lat="52.5210" lon="13.4200" version="1"/>
+  <way id="101" version="1">
+    <nd ref="1"/>
+    <nd ref="2"/>
+    <nd ref="3"/>
+    <nd ref="4"/>
+    <nd ref="5"/>
+    <nd ref="6"/>
+    <nd ref="7"/>
+    <nd ref="8"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="E9 North Street"/>
+  </way>
+  <way id="102" version="1">
+    <nd ref="11"/>
+    <nd ref="12"/>
+    <nd ref="13"/>
+    <nd ref="14"/>
+    <nd ref="15"/>
+    <nd ref="16"/>
+    <nd ref="17"/>
+    <nd ref="18"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="E9 South Street"/>
+  </way>
+  <way id="103" version="1">
+    <nd ref="3"/>
+    <nd ref="13"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="E9 West Connector"/>
+  </way>
+  <way id="104" version="1">
+    <nd ref="7"/>
+    <nd ref="17"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="E9 East Connector"/>
+  </way>
+</osm>

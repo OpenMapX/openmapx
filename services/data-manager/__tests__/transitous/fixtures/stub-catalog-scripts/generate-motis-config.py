@@ -18,8 +18,17 @@ from __future__ import annotations
 
 import re
 import json
+import shutil
 import sys
 from pathlib import Path
+
+# Tiny OSM extract the E9 test drops into the stub catalog root. MOTIS 2.x
+# refuses to import a config with a `gbfs:` section unless STREET_ROUTING is
+# enabled ("feature GBFS requires feature STREET_ROUTING"), and street routing
+# needs an OSM input — so whenever the extract is present we copy it into
+# `out/` (assemble-staging links every config-referenced input from there) and
+# enable street routing in the emitted config.
+OSM_EXTRACT = "berlin-tiny.osm"
 
 
 def dataset_identifier(zip_name: str) -> str:
@@ -78,11 +87,19 @@ def main(argv: list[str]) -> int:
             if source.get("type") == "url" and isinstance(source.get("url"), str):
                 gbfs_sources.append((source.get("name", "gbfs"), source["url"]))
 
+    osm_extract = Path(OSM_EXTRACT)
+    street_routing = osm_extract.exists()
+    if street_routing:
+        shutil.copyfile(osm_extract, out_dir / OSM_EXTRACT)
+
     # Serialise as YAML by hand to avoid pulling in PyYAML — keeps the stub
     # self-contained on a stock python3 install. MOTIS infers the dataset name
     # from the key; each entry points at a GTFS zip relative to the data dir we
     # mount in the container (/motis-data).
-    yaml_lines: list[str] = ["server:", "  port: 8080", "timetable:", "  datasets:"]
+    yaml_lines: list[str] = ["server:", "  port: 8080"]
+    if street_routing:
+        yaml_lines.extend([f"osm: {OSM_EXTRACT}", "street_routing: true"])
+    yaml_lines.extend(["timetable:", "  datasets:"])
     for ident, name in datasets:
         yaml_lines.append(f"    {ident}:")
         yaml_lines.append(f"      path: {name}")

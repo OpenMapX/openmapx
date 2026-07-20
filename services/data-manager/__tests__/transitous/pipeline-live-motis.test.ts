@@ -1,6 +1,6 @@
 /**
  * End-to-end Transitous pipeline against real `motis` + `motis-staging` Docker
- * containers, seeded with three tiny GTFS feeds (DE/CH/AT). Drives all 12 stages
+ * containers, seeded with three tiny GTFS feeds (DE/CH/AT). Drives all 14 stages
  * so the previously-stubbed `assemble-staging`, `motis-import`, `motis-health`,
  * and `promote` paths actually exec MOTIS and observe the atomic swap — then
  * asserts the PRIMARY serves the promoted data (the real production goal).
@@ -81,6 +81,7 @@ const PIPELINE_BUDGET_MS = 4 * 60_000;
 const ORDERED_STAGES: StageName[] = [
   "prepare",
   "filter",
+  "preflight",
   "compile-gbfs",
   "fetch",
   "validate",
@@ -496,6 +497,12 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
       cpSync(join(STUB_SCRIPTS_DIR, name), join(catalogDir, "src", name));
     }
 
+    // Tiny OSM extract covering the Berlin fixture area. The stub config
+    // generator copies it into `out/` and enables `street_routing` — MOTIS 2.x
+    // hard-refuses a config with a `gbfs:` section unless street routing (and
+    // therefore an OSM input) is enabled.
+    cpSync(resolve(HERE, "fixtures", "berlin-tiny.osm"), join(catalogDir, "berlin-tiny.osm"));
+
     // Catalog feed files: one per region, each referencing the matching fixture
     // zip via a `file://` url. `type: url` is what the stub fetch.py understands.
     const byRegion = new Map<string, typeof built.entries>();
@@ -589,7 +596,7 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
   }, 60_000);
 
   it(
-    "runs all 12 stages, atomically swaps staging → live, and the primary serves the promoted data",
+    "runs all 14 stages, atomically swaps staging → live, and the primary serves the promoted data",
     async (testCtx) => {
       if (!daemonAvailable || !imageAvailable) {
         // beforeAll already logged the reason. Use vitest's `testCtx.skip()`
