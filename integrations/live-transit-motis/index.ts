@@ -81,6 +81,10 @@ function makeClient(baseUrl: string): Client {
 const localClient = makeClient(FALLBACK_MOTIS_URL);
 const transitousClient = makeClient(TRANSITOUS_URL);
 
+// Temporary diagnostics for the live-transit overlay MOTIS path.
+let debugLog: ((obj: Record<string, unknown>, msg: string) => void) | undefined;
+let debugMotisUrl = FALLBACK_MOTIS_URL;
+
 function routeForId(id: string): { client: Client; attribution: Attribution[] } {
   if (id.startsWith("mo:")) {
     const attr = attribution.bySource("transitous");
@@ -186,7 +190,7 @@ async function getInterpolatedVehicles(bbox: BBox): Promise<LiveTransitVehicle[]
   const now = Date.now();
   let segments: TripSegment[] = [];
   try {
-    const { data } = await motisTrips({
+    const { data, error, response } = await motisTrips({
       client: localClient,
       query: {
         min: `${south},${west}`,
@@ -197,8 +201,13 @@ async function getInterpolatedVehicles(bbox: BBox): Promise<LiveTransitVehicle[]
         precision: RADAR_PRECISION,
       },
     });
+    debugLog?.(
+      { motisUrl: debugMotisUrl, status: response?.status, isArray: Array.isArray(data), error },
+      "live-transit-motis map/trips result",
+    );
     if (Array.isArray(data)) segments = data as TripSegment[];
-  } catch {
+  } catch (err) {
+    debugLog?.({ motisUrl: debugMotisUrl, err: String(err) }, "live-transit-motis map/trips threw");
     return [];
   }
   return tripSegmentsToVehicles(
@@ -215,8 +224,10 @@ async function getInterpolatedVehicles(bbox: BBox): Promise<LiveTransitVehicle[]
 
 export function setup(ctx: IntegrationContext): void {
   attribution.set(ctx.manifest.dataSources ?? []);
+  debugMotisUrl = resolveMotisUrl(ctx);
+  debugLog = (obj, msg) => ctx.log.info(`${msg}: ${JSON.stringify(obj)}`);
   localClient.setConfig({
-    baseUrl: resolveMotisUrl(ctx),
+    baseUrl: debugMotisUrl,
     headers: { "User-Agent": USER_AGENT_TRANSIT },
   });
   transitousClient.setConfig({
