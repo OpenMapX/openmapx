@@ -171,6 +171,7 @@ function translateStructuredSection(
   resolveT: (value: Translatable | undefined) => string,
 ): StructuredSection {
   const translatedTitle = resolveT(section.title);
+  const translatedCaption = section.caption === undefined ? undefined : resolveT(section.caption);
   // A value cell may be a single Translatable or a list of them (e.g. a
   // localized accessory list); resolve each and join with the locale separator.
   const resolveCell = (cell: Translatable | Translatable[] | undefined): string | number =>
@@ -190,6 +191,9 @@ function translateStructuredSection(
   return {
     id: undefined,
     title: translatedTitle,
+    caption: translatedCaption,
+    captionTimestamp: section.captionTimestamp,
+    links: section.links?.map((link) => ({ label: resolveT(link.label), url: link.url })),
     type: section.type,
     columns: translatedColumns,
     rows: translatedRows,

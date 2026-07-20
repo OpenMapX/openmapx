@@ -34,6 +34,8 @@ export {
   formatCalendarDate,
   formatClockTime,
   formatDateAndTime,
+  formatRelativeTime,
+  type RelativeTimeOptions,
   type TimeFormat,
 } from "./dateTimeFormat";
 export { buildDeliveryOpenUrl } from "./deliveryLink";

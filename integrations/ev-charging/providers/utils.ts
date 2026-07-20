@@ -166,3 +166,54 @@ export function connector(input: EvChargingConnector): EvChargingConnector {
     quantity: input.quantity && input.quantity > 0 ? input.quantity : undefined,
   };
 }
+
+interface ConnectorGroup {
+  type?: string;
+  powerKw?: number;
+  currentType?: string;
+  quantity: number;
+  status?: string;
+  statusDiverged: boolean;
+}
+
+/**
+ * Collapses physically-identical connectors (same type/power/currentType)
+ * into a single row with a summed quantity, so a station with e.g. six
+ * identical Type 2 plugs shows one grouped row instead of six. `status` is
+ * kept only when every member of the group shares it; otherwise it's
+ * dropped rather than picking one arbitrarily. Per-connector `reference` is
+ * not carried into the grouped result. Output is sorted by descending
+ * powerKw, matching the ungrouped table's prior sort order.
+ */
+export function groupConnectors(connectors: EvChargingConnector[]): EvChargingConnector[] {
+  const groups = new Map<string, ConnectorGroup>();
+  for (const conn of connectors) {
+    const key = `${conn.type ?? ""}|${conn.powerKw ?? ""}|${conn.currentType ?? ""}`;
+    const existing = groups.get(key);
+    const quantity = conn.quantity && conn.quantity > 0 ? conn.quantity : 1;
+    if (!existing) {
+      groups.set(key, {
+        type: conn.type,
+        powerKw: conn.powerKw,
+        currentType: conn.currentType,
+        quantity,
+        status: conn.status,
+        statusDiverged: false,
+      });
+      continue;
+    }
+    existing.quantity += quantity;
+    if (existing.status !== conn.status) existing.statusDiverged = true;
+  }
+  return Array.from(groups.values())
+    .map(
+      (group): EvChargingConnector => ({
+        type: group.type,
+        powerKw: group.powerKw,
+        currentType: group.currentType,
+        quantity: group.quantity,
+        status: group.statusDiverged ? undefined : group.status,
+      }),
+    )
+    .sort((a, b) => (b.powerKw ?? 0) - (a.powerKw ?? 0));
+}

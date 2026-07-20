@@ -227,6 +227,22 @@
       "dpaAvailable": false
     },
     {
+      "sourceId": "netherlands-ev",
+      "name": "Publicly accessible charging points (DOT-NL / NDW)",
+      "url": "https://dotnl.ndw.nu/",
+      "apiHosts": ["opendata.ndw.nu"],
+      "license": "DOT-NL National Access Point open data (NDW)",
+      "licenseUrl": "https://dotnl.ndw.nu/",
+      "attribution": "Charging data via <a href=\"https://dotnl.ndw.nu/\">DOT-NL</a> (NDW)",
+      "commercialUse": "yes",
+      "providerCountry": "NL",
+      "providerPrivacyUrl": "https://www.ndw.nu/service/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
       "sourceId": "nobil",
       "name": "NOBIL",
       "url": "https://info.nobil.no/api",

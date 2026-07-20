@@ -21,10 +21,15 @@ import { useTranslations } from "next-intl";
 import { type ReactNode, useState } from "react";
 import { HlsVideo } from "@/components/ui/HlsVideo";
 import { TEAL } from "@/lib/theme";
+import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 
 export interface StructuredSection {
   id?: string;
   title: string;
+  /** Optional subtitle rendered beneath the section header (e.g. live availability). */
+  caption?: string;
+  /** ISO timestamp the caption was last refreshed; renders a "· N ago" suffix. */
+  captionTimestamp?: string;
   type: "table" | "list" | "text" | "image" | "embed" | "pricing";
   columns?: string[];
   rows?: (string | number)[][];
@@ -37,6 +42,9 @@ export interface StructuredSection {
   embedType?: "iframe" | "video";
   sectionIcon?: ReactNode | string;
   pricingPlans?: PricingPlanEntry[];
+  /** Optional clickable links rendered beneath the section body (e.g. a tariff
+   *  terms link). An entry with no `url` renders as plain descriptive text. */
+  links?: { label: string; url?: string }[];
   collapsed?: boolean;
 }
 
@@ -493,6 +501,33 @@ function SectionContent({
   }
 }
 
+function SectionLinks({ links }: { links?: StructuredSection["links"] }) {
+  if (!links || links.length === 0) return null;
+  return (
+    <Box sx={{ mt: 0.75 }}>
+      {links.map((link) =>
+        link.url ? (
+          <Link
+            key={`${link.label}|${link.url}`}
+            href={safeHref(link.url)}
+            target="_blank"
+            rel="noopener noreferrer"
+            underline="hover"
+            variant="body2"
+            sx={{ display: "block" }}
+          >
+            {link.label}
+          </Link>
+        ) : (
+          <Typography key={`${link.label}|`} variant="body2" sx={{ color: "text.secondary" }}>
+            {link.label}
+          </Typography>
+        ),
+      )}
+    </Box>
+  );
+}
+
 function StructuredSectionCard({
   section,
   pricingLabels,
@@ -503,6 +538,9 @@ function StructuredSectionCard({
   const collapsed = section.collapsed ?? section.type === "embed";
   const [expanded, setExpanded] = useState(!collapsed);
   const deferCollapsedContent = collapsed && section.type === "embed";
+  const { relative } = useDateTimeFormat();
+  const relativeCaption =
+    section.caption && section.captionTimestamp ? relative(section.captionTimestamp) : undefined;
 
   return (
     <Box sx={{ px: 2, py: 1.25 }}>
@@ -546,6 +584,20 @@ function StructuredSectionCard({
           </IconButton>
         )}
       </Box>
+      {section.caption && (
+        <Typography
+          variant="caption"
+          sx={{
+            display: "block",
+            color: "text.secondary",
+            pl: 5,
+            mt: 0.25,
+          }}
+        >
+          {section.caption}
+          {relativeCaption && ` · ${relativeCaption}`}
+        </Typography>
+      )}
       {/* Body — indented to align under the title (icon width 24 + gap 16). */}
       <Box sx={{ pl: 5, mt: expanded ? 0.5 : 0, minWidth: 0 }}>
         {collapsed ? (
@@ -555,9 +607,13 @@ function StructuredSectionCard({
             unmountOnExit={deferCollapsedContent}
           >
             <SectionContent section={section} pricingLabels={pricingLabels} />
+            <SectionLinks links={section.links} />
           </Collapse>
         ) : (
-          <SectionContent section={section} pricingLabels={pricingLabels} />
+          <>
+            <SectionContent section={section} pricingLabels={pricingLabels} />
+            <SectionLinks links={section.links} />
+          </>
         )}
       </Box>
     </Box>

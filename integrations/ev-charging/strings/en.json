@@ -5,16 +5,29 @@
     "connectors": "Connectors",
     "usage": "Usage"
   },
+  "availability": "{available} of {total} available",
   "column": {
     "power": "Power",
     "current": "Current",
-    "qty": "Qty"
+    "qty": "Qty",
+    "price": "Price",
+    "conditions": "Conditions"
   },
   "row": {
     "cost": "Cost",
     "payment": "Payment",
-    "membershipRequired": "Membership required"
+    "membershipRequired": "Membership required",
+    "pricingEnergy": "Energy",
+    "pricingTime": "Time",
+    "pricingFlat": "Flat fee",
+    "pricingParking": "Parking"
   },
+  "priceEnergy": "{amount}/kWh",
+  "priceTime": "{amount}/min",
+  "priceFlat": "{amount}/session",
+  "priceParking": "{amount}/min parking",
+  "pricingNote": "Direct payment price at this charger — your provider's roaming or subscription price may differ.",
+  "tariffDetails": "View tariff details",
   "summary": {
     "connectorsTyped": "{count}x {types}",
     "connectorsTypedPower": "{count}x {types} · {power} kW",
@@ -52,6 +65,11 @@
       "purpose": "Swiss national charging station dataset (Swiss Federal Office of Energy SFOE) covering public charging infrastructure in Switzerland",
       "dataSent": "No query parameters — the full national OICP dataset (and a 5-minute live-status feed) is downloaded server-side on a schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
       "dataReceived": "Charging station records with location, operator, connector/plug types, rated power, accessibility, authentication/payment modes, opening hours, and live availability status"
+    },
+    "netherlands-ev": {
+      "purpose": "Dutch national charging point dataset (DOT-NL / NDW National Access Point) covering publicly accessible charging infrastructure in the Netherlands",
+      "dataSent": "No query parameters — the full national OCPI locations feed (and its structured tariffs feed) is downloaded server-side on a schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
+      "dataReceived": "Charging station records with location, operator, connector/plug types, rated power, structured tariffs, and live per-connector availability status"
     },
     "nobil": {
       "purpose": "Nordic EV charging station database (NOBIL) covering public charging stations in Norway and Sweden",

@@ -47,6 +47,17 @@ const wrapStatic = <T>(data: T, attributions: Attribution[]): MobilityResult<T> 
     freshnessNow({ hasRealtimeData: false, isStale: anyEvSourceColdStart() }),
   );
 
+const wrapDetail = <T>(
+  data: T,
+  attributions: Attribution[],
+  hasRealtimeData: boolean,
+): MobilityResult<T> =>
+  withAttribution(
+    data,
+    attributions,
+    freshnessNow({ hasRealtimeData, isStale: anyEvSourceColdStart() }),
+  );
+
 function attributionsForStation(station: EvChargingStation): Attribution[] {
   return attribution.forResults([station], (s) => s.sources);
 }
@@ -126,28 +137,33 @@ class EvChargingProvider implements MobilityDataSourceProvider {
     const merged = deduplicateChargingStations(allStations);
     for (const station of merged) this.cacheStation(station);
     const mapped = merged.map(mapStationToResult);
-    return wrapStatic(
+    const anyLive = merged.some((s) => s.isLive);
+    return withAttribution(
       mapped,
       attribution.forResults(mapped, (r) => r.sources ?? r.source),
+      freshnessNow({ hasRealtimeData: anyLive, isStale: anyEvSourceColdStart() }),
     );
   }
 
   async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
     const cached = this.stationCache.get(itemId);
-    if (cached)
-      return wrapStatic(
+    if (cached) {
+      return wrapDetail(
         mapStationToDetail(cached, resolveSourceName),
         attributionsForStation(cached),
+        Boolean(cached.isLive),
       );
+    }
 
     const primary = await this.fetchByPrefix(itemId);
     if (!primary) return wrapStatic(null, []);
 
     const enriched = await this.enrichStation(primary);
     this.cacheStation(enriched);
-    return wrapStatic(
+    return wrapDetail(
       mapStationToDetail(enriched, resolveSourceName),
       attributionsForStation(enriched),
+      Boolean(enriched.isLive),
     );
   }
 

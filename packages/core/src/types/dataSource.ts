@@ -107,6 +107,8 @@ export interface DataSourceResult {
   kind?: "station" | "vehicle";
   variant: string;
   status?: string;
+  /** Live EVSE availability rollup, present only for live-covered results. */
+  availability?: { available: number; total: number };
   summary?: I18nToken;
   operator?: string;
   branding?: DataSourceBranding;
@@ -128,6 +130,14 @@ export interface PricingPlanEntry {
 
 export interface DataSourceDetailSection {
   title: I18nToken;
+  /** Optional subtitle rendered beneath the section header (e.g. live availability). */
+  caption?: Translatable;
+  /**
+   * ISO timestamp the `caption` was last refreshed. When present alongside a
+   * resolved `caption`, the client appends a locale-aware "updated N ago"
+   * suffix (e.g. live availability freshness).
+   */
+  captionTimestamp?: string;
   type: "table" | "list" | "text" | "image" | "embed" | "pricing";
   columns?: I18nToken[];
   /**
@@ -192,6 +202,12 @@ export interface DataSourceDetailSection {
     | "warning";
   /** Structured pricing plans for type "pricing". */
   pricingPlans?: PricingPlanEntry[];
+  /**
+   * Optional clickable links rendered beneath the section caption/body (e.g.
+   * a tariff terms link). `url` is omitted when an entry carries descriptive
+   * text but no link target — it then renders as plain text instead of a link.
+   */
+  links?: { label: Translatable; url?: string }[];
   /** When true, the section renders collapsed by default. Embed sections default collapsed in the web UI. */
   collapsed?: boolean;
 }

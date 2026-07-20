@@ -7,6 +7,14 @@
         { "EvseID": "CH*GRN*E002", "EVSEStatus": "OUTOFORDER" },
         { "EvseID": "CH*GRN*E999", "EVSEStatus": "AVAILABLE" }
       ]
+    },
+    {
+      "OperatorID": "CH*STATION",
+      "EVSEStatusRecord": [
+        { "EvseID": "CH*STATION*1*E1", "EVSEStatus": "AVAILABLE" },
+        { "EvseID": "CH*STATION*1*E2", "EVSEStatus": "CHARGING" },
+        { "EvseID": "CH*STATION*1*E3", "EVSEStatus": "OUTOFORDER" }
+      ]
     }
   ]
 }

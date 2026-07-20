@@ -1,0 +1,39 @@
+[
+  {
+    "id": "live-station-mixed",
+    "name": "Mixed Status Station",
+    "last_updated": "2026-07-20T18:00:00Z",
+    "evses": [
+      { "uid": "e1", "status": "AVAILABLE" },
+      { "uid": "e2", "status": "CHARGING" },
+      { "uid": "e3", "status": "UNKNOWN" }
+    ]
+  },
+  {
+    "id": "live-station-outoforder",
+    "name": "Down Station",
+    "last_updated": "2026-07-20T17:30:00Z",
+    "evses": [{ "uid": "e1", "status": "OUTOFORDER" }, { "uid": "e2", "status": "REMOVED" }]
+  },
+  {
+    "id": "live-station-no-timestamp",
+    "name": "No Timestamp Station",
+    "evses": [{ "uid": "e1", "status": "AVAILABLE" }]
+  },
+  {
+    "id": "live-station-removed",
+    "name": "Partially Delisted Station",
+    "last_updated": "2026-07-20T18:15:00Z",
+    "evses": [
+      { "uid": "e1", "status": "AVAILABLE" },
+      { "uid": "e2", "status": "CHARGING" },
+      { "uid": "e3", "status": "REMOVED" }
+    ]
+  },
+  {
+    "id": "live-station-no-evses",
+    "name": "Empty Station",
+    "last_updated": "2026-07-20T17:00:00Z",
+    "evses": []
+  }
+]

@@ -18,6 +18,7 @@ import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import IconButton from "@mui/material/IconButton";
 import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
@@ -25,6 +26,7 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
+import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
@@ -400,17 +402,27 @@ export function DataSourceFilterContent() {
           ) : null;
         })()}
 
-        {/* Remaining filters not handled above -- fallback to generic chips */}
+        {/* Remaining filters not handled above -- toggles render as switches,
+            everything else falls back to generic chips */}
         {sourceMeta.filters
           .filter((f) => !["connectorType", "speed", "usageType", "status"].includes(f.id))
-          .map((filterDef) => (
-            <ChipFilterSection
-              key={filterDef.id}
-              filterDef={filterDef}
-              currentValue={filters[filterDef.id]}
-              onToggle={handleToggleMultiSelect}
-            />
-          ))}
+          .map((filterDef) =>
+            filterDef.type === "toggle" ? (
+              <ToggleFilterSection
+                key={filterDef.id}
+                filterDef={filterDef}
+                checked={Boolean(filters[filterDef.id])}
+                onChange={(checked) => setFilter(filterDef.id, checked)}
+              />
+            ) : (
+              <ChipFilterSection
+                key={filterDef.id}
+                filterDef={filterDef}
+                currentValue={filters[filterDef.id]}
+                onToggle={handleToggleMultiSelect}
+              />
+            ),
+          )}
 
         {/* Dynamic operator filter -- Autocomplete */}
         {operatorOptions.length > 0 && (
@@ -850,6 +862,33 @@ function SpeedFilterSection(props: {
         />
       )}
     />
+  );
+}
+
+/** Toggle Filter Section -- a single switch bound to a boolean filter value */
+
+function ToggleFilterSection({
+  filterDef,
+  checked,
+  onChange,
+}: {
+  filterDef: DataSourceFilterDef;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <Box sx={{ mb: 2 }}>
+      <FormControlLabel
+        control={
+          <Switch size="small" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+        }
+        label={
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            {filterDef.label}
+          </Typography>
+        }
+      />
+    </Box>
   );
 }
 

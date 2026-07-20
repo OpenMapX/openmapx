@@ -70,6 +70,19 @@ function mapContextOutlineLayerId(dsId: string) {
   return `ds-${dsId}-map-context-outline`;
 }
 
+/**
+ * Buckets a data-source result's live availability into a marker color state.
+ * `unknown` covers results with no live coverage (or a reported zero-capacity
+ * station), so the marker falls back to its static variant color.
+ */
+export function availStateOf(result: {
+  availability?: { available: number; total: number };
+}): "available" | "busy" | "unknown" {
+  const a = result.availability;
+  if (!a || a.total === 0) return "unknown";
+  return a.available > 0 ? "available" : "busy";
+}
+
 function buildGeoJson(
   results: DataSourceResult[],
   translateSummary: (summary: Translatable | undefined) => string | undefined,
@@ -92,6 +105,7 @@ function buildGeoJson(
         summary: translateSummary(r.summary) ?? "",
         operator: r.operator ?? "",
         kind: r.kind ?? "",
+        availState: availStateOf(r),
         ...(imageId ? { imageId } : {}),
       },
     })),
@@ -566,7 +580,16 @@ export function DataSourceLayer() {
       } else {
         // Circle marker mode (default, e.g. EV charging)
         if (!map.getLayer(markersLid)) {
-          const colorExpr = buildVariantColorExpression(activeMeta.markerStyle);
+          const variantColorExpr = buildVariantColorExpression(activeMeta.markerStyle);
+          const colorExpr: maplibregl.ExpressionSpecification = [
+            "match",
+            ["get", "availState"],
+            "available",
+            "#2E7D32",
+            "busy",
+            "#F9A825",
+            variantColorExpr,
+          ];
 
           map.addLayer(
             {

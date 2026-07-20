@@ -61,6 +61,12 @@ export async function getEvChargingFilters(): Promise<DataSourceFilterDef[]> {
         type: "multi-select",
         options: statusOptions,
       },
+      {
+        id: "available_now",
+        label: "Available now",
+        type: "toggle",
+        clientSide: true,
+      },
     ];
   } catch {
     // Fallback filters without OCM reference data (e.g. no API key)
@@ -93,6 +99,12 @@ export async function getEvChargingFilters(): Promise<DataSourceFilterDef[]> {
         label: "Status",
         type: "multi-select",
         options: [],
+      },
+      {
+        id: "available_now",
+        label: "Available now",
+        type: "toggle",
+        clientSide: true,
       },
     ];
   }

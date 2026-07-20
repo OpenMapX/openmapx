@@ -38,6 +38,7 @@ export function splitFilters(
  * - `speed` — matches against `result.variant`
  * - `operator` — matches against `result.operator`
  * - `source` — matches against `result.source`
+ * - `available_now` — when `true`, keeps only results with `availability.available > 0`
  * - opening hours — when set to `"open_now"`, keeps only `variant === "open"`
  */
 export function applyClientSideFilters(
@@ -78,6 +79,10 @@ export function applyClientSideFilters(
       const sourceSet = new Set(sourceValues);
       out = out.filter((r) => sourceSet.has(r.source));
     }
+  }
+
+  if (filters.available_now === true) {
+    out = out.filter((r) => (r.availability?.available ?? 0) > 0);
   }
 
   if (openingHoursFilter === "open_now") {

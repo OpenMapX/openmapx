@@ -10,7 +10,17 @@ vi.mock("@/components/ui/HlsVideo", () => ({
   ),
 }));
 
+vi.mock("@/lib/useDateTimeFormat", () => ({
+  useDateTimeFormat: () => ({
+    time: (v: string | number | Date) => String(v),
+    date: (v: string | number | Date) => String(v),
+    dateTime: (v: string | number | Date) => String(v),
+    relative: () => "5 minutes ago",
+  }),
+}));
+
 vi.mock("next-intl", () => ({
+  useLocale: () => "en",
   useTranslations: () => (key: string) =>
     (
       ({
@@ -43,6 +53,135 @@ describe("StructuredSections", () => {
       "http://localhost:3001/api/image-proxy?url=https%3A%2F%2Fapi.entur.io%2Fmobility%2Fassets%2Fvehicle.png",
     );
     expect(markup).not.toContain('src="https://api.entur.io');
+  });
+
+  it("renders the section caption beneath the header", () => {
+    const markup = renderToStaticMarkup(
+      <StructuredSections
+        sections={[
+          {
+            title: "Connectors",
+            caption: "2 of 4 available",
+            type: "table",
+            columns: ["Type", "Power", "Current", "Qty", "Status"],
+            rows: [["CCS", "50 kW", "DC", 2, "operational"]],
+            sectionIcon: "bolt",
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("2 of 4 available");
+  });
+
+  it("appends a relative-time suffix when the caption has a captionTimestamp", () => {
+    const markup = renderToStaticMarkup(
+      <StructuredSections
+        sections={[
+          {
+            title: "Connectors",
+            caption: "2 of 4 available",
+            captionTimestamp: "2026-07-20T10:00:00Z",
+            type: "table",
+            columns: ["Type", "Power", "Current", "Qty", "Status"],
+            rows: [["CCS", "50 kW", "DC", 2, "operational"]],
+            sectionIcon: "bolt",
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("2 of 4 available");
+    expect(markup).toContain("5 minutes ago");
+  });
+
+  it("renders the caption without a relative-time suffix when there is no captionTimestamp", () => {
+    const markup = renderToStaticMarkup(
+      <StructuredSections
+        sections={[
+          {
+            title: "Connectors",
+            caption: "2 of 4 available",
+            type: "table",
+            columns: ["Type", "Power", "Current", "Qty", "Status"],
+            rows: [["CCS", "50 kW", "DC", 2, "operational"]],
+            sectionIcon: "bolt",
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("2 of 4 available");
+    expect(markup).not.toContain("5 minutes ago");
+  });
+
+  it("renders a structured pricing table with formatted prices and a direct-price caption", () => {
+    const markup = renderToStaticMarkup(
+      <StructuredSections
+        sections={[
+          {
+            title: "Pricing",
+            caption: "Direct payment price at this charger — your provider may charge differently.",
+            type: "table",
+            rows: [
+              ["Energy", "€0.59/kWh"],
+              ["Parking", "€2.00/h parking"],
+            ],
+            sectionIcon: "payments",
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("€0.59/kWh");
+    expect(markup).toContain("€2.00/h parking");
+    expect(markup).toContain(
+      "Direct payment price at this charger — your provider may charge differently.",
+    );
+  });
+
+  it("renders a section's links as clickable anchors to the given urls", () => {
+    const markup = renderToStaticMarkup(
+      <StructuredSections
+        sections={[
+          {
+            title: "Pricing",
+            type: "table",
+            rows: [["Energy", "€0.48/kWh"]],
+            sectionIcon: "payments",
+            links: [
+              { label: "Night rate applies 00:00-07:00", url: "https://example.org/tariffs/1" },
+              { label: "View tariff details", url: "https://example.org/tariffs/2" },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain('href="https://example.org/tariffs/1"');
+    expect(markup).toContain('href="https://example.org/tariffs/2"');
+    expect(markup).toContain("Night rate applies 00:00-07:00");
+    expect(markup).toContain("View tariff details");
+    expect(markup).toContain('target="_blank"');
+  });
+
+  it("renders a link entry without a url as plain text, not an anchor", () => {
+    const markup = renderToStaticMarkup(
+      <StructuredSections
+        sections={[
+          {
+            title: "Pricing",
+            type: "table",
+            rows: [["Energy", "€0.48/kWh"]],
+            sectionIcon: "payments",
+            links: [{ label: "Ask your provider for terms" }],
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("Ask your provider for terms");
+    expect(markup).not.toContain("<a ");
   });
 
   it("does not load external embed URLs before the media gate is accepted", () => {

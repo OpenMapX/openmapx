@@ -61,6 +61,15 @@
           "Plugs": []
         }
       ]
+    },
+    {
+      "OperatorID": "CH*STATION",
+      "OperatorName": "Station Test Operator",
+      "EVSEDataRecord": [
+        { "ChargingStationId": "CH*STATION*1", "EvseID": "CH*STATION*1*E1" },
+        { "ChargingStationId": "CH*STATION*1", "EvseID": "CH*STATION*1*E2" },
+        { "ChargingStationId": "CH*STATION*1", "EvseID": "CH*STATION*1*E3" }
+      ]
     }
   ]
 }

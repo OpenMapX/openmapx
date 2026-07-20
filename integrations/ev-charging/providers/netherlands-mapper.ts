@@ -5,26 +5,21 @@ import type {
   EvChargingOperator,
   EvChargingStation,
   EvChargingStatus,
+  EvChargingTariff,
 } from "@openmapx/mobility-core/ev-charging";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
 
-// Swiss OICP cron is */5 min; flag as not-operational/unknown if upstream
-// hasn't refreshed for >30 min (=6 missed runs).
+// The live cron re-fetches the (large) DOT-NL locations file every 15 min
+// (see the build brief); ttlSeconds is set to 2x that interval (30 min) in
+// poi-sources.ts. Keep the merge-side staleness guard aligned with that Redis
+// TTL so a search never trusts live data that's already expired from cache.
 const MAX_LIVE_AGE_MS = 30 * 60 * 1000;
 
-// Prefix preserved at "swiss-sfoe:" — the registry id rename ("switzerland-ev")
-// is deliberately invisible to downstream consumers. Place ids stay stable.
-const STATION_ID_PREFIX = "swiss-sfoe:";
-const SOURCE_ID = "switzerland-ev";
+const STATION_ID_PREFIX = "nl-dotnl:";
+const SOURCE_ID = "netherlands-ev";
 
 function asStringOrUndef(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function asStringArrayOrUndef(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const out = value.filter((v): v is string => typeof v === "string" && v.length > 0);
-  return out.length > 0 ? out : undefined;
 }
 
 function asAddress(value: unknown): EvChargingAddress | undefined {
@@ -33,7 +28,6 @@ function asAddress(value: unknown): EvChargingAddress | undefined {
   const out: EvChargingAddress = {
     line1: asStringOrUndef(a.line1),
     town: asStringOrUndef(a.town),
-    state: asStringOrUndef(a.state),
     postcode: asStringOrUndef(a.postcode),
     country: asStringOrUndef(a.country),
   };
@@ -53,14 +47,15 @@ function asConnectors(value: unknown): EvChargingConnector[] {
   return value.filter((v): v is EvChargingConnector => typeof v === "object" && v !== null);
 }
 
-export function mapSwitzerlandPayload(poiId: string, payload: unknown): EvChargingStation {
+function asTariffs(value: unknown): EvChargingTariff[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out = value.filter((v): v is EvChargingTariff => typeof v === "object" && v !== null);
+  return out.length > 0 ? out : undefined;
+}
+
+export function mapNetherlandsPayload(poiId: string, payload: unknown): EvChargingStation {
   const p = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
   const stationId = `${STATION_ID_PREFIX}${poiId}`;
-  const encodedEvseId = asStringOrUndef(p.encodedEvseId);
-  const sourceItemIds = [
-    stationId,
-    encodedEvseId ? `${STATION_ID_PREFIX}${encodedEvseId}` : null,
-  ].filter((v): v is string => Boolean(v));
 
   const coordinates = Array.isArray(p.coordinates)
     ? ([p.coordinates[0] as number, p.coordinates[1] as number] as [number, number])
@@ -69,21 +64,16 @@ export function mapSwitzerlandPayload(poiId: string, payload: unknown): EvChargi
   return {
     id: stationId,
     sources: [SOURCE_ID],
-    sourceItemIds,
+    sourceItemIds: [stationId],
     name: asStringOrUndef(p.name) ?? "EV Charging Station",
     coordinates,
     address: asAddress(p.address),
     operator: asOperator(p.operator),
     // Static-only ingest: live per-EVSE status returns later via the live spec.
     status: "unknown",
-    usageType: asStringOrUndef(p.usageType),
-    openingHours: asStringOrUndef(p.openingHours),
-    access: asStringOrUndef(p.access),
-    paymentMethods: asStringArrayOrUndef(p.paymentMethods),
     connectors: asConnectors(p.connectors),
+    tariffs: asTariffs(p.tariffs),
     updatedAt: asStringOrUndef(p.updatedAt),
-    sourceUrl: asStringOrUndef(p.sourceUrl),
-    notes: asStringArrayOrUndef(p.notes),
   };
 }
 
@@ -99,7 +89,7 @@ function asLiveStatus(value: unknown): EvChargingStatus | undefined {
   return undefined;
 }
 
-export function mergeSwitzerlandLive(
+export function mergeNetherlandsLive(
   base: EvChargingStation,
   live: PoiLiveState | null,
 ): EvChargingStation {

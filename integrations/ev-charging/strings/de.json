@@ -5,16 +5,29 @@
     "connectors": "Anschlüsse",
     "usage": "Nutzung"
   },
+  "availability": "{available} von {total} verfügbar",
   "column": {
     "power": "Leistung",
     "current": "Strom",
-    "qty": "Anzahl"
+    "qty": "Anzahl",
+    "price": "Preis",
+    "conditions": "Bedingungen"
   },
   "row": {
     "cost": "Kosten",
     "payment": "Zahlung",
-    "membershipRequired": "Mitgliedschaft erforderlich"
+    "membershipRequired": "Mitgliedschaft erforderlich",
+    "pricingEnergy": "Energie",
+    "pricingTime": "Zeit",
+    "pricingFlat": "Pauschale",
+    "pricingParking": "Parken"
   },
+  "priceEnergy": "{amount}/kWh",
+  "priceTime": "{amount}/Min.",
+  "priceFlat": "{amount}/Ladevorgang",
+  "priceParking": "{amount}/Min. Parken",
+  "pricingNote": "Direktzahlungspreis an dieser Ladestation – der Roaming- oder Abo-Preis deines Anbieters kann abweichen.",
+  "tariffDetails": "Tarifdetails ansehen",
   "summary": {
     "connectorsTyped": "{count}× {types}",
     "connectorsTypedPower": "{count}× {types} · {power} kW",
@@ -52,6 +65,11 @@
       "purpose": "Schweizer nationaler Ladestationsdatensatz (Bundesamt für Energie BFE) mit öffentlicher Ladeinfrastruktur in der Schweiz",
       "dataSent": "Keine Abfrageparameter – der vollständige nationale OICP-Datensatz (und ein Live-Status-Feed im 5-Minuten-Takt) wird serverseitig regelmäßig in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
       "dataReceived": "Ladestationsdatensätze mit Standort, Betreiber, Stecker-/Plug-Typen, Nennleistung, Barrierefreiheit, Authentifizierungs-/Zahlungsmodi, Öffnungszeiten und Live-Verfügbarkeitsstatus"
+    },
+    "netherlands-ev": {
+      "purpose": "Niederländischer nationaler Ladepunktdatensatz (DOT-NL / NDW National Access Point) mit öffentlich zugänglicher Ladeinfrastruktur in den Niederlanden",
+      "dataSent": "Keine Abfrageparameter – der vollständige nationale OCPI-Standortfeed (und der zugehörige strukturierte Tarif-Feed) wird serverseitig regelmäßig in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
+      "dataReceived": "Ladestationsdatensätze mit Standort, Betreiber, Stecker-/Plug-Typen, Nennleistung, strukturierten Tarifen und Live-Verfügbarkeitsstatus je Anschluss"
     },
     "nobil": {
       "purpose": "Nordische Ladestationsdatenbank (NOBIL) mit öffentlichen Ladestationen in Norwegen und Schweden",

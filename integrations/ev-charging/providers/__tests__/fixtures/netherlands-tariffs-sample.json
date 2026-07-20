@@ -1,0 +1,99 @@
+[
+  {
+    "id": "t-62b5709e191e25e2a4482cac-1",
+    "country_code": "NL",
+    "party_id": "EFL",
+    "currency": "EUR",
+    "type": null,
+    "tariff_alt_text": null,
+    "tariff_alt_url": null,
+    "min_price": null,
+    "max_price": null,
+    "elements": [
+      {
+        "price_components": [
+          { "type": "FLAT", "price": 0.0, "vat": null, "step_size": 1 },
+          { "type": "TIME", "price": 0.02, "vat": 21.0, "step_size": 60 },
+          { "type": "ENERGY", "price": 0.48, "vat": 21.0, "step_size": 1 }
+        ],
+        "restrictions": null
+      }
+    ],
+    "energy_mix": null,
+    "start_date_time": null,
+    "end_date_time": null,
+    "last_updated": "2026-07-06T11:46:42.527Z"
+  },
+  {
+    "id": "1700009669",
+    "country_code": "NL",
+    "party_id": "NUO",
+    "currency": "EUR",
+    "type": "REGULAR",
+    "tariff_alt_text": [
+      { "language": "nl", "text": "Nachttarief van toepassing" },
+      { "language": "en", "text": "Night rate applies" }
+    ],
+    "tariff_alt_url": "https://example.org/tariffs/1700009669",
+    "min_price": null,
+    "max_price": null,
+    "elements": [
+      {
+        "price_components": [
+          { "type": "ENERGY", "price": 0.375, "vat": 21.0, "step_size": 1 },
+          { "type": "PARKING_TIME", "price": 0.05, "vat": 21.0, "step_size": 60 },
+          { "type": "REGULAR", "price": 999, "vat": null, "step_size": 1 }
+        ],
+        "restrictions": {
+          "start_time": "00:00",
+          "end_time": "07:00",
+          "start_date": null,
+          "end_date": null,
+          "min_kwh": null,
+          "max_kwh": null,
+          "min_current": null,
+          "max_current": null,
+          "min_power": 11,
+          "max_power": 50,
+          "min_duration": null,
+          "max_duration": null,
+          "day_of_week": [
+            "MONDAY",
+            "TUESDAY",
+            "WEDNESDAY",
+            "THURSDAY",
+            "FRIDAY",
+            "SUNDAY",
+            "SATURDAY"
+          ],
+          "reservation": null
+        }
+      }
+    ],
+    "energy_mix": null,
+    "start_date_time": null,
+    "end_date_time": null,
+    "last_updated": "2026-02-19T09:56:16Z"
+  },
+  {
+    "id": "677",
+    "country_code": "NL",
+    "party_id": "AD1",
+    "currency": "EUR",
+    "type": "AD_HOC_PAYMENT",
+    "tariff_alt_text": [{ "language": "nl", "text": "Alleen direct betalen" }],
+    "tariff_alt_url": null,
+    "min_price": null,
+    "max_price": null,
+    "elements": [
+      {
+        "price_components": [{ "type": "ENERGY", "price": 0.55, "vat": 21.0, "step_size": 1 }],
+        "restrictions": null
+      }
+    ],
+    "energy_mix": null,
+    "start_date_time": null,
+    "end_date_time": null,
+    "last_updated": "2026-05-10T09:00:00Z"
+  }
+]

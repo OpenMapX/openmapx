@@ -110,3 +110,36 @@ export function formatDateAndTime(
   if (!date || !time) return date || time;
   return `${date}, ${time}`;
 }
+
+export interface RelativeTimeOptions {
+  locale?: string;
+  /** Reference instant "now" is measured from. Defaults to `Date.now()`; tests pin this. */
+  now?: number;
+}
+
+// Largest-unit-first so a 2-day-old timestamp reads "2 days ago" rather than
+// "2880 minutes ago". "second" is last and always matches (its own
+// threshold is 1), so the loop always terminates.
+const RELATIVE_TIME_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ["day", 86400],
+  ["hour", 3600],
+  ["minute", 60],
+  ["second", 1],
+];
+
+/** Format a timestamp as a locale-aware relative time (e.g. "5 minutes ago"). */
+export function formatRelativeTime(
+  value: string | number | Date,
+  { locale, now }: RelativeTimeOptions = {},
+): string {
+  const d = toDate(value);
+  if (!d) return "";
+  const diffSeconds = Math.round((d.getTime() - (now ?? Date.now())) / 1000);
+  const rtf = new Intl.RelativeTimeFormat(locale ?? [], { numeric: "auto" });
+  for (const [unit, secondsInUnit] of RELATIVE_TIME_UNITS) {
+    if (Math.abs(diffSeconds) >= secondsInUnit || unit === "second") {
+      return rtf.format(Math.round(diffSeconds / secondsInUnit), unit);
+    }
+  }
+  return rtf.format(diffSeconds, "second");
+}

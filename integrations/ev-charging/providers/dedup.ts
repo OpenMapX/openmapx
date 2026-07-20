@@ -315,12 +315,18 @@ function mergeCluster(cluster: EvChargingStation[]): EvChargingStation {
     address: mergeAddress(members),
     operator: pickByPriority(members, (station) => station.operator),
     status: pickStatus(members),
+    availability: pickByPriority(members, (station) => station.availability),
+    isLive: members.some((station) => station.isLive) || undefined,
     usageType:
       pickByPriority(members, (station) => station.usageType) ??
       pickRichestString(members.map((station) => station.usageType)),
     usageCost:
       pickByPriority(members, (station) => station.usageCost) ??
       pickRichestString(members.map((station) => station.usageCost)),
+    tariffs: (() => {
+      const all = members.flatMap((station) => station.tariffs ?? []);
+      return all.length > 0 ? all : undefined;
+    })(),
     membershipRequired: pickByPriority(members, (station) => station.membershipRequired),
     openingHours:
       pickByPriority(members, (station) => station.openingHours) ??

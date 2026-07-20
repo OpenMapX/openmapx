@@ -102,6 +102,7 @@ export const parseSwissOicpLive: PoiLiveParseFn = async (buffer, ctx) => {
   }
 
   const perStation = new Map<string, Array<EvChargingStatus | null>>();
+  const rawStatusesByStation = new Map<string, string[]>();
   for (const group of statusFeed.EVSEStatuses ?? []) {
     for (const rec of group.EVSEStatusRecord ?? []) {
       const evseId = rec.EvseID;
@@ -112,13 +113,27 @@ export const parseSwissOicpLive: PoiLiveParseFn = async (buffer, ctx) => {
       const classified = classifyEvseStatus(rec.EVSEStatus);
       if (bucket) bucket.push(classified);
       else perStation.set(poiId, [classified]);
+
+      // Every EVSE record for this station is recorded here, including ones
+      // whose status string `classifyEvseStatus` doesn't recognize — they're
+      // still a real physical EVSE and must count toward `total`.
+      const raw = rec.EVSEStatus?.toUpperCase() ?? "";
+      const rawBucket = rawStatusesByStation.get(poiId);
+      if (rawBucket) rawBucket.push(raw);
+      else rawStatusesByStation.set(poiId, [raw]);
     }
   }
 
   const asOf = new Date().toISOString();
   const out = new Map<string, PoiLiveState>();
   for (const [poiId, statuses] of perStation) {
-    out.set(poiId, { asOf, status: aggregateStationStatus(statuses) });
+    const rawStatuses = rawStatusesByStation.get(poiId) ?? [];
+    // REMOVED means the EVSE is no longer part of the station, so it's
+    // excluded from `total` — but it still feeds `statuses` above, so the
+    // aggregate station status logic is unaffected.
+    const total = rawStatuses.filter((s) => s !== "REMOVED").length;
+    const available = rawStatuses.filter((s) => s === "AVAILABLE").length;
+    out.set(poiId, { asOf, status: aggregateStationStatus(statuses), available, total });
   }
   return out;
 };

@@ -1,0 +1,173 @@
+[
+  {
+    "id": "ca701e7f-71a7-49bf-bfff-a47c4c801819",
+    "city": "Amsterdam",
+    "name": "TNLP011285 - Ben Meerendonkstraat 113, Amsterdam",
+    "evses": [
+      {
+        "uid": "TNLP011285-1",
+        "status": "AVAILABLE",
+        "evse_id": "NL*TCB*ETNLP011285*1",
+        "connectors": [
+          {
+            "id": "1",
+            "format": "SOCKET",
+            "standard": "IEC_62196_T2",
+            "power_type": "AC_3_PHASE",
+            "tariff_ids": ["t-62b5709e191e25e2a4482cac-1"],
+            "max_voltage": 230,
+            "last_updated": "2026-07-19T23:15:12Z",
+            "max_amperage": 32,
+            "max_electric_power": 22080,
+            "terms_and_conditions": null
+          }
+        ],
+        "last_updated": "2026-07-20T17:51:06Z"
+      },
+      {
+        "uid": "TNLP011285-2",
+        "status": "CHARGING",
+        "evse_id": "NL*TCB*ETNLP011285*2",
+        "connectors": [
+          {
+            "id": "1",
+            "format": "CABLE",
+            "standard": "IEC_62196_T2_COMBO",
+            "power_type": "DC",
+            "tariff_ids": null,
+            "max_voltage": 500,
+            "last_updated": "2026-07-19T23:15:12Z",
+            "max_amperage": 125,
+            "max_electric_power": 50000,
+            "terms_and_conditions": null
+          },
+          {
+            "id": "2",
+            "format": "SOCKET",
+            "standard": "CHADEMO",
+            "power_type": "DC",
+            "tariff_ids": null,
+            "max_voltage": 400,
+            "last_updated": "2026-07-19T23:15:12Z",
+            "max_amperage": 125,
+            "max_electric_power": 50000,
+            "terms_and_conditions": null
+          }
+        ],
+        "last_updated": "2026-07-20T17:51:06Z"
+      }
+    ],
+    "owner": {
+      "logo": null,
+      "name": "TotalEnergies",
+      "website": "https://chargingservices.totalenergies.com/"
+    },
+    "state": null,
+    "images": null,
+    "address": "113 Ben Meerendonkstraat",
+    "country": "NLD",
+    "publish": true,
+    "operator": {
+      "logo": null,
+      "name": "TotalEnergies",
+      "website": "https://chargingservices.totalenergies.com/"
+    },
+    "party_id": "GFX",
+    "time_zone": "Europe/Amsterdam",
+    "coordinates": { "latitude": "52.3505000", "longitude": "5.0093430" },
+    "postal_code": "1087 LB",
+    "suboperator": null,
+    "country_code": "NL",
+    "last_updated": "2026-07-20T17:51:06Z",
+    "parking_type": null,
+    "opening_times": { "regular_hours": null, "twentyfourseven": true },
+    "charging_when_closed": true
+  },
+  {
+    "id": "62b5a5c75e1ba10d8eb4757c",
+    "city": "Eersel",
+    "name": "Wouters Groep",
+    "evses": [
+      {
+        "uid": "62b5a5185e1ba159bab443e2",
+        "status": "AVAILABLE",
+        "evse_id": "NL*EFL*EV8234036*C1",
+        "connectors": [
+          {
+            "id": "1",
+            "format": "SOCKET",
+            "standard": "IEC_62196_T2",
+            "power_type": "AC_3_PHASE",
+            "tariff_ids": ["t-62b5709e191e25e2a4482cac-1"],
+            "max_voltage": 230,
+            "last_updated": "2026-07-20T14:27:32.672Z",
+            "max_amperage": 32,
+            "max_electric_power": 22080,
+            "terms_and_conditions": null
+          }
+        ],
+        "capabilities": ["REMOTE_START_STOP_CAPABLE", "RFID_READER"],
+        "last_updated": "2026-07-20T14:27:32.672Z"
+      }
+    ],
+    "owner": null,
+    "address": "Meerheide 248",
+    "country": "NLD",
+    "publish": true,
+    "operator": {
+      "logo": null,
+      "name": "E-Flux by Road",
+      "website": "https://help.e-flux.io"
+    },
+    "party_id": "EFL",
+    "time_zone": "Europe/Amsterdam",
+    "coordinates": { "latitude": "51.374704", "longitude": "5.310303" },
+    "postal_code": "5521DW",
+    "suboperator": { "logo": null, "name": "E-Flux by Road", "website": null },
+    "country_code": "NL",
+    "last_updated": "2026-07-20T14:27:32.680Z",
+    "opening_times": null,
+    "charging_when_closed": false
+  },
+  {
+    "id": "no-tariff-station",
+    "city": "Utrecht",
+    "name": "Untariffed Station",
+    "evses": [
+      {
+        "uid": "no-tariff-1",
+        "status": "AVAILABLE",
+        "evse_id": "NL*UTR*E1",
+        "connectors": [
+          {
+            "id": "1",
+            "format": "SOCKET",
+            "standard": "DOMESTIC_E",
+            "power_type": "AC_1_PHASE",
+            "tariff_ids": null,
+            "max_electric_power": 2300
+          }
+        ],
+        "last_updated": "2026-07-20T12:00:00Z"
+      }
+    ],
+    "address": "Domplein 1",
+    "country": "NLD",
+    "operator": null,
+    "coordinates": { "latitude": "52.09083", "longitude": "5.12222" },
+    "postal_code": "3512 JC",
+    "country_code": "NL",
+    "last_updated": "2026-07-20T12:00:00Z"
+  },
+  {
+    "id": "missing-coords-station",
+    "name": "Broken Coordinates Station",
+    "evses": [],
+    "address": "Nowhere 1",
+    "city": "Nowhere",
+    "postal_code": "0000AA",
+    "country_code": "NL",
+    "coordinates": null,
+    "last_updated": "2026-07-20T14:27:32.680Z"
+  }
+]

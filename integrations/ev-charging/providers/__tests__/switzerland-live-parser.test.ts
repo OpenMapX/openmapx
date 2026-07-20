@@ -40,9 +40,102 @@ describe("parseSwissOicpLive", () => {
 
   it("produces one PoiLiveState per station keyed by encoded ChargingStationId", async () => {
     const out = await parseSwissOicpLive(STATUS_FIXTURE, { log: noopLog });
-    expect(out.size).toBe(2);
+    expect(out.size).toBe(3);
     expect(out.has(encodeURIComponent("CH-GRN-S001"))).toBe(true);
     expect(out.has(encodeURIComponent("CH-GRN-S002"))).toBe(true);
+    expect(out.has(encodeURIComponent("CH*STATION*1"))).toBe(true);
+  });
+
+  it("emits available/total EVSE counts per station", async () => {
+    // fixture station CH*STATION*1 has 3 EVSEs: AVAILABLE, CHARGING, OUTOFORDER
+    const out = await parseSwissOicpLive(STATUS_FIXTURE, { log: noopLog });
+    const state = out.get(encodeURIComponent("CH*STATION*1"));
+    expect(state).toBeDefined();
+    expect(state?.total).toBe(3);
+    expect(state?.available).toBe(1); // only the AVAILABLE evse counts as free
+  });
+
+  it("counts an EVSE with an unrecognized raw status toward total but not available", async () => {
+    const dataFeed = {
+      EVSEData: [
+        {
+          OperatorID: "CH*TEST",
+          EVSEDataRecord: [
+            { ChargingStationId: "CH-TEST-S001", EvseID: "CH*TEST*E1" },
+            { ChargingStationId: "CH-TEST-S001", EvseID: "CH*TEST*E2" },
+          ],
+        },
+      ],
+    };
+    const statusFeed = {
+      EVSEStatuses: [
+        {
+          OperatorID: "CH*TEST",
+          EVSEStatusRecord: [
+            { EvseID: "CH*TEST*E1", EVSEStatus: "AVAILABLE" },
+            { EvseID: "CH*TEST*E2", EVSEStatus: "FAULTED" },
+          ],
+        },
+      ],
+    };
+    const fakeFetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify(dataFeed), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fakeFetch);
+
+    const out = await parseSwissOicpLive(Buffer.from(JSON.stringify(statusFeed)), { log: noopLog });
+    const state = out.get(encodeURIComponent("CH-TEST-S001"));
+    expect(state).toBeDefined();
+    expect(state?.total).toBe(2); // both EVSEs count, even the unrecognized one
+    expect(state?.available).toBe(1);
+  });
+
+  it("excludes REMOVED EVSEs from total while still counting AVAILABLE/CHARGING", async () => {
+    const dataFeed = {
+      EVSEData: [
+        {
+          OperatorID: "CH*REM",
+          EVSEDataRecord: [
+            { ChargingStationId: "CH-REM-S001", EvseID: "CH*REM*E1" },
+            { ChargingStationId: "CH-REM-S001", EvseID: "CH*REM*E2" },
+            { ChargingStationId: "CH-REM-S001", EvseID: "CH*REM*E3" },
+          ],
+        },
+      ],
+    };
+    const statusFeed = {
+      EVSEStatuses: [
+        {
+          OperatorID: "CH*REM",
+          EVSEStatusRecord: [
+            { EvseID: "CH*REM*E1", EVSEStatus: "AVAILABLE" },
+            { EvseID: "CH*REM*E2", EVSEStatus: "CHARGING" },
+            { EvseID: "CH*REM*E3", EVSEStatus: "REMOVED" },
+          ],
+        },
+      ],
+    };
+    const fakeFetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify(dataFeed), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fakeFetch);
+
+    const out = await parseSwissOicpLive(Buffer.from(JSON.stringify(statusFeed)), { log: noopLog });
+    const state = out.get(encodeURIComponent("CH-REM-S001"));
+    expect(state).toBeDefined();
+    // The REMOVED evse is delisted hardware — it's excluded from `total`,
+    // leaving only the AVAILABLE and CHARGING evses.
+    expect(state?.available).toBe(1);
+    expect(state?.total).toBe(2);
+    expect(state?.status).toBe("operational");
   });
 
   it("aggregates AVAILABLE → operational and OUTOFORDER → not-operational at the station level", async () => {
@@ -106,6 +199,22 @@ describe("mergeSwitzerlandLive", () => {
       asOf: "2026-05-23T00:00:00Z",
       status: "nonsense",
     });
+    expect(merged.status).toBe("unknown");
+  });
+
+  it("attaches availability and isLive when live data is fresh", () => {
+    const live = { asOf: "2026-05-23T00:00:00Z", status: "operational", available: 2, total: 4 };
+    const merged = mergeSwitzerlandLive(base, live);
+    expect(merged.availability).toEqual({ available: 2, total: 4, updatedAt: live.asOf });
+    expect(merged.isLive).toBe(true);
+  });
+
+  it("does not attach availability when live data is stale", () => {
+    vi.setSystemTime(new Date("2026-07-20T12:00:00Z"));
+    const live = { asOf: "2026-07-20T11:00:00Z", status: "operational", available: 2, total: 4 }; // 1h old > 30m
+    const merged = mergeSwitzerlandLive(base, live);
+    expect(merged.availability).toBeUndefined();
+    expect(merged.isLive).toBeFalsy();
     expect(merged.status).toBe("unknown");
   });
 });

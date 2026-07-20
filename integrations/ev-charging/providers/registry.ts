@@ -2,6 +2,7 @@ import type { EvChargingSource, EvChargingStation } from "@openmapx/mobility-cor
 import { fetchAfdcChargingDetail, searchAfdcCharging } from "./afdc.js";
 import { fetchBnetzaChargingDetail, searchBnetzaCharging } from "./bnetza.js";
 import { fetchFranceIrveChargingDetail, searchFranceIrveCharging } from "./france.js";
+import { fetchNetherlandsChargingDetail, searchNetherlandsCharging } from "./netherlands.js";
 import { fetchNobilChargingDetail, searchNobilCharging } from "./nobil.js";
 import { getOcmDetail, searchOcm } from "./ocm.js";
 import { mapOcmToStation } from "./ocm-mapper.js";
@@ -30,6 +31,7 @@ export const EV_CHARGING_SOURCE_REGISTRY: EvChargingSource[] = [
   source("bnetza-ev", searchBnetzaCharging, "bnetza:", fetchBnetzaChargingDetail),
   source("france-irve", searchFranceIrveCharging, "france-irve:", fetchFranceIrveChargingDetail),
   source("switzerland-ev", searchSwissSfoeCharging, "swiss-sfoe:", fetchSwissSfoeChargingDetail),
+  source("netherlands-ev", searchNetherlandsCharging, "nl-dotnl:", fetchNetherlandsChargingDetail),
   source("nobil", searchNobilCharging, "nobil:", fetchNobilChargingDetail),
   source(
     "ocm",

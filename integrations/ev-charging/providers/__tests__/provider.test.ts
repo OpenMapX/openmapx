@@ -157,6 +157,30 @@ describe("evChargingProvider.search", () => {
     const results = (await evChargingProvider.search(makeBbox())).data;
     expect(results).toEqual([]);
   });
+
+  it("reports hasRealtimeData=true when some merged station is live", async () => {
+    const live = { ...makeStation("live-a", ["source-a"]), isLive: true };
+    const stale = makeStation("static-b", ["source-b"]);
+    vi.mocked(mocks.sourceA.search).mockResolvedValue([live]);
+    vi.mocked(mocks.sourceB.search).mockResolvedValue([stale]);
+    vi.mocked(deduplicateChargingStations).mockReturnValue([live, stale]);
+
+    const envelope = await evChargingProvider.search(makeBbox());
+
+    expect(envelope.freshness.hasRealtimeData).toBe(true);
+  });
+
+  it("reports hasRealtimeData=false when no merged station is live", async () => {
+    const a = makeStation("static-a", ["source-a"]);
+    const b = makeStation("static-b", ["source-b"]);
+    vi.mocked(mocks.sourceA.search).mockResolvedValue([a]);
+    vi.mocked(mocks.sourceB.search).mockResolvedValue([b]);
+    vi.mocked(deduplicateChargingStations).mockReturnValue([a, b]);
+
+    const envelope = await evChargingProvider.search(makeBbox());
+
+    expect(envelope.freshness.hasRealtimeData).toBe(false);
+  });
 });
 
 describe("evChargingProvider.getDetail", () => {
@@ -209,5 +233,29 @@ describe("evChargingProvider.getDetail", () => {
 
     const result = (await evChargingProvider.getDetail("unknown:100")).data;
     expect(result).toBeNull();
+  });
+
+  it("reports hasRealtimeData=true for a cached station with isLive set", async () => {
+    const live = { ...makeStation("live-detail", ["source-a"]), isLive: true };
+    vi.mocked(mocks.sourceA.search).mockResolvedValue([live]);
+    vi.mocked(mocks.sourceB.search).mockResolvedValue([]);
+    vi.mocked(deduplicateChargingStations).mockReturnValue([live]);
+
+    await evChargingProvider.search(makeBbox());
+    const envelope = await evChargingProvider.getDetail("live-detail");
+
+    expect(envelope.freshness.hasRealtimeData).toBe(true);
+  });
+
+  it("reports hasRealtimeData=false for a cached station without isLive", async () => {
+    const stationStatic = makeStation("static-detail", ["source-a"]);
+    vi.mocked(mocks.sourceA.search).mockResolvedValue([stationStatic]);
+    vi.mocked(mocks.sourceB.search).mockResolvedValue([]);
+    vi.mocked(deduplicateChargingStations).mockReturnValue([stationStatic]);
+
+    await evChargingProvider.search(makeBbox());
+    const envelope = await evChargingProvider.getDetail("static-detail");
+
+    expect(envelope.freshness.hasRealtimeData).toBe(false);
   });
 });

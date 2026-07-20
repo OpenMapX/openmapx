@@ -10,7 +10,14 @@ import {
   type Translatable,
   token,
 } from "@openmapx/integration-framework/strings";
-import type { EvChargingConnector, EvChargingStation } from "@openmapx/mobility-core/ev-charging";
+import type {
+  EvChargingConnector,
+  EvChargingPriceComponent,
+  EvChargingStation,
+  EvChargingTariffRestriction,
+  EvTariffDimension,
+} from "@openmapx/mobility-core/ev-charging";
+import { cleanString, groupConnectors, isSafeHttpUrl } from "./utils.js";
 
 function stationIdentity(station: EvChargingStation): OsmIdentity | undefined {
   const operator = station.operator?.name;
@@ -77,6 +84,11 @@ function buildSummary(station: EvChargingStation): I18nToken | undefined {
 }
 
 export function mapStationToResult(station: EvChargingStation): DataSourceResult {
+  const maxPowerKw = getMaxPower(station);
+  const sortValues: Record<string, number> = {};
+  if (maxPowerKw > 0) sortValues.powerKw = maxPowerKw;
+  if (station.availability) sortValues.available = station.availability.available;
+
   return {
     id: station.id,
     name: station.name,
@@ -86,14 +98,111 @@ export function mapStationToResult(station: EvChargingStation): DataSourceResult
     attributions: station.attributions,
     variant: getStationVariant(station),
     status: station.status,
+    ...(station.availability
+      ? {
+          availability: {
+            available: station.availability.available,
+            total: station.availability.total,
+          },
+        }
+      : {}),
     summary: buildSummary(station),
     operator: station.operator?.name,
-    sortValues: getMaxPower(station) > 0 ? { powerKw: getMaxPower(station) } : undefined,
+    sortValues: Object.keys(sortValues).length > 0 ? sortValues : undefined,
   };
 }
 
 function formatPower(value: number | undefined): string {
   return value ? `${value} kW` : "-";
+}
+
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  EUR: "€",
+  USD: "$",
+  GBP: "£",
+  CHF: "CHF",
+};
+
+// A price component arrives with an ISO currency code (from OCP/OCM tariff
+// feeds). Known codes render with their conventional symbol glued to the
+// amount (€0.59); unknown codes fall back to showing the bare code with a
+// space (SEK 0.59) so the price stays honest instead of silently mislabeled.
+export function formatMoney(price: number, currency: string): string {
+  const symbol = CURRENCY_SYMBOLS[currency] ?? currency;
+  const amount = price.toFixed(2);
+  const prefix = /[a-zA-Z]/.test(symbol) ? `${symbol} ` : symbol;
+  return `${prefix}${amount}`;
+}
+
+// The unit suffix (/kWh, /min, ...) lives in the strings catalog so it
+// localizes; the token key varies per tariff dimension, the formatted money
+// amount is passed through as the token's only param.
+const PRICE_DIMENSION_TOKENS: Record<EvTariffDimension, string> = {
+  energy: "priceEnergy",
+  time: "priceTime",
+  flat: "priceFlat",
+  parking: "priceParking",
+};
+
+export function formatTariff(component: EvChargingPriceComponent): I18nToken {
+  return token(PRICE_DIMENSION_TOKENS[component.type], {
+    amount: formatMoney(component.price, component.currency),
+  });
+}
+
+const TARIFF_DIMENSION_TOKENS: Record<EvTariffDimension, I18nToken> = {
+  energy: token("row.pricingEnergy"),
+  time: token("row.pricingTime"),
+  flat: token("row.pricingFlat"),
+  parking: token("row.pricingParking"),
+};
+
+// Renders a tariff's `restrictions` as a compact human-readable qualifier
+// (e.g. "AC · ≤22 kW") so an AC and a DC energy tariff don't collapse into
+// two identically-labelled "Energy" rows. Parts are universal/numeric
+// (current type, power, time-of-day) so no further i18n is needed.
+function tariffQualifier(restrictions: EvChargingTariffRestriction | undefined): string {
+  if (!restrictions) return "";
+  const parts: string[] = [];
+  if (restrictions.currentType) parts.push(restrictions.currentType.toUpperCase());
+  const { minPowerKw, maxPowerKw, timeOfDayStart, timeOfDayEnd } = restrictions;
+  if (minPowerKw !== undefined && maxPowerKw !== undefined) {
+    parts.push(`${minPowerKw}–${maxPowerKw} kW`);
+  } else if (minPowerKw !== undefined) {
+    parts.push(`≥${minPowerKw} kW`);
+  } else if (maxPowerKw !== undefined) {
+    parts.push(`≤${maxPowerKw} kW`);
+  }
+  if (timeOfDayStart && timeOfDayEnd) {
+    parts.push(`${timeOfDayStart}–${timeOfDayEnd}`);
+  }
+  return parts.join(" · ");
+}
+
+type TariffTableRows = [I18nToken, Translatable][] | [Translatable, Translatable, Translatable][];
+
+// Two shapes: a plain [label, price] table when no tariff carries a
+// restriction, or a [label, price, conditions] table once at least one row
+// needs to be disambiguated. A partial-column ("only some rows have
+// restrictions") table would leave an all-empty column, so the switch is
+// all-or-nothing across the whole pricing section.
+function tariffRows(station: EvChargingStation): TariffTableRows {
+  const rows: [I18nToken, Translatable, string][] = [];
+  for (const tariff of station.tariffs ?? []) {
+    const qualifier = tariffQualifier(tariff.restrictions);
+    for (const element of tariff.elements) {
+      rows.push([TARIFF_DIMENSION_TOKENS[element.type], formatTariff(element), qualifier]);
+    }
+  }
+  const hasQualifier = rows.some(([, , qualifier]) => qualifier.length > 0);
+  if (!hasQualifier) {
+    return rows.map(([label, price]): [I18nToken, Translatable] => [label, price]);
+  }
+  return rows.map(([label, price, qualifier]): [Translatable, Translatable, Translatable] => [
+    label,
+    price,
+    qualifier || "-",
+  ]);
 }
 
 // Brand spellings that title-casing alone gets wrong.
@@ -136,15 +245,38 @@ function formatTimestamp(value: string | undefined): string | undefined {
 function connectorRows(
   station: EvChargingStation,
 ): [Translatable, Translatable, Translatable, ...Translatable[]][] {
-  return [...station.connectors]
-    .sort((a, b) => (b.powerKw ?? 0) - (a.powerKw ?? 0))
-    .map((conn): [Translatable, Translatable, Translatable, Translatable, Translatable] => [
+  return groupConnectors(station.connectors).map(
+    (conn): [Translatable, Translatable, Translatable, Translatable, Translatable] => [
       conn.type ?? sharedT.value.unknown,
       formatPower(conn.powerKw),
       conn.currentType ?? "-",
       connectorQuantity(conn),
       conn.status ?? station.status ?? "-",
-    ]);
+    ],
+  );
+}
+
+/**
+ * Distinct (altText, sourceUrl) pairs collected across a station's tariffs,
+ * for rendering an OCPI `tariff_alt_text`/`tariff_alt_url` blurb+link beneath
+ * the Pricing section. `url` is omitted when a tariff carries descriptive
+ * text but no link target; entries with neither are skipped entirely.
+ */
+function tariffLinks(
+  station: EvChargingStation,
+): { label: Translatable; url?: string }[] | undefined {
+  const seen = new Set<string>();
+  const links: { label: Translatable; url?: string }[] = [];
+  for (const tariff of station.tariffs ?? []) {
+    const altText = cleanString(tariff.altText);
+    const url = isSafeHttpUrl(tariff.sourceUrl) ? tariff.sourceUrl : undefined;
+    if (!altText && !url) continue;
+    const key = `${altText ?? ""}|${url ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    links.push({ label: altText ?? token("tariffDetails"), url });
+  }
+  return links.length > 0 ? links : undefined;
 }
 
 export function mapStationToDetail(
@@ -158,6 +290,15 @@ export function mapStationToDetail(
   if (station.connectors.length > 0) {
     sections.push({
       title: token("section.connectors"),
+      ...(station.availability
+        ? {
+            caption: token("availability", {
+              available: station.availability.available,
+              total: station.availability.total,
+            }),
+            captionTimestamp: station.availability.updatedAt,
+          }
+        : {}),
       type: "table",
       columns: [
         sharedT.row.type,
@@ -171,9 +312,15 @@ export function mapStationToDetail(
     });
   }
 
+  const structuredTariffRows = tariffRows(station);
+
   const usageRows: [I18nToken, Translatable][] = [];
   if (station.usageType) usageRows.push([sharedT.row.access, station.usageType]);
-  if (station.usageCost) usageRows.push([token("row.cost"), station.usageCost]);
+  // Structured tariffs render their own Pricing section below; the free-text
+  // cost stays only as a fallback when no structured data is available.
+  if (structuredTariffRows.length === 0 && station.usageCost) {
+    usageRows.push([token("row.cost"), station.usageCost]);
+  }
   if (station.paymentMethods?.length) {
     usageRows.push([token("row.payment"), formatPaymentMethods(station.paymentMethods)]);
   }
@@ -189,6 +336,22 @@ export function mapStationToDetail(
       type: "table",
       rows: usageRows,
       sectionIcon: "payments",
+    });
+  }
+
+  if (structuredTariffRows.length > 0) {
+    const hasConditionsColumn = structuredTariffRows[0].length === 3;
+    const links = tariffLinks(station);
+    sections.push({
+      title: sharedT.section.pricing,
+      caption: token("pricingNote"),
+      type: "table",
+      ...(hasConditionsColumn
+        ? { columns: [sharedT.row.type, token("column.price"), token("column.conditions")] }
+        : {}),
+      rows: structuredTariffRows,
+      sectionIcon: "payments",
+      ...(links ? { links } : {}),
     });
   }
 

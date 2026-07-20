@@ -245,6 +245,44 @@ describe("deduplicateChargingStations", () => {
     ]);
   });
 
+  it("retains live availability, isLive, and tariffs when merging with a static duplicate", () => {
+    const live = makeStation({
+      id: "swiss-sfoe:1",
+      name: "Bahnhofplatz",
+      coordinates: [7.4474, 46.9481],
+      sources: ["switzerland-ev"],
+      availability: { available: 2, total: 4, updatedAt: "2026-07-20T10:00:00Z" },
+      isLive: true,
+      tariffs: [
+        {
+          elements: [{ type: "energy", price: 0.45, currency: "CHF" }],
+          scope: "cpo",
+          source: "switzerland-ev",
+          updatedAt: "2026-07-20T10:00:00Z",
+        },
+      ],
+    });
+    const ocm = makeStation({
+      id: "ocm:bahnhofplatz",
+      name: "Bahnhofplatz",
+      coordinates: [7.44744, 46.94813],
+      sources: ["ocm"],
+    });
+
+    const merged = deduplicateChargingStations([live, ocm]);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].availability).toEqual({
+      available: 2,
+      total: 4,
+      updatedAt: "2026-07-20T10:00:00Z",
+    });
+    expect(merged[0].isLive).toBe(true);
+    expect(merged[0].tariffs).toEqual([
+      expect.objectContaining({ source: "switzerland-ev", scope: "cpo" }),
+    ]);
+  });
+
   it("keeps nearby stations separate when names and operators do not match", () => {
     const first = makeStation({
       id: "bnetza:first",
