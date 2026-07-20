@@ -61,6 +61,7 @@ export default defineConfig({
           ...shared.test,
           name: "node",
           environment: "node",
+          setupFiles: ["./vitest.setup.node.ts"],
           include: [
             "apps/api/src/**/*.test.ts",
             "integrations/**/*.test.ts",

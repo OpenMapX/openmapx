@@ -214,7 +214,11 @@ export const run: StageFn = async (ctx) => {
     osmBytes: osmPath ? statSync(osmPath).size : undefined,
     osmAvailable: Boolean(osmPath),
     capacity: {
-      freeDiskBytes: filesystem.bavail * filesystem.bsize,
+      // Measured from the data volume by default. Overridable (like the other
+      // capacity inputs below) for environments where statfs doesn't reflect the
+      // real quota — a containerized slot, a network mount, or a CI runner where
+      // unit tests drive the pipeline and must not depend on incidental free disk.
+      freeDiskBytes: envNumber("MOTIS_FREE_DISK_BYTES", filesystem.bavail * filesystem.bsize),
       freeInodes: filesystem.ffree,
       slotMemoryGb: envNumber("MOTIS_SLOT_MEMORY_GB", 16),
       slotCpu: envNumber("MOTIS_SLOT_CPU", 4),
