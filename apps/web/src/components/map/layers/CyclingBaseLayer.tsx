@@ -17,7 +17,7 @@ const OSM_ATTRIBUTION: Attribution = {
 const CYCLOSM_ATTRIBUTIONS: Attribution[] = [
   {
     sourceId: "cyclosm",
-    name: "© CyclOSM",
+    name: "CyclOSM",
     url: "https://www.cyclosm.org/",
     publisher: { name: "OpenStreetMap France", url: "https://openstreetmap.fr/" },
   },
@@ -27,7 +27,7 @@ const CYCLOSM_ATTRIBUTIONS: Attribution[] = [
 const THUNDERFOREST_ATTRIBUTIONS: Attribution[] = [
   {
     sourceId: "thunderforest",
-    name: "© Thunderforest OpenCycleMap",
+    name: "Maps © Thunderforest",
     url: "https://www.thunderforest.com/maps/opencyclemap/",
   },
   OSM_ATTRIBUTION,

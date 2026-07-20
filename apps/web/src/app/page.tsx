@@ -78,7 +78,7 @@ const SATELLITE_ATTRIBUTIONS: Attribution[] = [
 const TERRAIN_ATTRIBUTIONS: Attribution[] = [
   {
     sourceId: "opentopomap",
-    name: "© OpenTopoMap",
+    name: "© OpenTopoMap (CC-BY-SA)",
     url: "https://opentopomap.org/about",
     spdxLicense: "CC-BY-SA-4.0",
     licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",

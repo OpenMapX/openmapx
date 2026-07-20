@@ -93,7 +93,7 @@ export function MountainShelterLayer() {
             type: "geojson",
             data: { type: "FeatureCollection", features: [] },
             attribution:
-              '© <a href="https://www.refuges.info" target="_blank" rel="noreferrer">Refuges.info</a> (<a href="https://creativecommons.org/licenses/by-sa/2.0/" target="_blank" rel="noreferrer">CC BY-SA 2.0</a>)',
+              '<a href="https://www.refuges.info" target="_blank" rel="noreferrer">Refuges.info</a> (<a href="https://creativecommons.org/licenses/by-sa/2.0/" target="_blank" rel="noreferrer">CC BY-SA 2.0</a>)',
           });
         }
 
