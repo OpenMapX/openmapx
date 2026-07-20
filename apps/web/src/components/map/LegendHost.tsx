@@ -72,13 +72,16 @@ export function LegendHost() {
   const panelExpanded = (activeSidebarId !== null || activeDetailId !== null) && !collapsed;
   const guardActive = navigating || panelExpanded;
 
-  // null = follow the context default; true/false = the user's explicit choice,
-  // which is reset whenever the context (guarded ↔ free) flips so each session
-  // starts from its sensible default.
+  // null = follow the context default; true/false = the user's explicit choice.
+  // Reset it whenever the context (guarded ↔ free) flips so each session starts
+  // from its sensible default — React's store-the-previous-render-value pattern,
+  // which resets during render without an effect.
   const [override, setOverride] = useState<boolean | null>(null);
-  useEffect(() => {
+  const [prevGuardActive, setPrevGuardActive] = useState(guardActive);
+  if (guardActive !== prevGuardActive) {
+    setPrevGuardActive(guardActive);
     setOverride(null);
-  }, [guardActive]);
+  }
   const showLegends = override ?? !guardActive;
 
   // Shift with the left sidebar so the stack stays centred in the visible map,
