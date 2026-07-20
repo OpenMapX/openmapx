@@ -37,7 +37,9 @@ export function SidebarCollapseToggle({ collapsed, onToggle, zIndex = 9 }: Props
           width: 20,
           height: 48,
           padding: 0,
-          "&:hover": { filter: "brightness(0.92)" },
+          // Re-assert bgcolor on hover — MUI's IconButton default hover sets a
+          // translucent backgroundColor that otherwise makes the tab see-through.
+          "&:hover": { bgcolor: "background.paper", filter: "brightness(0.92)" },
         }}
         aria-label={collapsed ? t("showSidebar") : t("hideSidebar")}
       >

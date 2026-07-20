@@ -18,7 +18,6 @@ import { useMobilePanelMaxHeight } from "@/lib/mobilePanelHeight";
 import { DeclarativeLegend } from "./overlay/DeclarativeLegend";
 
 const FLUSH_BOTTOM = "var(--omx-safe-bottom)";
-const PANEL_GAP = 12;
 // Clearance above the navigation bottom bar (mirrors MapControls' NAV_BOTTOM).
 const NAV_BOTTOM = 150;
 
@@ -116,10 +115,8 @@ export function LegendHost() {
   const bottom = navigating
     ? `calc(${NAV_BOTTOM}px + var(--omx-safe-bottom))`
     : {
-        xs:
-          followHeight > 0
-            ? `calc(${followHeight + PANEL_GAP}px + var(--omx-safe-bottom))`
-            : FLUSH_BOTTOM,
+        // Flush against the top edge of the mobile bottom sheet (no gap).
+        xs: followHeight > 0 ? `calc(${followHeight}px + var(--omx-safe-bottom))` : FLUSH_BOTTOM,
         sm: FLUSH_BOTTOM,
       };
 
@@ -154,7 +151,9 @@ export function LegendHost() {
           width: 54,
           height: 22,
           padding: 0,
-          "&:hover": { filter: "brightness(0.92)" },
+          // Re-assert bgcolor on hover — MUI's IconButton default hover sets a
+          // translucent backgroundColor that otherwise makes the tab see-through.
+          "&:hover": { bgcolor: "background.paper", filter: "brightness(0.92)" },
         }}
       >
         {showLegends ? (
