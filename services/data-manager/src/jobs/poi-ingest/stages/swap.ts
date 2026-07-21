@@ -1,16 +1,15 @@
+import { feedIdSchema } from "@openmapx/core";
 import type { PoiIngestStageResult, PoiJobContext } from "../types.js";
-
-const SOURCE_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 /**
  * Compute the live table name for a source. Mirrored by the A4 reader so
- * both ends agree on `${sourceId.replaceAll("-", "_")}_static`. The regex
+ * both ends agree on `${sourceId.replaceAll("-", "_")}_static`. The schema
  * gate is the same one applied to the registry id; it is the *only* defense
  * against SQL identifier injection here — every callsite must go through
  * this helper rather than interpolating raw ids into SQL.
  */
 export function tableName(sourceId: string): string {
-  if (!SOURCE_ID_RE.test(sourceId)) {
+  if (!feedIdSchema.safeParse(sourceId).success) {
     throw new Error(`invalid sourceId for SQL table name: "${sourceId}"`);
   }
   return `${sourceId.replace(/-/g, "_")}_static`;

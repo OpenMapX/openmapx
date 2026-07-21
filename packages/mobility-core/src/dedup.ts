@@ -204,7 +204,7 @@ export function dedupStations(stations: SharedMobilityStation[]): SharedMobility
  * NRW Mobidrom bundles operator feeds).
  * Vehicles from these sources are dropped when a direct-source vehicle with the same ID exists.
  */
-const AGGREGATOR_SOURCES = new Set(["transitous", "motis", "nrw-mobidrom-scooter"]);
+const AGGREGATOR_SOURCES = new Set(["transitous", "motis", "de-nw-mobidrom-scooter"]);
 
 function isAggregator(vehicle: SharedMobilityVehicle): boolean {
   if (vehicle.servingOrigin === "motis-local" || vehicle.servingOrigin === "transitous")

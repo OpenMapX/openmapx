@@ -1,5 +1,8 @@
-import type { BBox, PoiSource } from "./types";
+import { feedIdPartsSchema, feedIdSchema } from "@openmapx/core";
+import { resolvePoiSourceId } from "./derive";
+import type { BBox, PoiSource, RegisteredPoiSource } from "./types";
 
+export { resolvePoiSourceId } from "./derive";
 export * from "./types";
 
 /**
@@ -16,23 +19,30 @@ export function poiLiveHashKey(sourceId: string): string {
   return `poi:live:${sourceId}`;
 }
 
-const REGISTRY = new Map<string, PoiSource>();
+const REGISTRY = new Map<string, RegisteredPoiSource>();
+/**
+ * Tracks the raw (pre-normalization) object passed to `registerPoiSource`,
+ * keyed by derived id. Used only for the same-object-reregistered identity
+ * check below — `REGISTRY` itself holds the normalized copy so downstream
+ * consumers always see a defined `id`/`stationIdPrefix`.
+ */
+const RAW_SOURCES = new Map<string, PoiSource>();
 
 /**
  * Read-only snapshot of all currently-registered sources. The result is a
  * fresh array each call — safe to mutate without affecting the underlying
  * registry. Order is registration-order.
  */
-export function getAllPoiSources(): readonly PoiSource[] {
+export function getAllPoiSources(): readonly RegisteredPoiSource[] {
   return Array.from(REGISTRY.values());
 }
 
-export function getPoiSource(id: string): PoiSource | undefined {
+export function getPoiSource(id: string): RegisteredPoiSource | undefined {
   return REGISTRY.get(id);
 }
 
-export function getPoiSourcesByDomain(domain: string): readonly PoiSource[] {
-  const out: PoiSource[] = [];
+export function getPoiSourcesByDomain(domain: string): readonly RegisteredPoiSource[] {
+  const out: RegisteredPoiSource[] = [];
   for (const src of REGISTRY.values()) {
     if (src.domain === domain) out.push(src);
   }
@@ -45,9 +55,9 @@ export function getPoiSourcesByDomain(domain: string): readonly PoiSource[] {
  */
 export function __clearPoiSourceRegistry(): void {
   REGISTRY.clear();
+  RAW_SOURCES.clear();
 }
 
-const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 const CRON_RE = /^[\d*/,-]+(\s+[\d*/,-]+){4}$/;
 
 function checkBBox(id: string, bbox: BBox): string[] {
@@ -70,10 +80,18 @@ function checkBBox(id: string, bbox: BBox): string[] {
 
 function collectErrorsForSource(src: PoiSource): string[] {
   const errors: string[] = [];
-  const id = src.id;
+  const id = resolvePoiSourceId(src).id;
 
-  if (!ID_RE.test(id)) {
-    errors.push(`source "${id}": id must match ${ID_RE} (table-name-safe)`);
+  if (!feedIdSchema.safeParse(id).success) {
+    errors.push(
+      `source "${id}": id must be a valid feed id (lowercase, hyphen-separated, table-name-safe)`,
+    );
+  }
+
+  if (src.parts && !feedIdPartsSchema.safeParse(src.parts).success) {
+    errors.push(
+      `source "${id}": parts tokens must be lowercase alphanumeric (country /^[a-z]{2}$/, others /^[a-z0-9]+$/)`,
+    );
   }
 
   const hasStatic = (src as { static?: unknown }).static !== undefined;
@@ -131,21 +149,23 @@ export interface PoiRegistryLogger {
  * detectably but not crash the host.
  */
 export function registerPoiSource(source: PoiSource, log?: PoiRegistryLogger): void {
-  const errors = collectErrorsForSource(source);
+  const { id, stationIdPrefix } = resolvePoiSourceId(source);
+  const normalized = { ...source, id, stationIdPrefix } as RegisteredPoiSource;
+
+  const errors = collectErrorsForSource(normalized);
   if (errors.length > 0) {
     throw new Error(
-      `registerPoiSource: invalid declaration for "${source.id}":\n  - ${errors.join("\n  - ")}`,
+      `registerPoiSource: invalid declaration for "${id}":\n  - ${errors.join("\n  - ")}`,
     );
   }
-  const existing = REGISTRY.get(source.id);
-  if (existing) {
-    if (existing === source) return;
-    log?.warn(
-      `registerPoiSource: id "${source.id}" already registered; ignoring duplicate registration`,
-    );
+  const existingRaw = RAW_SOURCES.get(id);
+  if (existingRaw) {
+    if (existingRaw === source) return;
+    log?.warn(`registerPoiSource: id "${id}" already registered; ignoring duplicate registration`);
     return;
   }
-  REGISTRY.set(source.id, source);
+  RAW_SOURCES.set(id, source);
+  REGISTRY.set(id, normalized);
 }
 
 /** Bulk variant. Each source validated independently; first error halts. */
@@ -166,11 +186,12 @@ export function validatePoiSourceRegistry(
 
   for (let i = 0; i < sources.length; i++) {
     const src = sources[i] as PoiSource;
-    const prev = seen.get(src.id);
+    const id = resolvePoiSourceId(src).id;
+    const prev = seen.get(id);
     if (prev !== undefined) {
-      errors.push(`duplicate source id "${src.id}" at indexes ${prev} and ${i}`);
+      errors.push(`duplicate source id "${id}" at indexes ${prev} and ${i}`);
     } else {
-      seen.set(src.id, i);
+      seen.set(id, i);
     }
     errors.push(...collectErrorsForSource(src));
   }

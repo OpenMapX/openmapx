@@ -124,7 +124,7 @@ export function mapFuelStationToDetail(station: FuelStation): DataSourceDetail {
   };
 }
 
-interface TankerkoenigRaw {
+interface DeTankerkoenigRaw {
   isOpen: boolean;
   wholeDay: boolean;
   openingTimes: OpeningTime[];
@@ -145,7 +145,7 @@ const DE_DAY_TO_OSM: Record<string, string> = {
 };
 
 /** Converts Tankerkoenig opening times to an OSM-format opening_hours string. */
-function tankerkoenigToOsmHours(raw: TankerkoenigRaw): string | undefined {
+function deTankerkoenigToOsmHours(raw: DeTankerkoenigRaw): string | undefined {
   if (raw.wholeDay) return "24/7";
   if (raw.openingTimes.length === 0) return undefined;
 
@@ -179,9 +179,9 @@ function tankerkoenigToOsmHours(raw: TankerkoenigRaw): string | undefined {
   }
 }
 
-export function buildTankerkoenigDetail(
+export function buildDeTankerkoenigDetail(
   station: FuelStation,
-  tankerkoenigRaw: TankerkoenigRaw,
+  deTankerkoenigRaw: DeTankerkoenigRaw,
 ): DataSourceDetail {
   const sections: DataSourceDetailSection[] = [];
 
@@ -190,20 +190,20 @@ export function buildTankerkoenigDetail(
     ...station,
     fuelPrices: {
       ...station.fuelPrices,
-      ...tankerkoenigRaw.fuelPrices,
+      ...deTankerkoenigRaw.fuelPrices,
     },
   });
   if (priceTable) sections.push(priceTable);
 
   return {
     id: station.id,
-    sources: ["tankerkoenig"],
+    sources: ["de-tankerkoenig"],
     name: station.name,
     coordinates: station.coordinates,
     identity: stationIdentity(station),
     address: station.address ? { line1: station.address } : undefined,
     operator: station.brand ? { name: station.brand } : undefined,
-    openingHours: tankerkoenigToOsmHours(tankerkoenigRaw),
+    openingHours: deTankerkoenigToOsmHours(deTankerkoenigRaw),
     sections,
   };
 }

@@ -4,8 +4,8 @@
 // pipeline yet.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { mapBnetzaPayload } from "@integrations/ev-charging/providers/bnetza-mapper.js";
-import { parseBnetzaCsv } from "@integrations/ev-charging/providers/bnetza-parser.js";
+import { mapDeBnetzaPayload } from "@integrations/ev-charging/providers/de-bnetza-mapper.js";
+import { parseDeBnetzaCsv } from "@integrations/ev-charging/providers/de-bnetza-parser.js";
 import type {
   CacheClient,
   DatabaseClient,
@@ -14,7 +14,7 @@ import type {
 } from "@openmapx/integration-framework";
 import { createStaticPoiReader } from "@openmapx/integration-framework";
 import type { EvChargingStation } from "@openmapx/mobility-core/ev-charging";
-import type { PoiSource } from "@openmapx/poi-source-registry";
+import type { RegisteredPoiSource } from "@openmapx/poi-source-registry";
 import type { Redis } from "ioredis";
 import { describe, expect, it } from "vitest";
 import { buildPoiJobContext, runStaticIngest } from "../../src/jobs/poi-ingest/pipeline.js";
@@ -107,15 +107,15 @@ describe.skipIf(skipE2e)("e2e: bnetza ingest → SQL → reader → mapper round
     const pg = await startPostgis();
     try {
       const fixture = readFileSync(FIXTURE_PATH);
-      const source: PoiSource = {
-        id: "bnetza-ev",
-        stationIdPrefix: "bnetza:",
+      const source: RegisteredPoiSource = {
+        id: "de-bnetza",
+        stationIdPrefix: "de-bnetza:",
         domain: "ev-charging",
         name: "BNetzA Fixture",
         static: {
           cron: "0 4 * * *",
           fetch: { type: "http", url: "https://example.invalid/", timeoutMs: 30_000 },
-          parse: parseBnetzaCsv,
+          parse: parseDeBnetzaCsv,
           // Fixture has 2 valid rows + 1 invalid; floor of 1 keeps validate happy.
           minRowCount: 1,
         },
@@ -141,8 +141,8 @@ describe.skipIf(skipE2e)("e2e: bnetza ingest → SQL → reader → mapper round
       ]);
 
       const reader = createStaticPoiReader<EvChargingStation>({
-        sourceId: "bnetza-ev",
-        mapStatic: mapBnetzaPayload,
+        sourceId: "de-bnetza",
+        mapStatic: mapDeBnetzaPayload,
       });
 
       // Mirror apps/api's `integrationDb.execute` exactly — postgres-js's
@@ -161,8 +161,8 @@ describe.skipIf(skipE2e)("e2e: bnetza ingest → SQL → reader → mapper round
       const stations = await reader.search(integrationCtx, [5.5, 47.1, 15.6, 55.2]);
       expect(stations).toHaveLength(2);
       const ids = stations.map((s) => s.id).sort();
-      expect(ids.every((id) => id.startsWith("bnetza:"))).toBe(true);
-      expect(stations[0].sources).toEqual(["bnetza-ev"]);
+      expect(ids.every((id) => id.startsWith("de-bnetza:"))).toBe(true);
+      expect(stations[0].sources).toEqual(["de-bnetza"]);
 
       // Round-trip sanity: at least one station must land near the fixture's
       // Berlin coordinate (13.377, 52.52) after the geom column is loaded

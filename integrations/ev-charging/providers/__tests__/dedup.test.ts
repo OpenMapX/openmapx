@@ -179,7 +179,7 @@ describe("deduplicateChargingStations", () => {
       id: "bnetza:1",
       name: "Main Street Chargers",
       coordinates: [13.377, 52.52],
-      sources: ["bnetza-ev"],
+      sources: ["de-bnetza"],
       connectors: [{ type: "Type 2", powerKw: 22, quantity: 2 }],
       operator: { name: "City Utility" },
     });
@@ -202,7 +202,7 @@ describe("deduplicateChargingStations", () => {
 
     expect(merged).toHaveLength(1);
     expect(merged[0].id).toBe("bnetza:1");
-    expect(merged[0].sources).toEqual(["bnetza-ev", "ocm"]);
+    expect(merged[0].sources).toEqual(["de-bnetza", "ocm"]);
     expect(merged[0].operator?.name).toBe("City Utility");
     expect(merged[0].connectors).toEqual(
       expect.arrayContaining([
@@ -215,17 +215,17 @@ describe("deduplicateChargingStations", () => {
 
   it("sums same-source connector quantities before comparing duplicate providers", () => {
     const pdc1 = makeStation({
-      id: "france-irve:a",
+      id: "fr-irve:a",
       name: "Gare Centrale",
       coordinates: [2.35, 48.85],
-      sources: ["france-irve"],
+      sources: ["fr-irve"],
       connectors: [{ type: "Type 2", powerKw: 22, quantity: 1 }],
     });
     const pdc2 = makeStation({
-      id: "france-irve:b",
+      id: "fr-irve:b",
       name: "Gare Centrale",
       coordinates: [2.35, 48.85],
-      sources: ["france-irve"],
+      sources: ["fr-irve"],
       connectors: [{ type: "Type 2", powerKw: 22, quantity: 1 }],
     });
     const ocm = makeStation({
@@ -239,7 +239,7 @@ describe("deduplicateChargingStations", () => {
     const merged = deduplicateChargingStations([pdc1, pdc2, ocm]);
 
     expect(merged).toHaveLength(1);
-    expect(merged[0].sources).toEqual(["france-irve", "ocm"]);
+    expect(merged[0].sources).toEqual(["fr-irve", "ocm"]);
     expect(merged[0].connectors).toEqual([
       expect.objectContaining({ type: "Type 2", powerKw: 22, quantity: 2 }),
     ]);
@@ -250,14 +250,14 @@ describe("deduplicateChargingStations", () => {
       id: "swiss-sfoe:1",
       name: "Bahnhofplatz",
       coordinates: [7.4474, 46.9481],
-      sources: ["switzerland-ev"],
+      sources: ["ch-sfoe"],
       availability: { available: 2, total: 4, updatedAt: "2026-07-20T10:00:00Z" },
       isLive: true,
       tariffs: [
         {
           elements: [{ type: "energy", price: 0.45, currency: "CHF" }],
           scope: "cpo",
-          source: "switzerland-ev",
+          source: "ch-sfoe",
           updatedAt: "2026-07-20T10:00:00Z",
         },
       ],
@@ -279,7 +279,7 @@ describe("deduplicateChargingStations", () => {
     });
     expect(merged[0].isLive).toBe(true);
     expect(merged[0].tariffs).toEqual([
-      expect.objectContaining({ source: "switzerland-ev", scope: "cpo" }),
+      expect.objectContaining({ source: "ch-sfoe", scope: "cpo" }),
     ]);
   });
 
@@ -288,14 +288,14 @@ describe("deduplicateChargingStations", () => {
       id: "bnetza:first",
       name: "Mall East",
       coordinates: [13.377, 52.52],
-      sources: ["bnetza-ev"],
+      sources: ["de-bnetza"],
       operator: { name: "Operator A" },
     });
     const second = makeStation({
       id: "bnetza:second",
       name: "Hotel West",
       coordinates: [13.377, 52.52055],
-      sources: ["bnetza-ev"],
+      sources: ["de-bnetza"],
       operator: { name: "Operator B" },
     });
 

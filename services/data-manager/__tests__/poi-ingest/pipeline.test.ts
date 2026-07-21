@@ -1,4 +1,4 @@
-import type { PoiLiveState, PoiRow, PoiSource } from "@openmapx/poi-source-registry";
+import type { PoiLiveState, PoiRow, RegisteredPoiSource } from "@openmapx/poi-source-registry";
 import type { Redis } from "ioredis";
 import type { Sql } from "postgres";
 import { describe, expect, it } from "vitest";
@@ -91,9 +91,10 @@ const sampleRows: PoiRow[] = [
   { poiId: "b", lng: 11.0, lat: 51.0, payload: { name: "B" } },
 ];
 
-function staticSource(): PoiSource {
+function staticSource(): RegisteredPoiSource {
   return {
     id: "demo-static",
+    stationIdPrefix: "demo-static:",
     domain: "ev-charging",
     name: "Demo Static",
     static: {
@@ -105,9 +106,10 @@ function staticSource(): PoiSource {
   };
 }
 
-function staticSourceWithBadParser(): PoiSource {
+function staticSourceWithBadParser(): RegisteredPoiSource {
   return {
     id: "demo-broken",
+    stationIdPrefix: "demo-broken:",
     domain: "ev-charging",
     name: "Broken",
     static: {
@@ -120,9 +122,10 @@ function staticSourceWithBadParser(): PoiSource {
   };
 }
 
-function liveSource(): PoiSource {
+function liveSource(): RegisteredPoiSource {
   return {
     id: "demo-static",
+    stationIdPrefix: "demo-static:",
     domain: "ev-charging",
     name: "Demo",
     static: {
@@ -140,9 +143,12 @@ function liveSource(): PoiSource {
   };
 }
 
-function bundledSource(opts: { changeKey?: (rows: readonly PoiRow[]) => string } = {}): PoiSource {
+function bundledSource(
+  opts: { changeKey?: (rows: readonly PoiRow[]) => string } = {},
+): RegisteredPoiSource {
   return {
     id: "demo-bundled",
+    stationIdPrefix: "demo-bundled:",
     domain: "parking",
     name: "Demo Bundled",
     bundled: {
@@ -329,8 +335,9 @@ describe("pipeline fetch — resolveHeaders", () => {
       return new Response("payload", { status: 200 });
     }) as unknown as typeof fetch;
 
-    const source: PoiSource = {
+    const source: RegisteredPoiSource = {
       id: "demo-headers",
+      stationIdPrefix: "demo-headers:",
       domain: "ev-charging",
       name: "Headers Demo",
       static: {
@@ -372,8 +379,9 @@ describe("pipeline fetch — resolveHeaders", () => {
     const fetchImpl: typeof fetch = (async () =>
       new Response("never", { status: 200 })) as unknown as typeof fetch;
 
-    const source: PoiSource = {
+    const source: RegisteredPoiSource = {
       id: "demo-headers-fail",
+      stationIdPrefix: "demo-headers-fail:",
       domain: "ev-charging",
       name: "Headers Demo Fail",
       static: {

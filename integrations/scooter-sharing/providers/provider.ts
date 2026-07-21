@@ -35,8 +35,8 @@ import {
 import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
 import { buildSharedMobilityMapContext } from "@openmapx/mobility-core/shared-mobility-context";
 import { orchestrateSharedMobility } from "@openmapx/mobility-core/shared-mobility-orchestrator";
+import { searchDeNwMobidromScooter } from "./de-nw-mobidrom-scooter-client.js";
 import { searchFelyx } from "./felyx-client.js";
-import { searchNrwMobidrom } from "./nrw-mobidrom-client.js";
 
 const detailStore = new SharedMobilityDetailStore(600, 5_000);
 export const setDetailCache = (cache: CacheClient): void => detailStore.setCache(cache);
@@ -121,7 +121,7 @@ class ScooterSharingProvider implements MobilityDataSourceProvider {
         {
           id: "nrw-mobidrom",
           kind: "proprietary",
-          fetch: searchNrwMobidrom,
+          fetch: searchDeNwMobidromScooter,
         },
       ],
     });

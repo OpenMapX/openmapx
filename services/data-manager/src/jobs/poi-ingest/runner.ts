@@ -1,4 +1,4 @@
-import type { PoiSource } from "@openmapx/poi-source-registry";
+import type { RegisteredPoiSource } from "@openmapx/poi-source-registry";
 import type { Redis } from "ioredis";
 import type { Sql } from "postgres";
 import { withPoiBindings } from "../../logger.js";
@@ -26,7 +26,7 @@ import type { PoiIngestKind, PoiIngestResult, PoiJobLogger } from "./types.js";
  * between triggers and lives here.
  */
 export interface RunOneOptions {
-  source: PoiSource;
+  source: RegisteredPoiSource;
   kind: PoiIngestKind;
   jobId: string;
   sql: Sql;

@@ -76,7 +76,7 @@
   "category": "Shared Mobility",
   "dataSources": [
     {
-      "sourceId": "cambio",
+      "sourceId": "de-cambio",
       "name": "Cambio CarSharing",
       "url": "https://www.cambio-carsharing.de/",
       "apiHosts": ["cwapi.cambio-carsharing.com"],
@@ -91,7 +91,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "stadtteilauto",
+      "sourceId": "de-stadtteilauto",
       "name": "Stadt Münster Open Data",
       "url": "https://opendata.stadt-muenster.de/",
       "apiHosts": ["www.muenster01.de"],
@@ -106,7 +106,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "bielefeld",
+      "sourceId": "de-nw-bielefeld",
       "name": "Stadt Bielefeld Open Data",
       "url": "https://open-data.bielefeld.de/",
       "apiHosts": ["www.bielefeld01.de"],
@@ -121,7 +121,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "wuppertal",
+      "sourceId": "de-nw-wuppertal",
       "name": "Stadt Wuppertal Open Data",
       "url": "https://offenedaten-wuppertal.de/",
       "apiHosts": ["daten.wuppertal.de"],

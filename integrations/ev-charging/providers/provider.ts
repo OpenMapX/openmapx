@@ -34,7 +34,7 @@ const resolveSourceName = (id: string): string => attribution.bySource(id)?.name
 // `freshness.isStale=true` on the wrapped result. Hardcoded (rather than
 // derived from `declarePoiSources()`) to avoid a circular import with
 // poi-sources.ts; the list is small and rarely changes.
-const POI_READER_BACKED_EV_SOURCES = ["bnetza-ev", "switzerland-ev"] as const;
+const POI_READER_BACKED_EV_SOURCES = ["de-bnetza", "ch-sfoe"] as const;
 
 function anyEvSourceColdStart(): boolean {
   return POI_READER_BACKED_EV_SOURCES.some((id) => isInColdStart(id));

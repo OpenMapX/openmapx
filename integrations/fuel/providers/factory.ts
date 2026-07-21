@@ -1,16 +1,16 @@
 import type { BoundingBox } from "@openmapx/core";
 import type { Logger } from "@openmapx/integration-framework";
 import type { FuelStation } from "@openmapx/mobility-core/fuel";
-import { AustriaService } from "./austria.service";
-import { FranceService } from "./france.service";
+import { AtEcontrolService } from "./at-econtrol.service";
+import { DeTankerkoenigService } from "./de-tankerkoenig.service";
+import { EsMineturService } from "./es-minetur.service";
+import { FrPrixcarburantsService } from "./fr-prixcarburants.service";
 import type { FuelPriceProvider } from "./price-provider";
-import { SpainService } from "./spain.service";
-import { TankerkoenigService } from "./tankerkoenig.service";
 
 const ALL_PROVIDERS: FuelPriceProvider[] = [
-  new FranceService(),
-  new SpainService(),
-  new AustriaService(),
+  new FrPrixcarburantsService(),
+  new EsMineturService(),
+  new AtEcontrolService(),
 ];
 
 let log: Logger | null = null;
@@ -20,28 +20,28 @@ export function setFuelLogger(logger: Logger): void {
 }
 
 // Populated by setup(ctx) from the resolved integration config cascade.
-let _tankerkoenigKey: string | undefined;
-let _tankerkoenig: FuelPriceProvider | null | undefined;
+let _deTankerkoenigKey: string | undefined;
+let _deTankerkoenig: FuelPriceProvider | null | undefined;
 
-export function setTankerkoenigApiKey(value: string | undefined): void {
-  _tankerkoenigKey = value && value.length > 0 ? value : undefined;
+export function setDeTankerkoenigApiKey(value: string | undefined): void {
+  _deTankerkoenigKey = value && value.length > 0 ? value : undefined;
   // Reset the memoised provider so the next call picks up the new key.
-  _tankerkoenig = undefined;
+  _deTankerkoenig = undefined;
 }
 
-function getTankerkoenig(): FuelPriceProvider | null {
-  if (_tankerkoenig !== undefined) return _tankerkoenig;
-  _tankerkoenig = _tankerkoenigKey ? new TankerkoenigService(_tankerkoenigKey) : null;
-  return _tankerkoenig;
+function getDeTankerkoenig(): FuelPriceProvider | null {
+  if (_deTankerkoenig !== undefined) return _deTankerkoenig;
+  _deTankerkoenig = _deTankerkoenigKey ? new DeTankerkoenigService(_deTankerkoenigKey) : null;
+  return _deTankerkoenig;
 }
 
-export function getTankerkoenigApiKey(): string | undefined {
-  return _tankerkoenigKey;
+export function getDeTankerkoenigApiKey(): string | undefined {
+  return _deTankerkoenigKey;
 }
 
 function activeProviders(bbox: BoundingBox): FuelPriceProvider[] {
   const providers: FuelPriceProvider[] = [];
-  const tk = getTankerkoenig();
+  const tk = getDeTankerkoenig();
   if (tk?.supports(bbox)) providers.push(tk);
   for (const p of ALL_PROVIDERS) {
     if (p.supports(bbox)) providers.push(p);

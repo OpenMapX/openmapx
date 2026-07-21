@@ -167,7 +167,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "nrw-mobidrom-scooter",
+      "sourceId": "de-nw-mobidrom-scooter",
       "name": "NRW.Mobidrom E-Scooter Sharing",
       "url": "https://www.mobilitaetsdaten.nrw/dataset/e-scooter-sharing-nrw",
       "license": "Per-operator licenses (Voi, Lime) republished by NRW.Mobidrom GmbH",

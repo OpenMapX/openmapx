@@ -153,7 +153,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "afdc",
+      "sourceId": "us-afdc",
       "name": "NREL Alternative Fuel Stations (AFDC, US/CA)",
       "url": "https://afdc.energy.gov/stations/",
       "apiHosts": ["developer.nlr.gov"],
@@ -169,7 +169,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "bnetza-ev",
+      "sourceId": "de-bnetza",
       "name": "Bundesnetzagentur Ladesäulenregister",
       "url": "https://www.bundesnetzagentur.de/DE/Fachthemen/ElektrizitaetundGas/E-Mobilitaet/DownloadundKontakt.html",
       "license": "CC BY 4.0",
@@ -183,7 +183,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "france-irve",
+      "sourceId": "fr-irve",
       "name": "Base nationale consolidée des IRVE",
       "url": "https://www.data.gouv.fr/fr/datasets/fichier-consolide-des-bornes-de-recharge-pour-vehicules-electriques/",
       "license": "Licence Ouverte / Open Licence 2.0",
@@ -211,7 +211,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "switzerland-ev",
+      "sourceId": "ch-sfoe",
       "name": "Charging points for electric cars (SFOE)",
       "url": "https://opendata.swiss/en/dataset/ladestationen-fuer-elektroautos",
       "apiHosts": ["data.geo.admin.ch"],
@@ -227,7 +227,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "netherlands-ev",
+      "sourceId": "nl-dotnl",
       "name": "Publicly accessible charging points (DOT-NL / NDW)",
       "url": "https://dotnl.ndw.nu/",
       "apiHosts": ["opendata.ndw.nu"],
@@ -243,7 +243,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "nobil",
+      "sourceId": "no-nobil",
       "name": "NOBIL",
       "url": "https://info.nobil.no/api",
       "license": "CC BY 4.0 with NOBIL API usage terms",

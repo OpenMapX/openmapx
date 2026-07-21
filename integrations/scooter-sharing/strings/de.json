@@ -129,7 +129,7 @@
       "dataSent": "Begrenzungsrahmen-Koordinaten (Minimal- und Maximalecke aus Breitengrad/Längengrad)",
       "dataReceived": "Freifahrzeug-Positionen, Stationsstandorte, Fahrzeugtypen, Betreibernamen"
     },
-    "nrw-mobidrom-scooter": {
+    "de-nw-mobidrom-scooter": {
       "purpose": "NRW.Mobidrom gebündelter E-Scooter-Feed (Voi + Lime in Nordrhein-Westfalen)",
       "dataSent": "OAuth2-Client-Credentials (keine Nutzerdaten; nur serverseitig)",
       "dataReceived": "GBFS-Feeds je Anbieter mit Fahrzeugpositionen, Akkustand, Fahrzeugtypen, Preisplänen"

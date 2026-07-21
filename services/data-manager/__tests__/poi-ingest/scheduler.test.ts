@@ -1,4 +1,4 @@
-import type { PoiSource } from "@openmapx/poi-source-registry";
+import type { RegisteredPoiSource } from "@openmapx/poi-source-registry";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   PoiIngestKind,
@@ -88,9 +88,10 @@ function makeLogger(): PoiSchedulerLogger & {
   };
 }
 
-function staticSource(id = "src-1", cron = "0 * * * *"): PoiSource {
+function staticSource(id = "src-1", cron = "0 * * * *"): RegisteredPoiSource {
   return {
     id,
+    stationIdPrefix: `${id}:`,
     domain: "ev-charging",
     name: id,
     static: {
@@ -98,12 +99,13 @@ function staticSource(id = "src-1", cron = "0 * * * *"): PoiSource {
       fetch: { type: "http", url: "https://example.com/data.csv" },
       parse: function* () {},
     },
-  } as PoiSource;
+  } as RegisteredPoiSource;
 }
 
-function staticLiveSource(id = "src-1"): PoiSource {
+function staticLiveSource(id = "src-1"): RegisteredPoiSource {
   return {
     id,
+    stationIdPrefix: `${id}:`,
     domain: "ev-charging",
     name: id,
     static: {
@@ -116,12 +118,13 @@ function staticLiveSource(id = "src-1"): PoiSource {
       fetch: { type: "http", url: "https://example.com/live.json" },
       parse: () => new Map(),
     },
-  } as PoiSource;
+  } as RegisteredPoiSource;
 }
 
-function bundledSource(id = "bundled-1"): PoiSource {
+function bundledSource(id = "bundled-1"): RegisteredPoiSource {
   return {
     id,
+    stationIdPrefix: `${id}:`,
     domain: "parking",
     name: id,
     bundled: {
@@ -129,7 +132,7 @@ function bundledSource(id = "bundled-1"): PoiSource {
       fetch: { type: "http", url: "https://example.com/feed.json" },
       parse: () => ({ static: [], live: new Map() }),
     },
-  } as PoiSource;
+  } as RegisteredPoiSource;
 }
 
 function fakeSql(): import("postgres").Sql {
@@ -456,7 +459,7 @@ describe("setupPoiIngestCron", () => {
     const logger = makeLogger();
     const bad = [
       // Invalid id (uppercase) — validator should reject.
-      { ...staticSource("src-1"), id: "BadId" } as PoiSource,
+      { ...staticSource("src-1"), id: "BadId" } as RegisteredPoiSource,
     ];
     expect(() =>
       setupPoiIngestCron({

@@ -109,22 +109,22 @@
     "stationArea": "Station area"
   },
   "dataSources": {
-    "cambio": {
+    "de-cambio": {
       "purpose": "Station-based car sharing in Germany and Belgium",
       "dataSent": "Region code in URL path (matched by proximity to viewport center, up to 14 regions). No user location data sent directly",
       "dataReceived": "Station locations, vehicle counts, vehicle classes, addresses"
     },
-    "stadtteilauto": {
+    "de-stadtteilauto": {
       "purpose": "Car sharing stations and vehicles in Münster (open data)",
       "dataSent": "No user data (static dataset, fetches all stations)",
       "dataReceived": "Station locations, vehicle counts, vehicle classes, pricing"
     },
-    "bielefeld": {
+    "de-nw-bielefeld": {
       "purpose": "Car sharing stations in Bielefeld (open data)",
       "dataSent": "No user data (static dataset, fetched in parallel with stations)",
       "dataReceived": "Station locations, capacity, booking URLs"
     },
-    "wuppertal": {
+    "de-nw-wuppertal": {
       "purpose": "Car sharing stations in Wuppertal from multiple operators (open data)",
       "dataSent": "No user data (static WFS query with fixed parameters for carsharing layer)",
       "dataReceived": "Station locations, vehicle counts, provider names, vehicle classes"

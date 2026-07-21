@@ -121,7 +121,7 @@ function makeResult(id: string): DataSourceResult {
 describe("carSharingProvider.search", () => {
   it("regional stations merged first via mergeRegionalStations", async () => {
     vi.mocked(mapStationToResult).mockImplementation((s) => makeResult(s.id));
-    const regional = [makeStation("reg1", "cambio"), makeStation("reg2", "stadtmobil")];
+    const regional = [makeStation("reg1", "de-cambio"), makeStation("reg2", "stadtmobil")];
     vi.mocked(searchRegionalClients).mockResolvedValue(regional);
     vi.mocked(mergeRegionalStations).mockReturnValue(regional);
     vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [], vehicles: [] });
@@ -179,7 +179,7 @@ describe("carSharingProvider.search", () => {
   it("regional + GBFS + MOTIS all contribute to results", async () => {
     vi.mocked(mapStationToResult).mockImplementation((s) => makeResult(s.id));
     vi.mocked(mapVehicleToResult).mockImplementation((v) => makeResult(v.id));
-    const regStation = makeStation("reg1", "cambio");
+    const regStation = makeStation("reg1", "de-cambio");
     const gbfsStation = makeStation("gbfs1", "gbfs");
     const motisVehicle = makeVehicle("mo-v1", "motis");
 
@@ -242,7 +242,7 @@ describe("carSharingProvider.search", () => {
 describe("carSharingProvider.getDetail", () => {
   it("station cache hit calls mapStationToDetail", async () => {
     // Use unique IDs to avoid cache collisions with other tests
-    const station = makeStation("cs-cached-station", "cambio");
+    const station = makeStation("cs-cached-station", "de-cambio");
     vi.mocked(searchRegionalClients).mockResolvedValue([station]);
     vi.mocked(mergeRegionalStations).mockReturnValue([station]);
     vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [], vehicles: [] });
@@ -252,7 +252,7 @@ describe("carSharingProvider.getDetail", () => {
 
     const detail = {
       id: "cs-cached-station",
-      sources: ["cambio"],
+      sources: ["de-cambio"],
       name: "Station",
       coordinates: [11.5, 48.5] as [number, number],
       sections: [],

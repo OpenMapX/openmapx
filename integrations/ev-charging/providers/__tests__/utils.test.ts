@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dotNlLocationPoiId, groupConnectors } from "../utils.js";
+import { groupConnectors, nlDotnlLocationPoiId } from "../utils.js";
 
 describe("groupConnectors", () => {
   it("groups identical connectors into one row, summing quantity", () => {
@@ -67,14 +67,14 @@ describe("groupConnectors", () => {
   });
 });
 
-// This is the SAME helper imported by both netherlands-parser.ts (static)
-// and netherlands-live-parser.ts (live) — asserting its behavior here is
+// This is the SAME helper imported by both nl-dotnl-parser.ts (static)
+// and nl-dotnl-live-parser.ts (live) — asserting its behavior here is
 // what guarantees the two parsers derive identical poiIds for the same
 // OCPI Location, which live-merge depends on to join a status update back
 // onto the right static station row.
-describe("dotNlLocationPoiId", () => {
+describe("nlDotnlLocationPoiId", () => {
   it("builds a composite country+party+id key, uppercasing country/party but keeping id opaque", () => {
-    const poiId = dotNlLocationPoiId({
+    const poiId = nlDotnlLocationPoiId({
       id: "abc-123",
       country_code: "nl",
       party_id: "gfx",
@@ -83,24 +83,28 @@ describe("dotNlLocationPoiId", () => {
   });
 
   it("gives different CPOs reusing the same location.id distinct poiIds", () => {
-    const a = dotNlLocationPoiId({ id: "shared", country_code: "NL", party_id: "AAA" });
-    const b = dotNlLocationPoiId({ id: "shared", country_code: "NL", party_id: "BBB" });
+    const a = nlDotnlLocationPoiId({ id: "shared", country_code: "NL", party_id: "AAA" });
+    const b = nlDotnlLocationPoiId({ id: "shared", country_code: "NL", party_id: "BBB" });
     expect(a).not.toBe(b);
   });
 
   it("falls back to id alone only when both country_code and party_id are absent", () => {
-    expect(dotNlLocationPoiId({ id: "opaque-id" })).toBe(encodeURIComponent("opaque-id"));
+    expect(nlDotnlLocationPoiId({ id: "opaque-id" })).toBe(encodeURIComponent("opaque-id"));
   });
 
   it("still folds in whichever of country_code/party_id is present alone", () => {
-    expect(dotNlLocationPoiId({ id: "abc", country_code: "NL" })).toBe(
+    expect(nlDotnlLocationPoiId({ id: "abc", country_code: "NL" })).toBe(
       encodeURIComponent("NL*abc"),
     );
-    expect(dotNlLocationPoiId({ id: "abc", party_id: "GFX" })).toBe(encodeURIComponent("GFX*abc"));
+    expect(nlDotnlLocationPoiId({ id: "abc", party_id: "GFX" })).toBe(
+      encodeURIComponent("GFX*abc"),
+    );
   });
 
   it("returns undefined when id is missing or blank", () => {
-    expect(dotNlLocationPoiId({ country_code: "NL", party_id: "GFX" })).toBeUndefined();
-    expect(dotNlLocationPoiId({ id: "   ", country_code: "NL", party_id: "GFX" })).toBeUndefined();
+    expect(nlDotnlLocationPoiId({ country_code: "NL", party_id: "GFX" })).toBeUndefined();
+    expect(
+      nlDotnlLocationPoiId({ id: "   ", country_code: "NL", party_id: "GFX" }),
+    ).toBeUndefined();
   });
 });

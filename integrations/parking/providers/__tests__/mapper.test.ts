@@ -10,7 +10,7 @@ function makeFacility(overrides: Partial<ParkingFacility> = {}): ParkingFacility
     id: "parkapi-v3:1",
     name: "Test Parking",
     parkingType: "garage",
-    sources: ["parkapi-v3"],
+    sources: ["de-parkapi-v3"],
     ...overrides,
   };
 }

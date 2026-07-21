@@ -5,16 +5,16 @@ import { setSharedMobilityMotisUrl } from "@openmapx/mobility-core/motis-rentals
 import { setSharedMobilityNominatimUrl } from "@openmapx/mobility-core/nominatim";
 import { setSharedMobilityDecisionObserver } from "@openmapx/mobility-core/shared-mobility-orchestrator";
 import { registerPlaceResolver } from "@openmapx/place-ids";
-import { bielefeldClient } from "./providers/bielefeld-client.js";
-import { cambioClient } from "./providers/cambio-client.js";
+import { deCambioClient } from "./providers/de-cambio-client.js";
+import { deNwBielefeldClient } from "./providers/de-nw-bielefeld-client.js";
+import { deNwWuppertalClient } from "./providers/de-nw-wuppertal-client.js";
+import { deStadtteilautoClient } from "./providers/de-stadtteilauto-client.js";
 import {
   carSharingProvider,
   setDetailCache,
   setManifestDataSources,
 } from "./providers/provider.js";
 import { registerCarSharingClient, setCarSharingLogger } from "./providers/registry.js";
-import { stadtteilAutoClient } from "./providers/stadtteilauto-client.js";
-import { wuppertalClient } from "./providers/wuppertal-client.js";
 
 export function setup(ctx: IntegrationContext): void {
   initCache(ctx.cache);
@@ -25,10 +25,10 @@ export function setup(ctx: IntegrationContext): void {
   if (nominatim?.url) setSharedMobilityNominatimUrl(nominatim.url);
 
   setCarSharingLogger(ctx.log);
-  registerCarSharingClient(cambioClient);
-  registerCarSharingClient(stadtteilAutoClient);
-  registerCarSharingClient(wuppertalClient);
-  registerCarSharingClient(bielefeldClient);
+  registerCarSharingClient(deCambioClient);
+  registerCarSharingClient(deStadtteilautoClient);
+  registerCarSharingClient(deNwWuppertalClient);
+  registerCarSharingClient(deNwBielefeldClient);
 
   setManifestDataSources(ctx.manifest.dataSources ?? []);
   setSharedMobilityDecisionObserver((category, decision) => {

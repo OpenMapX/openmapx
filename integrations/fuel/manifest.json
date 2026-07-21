@@ -87,7 +87,7 @@
   "category": "Fuel Prices",
   "dataSources": [
     {
-      "sourceId": "tankerkoenig",
+      "sourceId": "de-tankerkoenig",
       "name": "Tankerkoenig (MTS-K)",
       "url": "https://creativecommons.tankerkoenig.de/",
       "license": "CC BY 4.0",
@@ -101,7 +101,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "e-control-at",
+      "sourceId": "at-econtrol",
       "name": "E-Control Spritpreisrechner",
       "url": "https://www.e-control.at/",
       "license": "No formal license",
@@ -115,7 +115,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "prix-carburants-fr",
+      "sourceId": "fr-prixcarburants",
       "name": "prix-carburants.gouv.fr",
       "url": "https://www.prix-carburants.gouv.fr/",
       "license": "Licence Ouverte v2.0",
@@ -129,7 +129,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "minetur-es",
+      "sourceId": "es-minetur",
       "name": "Minetur (Spain)",
       "url": "https://sedeaplicaciones.minetur.gob.es/",
       "license": "Reuse Authorization (Ley 37/2007)",

@@ -70,177 +70,177 @@
     "evChargingAvailable": "EV charging available"
   },
   "dataSources": {
-    "parkapi-v2": {
+    "de-parkapi-v2": {
       "purpose": "Real-time parking lot availability across European cities (ParkenDD aggregator covering ~12 cities in Germany, Austria, Switzerland and neighbours)",
       "dataSent": "No user data; our server's data-manager fetches the full city catalogue and per-city lots on a schedule",
       "dataReceived": "City list with coordinates and source info; per-city lots with name, address, coordinates, total/free capacity"
     },
-    "parkapi-v3": {
+    "de-parkapi-v3": {
       "purpose": "German parking sites with real-time occupancy data (MobiData BW ParkAPI v3 aggregator spanning multiple Baden-Württemberg and federal operators)",
       "dataSent": "No user data; our server's data-manager fetches the entire parking-sites dataset on a schedule",
       "dataReceived": "Parking sites with name, address, coordinates, capacity, realtime free capacity, type, fee info, opening hours"
     },
-    "db-bahnpark": {
+    "de-db-bahnpark": {
       "purpose": "Deutsche Bahn station parking facilities across Germany (single operator)",
       "dataSent": "No user data; our server's data-manager fetches the entire facilities dataset on a schedule using subscription credentials (DB Client ID and API key)",
       "dataReceived": "Parking facilities with name, address, coordinates, capacity, tariff/pricing, accessibility, EV charging info"
     },
-    "rdw-nl": {
+    "nl-rdw": {
       "purpose": "Netherlands parking garages, Park & Ride, and carpool facilities from the national RDW open-data register",
       "dataSent": "No user data; our server's data-manager fetches the full RDW datasets (specs plus the garage/P+R/carpool geo sets) on a schedule",
       "dataReceived": "Facility name, coordinates, type (garage/P+R/carpool), capacity, EV charging point count, disabled access flag, max vehicle height"
     },
-    "bnls-fr": {
+    "fr-bnls": {
       "purpose": "French parking facilities from the national BNLS register (Base nationale des lieux de stationnement aggregator)",
       "dataSent": "No user data; our server's data-manager fetches the entire BNLS GeoJSON export on a schedule",
       "dataReceived": "Facility ID, name, coordinates, total spaces, free/paid status, facility type, hourly/daily/monthly pricing, disabled/EV/P+R space counts, max height, address"
     },
-    "ghent-be": {
+    "be-vlg-ghent": {
       "purpose": "Real-time parking garage occupancy in Ghent, Belgium (single-city open-data feed)",
       "dataSent": "No user data; our server's data-manager fetches the entire dataset on a schedule",
       "dataReceived": "Garage name, coordinates, total/available capacity, occupancy percentage, open/closed status, occupancy trend, operator"
     },
-    "brussels-be": {
+    "be-bru-brussels": {
       "purpose": "Static parking facility data for Brussels, Belgium (single-city open-data portal)",
       "dataSent": "No user data; our server's data-manager fetches the entire dataset on a schedule",
       "dataReceived": "Facility name (FR/NL), coordinates, capacity, disabled capacity, max height, floors, operator, address"
     },
-    "basel-ch": {
+    "ch-bs-basel": {
       "purpose": "Real-time parking garage occupancy in Basel, Switzerland (canton open-data portal)",
       "dataSent": "No user data; our server's data-manager fetches the latest dataset snapshots on a schedule",
       "dataReceived": "Garage name, coordinates, free/total spaces, address"
     },
-    "opentransportdata-ch-parking": {
+    "ch-otd": {
       "purpose": "Bike and car parking facilities across Switzerland from the national open data platform mobility (opentransportdata.swiss aggregator)",
       "dataSent": "No user data; our server's data-manager fetches the entire bike-and-car-parking dataset on a schedule",
       "dataReceived": "Facility name, coordinates, capacity, derived free spaces (from current estimated occupancy), parking layout type"
     },
-    "cita-lu": {
+    "lu-cita": {
       "purpose": "Parking facilities in Luxembourg from the CITA DATEX II feed (national mobility authority)",
       "dataSent": "No user data; our server's data-manager fetches the entire static DATEX II XML feed on a schedule",
       "dataReceived": "Parking site name, coordinates, capacity, real-time free spaces and occupancy status, address"
     },
-    "florence-it": {
+    "it-52-florence": {
       "purpose": "Real-time parking availability in Florence, Italy (single-city open-data portal)",
       "dataSent": "No user data; our server's data-manager fetches the entire ParkFreeSpot dataset on a schedule",
       "dataReceived": "Facility name, coordinates, free spaces count, last update timestamp"
     },
-    "barcelona-es": {
+    "es-ct-barcelona": {
       "purpose": "Static parking facility data for Barcelona, Spain (single-city open-data portal)",
       "dataSent": "No user data; our server's data-manager fetches the entire dataset on a schedule",
       "dataReceived": "Facility name, coordinates, address, district, neighborhood, status"
     },
-    "vienna-at": {
+    "at-9-vienna": {
       "purpose": "Static parking garages and P+R facilities in Vienna, Austria (single-city open-data WFS service)",
       "dataSent": "No user data; our server's data-manager fetches the entire WFS feature collection on a schedule",
       "dataReceived": "Facility name, coordinates, operator, address, P+R flag, disabled access flag, website"
     },
-    "copenhagen-dk": {
+    "dk-84-copenhagen": {
       "purpose": "Static parking garage data for Copenhagen, Denmark (single-city open-data WFS service)",
       "dataSent": "No user data; our server's data-manager fetches the entire WFS feature collection on a schedule",
       "dataReceived": "Street name, house number, postal district, capacity, type (underground/garage), owner"
     },
-    "singapore": {
+    "sg-hdb": {
       "purpose": "Real-time car park availability across Singapore (national open-data portal aggregating HDB carparks)",
       "dataSent": "No user data; our server's data-manager fetches the entire availability and static datasets on a schedule",
       "dataReceived": "Car park number, lot type, total/available lots, address, coordinates (SVY21 converted to WGS84), car park type"
     },
-    "madrid-es": {
+    "es-md-madrid": {
       "purpose": "Static parking facility data for Madrid, Spain (single-city open-data portal)",
       "dataSent": "No user data; our server's data-manager fetches the entire dataset on a schedule",
       "dataReceived": "Facility name, coordinates, address, capacity (from description), schedule, P+R designation, operator"
     },
-    "utmc-newcastle": {
+    "gb-eng-utmc": {
       "purpose": "Real-time car park data for Newcastle/Tyne & Wear, UK (NE Travel Data UTMC feed)",
       "dataSent": "No user data; our server's data-manager fetches the entire static and dynamic car-park feeds on a schedule using UTMC credentials (username/password)",
       "dataReceived": "Car park name, coordinates, capacity, free spaces, state (open/closed/full)"
     },
-    "nsw-au": {
+    "au-nsw": {
       "purpose": "Real-time Park & Ride car park data for Greater Sydney, Australia (Transport for NSW open data)",
       "dataSent": "No user data; our server's data-manager fetches the car-park list and per-facility occupancy on a schedule using the NSW Transport API key",
       "dataReceived": "Facility name, coordinates, capacity, available spaces, occupancy"
     },
-    "ndw-truck-nl": {
+    "nl-ndw-truck": {
       "purpose": "Real-time truck parking availability along Dutch highways (NDW national open-data DATEX II feeds)",
       "dataSent": "No user data; our server's data-manager fetches the entire static table and dynamic status XML feeds on a schedule",
       "dataReceived": "Truck parking facilities with name, coordinates, capacity, real-time vacant/occupied spaces, amenities (charging, toilet, shower)"
     },
-    "autobahn-de": {
+    "de-autobahn": {
       "purpose": "German Autobahn rest area and truck parking facilities (Autobahn GmbH national feed)",
       "dataSent": "No user data; our server's data-manager fetches the road list and per-road parking data on a schedule",
       "dataReceived": "Rest area name, coordinates, car/truck parking capacity, blocked status, amenities (toilet, fuel, restaurant, WiFi, shower)"
     },
-    "opendatahub-it": {
+    "it-32-opendatahub": {
       "purpose": "Parking stations in South Tyrol, Italy (Open Data Hub regional aggregator)",
       "dataSent": "No user data; our server's data-manager fetches the entire station list and latest measurements on a schedule",
       "dataReceived": "Station name (multilingual), coordinates, capacity, real-time occupied/free spaces, parking layout type, EV charging availability"
     },
-    "nrw-mobidrom-pr": {
+    "de-nw-mobidrom-pr": {
       "purpose": "NRW.Mobidrom bundled Park+Ride data (VRR, Bielefeld, Bonn, Köln, Münster, Oberhausen) — regional Park+Ride aggregator",
       "dataSent": "No user data; our server's data-manager fetches the entire aggregate DATEX II Parking Light feed on a schedule",
       "dataReceived": "Park+Ride site name, coordinates, capacity, real-time availability where provided, fee info, address; every record flagged as P+R"
     },
-    "nrw-mobidrom-parking": {
+    "de-nw-mobidrom": {
       "purpose": "NRW.Mobidrom bundled parking data (Düsseldorf, Köln, Bielefeld, Krefeld, Wuppertal, Aachen plus operator static data) — regional parking aggregator",
       "dataSent": "No user data; our server's data-manager fetches the entire aggregate DATEX II Parking Light feed on a schedule",
       "dataReceived": "Parking site name, coordinates, capacity, real-time availability, occupancy trend, parking type, fee/tariff, opening hours, address, disabled and EV assignments"
     },
-    "apcoa": {
+    "de-apcoa": {
       "purpose": "APCOA Deutschland parking facilities via the NRW.Mobidrom exporter (single operator, openly licensed lineage)",
       "dataSent": "No user data; our server's data-manager fetches the operator feed on a schedule",
       "dataReceived": "Facility name, coordinates, capacity, address, tariff info, opening hours, equipment tags"
     },
-    "apag": {
+    "de-apag": {
       "purpose": "APAG Aachener Parkhaus real-time garage data from the operator's own PMS API (single operator, Aachen)",
       "dataSent": "No user data; our server's data-manager fetches the operator's facilities feed on a schedule",
       "dataReceived": "Garage name, coordinates, capacity, real-time available spaces, occupancy trend, address, tariff info, equipment tags"
     },
-    "apag-mobidrom": {
+    "de-apag-mobidrom": {
       "purpose": "APAG Aachener Parkhaus garage data via the NRW.Mobidrom exporter (single operator, Aachen; openly licensed backup lineage for the direct APAG feed)",
       "dataSent": "No user data; our server's data-manager fetches the operator feed on a schedule",
       "dataReceived": "Garage name, coordinates, capacity, real-time available spaces, occupancy trend, address, tariff info, equipment tags"
     },
-    "goldbeck": {
+    "de-goldbeck": {
       "purpose": "GOLDBECK Parking Services static garage data via the NRW.Mobidrom exporter (single operator)",
       "dataSent": "No user data; our server's data-manager fetches the operator feed on a schedule",
       "dataReceived": "Garage name, coordinates, address, tariff info, opening hours"
     },
-    "braunschweig-de": {
+    "de-ni-braunschweig": {
       "purpose": "Real-time parking garage data for Braunschweig, Germany (city PULP feed, single city)",
       "dataSent": "No user data; our server's data-manager fetches the entire PULP GeoJSON feed on a schedule",
       "dataReceived": "Garage name, coordinates, capacity, parking type, real-time free spaces, fee info"
     },
-    "bremen-de": {
+    "de-hb-bremen": {
       "purpose": "Static parking catalogue for Bremen, Germany (VMZ Bremen city feed, single city)",
       "dataSent": "No user data; our server's data-manager fetches the entire parking GeoJSON catalogue on a schedule",
       "dataReceived": "Facility name, coordinates, parking type, max height, fee info"
     },
-    "duesseldorf-de": {
+    "de-nw-duesseldorf": {
       "purpose": "Real-time parking garage data for Düsseldorf, Germany (city VT-Manager WFS service, single city)",
       "dataSent": "No user data; our server's data-manager fetches the entire WFS feature collection on a schedule",
       "dataReceived": "Garage name, coordinates, capacity, real-time free spaces, fee and tariff info, address, opening hours, max height, disabled spaces"
     },
-    "salzburg-at": {
+    "at-5-salzburg": {
       "purpose": "Parking facility data for the city of Salzburg, Austria (city WFS service, single city)",
       "dataSent": "No user data; our server's data-manager fetches the entire WFS feature collection on a schedule",
       "dataReceived": "Facility name, coordinates, capacity, fee and tariff info, address, opening hours, operator, real-time free spaces and occupancy trend where provided"
     },
-    "bielefeld-de": {
+    "de-nw-bielefeld": {
       "purpose": "Parking facility data for Bielefeld, Germany (city WFS service with embedded PLS live counts, single city)",
       "dataSent": "No user data; our server's data-manager fetches the entire WFS feature collection on a schedule",
       "dataReceived": "Facility name, coordinates, capacity, real-time free spaces, fee info, address, max height, disabled spaces, EV charging spaces, opening hours"
     },
-    "bamberg-de": {
+    "de-by-bamberg": {
       "purpose": "Real-time parking garage occupancy for Bamberg, Germany (Stadtwerke Bamberg carparkcounter feed, single operator)",
       "dataSent": "No user data; our server's data-manager fetches the entire status feed on a schedule",
       "dataReceived": "Garage name, coordinates, capacity, real-time free spaces, fee info, address, operator"
     },
-    "trier-de": {
+    "de-rp-trier": {
       "purpose": "Real-time parking garage occupancy for Trier, Germany (Stadtwerke Trier parken-v2 feed, single operator)",
       "dataSent": "No user data; our server's data-manager fetches the entire parken-v2 XML feed on a schedule",
       "dataReceived": "Garage name, coordinates, capacity, real-time free spaces, fee info, operator, opening hours"
     },
-    "potsdam-de": {
+    "de-bb-potsdam": {
       "purpose": "Parking facility data for Potsdam, Germany (Stadtwerke Potsdam CSV feed, single operator)",
       "dataSent": "No user data; our server's data-manager fetches the entire parking CSV feed on a schedule",
       "dataReceived": "Facility name, coordinates, capacity, real-time free spaces where provided, fee info, operator, Park+Ride flag"

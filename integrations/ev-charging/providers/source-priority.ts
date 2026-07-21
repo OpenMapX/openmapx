@@ -6,12 +6,12 @@
  * for their territory.
  */
 const SOURCE_PRIORITY: Record<string, number> = {
-  afdc: 0,
-  "bnetza-ev": 0,
-  "france-irve": 0,
-  "switzerland-ev": 0,
-  "netherlands-ev": 0,
-  nobil: 0,
+  "us-afdc": 0,
+  "de-bnetza": 0,
+  "fr-irve": 0,
+  "ch-sfoe": 0,
+  "nl-dotnl": 0,
+  "no-nobil": 0,
   ocm: 3,
   osm: 5,
 };

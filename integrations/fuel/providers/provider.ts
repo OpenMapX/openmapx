@@ -12,16 +12,16 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import type { FuelStation } from "@openmapx/mobility-core/fuel";
 import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
-import { getTankerkoenigApiKey, searchFuelStations } from "./factory.js";
+import { getDeTankerkoenigApiKey, searchFuelStations } from "./factory.js";
 import {
-  buildTankerkoenigDetail,
+  buildDeTankerkoenigDetail,
   mapFuelStationToDetail,
   mapFuelStationToResult,
 } from "./mapper.js";
 
-const TANKERKOENIG_DETAIL_URL = "https://creativecommons.tankerkoenig.de/json/detail.php";
+const DE_TANKERKOENIG_DETAIL_URL = "https://creativecommons.tankerkoenig.de/json/detail.php";
 
-interface TankerkoenigDetailStation {
+interface DeTankerkoenigDetailStation {
   id: string;
   name: string;
   brand: string;
@@ -34,9 +34,9 @@ interface TankerkoenigDetailStation {
   diesel: number | false | null;
 }
 
-interface TankerkoenigDetailResponse {
+interface DeTankerkoenigDetailResponse {
   ok: boolean;
-  station?: TankerkoenigDetailStation;
+  station?: DeTankerkoenigDetailStation;
   message?: string;
 }
 
@@ -165,18 +165,18 @@ class FuelDataSourceProvider implements MobilityDataSourceProvider {
   }
 
   private async fetchDetail(itemId: string): Promise<DataSourceDetail | null> {
-    // Tankerkoenig stations: fetch enriched detail from their API
-    if (itemId.startsWith("tankerkoenig/")) {
-      const uuid = itemId.replace(/^tankerkoenig\//, "");
-      const apiKey = getTankerkoenigApiKey();
+    // DE tankerkoenig stations: fetch enriched detail from their API
+    if (itemId.startsWith("de-tankerkoenig/")) {
+      const uuid = itemId.replace(/^de-tankerkoenig\//, "");
+      const apiKey = getDeTankerkoenigApiKey();
 
       if (apiKey && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid)) {
         try {
-          const url = new URL(TANKERKOENIG_DETAIL_URL);
+          const url = new URL(DE_TANKERKOENIG_DETAIL_URL);
           url.searchParams.set("id", uuid);
           url.searchParams.set("apikey", apiKey);
 
-          const data = await fetchJson<TankerkoenigDetailResponse>(url.toString(), {
+          const data = await fetchJson<DeTankerkoenigDetailResponse>(url.toString(), {
             nullOnError: true,
           });
           if (data?.ok && data.station) {
@@ -194,7 +194,7 @@ class FuelDataSourceProvider implements MobilityDataSourceProvider {
               },
             };
 
-            return buildTankerkoenigDetail(baseStation, {
+            return buildDeTankerkoenigDetail(baseStation, {
               isOpen: s.isOpen,
               wholeDay: s.wholeDay,
               openingTimes: s.openingTimes ?? [],

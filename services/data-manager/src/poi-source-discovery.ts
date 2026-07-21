@@ -68,7 +68,13 @@ function isPoiSourceArray(value: unknown): value is PoiSource[] {
   if (!Array.isArray(value)) return false;
   for (const item of value) {
     if (typeof item !== "object" || item === null) return false;
-    if (typeof (item as { id?: unknown }).id !== "string") return false;
+    if (typeof (item as { domain?: unknown }).domain !== "string") return false;
+    // A source is identified by EITHER an explicit `id` (global sources) OR
+    // structured `parts` from which `registerPoiSource` derives the id/prefix.
+    const hasId = typeof (item as { id?: unknown }).id === "string";
+    const parts = (item as { parts?: unknown }).parts;
+    const hasParts = typeof parts === "object" && parts !== null;
+    if (!hasId && !hasParts) return false;
   }
   return true;
 }

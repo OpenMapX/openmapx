@@ -1,3 +1,5 @@
+import type { FeedIdParts } from "@openmapx/core";
+
 /** Bounding box: [west, south, east, north] (lng/lat). */
 export type BBox = readonly [number, number, number, number];
 
@@ -103,8 +105,19 @@ export interface BundledPoiSpec {
 }
 
 export interface PoiSourceCommon {
-  /** Registry id — table name, Redis hash key, admin label. e.g. "bnetza-ev". */
-  id: string;
+  /**
+   * Registry id — table name, Redis hash key, admin label. e.g. "bnetza-ev".
+   * Derived from `parts` (via `deriveFeedId`) when `parts` is present; only
+   * required as an explicit literal for global sources with no `parts`
+   * (e.g. "osm").
+   */
+  id?: string;
+  /**
+   * Structured id parts. When present, `id` and `stationIdPrefix` are
+   * derived from this — the single source of truth — instead of being
+   * hand-typed. See `resolvePoiSourceId`.
+   */
+  parts?: FeedIdParts;
   /** Prefix on emitted user-facing station IDs. Defaults to `${id}:`. */
   stationIdPrefix?: string;
   /** Domain bucket: "ev-charging" | "parking" | future ones. */
@@ -119,3 +132,11 @@ export interface PoiSourceCommon {
 export type PoiSource =
   | (PoiSourceCommon & { static: StaticPoiSpec; live?: LivePoiSpec; bundled?: never })
   | (PoiSourceCommon & { bundled: BundledPoiSpec; static?: never; live?: never });
+
+/**
+ * A source after registration: `registerPoiSource` normalizes every source so
+ * `id` and `stationIdPrefix` are always populated (derived from `parts` when
+ * present). Registry accessors return this so consumers never see an optional
+ * `id`.
+ */
+export type RegisteredPoiSource = PoiSource & { id: string; stationIdPrefix: string };

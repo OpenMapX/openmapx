@@ -1,0 +1,36 @@
+import type { BoundingBox } from "@openmapx/core";
+import { createTwoTierPoiReader } from "@openmapx/integration-framework";
+import type { ParkingFacility } from "@openmapx/mobility-core/parking";
+import type { BBox } from "@openmapx/poi-source-registry";
+import { getRuntimeContext } from "../runtime.js";
+import { mapNlNdwTruckPayload, mergeNlNdwTruckLive } from "./nl-ndw-truck-mapper.js";
+
+/**
+ * NDW Netherlands truck parking thin wrapper.
+ *
+ * Bundled DATEX II static table + per-record live vacancies flow through the
+ * POI ingest pipeline (`poi_ingest.nl_ndw_truck_static` + Redis hash
+ * `poi:live:nl-ndw-truck`).
+ */
+
+const STATION_ID_PREFIX = "nl-ndw-truck:";
+
+const reader = createTwoTierPoiReader<ParkingFacility>({
+  sourceId: "nl-ndw-truck",
+  mapStatic: mapNlNdwTruckPayload,
+  mergeWithLive: mergeNlNdwTruckLive,
+  coverage: [3.3, 50.7, 7.3, 53.6],
+});
+
+function toBboxTuple(b: BoundingBox): BBox {
+  return [b.west, b.south, b.east, b.north];
+}
+
+export async function searchNlNdwTruck(bbox: BoundingBox): Promise<ParkingFacility[]> {
+  return reader.search(getRuntimeContext(), toBboxTuple(bbox));
+}
+
+export async function fetchNlNdwTruckDetail(id: string): Promise<ParkingFacility | null> {
+  const poiId = id.startsWith(STATION_ID_PREFIX) ? id.slice(STATION_ID_PREFIX.length) : id;
+  return reader.fetchDetail(getRuntimeContext(), poiId);
+}

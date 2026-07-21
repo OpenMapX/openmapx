@@ -1,6 +1,6 @@
 import {
   getAllPoiSources,
-  type PoiSource,
+  type RegisteredPoiSource,
   validatePoiSourceRegistry,
 } from "@openmapx/poi-source-registry";
 import { Cron } from "croner";
@@ -47,7 +47,7 @@ export interface PoiSchedulerOptions {
   redis: Redis;
   logger: PoiSchedulerLogger;
   /** Defaults to the current registry snapshot (getAllPoiSources()). Override for tests. */
-  sources?: readonly PoiSource[];
+  sources?: readonly RegisteredPoiSource[];
   /** Defaults to createPoiSingleFlight(). */
   singleFlight?: PoiSingleFlight;
   /** Defaults to a structured-log sink. Pass noopMetricsSink for tests. */
@@ -96,7 +96,7 @@ function envKey(sourceId: string, kind: PoiIngestKind): string {
   return `POI_INGEST_CRON__${sourceId.toUpperCase().replace(/-/g, "_")}__${kind.toUpperCase()}`;
 }
 
-function pickCronExpression(source: PoiSource, kind: PoiIngestKind): string {
+function pickCronExpression(source: RegisteredPoiSource, kind: PoiIngestKind): string {
   if (kind === "static") {
     const spec = (source as { static?: { cron: string } }).static;
     if (!spec) throw new Error(`source "${source.id}" has no static spec`);
@@ -156,7 +156,11 @@ export function setupPoiIngestCron(opts: PoiSchedulerOptions): PoiSchedulerHandl
   const crons = new Map<string, Cron>();
   const disabled: string[] = [];
 
-  async function runOne(sourceId: string, kind: PoiIngestKind, source: PoiSource): Promise<void> {
+  async function runOne(
+    sourceId: string,
+    kind: PoiIngestKind,
+    source: RegisteredPoiSource,
+  ): Promise<void> {
     const acquire = singleFlight.tryAcquire(sourceId, kind);
     if (!acquire.ok) {
       logger.warn("poi-ingest-cron: skipped scheduled run", {
@@ -218,7 +222,7 @@ export function setupPoiIngestCron(opts: PoiSchedulerOptions): PoiSchedulerHandl
   // Map of (sourceId, kind) -> source so `runNow` can look up the right source
   // without a linear scan and without trusting the registry to be unchanged
   // by the time a test seam fires.
-  const sourceIndex = new Map<string, PoiSource>();
+  const sourceIndex = new Map<string, RegisteredPoiSource>();
 
   for (const source of sources) {
     const kinds: PoiIngestKind[] = [];

@@ -1,4 +1,4 @@
-import type { PoiLiveState, PoiSource } from "@openmapx/poi-source-registry";
+import type { PoiLiveState, RegisteredPoiSource } from "@openmapx/poi-source-registry";
 import type { Redis } from "ioredis";
 import type { Sql } from "postgres";
 import { describe, expect, it } from "vitest";
@@ -45,9 +45,10 @@ function makeFakeRedis(): FakeRedis {
 
 const sqlStub = {} as unknown as Sql;
 
-function liveSource(ttl?: number): PoiSource {
+function liveSource(ttl?: number): RegisteredPoiSource {
   return {
     id: "demo-live",
+    stationIdPrefix: "demo-live:",
     domain: "ev-charging",
     name: "Demo",
     static: {

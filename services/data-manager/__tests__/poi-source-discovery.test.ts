@@ -49,6 +49,25 @@ export function declarePoiSources() {
 }
 `;
 
+// Migrated sources declare structured `parts` and NO explicit `id` — the
+// registry derives id/stationIdPrefix. Discovery must accept this shape.
+const VALID_PARTS_SOURCE_DECL_JS = `
+export function declarePoiSources() {
+  return [
+    {
+      parts: { country: "de", operator: "bnetza" },
+      domain: "ev-charging",
+      name: "Fixture BNetzA",
+      static: {
+        cron: "0 4 * * *",
+        fetch: { type: "http", url: "https://example.test/data.csv" },
+        parse: function* () {},
+      },
+    },
+  ];
+}
+`;
+
 const BROKEN_DECL_JS = `
 export function declarePoiSources() {
   throw new Error("parser is broken");
@@ -81,6 +100,18 @@ describe("discoverPoiSources", () => {
       "poi-source-discovery: scan complete",
       expect.objectContaining({ scanned: 1, withSources: 1, registered: 1 }),
     );
+  });
+
+  it("registers a parts-based source (no explicit id) under its derived id", async () => {
+    writeIntegration("ev-charging", VALID_PARTS_SOURCE_DECL_JS);
+    const logger = makeLogger();
+
+    const result = await discoverPoiSources({ rootDir: tmpRoot, logger });
+
+    expect(result.registered).toBe(1);
+    expect(result.errors).toEqual([]);
+    expect(getAllPoiSources().map((s) => s.id)).toEqual(["de-bnetza"]);
+    expect(getAllPoiSources()[0].stationIdPrefix).toBe("de-bnetza:");
   });
 
   it("isolates errors per integration — broken one skipped, valid one registered", async () => {

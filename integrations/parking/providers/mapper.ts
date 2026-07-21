@@ -274,8 +274,8 @@ export function mapParkingToDetail(facility: ParkingFacility): DataSourceDetail 
 
 /**
  * Build the per-feed attribution row for the detail footer. Only emitted when
- * the facility carries a `sourceAttribution` (aggregators like parkapi-v3,
- * opentransportdata-ch, cita-lu); single-source feeds rely on the manifest
+ * the facility carries a `sourceAttribution` (aggregators like de-parkapi-v3,
+ * ch-otd, cita-lu); single-source feeds rely on the manifest
  * attribution. The license link is resolved via the shared SPDX helper so
  * even feeds that only give a license string get a clickable license URL.
  */

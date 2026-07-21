@@ -66,12 +66,12 @@ describe("validatePoiSourceRegistry", () => {
 
   it("throws on invalid id (uppercase)", () => {
     const sources = [makeStaticSource({ id: "BadId" })];
-    expect(() => validatePoiSourceRegistry(sources)).toThrow(/id must match/);
+    expect(() => validatePoiSourceRegistry(sources)).toThrow(/id must be a valid feed id/);
   });
 
   it("throws on invalid id (leading dash)", () => {
     const sources = [makeStaticSource({ id: "-leading" })];
-    expect(() => validatePoiSourceRegistry(sources)).toThrow(/id must match/);
+    expect(() => validatePoiSourceRegistry(sources)).toThrow(/id must be a valid feed id/);
   });
 
   it("throws on invalid cron expression", () => {

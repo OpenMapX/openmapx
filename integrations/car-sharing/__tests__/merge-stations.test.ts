@@ -29,7 +29,7 @@ describe("mergeRegionalStations", () => {
       id: "c1",
       name: "Cambio Station",
       coordinates: [13.377, 52.52],
-      sources: ["cambio"],
+      sources: ["de-cambio"],
     });
     const result = mergeRegionalStations([station]);
     expect(result).toHaveLength(1);
@@ -44,10 +44,10 @@ describe("mergeRegionalStations", () => {
     // At ~52N: 1 degree lat ~ 111km, 1 degree lng ~ 67km
     // 0.0001 lat ~ 11m, so 0.0003 lat ~ 33m
     const primary = makeStation({
-      id: "cambio-1",
+      id: "de-cambio-1",
       name: "Cambio Alexanderplatz",
       coordinates: [13.41, 52.52],
-      sources: ["cambio"],
+      sources: ["de-cambio"],
       availableVehicles: 5,
       isActive: true,
       operator: "Cambio",
@@ -76,10 +76,10 @@ describe("mergeRegionalStations", () => {
 
     const merged = result[0];
     // Identity and availability from primary (NOT overridden)
-    expect(merged.id).toBe("cambio-1");
+    expect(merged.id).toBe("de-cambio-1");
     expect(merged.name).toBe("Cambio Alexanderplatz");
     expect(merged.coordinates).toEqual([13.41, 52.52]);
-    expect(merged.sources).toContain("cambio");
+    expect(merged.sources).toContain("de-cambio");
     expect(merged.sources).toContain("open-data");
     expect(merged.availableVehicles).toBe(5);
     expect(merged.isActive).toBe(true);
@@ -106,7 +106,7 @@ describe("mergeRegionalStations", () => {
       id: "p1",
       name: "Primary Station",
       coordinates: [13.41, 52.52],
-      sources: ["cambio"],
+      sources: ["de-cambio"],
       availableVehicles: 5,
       isActive: true,
       operator: "Cambio",
@@ -143,7 +143,7 @@ describe("mergeRegionalStations", () => {
     // Primary keeps all its own fields
     expect(merged.id).toBe("p1");
     expect(merged.name).toBe("Primary Station");
-    expect(merged.sources[0]).toBe("cambio");
+    expect(merged.sources[0]).toBe("de-cambio");
     expect(merged.sources).toContain("open-data");
     expect(merged.availableVehicles).toBe(5);
     expect(merged.isActive).toBe(true);
@@ -164,7 +164,7 @@ describe("mergeRegionalStations", () => {
       id: "a",
       name: "Station A",
       coordinates: [13.41, 52.52],
-      sources: ["cambio"],
+      sources: ["de-cambio"],
     });
     const b = makeStation({
       id: "b",
@@ -184,7 +184,7 @@ describe("mergeRegionalStations", () => {
       id: "live-1",
       name: "Live Station",
       coordinates: [13.41, 52.52],
-      sources: ["cambio-live"],
+      sources: ["de-cambio-live"],
       availableVehicles: 4,
     });
     const openA = makeStation({
@@ -212,7 +212,7 @@ describe("mergeRegionalStations", () => {
     // Identity from first (live)
     expect(merged.id).toBe("live-1");
     expect(merged.name).toBe("Live Station");
-    expect(merged.sources).toContain("cambio-live");
+    expect(merged.sources).toContain("de-cambio-live");
     expect(merged.sources).toContain("open-data-a");
     expect(merged.sources).toContain("open-data-b");
     expect(merged.availableVehicles).toBe(4);
@@ -249,7 +249,7 @@ describe("mergeRegionalStations", () => {
       id: "p1",
       name: "Primary",
       coordinates: [13.41, 52.52],
-      sources: ["cambio"],
+      sources: ["de-cambio"],
       // capacity is undefined by default
     });
     const secondary = makeStation({
@@ -269,7 +269,7 @@ describe("mergeRegionalStations", () => {
       id: "p1",
       name: "Primary",
       coordinates: [13.41, 52.52],
-      sources: ["cambio"],
+      sources: ["de-cambio"],
       capacity: 8,
     });
     const secondary = makeStation({

@@ -5,7 +5,7 @@ import { setSharedMobilityMotisUrl } from "@openmapx/mobility-core/motis-rentals
 import { setSharedMobilityNominatimUrl } from "@openmapx/mobility-core/nominatim";
 import { setSharedMobilityDecisionObserver } from "@openmapx/mobility-core/shared-mobility-orchestrator";
 import { registerPlaceResolver } from "@openmapx/place-ids";
-import { setNrwMobidromCredentials } from "./providers/nrw-mobidrom-client.js";
+import { setDeNwMobidromScooterCredentials } from "./providers/de-nw-mobidrom-scooter-client.js";
 import {
   scooterSharingProvider,
   setDetailCache,
@@ -30,7 +30,7 @@ export function setup(ctx: IntegrationContext): void {
   const nominatim = ctx.getRequiredService("nominatim");
   if (motis?.url) setSharedMobilityMotisUrl(motis.url);
   if (nominatim?.url) setSharedMobilityNominatimUrl(nominatim.url);
-  setNrwMobidromCredentials({
+  setDeNwMobidromScooterCredentials({
     clientId: ctx.config.nrwMobidromClientId as string | undefined,
     clientSecret: ctx.config.nrwMobidromClientSecret as string | undefined,
   });

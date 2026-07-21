@@ -2,22 +2,22 @@
   "name": "Fuel Prices",
   "description": "Gas station locations and real-time fuel prices",
   "dataSources": {
-    "tankerkoenig": {
+    "de-tankerkoenig": {
       "purpose": "German fuel station prices (E5, E10, Diesel)",
       "dataSent": "Center coordinates (latitude, longitude), search radius (max 25 km)",
       "dataReceived": "Gas stations with name, brand, address, coordinates, live diesel/E5/E10 prices, open/closed status"
     },
-    "e-control-at": {
+    "at-econtrol": {
       "purpose": "Austrian fuel station prices (Diesel, Super 95)",
       "dataSent": "Center coordinates (latitude, longitude), search radius, fuel type (diesel and Super 95 queried separately)",
       "dataReceived": "Gas stations with name, address, coordinates, prices per fuel type, open/closed status"
     },
-    "prix-carburants-fr": {
+    "fr-prixcarburants": {
       "purpose": "French fuel station prices (6 fuel types)",
       "dataSent": "Center coordinates (latitude, longitude), search radius",
       "dataReceived": "Gas stations with address, coordinates, prices for 6 fuel types with update timestamps"
     },
-    "minetur-es": {
+    "es-minetur": {
       "purpose": "Spanish fuel station prices (5 fuel types)",
       "dataSent": "No user data (fetches entire national dataset)",
       "dataReceived": "All Spanish gas stations with name, address, coordinates, prices for 5 fuel types"

@@ -9,12 +9,12 @@ interface DetailSnapshot {
 }
 
 const PROVIDER_SCOPED_PREFIXES = new Set([
-  "cambio",
+  "de-cambio",
   "citybikes",
   "db-bike",
   "gbfs",
   "nextbike",
-  "nrw-mobidrom-scooter",
+  "de-nw-mobidrom-scooter",
 ]);
 
 function decodeProviderScopedMotisId(id: string): {

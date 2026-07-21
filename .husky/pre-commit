@@ -17,4 +17,4 @@ else
   pnpm exec turbo run check-types --filter='...[HEAD]' || exit 1
 fi
 
-pnpm check-legal-tables && pnpm check-legal-updated && pnpm check-data-flows && pnpm check-license-metadata && pnpm check-toolchain-pins
+pnpm check-legal-tables && pnpm check-legal-updated && pnpm check-data-flows && pnpm check-license-metadata && pnpm check-toolchain-pins && pnpm check-feed-ids

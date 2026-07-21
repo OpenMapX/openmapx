@@ -1,5 +1,5 @@
 import { jobs, poiFeedState } from "@openmapx/db-schema";
-import { getAllPoiSources, type PoiSource } from "@openmapx/poi-source-registry";
+import { getAllPoiSources, type RegisteredPoiSource } from "@openmapx/poi-source-registry";
 import { desc, sql as drizzleSql, eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Redis } from "ioredis";
@@ -20,7 +20,7 @@ export interface PoiIngestApiOptions {
   /** Optional: cross-process drift checker against apps/api. Omit → `"unknown"`. */
   driftGuard?: DriftGuard;
   /** Override the registry — used by tests. */
-  sources?: readonly PoiSource[];
+  sources?: readonly RegisteredPoiSource[];
 }
 
 type SourceKindFlags = {
@@ -29,7 +29,7 @@ type SourceKindFlags = {
   hasBundled: boolean;
 };
 
-function inspectKinds(source: PoiSource): SourceKindFlags {
+function inspectKinds(source: RegisteredPoiSource): SourceKindFlags {
   return {
     hasStatic: (source as { static?: unknown }).static !== undefined,
     hasLive: (source as { live?: unknown }).live !== undefined,
@@ -37,7 +37,7 @@ function inspectKinds(source: PoiSource): SourceKindFlags {
   };
 }
 
-function kindLabels(source: PoiSource): PoiIngestKind[] {
+function kindLabels(source: RegisteredPoiSource): PoiIngestKind[] {
   const { hasStatic, hasLive, hasBundled } = inspectKinds(source);
   const out: PoiIngestKind[] = [];
   if (hasStatic) out.push("static");
@@ -61,7 +61,10 @@ interface SourceSummary {
   lastLiveRowCount: number | null;
 }
 
-function toSourceSummary(source: PoiSource, row: PoiFeedStateRow | undefined): SourceSummary {
+function toSourceSummary(
+  source: RegisteredPoiSource,
+  row: PoiFeedStateRow | undefined,
+): SourceSummary {
   return {
     sourceId: source.id,
     domain: source.domain,
@@ -98,10 +101,10 @@ export function registerPoiIngestApi(app: FastifyInstance, opts: PoiIngestApiOpt
   // scanner hasn't populated the registry yet — snapshotting here would
   // leave every handler with an empty source list. The registry is a
   // process-local Map; lookups are O(1), so this costs nothing.
-  function listSources(): readonly PoiSource[] {
+  function listSources(): readonly RegisteredPoiSource[] {
     return opts.sources ?? getAllPoiSources();
   }
-  function findSource(id: string): PoiSource | undefined {
+  function findSource(id: string): RegisteredPoiSource | undefined {
     return listSources().find((s) => s.id === id);
   }
   const logger = adaptFastifyLogger(app);

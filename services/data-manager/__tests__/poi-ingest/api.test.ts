@@ -1,4 +1,4 @@
-import type { PoiSource } from "@openmapx/poi-source-registry";
+import type { RegisteredPoiSource } from "@openmapx/poi-source-registry";
 import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PoiIngestKind, PoiIngestResult } from "../../src/jobs/poi-ingest/types.js";
@@ -118,9 +118,10 @@ import { registerPoiIngestApi } from "../../src/jobs/poi-ingest/api.js";
 import { noopMetricsSink, type PoiIngestMetricsSink } from "../../src/jobs/poi-ingest/metrics.js";
 import { createPoiSingleFlight } from "../../src/jobs/poi-ingest/single-flight.js";
 
-function staticSource(id = "src-1"): PoiSource {
+function staticSource(id = "src-1"): RegisteredPoiSource {
   return {
     id,
+    stationIdPrefix: `${id}:`,
     domain: "ev-charging",
     name: id,
     static: {
@@ -128,12 +129,13 @@ function staticSource(id = "src-1"): PoiSource {
       fetch: { type: "http", url: "https://example.com/data.csv" },
       parse: function* () {},
     },
-  } as PoiSource;
+  } as RegisteredPoiSource;
 }
 
-function staticLiveSource(id = "src-live"): PoiSource {
+function staticLiveSource(id = "src-live"): RegisteredPoiSource {
   return {
     id,
+    stationIdPrefix: `${id}:`,
     domain: "ev-charging",
     name: id,
     static: {
@@ -146,12 +148,13 @@ function staticLiveSource(id = "src-live"): PoiSource {
       fetch: { type: "http", url: "https://example.com/live.json" },
       parse: () => new Map(),
     },
-  } as PoiSource;
+  } as RegisteredPoiSource;
 }
 
-function bundledSource(id = "bundled-1"): PoiSource {
+function bundledSource(id = "bundled-1"): RegisteredPoiSource {
   return {
     id,
+    stationIdPrefix: `${id}:`,
     domain: "parking",
     name: id,
     bundled: {
@@ -159,7 +162,7 @@ function bundledSource(id = "bundled-1"): PoiSource {
       fetch: { type: "http", url: "https://example.com/feed.json" },
       parse: () => ({ static: [], live: new Map() }),
     },
-  } as PoiSource;
+  } as RegisteredPoiSource;
 }
 
 function fakeSql(): import("postgres").Sql {
@@ -187,7 +190,7 @@ function makeResult(
 }
 
 interface BuildAppOpts {
-  sources?: readonly PoiSource[];
+  sources?: readonly RegisteredPoiSource[];
   singleFlight?: ReturnType<typeof createPoiSingleFlight>;
   metricsSink?: PoiIngestMetricsSink;
 }

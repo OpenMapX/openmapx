@@ -1,9 +1,10 @@
+import { feedIdSchema } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import z from "zod/v4";
 
-const dataSourceSchema = z.object({
+export const dataSourceSchema = z.object({
   // Source matching — connects this entry to provider source values
-  sourceId: z.string(),
+  sourceId: feedIdSchema,
 
   // Identity
   name: z.string(),

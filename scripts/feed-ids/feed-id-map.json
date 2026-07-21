@@ -1,0 +1,669 @@
+[
+  {
+    "domain": "ev-charging",
+    "oldId": "switzerland-ev",
+    "oldPrefix": "swiss-sfoe:",
+    "parts": {
+      "country": "ch",
+      "operator": "sfoe"
+    },
+    "newId": "ch-sfoe",
+    "newPrefix": "ch-sfoe:",
+    "migrate": true,
+    "tableOld": "switzerland_ev_static",
+    "tableNew": "ch_sfoe_static"
+  },
+  {
+    "domain": "ev-charging",
+    "oldId": "bnetza-ev",
+    "oldPrefix": "bnetza:",
+    "parts": {
+      "country": "de",
+      "operator": "bnetza"
+    },
+    "newId": "de-bnetza",
+    "newPrefix": "de-bnetza:",
+    "migrate": true,
+    "tableOld": "bnetza_ev_static",
+    "tableNew": "de_bnetza_static"
+  },
+  {
+    "domain": "ev-charging",
+    "oldId": "france-irve",
+    "parts": {
+      "country": "fr",
+      "operator": "irve"
+    },
+    "newId": "fr-irve",
+    "newPrefix": "fr-irve:",
+    "migrate": true
+  },
+  {
+    "domain": "ev-charging",
+    "oldId": "netherlands-ev",
+    "oldPrefix": "nl-dotnl:",
+    "parts": {
+      "country": "nl",
+      "operator": "dotnl"
+    },
+    "newId": "nl-dotnl",
+    "newPrefix": "nl-dotnl:",
+    "migrate": true,
+    "tableOld": "netherlands_ev_static",
+    "tableNew": "nl_dotnl_static"
+  },
+  {
+    "domain": "ev-charging",
+    "oldId": "nobil",
+    "parts": {
+      "country": "no",
+      "operator": "nobil"
+    },
+    "newId": "no-nobil",
+    "newPrefix": "no-nobil:",
+    "migrate": true
+  },
+  {
+    "domain": "ev-charging",
+    "oldId": "ocm",
+    "parts": null,
+    "newId": "ocm",
+    "newPrefix": null,
+    "migrate": false
+  },
+  {
+    "domain": "ev-charging",
+    "oldId": "opendatasoft",
+    "parts": null,
+    "newId": "opendatasoft",
+    "newPrefix": null,
+    "migrate": false
+  },
+  {
+    "domain": "ev-charging",
+    "oldId": "osm",
+    "parts": null,
+    "newId": "osm",
+    "newPrefix": null,
+    "migrate": false
+  },
+  {
+    "domain": "ev-charging",
+    "oldId": "afdc",
+    "parts": {
+      "country": "us",
+      "operator": "afdc"
+    },
+    "newId": "us-afdc",
+    "newPrefix": "us-afdc:",
+    "migrate": true
+  },
+  {
+    "domain": "fuel",
+    "oldId": "e-control-at",
+    "parts": {
+      "country": "at",
+      "operator": "econtrol"
+    },
+    "newId": "at-econtrol",
+    "newPrefix": "at-econtrol:",
+    "migrate": true
+  },
+  {
+    "domain": "fuel",
+    "oldId": "tankerkoenig",
+    "parts": {
+      "country": "de",
+      "operator": "tankerkoenig"
+    },
+    "newId": "de-tankerkoenig",
+    "newPrefix": "de-tankerkoenig:",
+    "migrate": true
+  },
+  {
+    "domain": "fuel",
+    "oldId": "minetur-es",
+    "parts": {
+      "country": "es",
+      "operator": "minetur"
+    },
+    "newId": "es-minetur",
+    "newPrefix": "es-minetur:",
+    "migrate": true
+  },
+  {
+    "domain": "fuel",
+    "oldId": "prix-carburants-fr",
+    "parts": {
+      "country": "fr",
+      "operator": "prixcarburants"
+    },
+    "newId": "fr-prixcarburants",
+    "newPrefix": "fr-prixcarburants:",
+    "migrate": true
+  },
+  {
+    "domain": "parking",
+    "oldId": "salzburg-at",
+    "oldPrefix": "salzburg:",
+    "parts": {
+      "country": "at",
+      "operator": "salzburg",
+      "subdivision": "5"
+    },
+    "newId": "at-5-salzburg",
+    "newPrefix": "at-5-salzburg:",
+    "migrate": true,
+    "tableOld": "salzburg_at_static",
+    "tableNew": "at_5_salzburg_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "vienna-at",
+    "oldPrefix": "vienna:",
+    "parts": {
+      "country": "at",
+      "operator": "vienna",
+      "subdivision": "9"
+    },
+    "newId": "at-9-vienna",
+    "newPrefix": "at-9-vienna:",
+    "migrate": true,
+    "tableOld": "vienna_at_static",
+    "tableNew": "at_9_vienna_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "nsw-au",
+    "oldPrefix": "nsw:",
+    "parts": {
+      "country": "au",
+      "operator": "nsw"
+    },
+    "newId": "au-nsw",
+    "newPrefix": "au-nsw:",
+    "migrate": true,
+    "tableOld": "nsw_au_static",
+    "tableNew": "au_nsw_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "brussels-be",
+    "oldPrefix": "brussels:",
+    "parts": {
+      "country": "be",
+      "operator": "brussels",
+      "subdivision": "bru"
+    },
+    "newId": "be-bru-brussels",
+    "newPrefix": "be-bru-brussels:",
+    "migrate": true,
+    "tableOld": "brussels_be_static",
+    "tableNew": "be_bru_brussels_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "ghent-be",
+    "oldPrefix": "ghent:",
+    "parts": {
+      "country": "be",
+      "operator": "ghent",
+      "subdivision": "vlg"
+    },
+    "newId": "be-vlg-ghent",
+    "newPrefix": "be-vlg-ghent:",
+    "migrate": true,
+    "tableOld": "ghent_be_static",
+    "tableNew": "be_vlg_ghent_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "basel-ch",
+    "oldPrefix": "basel:",
+    "parts": {
+      "country": "ch",
+      "operator": "basel",
+      "subdivision": "bs"
+    },
+    "newId": "ch-bs-basel",
+    "newPrefix": "ch-bs-basel:",
+    "migrate": true,
+    "tableOld": "basel_ch_static",
+    "tableNew": "ch_bs_basel_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "opentransportdata-ch-parking",
+    "oldPrefix": "otdch-parking:",
+    "parts": {
+      "country": "ch",
+      "operator": "otd"
+    },
+    "newId": "ch-otd",
+    "newPrefix": "ch-otd:",
+    "migrate": true,
+    "tableOld": "opentransportdata_ch_parking_static",
+    "tableNew": "ch_otd_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "apag",
+    "oldPrefix": "apag:",
+    "parts": {
+      "country": "de",
+      "operator": "apag"
+    },
+    "newId": "de-apag",
+    "newPrefix": "de-apag:",
+    "migrate": true,
+    "tableOld": "apag_static",
+    "tableNew": "de_apag_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "apag-mobidrom",
+    "oldPrefix": "apag-mobidrom:",
+    "parts": {
+      "country": "de",
+      "operator": "apag",
+      "stream": "mobidrom"
+    },
+    "newId": "de-apag-mobidrom",
+    "newPrefix": "de-apag-mobidrom:",
+    "migrate": true,
+    "tableOld": "apag_mobidrom_static",
+    "tableNew": "de_apag_mobidrom_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "apcoa",
+    "oldPrefix": "apcoa:",
+    "parts": {
+      "country": "de",
+      "operator": "apcoa"
+    },
+    "newId": "de-apcoa",
+    "newPrefix": "de-apcoa:",
+    "migrate": true,
+    "tableOld": "apcoa_static",
+    "tableNew": "de_apcoa_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "autobahn-de",
+    "oldPrefix": "autobahn:",
+    "parts": {
+      "country": "de",
+      "operator": "autobahn"
+    },
+    "newId": "de-autobahn",
+    "newPrefix": "de-autobahn:",
+    "migrate": true,
+    "tableOld": "autobahn_de_static",
+    "tableNew": "de_autobahn_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "potsdam-de",
+    "oldPrefix": "potsdam:",
+    "parts": {
+      "country": "de",
+      "operator": "potsdam",
+      "subdivision": "bb"
+    },
+    "newId": "de-bb-potsdam",
+    "newPrefix": "de-bb-potsdam:",
+    "migrate": true,
+    "tableOld": "potsdam_de_static",
+    "tableNew": "de_bb_potsdam_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "bamberg-de",
+    "oldPrefix": "bamberg:",
+    "parts": {
+      "country": "de",
+      "operator": "bamberg",
+      "subdivision": "by"
+    },
+    "newId": "de-by-bamberg",
+    "newPrefix": "de-by-bamberg:",
+    "migrate": true,
+    "tableOld": "bamberg_de_static",
+    "tableNew": "de_by_bamberg_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "db-bahnpark",
+    "oldPrefix": "db-bahnpark:",
+    "parts": {
+      "country": "de",
+      "operator": "db",
+      "stream": "bahnpark"
+    },
+    "newId": "de-db-bahnpark",
+    "newPrefix": "de-db-bahnpark:",
+    "migrate": true,
+    "tableOld": "db_bahnpark_static",
+    "tableNew": "de_db_bahnpark_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "goldbeck",
+    "oldPrefix": "goldbeck:",
+    "parts": {
+      "country": "de",
+      "operator": "goldbeck"
+    },
+    "newId": "de-goldbeck",
+    "newPrefix": "de-goldbeck:",
+    "migrate": true,
+    "tableOld": "goldbeck_static",
+    "tableNew": "de_goldbeck_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "bremen-de",
+    "oldPrefix": "bremen:",
+    "parts": {
+      "country": "de",
+      "operator": "bremen",
+      "subdivision": "hb"
+    },
+    "newId": "de-hb-bremen",
+    "newPrefix": "de-hb-bremen:",
+    "migrate": true,
+    "tableOld": "bremen_de_static",
+    "tableNew": "de_hb_bremen_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "braunschweig-de",
+    "oldPrefix": "braunschweig:",
+    "parts": {
+      "country": "de",
+      "operator": "braunschweig",
+      "subdivision": "ni"
+    },
+    "newId": "de-ni-braunschweig",
+    "newPrefix": "de-ni-braunschweig:",
+    "migrate": true,
+    "tableOld": "braunschweig_de_static",
+    "tableNew": "de_ni_braunschweig_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "bielefeld-de",
+    "oldPrefix": "bielefeld:",
+    "parts": {
+      "country": "de",
+      "operator": "bielefeld",
+      "subdivision": "nw"
+    },
+    "newId": "de-nw-bielefeld",
+    "newPrefix": "de-nw-bielefeld:",
+    "migrate": true,
+    "tableOld": "bielefeld_de_static",
+    "tableNew": "de_nw_bielefeld_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "duesseldorf-de",
+    "oldPrefix": "duesseldorf:",
+    "parts": {
+      "country": "de",
+      "operator": "duesseldorf",
+      "subdivision": "nw"
+    },
+    "newId": "de-nw-duesseldorf",
+    "newPrefix": "de-nw-duesseldorf:",
+    "migrate": true,
+    "tableOld": "duesseldorf_de_static",
+    "tableNew": "de_nw_duesseldorf_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "nrw-mobidrom-parking",
+    "oldPrefix": "nrw:",
+    "parts": {
+      "country": "de",
+      "operator": "mobidrom",
+      "subdivision": "nw"
+    },
+    "newId": "de-nw-mobidrom",
+    "newPrefix": "de-nw-mobidrom:",
+    "migrate": true,
+    "tableOld": "nrw_mobidrom_parking_static",
+    "tableNew": "de_nw_mobidrom_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "nrw-mobidrom-pr",
+    "oldPrefix": "nrw-pr:",
+    "parts": {
+      "country": "de",
+      "operator": "mobidrom",
+      "stream": "pr",
+      "subdivision": "nw"
+    },
+    "newId": "de-nw-mobidrom-pr",
+    "newPrefix": "de-nw-mobidrom-pr:",
+    "migrate": true,
+    "tableOld": "nrw_mobidrom_pr_static",
+    "tableNew": "de_nw_mobidrom_pr_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "parkapi-v2",
+    "oldPrefix": "parkapi-v2:",
+    "parts": {
+      "country": "de",
+      "operator": "parkapi",
+      "stream": "v2"
+    },
+    "newId": "de-parkapi-v2",
+    "newPrefix": "de-parkapi-v2:",
+    "migrate": true,
+    "tableOld": "parkapi_v2_static",
+    "tableNew": "de_parkapi_v2_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "parkapi-v3",
+    "oldPrefix": "parkapi-v3:",
+    "parts": {
+      "country": "de",
+      "operator": "parkapi",
+      "stream": "v3"
+    },
+    "newId": "de-parkapi-v3",
+    "newPrefix": "de-parkapi-v3:",
+    "migrate": true,
+    "tableOld": "parkapi_v3_static",
+    "tableNew": "de_parkapi_v3_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "trier-de",
+    "oldPrefix": "trier:",
+    "parts": {
+      "country": "de",
+      "operator": "trier",
+      "subdivision": "rp"
+    },
+    "newId": "de-rp-trier",
+    "newPrefix": "de-rp-trier:",
+    "migrate": true,
+    "tableOld": "trier_de_static",
+    "tableNew": "de_rp_trier_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "copenhagen-dk",
+    "oldPrefix": "copenhagen:",
+    "parts": {
+      "country": "dk",
+      "operator": "copenhagen",
+      "subdivision": "84"
+    },
+    "newId": "dk-84-copenhagen",
+    "newPrefix": "dk-84-copenhagen:",
+    "migrate": true,
+    "tableOld": "copenhagen_dk_static",
+    "tableNew": "dk_84_copenhagen_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "barcelona-es",
+    "oldPrefix": "barcelona:",
+    "parts": {
+      "country": "es",
+      "operator": "barcelona",
+      "subdivision": "ct"
+    },
+    "newId": "es-ct-barcelona",
+    "newPrefix": "es-ct-barcelona:",
+    "migrate": true,
+    "tableOld": "barcelona_es_static",
+    "tableNew": "es_ct_barcelona_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "madrid-es",
+    "oldPrefix": "madrid:",
+    "parts": {
+      "country": "es",
+      "operator": "madrid",
+      "subdivision": "md"
+    },
+    "newId": "es-md-madrid",
+    "newPrefix": "es-md-madrid:",
+    "migrate": true,
+    "tableOld": "madrid_es_static",
+    "tableNew": "es_md_madrid_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "bnls-fr",
+    "oldPrefix": "bnls:",
+    "parts": {
+      "country": "fr",
+      "operator": "bnls"
+    },
+    "newId": "fr-bnls",
+    "newPrefix": "fr-bnls:",
+    "migrate": true,
+    "tableOld": "bnls_fr_static",
+    "tableNew": "fr_bnls_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "utmc-newcastle",
+    "oldPrefix": "utmc:",
+    "parts": {
+      "country": "gb",
+      "operator": "utmc",
+      "subdivision": "eng"
+    },
+    "newId": "gb-eng-utmc",
+    "newPrefix": "gb-eng-utmc:",
+    "migrate": true,
+    "tableOld": "utmc_newcastle_static",
+    "tableNew": "gb_eng_utmc_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "opendatahub-it",
+    "oldPrefix": "odh:",
+    "parts": {
+      "country": "it",
+      "operator": "opendatahub",
+      "subdivision": "32"
+    },
+    "newId": "it-32-opendatahub",
+    "newPrefix": "it-32-opendatahub:",
+    "migrate": true,
+    "tableOld": "opendatahub_it_static",
+    "tableNew": "it_32_opendatahub_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "florence-it",
+    "oldPrefix": "florence:",
+    "parts": {
+      "country": "it",
+      "operator": "florence",
+      "subdivision": "52"
+    },
+    "newId": "it-52-florence",
+    "newPrefix": "it-52-florence:",
+    "migrate": true,
+    "tableOld": "florence_it_static",
+    "tableNew": "it_52_florence_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "cita-lu",
+    "oldPrefix": "cita-lu:",
+    "parts": {
+      "country": "lu",
+      "operator": "cita"
+    },
+    "newId": "lu-cita",
+    "newPrefix": "lu-cita:",
+    "migrate": true,
+    "tableOld": "cita_lu_static",
+    "tableNew": "lu_cita_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "ndw-truck-nl",
+    "oldPrefix": "ndw-truck:",
+    "parts": {
+      "country": "nl",
+      "operator": "ndw",
+      "stream": "truck"
+    },
+    "newId": "nl-ndw-truck",
+    "newPrefix": "nl-ndw-truck:",
+    "migrate": true,
+    "tableOld": "ndw_truck_nl_static",
+    "tableNew": "nl_ndw_truck_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "rdw-nl",
+    "oldPrefix": "rdw:",
+    "parts": {
+      "country": "nl",
+      "operator": "rdw"
+    },
+    "newId": "nl-rdw",
+    "newPrefix": "nl-rdw:",
+    "migrate": true,
+    "tableOld": "rdw_nl_static",
+    "tableNew": "nl_rdw_static"
+  },
+  {
+    "domain": "parking",
+    "oldId": "osm",
+    "parts": null,
+    "newId": "osm",
+    "newPrefix": null,
+    "migrate": false
+  },
+  {
+    "domain": "parking",
+    "oldId": "singapore",
+    "oldPrefix": "sg:",
+    "parts": {
+      "country": "sg",
+      "operator": "hdb"
+    },
+    "newId": "sg-hdb",
+    "newPrefix": "sg-hdb:",
+    "migrate": true,
+    "tableOld": "singapore_static",
+    "tableNew": "sg_hdb_static"
+  }
+]

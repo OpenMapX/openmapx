@@ -109,22 +109,22 @@
     "stationArea": "Stationsbereich"
   },
   "dataSources": {
-    "cambio": {
+    "de-cambio": {
       "purpose": "Stationsbasiertes Carsharing in Deutschland und Belgien",
       "dataSent": "Regionscode im URL-Pfad (zugeordnet nach Nähe zum Kartenausschnittszentrum, bis zu 14 Regionen). Keine Nutzerstandortdaten direkt gesendet",
       "dataReceived": "Stationsstandorte, Fahrzeuganzahl, Fahrzeugklassen, Adressen"
     },
-    "stadtteilauto": {
+    "de-stadtteilauto": {
       "purpose": "Carsharing-Stationen und Fahrzeuge in Münster (offene Daten)",
       "dataSent": "Keine Nutzerdaten (statischer Datensatz, ruft alle Stationen ab)",
       "dataReceived": "Stationsstandorte, Fahrzeuganzahl, Fahrzeugklassen, Preise"
     },
-    "bielefeld": {
+    "de-nw-bielefeld": {
       "purpose": "Carsharing-Stationen in Bielefeld (offene Daten)",
       "dataSent": "Keine Nutzerdaten (statischer Datensatz, parallel mit Stationen abgerufen)",
       "dataReceived": "Stationsstandorte, Kapazität, Buchungs-URLs"
     },
-    "wuppertal": {
+    "de-nw-wuppertal": {
       "purpose": "Carsharing-Stationen in Wuppertal von mehreren Anbietern (offene Daten)",
       "dataSent": "Keine Nutzerdaten (statische WFS-Abfrage mit festen Parametern für Carsharing-Layer)",
       "dataReceived": "Stationsstandorte, Fahrzeuganzahl, Anbieternamen, Fahrzeugklassen"

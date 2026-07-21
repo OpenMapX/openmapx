@@ -129,7 +129,7 @@
       "dataSent": "Bounding-box coordinates (min and max latitude/longitude corners)",
       "dataReceived": "Free-floating vehicle positions, station locations, vehicle types, operator names"
     },
-    "nrw-mobidrom-scooter": {
+    "de-nw-mobidrom-scooter": {
       "purpose": "NRW.Mobidrom bundled e-scooter feed (Voi + Lime in North Rhine-Westphalia)",
       "dataSent": "OAuth2 client credentials (no user data; server-only)",
       "dataReceived": "Per-operator GBFS feeds with vehicle positions, battery levels, vehicle types, pricing plans"

@@ -7,6 +7,7 @@ export * from "./api";
 export * from "./auth";
 export * from "./constants";
 export * from "./domains";
+export * from "./feed-id";
 
 // Git URL allowlist (shared by community service repos + community integrations).
 // The `gitShallowClone*` helpers that use these live in `./server` — they import

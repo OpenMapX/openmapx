@@ -6,7 +6,7 @@ import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobil
  * Each client handles fetching and mapping from one operator's API.
  */
 export interface RegionalCarSharingClient {
-  /** Unique identifier for this client (e.g., "cambio", "stadtteilauto"). */
+  /** Unique identifier for this client (e.g., "de-cambio", "de-stadtteilauto"). */
   readonly id: string;
   /** Human-readable name. */
   readonly name: string;

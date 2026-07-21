@@ -341,7 +341,7 @@
   "category": "Parking",
   "dataSources": [
     {
-      "sourceId": "parkapi-v2",
+      "sourceId": "de-parkapi-v2",
       "name": "ParkenDD",
       "url": "https://api.parkendd.de/",
       "license": "MIT (software); data licenses vary by city",
@@ -355,7 +355,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "parkapi-v3",
+      "sourceId": "de-parkapi-v3",
       "name": "MobiData BW (ParkAPI)",
       "url": "https://api.mobidata-bw.de/",
       "license": "various (per source)",
@@ -369,7 +369,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "db-bahnpark",
+      "sourceId": "de-db-bahnpark",
       "name": "DB BahnPark",
       "url": "https://developers.deutschebahn.com/",
       "license": "Proprietary (bilateral license)",
@@ -383,7 +383,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "rdw-nl",
+      "sourceId": "nl-rdw",
       "name": "RDW Open Data (Netherlands)",
       "url": "https://opendata.rdw.nl/",
       "license": "CC0 1.0 Universal (Public Domain)",
@@ -397,7 +397,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "bnls-fr",
+      "sourceId": "fr-bnls",
       "name": "BNLS France (Opendatasoft)",
       "url": "https://transport.data.gouv.fr/",
       "license": "ODbL 1.0",
@@ -411,7 +411,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "ghent-be",
+      "sourceId": "be-vlg-ghent",
       "name": "Stad Gent (Belgium)",
       "url": "https://data.stad.gent/",
       "license": "Modellicentie Gratis Hergebruik",
@@ -425,7 +425,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "brussels-be",
+      "sourceId": "be-bru-brussels",
       "name": "Open Data Brussels (Belgium)",
       "url": "https://opendata.brussels.be/",
       "license": "CC0 1.0",
@@ -439,7 +439,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "basel-ch",
+      "sourceId": "ch-bs-basel",
       "name": "Kanton Basel-Stadt (Switzerland)",
       "url": "https://data.bs.ch/",
       "license": "CC BY 4.0",
@@ -453,7 +453,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "opentransportdata-ch-parking",
+      "sourceId": "ch-otd",
       "name": "Open data platform mobility Switzerland – Bike and car parking",
       "url": "https://opentransportdata.swiss/en/cookbook/road-traffic-cookbook/bike-and-car-parking/",
       "license": "Open data platform mobility Switzerland terms of use",
@@ -468,7 +468,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "cita-lu",
+      "sourceId": "lu-cita",
       "name": "CITA Luxembourg parking DATEX II",
       "url": "https://data.public.lu/en/datasets/cita-donnees-parking-en-datex-ii/",
       "apiHosts": ["www.cita.lu"],
@@ -483,7 +483,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "florence-it",
+      "sourceId": "it-52-florence",
       "name": "Comune di Firenze (Italy)",
       "url": "https://opendata.comune.fi.it/",
       "license": "CC BY 4.0",
@@ -497,7 +497,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "barcelona-es",
+      "sourceId": "es-ct-barcelona",
       "name": "Ajuntament de Barcelona (Spain)",
       "url": "https://opendata-ajuntament.barcelona.cat/",
       "license": "CC BY 4.0",
@@ -511,7 +511,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "vienna-at",
+      "sourceId": "at-9-vienna",
       "name": "Stadt Wien (Austria)",
       "url": "https://data.wien.gv.at/",
       "license": "CC BY 4.0",
@@ -526,7 +526,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "copenhagen-dk",
+      "sourceId": "dk-84-copenhagen",
       "name": "Københavns Kommune (Denmark)",
       "url": "https://www.opendata.dk/city-of-copenhagen",
       "apiHosts": ["wfs-kbhkort.kk.dk"],
@@ -541,7 +541,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "singapore",
+      "sourceId": "sg-hdb",
       "name": "data.gov.sg (Singapore)",
       "url": "https://data.gov.sg/",
       "license": "Singapore Open Data Licence",
@@ -556,7 +556,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "madrid-es",
+      "sourceId": "es-md-madrid",
       "name": "Ayuntamiento de Madrid (Spain)",
       "url": "https://datos.madrid.es/",
       "license": "Open Data",
@@ -570,7 +570,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "utmc-newcastle",
+      "sourceId": "gb-eng-utmc",
       "name": "NE Travel Data (UK)",
       "url": "https://www.netraveldata.co.uk/",
       "license": "OGL v3",
@@ -584,7 +584,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "nsw-au",
+      "sourceId": "au-nsw",
       "name": "Transport for NSW (Australia)",
       "url": "https://opendata.transport.nsw.gov.au/",
       "license": "CC BY 4.0",
@@ -598,7 +598,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "ndw-truck-nl",
+      "sourceId": "nl-ndw-truck",
       "name": "NDW Open Data (Netherlands)",
       "url": "https://opendata.ndw.nu/",
       "license": "CC0 1.0 Universal (Public Domain)",
@@ -612,7 +612,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "autobahn-de",
+      "sourceId": "de-autobahn",
       "name": "Autobahn GmbH (Germany)",
       "url": "https://verkehr.autobahn.de/",
       "license": "Datenlizenz Deutschland Namensnennung 2.0",
@@ -626,7 +626,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "opendatahub-it",
+      "sourceId": "it-32-opendatahub",
       "name": "Open Data Hub (South Tyrol, Italy)",
       "url": "https://opendatahub.com/",
       "license": "CC0 1.0 Universal (Public Domain)",
@@ -640,7 +640,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "nrw-mobidrom-pr",
+      "sourceId": "de-nw-mobidrom-pr",
       "name": "NRW.Mobidrom – Park+Ride NRW",
       "url": "https://www.mobilitaetsdaten.nrw/",
       "license": "Datenlizenz Deutschland Namensnennung 2.0",
@@ -654,7 +654,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "nrw-mobidrom-parking",
+      "sourceId": "de-nw-mobidrom",
       "name": "NRW.Mobidrom – Parken NRW",
       "url": "https://www.mobilitaetsdaten.nrw/",
       "license": "Datenlizenz Deutschland Namensnennung 2.0",
@@ -668,7 +668,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "apcoa",
+      "sourceId": "de-apcoa",
       "name": "APCOA Deutschland (via NRW.Mobidrom)",
       "url": "https://www.mobilitaetsdaten.nrw/",
       "license": "Datenlizenz Deutschland Namensnennung 2.0",
@@ -682,7 +682,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "apag",
+      "sourceId": "de-apag",
       "name": "APAG – Aachener Parkhaus",
       "url": "https://www.apag.de/",
       "license": "All Rights Reserved (no published reuse terms)",
@@ -697,7 +697,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "apag-mobidrom",
+      "sourceId": "de-apag-mobidrom",
       "name": "APAG – Aachener Parkhaus",
       "url": "https://www.mobilitaetsdaten.nrw/",
       "license": "Datenlizenz Deutschland Namensnennung 2.0",
@@ -711,7 +711,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "goldbeck",
+      "sourceId": "de-goldbeck",
       "name": "GOLDBECK Parking Services (via NRW.Mobidrom)",
       "url": "https://www.mobilitaetsdaten.nrw/",
       "license": "Datenlizenz Deutschland Namensnennung 2.0",
@@ -725,7 +725,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "braunschweig-de",
+      "sourceId": "de-ni-braunschweig",
       "name": "Stadt Braunschweig — PULP parking",
       "url": "https://www.braunschweig.de/",
       "license": "Datenlizenz Deutschland Namensnennung 2.0",
@@ -739,7 +739,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "bremen-de",
+      "sourceId": "de-hb-bremen",
       "name": "VMZ Bremen — parking catalogue",
       "url": "https://vmz.bremen.de/",
       "license": "Datenlizenz Deutschland Namensnennung 2.0",
@@ -753,7 +753,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "duesseldorf-de",
+      "sourceId": "de-nw-duesseldorf",
       "name": "Stadt Düsseldorf — VT-Manager",
       "url": "https://opendata.duesseldorf.de/",
       "license": "Datenlizenz Deutschland Namensnennung 2.0",
@@ -767,7 +767,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "salzburg-at",
+      "sourceId": "at-5-salzburg",
       "name": "Stadt Salzburg — parkplatz WFS",
       "url": "https://www.stadt-salzburg.at/ogd",
       "license": "CC BY 3.0 AT",
@@ -782,7 +782,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "bielefeld-de",
+      "sourceId": "de-nw-bielefeld",
       "name": "Stadt Bielefeld — Parkplätze WFS",
       "url": "https://www.bielefeld.de/open-data",
       "apiHosts": ["www.bielefeld01.de"],
@@ -797,7 +797,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "bamberg-de",
+      "sourceId": "de-by-bamberg",
       "name": "Stadtwerke Bamberg — Parken",
       "url": "https://www.stadtwerke-bamberg.de/mobilitaet/parken",
       "license": "All Rights Reserved (no published reuse terms)",
@@ -812,7 +812,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "trier-de",
+      "sourceId": "de-rp-trier",
       "name": "Stadtwerke Trier — Parken",
       "url": "https://www.swt.de/seite/aktuell-freie-parkplatze-auf-einen-blick",
       "license": "All Rights Reserved (no published reuse terms)",
@@ -827,7 +827,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "potsdam-de",
+      "sourceId": "de-bb-potsdam",
       "name": "Stadtwerke Potsdam — Parkplätze",
       "url": "https://www.swp-potsdam.de/",
       "license": "All Rights Reserved (no published reuse terms)",

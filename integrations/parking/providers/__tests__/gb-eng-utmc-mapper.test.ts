@@ -1,0 +1,123 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  deriveFreeSpaces,
+  mapGbEngUtmcPayload,
+  mapState,
+  mergeGbEngUtmcLive,
+} from "../gb-eng-utmc-mapper.js";
+
+// Fixtures use 2012 timestamps; anchor `Date.now()` near them so the
+// mergeXLive staleness gate doesn't flip hasRealtimeData=false. The shared
+// helper compares `Date.now() - asOf` against MAX_LIVE_AGE_MS.
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2012-01-13T12:20:00Z"));
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe("mapState", () => {
+  it("maps CLOSED and FAULTY to closed", () => {
+    expect(mapState("CLOSED")).toBe("closed");
+    expect(mapState("FAULTY")).toBe("closed");
+  });
+  it("maps SPACES / ALMOST FULL / FULL / OPEN to open", () => {
+    for (const s of ["SPACES", "ALMOST FULL", "FULL", "OPEN"]) {
+      expect(mapState(s)).toBe("open");
+    }
+  });
+  it("returns unknown otherwise", () => {
+    expect(mapState()).toBe("unknown");
+    expect(mapState("UNKNOWN")).toBe("unknown");
+    expect(mapState("WAT")).toBe("unknown");
+  });
+});
+
+describe("deriveFreeSpaces", () => {
+  it("returns capacity - occupancy when both present", () => {
+    expect(deriveFreeSpaces(50, 200)).toBe(150);
+  });
+  it("clamps negative results to 0", () => {
+    expect(deriveFreeSpaces(250, 200)).toBe(0);
+  });
+  it("returns undefined when either side is missing", () => {
+    expect(deriveFreeSpaces(undefined, 200)).toBeUndefined();
+    expect(deriveFreeSpaces(50, undefined)).toBeUndefined();
+  });
+});
+
+describe("mapGbEngUtmcPayload", () => {
+  it("builds a ParkingFacility with gb-eng-utmc: prefix and static fields", () => {
+    const facility = mapGbEngUtmcPayload("CP1", {
+      coordinates: [-1.625, 54.975],
+      name: "Town Centre",
+      capacity: 200,
+      address: "Car park in Newcastle Town Centre",
+      parkingType: "garage",
+      fee: "unknown",
+      staticDataUpdatedAt: "2012-01-13T12:19:32.419+0000",
+    });
+    expect(facility).toMatchObject({
+      id: "gb-eng-utmc:CP1",
+      name: "Town Centre",
+      coordinates: [-1.625, 54.975],
+      sources: ["gb-eng-utmc"],
+      parkingType: "garage",
+      capacity: 200,
+      hasRealtimeData: false,
+      staticDataUpdatedAt: "2012-01-13T12:19:32.419+0000",
+      dataUpdatedAt: "2012-01-13T12:19:32.419+0000",
+      fee: "unknown",
+      address: "Car park in Newcastle Town Centre",
+      state: "unknown",
+    });
+  });
+
+  it("defaults gracefully when payload is empty", () => {
+    const facility = mapGbEngUtmcPayload("CPX", {});
+    expect(facility.id).toBe("gb-eng-utmc:CPX");
+    expect(facility.name).toBe("Car Park CPX");
+    expect(facility.coordinates).toEqual([0, 0]);
+    expect(facility.parkingType).toBe("garage");
+    expect(facility.hasRealtimeData).toBe(false);
+  });
+});
+
+describe("mergeGbEngUtmcLive", () => {
+  const base = mapGbEngUtmcPayload("CP1", {
+    coordinates: [-1.625, 54.975],
+    name: "Town Centre",
+    capacity: 200,
+    parkingType: "garage",
+    fee: "unknown",
+    staticDataUpdatedAt: "2012-01-13T12:19:32.419+0000",
+  });
+
+  it("derives freeSpaces, state, and updates realtime/data timestamps", () => {
+    const merged = mergeGbEngUtmcLive(base, {
+      asOf: "2012-01-13T12:19:32.419+0000",
+      occupancy: 142,
+      stateDescription: "SPACES",
+    });
+    expect(merged.freeSpaces).toBe(58);
+    expect(merged.state).toBe("open");
+    expect(merged.hasRealtimeData).toBe(true);
+    expect(merged.realtimeDataUpdatedAt).toBe("2012-01-13T12:19:32.419+0000");
+    expect(merged.dataUpdatedAt).toBe("2012-01-13T12:19:32.419+0000");
+  });
+
+  it("returns base unchanged when live is null", () => {
+    expect(mergeGbEngUtmcLive(base, null)).toBe(base);
+  });
+
+  it("maps CLOSED state and leaves freeSpaces undefined when occupancy missing", () => {
+    const merged = mergeGbEngUtmcLive(base, {
+      asOf: "2012-01-13T12:19:32.419+0000",
+      stateDescription: "CLOSED",
+    });
+    expect(merged.state).toBe("closed");
+    expect(merged.freeSpaces).toBeUndefined();
+    expect(merged.hasRealtimeData).toBe(true);
+  });
+});

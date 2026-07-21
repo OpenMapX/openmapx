@@ -2,92 +2,116 @@ import type { BoundingBox, DataSourceResult } from "@openmapx/core";
 import type { ParkingFacility } from "@openmapx/mobility-core/parking";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../apag.js", () => ({ searchApag: vi.fn(), fetchApagDetail: vi.fn() }));
-vi.mock("../apcoa.js", () => ({ searchApcoa: vi.fn(), fetchApcoaDetail: vi.fn() }));
-vi.mock("../autobahn-de.js", () => ({
-  searchAutobahnDe: vi.fn(),
-  fetchAutobahnDeDetail: vi.fn(),
+vi.mock("../de-apag.js", () => ({ searchDeApag: vi.fn(), fetchDeApagDetail: vi.fn() }));
+vi.mock("../de-apcoa.js", () => ({ searchDeApcoa: vi.fn(), fetchDeApcoaDetail: vi.fn() }));
+vi.mock("../de-autobahn.js", () => ({
+  searchDeAutobahn: vi.fn(),
+  fetchDeAutobahnDetail: vi.fn(),
 }));
-vi.mock("../barcelona-es.js", () => ({
-  searchBarcelonaEs: vi.fn(),
-  fetchBarcelonaEsDetail: vi.fn(),
+vi.mock("../es-ct-barcelona.js", () => ({
+  searchEsCtBarcelona: vi.fn(),
+  fetchEsCtBarcelonaDetail: vi.fn(),
 }));
-vi.mock("../basel-ch.js", () => ({ searchBaselCh: vi.fn(), fetchBaselChDetail: vi.fn() }));
-vi.mock("../bnls-fr.js", () => ({ searchBnlsFr: vi.fn(), fetchBnlsFrDetail: vi.fn() }));
-vi.mock("../brussels-be.js", () => ({ searchBrusselsBe: vi.fn(), fetchBrusselsBeDetail: vi.fn() }));
-vi.mock("../cita-lu.js", () => ({ searchCitaLu: vi.fn(), fetchCitaLuDetail: vi.fn() }));
-vi.mock("../copenhagen-dk.js", () => ({
-  searchCopenhagenDk: vi.fn(),
-  fetchCopenhagenDkDetail: vi.fn(),
+vi.mock("../ch-bs-basel.js", () => ({ searchChBsBasel: vi.fn(), fetchChBsBaselDetail: vi.fn() }));
+vi.mock("../fr-bnls.js", () => ({ searchFrBnls: vi.fn(), fetchFrBnlsDetail: vi.fn() }));
+vi.mock("../be-bru-brussels.js", () => ({
+  searchBeBruBrussels: vi.fn(),
+  fetchBeBruBrusselsDetail: vi.fn(),
 }));
-vi.mock("../db-bahnpark.js", () => ({ searchDbBahnPark: vi.fn(), fetchDbBahnParkDetail: vi.fn() }));
+vi.mock("../lu-cita.js", () => ({ searchLuCita: vi.fn(), fetchLuCitaDetail: vi.fn() }));
+vi.mock("../dk-84-copenhagen.js", () => ({
+  searchDk84Copenhagen: vi.fn(),
+  fetchDk84CopenhagenDetail: vi.fn(),
+}));
+vi.mock("../de-db-bahnpark.js", () => ({
+  searchDeDbBahnPark: vi.fn(),
+  fetchDeDbBahnParkDetail: vi.fn(),
+}));
 vi.mock("../dedup.js", () => ({ deduplicateParking: vi.fn((items: unknown[]) => items) }));
-vi.mock("../florence-it.js", () => ({ searchFlorenceIt: vi.fn(), fetchFlorenceItDetail: vi.fn() }));
-vi.mock("../ghent-be.js", () => ({ searchGhentBe: vi.fn(), fetchGhentBeDetail: vi.fn() }));
-vi.mock("../goldbeck.js", () => ({ searchGoldbeck: vi.fn(), fetchGoldbeckDetail: vi.fn() }));
-vi.mock("../madrid-es.js", () => ({ searchMadridEs: vi.fn(), fetchMadridEsDetail: vi.fn() }));
-vi.mock("../ndw-truck-nl.js", () => ({
-  searchNdwTruckNl: vi.fn(),
-  fetchNdwTruckNlDetail: vi.fn(),
+vi.mock("../it-52-florence.js", () => ({
+  searchIt52Florence: vi.fn(),
+  fetchIt52FlorenceDetail: vi.fn(),
 }));
-vi.mock("../nrw-mobidrom.js", () => ({
-  searchNrwMobidrom: vi.fn(),
-  fetchNrwMobidromDetail: vi.fn(),
+vi.mock("../be-vlg-ghent.js", () => ({
+  searchBeVlgGhent: vi.fn(),
+  fetchBeVlgGhentDetail: vi.fn(),
 }));
-vi.mock("../nrw-pr.js", () => ({
-  searchNrwPr: vi.fn(),
-  fetchNrwPrDetail: vi.fn(),
+vi.mock("../de-goldbeck.js", () => ({ searchDeGoldbeck: vi.fn(), fetchDeGoldbeckDetail: vi.fn() }));
+vi.mock("../es-md-madrid.js", () => ({
+  searchEsMdMadrid: vi.fn(),
+  fetchEsMdMadridDetail: vi.fn(),
 }));
-vi.mock("../opendatahub-it.js", () => ({ searchOdhIt: vi.fn(), fetchOdhItDetail: vi.fn() }));
+vi.mock("../nl-ndw-truck.js", () => ({
+  searchNlNdwTruck: vi.fn(),
+  fetchNlNdwTruckDetail: vi.fn(),
+}));
+vi.mock("../de-nw-mobidrom.js", () => ({
+  searchDeNwMobidrom: vi.fn(),
+  fetchDeNwMobidromDetail: vi.fn(),
+}));
+vi.mock("../de-nw-mobidrom-pr.js", () => ({
+  searchDeNwMobidromPr: vi.fn(),
+  fetchDeNwMobidromPrDetail: vi.fn(),
+}));
+vi.mock("../it-32-opendatahub.js", () => ({
+  searchIt32Opendatahub: vi.fn(),
+  fetchIt32OpendatahubDetail: vi.fn(),
+}));
 vi.mock("../mapper.js", () => ({ mapParkingToResult: vi.fn(), mapParkingToDetail: vi.fn() }));
-vi.mock("../nsw-au.js", () => ({ searchNswAu: vi.fn(), fetchNswAuDetail: vi.fn() }));
+vi.mock("../au-nsw.js", () => ({ searchAuNsw: vi.fn(), fetchAuNswDetail: vi.fn() }));
 vi.mock("../osm.js", () => ({ searchOsmParking: vi.fn(), fetchOsmParkingElement: vi.fn() }));
-vi.mock("../parkapi-v2.js", () => ({ searchParkApiV2: vi.fn(), fetchParkApiV2Detail: vi.fn() }));
-vi.mock("../parkapi-v3.js", () => ({ searchParkApiV3: vi.fn(), fetchParkApiV3Detail: vi.fn() }));
-vi.mock("../rdw-nl.js", () => ({ searchRdwNl: vi.fn(), fetchRdwNlDetail: vi.fn() }));
-vi.mock("../singapore.js", () => ({ searchSingapore: vi.fn(), fetchSingaporeDetail: vi.fn() }));
-vi.mock("../utmc-newcastle.js", () => ({
-  searchUtmcNewcastle: vi.fn(),
-  fetchUtmcNewcastleDetail: vi.fn(),
+vi.mock("../de-parkapi-v2.js", () => ({
+  searchDeParkapiV2: vi.fn(),
+  fetchDeParkapiV2Detail: vi.fn(),
 }));
-vi.mock("../vienna-at.js", () => ({ searchViennaAt: vi.fn(), fetchViennaAtDetail: vi.fn() }));
+vi.mock("../de-parkapi-v3.js", () => ({
+  searchDeParkapiV3: vi.fn(),
+  fetchDeParkapiV3Detail: vi.fn(),
+}));
+vi.mock("../nl-rdw.js", () => ({ searchNlRdw: vi.fn(), fetchNlRdwDetail: vi.fn() }));
+vi.mock("../sg-hdb.js", () => ({ searchSgHdb: vi.fn(), fetchSgHdbDetail: vi.fn() }));
+vi.mock("../gb-eng-utmc.js", () => ({
+  searchGbEngUtmc: vi.fn(),
+  fetchGbEngUtmcDetail: vi.fn(),
+}));
+vi.mock("../at-9-vienna.js", () => ({ searchAt9Vienna: vi.fn(), fetchAt9ViennaDetail: vi.fn() }));
 
-import { searchApag } from "../apag.js";
-import { searchApcoa } from "../apcoa.js";
-import { searchAutobahnDe } from "../autobahn-de.js";
-import { searchBarcelonaEs } from "../barcelona-es.js";
-import { searchBaselCh } from "../basel-ch.js";
-import { fetchBnlsFrDetail, searchBnlsFr } from "../bnls-fr.js";
-import { searchBrusselsBe } from "../brussels-be.js";
-import { fetchCitaLuDetail, searchCitaLu } from "../cita-lu.js";
-import { searchCopenhagenDk } from "../copenhagen-dk.js";
-import { fetchDbBahnParkDetail, searchDbBahnPark } from "../db-bahnpark.js";
+import { searchAt9Vienna } from "../at-9-vienna.js";
+import { searchAuNsw } from "../au-nsw.js";
+import { searchBeBruBrussels } from "../be-bru-brussels.js";
+import { searchBeVlgGhent } from "../be-vlg-ghent.js";
+import { searchChBsBasel } from "../ch-bs-basel.js";
+import { searchDeApag } from "../de-apag.js";
+import { searchDeApcoa } from "../de-apcoa.js";
+import { searchDeAutobahn } from "../de-autobahn.js";
+import { fetchDeDbBahnParkDetail, searchDeDbBahnPark } from "../de-db-bahnpark.js";
+import { searchDeGoldbeck } from "../de-goldbeck.js";
+import { searchDeNwMobidrom } from "../de-nw-mobidrom.js";
+import { searchDeNwMobidromPr } from "../de-nw-mobidrom-pr.js";
+import { fetchDeParkapiV2Detail, searchDeParkapiV2 } from "../de-parkapi-v2.js";
+import { fetchDeParkapiV3Detail, searchDeParkapiV3 } from "../de-parkapi-v3.js";
 import { deduplicateParking } from "../dedup.js";
-import { searchFlorenceIt } from "../florence-it.js";
-import { searchGhentBe } from "../ghent-be.js";
-import { searchGoldbeck } from "../goldbeck.js";
-import { searchMadridEs } from "../madrid-es.js";
+import { searchDk84Copenhagen } from "../dk-84-copenhagen.js";
+import { searchEsCtBarcelona } from "../es-ct-barcelona.js";
+import { searchEsMdMadrid } from "../es-md-madrid.js";
+import { fetchFrBnlsDetail, searchFrBnls } from "../fr-bnls.js";
+import { searchGbEngUtmc } from "../gb-eng-utmc.js";
+import { searchIt32Opendatahub } from "../it-32-opendatahub.js";
+import { searchIt52Florence } from "../it-52-florence.js";
+import { fetchLuCitaDetail, searchLuCita } from "../lu-cita.js";
 import { mapParkingToDetail, mapParkingToResult } from "../mapper.js";
-import { searchNdwTruckNl } from "../ndw-truck-nl.js";
-import { searchNrwMobidrom } from "../nrw-mobidrom.js";
-import { searchNrwPr } from "../nrw-pr.js";
-import { searchNswAu } from "../nsw-au.js";
-import { searchOdhIt } from "../opendatahub-it.js";
+import { searchNlNdwTruck } from "../nl-ndw-truck.js";
+import { fetchNlRdwDetail, searchNlRdw } from "../nl-rdw.js";
 import { fetchOsmParkingElement, searchOsmParking } from "../osm.js";
-import { fetchParkApiV2Detail, searchParkApiV2 } from "../parkapi-v2.js";
-import { fetchParkApiV3Detail, searchParkApiV3 } from "../parkapi-v3.js";
 import { parkingProvider, setManifestDataSources } from "../provider.js";
-import { fetchRdwNlDetail, searchRdwNl } from "../rdw-nl.js";
-import { searchSingapore } from "../singapore.js";
-import { searchUtmcNewcastle } from "../utmc-newcastle.js";
-import { searchViennaAt } from "../vienna-at.js";
+import { searchSgHdb } from "../sg-hdb.js";
 
 // Mirror the manifest dataSources the host loads at runtime so the provider's
 // attribution lookup has something to map `source` prefixes against.
 beforeEach(() => {
   setManifestDataSources([
     {
-      sourceId: "parkapi-v2",
+      sourceId: "de-parkapi-v2",
       name: "ParkenDD",
       url: "https://github.com/ParkenDD/park-api-v2",
       license: "test",
@@ -95,7 +119,7 @@ beforeEach(() => {
       providerPrivacyUrl: "https://example.com/privacy",
     },
     {
-      sourceId: "parkapi-v3",
+      sourceId: "de-parkapi-v3",
       name: "ParkenDD v3",
       url: "https://github.com/ParkenDD/park-api-v3",
       license: "test",
@@ -103,7 +127,7 @@ beforeEach(() => {
       providerPrivacyUrl: "https://example.com/privacy",
     },
     {
-      sourceId: "db-bahnpark",
+      sourceId: "de-db-bahnpark",
       name: "DB BahnPark",
       url: "https://example.com/db",
       license: "test",
@@ -164,31 +188,31 @@ function makeResult(id: string, sources: string[] = ["test"]): DataSourceResult 
 
 function setupEmptySources() {
   for (const fn of [
-    searchParkApiV2,
-    searchParkApiV3,
-    searchDbBahnPark,
-    searchRdwNl,
-    searchBnlsFr,
-    searchGhentBe,
-    searchBrusselsBe,
-    searchBaselCh,
-    searchFlorenceIt,
-    searchBarcelonaEs,
-    searchViennaAt,
-    searchCopenhagenDk,
-    searchSingapore,
-    searchMadridEs,
-    searchUtmcNewcastle,
-    searchNswAu,
-    searchNdwTruckNl,
-    searchAutobahnDe,
-    searchOdhIt,
-    searchCitaLu,
-    searchNrwMobidrom,
-    searchNrwPr,
-    searchApag,
-    searchApcoa,
-    searchGoldbeck,
+    searchDeParkapiV2,
+    searchDeParkapiV3,
+    searchDeDbBahnPark,
+    searchNlRdw,
+    searchFrBnls,
+    searchBeVlgGhent,
+    searchBeBruBrussels,
+    searchChBsBasel,
+    searchIt52Florence,
+    searchEsCtBarcelona,
+    searchAt9Vienna,
+    searchDk84Copenhagen,
+    searchSgHdb,
+    searchEsMdMadrid,
+    searchGbEngUtmc,
+    searchAuNsw,
+    searchNlNdwTruck,
+    searchDeAutobahn,
+    searchIt32Opendatahub,
+    searchLuCita,
+    searchDeNwMobidrom,
+    searchDeNwMobidromPr,
+    searchDeApag,
+    searchDeApcoa,
+    searchDeGoldbeck,
     searchOsmParking,
   ]) {
     vi.mocked(fn).mockResolvedValue([]);
@@ -215,12 +239,12 @@ describe("parkingProvider.search", () => {
   it("queries all sources in parallel and combines in priority order", async () => {
     setupEmptySources();
     vi.mocked(mapParkingToResult).mockImplementation((f) => makeResult(f.id, f.sources));
-    const db = [makeFacility({ id: "db-bahnpark:1", sources: ["db-bahnpark"] })];
-    const v3 = [makeFacility({ id: "parkapi-v3:2", sources: ["parkapi-v3"] })];
+    const db = [makeFacility({ id: "db-bahnpark:1", sources: ["de-db-bahnpark"] })];
+    const v3 = [makeFacility({ id: "parkapi-v3:2", sources: ["de-parkapi-v3"] })];
     const osm = [makeFacility({ id: "osm:node/4", sources: ["osm"] })];
 
-    vi.mocked(searchParkApiV3).mockResolvedValue(v3);
-    vi.mocked(searchDbBahnPark).mockResolvedValue(db);
+    vi.mocked(searchDeParkapiV3).mockResolvedValue(v3);
+    vi.mocked(searchDeDbBahnPark).mockResolvedValue(db);
     vi.mocked(searchOsmParking).mockResolvedValue(osm);
 
     const envelope = await parkingProvider.search(makeBbox());
@@ -235,8 +259,8 @@ describe("parkingProvider.search", () => {
     // Attribution credits only the sources that actually contributed, in the
     // order they appear in the merged result list.
     expect(envelope.attributions.map((a) => a.sourceId)).toEqual([
-      "db-bahnpark",
-      "parkapi-v3",
+      "de-db-bahnpark",
+      "de-parkapi-v3",
       "osm",
     ]);
     expect(envelope.freshness.fetchedAt).toBeTruthy();
@@ -247,15 +271,15 @@ describe("parkingProvider.search", () => {
     vi.mocked(mapParkingToResult).mockImplementation((f) => makeResult(f.id, f.sources));
     // Fail most sources but keep DB alive
     for (const fn of [
-      searchParkApiV2,
-      searchParkApiV3,
-      searchRdwNl,
-      searchBnlsFr,
+      searchDeParkapiV2,
+      searchDeParkapiV3,
+      searchNlRdw,
+      searchFrBnls,
       searchOsmParking,
     ]) {
       vi.mocked(fn).mockRejectedValue(new Error("down"));
     }
-    vi.mocked(searchDbBahnPark).mockResolvedValue([makeFacility({ id: "db:1" })]);
+    vi.mocked(searchDeDbBahnPark).mockResolvedValue([makeFacility({ id: "db:1" })]);
 
     const results = (await parkingProvider.search(makeBbox())).data;
 
@@ -265,31 +289,31 @@ describe("parkingProvider.search", () => {
 
   it("all sources fail → returns empty array", async () => {
     for (const fn of [
-      searchParkApiV2,
-      searchParkApiV3,
-      searchDbBahnPark,
-      searchRdwNl,
-      searchBnlsFr,
-      searchGhentBe,
-      searchBrusselsBe,
-      searchBaselCh,
-      searchFlorenceIt,
-      searchBarcelonaEs,
-      searchViennaAt,
-      searchCopenhagenDk,
-      searchSingapore,
-      searchMadridEs,
-      searchUtmcNewcastle,
-      searchNswAu,
-      searchNdwTruckNl,
-      searchAutobahnDe,
-      searchOdhIt,
-      searchCitaLu,
-      searchNrwMobidrom,
-      searchNrwPr,
-      searchApag,
-      searchApcoa,
-      searchGoldbeck,
+      searchDeParkapiV2,
+      searchDeParkapiV3,
+      searchDeDbBahnPark,
+      searchNlRdw,
+      searchFrBnls,
+      searchBeVlgGhent,
+      searchBeBruBrussels,
+      searchChBsBasel,
+      searchIt52Florence,
+      searchEsCtBarcelona,
+      searchAt9Vienna,
+      searchDk84Copenhagen,
+      searchSgHdb,
+      searchEsMdMadrid,
+      searchGbEngUtmc,
+      searchAuNsw,
+      searchNlNdwTruck,
+      searchDeAutobahn,
+      searchIt32Opendatahub,
+      searchLuCita,
+      searchDeNwMobidrom,
+      searchDeNwMobidromPr,
+      searchDeApag,
+      searchDeApcoa,
+      searchDeGoldbeck,
       searchOsmParking,
     ]) {
       vi.mocked(fn).mockRejectedValue(new Error("down"));
@@ -440,9 +464,9 @@ describe("parkingProvider.getDetail", () => {
   it("cache hit returns mapped detail", async () => {
     vi.mocked(mapParkingToResult).mockImplementation((f) => makeResult(f.id, f.sources));
     const facility = makeFacility({ id: "pk-cached-1" });
-    vi.mocked(searchParkApiV2).mockResolvedValue([]);
-    vi.mocked(searchParkApiV3).mockResolvedValue([]);
-    vi.mocked(searchDbBahnPark).mockResolvedValue([facility]);
+    vi.mocked(searchDeParkapiV2).mockResolvedValue([]);
+    vi.mocked(searchDeParkapiV3).mockResolvedValue([]);
+    vi.mocked(searchDeDbBahnPark).mockResolvedValue([facility]);
     vi.mocked(searchOsmParking).mockResolvedValue([]);
     vi.mocked(deduplicateParking).mockReturnValue([facility]);
     await parkingProvider.search(makeBbox());
@@ -464,102 +488,102 @@ describe("parkingProvider.getDetail", () => {
     expect(envelope.freshness.fetchedAt).toBeTruthy();
   });
 
-  it("cache miss with parkapi-v2: prefix fetches detail", async () => {
-    const facility = makeFacility({ id: "parkapi-v2:berlin/lot42" });
-    vi.mocked(fetchParkApiV2Detail).mockResolvedValue(facility);
+  it("cache miss with de-parkapi-v2: prefix fetches detail", async () => {
+    const facility = makeFacility({ id: "de-parkapi-v2:berlin/lot42" });
+    vi.mocked(fetchDeParkapiV2Detail).mockResolvedValue(facility);
 
     // Mock enrichFacility's internal calls
     setupEmptySources();
     vi.mocked(deduplicateParking).mockReturnValue([facility]);
 
     const detail = {
-      id: "parkapi-v2:berlin/lot42",
-      sources: ["parkapi-v2"],
+      id: "de-parkapi-v2:berlin/lot42",
+      sources: ["de-parkapi-v2"],
       name: "Lot 42",
       coordinates: [11.5, 48.5] as [number, number],
       sections: [],
     };
     vi.mocked(mapParkingToDetail).mockReturnValue(detail);
 
-    const result = (await parkingProvider.getDetail("parkapi-v2:berlin/lot42")).data;
-    expect(fetchParkApiV2Detail).toHaveBeenCalledWith("berlin", "lot42");
+    const result = (await parkingProvider.getDetail("de-parkapi-v2:berlin/lot42")).data;
+    expect(fetchDeParkapiV2Detail).toHaveBeenCalledWith("berlin", "lot42");
     expect(result).toBe(detail);
   });
 
-  it("cache miss with parkapi-v3: prefix fetches detail", async () => {
-    const facility = makeFacility({ id: "parkapi-v3:123" });
-    vi.mocked(fetchParkApiV3Detail).mockResolvedValue(facility);
+  it("cache miss with de-parkapi-v3: prefix fetches detail", async () => {
+    const facility = makeFacility({ id: "de-parkapi-v3:123" });
+    vi.mocked(fetchDeParkapiV3Detail).mockResolvedValue(facility);
 
     setupEmptySources();
     vi.mocked(deduplicateParking).mockReturnValue([facility]);
     vi.mocked(mapParkingToDetail).mockReturnValue({
-      id: "parkapi-v3:123",
-      sources: ["parkapi-v3"],
+      id: "de-parkapi-v3:123",
+      sources: ["de-parkapi-v3"],
       name: "P",
       coordinates: [0, 0],
       sections: [],
     });
 
-    const result = (await parkingProvider.getDetail("parkapi-v3:123")).data;
-    expect(fetchParkApiV3Detail).toHaveBeenCalledWith(123);
-    expect(result?.id).toBe("parkapi-v3:123");
+    const result = (await parkingProvider.getDetail("de-parkapi-v3:123")).data;
+    expect(fetchDeParkapiV3Detail).toHaveBeenCalledWith(123);
+    expect(result?.id).toBe("de-parkapi-v3:123");
   });
 
-  it("cache miss with db-bahnpark: prefix fetches detail", async () => {
-    const facility = makeFacility({ id: "db-bahnpark:ABC" });
-    vi.mocked(fetchDbBahnParkDetail).mockResolvedValue(facility);
+  it("cache miss with de-db-bahnpark: prefix fetches detail", async () => {
+    const facility = makeFacility({ id: "de-db-bahnpark:ABC" });
+    vi.mocked(fetchDeDbBahnParkDetail).mockResolvedValue(facility);
 
     setupEmptySources();
     vi.mocked(deduplicateParking).mockReturnValue([facility]);
     vi.mocked(mapParkingToDetail).mockReturnValue({
-      id: "db-bahnpark:ABC",
+      id: "de-db-bahnpark:ABC",
       sources: ["db"],
       name: "P",
       coordinates: [0, 0],
       sections: [],
     });
 
-    const result = (await parkingProvider.getDetail("db-bahnpark:ABC")).data;
-    expect(fetchDbBahnParkDetail).toHaveBeenCalledWith("ABC");
-    expect(result?.id).toBe("db-bahnpark:ABC");
+    const result = (await parkingProvider.getDetail("de-db-bahnpark:ABC")).data;
+    expect(fetchDeDbBahnParkDetail).toHaveBeenCalledWith("ABC");
+    expect(result?.id).toBe("de-db-bahnpark:ABC");
   });
 
-  it("cache miss with rdw: prefix fetches detail", async () => {
-    const facility = makeFacility({ id: "rdw:2459/P1_FLOW" });
-    vi.mocked(fetchRdwNlDetail).mockResolvedValue(facility);
+  it("cache miss with nl-rdw: prefix fetches detail", async () => {
+    const facility = makeFacility({ id: "nl-rdw:2459/P1_FLOW" });
+    vi.mocked(fetchNlRdwDetail).mockResolvedValue(facility);
 
     setupEmptySources();
     vi.mocked(deduplicateParking).mockReturnValue([facility]);
     vi.mocked(mapParkingToDetail).mockReturnValue({
-      id: "rdw:2459/P1_FLOW",
-      sources: ["rdw-nl"],
+      id: "nl-rdw:2459/P1_FLOW",
+      sources: ["nl-rdw"],
       name: "P",
       coordinates: [0, 0],
       sections: [],
     });
 
-    const result = (await parkingProvider.getDetail("rdw:2459/P1_FLOW")).data;
-    expect(fetchRdwNlDetail).toHaveBeenCalledWith("2459", "P1_FLOW");
-    expect(result?.id).toBe("rdw:2459/P1_FLOW");
+    const result = (await parkingProvider.getDetail("nl-rdw:2459/P1_FLOW")).data;
+    expect(fetchNlRdwDetail).toHaveBeenCalledWith("2459", "P1_FLOW");
+    expect(result?.id).toBe("nl-rdw:2459/P1_FLOW");
   });
 
-  it("cache miss with bnls: prefix fetches detail", async () => {
-    const facility = makeFacility({ id: "bnls:FR-75056-P-001" });
-    vi.mocked(fetchBnlsFrDetail).mockResolvedValue(facility);
+  it("cache miss with fr-bnls: prefix fetches detail", async () => {
+    const facility = makeFacility({ id: "fr-bnls:FR-75056-P-001" });
+    vi.mocked(fetchFrBnlsDetail).mockResolvedValue(facility);
 
     setupEmptySources();
     vi.mocked(deduplicateParking).mockReturnValue([facility]);
     vi.mocked(mapParkingToDetail).mockReturnValue({
-      id: "bnls:FR-75056-P-001",
-      sources: ["bnls-fr"],
+      id: "fr-bnls:FR-75056-P-001",
+      sources: ["fr-bnls"],
       name: "P",
       coordinates: [0, 0],
       sections: [],
     });
 
-    const result = (await parkingProvider.getDetail("bnls:FR-75056-P-001")).data;
-    expect(fetchBnlsFrDetail).toHaveBeenCalledWith("FR-75056-P-001");
-    expect(result?.id).toBe("bnls:FR-75056-P-001");
+    const result = (await parkingProvider.getDetail("fr-bnls:FR-75056-P-001")).data;
+    expect(fetchFrBnlsDetail).toHaveBeenCalledWith("FR-75056-P-001");
+    expect(result?.id).toBe("fr-bnls:FR-75056-P-001");
   });
 
   it("cache miss with osm: prefix fetches element", async () => {
@@ -581,23 +605,23 @@ describe("parkingProvider.getDetail", () => {
     expect(result?.id).toBe("osm:way/999");
   });
 
-  it("cache miss with cita-lu: prefix fetches DATEX detail", async () => {
-    const facility = makeFacility({ id: "cita-lu:P1", sources: ["cita-lu"] });
-    vi.mocked(fetchCitaLuDetail).mockResolvedValue(facility);
+  it("cache miss with lu-cita: prefix fetches DATEX detail", async () => {
+    const facility = makeFacility({ id: "lu-cita:P1", sources: ["lu-cita"] });
+    vi.mocked(fetchLuCitaDetail).mockResolvedValue(facility);
 
     setupEmptySources();
     vi.mocked(deduplicateParking).mockReturnValue([facility]);
     vi.mocked(mapParkingToDetail).mockReturnValue({
-      id: "cita-lu:P1",
-      sources: ["cita-lu"],
+      id: "lu-cita:P1",
+      sources: ["lu-cita"],
       name: "P",
       coordinates: [0, 0],
       sections: [],
     });
 
-    const result = (await parkingProvider.getDetail("cita-lu:P1")).data;
-    expect(fetchCitaLuDetail).toHaveBeenCalledWith("P1");
-    expect(result?.id).toBe("cita-lu:P1");
+    const result = (await parkingProvider.getDetail("lu-cita:P1")).data;
+    expect(fetchLuCitaDetail).toHaveBeenCalledWith("P1");
+    expect(result?.id).toBe("lu-cita:P1");
   });
 
   it("unknown prefix returns fallback detail", async () => {

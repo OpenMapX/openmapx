@@ -1,4 +1,4 @@
-import { getAllPoiSources, type PoiSource } from "@openmapx/poi-source-registry";
+import { getAllPoiSources, type RegisteredPoiSource } from "@openmapx/poi-source-registry";
 import type { Redis } from "ioredis";
 import type { Sql } from "postgres";
 import type { PoiIngestMetricsSink } from "./metrics.js";
@@ -14,7 +14,7 @@ export interface BootstrapOptions {
   metricsSink: PoiIngestMetricsSink;
   logger: PoiJobLogger;
   /** Defaults to the live registry snapshot. Override for tests. */
-  sources?: readonly PoiSource[];
+  sources?: readonly RegisteredPoiSource[];
 }
 
 export interface BootstrapResult {
@@ -46,7 +46,7 @@ interface KindDecision {
  * contract — first deploy = run everything once).
  */
 function decideKindsToTrigger(
-  source: PoiSource,
+  source: RegisteredPoiSource,
   lastStaticIngestAt: Date | null | undefined,
 ): KindDecision[] {
   const decisions: KindDecision[] = [];
@@ -68,7 +68,7 @@ function decideKindsToTrigger(
   return decisions;
 }
 
-function cronExpressionFor(source: PoiSource, kind: PoiIngestKind): string {
+function cronExpressionFor(source: RegisteredPoiSource, kind: PoiIngestKind): string {
   if (kind === "static") return (source as { static: { cron: string } }).static.cron;
   if (kind === "live") return (source as { live: { cron: string } }).live.cron;
   return (source as { bundled: { cron: string } }).bundled.cron;

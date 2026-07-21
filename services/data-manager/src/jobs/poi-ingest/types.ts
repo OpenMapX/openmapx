@@ -1,4 +1,4 @@
-import type { PoiLiveState, PoiRow, PoiSource } from "@openmapx/poi-source-registry";
+import type { PoiLiveState, PoiRow, RegisteredPoiSource } from "@openmapx/poi-source-registry";
 
 export type PoiIngestKind = "static" | "live" | "bundled";
 
@@ -71,7 +71,7 @@ export interface PoiIngestResult {
  */
 export interface PoiJobContext {
   jobId: string;
-  source: PoiSource;
+  source: RegisteredPoiSource;
   kind: PoiIngestKind;
   logger: PoiJobLogger;
   abortSignal: AbortSignal;

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { parseBambergDeBundled } from "../bamberg-de-parser.js";
-import { parseBielefeldDeBundled } from "../bielefeld-de-parser.js";
-import { parseBraunschweigDeBundled } from "../braunschweig-de-parser.js";
-import { parseBremenDeStatic } from "../bremen-de-parser.js";
-import { parseDuesseldorfDeBundled } from "../duesseldorf-de-parser.js";
-import { parsePotsdamDeBundled } from "../potsdam-de-parser.js";
-import { parseSalzburgAtBundled } from "../salzburg-at-parser.js";
-import { parseTrierDeBundled } from "../trier-de-parser.js";
+import { parseAt5SalzburgBundled } from "../at-5-salzburg-parser.js";
+import { parseDeBbPotsdamBundled } from "../de-bb-potsdam-parser.js";
+import { parseDeByBambergBundled } from "../de-by-bamberg-parser.js";
+import { parseDeHbBremenStatic } from "../de-hb-bremen-parser.js";
+import { parseDeNiBraunschweigBundled } from "../de-ni-braunschweig-parser.js";
+import { parseDeNwBielefeldBundled } from "../de-nw-bielefeld-parser.js";
+import { parseDeNwDuesseldorfBundled } from "../de-nw-duesseldorf-parser.js";
+import { parseDeRpTrierBundled } from "../de-rp-trier-parser.js";
 
 /**
  * Smoke tests for the eight direct city/operator parking feeds (Braunschweig,
@@ -26,7 +26,7 @@ function buf(str: string): Buffer {
   return Buffer.from(str, "utf-8");
 }
 
-describe("parseBraunschweigDeBundled", () => {
+describe("parseDeNiBraunschweigBundled", () => {
   it("emits a static row + live state per feature, indexed by feature.id", async () => {
     const fixture = JSON.stringify({
       type: "FeatureCollection",
@@ -49,7 +49,7 @@ describe("parseBraunschweigDeBundled", () => {
         },
       ],
     });
-    const out = await parseBraunschweigDeBundled(buf(fixture), ctx);
+    const out = await parseDeNiBraunschweigBundled(buf(fixture), ctx);
     expect(out.static).toHaveLength(1);
     expect(out.static[0].poiId).toBe("26058262cf");
     expect(out.static[0].payload.name).toBe("Parkhaus Lange Str. Nord");
@@ -59,7 +59,7 @@ describe("parseBraunschweigDeBundled", () => {
   });
 });
 
-describe("parseBremenDeStatic", () => {
+describe("parseDeHbBremenStatic", () => {
   it("emits one row per VMZ feature with maxHeight in centimeters", () => {
     const fixture = JSON.stringify({
       type: "FeatureCollection",
@@ -79,7 +79,7 @@ describe("parseBremenDeStatic", () => {
         },
       ],
     });
-    const rows = parseBremenDeStatic(buf(fixture));
+    const rows = parseDeHbBremenStatic(buf(fixture));
     expect(rows).toHaveLength(1);
     expect(rows[0].poiId).toBe("poi-vmz-hb-32");
     expect(rows[0].payload.name).toBe("Am Bahnhof");
@@ -87,7 +87,7 @@ describe("parseBremenDeStatic", () => {
   });
 });
 
-describe("parseDuesseldorfDeBundled", () => {
+describe("parseDeNwDuesseldorfBundled", () => {
   it("derives freeSpaces from kurzparkermax - kurzparkerbelegt and maps status=1 → open", async () => {
     const fixture = JSON.stringify({
       type: "FeatureCollection",
@@ -109,7 +109,7 @@ describe("parseDuesseldorfDeBundled", () => {
         },
       ],
     });
-    const out = await parseDuesseldorfDeBundled(buf(fixture), ctx);
+    const out = await parseDeNwDuesseldorfBundled(buf(fixture), ctx);
     expect(out.static[0].poiId).toBe("1");
     expect(out.static[0].payload.capacity).toBe(300);
     expect(out.static[0].payload.maxHeight).toBe(210);
@@ -119,7 +119,7 @@ describe("parseDuesseldorfDeBundled", () => {
   });
 });
 
-describe("parseSalzburgAtBundled", () => {
+describe("parseAt5SalzburgBundled", () => {
   it("parses 'NNN (PP%)' into freeSpaces when FREIE_PLAETZE_STATUS=1, skips '=0", async () => {
     const fixture = JSON.stringify({
       type: "FeatureCollection",
@@ -153,14 +153,14 @@ describe("parseSalzburgAtBundled", () => {
         },
       ],
     });
-    const out = await parseSalzburgAtBundled(buf(fixture), ctx);
+    const out = await parseAt5SalzburgBundled(buf(fixture), ctx);
     expect(out.static.map((r) => r.poiId)).toEqual(["22101", "22151"]);
     expect(out.live.get("22101")?.freeSpaces).toBe(207);
     expect(out.live.has("22151")).toBe(false);
   });
 });
 
-describe("parseBielefeldDeBundled", () => {
+describe("parseDeNwBielefeldBundled", () => {
   it("reads gid from properties (not feature.id), drops permit-only, and emits live state for PLS-enabled garages", async () => {
     const fixture = JSON.stringify({
       type: "FeatureCollection",
@@ -217,7 +217,7 @@ describe("parseBielefeldDeBundled", () => {
         },
       ],
     });
-    const out = await parseBielefeldDeBundled(buf(fixture), ctx);
+    const out = await parseDeNwBielefeldBundled(buf(fixture), ctx);
     const ids = out.static.map((r) => r.poiId).sort();
     expect(ids).toEqual(["620-10", "660-6"]);
 
@@ -264,7 +264,7 @@ describe("parseBielefeldDeBundled", () => {
         ],
       });
 
-    const allOpen = await parseBielefeldDeBundled(
+    const allOpen = await parseDeNwBielefeldBundled(
       buf(make("durchgehend", "durchgehend", "durchgehend")),
       ctx,
     );
@@ -273,7 +273,7 @@ describe("parseBielefeldDeBundled", () => {
     // Parenthetical German qualifier → can't normalise to OSM, but keep
     // operator-supplied info (entry deadline matters) behind English day
     // labels so an EN-UI user still sees the caveat.
-    const withComment = await parseBielefeldDeBundled(
+    const withComment = await parseDeNwBielefeldBundled(
       buf(
         make(
           "8:00 - 22:00 (Einfahrt bis 21:30)",
@@ -289,7 +289,7 @@ describe("parseBielefeldDeBundled", () => {
 
     // All three days identical and parseable → collapsed to a single "Mo-Su" rule
     // rather than repeating the value three times.
-    const allSame = await parseBielefeldDeBundled(
+    const allSame = await parseDeNwBielefeldBundled(
       buf(make("7:00 - 21:00", "7:00 - 21:00", "7:00 - 21:00")),
       ctx,
     );
@@ -297,7 +297,7 @@ describe("parseBielefeldDeBundled", () => {
   });
 });
 
-describe("parseBambergDeBundled", () => {
+describe("parseDeByBambergBundled", () => {
   it("enriches known facility ids with static coordinates, drops unknown ids", async () => {
     const fixture = JSON.stringify({
       success: true,
@@ -308,14 +308,14 @@ describe("parseBambergDeBundled", () => {
         { id: 99999, name: "Unknown future facility", available: 5, total: 50, state: 4 },
       ],
     });
-    const out = await parseBambergDeBundled(buf(fixture), ctx);
+    const out = await parseDeByBambergBundled(buf(fixture), ctx);
     expect(out.static.map((r) => r.poiId)).toEqual(["14"]);
     expect(out.live.get("14")?.freeSpaces).toBe(247);
     expect(out.live.get("14")?.state).toBe("open");
   });
 });
 
-describe("parseTrierDeBundled", () => {
+describe("parseDeRpTrierBundled", () => {
   it("parses the SWT XML envelope, enriches each phname with static coords + OSM hours", async () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <parken>
@@ -325,7 +325,7 @@ describe("parseTrierDeBundled", () => {
   <parkhaus><phname>Hauptm</phname><phstate>1</phstate><shortmax>297</shortmax><shortfree>141</shortfree><timeopen>06:00</timeopen><timeclose>22:00</timeclose></parkhaus>
   <parkhaus><phname>UnknownNew</phname><phstate>1</phstate><shortmax>100</shortmax><shortfree>50</shortfree></parkhaus>
 </parken>`;
-    const out = await parseTrierDeBundled(buf(xml), ctx);
+    const out = await parseDeRpTrierBundled(buf(xml), ctx);
     expect(out.static.map((r) => r.poiId).sort()).toEqual(["Basi", "Hauptm"]);
     expect(out.live.get("Basi")?.freeSpaces).toBe(62);
     expect(out.live.get("Hauptm")?.state).toBe("open");
@@ -338,7 +338,7 @@ describe("parseTrierDeBundled", () => {
   });
 });
 
-describe("parsePotsdamDeBundled", () => {
+describe("parseDeBbPotsdamBundled", () => {
   it("parses semicolon CSV, filters out-of-bbox entries, derives free=cap-occupied", async () => {
     const csv = [
       "Parkplatz;Belegung;Kapazitaet;Geo Point;Dynamische Daten",
@@ -346,7 +346,7 @@ describe("parsePotsdamDeBundled", () => {
       "Wilhelmgalerie;45;52;48.8972345,9.1854717;True", // Stuttgart — must drop
       "Luisenplatz;68;213;52.3993911,13.0467921;True",
     ].join("\n");
-    const out = await parsePotsdamDeBundled(buf(csv), ctx);
+    const out = await parseDeBbPotsdamBundled(buf(csv), ctx);
     const ids = out.static.map((r) => r.poiId).sort();
     expect(ids).toEqual(["Luisenplatz", "P+R Bahnhof Pirschheide"]);
     expect(out.live.get("P+R Bahnhof Pirschheide")?.freeSpaces).toBe(56);

@@ -247,7 +247,7 @@ function minDefined(values: Array<number | undefined>): number | undefined {
 
 /**
  * Collapse source strings to a canonical set for display. Keeps the primary's
- * full source (e.g. "parkapi-v2/Dresden") but deduplicates variants of the
+ * full source (e.g. "de-parkapi-v2/Dresden") but deduplicates variants of the
  * same provider across the cluster.
  */
 function dedupeSources(primary: string, all: string[]): string[] {

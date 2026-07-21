@@ -1,15 +1,15 @@
 import type { EvChargingSource, EvChargingStation } from "@openmapx/mobility-core/ev-charging";
-import { fetchAfdcChargingDetail, searchAfdcCharging } from "./afdc.js";
-import { fetchBnetzaChargingDetail, searchBnetzaCharging } from "./bnetza.js";
-import { fetchFranceIrveChargingDetail, searchFranceIrveCharging } from "./france.js";
-import { fetchNetherlandsChargingDetail, searchNetherlandsCharging } from "./netherlands.js";
-import { fetchNobilChargingDetail, searchNobilCharging } from "./nobil.js";
+import { fetchChSfoeChargingDetail, searchChSfoeCharging } from "./ch-sfoe.js";
+import { fetchDeBnetzaChargingDetail, searchDeBnetzaCharging } from "./de-bnetza.js";
+import { fetchFrIrveChargingDetail, searchFrIrveCharging } from "./fr-irve.js";
+import { fetchNlDotnlChargingDetail, searchNlDotnlCharging } from "./nl-dotnl.js";
+import { fetchNoNobilChargingDetail, searchNoNobilCharging } from "./no-nobil.js";
 import { getOcmDetail, searchOcm } from "./ocm.js";
 import { mapOcmToStation } from "./ocm-mapper.js";
 import { getOsmChargingNode, searchOsmCharging } from "./osm.js";
 import { mapOsmToStation } from "./osm-mapper.js";
 import { getEvChargingSourcePriority } from "./source-priority.js";
-import { fetchSwissSfoeChargingDetail, searchSwissSfoeCharging } from "./switzerland.js";
+import { fetchUsAfdcChargingDetail, searchUsAfdcCharging } from "./us-afdc.js";
 
 function source(
   id: string,
@@ -27,12 +27,12 @@ function source(
 }
 
 export const EV_CHARGING_SOURCE_REGISTRY: EvChargingSource[] = [
-  source("afdc", searchAfdcCharging, "afdc:", fetchAfdcChargingDetail),
-  source("bnetza-ev", searchBnetzaCharging, "bnetza:", fetchBnetzaChargingDetail),
-  source("france-irve", searchFranceIrveCharging, "france-irve:", fetchFranceIrveChargingDetail),
-  source("switzerland-ev", searchSwissSfoeCharging, "swiss-sfoe:", fetchSwissSfoeChargingDetail),
-  source("netherlands-ev", searchNetherlandsCharging, "nl-dotnl:", fetchNetherlandsChargingDetail),
-  source("nobil", searchNobilCharging, "nobil:", fetchNobilChargingDetail),
+  source("us-afdc", searchUsAfdcCharging, "us-afdc:", fetchUsAfdcChargingDetail),
+  source("de-bnetza", searchDeBnetzaCharging, "de-bnetza:", fetchDeBnetzaChargingDetail),
+  source("fr-irve", searchFrIrveCharging, "fr-irve:", fetchFrIrveChargingDetail),
+  source("ch-sfoe", searchChSfoeCharging, "ch-sfoe:", fetchChSfoeChargingDetail),
+  source("nl-dotnl", searchNlDotnlCharging, "nl-dotnl:", fetchNlDotnlChargingDetail),
+  source("no-nobil", searchNoNobilCharging, "no-nobil:", fetchNoNobilChargingDetail),
   source(
     "ocm",
     async (bbox, filters) => (await searchOcm(bbox, filters)).map(mapOcmToStation),

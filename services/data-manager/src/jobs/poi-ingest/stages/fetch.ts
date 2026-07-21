@@ -2,7 +2,7 @@ import type {
   BundledPoiSpec,
   LivePoiSpec,
   PoiFetchSpec,
-  PoiSource,
+  RegisteredPoiSource,
   StaticPoiSpec,
 } from "@openmapx/poi-source-registry";
 import type { PoiIngestKind, PoiIngestStageResult, PoiJobContext } from "../types.js";
@@ -14,7 +14,7 @@ type FetchableSpec = StaticPoiSpec | LivePoiSpec | BundledPoiSpec;
  * mismatches — e.g. `kind="bundled"` on a static-only source. The pipeline
  * catches this and turns it into a stage error.
  */
-export function getSpec(source: PoiSource, kind: PoiIngestKind): FetchableSpec {
+export function getSpec(source: RegisteredPoiSource, kind: PoiIngestKind): FetchableSpec {
   if (kind === "static") {
     if (!source.static) {
       throw new Error(`source "${source.id}" has no static spec (kind=static requested)`);

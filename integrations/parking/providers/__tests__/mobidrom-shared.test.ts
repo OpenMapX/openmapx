@@ -28,7 +28,7 @@ describe("makeMobidromBundledParser", () => {
   it("emits one static row per geolocated record and skips records without coords", async () => {
     const parser = makeMobidromBundledParser({
       idPrefix: "nrw",
-      sourceId: "nrw-mobidrom-parking",
+      sourceId: "de-nw-mobidrom",
     });
     const { static: rows, live } = await parser(FIXTURE, { log: noopLog });
     expect(rows.map((r) => r.poiId)).toEqual(["MS-001", "DUS-PR-7", "AC-44"]);
@@ -39,7 +39,7 @@ describe("makeMobidromBundledParser", () => {
   it("normalises [lat,lng] records into GeoJSON [lng,lat]", async () => {
     const parser = makeMobidromBundledParser({
       idPrefix: "x",
-      sourceId: "nrw-mobidrom-parking",
+      sourceId: "de-nw-mobidrom",
     });
     const { static: rows } = await parser(FIXTURE, { log: noopLog });
     // AC-44's source coords are [50.78, 6.08] (lat,lng-shaped) → must be flipped.
@@ -52,7 +52,7 @@ describe("makeMobidromBundledParser", () => {
   it("captures the upstream publicationTime in live.asOf when present", async () => {
     const parser = makeMobidromBundledParser({
       idPrefix: "nrw",
-      sourceId: "nrw-mobidrom-parking",
+      sourceId: "de-nw-mobidrom",
     });
     const { live } = await parser(FIXTURE, { log: noopLog });
     expect(live.get("MS-001")?.asOf).toBe("2026-05-23T10:00:00Z");
@@ -65,7 +65,7 @@ describe("makeMobidromBundledParser", () => {
   it("honours forceParkAndRide for the P+R feed", async () => {
     const parser = makeMobidromBundledParser({
       idPrefix: "nrw-pr",
-      sourceId: "nrw-mobidrom-pr",
+      sourceId: "de-nw-mobidrom-pr",
       forceParkAndRide: true,
     });
     const { static: rows } = await parser(FIXTURE, { log: noopLog });
@@ -130,7 +130,7 @@ describe("mobidromSiteToPayload", () => {
 
 describe("makeMobidromMapper + mergeMobidromLive", () => {
   it("reconstructs a ParkingFacility with hasRealtimeData=false from payload alone", () => {
-    const mapper = makeMobidromMapper({ sourceId: "apag", idPrefix: "apag" });
+    const mapper = makeMobidromMapper({ sourceId: "de-apag", idPrefix: "de-apag" });
     const facility = mapper("XYZ", {
       coordinates: [6.08, 50.78],
       name: "Parkhaus Foo",
@@ -139,16 +139,16 @@ describe("makeMobidromMapper + mergeMobidromLive", () => {
       state: "open",
       fee: "paid",
     });
-    expect(facility.id).toBe("apag:XYZ");
-    expect(facility.sources).toEqual(["apag"]);
+    expect(facility.id).toBe("de-apag:XYZ");
+    expect(facility.sources).toEqual(["de-apag"]);
     expect(facility.hasRealtimeData).toBe(false);
     expect(facility.freeSpaces).toBeUndefined();
   });
 
   it("falls back to the registered operatorName when payload omits operator", () => {
     const mapper = makeMobidromMapper({
-      sourceId: "apag",
-      idPrefix: "apag",
+      sourceId: "de-apag",
+      idPrefix: "de-apag",
       operatorName: "APAG",
     });
     const f = mapper("Z", { coordinates: [6, 50], name: "P" });
@@ -156,7 +156,7 @@ describe("makeMobidromMapper + mergeMobidromLive", () => {
   });
 
   it("mergeMobidromLive flips hasRealtimeData and writes freshness fields", () => {
-    const mapper = makeMobidromMapper({ sourceId: "apag", idPrefix: "apag" });
+    const mapper = makeMobidromMapper({ sourceId: "de-apag", idPrefix: "de-apag" });
     const base = mapper("XYZ", { coordinates: [6, 50], name: "P", capacity: 100 });
     const merged = mergeMobidromLive(base, {
       asOf: "2026-05-23T11:00:00Z",
@@ -170,7 +170,7 @@ describe("makeMobidromMapper + mergeMobidromLive", () => {
   });
 
   it("mergeMobidromLive is a no-op when live is null or carries no freeSpaces", () => {
-    const mapper = makeMobidromMapper({ sourceId: "apag", idPrefix: "apag" });
+    const mapper = makeMobidromMapper({ sourceId: "de-apag", idPrefix: "de-apag" });
     const base = mapper("XYZ", { coordinates: [6, 50], name: "P" });
     expect(mergeMobidromLive(base, null)).toBe(base);
     expect(mergeMobidromLive(base, { asOf: "2026-05-23T11:00:00Z" })).toBe(base);

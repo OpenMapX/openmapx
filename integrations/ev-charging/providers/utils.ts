@@ -180,7 +180,7 @@ export interface OcpiLocationIdentity {
  * `country_code` and `party_id` are absent; if only one is present, it's
  * still folded into the key (partial specificity beats none).
  */
-export function dotNlLocationPoiId(location: OcpiLocationIdentity): string | undefined {
+export function nlDotnlLocationPoiId(location: OcpiLocationIdentity): string | undefined {
   const id = cleanString(location.id);
   if (!id) return undefined;
   const countryCode = cleanString(location.country_code)?.toUpperCase();

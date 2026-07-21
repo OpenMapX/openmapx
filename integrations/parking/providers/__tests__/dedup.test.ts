@@ -34,7 +34,7 @@ describe("deduplicateParking", () => {
     const a = makeFacility({
       id: "db-1",
       coordinates: [13.3771, 52.5201],
-      sources: ["db-bahnpark"],
+      sources: ["de-db-bahnpark"],
       name: "DB Parking",
     });
     const b = makeFacility({
@@ -86,7 +86,7 @@ describe("deduplicateParking", () => {
       const a = makeFacility({
         id: "a",
         coordinates: [13.377, 52.521],
-        sources: ["parkapi-v2/Köln"],
+        sources: ["de-parkapi-v2/Köln"],
         name: "Parkhaus Rathaus",
       });
       const b = makeFacility({
@@ -157,46 +157,46 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
+        sources: ["de-db-bahnpark"],
         name: "DB Station Parking",
       });
       const parkapi = makeFacility({
         id: "pv3-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["parkapi-v3"],
+        sources: ["de-parkapi-v3"],
         name: "ParkAPI Parking",
       });
       const result = deduplicateParking([parkapi, db]);
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe("db-1");
       expect(result[0].name).toBe("DB Station Parking");
-      expect(result[0].sources[0]).toBe("db-bahnpark");
+      expect(result[0].sources[0]).toBe("de-db-bahnpark");
     });
 
     it("parkapi-v3 (1) wins over parkapi-v2 (2)", () => {
       const v3 = makeFacility({
         id: "pv3-1",
         coordinates: [13.377, 52.52],
-        sources: ["parkapi-v3"],
+        sources: ["de-parkapi-v3"],
         name: "V3 Parking",
       });
       const v2 = makeFacility({
         id: "pv2-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["parkapi-v2/Dresden"],
+        sources: ["de-parkapi-v2/Dresden"],
         name: "V2 Parking",
       });
       const result = deduplicateParking([v2, v3]);
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe("pv3-1");
-      expect(result[0].sources[0]).toBe("parkapi-v3");
+      expect(result[0].sources[0]).toBe("de-parkapi-v3");
     });
 
     it("parkapi-v2 (2) wins over osm-parking (5)", () => {
       const v2 = makeFacility({
         id: "pv2-1",
         coordinates: [13.377, 52.52],
-        sources: ["parkapi-v2/Berlin"],
+        sources: ["de-parkapi-v2/Berlin"],
         name: "V2 Parking",
       });
       const osm = makeFacility({
@@ -208,14 +208,14 @@ describe("deduplicateParking", () => {
       const result = deduplicateParking([osm, v2]);
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe("pv2-1");
-      expect(result[0].sources[0]).toBe("parkapi-v2/Berlin");
+      expect(result[0].sources[0]).toBe("de-parkapi-v2/Berlin");
     });
 
     it("prefix match: parkapi-v2/CityName gets priority 2", () => {
       const v2 = makeFacility({
         id: "pv2-1",
         coordinates: [13.377, 52.52],
-        sources: ["parkapi-v2/Dresden"],
+        sources: ["de-parkapi-v2/Dresden"],
         name: "Rathaus",
       });
       const osm = makeFacility({
@@ -253,7 +253,7 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
+        sources: ["de-db-bahnpark"],
         name: "DB Parking Hbf",
       });
       const osm = makeFacility({
@@ -266,14 +266,14 @@ describe("deduplicateParking", () => {
       expect(result[0].id).toBe("db-1");
       expect(result[0].name).toBe("DB Parking Hbf");
       expect(result[0].coordinates).toEqual([13.377, 52.52]);
-      expect(result[0].sources[0]).toBe("db-bahnpark");
+      expect(result[0].sources[0]).toBe("de-db-bahnpark");
     });
 
     it("merges freeSpaces from secondary when primary lacks it", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
+        sources: ["de-db-bahnpark"],
       });
       const osm = makeFacility({
         id: "osm-1",
@@ -290,7 +290,7 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
+        sources: ["de-db-bahnpark"],
         hasRealtimeData: false,
         freeSpaces: 10,
       });
@@ -310,7 +310,7 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
+        sources: ["de-db-bahnpark"],
         hasRealtimeData: false,
         state: "unknown",
       });
@@ -329,7 +329,7 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
+        sources: ["de-db-bahnpark"],
         freeSpaces: 10,
       });
       const osm = makeFacility({
@@ -346,7 +346,7 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
+        sources: ["de-db-bahnpark"],
       });
       const osm = makeFacility({
         id: "osm-1",
@@ -362,7 +362,7 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
+        sources: ["de-db-bahnpark"],
         hasRealtimeData: false,
       });
       const osm = makeFacility({
@@ -379,7 +379,7 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
+        sources: ["de-db-bahnpark"],
         hasRealtimeData: false,
       });
       const osm = makeFacility({
@@ -396,7 +396,7 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
+        sources: ["de-db-bahnpark"],
         parkingType: "unknown",
       });
       const osm = makeFacility({
@@ -413,13 +413,13 @@ describe("deduplicateParking", () => {
       const v3 = makeFacility({
         id: "v3-1",
         coordinates: [13.377, 52.52],
-        sources: ["parkapi-v3"],
+        sources: ["de-parkapi-v3"],
         disabledSpaces: 1,
       });
       const nrw = makeFacility({
         id: "nrw-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["nrw-mobidrom-parking"],
+        sources: ["de-nw-mobidrom"],
         disabledSpaces: 12,
       });
       const result = deduplicateParking([v3, nrw]);
@@ -430,7 +430,7 @@ describe("deduplicateParking", () => {
       const a = makeFacility({
         id: "a",
         coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
+        sources: ["de-db-bahnpark"],
         maxHeight: 220,
       });
       const b = makeFacility({
@@ -447,7 +447,7 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
+        sources: ["de-db-bahnpark"],
         address: "Hauptstr.",
       });
       const osm = makeFacility({
@@ -464,7 +464,7 @@ describe("deduplicateParking", () => {
       const a = makeFacility({
         id: "a",
         coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
+        sources: ["de-db-bahnpark"],
         openingHours: "24/7",
       });
       const b = makeFacility({
@@ -481,7 +481,7 @@ describe("deduplicateParking", () => {
       const a = makeFacility({
         id: "a",
         coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
+        sources: ["de-db-bahnpark"],
       });
       const b = makeFacility({
         id: "b",
@@ -497,7 +497,7 @@ describe("deduplicateParking", () => {
       const v2 = makeFacility({
         id: "v2-1",
         coordinates: [13.377, 52.52],
-        sources: ["parkapi-v2/Dresden"],
+        sources: ["de-parkapi-v2/Dresden"],
       });
       const osm = makeFacility({
         id: "osm-1",
@@ -505,14 +505,14 @@ describe("deduplicateParking", () => {
         sources: ["osm"],
       });
       const result = deduplicateParking([v2, osm]);
-      expect(result[0].sources).toEqual(["parkapi-v2/Dresden", "osm"]);
+      expect(result[0].sources).toEqual(["de-parkapi-v2/Dresden", "osm"]);
     });
 
     it("merges provenance, freshness, and quality metadata", () => {
       const v3 = makeFacility({
         id: "v3-1",
         coordinates: [13.377, 52.52],
-        sources: ["parkapi-v3"],
+        sources: ["de-parkapi-v3"],
         dataUpdatedAt: "2026-05-06T10:00:00.000Z",
         qualityWarnings: ["Realtime availability is older than 30 minutes."],
         sourceAttribution: { contributor: "MobiData BW", license: "dl-de/by-2-0" },
@@ -522,7 +522,7 @@ describe("deduplicateParking", () => {
       const cita = makeFacility({
         id: "cita-lu:P1",
         coordinates: [13.3772, 52.5202],
-        sources: ["cita-lu"],
+        sources: ["lu-cita"],
         dataUpdatedAt: "2026-05-06T11:00:00.000Z",
         isStale: true,
         qualityWarnings: ["Realtime free-space count exceeded capacity and was clamped."],
@@ -550,7 +550,7 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
+        sources: ["de-db-bahnpark"],
       });
       const osm = makeFacility({
         id: "osm-1",
@@ -592,7 +592,7 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
+        sources: ["de-db-bahnpark"],
         fee: "free",
       });
       const osm = makeFacility({
@@ -609,7 +609,7 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
+        sources: ["de-db-bahnpark"],
         fee: "unknown",
       });
       const osm = makeFacility({
@@ -635,7 +635,7 @@ describe("deduplicateParking", () => {
       const v3 = makeFacility({
         id: "pv3-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["parkapi-v3"],
+        sources: ["de-parkapi-v3"],
         name: "V3 Lot",
         freeSpaces: 25,
         hasRealtimeData: true,
@@ -643,7 +643,7 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.3771, 52.5201],
-        sources: ["db-bahnpark"],
+        sources: ["de-db-bahnpark"],
         name: "DB Lot",
         state: "open",
       });
@@ -651,7 +651,7 @@ describe("deduplicateParking", () => {
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe("db-1");
       expect(result[0].name).toBe("DB Lot");
-      expect(result[0].sources[0]).toBe("db-bahnpark");
+      expect(result[0].sources[0]).toBe("de-db-bahnpark");
       // Groupwise merge still enriches from all lower-priority members
       expect(result[0].capacity).toBe(100);
       expect(result[0].freeSpaces).toBe(25);

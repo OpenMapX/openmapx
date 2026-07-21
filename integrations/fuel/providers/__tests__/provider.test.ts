@@ -2,20 +2,20 @@ import type { BoundingBox, DataSourceResult } from "@openmapx/core";
 import type { FuelStation } from "@openmapx/mobility-core/fuel";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-let mockTankerkoenigKey: string | undefined;
+let mockDeTankerkoenigKey: string | undefined;
 
 vi.mock("../factory.js", () => ({
   searchFuelStations: vi.fn(),
-  getTankerkoenigApiKey: () => mockTankerkoenigKey,
-  setTankerkoenigApiKey: (value: string | undefined) => {
-    mockTankerkoenigKey = value && value.length > 0 ? value : undefined;
+  getDeTankerkoenigApiKey: () => mockDeTankerkoenigKey,
+  setDeTankerkoenigApiKey: (value: string | undefined) => {
+    mockDeTankerkoenigKey = value && value.length > 0 ? value : undefined;
   },
 }));
 
 vi.mock("../mapper.js", () => ({
   mapFuelStationToResult: vi.fn(),
   mapFuelStationToDetail: vi.fn(),
-  buildTankerkoenigDetail: vi.fn(),
+  buildDeTankerkoenigDetail: vi.fn(),
 }));
 
 vi.mock("@openmapx/core", async () => {
@@ -30,7 +30,7 @@ vi.mock("@openmapx/core", async () => {
 import { searchByCategory } from "@openmapx/core";
 import { searchFuelStations } from "../factory.js";
 import {
-  buildTankerkoenigDetail,
+  buildDeTankerkoenigDetail,
   mapFuelStationToDetail,
   mapFuelStationToResult,
 } from "../mapper.js";
@@ -43,7 +43,7 @@ let mockFetch: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   setManifestDataSources([
     {
-      sourceId: "tankerkoenig",
+      sourceId: "de-tankerkoenig",
       name: "Tankerkoenig (MTS-K)",
       url: "https://creativecommons.tankerkoenig.de/",
       license: "CC BY 4.0",
@@ -64,7 +64,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  mockTankerkoenigKey = undefined;
+  mockDeTankerkoenigKey = undefined;
 });
 
 function makeBbox(): BoundingBox {
@@ -85,7 +85,7 @@ function makeResult(id: string): DataSourceResult {
     id,
     name: `Station ${id}`,
     coordinates: [11.5, 48.5],
-    source: "tankerkoenig",
+    source: "de-tankerkoenig",
     variant: "unknown",
     status: "unknown",
   };
@@ -107,7 +107,7 @@ describe("fuelProvider.search", () => {
     expect(results).toHaveLength(2);
     expect(results[0].id).toBe("s1");
     expect(envelope.attributions.length).toBeGreaterThan(0);
-    expect(envelope.attributions[0].sourceId).toBe("tankerkoenig");
+    expect(envelope.attributions[0].sourceId).toBe("de-tankerkoenig");
     expect(envelope.freshness.fetchedAt).toBeTruthy();
   });
 
@@ -174,11 +174,11 @@ describe("fuelProvider.getDetail", () => {
     vi.stubGlobal("fetch", mockFetch);
   });
 
-  it("tankerkoenig/ prefix with valid UUID and API key fetches enriched detail", async () => {
-    mockTankerkoenigKey = "test-key-123";
+  it("de-tankerkoenig/ prefix with valid UUID and API key fetches enriched detail", async () => {
+    mockDeTankerkoenigKey = "test-key-123";
 
     const uuid = "51d4b477-a095-1aa0-e100-80009459e03a";
-    const itemId = `tankerkoenig/${uuid}`;
+    const itemId = `de-tankerkoenig/${uuid}`;
 
     const apiStation = {
       id: uuid,
@@ -199,12 +199,12 @@ describe("fuelProvider.getDetail", () => {
 
     const enrichedDetail = {
       id: itemId,
-      source: "tankerkoenig",
+      source: "de-tankerkoenig",
       name: "Aral",
       coordinates: [0, 0] as [number, number],
       sections: [],
     };
-    vi.mocked(buildTankerkoenigDetail).mockReturnValue(enrichedDetail);
+    vi.mocked(buildDeTankerkoenigDetail).mockReturnValue(enrichedDetail);
 
     const envelope = await fuelProvider.getDetail(itemId);
 
@@ -212,17 +212,17 @@ describe("fuelProvider.getDetail", () => {
     const fetchUrl = mockFetch.mock.calls[0][0] as string;
     expect(fetchUrl).toContain("detail.php");
     expect(fetchUrl).toContain(uuid);
-    expect(buildTankerkoenigDetail).toHaveBeenCalled();
+    expect(buildDeTankerkoenigDetail).toHaveBeenCalled();
     expect(envelope.data).toBe(enrichedDetail);
     expect(envelope.attributions.length).toBeGreaterThan(0);
-    expect(envelope.attributions[0].sourceId).toBe("tankerkoenig");
+    expect(envelope.attributions[0].sourceId).toBe("de-tankerkoenig");
     expect(envelope.freshness.fetchedAt).toBeTruthy();
   });
 
-  it("tankerkoenig/ with invalid UUID skips API call and returns null", async () => {
-    mockTankerkoenigKey = "test-key-123";
+  it("de-tankerkoenig/ with invalid UUID skips API call and returns null", async () => {
+    mockDeTankerkoenigKey = "test-key-123";
 
-    const itemId = "tankerkoenig/not-a-uuid";
+    const itemId = "de-tankerkoenig/not-a-uuid";
 
     const result = (await fuelProvider.getDetail(itemId)).data;
 
@@ -230,11 +230,11 @@ describe("fuelProvider.getDetail", () => {
     expect(result).toBeNull();
   });
 
-  it("tankerkoenig/ without API key skips API call and returns null", async () => {
-    mockTankerkoenigKey = undefined;
+  it("de-tankerkoenig/ without API key skips API call and returns null", async () => {
+    mockDeTankerkoenigKey = undefined;
 
     const uuid = "51d4b477-a095-1aa0-e100-80009459e03a";
-    const result = (await fuelProvider.getDetail(`tankerkoenig/${uuid}`)).data;
+    const result = (await fuelProvider.getDetail(`de-tankerkoenig/${uuid}`)).data;
 
     expect(mockFetch).not.toHaveBeenCalled();
     expect(result).toBeNull();
@@ -249,7 +249,7 @@ describe("fuelProvider.getDetail", () => {
 
     const detail = {
       id: "fuel-cached-id",
-      source: "tankerkoenig",
+      source: "de-tankerkoenig",
       name: "Station",
       coordinates: [11.5, 48.5] as [number, number],
       sections: [],
@@ -266,13 +266,13 @@ describe("fuelProvider.getDetail", () => {
     expect(result).toBeNull();
   });
 
-  it("tankerkoenig/ API fetch failure falls through to null when no cache entry", async () => {
-    mockTankerkoenigKey = "test-key";
+  it("de-tankerkoenig/ API fetch failure falls through to null when no cache entry", async () => {
+    mockDeTankerkoenigKey = "test-key";
 
     const uuid = "51d4b477-a095-1aa0-e100-80009459e03a";
     mockFetch.mockRejectedValue(new Error("Network error"));
 
-    const result = (await fuelProvider.getDetail(`tankerkoenig/${uuid}`)).data;
+    const result = (await fuelProvider.getDetail(`de-tankerkoenig/${uuid}`)).data;
     expect(result).toBeNull();
   });
 });

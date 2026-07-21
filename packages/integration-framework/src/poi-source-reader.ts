@@ -1,9 +1,9 @@
+import { feedIdSchema } from "@openmapx/core";
 import { type BBox, type PoiLiveState, poiLiveHashKey } from "@openmapx/poi-source-registry";
 import type { IntegrationContext } from "./context.js";
 
 const MAX_ROWS_PER_BBOX = 2000;
 const TABLE_MISSING_PG_CODE = "42P01";
-const SOURCE_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 // Cold-start tracking: a missing ingest table is the normal pre-first-ingest
 // state. The Set serves two purposes:
@@ -77,15 +77,15 @@ interface StaticRow {
 }
 
 function assertValidSourceId(sourceId: string): void {
-  if (!SOURCE_ID_RE.test(sourceId)) {
+  if (!feedIdSchema.safeParse(sourceId).success) {
     throw new Error(
-      `createPoiReader: sourceId "${sourceId}" must match ${SOURCE_ID_RE} (table-name-safe)`,
+      `createPoiReader: sourceId "${sourceId}" must be a valid feed id (lowercase, hyphen-separated, table-name-safe)`,
     );
   }
 }
 
 // postgres-js parameterises *values*, not identifiers. The registry validator
-// already constrains source ids to /^[a-z0-9][a-z0-9-]*$/, so the dash→underscore
+// already constrains source ids via feedIdSchema, so the dash→underscore
 // rewrite is sufficient to make a safe identifier — but we re-check at factory
 // time so an unvalidated id can't sneak through into raw SQL.
 function tableIdentFor(sourceId: string): string {

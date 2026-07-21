@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { PoiSource } from "@openmapx/poi-source-registry";
+import type { RegisteredPoiSource } from "@openmapx/poi-source-registry";
 import { asPoiJobLogger, jobChildLogger } from "../../logger.js";
 import * as fetchStage from "./stages/fetch.js";
 import * as parseStage from "./stages/parse.js";
@@ -220,7 +220,7 @@ export function runBundledIngest(ctx: PoiJobContext): Promise<PoiIngestResult> {
 }
 
 export interface BuildPoiJobContextOptions {
-  source: PoiSource;
+  source: RegisteredPoiSource;
   kind: PoiIngestKind;
   sql: import("postgres").Sql;
   redis: import("ioredis").Redis | null;
