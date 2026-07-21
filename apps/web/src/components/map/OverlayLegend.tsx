@@ -7,6 +7,7 @@ import Switch from "@mui/material/Switch";
 import type { SxProps, Theme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import type { ReactNode } from "react";
+import { AttributionText } from "@/components/ui/AttributionText";
 
 export interface OverlayLegendProps {
   /** Resolved title string (already translated by the caller). */
@@ -106,13 +107,14 @@ export function OverlayLegend({
       {attributionHtml && (
         <Typography
           variant="caption"
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: attribution HTML comes from manifest dataSources (trusted static config, not user input); preserves prior per-overlay legend behavior
-          dangerouslySetInnerHTML={{ __html: attributionHtml }}
+          component="div"
           sx={[
             { color: "text.secondary" },
             ...(Array.isArray(attributionSx) ? attributionSx : [attributionSx]),
           ]}
-        />
+        >
+          <AttributionText html={attributionHtml} />
+        </Typography>
       )}
     </Paper>
   );

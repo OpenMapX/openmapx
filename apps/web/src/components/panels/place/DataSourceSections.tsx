@@ -17,6 +17,7 @@ import Divider from "@mui/material/Divider";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import {
+  buildRuntimeAttributionHtml,
   buildSourceAttribution,
   type DataSourceAttribution,
   type DataSourceDetail,
@@ -28,6 +29,7 @@ import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { Translatable } from "@openmapx/integration-framework/strings";
 import { useTranslations } from "next-intl";
 import { Fragment, type ReactNode } from "react";
+import { AttributionText } from "@/components/ui/AttributionText";
 import { TEAL } from "@/lib/theme";
 import { BrandMark } from "../shared/BrandMark";
 import { type StructuredSection, StructuredSections } from "../shared/StructuredSections";
@@ -211,7 +213,6 @@ function translateStructuredSection(
 }
 
 function AttributionFooter({ detail }: { detail: DataSourceDetail }) {
-  const tc = useTranslations("common");
   const registry = useIntegrationRegistry();
 
   // Resolve the producing integration. The host stamps `providerId`, which is
@@ -236,18 +237,18 @@ function AttributionFooter({ detail }: { detail: DataSourceDetail }) {
           color: "text.secondary",
         }}
       >
-        {tc("data")}:{" "}
-        {html && (
-          <Box
-            component="span"
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: attribution HTML from trusted integration manifests
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
-        )}
+        {html && <AttributionText html={html} />}
         {detailAttributions.map((attribution, index) => (
           <Fragment key={detailAttributionKey(attribution)}>
             {(html || index > 0) && " · "}
-            <DetailAttribution attribution={attribution} />
+            <AttributionText
+              html={buildRuntimeAttributionHtml({
+                text: attribution.text,
+                url: attribution.url,
+                license: attribution.license,
+                licenseUrl: attribution.licenseUrl,
+              })}
+            />
           </Fragment>
         ))}
       </Typography>
@@ -259,16 +260,6 @@ function detailAttributionKey(attribution: DataSourceAttribution): string {
   return [attribution.text, attribution.url, attribution.license, attribution.licenseUrl]
     .filter(Boolean)
     .join("|");
-}
-
-function safeExternalUrl(url: string | undefined): string | undefined {
-  if (!url) return undefined;
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" || parsed.protocol === "http:" ? url : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 export function pickRentalActionUrl(
@@ -292,47 +283,6 @@ function safeRentalUri(uri: string | undefined): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function DetailAttribution({ attribution }: { attribution: DataSourceAttribution }) {
-  const providerUrl = safeExternalUrl(attribution.url);
-  const licenseUrl = safeExternalUrl(attribution.licenseUrl);
-
-  return (
-    <Box component="span">
-      ©{" "}
-      {providerUrl ? (
-        <Link
-          href={safeHref(providerUrl)}
-          target="_blank"
-          rel="noopener noreferrer"
-          color="inherit"
-        >
-          {attribution.text}
-        </Link>
-      ) : (
-        attribution.text
-      )}
-      {attribution.license &&
-        (licenseUrl ? (
-          <>
-            {" "}
-            (
-            <Link
-              href={safeHref(licenseUrl)}
-              target="_blank"
-              rel="noopener noreferrer"
-              color="inherit"
-            >
-              {attribution.license}
-            </Link>
-            )
-          </>
-        ) : (
-          ` (${attribution.license})`
-        ))}
-    </Box>
-  );
 }
 
 export function DataSourceSections({ detail, domain }: Props) {

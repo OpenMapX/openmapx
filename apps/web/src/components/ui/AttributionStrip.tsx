@@ -69,9 +69,19 @@ function dedupeForDisplay(attributions: Attribution[]): Attribution[] {
 }
 
 /**
- * AttributionStrip — the single rendering path for data-source attribution
- * across the app. Consumes a `MobilityResult.attributions[]` and renders one
- * compact chip per source (name plus, where present, SPDX license).
+ * AttributionStrip — the compact chip presentation for data-source attribution,
+ * used by the over-the-wire, multi-source paths (transit, directions, geocoding
+ * search, reviews). Consumes `MobilityResult.attributions[]` and renders one
+ * chip per source (name plus, where present, SPDX license), with the full
+ * builder-produced credit in the hover tooltip.
+ *
+ * This is the ONE deliberate divergence from the shared inline renderer: chips
+ * are compact and intentionally `©`-less — a dense list of feeds should not
+ * repeat `©` per chip, and the copyright obligation is discharged by the inline
+ * captions (`SectionAttribution`/`AttributionText`), the overlay legends, the
+ * `/terms` tables, and the map credit. Every non-chip surface renders through
+ * `buildAttributionHtml` via `AttributionText`; do not re-add `©` here or fork a
+ * second inline renderer.
  *
  * Returns `null` when there are no attributions to render so callers can render
  * unconditionally.
