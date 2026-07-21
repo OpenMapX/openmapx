@@ -39,6 +39,8 @@ interface WaypointListProps {
   onReverse: () => void;
   onUseMyLocation?: () => void;
   isTransitMode: boolean;
+  /** EV mode only supports origin + destination (see ev-plan.ts re-route assumption) — hides the add-stop affordance. */
+  isEvMode?: boolean;
   t: ReturnType<typeof useTranslations>;
 }
 
@@ -54,6 +56,7 @@ export function WaypointList({
   onReverse,
   onUseMyLocation,
   isTransitMode,
+  isEvMode = false,
   t,
 }: WaypointListProps) {
   const sensors = useSensors(
@@ -71,7 +74,7 @@ export function WaypointList({
     }
   };
 
-  const canAddMore = waypoints.length < MAX_WAYPOINTS && !isTransitMode;
+  const canAddMore = waypoints.length < MAX_WAYPOINTS && !isTransitMode && !isEvMode;
 
   return (
     <Box sx={{ px: 1.5, pt: 0.75, pb: 0.5 }}>

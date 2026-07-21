@@ -268,12 +268,25 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     },
 
     setMode: (mode) => set({ mode, activeRouteIndex: 0, isEvMode: false }),
-    setEvMode: (isEvMode) =>
-      set(
-        isEvMode
-          ? { isEvMode, mode: "driving", activeRouteIndex: 0, evForceNonExclusive: false }
-          : { isEvMode },
-      ),
+    setEvMode: (isEvMode) => {
+      if (!isEvMode) {
+        set({ isEvMode });
+        return;
+      }
+      // EV re-routing only supports origin + destination (see ev-plan.ts) —
+      // drop any intermediate waypoints picked up before switching into EV mode.
+      const wps = get().waypoints;
+      const last = wps.length - 1;
+      const trimmed = last > 1 ? deriveTypes([wps[0], wps[last]]) : wps;
+      set({
+        waypoints: trimmed,
+        ...derived(trimmed),
+        isEvMode,
+        mode: "driving",
+        activeRouteIndex: 0,
+        evForceNonExclusive: false,
+      });
+    },
     setEvSocStartPct: (evSocStartPct) => set({ evSocStartPct }),
     setEvSocArrivalMinPct: (evSocArrivalMinPct) => set({ evSocArrivalMinPct }),
     setEvForceNonExclusive: (evForceNonExclusive) => set({ evForceNonExclusive }),

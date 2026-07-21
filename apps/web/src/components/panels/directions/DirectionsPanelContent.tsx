@@ -750,6 +750,7 @@ export function DirectionsPanelContent() {
         onReverse={handleReverse}
         onUseMyLocation={userLocation ? handleUseMyLocation : undefined}
         isTransitMode={isTransitMode}
+        isEvMode={isEvMode}
         t={t}
       />
       {/* Divider + content below */}

@@ -278,4 +278,30 @@ describe("DirectionsPanelContent", () => {
     renderPanel();
     screen.getByText("directions.noRoutesFound");
   });
+
+  it("EV mode hides the add-stop control and drops any existing intermediate waypoint", () => {
+    // ev-plan.ts's re-route only splices charge stops between the first and
+    // last waypoint (see the doc comment above its `wps` construction) — an
+    // intermediate waypoint added before switching to EV mode would silently
+    // stop matching what the map draws, so entering EV mode must both trim
+    // any existing via and hide the control that would let the user add one.
+    seedOriginDestination();
+    act(() => {
+      useDirectionsStore.getState().addWaypoint(0);
+      useDirectionsStore.getState().setWaypoint(1, [12.37, 51.34], "Leipzig");
+    });
+    renderPanel();
+
+    expect(useDirectionsStore.getState().waypoints.length).toBe(3);
+    screen.getByText("directions.addStop");
+
+    fireEvent.click(screen.getByLabelText("directions.evMode"));
+
+    expect(useDirectionsStore.getState().isEvMode).toBe(true);
+    expect(useDirectionsStore.getState().waypoints.map((w) => w.label)).toEqual([
+      "Berlin",
+      "Munich",
+    ]);
+    expect(screen.queryByText("directions.addStop")).toBeNull();
+  });
 });

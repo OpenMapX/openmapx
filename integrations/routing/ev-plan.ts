@@ -165,6 +165,16 @@ export async function runEvPlan(
     );
 
     // Re-route with inserted stops (same closure/avoid opts), if any.
+    //
+    // This assumes a 2-endpoint trip (origin + destination): charge stops are
+    // spliced in between `args.waypoints[0]` and the last waypoint, and any
+    // intermediate waypoints in between are dropped. The web UI enforces this
+    // by hiding the add-stop control while EV mode is active (see
+    // DirectionsPanelContent/WaypointList's isEvMode gating), so args.waypoints
+    // should always have length 2 here. Full via-interleaving — figuring out
+    // where along the route each user-supplied via falls relative to the
+    // chosen charge stops — needs per-stop along-route distance the planner
+    // doesn't currently expose, and is a future enhancement, not this fix.
     let finalRoute = baseRoute;
     if (plan.stops.length > 0) {
       const wps: [number, number][] = [
