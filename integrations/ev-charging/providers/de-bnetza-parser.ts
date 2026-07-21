@@ -71,8 +71,21 @@ function openingHours(row: Record<string, string>): string | undefined {
   return raw;
 }
 
+/**
+ * BNetzA published the register as windows-1252 for years, then switched to
+ * UTF-8 (with a BOM) in 2026. Decode by BOM sniff so both encodings parse
+ * correctly — mis-decoding UTF-8 as windows-1252 mangles the umlaut column
+ * headers ("Längengrad") and every row is dropped for a missing coordinate.
+ * `TextDecoder("utf-8")` strips the BOM; windows-1252 files have none.
+ */
+function decodeBnetzaCsv(buffer: Buffer): string {
+  const hasUtf8Bom =
+    buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf;
+  return new TextDecoder(hasUtf8Bom ? "utf-8" : "windows-1252").decode(buffer);
+}
+
 export function* parseDeBnetzaCsv(buffer: Buffer): Iterable<PoiRow> {
-  const text = new TextDecoder("windows-1252").decode(buffer);
+  const text = decodeBnetzaCsv(buffer);
   const rows = parseDelimited(text, ";");
   const headerIndex = rows.findIndex((row) => row[0] === "Ladeeinrichtungs-ID");
   if (headerIndex < 0) return;

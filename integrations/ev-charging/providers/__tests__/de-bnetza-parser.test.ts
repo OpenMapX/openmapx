@@ -32,6 +32,18 @@ describe("parseDeBnetzaCsv", () => {
     expect(munich?.payload.operator).toEqual({ name: "Stadtwerke München" });
   });
 
+  it("decodes a UTF-8-with-BOM register (BNetzA switched from windows-1252)", () => {
+    const csv = Buffer.from(
+      `﻿Ladeeinrichtungs-ID;Breitengrad;Längengrad\nLE-9001;52,52;13,377\n`,
+      "utf-8",
+    );
+    const rows = Array.from(parseDeBnetzaCsv(csv));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].poiId).toBe("LE-9001");
+    expect(rows[0].lat).toBeCloseTo(52.52);
+    expect(rows[0].lng).toBeCloseTo(13.377);
+  });
+
   it("parses coordinates into top-level lng/lat and duplicates into payload.coordinates", () => {
     const berlin = collect().find((r) => r.poiId === "LE-1001");
     expect(berlin?.lat).toBeCloseTo(52.52);

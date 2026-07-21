@@ -34,7 +34,9 @@ interface ChSfoeEvseRecord {
   AuthenticationModes?: string[];
   ChargingFacilities?: ChSfoeChargingFacility[];
   ChargingStationId?: string;
-  ChargingStationNames?: Array<{ lang?: string; value?: string }>;
+  ChargingStationNames?:
+    | Array<{ lang?: string; value?: string }>
+    | { lang?: string; value?: string };
   DynamicInfoAvailable?: boolean;
   EvseID?: string;
   GeoCoordinates?: { Google?: string };
@@ -57,7 +59,10 @@ function parseGoogleCoordinates(value: string | undefined): [number, number] | n
 }
 
 function preferredName(record: ChSfoeEvseRecord): string | undefined {
-  const names = record.ChargingStationNames ?? [];
+  // OICP serialises a single-element list as a bare object, not a 1-element
+  // array (~40 of ~19k CH records), so normalise before iterating.
+  const raw = record.ChargingStationNames;
+  const names = Array.isArray(raw) ? raw : raw ? [raw] : [];
   return (
     cleanString(names.find((name) => name.lang === "en")?.value) ??
     cleanString(names.find((name) => name.lang === "de")?.value) ??

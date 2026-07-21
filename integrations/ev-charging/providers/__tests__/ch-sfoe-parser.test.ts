@@ -35,6 +35,26 @@ describe("parseChSfoeOicp", () => {
     expect(rows[0].payload.name).toBe("Zurich HB Station");
   });
 
+  it("handles a single-object ChargingStationNames (OICP serialises 1-element lists as a bare object)", () => {
+    const feed = {
+      EVSEData: [
+        {
+          OperatorName: "Test Operator",
+          EVSEDataRecord: [
+            {
+              ChargingStationId: "CH-TST-S001",
+              GeoCoordinates: { Google: "47.4 8.5" },
+              ChargingStationNames: { value: "Solo Station", lang: "en" },
+            },
+          ],
+        },
+      ],
+    };
+    const rows = parseChSfoeOicp(Buffer.from(JSON.stringify(feed)));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].payload.name).toBe("Solo Station");
+  });
+
   it("populates operator from group metadata", async () => {
     const rows = await parseChSfoeOicp(FIXTURE);
     expect(rows[0].payload.operator).toEqual({ name: "Green Motion AG" });
