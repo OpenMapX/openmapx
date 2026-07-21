@@ -47,6 +47,14 @@
     "evses": []
   },
   {
+    "id": "live-station-all-unknown",
+    "party_id": "UNK",
+    "country_code": "NL",
+    "name": "All EVSEs Unclassifiable",
+    "last_updated": "2026-07-20T10:00:00Z",
+    "evses": [{ "uid": "e1", "status": "UNKNOWN" }, { "uid": "e2", "status": "UNKNOWN" }]
+  },
+  {
     "id": "live-station-mixed",
     "party_id": "OTHER",
     "country_code": "NL",

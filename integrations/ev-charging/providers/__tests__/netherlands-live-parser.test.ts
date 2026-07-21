@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseDotNlLive } from "../netherlands-live-parser.js";
 
 const LIVE_FIXTURE = readFileSync(join(__dirname, "fixtures", "netherlands-live-sample.json"));
@@ -13,9 +13,17 @@ const noopLog = {
 };
 
 describe("parseDotNlLive", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-21T12:00:00Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("produces one PoiLiveState per location keyed by the composite country+party+id poiId", async () => {
     const out = await parseDotNlLive(LIVE_FIXTURE, { log: noopLog });
-    expect(out.size).toBe(6);
+    expect(out.size).toBe(7);
     expect(out.has(encodeURIComponent("NL*MIX*live-station-mixed"))).toBe(true);
     expect(out.has(encodeURIComponent("NL*OOO*live-station-outoforder"))).toBe(true);
   });
@@ -52,24 +60,35 @@ describe("parseDotNlLive", () => {
     expect(state?.status).toBe("operational");
   });
 
-  it("uses the location's last_updated as asOf when present", async () => {
+  it("stamps asOf with the current parse time, ignoring the location's (potentially stale) last_updated", async () => {
     const out = await parseDotNlLive(LIVE_FIXTURE, { log: noopLog });
     const state = out.get(encodeURIComponent("NL*MIX*live-station-mixed"));
-    expect(state?.asOf).toBe("2026-07-20T18:00:00Z");
+    // The fixture's last_updated ("2026-07-20T18:00:00Z") must NOT leak through —
+    // the DOT-NL locations file is a bulk snapshot re-fetched every 15 min, so
+    // the EVSE statuses are only as fresh as OUR poll, not the CPO's last edit.
+    expect(state?.asOf).toBe("2026-07-21T12:00:00.000Z");
   });
 
-  it("falls back to the parse-time timestamp when last_updated is missing", async () => {
+  it("stamps every row with the same parse-time asOf even when last_updated is missing", async () => {
     const out = await parseDotNlLive(LIVE_FIXTURE, { log: noopLog });
     const state = out.get(encodeURIComponent("NL*NOT*live-station-no-timestamp"));
-    expect(typeof state?.asOf).toBe("string");
-    expect(Number.isFinite(Date.parse(state?.asOf as string))).toBe(true);
+    expect(state?.asOf).toBe("2026-07-21T12:00:00.000Z");
   });
 
-  it("reports status unknown and zero counts for a location with no EVSEs", async () => {
+  it("reports status unknown and omits available/total for a location with no EVSEs", async () => {
     const out = await parseDotNlLive(LIVE_FIXTURE, { log: noopLog });
     const state = out.get(encodeURIComponent("NL*NOE*live-station-no-evses"));
     expect(state?.status).toBe("unknown");
-    expect(state?.total).toBe(0);
-    expect(state?.available).toBe(0);
+    expect(state?.total).toBeUndefined();
+    expect(state?.available).toBeUndefined();
+  });
+
+  it("reports status unknown and omits available/total when every EVSE has an unrecognized status", async () => {
+    const out = await parseDotNlLive(LIVE_FIXTURE, { log: noopLog });
+    const state = out.get(encodeURIComponent("NL*UNK*live-station-all-unknown"));
+    expect(state?.status).toBe("unknown");
+    expect(state?.total).toBeUndefined();
+    expect(state?.available).toBeUndefined();
+    expect(state?.asOf).toBe("2026-07-21T12:00:00.000Z");
   });
 });

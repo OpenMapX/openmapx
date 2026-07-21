@@ -15,7 +15,6 @@ interface OcpiLocation {
   id?: string;
   country_code?: string;
   party_id?: string;
-  last_updated?: string;
   evses?: OcpiEvse[];
 }
 
@@ -53,7 +52,15 @@ export const parseDotNlLive: PoiLiveParseFn = (buffer) => {
   const out = new Map<string, PoiLiveState>();
   if (!Array.isArray(locations)) return out;
 
-  const fallbackAsOf = new Date().toISOString();
+  // The DOT-NL locations file is a bulk snapshot the live cron re-fetches
+  // every 15 min — the EVSE statuses inside it are only as fresh as OUR poll,
+  // not the location's own `last_updated` (which reflects when the CPO last
+  // edited the record, often hours ago). Stamping every row with OUR parse
+  // time — computed once so all rows share one consistent value — keeps the
+  // two-tier merge's staleness guard (`isLiveTooStale`, 30 min) from
+  // rejecting fresh data as stale.
+  const asOf = new Date().toISOString();
+
   for (const raw of locations) {
     if (!raw || typeof raw !== "object") continue;
     const location = raw as OcpiLocation;
@@ -78,11 +85,17 @@ export const parseDotNlLive: PoiLiveParseFn = (buffer) => {
       statuses.push(classifyEvseStatus(evse.status));
     }
 
-    const asOf =
-      typeof location.last_updated === "string" && location.last_updated.length > 0
-        ? location.last_updated
-        : fallbackAsOf;
-    out.set(poiId, { asOf, status: aggregateStationStatus(statuses), available, total });
+    // A station where every classifiable EVSE came back with an unrecognized
+    // status (or there are no EVSEs at all) carries no meaningful
+    // availability signal — emitting available:0/total:N here would render
+    // as a misleading "0 of N available" once merged. Only attach the counts
+    // when at least one EVSE resolved to a known status.
+    const hasKnownStatus = statuses.some((status) => status !== null);
+    out.set(poiId, {
+      asOf,
+      status: aggregateStationStatus(statuses),
+      ...(hasKnownStatus ? { available, total } : {}),
+    });
   }
   return out;
 };
