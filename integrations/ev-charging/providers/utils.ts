@@ -158,6 +158,38 @@ export function inferCurrentType(type: string | undefined, fallback?: string): s
   return cleanedFallback;
 }
 
+/**
+ * OCPI Location identity fields relevant to poiId derivation. `id` alone is
+ * only unique per `country_code` + `party_id` (different CPOs reuse the same
+ * `id` value) — see the DOT-NL scout report — so the poiId must be the
+ * composite of all three, not `id` alone.
+ */
+export interface OcpiLocationIdentity {
+  id?: string;
+  country_code?: string;
+  party_id?: string;
+}
+
+/**
+ * Derives the DOT-NL station poiId from an OCPI Location's composite
+ * identity (`country_code` + `party_id` + `id`), uppercasing the
+ * country/party components for stability while keeping `id` opaque. Used by
+ * BOTH the static and live DOT-NL parsers — they MUST stay identical or
+ * live-merge stops joining to the right station. Returns undefined when
+ * `id` is missing/blank. Falls back to `id` alone only when both
+ * `country_code` and `party_id` are absent; if only one is present, it's
+ * still folded into the key (partial specificity beats none).
+ */
+export function dotNlLocationPoiId(location: OcpiLocationIdentity): string | undefined {
+  const id = cleanString(location.id);
+  if (!id) return undefined;
+  const countryCode = cleanString(location.country_code)?.toUpperCase();
+  const partyId = cleanString(location.party_id)?.toUpperCase();
+  const prefixParts = [countryCode, partyId].filter((part): part is string => Boolean(part));
+  const key = prefixParts.length > 0 ? `${prefixParts.join("*")}*${id}` : id;
+  return encodeURIComponent(key);
+}
+
 export function connector(input: EvChargingConnector): EvChargingConnector {
   return {
     ...input,

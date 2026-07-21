@@ -47,12 +47,34 @@ describe("parseDotNl", () => {
 
   it("yields one row per valid location and drops rows with unparsable coordinates", async () => {
     const rows = await collectRows();
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(6);
     expect(rows.map((r) => r.poiId)).toEqual([
-      encodeURIComponent("ca701e7f-71a7-49bf-bfff-a47c4c801819"),
-      encodeURIComponent("62b5a5c75e1ba10d8eb4757c"),
-      encodeURIComponent("no-tariff-station"),
+      encodeURIComponent("NL*GFX*ca701e7f-71a7-49bf-bfff-a47c4c801819"),
+      encodeURIComponent("NL*EFL*62b5a5c75e1ba10d8eb4757c"),
+      // No party_id on this location — only country_code folds into the key.
+      encodeURIComponent("NL*no-tariff-station"),
+      encodeURIComponent("NL*AAA*shared-id-1"),
+      encodeURIComponent("NL*BBB*shared-id-1"),
+      // The second "dup-key-station" location (same country+party+id) is
+      // dropped by the dedupe safety net — see the test below.
+      encodeURIComponent("NL*DUP*dup-key-station"),
     ]);
+  });
+
+  it("builds distinct poiIds via the composite country+party+id key when the same location.id is reused by different parties", async () => {
+    const rows = await collectRows();
+    const aaa = rows.find((r) => r.payload.name === "Composite Key Station AAA");
+    const bbb = rows.find((r) => r.payload.name === "Composite Key Station BBB");
+    expect(aaa?.poiId).toBe(encodeURIComponent("NL*AAA*shared-id-1"));
+    expect(bbb?.poiId).toBe(encodeURIComponent("NL*BBB*shared-id-1"));
+    expect(aaa?.poiId).not.toBe(bbb?.poiId);
+  });
+
+  it("dedupes locations that still collide on the composite poiId, keeping the first occurrence", async () => {
+    const rows = await collectRows();
+    const dupRows = rows.filter((r) => r.poiId === encodeURIComponent("NL*DUP*dup-key-station"));
+    expect(dupRows).toHaveLength(1);
+    expect(dupRows[0].payload.name).toBe("Dedupe Station First");
   });
 
   it("emits bare encoded poiId without the nl-dotnl: prefix", async () => {

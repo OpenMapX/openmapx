@@ -2,7 +2,7 @@ import { gunzipSync } from "node:zlib";
 import type { EvChargingConnector, EvChargingTariff } from "@openmapx/mobility-core/ev-charging";
 import type { PoiRow, PoiSourceLogger, PoiStaticParseFn } from "@openmapx/poi-source-registry";
 import { attachTariffs, buildTariffMap, DOTNL_TARIFFS_URL } from "./netherlands-tariff.js";
-import { cleanString, connector } from "./utils.js";
+import { cleanString, connector, dotNlLocationPoiId } from "./utils.js";
 
 // NDW/DOT-NL national open charging data (National Access Point) — OCPI 2.2
 // Locations array. Served as a bare gzip body (no Content-Encoding header —
@@ -42,6 +42,7 @@ interface OcpiLocation {
   city?: string;
   postal_code?: string;
   country_code?: string;
+  party_id?: string;
   operator?: OcpiOperator | null;
   coordinates?: OcpiCoordinates;
   evses?: OcpiEvse[];
@@ -79,8 +80,8 @@ function mapLocationToRow(raw: unknown, tariffMap: Map<string, EvChargingTariff>
   if (!raw || typeof raw !== "object") return null;
   const location = raw as OcpiLocation;
 
-  const id = cleanString(location.id);
-  if (!id) return null;
+  const poiId = dotNlLocationPoiId(location);
+  if (!poiId) return null;
 
   const lat = Number(location.coordinates?.latitude);
   const lng = Number(location.coordinates?.longitude);
@@ -108,7 +109,7 @@ function mapLocationToRow(raw: unknown, tariffMap: Map<string, EvChargingTariff>
   const operatorName = cleanString(location.operator?.name);
 
   return {
-    poiId: encodeURIComponent(id),
+    poiId,
     lng,
     lat,
     payload: {
@@ -159,9 +160,21 @@ async function* dotNlAsyncIterable(buffer: Buffer, log: PoiSourceLogger): AsyncI
 
   const tariffMap = await fetchTariffMap(log);
 
+  // Composite country+party+id keys are unique per the OCPI spec, but the
+  // feed is aggregated from many CPOs and has already shown real-world
+  // quirks (see the scout report) — dedupe defensively so a collision never
+  // reaches the Postgres upsert and aborts the whole batch with a duplicate
+  // PK error. Keeps the FIRST occurrence per poiId, drops the rest.
+  const seenPoiIds = new Set<string>();
   for (const raw of locations) {
     const row = mapLocationToRow(raw, tariffMap);
-    if (row) yield row;
+    if (!row) continue;
+    if (seenPoiIds.has(row.poiId)) {
+      log.warn(`netherlands-parser: dropping duplicate location for poiId ${row.poiId}`);
+      continue;
+    }
+    seenPoiIds.add(row.poiId);
+    yield row;
   }
 }
 

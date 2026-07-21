@@ -1,6 +1,8 @@
 [
   {
     "id": "live-station-mixed",
+    "party_id": "MIX",
+    "country_code": "NL",
     "name": "Mixed Status Station",
     "last_updated": "2026-07-20T18:00:00Z",
     "evses": [
@@ -11,17 +13,23 @@
   },
   {
     "id": "live-station-outoforder",
+    "party_id": "OOO",
+    "country_code": "NL",
     "name": "Down Station",
     "last_updated": "2026-07-20T17:30:00Z",
     "evses": [{ "uid": "e1", "status": "OUTOFORDER" }, { "uid": "e2", "status": "REMOVED" }]
   },
   {
     "id": "live-station-no-timestamp",
+    "party_id": "NOT",
+    "country_code": "NL",
     "name": "No Timestamp Station",
     "evses": [{ "uid": "e1", "status": "AVAILABLE" }]
   },
   {
     "id": "live-station-removed",
+    "party_id": "REM",
+    "country_code": "NL",
     "name": "Partially Delisted Station",
     "last_updated": "2026-07-20T18:15:00Z",
     "evses": [
@@ -32,8 +40,18 @@
   },
   {
     "id": "live-station-no-evses",
+    "party_id": "NOE",
+    "country_code": "NL",
     "name": "Empty Station",
     "last_updated": "2026-07-20T17:00:00Z",
     "evses": []
+  },
+  {
+    "id": "live-station-mixed",
+    "party_id": "OTHER",
+    "country_code": "NL",
+    "name": "Same location.id, different party_id",
+    "last_updated": "2026-07-20T18:05:00Z",
+    "evses": [{ "uid": "e1", "status": "OUTOFORDER" }]
   }
 ]

@@ -1,5 +1,6 @@
 import type { EvChargingStatus } from "@openmapx/mobility-core/ev-charging";
 import type { PoiLiveParseFn, PoiLiveState } from "@openmapx/poi-source-registry";
+import { dotNlLocationPoiId } from "./utils.js";
 
 // Unlike the Swiss OICP feed (status keyed by EvseID in a separate feed, with
 // no station backref), the DOT-NL OCPI Locations file carries `evses[].status`
@@ -12,6 +13,8 @@ interface OcpiEvse {
 
 interface OcpiLocation {
   id?: string;
+  country_code?: string;
+  party_id?: string;
   last_updated?: string;
   evses?: OcpiEvse[];
 }
@@ -54,9 +57,10 @@ export const parseDotNlLive: PoiLiveParseFn = (buffer) => {
   for (const raw of locations) {
     if (!raw || typeof raw !== "object") continue;
     const location = raw as OcpiLocation;
-    const id = typeof location.id === "string" && location.id.length > 0 ? location.id : undefined;
-    if (!id) continue;
-    const poiId = encodeURIComponent(id);
+    // MUST derive poiId identically to netherlands-parser.ts (same shared
+    // helper) — otherwise live status never joins to its static station row.
+    const poiId = dotNlLocationPoiId(location);
+    if (!poiId) continue;
 
     const statuses: Array<EvChargingStatus | null> = [];
     let available = 0;

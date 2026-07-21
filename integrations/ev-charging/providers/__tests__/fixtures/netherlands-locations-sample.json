@@ -169,5 +169,41 @@
     "country_code": "NL",
     "coordinates": null,
     "last_updated": "2026-07-20T14:27:32.680Z"
+  },
+  {
+    "id": "shared-id-1",
+    "party_id": "AAA",
+    "country_code": "NL",
+    "name": "Composite Key Station AAA",
+    "evses": [],
+    "coordinates": { "latitude": "52.0", "longitude": "5.0" },
+    "last_updated": "2026-07-20T12:00:00Z"
+  },
+  {
+    "id": "shared-id-1",
+    "party_id": "BBB",
+    "country_code": "NL",
+    "name": "Composite Key Station BBB",
+    "evses": [],
+    "coordinates": { "latitude": "52.1", "longitude": "5.1" },
+    "last_updated": "2026-07-20T12:00:00Z"
+  },
+  {
+    "id": "dup-key-station",
+    "party_id": "DUP",
+    "country_code": "NL",
+    "name": "Dedupe Station First",
+    "evses": [],
+    "coordinates": { "latitude": "52.2", "longitude": "5.2" },
+    "last_updated": "2026-07-20T12:00:00Z"
+  },
+  {
+    "id": "dup-key-station",
+    "party_id": "DUP",
+    "country_code": "NL",
+    "name": "Dedupe Station Second (should be dropped)",
+    "evses": [],
+    "coordinates": { "latitude": "52.3", "longitude": "5.3" },
+    "last_updated": "2026-07-20T12:05:00Z"
   }
 ]

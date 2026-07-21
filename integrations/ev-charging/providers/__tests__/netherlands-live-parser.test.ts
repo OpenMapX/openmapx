@@ -13,16 +13,22 @@ const noopLog = {
 };
 
 describe("parseDotNlLive", () => {
-  it("produces one PoiLiveState per location keyed by its encoded id", async () => {
+  it("produces one PoiLiveState per location keyed by the composite country+party+id poiId", async () => {
     const out = await parseDotNlLive(LIVE_FIXTURE, { log: noopLog });
-    expect(out.size).toBe(5);
-    expect(out.has(encodeURIComponent("live-station-mixed"))).toBe(true);
-    expect(out.has(encodeURIComponent("live-station-outoforder"))).toBe(true);
+    expect(out.size).toBe(6);
+    expect(out.has(encodeURIComponent("NL*MIX*live-station-mixed"))).toBe(true);
+    expect(out.has(encodeURIComponent("NL*OOO*live-station-outoforder"))).toBe(true);
+  });
+
+  it("keeps locations that share a location.id but differ by party_id distinct (matches the static parser's dedupe-safe key)", async () => {
+    const out = await parseDotNlLive(LIVE_FIXTURE, { log: noopLog });
+    expect(out.has(encodeURIComponent("NL*MIX*live-station-mixed"))).toBe(true);
+    expect(out.has(encodeURIComponent("NL*OTHER*live-station-mixed"))).toBe(true);
   });
 
   it("counts AVAILABLE toward available and every EVSE toward total, including UNKNOWN", async () => {
     const out = await parseDotNlLive(LIVE_FIXTURE, { log: noopLog });
-    const state = out.get(encodeURIComponent("live-station-mixed"));
+    const state = out.get(encodeURIComponent("NL*MIX*live-station-mixed"));
     expect(state?.total).toBe(3);
     expect(state?.available).toBe(1);
     expect(state?.status).toBe("operational");
@@ -30,7 +36,7 @@ describe("parseDotNlLive", () => {
 
   it("aggregates OUTOFORDER/REMOVED to not-operational with zero available", async () => {
     const out = await parseDotNlLive(LIVE_FIXTURE, { log: noopLog });
-    const state = out.get(encodeURIComponent("live-station-outoforder"));
+    const state = out.get(encodeURIComponent("NL*OOO*live-station-outoforder"));
     expect(state?.status).toBe("not-operational");
     expect(state?.available).toBe(0);
     // The REMOVED evse is excluded from `total` — only the OUTOFORDER evse
@@ -40,7 +46,7 @@ describe("parseDotNlLive", () => {
 
   it("excludes REMOVED EVSEs from total while still counting AVAILABLE/CHARGING", async () => {
     const out = await parseDotNlLive(LIVE_FIXTURE, { log: noopLog });
-    const state = out.get(encodeURIComponent("live-station-removed"));
+    const state = out.get(encodeURIComponent("NL*REM*live-station-removed"));
     expect(state?.available).toBe(1);
     expect(state?.total).toBe(2);
     expect(state?.status).toBe("operational");
@@ -48,20 +54,20 @@ describe("parseDotNlLive", () => {
 
   it("uses the location's last_updated as asOf when present", async () => {
     const out = await parseDotNlLive(LIVE_FIXTURE, { log: noopLog });
-    const state = out.get(encodeURIComponent("live-station-mixed"));
+    const state = out.get(encodeURIComponent("NL*MIX*live-station-mixed"));
     expect(state?.asOf).toBe("2026-07-20T18:00:00Z");
   });
 
   it("falls back to the parse-time timestamp when last_updated is missing", async () => {
     const out = await parseDotNlLive(LIVE_FIXTURE, { log: noopLog });
-    const state = out.get(encodeURIComponent("live-station-no-timestamp"));
+    const state = out.get(encodeURIComponent("NL*NOT*live-station-no-timestamp"));
     expect(typeof state?.asOf).toBe("string");
     expect(Number.isFinite(Date.parse(state?.asOf as string))).toBe(true);
   });
 
   it("reports status unknown and zero counts for a location with no EVSEs", async () => {
     const out = await parseDotNlLive(LIVE_FIXTURE, { log: noopLog });
-    const state = out.get(encodeURIComponent("live-station-no-evses"));
+    const state = out.get(encodeURIComponent("NL*NOE*live-station-no-evses"));
     expect(state?.status).toBe("unknown");
     expect(state?.total).toBe(0);
     expect(state?.available).toBe(0);
