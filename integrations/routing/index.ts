@@ -1,29 +1,14 @@
-import { createHash } from "node:crypto";
-import { overpassQuerySafe, type TravelMode, timeZoneAt } from "@openmapx/core";
+import { overpassQuerySafe, type TravelMode } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { activeClosuresForBbox } from "./closures.js";
+import {
+  applyClosureExclusions,
+  hashKey,
+  resolveTravelInstant,
+  round,
+} from "./closure-exclusions.js";
+import { runEvPlan } from "./ev-plan.js";
 import { createRoutingOrchestrator } from "./orchestrator.js";
-import { zonedWallClockToInstant } from "./timezone.js";
 import { parseDateTime, parseTravelMode } from "./validation.js";
-
-/**
- * Resolve the travel instant for closure-time evaluation: the chosen
- * departAt/arriveBy — a wall-clock "YYYY-MM-DDTHH:mm" local to the route ORIGIN —
- * turned into an absolute instant via the origin's timezone. Returns undefined
- * for "leave now" (closures are then evaluated at the current instant). Falls
- * back to a naive parse if the origin zone can't be resolved.
- */
-function resolveTravelInstant(
-  waypoints: [number, number][],
-  departAt: string | undefined,
-  arriveBy: string | undefined,
-): Date | undefined {
-  const wall = departAt ?? arriveBy;
-  if (!wall) return undefined;
-  const origin = waypoints[0];
-  const tz = origin ? timeZoneAt(origin[1], origin[0]) : null;
-  return (tz ? zonedWallClockToInstant(tz, wall) : null) ?? new Date(wall);
-}
 
 /** A raw (un-projected) approach alert from OSM, returned by /navigation/alerts. */
 interface RawRoadAlert {
@@ -86,18 +71,6 @@ function mapAlertElements(
   return out;
 }
 
-/** Round a number to a fixed number of decimal places. */
-function round(value: number, decimals: number): number {
-  const factor = 10 ** decimals;
-  return Math.round(value * factor) / factor;
-}
-
-/** Build a short hash key from a prefix + arbitrary data. */
-function hashKey(prefix: string, data: unknown): string {
-  const hash = createHash("sha256").update(JSON.stringify(data)).digest("hex").slice(0, 16);
-  return `${prefix}:${hash}`;
-}
-
 /** Parse semicolon-separated "lng,lat" pairs into coordinate tuples. */
 function parseWaypoints(raw: string): [number, number][] {
   return raw.split(";").map((pair) => {
@@ -112,6 +85,48 @@ function parseWaypoints(raw: string): [number, number][] {
 /** Round all waypoints for cache-key stability. */
 function roundWaypoints(wps: [number, number][]): [number, number][] {
   return wps.map((wp) => [round(wp[0], 4), round(wp[1], 4)]);
+}
+
+/**
+ * Parse waypoints from a JSON request body: either `waypoints` (an array of
+ * `[lng, lat]` pairs) or the `originLng/originLat/destLng/destLat` shorthand —
+ * the same two shapes the GET `/directions` query params accept. Throws when
+ * neither shape is present or fewer than 2 waypoints result.
+ */
+function parseBodyWaypoints(body: Record<string, unknown> | null | undefined): [number, number][] {
+  const raw = body?.waypoints;
+  let waypoints: [number, number][];
+  if (Array.isArray(raw)) {
+    waypoints = raw.map((pair) => {
+      if (!Array.isArray(pair) || pair.length < 2) {
+        throw new Error("Each waypoint must be a [lng, lat] pair");
+      }
+      const [lng, lat] = pair.map(Number);
+      if (Number.isNaN(lng) || Number.isNaN(lat)) {
+        throw new Error(`Invalid coordinate pair: ${JSON.stringify(pair)}`);
+      }
+      return [lng, lat] as [number, number];
+    });
+  } else if (
+    body?.originLng != null &&
+    body?.originLat != null &&
+    body?.destLng != null &&
+    body?.destLat != null
+  ) {
+    waypoints = [
+      [Number(body.originLng), Number(body.originLat)],
+      [Number(body.destLng), Number(body.destLat)],
+    ];
+  } else {
+    throw new Error(
+      "Provide either 'waypoints' (array of [lng, lat] pairs) or originLng/originLat/destLng/destLat",
+    );
+  }
+
+  if (waypoints.length < 2) {
+    throw new Error("At least 2 waypoints are required");
+  }
+  return waypoints;
 }
 
 /**
@@ -133,56 +148,6 @@ function cacheTtlSeconds(hasExplicitTime: boolean): number {
  * caller from queueing a multi-megabyte payload through Valhalla.
  */
 const MAX_MATCH_TRACE_POINTS = 10_000;
-
-/** Margin (degrees) added around the waypoint bounding box when querying closures. */
-const CLOSURE_BBOX_MARGIN_DEG = 0.05;
-
-interface ClosureExclusionResult {
-  exclusions: { points: [number, number][]; polygons: [number, number][][] };
-  hasExclusions: boolean;
-  exclusionsHash: string | null;
-}
-
-/**
- * Fetch active road closures for the bounding box around the given waypoints
- * and return the exclusion geometry plus a cache-key hash. When
- * `wantClosureAvoidance` is false the function returns empty exclusions
- * immediately without hitting any provider.
- */
-async function applyClosureExclusions(
-  ctx: IntegrationContext,
-  waypoints: [number, number][],
-  wantClosureAvoidance: boolean,
-  at?: Date,
-): Promise<ClosureExclusionResult> {
-  const empty = { points: [] as [number, number][], polygons: [] as [number, number][][] };
-  if (!wantClosureAvoidance) {
-    return { exclusions: empty, hasExclusions: false, exclusionsHash: null };
-  }
-
-  const lons = waypoints.map((wp) => wp[0]);
-  const lats = waypoints.map((wp) => wp[1]);
-  const bbox: [number, number, number, number] = [
-    Math.min(...lons) - CLOSURE_BBOX_MARGIN_DEG,
-    Math.min(...lats) - CLOSURE_BBOX_MARGIN_DEG,
-    Math.max(...lons) + CLOSURE_BBOX_MARGIN_DEG,
-    Math.max(...lats) + CLOSURE_BBOX_MARGIN_DEG,
-  ];
-
-  let exclusions = empty;
-  try {
-    exclusions = await activeClosuresForBbox(ctx, bbox, at);
-  } catch (err) {
-    ctx.log.warn("[routing] failed to fetch closures; routing without exclusions", err as Error);
-  }
-
-  const hasExclusions = exclusions.points.length > 0 || exclusions.polygons.length > 0;
-  const exclusionsHash = hasExclusions
-    ? hashKey("excl", { points: exclusions.points, polygons: exclusions.polygons })
-    : null;
-
-  return { exclusions, hasExclusions, exclusionsHash };
-}
 
 export function setup(ctx: IntegrationContext): void {
   const { getRoutingProviders, getOptimizeProvider, getMatchProvider } =
@@ -630,6 +595,76 @@ export function setup(ctx: IntegrationContext): void {
       reply.send(result);
     } catch {
       reply.send({ alerts: [] }); // optional layer: never fail navigation over it
+    }
+  });
+
+  /**
+   * POST /directions/ev — a driving route with EV charging stops inserted
+   * (@openmapx/ev-charge-planner), planned against the base Valhalla route,
+   * a corridor charger search (ev-charging data-source), and Valhalla's
+   * `sources_to_targets` matrix. Not cached at the HTTP layer beyond
+   * `runEvPlan`'s own short-TTL cache (live availability can shift the plan).
+   *
+   * Body shape:
+   *   {
+   *     waypoints?: [lng, lat][],                 // or originLng/originLat/destLng/destLat
+   *     vehicleId?: string, vehicle?: EvVehicleSpec,
+   *     socStartPct: number,                      // required, 0-100
+   *     socArrivalMinPct?, socTargetPct?, ambientTempC?, departAt?,
+   *     avoidClosures?, avoidTolls?, avoidHighways?, avoidFerries?,
+   *     preferredNetworks?, avoidedNetworks?, exclusiveNetworks?, preferCheaper?,
+   *     homePricePerKwh?, homeCurrency?, units?, lang?
+   *   }
+   */
+  ctx.registerRoute("POST", "/directions/ev", async (req, reply) => {
+    const body = req.body as Record<string, unknown> | null | undefined;
+
+    let waypoints: [number, number][];
+    try {
+      waypoints = parseBodyWaypoints(body);
+    } catch (e) {
+      reply.status(400).send({ error: (e as Error).message });
+      return;
+    }
+
+    const socStartPct = Number(body?.socStartPct);
+    if (!Number.isFinite(socStartPct) || socStartPct < 0 || socStartPct > 100) {
+      reply.status(400).send({ error: "socStartPct is required and must be between 0 and 100" });
+      return;
+    }
+
+    try {
+      const result = await runEvPlan(ctx, getRoutingProviders, {
+        waypoints,
+        vehicleId: typeof body?.vehicleId === "string" ? body.vehicleId : undefined,
+        // biome-ignore lint/suspicious/noExplicitAny: a caller-supplied full vehicle spec bypasses the preset table; shape is validated indirectly by planCharges' consumption math.
+        vehicle: body?.vehicle as any,
+        socStartPct,
+        socArrivalMinPct:
+          body?.socArrivalMinPct != null ? Number(body.socArrivalMinPct) : undefined,
+        socTargetPct: body?.socTargetPct != null ? Number(body.socTargetPct) : undefined,
+        ambientTempC: body?.ambientTempC != null ? Number(body.ambientTempC) : undefined,
+        departAt: typeof body?.departAt === "string" ? body.departAt : undefined,
+        avoidClosures: body?.avoidClosures === true || body?.avoidClosures === "1",
+        avoidTolls: !!body?.avoidTolls,
+        avoidHighways: !!body?.avoidHighways,
+        avoidFerries: !!body?.avoidFerries,
+        preferredNetworks: Array.isArray(body?.preferredNetworks)
+          ? body.preferredNetworks
+          : undefined,
+        avoidedNetworks: Array.isArray(body?.avoidedNetworks) ? body.avoidedNetworks : undefined,
+        exclusiveNetworks:
+          typeof body?.exclusiveNetworks === "boolean" ? body.exclusiveNetworks : undefined,
+        preferCheaper: typeof body?.preferCheaper === "boolean" ? body.preferCheaper : undefined,
+        homePricePerKwh: body?.homePricePerKwh != null ? Number(body.homePricePerKwh) : undefined,
+        homeCurrency: typeof body?.homeCurrency === "string" ? body.homeCurrency : undefined,
+        units: body?.units as "metric" | "imperial" | undefined,
+        lang: typeof body?.lang === "string" ? body.lang : undefined,
+      });
+      reply.send(result);
+    } catch (e) {
+      const status = (e as { status?: number }).status ?? 502;
+      reply.status(status).send({ error: (e as Error).message });
     }
   });
 }

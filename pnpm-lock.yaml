@@ -1210,9 +1210,15 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
+      '@openmapx/ev-charge-planner':
+        specifier: workspace:^
+        version: link:../../packages/ev-charge-planner
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/routing-osrm:
     dependencies:
