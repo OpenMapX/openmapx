@@ -149,6 +149,7 @@ COPY --from=prod-deps /app/packages/db-schema/node_modules ./packages/db-schema/
 COPY --from=prod-deps /app/packages/mobility-core/node_modules ./packages/mobility-core/node_modules
 COPY --from=prod-deps /app/packages/mobility-formats/node_modules ./packages/mobility-formats/node_modules
 COPY --from=prod-deps /app/packages/integration-framework/node_modules ./packages/integration-framework/node_modules
+COPY --from=prod-deps /app/packages/poi-source-registry/node_modules ./packages/poi-source-registry/node_modules
 COPY --from=prod-deps /app/packages/mangrove-client/node_modules ./packages/mangrove-client/node_modules
 COPY --from=prod-deps /app/packages/noaa-coops-data/node_modules ./packages/noaa-coops-data/node_modules
 COPY --from=prod-deps /app/packages/openconditions-contrib-client/node_modules ./packages/openconditions-contrib-client/node_modules

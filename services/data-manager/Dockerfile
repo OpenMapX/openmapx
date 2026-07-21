@@ -162,9 +162,11 @@ COPY packages/motis-feed-proxy-config/ ./packages/motis-feed-proxy-config/
 COPY packages/mobility-formats/ ./packages/mobility-formats/
 COPY --from=prod-deps /app/packages/mobility-formats/node_modules ./packages/mobility-formats/node_modules
 COPY packages/poi-source-registry/ ./packages/poi-source-registry/
+COPY --from=prod-deps /app/packages/poi-source-registry/node_modules ./packages/poi-source-registry/node_modules
 COPY packages/transitous-core/ ./packages/transitous-core/
 COPY --from=prod-deps /app/packages/transitous-core/node_modules ./packages/transitous-core/node_modules
 COPY packages/core/ ./packages/core/
+COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
 COPY packages/hey-api-client-fetch/ ./packages/hey-api-client-fetch/
 COPY --from=builder /app/services/data-manager/dist ./services/data-manager/dist
 COPY services/data-manager/package.json ./services/data-manager/
