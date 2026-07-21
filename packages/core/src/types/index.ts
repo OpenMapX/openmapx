@@ -35,6 +35,11 @@ export type {
   ElevationStats,
 } from "./elevation";
 export type {
+  ConnectorStandard,
+  CurrentStandard,
+  EvVehicleSpec,
+} from "./ev";
+export type {
   CabinClass,
   FlightProviderCapabilities,
   FlightProviderInfo,

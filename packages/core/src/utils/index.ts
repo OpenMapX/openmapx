@@ -102,6 +102,8 @@ export { buildHotelOpenUrl } from "./hotelLink";
 export { bareDomain } from "./httpUrl";
 export { formatAddress, legalConfig } from "./legalConfig";
 export { isLodging } from "./lodgingPlace";
+export { normalizeConnector } from "./normalize-connector";
+export { normalizeOperator } from "./normalize-operator";
 export { isOpenAtBitmap, isOpenAtSlot } from "./openingHoursClient";
 export { otpMode } from "./otp";
 export {
