@@ -1,4 +1,9 @@
-import { overpassQuerySafe, type TravelMode } from "@openmapx/core";
+import {
+  type ConnectorStandard,
+  type EvVehicleSpec,
+  overpassQuerySafe,
+  type TravelMode,
+} from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import {
   applyClosureExclusions,
@@ -127,6 +132,64 @@ function parseBodyWaypoints(body: Record<string, unknown> | null | undefined): [
     throw new Error("At least 2 waypoints are required");
   }
   return waypoints;
+}
+
+/** Parse an optional numeric body field; throws a 400 if present but not a finite number in [min,max]. */
+function optionalNumberInRange(
+  v: unknown,
+  name: string,
+  min: number,
+  max: number,
+): number | undefined {
+  if (v == null) return undefined;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < min || n > max) {
+    throw Object.assign(new Error(`${name} must be a number between ${min} and ${max}`), {
+      status: 400,
+    });
+  }
+  return n;
+}
+
+/** Validate a caller-supplied full vehicle spec; throws a 400 if present but malformed. */
+function parseVehicleSpec(v: unknown): EvVehicleSpec | undefined {
+  if (v == null) return undefined;
+  if (typeof v !== "object") {
+    throw Object.assign(new Error("vehicle must be an object"), { status: 400 });
+  }
+  const o = v as Record<string, unknown>;
+  const num = (k: string) => Number(o[k]);
+  const batteryKwh = num("batteryKwh");
+  const baseWhPerKm = num("baseWhPerKm");
+  const maxDcKw = num("maxDcKw");
+  const maxAcKw = num("maxAcKw");
+  const massTonnes = num("massTonnes");
+  const vehicleTaperSocPct = num("vehicleTaperSocPct");
+  const { connectors } = o;
+  if (
+    !(batteryKwh > 0) ||
+    !(baseWhPerKm > 0) ||
+    !(maxDcKw > 0) ||
+    !(maxAcKw >= 0) ||
+    !Array.isArray(connectors) ||
+    connectors.length === 0
+  ) {
+    throw Object.assign(
+      new Error(
+        "vehicle spec is invalid: needs positive batteryKwh, baseWhPerKm and maxDcKw, maxAcKw >= 0, and a non-empty connectors array",
+      ),
+      { status: 400 },
+    );
+  }
+  return {
+    batteryKwh,
+    baseWhPerKm,
+    massTonnes: Number.isFinite(massTonnes) ? massTonnes : 2,
+    maxDcKw,
+    maxAcKw,
+    vehicleTaperSocPct: Number.isFinite(vehicleTaperSocPct) ? vehicleTaperSocPct : 80,
+    connectors: connectors as ConnectorStandard[],
+  };
 }
 
 /**
@@ -619,31 +682,23 @@ export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("POST", "/directions/ev", async (req, reply) => {
     const body = req.body as Record<string, unknown> | null | undefined;
 
-    let waypoints: [number, number][];
+    let planArgs: Parameters<typeof runEvPlan>[2];
     try {
-      waypoints = parseBodyWaypoints(body);
-    } catch (e) {
-      reply.status(400).send({ error: (e as Error).message });
-      return;
-    }
-
-    const socStartPct = Number(body?.socStartPct);
-    if (!Number.isFinite(socStartPct) || socStartPct < 0 || socStartPct > 100) {
-      reply.status(400).send({ error: "socStartPct is required and must be between 0 and 100" });
-      return;
-    }
-
-    try {
-      const result = await runEvPlan(ctx, getRoutingProviders, {
+      const waypoints = parseBodyWaypoints(body);
+      const socStartPct = Number(body?.socStartPct);
+      if (!Number.isFinite(socStartPct) || socStartPct < 0 || socStartPct > 100) {
+        throw Object.assign(new Error("socStartPct is required and must be between 0 and 100"), {
+          status: 400,
+        });
+      }
+      planArgs = {
         waypoints,
         vehicleId: typeof body?.vehicleId === "string" ? body.vehicleId : undefined,
-        // biome-ignore lint/suspicious/noExplicitAny: a caller-supplied full vehicle spec bypasses the preset table; shape is validated indirectly by planCharges' consumption math.
-        vehicle: body?.vehicle as any,
+        vehicle: parseVehicleSpec(body?.vehicle),
         socStartPct,
-        socArrivalMinPct:
-          body?.socArrivalMinPct != null ? Number(body.socArrivalMinPct) : undefined,
-        socTargetPct: body?.socTargetPct != null ? Number(body.socTargetPct) : undefined,
-        ambientTempC: body?.ambientTempC != null ? Number(body.ambientTempC) : undefined,
+        socArrivalMinPct: optionalNumberInRange(body?.socArrivalMinPct, "socArrivalMinPct", 0, 100),
+        socTargetPct: optionalNumberInRange(body?.socTargetPct, "socTargetPct", 0, 100),
+        ambientTempC: optionalNumberInRange(body?.ambientTempC, "ambientTempC", -60, 60),
         departAt: typeof body?.departAt === "string" ? body.departAt : undefined,
         avoidClosures: body?.avoidClosures === true || body?.avoidClosures === "1",
         avoidTolls: !!body?.avoidTolls,
@@ -656,11 +711,19 @@ export function setup(ctx: IntegrationContext): void {
         exclusiveNetworks:
           typeof body?.exclusiveNetworks === "boolean" ? body.exclusiveNetworks : undefined,
         preferCheaper: typeof body?.preferCheaper === "boolean" ? body.preferCheaper : undefined,
-        homePricePerKwh: body?.homePricePerKwh != null ? Number(body.homePricePerKwh) : undefined,
+        homePricePerKwh: optionalNumberInRange(body?.homePricePerKwh, "homePricePerKwh", 0, 100),
         homeCurrency: typeof body?.homeCurrency === "string" ? body.homeCurrency : undefined,
         units: body?.units as "metric" | "imperial" | undefined,
         lang: typeof body?.lang === "string" ? body.lang : undefined,
-      });
+      };
+    } catch (e) {
+      const status = (e as { status?: number }).status ?? 400;
+      reply.status(status).send({ error: (e as Error).message });
+      return;
+    }
+
+    try {
+      const result = await runEvPlan(ctx, getRoutingProviders, planArgs);
       reply.send(result);
     } catch (e) {
       const status = (e as { status?: number }).status ?? 502;

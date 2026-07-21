@@ -604,9 +604,21 @@
       "stopsHeading": "Ladestopps",
       "unreachable": "Keine ladbare Route gefunden — versuche ein anderes Fahrzeug oder einen anderen Startladestand.",
       "noAllowedNetwork": "Kein Ladepunkt in deinen erlaubten Netzwerken in Reichweite.",
+      "tightMargin": "Diese Route kommt mit wenig Restladung an — lade länger oder füge einen Stopp hinzu.",
       "routeWithoutRestriction": "Route ohne Netzwerkbeschränkung",
       "editVehicle": "bearbeiten",
-      "addVehicle": "Fahrzeug hinzufügen"
+      "addVehicle": "Fahrzeug hinzufügen",
+      "connector": {
+        "ccs2": "CCS2",
+        "ccs1": "CCS1",
+        "chademo": "CHAdeMO",
+        "type2": "Typ 2",
+        "type1": "Typ 1",
+        "tesla_ccs": "Tesla",
+        "gbt_ac": "GB/T AC",
+        "gbt_dc": "GB/T DC",
+        "type3": "Typ 3"
+      }
     }
   },
   "place": {

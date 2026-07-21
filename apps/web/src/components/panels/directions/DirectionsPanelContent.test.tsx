@@ -295,7 +295,7 @@ describe("DirectionsPanelContent", () => {
     expect(useDirectionsStore.getState().waypoints.length).toBe(3);
     screen.getByText("directions.addStop");
 
-    fireEvent.click(screen.getByLabelText("directions.evMode"));
+    fireEvent.click(screen.getByRole("button", { name: "directions.evMode" }));
 
     expect(useDirectionsStore.getState().isEvMode).toBe(true);
     expect(useDirectionsStore.getState().waypoints.map((w) => w.label)).toEqual([

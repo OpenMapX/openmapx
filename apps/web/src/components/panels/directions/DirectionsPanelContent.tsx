@@ -1,6 +1,7 @@
 "use client";
 
 import CloseIcon from "@mui/icons-material/Close";
+import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
 import EvStationIcon from "@mui/icons-material/EvStation";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import MenuIcon from "@mui/icons-material/Menu";
@@ -14,6 +15,8 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Snackbar from "@mui/material/Snackbar";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import type {
   AutocompleteResult,
@@ -54,7 +57,7 @@ import { DetailsView } from "@/components/panels/directions/DetailsView";
 import { EvPlanCard } from "@/components/panels/directions/EvPlanCard";
 import { EvVehiclePanel, prettifyVehicleId } from "@/components/panels/directions/EvVehiclePanel";
 import { FlightPanel } from "@/components/panels/directions/FlightPanel";
-import { EV_MODE, MODES, ModeButton } from "@/components/panels/directions/ModeSelector";
+import { MODES, ModeButton } from "@/components/panels/directions/ModeSelector";
 import { RouteCard } from "@/components/panels/directions/RouteCard";
 import { RouteEnergyEstimate } from "@/components/panels/directions/RouteEnergyEstimate";
 import { RouteOptions } from "@/components/panels/directions/RouteOptions";
@@ -677,7 +680,10 @@ export function DirectionsPanelContent() {
           }}
         >
           {MODES.map(({ mode: m, icon, labelKey, disabled }) => {
-            const isActive = mode === m && !isEvMode;
+            // EV is a sub-option of driving (isEvMode), so the driving button
+            // stays highlighted while EV planning is active — isEvMode only ever
+            // coexists with mode === "driving".
+            const isActive = mode === m;
             const isTransit = m === "transit";
             const timeStr = disabled
               ? undefined
@@ -709,23 +715,6 @@ export function DirectionsPanelContent() {
               />
             );
           })}
-          <ModeButton
-            key="ev"
-            icon={EV_MODE.icon}
-            label={t(EV_MODE.labelKey)}
-            time={
-              isEvMode && evData?.routes[0]?.duration !== undefined
-                ? formatDuration(evData.routes[0].duration)
-                : undefined
-            }
-            active={isEvMode}
-            loading={isEvMode && evLoading}
-            onClick={() => {
-              setEvMode(true);
-              setDetailsRouteIndex(null);
-              setTransitDetailsIndex(null);
-            }}
-          />
         </Box>
 
         <IconButton
@@ -737,6 +726,35 @@ export function DirectionsPanelContent() {
           <CloseIcon sx={{ fontSize: 22 }} />
         </IconButton>
       </Box>
+      {/* Driving sub-mode: normal route vs. EV charge planning. EV is a subtype
+          of driving, not its own top-level mode, so it lives here rather than in
+          the mode row. */}
+      {mode === "driving" && (
+        <Box sx={{ px: 1.5, pt: 1 }}>
+          <ToggleButtonGroup
+            size="small"
+            exclusive
+            value={isEvMode ? "ev" : "route"}
+            onChange={(_, value) => {
+              if (!value) return;
+              setEvMode(value === "ev");
+              setDetailsRouteIndex(null);
+              setTransitDetailsIndex(null);
+            }}
+            aria-label={t("driving")}
+            sx={{ "& .MuiToggleButton-root": { textTransform: "none", py: 0.3, px: 1.2 } }}
+          >
+            <ToggleButton value="route">
+              <DirectionsCarIcon sx={{ fontSize: 18, mr: 0.5 }} />
+              {t("driving")}
+            </ToggleButton>
+            <ToggleButton value="ev">
+              <EvStationIcon sx={{ fontSize: 18, mr: 0.5 }} />
+              {t("evMode")}
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
+      )}
       {/* Waypoint list with drag-and-drop */}
       <WaypointList
         waypoints={waypoints}

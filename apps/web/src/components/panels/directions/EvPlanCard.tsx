@@ -7,24 +7,12 @@ import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import type { ConnectorStandard, EvChargeStop, EvDirectionsResult } from "@openmapx/core";
+import type { EvChargeStop, EvDirectionsResult } from "@openmapx/core";
 import { formatDuration } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { runtimeAttributionToAttribution } from "@/lib/attributionForProviders";
 import { TEAL } from "@/lib/theme";
-
-const CONNECTOR_LABELS: Record<ConnectorStandard, string> = {
-  ccs2: "CCS2",
-  ccs1: "CCS1",
-  chademo: "CHAdeMO",
-  type2: "Type 2",
-  type1: "Type 1",
-  tesla_ccs: "Tesla",
-  gbt_ac: "GB/T AC",
-  gbt_dc: "GB/T DC",
-  type3: "Type 3",
-};
 
 export function EvPlanCard({
   result,
@@ -41,6 +29,7 @@ export function EvPlanCard({
     (w) => w.kind === "unreachable" || w.kind === "no-charger-data",
   );
   const hasNoAllowedNetwork = result.warnings.some((w) => w.kind === "no-allowed-network");
+  const hasTightMargin = result.warnings.some((w) => w.kind === "tight-margin");
 
   const totalSeconds = result.totals.driveSeconds + result.totals.chargeSeconds;
   const estimatedCost = result.totals.estimatedCost;
@@ -50,6 +39,9 @@ export function EvPlanCard({
         currency: estimatedCost.currency,
       }).format(estimatedCost.amount)
     : null;
+  const otherCurrenciesFmt = estimatedCost?.otherCurrencies?.map(({ currency, amount }) =>
+    new Intl.NumberFormat(locale, { style: "currency", currency }).format(amount),
+  );
 
   return (
     <Box>
@@ -100,6 +92,7 @@ export function EvPlanCard({
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>
                 {costFmt}
+                {otherCurrenciesFmt?.length ? ` + ${otherCurrenciesFmt.join(" + ")}` : ""}
               </Typography>
             </Box>
           </Tooltip>
@@ -130,6 +123,12 @@ export function EvPlanCard({
         </Alert>
       )}
 
+      {hasTightMargin && !hasUnreachable && !hasNoAllowedNetwork && (
+        <Alert severity="warning" sx={{ mx: 2, my: 1.5 }}>
+          {t("tightMargin")}
+        </Alert>
+      )}
+
       {result.stops.length > 0 && (
         <Box sx={{ px: 2, py: 1 }}>
           <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
@@ -147,7 +146,7 @@ export function EvPlanCard({
 function EvPlanStopRow({ stop, index }: { stop: EvChargeStop; index: number }) {
   const t = useTranslations("directions.ev");
   const locale = useLocale();
-  const connectorLabel = CONNECTOR_LABELS[stop.connector] ?? stop.connector;
+  const connectorLabel = t(`connector.${stop.connector}`);
   const costFmt = stop.estimatedCost
     ? new Intl.NumberFormat(locale, {
         style: "currency",

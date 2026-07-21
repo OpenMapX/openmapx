@@ -224,6 +224,119 @@ describe("runEvPlan", () => {
     expect(result.totals.energyKwh).toBeGreaterThan(0); // energy still shown
   });
 
+  it("reports a per-currency breakdown when a public stop is priced in a foreign currency", async () => {
+    const ctx = fakeCtx({
+      getIntegrationsByDomain: (d: string) =>
+        d === "data-source"
+          ? [
+              {
+                id: "ev-charging",
+                providers: new Map([
+                  [
+                    "data-source",
+                    [
+                      {
+                        searchStations: vi.fn().mockResolvedValue([
+                          {
+                            id: "c1",
+                            name: "c1",
+                            coordinates: [1.35, 50],
+                            sources: ["ocm"],
+                            connectors: [{ type: "CCS", powerKw: 150, currentType: "dc" }],
+                            attributions: [{ sourceId: "ocm", name: "OpenChargeMap" }],
+                            tariffs: [
+                              {
+                                scope: "cpo",
+                                elements: [{ type: "energy", price: 0.55, currency: "CHF" }],
+                                source: "test",
+                                updatedAt: new Date().toISOString(),
+                              },
+                            ],
+                          },
+                        ]),
+                      },
+                    ],
+                  ],
+                ]),
+              },
+            ]
+          : [],
+    });
+    const getProviders = (): ResolvedRoutingProvider[] => [
+      { integrationId: "valhalla", provider: ctx._valhalla },
+    ];
+    const result = await runEvPlan(ctx as unknown as IntegrationContext, getProviders, {
+      waypoints: [
+        [0, 50],
+        [2.7, 50],
+      ],
+      vehicleId: "tesla-model-3-lr",
+      socStartPct: 40,
+      socArrivalMinPct: 10,
+      socTargetPct: 50,
+      ambientTempC: 20,
+      avoidClosures: false,
+      homePricePerKwh: 0.3,
+      homeCurrency: "EUR",
+    });
+    expect(result.stops.length).toBeGreaterThanOrEqual(1);
+    expect(result.stops[0].estimatedCost?.currency).toBe("CHF");
+    expect(result.totals.estimatedCost?.currency).toBe("EUR");
+    expect(result.totals.estimatedCost?.amount).toBeGreaterThan(0);
+    expect(result.totals.estimatedCost?.otherCurrencies).toContainEqual(
+      expect.objectContaining({ currency: "CHF", amount: expect.any(Number) }),
+    );
+    expect(result.totals.estimatedCost?.otherCurrencies?.[0]?.amount).toBeGreaterThan(0);
+  });
+
+  it("flags tight-margin when the final route arrives with barely enough charge, and not when it's comfortable", async () => {
+    const lowTargetCtx = fakeCtx();
+    const getProvidersLow = (): ResolvedRoutingProvider[] => [
+      { integrationId: "valhalla", provider: lowTargetCtx._valhalla },
+    ];
+    const lowResult = await runEvPlan(
+      lowTargetCtx as unknown as IntegrationContext,
+      getProvidersLow,
+      {
+        waypoints: [
+          [0, 50],
+          [2.7, 50],
+        ],
+        vehicleId: "tesla-model-3-lr",
+        socStartPct: 40,
+        socArrivalMinPct: 10,
+        socTargetPct: 25,
+        ambientTempC: 20,
+        avoidClosures: false,
+      },
+    );
+    expect(lowResult.warnings.some((w) => w.kind === "tight-margin")).toBe(true);
+    expect(lowResult.warnings.some((w) => w.kind === "unreachable")).toBe(false);
+
+    const highTargetCtx = fakeCtx();
+    const getProvidersHigh = (): ResolvedRoutingProvider[] => [
+      { integrationId: "valhalla", provider: highTargetCtx._valhalla },
+    ];
+    const highResult = await runEvPlan(
+      highTargetCtx as unknown as IntegrationContext,
+      getProvidersHigh,
+      {
+        waypoints: [
+          [0, 50],
+          [2.7, 50],
+        ],
+        vehicleId: "tesla-model-3-lr",
+        socStartPct: 40,
+        socArrivalMinPct: 10,
+        socTargetPct: 80,
+        ambientTempC: 20,
+        avoidClosures: false,
+      },
+    );
+    expect(highResult.warnings.some((w) => w.kind === "tight-margin")).toBe(false);
+    expect(highResult.warnings.some((w) => w.kind === "unreachable")).toBe(false);
+  });
+
   it("skips disallowed charger sources", async () => {
     const ctx = fakeCtx({ getDisallowedSourceIds: async () => new Set(["ocm"]) });
     const getProviders = (): ResolvedRoutingProvider[] => [

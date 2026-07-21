@@ -1,5 +1,5 @@
 import { bboxAroundPoint, type EvVehicleSpec, normalizeOperator } from "@openmapx/core";
-import { getVehiclePreset, planCharges } from "@openmapx/ev-charge-planner";
+import { getVehiclePreset, planCharges, routeEnergyKwh } from "@openmapx/ev-charge-planner";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import type { EvChargingStation } from "@openmapx/mobility-core/ev-charging";
 import { applyClosureExclusions, resolveTravelInstant } from "./closure-exclusions.js";
@@ -186,6 +186,30 @@ export async function runEvPlan(
       finalRoute = rerouted.routes[rerouted.activeRouteIndex] ?? rerouted.routes[0];
     }
 
+    // Whole-trip re-validation: `planCharges` sizes charge amounts against the
+    // BASE route, but the actual re-route through the chosen stops can cost
+    // more energy than the base route did (detours to reach the chargers).
+    // Re-check the final route's energy against the actual charged total and
+    // flag it when the trip arrives within a thin band of the reserve. This is
+    // whole-trip granularity — per-leg mid-trip re-validation is a future
+    // refinement.
+    const revalidationWarnings: typeof plan.warnings = [];
+    if (plan.stops.length > 0) {
+      const finalEnergyKwh = routeEnergyKwh(finalRoute, vehicle, {
+        ambientTempC: args.ambientTempC ?? 20,
+        elevationAbsentDerate: (finalRoute.elevation?.length ?? 0) >= 2 ? 1 : 1.1,
+      }).totalKwh;
+      const totalChargedKwh = plan.stops.reduce((a, s) => a + s.addedKwh, 0);
+      const arrivalKwh = socStartKwh + totalChargedKwh - finalEnergyKwh;
+      // Thin band above the reserve; also covers arrival BELOW the reserve (the
+      // final detour route can cost more energy than the base route the planner
+      // sized the charge on).
+      const tightBandKwh = Math.max(socArrivalMinKwh * 0.5, vehicle.batteryKwh * 0.03);
+      if (arrivalKwh < socArrivalMinKwh + tightBandKwh) {
+        revalidationWarnings.push({ kind: "tight-margin", legIndex: plan.stops.length });
+      }
+    }
+
     const tripCost = estimateTripCost(plan, args.homePricePerKwh, args.homeCurrency); // D11
 
     return {
@@ -214,7 +238,7 @@ export async function runEvPlan(
         energyKwh: Math.round(plan.totalEnergyKwh * 10) / 10,
         ...(tripCost ? { estimatedCost: tripCost } : {}),
       },
-      warnings: plan.warnings,
+      warnings: [...plan.warnings, ...revalidationWarnings],
     };
   });
 }
@@ -250,9 +274,11 @@ function evPlanCacheKey(
 
 /**
  * D11 whole-trip cost: known public sessions priced by their own tariff, and all
- * other energy (home + any unpriced public kWh) valued at the home tariff. Null
- * when no home price is given, or a public stop's currency differs from
- * homeCurrency (cross-currency summing is Phase 2).
+ * other energy (home + any unpriced public kWh) valued at the home tariff.
+ * Public sessions priced in a currency other than `homeCurrency` are NOT
+ * FX-converted (we have no rates) — they're reported separately in
+ * `otherCurrencies` instead of being dropped from the estimate. Null when no
+ * home price is given.
  */
 function estimateTripCost(
   plan: {
@@ -261,23 +287,40 @@ function estimateTripCost(
   },
   homePricePerKwh: number | undefined,
   homeCurrency: string | undefined,
-): { amount: number; currency: string; homeKwh: number; publicKwh: number } | null {
+): {
+  amount: number;
+  currency: string;
+  homeKwh: number;
+  publicKwh: number;
+  otherCurrencies?: { currency: string; amount: number }[];
+} | null {
   if (homePricePerKwh == null || !homeCurrency) return null;
-  let knownPublicKwh = 0;
-  let knownPublicCost = 0;
+  let pricedKwh = 0;
+  let homeCurrencyPublicCost = 0;
+  const foreign = new Map<string, number>();
   for (const s of plan.stops) {
-    if (!s.estimatedCost) continue; // unpriced → valued at home price below
-    if (s.estimatedCost.currency !== homeCurrency) return null; // mixed currency → don't sum
-    knownPublicKwh += s.addedKwh;
-    knownPublicCost += s.estimatedCost.amount;
+    if (!s.estimatedCost) continue; // unpriced → valued at the home price below
+    pricedKwh += s.addedKwh;
+    if (s.estimatedCost.currency === homeCurrency) {
+      homeCurrencyPublicCost += s.estimatedCost.amount;
+    } else {
+      foreign.set(
+        s.estimatedCost.currency,
+        (foreign.get(s.estimatedCost.currency) ?? 0) + s.estimatedCost.amount,
+      );
+    }
   }
-  const otherKwh = Math.max(0, plan.totalEnergyKwh - knownPublicKwh); // home + unpriced public
-  const amount = otherKwh * homePricePerKwh + knownPublicCost;
+  const otherKwh = Math.max(0, plan.totalEnergyKwh - pricedKwh); // home + unpriced public, at home price
+  const amount = otherKwh * homePricePerKwh + homeCurrencyPublicCost;
+  const otherCurrencies = [...foreign.entries()]
+    .map(([currency, amt]) => ({ currency, amount: Math.round(amt * 100) / 100 }))
+    .sort((a, b) => a.currency.localeCompare(b.currency));
   return {
     amount: Math.round(amount * 100) / 100,
     currency: homeCurrency,
     homeKwh: Math.round(otherKwh * 10) / 10,
-    publicKwh: Math.round(knownPublicKwh * 10) / 10,
+    publicKwh: Math.round(pricedKwh * 10) / 10,
+    ...(otherCurrencies.length ? { otherCurrencies } : {}),
   };
 }
 

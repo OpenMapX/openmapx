@@ -320,8 +320,9 @@ export interface EvChargeStop {
 }
 
 /**
- * Why a plan fell short of a complete route. `tight-margin` is reserved for
- * the Phase 2 post-reroute re-validation pass and is not currently emitted.
+ * Why a plan fell short of a complete route. `tight-margin` is emitted by the
+ * post-reroute whole-trip re-validation pass, when the final route arrives
+ * within a thin band of the reserve.
  */
 export type EvPlanWarning =
   | { kind: "unreachable"; afterStopIndex: number }
@@ -342,8 +343,15 @@ export interface EvDirectionsResult extends DirectionsResult {
     driveSeconds: number;
     chargeSeconds: number;
     energyKwh: number;
-    /** Present when a home price was given and all priced stops share its currency. */
-    estimatedCost?: { amount: number; currency: string; homeKwh: number; publicKwh: number };
+    /** Present when a home price was given. */
+    estimatedCost?: {
+      amount: number;
+      currency: string;
+      homeKwh: number;
+      publicKwh: number;
+      /** Public sessions priced in a currency other than `currency`, summed per currency (no FX conversion). */
+      otherCurrencies?: { currency: string; amount: number }[];
+    };
   };
   warnings: EvPlanWarning[];
 }
