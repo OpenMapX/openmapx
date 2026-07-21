@@ -387,6 +387,61 @@ describe("mapStationToDetail pricing section", () => {
     );
   });
 
+  it("collapses byte-identical price rows from separate tariffs (e.g. duplicate NL OCPI tariffs) into one", () => {
+    const station = makeStation({
+      tariffs: [
+        {
+          elements: [{ type: "energy", price: 0.28, currency: "EUR" }],
+          scope: "evse",
+          source: "netherlands-ev",
+          updatedAt: "2026-07-01T00:00:00.000Z",
+        },
+        {
+          elements: [{ type: "energy", price: 0.28, currency: "EUR" }],
+          scope: "evse",
+          source: "netherlands-ev",
+          updatedAt: "2026-07-01T00:00:00.000Z",
+        },
+      ],
+    });
+    const detail = mapStationToDetail(station);
+    const pricing = detail.sections.find((s) => s.sectionIcon === "payments" && s.caption);
+    expect(pricing?.rows).toHaveLength(1);
+    expect(pricing?.rows).toEqual([
+      [expect.anything(), { $t: "priceEnergy", values: { amount: "€0.28" } }],
+    ]);
+  });
+
+  it("keeps an AC and a DC energy row distinct even at the same price, since their conditions differ", () => {
+    const station = makeStation({
+      tariffs: [
+        {
+          elements: [{ type: "energy", price: 0.28, currency: "EUR" }],
+          restrictions: { currentType: "ac" },
+          scope: "evse",
+          source: "netherlands-ev",
+          updatedAt: "2026-07-01T00:00:00.000Z",
+        },
+        {
+          elements: [{ type: "energy", price: 0.28, currency: "EUR" }],
+          restrictions: { currentType: "dc" },
+          scope: "evse",
+          source: "netherlands-ev",
+          updatedAt: "2026-07-01T00:00:00.000Z",
+        },
+      ],
+    });
+    const detail = mapStationToDetail(station);
+    const pricing = detail.sections.find((s) => s.sectionIcon === "payments" && s.caption);
+    expect(pricing?.rows).toHaveLength(2);
+    expect(pricing?.rows).toEqual(
+      expect.arrayContaining([
+        [expect.anything(), expect.anything(), "AC"],
+        [expect.anything(), expect.anything(), "DC"],
+      ]),
+    );
+  });
+
   it("falls back to the free-text usageCost row when there are no structured tariffs", () => {
     const station = makeStation({ usageCost: "0.35 EUR/kWh" });
     const detail = mapStationToDetail(station);

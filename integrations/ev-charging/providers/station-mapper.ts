@@ -188,10 +188,22 @@ type TariffTableRows = [I18nToken, Translatable][] | [Translatable, Translatable
 // all-or-nothing across the whole pricing section.
 function tariffRows(station: EvChargingStation): TariffTableRows {
   const rows: [I18nToken, Translatable, string][] = [];
+  const seen = new Set<string>();
   for (const tariff of station.tariffs ?? []) {
     const qualifier = tariffQualifier(tariff.restrictions);
     for (const element of tariff.elements) {
-      rows.push([TARIFF_DIMENSION_TOKENS[element.type], formatTariff(element), qualifier]);
+      const row: [I18nToken, Translatable, string] = [
+        TARIFF_DIMENSION_TOKENS[element.type],
+        formatTariff(element),
+        qualifier,
+      ];
+      // NL stations often carry several OCPI tariffs whose price components
+      // are byte-identical (same dimension, price and restrictions), which
+      // would otherwise render duplicate rows in the Pricing table.
+      const key = JSON.stringify(row);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push(row);
     }
   }
   const hasQualifier = rows.some(([, , qualifier]) => qualifier.length > 0);
