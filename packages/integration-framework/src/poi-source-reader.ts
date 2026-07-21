@@ -1,4 +1,4 @@
-import { feedIdSchema } from "@openmapx/core";
+import { feedIdSchema } from "@openmapx/core/feed-id";
 import { type BBox, type PoiLiveState, poiLiveHashKey } from "@openmapx/poi-source-registry";
 import type { IntegrationContext } from "./context.js";
 

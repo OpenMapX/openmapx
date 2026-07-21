@@ -1,4 +1,4 @@
-import { feedIdSchema } from "@openmapx/core";
+import { feedIdSchema } from "@openmapx/core/feed-id";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import z from "zod/v4";
 

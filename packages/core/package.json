@@ -22,6 +22,10 @@
       "types": "./src/types/placeIds.ts",
       "default": "./src/types/placeIds.ts"
     },
+    "./feed-id": {
+      "types": "./src/feed-id.ts",
+      "default": "./src/feed-id.ts"
+    },
     "./utils/poiConflation": {
       "types": "./src/utils/poiConflation.ts",
       "default": "./src/utils/poiConflation.ts"

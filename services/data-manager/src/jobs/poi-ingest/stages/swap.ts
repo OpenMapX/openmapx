@@ -1,4 +1,4 @@
-import { feedIdSchema } from "@openmapx/core";
+import { feedIdSchema } from "@openmapx/core/feed-id";
 import type { PoiIngestStageResult, PoiJobContext } from "../types.js";
 
 /**

@@ -1,4 +1,4 @@
-import type { FeedIdParts } from "@openmapx/core";
+import type { FeedIdParts } from "@openmapx/core/feed-id";
 
 /** Bounding box: [west, south, east, north] (lng/lat). */
 export type BBox = readonly [number, number, number, number];

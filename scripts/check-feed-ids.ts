@@ -30,7 +30,12 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { deriveFeedId, type FeedIdParts, feedIdPartsSchema, feedIdSchema } from "@openmapx/core";
+import {
+  deriveFeedId,
+  type FeedIdParts,
+  feedIdPartsSchema,
+  feedIdSchema,
+} from "@openmapx/core/feed-id";
 import type { IntegrationManifest } from "@openmapx/integration-framework";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");

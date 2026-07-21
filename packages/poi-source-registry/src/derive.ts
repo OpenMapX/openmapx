@@ -1,4 +1,4 @@
-import { deriveFeedId } from "@openmapx/core";
+import { deriveFeedId } from "@openmapx/core/feed-id";
 import type { PoiSourceCommon } from "./types";
 
 /**

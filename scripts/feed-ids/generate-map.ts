@@ -26,7 +26,7 @@ import {
   type FeedIdParts,
   feedIdPartsSchema,
   feedIdSchema,
-} from "@openmapx/core";
+} from "@openmapx/core/feed-id";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const INTEGRATIONS_DIR = join(REPO_ROOT, "integrations");

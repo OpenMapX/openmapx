@@ -1,4 +1,4 @@
-import { feedIdPartsSchema, feedIdSchema } from "@openmapx/core";
+import { feedIdPartsSchema, feedIdSchema } from "@openmapx/core/feed-id";
 import { resolvePoiSourceId } from "./derive";
 import type { BBox, PoiSource, RegisteredPoiSource } from "./types";
 
