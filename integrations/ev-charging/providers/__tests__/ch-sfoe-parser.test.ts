@@ -55,6 +55,35 @@ describe("parseChSfoeOicp", () => {
     expect(rows[0].payload.name).toBe("Solo Station");
   });
 
+  it("collapses multiple EVSE records of one station into a single row with merged connectors", () => {
+    const feed = {
+      EVSEData: [
+        {
+          OperatorName: "Test Operator",
+          EVSEDataRecord: [
+            {
+              ChargingStationId: "CH-DUP-S001",
+              EvseID: "CH-DUP-E1",
+              GeoCoordinates: { Google: "47.4 8.5" },
+              Plugs: ["Type 2"],
+              ChargingFacilities: [{ power: 22 }],
+            },
+            {
+              ChargingStationId: "CH-DUP-S001",
+              EvseID: "CH-DUP-E2",
+              GeoCoordinates: { Google: "47.4 8.5" },
+              Plugs: ["CCS"],
+              ChargingFacilities: [{ power: 50 }],
+            },
+          ],
+        },
+      ],
+    };
+    const rows = parseChSfoeOicp(Buffer.from(JSON.stringify(feed)));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].payload.connectors as unknown[]).toHaveLength(2);
+  });
+
   it("populates operator from group metadata", async () => {
     const rows = await parseChSfoeOicp(FIXTURE);
     expect(rows[0].payload.operator).toEqual({ name: "Green Motion AG" });

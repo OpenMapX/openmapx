@@ -96,7 +96,11 @@ function recordConnectors(record: ChSfoeEvseRecord): EvChargingConnector[] {
 
 export function parseChSfoeOicp(buffer: Buffer): PoiRow[] {
   const feed = JSON.parse(buffer.toString("utf8")) as ChSfoeEvseFeed;
-  const rows: PoiRow[] = [];
+  // OICP emits one record per EVSE, and multiple EVSEs of the same station
+  // share a ChargingStationId. Collapse to one row per station (the poiId),
+  // merging each EVSE's connectors — otherwise duplicate poiIds violate the
+  // static table's primary key.
+  const byStation = new Map<string, PoiRow>();
 
   for (const group of feed.EVSEData ?? []) {
     const operatorName = cleanString(group.OperatorName) ?? cleanString(group.OperatorID);
@@ -108,6 +112,13 @@ export function parseChSfoeOicp(buffer: Buffer): PoiRow[] {
       const encodedStationId = encodeURIComponent(stationId);
       const encodedEvseId = record.EvseID ? encodeURIComponent(record.EvseID) : undefined;
 
+      const existing = byStation.get(encodedStationId);
+      if (existing) {
+        const merged = existing.payload.connectors as ReturnType<typeof recordConnectors>;
+        existing.payload.connectors = [...merged, ...recordConnectors(record)];
+        continue;
+      }
+
       const notes = [
         record.DynamicInfoAvailable ? "Dynamic status available" : undefined,
         record.RenewableEnergy ? "Renewable energy" : undefined,
@@ -116,7 +127,7 @@ export function parseChSfoeOicp(buffer: Buffer): PoiRow[] {
 
       const paymentMethods = uniqueStrings([record.AuthenticationModes]);
 
-      rows.push({
+      byStation.set(encodedStationId, {
         // Use the encoded station id as the bare poiId so the existing
         // user-facing id format (prefix + encoded id) is preserved by the
         // mapper. Decoupling station id from EvseID here means Phase C ships
@@ -151,5 +162,5 @@ export function parseChSfoeOicp(buffer: Buffer): PoiRow[] {
     }
   }
 
-  return rows;
+  return Array.from(byStation.values());
 }
