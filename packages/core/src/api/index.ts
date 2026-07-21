@@ -10,6 +10,7 @@ export {
 export {
   type FetchDirectionsParams,
   fetchDirections,
+  postEvDirections,
 } from "./directions";
 export { API_ENDPOINTS } from "./endpoints";
 export { type AlertBBox, fetchRoadAlerts, type RawRoadAlert } from "./roadAlerts";

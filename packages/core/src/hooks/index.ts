@@ -55,6 +55,7 @@ export { useDebounce, useDebouncedCallback } from "./useDebounce";
 export { useDeliveryProviders } from "./useDeliveryProviders";
 export { directionsQueryKey, useDirections } from "./useDirections";
 export { useElevation } from "./useElevation";
+export { evDirectionsQueryKey, useEvDirections } from "./useEvDirections";
 export { useExploreResults } from "./useExploreResults";
 export { useFilteredCategoryResults } from "./useFilteredCategoryResults";
 export { useFlightProviders } from "./useFlightProviders";

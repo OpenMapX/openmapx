@@ -61,6 +61,27 @@ export interface DirectionsState {
    * the `/directions` chain.
    */
   mode: TravelMode;
+  /**
+   * EV trip-planning mode. Deliberately NOT folded into `mode` — `"ev"` is not
+   * a `TravelMode` (that would ripple through the transit/flying guards in
+   * `parseTravelMode` and every routing engine). Toggling EV mode leaves
+   * `mode` at `"driving"` so the map/base plumbing still sees a driving route;
+   * `DirectionsPanelContent` branches on `isEvMode` to swap in the EV panel
+   * and call `useEvDirections` instead of `useDirections`.
+   */
+  isEvMode: boolean;
+  /** Transient (not persisted) current battery state of charge, 0–100. */
+  evSocStartPct: number;
+  /** Transient (not persisted) minimum arrival-reserve state of charge, 0–100. */
+  evSocArrivalMinPct: number;
+  /**
+   * Transient one-shot override for the "no-allowed-network" recovery
+   * action ("route without the network restriction") — forces the next EV
+   * request's `exclusiveNetworks` to `false` regardless of the persisted
+   * setting. Lives here (not component state) so the panel's plan card and
+   * the map's independent `useEvDirections` query (RouteLayer) stay in sync.
+   */
+  evForceNonExclusive: boolean;
   activeRouteIndex: number;
   avoidHighways: boolean;
   avoidTolls: boolean;
@@ -101,6 +122,11 @@ export interface DirectionsState {
   setDestination: (coords: LngLat | null, label: string) => void;
   swapOriginDestination: () => void;
   setMode: (mode: TravelMode) => void;
+  /** Toggle EV trip-planning mode. Turning it on forces `mode` back to `"driving"`. */
+  setEvMode: (on: boolean) => void;
+  setEvSocStartPct: (v: number) => void;
+  setEvSocArrivalMinPct: (v: number) => void;
+  setEvForceNonExclusive: (v: boolean) => void;
   setActiveRouteIndex: (index: number) => void;
   setAvoidHighways: (v: boolean) => void;
   setAvoidTolls: (v: boolean) => void;
@@ -136,6 +162,10 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     waypoints: initWps,
     ...derived(initWps),
     mode: "driving",
+    isEvMode: false,
+    evSocStartPct: 80,
+    evSocArrivalMinPct: 10,
+    evForceNonExclusive: false,
     activeRouteIndex: 0,
     avoidHighways: readBool(AVOID_HIGHWAYS_STORAGE_KEY),
     avoidTolls: readBool(AVOID_TOLLS_STORAGE_KEY),
@@ -162,6 +192,10 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
         waypoints: wps,
         ...derived(wps),
         activeRouteIndex: 0,
+        isEvMode: false,
+        evSocStartPct: 80,
+        evSocArrivalMinPct: 10,
+        evForceNonExclusive: false,
         transitItineraries: [],
         activeItineraryIndex: 0,
         transitDepartureTime: "now" as const,
@@ -233,7 +267,16 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       get().reverseWaypoints();
     },
 
-    setMode: (mode) => set({ mode, activeRouteIndex: 0 }),
+    setMode: (mode) => set({ mode, activeRouteIndex: 0, isEvMode: false }),
+    setEvMode: (isEvMode) =>
+      set(
+        isEvMode
+          ? { isEvMode, mode: "driving", activeRouteIndex: 0, evForceNonExclusive: false }
+          : { isEvMode },
+      ),
+    setEvSocStartPct: (evSocStartPct) => set({ evSocStartPct }),
+    setEvSocArrivalMinPct: (evSocArrivalMinPct) => set({ evSocArrivalMinPct }),
+    setEvForceNonExclusive: (evForceNonExclusive) => set({ evForceNonExclusive }),
     setActiveRouteIndex: (activeRouteIndex) => set({ activeRouteIndex }),
     setAvoidHighways: (avoidHighways) => {
       getStorage().setString(AVOID_HIGHWAYS_STORAGE_KEY, String(avoidHighways));

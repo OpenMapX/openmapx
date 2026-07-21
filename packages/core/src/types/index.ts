@@ -121,6 +121,10 @@ export type {
 } from "./roadConditions";
 export type {
   DirectionsResult,
+  EvChargeStop,
+  EvDirectionsRequest,
+  EvDirectionsResult,
+  EvPlanWarning,
   IsochroneContour,
   IsochroneGeometry,
   IsochroneMultiPolygon,

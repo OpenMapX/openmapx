@@ -239,6 +239,9 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
+      '@openmapx/ev-charge-planner':
+        specifier: workspace:^
+        version: link:../../packages/ev-charge-planner
       '@openmapx/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n

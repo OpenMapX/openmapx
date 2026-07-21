@@ -19,7 +19,6 @@ import {
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
-import type { DataSourceAttribution } from "@openmapx/integration-framework";
 import { dataSourceToAttribution } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { isI18nToken, type Translatable } from "@openmapx/integration-framework/strings";
@@ -30,6 +29,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
 import { usePinMarker } from "@/hooks/usePinMarker";
+import { runtimeAttributionToAttribution } from "@/lib/attributionForProviders";
 import { translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
@@ -109,21 +109,6 @@ function buildGeoJson(
         ...(imageId ? { imageId } : {}),
       },
     })),
-  };
-}
-
-// Per-record runtime attribution from providers — e.g. France IRVE's
-// per-station Licence-Ouverte publisher credit, OCM's upstream DataProvider.
-// Surfaced alongside the manifest credits so license-required per-publisher
-// attribution reaches the map strip even when the provider isn't enumerated
-// in the manifest.
-function runtimeAttributionToAttribution(attr: DataSourceAttribution): Attribution {
-  return {
-    sourceId: attr.text || attr.url,
-    name: attr.text,
-    url: attr.url,
-    spdxLicense: attr.license,
-    licenseUrl: attr.licenseUrl,
   };
 }
 

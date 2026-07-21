@@ -1,8 +1,26 @@
 import {
+  type DataSourceAttribution,
   dataSourceToAttribution,
   type IntegrationDataSource,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+
+/**
+ * Map a provider's per-record runtime attribution ({@link DataSourceAttribution}
+ * — e.g. France IRVE's per-station Licence-Ouverte publisher credit, an EV
+ * charge stop's upstream OCM data provider) onto the shared {@link Attribution}
+ * shape consumed by `<AttributionStrip>`. Shared by `DataSourceLayer` (map
+ * strip) and `EvPlanCard` (per-stop credit) so the mapping lives in one place.
+ */
+export function runtimeAttributionToAttribution(attr: DataSourceAttribution): Attribution {
+  return {
+    sourceId: attr.text || attr.url,
+    name: attr.text,
+    url: attr.url,
+    spdxLicense: attr.license,
+    licenseUrl: attr.licenseUrl,
+  };
+}
 
 /**
  * Minimal slice of `IntegrationRegistry` this helper depends on. Keeping it

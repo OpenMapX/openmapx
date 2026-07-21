@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { getStorage } from "../platform/storage";
 import type { UnitSystem } from "../types/geometry";
 import type { DateFormat, TimeFormat } from "../utils/dateTimeFormat";
+import { useDirectionsStore } from "./directionsStore";
 
 const UNITS_STORAGE_KEY = "openmapx:unitSystem";
 const TIME_FORMAT_STORAGE_KEY = "openmapx:timeFormat";
@@ -13,6 +14,14 @@ const INCIDENT_ALERTS_STORAGE_KEY = "openmapx:incidentAlerts";
 const AVOID_INCIDENTS_STORAGE_KEY = "openmapx:avoidIncidents";
 const VOICE_NAME_STORAGE_KEY = "openmapx:voiceName";
 const MAP_NORTH_UP_STORAGE_KEY = "openmapx:mapNorthUp";
+const EV_VEHICLE_ID_STORAGE_KEY = "openmapx:evVehicleId";
+const EV_SOC_TARGET_PCT_STORAGE_KEY = "openmapx:evSocTargetPct";
+const EV_PREFERRED_NETWORKS_STORAGE_KEY = "openmapx:evPreferredNetworks";
+const EV_AVOIDED_NETWORKS_STORAGE_KEY = "openmapx:evAvoidedNetworks";
+const EV_EXCLUSIVE_NETWORKS_STORAGE_KEY = "openmapx:evExclusiveNetworks";
+const EV_PREFER_CHEAPER_STORAGE_KEY = "openmapx:evPreferCheaper";
+const EV_HOME_PRICE_PER_KWH_STORAGE_KEY = "openmapx:evHomePricePerKwh";
+const EV_HOME_CURRENCY_STORAGE_KEY = "openmapx:evHomeCurrency";
 
 const TIME_FORMATS: readonly TimeFormat[] = ["auto", "12h", "24h"];
 const DATE_FORMATS: readonly DateFormat[] = ["auto", "dmy", "mdy", "ymd"];
@@ -87,6 +96,48 @@ function readMapNorthUp(): boolean {
   return getStorage().getString(MAP_NORTH_UP_STORAGE_KEY) === "true";
 }
 
+/** Last-chosen EV vehicle preset key (`@openmapx/ev-charge-planner`'s `VEHICLE_PRESETS`); null = none picked. */
+function readEvVehicleId(): string | null {
+  return getStorage().getString(EV_VEHICLE_ID_STORAGE_KEY) || null;
+}
+
+function readEvSocTargetPct(): number {
+  const v = Number(getStorage().getString(EV_SOC_TARGET_PCT_STORAGE_KEY));
+  return Number.isFinite(v) && v > 0 && v <= 100 ? v : 80;
+}
+
+function readStringArray(key: string): string[] {
+  const raw = getStorage().getString(key);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function readEvPreferCheaper(): boolean {
+  // Default ON: bias stop selection toward cheaper charging unless opted out.
+  const v = getStorage().getString(EV_PREFER_CHEAPER_STORAGE_KEY);
+  return v === null ? true : v === "true";
+}
+
+function readEvHomePricePerKwh(): number | null {
+  // Distinguish "never set" from a genuine 0 — `Number(null)`/`Number("")`
+  // are both 0, which would masquerade as a real tariff and feed a bogus
+  // zero cost into the estimate + backend request. Same presence idiom as
+  // readEvVehicleId/readVoiceName.
+  const raw = getStorage().getString(EV_HOME_PRICE_PER_KWH_STORAGE_KEY);
+  if (raw == null || raw === "") return null;
+  const v = Number(raw);
+  return Number.isFinite(v) && v >= 0 ? v : null;
+}
+
+function readEvHomeCurrency(): string {
+  return getStorage().getString(EV_HOME_CURRENCY_STORAGE_KEY) || "EUR";
+}
+
 interface SettingsState {
   units: UnitSystem;
   setUnits: (u: UnitSystem) => void;
@@ -117,6 +168,30 @@ interface SettingsState {
   /** Keep the map north-up during navigation instead of the default course-up. */
   mapNorthUp: boolean;
   setMapNorthUp: (v: boolean) => void;
+  /** Last-chosen EV vehicle preset key; null = no vehicle picked yet. */
+  evVehicleId: string | null;
+  setEvVehicleId: (v: string | null) => void;
+  /** User's charge-to preference at each EV stop, 0–100 (default 80). */
+  evSocTargetPct: number;
+  setEvSocTargetPct: (v: number) => void;
+  /** Charging network display names to favour when planning an EV route. */
+  evPreferredNetworks: string[];
+  setEvPreferredNetworks: (v: string[]) => void;
+  /** Charging network display names to de-prioritise when planning an EV route. */
+  evAvoidedNetworks: string[];
+  setEvAvoidedNetworks: (v: string[]) => void;
+  /** Treat `evPreferredNetworks` as a hard whitelist instead of a soft preference. */
+  evExclusiveNetworks: boolean;
+  setEvExclusiveNetworks: (v: boolean) => void;
+  /** Bias EV stop selection toward cheaper session cost (default on). */
+  evPreferCheaper: boolean;
+  setEvPreferCheaper: (v: boolean) => void;
+  /** User's home electricity tariff, for the whole-trip cost estimate. Null = not set. */
+  evHomePricePerKwh: number | null;
+  setEvHomePricePerKwh: (v: number | null) => void;
+  /** Currency of `evHomePricePerKwh`, e.g. "EUR". */
+  evHomeCurrency: string;
+  setEvHomeCurrency: (v: string) => void;
   /**
    * Re-read the persisted preferences from storage. The store is created at
    * module-eval time, which can run before the platform storage adapter is
@@ -177,6 +252,53 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     getStorage().setString(MAP_NORTH_UP_STORAGE_KEY, String(mapNorthUp));
     set({ mapNorthUp });
   },
+  evVehicleId: readEvVehicleId(),
+  setEvVehicleId: (evVehicleId) => {
+    getStorage().setString(EV_VEHICLE_ID_STORAGE_KEY, evVehicleId ?? "");
+    set({ evVehicleId });
+  },
+  evSocTargetPct: readEvSocTargetPct(),
+  setEvSocTargetPct: (evSocTargetPct) => {
+    getStorage().setString(EV_SOC_TARGET_PCT_STORAGE_KEY, String(evSocTargetPct));
+    set({ evSocTargetPct });
+  },
+  evPreferredNetworks: readStringArray(EV_PREFERRED_NETWORKS_STORAGE_KEY),
+  setEvPreferredNetworks: (evPreferredNetworks) => {
+    getStorage().setString(EV_PREFERRED_NETWORKS_STORAGE_KEY, JSON.stringify(evPreferredNetworks));
+    set({ evPreferredNetworks });
+    // Editing the network list directly re-asserts the user's intent, so drop
+    // any lingering one-shot "route without the network restriction" override
+    // (otherwise it would silently keep the whitelist disabled).
+    useDirectionsStore.getState().setEvForceNonExclusive(false);
+  },
+  evAvoidedNetworks: readStringArray(EV_AVOIDED_NETWORKS_STORAGE_KEY),
+  setEvAvoidedNetworks: (evAvoidedNetworks) => {
+    getStorage().setString(EV_AVOIDED_NETWORKS_STORAGE_KEY, JSON.stringify(evAvoidedNetworks));
+    set({ evAvoidedNetworks });
+  },
+  evExclusiveNetworks: getStorage().getString(EV_EXCLUSIVE_NETWORKS_STORAGE_KEY) === "true",
+  setEvExclusiveNetworks: (evExclusiveNetworks) => {
+    getStorage().setString(EV_EXCLUSIVE_NETWORKS_STORAGE_KEY, String(evExclusiveNetworks));
+    set({ evExclusiveNetworks });
+    // Toggling the whitelist directly re-asserts the user's intent, so drop
+    // any lingering one-shot "route without the network restriction" override.
+    useDirectionsStore.getState().setEvForceNonExclusive(false);
+  },
+  evPreferCheaper: readEvPreferCheaper(),
+  setEvPreferCheaper: (evPreferCheaper) => {
+    getStorage().setString(EV_PREFER_CHEAPER_STORAGE_KEY, String(evPreferCheaper));
+    set({ evPreferCheaper });
+  },
+  evHomePricePerKwh: readEvHomePricePerKwh(),
+  setEvHomePricePerKwh: (evHomePricePerKwh) => {
+    getStorage().setString(EV_HOME_PRICE_PER_KWH_STORAGE_KEY, String(evHomePricePerKwh ?? ""));
+    set({ evHomePricePerKwh });
+  },
+  evHomeCurrency: readEvHomeCurrency(),
+  setEvHomeCurrency: (evHomeCurrency) => {
+    getStorage().setString(EV_HOME_CURRENCY_STORAGE_KEY, evHomeCurrency);
+    set({ evHomeCurrency });
+  },
   hydrate: () =>
     set({
       units: readUnits(),
@@ -189,5 +311,13 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       avoidIncidents: readAvoidIncidents(),
       voiceName: readVoiceName(),
       mapNorthUp: readMapNorthUp(),
+      evVehicleId: readEvVehicleId(),
+      evSocTargetPct: readEvSocTargetPct(),
+      evPreferredNetworks: readStringArray(EV_PREFERRED_NETWORKS_STORAGE_KEY),
+      evAvoidedNetworks: readStringArray(EV_AVOIDED_NETWORKS_STORAGE_KEY),
+      evExclusiveNetworks: getStorage().getString(EV_EXCLUSIVE_NETWORKS_STORAGE_KEY) === "true",
+      evPreferCheaper: readEvPreferCheaper(),
+      evHomePricePerKwh: readEvHomePricePerKwh(),
+      evHomeCurrency: readEvHomeCurrency(),
     }),
 }));

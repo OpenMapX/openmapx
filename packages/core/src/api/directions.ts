@@ -1,5 +1,10 @@
 import type { LngLat } from "../types/geometry";
-import type { DirectionsResult, TravelMode } from "../types/routing";
+import type {
+  DirectionsResult,
+  EvDirectionsRequest,
+  EvDirectionsResult,
+  TravelMode,
+} from "../types/routing";
 import { apiClient } from "./client";
 import { API_ENDPOINTS } from "./endpoints";
 
@@ -43,4 +48,9 @@ export function fetchDirections({
     ...(departAt && { departAt }),
     ...(arriveBy && { arriveBy }),
   });
+}
+
+/** Plan an EV route with charge stops inserted, via `POST /directions/ev`. */
+export function postEvDirections(req: EvDirectionsRequest): Promise<EvDirectionsResult> {
+  return apiClient.post<EvDirectionsResult>(API_ENDPOINTS.directionsEv, req);
 }

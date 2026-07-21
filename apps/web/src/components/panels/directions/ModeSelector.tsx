@@ -4,6 +4,7 @@ import DirectionsBikeIcon from "@mui/icons-material/DirectionsBike";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
 import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
+import EvStationIcon from "@mui/icons-material/EvStation";
 import FlightIcon from "@mui/icons-material/Flight";
 import TwoWheelerIcon from "@mui/icons-material/TwoWheeler";
 import Box from "@mui/material/Box";
@@ -26,6 +27,18 @@ const MODES: { mode: TravelMode; icon: ReactNode; labelKey: string; disabled?: b
   { mode: "motorcycle", icon: <TwoWheelerIcon sx={{ fontSize: 22 }} />, labelKey: "motorcycle" },
   { mode: "flying", icon: <FlightIcon sx={{ fontSize: 22 }} />, labelKey: "flights" },
 ];
+
+/**
+ * Separate EV entry, rendered alongside the mapped `MODES` buttons. `"ev"` is
+ * deliberately NOT a `TravelMode` (see `DirectionsState.isEvMode`) — it exists
+ * only so the mode row can render an EV button next to the real `MODES`
+ * entries. Selecting it sets `isEvMode` in the directions store instead of
+ * changing `mode`.
+ */
+export const EV_MODE = {
+  icon: <EvStationIcon sx={{ fontSize: 22 }} />,
+  labelKey: "evMode",
+} as const;
 
 function ModeButton({
   icon,

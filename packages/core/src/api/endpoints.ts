@@ -6,6 +6,7 @@ export const API_ENDPOINTS = {
   autocomplete: "/api/integrations/geocoding/autocomplete",
   directions: "/api/integrations/routing/directions",
   directionsOptimize: "/api/integrations/routing/directions/optimize",
+  directionsEv: "/api/integrations/routing/directions/ev",
   routingMatch: "/api/integrations/routing/match",
   navigationAlerts: "/api/integrations/routing/navigation/alerts",
   roadConditions: "/api/integrations/road-conditions/events",

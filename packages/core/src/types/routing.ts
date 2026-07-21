@@ -1,3 +1,5 @@
+import type { DataSourceAttribution } from "./dataSource";
+import type { ConnectorStandard, EvVehicleSpec } from "./ev";
 import type { LngLat } from "./geometry";
 
 // "transit" and "flying" are handled outside the ground-routing engines:
@@ -250,4 +252,98 @@ export interface MatchResult {
   mode: TravelMode;
   /** Integration ID of the provider that produced these results. */
   provider?: string;
+}
+
+/** Request body for `POST /directions/ev` — a route with EV charge stops inserted. */
+export interface EvDirectionsRequest {
+  /** Origin…destination, in order. At least 2 required. */
+  waypoints: LngLat[];
+  /** Vehicle preset key. One of `vehicleId` or `vehicle` is required. */
+  vehicleId?: string;
+  /** Inline vehicle spec, overriding `vehicleId`. */
+  vehicle?: EvVehicleSpec;
+  /** Current battery state of charge, 0–100. */
+  socStartPct: number;
+  /** Minimum SoC to keep in reserve on arrival, 0–100. Default 10. */
+  socArrivalMinPct?: number;
+  /** User's charge-to preference at each stop, 0–100. Default 80 (distinct from the vehicle's chemistry taper). */
+  socTargetPct?: number;
+  /** Ambient temperature (°C), affects consumption. Default 20. */
+  ambientTempC?: number;
+  /** Wall-clock departure time `YYYY-MM-DDTHH:mm`. */
+  departAt?: string;
+  /** Inject active road closures as routing exclusions. */
+  avoidClosures?: boolean;
+  avoidTolls?: boolean;
+  avoidHighways?: boolean;
+  avoidFerries?: boolean;
+  /** Operator display names to favour (subscription/RFID access). */
+  preferredNetworks?: string[];
+  /** Operator display names to de-prioritise. */
+  avoidedNetworks?: string[];
+  /** Treat `preferredNetworks` as a hard whitelist instead of a soft preference. */
+  exclusiveNetworks?: boolean;
+  /** Bias stop selection toward cheaper session cost. Default true. */
+  preferCheaper?: boolean;
+  /** User's home electricity tariff, used to estimate whole-trip cost. */
+  homePricePerKwh?: number;
+  /** Currency of `homePricePerKwh`, e.g. "EUR". */
+  homeCurrency?: string;
+  units?: "metric" | "imperial";
+  lang?: string;
+}
+
+/** A charging stop inserted into an EV route plan. */
+export interface EvChargeStop {
+  /** Subset of the charging station identity/location needed to render the stop — not the full provider record. */
+  station: { id: string; name: string; coordinates: LngLat };
+  connector: ConnectorStandard;
+  powerKw: number;
+  /** Network/operator display name, for badge + display. */
+  operator?: string;
+  /** True when `operator` matches one of the request's `preferredNetworks`. */
+  isPreferredNetwork?: boolean;
+  arriveSocPct: number;
+  departSocPct: number;
+  chargeSeconds: number;
+  addedKwh: number;
+  /**
+   * Live availability at plan time, when the source reports it. Structural
+   * shape matching mobility-core's `EvseAvailability` field-for-field — kept
+   * inline here so `@openmapx/core` never imports `@openmapx/mobility-core`.
+   */
+  availability?: { available: number; total: number; updatedAt: string };
+  tariffSummary?: string;
+  /** Modelled cost of this charging session. */
+  estimatedCost?: { amount: number; currency: string };
+  attributions: DataSourceAttribution[];
+}
+
+/**
+ * Why a plan fell short of a complete route. `tight-margin` is reserved for
+ * the Phase 2 post-reroute re-validation pass and is not currently emitted.
+ */
+export type EvPlanWarning =
+  | { kind: "unreachable"; afterStopIndex: number }
+  | { kind: "tight-margin"; legIndex: number }
+  | { kind: "no-charger-data" }
+  | { kind: "no-allowed-network"; afterStopIndex: number };
+
+/**
+ * Response for `POST /directions/ev`. EV mode always returns a single
+ * primary route (no alternates — inserted stops make the request
+ * multi-waypoint, and Valhalla only produces alternates for exactly 2), so
+ * `routes` has length 1 and `activeRouteIndex` is 0.
+ */
+export interface EvDirectionsResult extends DirectionsResult {
+  /** Charge stops, aligned to `routes[activeRouteIndex]`'s inserted legs. */
+  stops: EvChargeStop[];
+  totals: {
+    driveSeconds: number;
+    chargeSeconds: number;
+    energyKwh: number;
+    /** Present when a home price was given and all priced stops share its currency. */
+    estimatedCost?: { amount: number; currency: string; homeKwh: number; publicKwh: number };
+  };
+  warnings: EvPlanWarning[];
 }

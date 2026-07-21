@@ -46,6 +46,7 @@ const nextConfig: NextConfig = {
   transpilePackages: [
     "@openmapx/command-palette",
     "@openmapx/core",
+    "@openmapx/ev-charge-planner",
     "@openmapx/i18n",
     "@openmapx/integration-framework",
     "@openmapx/mangrove-client",

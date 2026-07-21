@@ -32,6 +32,7 @@
     "@mui/material-nextjs": "^9.1.1",
     "@openmapx/command-palette": "workspace:^",
     "@openmapx/core": "workspace:^",
+    "@openmapx/ev-charge-planner": "workspace:^",
     "@openmapx/i18n": "workspace:*",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/mangrove-client": "workspace:^",

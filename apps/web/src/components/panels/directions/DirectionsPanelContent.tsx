@@ -1,6 +1,7 @@
 "use client";
 
 import CloseIcon from "@mui/icons-material/Close";
+import EvStationIcon from "@mui/icons-material/EvStation";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import MenuIcon from "@mui/icons-material/Menu";
 import RouteIcon from "@mui/icons-material/Route";
@@ -8,6 +9,7 @@ import ScheduleIcon from "@mui/icons-material/Schedule";
 import ShareIcon from "@mui/icons-material/Share";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
@@ -33,6 +35,7 @@ import {
   useDebounce,
   useDirections,
   useDirectionsStore,
+  useEvDirections,
   useMapStore,
   useMenuStore,
   useOptimizeRoute,
@@ -48,9 +51,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DetailsView } from "@/components/panels/directions/DetailsView";
+import { EvPlanCard } from "@/components/panels/directions/EvPlanCard";
+import { EvVehiclePanel, prettifyVehicleId } from "@/components/panels/directions/EvVehiclePanel";
 import { FlightPanel } from "@/components/panels/directions/FlightPanel";
-import { MODES, ModeButton } from "@/components/panels/directions/ModeSelector";
+import { EV_MODE, MODES, ModeButton } from "@/components/panels/directions/ModeSelector";
 import { RouteCard } from "@/components/panels/directions/RouteCard";
+import { RouteEnergyEstimate } from "@/components/panels/directions/RouteEnergyEstimate";
 import { RouteOptions } from "@/components/panels/directions/RouteOptions";
 import {
   type TimeMode,
@@ -63,6 +69,7 @@ import { WaypointList } from "@/components/panels/directions/WaypointList";
 import { AutocompleteDropdown } from "@/components/search/AutocompleteDropdown";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { attributionsForProviders } from "@/lib/attributionForProviders";
+import { buildEvDirectionsRequest } from "@/lib/buildEvDirectionsRequest";
 import { shareCurrentUrl } from "@/lib/deepLink";
 import { TEAL } from "@/lib/theme";
 import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
@@ -81,6 +88,10 @@ export function DirectionsPanelContent() {
     destination,
     destinationLabel,
     mode,
+    isEvMode,
+    evSocStartPct,
+    evSocArrivalMinPct,
+    evForceNonExclusive,
     activeRouteIndex,
     avoidHighways,
     avoidTolls,
@@ -105,6 +116,8 @@ export function DirectionsPanelContent() {
     reverseWaypoints,
     setOrigin,
     setMode,
+    setEvMode,
+    setEvForceNonExclusive,
     setActiveRouteIndex,
     setTransitItineraries,
     setActiveItineraryIndex,
@@ -113,6 +126,14 @@ export function DirectionsPanelContent() {
   } = useDirectionsStore();
   const units = useSettingsStore((s) => s.units);
   const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
+  const evVehicleId = useSettingsStore((s) => s.evVehicleId);
+  const evSocTargetPct = useSettingsStore((s) => s.evSocTargetPct);
+  const evPreferredNetworks = useSettingsStore((s) => s.evPreferredNetworks);
+  const evAvoidedNetworks = useSettingsStore((s) => s.evAvoidedNetworks);
+  const evExclusiveNetworks = useSettingsStore((s) => s.evExclusiveNetworks);
+  const evPreferCheaper = useSettingsStore((s) => s.evPreferCheaper);
+  const evHomePricePerKwh = useSettingsStore((s) => s.evHomePricePerKwh);
+  const evHomeCurrency = useSettingsStore((s) => s.evHomeCurrency);
 
   const { userLocation } = useMapStore();
   const registry = useIntegrationRegistry();
@@ -179,7 +200,8 @@ export function DirectionsPanelContent() {
       : undefined;
 
   const { data, isLoading, isError } = useDirections({
-    waypoints: isTransitMode || isFlightMode ? [] : allWaypointsFilled ? routeWaypoints : [],
+    waypoints:
+      isTransitMode || isFlightMode || isEvMode ? [] : allWaypointsFilled ? routeWaypoints : [],
     mode,
     avoidHighways,
     avoidTolls,
@@ -190,6 +212,60 @@ export function DirectionsPanelContent() {
     departAt: drivingDepartAtStr,
     arriveBy: drivingArriveByStr,
   });
+
+  // EV plan query — built identically to RouteLayer's independent request
+  // (via the shared `buildEvDirectionsRequest`) so both hit the same cache
+  // entry instead of firing two network requests.
+  const evRequest = useMemo(
+    () =>
+      buildEvDirectionsRequest({
+        isEvMode,
+        waypoints: routeWaypoints,
+        allWaypointsFilled,
+        vehicleId: evVehicleId,
+        socStartPct: evSocStartPct,
+        socArrivalMinPct: evSocArrivalMinPct,
+        socTargetPct: evSocTargetPct,
+        departAt: drivingDepartAtStr,
+        avoidHighways,
+        avoidTolls,
+        avoidFerries,
+        avoidClosures: avoidIncidents,
+        preferredNetworks: evPreferredNetworks,
+        avoidedNetworks: evAvoidedNetworks,
+        exclusiveNetworks: evExclusiveNetworks,
+        forceNonExclusive: evForceNonExclusive,
+        preferCheaper: evPreferCheaper,
+        homePricePerKwh: evHomePricePerKwh,
+        homeCurrency: evHomeCurrency,
+        units,
+        lang: locale,
+      }),
+    [
+      isEvMode,
+      routeWaypoints,
+      allWaypointsFilled,
+      evVehicleId,
+      evSocStartPct,
+      evSocArrivalMinPct,
+      evSocTargetPct,
+      drivingDepartAtStr,
+      avoidHighways,
+      avoidTolls,
+      avoidFerries,
+      avoidIncidents,
+      evPreferredNetworks,
+      evAvoidedNetworks,
+      evExclusiveNetworks,
+      evForceNonExclusive,
+      evPreferCheaper,
+      evHomePricePerKwh,
+      evHomeCurrency,
+      units,
+      locale,
+    ],
+  );
+  const { data: evData, isLoading: evLoading, isError: evIsError } = useEvDirections(evRequest);
 
   // Transit plan query
   const debouncedDepartureTime = useDebounce(transitDepartureTime, 500);
@@ -601,7 +677,7 @@ export function DirectionsPanelContent() {
           }}
         >
           {MODES.map(({ mode: m, icon, labelKey, disabled }) => {
-            const isActive = mode === m;
+            const isActive = mode === m && !isEvMode;
             const isTransit = m === "transit";
             const timeStr = disabled
               ? undefined
@@ -633,6 +709,23 @@ export function DirectionsPanelContent() {
               />
             );
           })}
+          <ModeButton
+            key="ev"
+            icon={EV_MODE.icon}
+            label={t(EV_MODE.labelKey)}
+            time={
+              isEvMode && evData?.routes[0]?.duration !== undefined
+                ? formatDuration(evData.routes[0].duration)
+                : undefined
+            }
+            active={isEvMode}
+            loading={isEvMode && evLoading}
+            onClick={() => {
+              setEvMode(true);
+              setDetailsRouteIndex(null);
+              setTransitDetailsIndex(null);
+            }}
+          />
         </Box>
 
         <IconButton
@@ -834,6 +927,26 @@ export function DirectionsPanelContent() {
 
         <Divider />
 
+        {/* Plain-route energy/cost + vehicle chip, driving mode only (EV mode
+            gets its own vehicle inputs via EvVehiclePanel above). */}
+        {mode === "driving" && !isEvMode && allWaypointsFilled && (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 0.5 }}>
+            <Chip
+              icon={<EvStationIcon sx={{ fontSize: 16 }} />}
+              label={evVehicleId ? prettifyVehicleId(evVehicleId) : t("ev.addVehicle")}
+              size="small"
+              onClick={() => setEvMode(true)}
+              sx={{ cursor: "pointer" }}
+            />
+            {data?.routes[activeRouteIndex] && (
+              <RouteEnergyEstimate
+                route={data.routes[activeRouteIndex]}
+                onEditVehicle={() => setEvMode(true)}
+              />
+            )}
+          </Box>
+        )}
+
         {/* Route results */}
         {isFlightMode ? (
           <FlightPanel />
@@ -848,6 +961,26 @@ export function DirectionsPanelContent() {
               {t("chooseOrigin")}
             </Typography>
           </Box>
+        ) : isEvMode ? (
+          <>
+            <EvVehiclePanel />
+            {!evVehicleId ? null : evLoading ? (
+              <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+                <CircularProgress size={28} sx={{ color: TEAL }} />
+              </Box>
+            ) : evIsError ? (
+              <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
+                <Typography variant="body2" sx={{ color: "error.main" }}>
+                  {t("noRoutesFound")}
+                </Typography>
+              </Box>
+            ) : evData ? (
+              <EvPlanCard
+                result={evData}
+                onRetryWithoutNetworkRestriction={() => setEvForceNonExclusive(true)}
+              />
+            ) : null}
+          </>
         ) : isTransitMode ? (
           transitLoading ? (
             <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
