@@ -84,8 +84,12 @@ function isPoiSourceArray(value: unknown): value is PoiSource[] {
  * dynamically imports each `poi-sources.{js,ts}` module, calls
  * `declarePoiSources()`, and feeds the result into the shared registry.
  *
- * Failures are isolated per integration — one broken community module does
- * not crash the data-manager. The drift guard (A-bis.4) surfaces persistent
+ * Builtin (rootDir/integrations/*) failures are FATAL: they mean the image's
+ * own baked integration code is broken, so this throws after the full scan
+ * (collecting every builtin failure first) rather than silently registering
+ * an incomplete source list. Community (customIntegrationsDir/*) failures
+ * stay isolated per integration — one broken community module does not
+ * crash the data-manager. The drift guard (A-bis.4) surfaces persistent
  * cross-process discrepancies.
  *
  * Prod note: data-manager runs `tsx` in dev (.ts imports work) and node in
@@ -97,6 +101,7 @@ export async function discoverPoiSources(opts: DiscoveryOptions): Promise<Discov
   const importFn = opts.importModule ?? ((url: string) => import(url));
   const builtin = listIntegrationDirs(resolve(opts.rootDir, "integrations"));
   const community = listIntegrationDirs(opts.customIntegrationsDir);
+  const builtinDirs = new Set(builtin);
   const dirs = [...builtin, ...community];
 
   const result: DiscoveryResult = {
@@ -105,6 +110,7 @@ export async function discoverPoiSources(opts: DiscoveryOptions): Promise<Discov
     registered: 0,
     errors: [],
   };
+  const builtinFailures: string[] = [];
 
   for (const dir of dirs) {
     const integrationName = dir.split("/").pop() ?? dir;
@@ -148,12 +154,24 @@ export async function discoverPoiSources(opts: DiscoveryOptions): Promise<Discov
     } catch (err) {
       const reason = (err as Error).message;
       result.errors.push({ integration: integrationName, reason });
+      if (builtinDirs.has(dir)) {
+        builtinFailures.push(integrationName);
+      }
       opts.logger.warn("poi-source-discovery: failed to load integration poi-sources", {
         integration: integrationName,
         file,
         err: reason,
       });
     }
+  }
+
+  if (builtinFailures.length > 0) {
+    opts.logger.error("poi-source-discovery: builtin POI-source discovery failed", {
+      integrations: builtinFailures,
+    });
+    throw new Error(
+      `poi-source-discovery: builtin POI-source discovery failed for: ${builtinFailures.join(", ")}`,
+    );
   }
 
   opts.logger.info("poi-source-discovery: scan complete", {

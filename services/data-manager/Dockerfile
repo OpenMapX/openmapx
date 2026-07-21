@@ -3,8 +3,11 @@
 # IMPORTANT: build context MUST be the repo root. This Dockerfile reaches
 # outside its own directory to pick up:
 #   - pnpm-workspace.yaml + workspace package.json files (for dependency
-#     resolution of @openmapx/db-schema, @openmapx/hardlinks, and
-#     @openmapx/motis-feed-proxy-config)
+#     resolution of @openmapx/db-schema, @openmapx/hardlinks, and the other
+#     workspace packages the baked `integrations/` tree depends on)
+#   - integrations/ — baked into the image so POI-source discovery is
+#     self-contained (see poi-source-discovery.ts): no host bind-mount of
+#     the repo is required to see integration code, mirroring apps/api
 #   - services/motis/tools/transitous/requirements.txt (pulled into the
 #     runtime stage for the Transitous GTFS pipeline)
 #
@@ -40,8 +43,19 @@ COPY packages/poi-source-registry/package.json packages/poi-source-registry/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/core/package.json packages/core/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
+COPY packages/i18n/package.json packages/i18n/
+COPY packages/cli/package.json packages/cli/
+COPY packages/integration-framework/package.json packages/integration-framework/
+COPY packages/mangrove-client/package.json packages/mangrove-client/
+COPY packages/mobility-core/package.json packages/mobility-core/
+COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
+COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
+COPY packages/ourairports-data/package.json packages/ourairports-data/
+COPY packages/place-ids/package.json packages/place-ids/
+COPY packages/presets/package.json packages/presets/
+COPY integrations/ integrations/
 
-RUN pnpm install --filter @openmapx/data-manager... --frozen-lockfile
+RUN pnpm install --frozen-lockfile
 
 FROM base AS prod-deps
 WORKDIR /app
@@ -57,8 +71,19 @@ COPY packages/poi-source-registry/package.json packages/poi-source-registry/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/core/package.json packages/core/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
+COPY packages/i18n/package.json packages/i18n/
+COPY packages/cli/package.json packages/cli/
+COPY packages/integration-framework/package.json packages/integration-framework/
+COPY packages/mangrove-client/package.json packages/mangrove-client/
+COPY packages/mobility-core/package.json packages/mobility-core/
+COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
+COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
+COPY packages/ourairports-data/package.json packages/ourairports-data/
+COPY packages/place-ids/package.json packages/place-ids/
+COPY packages/presets/package.json packages/presets/
+COPY integrations/ integrations/
 
-RUN pnpm install --filter @openmapx/data-manager... --frozen-lockfile --prod --ignore-scripts
+RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
 FROM deps AS builder
 WORKDIR /app
@@ -168,8 +193,46 @@ COPY --from=prod-deps /app/packages/transitous-core/node_modules ./packages/tran
 COPY packages/core/ ./packages/core/
 COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
 COPY packages/hey-api-client-fetch/ ./packages/hey-api-client-fetch/
+
+# The baked `integrations/` tree (below) dynamically imports these packages
+# at runtime the same way apps/api's integration loader does — they are not
+# direct dependencies of @openmapx/data-manager itself, but of the
+# integration code data-manager now ships and runs discovery against instead
+# of reading from the host bind-mount.
+COPY packages/place-ids/ ./packages/place-ids/
+COPY packages/integration-framework/ ./packages/integration-framework/
+COPY --from=prod-deps /app/packages/integration-framework/node_modules ./packages/integration-framework/node_modules
+COPY packages/mobility-core/ ./packages/mobility-core/
+COPY --from=prod-deps /app/packages/mobility-core/node_modules ./packages/mobility-core/node_modules
+COPY packages/mangrove-client/ ./packages/mangrove-client/
+COPY --from=prod-deps /app/packages/mangrove-client/node_modules ./packages/mangrove-client/node_modules
+COPY packages/noaa-coops-data/ ./packages/noaa-coops-data/
+COPY --from=prod-deps /app/packages/noaa-coops-data/node_modules ./packages/noaa-coops-data/node_modules
+COPY packages/openconditions-contrib-client/ ./packages/openconditions-contrib-client/
+COPY --from=prod-deps /app/packages/openconditions-contrib-client/node_modules ./packages/openconditions-contrib-client/node_modules
+COPY packages/ourairports-data/ ./packages/ourairports-data/
+COPY --from=prod-deps /app/packages/ourairports-data/node_modules ./packages/ourairports-data/node_modules
+COPY packages/presets/ ./packages/presets/
+COPY --from=prod-deps /app/packages/presets/node_modules ./packages/presets/node_modules
+
+# packages/cli source + node_modules — bundled for parity with apps/api's
+# runner (admin-cli.ts spawns the CLI for data jobs when no host bind-mount
+# with the CLI is present); tiny, no native deps.
+COPY packages/cli/ packages/cli/
+COPY --from=prod-deps /app/packages/cli/node_modules ./packages/cli/node_modules
+
+# Integrations with pnpm-resolved node_modules (manifests + code + deps) —
+# this is what makes data-manager self-contained: POI-source discovery no
+# longer needs the host bind-mount to see integration code.
+COPY --from=prod-deps /app/integrations ./integrations
+
 COPY --from=builder /app/services/data-manager/dist ./services/data-manager/dist
 COPY services/data-manager/package.json ./services/data-manager/
+
+# tsx resolves tsconfig paths + .js -> .ts at runtime for the dynamically
+# imported integration modules (mirrors apps/api's runner).
+ENV TSX_TSCONFIG_PATH=/app/tsconfig.base.json
+COPY tsconfig.base.json ./
 
 # Run as a dedicated non-root user. The data-manager writes to /data which is
 # bind-mounted from the host — the host-side permissions need to allow writes

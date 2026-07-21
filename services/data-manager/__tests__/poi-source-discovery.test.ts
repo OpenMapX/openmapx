@@ -114,23 +114,53 @@ describe("discoverPoiSources", () => {
     expect(getAllPoiSources()[0].stationIdPrefix).toBe("de-bnetza:");
   });
 
-  it("isolates errors per integration — broken one skipped, valid one registered", async () => {
+  it("throws when a builtin integration's poi-sources module fails to load", async () => {
     writeIntegration("ev-charging", VALID_SOURCE_DECL_JS);
     writeIntegration("broken-integration", BROKEN_DECL_JS);
     const logger = makeLogger();
 
-    const result = await discoverPoiSources({ rootDir: tmpRoot, logger });
-
-    expect(result.scanned).toBe(2);
-    expect(result.withSources).toBe(1);
-    expect(result.registered).toBe(1);
-    expect(result.errors).toHaveLength(1);
-    expect(result.errors[0]?.integration).toBe("broken-integration");
-    expect(getAllPoiSources().map((s) => s.id)).toEqual(["fixture-ev-1"]);
+    await expect(discoverPoiSources({ rootDir: tmpRoot, logger })).rejects.toThrow(
+      /builtin POI-source discovery failed for: broken-integration/,
+    );
     expect(logger.warn).toHaveBeenCalledWith(
       "poi-source-discovery: failed to load integration poi-sources",
       expect.objectContaining({ integration: "broken-integration" }),
     );
+    expect(logger.error).toHaveBeenCalledWith(
+      "poi-source-discovery: builtin POI-source discovery failed",
+      expect.objectContaining({ integrations: ["broken-integration"] }),
+    );
+  });
+
+  it("isolates errors per integration when the failure is a community integration", async () => {
+    writeIntegration("ev-charging", VALID_SOURCE_DECL_JS);
+    const customRoot = mkdtempSync(join(tmpdir(), "poi-discovery-custom-"));
+    try {
+      const brokenCommunityDir = join(customRoot, "broken-community");
+      mkdirSync(brokenCommunityDir, { recursive: true });
+      writeFileSync(join(brokenCommunityDir, "poi-sources.js"), BROKEN_DECL_JS);
+      const logger = makeLogger();
+
+      const result = await discoverPoiSources({
+        rootDir: tmpRoot,
+        customIntegrationsDir: customRoot,
+        logger,
+      });
+
+      expect(result.scanned).toBe(2);
+      expect(result.withSources).toBe(1);
+      expect(result.registered).toBe(1);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]?.integration).toBe("broken-community");
+      expect(getAllPoiSources().map((s) => s.id)).toEqual(["fixture-ev-1"]);
+      expect(logger.warn).toHaveBeenCalledWith(
+        "poi-source-discovery: failed to load integration poi-sources",
+        expect.objectContaining({ integration: "broken-community" }),
+      );
+      expect(logger.error).not.toHaveBeenCalled();
+    } finally {
+      rmSync(customRoot, { recursive: true, force: true });
+    }
   });
 
   it("skips integrations without a poi-sources file (silent)", async () => {
@@ -218,7 +248,7 @@ describe("discoverPoiSources", () => {
     expect(result).toEqual({ scanned: 0, withSources: 0, registered: 0, errors: [] });
   });
 
-  it("warns when a source declaration is invalid (registry throws)", async () => {
+  it("throws when a builtin source declaration is invalid (registry throws)", async () => {
     const INVALID_ID = `
 export function declarePoiSources() {
   return [{
@@ -236,10 +266,9 @@ export function declarePoiSources() {
     writeIntegration("bad-source", INVALID_ID);
     const logger = makeLogger();
 
-    const result = await discoverPoiSources({ rootDir: tmpRoot, logger });
-
-    expect(result.errors).toHaveLength(1);
-    expect(result.errors[0]?.reason).toMatch(/invalid declaration/);
+    await expect(discoverPoiSources({ rootDir: tmpRoot, logger })).rejects.toThrow(
+      /builtin POI-source discovery failed for: bad-source/,
+    );
     expect(getAllPoiSources()).toEqual([]);
   });
 });

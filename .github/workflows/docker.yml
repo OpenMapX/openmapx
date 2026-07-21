@@ -49,6 +49,7 @@ jobs:
             data-manager:
               - 'services/data-manager/**'
               - 'packages/**'
+              - 'integrations/**'
               - 'pnpm-lock.yaml'
               - 'pnpm-workspace.yaml'
               - 'package.json'

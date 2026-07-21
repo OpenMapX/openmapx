@@ -16,6 +16,7 @@
     "redis:flush": "docker exec docker-redis-1 redis-cli FLUSHALL",
     "check-translations": "pnpm -C packages/i18n exec tsx scripts/check-translations.ts",
     "check-data-flows": "pnpm -C packages/cli exec tsx ../../scripts/check-data-flows.ts",
+    "check-dockerfile-sync": "pnpm -C packages/cli exec tsx ../../scripts/check-dockerfile-workspace-sync.ts",
     "check-feed-ids": "pnpm -C packages/cli exec tsx ../../scripts/check-feed-ids.ts",
     "check-legal-tables": "pnpm -C packages/cli exec tsx ../../scripts/check-legal-tables.ts",
     "check-legal-updated": "pnpm -C packages/cli exec tsx ../../scripts/check-legal-updated.ts",

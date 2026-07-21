@@ -1,4 +1,5 @@
 import { accessSync, constants } from "node:fs";
+import { join } from "node:path";
 import Fastify from "fastify";
 import { Redis } from "ioredis";
 import { registerApi } from "./api.js";
@@ -29,6 +30,17 @@ registerAuth(app, resolveAuthToken(app));
 
 const dataDir = process.env.DATA_DIR ?? "/data";
 const repoRoot = process.env.OPENMAPX_ROOT_DIR ?? "";
+// Where to discover POI sources (`integrations/*/poi-sources.ts`) from. This
+// is decoupled from `repoRoot`: repoRoot stays the host bind-mount used for
+// lockfile write-backs (POST /transit/bump, gbfs-catalog-lock.ts, promote.ts's
+// `docker compose -f ${repoRoot}/...`), but the image now bakes its own copy
+// of `integrations/` so discovery shouldn't depend on that mount being
+// present. In the built image `dist/index.js` lives at
+// `/app/services/data-manager/dist` — three levels up is `/app`, the same
+// depth `src/` sits at relative to the repo root in dev.
+const integrationsRootDir =
+  process.env.OPENMAPX_INTEGRATIONS_DIR ??
+  (import.meta.dirname ? join(import.meta.dirname, "..", "..", "..") : repoRoot);
 const singleFlight = getSingleFlightController();
 const operationsPolicy = resolveOperationsProfileFromEnv();
 
@@ -172,15 +184,15 @@ app
     // BEFORE setupPoiIngestCron — the scheduler reads the registry snapshot
     // at boot, so anything that hasn't been registered yet won't get a cron.
     const customIntegrationsDir = process.env.OPENMAPX_CUSTOM_INTEGRATIONS_DIR;
-    if (repoRoot) {
+    if (integrationsRootDir) {
       await discoverPoiSources({
-        rootDir: repoRoot,
+        rootDir: integrationsRootDir,
         customIntegrationsDir,
         logger: poiAdapter,
       });
     } else {
       app.log.warn(
-        "OPENMAPX_ROOT_DIR not set — skipping POI source discovery (data-manager will see an empty registry)",
+        "no integrations root resolved (OPENMAPX_INTEGRATIONS_DIR unset and import.meta.dirname unavailable) — skipping POI source discovery (data-manager will see an empty registry)",
       );
     }
 
