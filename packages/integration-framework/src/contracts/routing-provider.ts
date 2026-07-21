@@ -63,4 +63,15 @@ export interface RoutingProvider {
     mode: TravelMode,
     options?: MatchOptions,
   ): Promise<MatchResult>;
+  /**
+   * Optional many-to-many time/distance matrix (Valhalla `/sources_to_targets`).
+   * `rows[s][t]` gives seconds + km from `sources[s]` to `targets[t]`; `null`
+   * when the engine reports the pair unreachable. Used by EV charge-planning
+   * to score charger detours.
+   */
+  getMatrix?(
+    sources: LngLat[],
+    targets: LngLat[],
+    opts?: { mode?: TravelMode },
+  ): Promise<({ seconds: number; km: number } | null)[][]>;
 }

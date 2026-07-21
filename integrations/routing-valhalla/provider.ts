@@ -497,6 +497,13 @@ export function buildExclusions(options: RoutingOptions): ValhallaExclusions {
   return result;
 }
 
+/** Response shape for Valhalla's `sources_to_targets` matrix endpoint. */
+interface ValhallaMatrixResponse {
+  sources_to_targets: Array<
+    Array<{ from_index: number; to_index: number; time: number | null; distance: number | null }>
+  >;
+}
+
 export const valhallaService: RoutingProvider = {
   id: "valhalla",
   supportedModes: ["walking", "cycling", "driving", "motorcycle"] as TravelMode[],
@@ -647,5 +654,41 @@ export const valhallaService: RoutingProvider = {
       points: (data.matched_points ?? []).map(transformMatchedPoint),
       mode,
     };
+  },
+
+  /**
+   * Many-to-many time/distance matrix via Valhalla's `sources_to_targets`
+   * endpoint. Used by EV charge-planning to score charger detours without
+   * requesting a full route per candidate.
+   */
+  async getMatrix(
+    sources: [number, number][],
+    targets: [number, number][],
+    opts: { mode?: TravelMode } = {},
+  ): Promise<({ seconds: number; km: number } | null)[][]> {
+    const costing = COSTING_MAP[opts.mode ?? "driving"] ?? "auto";
+
+    const body = {
+      sources: sources.map(([lon, lat]) => ({ lat, lon })),
+      targets: targets.map(([lon, lat]) => ({ lat, lon })),
+      costing,
+      units: "kilometers",
+    };
+
+    const data = await fetchJson<ValhallaMatrixResponse>(endpoint("/sources_to_targets"), {
+      timeoutMs: 15_000,
+      userAgent: null,
+      headers: { "Content-Type": "application/json" },
+      errorMessage: ({ status }) => `Valhalla sources_to_targets error ${status}`,
+      init: { method: "POST", body: JSON.stringify(body) },
+    });
+
+    return data.sources_to_targets.map((row) =>
+      row.map((cell) =>
+        cell.time == null || cell.distance == null
+          ? null
+          : { seconds: cell.time, km: cell.distance },
+      ),
+    );
   },
 };
