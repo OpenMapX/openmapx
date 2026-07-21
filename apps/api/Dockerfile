@@ -12,6 +12,7 @@ COPY packages/core/package.json packages/core/
 COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
 COPY packages/mobility-core/package.json packages/mobility-core/
+COPY packages/ev-charge-planner/package.json packages/ev-charge-planner/
 COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
 COPY packages/mobility-formats/package.json packages/mobility-formats/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
@@ -38,6 +39,7 @@ COPY packages/core/package.json packages/core/
 COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
 COPY packages/mobility-core/package.json packages/mobility-core/
+COPY packages/ev-charge-planner/package.json packages/ev-charge-planner/
 COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
 COPY packages/mobility-formats/package.json packages/mobility-formats/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
@@ -72,6 +74,7 @@ COPY packages/core/ packages/core/
 COPY packages/db-schema/ packages/db-schema/
 COPY packages/hardlinks/ packages/hardlinks/
 COPY packages/mobility-core/ packages/mobility-core/
+COPY packages/ev-charge-planner/ packages/ev-charge-planner/
 COPY packages/mobility-formats/ packages/mobility-formats/
 COPY packages/motis-feed-proxy-config/ packages/motis-feed-proxy-config/
 COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
@@ -133,6 +136,7 @@ COPY packages/core/ packages/core/
 COPY packages/db-schema/ packages/db-schema/
 COPY packages/hardlinks/ packages/hardlinks/
 COPY packages/mobility-core/ packages/mobility-core/
+COPY packages/ev-charge-planner/ packages/ev-charge-planner/
 COPY packages/mobility-formats/ packages/mobility-formats/
 COPY packages/motis-feed-proxy-config/ packages/motis-feed-proxy-config/
 COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
@@ -147,6 +151,7 @@ COPY packages/presets/ packages/presets/
 COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
 COPY --from=prod-deps /app/packages/db-schema/node_modules ./packages/db-schema/node_modules
 COPY --from=prod-deps /app/packages/mobility-core/node_modules ./packages/mobility-core/node_modules
+COPY --from=prod-deps /app/packages/ev-charge-planner/node_modules ./packages/ev-charge-planner/node_modules
 COPY --from=prod-deps /app/packages/mobility-formats/node_modules ./packages/mobility-formats/node_modules
 COPY --from=prod-deps /app/packages/integration-framework/node_modules ./packages/integration-framework/node_modules
 COPY --from=prod-deps /app/packages/poi-source-registry/node_modules ./packages/poi-source-registry/node_modules

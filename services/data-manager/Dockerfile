@@ -48,6 +48,7 @@ COPY packages/cli/package.json packages/cli/
 COPY packages/integration-framework/package.json packages/integration-framework/
 COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/mobility-core/package.json packages/mobility-core/
+COPY packages/ev-charge-planner/package.json packages/ev-charge-planner/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
 COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
 COPY packages/ourairports-data/package.json packages/ourairports-data/
@@ -76,6 +77,7 @@ COPY packages/cli/package.json packages/cli/
 COPY packages/integration-framework/package.json packages/integration-framework/
 COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/mobility-core/package.json packages/mobility-core/
+COPY packages/ev-charge-planner/package.json packages/ev-charge-planner/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
 COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
 COPY packages/ourairports-data/package.json packages/ourairports-data/
@@ -204,6 +206,8 @@ COPY packages/integration-framework/ ./packages/integration-framework/
 COPY --from=prod-deps /app/packages/integration-framework/node_modules ./packages/integration-framework/node_modules
 COPY packages/mobility-core/ ./packages/mobility-core/
 COPY --from=prod-deps /app/packages/mobility-core/node_modules ./packages/mobility-core/node_modules
+COPY packages/ev-charge-planner/ ./packages/ev-charge-planner/
+COPY --from=prod-deps /app/packages/ev-charge-planner/node_modules ./packages/ev-charge-planner/node_modules
 COPY packages/mangrove-client/ ./packages/mangrove-client/
 COPY --from=prod-deps /app/packages/mangrove-client/node_modules ./packages/mangrove-client/node_modules
 COPY packages/noaa-coops-data/ ./packages/noaa-coops-data/

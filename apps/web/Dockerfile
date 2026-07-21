@@ -16,6 +16,7 @@ COPY packages/integration-framework/package.json packages/integration-framework/
 COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/mangrove-react/package.json packages/mangrove-react/
 COPY packages/mobility-core/package.json packages/mobility-core/
+COPY packages/ev-charge-planner/package.json packages/ev-charge-planner/
 COPY packages/mobility-formats/package.json packages/mobility-formats/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
 COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
@@ -42,6 +43,7 @@ COPY packages/integration-framework/ packages/integration-framework/
 COPY packages/mangrove-client/ packages/mangrove-client/
 COPY packages/mangrove-react/ packages/mangrove-react/
 COPY packages/mobility-core/ packages/mobility-core/
+COPY packages/ev-charge-planner/ packages/ev-charge-planner/
 COPY packages/mobility-formats/ packages/mobility-formats/
 COPY packages/noaa-coops-data/ packages/noaa-coops-data/
 COPY packages/openconditions-contrib-client/ packages/openconditions-contrib-client/
