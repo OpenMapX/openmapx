@@ -1,8 +1,8 @@
 import type { ConnectorStandard, CurrentStandard, LngLat, Route } from "@openmapx/core";
 import { normalizeConnector, normalizeOperator } from "@openmapx/core";
 import type { EvChargingStation, EvChargingTariff } from "@openmapx/mobility-core/ev-charging";
-import { chargeSecondsFor } from "./charging.js";
-import { routeEnergyKwh } from "./consumption.js";
+import { chargeSecondsFor } from "./charging";
+import { routeEnergyKwh } from "./consumption";
 import type {
   ChargePlan,
   MatrixCell,
@@ -10,7 +10,7 @@ import type {
   PlanInput,
   PlannedStop,
   PlanWarning,
-} from "./types.js";
+} from "./types";
 
 const MAX_STOPS = 12;
 const DETOUR_UPLIFT = 1.15; // off-route energy penalty (matrix gives no elevation)

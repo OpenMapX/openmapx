@@ -1,5 +1,5 @@
 import type { Route } from "@openmapx/core";
-import type { EvVehicleSpec } from "./types.js";
+import type { EvVehicleSpec } from "./types";
 
 /** Potential-energy per metre of climb, Wh, per tonne (g=9.81, 1 kWh=3.6e6 J). */
 const GRAVITY_WH_PER_M_PER_TONNE = (9.81 * 1000) / 3600; // ≈ 2.725

@@ -4,7 +4,7 @@
 // real-world consumption varies with speed, weather, load and driving style.
 // Where the dataset does not carry an explicit consumption figure,
 // baseWhPerKm is derived as usableBatteryKwh / wltpRangeKm * 1000.
-import type { EvVehicleSpec } from "./types.js";
+import type { EvVehicleSpec } from "./types";
 
 export const VEHICLE_PRESETS: Record<string, EvVehicleSpec> = {
   "vw-id4": {
