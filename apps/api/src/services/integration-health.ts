@@ -189,7 +189,7 @@ async function executeSingleHealthCheck(
     return resolveConfigValue(integration, key) ?? "";
   }
   if (hc.urlTemplate) {
-    const resolved = (hc.urlTemplate as string).replace(/\$\{([\w:]+)\}/g, (_, key: string) =>
+    const resolved = (hc.urlTemplate as string).replace(/\$\{([\w:-]+)\}/g, (_, key: string) =>
       resolvePlaceholder(key),
     );
     if (unsatisfiedService) {
@@ -221,7 +221,7 @@ async function executeSingleHealthCheck(
   const rawHeaders = (hc.headers as Record<string, string>) ?? {};
   const interpolatedHeaders: Record<string, string> = {};
   for (const [k, v] of Object.entries(rawHeaders)) {
-    interpolatedHeaders[k] = v.replace(/\$\{([\w:]+)\}/g, (_, key: string) =>
+    interpolatedHeaders[k] = v.replace(/\$\{([\w:-]+)\}/g, (_, key: string) =>
       resolvePlaceholder(key),
     );
   }

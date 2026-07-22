@@ -149,6 +149,43 @@ describe("integration-health SSRF guard", () => {
   });
 });
 
+describe("integration-health placeholder substitution", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("substitutes a hyphenated ${...} config key in both urlTemplate and a header value", async () => {
+    const integration = makeIntegration({
+      type: "http",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional string (manifest template syntax, not JS interpolation)
+      urlTemplate: "https://api.example.com/status?key=${us-afdc-api-key}",
+      headers: {
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional string (manifest template syntax, not JS interpolation)
+        "X-Api-Key": "${us-afdc-api-key}",
+      },
+    });
+    integration.config = { "us-afdc-api-key": "secret-token-123" };
+
+    const results = await executeIntegrationHealthCheck(integration);
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.status).toBe("up");
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://api.example.com/status?key=secret-token-123",
+      expect.objectContaining({
+        headers: expect.objectContaining({ "X-Api-Key": "secret-token-123" }),
+      }),
+    );
+  });
+});
+
 describe("integration-health impersonation", () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
