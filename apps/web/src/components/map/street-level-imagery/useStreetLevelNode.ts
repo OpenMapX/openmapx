@@ -4,7 +4,7 @@ import type {
   StreetLevelLink,
   StreetLevelRef,
 } from "@openmapx/core";
-import { formatStreetLevelRef, selectArrowLinks } from "@openmapx/core";
+import { formatStreetLevelRef, proxyImageUrl, selectArrowLinks } from "@openmapx/core";
 
 export interface StreetLevelNode {
   /** Composite ref string; doubles as the Photo Sphere Viewer node id. */
@@ -112,6 +112,25 @@ function remember(key: string, promise: Promise<StreetLevelNode>): Promise<Stree
   return promise;
 }
 
+/**
+ * Route imagery through the backend image proxy.
+ *
+ * Mapillary serves its panoramas from `*.xx.fbcdn.net`, which is on the
+ * tracking lists that Firefox's Enhanced Tracking Protection enforces by
+ * default — the fetch is blocked before it leaves the browser and the viewer
+ * shows a bare "panorama cannot be loaded" over an image whose metadata,
+ * arrows and attribution all arrived fine. Proxying also keeps the user's IP
+ * away from the provider, which is the same reason place photos go through it.
+ */
+function proxiedAssets(assets: StreetLevelImage["assets"]): StreetLevelImage["assets"] {
+  const proxied: StreetLevelImage["assets"] = { ...assets };
+  for (const key of ["thumb", "sd", "hd"] as const) {
+    const url = assets[key];
+    if (url) proxied[key] = proxyImageUrl(url);
+  }
+  return proxied;
+}
+
 async function loadStreetLevelNode(apiUrl: string, ref: StreetLevelRef): Promise<StreetLevelNode> {
   const base = `${apiUrl}/api/integrations/${integrationIdFor(ref.providerId)}/images/${encodeURIComponent(ref.imageId)}`;
 
@@ -121,13 +140,13 @@ async function loadStreetLevelNode(apiUrl: string, ref: StreetLevelRef): Promise
     throw new Error(`Street-level image unavailable: ${ref.providerId}:${ref.imageId}`);
   }
 
-  const image = (await imageResponse.json()) as StreetLevelImage;
+  const raw = (await imageResponse.json()) as StreetLevelImage;
   const links = linksResponse.ok ? ((await linksResponse.json()) as StreetLevelLink[]) : [];
 
   return {
     id: formatStreetLevelRef(ref),
-    image,
-    arrows: selectArrowLinks(image.lngLat, links),
+    image: { ...raw, assets: proxiedAssets(raw.assets) },
+    arrows: selectArrowLinks(raw.lngLat, links),
   };
 }
 

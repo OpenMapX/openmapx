@@ -11,7 +11,7 @@ import {
   useStreetLevelStore,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SearchBar } from "@/components/search/SearchBar";
 import { useEnv } from "@/lib/EnvProvider";
 import { StreetLevelFlatImage } from "./StreetLevelFlatImage";
@@ -45,12 +45,25 @@ export default function StreetLevelViewerInner() {
 
   // The viewer effect must not re-run when these change, so read them through
   // refs rather than dependencies.
-  const acceptedProvidersRef = useRef(acceptedProviders);
+  // A provider whose imagery is proxied exposes nothing to a third party and is
+  // auto-accepted, so it must not be filtered out of the arrow set merely
+  // because the user has not visited it yet.
+  const reachableProviders = useMemo(
+    () => [
+      ...new Set([
+        ...acceptedProviders,
+        ...providers.filter((p) => p.endUserExposure === "server-only").map((p) => p.id),
+      ]),
+    ],
+    [acceptedProviders, providers],
+  );
+
+  const acceptedProvidersRef = useRef(reachableProviders);
   const requestImageLoadRef = useRef(requestImageLoad);
   useEffect(() => {
-    acceptedProvidersRef.current = acceptedProviders;
+    acceptedProvidersRef.current = reachableProviders;
     requestImageLoadRef.current = requestImageLoad;
-  }, [acceptedProviders, requestImageLoad]);
+  }, [reachableProviders, requestImageLoad]);
 
   // A stable string is a safer effect dependency than the ref object, whose
   // identity changes on every parse.

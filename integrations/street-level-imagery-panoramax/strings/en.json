@@ -3,8 +3,8 @@
   "description": "Street-level imagery from the Panoramax open federated network",
   "dataSources": {
     "panoramax": {
-      "purpose": "Street-level imagery. Coverage tiles and image metadata are proxied via BFF. Panoramic imagery is loaded directly from the configured Panoramax instance once an in-app notice is confirmed.",
-      "dataSent": "Coverage tile and metadata requests are proxied. After confirmation, direct browser requests may expose IP address, browser/device request metadata, and the viewed image ID to the Panoramax instance.",
+      "purpose": "Street-level imagery. Coverage tiles, image metadata and the imagery itself are all fetched by the OpenMapX server; your browser never contacts the Panoramax instance.",
+      "dataSent": "Only the OpenMapX server contacts Panoramax, sending the map area being viewed and the identifier of any image opened. Your IP address and browser details are not exposed to Panoramax.",
       "dataReceived": "Nearest image ID, image metadata and navigation links, vector tiles (sequence lines + picture points), and panoramic imagery."
     }
   }

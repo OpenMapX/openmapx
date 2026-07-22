@@ -3,9 +3,9 @@
   "description": "Straßenansichtsbilder von Mapillary",
   "dataSources": {
     "mapillary": {
-      "purpose": "Straßenansichtsbilder. Abdeckungskacheln laufen über den BFF-Proxy. Der MapillaryJS-Viewer wird erst nach Bestätigung eines In-App-Hinweises geladen und kontaktiert dann graph.mapillary.com und fbcdn.net direkt aus dem Browser.",
-      "dataSent": "Abdeckungskachel-Anfragen laufen über den Proxy. Nach Bestätigung können direkte Browser-Anfragen IP-Adresse, Browser-/Geräte-Anfragedaten, ausgewählte Bild-ID und betrachteten Ort an Mapillary/Meta übermitteln.",
-      "dataReceived": "Nächste Bild-ID für Viewer; Vektorkacheln (Sequenzlinien + Bildpunkte); Panoramabilder über MapillaryJS"
+      "purpose": "Straßenansichten. Kacheln, Bild-Metadaten und die Bilder selbst werden vom OpenMapX-Server geladen; Ihr Browser kontaktiert Mapillary oder Meta nie direkt.",
+      "dataSent": "Nur der OpenMapX-Server kontaktiert Mapillary und übermittelt den betrachteten Kartenausschnitt sowie die ID eines geöffneten Bildes. Ihre IP-Adresse und Browserdaten werden Mapillary/Meta nicht offengelegt.",
+      "dataReceived": "Nächstgelegene Bild-ID, Bild-Metadaten und Navigationslinks, Vektorkacheln (Sequenzlinien + Bildpunkte) sowie Panoramabilder."
     }
   }
 }

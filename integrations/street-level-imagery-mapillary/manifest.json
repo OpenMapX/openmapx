@@ -69,8 +69,8 @@
       "commercialUse": "conditional",
       "providerCountry": "IE",
       "providerPrivacyUrl": "https://www.mapillary.com/privacy",
-      "endUserExposure": "direct",
-      "personalData": true,
+      "endUserExposure": "server-only",
+      "personalData": false,
       "cookies": false,
       "dpaAvailable": false
     }

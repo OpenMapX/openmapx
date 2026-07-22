@@ -95,7 +95,9 @@ export function createMapillaryProvider(options: {
         color: "#05cb63",
         licenseUrl: "https://www.mapillary.com/terms",
         // privacyUrl is filled in from the manifest by the street-level-imagery route.
-        endUserExposure: "direct",
+        // Imagery is fetched through the backend image proxy, so the
+        // browser never contacts the provider directly.
+        endUserExposure: "server-only",
         coverage: {
           kind: "mvt",
           tileUrlTemplate: options.tileUrlTemplate,

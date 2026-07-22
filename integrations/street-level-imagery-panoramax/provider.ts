@@ -118,7 +118,9 @@ export function createPanoramaxProvider(options: {
         // declares its own.
         licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
         // privacyUrl is filled in from the manifest by the street-level-imagery route.
-        endUserExposure: "direct",
+        // Imagery is fetched through the backend image proxy, so the
+        // browser never contacts the provider directly.
+        endUserExposure: "server-only",
         coverage: {
           kind: "mvt",
           tileUrlTemplate: options.tileUrlTemplate,

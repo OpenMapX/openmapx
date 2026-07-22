@@ -54,8 +54,8 @@
       "commercialUse": "yes",
       "providerCountry": "FR",
       "providerPrivacyUrl": "https://www.ign.fr/institut/donnees-caractere-personnel",
-      "endUserExposure": "direct",
-      "personalData": true,
+      "endUserExposure": "server-only",
+      "personalData": false,
       "cookies": false,
       "dpaAvailable": false
     }
