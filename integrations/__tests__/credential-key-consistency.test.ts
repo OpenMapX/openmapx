@@ -23,10 +23,16 @@ describe("credential-key consistency", () => {
       if (!loaded) continue;
 
       const sourceIds = new Set((loaded.manifest.dataSources ?? []).map((ds) => ds.sourceId));
-      expect(sourceIds.size, `${integrationId}: should declare at least one dataSources sourceId`).toBeGreaterThan(0);
+      expect(
+        sourceIds.size,
+        `${integrationId}: should declare at least one dataSources sourceId`,
+      ).toBeGreaterThan(0);
 
       const keys = credentialKeysOf(loaded.manifest);
-      expect(keys.length, `${integrationId}: should declare at least one credential key`).toBeGreaterThan(0);
+      expect(
+        keys.length,
+        `${integrationId}: should declare at least one credential key`,
+      ).toBeGreaterThan(0);
       for (const key of keys) {
         checked++;
         expect(

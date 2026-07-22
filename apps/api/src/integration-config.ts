@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { integrationEnvVarName, type IntegrationManifest } from "@openmapx/integration-framework";
+import { type IntegrationManifest, integrationEnvVarName } from "@openmapx/integration-framework";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { integrationConfig } from "./db/schema";

@@ -61,7 +61,10 @@ interface LoadedManifest {
   path: string;
 }
 
-export function loadManifest(integrationId: string, integrationsDir = INTEGRATIONS_DIR): LoadedManifest | undefined {
+export function loadManifest(
+  integrationId: string,
+  integrationsDir = INTEGRATIONS_DIR,
+): LoadedManifest | undefined {
   const dir = join(integrationsDir, integrationId);
   const path = join(dir, "manifest.json");
   if (!existsSync(path)) return undefined;
@@ -80,7 +83,9 @@ export function credentialKeysOf(manifest: IntegrationManifest): string[] {
     | undefined;
   if (!properties || typeof properties !== "object") return [];
   return Object.entries(properties)
-    .filter(([, def]) => def != null && typeof def === "object" && def["x-openmapx-secret"] === true)
+    .filter(
+      ([, def]) => def != null && typeof def === "object" && def["x-openmapx-secret"] === true,
+    )
     .map(([key]) => key);
 }
 

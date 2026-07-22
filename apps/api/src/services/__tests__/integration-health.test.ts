@@ -160,6 +160,7 @@ describe("integration-health placeholder substitution", () => {
     vi.restoreAllMocks();
   });
 
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest template syntax, not JS interpolation
   it("substitutes a hyphenated ${...} config key in both urlTemplate and a header value", async () => {
     const integration = makeIntegration({
       type: "http",

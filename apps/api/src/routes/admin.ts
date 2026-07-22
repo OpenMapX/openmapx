@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { integrationEnvVarName, type CredentialSetup } from "@openmapx/integration-framework";
+import { type CredentialSetup, integrationEnvVarName } from "@openmapx/integration-framework";
 import { and, asc, count, desc, eq, gt, inArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
