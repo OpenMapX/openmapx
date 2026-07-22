@@ -9,6 +9,12 @@ import type { IntegrationContext } from "@openmapx/integration-framework";
 import type { EvChargingStation } from "@openmapx/mobility-core/ev-charging";
 import { applyClosureExclusions, resolveTravelInstant } from "./closure-exclusions.js";
 
+/**
+ * How close to the arrival reserve the trip may land before it counts as tight,
+ * as a share of the pack. Absolute on purpose — see the re-validation below.
+ */
+const TIGHT_MARGIN_BAND_FRACTION = 0.05;
+
 export interface EvPlanArgs {
   waypoints: [number, number][];
   vehicleId?: string;
@@ -208,8 +214,12 @@ export async function runEvPlan(
       const arrivalKwh = socStartKwh + totalChargedKwh - finalEnergyKwh;
       // Thin band above the reserve; also covers arrival BELOW the reserve (the
       // final detour route can cost more energy than the base route the planner
-      // sized the charge on).
-      const tightBandKwh = Math.max(socArrivalMinKwh * 0.5, vehicle.batteryKwh * 0.03);
+      // sized the charge on). Deliberately a fixed slice of the pack rather than
+      // a fraction of the reserve: scaling with the reserve meant a cautious 40%
+      // reserve only counted as comfortable above 60% arrival, so raising the
+      // reserve — which plans MORE charging — made the safer route warn while
+      // the riskier one stayed silent.
+      const tightBandKwh = vehicle.batteryKwh * TIGHT_MARGIN_BAND_FRACTION;
       if (arrivalKwh < socArrivalMinKwh + tightBandKwh) {
         revalidationWarnings.push({ kind: "tight-margin", legIndex: plan.stops.length });
       }

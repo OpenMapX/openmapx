@@ -403,6 +403,39 @@ describe("runEvPlan", () => {
     expect(highResult.warnings.some((w) => w.kind === "unreachable")).toBe(false);
   });
 
+  it("does not call a route tight merely because the arrival reserve is high", async () => {
+    // A bigger reserve plans MORE charging, so it must not be the thing that
+    // triggers the warning: the band above the reserve is a fixed slice of the
+    // pack, not a fraction of the reserve itself.
+    const plan = async (socArrivalMinPct: number) => {
+      const ctx = fakeCtx();
+      const getProviders = (): ResolvedRoutingProvider[] => [
+        { integrationId: "valhalla", provider: ctx._valhalla },
+      ];
+      return runEvPlan(ctx as unknown as IntegrationContext, getProviders, {
+        waypoints: [
+          [0, 50],
+          [2.7, 50],
+        ],
+        vehicleId: "tesla:model_3:2024:model_3_long_range",
+        socStartPct: 80,
+        socArrivalMinPct,
+        socTargetPct: 80,
+        ambientTempC: 20,
+        avoidClosures: false,
+      });
+    };
+
+    const cautious = await plan(40);
+    const relaxed = await plan(10);
+    expect(cautious.warnings.some((w) => w.kind === "unreachable")).toBe(false);
+    expect(relaxed.warnings.some((w) => w.kind === "unreachable")).toBe(false);
+    // The cautious plan charges at least as much, so it cannot be the tighter one.
+    expect(cautious.totals.chargeSeconds).toBeGreaterThanOrEqual(relaxed.totals.chargeSeconds);
+    const tight = (r: typeof cautious) => r.warnings.some((w) => w.kind === "tight-margin");
+    expect(tight(cautious)).toBe(tight(relaxed));
+  });
+
   it("skips disallowed charger sources", async () => {
     const ctx = fakeCtx({ getDisallowedSourceIds: async () => new Set(["ocm"]) });
     const getProviders = (): ResolvedRoutingProvider[] => [
