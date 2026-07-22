@@ -181,8 +181,11 @@ describe("runEvPlan", () => {
     expect(result.warnings.length + result.stops.length).toBeGreaterThan(0);
   });
 
-  it("reports a whole-trip cost estimate when a home price is given (D11)", async () => {
-    const ctx = fakeCtx(); // fixture charger has no tariff → all energy valued at home price
+  it("omits trip cost when a planned stop has no tariff, even with a home price", async () => {
+    // Most German chargers (BNetzA/OSM) publish no tariff. Billing that energy
+    // at the home rate would both understate the trip and claim an impossible
+    // amount was charged at home, so no cost may be reported at all.
+    const ctx = fakeCtx(); // fixture charger carries no tariff
     const getProviders = (): ResolvedRoutingProvider[] => [
       { integrationId: "valhalla", provider: ctx._valhalla },
     ];
@@ -200,9 +203,72 @@ describe("runEvPlan", () => {
       homePricePerKwh: 0.3,
       homeCurrency: "EUR",
     });
+    expect(result.stops.length).toBeGreaterThan(0);
+    expect(result.stops.every((s) => !s.estimatedCost)).toBe(true);
+    expect(result.totals.estimatedCost).toBeUndefined();
+    expect(result.totals.energyKwh).toBeGreaterThan(0); // energy is still reported
+  });
+
+  it("reports a whole-trip cost estimate when every stop is priced (D11)", async () => {
+    const ctx = fakeCtx({
+      getIntegrationsByDomain: (d: string) =>
+        d === "data-source"
+          ? [
+              {
+                id: "ev-charging",
+                providers: new Map([
+                  [
+                    "data-source",
+                    [
+                      {
+                        searchStations: vi.fn().mockResolvedValue([
+                          {
+                            id: "c1",
+                            name: "c1",
+                            coordinates: [1.35, 50],
+                            sources: ["ocm"],
+                            connectors: [{ type: "CCS", powerKw: 150, currentType: "dc" }],
+                            attributions: [{ sourceId: "ocm", name: "OpenChargeMap" }],
+                            tariffs: [
+                              {
+                                scope: "cpo",
+                                elements: [{ type: "energy", price: 0.55, currency: "EUR" }],
+                                source: "test",
+                                updatedAt: new Date().toISOString(),
+                              },
+                            ],
+                          },
+                        ]),
+                      },
+                    ],
+                  ],
+                ]),
+              },
+            ]
+          : [],
+    });
+    const getProviders = (): ResolvedRoutingProvider[] => [
+      { integrationId: "valhalla", provider: ctx._valhalla },
+    ];
+    const result = await runEvPlan(ctx as unknown as IntegrationContext, getProviders, {
+      waypoints: [
+        [0, 50],
+        [2.7, 50],
+      ],
+      vehicleId: "tesla:model_3:2024:model_3_long_range",
+      socStartPct: 40,
+      socArrivalMinPct: 10,
+      socTargetPct: 80,
+      ambientTempC: 20,
+      avoidClosures: false,
+      homePricePerKwh: 0.3,
+      homeCurrency: "EUR",
+    });
+    expect(result.stops.every((s) => s.estimatedCost)).toBe(true);
     expect(result.totals.estimatedCost?.currency).toBe("EUR");
     expect(result.totals.estimatedCost?.amount).toBeGreaterThan(0);
-    expect(result.totals.estimatedCost?.homeKwh).toBeGreaterThan(0);
+    // Public energy is now actually attributed to the public stops.
+    expect(result.totals.estimatedCost?.publicKwh).toBeGreaterThan(0);
   });
 
   it("omits trip cost when no home price is given", async () => {

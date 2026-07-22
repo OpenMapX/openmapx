@@ -295,11 +295,18 @@ function estimateTripCost(
   otherCurrencies?: { currency: string; amount: number }[];
 } | null {
   if (homePricePerKwh == null || !homeCurrency) return null;
+  // The home/public split below only holds when every planned stop is priced:
+  // whatever is left after subtracting public energy is then genuinely the
+  // energy the trip started with. A stop without tariff data would instead be
+  // billed at the home rate, which both understates the trip badly and claims
+  // an impossible amount was charged at home. Many networks publish no tariffs,
+  // so report no cost at all rather than an invented one.
+  if (plan.stops.some((s) => !s.estimatedCost)) return null;
   let pricedKwh = 0;
   let homeCurrencyPublicCost = 0;
   const foreign = new Map<string, number>();
   for (const s of plan.stops) {
-    if (!s.estimatedCost) continue; // unpriced → valued at the home price below
+    if (!s.estimatedCost) continue;
     pricedKwh += s.addedKwh;
     if (s.estimatedCost.currency === homeCurrency) {
       homeCurrencyPublicCost += s.estimatedCost.amount;
