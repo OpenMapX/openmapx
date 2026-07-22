@@ -12,6 +12,7 @@ import { useOverlayLayerVisible } from "@/components/map/overlay/useOverlayStore
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import { overlayMinZoom } from "@/lib/overlayZoomGate";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { isUnconfirmedCrowd } from "./evidence";
@@ -27,7 +28,9 @@ const MARKER_SOURCE = "omx-road-conditions-markers";
 const LINE_SOURCE = "omx-road-conditions-lines";
 const LINE_LAYER = "omx-road-conditions-line";
 const MARKER_LAYER = "omx-road-conditions-markers";
-const MIN_ZOOM = 5;
+// Shared zoom gate: below this the overlay skips fetching and its layers stay
+// hidden, so a country-sized viewport can't pull thousands of incidents.
+const MIN_ZOOM = overlayMinZoom(OVERLAY_ID);
 
 /** Affected-segment line color by severity (matches the marker disc ramp). */
 const SEVERITY_LINE_COLOR: maplibregl.ExpressionSpecification = [

@@ -15,7 +15,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { MouseEvent } from "react";
-import { useEnv } from "@/lib/EnvProvider";
+import { isBelowOverlayMinZoom, useOverlayMinZoom } from "@/lib/overlayZoomGate";
 import { LayerPreviewTile } from "./LayerPreviewTile";
 import { globePreview } from "./layerPreviewSvgs";
 import { BASE_LAYER_OPTIONS } from "./layerSelectorConfig";
@@ -24,22 +24,24 @@ import { useLayerSelectorConfig } from "./useLayerSelectorConfig";
 
 interface DesktopQuickSelectorProps {
   onMoreClick: (event: MouseEvent<HTMLElement>) => void;
-  trafficZoomTooLow: boolean;
+  zoomLevel: number | null;
 }
 
 function DetailOptionTile({
   entry,
-  trafficZoomTooLow,
+  zoomLevel,
 }: {
   entry: GeneratedLayerEntry;
-  trafficZoomTooLow: boolean;
+  zoomLevel: number | null;
 }) {
   const t = useTranslations("layers");
-  const { trafficMinZoom } = useEnv();
   const overlayActive = useIntegrationOverlayActive(entry.overlayId);
 
-  const isTraffic = entry.overlayId === "traffic";
-  const disabled = isTraffic && trafficZoomTooLow;
+  // Marker-heavy overlays (and the TomTom raster) are only usable from a given
+  // zoom; below it the tile is disabled and explains itself instead of toggling
+  // on an overlay that would fetch nothing.
+  const minZoom = useOverlayMinZoom(entry.overlayId);
+  const disabled = isBelowOverlayMinZoom(zoomLevel, minZoom);
   const highlighted = overlayActive && !disabled;
   const label = t(entry.labelKey);
 
@@ -57,7 +59,7 @@ function DetailOptionTile({
       >
         {disabled ? (
           <Typography sx={{ mt: 0.2, fontSize: 9, color: "text.secondary" }}>
-            Zoom {trafficMinZoom}+
+            Zoom {minZoom}+
           </Typography>
         ) : null}
       </LayerPreviewTile>
@@ -83,10 +85,7 @@ function GlobeTile() {
   );
 }
 
-export function DesktopQuickSelector({
-  onMoreClick,
-  trafficZoomTooLow,
-}: DesktopQuickSelectorProps) {
+export function DesktopQuickSelector({ onMoreClick, zoomLevel }: DesktopQuickSelectorProps) {
   const t = useTranslations("layers");
   const activeLayer = useLayerStore((s) => s.activeLayer);
   const setActiveLayer = useLayerStore((s) => s.setActiveLayer);
@@ -130,7 +129,7 @@ export function DesktopQuickSelector({
       {quickDetails
         .filter((entry) => isAvailable(entry.serviceId))
         .map((entry) => (
-          <DetailOptionTile key={entry.id} entry={entry} trafficZoomTooLow={trafficZoomTooLow} />
+          <DetailOptionTile key={entry.id} entry={entry} zoomLevel={zoomLevel} />
         ))}
 
       <GlobeTile />

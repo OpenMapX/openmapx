@@ -20,7 +20,6 @@ import { useTranslations } from "next-intl";
 import type { FocusEvent, MouseEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { LAYER_SELECTOR_OPEN_EVENT } from "@/components/command-palette/constants";
-import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { DesktopMorePanel } from "./DesktopMorePanel";
 import { DesktopQuickSelector } from "./DesktopQuickSelector";
@@ -29,7 +28,6 @@ import { MobileLayerPanel } from "./MobileLayerPanel";
 
 export function LayerSelector() {
   const t = useTranslations("layers");
-  const { trafficMinZoom } = useEnv();
   const theme = useTheme();
   const desktopDock = useMediaQuery(theme.breakpoints.up("sm"));
   const { mapReady, mapRef, styleVersion } = useMap();
@@ -136,7 +134,6 @@ export function LayerSelector() {
   }, [mapReady, styleVersion, mapRef]);
 
   const open = Boolean(anchorEl);
-  const trafficZoomTooLow = zoomLevel !== null && zoomLevel < trafficMinZoom;
 
   return (
     <>
@@ -236,10 +233,7 @@ export function LayerSelector() {
                 pointerEvents: desktopExpanded ? "auto" : "none",
               }}
             >
-              <DesktopQuickSelector
-                onMoreClick={handleOpen}
-                trafficZoomTooLow={trafficZoomTooLow}
-              />
+              <DesktopQuickSelector onMoreClick={handleOpen} zoomLevel={zoomLevel} />
             </Box>
           </Box>
         ) : (
