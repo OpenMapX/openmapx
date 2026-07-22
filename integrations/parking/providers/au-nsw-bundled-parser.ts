@@ -1,3 +1,4 @@
+import { integrationEnvVarName } from "@openmapx/integration-framework";
 import type {
   PoiBundledParseFn,
   PoiLiveState,
@@ -196,7 +197,7 @@ function parseIntStrict(value: string | null | undefined): number | null {
 }
 
 function authHeaders(): Record<string, string> | null {
-  const apiKey = process.env.NSW_TRANSPORT_API_KEY;
+  const apiKey = process.env[integrationEnvVarName("parking", "au-nsw-api-key")];
   if (!apiKey) return null;
   return {
     Authorization: `apikey ${apiKey}`,

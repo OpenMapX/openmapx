@@ -23,7 +23,7 @@
         "type": "boolean",
         "default": true
       },
-      "dbBahnParkClientId": {
+      "de-db-bahnpark-client-id": {
         "type": "string",
         "title": "DB BahnPark Client ID",
         "description": "Deutsche Bahn Parking API client ID.",
@@ -41,7 +41,7 @@
           "notes": "Provides ~315 DB BahnPark facilities. The higher transit-authority plan needs a separate data agreement."
         }
       },
-      "dbBahnParkApiKey": {
+      "de-db-bahnpark-api-key": {
         "type": "string",
         "title": "DB BahnPark API Key",
         "description": "Deutsche Bahn Parking API key.",
@@ -60,10 +60,10 @@
           "notes": "The Client Secret is displayed only once at creation; regenerate it in the application settings if lost."
         }
       },
-      "utmcUsername": {
+      "gb-eng-utmc-username": {
         "type": "string",
         "title": "UTMC Username",
-        "description": "NE Travel Data (Newcastle) username. Request via data@glasgow.gov.uk. The data-manager POI ingest reads UTMC_USERNAME from its own env vars; this UI field is retained for operator visibility.",
+        "description": "NE Travel Data (Newcastle) username. Request via data@glasgow.gov.uk. The data-manager POI ingest reads the same derived env var as this field; there is no separate credential.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://www.netraveldata.co.uk/?page_id=9",
@@ -82,10 +82,10 @@
           }
         }
       },
-      "utmcPassword": {
+      "gb-eng-utmc-password": {
         "type": "string",
         "title": "UTMC Password",
-        "description": "NE Travel Data (Newcastle) password. The data-manager POI ingest reads UTMC_PASSWORD from its own env vars; this UI field is retained for operator visibility.",
+        "description": "NE Travel Data (Newcastle) password. The data-manager POI ingest reads the same derived env var as this field; there is no separate credential.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://www.netraveldata.co.uk/?page_id=9",
@@ -99,7 +99,7 @@
           "notes": "Same netraveldata.co.uk account as the UTMC username — there is no separate API password; the website login doubles as the API credential."
         }
       },
-      "nswTransportApiKey": {
+      "au-nsw-api-key": {
         "type": "string",
         "title": "NSW Transport API Key",
         "description": "Register at https://opendata.transport.nsw.gov.au/",
@@ -139,10 +139,10 @@
       "type": "http",
       "urlTemplate": "https://apis.deutschebahn.com/db-api-marketplace/apis/parking-information/db-bahnpark/v2/parking-facilities?limit=1",
       "headers": {
-        "DB-Client-Id": "${dbBahnParkClientId}",
-        "DB-Api-Key": "${dbBahnParkApiKey}"
+        "DB-Client-Id": "${de-db-bahnpark-client-id}",
+        "DB-Api-Key": "${de-db-bahnpark-api-key}"
       },
-      "requiredConfigKeys": ["dbBahnParkClientId", "dbBahnParkApiKey"]
+      "requiredConfigKeys": ["de-db-bahnpark-client-id", "de-db-bahnpark-api-key"]
     },
     {
       "name": "ParkenDD",
@@ -229,7 +229,7 @@
       "name": "NE Travel Data (Newcastle)",
       "type": "ping",
       "url": "https://www.netraveldata.co.uk/api/v1/carpark/static",
-      "requiredConfigKeys": ["utmcUsername", "utmcPassword"]
+      "requiredConfigKeys": ["gb-eng-utmc-username", "gb-eng-utmc-password"]
     },
     {
       "name": "NDW Truck Parking (NL)",

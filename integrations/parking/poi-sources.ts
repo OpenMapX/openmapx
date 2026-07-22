@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { integrationEnvVarName } from "@openmapx/integration-framework";
 import type { PoiRow, PoiSource } from "@openmapx/poi-source-registry";
 import { parseAt5SalzburgBundled } from "./providers/at-5-salzburg-parser.js";
 import { parseAt9ViennaStatic } from "./providers/at-9-vienna-parser.js";
@@ -35,14 +36,15 @@ import { parseSgHdbLive } from "./providers/sg-hdb-live-parser.js";
 import { parseSgHdbStatic } from "./providers/sg-hdb-static-parser.js";
 
 // UTMC requires HTTP Basic on every request. The credential cascade lives in
-// data-manager env vars (UTMC_USERNAME / UTMC_PASSWORD) rather than the
-// integration's config-resolved cascade so the ingest scanner can synthesise
-// the auth header at fetch time without round-tripping through apps/api.
+// data-manager env vars (the derived `gb-eng-utmc-username` / `-password`
+// names) rather than the integration's config-resolved cascade so the
+// ingest scanner can synthesise the auth header at fetch time without
+// round-tripping through apps/api.
 // When unset we deliberately return {} and let the upstream 401 surface in
 // the ingest status — operators see "missing creds" instead of a silent skip.
 function utmcAuthHeader(): Record<string, string> {
-  const u = process.env.UTMC_USERNAME;
-  const p = process.env.UTMC_PASSWORD;
+  const u = process.env[integrationEnvVarName("parking", "gb-eng-utmc-username")];
+  const p = process.env[integrationEnvVarName("parking", "gb-eng-utmc-password")];
   if (!u || !p) return {};
   return {
     Authorization: `Basic ${Buffer.from(`${u}:${p}`).toString("base64")}`,
@@ -55,17 +57,17 @@ function utmcAuthHeader(): Record<string, string> {
 // either var is unset we return {} and let the upstream 401 surface in the
 // ingest status (instead of silently skipping).
 function dbBahnParkHeaders(): Record<string, string> {
-  const id = process.env.DB_BAHNPARK_CLIENT_ID;
-  const key = process.env.DB_BAHNPARK_API_KEY;
+  const id = process.env[integrationEnvVarName("parking", "de-db-bahnpark-client-id")];
+  const key = process.env[integrationEnvVarName("parking", "de-db-bahnpark-api-key")];
   if (!id || !key) return {};
   return { "DB-Client-Id": id, "DB-Api-Key": key, Accept: "application/json" };
 }
 
 // NSW Transport API key — same pattern. The bundled parser also reads the
-// same env var directly when fanning out per-facility detail calls, since
-// the data-manager fetch stage only wraps the configured `url`.
+// same derived env var directly when fanning out per-facility detail calls,
+// since the data-manager fetch stage only wraps the configured `url`.
 function nswAuHeaders(): Record<string, string> {
-  const key = process.env.NSW_TRANSPORT_API_KEY;
+  const key = process.env[integrationEnvVarName("parking", "au-nsw-api-key")];
   if (!key) return {};
   return { Authorization: `apikey ${key}`, Accept: "application/json" };
 }

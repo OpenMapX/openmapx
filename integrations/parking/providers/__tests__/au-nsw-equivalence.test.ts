@@ -1,9 +1,12 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { integrationEnvVarName } from "@openmapx/integration-framework";
 import type { ParkingFacility } from "@openmapx/mobility-core/parking";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseAuNswBundled } from "../au-nsw-bundled-parser.js";
 import { mapAuNswPayload, mergeAuNswLive } from "../au-nsw-mapper.js";
+
+const NSW_API_KEY_ENV = integrationEnvVarName("parking", "au-nsw-api-key");
 
 /**
  * Pre-migration reference behaviour: for each visible facility build the
@@ -84,7 +87,7 @@ async function runMigrated(): Promise<ParkingFacility[]> {
 }
 
 beforeEach(() => {
-  process.env.NSW_TRANSPORT_API_KEY = "test-key";
+  process.env[NSW_API_KEY_ENV] = "test-key";
   // Detail fixtures' MessageDate values are emitted without a timezone, so
   // Date.parse interprets them as local time. Anchor system time to the
   // same local-time base so the staleness gate (30 min) doesn't trip
@@ -117,7 +120,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   vi.useRealTimers();
-  process.env.NSW_TRANSPORT_API_KEY = undefined;
+  process.env[NSW_API_KEY_ENV] = undefined;
 });
 
 describe("nsw-au parser+mapper equivalence to pre-migration in-memory parser", () => {
