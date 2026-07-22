@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { CredentialSetup } from "@openmapx/integration-framework";
+import { integrationEnvVarName, type CredentialSetup } from "@openmapx/integration-framework";
 import { and, asc, count, desc, eq, gt, inArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
@@ -96,7 +96,7 @@ async function computeCredentialStatus(integration: {
   const result: CredentialStatusEntry[] = [];
   for (const field of secretFields) {
     const vaultEntry = vaultMap.get(field.key);
-    const envKey = `INTEGRATION_${integration.id.replace(/-/g, "_").toUpperCase()}_${field.key.toUpperCase()}`;
+    const envKey = integrationEnvVarName(integration.id, field.key);
     const hasEnv = !!(process.env[envKey] && process.env[envKey] !== "");
 
     let source: "vault" | "env" | "missing" = "missing";
@@ -377,11 +377,10 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
             "x-openmapx-secret"?: boolean;
           }
         >;
-        const idEnv = integration.id.replace(/-/g, "_").toUpperCase();
         const envVars = Object.entries(props)
           .filter(([key]) => key !== "type" && key !== "properties" && key !== "enabled")
           .map(([key, def]) => {
-            const name = `INTEGRATION_${idEnv}_${key.toUpperCase()}`;
+            const name = integrationEnvVarName(integration.id, key);
             const secret = def?.["x-openmapx-secret"] === true;
             return {
               key,
@@ -668,7 +667,7 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
         const vaultList = vaultByIntegration.get(i.id) ?? [];
         const vaultMap = new Map(vaultList.map((v) => [v.key, v]));
         const missingSecrets = secretFields.filter((f) => {
-          const envKey = `INTEGRATION_${i.id.replace(/-/g, "_").toUpperCase()}_${f.key.toUpperCase()}`;
+          const envKey = integrationEnvVarName(i.id, f.key);
           return !vaultMap.has(f.key) && !process.env[envKey];
         });
 

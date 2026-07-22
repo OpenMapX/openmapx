@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { IntegrationManifest } from "@openmapx/integration-framework";
+import { integrationEnvVarName, type IntegrationManifest } from "@openmapx/integration-framework";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { integrationConfig } from "./db/schema";
@@ -60,11 +60,6 @@ export async function resolveConfigWithSources(
   const result: Record<string, ConfigValueWithSource> = {};
   const schema = manifest.configSchema as Record<string, unknown> | undefined;
   const knownKeys = new Set<string>();
-  // Uppercased config key → canonical (original-case) key. Used to match env
-  // vars like `INTEGRATION_PHOTOS_FLICKR_APIKEY` against configSchema key
-  // `apiKey` without forcing operators to lowercase the suffix (or forcing
-  // schema authors to pick all-lowercase keys).
-  const upperToKey = new Map<string, string>();
   // Canonical key → JSON-schema declared type. Used to coerce env-string values
   // to the type the integration expects (env vars are always strings).
   const keyTypes = new Map<string, string>();
@@ -77,7 +72,6 @@ export async function resolveConfigWithSources(
     for (const [key, def] of Object.entries(props)) {
       if (key === "type" || key === "properties") continue;
       knownKeys.add(key);
-      upperToKey.set(key.toUpperCase(), key);
       if (def && typeof def === "object" && typeof def.type === "string") {
         keyTypes.set(key, def.type);
       }
@@ -128,19 +122,14 @@ export async function resolveConfigWithSources(
     }
   }
 
-  // Env layer — highest priority. Pattern: `INTEGRATION_<ID>_<KEY>` (upper-cased
-  // id with hyphens replaced by underscores, then the upper-cased config key).
-  // Matching is case-insensitive on the configSchema key so both snake_case
-  // and camelCase keys work (`apiKey` matches `INTEGRATION_X_APIKEY`).
-  const prefix = `INTEGRATION_${manifest.id.replace(/-/g, "_").toUpperCase()}_`;
-  for (const [envKey, envVal] of Object.entries(process.env)) {
+  // Env layer — highest priority. Pattern: `INTEGRATION_<ID>_<KEY>` via the
+  // shared `integrationEnvVarName` helper (hyphens in both id and key are
+  // normalized to underscores and upper-cased, so bare camelCase keys still
+  // match `INTEGRATION_X_APIKEY` and region-first hyphenated keys match too).
+  for (const key of knownKeys) {
+    const envVal = process.env[integrationEnvVarName(manifest.id, key)];
     if (envVal === undefined) continue;
-    if (!envKey.startsWith(prefix)) continue;
-    const rest = envKey.slice(prefix.length);
-    const canonical = upperToKey.get(rest);
-    if (canonical) {
-      result[canonical] = { value: coerceEnvValue(envVal, keyTypes.get(canonical)), source: "env" };
-    }
+    result[key] = { value: coerceEnvValue(envVal, keyTypes.get(key)), source: "env" };
   }
 
   return result;

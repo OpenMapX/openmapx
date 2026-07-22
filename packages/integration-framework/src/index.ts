@@ -138,6 +138,7 @@ export type {
   WeatherResponse,
 } from "./contracts/index.js";
 export { isPlausibleNlSearch, NL_CONFIDENCE_FLOOR } from "./contracts/search-nlp-provider";
+export { integrationEnvVarName } from "./env-var";
 export type { IntegrationEvent } from "./events";
 export { IntegrationEventBus } from "./events";
 export { httpError } from "./http-error";
