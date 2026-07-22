@@ -18,6 +18,7 @@
     "check-data-flows": "pnpm -C packages/cli exec tsx ../../scripts/check-data-flows.ts",
     "check-dockerfile-sync": "pnpm -C packages/cli exec tsx ../../scripts/check-dockerfile-workspace-sync.ts",
     "check-feed-ids": "pnpm -C packages/cli exec tsx ../../scripts/check-feed-ids.ts",
+    "check-credential-keys": "pnpm -C packages/cli exec tsx ../../scripts/check-credential-keys.ts",
     "check-legal-tables": "pnpm -C packages/cli exec tsx ../../scripts/check-legal-tables.ts",
     "check-legal-updated": "pnpm -C packages/cli exec tsx ../../scripts/check-legal-updated.ts",
     "check-legal-urls": "pnpm -C packages/cli exec tsx ../../scripts/check-legal-urls.ts",
