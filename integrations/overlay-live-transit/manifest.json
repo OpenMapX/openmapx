@@ -17,7 +17,7 @@
     },
     "overlay": {
       "excludes": [],
-      "minZoom": 7
+      "minZoom": 12
     }
   },
   "backend": {
