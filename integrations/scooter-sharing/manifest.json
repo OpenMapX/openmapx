@@ -100,7 +100,10 @@
       "name": "NRW Mobidrom E-Scooter",
       "type": "http",
       "url": "https://www.mobilitaetsdaten.nrw/api/systemadapter-gbfs-provider/conflated/v3.0/e-scooter-sharing-nrw/manifest.json",
-      "requiredConfigKeys": ["de-nw-mobidrom-scooter-client-id", "de-nw-mobidrom-scooter-client-secret"]
+      "requiredConfigKeys": [
+        "de-nw-mobidrom-scooter-client-id",
+        "de-nw-mobidrom-scooter-client-secret"
+      ]
     }
   ],
   "quality": "built-in",
