@@ -9,10 +9,27 @@
 --
 -- Idempotent and collision-guarded: if a row with the new key already exists for that
 -- integration (e.g. a re-entered credential post-deploy), the UPDATE skips rather than
--- violating the unique constraint. Safe to re-run without error.
+-- violating the unique constraint. This leaves the old-key row as an orphan — a
+-- still-encrypted credential row that no code path will read again. After running this
+-- migration, check for leftover orphan rows and decide whether to delete them:
+--
+--   SELECT integration_id, key FROM integration_secret WHERE key IN (
+--     'openChargeMapApiKey','afdcApiKey','nobilApiKey','tankerkoenigApiKey',
+--     'dbBahnParkClientId','dbBahnParkApiKey','utmcUsername','utmcPassword','nswTransportApiKey',
+--     'nrwMobidromClientId','nrwMobidromClientSecret','dbClientId','dbApiKey',
+--     'windyApiKey','npsApiKey','dotGaApiKey','dotFlApiKey','dotAzApiKey','dotIdApiKey',
+--     'dotUtApiKey','dotLaApiKey','dotPaApiKey','dotScApiKey','dotMaApiKey'
+--   );
+--
+-- Optional: preview which rows will be touched before running the migration. Run each
+-- old-key SELECT against the openmapx database to see which integration_secret rows
+-- exist, e.g.: SELECT * FROM integration_secret WHERE key = 'openChargeMapApiKey';
 --
 -- Command to run against production:
---   psql -h <host> -U <user> -d <dbname> -f scripts/migrate-credential-keys.sql
+-- Copy this script to the production host (~/openmapx), then execute it via the
+-- Docker-deployed postgis service:
+--   docker compose -f infra/docker/docker-compose.generated.yml exec -T postgis \
+--     psql -U postgres -d openmapx -f scripts/migrate-credential-keys.sql
 --
 
 BEGIN TRANSACTION;
