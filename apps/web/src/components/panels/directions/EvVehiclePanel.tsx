@@ -28,8 +28,11 @@ interface VehicleOption {
 
 const VEHICLE_OPTIONS = listVehicles();
 
-/** Over a thousand options: render at most a screenful so the dropdown stays responsive. */
-const filterVehicleOptions = createFilterOptions<VehicleOption>({ limit: 50 });
+// Deliberately uncapped. A limit truncates the *unfiltered* list too, and with
+// 51 Audis alphabetically first, any screenful-sized cap makes the picker look
+// like it only stocks Audi. Typing narrows it immediately, so the full list is
+// only ever rendered while the user is browsing.
+const filterVehicleOptions = createFilterOptions<VehicleOption>();
 
 const CONNECTOR_OPTIONS: ConnectorStandard[] = [
   "ccs2",
