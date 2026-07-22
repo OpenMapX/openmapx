@@ -1,21 +1,34 @@
 "use client";
 
-import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
+import Autocomplete, { autocompleteClasses, createFilterOptions } from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import Checkbox from "@mui/material/Checkbox";
 import FormControl from "@mui/material/FormControl";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import InputAdornment from "@mui/material/InputAdornment";
 import InputLabel from "@mui/material/InputLabel";
+import ListSubheader from "@mui/material/ListSubheader";
 import MenuItem from "@mui/material/MenuItem";
+import Popper from "@mui/material/Popper";
 import Select from "@mui/material/Select";
 import Switch from "@mui/material/Switch";
+import { styled } from "@mui/material/styles";
 import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import type { ConnectorStandard, EvVehicleSpec } from "@openmapx/core";
 import { useDirectionsStore, useSettingsStore } from "@openmapx/core";
 import { COMMON_EV_NETWORKS, listVehicles } from "@openmapx/ev-charge-planner";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  type HTMLAttributes,
+  type SyntheticEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { List, type ListImperativeAPI, type RowComponentProps, useListRef } from "react-window";
 import { CUSTOM_VEHICLE_ID } from "@/lib/buildEvDirectionsRequest";
 import { TEAL } from "@/lib/theme";
 
@@ -24,15 +37,127 @@ const HOME_CURRENCIES = ["EUR", "USD", "GBP", "CHF"];
 interface VehicleOption {
   id: string;
   label: string;
+  /** Group heading the option sits under; the custom vehicle gets its own. */
+  make: string;
 }
 
 const VEHICLE_OPTIONS = listVehicles();
 
 // Deliberately uncapped. A limit truncates the *unfiltered* list too, and with
 // 51 Audis alphabetically first, any screenful-sized cap makes the picker look
-// like it only stocks Audi. Typing narrows it immediately, so the full list is
-// only ever rendered while the user is browsing.
+// like it only stocks Audi. Typing narrows it immediately, and the listbox is
+// virtualized, so the full list costs a screenful of DOM either way.
 const filterVehicleOptions = createFilterOptions<VehicleOption>();
+
+/** Vertical padding MUI puts on the listbox; rows are absolutely positioned inside it. */
+const LISTBOX_PADDING = 8;
+const OPTION_ROW_HEIGHT = 36;
+const GROUP_HEADER_HEIGHT = 38;
+const MAX_VISIBLE_ROWS = 8;
+
+/** A group heading, as handed to `renderGroup`. */
+interface GroupRow {
+  key: string | number;
+  group: string;
+  children?: React.ReactNode;
+}
+
+/** An option, as handed to `renderOption`: its DOM props plus the option itself. */
+type OptionRow = [HTMLAttributes<HTMLLIElement> & { key?: string }, VehicleOption];
+
+type ListboxRow = GroupRow | OptionRow;
+
+function isGroupRow(row: ListboxRow): row is GroupRow {
+  return !Array.isArray(row);
+}
+
+function rowHeight(row: ListboxRow): number {
+  return isGroupRow(row) ? GROUP_HEADER_HEIGHT : OPTION_ROW_HEIGHT;
+}
+
+/**
+ * One virtualized row: either a make heading or a vehicle. `noWrap` keeps every
+ * option exactly one line tall, which is what lets the heights above be fixed.
+ */
+function VehicleRow({ index, rows, style }: RowComponentProps<{ rows: ListboxRow[] }>) {
+  const row = rows[index];
+  const rowStyle = { ...style, top: (Number(style.top) || 0) + LISTBOX_PADDING };
+  if (isGroupRow(row)) {
+    return (
+      <ListSubheader component="div" style={rowStyle}>
+        {row.group}
+      </ListSubheader>
+    );
+  }
+  const [{ key, ...optionProps }, option] = row;
+  return (
+    <Typography key={key} component="li" {...optionProps} noWrap style={rowStyle}>
+      {option.label}
+    </Typography>
+  );
+}
+
+interface VehicleListboxProps extends HTMLAttributes<HTMLElement> {
+  /** Forwarded to react-window so keyboard highlighting can scroll the window. */
+  virtualListRef: React.RefObject<ListImperativeAPI | null>;
+  /** Filled on every render with option id -> flat row index, for the same reason. */
+  rowIndexById: Map<string, number>;
+}
+
+/**
+ * Renders the 1091-entry option list through react-window so only a screenful
+ * of rows is ever mounted. `renderGroup`/`renderOption` on the Autocomplete
+ * below hand their arguments straight through instead of producing elements,
+ * so `children` here is the raw group/option tree; flattening it gives the
+ * virtualizer one array with headings and options interleaved.
+ */
+const VehicleListbox = forwardRef<HTMLDivElement, VehicleListboxProps>(function VehicleListbox(
+  { children, className, virtualListRef, rowIndexById, style: _style, ...other },
+  ref,
+) {
+  const rows: ListboxRow[] = [];
+  for (const child of children as unknown as ListboxRow[]) {
+    rows.push(child);
+    if (isGroupRow(child) && Array.isArray(child.children)) {
+      rows.push(...(child.children as ListboxRow[]));
+    }
+  }
+
+  rowIndexById.clear();
+  rows.forEach((row, index) => {
+    if (!isGroupRow(row)) rowIndexById.set(row[1].id, index);
+  });
+
+  const contentHeight = rows.reduce((sum, row) => sum + rowHeight(row), 0);
+  const height =
+    Math.min(contentHeight, MAX_VISIBLE_ROWS * OPTION_ROW_HEIGHT) + 2 * LISTBOX_PADDING;
+
+  return (
+    <div ref={ref} {...other}>
+      <List
+        className={className}
+        listRef={virtualListRef}
+        rowCount={rows.length}
+        rowHeight={(index) => rowHeight(rows[index])}
+        rowComponent={VehicleRow}
+        rowProps={{ rows }}
+        // A numeric height keeps react-window off ResizeObserver entirely, so
+        // rows render under jsdom as well as in the browser.
+        style={{ height, width: "100%" }}
+        overscanCount={5}
+        tagName="ul"
+      />
+    </div>
+  );
+});
+
+/** The listbox class lands on the inner scroller, so its box has to include the padding. */
+const VehiclePopper = styled(Popper)({
+  [`& .${autocompleteClasses.listbox}`]: {
+    boxSizing: "border-box",
+    "& ul": { padding: 0, margin: 0 },
+  },
+});
 
 const CONNECTOR_OPTIONS: ConnectorStandard[] = [
   "ccs2",
@@ -116,10 +241,24 @@ export function EvVehiclePanel() {
   const evCustomVehicle = useSettingsStore((s) => s.evCustomVehicle);
   const setEvCustomVehicle = useSettingsStore((s) => s.setEvCustomVehicle);
 
+  // The sentinel has no manufacturer, so it becomes its own one-entry group and
+  // stays first: `groupBy` only chunks consecutive options, it does not reorder.
   const options = useMemo<VehicleOption[]>(
-    () => [{ id: CUSTOM_VEHICLE_ID, label: t("customVehicle") }, ...VEHICLE_OPTIONS],
+    () => [
+      { id: CUSTOM_VEHICLE_ID, label: t("customVehicle"), make: t("customVehicle") },
+      ...VEHICLE_OPTIONS,
+    ],
     [t],
   );
+
+  // Virtualization means the highlighted option may not be mounted, so MUI's own
+  // scroll-into-view cannot reach it; scroll the window by row index instead.
+  const virtualListRef = useListRef(null);
+  const rowIndexById = useMemo(() => new Map<string, number>(), []);
+  const scrollToHighlighted = (_event: SyntheticEvent, option: VehicleOption | null) => {
+    const index = option ? rowIndexById.get(option.id) : undefined;
+    if (index !== undefined) virtualListRef.current?.scrollToRow({ index, align: "auto" });
+  };
 
   const isCustomVehicle = evVehicleId === CUSTOM_VEHICLE_ID;
   const [customDraft, setCustomDraft] = useState<CustomVehicleDraft>(() => ({
@@ -154,16 +293,29 @@ export function EvVehiclePanel() {
         options={options}
         filterOptions={filterVehicleOptions}
         getOptionLabel={(o) => o.label}
+        // Keyed by id, not by the default label key: the id is the stable
+        // identity even if two dataset entries ever share a display name again.
+        getOptionKey={(o) => o.id}
         isOptionEqualToValue={(o, v) => o.id === v.id}
+        groupBy={(o) => o.make}
         value={options.find((o) => o.id === evVehicleId) ?? null}
         onChange={(_event, option) => setEvVehicleId(option?.id ?? null)}
-        // Keyed by id, not by the default label key: 28 dataset entries share a
-        // display name (a base record plus its identically-named trim).
-        renderOption={({ key: _key, ...props }, option) => (
-          <li {...props} key={option.id}>
-            {option.label}
-          </li>
-        )}
+        onHighlightChange={scrollToHighlighted}
+        // Wrapping from the last option back to the first would jump the virtual
+        // window a thousand rows; MUI's own virtualization guidance disables it.
+        disableListWrap
+        // Both render props hand their arguments back untouched — the listbox
+        // component builds the actual rows once it has flattened them.
+        renderGroup={(params) => params as unknown as React.ReactNode}
+        renderOption={(props, option) => [props, option] as unknown as React.ReactNode}
+        slots={{ popper: VehiclePopper }}
+        slotProps={{
+          listbox: {
+            component: VehicleListbox,
+            virtualListRef,
+            rowIndexById,
+          } as never,
+        }}
         renderInput={(params) => (
           <TextField {...params} label={t("vehicle")} variant="outlined" size="small" />
         )}

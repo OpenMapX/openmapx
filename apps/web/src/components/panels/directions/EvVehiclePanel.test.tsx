@@ -1,4 +1,5 @@
 import { useSettingsStore } from "@openmapx/core";
+import { listVehicles } from "@openmapx/ev-charge-planner";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CUSTOM_VEHICLE_ID } from "@/lib/buildEvDirectionsRequest";
@@ -74,6 +75,42 @@ describe("EvVehiclePanel", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 800));
     expect(useSettingsStore.getState().evCustomVehicle).toBeNull();
+  });
+
+  it("virtualizes the listbox and groups options by make", async () => {
+    const user = userEvent.setup();
+    render(<EvVehiclePanel />);
+    await user.click(screen.getByLabelText("directions.ev.vehicle"));
+
+    // Only a screenful of the 1091 options is mounted at a time.
+    const mounted = await screen.findAllByRole("option");
+    expect(mounted.length).toBeGreaterThan(0);
+    expect(mounted.length).toBeLessThan(40);
+
+    // The custom vehicle heads the list under its own heading, then the makes.
+    expect(mounted[0].textContent).toBe("directions.ev.customVehicle");
+    expect(screen.getByText("Audi").textContent).toBe("Audi");
+  });
+
+  it("scrolls the virtual window to keep the keyboard highlight mounted", async () => {
+    const user = userEvent.setup();
+    render(<EvVehiclePanel />);
+    const input = screen.getByLabelText("directions.ev.vehicle");
+    await user.click(input);
+    await screen.findAllByRole("option");
+
+    for (let i = 0; i < 20; i += 1) await user.keyboard("{ArrowDown}");
+
+    // The highlight has run past the first screenful, so the option it points at
+    // is only in the DOM if the virtual window followed it.
+    const highlighted = input.getAttribute("aria-activedescendant");
+    expect(highlighted).not.toBeNull();
+    expect(document.getElementById(highlighted as string)).not.toBeNull();
+
+    // Twenty steps down from an unhighlighted list is the twentieth option: the
+    // custom vehicle plus the first nineteen dataset entries.
+    await user.keyboard("{Enter}");
+    expect(useSettingsStore.getState().evVehicleId).toBe(listVehicles()[18].id);
   });
 
   it("hides the custom form for a dataset vehicle", async () => {
