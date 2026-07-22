@@ -12,8 +12,10 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LocationMinimap } from "@/components/map/LocationMinimap";
 import { SearchBar } from "@/components/search/SearchBar";
 import { useEnv } from "@/lib/EnvProvider";
+import { useMap } from "@/lib/MapContext";
 import { StreetLevelFlatImage } from "./StreetLevelFlatImage";
 import { StreetLevelInfoCard } from "./StreetLevelInfoCard";
 import { fetchStreetLevelNode, pickPanoramaUrl, type StreetLevelNode } from "./useStreetLevelNode";
@@ -35,6 +37,7 @@ export default function StreetLevelViewerInner() {
   const selectedPlace = usePlaceStore((s) => s.selectedPlace);
   const directionsOpen = useDirectionsStore((s) => s.isOpen);
   const { providers } = useStreetLevelProviders();
+  const { flyTo } = useMap();
 
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<{ destroy: () => void } | null>(null);
@@ -244,6 +247,15 @@ export default function StreetLevelViewerInner() {
   // previous node is still on screen during a cross-provider hop.
   const provider = providers.find((p) => p.id === node?.image.providerId);
 
+  // The minimap doubles as the way back: it shows where you are standing, and
+  // clicking it returns to the map centred on that spot rather than wherever
+  // the map happened to be when the viewer opened.
+  const currentLngLat = node?.image.lngLat;
+  const handleMinimapClick = useCallback(() => {
+    if (currentLngLat) flyTo(currentLngLat, 18);
+    closeViewer();
+  }, [currentLngLat, flyTo, closeViewer]);
+
   return (
     <div style={{ position: "absolute", inset: 0, zIndex: 30, background: "#000" }}>
       {node && !node.image.isPano ? (
@@ -278,6 +290,29 @@ export default function StreetLevelViewerInner() {
 
       {node && provider && (
         <StreetLevelInfoCard image={node.image} provider={provider} onClose={closeViewer} />
+      )}
+
+      {node && (
+        <LocationMinimap
+          lng={node.image.lngLat[0]}
+          lat={node.image.lngLat[1]}
+          zoom={17}
+          onClick={handleMinimapClick}
+          sx={{
+            position: "absolute",
+            right: 12,
+            // Clear of the MapLibre attribution strip the minimap renders.
+            bottom: 28,
+            width: { xs: 132, sm: 196 },
+            height: { xs: 96, sm: 132 },
+            borderRadius: "10px",
+            overflow: "hidden",
+            border: "2px solid rgba(255,255,255,0.85)",
+            boxShadow: "0 4px 14px rgba(0,0,0,0.45)",
+            cursor: "pointer",
+            zIndex: 10,
+          }}
+        />
       )}
 
       <IconButton
