@@ -23,7 +23,7 @@
         "type": "boolean",
         "default": true
       },
-      "openChargeMapApiKey": {
+      "ocm-api-key": {
         "type": "string",
         "title": "OpenChargeMap API Key",
         "description": "OpenChargeMap API key.",
@@ -41,7 +41,7 @@
           "notes": "Required for regular use and for calls with maxresults > 250. Sent via the 'X-API-Key' header or 'key' query parameter."
         }
       },
-      "afdcApiKey": {
+      "us-afdc-api-key": {
         "type": "string",
         "title": "AFDC/NREL API Key",
         "description": "NREL (National Renewable Energy Laboratory) developer API key (developer.nlr.gov) covering the AFDC Alternative Fuel Stations dataset for the United States and Canada.",
@@ -58,7 +58,7 @@
           "notes": "This NREL / api.data.gov key powers the AFDC Alternative Fuel Stations dataset. DEMO_KEY works for testing but has very low rate limits."
         }
       },
-      "nobilApiKey": {
+      "no-nobil-api-key": {
         "type": "string",
         "title": "NOBIL API Key",
         "description": "NOBIL API key for Norway and Sweden charging station data.",
@@ -96,15 +96,15 @@
     {
       "name": "OpenChargeMap",
       "type": "http",
-      "urlTemplate": "https://api.openchargemap.io/v3/poi/?output=json&maxresults=1&key=${openChargeMapApiKey}&latitude=0&longitude=0&distance=100",
-      "requiredConfigKeys": ["openChargeMapApiKey"],
+      "urlTemplate": "https://api.openchargemap.io/v3/poi/?output=json&maxresults=1&key=${ocm-api-key}&latitude=0&longitude=0&distance=100",
+      "requiredConfigKeys": ["ocm-api-key"],
       "impersonate": true
     },
     {
       "name": "AFDC/NREL (US/CA)",
       "type": "http",
-      "urlTemplate": "https://developer.nlr.gov/api/alt-fuel-stations/v1/nearest.json?api_key=${afdcApiKey}&fuel_type=ELEC&country=all&status=E&access=public&latitude=38.8977&longitude=-77.0365&radius=1&limit=1&format=json",
-      "requiredConfigKeys": ["afdcApiKey"]
+      "urlTemplate": "https://developer.nlr.gov/api/alt-fuel-stations/v1/nearest.json?api_key=${us-afdc-api-key}&fuel_type=ELEC&country=all&status=E&access=public&latitude=38.8977&longitude=-77.0365&radius=1&limit=1&format=json",
+      "requiredConfigKeys": ["us-afdc-api-key"]
     },
     {
       "name": "Bundesnetzagentur (DE)",
@@ -124,8 +124,8 @@
     {
       "name": "NOBIL",
       "type": "http",
-      "urlTemplate": "https://nobil.no/api/server/search.php?apikey=${nobilApiKey}&apiversion=3&action=search&type=rectangle&northeast=%2859.95%2C10.85%29&southwest=%2859.85%2C10.65%29&limit=1&format=json",
-      "requiredConfigKeys": ["nobilApiKey"]
+      "urlTemplate": "https://nobil.no/api/server/search.php?apikey=${no-nobil-api-key}&apiversion=3&action=search&type=rectangle&northeast=%2859.95%2C10.85%29&southwest=%2859.85%2C10.65%29&limit=1&format=json",
+      "requiredConfigKeys": ["no-nobil-api-key"]
     },
     {
       "name": "OpenStreetMap / Overpass",
