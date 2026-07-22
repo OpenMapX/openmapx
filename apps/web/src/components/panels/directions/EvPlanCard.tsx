@@ -3,15 +3,17 @@
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import ButtonBase from "@mui/material/ButtonBase";
 import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { EvChargeStop, EvDirectionsResult } from "@openmapx/core";
-import { formatDuration } from "@openmapx/core";
+import { formatDuration, useDataSources } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { runtimeAttributionToAttribution } from "@/lib/attributionForProviders";
+import { EV_CHARGING_SOURCE_ID, openChargerPlace } from "@/lib/openChargerPlace";
 import { TEAL } from "@/lib/theme";
 
 export function EvPlanCard({
@@ -24,6 +26,10 @@ export function EvPlanCard({
 }) {
   const t = useTranslations("directions.ev");
   const locale = useLocale();
+  // Looked up once for the whole card so every stop opens the place card with
+  // the same category the data-source layer applies.
+  const { data: dataSourcesData } = useDataSources();
+  const evSourceMeta = dataSourcesData?.sources?.find((s) => s.id === EV_CHARGING_SOURCE_ID);
 
   const hasUnreachable = result.warnings.some(
     (w) => w.kind === "unreachable" || w.kind === "no-charger-data",
@@ -135,7 +141,7 @@ export function EvPlanCard({
             {t("stopsHeading")}
           </Typography>
           {result.stops.map((stop, i) => (
-            <EvPlanStopRow key={stop.station.id} stop={stop} index={i} />
+            <EvPlanStopRow key={stop.station.id} stop={stop} index={i} sourceMeta={evSourceMeta} />
           ))}
         </Box>
       )}
@@ -143,7 +149,15 @@ export function EvPlanCard({
   );
 }
 
-function EvPlanStopRow({ stop, index }: { stop: EvChargeStop; index: number }) {
+function EvPlanStopRow({
+  stop,
+  index,
+  sourceMeta,
+}: {
+  stop: EvChargeStop;
+  index: number;
+  sourceMeta?: { placeCategory?: string; placeCategoryRaw?: string };
+}) {
   const t = useTranslations("directions.ev");
   const locale = useLocale();
   const connectorLabel = t(`connector.${stop.connector}`);
@@ -157,62 +171,84 @@ function EvPlanStopRow({ stop, index }: { stop: EvChargeStop; index: number }) {
 
   return (
     <Box sx={{ py: 1, borderTop: index > 0 ? "1px solid" : "none", borderColor: "divider" }}>
-      <Box
-        sx={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 1 }}
+      <ButtonBase
+        onClick={() =>
+          openChargerPlace(stop.station, {
+            placeCategory: sourceMeta?.placeCategory,
+            placeCategoryRaw: sourceMeta?.placeCategoryRaw,
+          })
+        }
+        aria-label={stop.station.name}
+        sx={{
+          display: "block",
+          width: "100%",
+          textAlign: "left",
+          borderRadius: 1,
+          px: 0.5,
+          py: 0.25,
+          "&:hover": { bgcolor: "var(--omx-chip-hover)" },
+        }}
       >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
-          <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
-            {stop.station.name}
+        <Box
+          sx={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 1 }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+            <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
+              {stop.station.name}
+            </Typography>
+            {stop.isPreferredNetwork && (
+              <Chip
+                label={t("onYourNetwork")}
+                size="small"
+                sx={{ height: 18, fontSize: "0.6875rem" }}
+              />
+            )}
+          </Box>
+          <Typography variant="body2" sx={{ fontWeight: 600, color: TEAL, flexShrink: 0 }}>
+            {`${stop.powerKw} kW`}
           </Typography>
-          {stop.isPreferredNetwork && (
-            <Chip
-              label={t("onYourNetwork")}
-              size="small"
-              sx={{ height: 18, fontSize: "0.6875rem" }}
-            />
-          )}
         </Box>
-        <Typography variant="body2" sx={{ fontWeight: 600, color: TEAL, flexShrink: 0 }}>
-          {`${stop.powerKw} kW`}
-        </Typography>
-      </Box>
-      {stop.operator && (
-        <Typography variant="caption" sx={{ color: "text.secondary" }}>
-          {stop.operator}
-        </Typography>
-      )}
-      <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1, mt: 0.5 }}>
-        <Chip
-          label={connectorLabel}
-          size="small"
-          variant="outlined"
-          sx={{ height: 20, fontSize: "0.6875rem" }}
-        />
-        <Typography variant="caption" sx={{ color: "text.secondary" }}>
-          {t("stopArriveDepart", {
-            arrive: Math.round(stop.arriveSocPct),
-            depart: Math.round(stop.departSocPct),
-          })}
-        </Typography>
-        <Typography variant="caption" sx={{ color: "text.secondary" }}>
-          {formatDuration(stop.chargeSeconds)}
-        </Typography>
-        {stop.availability && (
+        {stop.operator && (
           <Typography variant="caption" sx={{ color: "text.secondary" }}>
-            {t("availability", {
-              available: stop.availability.available,
-              total: stop.availability.total,
-            })}
+            {stop.operator}
           </Typography>
         )}
-      </Box>
-      {(costFmt || stop.tariffSummary) && (
-        <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mt: 0.25 }}>
-          {costFmt}
-          {costFmt && stop.tariffSummary ? " · " : ""}
-          {stop.tariffSummary}
-        </Typography>
-      )}
+        <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1, mt: 0.5 }}>
+          <Chip
+            label={connectorLabel}
+            size="small"
+            variant="outlined"
+            sx={{ height: 20, fontSize: "0.6875rem" }}
+          />
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
+            {t("stopArriveDepart", {
+              arrive: Math.round(stop.arriveSocPct),
+              depart: Math.round(stop.departSocPct),
+            })}
+          </Typography>
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
+            {formatDuration(stop.chargeSeconds)}
+          </Typography>
+          {stop.availability && (
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>
+              {t("availability", {
+                available: stop.availability.available,
+                total: stop.availability.total,
+              })}
+            </Typography>
+          )}
+        </Box>
+        {(costFmt || stop.tariffSummary) && (
+          <Typography
+            variant="caption"
+            sx={{ color: "text.secondary", display: "block", mt: 0.25 }}
+          >
+            {costFmt}
+            {costFmt && stop.tariffSummary ? " · " : ""}
+            {stop.tariffSummary}
+          </Typography>
+        )}
+      </ButtonBase>
       {attributions.length > 0 && (
         <Box sx={{ mt: 0.25 }}>
           <AttributionStrip attributions={attributions} variant="inline" />

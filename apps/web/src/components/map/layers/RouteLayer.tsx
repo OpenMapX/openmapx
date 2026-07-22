@@ -2,6 +2,7 @@
 
 import type { LngLat } from "@openmapx/core";
 import {
+  useDataSources,
   useDirections,
   useDirectionsStore,
   useEvDirections,
@@ -10,11 +11,13 @@ import {
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type maplibregl from "maplibre-gl";
+import type { MapMouseEvent } from "maplibre-gl";
 import { useLocale } from "next-intl";
 import { useEffect, useMemo } from "react";
 import { attributionsForProviders } from "@/lib/attributionForProviders";
 import { buildEvDirectionsRequest } from "@/lib/buildEvDirectionsRequest";
 import { useMap } from "@/lib/MapContext";
+import { EV_CHARGING_SOURCE_ID, openChargerPlace } from "@/lib/openChargerPlace";
 import { PRIMARY_BLUE_HEX, TEAL_HEX } from "@/lib/theme";
 import { useMapAttributions } from "@/lib/useMapAttributions";
 import { upsertGeoJsonSource } from "./layerStyleUtils";
@@ -149,6 +152,13 @@ export function RouteLayer() {
     ],
   );
   const { data: evData } = useEvDirections(navigating ? null : evRequest);
+  // Charge-stop pins open the place card with the same category the data-source
+  // layer applies, so the card looks identical however the charger was reached.
+  const { data: dataSourcesData } = useDataSources();
+  const evSourceMeta = useMemo(
+    () => dataSourcesData?.sources?.find((s) => s.id === EV_CHARGING_SOURCE_ID) ?? null,
+    [dataSourcesData],
+  );
 
   // The result actually drawn on the map: the EV plan (route + inserted
   // charge-stop legs) in EV mode, the plain route otherwise.
@@ -390,12 +400,41 @@ export function RouteLayer() {
       }
     };
 
+    // Charge-stop pins open the same floating place card as a charger clicked
+    // in the data-source layer.
+    const onStopClick = (e: MapMouseEvent) => {
+      if (!map.getLayer(EV_STOPS_LAYER_ID)) return;
+      const features = map.queryRenderedFeatures(e.point, { layers: [EV_STOPS_LAYER_ID] });
+      if (!features.length) return;
+      const props = features[0].properties as { id: string; name: string };
+      const coordinates = (features[0].geometry as { coordinates: number[] }).coordinates as LngLat;
+      openChargerPlace(
+        { id: props.id, name: props.name, coordinates },
+        {
+          placeCategory: evSourceMeta?.placeCategory,
+          placeCategoryRaw: evSourceMeta?.placeCategoryRaw,
+        },
+      );
+    };
+    const onStopEnter = () => {
+      map.getCanvasContainer().style.cursor = "pointer";
+    };
+    const onStopLeave = () => {
+      map.getCanvasContainer().style.cursor = "";
+    };
+
     sync();
     map.on("styledata", sync);
+    map.on("click", EV_STOPS_LAYER_ID, onStopClick);
+    map.on("mouseenter", EV_STOPS_LAYER_ID, onStopEnter);
+    map.on("mouseleave", EV_STOPS_LAYER_ID, onStopLeave);
     return () => {
+      map.off("click", EV_STOPS_LAYER_ID, onStopClick);
+      map.off("mouseenter", EV_STOPS_LAYER_ID, onStopEnter);
+      map.off("mouseleave", EV_STOPS_LAYER_ID, onStopLeave);
       map.off("styledata", sync);
     };
-  }, [isEvMode, evData, mapReady, styleVersion, mapRef]);
+  }, [isEvMode, evData, mapReady, styleVersion, mapRef, evSourceMeta]);
 
   // Clear routes when all waypoints are empty (panel closed)
   useEffect(() => {

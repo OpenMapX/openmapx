@@ -1,6 +1,7 @@
 import type { EvDirectionsResult } from "@openmapx/core";
+import { usePlaceStore } from "@openmapx/core";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@/test";
+import { createQueryWrapper, fireEvent, render, screen } from "@/test";
 import { EvPlanCard } from "./EvPlanCard";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
@@ -44,15 +45,29 @@ const baseResult: EvDirectionsResult = {
 
 describe("EvPlanCard", () => {
   it("renders each stop with power and charge time, and the total", () => {
-    render(<EvPlanCard result={baseResult} />);
+    render(<EvPlanCard result={baseResult} />, { wrapper: createQueryWrapper() });
     screen.getByText(/Ionity Aachen/);
     screen.getByText(/150 kW/);
     expect(screen.getAllByText(/25 min/).length).toBeGreaterThan(0); // 1500s charge
   });
 
   it("shows the preferred-network chip for a stop on the user's network", () => {
-    render(<EvPlanCard result={baseResult} />);
+    render(<EvPlanCard result={baseResult} />, { wrapper: createQueryWrapper() });
     screen.getByText("directions.ev.onYourNetwork");
+  });
+
+  it("opens the charger in the floating place card when a stop is clicked", () => {
+    usePlaceStore.getState().setSelectedPlace(null);
+    render(<EvPlanCard result={baseResult} />, { wrapper: createQueryWrapper() });
+
+    fireEvent.click(screen.getByRole("button", { name: "Ionity Aachen" }));
+
+    const place = usePlaceStore.getState().selectedPlace;
+    // Same id space the data-source layer resolves details with, so the panel
+    // fetches the real station rather than showing only the preview.
+    expect(place?.ids?.["ev-charging"]).toBe("c1");
+    expect(place?.name).toBe("Ionity Aachen");
+    expect(place?.coordinates).toEqual([6, 50]);
   });
 
   it("shows an unreachable warning banner instead of the stop list", () => {
@@ -64,6 +79,7 @@ describe("EvPlanCard", () => {
           warnings: [{ kind: "unreachable", afterStopIndex: -1 }],
         }}
       />,
+      { wrapper: createQueryWrapper() },
     );
     screen.getByText("directions.ev.unreachable");
     expect(screen.queryByText(/Ionity Aachen/)).toBeNull();
@@ -80,6 +96,7 @@ describe("EvPlanCard", () => {
         }}
         onRetryWithoutNetworkRestriction={onRetry}
       />,
+      { wrapper: createQueryWrapper() },
     );
     screen.getByText("directions.ev.noAllowedNetwork");
     const retryButton = screen.getByText("directions.ev.routeWithoutRestriction");
