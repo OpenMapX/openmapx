@@ -1,220 +1,38 @@
-// Vehicle specs seeded from open-ev-data/open-ev-data-dataset
-// (https://github.com/open-ev-data/open-ev-data-dataset), CDLA-Permissive-2.0.
+// Vehicle specs from open-ev-data/open-ev-data-dataset
+// (https://github.com/open-ev-data/open-ev-data-dataset), CDLA-Permissive-2.0,
+// distilled by `pnpm gen-ev-vehicles` into ./vehicles.generated.ts.
 // Values are approximate typical figures for stop-placement, not warranties —
 // real-world consumption varies with speed, weather, load and driving style.
-// Where the dataset does not carry an explicit consumption figure,
-// baseWhPerKm is derived as usableBatteryKwh / wltpRangeKm * 1000.
 import type { EvVehicleSpec } from "./types";
+import { DATASET_VERSION, GENERATED_VEHICLES } from "./vehicles.generated";
 
-export const VEHICLE_PRESETS: Record<string, EvVehicleSpec> = {
-  "vw-id4": {
-    batteryKwh: 77,
-    baseWhPerKm: 180,
-    massTonnes: 2.1,
-    maxDcKw: 135,
-    maxAcKw: 11,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs2", "type2"],
-  },
-  "vw-id3": {
-    batteryKwh: 58,
-    baseWhPerKm: 165,
-    massTonnes: 1.8,
-    maxDcKw: 120,
-    maxAcKw: 11,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs2", "type2"],
-  },
-  "tesla-model-3-lr": {
-    batteryKwh: 75,
-    baseWhPerKm: 150,
-    massTonnes: 1.85,
-    maxDcKw: 250,
-    maxAcKw: 11,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs2", "tesla_ccs", "type2"],
-  },
-  "tesla-model-y-lr": {
-    batteryKwh: 75,
-    baseWhPerKm: 160,
-    massTonnes: 2.0,
-    maxDcKw: 250,
-    maxAcKw: 11,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs2", "tesla_ccs", "type2"],
-  },
-  "hyundai-ioniq5": {
-    batteryKwh: 74,
-    baseWhPerKm: 175,
-    massTonnes: 2.0,
-    maxDcKw: 233,
-    maxAcKw: 11,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs2", "type2"],
-  },
-  "hyundai-ioniq6": {
-    batteryKwh: 74,
-    baseWhPerKm: 150,
-    massTonnes: 1.9,
-    maxDcKw: 233,
-    maxAcKw: 11,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs2", "type2"],
-  },
-  "kia-ev6": {
-    batteryKwh: 77,
-    baseWhPerKm: 170,
-    massTonnes: 2.0,
-    maxDcKw: 233,
-    maxAcKw: 11,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs2", "type2"],
-  },
-  "kia-niro-ev": {
-    batteryKwh: 64,
-    baseWhPerKm: 155,
-    massTonnes: 1.7,
-    maxDcKw: 85,
-    maxAcKw: 11,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs2", "type2"],
-  },
-  "bmw-i4-edrive40": {
-    batteryKwh: 80,
-    baseWhPerKm: 175,
-    massTonnes: 2.1,
-    maxDcKw: 205,
-    maxAcKw: 11,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs2", "type2"],
-  },
-  "bmw-ix-xdrive50": {
-    batteryKwh: 105,
-    baseWhPerKm: 210,
-    massTonnes: 2.5,
-    maxDcKw: 195,
-    maxAcKw: 11,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs2", "type2"],
-  },
-  "audi-q4-etron": {
-    batteryKwh: 77,
-    baseWhPerKm: 190,
-    massTonnes: 2.2,
-    maxDcKw: 135,
-    maxAcKw: 11,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs2", "type2"],
-  },
-  "audi-etron-gt": {
-    batteryKwh: 93,
-    baseWhPerKm: 210,
-    massTonnes: 2.3,
-    maxDcKw: 270,
-    maxAcKw: 11,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs2", "type2"],
-  },
-  "mercedes-eqa": {
-    batteryKwh: 66,
-    baseWhPerKm: 175,
-    massTonnes: 2.0,
-    maxDcKw: 100,
-    maxAcKw: 11,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs2", "type2"],
-  },
-  "mercedes-eqs": {
-    batteryKwh: 107,
-    baseWhPerKm: 175,
-    massTonnes: 2.5,
-    maxDcKw: 200,
-    maxAcKw: 11,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs2", "type2"],
-  },
-  "renault-megane-etech": {
-    batteryKwh: 60,
-    baseWhPerKm: 165,
-    massTonnes: 1.65,
-    maxDcKw: 130,
-    maxAcKw: 22,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs2", "type2"],
-  },
-  "peugeot-e2008": {
-    batteryKwh: 54,
-    baseWhPerKm: 170,
-    massTonnes: 1.6,
-    maxDcKw: 100,
-    maxAcKw: 11,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs2", "type2"],
-  },
-  "skoda-enyaq": {
-    batteryKwh: 77,
-    baseWhPerKm: 180,
-    massTonnes: 2.1,
-    maxDcKw: 135,
-    maxAcKw: 11,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs2", "type2"],
-  },
-  "polestar-2": {
-    batteryKwh: 78,
-    baseWhPerKm: 185,
-    massTonnes: 2.1,
-    maxDcKw: 155,
-    maxAcKw: 11,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs2", "type2"],
-  },
-  "nissan-leaf-e-plus": {
-    batteryKwh: 59,
-    baseWhPerKm: 175,
-    massTonnes: 1.75,
-    maxDcKw: 100,
-    maxAcKw: 6.6,
-    vehicleTaperSocPct: 80,
-    connectors: ["chademo", "type1"],
-  },
-  "ford-mustang-mache": {
-    batteryKwh: 91,
-    baseWhPerKm: 195,
-    massTonnes: 2.0,
-    maxDcKw: 150,
-    maxAcKw: 11,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs2", "type2"],
-  },
-  "volvo-ex30": {
-    batteryKwh: 64,
-    baseWhPerKm: 160,
-    massTonnes: 1.85,
-    maxDcKw: 153,
-    maxAcKw: 11,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs2", "type2"],
-  },
-  "tesla-model-3-lr-us": {
-    batteryKwh: 75,
-    baseWhPerKm: 150,
-    massTonnes: 1.85,
-    maxDcKw: 250,
-    maxAcKw: 11.5,
-    vehicleTaperSocPct: 80,
-    connectors: ["tesla_ccs", "ccs1"],
-  },
-  "chevrolet-bolt-euv": {
-    batteryKwh: 65,
-    baseWhPerKm: 170,
-    massTonnes: 1.6,
-    maxDcKw: 55,
-    maxAcKw: 7.2,
-    vehicleTaperSocPct: 80,
-    connectors: ["ccs1", "type1"],
-  },
-};
+/** Upstream open-ev-data release the table was generated from. */
+export const VEHICLE_DATASET_VERSION = DATASET_VERSION;
+
+export const VEHICLE_PRESETS: Record<string, EvVehicleSpec> = Object.fromEntries(
+  GENERATED_VEHICLES.map((vehicle) => [
+    vehicle.id,
+    {
+      batteryKwh: vehicle.batteryKwh,
+      baseWhPerKm: vehicle.baseWhPerKm,
+      massTonnes: vehicle.massTonnes,
+      maxDcKw: vehicle.maxDcKw,
+      maxAcKw: vehicle.maxAcKw,
+      vehicleTaperSocPct: vehicle.vehicleTaperSocPct,
+      connectors: vehicle.connectors,
+    } satisfies EvVehicleSpec,
+  ]),
+);
+
+const VEHICLE_LIST: { id: string; label: string }[] = GENERATED_VEHICLES.map((vehicle) => ({
+  id: vehicle.id,
+  label: vehicle.label,
+}));
+
+/** Every selectable vehicle with its display name, sorted by label. */
+export function listVehicles(): { id: string; label: string }[] {
+  return VEHICLE_LIST;
+}
 
 export function getVehiclePreset(id: string): EvVehicleSpec | null {
   return VEHICLE_PRESETS[id] ?? null;

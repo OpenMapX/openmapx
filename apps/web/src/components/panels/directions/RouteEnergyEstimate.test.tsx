@@ -34,7 +34,7 @@ describe("RouteEnergyEstimate", () => {
 
   it("renders an energy figure for a fixture route once a vehicle is selected", () => {
     useSettingsStore.setState({
-      evVehicleId: "vw-id4",
+      evVehicleId: "volkswagen:id_4:2024:id_4",
       evHomePricePerKwh: 0.3,
       evHomeCurrency: "EUR",
     });
@@ -46,7 +46,7 @@ describe("RouteEnergyEstimate", () => {
     // Regression guard: a vehicle is selected but the home tariff was never
     // set (null, not 0), so no cost/currency text may render.
     useSettingsStore.setState({
-      evVehicleId: "vw-id4",
+      evVehicleId: "volkswagen:id_4:2024:id_4",
       evHomePricePerKwh: null,
       evHomeCurrency: "EUR",
     });
