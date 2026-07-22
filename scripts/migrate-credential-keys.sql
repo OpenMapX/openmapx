@@ -26,10 +26,12 @@
 -- exist, e.g.: SELECT * FROM integration_secret WHERE key = 'openChargeMapApiKey';
 --
 -- Command to run against production:
--- Copy this script to the production host (~/openmapx), then execute it via the
--- Docker-deployed postgis service:
+-- Copy this script to the production host (~/openmapx), then pipe it into the
+-- Docker-deployed postgis service. The redirect is evaluated by the HOST shell and
+-- the file is fed over stdin — the postgis container has no bind mounts, so a
+-- container-side `-f <path>` would not find this file:
 --   docker compose -f infra/docker/docker-compose.generated.yml exec -T postgis \
---     psql -U postgres -d openmapx -f scripts/migrate-credential-keys.sql
+--     psql -U postgres -d openmapx < scripts/migrate-credential-keys.sql
 --
 
 BEGIN TRANSACTION;
