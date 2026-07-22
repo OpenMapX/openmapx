@@ -93,6 +93,28 @@ function fmt(d: Date): string {
 }
 
 /**
+ * Upper bound for `getNextChange`. The library's iterator has no natural
+ * stopping point for a rule that never changes state but still has recurring
+ * date boundaries — `Mo-Su, PH 00:00-24:00` is always open, yet gets
+ * re-evaluated at every public holiday. Unbounded, it walks centuries ahead
+ * (~100s of CPU) until the holiday arithmetic gives out and throws, which used
+ * to surface as a bogus "Closed".
+ *
+ * A year is a complete horizon: rules repeat annually, so anything that ever
+ * changes state does so within one. Nothing beyond it is worth reporting —
+ * "no change within a year" is exactly the always-open/always-closed case.
+ */
+function changeHorizon(now: Date): Date {
+  const limit = new Date(now);
+  limit.setFullYear(limit.getFullYear() + 1);
+  return limit;
+}
+
+function nextChangeWithin(oh: opening_hours, now: Date): Date | undefined {
+  return oh.getNextChange(now, changeHorizon(now));
+}
+
+/**
  * Builds a 7-day schedule starting from today using the library's interval API.
  */
 function buildWeekSchedule(oh: opening_hours, now: Date): DaySchedule[] {
@@ -156,7 +178,7 @@ export function parseOpeningHours(
     const isOpen = oh.getState(now);
     const isUnknown = oh.getUnknown(now);
     const comment = oh.getComment(now);
-    const nextChange = oh.getNextChange(now);
+    const nextChange = nextChangeWithin(oh, now);
 
     // When the current state is unknown (ambiguous hours like "by appointment",
     // cinema showtimes, etc.), don't show a definitive "Open" or "Closed" status
@@ -228,8 +250,10 @@ export function parseOpeningHours(
       isWeekStable: oh.isWeekStable(),
     };
   } catch {
-    // Malformed opening_hours string — fall back to displaying raw value
-    return { isOpen: false, label: raw, detail: raw };
+    // Unevaluable opening_hours value — malformed syntax, or a selector we
+    // can't resolve here (a `PH` rule needs a country code we may not have).
+    // Show the raw value rather than a definite "Closed" we can't stand behind.
+    return { isOpen: false, isUnknown: true, label: raw, detail: raw };
   }
 }
 
@@ -253,10 +277,15 @@ export function isAlwaysOpen(raw: string | undefined, location?: LocationContext
   if (!raw) return false;
   try {
     const oh = new opening_hours(raw, buildNominatim(location));
-    return oh.getState() && oh.getNextChange() === undefined;
+    return alwaysOpen(oh, placeNow(location));
   } catch {
     return false;
   }
+}
+
+/** Open right now with no state change ahead — i.e. 24/7 or equivalent. */
+function alwaysOpen(oh: opening_hours, now: Date): boolean {
+  return oh.getState(now) && nextChangeWithin(oh, now) === undefined;
 }
 
 /**
@@ -321,8 +350,9 @@ export function buildOpeningHoursInfo(
   let weekBitmap = "";
   try {
     const oh = new opening_hours(raw, buildNominatim(location));
-    always = oh.getState() && oh.getNextChange() === undefined;
-    weekBitmap = buildWeekBitmap(oh, placeNow(location));
+    const now = placeNow(location);
+    always = alwaysOpen(oh, now);
+    weekBitmap = buildWeekBitmap(oh, now);
   } catch {
     // Leave defaults — status already reflects the parse failure.
   }
