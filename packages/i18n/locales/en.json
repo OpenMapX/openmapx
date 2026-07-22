@@ -614,6 +614,7 @@
         "type2": "Type 2",
         "type1": "Type 1",
         "tesla_ccs": "Tesla",
+        "nacs": "NACS",
         "gbt_ac": "GB/T AC",
         "gbt_dc": "GB/T DC",
         "type3": "Type 3"

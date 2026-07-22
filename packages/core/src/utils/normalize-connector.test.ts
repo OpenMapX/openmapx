@@ -21,4 +21,18 @@ describe("normalizeConnector", () => {
     expect(normalizeConnector("wireless-magic")).toBeNull();
     expect(normalizeConnector(undefined)).toBeNull();
   });
+
+  it("normalizes NACS to its own standard", () => {
+    expect(normalizeConnector("NACS")?.standard).toBe("nacs");
+    expect(normalizeConnector("nacs")?.standard).toBe("nacs");
+    expect(normalizeConnector("Tesla (NACS)")?.standard).toBe("nacs");
+  });
+
+  it("treats NACS as DC", () => {
+    expect(normalizeConnector("NACS")?.current).toBe("dc");
+  });
+
+  it("still maps a bare Tesla connector to tesla_ccs", () => {
+    expect(normalizeConnector("Tesla")?.standard).toBe("tesla_ccs");
+  });
 });

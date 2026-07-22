@@ -6,6 +6,7 @@ export type ConnectorStandard =
   | "type2"
   | "type1"
   | "tesla_ccs"
+  | "nacs"
   | "gbt_ac"
   | "gbt_dc"
   | "type3";

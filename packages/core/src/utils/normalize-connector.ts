@@ -1,12 +1,22 @@
 import type { ConnectorStandard, CurrentStandard } from "../types/ev.js";
 
-const DC_STANDARDS = new Set<ConnectorStandard>(["ccs2", "ccs1", "chademo", "tesla_ccs", "gbt_dc"]);
+const DC_STANDARDS = new Set<ConnectorStandard>([
+  "ccs2",
+  "ccs1",
+  "chademo",
+  "tesla_ccs",
+  "nacs",
+  "gbt_dc",
+]);
 
 /** Ordered longest-first so "type2_combo" matches ccs2 before "type2". */
 const TYPE_PATTERNS: Array<[RegExp, ConnectorStandard]> = [
   [/t2.?combo|type.?2.?combo|62196.?t2.?combo|ccs.?2|^ccs$|combo.?2|combo.?ccs/, "ccs2"],
   [/t1.?combo|type.?1.?combo|ccs.?1|combo.?1/, "ccs1"],
   [/chademo|charge.?de.?move|62196.?3|type.?4/, "chademo"],
+  // Before /tesla/: "Tesla (NACS)" normalises to "teslanacs" and would
+  // otherwise be swallowed by the bare-Tesla pattern.
+  [/nacs/, "nacs"],
   [/tesla/, "tesla_ccs"],
   [/gbt.?dc|gb.?t.?dc/, "gbt_dc"],
   [/gbt.?ac|gb.?t.?ac|gbt/, "gbt_ac"],
