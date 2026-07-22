@@ -20,7 +20,6 @@ import { useTranslations } from "next-intl";
 import type { FocusEvent, MouseEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { LAYER_SELECTOR_OPEN_EVENT } from "@/components/command-palette/constants";
-import { useMap } from "@/lib/MapContext";
 import { DesktopMorePanel } from "./DesktopMorePanel";
 import { DesktopQuickSelector } from "./DesktopQuickSelector";
 import { BASE_LAYER_OPTIONS } from "./layerSelectorConfig";
@@ -30,10 +29,8 @@ export function LayerSelector() {
   const t = useTranslations("layers");
   const theme = useTheme();
   const desktopDock = useMediaQuery(theme.breakpoints.up("sm"));
-  const { mapReady, mapRef, styleVersion } = useMap();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [desktopExpanded, setDesktopExpanded] = useState(false);
-  const [zoomLevel, setZoomLevel] = useState<number | null>(null);
   const desktopAnchorRef = useRef<HTMLDivElement | null>(null);
   const closeTimerRef = useRef<number | undefined>(undefined);
   const activeSidebarId = useSidebarStore((s) => s.activeSidebarId);
@@ -116,22 +113,6 @@ export function LayerSelector() {
       closeTimerRef.current = undefined;
     }
   }, [desktopDock]);
-
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-
-    const syncZoom = () => {
-      setZoomLevel(map.getZoom());
-    };
-
-    syncZoom();
-    map.on("zoom", syncZoom);
-    return () => {
-      map.off("zoom", syncZoom);
-    };
-  }, [mapReady, styleVersion, mapRef]);
 
   const open = Boolean(anchorEl);
 
@@ -233,7 +214,7 @@ export function LayerSelector() {
                 pointerEvents: desktopExpanded ? "auto" : "none",
               }}
             >
-              <DesktopQuickSelector onMoreClick={handleOpen} zoomLevel={zoomLevel} />
+              <DesktopQuickSelector onMoreClick={handleOpen} />
             </Box>
           </Box>
         ) : (

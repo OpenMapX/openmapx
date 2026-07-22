@@ -17,7 +17,6 @@ const env: ClientEnv = {
   mapStyleUrl: "",
   tilesUrl: "",
   styleProvider: "openmapx",
-  trafficMinZoom: 10,
   trafficTileUrlTemplate: "",
   cyclOsmTileUrlTemplate: "",
   terrainTileUrlTemplate: "",

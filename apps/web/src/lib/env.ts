@@ -17,7 +17,6 @@ export interface ClientEnv {
   mapStyleUrl: string;
   tilesUrl: string;
   styleProvider: "maptiler" | "openmapx";
-  trafficMinZoom: number;
   trafficTileUrlTemplate: string;
   cyclOsmTileUrlTemplate: string;
   terrainTileUrlTemplate: string;
@@ -32,10 +31,6 @@ export interface ClientEnv {
 export function buildClientEnv(): ClientEnv {
   const apiBase = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 
-  const parsedZoom = Number(process.env.NEXT_PUBLIC_TRAFFIC_MIN_ZOOM || "10");
-  const trafficMinZoom =
-    Number.isFinite(parsedZoom) && parsedZoom >= 0 && parsedZoom <= 22 ? parsedZoom : 10;
-
   return {
     apiUrl: process.env.NEXT_PUBLIC_API_URL ?? "",
     mapillaryToken: process.env.NEXT_PUBLIC_MAPILLARY_TOKEN ?? "",
@@ -43,7 +38,6 @@ export function buildClientEnv(): ClientEnv {
     tilesUrl: process.env.NEXT_PUBLIC_TILES_URL ?? "",
     styleProvider:
       (process.env.NEXT_PUBLIC_STYLE_PROVIDER as "maptiler" | "openmapx") || "openmapx",
-    trafficMinZoom,
     trafficTileUrlTemplate:
       process.env.NEXT_PUBLIC_TRAFFIC_TILE_URL_TEMPLATE ||
       (apiBase

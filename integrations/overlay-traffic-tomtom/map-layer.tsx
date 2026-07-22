@@ -4,6 +4,7 @@ import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useStyleSyncedLayer } from "@/components/map/layers/useStyleSyncedLayer";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
+import { useOverlayMinZoom } from "@/lib/overlayZoomGate";
 import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { useTrafficStore } from "./store";
 
@@ -14,6 +15,9 @@ export function TrafficLayer() {
   const map = useMap();
   const { mapRef, mapReady, styleVersion } = map;
   const env = useEnv();
+  // Declared in this integration's manifest (frontend.overlay.minZoom), the same
+  // gate the layer selector applies — below it MapLibre requests no tiles.
+  const minZoom = useOverlayMinZoom("traffic");
   const showTraffic = useTrafficStore((s) => s.panelOpen && s.layerVisible);
   useIntegrationAttribution("overlay-traffic-tomtom", showTraffic);
   useLayerReanchor(TRAFFIC_LAYER_ID, showTraffic);
@@ -37,7 +41,7 @@ export function TrafficLayer() {
           id: TRAFFIC_LAYER_ID,
           type: "raster",
           source: TRAFFIC_SOURCE_ID,
-          minzoom: env.trafficMinZoom,
+          minzoom: minZoom,
           paint: {
             "raster-opacity": 0.9,
             "raster-fade-duration": 200,
@@ -46,14 +50,7 @@ export function TrafficLayer() {
         beforeLayerId,
       );
     },
-    deps: [
-      mapReady,
-      styleVersion,
-      mapRef,
-      showTraffic,
-      env.trafficTileUrlTemplate,
-      env.trafficMinZoom,
-    ],
+    deps: [mapReady, styleVersion, mapRef, showTraffic, env.trafficTileUrlTemplate, minZoom],
   });
 
   return null;

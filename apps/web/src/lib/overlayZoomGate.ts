@@ -1,43 +1,49 @@
 "use client";
 
-import { useEnv } from "@/lib/EnvProvider";
+import { integrationIdToOverlayId, useMapStore } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import { useMemo } from "react";
 
 /**
- * Minimum zoom at which an overlay is usable, keyed by overlay id.
+ * Zoom gating for overlays, declared per integration as
+ * `frontend.overlay.minZoom` in its manifest.
  *
- * Marker overlays fetch every feature in the viewport bbox, so a country-sized
- * view pulls — and paints — thousands of them, which is what makes panning and
- * zooming stutter. Below the threshold the overlay stops fetching, its layers
- * stay hidden, and the layer selector disables the tile with a "Zoom N+" hint so
- * the state is explained rather than silently empty.
+ * Below the threshold an overlay is treated as unusable: the layer selector
+ * disables its control and shows a "Zoom N+" hint instead of toggling on
+ * something that would render nothing, and overlays that fetch viewport-bbox
+ * data skip fetching entirely — which is what keeps a country-sized view from
+ * pulling (and painting) thousands of features.
  *
- * Values are calibrated so a German state (~z7) still works while a whole-country
- * view (~z5-6) does not. Overlays absent from this map are never zoom-gated.
- *
- * `traffic` (the TomTom raster overlay) is deliberately not listed: its threshold
- * is operator-configurable via NEXT_PUBLIC_TRAFFIC_MIN_ZOOM and is resolved by
- * {@link useOverlayMinZoom}.
+ * An absent or zero `minZoom` means the overlay is never gated. That is the
+ * right default for raster/vector-tile overlays, whose tile pyramid already
+ * handles zoom cheaply, and for global feeds meant to be read at world view.
  */
-export const OVERLAY_MIN_ZOOM: Readonly<Record<string, number>> = {
-  "road-conditions": 7,
-  "live-transit": 7,
-};
 
-/** Static threshold for an overlay; 0 when it isn't zoom-gated. */
-export function overlayMinZoom(overlayId: string): number {
-  return OVERLAY_MIN_ZOOM[overlayId] ?? 0;
-}
-
-/**
- * Threshold for an overlay, resolving the env-configured TomTom traffic value.
- * Returns 0 when the overlay isn't zoom-gated.
- */
+/** Manifest `minZoom` for an overlay; 0 when it isn't zoom-gated. */
 export function useOverlayMinZoom(overlayId: string): number {
-  const { trafficMinZoom } = useEnv();
-  return overlayId === "traffic" ? trafficMinZoom : overlayMinZoom(overlayId);
+  const registry = useIntegrationRegistry();
+  return useMemo(() => {
+    const match = registry
+      .getAll()
+      .find((integration) => integrationIdToOverlayId(integration.id) === overlayId);
+    return match?.frontend?.overlay?.minZoom ?? 0;
+  }, [registry, overlayId]);
 }
 
-/** True when `zoom` is known and below the overlay's threshold. */
-export function isBelowOverlayMinZoom(zoom: number | null, minZoom: number): boolean {
-  return zoom !== null && minZoom > 0 && zoom < minZoom;
+export interface OverlayZoomGate {
+  /** Manifest threshold; 0 when ungated. */
+  minZoom: number;
+  /** True when the overlay is gated and the map is currently below it. */
+  belowMinZoom: boolean;
+}
+
+/**
+ * Resolve an overlay's gate against the live map zoom. Reads the shared map
+ * store rather than subscribing each caller to map events, so the many layer
+ * selector tiles don't each attach their own listener.
+ */
+export function useOverlayZoomGate(overlayId: string): OverlayZoomGate {
+  const minZoom = useOverlayMinZoom(overlayId);
+  const zoom = useMapStore((s) => s.zoom);
+  return { minZoom, belowMinZoom: minZoom > 0 && zoom < minZoom };
 }

@@ -16,7 +16,8 @@
       "preview": "preview.svg"
     },
     "overlay": {
-      "excludes": ["air-quality", "earthquakes", "wildfires", "winter-sports", "hiking"]
+      "excludes": ["air-quality", "earthquakes", "wildfires", "winter-sports", "hiking"],
+      "minZoom": 6
     }
   },
   "backend": {

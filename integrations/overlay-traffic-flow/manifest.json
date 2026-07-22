@@ -12,7 +12,12 @@
       "quickSelector": true,
       "preview": "preview.svg"
     },
-    "overlay": { "minZoom": 6, "excludes": ["traffic"] }
+    "overlay": {
+      "minZoom": 6,
+      "excludes": ["traffic"]
+    }
   },
-  "backend": { "routes": false }
+  "backend": {
+    "routes": false
+  }
 }

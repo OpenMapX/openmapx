@@ -14,6 +14,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 
+import { useOverlayZoomGate } from "@/lib/overlayZoomGate";
 import { LayerPreviewTile } from "./LayerPreviewTile";
 import { BASE_LAYER_OPTIONS } from "./layerSelectorConfig";
 import type { GeneratedLayerEntry } from "./useLayerSelectorConfig";
@@ -22,10 +23,15 @@ import { useLayerSelectorConfig } from "./useLayerSelectorConfig";
 function OverlaySwitchRow({ entry }: { entry: GeneratedLayerEntry }) {
   const t = useTranslations("layers");
   const active = useIntegrationOverlayActive(entry.overlayId);
+  // Overlays declare a minimum usable zoom in their manifest; below it the row
+  // is disabled and says so rather than toggling on something that would
+  // render nothing.
+  const { minZoom, belowMinZoom } = useOverlayZoomGate(entry.overlayId);
 
   return (
     <FormControlLabel
       sx={{ mr: 0, ml: 0.25 }}
+      disabled={belowMinZoom}
       label={
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.8 }}>
           <Box
@@ -39,12 +45,19 @@ function OverlaySwitchRow({ entry }: { entry: GeneratedLayerEntry }) {
             {entry.icon}
           </Box>
           <Typography sx={{ fontSize: 13.5 }}>{t(entry.labelKey)}</Typography>
+          {belowMinZoom ? (
+            <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
+              {t("zoomInHint", { minZoom })}
+            </Typography>
+          ) : null}
         </Box>
       }
       control={
         <Switch
-          checked={active}
-          onChange={() => toggleOverlay(entry.overlayId)}
+          checked={active && !belowMinZoom}
+          onChange={() => {
+            if (!belowMinZoom) toggleOverlay(entry.overlayId);
+          }}
           slotProps={{ input: { "aria-label": t("toggleOverlay", { layer: t(entry.labelKey) }) } }}
           size="small"
         />

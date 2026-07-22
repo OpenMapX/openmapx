@@ -115,7 +115,6 @@ runtime changes reach both server and client components without a rebuild.
 | `MAPTILER_KEY`                            | MapTiler Cloud API key. Also settable in `/admin/settings → Map`. Leave commented to manage from the admin UI; uncomment to lock a value (env wins). | Optional. Commented       |
 | `NEXT_PUBLIC_MAP_STYLE_URL`               | Base URL of the self-hosted `tileserver-gl`; the web app appends `/styles/<style>/style.json`. With the built-in Traefik route this is `${DOMAIN}/tiles`. | Optional. Commented       |
 | `NEXT_PUBLIC_TILES_URL`                   | Self-hosted tile JSON URL.                                                                                                 | Optional. Commented       |
-| `NEXT_PUBLIC_TRAFFIC_MIN_ZOOM`            | Minimum zoom at which traffic tiles are requested.                                                                        | Optional. Commented `10`  |
 | `NEXT_PUBLIC_TRAFFIC_TILE_URL_TEMPLATE`   | Override URL template for the traffic raster layer.                                                                       | Optional. Commented       |
 | `NEXT_PUBLIC_CYCLOSM_TILE_URL_TEMPLATE`   | Override URL template for the CyclOSM layer.                                                                              | Optional. Commented       |
 | `NEXT_PUBLIC_TERRAIN_TILE_URL_TEMPLATE`   | Override URL template for the terrain layer.                                                                              | Optional. Commented       |

@@ -8,11 +8,16 @@ export function DesktopMoreTile({
   label,
   labelWidth = 96,
   onClick,
+  disabled,
+  children,
 }: {
   item: { preview: ReactNode; selected?: boolean };
   label: string;
   labelWidth?: number;
   onClick?: () => void;
+  disabled?: boolean;
+  /** Rendered under the label — used for the zoom-gate hint. */
+  children?: ReactNode;
 }) {
   return (
     <LayerPreviewTile
@@ -22,6 +27,9 @@ export function DesktopMoreTile({
       size={48}
       labelWidth={labelWidth}
       onClick={onClick}
-    />
+      disabled={disabled}
+    >
+      {children}
+    </LayerPreviewTile>
   );
 }

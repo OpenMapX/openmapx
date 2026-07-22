@@ -18,8 +18,7 @@
       "preview": "preview.svg"
     },
     "overlay": {
-      "excludes": ["weather", "air-quality"],
-      "minZoom": 2
+      "excludes": ["weather", "air-quality"]
     }
   },
   "backend": {

@@ -13,6 +13,7 @@ import Typography from "@mui/material/Typography";
 import type { MapLayer } from "@openmapx/core";
 import { OVERLAY_REGISTRY, toggleOverlay, useCapabilities, useLayerStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { useOverlayZoomGate } from "@/lib/overlayZoomGate";
 import { DesktopMoreTile } from "./DesktopMoreTile";
 import { DESKTOP_MORE_MAP_TYPES } from "./layerSelectorConfig";
 import type { GeneratedLayerEntry } from "./useLayerSelectorConfig";
@@ -23,22 +24,34 @@ interface DesktopMorePanelProps {
 }
 
 function OverlayDetailTile({ item, label }: { item: GeneratedLayerEntry; label: string }) {
+  const t = useTranslations("layers");
   const entry = item.overlayId ? OVERLAY_REGISTRY.find((r) => r.id === item.overlayId) : undefined;
   const active = entry?.useActive() ?? false;
+  // Overlays declare a minimum usable zoom in their manifest; below it the tile
+  // is disabled and explains itself rather than toggling on something that
+  // would render nothing.
+  const { minZoom, belowMinZoom } = useOverlayZoomGate(item.overlayId ?? "");
 
   return (
     <DesktopMoreTile
-      item={{ ...item, selected: active }}
+      item={{ ...item, selected: active && !belowMinZoom }}
       label={label}
       labelWidth={96}
+      disabled={belowMinZoom}
       onClick={
-        item.overlayId
+        item.overlayId && !belowMinZoom
           ? () => {
               toggleOverlay(item.overlayId);
             }
           : undefined
       }
-    />
+    >
+      {belowMinZoom ? (
+        <Typography sx={{ mt: 0.2, fontSize: 9, color: "text.secondary" }}>
+          {t("zoomInHint", { minZoom })}
+        </Typography>
+      ) : null}
+    </DesktopMoreTile>
   );
 }
 

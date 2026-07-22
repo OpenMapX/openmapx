@@ -17,8 +17,7 @@
       "preview": "preview.svg"
     },
     "overlay": {
-      "excludes": ["air-quality", "environment"],
-      "minZoom": 2
+      "excludes": ["air-quality", "environment"]
     }
   },
   "backend": {

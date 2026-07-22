@@ -12,7 +12,7 @@ import { useOverlayLayerVisible } from "@/components/map/overlay/useOverlayStore
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
-import { overlayMinZoom } from "@/lib/overlayZoomGate";
+import { useOverlayMinZoom } from "@/lib/overlayZoomGate";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { isUnconfirmedCrowd } from "./evidence";
@@ -28,9 +28,6 @@ const MARKER_SOURCE = "omx-road-conditions-markers";
 const LINE_SOURCE = "omx-road-conditions-lines";
 const LINE_LAYER = "omx-road-conditions-line";
 const MARKER_LAYER = "omx-road-conditions-markers";
-// Shared zoom gate: below this the overlay skips fetching and its layers stay
-// hidden, so a country-sized viewport can't pull thousands of incidents.
-const MIN_ZOOM = overlayMinZoom(OVERLAY_ID);
 
 /** Affected-segment line color by severity (matches the marker disc ramp). */
 const SEVERITY_LINE_COLOR: maplibregl.ExpressionSpecification = [
@@ -248,6 +245,10 @@ function buildSources(features: RawFeature[]): { markers: GeoJsonData; lines: Ge
 export function RoadConditionsLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const { apiUrl } = useEnv();
+  // Declared in this integration's manifest, the same gate the layer selector
+  // applies: below it we skip fetching and keep the layers hidden, so a
+  // country-sized viewport can't pull thousands of incidents.
+  const minZoom = useOverlayMinZoom(OVERLAY_ID);
   const layerVisible = useOverlayLayerVisible(OVERLAY_ID);
   useIntegrationAttribution(OVERLAY_ID, layerVisible);
   useOverlayExclusion(OVERLAY_ID, layerVisible);
@@ -272,7 +273,7 @@ export function RoadConditionsLayer() {
 
   const fetchData = useCallback(async () => {
     const map = mapRef.current;
-    if (!map || map.getZoom() < MIN_ZOOM) return;
+    if (!map || map.getZoom() < minZoom) return;
     const b = map.getBounds();
     const base = apiUrl.replace(/\/$/, "");
     const params = new URLSearchParams({
@@ -291,7 +292,7 @@ export function RoadConditionsLayer() {
     } catch {
       // Silent fetch failure — overlay stays as-is.
     }
-  }, [apiUrl, mapRef, filterTypes, minSeverity]);
+  }, [apiUrl, mapRef, filterTypes, minSeverity, minZoom]);
 
   // Bake a disc+glyph marker image on demand for each (type, severity) the
   // symbol layer requests. Synchronous canvas render → no flicker, no warnings.
@@ -354,7 +355,7 @@ export function RoadConditionsLayer() {
               id: LINE_LAYER,
               type: "line",
               source: LINE_SOURCE,
-              minzoom: MIN_ZOOM,
+              minzoom: minZoom,
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
                 "line-color": SEVERITY_LINE_COLOR,
@@ -371,7 +372,7 @@ export function RoadConditionsLayer() {
               id: MARKER_LAYER,
               type: "symbol",
               source: MARKER_SOURCE,
-              minzoom: MIN_ZOOM,
+              minzoom: minZoom,
               layout: {
                 "icon-image": ["get", "_icon"],
                 "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.42, 10, 0.55, 16, 0.75],
@@ -397,7 +398,7 @@ export function RoadConditionsLayer() {
     return () => {
       map.off("styledata", sync);
     };
-  }, [mapReady, mapRef, styleVersion, layerVisible, fetchData]);
+  }, [mapReady, mapRef, styleVersion, layerVisible, fetchData, minZoom]);
 
   // bbox-driven refetch on pan/zoom.
   const debouncedFetch = useDebouncedCallback(() => fetchData(), 800);

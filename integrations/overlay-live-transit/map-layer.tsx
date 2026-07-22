@@ -21,7 +21,7 @@ import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
-import { overlayMinZoom } from "@/lib/overlayZoomGate";
+import { useOverlayMinZoom } from "@/lib/overlayZoomGate";
 import {
   loadTransitVehicleMarkers,
   modeColor,
@@ -39,9 +39,6 @@ const RING_LAYER = "live-transit-onroute-ring";
 // A filter that matches no feature — used to hide the on-route ring when the
 // user isn't following a transit itinerary.
 const MATCH_NONE: maplibregl.FilterSpecification = ["==", ["get", "tripId"], " "];
-// Shared zoom gate: below this the overlay stops polling and clears its
-// vehicles, so a country-sized viewport can't accumulate thousands of markers.
-const MIN_FETCH_ZOOM = overlayMinZoom("live-transit");
 const POLL_MS = 15_000;
 const MOVE_ANIMATION_MS = 1_100;
 const POSITION_EPSILON = 0.00001;
@@ -315,6 +312,10 @@ function vehicleMatchesFilters(
 
 export function LiveTransitLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
+  // Declared in this integration's manifest, the same gate the layer selector
+  // applies: below it we stop polling and clear the vehicles, so a
+  // country-sized viewport can't accumulate thousands of markers.
+  const minFetchZoom = useOverlayMinZoom("live-transit");
   const env = useEnv();
   const registry = useIntegrationRegistry();
   const layerVisible = useLiveTransitStore((s) => s.layerVisible);
@@ -410,7 +411,7 @@ export function LiveTransitLayer() {
     const map = mapRef.current;
     if (!map || !layerVisible) return;
 
-    if (map.getZoom() < MIN_FETCH_ZOOM) {
+    if (map.getZoom() < minFetchZoom) {
       cancelAnimation();
       setLoading(false);
       setSnapshot({ vehicles: [], alerts: [] });
@@ -442,6 +443,7 @@ export function LiveTransitLayer() {
     env.apiUrl,
     layerVisible,
     mapRef,
+    minFetchZoom,
     setLastUpdated,
     setLoading,
   ]);

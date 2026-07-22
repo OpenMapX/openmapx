@@ -245,6 +245,7 @@
   },
   "layers": {
     "layers": "Ebenen",
+    "zoomInHint": "Ab Zoom {minZoom}",
     "openLayers": "Ebenen öffnen",
     "openLayerMenu": "Kartenebenen-Menü öffnen",
     "openAdvancedMenu": "Erweiterte Ebenen öffnen",

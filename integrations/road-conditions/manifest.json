@@ -19,7 +19,7 @@
       "preview": "preview.svg"
     },
     "overlay": {
-      "minZoom": 5
+      "minZoom": 7
     }
   }
 }

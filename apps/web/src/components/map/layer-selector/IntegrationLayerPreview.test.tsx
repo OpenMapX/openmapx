@@ -14,7 +14,6 @@ function withEnv(children: ReactNode, apiUrl = "") {
     mapStyleUrl: "",
     tilesUrl: "",
     styleProvider: "openmapx",
-    trafficMinZoom: 10,
     trafficTileUrlTemplate: "",
     cyclOsmTileUrlTemplate: "",
     terrainTileUrlTemplate: "",

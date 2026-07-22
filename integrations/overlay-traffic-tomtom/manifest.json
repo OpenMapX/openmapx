@@ -17,7 +17,8 @@
       "preview": "preview.svg"
     },
     "overlay": {
-      "excludes": ["traffic-flow"]
+      "excludes": ["traffic-flow"],
+      "minZoom": 10
     }
   },
   "backend": {

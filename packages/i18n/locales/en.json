@@ -245,6 +245,7 @@
   },
   "layers": {
     "layers": "Layers",
+    "zoomInHint": "Zoom {minZoom}+",
     "openLayers": "Open layers",
     "openLayerMenu": "Open map layer menu",
     "openAdvancedMenu": "Open advanced layer menu",
