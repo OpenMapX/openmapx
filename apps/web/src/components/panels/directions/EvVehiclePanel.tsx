@@ -1,6 +1,6 @@
 "use client";
 
-import Autocomplete from "@mui/material/Autocomplete";
+import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import Checkbox from "@mui/material/Checkbox";
 import FormControl from "@mui/material/FormControl";
@@ -12,29 +12,23 @@ import Select from "@mui/material/Select";
 import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import { useDirectionsStore, useSettingsStore } from "@openmapx/core";
-import { COMMON_EV_NETWORKS, VEHICLE_PRESETS } from "@openmapx/ev-charge-planner";
+import { COMMON_EV_NETWORKS, listVehicles } from "@openmapx/ev-charge-planner";
 import { useTranslations } from "next-intl";
 import { TEAL } from "@/lib/theme";
 
 const HOME_CURRENCIES = ["EUR", "USD", "GBP", "CHF"];
 
-/** Acronym segments a hyphen-split vehicle preset id keeps upper-cased, e.g. "vw-id4" → "VW Id4". */
-const ACRONYM_SEGMENTS = new Set(["vw", "bmw"]);
+const VEHICLE_OPTIONS = listVehicles();
 
-export function prettifyVehicleId(id: string): string {
-  return id
-    .split("-")
-    .map((segment) =>
-      ACRONYM_SEGMENTS.has(segment)
-        ? segment.toUpperCase()
-        : segment.charAt(0).toUpperCase() + segment.slice(1),
-    )
-    .join(" ");
+const VEHICLE_LABELS = new Map(VEHICLE_OPTIONS.map((o) => [o.id, o.label]));
+
+/** Display name for a stored vehicle id; falls back to the raw id. */
+export function vehicleLabel(id: string): string {
+  return VEHICLE_LABELS.get(id) ?? id;
 }
 
-const VEHICLE_OPTIONS = Object.keys(VEHICLE_PRESETS)
-  .map((id) => ({ id, label: prettifyVehicleId(id) }))
-  .sort((a, b) => a.label.localeCompare(b.label));
+/** Over a thousand options: render at most a screenful so the dropdown stays responsive. */
+const filterVehicleOptions = createFilterOptions<{ id: string; label: string }>({ limit: 50 });
 
 /**
  * EV trip inputs: vehicle + state-of-charge, network preferences,
@@ -71,24 +65,18 @@ export function EvVehiclePanel() {
 
   return (
     <Box sx={{ px: 2, py: 1.5, display: "flex", flexDirection: "column", gap: 1.5 }}>
-      <FormControl size="small" fullWidth>
-        <InputLabel id="ev-vehicle-select-label">{t("vehicle")}</InputLabel>
-        <Select
-          labelId="ev-vehicle-select-label"
-          label={t("vehicle")}
-          value={evVehicleId ?? ""}
-          onChange={(e) => setEvVehicleId(e.target.value || null)}
-        >
-          <MenuItem value="">
-            <em>{t("noVehicleSelected")}</em>
-          </MenuItem>
-          {VEHICLE_OPTIONS.map((v) => (
-            <MenuItem key={v.id} value={v.id}>
-              {v.label}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
+      <Autocomplete
+        size="small"
+        options={VEHICLE_OPTIONS}
+        filterOptions={filterVehicleOptions}
+        getOptionLabel={(o) => o.label}
+        isOptionEqualToValue={(o, v) => o.id === v.id}
+        value={VEHICLE_OPTIONS.find((o) => o.id === evVehicleId) ?? null}
+        onChange={(_event, option) => setEvVehicleId(option?.id ?? null)}
+        renderInput={(params) => (
+          <TextField {...params} label={t("vehicle")} variant="outlined" size="small" />
+        )}
+      />
 
       <Box sx={{ display: "flex", gap: 1.5 }}>
         <TextField

@@ -580,7 +580,6 @@
     "evMode": "E-Auto",
     "ev": {
       "vehicle": "Fahrzeug",
-      "noVehicleSelected": "Kein Fahrzeug ausgewählt",
       "batteryStart": "Aktueller Akkustand",
       "socTarget": "Laden bis",
       "socArrivalMin": "Ankunftsreserve",

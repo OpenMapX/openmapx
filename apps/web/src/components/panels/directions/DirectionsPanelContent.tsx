@@ -55,7 +55,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DetailsView } from "@/components/panels/directions/DetailsView";
 import { EvPlanCard } from "@/components/panels/directions/EvPlanCard";
-import { EvVehiclePanel, prettifyVehicleId } from "@/components/panels/directions/EvVehiclePanel";
+import { EvVehiclePanel, vehicleLabel } from "@/components/panels/directions/EvVehiclePanel";
 import { FlightPanel } from "@/components/panels/directions/FlightPanel";
 import { MODES, ModeButton } from "@/components/panels/directions/ModeSelector";
 import { RouteCard } from "@/components/panels/directions/RouteCard";
@@ -952,7 +952,7 @@ export function DirectionsPanelContent() {
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 0.5 }}>
             <Chip
               icon={<EvStationIcon sx={{ fontSize: 16 }} />}
-              label={evVehicleId ? prettifyVehicleId(evVehicleId) : t("ev.addVehicle")}
+              label={evVehicleId ? vehicleLabel(evVehicleId) : t("ev.addVehicle")}
               size="small"
               onClick={() => setEvMode(true)}
               sx={{ cursor: "pointer" }}
