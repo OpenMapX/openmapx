@@ -28,8 +28,8 @@ function raw(overrides: Partial<RawVehicle> = {}): RawVehicle {
 
 describe("mapConnectors", () => {
   it.each([
-    ["ccs2", ["ccs2"]],
-    ["ccs1", ["ccs1"]],
+    ["ccs2", ["ccs2", "type2"]],
+    ["ccs1", ["ccs1", "type1"]],
     ["type2", ["type2"]],
     ["type1", ["type1"]],
     ["chademo", ["chademo"]],
@@ -39,6 +39,11 @@ describe("mapConnectors", () => {
     expect(mapConnectors(raw({ charge_ports: [{ connector }] }))).toEqual(expected);
   });
 
+  it("gives every CCS car the AC half of its own inlet", () => {
+    expect(mapConnectors(raw({ charge_ports: [{ connector: "ccs2" }] }))).toContain("type2");
+    expect(mapConnectors(raw({ charge_ports: [{ connector: "ccs1" }] }))).toContain("type1");
+  });
+
   it("fans a European NACS car out to tesla_ccs and ccs2", () => {
     const connectors = mapConnectors(
       raw({ charge_ports: [{ connector: "nacs" }], markets: ["US", "DE", "NL"] }),
@@ -46,6 +51,7 @@ describe("mapConnectors", () => {
     expect(connectors).toContain("nacs");
     expect(connectors).toContain("tesla_ccs");
     expect(connectors).toContain("ccs2");
+    expect(connectors).toContain("type2");
     expect(connectors).not.toContain("ccs1");
   });
 
@@ -56,6 +62,7 @@ describe("mapConnectors", () => {
     expect(connectors).toContain("nacs");
     expect(connectors).toContain("tesla_ccs");
     expect(connectors).toContain("ccs1");
+    expect(connectors).toContain("type1");
     expect(connectors).not.toContain("ccs2");
   });
 
@@ -80,7 +87,7 @@ describe("mapConnectors", () => {
       mapConnectors(
         raw({ charge_ports: [{ connector: "inductive_magic" }, { connector: "ccs2" }] }),
       ),
-    ).toEqual(["ccs2"]);
+    ).toEqual(["ccs2", "type2"]);
   });
 
   it("dedupes while preserving first-seen order", () => {
@@ -95,7 +102,9 @@ describe("mapConnectors", () => {
 });
 
 describe("pickRange", () => {
-  it("prefers wltp over epa", () => {
+  it("takes the entry implying the highest consumption, not a preferred cycle", () => {
+    // wltp 480 * 0.82 = 393.6 effective; epa 400 * 1.0 = 400 effective — wltp is
+    // the shorter corrected range, so it is the conservative pick here.
     const picked = pickRange(
       raw({
         range: {
@@ -109,7 +118,24 @@ describe("pickRange", () => {
     expect(picked).toEqual({ km: 480, cycle: "wltp", notes: undefined });
   });
 
-  it("falls back to the first usable entry for an unlisted cycle", () => {
+  it("rejects an over-optimistic wltp figure in favour of a sane epa one", () => {
+    // The real 2024 Model Y Long Range AWD record: 719 km wltp * 0.82 = 589.6
+    // effective vs 500 km epa * 1.0 = 500 — epa is the conservative candidate.
+    const picked = pickRange(
+      raw({
+        range: {
+          rated: [
+            { cycle: "epa", range_km: 500 },
+            { cycle: "wltp", range_km: 719 },
+          ],
+        },
+      }),
+    );
+    expect(picked?.cycle).toBe("epa");
+    expect(picked?.km).toBe(500);
+  });
+
+  it("uses the single usable entry for an unlisted cycle", () => {
     const picked = pickRange(raw({ range: { rated: [{ cycle: "other", range_km: 300 }] } }));
     expect(picked?.cycle).toBe("other");
     expect(picked?.km).toBe(300);
@@ -219,6 +245,73 @@ describe("buildLabel", () => {
     ).toBe("Tesla Model 3 Long Range (2024)");
   });
 
+  it("folds a variant that merely extends the trim", () => {
+    expect(
+      buildLabel(
+        raw({
+          make: { name: "Tesla" },
+          model: { name: "Model Y" },
+          trim: { name: "Long Range" },
+          variant: { name: "Long Range AWD" },
+          year: 2024,
+        }),
+      ),
+    ).toBe("Tesla Model Y Long Range AWD (2024)");
+  });
+
+  it("does not repeat the make when the model already starts with it", () => {
+    expect(
+      buildLabel(
+        raw({
+          make: { name: "Polestar" },
+          model: { name: "Polestar 2" },
+          trim: { name: "Long Range Dual Motor" },
+          variant: undefined,
+          year: 2024,
+        }),
+      ),
+    ).toBe("Polestar 2 Long Range Dual Motor (2024)");
+  });
+
+  it("drops a trim the model name already ends with", () => {
+    expect(
+      buildLabel(
+        raw({
+          make: { name: "Mini" },
+          model: { name: "Cooper SE" },
+          trim: { name: "SE" },
+          variant: undefined,
+          year: 2024,
+        }),
+      ),
+    ).toBe("Mini Cooper SE (2024)");
+    expect(
+      buildLabel(
+        raw({
+          make: { name: "BMW" },
+          model: { name: "iX3" },
+          trim: { name: "iX3" },
+          variant: undefined,
+          year: 2025,
+        }),
+      ),
+    ).toBe("BMW iX3 (2025)");
+  });
+
+  it("merges a make and model that share a word", () => {
+    expect(
+      buildLabel(
+        raw({
+          make: { name: "GAC Aion" },
+          model: { name: "Aion ES" },
+          trim: { name: "Base" },
+          variant: undefined,
+          year: 2024,
+        }),
+      ),
+    ).toBe("GAC Aion ES (2024)");
+  });
+
   it("collapses whitespace and survives a missing year", () => {
     expect(
       buildLabel(
@@ -273,7 +366,31 @@ describe("mapVehicle", () => {
     expect(r.ok.maxAcKw).toBe(11);
     expect(r.ok.massTonnes).toBeCloseTo(2.124);
     expect(r.ok.vehicleTaperSocPct).toBe(80);
-    expect(r.ok.connectors).toEqual(["ccs2"]);
+    expect(r.ok.connectors).toEqual(["ccs2", "type2"]);
+  });
+
+  it("derives consumption from the most pessimistic rated cycle", () => {
+    // Real 2024 Tesla Model Y Long Range AWD: the 719 km wltp figure is not
+    // physical and would yield 134 Wh/km, under the ~165 the car really uses.
+    const r = mapVehicle(
+      raw({
+        unique_code: "tesla:model_y:2024:model_y_long_range_awd",
+        make: { name: "Tesla" },
+        model: { name: "Model Y" },
+        trim: { name: "Long Range" },
+        variant: { name: "Long Range AWD" },
+        battery: { pack_capacity_kwh_net: 79 },
+        weights: { curb_weight_kg: 2003 },
+        range: {
+          rated: [
+            { cycle: "epa", range_km: 500 },
+            { cycle: "wltp", range_km: 719 },
+          ],
+        },
+      }),
+    );
+    if (!("ok" in r)) throw new Error("expected a mapped vehicle");
+    expect(r.ok.baseWhPerKm).toBe(158);
   });
 
   it("defaults a missing AC power to zero", () => {

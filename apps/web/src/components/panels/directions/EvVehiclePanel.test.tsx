@@ -2,7 +2,7 @@ import { useSettingsStore } from "@openmapx/core";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CUSTOM_VEHICLE_ID } from "@/lib/buildEvDirectionsRequest";
-import { fireEvent, render, screen } from "@/test";
+import { fireEvent, render, screen, waitFor } from "@/test";
 import { EvVehiclePanel } from "./EvVehiclePanel";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
@@ -44,12 +44,20 @@ describe("EvVehiclePanel", () => {
       target: { value: "11" },
     });
 
-    const spec = useSettingsStore.getState().evCustomVehicle;
-    expect(spec?.batteryKwh).toBe(64);
-    expect(spec?.baseWhPerKm).toBe(170);
-    expect(spec?.maxDcKw).toBe(150);
-    expect(spec?.maxAcKw).toBe(11);
-    expect(spec?.connectors.length).toBeGreaterThan(0);
+    // The write is debounced so typing does not fire a plan request per keystroke.
+    expect(useSettingsStore.getState().evCustomVehicle).toBeNull();
+
+    await waitFor(
+      () => {
+        const spec = useSettingsStore.getState().evCustomVehicle;
+        expect(spec?.batteryKwh).toBe(64);
+        expect(spec?.baseWhPerKm).toBe(170);
+        expect(spec?.maxDcKw).toBe(150);
+        expect(spec?.maxAcKw).toBe(11);
+        expect(spec?.connectors.length).toBeGreaterThan(0);
+      },
+      { timeout: 3000 },
+    );
   });
 
   it("does not save a spec with a non-positive battery", async () => {
@@ -64,6 +72,7 @@ describe("EvVehiclePanel", () => {
     fireEvent.change(screen.getByLabelText("directions.ev.customMaxDc"), {
       target: { value: "150" },
     });
+    await new Promise((resolve) => setTimeout(resolve, 800));
     expect(useSettingsStore.getState().evCustomVehicle).toBeNull();
   });
 

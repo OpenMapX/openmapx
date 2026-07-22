@@ -72,7 +72,7 @@ import { WaypointList } from "@/components/panels/directions/WaypointList";
 import { AutocompleteDropdown } from "@/components/search/AutocompleteDropdown";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { attributionsForProviders } from "@/lib/attributionForProviders";
-import { buildEvDirectionsRequest } from "@/lib/buildEvDirectionsRequest";
+import { buildEvDirectionsRequest, CUSTOM_VEHICLE_ID } from "@/lib/buildEvDirectionsRequest";
 import { shareCurrentUrl } from "@/lib/deepLink";
 import { TEAL } from "@/lib/theme";
 import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
@@ -955,7 +955,13 @@ export function DirectionsPanelContent() {
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 0.5 }}>
             <Chip
               icon={<EvStationIcon sx={{ fontSize: 16 }} />}
-              label={evVehicleId ? vehicleLabel(evVehicleId) : t("ev.addVehicle")}
+              label={
+                evVehicleId === CUSTOM_VEHICLE_ID
+                  ? t("ev.customVehicle")
+                  : evVehicleId
+                    ? vehicleLabel(evVehicleId)
+                    : t("ev.addVehicle")
+              }
               size="small"
               onClick={() => setEvMode(true)}
               sx={{ cursor: "pointer" }}

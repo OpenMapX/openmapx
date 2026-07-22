@@ -61,9 +61,6 @@ const CYCLE_FACTOR: Record<string, number> = {
 
 const DEFAULT_CYCLE_FACTOR = 0.85;
 
-/** Cycles in descending order of trust; anything else falls back to the first usable entry. */
-const CYCLE_PREFERENCE = ["wltp", "epa", "cltc", "nedc"];
-
 /** Curb weight is missing for ~200 records; mass only feeds the gravity term, so a body-type guess is enough. */
 const MASS_BY_VEHICLE_TYPE: Record<string, number> = {
   passenger_car: 1.9,
@@ -77,9 +74,13 @@ const FALLBACK_MASS_TONNES = 2.1;
 /** The dataset has no charge-curve data, so every vehicle tapers at the same nominal SoC. */
 const DEFAULT_TAPER_SOC_PCT = 80;
 
+// A CCS inlet is a DC combo built around its AC plug: every CCS2 car charges AC
+// on Type 2, every CCS1 car on Type 1. Upstream only lists the DC port, and the
+// planner matches a station's standard against this set, so without the AC half
+// a CCS car could never use an AC charger and its maxAcKw would be dead weight.
 const CONNECTOR_MAP: Record<string, string[]> = {
-  ccs2: ["ccs2"],
-  ccs1: ["ccs1"],
+  ccs2: ["ccs2", "type2"],
+  ccs1: ["ccs1", "type1"],
   type2: ["type2"],
   type1: ["type1"],
   chademo: ["chademo"],
@@ -137,7 +138,7 @@ export function mapConnectors(raw: RawVehicle): string[] {
     const connector = port?.connector;
     if (!connector) continue;
     if (connector === "nacs") {
-      out.push("nacs", "tesla_ccs", european ? "ccs2" : "ccs1");
+      out.push("nacs", "tesla_ccs", ...CONNECTOR_MAP[european ? "ccs2" : "ccs1"]);
       continue;
     }
     out.push(...(CONNECTOR_MAP[connector] ?? []));
@@ -145,14 +146,31 @@ export function mapConnectors(raw: RawVehicle): string[] {
   return [...new Set(out)];
 }
 
+/** Realism-corrected range of one rated entry — the distance the derived Wh/km is based on. */
+function effectiveRangeKm(entry: RawRatedRange): number {
+  return (entry.range_km as number) * (CYCLE_FACTOR[entry.cycle ?? ""] ?? DEFAULT_CYCLE_FACTOR);
+}
+
+/**
+ * The rated entry that implies the HIGHEST consumption once its own cycle factor
+ * is applied — i.e. the shortest realism-corrected range.
+ *
+ * Upstream sometimes lists an implausible figure for one cycle next to a sane one
+ * for another (the 2024 Model Y Long Range AWD claims 719 km WLTP alongside
+ * 500 km EPA), so trusting a fixed cycle order silently under-estimates
+ * consumption. Erring high adds an early charge stop, which is annoying; erring
+ * low strands the driver, because the plan's arrival reserve is computed from
+ * this figure. Take the conservative candidate.
+ */
 export function pickRange(raw: RawVehicle): { km: number; cycle: string; notes?: string } | null {
   const usable = (raw.range?.rated ?? []).filter(
     (entry) => typeof entry?.range_km === "number" && entry.range_km > 0,
   );
   if (usable.length === 0) return null;
-  const picked =
-    CYCLE_PREFERENCE.map((cycle) => usable.find((entry) => entry.cycle === cycle)).find(Boolean) ??
-    usable[0];
+  let picked = usable[0];
+  for (const entry of usable) {
+    if (effectiveRangeKm(entry) < effectiveRangeKm(picked)) picked = entry;
+  }
   return { km: picked.range_km as number, cycle: picked.cycle ?? "", notes: picked.notes };
 }
 
@@ -167,19 +185,36 @@ export function estimateMassTonnes(raw: RawVehicle): number {
   return MASS_BY_VEHICLE_TYPE[raw.vehicle_type ?? ""] ?? FALLBACK_MASS_TONNES;
 }
 
-export function buildLabel(raw: RawVehicle): string {
-  const parts = [raw.make?.name ?? "", raw.model?.name ?? ""];
-  const trim = raw.trim?.name;
-  if (trim && trim !== "Base") parts.push(trim);
-  const variant = raw.variant?.name;
-  // A fifth of the records repeat the trim name as the variant name
-  // ("Model 3" / trim "Long Range" / variant "Long Range"), which would read
-  // as "Tesla Model 3 Long Range Long Range".
-  if (variant && !parts.some((part) => part.toLowerCase() === variant.toLowerCase())) {
-    parts.push(variant);
+/**
+ * Append a name segment, folding away any overlap with what the label already
+ * says. The upstream name fields repeat each other constantly — make "Polestar"
+ * + model "Polestar 2", model "Cooper SE" + trim "SE", trim "Long Range" +
+ * variant "Long Range AWD" — and concatenating them verbatim reads as
+ * "Polestar Polestar 2" or "Model Y Long Range Long Range AWD". Merging on the
+ * longest suffix/prefix word overlap keeps whichever segment carries the extra
+ * detail without repeating the shared words.
+ */
+function appendSegment(tokens: string[], segment: string | undefined): string[] {
+  const added = (segment ?? "").split(/\s+/).filter(Boolean);
+  if (added.length === 0) return tokens;
+  const lower = (words: string[]) => words.map((w) => w.toLowerCase());
+  const current = lower(tokens);
+  const incoming = lower(added);
+  for (let overlap = Math.min(current.length, incoming.length); overlap > 0; overlap--) {
+    const tail = current.slice(current.length - overlap).join(" ");
+    if (tail === incoming.slice(0, overlap).join(" ")) return [...tokens, ...added.slice(overlap)];
   }
-  if (raw.year) parts.push(`(${raw.year})`);
-  return parts.join(" ").replace(/\s+/g, " ").trim();
+  return [...tokens, ...added];
+}
+
+export function buildLabel(raw: RawVehicle): string {
+  let tokens = appendSegment([], raw.make?.name);
+  tokens = appendSegment(tokens, raw.model?.name);
+  const trim = raw.trim?.name;
+  if (trim && trim !== "Base") tokens = appendSegment(tokens, trim);
+  tokens = appendSegment(tokens, raw.variant?.name);
+  const name = tokens.join(" ");
+  return raw.year ? `${name} (${raw.year})` : name;
 }
 
 export function mapVehicle(raw: RawVehicle): { ok: GeneratedVehicle } | { drop: DropReason } {

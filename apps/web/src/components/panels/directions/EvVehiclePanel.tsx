@@ -15,7 +15,7 @@ import type { ConnectorStandard, EvVehicleSpec } from "@openmapx/core";
 import { useDirectionsStore, useSettingsStore } from "@openmapx/core";
 import { COMMON_EV_NETWORKS, listVehicles } from "@openmapx/ev-charge-planner";
 import { useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CUSTOM_VEHICLE_ID } from "@/lib/buildEvDirectionsRequest";
 import { TEAL } from "@/lib/theme";
 
@@ -53,6 +53,9 @@ const CONNECTOR_OPTIONS: ConnectorStandard[] = [
 
 /** Sensible European default so a half-filled custom form still yields a usable spec. */
 const DEFAULT_CUSTOM_CONNECTORS: ConnectorStandard[] = ["ccs2", "type2"];
+
+/** Quiet period before a custom-vehicle edit reaches the store and triggers a re-plan. */
+const COMMIT_DEBOUNCE_MS = 500;
 
 interface CustomVehicleDraft {
   battery: string;
@@ -131,10 +134,21 @@ export function EvVehiclePanel() {
     connectors: evCustomVehicle?.connectors ?? DEFAULT_CUSTOM_CONNECTORS,
   }));
 
+  const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => clearTimeout(commitTimer.current ?? undefined), []);
+
+  // The store write drives both EV-plan request memos, and a plan is a real
+  // server-side route + corridor-charger + matrix computation. Writing on every
+  // keystroke would plan for "7" and then "77" while the user types battery
+  // size, so the spec only reaches the store once typing pauses.
   const updateCustomDraft = (patch: Partial<CustomVehicleDraft>) => {
     const next = { ...customDraft, ...patch };
     setCustomDraft(next);
-    setEvCustomVehicle(draftToSpec(next));
+    clearTimeout(commitTimer.current ?? undefined);
+    commitTimer.current = setTimeout(
+      () => setEvCustomVehicle(draftToSpec(next)),
+      COMMIT_DEBOUNCE_MS,
+    );
   };
 
   return (
