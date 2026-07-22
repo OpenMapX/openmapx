@@ -13,8 +13,8 @@ export function setup(ctx: IntegrationContext): void {
   const resolved = ctx.getRequiredService("overpass");
   if (resolved?.url) setOverpassUrl(resolved.url);
   setDotLogger(ctx.log);
-  setWindyApiKey(ctx.config.windyApiKey as string | undefined);
-  setNpsApiKey(ctx.config.npsApiKey as string | undefined);
+  setWindyApiKey(ctx.config["windy-api-key"] as string | undefined);
+  setNpsApiKey(ctx.config["nps-api-key"] as string | undefined);
   setManifestDataSources(ctx.manifest.dataSources ?? []);
   ctx.registerMobilityDataSource(webcamProvider);
   registerPlaceResolver(webcamProvider.id, createDataSourceResolver(webcamProvider));

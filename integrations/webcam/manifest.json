@@ -23,7 +23,7 @@
         "type": "boolean",
         "default": true
       },
-      "windyApiKey": {
+      "windy-api-key": {
         "type": "string",
         "title": "Windy Webcams API Key",
         "description": "Get a free key at https://api.windy.com/keys",
@@ -40,7 +40,7 @@
           "notes": "Free tier returns only low-resolution images, image URLs expire after 10 minutes, and the listing offset is capped (~1000)."
         }
       },
-      "npsApiKey": {
+      "nps-api-key": {
         "type": "string",
         "title": "NPS API Key",
         "description": "Get a free key at https://developer.nps.gov/signup/",
@@ -57,7 +57,7 @@
           "notes": "Self-service form on nps.gov; the key arrives by email (developer portal is developer.nps.gov). Delivery is usually near-instant."
         }
       },
-      "dotGaApiKey": {
+      "dot-ga-api-key": {
         "type": "string",
         "title": "Georgia 511 API Key",
         "description": "Register at https://511ga.org/my511/register",
@@ -75,7 +75,7 @@
           "notes": "Georgia 511 runs the IBI Group / Castle Rock 511 platform. Self-service. Rate limit: 10 calls per 60 seconds."
         }
       },
-      "dotFlApiKey": {
+      "dot-fl-api-key": {
         "type": "string",
         "title": "Florida 511 API Key",
         "description": "Register at https://fl511.com/my511/register",
@@ -97,7 +97,7 @@
           }
         }
       },
-      "dotAzApiKey": {
+      "dot-az-api-key": {
         "type": "string",
         "title": "Arizona 511 API Key",
         "description": "Register at https://az511.com/my511/register",
@@ -115,7 +115,7 @@
           "notes": "Arizona 511 runs the IBI Group / Castle Rock 511 platform. Self-service. Rate limit: 10 calls per 60 seconds."
         }
       },
-      "dotIdApiKey": {
+      "dot-id-api-key": {
         "type": "string",
         "title": "Idaho 511 API Key",
         "description": "Register at https://511.idaho.gov/my511/register",
@@ -133,7 +133,7 @@
           "notes": "Idaho 511 runs the IBI Group / Castle Rock 511 platform. Self-service. Rate limit: 10 calls per 60 seconds."
         }
       },
-      "dotUtApiKey": {
+      "dot-ut-api-key": {
         "type": "string",
         "title": "Utah 511 API Key",
         "description": "Register at https://prod-ut.ibi511.com/my511/register",
@@ -150,7 +150,7 @@
           "notes": "UDOT Traffic 511 runs the IBI Group / Castle Rock platform. Self-service; an account is required first. Rate limit: 10 calls per 60 seconds."
         }
       },
-      "dotLaApiKey": {
+      "dot-la-api-key": {
         "type": "string",
         "title": "Louisiana 511 API Key",
         "description": "Register at https://511la.org/my511/register",
@@ -168,7 +168,7 @@
           "notes": "Louisiana 511 runs the IBI Group / Castle Rock 511 platform. Self-service; an account is required first. Rate limit: 10 calls per 60 seconds."
         }
       },
-      "dotPaApiKey": {
+      "dot-pa-api-key": {
         "type": "string",
         "title": "Pennsylvania 511 API Key",
         "description": "Register at https://www.511pa.com/my511/register",
@@ -191,7 +191,7 @@
           }
         }
       },
-      "dotScApiKey": {
+      "dot-sc-api-key": {
         "type": "string",
         "title": "South Carolina 511 API Key",
         "description": "Register at https://511sc.org/my511/register",
@@ -209,7 +209,7 @@
           "notes": "South Carolina 511 runs the IBI Group / Castle Rock 511 platform. Self-service; an account is required first. Rate limit ~10 calls per 60 seconds."
         }
       },
-      "dotMaApiKey": {
+      "dot-ma-api-key": {
         "type": "string",
         "title": "Massachusetts 511 API Key",
         "description": "Register at https://www.mass511.com/my511/register",
@@ -241,15 +241,15 @@
       "type": "http",
       "urlTemplate": "https://api.windy.com/webcams/api/v3/webcams?limit=1",
       "headers": {
-        "x-windy-api-key": "${windyApiKey}"
+        "x-windy-api-key": "${windy-api-key}"
       },
-      "requiredConfigKeys": ["windyApiKey"]
+      "requiredConfigKeys": ["windy-api-key"]
     },
     {
       "name": "NPS Webcams",
       "type": "http",
-      "urlTemplate": "https://developer.nps.gov/api/v1/webcams?limit=1&api_key=${npsApiKey}",
-      "requiredConfigKeys": ["npsApiKey"]
+      "urlTemplate": "https://developer.nps.gov/api/v1/webcams?limit=1&api_key=${nps-api-key}",
+      "requiredConfigKeys": ["nps-api-key"]
     },
     {
       "name": "Caltrans CCTV",
@@ -274,56 +274,56 @@
     {
       "name": "511GA",
       "type": "http",
-      "urlTemplate": "https://511ga.org/api/v2/get/cameras?key=${dotGaApiKey}&format=json",
-      "requiredConfigKeys": ["dotGaApiKey"]
+      "urlTemplate": "https://511ga.org/api/v2/get/cameras?key=${dot-ga-api-key}&format=json",
+      "requiredConfigKeys": ["dot-ga-api-key"]
     },
     {
       "name": "FL511",
       "type": "http",
-      "urlTemplate": "https://fl511.com/api/v2/get/cameras?key=${dotFlApiKey}&format=json",
-      "requiredConfigKeys": ["dotFlApiKey"]
+      "urlTemplate": "https://fl511.com/api/v2/get/cameras?key=${dot-fl-api-key}&format=json",
+      "requiredConfigKeys": ["dot-fl-api-key"]
     },
     {
       "name": "AZ511",
       "type": "http",
-      "urlTemplate": "https://az511.com/api/v2/get/cameras?key=${dotAzApiKey}&format=json",
-      "requiredConfigKeys": ["dotAzApiKey"]
+      "urlTemplate": "https://az511.com/api/v2/get/cameras?key=${dot-az-api-key}&format=json",
+      "requiredConfigKeys": ["dot-az-api-key"]
     },
     {
       "name": "Idaho 511",
       "type": "http",
-      "urlTemplate": "https://511.idaho.gov/api/v2/get/cameras?key=${dotIdApiKey}&format=json",
-      "requiredConfigKeys": ["dotIdApiKey"]
+      "urlTemplate": "https://511.idaho.gov/api/v2/get/cameras?key=${dot-id-api-key}&format=json",
+      "requiredConfigKeys": ["dot-id-api-key"]
     },
     {
       "name": "Utah 511",
       "type": "http",
-      "urlTemplate": "https://prod-ut.ibi511.com/api/v2/get/cameras?key=${dotUtApiKey}&format=json",
-      "requiredConfigKeys": ["dotUtApiKey"]
+      "urlTemplate": "https://prod-ut.ibi511.com/api/v2/get/cameras?key=${dot-ut-api-key}&format=json",
+      "requiredConfigKeys": ["dot-ut-api-key"]
     },
     {
       "name": "511LA",
       "type": "http",
-      "urlTemplate": "https://511la.org/api/v2/get/cameras?key=${dotLaApiKey}&format=json",
-      "requiredConfigKeys": ["dotLaApiKey"]
+      "urlTemplate": "https://511la.org/api/v2/get/cameras?key=${dot-la-api-key}&format=json",
+      "requiredConfigKeys": ["dot-la-api-key"]
     },
     {
       "name": "511PA",
       "type": "http",
-      "urlTemplate": "https://www.511pa.com/api/v2/get/cameras?key=${dotPaApiKey}&format=json",
-      "requiredConfigKeys": ["dotPaApiKey"]
+      "urlTemplate": "https://www.511pa.com/api/v2/get/cameras?key=${dot-pa-api-key}&format=json",
+      "requiredConfigKeys": ["dot-pa-api-key"]
     },
     {
       "name": "511SC",
       "type": "http",
-      "urlTemplate": "https://511sc.org/api/v2/get/cameras?key=${dotScApiKey}&format=json",
-      "requiredConfigKeys": ["dotScApiKey"]
+      "urlTemplate": "https://511sc.org/api/v2/get/cameras?key=${dot-sc-api-key}&format=json",
+      "requiredConfigKeys": ["dot-sc-api-key"]
     },
     {
       "name": "Mass511",
       "type": "http",
-      "urlTemplate": "https://www.mass511.com/api/v2/get/cameras?key=${dotMaApiKey}&format=json",
-      "requiredConfigKeys": ["dotMaApiKey"]
+      "urlTemplate": "https://www.mass511.com/api/v2/get/cameras?key=${dot-ma-api-key}&format=json",
+      "requiredConfigKeys": ["dot-ma-api-key"]
     },
     {
       "name": "OpenStreetMap Overpass",

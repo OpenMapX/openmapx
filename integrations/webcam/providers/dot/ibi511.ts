@@ -1,4 +1,5 @@
 import { fetchJson } from "@openmapx/core";
+import { integrationEnvVarName } from "@openmapx/integration-framework";
 import type { RawWebcam } from "../types.js";
 import type { StateDotConfig } from "./types.js";
 
@@ -94,7 +95,7 @@ export const ga = makeIbi511Config({
   stateCode: "ga",
   stateName: "Georgia",
   baseUrl: "https://511ga.org",
-  apiKeyEnvVar: "DOT_GA_API_KEY",
+  apiKeyEnvVar: integrationEnvVarName("webcam", "dot-ga-api-key"),
   bbox: { south: 30.3, west: -85.6, north: 35.0, east: -80.8 },
 });
 
@@ -102,7 +103,7 @@ export const fl = makeIbi511Config({
   stateCode: "fl",
   stateName: "Florida",
   baseUrl: "https://fl511.com",
-  apiKeyEnvVar: "DOT_FL_API_KEY",
+  apiKeyEnvVar: integrationEnvVarName("webcam", "dot-fl-api-key"),
   bbox: { south: 24.4, west: -87.7, north: 31.0, east: -80.0 },
 });
 
@@ -110,7 +111,7 @@ export const az = makeIbi511Config({
   stateCode: "az",
   stateName: "Arizona",
   baseUrl: "https://az511.com",
-  apiKeyEnvVar: "DOT_AZ_API_KEY",
+  apiKeyEnvVar: integrationEnvVarName("webcam", "dot-az-api-key"),
   bbox: { south: 31.3, west: -114.8, north: 37.0, east: -109.0 },
 });
 
@@ -118,7 +119,7 @@ export const id = makeIbi511Config({
   stateCode: "id",
   stateName: "Idaho",
   baseUrl: "https://511.idaho.gov",
-  apiKeyEnvVar: "DOT_ID_API_KEY",
+  apiKeyEnvVar: integrationEnvVarName("webcam", "dot-id-api-key"),
   bbox: { south: 41.9, west: -117.3, north: 49.0, east: -111.0 },
 });
 
@@ -126,7 +127,7 @@ export const ut = makeIbi511Config({
   stateCode: "ut",
   stateName: "Utah",
   baseUrl: "https://prod-ut.ibi511.com",
-  apiKeyEnvVar: "DOT_UT_API_KEY",
+  apiKeyEnvVar: integrationEnvVarName("webcam", "dot-ut-api-key"),
   bbox: { south: 36.9, west: -114.1, north: 42.0, east: -109.0 },
 });
 
@@ -134,7 +135,7 @@ export const la = makeIbi511Config({
   stateCode: "la",
   stateName: "Louisiana",
   baseUrl: "https://511la.org",
-  apiKeyEnvVar: "DOT_LA_API_KEY",
+  apiKeyEnvVar: integrationEnvVarName("webcam", "dot-la-api-key"),
   bbox: { south: 28.9, west: -94.1, north: 33.0, east: -88.8 },
 });
 
@@ -142,7 +143,7 @@ export const pa = makeIbi511Config({
   stateCode: "pa",
   stateName: "Pennsylvania",
   baseUrl: "https://www.511pa.com",
-  apiKeyEnvVar: "DOT_PA_API_KEY",
+  apiKeyEnvVar: integrationEnvVarName("webcam", "dot-pa-api-key"),
   bbox: { south: 39.7, west: -80.6, north: 42.3, east: -74.7 },
 });
 
@@ -150,7 +151,7 @@ export const sc = makeIbi511Config({
   stateCode: "sc",
   stateName: "South Carolina",
   baseUrl: "https://511sc.org",
-  apiKeyEnvVar: "DOT_SC_API_KEY",
+  apiKeyEnvVar: integrationEnvVarName("webcam", "dot-sc-api-key"),
   bbox: { south: 32.0, west: -83.4, north: 35.2, east: -78.5 },
 });
 
@@ -158,6 +159,6 @@ export const ma = makeIbi511Config({
   stateCode: "ma",
   stateName: "Massachusetts",
   baseUrl: "https://www.mass511.com",
-  apiKeyEnvVar: "DOT_MA_API_KEY",
+  apiKeyEnvVar: integrationEnvVarName("webcam", "dot-ma-api-key"),
   bbox: { south: 41.2, west: -73.5, north: 42.9, east: -69.9 },
 });
