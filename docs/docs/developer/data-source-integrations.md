@@ -167,7 +167,7 @@ export function setup(ctx: IntegrationContext): void {
   const resolved = ctx.getRequiredService("overpass");
   if (resolved?.url) setOverpassUrl(resolved.url);
   setFuelLogger(ctx.log);
-  setTankerkoenigApiKey(ctx.config.tankerkoenigApiKey as string | undefined);
+  setTankerkoenigApiKey(ctx.config["de-tankerkoenig-api-key"] as string | undefined);
 
   // Load attribution from the manifest *before* registering the provider,
   // so its `attribution` getter has data when the framework reads it.
