@@ -6,6 +6,23 @@ import { useEffect, useRef } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { baseMapCustomAttribution, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
 
+/**
+ * Collapse MapLibre's compact attribution control to its info button.
+ *
+ * With `compact: true`, MapLibre 5's `_updateCompact()` renders the control
+ * EXPANDED on init — it sets the `open` attribute and adds
+ * `maplibregl-compact-show` — and only minimises again in response to a map
+ * interaction. A minimap is non-interactive, so nothing ever collapses it, and
+ * on a map this small the attribution strip covers most of the view. This
+ * mirrors MapLibre's own `_updateCompactMinimize` (removing the show class),
+ * and also clears `open` for good measure.
+ */
+export function collapseCompactAttribution(container: HTMLElement): void {
+  const attrib = container.querySelector<HTMLElement>(".maplibregl-ctrl-attrib.maplibregl-compact");
+  attrib?.classList.remove("maplibregl-compact-show");
+  attrib?.removeAttribute("open");
+}
+
 interface LocationMinimapProps {
   lng: number;
   lat: number;
@@ -53,6 +70,14 @@ export function LocationMinimap({ lng, lat, zoom = 16, onClick, sx }: LocationMi
       });
 
       const marker = new maplibregl.Marker({ color: "#e53935" }).setLngLat([lng, lat]).addTo(map);
+
+      // MapLibre's compact attribution renders EXPANDED on init and only
+      // minimises on a map interaction — which never happens on a
+      // non-interactive minimap (see collapseCompactAttribution). Re-run on
+      // resize in case MapLibre re-expands it.
+      const collapse = () => collapseCompactAttribution(el);
+      map.once("idle", collapse);
+      map.on("resize", collapse);
 
       mapRef.current = { map, marker };
     })().catch(() => {
