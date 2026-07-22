@@ -580,7 +580,6 @@
     "evMode": "EV",
     "ev": {
       "vehicle": "Vehicle",
-      "selectVehicle": "Select vehicle",
       "noVehicleSelected": "No vehicle selected",
       "batteryStart": "Current battery",
       "socTarget": "Charge to",

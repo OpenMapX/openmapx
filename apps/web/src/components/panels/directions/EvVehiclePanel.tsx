@@ -1,6 +1,5 @@
 "use client";
 
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import Checkbox from "@mui/material/Checkbox";
@@ -12,11 +11,9 @@ import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
-import Typography from "@mui/material/Typography";
 import { useDirectionsStore, useSettingsStore } from "@openmapx/core";
 import { COMMON_EV_NETWORKS, VEHICLE_PRESETS } from "@openmapx/ev-charge-planner";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
 import { TEAL } from "@/lib/theme";
 
 const HOME_CURRENCIES = ["EUR", "USD", "GBP", "CHF"];
@@ -49,7 +46,6 @@ const VEHICLE_OPTIONS = Object.keys(VEHICLE_PRESETS)
  */
 export function EvVehiclePanel() {
   const t = useTranslations("directions.ev");
-  const [avoidedExpanded, setAvoidedExpanded] = useState(false);
 
   const evSocStartPct = useDirectionsStore((s) => s.evSocStartPct);
   const setEvSocStartPct = useDirectionsStore((s) => s.setEvSocStartPct);
@@ -81,11 +77,10 @@ export function EvVehiclePanel() {
           labelId="ev-vehicle-select-label"
           label={t("vehicle")}
           value={evVehicleId ?? ""}
-          displayEmpty
           onChange={(e) => setEvVehicleId(e.target.value || null)}
         >
           <MenuItem value="">
-            <em>{t("selectVehicle")}</em>
+            <em>{t("noVehicleSelected")}</em>
           </MenuItem>
           {VEHICLE_OPTIONS.map((v) => (
             <MenuItem key={v.id} value={v.id}>
@@ -134,55 +129,29 @@ export function EvVehiclePanel() {
         />
       </Box>
 
-      <Box>
-        <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
-          {t("preferredNetworks")}
-        </Typography>
-        <Autocomplete
-          multiple
-          freeSolo
-          size="small"
-          options={COMMON_EV_NETWORKS}
-          value={evPreferredNetworks}
-          onChange={(_event, newValue) => setEvPreferredNetworks(newValue as string[])}
-          renderInput={(params) => <TextField {...params} variant="outlined" size="small" />}
-        />
-      </Box>
-
-      <Box>
-        <Typography
-          variant="body2"
-          onClick={() => setAvoidedExpanded((v) => !v)}
-          sx={{
-            fontWeight: 600,
-            mb: 0.5,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: 0.5,
-          }}
-        >
-          {t("avoidedNetworks")}
-          <ExpandMoreIcon
-            sx={{
-              fontSize: 18,
-              transform: avoidedExpanded ? "rotate(180deg)" : "none",
-              transition: "transform 0.15s",
-            }}
-          />
-        </Typography>
-        {avoidedExpanded && (
-          <Autocomplete
-            multiple
-            freeSolo
-            size="small"
-            options={COMMON_EV_NETWORKS}
-            value={evAvoidedNetworks}
-            onChange={(_event, newValue) => setEvAvoidedNetworks(newValue as string[])}
-            renderInput={(params) => <TextField {...params} variant="outlined" size="small" />}
-          />
+      <Autocomplete
+        multiple
+        freeSolo
+        size="small"
+        options={COMMON_EV_NETWORKS}
+        value={evPreferredNetworks}
+        onChange={(_event, newValue) => setEvPreferredNetworks(newValue as string[])}
+        renderInput={(params) => (
+          <TextField {...params} label={t("preferredNetworks")} variant="outlined" size="small" />
         )}
-      </Box>
+      />
+
+      <Autocomplete
+        multiple
+        freeSolo
+        size="small"
+        options={COMMON_EV_NETWORKS}
+        value={evAvoidedNetworks}
+        onChange={(_event, newValue) => setEvAvoidedNetworks(newValue as string[])}
+        renderInput={(params) => (
+          <TextField {...params} label={t("avoidedNetworks")} variant="outlined" size="small" />
+        )}
+      />
 
       <FormControlLabel
         control={
