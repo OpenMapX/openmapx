@@ -11,12 +11,20 @@ import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
+import type { ConnectorStandard, EvVehicleSpec } from "@openmapx/core";
 import { useDirectionsStore, useSettingsStore } from "@openmapx/core";
 import { COMMON_EV_NETWORKS, listVehicles } from "@openmapx/ev-charge-planner";
 import { useTranslations } from "next-intl";
+import { useMemo, useState } from "react";
+import { CUSTOM_VEHICLE_ID } from "@/lib/buildEvDirectionsRequest";
 import { TEAL } from "@/lib/theme";
 
 const HOME_CURRENCIES = ["EUR", "USD", "GBP", "CHF"];
+
+interface VehicleOption {
+  id: string;
+  label: string;
+}
 
 const VEHICLE_OPTIONS = listVehicles();
 
@@ -28,7 +36,51 @@ export function vehicleLabel(id: string): string {
 }
 
 /** Over a thousand options: render at most a screenful so the dropdown stays responsive. */
-const filterVehicleOptions = createFilterOptions<{ id: string; label: string }>({ limit: 50 });
+const filterVehicleOptions = createFilterOptions<VehicleOption>({ limit: 50 });
+
+const CONNECTOR_OPTIONS: ConnectorStandard[] = [
+  "ccs2",
+  "ccs1",
+  "chademo",
+  "type2",
+  "type1",
+  "tesla_ccs",
+  "nacs",
+  "gbt_ac",
+  "gbt_dc",
+  "type3",
+];
+
+/** Sensible European default so a half-filled custom form still yields a usable spec. */
+const DEFAULT_CUSTOM_CONNECTORS: ConnectorStandard[] = ["ccs2", "type2"];
+
+interface CustomVehicleDraft {
+  battery: string;
+  consumption: string;
+  maxDc: string;
+  maxAc: string;
+  connectors: ConnectorStandard[];
+}
+
+/** Null until battery, consumption and DC power are all positive — a partial form must not be sent. */
+function draftToSpec(draft: CustomVehicleDraft): EvVehicleSpec | null {
+  const batteryKwh = Number(draft.battery);
+  const baseWhPerKm = Number(draft.consumption);
+  const maxDcKw = Number(draft.maxDc);
+  const maxAcKw = Number(draft.maxAc);
+  const positive = (v: number) => Number.isFinite(v) && v > 0;
+  if (!positive(batteryKwh) || !positive(baseWhPerKm) || !positive(maxDcKw)) return null;
+  if (draft.connectors.length === 0) return null;
+  return {
+    batteryKwh,
+    baseWhPerKm,
+    massTonnes: 2,
+    maxDcKw,
+    maxAcKw: Number.isFinite(maxAcKw) && maxAcKw > 0 ? maxAcKw : 0,
+    vehicleTaperSocPct: 80,
+    connectors: draft.connectors,
+  };
+}
 
 /**
  * EV trip inputs: vehicle + state-of-charge, network preferences,
@@ -62,21 +114,111 @@ export function EvVehiclePanel() {
   const setEvHomePricePerKwh = useSettingsStore((s) => s.setEvHomePricePerKwh);
   const evHomeCurrency = useSettingsStore((s) => s.evHomeCurrency);
   const setEvHomeCurrency = useSettingsStore((s) => s.setEvHomeCurrency);
+  const evCustomVehicle = useSettingsStore((s) => s.evCustomVehicle);
+  const setEvCustomVehicle = useSettingsStore((s) => s.setEvCustomVehicle);
+
+  const options = useMemo<VehicleOption[]>(
+    () => [{ id: CUSTOM_VEHICLE_ID, label: t("customVehicle") }, ...VEHICLE_OPTIONS],
+    [t],
+  );
+
+  const isCustomVehicle = evVehicleId === CUSTOM_VEHICLE_ID;
+  const [customDraft, setCustomDraft] = useState<CustomVehicleDraft>(() => ({
+    battery: evCustomVehicle ? String(evCustomVehicle.batteryKwh) : "",
+    consumption: evCustomVehicle ? String(evCustomVehicle.baseWhPerKm) : "",
+    maxDc: evCustomVehicle ? String(evCustomVehicle.maxDcKw) : "",
+    maxAc: evCustomVehicle ? String(evCustomVehicle.maxAcKw) : "",
+    connectors: evCustomVehicle?.connectors ?? DEFAULT_CUSTOM_CONNECTORS,
+  }));
+
+  const updateCustomDraft = (patch: Partial<CustomVehicleDraft>) => {
+    const next = { ...customDraft, ...patch };
+    setCustomDraft(next);
+    setEvCustomVehicle(draftToSpec(next));
+  };
 
   return (
     <Box sx={{ px: 2, py: 1.5, display: "flex", flexDirection: "column", gap: 1.5 }}>
       <Autocomplete
         size="small"
-        options={VEHICLE_OPTIONS}
+        options={options}
         filterOptions={filterVehicleOptions}
         getOptionLabel={(o) => o.label}
         isOptionEqualToValue={(o, v) => o.id === v.id}
-        value={VEHICLE_OPTIONS.find((o) => o.id === evVehicleId) ?? null}
+        value={options.find((o) => o.id === evVehicleId) ?? null}
         onChange={(_event, option) => setEvVehicleId(option?.id ?? null)}
+        // Keyed by id, not by the default label key: 28 dataset entries share a
+        // display name (a base record plus its identically-named trim).
+        renderOption={({ key: _key, ...props }, option) => (
+          <li {...props} key={option.id}>
+            {option.label}
+          </li>
+        )}
         renderInput={(params) => (
           <TextField {...params} label={t("vehicle")} variant="outlined" size="small" />
         )}
       />
+
+      {isCustomVehicle && (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+          <Box sx={{ display: "flex", gap: 1.5 }}>
+            <TextField
+              size="small"
+              type="number"
+              label={t("customBattery")}
+              value={customDraft.battery}
+              onChange={(e) => updateCustomDraft({ battery: e.target.value })}
+              slotProps={{ htmlInput: { min: 0, step: 0.1 } }}
+              fullWidth
+            />
+            <TextField
+              size="small"
+              type="number"
+              label={t("customConsumption")}
+              value={customDraft.consumption}
+              onChange={(e) => updateCustomDraft({ consumption: e.target.value })}
+              slotProps={{ htmlInput: { min: 0, step: 1 } }}
+              fullWidth
+            />
+          </Box>
+          <Box sx={{ display: "flex", gap: 1.5 }}>
+            <TextField
+              size="small"
+              type="number"
+              label={t("customMaxDc")}
+              value={customDraft.maxDc}
+              onChange={(e) => updateCustomDraft({ maxDc: e.target.value })}
+              slotProps={{ htmlInput: { min: 0, step: 1 } }}
+              fullWidth
+            />
+            <TextField
+              size="small"
+              type="number"
+              label={t("customMaxAc")}
+              value={customDraft.maxAc}
+              onChange={(e) => updateCustomDraft({ maxAc: e.target.value })}
+              slotProps={{ htmlInput: { min: 0, step: 0.1 } }}
+              fullWidth
+            />
+          </Box>
+          <Autocomplete
+            multiple
+            size="small"
+            options={CONNECTOR_OPTIONS}
+            getOptionLabel={(c) => t(`connector.${c}`)}
+            value={customDraft.connectors}
+            onChange={(_event, value) => updateCustomDraft({ connectors: value })}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label={t("customConnectors")}
+                variant="outlined"
+                size="small"
+              />
+            )}
+          />
+        </Box>
+      )}
 
       <Box sx={{ display: "flex", gap: 1.5 }}>
         <TextField

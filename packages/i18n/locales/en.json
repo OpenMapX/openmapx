@@ -580,6 +580,12 @@
     "evMode": "EV",
     "ev": {
       "vehicle": "Vehicle",
+      "customVehicle": "Custom vehicle…",
+      "customBattery": "Usable battery (kWh)",
+      "customConsumption": "Consumption (Wh/km)",
+      "customMaxDc": "Max DC power (kW)",
+      "customMaxAc": "Max AC power (kW)",
+      "customConnectors": "Connectors",
       "batteryStart": "Current battery",
       "socTarget": "Charge to",
       "socArrivalMin": "Arrival reserve",

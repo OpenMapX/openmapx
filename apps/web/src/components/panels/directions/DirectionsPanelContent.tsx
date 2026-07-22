@@ -130,6 +130,7 @@ export function DirectionsPanelContent() {
   const units = useSettingsStore((s) => s.units);
   const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
   const evVehicleId = useSettingsStore((s) => s.evVehicleId);
+  const evCustomVehicle = useSettingsStore((s) => s.evCustomVehicle);
   const evSocTargetPct = useSettingsStore((s) => s.evSocTargetPct);
   const evPreferredNetworks = useSettingsStore((s) => s.evPreferredNetworks);
   const evAvoidedNetworks = useSettingsStore((s) => s.evAvoidedNetworks);
@@ -226,6 +227,7 @@ export function DirectionsPanelContent() {
         waypoints: routeWaypoints,
         allWaypointsFilled,
         vehicleId: evVehicleId,
+        customVehicle: evCustomVehicle,
         socStartPct: evSocStartPct,
         socArrivalMinPct: evSocArrivalMinPct,
         socTargetPct: evSocTargetPct,
@@ -249,6 +251,7 @@ export function DirectionsPanelContent() {
       routeWaypoints,
       allWaypointsFilled,
       evVehicleId,
+      evCustomVehicle,
       evSocStartPct,
       evSocArrivalMinPct,
       evSocTargetPct,

@@ -580,6 +580,12 @@
     "evMode": "E-Auto",
     "ev": {
       "vehicle": "Fahrzeug",
+      "customVehicle": "Eigenes Fahrzeug…",
+      "customBattery": "Nutzbare Batterie (kWh)",
+      "customConsumption": "Verbrauch (Wh/km)",
+      "customMaxDc": "Max. DC-Leistung (kW)",
+      "customMaxAc": "Max. AC-Leistung (kW)",
+      "customConnectors": "Anschlüsse",
       "batteryStart": "Aktueller Akkustand",
       "socTarget": "Laden bis",
       "socArrivalMin": "Ankunftsreserve",

@@ -7,6 +7,7 @@ import { useSettingsStore } from "@openmapx/core";
 import { getVehiclePreset, routeEnergyKwh } from "@openmapx/ev-charge-planner";
 import { useLocale, useTranslations } from "next-intl";
 import { useMemo } from "react";
+import { CUSTOM_VEHICLE_ID } from "@/lib/buildEvDirectionsRequest";
 
 /**
  * Plain (non-EV-mode) driving route energy/cost estimate. Computed
@@ -26,10 +27,16 @@ export function RouteEnergyEstimate({
   const t = useTranslations("directions.ev");
   const locale = useLocale();
   const vehicleId = useSettingsStore((s) => s.evVehicleId);
+  const customVehicle = useSettingsStore((s) => s.evCustomVehicle);
   const homePricePerKwh = useSettingsStore((s) => s.evHomePricePerKwh);
   const homeCurrency = useSettingsStore((s) => s.evHomeCurrency);
 
-  const vehicle = vehicleId ? getVehiclePreset(vehicleId) : null;
+  const vehicle =
+    vehicleId === CUSTOM_VEHICLE_ID
+      ? customVehicle
+      : vehicleId
+        ? getVehiclePreset(vehicleId)
+        : null;
 
   const energyKwh = useMemo(() => {
     if (!vehicle) return null;

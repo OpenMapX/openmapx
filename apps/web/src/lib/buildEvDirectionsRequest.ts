@@ -1,4 +1,7 @@
-import type { EvDirectionsRequest, LngLat } from "@openmapx/core";
+import type { EvDirectionsRequest, EvVehicleSpec, LngLat } from "@openmapx/core";
+
+/** Sentinel `vehicleId` meaning "use the user's hand-entered spec instead of a dataset preset". */
+export const CUSTOM_VEHICLE_ID = "custom";
 
 /**
  * Single source of truth for building the `POST /directions/ev` request body.
@@ -13,6 +16,8 @@ export interface EvDirectionsRequestInput {
   waypoints: LngLat[];
   allWaypointsFilled: boolean;
   vehicleId: string | null;
+  /** Hand-entered spec, sent instead of `vehicleId` when the custom vehicle is selected. */
+  customVehicle: EvVehicleSpec | null;
   socStartPct: number;
   socArrivalMinPct: number;
   socTargetPct: number;
@@ -38,9 +43,13 @@ export function buildEvDirectionsRequest(
   input: EvDirectionsRequestInput,
 ): EvDirectionsRequest | null {
   if (!input.isEvMode || !input.allWaypointsFilled || !input.vehicleId) return null;
+  const isCustom = input.vehicleId === CUSTOM_VEHICLE_ID;
+  if (isCustom && !input.customVehicle) return null;
   return {
     waypoints: input.waypoints,
-    vehicleId: input.vehicleId,
+    ...(isCustom && input.customVehicle
+      ? { vehicle: input.customVehicle }
+      : { vehicleId: input.vehicleId }),
     socStartPct: input.socStartPct,
     socArrivalMinPct: input.socArrivalMinPct,
     socTargetPct: input.socTargetPct,

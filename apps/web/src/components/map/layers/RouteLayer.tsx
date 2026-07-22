@@ -52,6 +52,7 @@ export function RouteLayer() {
   const units = useSettingsStore((s) => s.units);
   const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
   const evVehicleId = useSettingsStore((s) => s.evVehicleId);
+  const evCustomVehicle = useSettingsStore((s) => s.evCustomVehicle);
   const evSocTargetPct = useSettingsStore((s) => s.evSocTargetPct);
   const evPreferredNetworks = useSettingsStore((s) => s.evPreferredNetworks);
   const evAvoidedNetworks = useSettingsStore((s) => s.evAvoidedNetworks);
@@ -105,6 +106,7 @@ export function RouteLayer() {
         waypoints: routeWaypoints,
         allWaypointsFilled: allFilled,
         vehicleId: evVehicleId,
+        customVehicle: evCustomVehicle,
         socStartPct: evSocStartPct,
         socArrivalMinPct: evSocArrivalMinPct,
         socTargetPct: evSocTargetPct,
@@ -127,6 +129,7 @@ export function RouteLayer() {
       routeWaypoints,
       allFilled,
       evVehicleId,
+      evCustomVehicle,
       evSocStartPct,
       evSocArrivalMinPct,
       evSocTargetPct,
