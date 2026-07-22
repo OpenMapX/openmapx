@@ -205,6 +205,20 @@ describe("buildLabel", () => {
     ).toBe("Tesla Model 3 Long Range (2024)");
   });
 
+  it("does not repeat a variant name that already matches the trim", () => {
+    expect(
+      buildLabel(
+        raw({
+          make: { name: "Tesla" },
+          model: { name: "Model 3" },
+          trim: { name: "Long Range" },
+          variant: { name: "Long Range" },
+          year: 2024,
+        }),
+      ),
+    ).toBe("Tesla Model 3 Long Range (2024)");
+  });
+
   it("collapses whitespace and survives a missing year", () => {
     expect(
       buildLabel(

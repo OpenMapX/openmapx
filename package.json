@@ -23,6 +23,7 @@
     "check-legal-urls": "pnpm -C packages/cli exec tsx ../../scripts/check-legal-urls.ts",
     "check-license-metadata": "pnpm -C packages/cli exec tsx ../../scripts/check-license-metadata.ts",
     "check-toolchain-pins": "pnpm -C packages/cli exec tsx ../../scripts/check-toolchain-pins.ts",
+    "gen-ev-vehicles": "pnpm -C packages/cli exec tsx ../../scripts/ev-vehicles/generate.ts",
     "openmapx": "pnpm -C packages/cli exec tsx src/index.ts"
   },
   "devDependencies": {

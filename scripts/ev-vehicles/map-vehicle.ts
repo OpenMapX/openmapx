@@ -171,7 +171,13 @@ export function buildLabel(raw: RawVehicle): string {
   const parts = [raw.make?.name ?? "", raw.model?.name ?? ""];
   const trim = raw.trim?.name;
   if (trim && trim !== "Base") parts.push(trim);
-  if (raw.variant?.name) parts.push(raw.variant.name);
+  const variant = raw.variant?.name;
+  // A fifth of the records repeat the trim name as the variant name
+  // ("Model 3" / trim "Long Range" / variant "Long Range"), which would read
+  // as "Tesla Model 3 Long Range Long Range".
+  if (variant && !parts.some((part) => part.toLowerCase() === variant.toLowerCase())) {
+    parts.push(variant);
+  }
   if (raw.year) parts.push(`(${raw.year})`);
   return parts.join(" ").replace(/\s+/g, " ").trim();
 }
