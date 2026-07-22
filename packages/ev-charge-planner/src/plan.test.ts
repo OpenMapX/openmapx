@@ -317,6 +317,71 @@ describe("planCharges", () => {
     expect(plan.stops[0]?.station.id).toBe("ionity");
   });
 
+  it("avoids a network the user named by brand, not by its full registered name (D9)", async () => {
+    // The user types "EnBW"; the register carries "EnBW mobility+ AG und Co.KG",
+    // whose key is "enbw mobility und". Matching those by equality silently
+    // dropped the preference and the avoided operator was recommended anyway.
+    const enbw = { ...charger("enbw", 1.35), operator: { name: "EnBW mobility+ AG und Co.KG" } };
+    const other = { ...charger("other", 1.36), operator: { name: "SomeCPO" } };
+    const cb = {
+      requestCorridorChargers: vi.fn().mockResolvedValue([enbw, other]),
+      // "enbw" is the shorter detour (ti=0), so only the avoid penalty can flip this.
+      requestMatrix: vi.fn().mockImplementation(async (s: any[], t: any[]) =>
+        s.map(() =>
+          t.map((_: unknown, ti: number) => ({
+            seconds: ti === 0 ? 60 : 180,
+            km: ti === 0 ? 1 : 3,
+          })),
+        ),
+      ),
+    };
+    const plan = await planCharges(
+      {
+        route: longRoute(),
+        vehicle,
+        socStartKwh: 30,
+        socArrivalMinKwh: 6,
+        socTargetKwh: 48,
+        ambientTempC: 20,
+        hasElevation: false,
+        nowMs: NOW,
+        preferredNetworkKeys: new Set(),
+        avoidedNetworkKeys: new Set(["enbw"]),
+      },
+      cb,
+    );
+    expect(plan.stops[0]?.station.id).toBe("other");
+  });
+
+  it("treats an exclusive whitelist named by brand as covering the full operator name", async () => {
+    const enbw = { ...charger("enbw", 1.35), operator: { name: "EnBW mobility+ AG und Co.KG" } };
+    const cb = {
+      requestCorridorChargers: vi.fn().mockResolvedValue([enbw]),
+      requestMatrix: vi
+        .fn()
+        .mockImplementation(async (s: any[], t: any[]) =>
+          s.map(() => t.map(() => ({ seconds: 120, km: 2 }))),
+        ),
+    };
+    const plan = await planCharges(
+      {
+        route: longRoute(),
+        vehicle,
+        socStartKwh: 30,
+        socArrivalMinKwh: 6,
+        socTargetKwh: 48,
+        ambientTempC: 20,
+        hasElevation: false,
+        nowMs: NOW,
+        exclusiveNetworkKeys: new Set(["enbw"]),
+      },
+      cb,
+    );
+    // Equality matching would have filtered this station out and warned instead.
+    expect(plan.stops[0]?.station.id).toBe("enbw");
+    expect(plan.warnings.some((w) => w.kind === "no-allowed-network")).toBe(false);
+  });
+
   it("keeps an avoided network when it is the only reachable option (soft, not a filter)", async () => {
     const only = { ...charger("only", 1.35), operator: { name: "SomeCPO" } };
     const cb = {

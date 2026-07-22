@@ -1,5 +1,5 @@
 import type { ConnectorStandard, CurrentStandard, LngLat, Route } from "@openmapx/core";
-import { normalizeConnector, normalizeOperator } from "@openmapx/core";
+import { matchesAnyOperator, normalizeConnector, normalizeOperator } from "@openmapx/core";
 import type { EvChargingStation, EvChargingTariff } from "@openmapx/mobility-core/ev-charging";
 import { chargeSecondsFor } from "./charging";
 import { routeEnergyKwh } from "./consumption";
@@ -244,7 +244,9 @@ export async function planCharges(input: PlanInput, cb: PlanCallbacks): Promise<
     // is a distinct, user-actionable warning (not a generic "unreachable").
     const allowed = input.exclusiveNetworkKeys;
     const compatible = allowed?.size
-      ? connCompatible.filter((c) => allowed.has(normalizeOperator(c.s.operator?.name)))
+      ? connCompatible.filter((c) =>
+          matchesAnyOperator(normalizeOperator(c.s.operator?.name), allowed),
+        )
       : connCompatible;
     if (compatible.length === 0) {
       warnings.push({ kind: "no-allowed-network", afterStopIndex: stops.length - 1 });
@@ -327,12 +329,11 @@ export async function planCharges(input: PlanInput, cb: PlanCallbacks): Promise<
       const cand = compatible[s.i];
       const availPenalty = availabilityPenaltySec(cand.s, etaBaseSec + s.toSeconds, input.nowMs);
       const opKey = normalizeOperator(cand.s.operator?.name);
-      const networkBias =
-        opKey && input.preferredNetworkKeys?.has(opKey)
-          ? -NETWORK_PREFERENCE_BONUS_SEC
-          : opKey && input.avoidedNetworkKeys?.has(opKey)
-            ? NETWORK_AVOID_PENALTY_SEC
-            : 0;
+      const networkBias = matchesAnyOperator(opKey, input.preferredNetworkKeys)
+        ? -NETWORK_PREFERENCE_BONUS_SEC
+        : matchesAnyOperator(opKey, input.avoidedNetworkKeys)
+          ? NETWORK_AVOID_PENALTY_SEC
+          : 0;
       let costPenalty = 0;
       if (s.cost && costWeight > 0) {
         const minCost = minCostByCcy.get(s.cost.currency); // same-currency cheapest

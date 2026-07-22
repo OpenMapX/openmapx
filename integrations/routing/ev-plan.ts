@@ -1,4 +1,9 @@
-import { bboxAroundPoint, type EvVehicleSpec, normalizeOperator } from "@openmapx/core";
+import {
+  bboxAroundPoint,
+  type EvVehicleSpec,
+  matchesAnyOperator,
+  normalizeOperator,
+} from "@openmapx/core";
 import { getVehiclePreset, planCharges, routeEnergyKwh } from "@openmapx/ev-charge-planner";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import type { EvChargingStation } from "@openmapx/mobility-core/ev-charging";
@@ -222,7 +227,10 @@ export async function runEvPlan(
         connector: s.connector,
         powerKw: s.powerKw,
         operator: s.station.operator?.name,
-        isPreferredNetwork: preferredNetworkKeys.has(normalizeOperator(s.station.operator?.name)),
+        isPreferredNetwork: matchesAnyOperator(
+          normalizeOperator(s.station.operator?.name),
+          preferredNetworkKeys,
+        ),
         arriveSocPct: Math.round((s.arriveSocKwh / vehicle.batteryKwh) * 100),
         departSocPct: Math.round((s.departSocKwh / vehicle.batteryKwh) * 100),
         chargeSeconds: Math.round(s.chargeSeconds),
