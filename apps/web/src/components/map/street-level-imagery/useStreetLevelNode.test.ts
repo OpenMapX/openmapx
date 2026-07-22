@@ -3,6 +3,7 @@ import {
   clearStreetLevelNodeCache,
   fetchStreetLevelNode,
   integrationIdFor,
+  pickPanoramaUrl,
 } from "./useStreetLevelNode";
 
 const REF = { providerId: "panoramax", imageId: "abc" };
@@ -130,5 +131,39 @@ describe("fetchStreetLevelNode", () => {
 
     const node = await fetchStreetLevelNode("http://api.test", REF);
     expect(node.image.id).toBe("abc");
+  });
+});
+
+describe("pickPanoramaUrl", () => {
+  const assets = {
+    thumb: "https://example.test/thumb.jpg",
+    sd: "https://example.test/sd.jpg",
+    hd: "https://example.test/hd.jpg",
+  };
+
+  it("uses full resolution when the GPU has ample headroom", () => {
+    expect(pickPanoramaUrl(assets, 16384)).toBe(assets.hd);
+  });
+
+  it("falls back to the capped rendition on a 4096-limited GPU", () => {
+    // Mapillary originals are commonly 5376px wide; a 4096 texture limit is a
+    // hard failure, which surfaces as "the panorama cannot be loaded".
+    expect(pickPanoramaUrl(assets, 4096)).toBe(assets.sd);
+  });
+
+  it("treats an unknown limit as unsafe", () => {
+    expect(pickPanoramaUrl(assets, 0)).toBe(assets.sd);
+  });
+
+  it("still returns something when only hd exists", () => {
+    expect(pickPanoramaUrl({ hd: assets.hd }, 4096)).toBe(assets.hd);
+  });
+
+  it("falls back to the thumbnail as a last resort", () => {
+    expect(pickPanoramaUrl({ thumb: assets.thumb }, 4096)).toBe(assets.thumb);
+  });
+
+  it("returns an empty string when there is no image at all", () => {
+    expect(pickPanoramaUrl({}, 16384)).toBe("");
   });
 });

@@ -19,6 +19,51 @@ export function integrationIdFor(providerId: string): string {
 }
 
 /**
+ * A panorama wide enough to need this much texture is safe to request. Both
+ * providers cap their `sd` rendition at 2048px, while `hd` is the untouched
+ * original — 5376px is typical for Mapillary and some are far larger.
+ *
+ * A GPU limited to 4096 (older integrated chips, plenty of phones) cannot hold
+ * those originals, and the sphere fails to render with a bare "panorama cannot
+ * be loaded". Requiring headroom well above the common original sizes keeps
+ * such devices on the rendition that always works.
+ */
+const HD_TEXTURE_HEADROOM = 8192;
+
+let cachedMaxTextureSize: number | null = null;
+
+/** The GPU's maximum texture edge, probed once via a throwaway context. */
+export function maxTextureSize(): number {
+  if (cachedMaxTextureSize !== null) return cachedMaxTextureSize;
+
+  let size = 0;
+  try {
+    const canvas = document.createElement("canvas");
+    const gl = (canvas.getContext("webgl2") ??
+      canvas.getContext("webgl")) as WebGLRenderingContext | null;
+    if (gl) size = (gl.getParameter(gl.MAX_TEXTURE_SIZE) as number) || 0;
+  } catch {
+    // No WebGL (or blocked) — fall through to the conservative rendition.
+  }
+
+  cachedMaxTextureSize = size;
+  return size;
+}
+
+/**
+ * The image to hand the sphere renderer. Prefers full resolution only where the
+ * GPU can certainly hold it, since the texture limit is a hard failure rather
+ * than a graceful downgrade.
+ */
+export function pickPanoramaUrl(
+  assets: StreetLevelImage["assets"],
+  limit = maxTextureSize(),
+): string {
+  if (limit >= HD_TEXTURE_HEADROOM && assets.hd) return assets.hd;
+  return assets.sd ?? assets.hd ?? assets.thumb ?? "";
+}
+
+/**
  * In-flight and very recently resolved nodes, keyed by composite ref.
  *
  * Each hop is requested twice — once by the virtual-tour plugin's `getNode`

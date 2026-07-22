@@ -16,7 +16,7 @@ import { SearchBar } from "@/components/search/SearchBar";
 import { useEnv } from "@/lib/EnvProvider";
 import { StreetLevelFlatImage } from "./StreetLevelFlatImage";
 import { StreetLevelInfoCard } from "./StreetLevelInfoCard";
-import { fetchStreetLevelNode, type StreetLevelNode } from "./useStreetLevelNode";
+import { fetchStreetLevelNode, pickPanoramaUrl, type StreetLevelNode } from "./useStreetLevelNode";
 import { useStreetLevelProviders } from "./useStreetLevelProviders";
 
 interface TourPlugin {
@@ -158,7 +158,7 @@ export default function StreetLevelViewerInner() {
 
                 return {
                   id: target.id,
-                  panorama: target.image.assets.hd ?? target.image.assets.sd ?? "",
+                  panorama: pickPanoramaUrl(target.image.assets),
                   gps: target.image.lngLat,
                   sphereCorrection: {
                     pan: (-(target.image.heading ?? 0) * Math.PI) / 180,
