@@ -17,6 +17,7 @@ function generated(overrides: Partial<GeneratedVehicle> = {}): GeneratedVehicle 
   return {
     id: "bmw:i4:2024:i4",
     label: "BMW i4 eDrive40 (2024)",
+    make: "BMW",
     batteryKwh: 81.3,
     baseWhPerKm: 168,
     massTonnes: 2.05,
@@ -380,6 +381,7 @@ describe("mapVehicle", () => {
     if (!("ok" in r)) throw new Error("expected a mapped vehicle");
     expect(r.ok.id).toBe("volkswagen:id_4:2024:id_4");
     expect(r.ok.label).toBe("Volkswagen ID.4 (2024)");
+    expect(r.ok.make).toBe("Volkswagen");
     expect(r.ok.batteryKwh).toBe(77);
     expect(r.ok.maxDcKw).toBe(135);
     expect(r.ok.maxAcKw).toBe(11);
@@ -410,6 +412,18 @@ describe("mapVehicle", () => {
     );
     if (!("ok" in r)) throw new Error("expected a mapped vehicle");
     expect(r.ok.baseWhPerKm).toBe(158);
+  });
+
+  it("carries the make as its own field, trimmed", () => {
+    const r = mapVehicle(raw({ make: { name: "  Mercedes-Benz " } }));
+    if (!("ok" in r)) throw new Error("expected a mapped vehicle");
+    expect(r.ok.make).toBe("Mercedes-Benz");
+  });
+
+  it("falls back to an empty make when upstream omits it", () => {
+    const r = mapVehicle(raw({ make: undefined }));
+    if (!("ok" in r)) throw new Error("expected a mapped vehicle");
+    expect(r.ok.make).toBe("");
   });
 
   it("defaults a missing AC power to zero", () => {

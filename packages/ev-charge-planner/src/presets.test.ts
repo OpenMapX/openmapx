@@ -24,8 +24,32 @@ describe("vehicle presets", () => {
     const list = listVehicles();
     expect(list.length).toBe(Object.keys(VEHICLE_PRESETS).length);
     expect(new Set(list.map((v) => v.id)).size).toBe(list.length);
-    const labels = list.map((v) => v.label);
-    expect(labels).toEqual([...labels].sort((a, b) => a.localeCompare(b, "en")));
+    const sorted = [...list].sort(
+      (a, b) => a.make.localeCompare(b.make, "en") || a.label.localeCompare(b.label, "en"),
+    );
+    expect(list.map((v) => v.id)).toEqual(sorted.map((v) => v.id));
+  });
+
+  it("gives every vehicle a non-empty make", () => {
+    for (const vehicle of listVehicles()) {
+      expect(vehicle.make, vehicle.id).toBeTruthy();
+    }
+  });
+
+  // The picker groups by make, and MUI renders a second header for a make whose
+  // options are interrupted by another make's — so the runs must not interleave.
+  it("keeps every make's options contiguous", () => {
+    const spans = new Map<string, { first: number; last: number }>();
+    listVehicles().forEach((vehicle, index) => {
+      const span = spans.get(vehicle.make);
+      if (span) span.last = index;
+      else spans.set(vehicle.make, { first: index, last: index });
+    });
+    for (const [make, span] of spans) {
+      expect(span.last - span.first + 1, make).toBe(
+        listVehicles().filter((v) => v.make === make).length,
+      );
+    }
   });
 
   it("has no duplicate display labels", () => {

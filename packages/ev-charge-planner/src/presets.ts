@@ -24,13 +24,25 @@ export const VEHICLE_PRESETS: Record<string, EvVehicleSpec> = Object.fromEntries
   ]),
 );
 
-const VEHICLE_LIST: { id: string; label: string }[] = GENERATED_VEHICLES.map((vehicle) => ({
+/** One entry of the vehicle picker: display name plus the make it groups under. */
+export interface VehicleListEntry {
+  id: string;
+  label: string;
+  make: string;
+}
+
+const VEHICLE_LIST: VehicleListEntry[] = GENERATED_VEHICLES.map((vehicle) => ({
   id: vehicle.id,
   label: vehicle.label,
+  make: vehicle.make,
 }));
 
-/** Every selectable vehicle with its display name, sorted by label. */
-export function listVehicles(): { id: string; label: string }[] {
+/**
+ * Every selectable vehicle with its display name, sorted by make then label.
+ * The make-first order keeps each make's options contiguous, which is what a
+ * grouped picker needs to render one header per make.
+ */
+export function listVehicles(): VehicleListEntry[] {
   return VEHICLE_LIST;
 }
 

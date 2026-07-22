@@ -17,6 +17,7 @@ import type { ConnectorStandard } from "@openmapx/core";
 export interface GeneratedVehicleRecord {
   id: string;
   label: string;
+  make: string;
   batteryKwh: number;
   baseWhPerKm: number;
   massTonnes: number;
@@ -32,6 +33,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:a6_e_tron:2024:a6_e_tron_avant",
     label: "Audi A6 e-tron Avant (2024)",
+    make: "Audi",
     batteryKwh: 94.9,
     baseWhPerKm: 165,
     massTonnes: 2.22,
@@ -43,6 +45,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:a6_e_tron:2025:a6_e_tron_avant",
     label: "Audi A6 e-tron Avant (2025)",
+    make: "Audi",
     batteryKwh: 94.9,
     baseWhPerKm: 165,
     massTonnes: 2.22,
@@ -54,6 +57,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:a6_e_tron:2024:a6_e_tron",
     label: "Audi A6 e-tron Sportback (2024)",
+    make: "Audi",
     batteryKwh: 94.9,
     baseWhPerKm: 165,
     massTonnes: 2.2,
@@ -65,6 +69,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:a6_e_tron:2025:a6_e_tron",
     label: "Audi A6 e-tron Sportback (2025)",
+    make: "Audi",
     batteryKwh: 94.9,
     baseWhPerKm: 165,
     massTonnes: 2.2,
@@ -76,6 +81,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:e_tron_gt:2023:e_tron_gt",
     label: "Audi e-tron GT quattro (2023)",
+    make: "Audi",
     batteryKwh: 85,
     baseWhPerKm: 222,
     massTonnes: 2.347,
@@ -87,6 +93,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:e_tron_gt:2024:e_tron_gt",
     label: "Audi e-tron GT quattro (2024)",
+    make: "Audi",
     batteryKwh: 85,
     baseWhPerKm: 222,
     massTonnes: 2.347,
@@ -98,6 +105,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:e_tron_gt:2025:e_tron_gt",
     label: "Audi e-tron GT quattro (2025)",
+    make: "Audi",
     batteryKwh: 85,
     baseWhPerKm: 222,
     massTonnes: 2.347,
@@ -109,6 +117,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:e_tron_gt:2023:e_tron_gt_rs",
     label: "Audi e-tron GT RS (2023)",
+    make: "Audi",
     batteryKwh: 85,
     baseWhPerKm: 230,
     massTonnes: 2.35,
@@ -120,6 +129,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:e_tron_gt:2024:e_tron_gt_rs",
     label: "Audi e-tron GT RS (2024)",
+    make: "Audi",
     batteryKwh: 85,
     baseWhPerKm: 230,
     massTonnes: 2.35,
@@ -131,6 +141,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:e_tron_gt:2025:e_tron_gt_rs",
     label: "Audi e-tron GT RS (2025)",
+    make: "Audi",
     batteryKwh: 85,
     baseWhPerKm: 230,
     massTonnes: 2.35,
@@ -142,6 +153,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q4_e_tron:2023:q4_e_tron",
     label: "Audi Q4 e-tron 40 (2023)",
+    make: "Audi",
     batteryKwh: 48,
     baseWhPerKm: 172,
     massTonnes: 1.985,
@@ -153,6 +165,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q4_e_tron:2024:q4_e_tron",
     label: "Audi Q4 e-tron 40 (2024)",
+    make: "Audi",
     batteryKwh: 48,
     baseWhPerKm: 172,
     massTonnes: 1.985,
@@ -164,6 +177,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q4_e_tron:2025:q4_e_tron",
     label: "Audi Q4 e-tron 40 (2025)",
+    make: "Audi",
     batteryKwh: 48,
     baseWhPerKm: 172,
     massTonnes: 1.985,
@@ -175,6 +189,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q4_e_tron:2023:q4_e_tron_sportback",
     label: "Audi Q4 e-tron 40 Sportback (2023)",
+    make: "Audi",
     batteryKwh: 48,
     baseWhPerKm: 168,
     massTonnes: 1.98,
@@ -186,6 +201,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q4_e_tron:2024:q4_e_tron_sportback",
     label: "Audi Q4 e-tron 40 Sportback (2024)",
+    make: "Audi",
     batteryKwh: 48,
     baseWhPerKm: 168,
     massTonnes: 1.98,
@@ -197,6 +213,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q4_e_tron:2025:q4_e_tron_sportback",
     label: "Audi Q4 e-tron 40 Sportback (2025)",
+    make: "Audi",
     batteryKwh: 48,
     baseWhPerKm: 168,
     massTonnes: 1.98,
@@ -208,6 +225,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q4_e_tron:2023:q4_e_tron_50",
     label: "Audi Q4 e-tron 50 (2023)",
+    make: "Audi",
     batteryKwh: 73,
     baseWhPerKm: 183,
     massTonnes: 2.065,
@@ -219,6 +237,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q4_e_tron:2024:q4_e_tron_50",
     label: "Audi Q4 e-tron 50 (2024)",
+    make: "Audi",
     batteryKwh: 73,
     baseWhPerKm: 183,
     massTonnes: 2.065,
@@ -230,6 +249,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q4_e_tron:2025:q4_e_tron_50",
     label: "Audi Q4 e-tron 50 (2025)",
+    make: "Audi",
     batteryKwh: 73,
     baseWhPerKm: 183,
     massTonnes: 2.065,
@@ -241,6 +261,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q4_e_tron:2023:q4_e_tron_sportback_50",
     label: "Audi Q4 e-tron 50 Sportback (2023)",
+    make: "Audi",
     batteryKwh: 73,
     baseWhPerKm: 178,
     massTonnes: 2.06,
@@ -252,6 +273,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q4_e_tron:2024:q4_e_tron_sportback_50",
     label: "Audi Q4 e-tron 50 Sportback (2024)",
+    make: "Audi",
     batteryKwh: 73,
     baseWhPerKm: 178,
     massTonnes: 2.06,
@@ -263,6 +285,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q4_e_tron:2025:q4_e_tron_sportback_50",
     label: "Audi Q4 e-tron 50 Sportback (2025)",
+    make: "Audi",
     batteryKwh: 73,
     baseWhPerKm: 178,
     massTonnes: 2.06,
@@ -274,6 +297,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q4_e_tron:2023:q4_e_tron_quattro",
     label: "Audi Q4 e-tron quattro (2023)",
+    make: "Audi",
     batteryKwh: 73,
     baseWhPerKm: 195,
     massTonnes: 2.165,
@@ -285,6 +309,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q4_e_tron:2024:q4_e_tron_quattro",
     label: "Audi Q4 e-tron quattro (2024)",
+    make: "Audi",
     batteryKwh: 73,
     baseWhPerKm: 195,
     massTonnes: 2.165,
@@ -296,6 +321,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q4_e_tron:2025:q4_e_tron_quattro",
     label: "Audi Q4 e-tron quattro (2025)",
+    make: "Audi",
     batteryKwh: 73,
     baseWhPerKm: 195,
     massTonnes: 2.165,
@@ -307,6 +333,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q4_e_tron:2023:q4_e_tron_sportback_quattro",
     label: "Audi Q4 e-tron quattro Sportback (2023)",
+    make: "Audi",
     batteryKwh: 73,
     baseWhPerKm: 190,
     massTonnes: 2.16,
@@ -318,6 +345,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q4_e_tron:2024:q4_e_tron_sportback_quattro",
     label: "Audi Q4 e-tron quattro Sportback (2024)",
+    make: "Audi",
     batteryKwh: 73,
     baseWhPerKm: 190,
     massTonnes: 2.16,
@@ -329,6 +357,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q4_e_tron:2025:q4_e_tron_sportback_quattro",
     label: "Audi Q4 e-tron quattro Sportback (2025)",
+    make: "Audi",
     batteryKwh: 73,
     baseWhPerKm: 190,
     massTonnes: 2.16,
@@ -340,6 +369,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q6_e_tron:2024:q6_e_tron",
     label: "Audi Q6 e-tron quattro (2024)",
+    make: "Audi",
     batteryKwh: 94.9,
     baseWhPerKm: 185,
     massTonnes: 2.35,
@@ -351,6 +381,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q6_e_tron:2025:q6_e_tron",
     label: "Audi Q6 e-tron quattro (2025)",
+    make: "Audi",
     batteryKwh: 94.9,
     baseWhPerKm: 185,
     massTonnes: 2.35,
@@ -362,6 +393,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q6_e_tron:2024:q6_e_tron_sportback",
     label: "Audi Q6 e-tron quattro Sportback (2024)",
+    make: "Audi",
     batteryKwh: 94.9,
     baseWhPerKm: 181,
     massTonnes: 2.34,
@@ -373,6 +405,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q6_e_tron:2025:q6_e_tron_sportback",
     label: "Audi Q6 e-tron quattro Sportback (2025)",
+    make: "Audi",
     batteryKwh: 94.9,
     baseWhPerKm: 181,
     massTonnes: 2.34,
@@ -384,6 +417,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q6_e_tron:2025:q6_e_tron_sq6",
     label: "Audi Q6 e-tron SQ6 (2025)",
+    make: "Audi",
     batteryKwh: 94.9,
     baseWhPerKm: 194,
     massTonnes: 2.42,
@@ -395,6 +429,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q8_e_tron:2023:q8_e_tron",
     label: "Audi Q8 e-tron 50 (2023)",
+    make: "Audi",
     batteryKwh: 89,
     baseWhPerKm: 239,
     massTonnes: 2.585,
@@ -406,6 +441,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q8_e_tron:2024:q8_e_tron",
     label: "Audi Q8 e-tron 50 (2024)",
+    make: "Audi",
     batteryKwh: 89,
     baseWhPerKm: 239,
     massTonnes: 2.585,
@@ -417,6 +453,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q8_e_tron:2025:q8_e_tron",
     label: "Audi Q8 e-tron 50 (2025)",
+    make: "Audi",
     batteryKwh: 89,
     baseWhPerKm: 239,
     massTonnes: 2.585,
@@ -428,6 +465,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q8_e_tron:2023:q8_e_tron_sportback",
     label: "Audi Q8 e-tron 50 Sportback (2023)",
+    make: "Audi",
     batteryKwh: 89,
     baseWhPerKm: 232,
     massTonnes: 2.575,
@@ -439,6 +477,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q8_e_tron:2024:q8_e_tron_sportback",
     label: "Audi Q8 e-tron 50 Sportback (2024)",
+    make: "Audi",
     batteryKwh: 89,
     baseWhPerKm: 232,
     massTonnes: 2.575,
@@ -450,6 +489,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q8_e_tron:2025:q8_e_tron_sportback",
     label: "Audi Q8 e-tron 50 Sportback (2025)",
+    make: "Audi",
     batteryKwh: 89,
     baseWhPerKm: 232,
     massTonnes: 2.575,
@@ -461,6 +501,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q8_e_tron:2023:q8_e_tron_55",
     label: "Audi Q8 e-tron 55 (2023)",
+    make: "Audi",
     batteryKwh: 100,
     baseWhPerKm: 224,
     massTonnes: 2.62,
@@ -472,6 +513,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q8_e_tron:2024:q8_e_tron_55",
     label: "Audi Q8 e-tron 55 (2024)",
+    make: "Audi",
     batteryKwh: 100,
     baseWhPerKm: 224,
     massTonnes: 2.62,
@@ -483,6 +525,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q8_e_tron:2025:q8_e_tron_55",
     label: "Audi Q8 e-tron 55 (2025)",
+    make: "Audi",
     batteryKwh: 100,
     baseWhPerKm: 224,
     massTonnes: 2.62,
@@ -494,6 +537,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q8_e_tron:2023:q8_e_tron_sportback_55",
     label: "Audi Q8 e-tron 55 Sportback (2023)",
+    make: "Audi",
     batteryKwh: 100,
     baseWhPerKm: 217,
     massTonnes: 2.61,
@@ -505,6 +549,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q8_e_tron:2024:q8_e_tron_sportback_55",
     label: "Audi Q8 e-tron 55 Sportback (2024)",
+    make: "Audi",
     batteryKwh: 100,
     baseWhPerKm: 217,
     massTonnes: 2.61,
@@ -516,6 +561,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q8_e_tron:2025:q8_e_tron_sportback_55",
     label: "Audi Q8 e-tron 55 Sportback (2025)",
+    make: "Audi",
     batteryKwh: 100,
     baseWhPerKm: 217,
     massTonnes: 2.61,
@@ -527,6 +573,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q8_e_tron:2023:q8_e_tron_quattro",
     label: "Audi Q8 e-tron quattro (2023)",
+    make: "Audi",
     batteryKwh: 100,
     baseWhPerKm: 224,
     massTonnes: 2.62,
@@ -538,6 +585,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q8_e_tron:2024:q8_e_tron_quattro",
     label: "Audi Q8 e-tron quattro (2024)",
+    make: "Audi",
     batteryKwh: 100,
     baseWhPerKm: 224,
     massTonnes: 2.62,
@@ -549,6 +597,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q8_e_tron:2025:q8_e_tron_quattro",
     label: "Audi Q8 e-tron quattro (2025)",
+    make: "Audi",
     batteryKwh: 100,
     baseWhPerKm: 224,
     massTonnes: 2.62,
@@ -560,6 +609,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q8_e_tron:2023:q8_e_tron_sportback_quattro",
     label: "Audi Q8 e-tron quattro Sportback (2023)",
+    make: "Audi",
     batteryKwh: 100,
     baseWhPerKm: 217,
     massTonnes: 2.61,
@@ -571,6 +621,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q8_e_tron:2024:q8_e_tron_sportback_quattro",
     label: "Audi Q8 e-tron quattro Sportback (2024)",
+    make: "Audi",
     batteryKwh: 100,
     baseWhPerKm: 217,
     massTonnes: 2.61,
@@ -582,6 +633,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "audi:q8_e_tron:2025:q8_e_tron_sportback_quattro",
     label: "Audi Q8 e-tron quattro Sportback (2025)",
+    make: "Audi",
     batteryKwh: 100,
     baseWhPerKm: 217,
     massTonnes: 2.61,
@@ -593,6 +645,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "automobili_pininfarina:battista:2023:battista",
     label: "Automobili Pininfarina Battista (2023)",
+    make: "Automobili Pininfarina",
     batteryKwh: 120,
     baseWhPerKm: 293,
     massTonnes: 1.9,
@@ -604,6 +657,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "automobili_pininfarina:battista:2024:battista",
     label: "Automobili Pininfarina Battista (2024)",
+    make: "Automobili Pininfarina",
     batteryKwh: 120,
     baseWhPerKm: 293,
     massTonnes: 1.9,
@@ -615,6 +669,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "automobili_pininfarina:battista:2025:battista",
     label: "Automobili Pininfarina Battista (2025)",
+    make: "Automobili Pininfarina",
     batteryKwh: 120,
     baseWhPerKm: 293,
     massTonnes: 1.9,
@@ -626,6 +681,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i4:2023:i4_edrive35",
     label: "BMW i4 eDrive35 (2023)",
+    make: "BMW",
     batteryKwh: 66,
     baseWhPerKm: 167,
     massTonnes: 1.945,
@@ -637,6 +693,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i4:2024:i4_edrive35",
     label: "BMW i4 eDrive35 (2024)",
+    make: "BMW",
     batteryKwh: 67.1,
     baseWhPerKm: 169,
     massTonnes: 1.955,
@@ -648,6 +705,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i4:2025:i4_edrive35",
     label: "BMW i4 eDrive35 (2025)",
+    make: "BMW",
     batteryKwh: 67.1,
     baseWhPerKm: 166,
     massTonnes: 1.955,
@@ -659,6 +717,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i4:2023:i4",
     label: "BMW i4 eDrive40 (2023)",
+    make: "BMW",
     batteryKwh: 81.3,
     baseWhPerKm: 168,
     massTonnes: 2.05,
@@ -670,6 +729,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i4:2024:i4",
     label: "BMW i4 eDrive40 (2024)",
+    make: "BMW",
     batteryKwh: 81.3,
     baseWhPerKm: 168,
     massTonnes: 2.05,
@@ -681,6 +741,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i4:2025:i4",
     label: "BMW i4 eDrive40 (2025)",
+    make: "BMW",
     batteryKwh: 81.3,
     baseWhPerKm: 166,
     massTonnes: 2.05,
@@ -692,6 +753,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i4:2023:i4_m50",
     label: "BMW i4 M50 (2023)",
+    make: "BMW",
     batteryKwh: 81.3,
     baseWhPerKm: 206,
     massTonnes: 2.215,
@@ -703,6 +765,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i4:2024:i4_m50",
     label: "BMW i4 M50 (2024)",
+    make: "BMW",
     batteryKwh: 81.3,
     baseWhPerKm: 192,
     massTonnes: 2.215,
@@ -714,6 +777,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i4:2025:i4_m50",
     label: "BMW i4 M50 (2025)",
+    make: "BMW",
     batteryKwh: 81.3,
     baseWhPerKm: 190,
     massTonnes: 2.215,
@@ -725,6 +789,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i4:2024:i4_xdrive40",
     label: "BMW i4 xDrive40 (2024)",
+    make: "BMW",
     batteryKwh: 81.3,
     baseWhPerKm: 181,
     massTonnes: 2.125,
@@ -736,6 +801,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i4:2025:i4_xdrive40",
     label: "BMW i4 xDrive40 (2025)",
+    make: "BMW",
     batteryKwh: 81.3,
     baseWhPerKm: 178,
     massTonnes: 2.125,
@@ -747,6 +813,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i5:2024:i5",
     label: "BMW i5 eDrive40 (2024)",
+    make: "BMW",
     batteryKwh: 81.2,
     baseWhPerKm: 171,
     massTonnes: 2.15,
@@ -758,6 +825,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i5:2025:i5",
     label: "BMW i5 eDrive40 (2025)",
+    make: "BMW",
     batteryKwh: 81.2,
     baseWhPerKm: 171,
     massTonnes: 2.15,
@@ -769,6 +837,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i5:2024:i5_m60",
     label: "BMW i5 M60 (2024)",
+    make: "BMW",
     batteryKwh: 81.2,
     baseWhPerKm: 200,
     massTonnes: 2.26,
@@ -780,6 +849,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i5:2025:i5_m60",
     label: "BMW i5 M60 (2025)",
+    make: "BMW",
     batteryKwh: 81.2,
     baseWhPerKm: 199,
     massTonnes: 2.26,
@@ -791,6 +861,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i7:2023:i7_m70",
     label: "BMW i7 M70 (2023)",
+    make: "BMW",
     batteryKwh: 101.7,
     baseWhPerKm: 224,
     massTonnes: 2.805,
@@ -802,6 +873,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i7:2024:i7_m70",
     label: "BMW i7 M70 (2024)",
+    make: "BMW",
     batteryKwh: 101.7,
     baseWhPerKm: 223,
     massTonnes: 2.805,
@@ -813,6 +885,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i7:2025:i7_m70",
     label: "BMW i7 M70 (2025)",
+    make: "BMW",
     batteryKwh: 101.7,
     baseWhPerKm: 222,
     massTonnes: 2.805,
@@ -824,6 +897,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i7:2023:i7",
     label: "BMW i7 xDrive60 (2023)",
+    make: "BMW",
     batteryKwh: 101.7,
     baseWhPerKm: 199,
     massTonnes: 2.715,
@@ -835,6 +909,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i7:2024:i7",
     label: "BMW i7 xDrive60 (2024)",
+    make: "BMW",
     batteryKwh: 101.7,
     baseWhPerKm: 201,
     massTonnes: 2.715,
@@ -846,6 +921,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:i7:2025:i7",
     label: "BMW i7 xDrive60 (2025)",
+    make: "BMW",
     batteryKwh: 101.7,
     baseWhPerKm: 201,
     massTonnes: 2.715,
@@ -857,6 +933,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:ix:2023:ix_m60",
     label: "BMW iX M60 (2023)",
+    make: "BMW",
     batteryKwh: 105.2,
     baseWhPerKm: 229,
     massTonnes: 2.71,
@@ -868,6 +945,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:ix:2024:ix_m60",
     label: "BMW iX M60 (2024)",
+    make: "BMW",
     batteryKwh: 105.2,
     baseWhPerKm: 228,
     massTonnes: 2.71,
@@ -879,6 +957,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:ix:2025:ix_m60",
     label: "BMW iX M60 (2025)",
+    make: "BMW",
     batteryKwh: 105.2,
     baseWhPerKm: 229,
     massTonnes: 2.71,
@@ -890,6 +969,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:ix:2023:ix_xdrive40",
     label: "BMW iX xDrive40 (2023)",
+    make: "BMW",
     batteryKwh: 71,
     baseWhPerKm: 220,
     massTonnes: 2.365,
@@ -901,6 +981,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:ix:2024:ix_xdrive40",
     label: "BMW iX xDrive40 (2024)",
+    make: "BMW",
     batteryKwh: 71,
     baseWhPerKm: 204,
     massTonnes: 2.365,
@@ -912,6 +993,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:ix:2023:ix",
     label: "BMW iX xDrive50 (2023)",
+    make: "BMW",
     batteryKwh: 105.2,
     baseWhPerKm: 204,
     massTonnes: 2.585,
@@ -923,6 +1005,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:ix:2024:ix",
     label: "BMW iX xDrive50 (2024)",
+    make: "BMW",
     batteryKwh: 105.2,
     baseWhPerKm: 211,
     massTonnes: 2.585,
@@ -934,6 +1017,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:ix:2025:ix",
     label: "BMW iX xDrive50 (2025)",
+    make: "BMW",
     batteryKwh: 105.2,
     baseWhPerKm: 212,
     massTonnes: 2.585,
@@ -945,6 +1029,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:ix1:2023:ix1",
     label: "BMW iX1 xDrive30 (2023)",
+    make: "BMW",
     batteryKwh: 64.7,
     baseWhPerKm: 180,
     massTonnes: 2.085,
@@ -956,6 +1041,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:ix1:2024:ix1",
     label: "BMW iX1 xDrive30 (2024)",
+    make: "BMW",
     batteryKwh: 64.7,
     baseWhPerKm: 187,
     massTonnes: 2.085,
@@ -967,6 +1053,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:ix1:2025:ix1",
     label: "BMW iX1 xDrive30 (2025)",
+    make: "BMW",
     batteryKwh: 64.7,
     baseWhPerKm: 184,
     massTonnes: 2.085,
@@ -978,6 +1065,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:ix2:2024:ix2",
     label: "BMW iX2 xDrive30 (2024)",
+    make: "BMW",
     batteryKwh: 64.7,
     baseWhPerKm: 176,
     massTonnes: 2.05,
@@ -989,6 +1077,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:ix2:2025:ix2",
     label: "BMW iX2 xDrive30 (2025)",
+    make: "BMW",
     batteryKwh: 64.7,
     baseWhPerKm: 176,
     massTonnes: 2.05,
@@ -1000,6 +1089,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:ix3:2023:ix3",
     label: "BMW iX3 (2023)",
+    make: "BMW",
     batteryKwh: 74,
     baseWhPerKm: 196,
     massTonnes: 2.26,
@@ -1011,6 +1101,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "bmw:ix3:2024:ix3",
     label: "BMW iX3 (2024)",
+    make: "BMW",
     batteryKwh: 74,
     baseWhPerKm: 196,
     massTonnes: 2.26,
@@ -1022,6 +1113,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:dolphin:2024:dolphin_boost",
     label: "BYD Dolphin Boost (2024)",
+    make: "BYD",
     batteryKwh: 44,
     baseWhPerKm: 173,
     massTonnes: 1.45,
@@ -1033,6 +1125,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:dolphin:2025:dolphin_boost",
     label: "BYD Dolphin Boost (2025)",
+    make: "BYD",
     batteryKwh: 44,
     baseWhPerKm: 173,
     massTonnes: 1.45,
@@ -1044,6 +1137,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:dolphin:2024:dolphin_extended_range",
     label: "BYD Dolphin Comfort Extended Range (2024)",
+    make: "BYD",
     batteryKwh: 60,
     baseWhPerKm: 171,
     massTonnes: 1.52,
@@ -1055,6 +1149,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:dolphin_mini:2023:dolphin_mini_plus",
     label: "BYD Dolphin Mini Plus (2023)",
+    make: "BYD",
     batteryKwh: 38,
     baseWhPerKm: 130,
     massTonnes: 1.24,
@@ -1066,6 +1161,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:dolphin_mini:2024:dolphin_mini_plus",
     label: "BYD Dolphin Mini Plus (2024)",
+    make: "BYD",
     batteryKwh: 38,
     baseWhPerKm: 160,
     massTonnes: 1.24,
@@ -1077,6 +1173,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:dolphin_mini:2025:dolphin_mini_plus",
     label: "BYD Dolphin Mini Plus (2025)",
+    make: "BYD",
     batteryKwh: 38,
     baseWhPerKm: 160,
     massTonnes: 1.24,
@@ -1088,6 +1185,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:dolphin_mini:2024:dolphin_mini_plus_5_seats",
     label: "BYD Dolphin Mini Plus 5 Seats (2024)",
+    make: "BYD",
     batteryKwh: 38,
     baseWhPerKm: 160,
     massTonnes: 1.26,
@@ -1099,6 +1197,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:dolphin_mini:2025:dolphin_mini_plus_5_seats",
     label: "BYD Dolphin Mini Plus 5 Seats (2025)",
+    make: "BYD",
     batteryKwh: 38,
     baseWhPerKm: 160,
     massTonnes: 1.26,
@@ -1110,6 +1209,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:dolphin_mini:2023:dolphin_mini",
     label: "BYD Dolphin Mini Standard (2023)",
+    make: "BYD",
     batteryKwh: 29.5,
     baseWhPerKm: 134,
     massTonnes: 1.18,
@@ -1121,6 +1221,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:dolphin_mini:2024:dolphin_mini",
     label: "BYD Dolphin Mini Standard (2024)",
+    make: "BYD",
     batteryKwh: 29.5,
     baseWhPerKm: 134,
     massTonnes: 1.18,
@@ -1132,6 +1233,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:dolphin_mini:2025:dolphin_mini",
     label: "BYD Dolphin Mini Standard (2025)",
+    make: "BYD",
     batteryKwh: 29.5,
     baseWhPerKm: 134,
     massTonnes: 1.18,
@@ -1143,6 +1245,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:dolphin:2023:dolphin_extended_range",
     label: "BYD Dolphin Premium Extended Range (2023)",
+    make: "BYD",
     batteryKwh: 60,
     baseWhPerKm: 171,
     massTonnes: 1.52,
@@ -1154,6 +1257,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:dolphin:2025:dolphin_extended_range",
     label: "BYD Dolphin Premium Extended Range (2025)",
+    make: "BYD",
     batteryKwh: 60,
     baseWhPerKm: 171,
     massTonnes: 1.52,
@@ -1165,6 +1269,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:dolphin:2023:dolphin",
     label: "BYD Dolphin Standard (2023)",
+    make: "BYD",
     batteryKwh: 44,
     baseWhPerKm: 158,
     massTonnes: 1.405,
@@ -1176,6 +1281,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:dolphin:2024:dolphin",
     label: "BYD Dolphin Standard (2024)",
+    make: "BYD",
     batteryKwh: 44,
     baseWhPerKm: 158,
     massTonnes: 1.405,
@@ -1187,6 +1293,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:dolphin:2025:dolphin",
     label: "BYD Dolphin Standard (2025)",
+    make: "BYD",
     batteryKwh: 44,
     baseWhPerKm: 158,
     massTonnes: 1.405,
@@ -1198,6 +1305,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:han:2023:han",
     label: "BYD Han Flagship (2023)",
+    make: "BYD",
     batteryKwh: 85.4,
     baseWhPerKm: 200,
     massTonnes: 2.25,
@@ -1209,6 +1317,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:han:2024:han",
     label: "BYD Han Flagship (2024)",
+    make: "BYD",
     batteryKwh: 85.4,
     baseWhPerKm: 200,
     massTonnes: 2.25,
@@ -1220,6 +1329,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:han:2025:han",
     label: "BYD Han Flagship (2025)",
+    make: "BYD",
     batteryKwh: 85.4,
     baseWhPerKm: 200,
     massTonnes: 2.25,
@@ -1231,6 +1341,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:king:2024:king",
     label: "BYD King GLS (2024)",
+    make: "BYD",
     batteryKwh: 71,
     baseWhPerKm: 167,
     massTonnes: 2.05,
@@ -1242,6 +1353,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:king:2024:king_awd",
     label: "BYD King GLS AWD (2024)",
+    make: "BYD",
     batteryKwh: 71,
     baseWhPerKm: 167,
     massTonnes: 2.35,
@@ -1253,6 +1365,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:seal:2025:seal",
     label: "BYD Seal Dynamic (2025)",
+    make: "BYD",
     batteryKwh: 61.44,
     baseWhPerKm: 163,
     massTonnes: 1.922,
@@ -1264,6 +1377,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:seal:2025:seal_performance",
     label: "BYD Seal Performance (2025)",
+    make: "BYD",
     batteryKwh: 82.56,
     baseWhPerKm: 194,
     massTonnes: 2.185,
@@ -1275,6 +1389,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:seal:2023:seal_premium",
     label: "BYD Seal Premium (2023)",
+    make: "BYD",
     batteryKwh: 82.56,
     baseWhPerKm: 177,
     massTonnes: 2.055,
@@ -1286,6 +1401,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:seal:2024:seal_premium",
     label: "BYD Seal Premium (2024)",
+    make: "BYD",
     batteryKwh: 82.56,
     baseWhPerKm: 177,
     massTonnes: 2.055,
@@ -1297,6 +1413,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:seal:2025:seal_premium",
     label: "BYD Seal Premium (2025)",
+    make: "BYD",
     batteryKwh: 82.56,
     baseWhPerKm: 177,
     massTonnes: 2.055,
@@ -1308,6 +1425,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:seal:2023:seal",
     label: "BYD Seal Standard (2023)",
+    make: "BYD",
     batteryKwh: 61,
     baseWhPerKm: 162,
     massTonnes: 1.87,
@@ -1319,6 +1437,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:seal:2024:seal",
     label: "BYD Seal Standard (2024)",
+    make: "BYD",
     batteryKwh: 61,
     baseWhPerKm: 162,
     massTonnes: 1.87,
@@ -1330,6 +1449,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:seal:2023:seal_performance",
     label: "BYD Seal Standard Performance (2023)",
+    make: "BYD",
     batteryKwh: 82.5,
     baseWhPerKm: 193,
     massTonnes: 2.15,
@@ -1341,6 +1461,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:seal:2024:seal_performance",
     label: "BYD Seal Standard Performance (2024)",
+    make: "BYD",
     batteryKwh: 82.5,
     baseWhPerKm: 193,
     massTonnes: 2.15,
@@ -1352,6 +1473,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:song_plus:2023:song_plus",
     label: "BYD Song Plus Comfort (2023)",
+    make: "BYD",
     batteryKwh: 71.8,
     baseWhPerKm: 208,
     massTonnes: 2.02,
@@ -1363,6 +1485,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:song_plus:2024:song_plus",
     label: "BYD Song Plus Comfort (2024)",
+    make: "BYD",
     batteryKwh: 71.8,
     baseWhPerKm: 208,
     massTonnes: 2.02,
@@ -1374,6 +1497,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:song_plus:2025:song_plus",
     label: "BYD Song Plus Comfort (2025)",
+    make: "BYD",
     batteryKwh: 71.8,
     baseWhPerKm: 208,
     massTonnes: 2.02,
@@ -1385,6 +1509,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:tang:2023:tang",
     label: "BYD Tang Flagship (2023)",
+    make: "BYD",
     batteryKwh: 108.8,
     baseWhPerKm: 250,
     massTonnes: 2.589,
@@ -1396,6 +1521,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:tang:2024:tang",
     label: "BYD Tang Flagship (2024)",
+    make: "BYD",
     batteryKwh: 108.8,
     baseWhPerKm: 250,
     massTonnes: 2.589,
@@ -1407,6 +1533,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:tang:2025:tang",
     label: "BYD Tang Flagship (2025)",
+    make: "BYD",
     batteryKwh: 108.8,
     baseWhPerKm: 250,
     massTonnes: 2.589,
@@ -1418,6 +1545,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:yuan_plus:2025:yuan_plus_extended_range",
     label: "BYD Yuan Plus Extended Range (2025)",
+    make: "BYD",
     batteryKwh: 60.48,
     baseWhPerKm: 176,
     massTonnes: 1.75,
@@ -1429,6 +1557,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:yuan_plus:2023:yuan_plus",
     label: "BYD Yuan Plus Standard Range (2023)",
+    make: "BYD",
     batteryKwh: 49,
     baseWhPerKm: 187,
     massTonnes: 1.75,
@@ -1440,6 +1569,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:yuan_plus:2024:yuan_plus",
     label: "BYD Yuan Plus Standard Range (2024)",
+    make: "BYD",
     batteryKwh: 49,
     baseWhPerKm: 187,
     massTonnes: 1.75,
@@ -1451,6 +1581,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:yuan_plus:2025:yuan_plus",
     label: "BYD Yuan Plus Standard Range (2025)",
+    make: "BYD",
     batteryKwh: 49.92,
     baseWhPerKm: 176,
     massTonnes: 1.69,
@@ -1462,6 +1593,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:yuan_plus:2023:yuan_plus_extended_range",
     label: "BYD Yuan Plus Standard Range Extended Range (2023)",
+    make: "BYD",
     batteryKwh: 60,
     baseWhPerKm: 174,
     massTonnes: 1.785,
@@ -1473,6 +1605,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:yuan_plus:2024:yuan_plus_extended_range",
     label: "BYD Yuan Plus Standard Range Extended Range (2024)",
+    make: "BYD",
     batteryKwh: 60,
     baseWhPerKm: 174,
     massTonnes: 1.785,
@@ -1484,6 +1617,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:yuan_up:2024:yuan_up",
     label: "BYD Yuan Up Superior (2024)",
+    make: "BYD",
     batteryKwh: 45.12,
     baseWhPerKm: 156,
     massTonnes: 1.54,
@@ -1495,6 +1629,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "byd:yuan_up:2025:yuan_up",
     label: "BYD Yuan Up Superior (2025)",
+    make: "BYD",
     batteryKwh: 45.12,
     baseWhPerKm: 156,
     massTonnes: 1.54,
@@ -1506,6 +1641,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cadillac:celestiq:2024:celestiq",
     label: "Cadillac Celestiq (2024)",
+    make: "Cadillac",
     batteryKwh: 105,
     baseWhPerKm: 216,
     massTonnes: 2.9,
@@ -1517,6 +1653,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cadillac:celestiq:2025:celestiq",
     label: "Cadillac Celestiq (2025)",
+    make: "Cadillac",
     batteryKwh: 105,
     baseWhPerKm: 216,
     massTonnes: 2.9,
@@ -1528,6 +1665,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cadillac:escalade_iq:2025:escalade_iq",
     label: "Cadillac Escalade IQ (2025)",
+    make: "Cadillac",
     batteryKwh: 192,
     baseWhPerKm: 265,
     massTonnes: 3.8,
@@ -1539,6 +1677,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cadillac:lyriq:2023:lyriq_awd",
     label: "Cadillac Lyriq All-Wheel Drive (2023)",
+    make: "Cadillac",
     batteryKwh: 95,
     baseWhPerKm: 194,
     massTonnes: 2.55,
@@ -1550,6 +1689,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cadillac:lyriq:2024:lyriq_awd",
     label: "Cadillac Lyriq All-Wheel Drive (2024)",
+    make: "Cadillac",
     batteryKwh: 95,
     baseWhPerKm: 194,
     massTonnes: 2.55,
@@ -1561,6 +1701,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cadillac:lyriq:2025:lyriq_awd",
     label: "Cadillac Lyriq All-Wheel Drive (2025)",
+    make: "Cadillac",
     batteryKwh: 95,
     baseWhPerKm: 194,
     massTonnes: 2.55,
@@ -1572,6 +1713,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cadillac:lyriq:2023:lyriq",
     label: "Cadillac Lyriq Rear-Wheel Drive (2023)",
+    make: "Cadillac",
     batteryKwh: 95,
     baseWhPerKm: 188,
     massTonnes: 2.55,
@@ -1583,6 +1725,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cadillac:lyriq:2024:lyriq",
     label: "Cadillac Lyriq Rear-Wheel Drive (2024)",
+    make: "Cadillac",
     batteryKwh: 95,
     baseWhPerKm: 188,
     massTonnes: 2.55,
@@ -1594,6 +1737,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cadillac:lyriq:2025:lyriq",
     label: "Cadillac Lyriq Rear-Wheel Drive (2025)",
+    make: "Cadillac",
     batteryKwh: 95,
     baseWhPerKm: 188,
     massTonnes: 2.55,
@@ -1605,6 +1749,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cadillac:optiq:2025:optiq",
     label: "Cadillac Optiq (2025)",
+    make: "Cadillac",
     batteryKwh: 80,
     baseWhPerKm: 167,
     massTonnes: 2.2,
@@ -1616,6 +1761,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cadillac:optiq:2025:optiq_v",
     label: "Cadillac Optiq Optiq-V (2025)",
+    make: "Cadillac",
     batteryKwh: 80,
     baseWhPerKm: 178,
     massTonnes: 2.2,
@@ -1627,6 +1773,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cadillac:vistiq:2025:vistiq",
     label: "Cadillac Vistiq (2025)",
+    make: "Cadillac",
     batteryKwh: 97,
     baseWhPerKm: 201,
     massTonnes: 2.7,
@@ -1638,6 +1785,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "changan:deepal_l07:2025:deepal_l07",
     label: "Changan Deepal L07 Standard (2025)",
+    make: "Changan",
     batteryKwh: 56,
     baseWhPerKm: 151,
     massTonnes: 1.865,
@@ -1649,6 +1797,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "changan:deepal_s7:2023:deepal_s7",
     label: "Changan Deepal S7 Standard (2023)",
+    make: "Changan",
     batteryKwh: 64,
     baseWhPerKm: 171,
     massTonnes: 1.95,
@@ -1660,6 +1809,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "changan:deepal_s7:2024:deepal_s7",
     label: "Changan Deepal S7 Standard (2024)",
+    make: "Changan",
     batteryKwh: 64,
     baseWhPerKm: 171,
     massTonnes: 1.95,
@@ -1671,6 +1821,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "changan:deepal_s7:2025:deepal_s7",
     label: "Changan Deepal S7 Standard (2025)",
+    make: "Changan",
     batteryKwh: 64,
     baseWhPerKm: 171,
     massTonnes: 1.95,
@@ -1682,6 +1833,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "changan:deepal_sl03:2023:deepal_sl03",
     label: "Changan Deepal SL03 Standard (2023)",
+    make: "Changan",
     batteryKwh: 56,
     baseWhPerKm: 151,
     massTonnes: 1.865,
@@ -1693,6 +1845,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "changan:deepal_sl03:2024:deepal_sl03",
     label: "Changan Deepal SL03 Standard (2024)",
+    make: "Changan",
     batteryKwh: 56,
     baseWhPerKm: 151,
     massTonnes: 1.865,
@@ -1704,6 +1857,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "changan:deepal_sl03:2025:deepal_sl03",
     label: "Changan Deepal SL03 Standard (2025)",
+    make: "Changan",
     batteryKwh: 56,
     baseWhPerKm: 151,
     massTonnes: 1.865,
@@ -1715,6 +1869,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "changan:lumin:2023:lumin",
     label: "Changan Lumin Standard (2023)",
+    make: "Changan",
     batteryKwh: 12,
     baseWhPerKm: 108,
     massTonnes: 0.73,
@@ -1726,6 +1881,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "changan:lumin:2024:lumin",
     label: "Changan Lumin Standard (2024)",
+    make: "Changan",
     batteryKwh: 12,
     baseWhPerKm: 108,
     massTonnes: 0.73,
@@ -1737,6 +1893,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "changan:lumin:2025:lumin",
     label: "Changan Lumin Standard (2025)",
+    make: "Changan",
     batteryKwh: 12,
     baseWhPerKm: 108,
     massTonnes: 0.73,
@@ -1748,6 +1905,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "changan:nevo_a06:2025:nevo_a06",
     label: "Changan Nevo A06 Standard (2025)",
+    make: "Changan",
     batteryKwh: 56,
     baseWhPerKm: 150,
     massTonnes: 1.9,
@@ -1759,6 +1917,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "changan:nevo_a07:2023:nevo_a07",
     label: "Changan Nevo A07 Standard (2023)",
+    make: "Changan",
     batteryKwh: 56,
     baseWhPerKm: 151,
     massTonnes: 1.865,
@@ -1770,6 +1929,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "changan:nevo_a07:2024:nevo_a07",
     label: "Changan Nevo A07 Standard (2024)",
+    make: "Changan",
     batteryKwh: 56,
     baseWhPerKm: 151,
     massTonnes: 1.865,
@@ -1781,6 +1941,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "changan:nevo_a07:2025:nevo_a07",
     label: "Changan Nevo A07 Standard (2025)",
+    make: "Changan",
     batteryKwh: 56,
     baseWhPerKm: 151,
     massTonnes: 1.865,
@@ -1792,6 +1953,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "changan:nevo_a07:2023:nevo_a07_long_range",
     label: "Changan Nevo A07 Standard Long Range (2023)",
+    make: "Changan",
     batteryKwh: 78,
     baseWhPerKm: 153,
     massTonnes: 1.95,
@@ -1803,6 +1965,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "changan:nevo_a07:2024:nevo_a07_long_range",
     label: "Changan Nevo A07 Standard Long Range (2024)",
+    make: "Changan",
     batteryKwh: 78,
     baseWhPerKm: 153,
     massTonnes: 1.95,
@@ -1814,6 +1977,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "changan:nevo_a07:2025:nevo_a07_long_range",
     label: "Changan Nevo A07 Standard Long Range (2025)",
+    make: "Changan",
     batteryKwh: 78,
     baseWhPerKm: 153,
     massTonnes: 1.95,
@@ -1825,6 +1989,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "changan:nevo_q05:2025:nevo_q05",
     label: "Changan Nevo Q05 Standard (2025)",
+    make: "Changan",
     batteryKwh: 58,
     baseWhPerKm: 159,
     massTonnes: 2.2,
@@ -1836,6 +2001,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chery:eq7:2023:eq7",
     label: "Chery eQ7 (2023)",
+    make: "Chery",
     batteryKwh: 64,
     baseWhPerKm: 174,
     massTonnes: 2.2,
@@ -1847,6 +2013,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chery:eq7:2024:eq7",
     label: "Chery eQ7 (2024)",
+    make: "Chery",
     batteryKwh: 64,
     baseWhPerKm: 174,
     massTonnes: 2.2,
@@ -1858,6 +2025,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chery:eq7:2025:eq7",
     label: "Chery eQ7 (2025)",
+    make: "Chery",
     batteryKwh: 64,
     baseWhPerKm: 174,
     massTonnes: 2.2,
@@ -1869,6 +2037,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chery:icar:2023:icar",
     label: "Chery iCar (2023)",
+    make: "Chery",
     batteryKwh: 30.7,
     baseWhPerKm: 200,
     massTonnes: 0.99,
@@ -1880,6 +2049,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chery:icar:2024:icar",
     label: "Chery iCar (2024)",
+    make: "Chery",
     batteryKwh: 30.7,
     baseWhPerKm: 140,
     massTonnes: 0.99,
@@ -1891,6 +2061,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chery:omoda_e5:2024:omoda_e5",
     label: "Chery Omoda E5 (2024)",
+    make: "Chery",
     batteryKwh: 58,
     baseWhPerKm: 179,
     massTonnes: 2.2,
@@ -1902,6 +2073,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chery:omoda_e5:2025:omoda_e5",
     label: "Chery Omoda E5 (2025)",
+    make: "Chery",
     batteryKwh: 58,
     baseWhPerKm: 179,
     massTonnes: 2.2,
@@ -1913,6 +2085,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chery:qq_domi:2025:qq_domi",
     label: "Chery QQ Domi (2025)",
+    make: "Chery",
     batteryKwh: 28.5,
     baseWhPerKm: 98,
     massTonnes: 1.9,
@@ -1924,6 +2097,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chery:qq_domi:2025:qq_domi_extended_range",
     label: "Chery QQ Domi Extended Range (2025)",
+    make: "Chery",
     batteryKwh: 39.33,
     baseWhPerKm: 135,
     massTonnes: 1.9,
@@ -1935,6 +2109,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:blazer_ev:2023:blazer_ev",
     label: "Chevrolet Blazer EV LT (2023)",
+    make: "Chevrolet",
     batteryKwh: 97,
     baseWhPerKm: 188,
     massTonnes: 2.495,
@@ -1946,6 +2121,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:blazer_ev:2024:blazer_ev",
     label: "Chevrolet Blazer EV LT (2024)",
+    make: "Chevrolet",
     batteryKwh: 97,
     baseWhPerKm: 237,
     massTonnes: 2.495,
@@ -1957,6 +2133,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:blazer_ev:2025:blazer_ev",
     label: "Chevrolet Blazer EV LT (2025)",
+    make: "Chevrolet",
     batteryKwh: 97,
     baseWhPerKm: 237,
     massTonnes: 2.495,
@@ -1968,6 +2145,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:blazer_ev:2023:blazer_ev_rs",
     label: "Chevrolet Blazer EV RS (2023)",
+    make: "Chevrolet",
     batteryKwh: 97,
     baseWhPerKm: 188,
     massTonnes: 2.495,
@@ -1979,6 +2157,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:blazer_ev:2024:blazer_ev_rs",
     label: "Chevrolet Blazer EV RS (2024)",
+    make: "Chevrolet",
     batteryKwh: 97,
     baseWhPerKm: 237,
     massTonnes: 2.495,
@@ -1990,6 +2169,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:blazer_ev:2025:blazer_ev_rs",
     label: "Chevrolet Blazer EV RS (2025)",
+    make: "Chevrolet",
     batteryKwh: 97,
     baseWhPerKm: 237,
     massTonnes: 2.495,
@@ -2001,6 +2181,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:blazer_ev:2023:blazer_ev_ss",
     label: "Chevrolet Blazer EV SS (2023)",
+    make: "Chevrolet",
     batteryKwh: 97,
     baseWhPerKm: 188,
     massTonnes: 2.495,
@@ -2012,6 +2193,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:blazer_ev:2024:blazer_ev_ss",
     label: "Chevrolet Blazer EV SS (2024)",
+    make: "Chevrolet",
     batteryKwh: 97,
     baseWhPerKm: 237,
     massTonnes: 2.495,
@@ -2023,6 +2205,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:blazer_ev:2025:blazer_ev_ss",
     label: "Chevrolet Blazer EV SS (2025)",
+    make: "Chevrolet",
     batteryKwh: 97,
     baseWhPerKm: 237,
     massTonnes: 2.495,
@@ -2034,6 +2217,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:bolt_euv:2023:bolt_euv",
     label: "Chevrolet Bolt EUV 1LT (2023)",
+    make: "Chevrolet",
     batteryKwh: 65,
     baseWhPerKm: 163,
     massTonnes: 1.69,
@@ -2045,6 +2229,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:bolt_euv:2023:bolt_euv_2lt",
     label: "Chevrolet Bolt EUV 2LT (2023)",
+    make: "Chevrolet",
     batteryKwh: 65,
     baseWhPerKm: 163,
     massTonnes: 1.69,
@@ -2056,6 +2241,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:bolt_ev:2023:bolt_ev",
     label: "Chevrolet Bolt EV 1LT (2023)",
+    make: "Chevrolet",
     batteryKwh: 65,
     baseWhPerKm: 156,
     massTonnes: 1.639,
@@ -2067,6 +2253,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:bolt_ev:2023:bolt_ev_2lt",
     label: "Chevrolet Bolt EV 2LT (2023)",
+    make: "Chevrolet",
     batteryKwh: 65,
     baseWhPerKm: 156,
     massTonnes: 1.639,
@@ -2078,6 +2265,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:captiva_ev:2025:captiva_ev",
     label: "Chevrolet Captiva EV (2025)",
+    make: "Chevrolet",
     batteryKwh: 65,
     baseWhPerKm: 252,
     massTonnes: 1.8,
@@ -2089,6 +2277,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:captiva_ev:2025:captiva_ev_premier",
     label: "Chevrolet Captiva EV Premier (2025)",
+    make: "Chevrolet",
     batteryKwh: 65,
     baseWhPerKm: 252,
     massTonnes: 1.8,
@@ -2100,6 +2289,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:equinox_ev:2024:equinox_ev",
     label: "Chevrolet Equinox EV LT (2024)",
+    make: "Chevrolet",
     batteryKwh: 80,
     baseWhPerKm: 212,
     massTonnes: 2.18,
@@ -2111,6 +2301,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:equinox_ev:2025:equinox_ev",
     label: "Chevrolet Equinox EV LT (2025)",
+    make: "Chevrolet",
     batteryKwh: 80,
     baseWhPerKm: 212,
     massTonnes: 2.18,
@@ -2122,6 +2313,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:equinox_ev:2024:equinox_ev_premier",
     label: "Chevrolet Equinox EV Premier (2024)",
+    make: "Chevrolet",
     batteryKwh: 80,
     baseWhPerKm: 212,
     massTonnes: 2.18,
@@ -2133,6 +2325,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:equinox_ev:2025:equinox_ev_premier",
     label: "Chevrolet Equinox EV Premier (2025)",
+    make: "Chevrolet",
     batteryKwh: 80,
     baseWhPerKm: 212,
     massTonnes: 2.18,
@@ -2144,6 +2337,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:equinox_ev:2024:equinox_ev_rs",
     label: "Chevrolet Equinox EV RS (2024)",
+    make: "Chevrolet",
     batteryKwh: 80,
     baseWhPerKm: 212,
     massTonnes: 2.18,
@@ -2155,6 +2349,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:equinox_ev:2025:equinox_ev_rs",
     label: "Chevrolet Equinox EV RS (2025)",
+    make: "Chevrolet",
     batteryKwh: 80,
     baseWhPerKm: 212,
     massTonnes: 2.18,
@@ -2166,6 +2361,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:silverado_ev:2024:silverado_ev_first_edition",
     label: "Chevrolet Silverado EV First Edition (2024)",
+    make: "Chevrolet",
     batteryKwh: 200,
     baseWhPerKm: 276,
     massTonnes: 3.629,
@@ -2177,6 +2373,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:silverado_ev:2025:silverado_ev_first_edition",
     label: "Chevrolet Silverado EV First Edition (2025)",
+    make: "Chevrolet",
     batteryKwh: 200,
     baseWhPerKm: 276,
     massTonnes: 3.629,
@@ -2188,6 +2385,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:silverado_ev:2024:silverado_ev_rst",
     label: "Chevrolet Silverado EV RST (2024)",
+    make: "Chevrolet",
     batteryKwh: 200,
     baseWhPerKm: 276,
     massTonnes: 3.629,
@@ -2199,6 +2397,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:silverado_ev:2025:silverado_ev_rst",
     label: "Chevrolet Silverado EV RST (2025)",
+    make: "Chevrolet",
     batteryKwh: 200,
     baseWhPerKm: 276,
     massTonnes: 3.629,
@@ -2210,6 +2409,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:silverado_ev:2024:silverado_ev",
     label: "Chevrolet Silverado EV WT (2024)",
+    make: "Chevrolet",
     batteryKwh: 200,
     baseWhPerKm: 276,
     massTonnes: 3.629,
@@ -2221,6 +2421,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:silverado_ev:2025:silverado_ev",
     label: "Chevrolet Silverado EV WT (2025)",
+    make: "Chevrolet",
     batteryKwh: 200,
     baseWhPerKm: 276,
     massTonnes: 3.629,
@@ -2232,6 +2433,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:spark_euv:2025:spark_euv",
     label: "Chevrolet Spark EUV (2025)",
+    make: "Chevrolet",
     batteryKwh: 40,
     baseWhPerKm: 118,
     massTonnes: 1.6,
@@ -2243,6 +2445,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "chevrolet:spark_euv:2025:spark_euv_activ",
     label: "Chevrolet Spark EUV Activ (2025)",
+    make: "Chevrolet",
     batteryKwh: 40,
     baseWhPerKm: 118,
     massTonnes: 1.6,
@@ -2254,6 +2457,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "citroen:e_berlingo:2023:e_berlingo",
     label: "Citroën ë-Berlingo (2023)",
+    make: "Citroën",
     batteryKwh: 46,
     baseWhPerKm: 204,
     massTonnes: 1.75,
@@ -2265,6 +2469,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "citroen:e_berlingo:2024:e_berlingo",
     label: "Citroën ë-Berlingo (2024)",
+    make: "Citroën",
     batteryKwh: 46,
     baseWhPerKm: 204,
     massTonnes: 1.75,
@@ -2276,6 +2481,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "citroen:e_berlingo:2025:e_berlingo",
     label: "Citroën ë-Berlingo (2025)",
+    make: "Citroën",
     batteryKwh: 46,
     baseWhPerKm: 204,
     massTonnes: 1.75,
@@ -2287,6 +2493,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "citroen:e_c3:2024:e_c3",
     label: "Citroën ë-C3 (2024)",
+    make: "Citroën",
     batteryKwh: 42,
     baseWhPerKm: 160,
     massTonnes: 1.4,
@@ -2298,6 +2505,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "citroen:e_c3:2025:e_c3",
     label: "Citroën ë-C3 (2025)",
+    make: "Citroën",
     batteryKwh: 42,
     baseWhPerKm: 160,
     massTonnes: 1.4,
@@ -2309,6 +2517,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "citroen:e_c3:2025:e_c3_electric_200",
     label: "Citroën ë-C3 Electric 200 (2025)",
+    make: "Citroën",
     batteryKwh: 26,
     baseWhPerKm: 159,
     massTonnes: 1.4,
@@ -2320,6 +2529,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "citroen:e_c4:2023:e_c4",
     label: "Citroën ë-C4 (2023)",
+    make: "Citroën",
     batteryKwh: 46,
     baseWhPerKm: 160,
     massTonnes: 1.55,
@@ -2331,6 +2541,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "citroen:e_c4:2024:e_c4",
     label: "Citroën ë-C4 (2024)",
+    make: "Citroën",
     batteryKwh: 46,
     baseWhPerKm: 160,
     massTonnes: 1.55,
@@ -2342,6 +2553,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "citroen:e_c4:2025:e_c4",
     label: "Citroën ë-C4 (2025)",
+    make: "Citroën",
     batteryKwh: 46,
     baseWhPerKm: 160,
     massTonnes: 1.55,
@@ -2353,6 +2565,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "citroen:e_c4_x:2023:e_c4_x",
     label: "Citroën ë-C4 X (2023)",
+    make: "Citroën",
     batteryKwh: 46,
     baseWhPerKm: 156,
     massTonnes: 1.58,
@@ -2364,6 +2577,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "citroen:e_c4_x:2024:e_c4_x",
     label: "Citroën ë-C4 X (2024)",
+    make: "Citroën",
     batteryKwh: 46,
     baseWhPerKm: 156,
     massTonnes: 1.58,
@@ -2375,6 +2589,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "citroen:e_c4_x:2025:e_c4_x",
     label: "Citroën ë-C4 X (2025)",
+    make: "Citroën",
     batteryKwh: 46,
     baseWhPerKm: 156,
     massTonnes: 1.58,
@@ -2386,6 +2601,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "citroen:e_jumpy:2023:e_jumpy",
     label: "Citroën ë-Jumpy (2023)",
+    make: "Citroën",
     batteryKwh: 46,
     baseWhPerKm: 244,
     massTonnes: 1.85,
@@ -2397,6 +2613,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "citroen:e_jumpy:2024:e_jumpy",
     label: "Citroën ë-Jumpy (2024)",
+    make: "Citroën",
     batteryKwh: 46,
     baseWhPerKm: 244,
     massTonnes: 1.85,
@@ -2408,6 +2625,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "citroen:e_jumpy:2025:e_jumpy",
     label: "Citroën ë-Jumpy (2025)",
+    make: "Citroën",
     batteryKwh: 46,
     baseWhPerKm: 244,
     massTonnes: 1.85,
@@ -2419,6 +2637,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "citroen:e_spacetourer:2023:e_spacetourer",
     label: "Citroën ë-Spacetourer (2023)",
+    make: "Citroën",
     batteryKwh: 46,
     baseWhPerKm: 244,
     massTonnes: 1.95,
@@ -2430,6 +2649,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "citroen:e_spacetourer:2024:e_spacetourer",
     label: "Citroën ë-Spacetourer (2024)",
+    make: "Citroën",
     batteryKwh: 46,
     baseWhPerKm: 244,
     massTonnes: 1.95,
@@ -2441,6 +2661,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "citroen:e_spacetourer:2025:e_spacetourer",
     label: "Citroën ë-Spacetourer (2025)",
+    make: "Citroën",
     batteryKwh: 46,
     baseWhPerKm: 244,
     massTonnes: 1.95,
@@ -2452,6 +2673,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cupra:born:2023:born",
     label: "Cupra Born (2023)",
+    make: "Cupra",
     batteryKwh: 58,
     baseWhPerKm: 168,
     massTonnes: 1.83,
@@ -2463,6 +2685,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cupra:born:2024:born",
     label: "Cupra Born (2024)",
+    make: "Cupra",
     batteryKwh: 58,
     baseWhPerKm: 166,
     massTonnes: 1.83,
@@ -2474,6 +2697,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cupra:born:2025:born",
     label: "Cupra Born (2025)",
+    make: "Cupra",
     batteryKwh: 58,
     baseWhPerKm: 164,
     massTonnes: 1.83,
@@ -2485,6 +2709,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cupra:born:2023:born_77kwh",
     label: "Cupra Born 77 kWh (2023)",
+    make: "Cupra",
     batteryKwh: 77,
     baseWhPerKm: 174,
     massTonnes: 1.95,
@@ -2496,6 +2721,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cupra:born:2024:born_77kwh",
     label: "Cupra Born 77 kWh (2024)",
+    make: "Cupra",
     batteryKwh: 77,
     baseWhPerKm: 172,
     massTonnes: 1.95,
@@ -2507,6 +2733,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cupra:born:2025:born_77kwh",
     label: "Cupra Born 77 kWh (2025)",
+    make: "Cupra",
     batteryKwh: 77,
     baseWhPerKm: 171,
     massTonnes: 1.95,
@@ -2518,6 +2745,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cupra:raval:2025:raval",
     label: "Cupra Raval (2025)",
+    make: "Cupra",
     batteryKwh: 55,
     baseWhPerKm: 152,
     massTonnes: 1.65,
@@ -2529,6 +2757,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cupra:raval:2025:raval_vz",
     label: "Cupra Raval VZ (2025)",
+    make: "Cupra",
     batteryKwh: 55,
     baseWhPerKm: 156,
     massTonnes: 1.68,
@@ -2540,6 +2769,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cupra:tavascan:2024:tavascan",
     label: "Cupra Tavascan (2024)",
+    make: "Cupra",
     batteryKwh: 77,
     baseWhPerKm: 209,
     massTonnes: 2.13,
@@ -2551,6 +2781,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cupra:tavascan:2025:tavascan",
     label: "Cupra Tavascan (2025)",
+    make: "Cupra",
     batteryKwh: 77,
     baseWhPerKm: 206,
     massTonnes: 2.13,
@@ -2562,6 +2793,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cupra:tavascan:2024:tavascan_vz",
     label: "Cupra Tavascan VZ (2024)",
+    make: "Cupra",
     batteryKwh: 77,
     baseWhPerKm: 213,
     massTonnes: 2.25,
@@ -2573,6 +2805,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "cupra:tavascan:2025:tavascan_vz",
     label: "Cupra Tavascan VZ (2025)",
+    make: "Cupra",
     batteryKwh: 77,
     baseWhPerKm: 211,
     massTonnes: 2.25,
@@ -2584,6 +2817,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "dacia:spring:2023:spring",
     label: "Dacia Spring Essential (2023)",
+    make: "Dacia",
     batteryKwh: 26.8,
     baseWhPerKm: 142,
     massTonnes: 0.95,
@@ -2595,6 +2829,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "dacia:spring:2024:spring",
     label: "Dacia Spring Essential (2024)",
+    make: "Dacia",
     batteryKwh: 26.8,
     baseWhPerKm: 142,
     massTonnes: 0.95,
@@ -2606,6 +2841,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "dacia:spring:2025:spring",
     label: "Dacia Spring Essential (2025)",
+    make: "Dacia",
     batteryKwh: 24.3,
     baseWhPerKm: 135,
     massTonnes: 0.95,
@@ -2617,6 +2853,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "dacia:spring:2023:spring_comfort",
     label: "Dacia Spring Essential Comfort (2023)",
+    make: "Dacia",
     batteryKwh: 26.8,
     baseWhPerKm: 142,
     massTonnes: 0.95,
@@ -2628,6 +2865,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "dacia:spring:2024:spring_comfort",
     label: "Dacia Spring Essential Comfort (2024)",
+    make: "Dacia",
     batteryKwh: 26.8,
     baseWhPerKm: 142,
     massTonnes: 0.95,
@@ -2639,6 +2877,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "dacia:spring:2025:spring_comfort",
     label: "Dacia Spring Essential Comfort (2025)",
+    make: "Dacia",
     batteryKwh: 24.3,
     baseWhPerKm: 135,
     massTonnes: 0.95,
@@ -2650,6 +2889,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "dacia:spring:2023:spring_extreme",
     label: "Dacia Spring Essential Extreme (2023)",
+    make: "Dacia",
     batteryKwh: 26.8,
     baseWhPerKm: 142,
     massTonnes: 0.95,
@@ -2661,6 +2901,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "dacia:spring:2024:spring_extreme",
     label: "Dacia Spring Essential Extreme (2024)",
+    make: "Dacia",
     batteryKwh: 26.8,
     baseWhPerKm: 142,
     massTonnes: 0.95,
@@ -2672,6 +2913,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "dacia:spring:2025:spring_extreme",
     label: "Dacia Spring Essential Extreme (2025)",
+    make: "Dacia",
     batteryKwh: 24.3,
     baseWhPerKm: 135,
     massTonnes: 0.95,
@@ -2683,6 +2925,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "dongfeng:epi_007:2023:epi_007",
     label: "Dongfeng eπ 007 (2023)",
+    make: "Dongfeng",
     batteryKwh: 66,
     baseWhPerKm: 148,
     massTonnes: 1.85,
@@ -2694,6 +2937,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "dongfeng:epi_007:2024:epi_007",
     label: "Dongfeng eπ 007 (2024)",
+    make: "Dongfeng",
     batteryKwh: 66,
     baseWhPerKm: 148,
     massTonnes: 1.85,
@@ -2705,6 +2949,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "dongfeng:epi_007:2025:epi_007",
     label: "Dongfeng eπ 007 (2025)",
+    make: "Dongfeng",
     batteryKwh: 66,
     baseWhPerKm: 148,
     massTonnes: 1.85,
@@ -2716,6 +2961,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "dongfeng:epi_008:2023:epi_008",
     label: "Dongfeng eπ 008 (2023)",
+    make: "Dongfeng",
     batteryKwh: 66,
     baseWhPerKm: 148,
     massTonnes: 2.15,
@@ -2727,6 +2973,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "dongfeng:epi_008:2024:epi_008",
     label: "Dongfeng eπ 008 (2024)",
+    make: "Dongfeng",
     batteryKwh: 66,
     baseWhPerKm: 148,
     massTonnes: 2.15,
@@ -2738,6 +2985,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "dongfeng:epi_008:2025:epi_008",
     label: "Dongfeng eπ 008 (2025)",
+    make: "Dongfeng",
     batteryKwh: 66,
     baseWhPerKm: 148,
     massTonnes: 2.15,
@@ -2749,6 +2997,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ds_automobiles:ds_3_e_tense:2023:ds_3_e_tense",
     label: "DS Automobiles DS 3 E-Tense (2023)",
+    make: "DS Automobiles",
     batteryKwh: 50,
     baseWhPerKm: 191,
     massTonnes: 2.2,
@@ -2760,6 +3009,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ds_automobiles:ds_3_e_tense:2024:ds_3_e_tense",
     label: "DS Automobiles DS 3 E-Tense (2024)",
+    make: "DS Automobiles",
     batteryKwh: 50,
     baseWhPerKm: 191,
     massTonnes: 2.2,
@@ -2771,6 +3021,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ds_automobiles:ds_3_e_tense:2025:ds_3_e_tense",
     label: "DS Automobiles DS 3 E-Tense (2025)",
+    make: "DS Automobiles",
     batteryKwh: 50,
     baseWhPerKm: 191,
     massTonnes: 2.2,
@@ -2782,6 +3033,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ds_automobiles:ds_4_e_tense:2023:ds_4_e_tense",
     label: "DS Automobiles DS 4 E-Tense (2023)",
+    make: "DS Automobiles",
     batteryKwh: 54,
     baseWhPerKm: 165,
     massTonnes: 1.9,
@@ -2793,6 +3045,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ds_automobiles:ds_4_e_tense:2024:ds_4_e_tense",
     label: "DS Automobiles DS 4 E-Tense (2024)",
+    make: "DS Automobiles",
     batteryKwh: 54,
     baseWhPerKm: 165,
     massTonnes: 1.9,
@@ -2804,6 +3057,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ds_automobiles:ds_4_e_tense:2025:ds_4_e_tense",
     label: "DS Automobiles DS 4 E-Tense (2025)",
+    make: "DS Automobiles",
     batteryKwh: 54,
     baseWhPerKm: 165,
     massTonnes: 1.9,
@@ -2815,6 +3069,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fangchengbao:bao_5:2023:bao_5",
     label: "FangChengBao Bao 5 (2023)",
+    make: "FangChengBao",
     batteryKwh: 31.8,
     baseWhPerKm: 353,
     massTonnes: 2.2,
@@ -2826,6 +3081,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fangchengbao:bao_5:2024:bao_5",
     label: "FangChengBao Bao 5 (2024)",
+    make: "FangChengBao",
     batteryKwh: 31.8,
     baseWhPerKm: 353,
     massTonnes: 2.2,
@@ -2837,6 +3093,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fangchengbao:bao_5:2025:bao_5",
     label: "FangChengBao Bao 5 (2025)",
+    make: "FangChengBao",
     batteryKwh: 31.8,
     baseWhPerKm: 353,
     massTonnes: 2.2,
@@ -2848,6 +3105,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fangchengbao:tai_3:2025:tai_3",
     label: "FangChengBao Tai 3 RWD (2025)",
+    make: "FangChengBao",
     batteryKwh: 78.72,
     baseWhPerKm: 218,
     massTonnes: 2.2,
@@ -2859,6 +3117,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fangchengbao:tai_3:2025:tai_3_awd",
     label: "FangChengBao Tai 3 RWD AWD (2025)",
+    make: "FangChengBao",
     batteryKwh: 78.72,
     baseWhPerKm: 218,
     massTonnes: 2.2,
@@ -2870,6 +3129,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "faraday_future:ff_91:2023:ff_91",
     label: "Faraday Future FF 91 (2023)",
+    make: "Faraday Future",
     batteryKwh: 130,
     baseWhPerKm: 212,
     massTonnes: 2.7,
@@ -2881,6 +3141,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "faraday_future:ff_91:2024:ff_91",
     label: "Faraday Future FF 91 (2024)",
+    make: "Faraday Future",
     batteryKwh: 130,
     baseWhPerKm: 212,
     massTonnes: 2.7,
@@ -2892,6 +3153,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "faraday_future:ff_91:2025:ff_91",
     label: "Faraday Future FF 91 (2025)",
+    make: "Faraday Future",
     batteryKwh: 130,
     baseWhPerKm: 212,
     massTonnes: 2.7,
@@ -2903,6 +3165,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:500e:2023:500e",
     label: "Fiat 500e (2023)",
+    make: "Fiat",
     batteryKwh: 37.3,
     baseWhPerKm: 142,
     massTonnes: 1.365,
@@ -2914,6 +3177,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:500e:2024:500e",
     label: "Fiat 500e (2024)",
+    make: "Fiat",
     batteryKwh: 37.3,
     baseWhPerKm: 142,
     massTonnes: 1.365,
@@ -2925,6 +3189,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:500e:2025:500e",
     label: "Fiat 500e (2025)",
+    make: "Fiat",
     batteryKwh: 37.3,
     baseWhPerKm: 142,
     massTonnes: 1.365,
@@ -2936,6 +3201,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:500e:2023:500e_icon",
     label: "Fiat 500e Icon (2023)",
+    make: "Fiat",
     batteryKwh: 37.3,
     baseWhPerKm: 142,
     massTonnes: 1.365,
@@ -2947,6 +3213,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:500e:2024:500e_icon",
     label: "Fiat 500e Icon (2024)",
+    make: "Fiat",
     batteryKwh: 37.3,
     baseWhPerKm: 142,
     massTonnes: 1.365,
@@ -2958,6 +3225,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:500e:2025:500e_icon",
     label: "Fiat 500e Icon (2025)",
+    make: "Fiat",
     batteryKwh: 37.3,
     baseWhPerKm: 142,
     massTonnes: 1.365,
@@ -2969,6 +3237,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:500e:2023:500e_la_prima",
     label: "Fiat 500e La Prima (2023)",
+    make: "Fiat",
     batteryKwh: 37.3,
     baseWhPerKm: 142,
     massTonnes: 1.365,
@@ -2980,6 +3249,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:500e:2024:500e_la_prima",
     label: "Fiat 500e La Prima (2024)",
+    make: "Fiat",
     batteryKwh: 37.3,
     baseWhPerKm: 142,
     massTonnes: 1.365,
@@ -2991,6 +3261,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:500e:2025:500e_la_prima",
     label: "Fiat 500e La Prima (2025)",
+    make: "Fiat",
     batteryKwh: 37.3,
     baseWhPerKm: 142,
     massTonnes: 1.365,
@@ -3002,6 +3273,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:500e:2023:500e_pop",
     label: "Fiat 500e Pop (2023)",
+    make: "Fiat",
     batteryKwh: 37.3,
     baseWhPerKm: 142,
     massTonnes: 1.365,
@@ -3013,6 +3285,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:500e:2024:500e_pop",
     label: "Fiat 500e Pop (2024)",
+    make: "Fiat",
     batteryKwh: 37.3,
     baseWhPerKm: 142,
     massTonnes: 1.365,
@@ -3024,6 +3297,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:500e:2025:500e_pop",
     label: "Fiat 500e Pop (2025)",
+    make: "Fiat",
     batteryKwh: 37.3,
     baseWhPerKm: 142,
     massTonnes: 1.365,
@@ -3035,6 +3309,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:600e:2023:600e",
     label: "Fiat 600e (2023)",
+    make: "Fiat",
     batteryKwh: 51,
     baseWhPerKm: 155,
     massTonnes: 1.535,
@@ -3046,6 +3321,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:600e:2024:600e",
     label: "Fiat 600e (2024)",
+    make: "Fiat",
     batteryKwh: 51,
     baseWhPerKm: 155,
     massTonnes: 1.535,
@@ -3057,6 +3333,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:600e:2025:600e",
     label: "Fiat 600e (2025)",
+    make: "Fiat",
     batteryKwh: 51,
     baseWhPerKm: 155,
     massTonnes: 1.535,
@@ -3068,6 +3345,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:600e:2023:600e_la_prima",
     label: "Fiat 600e La Prima (2023)",
+    make: "Fiat",
     batteryKwh: 51,
     baseWhPerKm: 155,
     massTonnes: 1.535,
@@ -3079,6 +3357,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:600e:2024:600e_la_prima",
     label: "Fiat 600e La Prima (2024)",
+    make: "Fiat",
     batteryKwh: 51,
     baseWhPerKm: 155,
     massTonnes: 1.535,
@@ -3090,6 +3369,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:600e:2025:600e_la_prima",
     label: "Fiat 600e La Prima (2025)",
+    make: "Fiat",
     batteryKwh: 51,
     baseWhPerKm: 155,
     massTonnes: 1.535,
@@ -3101,6 +3381,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:600e:2023:600e_red",
     label: "Fiat 600e Red (2023)",
+    make: "Fiat",
     batteryKwh: 51,
     baseWhPerKm: 155,
     massTonnes: 1.535,
@@ -3112,6 +3393,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:600e:2024:600e_red",
     label: "Fiat 600e Red (2024)",
+    make: "Fiat",
     batteryKwh: 51,
     baseWhPerKm: 155,
     massTonnes: 1.535,
@@ -3123,6 +3405,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "fiat:600e:2025:600e_red",
     label: "Fiat 600e Red (2025)",
+    make: "Fiat",
     batteryKwh: 51,
     baseWhPerKm: 155,
     massTonnes: 1.535,
@@ -3134,6 +3417,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:capri_ev:2024:capri_ev",
     label: "Ford Capri EV (2024)",
+    make: "Ford",
     batteryKwh: 72,
     baseWhPerKm: 146,
     massTonnes: 2.2,
@@ -3145,6 +3429,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:capri_ev:2025:capri_ev",
     label: "Ford Capri EV (2025)",
+    make: "Ford",
     batteryKwh: 72,
     baseWhPerKm: 146,
     massTonnes: 2.2,
@@ -3156,6 +3441,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:e_tourneo_courier:2025:e_tourneo_courier",
     label: "Ford E-Tourneo Courier (2025)",
+    make: "Ford",
     batteryKwh: 51,
     baseWhPerKm: 178,
     massTonnes: 2.6,
@@ -3167,6 +3453,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:e_transit:2023:e_transit",
     label: "Ford E-Transit (2023)",
+    make: "Ford",
     batteryKwh: 64,
     baseWhPerKm: 246,
     massTonnes: 2.69,
@@ -3178,6 +3465,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:e_transit:2024:e_transit",
     label: "Ford E-Transit (2024)",
+    make: "Ford",
     batteryKwh: 64,
     baseWhPerKm: 246,
     massTonnes: 2.69,
@@ -3189,6 +3477,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:e_transit:2025:e_transit",
     label: "Ford E-Transit (2025)",
+    make: "Ford",
     batteryKwh: 64,
     baseWhPerKm: 246,
     massTonnes: 2.69,
@@ -3200,6 +3489,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:e_transit_courier:2025:e_transit_courier",
     label: "Ford E-Transit Courier (2025)",
+    make: "Ford",
     batteryKwh: 51,
     baseWhPerKm: 178,
     massTonnes: 2.6,
@@ -3211,6 +3501,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:explorer_ev:2024:explorer_ev",
     label: "Ford Explorer EV (2024)",
+    make: "Ford",
     batteryKwh: 75,
     baseWhPerKm: 183,
     massTonnes: 2.2,
@@ -3222,6 +3513,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:explorer_ev:2025:explorer_ev",
     label: "Ford Explorer EV (2025)",
+    make: "Ford",
     batteryKwh: 75,
     baseWhPerKm: 183,
     massTonnes: 2.2,
@@ -3233,6 +3525,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:f_150_lightning:2023:f_150_lightning_lariat",
     label: "Ford F-150 Lightning Lariat (2023)",
+    make: "Ford",
     batteryKwh: 123,
     baseWhPerKm: 239,
     massTonnes: 2.67,
@@ -3244,6 +3537,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:f_150_lightning:2024:f_150_lightning_lariat",
     label: "Ford F-150 Lightning Lariat (2024)",
+    make: "Ford",
     batteryKwh: 123,
     baseWhPerKm: 239,
     massTonnes: 2.67,
@@ -3255,6 +3549,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:f_150_lightning:2025:f_150_lightning_lariat",
     label: "Ford F-150 Lightning Lariat (2025)",
+    make: "Ford",
     batteryKwh: 123,
     baseWhPerKm: 239,
     massTonnes: 2.67,
@@ -3266,6 +3561,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:f_150_lightning:2023:f_150_lightning_platinum",
     label: "Ford F-150 Lightning Platinum (2023)",
+    make: "Ford",
     batteryKwh: 123,
     baseWhPerKm: 239,
     massTonnes: 2.67,
@@ -3277,6 +3573,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:f_150_lightning:2024:f_150_lightning_platinum",
     label: "Ford F-150 Lightning Platinum (2024)",
+    make: "Ford",
     batteryKwh: 123,
     baseWhPerKm: 239,
     massTonnes: 2.67,
@@ -3288,6 +3585,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:f_150_lightning:2025:f_150_lightning_platinum",
     label: "Ford F-150 Lightning Platinum (2025)",
+    make: "Ford",
     batteryKwh: 123,
     baseWhPerKm: 239,
     massTonnes: 2.67,
@@ -3299,6 +3597,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:f_150_lightning:2023:f_150_lightning",
     label: "Ford F-150 Lightning Pro (2023)",
+    make: "Ford",
     batteryKwh: 91,
     baseWhPerKm: 246,
     massTonnes: 2.67,
@@ -3310,6 +3609,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:f_150_lightning:2024:f_150_lightning",
     label: "Ford F-150 Lightning Pro (2024)",
+    make: "Ford",
     batteryKwh: 91,
     baseWhPerKm: 246,
     massTonnes: 2.67,
@@ -3321,6 +3621,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:f_150_lightning:2025:f_150_lightning",
     label: "Ford F-150 Lightning Pro (2025)",
+    make: "Ford",
     batteryKwh: 91,
     baseWhPerKm: 246,
     massTonnes: 2.67,
@@ -3332,6 +3633,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:f_150_lightning:2023:f_150_lightning_xlt",
     label: "Ford F-150 Lightning XLT (2023)",
+    make: "Ford",
     batteryKwh: 91,
     baseWhPerKm: 246,
     massTonnes: 2.67,
@@ -3343,6 +3645,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:f_150_lightning:2024:f_150_lightning_xlt",
     label: "Ford F-150 Lightning XLT (2024)",
+    make: "Ford",
     batteryKwh: 91,
     baseWhPerKm: 246,
     massTonnes: 2.67,
@@ -3354,6 +3657,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:f_150_lightning:2025:f_150_lightning_xlt",
     label: "Ford F-150 Lightning XLT (2025)",
+    make: "Ford",
     batteryKwh: 91,
     baseWhPerKm: 246,
     massTonnes: 2.67,
@@ -3365,6 +3669,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:mustang_mach_e:2023:mustang_mach_e_extended_range",
     label: "Ford Mustang Mach-E Extended Range (2023)",
+    make: "Ford",
     batteryKwh: 91,
     baseWhPerKm: 186,
     massTonnes: 2.108,
@@ -3376,6 +3681,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:mustang_mach_e:2024:mustang_mach_e_extended_range",
     label: "Ford Mustang Mach-E Extended Range (2024)",
+    make: "Ford",
     batteryKwh: 91,
     baseWhPerKm: 186,
     massTonnes: 2.108,
@@ -3387,6 +3693,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:mustang_mach_e:2025:mustang_mach_e_extended_range",
     label: "Ford Mustang Mach-E Extended Range (2025)",
+    make: "Ford",
     batteryKwh: 91,
     baseWhPerKm: 186,
     massTonnes: 2.108,
@@ -3398,6 +3705,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:mustang_mach_e:2023:mustang_mach_e_gt",
     label: "Ford Mustang Mach-E GT (2023)",
+    make: "Ford",
     batteryKwh: 82,
     baseWhPerKm: 204,
     massTonnes: 2.108,
@@ -3409,6 +3717,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:mustang_mach_e:2024:mustang_mach_e_gt",
     label: "Ford Mustang Mach-E GT (2024)",
+    make: "Ford",
     batteryKwh: 82,
     baseWhPerKm: 204,
     massTonnes: 2.108,
@@ -3420,6 +3729,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:mustang_mach_e:2025:mustang_mach_e_gt",
     label: "Ford Mustang Mach-E GT (2025)",
+    make: "Ford",
     batteryKwh: 82,
     baseWhPerKm: 204,
     massTonnes: 2.108,
@@ -3431,6 +3741,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:mustang_mach_e:2023:mustang_mach_e_premium",
     label: "Ford Mustang Mach-E Premium (2023)",
+    make: "Ford",
     batteryKwh: 82,
     baseWhPerKm: 189,
     massTonnes: 2.108,
@@ -3442,6 +3753,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:mustang_mach_e:2024:mustang_mach_e_premium",
     label: "Ford Mustang Mach-E Premium (2024)",
+    make: "Ford",
     batteryKwh: 82,
     baseWhPerKm: 189,
     massTonnes: 2.108,
@@ -3453,6 +3765,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:mustang_mach_e:2025:mustang_mach_e_premium",
     label: "Ford Mustang Mach-E Premium (2025)",
+    make: "Ford",
     batteryKwh: 82,
     baseWhPerKm: 189,
     massTonnes: 2.108,
@@ -3464,6 +3777,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:mustang_mach_e:2023:mustang_mach_e",
     label: "Ford Mustang Mach-E Select (2023)",
+    make: "Ford",
     batteryKwh: 70,
     baseWhPerKm: 185,
     massTonnes: 2.108,
@@ -3475,6 +3789,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:mustang_mach_e:2024:mustang_mach_e",
     label: "Ford Mustang Mach-E Select (2024)",
+    make: "Ford",
     batteryKwh: 70,
     baseWhPerKm: 185,
     massTonnes: 2.108,
@@ -3486,6 +3801,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:mustang_mach_e:2025:mustang_mach_e",
     label: "Ford Mustang Mach-E Select (2025)",
+    make: "Ford",
     batteryKwh: 70,
     baseWhPerKm: 185,
     massTonnes: 2.108,
@@ -3497,6 +3813,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:puma_gen_e:2024:puma_gen_e",
     label: "Ford Puma Gen-E (2024)",
+    make: "Ford",
     batteryKwh: 51,
     baseWhPerKm: 165,
     massTonnes: 1.65,
@@ -3508,6 +3825,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "ford:puma_gen_e:2025:puma_gen_e",
     label: "Ford Puma Gen-E (2025)",
+    make: "Ford",
     batteryKwh: 51,
     baseWhPerKm: 165,
     massTonnes: 1.65,
@@ -3519,6 +3837,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_es:2024:aion_es",
     label: "GAC Aion ES (2024)",
+    make: "GAC Aion",
     batteryKwh: 55.2,
     baseWhPerKm: 214,
     massTonnes: 1.658,
@@ -3530,6 +3849,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_es:2025:aion_es",
     label: "GAC Aion ES (2025)",
+    make: "GAC Aion",
     batteryKwh: 55.2,
     baseWhPerKm: 214,
     massTonnes: 1.658,
@@ -3541,6 +3861,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:hyper_gt:2023:hyper_gt",
     label: "GAC Aion Hyper GT (2023)",
+    make: "GAC Aion",
     batteryKwh: 70,
     baseWhPerKm: 162,
     massTonnes: 1.9,
@@ -3552,6 +3873,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:hyper_gt:2024:hyper_gt",
     label: "GAC Aion Hyper GT (2024)",
+    make: "GAC Aion",
     batteryKwh: 70,
     baseWhPerKm: 162,
     massTonnes: 1.9,
@@ -3563,6 +3885,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:hyper_gt:2025:hyper_gt",
     label: "GAC Aion Hyper GT (2025)",
+    make: "GAC Aion",
     batteryKwh: 70,
     baseWhPerKm: 162,
     massTonnes: 1.9,
@@ -3574,6 +3897,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:hyper_gt:2023:hyper_gt_80kwh",
     label: "GAC Aion Hyper GT 80 kWh (2023)",
+    make: "GAC Aion",
     batteryKwh: 80,
     baseWhPerKm: 159,
     massTonnes: 1.9,
@@ -3585,6 +3909,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:hyper_gt:2024:hyper_gt_80kwh",
     label: "GAC Aion Hyper GT 80 kWh (2024)",
+    make: "GAC Aion",
     batteryKwh: 80,
     baseWhPerKm: 159,
     massTonnes: 1.9,
@@ -3596,6 +3921,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:hyper_gt:2025:hyper_gt_80kwh",
     label: "GAC Aion Hyper GT 80 kWh (2025)",
+    make: "GAC Aion",
     batteryKwh: 80,
     baseWhPerKm: 159,
     massTonnes: 1.9,
@@ -3607,6 +3933,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:hyptec_hl:2025:hyptec_hl",
     label: "GAC Aion Hyptec HL (2025)",
+    make: "GAC Aion",
     batteryKwh: 95.9,
     baseWhPerKm: 199,
     massTonnes: 2.5,
@@ -3618,6 +3945,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:hyptec_ht:2025:hyptec_ht",
     label: "GAC Aion Hyptec HT (2025)",
+    make: "GAC Aion",
     batteryKwh: 72.7,
     baseWhPerKm: 168,
     massTonnes: 2.2,
@@ -3629,6 +3957,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:hyptec_ht:2025:hyptec_ht_elite",
     label: "GAC Aion Hyptec HT Elite (2025)",
+    make: "GAC Aion",
     batteryKwh: 72.7,
     baseWhPerKm: 168,
     massTonnes: 2.2,
@@ -3640,6 +3969,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:hyptec_ht:2025:hyptec_ht_ultra",
     label: "GAC Aion Hyptec HT Ultra (2025)",
+    make: "GAC Aion",
     batteryKwh: 99.5,
     baseWhPerKm: 184,
     massTonnes: 2.2,
@@ -3651,6 +3981,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_rt:2024:aion_rt",
     label: "GAC Aion RT (2024)",
+    make: "GAC Aion",
     batteryKwh: 55.1,
     baseWhPerKm: 147,
     massTonnes: 1.67,
@@ -3662,6 +3993,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_rt:2025:aion_rt",
     label: "GAC Aion RT (2025)",
+    make: "GAC Aion",
     batteryKwh: 55.1,
     baseWhPerKm: 147,
     massTonnes: 1.67,
@@ -3673,6 +4005,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_rt:2024:aion_rt_68kwh",
     label: "GAC Aion RT 68.1 kWh (2024)",
+    make: "GAC Aion",
     batteryKwh: 68.1,
     baseWhPerKm: 146,
     massTonnes: 1.87,
@@ -3684,6 +4017,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_rt:2025:aion_rt_68kwh",
     label: "GAC Aion RT 68.1 kWh (2025)",
+    make: "GAC Aion",
     batteryKwh: 68.1,
     baseWhPerKm: 146,
     massTonnes: 1.87,
@@ -3695,6 +4029,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_v:2023:aion_v",
     label: "GAC Aion V (2023)",
+    make: "GAC Aion",
     batteryKwh: 75.3,
     baseWhPerKm: 160,
     massTonnes: 1.92,
@@ -3706,6 +4041,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_v:2024:aion_v",
     label: "GAC Aion V (2024)",
+    make: "GAC Aion",
     batteryKwh: 75.3,
     baseWhPerKm: 204,
     massTonnes: 1.92,
@@ -3717,6 +4053,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_v:2025:aion_v",
     label: "GAC Aion V (2025)",
+    make: "GAC Aion",
     batteryKwh: 75.2,
     baseWhPerKm: 204,
     massTonnes: 1.81,
@@ -3728,6 +4065,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_v:2023:aion_v_elite",
     label: "GAC Aion V Elite (2023)",
+    make: "GAC Aion",
     batteryKwh: 75.3,
     baseWhPerKm: 160,
     massTonnes: 1.92,
@@ -3739,6 +4077,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_v:2024:aion_v_elite",
     label: "GAC Aion V Elite (2024)",
+    make: "GAC Aion",
     batteryKwh: 75.3,
     baseWhPerKm: 204,
     massTonnes: 1.92,
@@ -3750,6 +4089,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_v:2025:aion_v_elite",
     label: "GAC Aion V Elite (2025)",
+    make: "GAC Aion",
     batteryKwh: 75.2,
     baseWhPerKm: 204,
     massTonnes: 1.81,
@@ -3761,6 +4101,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_y:2023:aion_y",
     label: "GAC Aion Y (2023)",
+    make: "GAC Aion",
     batteryKwh: 63.2,
     baseWhPerKm: 178,
     massTonnes: 1.738,
@@ -3772,6 +4113,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_y:2024:aion_y",
     label: "GAC Aion Y (2024)",
+    make: "GAC Aion",
     batteryKwh: 63.2,
     baseWhPerKm: 227,
     massTonnes: 1.738,
@@ -3783,6 +4125,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_y:2025:aion_y",
     label: "GAC Aion Y (2025)",
+    make: "GAC Aion",
     batteryKwh: 63.2,
     baseWhPerKm: 227,
     massTonnes: 1.738,
@@ -3794,6 +4137,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_y:2023:aion_y_elite",
     label: "GAC Aion Y Elite (2023)",
+    make: "GAC Aion",
     batteryKwh: 63.2,
     baseWhPerKm: 178,
     massTonnes: 1.738,
@@ -3805,6 +4149,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_y:2024:aion_y_elite",
     label: "GAC Aion Y Elite (2024)",
+    make: "GAC Aion",
     batteryKwh: 63.2,
     baseWhPerKm: 227,
     massTonnes: 1.738,
@@ -3816,6 +4161,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_y:2025:aion_y_elite",
     label: "GAC Aion Y Elite (2025)",
+    make: "GAC Aion",
     batteryKwh: 63.2,
     baseWhPerKm: 227,
     massTonnes: 1.738,
@@ -3827,6 +4173,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_y:2023:aion_y_premium",
     label: "GAC Aion Y Premium (2023)",
+    make: "GAC Aion",
     batteryKwh: 63.2,
     baseWhPerKm: 178,
     massTonnes: 1.727,
@@ -3838,6 +4185,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_y:2024:aion_y_premium",
     label: "GAC Aion Y Premium (2024)",
+    make: "GAC Aion",
     batteryKwh: 63.2,
     baseWhPerKm: 227,
     massTonnes: 1.727,
@@ -3849,6 +4197,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gac_aion:aion_y:2025:aion_y_premium",
     label: "GAC Aion Y Premium (2025)",
+    make: "GAC Aion",
     batteryKwh: 63.2,
     baseWhPerKm: 227,
     massTonnes: 1.727,
@@ -3860,6 +4209,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "geely:ex2:2025:ex2",
     label: "Geely EX2 (2025)",
+    make: "Geely",
     batteryKwh: 28,
     baseWhPerKm: 125,
     massTonnes: 1.3,
@@ -3871,6 +4221,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "geely:ex5:2024:ex5",
     label: "Geely EX5 (2024)",
+    make: "Geely",
     batteryKwh: 46,
     baseWhPerKm: 145,
     massTonnes: 1.715,
@@ -3882,6 +4233,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "geely:ex5:2025:ex5",
     label: "Geely EX5 (2025)",
+    make: "Geely",
     batteryKwh: 46,
     baseWhPerKm: 145,
     massTonnes: 1.715,
@@ -3893,6 +4245,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "geely:ex5:2024:ex5_60kwh",
     label: "Geely EX5 60.22 kWh Extended Range (2024)",
+    make: "Geely",
     batteryKwh: 56,
     baseWhPerKm: 147,
     massTonnes: 1.765,
@@ -3904,6 +4257,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "geely:ex5:2025:ex5_60kwh",
     label: "Geely EX5 60.22 kWh Extended Range (2025)",
+    make: "Geely",
     batteryKwh: 56,
     baseWhPerKm: 147,
     massTonnes: 1.765,
@@ -3915,6 +4269,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "geely:galaxy_e8:2024:galaxy_e8",
     label: "Geely Galaxy E8 (2024)",
+    make: "Geely",
     batteryKwh: 58,
     baseWhPerKm: 140,
     massTonnes: 1.905,
@@ -3926,6 +4281,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "geely:galaxy_e8:2025:galaxy_e8",
     label: "Geely Galaxy E8 (2025)",
+    make: "Geely",
     batteryKwh: 72,
     baseWhPerKm: 161,
     massTonnes: 1.95,
@@ -3937,6 +4293,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "geely:galaxy_e8:2024:galaxy_e8_475kw",
     label: "Geely Galaxy E8 475 kW Performance (2024)",
+    make: "Geely",
     batteryKwh: 72,
     baseWhPerKm: 161,
     massTonnes: 2.15,
@@ -3948,6 +4305,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "geely:galaxy_e8:2025:galaxy_e8_475kw",
     label: "Geely Galaxy E8 475 kW Performance (2025)",
+    make: "Geely",
     batteryKwh: 72,
     baseWhPerKm: 161,
     massTonnes: 2.15,
@@ -3959,6 +4317,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "geely:panda_mini:2023:panda_mini",
     label: "Geely Panda Mini (2023)",
+    make: "Geely",
     batteryKwh: 9,
     baseWhPerKm: 104,
     massTonnes: 0.8,
@@ -3970,6 +4329,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "geely:panda_mini:2024:panda_mini",
     label: "Geely Panda Mini (2024)",
+    make: "Geely",
     batteryKwh: 9,
     baseWhPerKm: 104,
     massTonnes: 0.8,
@@ -3981,6 +4341,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "geely:panda_mini:2025:panda_mini",
     label: "Geely Panda Mini (2025)",
+    make: "Geely",
     batteryKwh: 9,
     baseWhPerKm: 104,
     massTonnes: 0.8,
@@ -3992,6 +4353,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "geely:panda_mini:2023:panda_mini_17kwh",
     label: "Geely Panda Mini 17 kWh Extended Range (2023)",
+    make: "Geely",
     batteryKwh: 16,
     baseWhPerKm: 111,
     massTonnes: 0.85,
@@ -4003,6 +4365,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "geely:panda_mini:2024:panda_mini_17kwh",
     label: "Geely Panda Mini 17 kWh Extended Range (2024)",
+    make: "Geely",
     batteryKwh: 16,
     baseWhPerKm: 111,
     massTonnes: 0.85,
@@ -4014,6 +4377,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "geely:panda_mini:2025:panda_mini_17kwh",
     label: "Geely Panda Mini 17 kWh Extended Range (2025)",
+    make: "Geely",
     batteryKwh: 16,
     baseWhPerKm: 111,
     massTonnes: 0.85,
@@ -4025,6 +4389,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "geely:xingyuan:2024:xingyuan",
     label: "Geely Xingyuan (2024)",
+    make: "Geely",
     batteryKwh: 28,
     baseWhPerKm: 125,
     massTonnes: 1.215,
@@ -4036,6 +4401,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "geely:xingyuan:2025:xingyuan",
     label: "Geely Xingyuan (2025)",
+    make: "Geely",
     batteryKwh: 28,
     baseWhPerKm: 125,
     massTonnes: 1.215,
@@ -4047,6 +4413,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "geely:xingyuan:2024:xingyuan_40kwh",
     label: "Geely Xingyuan 40.16 kWh Extended Range (2024)",
+    make: "Geely",
     batteryKwh: 38,
     baseWhPerKm: 129,
     massTonnes: 1.285,
@@ -4058,6 +4425,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "geely:xingyuan:2025:xingyuan_40kwh",
     label: "Geely Xingyuan 40.16 kWh Extended Range (2025)",
+    make: "Geely",
     batteryKwh: 38,
     baseWhPerKm: 129,
     massTonnes: 1.285,
@@ -4069,6 +4437,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "genesis:electrified_g80:2023:electrified_g80",
     label: "Genesis Electrified G80 (2023)",
+    make: "Genesis",
     batteryKwh: 80.7,
     baseWhPerKm: 286,
     massTonnes: 2.25,
@@ -4080,6 +4449,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "genesis:electrified_g80:2024:electrified_g80",
     label: "Genesis Electrified G80 (2024)",
+    make: "Genesis",
     batteryKwh: 80.7,
     baseWhPerKm: 286,
     massTonnes: 2.25,
@@ -4091,6 +4461,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "genesis:electrified_g80:2025:electrified_g80",
     label: "Genesis Electrified G80 (2025)",
+    make: "Genesis",
     batteryKwh: 80.7,
     baseWhPerKm: 286,
     massTonnes: 2.25,
@@ -4102,6 +4473,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "genesis:gv60:2023:gv60",
     label: "Genesis GV60 (2023)",
+    make: "Genesis",
     batteryKwh: 74,
     baseWhPerKm: 252,
     massTonnes: 2.1,
@@ -4113,6 +4485,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "genesis:gv60:2024:gv60",
     label: "Genesis GV60 (2024)",
+    make: "Genesis",
     batteryKwh: 74,
     baseWhPerKm: 252,
     massTonnes: 2.1,
@@ -4124,6 +4497,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "genesis:gv60:2025:gv60",
     label: "Genesis GV60 (2025)",
+    make: "Genesis",
     batteryKwh: 74,
     baseWhPerKm: 252,
     massTonnes: 2.1,
@@ -4135,6 +4509,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "genesis:gv60:2023:gv60_advanced",
     label: "Genesis GV60 Advanced (2023)",
+    make: "Genesis",
     batteryKwh: 74,
     baseWhPerKm: 252,
     massTonnes: 2.18,
@@ -4146,6 +4521,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "genesis:gv60:2024:gv60_advanced",
     label: "Genesis GV60 Advanced (2024)",
+    make: "Genesis",
     batteryKwh: 74,
     baseWhPerKm: 252,
     massTonnes: 2.18,
@@ -4157,6 +4533,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "genesis:gv60:2025:gv60_advanced",
     label: "Genesis GV60 Advanced (2025)",
+    make: "Genesis",
     batteryKwh: 74,
     baseWhPerKm: 252,
     massTonnes: 2.18,
@@ -4168,6 +4545,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "genesis:gv60:2023:gv60_performance",
     label: "Genesis GV60 Performance (2023)",
+    make: "Genesis",
     batteryKwh: 74,
     baseWhPerKm: 252,
     massTonnes: 2.18,
@@ -4179,6 +4557,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "genesis:gv60:2024:gv60_performance",
     label: "Genesis GV60 Performance (2024)",
+    make: "Genesis",
     batteryKwh: 74,
     baseWhPerKm: 252,
     massTonnes: 2.18,
@@ -4190,6 +4569,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "genesis:gv60:2025:gv60_performance",
     label: "Genesis GV60 Performance (2025)",
+    make: "Genesis",
     batteryKwh: 74,
     baseWhPerKm: 252,
     massTonnes: 2.18,
@@ -4201,6 +4581,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "genesis:gv70_electrified:2024:gv70_electrified",
     label: "Genesis GV70 Electrified (2024)",
+    make: "Genesis",
     batteryKwh: 74,
     baseWhPerKm: 252,
     massTonnes: 2.18,
@@ -4212,6 +4593,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "genesis:gv70_electrified:2025:gv70_electrified",
     label: "Genesis GV70 Electrified (2025)",
+    make: "Genesis",
     batteryKwh: 74,
     baseWhPerKm: 252,
     massTonnes: 2.18,
@@ -4223,6 +4605,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gwm:ora_03_gt:2023:ora_03_gt",
     label: "GWM ORA 03 GT (2023)",
+    make: "GWM",
     batteryKwh: 61,
     baseWhPerKm: 245,
     massTonnes: 1.51,
@@ -4234,6 +4617,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gwm:ora_03_gt:2024:ora_03_gt",
     label: "GWM ORA 03 GT (2024)",
+    make: "GWM",
     batteryKwh: 61,
     baseWhPerKm: 245,
     massTonnes: 1.51,
@@ -4245,6 +4629,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gwm:ora_03_gt:2025:ora_03_gt",
     label: "GWM ORA 03 GT (2025)",
+    make: "GWM",
     batteryKwh: 61,
     baseWhPerKm: 245,
     massTonnes: 1.51,
@@ -4256,6 +4641,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gwm:ora_03_skin:2023:ora_03_skin",
     label: "GWM ORA 03 Skin (2023)",
+    make: "GWM",
     batteryKwh: 47,
     baseWhPerKm: 260,
     massTonnes: 1.43,
@@ -4267,6 +4653,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gwm:ora_03_skin:2024:ora_03_skin",
     label: "GWM ORA 03 Skin (2024)",
+    make: "GWM",
     batteryKwh: 47,
     baseWhPerKm: 260,
     massTonnes: 1.43,
@@ -4278,6 +4665,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "gwm:ora_03_skin:2025:ora_03_skin",
     label: "GWM ORA 03 Skin (2025)",
+    make: "GWM",
     batteryKwh: 47,
     baseWhPerKm: 260,
     massTonnes: 1.43,
@@ -4289,6 +4677,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hiphi:hiphi_x:2023:hiphi_x",
     label: "HiPhi X (2023)",
+    make: "HiPhi",
     batteryKwh: 97,
     baseWhPerKm: 245,
     massTonnes: 2.2,
@@ -4300,6 +4689,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hiphi:hiphi_x:2024:hiphi_x",
     label: "HiPhi X (2024)",
+    make: "HiPhi",
     batteryKwh: 97,
     baseWhPerKm: 245,
     massTonnes: 2.2,
@@ -4311,6 +4701,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hiphi:hiphi_x:2025:hiphi_x",
     label: "HiPhi X (2025)",
+    make: "HiPhi",
     batteryKwh: 97,
     baseWhPerKm: 245,
     massTonnes: 2.2,
@@ -4322,6 +4713,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hiphi:hiphi_z:2023:hiphi_z",
     label: "HiPhi Z (2023)",
+    make: "HiPhi",
     batteryKwh: 120,
     baseWhPerKm: 236,
     massTonnes: 1.9,
@@ -4333,6 +4725,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hiphi:hiphi_z:2024:hiphi_z",
     label: "HiPhi Z (2024)",
+    make: "HiPhi",
     batteryKwh: 120,
     baseWhPerKm: 236,
     massTonnes: 1.9,
@@ -4344,6 +4737,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hiphi:hiphi_z:2025:hiphi_z",
     label: "HiPhi Z (2025)",
+    make: "HiPhi",
     batteryKwh: 120,
     baseWhPerKm: 236,
     massTonnes: 1.9,
@@ -4355,6 +4749,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "honda:e_np2:2024:e_np2",
     label: "Honda e:NP2 (2024)",
+    make: "Honda",
     batteryKwh: 65,
     baseWhPerKm: 166,
     massTonnes: 1.758,
@@ -4366,6 +4761,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "honda:e_np2:2025:e_np2",
     label: "Honda e:NP2 (2025)",
+    make: "Honda",
     batteryKwh: 65,
     baseWhPerKm: 166,
     massTonnes: 1.758,
@@ -4377,6 +4773,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "honda:e_ns2:2024:e_ns2",
     label: "Honda e:NS2 (2024)",
+    make: "Honda",
     batteryKwh: 65,
     baseWhPerKm: 166,
     massTonnes: 1.758,
@@ -4388,6 +4785,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "honda:e_ns2:2025:e_ns2",
     label: "Honda e:NS2 (2025)",
+    make: "Honda",
     batteryKwh: 65,
     baseWhPerKm: 166,
     massTonnes: 1.758,
@@ -4399,6 +4797,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "honda:prologue:2024:prologue_awd",
     label: "Honda Prologue Elite All-Wheel Drive (2024)",
+    make: "Honda",
     batteryKwh: 81.7,
     baseWhPerKm: 181,
     massTonnes: 2.28,
@@ -4410,6 +4809,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "honda:prologue:2025:prologue_awd",
     label: "Honda Prologue Elite All-Wheel Drive (2025)",
+    make: "Honda",
     batteryKwh: 81.7,
     baseWhPerKm: 181,
     massTonnes: 2.28,
@@ -4421,6 +4821,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "honda:prologue:2024:prologue",
     label: "Honda Prologue EX (2024)",
+    make: "Honda",
     batteryKwh: 81.7,
     baseWhPerKm: 172,
     massTonnes: 2.18,
@@ -4432,6 +4833,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "honda:prologue:2025:prologue",
     label: "Honda Prologue EX (2025)",
+    make: "Honda",
     batteryKwh: 81.7,
     baseWhPerKm: 172,
     massTonnes: 2.18,
@@ -4443,6 +4845,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hongqi:e_hs9:2023:e_hs9",
     label: "Hongqi E-HS9 (2023)",
+    make: "Hongqi",
     batteryKwh: 99,
     baseWhPerKm: 276,
     massTonnes: 2.2,
@@ -4454,6 +4857,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hongqi:e_hs9:2024:e_hs9",
     label: "Hongqi E-HS9 (2024)",
+    make: "Hongqi",
     batteryKwh: 99,
     baseWhPerKm: 276,
     massTonnes: 2.2,
@@ -4465,6 +4869,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hongqi:e_hs9:2025:e_hs9",
     label: "Hongqi E-HS9 (2025)",
+    make: "Hongqi",
     batteryKwh: 99,
     baseWhPerKm: 276,
     massTonnes: 2.2,
@@ -4476,6 +4881,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hongqi:e_qm5:2023:e_qm5",
     label: "Hongqi E-QM5 (2023)",
+    make: "Hongqi",
     batteryKwh: 54,
     baseWhPerKm: 174,
     massTonnes: 1.9,
@@ -4487,6 +4893,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hongqi:e_qm5:2024:e_qm5",
     label: "Hongqi E-QM5 (2024)",
+    make: "Hongqi",
     batteryKwh: 54,
     baseWhPerKm: 174,
     massTonnes: 1.9,
@@ -4498,6 +4905,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hongqi:e_qm5:2025:e_qm5",
     label: "Hongqi E-QM5 (2025)",
+    make: "Hongqi",
     batteryKwh: 54,
     baseWhPerKm: 174,
     massTonnes: 1.9,
@@ -4509,6 +4917,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:ioniq_5:2023:ioniq_5",
     label: "Hyundai IONIQ 5 (2023)",
+    make: "Hyundai",
     batteryKwh: 72.6,
     baseWhPerKm: 175,
     massTonnes: 1.95,
@@ -4520,6 +4929,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:ioniq_5:2024:ioniq_5",
     label: "Hyundai IONIQ 5 (2024)",
+    make: "Hyundai",
     batteryKwh: 72.6,
     baseWhPerKm: 175,
     massTonnes: 1.95,
@@ -4531,6 +4941,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:ioniq_5:2025:ioniq_5",
     label: "Hyundai IONIQ 5 (2025)",
+    make: "Hyundai",
     batteryKwh: 72.6,
     baseWhPerKm: 175,
     massTonnes: 1.95,
@@ -4542,6 +4953,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:ioniq_5:2023:ioniq_5_awd",
     label: "Hyundai IONIQ 5 AWD (2023)",
+    make: "Hyundai",
     batteryKwh: 72.6,
     baseWhPerKm: 184,
     massTonnes: 2.11,
@@ -4553,6 +4965,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:ioniq_5:2024:ioniq_5_awd",
     label: "Hyundai IONIQ 5 AWD (2024)",
+    make: "Hyundai",
     batteryKwh: 72.6,
     baseWhPerKm: 184,
     massTonnes: 2.11,
@@ -4564,6 +4977,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:ioniq_5:2025:ioniq_5_awd",
     label: "Hyundai IONIQ 5 AWD (2025)",
+    make: "Hyundai",
     batteryKwh: 72.6,
     baseWhPerKm: 184,
     massTonnes: 2.11,
@@ -4575,6 +4989,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:ioniq_5:2024:ioniq_5_n",
     label: "Hyundai IONIQ 5 N (2024)",
+    make: "Hyundai",
     batteryKwh: 78,
     baseWhPerKm: 272,
     massTonnes: 2.235,
@@ -4586,6 +5001,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:ioniq_5:2025:ioniq_5_n",
     label: "Hyundai IONIQ 5 N (2025)",
+    make: "Hyundai",
     batteryKwh: 78,
     baseWhPerKm: 272,
     massTonnes: 2.235,
@@ -4597,6 +5013,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:ioniq_6:2023:ioniq_6_awd",
     label: "Hyundai IONIQ 6 AWD (2023)",
+    make: "Hyundai",
     batteryKwh: 72.6,
     baseWhPerKm: 152,
     massTonnes: 2.11,
@@ -4608,6 +5025,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:ioniq_6:2024:ioniq_6_awd",
     label: "Hyundai IONIQ 6 AWD (2024)",
+    make: "Hyundai",
     batteryKwh: 72.6,
     baseWhPerKm: 152,
     massTonnes: 2.11,
@@ -4619,6 +5037,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:ioniq_6:2025:ioniq_6_awd",
     label: "Hyundai IONIQ 6 AWD (2025)",
+    make: "Hyundai",
     batteryKwh: 72.6,
     baseWhPerKm: 152,
     massTonnes: 2.11,
@@ -4630,6 +5049,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:ioniq_6:2023:ioniq_6_long_range",
     label: "Hyundai IONIQ 6 Long Range (2023)",
+    make: "Hyundai",
     batteryKwh: 72.6,
     baseWhPerKm: 144,
     massTonnes: 1.95,
@@ -4641,6 +5061,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:ioniq_6:2024:ioniq_6_long_range",
     label: "Hyundai IONIQ 6 Long Range (2024)",
+    make: "Hyundai",
     batteryKwh: 72.6,
     baseWhPerKm: 144,
     massTonnes: 1.95,
@@ -4652,6 +5073,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:ioniq_6:2025:ioniq_6_long_range",
     label: "Hyundai IONIQ 6 Long Range (2025)",
+    make: "Hyundai",
     batteryKwh: 72.6,
     baseWhPerKm: 144,
     massTonnes: 1.95,
@@ -4663,6 +5085,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:ioniq_6:2023:ioniq_6",
     label: "Hyundai IONIQ 6 Standard Range (2023)",
+    make: "Hyundai",
     batteryKwh: 50,
     baseWhPerKm: 142,
     massTonnes: 1.785,
@@ -4674,6 +5097,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:ioniq_6:2024:ioniq_6",
     label: "Hyundai IONIQ 6 Standard Range (2024)",
+    make: "Hyundai",
     batteryKwh: 50,
     baseWhPerKm: 142,
     massTonnes: 1.785,
@@ -4685,6 +5109,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:ioniq_6:2025:ioniq_6",
     label: "Hyundai IONIQ 6 Standard Range (2025)",
+    make: "Hyundai",
     batteryKwh: 50,
     baseWhPerKm: 142,
     massTonnes: 1.785,
@@ -4696,6 +5121,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:ioniq_9:2025:ioniq_9",
     label: "Hyundai IONIQ 9 Long Range AWD (2025)",
+    make: "Hyundai",
     batteryKwh: 99.5,
     baseWhPerKm: 196,
     massTonnes: 2.65,
@@ -4707,6 +5133,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:kona_electric:2023:kona_electric_long_range",
     label: "Hyundai Kona Electric Long Range (2023)",
+    make: "Hyundai",
     batteryKwh: 58,
     baseWhPerKm: 146,
     massTonnes: 1.82,
@@ -4718,6 +5145,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:kona_electric:2024:kona_electric_long_range",
     label: "Hyundai Kona Electric Long Range (2024)",
+    make: "Hyundai",
     batteryKwh: 58,
     baseWhPerKm: 146,
     massTonnes: 1.82,
@@ -4729,6 +5157,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:kona_electric:2025:kona_electric_long_range",
     label: "Hyundai Kona Electric Long Range (2025)",
+    make: "Hyundai",
     batteryKwh: 58,
     baseWhPerKm: 146,
     massTonnes: 1.82,
@@ -4740,6 +5169,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:kona_electric:2023:kona_electric",
     label: "Hyundai Kona Electric Standard Range (2023)",
+    make: "Hyundai",
     batteryKwh: 36,
     baseWhPerKm: 144,
     massTonnes: 1.685,
@@ -4751,6 +5181,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:kona_electric:2024:kona_electric",
     label: "Hyundai Kona Electric Standard Range (2024)",
+    make: "Hyundai",
     batteryKwh: 36,
     baseWhPerKm: 144,
     massTonnes: 1.685,
@@ -4762,6 +5193,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "hyundai:kona_electric:2025:kona_electric",
     label: "Hyundai Kona Electric Standard Range (2025)",
+    make: "Hyundai",
     batteryKwh: 36,
     baseWhPerKm: 144,
     massTonnes: 1.685,
@@ -4773,6 +5205,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "im_motors:l7:2023:l7",
     label: "IM Motors L7 (2023)",
+    make: "IM Motors",
     batteryKwh: 85,
     baseWhPerKm: 203,
     massTonnes: 2.29,
@@ -4784,6 +5217,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "im_motors:l7:2024:l7",
     label: "IM Motors L7 (2024)",
+    make: "IM Motors",
     batteryKwh: 85,
     baseWhPerKm: 203,
     massTonnes: 2.29,
@@ -4795,6 +5229,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "im_motors:l7:2025:l7",
     label: "IM Motors L7 (2025)",
+    make: "IM Motors",
     batteryKwh: 85,
     baseWhPerKm: 203,
     massTonnes: 2.29,
@@ -4806,6 +5241,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "im_motors:ls6:2023:ls6",
     label: "IM Motors LS6 (2023)",
+    make: "IM Motors",
     batteryKwh: 95,
     baseWhPerKm: 207,
     massTonnes: 2.47,
@@ -4817,6 +5253,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "im_motors:ls6:2024:ls6",
     label: "IM Motors LS6 (2024)",
+    make: "IM Motors",
     batteryKwh: 95,
     baseWhPerKm: 207,
     massTonnes: 2.47,
@@ -4828,6 +5265,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "im_motors:ls6:2025:ls6",
     label: "IM Motors LS6 (2025)",
+    make: "IM Motors",
     batteryKwh: 95,
     baseWhPerKm: 207,
     massTonnes: 2.47,
@@ -4839,6 +5277,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "im_motors:ls7:2023:ls7",
     label: "IM Motors LS7 (2023)",
+    make: "IM Motors",
     batteryKwh: 95,
     baseWhPerKm: 232,
     massTonnes: 2.65,
@@ -4850,6 +5289,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "im_motors:ls7:2024:ls7",
     label: "IM Motors LS7 (2024)",
+    make: "IM Motors",
     batteryKwh: 95,
     baseWhPerKm: 232,
     massTonnes: 2.65,
@@ -4861,6 +5301,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "im_motors:ls7:2025:ls7",
     label: "IM Motors LS7 (2025)",
+    make: "IM Motors",
     batteryKwh: 95,
     baseWhPerKm: 232,
     massTonnes: 2.65,
@@ -4872,6 +5313,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "jaguar:i_pace:2023:i_pace",
     label: "Jaguar I-PACE (2023)",
+    make: "Jaguar",
     batteryKwh: 84.7,
     baseWhPerKm: 225,
     massTonnes: 2.2,
@@ -4883,6 +5325,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "jaguar:i_pace:2024:i_pace",
     label: "Jaguar I-PACE (2024)",
+    make: "Jaguar",
     batteryKwh: 84.7,
     baseWhPerKm: 225,
     massTonnes: 2.2,
@@ -4894,6 +5337,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:b01:2025:b01",
     label: "Leapmotor B01 (2025)",
+    make: "Leapmotor",
     batteryKwh: 62,
     baseWhPerKm: 132,
     massTonnes: 1.711,
@@ -4905,6 +5349,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:b01:2025:b01_160kw",
     label: "Leapmotor B01 160 kW (2025)",
+    make: "Leapmotor",
     batteryKwh: 62,
     baseWhPerKm: 132,
     massTonnes: 1.711,
@@ -4916,6 +5361,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:b01:2025:b01_56_2kwh",
     label: "Leapmotor B01 56.2 kWh (2025)",
+    make: "Leapmotor",
     batteryKwh: 52,
     baseWhPerKm: 142,
     massTonnes: 1.55,
@@ -4927,6 +5373,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:b10:2025:b10",
     label: "Leapmotor B10 (2025)",
+    make: "Leapmotor",
     batteryKwh: 62,
     baseWhPerKm: 144,
     massTonnes: 1.756,
@@ -4938,6 +5385,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:b10:2025:b10_160kw",
     label: "Leapmotor B10 160 kW (2025)",
+    make: "Leapmotor",
     batteryKwh: 62,
     baseWhPerKm: 144,
     massTonnes: 1.756,
@@ -4949,6 +5397,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:b10:2025:b10_56_2kwh",
     label: "Leapmotor B10 56.2 kWh (2025)",
+    make: "Leapmotor",
     batteryKwh: 52,
     baseWhPerKm: 142,
     massTonnes: 1.67,
@@ -4960,6 +5409,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:c10:2025:c10",
     label: "Leapmotor C10 (2025)",
+    make: "Leapmotor",
     batteryKwh: 64,
     baseWhPerKm: 186,
     massTonnes: 1.85,
@@ -4971,6 +5421,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:c16:2024:c16",
     label: "Leapmotor C16 (2024)",
+    make: "Leapmotor",
     batteryKwh: 95,
     baseWhPerKm: 223,
     massTonnes: 2.15,
@@ -4982,6 +5433,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:c16:2025:c16",
     label: "Leapmotor C16 (2025)",
+    make: "Leapmotor",
     batteryKwh: 95,
     baseWhPerKm: 223,
     massTonnes: 2.15,
@@ -4993,6 +5445,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:lafa_5:2025:lafa_5",
     label: "Leapmotor Lafa 5 (2025)",
+    make: "Leapmotor",
     batteryKwh: 62,
     baseWhPerKm: 198,
     massTonnes: 1.65,
@@ -5004,6 +5457,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:lafa_5:2025:lafa_5_52_6kwh",
     label: "Leapmotor Lafa 5 52.6 kWh (2025)",
+    make: "Leapmotor",
     batteryKwh: 48,
     baseWhPerKm: 185,
     massTonnes: 1.6,
@@ -5015,6 +5469,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:t03:2023:t03",
     label: "Leapmotor T03 (2023)",
+    make: "Leapmotor",
     batteryKwh: 31.9,
     baseWhPerKm: 110,
     massTonnes: 1.122,
@@ -5026,6 +5481,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:t03:2024:t03",
     label: "Leapmotor T03 (2024)",
+    make: "Leapmotor",
     batteryKwh: 31.9,
     baseWhPerKm: 110,
     massTonnes: 1.122,
@@ -5037,6 +5493,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:t03:2025:t03",
     label: "Leapmotor T03 (2025)",
+    make: "Leapmotor",
     batteryKwh: 31.9,
     baseWhPerKm: 110,
     massTonnes: 1.122,
@@ -5048,6 +5505,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:t03:2023:t03_21_6kwh",
     label: "Leapmotor T03 21.6 kWh (2023)",
+    make: "Leapmotor",
     batteryKwh: 18.5,
     baseWhPerKm: 128,
     massTonnes: 1.087,
@@ -5059,6 +5517,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:t03:2023:t03_31_9kwh",
     label: "Leapmotor T03 31.9 kWh (2023)",
+    make: "Leapmotor",
     batteryKwh: 28,
     baseWhPerKm: 129,
     massTonnes: 1.105,
@@ -5070,6 +5529,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:t03:2024:t03_31_9kwh",
     label: "Leapmotor T03 31.9 kWh (2024)",
+    make: "Leapmotor",
     batteryKwh: 28,
     baseWhPerKm: 129,
     massTonnes: 1.105,
@@ -5081,6 +5541,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:t03:2025:t03_31_9kwh",
     label: "Leapmotor T03 31.9 kWh (2025)",
+    make: "Leapmotor",
     batteryKwh: 28,
     baseWhPerKm: 129,
     massTonnes: 1.105,
@@ -5092,6 +5553,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:t03:2023:t03_40kw",
     label: "Leapmotor T03 40 kW (2023)",
+    make: "Leapmotor",
     batteryKwh: 31.9,
     baseWhPerKm: 110,
     massTonnes: 1.122,
@@ -5103,6 +5565,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:t03:2023:t03_41_3kwh",
     label: "Leapmotor T03 41.3 kWh (2023)",
+    make: "Leapmotor",
     batteryKwh: 36.5,
     baseWhPerKm: 126,
     massTonnes: 1.122,
@@ -5114,6 +5577,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:t03:2024:t03_41_3kwh",
     label: "Leapmotor T03 41.3 kWh (2024)",
+    make: "Leapmotor",
     batteryKwh: 36.5,
     baseWhPerKm: 126,
     massTonnes: 1.122,
@@ -5125,6 +5589,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:t03:2025:t03_41_3kwh",
     label: "Leapmotor T03 41.3 kWh (2025)",
+    make: "Leapmotor",
     batteryKwh: 36.5,
     baseWhPerKm: 126,
     massTonnes: 1.122,
@@ -5136,6 +5601,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "leapmotor:t03:2023:t03_85kw",
     label: "Leapmotor T03 85 kW (2023)",
+    make: "Leapmotor",
     batteryKwh: 31.9,
     baseWhPerKm: 110,
     massTonnes: 1.122,
@@ -5147,6 +5613,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lexus:es_350e:2025:es_350e",
     label: "Lexus ES 350e (2025)",
+    make: "Lexus",
     batteryKwh: 66,
     baseWhPerKm: 174,
     massTonnes: 1.95,
@@ -5158,6 +5625,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lexus:es_500e:2025:es_500e",
     label: "Lexus ES 500e (2025)",
+    make: "Lexus",
     batteryKwh: 66,
     baseWhPerKm: 174,
     massTonnes: 2.05,
@@ -5169,6 +5637,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lexus:rz_450e:2023:rz_450e",
     label: "Lexus RZ 450e (2023)",
+    make: "Lexus",
     batteryKwh: 65.1,
     baseWhPerKm: 296,
     massTonnes: 2.05,
@@ -5180,6 +5649,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lexus:rz_450e:2024:rz_450e",
     label: "Lexus RZ 450e (2024)",
+    make: "Lexus",
     batteryKwh: 65.1,
     baseWhPerKm: 296,
     massTonnes: 2.05,
@@ -5191,6 +5661,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lexus:rz_450e:2025:rz_450e",
     label: "Lexus RZ 450e (2025)",
+    make: "Lexus",
     batteryKwh: 65.1,
     baseWhPerKm: 296,
     massTonnes: 2.05,
@@ -5202,6 +5673,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lexus:rz_450e:2023:rz_450e_luxury",
     label: "Lexus RZ 450e Luxury (2023)",
+    make: "Lexus",
     batteryKwh: 65.1,
     baseWhPerKm: 296,
     massTonnes: 2.05,
@@ -5213,6 +5685,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lexus:rz_450e:2024:rz_450e_luxury",
     label: "Lexus RZ 450e Luxury (2024)",
+    make: "Lexus",
     batteryKwh: 65.1,
     baseWhPerKm: 296,
     massTonnes: 2.05,
@@ -5224,6 +5697,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lexus:rz_450e:2025:rz_450e_luxury",
     label: "Lexus RZ 450e Luxury (2025)",
+    make: "Lexus",
     batteryKwh: 65.1,
     baseWhPerKm: 296,
     massTonnes: 2.05,
@@ -5235,6 +5709,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lexus:rz_450e:2023:rz_450e_premium",
     label: "Lexus RZ 450e Premium (2023)",
+    make: "Lexus",
     batteryKwh: 65.1,
     baseWhPerKm: 296,
     massTonnes: 2.05,
@@ -5246,6 +5721,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lexus:rz_450e:2024:rz_450e_premium",
     label: "Lexus RZ 450e Premium (2024)",
+    make: "Lexus",
     batteryKwh: 65.1,
     baseWhPerKm: 296,
     massTonnes: 2.05,
@@ -5257,6 +5733,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lexus:rz_450e:2025:rz_450e_premium",
     label: "Lexus RZ 450e Premium (2025)",
+    make: "Lexus",
     batteryKwh: 65.1,
     baseWhPerKm: 296,
     massTonnes: 2.05,
@@ -5268,6 +5745,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lexus:ux_300e:2023:ux_300e",
     label: "Lexus UX 300e (2023)",
+    make: "Lexus",
     batteryKwh: 50.3,
     baseWhPerKm: 257,
     massTonnes: 1.78,
@@ -5279,6 +5757,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lexus:ux_300e:2024:ux_300e",
     label: "Lexus UX 300e (2024)",
+    make: "Lexus",
     batteryKwh: 50.3,
     baseWhPerKm: 257,
     massTonnes: 1.78,
@@ -5290,6 +5769,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lexus:ux_300e:2025:ux_300e",
     label: "Lexus UX 300e (2025)",
+    make: "Lexus",
     batteryKwh: 50.3,
     baseWhPerKm: 257,
     massTonnes: 1.78,
@@ -5301,6 +5781,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lotus:eletre:2023:eletre",
     label: "Lotus Eletre (2023)",
+    make: "Lotus",
     batteryKwh: 100,
     baseWhPerKm: 203,
     massTonnes: 2.59,
@@ -5312,6 +5793,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lotus:eletre:2024:eletre",
     label: "Lotus Eletre (2024)",
+    make: "Lotus",
     batteryKwh: 100,
     baseWhPerKm: 203,
     massTonnes: 2.59,
@@ -5323,6 +5805,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lotus:eletre:2025:eletre",
     label: "Lotus Eletre (2025)",
+    make: "Lotus",
     batteryKwh: 100,
     baseWhPerKm: 203,
     massTonnes: 2.59,
@@ -5334,6 +5817,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lotus:eletre:2023:eletre_r_plus",
     label: "Lotus Eletre R+ (2023)",
+    make: "Lotus",
     batteryKwh: 100,
     baseWhPerKm: 203,
     massTonnes: 2.59,
@@ -5345,6 +5829,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lotus:eletre:2024:eletre_r_plus",
     label: "Lotus Eletre R+ (2024)",
+    make: "Lotus",
     batteryKwh: 100,
     baseWhPerKm: 203,
     massTonnes: 2.59,
@@ -5356,6 +5841,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lotus:eletre:2025:eletre_r_plus",
     label: "Lotus Eletre R+ (2025)",
+    make: "Lotus",
     batteryKwh: 100,
     baseWhPerKm: 203,
     massTonnes: 2.59,
@@ -5367,6 +5853,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lotus:eletre:2023:eletre_s",
     label: "Lotus Eletre S (2023)",
+    make: "Lotus",
     batteryKwh: 100,
     baseWhPerKm: 203,
     massTonnes: 2.59,
@@ -5378,6 +5865,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lotus:eletre:2024:eletre_s",
     label: "Lotus Eletre S (2024)",
+    make: "Lotus",
     batteryKwh: 100,
     baseWhPerKm: 203,
     massTonnes: 2.59,
@@ -5389,6 +5877,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lotus:eletre:2025:eletre_s",
     label: "Lotus Eletre S (2025)",
+    make: "Lotus",
     batteryKwh: 100,
     baseWhPerKm: 203,
     massTonnes: 2.59,
@@ -5400,6 +5889,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lotus:emeya:2024:emeya",
     label: "Lotus Emeya (2024)",
+    make: "Lotus",
     batteryKwh: 102,
     baseWhPerKm: 204,
     massTonnes: 2.56,
@@ -5411,6 +5901,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lotus:emeya:2025:emeya",
     label: "Lotus Emeya (2025)",
+    make: "Lotus",
     batteryKwh: 102,
     baseWhPerKm: 204,
     massTonnes: 2.56,
@@ -5422,6 +5913,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lucid:air:2023:air",
     label: "Lucid Air Pure (2023)",
+    make: "Lucid",
     batteryKwh: 84,
     baseWhPerKm: 124,
     massTonnes: 2.08,
@@ -5433,6 +5925,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lucid:air:2024:air",
     label: "Lucid Air Pure (2024)",
+    make: "Lucid",
     batteryKwh: 84,
     baseWhPerKm: 124,
     massTonnes: 2.08,
@@ -5444,6 +5937,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lucid:air:2025:air",
     label: "Lucid Air Pure (2025)",
+    make: "Lucid",
     batteryKwh: 84,
     baseWhPerKm: 124,
     massTonnes: 2.08,
@@ -5455,6 +5949,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lucid:air:2023:air_grand_touring",
     label: "Lucid Air Pure Grand Touring (2023)",
+    make: "Lucid",
     batteryKwh: 106,
     baseWhPerKm: 128,
     massTonnes: 2.23,
@@ -5466,6 +5961,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lucid:air:2024:air_grand_touring",
     label: "Lucid Air Pure Grand Touring (2024)",
+    make: "Lucid",
     batteryKwh: 106,
     baseWhPerKm: 128,
     massTonnes: 2.23,
@@ -5477,6 +5973,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lucid:air:2025:air_grand_touring",
     label: "Lucid Air Pure Grand Touring (2025)",
+    make: "Lucid",
     batteryKwh: 106,
     baseWhPerKm: 128,
     massTonnes: 2.23,
@@ -5488,6 +5985,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lucid:air:2024:air_sapphire",
     label: "Lucid Air Pure Sapphire (2024)",
+    make: "Lucid",
     batteryKwh: 112,
     baseWhPerKm: 163,
     massTonnes: 2.35,
@@ -5499,6 +5997,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lucid:air:2025:air_sapphire",
     label: "Lucid Air Pure Sapphire (2025)",
+    make: "Lucid",
     batteryKwh: 112,
     baseWhPerKm: 163,
     massTonnes: 2.35,
@@ -5510,6 +6009,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lucid:air:2023:air_touring",
     label: "Lucid Air Pure Touring (2023)",
+    make: "Lucid",
     batteryKwh: 88,
     baseWhPerKm: 129,
     massTonnes: 2.15,
@@ -5521,6 +6021,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lucid:air:2024:air_touring",
     label: "Lucid Air Pure Touring (2024)",
+    make: "Lucid",
     batteryKwh: 88,
     baseWhPerKm: 129,
     massTonnes: 2.15,
@@ -5532,6 +6033,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lucid:air:2025:air_touring",
     label: "Lucid Air Pure Touring (2025)",
+    make: "Lucid",
     batteryKwh: 88,
     baseWhPerKm: 129,
     massTonnes: 2.15,
@@ -5543,6 +6045,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lucid:gravity:2025:gravity",
     label: "Lucid Gravity Touring (2025)",
+    make: "Lucid",
     batteryKwh: 112,
     baseWhPerKm: 207,
     massTonnes: 2.65,
@@ -5554,6 +6057,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "lucid:gravity:2025:gravity_grand_touring",
     label: "Lucid Gravity Touring Grand Touring (2025)",
+    make: "Lucid",
     batteryKwh: 112,
     baseWhPerKm: 155,
     massTonnes: 2.75,
@@ -5565,6 +6069,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "m_hero:917:2023:917",
     label: "M-Hero 917 (2023)",
+    make: "M-Hero",
     batteryKwh: 135,
     baseWhPerKm: 371,
     massTonnes: 3.5,
@@ -5576,6 +6081,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "m_hero:917:2024:917",
     label: "M-Hero 917 (2024)",
+    make: "M-Hero",
     batteryKwh: 135,
     baseWhPerKm: 371,
     massTonnes: 3.5,
@@ -5587,6 +6093,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "m_hero:917:2025:917",
     label: "M-Hero 917 (2025)",
+    make: "M-Hero",
     batteryKwh: 135,
     baseWhPerKm: 371,
     massTonnes: 3.5,
@@ -5598,6 +6105,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "maserati:gran_cabrio_folgore:2025:gran_cabrio_folgore",
     label: "Maserati GranCabrio Folgore (2025)",
+    make: "Maserati",
     batteryKwh: 83,
     baseWhPerKm: 225,
     massTonnes: 2.28,
@@ -5609,6 +6117,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "maserati:gran_turismo_folgore:2023:gran_turismo_folgore",
     label: "Maserati GranTurismo Folgore (2023)",
+    make: "Maserati",
     batteryKwh: 83,
     baseWhPerKm: 225,
     massTonnes: 2.26,
@@ -5620,6 +6129,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "maserati:grecale_folgore:2024:grecale_folgore",
     label: "Maserati Grecale Folgore (2024)",
+    make: "Maserati",
     batteryKwh: 96,
     baseWhPerKm: 234,
     massTonnes: 2.2,
@@ -5631,6 +6141,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "maserati:mc20_folgore:2025:mc20_folgore",
     label: "Maserati MC20 Folgore (2025)",
+    make: "Maserati",
     batteryKwh: 90,
     baseWhPerKm: 228,
     massTonnes: 2.1,
@@ -5642,6 +6153,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:cla_ev:2025:cla_ev",
     label: "Mercedes-Benz CLA EV (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 82,
     baseWhPerKm: 126,
     massTonnes: 1.95,
@@ -5653,6 +6165,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqa:2023:eqa",
     label: "Mercedes-Benz EQA (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 172,
     massTonnes: 2.04,
@@ -5664,6 +6177,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqa:2024:eqa",
     label: "Mercedes-Benz EQA (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 172,
     massTonnes: 2.04,
@@ -5675,6 +6189,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqa:2025:eqa",
     label: "Mercedes-Benz EQA (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 172,
     massTonnes: 2.04,
@@ -5686,6 +6201,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqa:2023:eqa_300_4matic",
     label: "Mercedes-Benz EQA 300 4MATIC (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 183,
     massTonnes: 2.04,
@@ -5697,6 +6213,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqa:2024:eqa_300_4matic",
     label: "Mercedes-Benz EQA 300 4MATIC (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 183,
     massTonnes: 2.04,
@@ -5708,6 +6225,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqa:2025:eqa_300_4matic",
     label: "Mercedes-Benz EQA 300 4MATIC (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 183,
     massTonnes: 2.04,
@@ -5719,6 +6237,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqa:2023:eqa_350_4matic",
     label: "Mercedes-Benz EQA 350 4MATIC (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 185,
     massTonnes: 2.04,
@@ -5730,6 +6249,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqa:2024:eqa_350_4matic",
     label: "Mercedes-Benz EQA 350 4MATIC (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 185,
     massTonnes: 2.04,
@@ -5741,6 +6261,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqa:2025:eqa_350_4matic",
     label: "Mercedes-Benz EQA 350 4MATIC (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 185,
     massTonnes: 2.04,
@@ -5752,6 +6273,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqb:2023:eqb",
     label: "Mercedes-Benz EQB (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 175,
     massTonnes: 2.12,
@@ -5763,6 +6285,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqb:2024:eqb",
     label: "Mercedes-Benz EQB (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 175,
     massTonnes: 2.12,
@@ -5774,6 +6297,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqb:2025:eqb",
     label: "Mercedes-Benz EQB (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 175,
     massTonnes: 2.12,
@@ -5785,6 +6309,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqb:2023:eqb_300_4matic",
     label: "Mercedes-Benz EQB 300 4MATIC (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 183,
     massTonnes: 2.12,
@@ -5796,6 +6321,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqb:2024:eqb_300_4matic",
     label: "Mercedes-Benz EQB 300 4MATIC (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 183,
     massTonnes: 2.12,
@@ -5807,6 +6333,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqb:2025:eqb_300_4matic",
     label: "Mercedes-Benz EQB 300 4MATIC (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 183,
     massTonnes: 2.12,
@@ -5818,6 +6345,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqb:2023:eqb_300_4matic_7_seater",
     label: "Mercedes-Benz EQB 300 4MATIC 7-Seater (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 188,
     massTonnes: 2.2,
@@ -5829,6 +6357,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqb:2024:eqb_300_4matic_7_seater",
     label: "Mercedes-Benz EQB 300 4MATIC 7-Seater (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 188,
     massTonnes: 2.2,
@@ -5840,6 +6369,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqb:2025:eqb_300_4matic_7_seater",
     label: "Mercedes-Benz EQB 300 4MATIC 7-Seater (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 188,
     massTonnes: 2.2,
@@ -5851,6 +6381,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqb:2023:eqb_350_4matic",
     label: "Mercedes-Benz EQB 350 4MATIC (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 185,
     massTonnes: 2.12,
@@ -5862,6 +6393,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqb:2024:eqb_350_4matic",
     label: "Mercedes-Benz EQB 350 4MATIC (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 185,
     massTonnes: 2.12,
@@ -5873,6 +6405,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqb:2025:eqb_350_4matic",
     label: "Mercedes-Benz EQB 350 4MATIC (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 185,
     massTonnes: 2.12,
@@ -5884,6 +6417,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqb:2023:eqb_350_4matic_7_seater",
     label: "Mercedes-Benz EQB 350 4MATIC 7-Seater (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 190,
     massTonnes: 2.26,
@@ -5895,6 +6429,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqb:2024:eqb_350_4matic_7_seater",
     label: "Mercedes-Benz EQB 350 4MATIC 7-Seater (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 190,
     massTonnes: 2.26,
@@ -5906,6 +6441,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqb:2025:eqb_350_4matic_7_seater",
     label: "Mercedes-Benz EQB 350 4MATIC 7-Seater (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 190,
     massTonnes: 2.26,
@@ -5917,6 +6453,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqb:2023:eqb_7_seater",
     label: "Mercedes-Benz EQB 7-Seater (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 178,
     massTonnes: 2.18,
@@ -5928,6 +6465,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqb:2024:eqb_7_seater",
     label: "Mercedes-Benz EQB 7-Seater (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 178,
     massTonnes: 2.18,
@@ -5939,6 +6477,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqb:2025:eqb_7_seater",
     label: "Mercedes-Benz EQB 7-Seater (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 60,
     baseWhPerKm: 178,
     massTonnes: 2.18,
@@ -5950,6 +6489,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe:2023:eqe",
     label: "Mercedes-Benz EQE (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 185,
     massTonnes: 2.34,
@@ -5961,6 +6501,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe:2024:eqe",
     label: "Mercedes-Benz EQE (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 185,
     massTonnes: 2.34,
@@ -5972,6 +6513,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe:2025:eqe",
     label: "Mercedes-Benz EQE (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 185,
     massTonnes: 2.34,
@@ -5983,6 +6525,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe:2023:eqe_350_plus",
     label: "Mercedes-Benz EQE 350+ (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 171,
     massTonnes: 2.34,
@@ -5994,6 +6537,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe:2024:eqe_350_plus",
     label: "Mercedes-Benz EQE 350+ (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 171,
     massTonnes: 2.34,
@@ -6005,6 +6549,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe:2025:eqe_350_plus",
     label: "Mercedes-Benz EQE 350+ (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 171,
     massTonnes: 2.34,
@@ -6016,6 +6561,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe:2023:eqe_500_4matic",
     label: "Mercedes-Benz EQE 500 4MATIC (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 193,
     massTonnes: 2.52,
@@ -6027,6 +6573,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe:2024:eqe_500_4matic",
     label: "Mercedes-Benz EQE 500 4MATIC (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 193,
     massTonnes: 2.52,
@@ -6038,6 +6585,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe:2025:eqe_500_4matic",
     label: "Mercedes-Benz EQE 500 4MATIC (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 193,
     massTonnes: 2.52,
@@ -6049,6 +6597,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe:2023:eqe_53_amg",
     label: "Mercedes-Benz EQE 53 AMG (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 209,
     massTonnes: 2.58,
@@ -6060,6 +6609,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe:2024:eqe_53_amg",
     label: "Mercedes-Benz EQE 53 AMG (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 209,
     massTonnes: 2.58,
@@ -6071,6 +6621,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe:2025:eqe_53_amg",
     label: "Mercedes-Benz EQE 53 AMG (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 209,
     massTonnes: 2.58,
@@ -6082,6 +6633,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe_suv:2023:eqe_suv",
     label: "Mercedes-Benz EQE SUV (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 200,
     massTonnes: 2.45,
@@ -6093,6 +6645,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe_suv:2024:eqe_suv",
     label: "Mercedes-Benz EQE SUV (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 200,
     massTonnes: 2.45,
@@ -6104,6 +6657,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe_suv:2025:eqe_suv",
     label: "Mercedes-Benz EQE SUV (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 200,
     massTonnes: 2.45,
@@ -6115,6 +6669,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe_suv:2023:eqe_suv_500_4matic",
     label: "Mercedes-Benz EQE SUV 500 4MATIC (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 207,
     massTonnes: 2.63,
@@ -6126,6 +6681,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe_suv:2024:eqe_suv_500_4matic",
     label: "Mercedes-Benz EQE SUV 500 4MATIC (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 207,
     massTonnes: 2.63,
@@ -6137,6 +6693,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe_suv:2025:eqe_suv_500_4matic",
     label: "Mercedes-Benz EQE SUV 500 4MATIC (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 207,
     massTonnes: 2.63,
@@ -6148,6 +6705,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe_suv:2023:eqe_suv_53_amg",
     label: "Mercedes-Benz EQE SUV 53 AMG (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 225,
     massTonnes: 2.69,
@@ -6159,6 +6717,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe_suv:2024:eqe_suv_53_amg",
     label: "Mercedes-Benz EQE SUV 53 AMG (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 225,
     massTonnes: 2.69,
@@ -6170,6 +6729,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqe_suv:2025:eqe_suv_53_amg",
     label: "Mercedes-Benz EQE SUV 53 AMG (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 84,
     baseWhPerKm: 225,
     massTonnes: 2.69,
@@ -6181,6 +6741,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqs:2023:eqs",
     label: "Mercedes-Benz EQS (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 100,
     baseWhPerKm: 178,
     massTonnes: 2.48,
@@ -6192,6 +6753,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqs:2024:eqs",
     label: "Mercedes-Benz EQS (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 100,
     baseWhPerKm: 178,
     massTonnes: 2.48,
@@ -6203,6 +6765,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqs:2025:eqs",
     label: "Mercedes-Benz EQS (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 110,
     baseWhPerKm: 192,
     massTonnes: 2.48,
@@ -6214,6 +6777,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqs:2023:eqs_53_amg",
     label: "Mercedes-Benz EQS 53 AMG (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 100,
     baseWhPerKm: 239,
     massTonnes: 2.72,
@@ -6225,6 +6789,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqs:2024:eqs_53_amg",
     label: "Mercedes-Benz EQS 53 AMG (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 100,
     baseWhPerKm: 239,
     massTonnes: 2.72,
@@ -6236,6 +6801,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqs:2025:eqs_53_amg",
     label: "Mercedes-Benz EQS 53 AMG (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 110,
     baseWhPerKm: 256,
     massTonnes: 2.72,
@@ -6247,6 +6813,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqs:2023:eqs_580_4matic",
     label: "Mercedes-Benz EQS 580 4MATIC (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 100,
     baseWhPerKm: 194,
     massTonnes: 2.65,
@@ -6258,6 +6825,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqs:2024:eqs_580_4matic",
     label: "Mercedes-Benz EQS 580 4MATIC (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 100,
     baseWhPerKm: 194,
     massTonnes: 2.65,
@@ -6269,6 +6837,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqs:2025:eqs_580_4matic",
     label: "Mercedes-Benz EQS 580 4MATIC (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 110,
     baseWhPerKm: 209,
     massTonnes: 2.65,
@@ -6280,6 +6849,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqs_suv:2023:eqs_suv",
     label: "Mercedes-Benz EQS SUV (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 100,
     baseWhPerKm: 211,
     massTonnes: 2.65,
@@ -6291,6 +6861,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqs_suv:2024:eqs_suv",
     label: "Mercedes-Benz EQS SUV (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 100,
     baseWhPerKm: 211,
     massTonnes: 2.65,
@@ -6302,6 +6873,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqs_suv:2025:eqs_suv",
     label: "Mercedes-Benz EQS SUV (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 110,
     baseWhPerKm: 227,
     massTonnes: 2.65,
@@ -6313,6 +6885,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqs_suv:2023:eqs_suv_53_amg",
     label: "Mercedes-Benz EQS SUV 53 AMG (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 100,
     baseWhPerKm: 287,
     massTonnes: 2.89,
@@ -6324,6 +6897,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqs_suv:2024:eqs_suv_53_amg",
     label: "Mercedes-Benz EQS SUV 53 AMG (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 100,
     baseWhPerKm: 287,
     massTonnes: 2.89,
@@ -6335,6 +6909,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqs_suv:2025:eqs_suv_53_amg",
     label: "Mercedes-Benz EQS SUV 53 AMG (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 110,
     baseWhPerKm: 306,
     massTonnes: 2.89,
@@ -6346,6 +6921,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqs_suv:2023:eqs_suv_580_4matic",
     label: "Mercedes-Benz EQS SUV 580 4MATIC (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 100,
     baseWhPerKm: 233,
     massTonnes: 2.82,
@@ -6357,6 +6933,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqs_suv:2024:eqs_suv_580_4matic",
     label: "Mercedes-Benz EQS SUV 580 4MATIC (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 100,
     baseWhPerKm: 233,
     massTonnes: 2.82,
@@ -6368,6 +6945,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqs_suv:2025:eqs_suv_580_4matic",
     label: "Mercedes-Benz EQS SUV 580 4MATIC (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 110,
     baseWhPerKm: 249,
     massTonnes: 2.82,
@@ -6379,6 +6957,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqv:2023:eqv",
     label: "Mercedes-Benz EQV (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 55,
     baseWhPerKm: 184,
     massTonnes: 2.65,
@@ -6390,6 +6969,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqv:2024:eqv",
     label: "Mercedes-Benz EQV (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 55,
     baseWhPerKm: 184,
     massTonnes: 2.65,
@@ -6401,6 +6981,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqv:2025:eqv",
     label: "Mercedes-Benz EQV (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 55,
     baseWhPerKm: 184,
     massTonnes: 2.65,
@@ -6412,6 +6993,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqv:2023:eqv_long_range",
     label: "Mercedes-Benz EQV Long Range (2023)",
+    make: "Mercedes-Benz",
     batteryKwh: 85,
     baseWhPerKm: 284,
     massTonnes: 2.85,
@@ -6423,6 +7005,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqv:2024:eqv_long_range",
     label: "Mercedes-Benz EQV Long Range (2024)",
+    make: "Mercedes-Benz",
     batteryKwh: 85,
     baseWhPerKm: 284,
     massTonnes: 2.85,
@@ -6434,6 +7017,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:eqv:2025:eqv_long_range",
     label: "Mercedes-Benz EQV Long Range (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 85,
     baseWhPerKm: 284,
     massTonnes: 2.85,
@@ -6445,6 +7029,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mercedes_benz:g_580_eq:2025:g_580_eq",
     label: "Mercedes-Benz G 580 EQ (2025)",
+    make: "Mercedes-Benz",
     batteryKwh: 108,
     baseWhPerKm: 320,
     massTonnes: 3.085,
@@ -6456,6 +7041,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mg:cyberster:2025:cyberster",
     label: "MG Motor Cyberster (2025)",
+    make: "MG Motor",
     batteryKwh: 73,
     baseWhPerKm: 260,
     massTonnes: 1.985,
@@ -6467,6 +7053,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mg:mg4:2023:mg4",
     label: "MG Motor MG4 Standard (2023)",
+    make: "MG Motor",
     batteryKwh: 49,
     baseWhPerKm: 171,
     massTonnes: 1.685,
@@ -6478,6 +7065,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mg:mg4:2024:mg4",
     label: "MG Motor MG4 Standard (2024)",
+    make: "MG Motor",
     batteryKwh: 49,
     baseWhPerKm: 171,
     massTonnes: 1.685,
@@ -6489,6 +7077,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mg:mg4:2025:mg4",
     label: "MG Motor MG4 Standard (2025)",
+    make: "MG Motor",
     batteryKwh: 49,
     baseWhPerKm: 171,
     massTonnes: 1.685,
@@ -6500,6 +7089,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mg:mg4:2023:mg4_long_range",
     label: "MG Motor MG4 Standard Long Range (2023)",
+    make: "MG Motor",
     batteryKwh: 61,
     baseWhPerKm: 165,
     massTonnes: 1.72,
@@ -6511,6 +7101,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mg:mg4:2024:mg4_long_range",
     label: "MG Motor MG4 Standard Long Range (2024)",
+    make: "MG Motor",
     batteryKwh: 61,
     baseWhPerKm: 165,
     massTonnes: 1.72,
@@ -6522,6 +7113,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mg:mg4:2025:mg4_long_range",
     label: "MG Motor MG4 Standard Long Range (2025)",
+    make: "MG Motor",
     batteryKwh: 61,
     baseWhPerKm: 165,
     massTonnes: 1.72,
@@ -6533,6 +7125,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mg:mg4:2023:mg4_standard_range",
     label: "MG Motor MG4 Standard Range (2023)",
+    make: "MG Motor",
     batteryKwh: 49,
     baseWhPerKm: 171,
     massTonnes: 1.685,
@@ -6544,6 +7137,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mg:mg4:2024:mg4_standard_range",
     label: "MG Motor MG4 Standard Range (2024)",
+    make: "MG Motor",
     batteryKwh: 49,
     baseWhPerKm: 171,
     massTonnes: 1.685,
@@ -6555,6 +7149,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mg:mg4:2025:mg4_standard_range",
     label: "MG Motor MG4 Standard Range (2025)",
+    make: "MG Motor",
     batteryKwh: 49,
     baseWhPerKm: 171,
     massTonnes: 1.685,
@@ -6566,6 +7161,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mg:mg4:2023:mg4_trophy",
     label: "MG Motor MG4 Trophy (2023)",
+    make: "MG Motor",
     batteryKwh: 61,
     baseWhPerKm: 165,
     massTonnes: 1.72,
@@ -6577,6 +7173,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mg:mg4:2024:mg4_trophy",
     label: "MG Motor MG4 Trophy (2024)",
+    make: "MG Motor",
     batteryKwh: 61,
     baseWhPerKm: 165,
     massTonnes: 1.72,
@@ -6588,6 +7185,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mg:mg4:2025:mg4_trophy",
     label: "MG Motor MG4 Trophy (2025)",
+    make: "MG Motor",
     batteryKwh: 61,
     baseWhPerKm: 165,
     massTonnes: 1.72,
@@ -6599,6 +7197,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mg:mg4:2023:mg4_xpower",
     label: "MG Motor MG4 XPower (2023)",
+    make: "MG Motor",
     batteryKwh: 61,
     baseWhPerKm: 193,
     massTonnes: 1.785,
@@ -6610,6 +7209,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mg:mg4:2024:mg4_xpower",
     label: "MG Motor MG4 XPower (2024)",
+    make: "MG Motor",
     batteryKwh: 61,
     baseWhPerKm: 193,
     massTonnes: 1.785,
@@ -6621,6 +7221,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mg:mg4:2025:mg4_xpower",
     label: "MG Motor MG4 XPower (2025)",
+    make: "MG Motor",
     batteryKwh: 61,
     baseWhPerKm: 193,
     massTonnes: 1.785,
@@ -6632,6 +7233,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mg:s5:2025:s5",
     label: "MG Motor S5 Luxury (2025)",
+    make: "MG Motor",
     batteryKwh: 64,
     baseWhPerKm: 222,
     massTonnes: 1.85,
@@ -6643,6 +7245,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mini:cooper_se:2023:cooper_se",
     label: "Mini Cooper SE (2023)",
+    make: "Mini",
     batteryKwh: 28.9,
     baseWhPerKm: 151,
     massTonnes: 1.365,
@@ -6654,6 +7257,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mini:cooper_se:2024:cooper_se",
     label: "Mini Cooper SE (2024)",
+    make: "Mini",
     batteryKwh: 51,
     baseWhPerKm: 205,
     massTonnes: 1.42,
@@ -6665,6 +7269,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mini:cooper_se:2025:cooper_se",
     label: "Mini Cooper SE (2025)",
+    make: "Mini",
     batteryKwh: 51,
     baseWhPerKm: 205,
     massTonnes: 1.42,
@@ -6676,6 +7281,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mini:countryman:2024:countryman",
     label: "Mini Countryman E (2024)",
+    make: "Mini",
     batteryKwh: 64.7,
     baseWhPerKm: 171,
     massTonnes: 1.95,
@@ -6687,6 +7293,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mini:countryman:2025:countryman",
     label: "Mini Countryman E (2025)",
+    make: "Mini",
     batteryKwh: 64.7,
     baseWhPerKm: 171,
     massTonnes: 1.95,
@@ -6698,6 +7305,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mini:countryman:2024:countryman_se_all4",
     label: "Mini Countryman E SE ALL4 (2024)",
+    make: "Mini",
     batteryKwh: 64.7,
     baseWhPerKm: 183,
     massTonnes: 2.05,
@@ -6709,6 +7317,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mini:countryman:2025:countryman_se_all4",
     label: "Mini Countryman E SE ALL4 (2025)",
+    make: "Mini",
     batteryKwh: 64.7,
     baseWhPerKm: 183,
     massTonnes: 2.05,
@@ -6720,6 +7329,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "mitsubishi:eclipse_cross_ev:2025:eclipse_cross_ev",
     label: "Mitsubishi Eclipse Cross EV (2025)",
+    make: "Mitsubishi",
     batteryKwh: 87,
     baseWhPerKm: 177,
     massTonnes: 2.2,
@@ -6731,6 +7341,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nammi:01:2023:01",
     label: "Nammi 01 (2023)",
+    make: "Nammi",
     batteryKwh: 29.5,
     baseWhPerKm: 124,
     massTonnes: 1.2,
@@ -6742,6 +7353,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nammi:01:2024:01",
     label: "Nammi 01 (2024)",
+    make: "Nammi",
     batteryKwh: 29.5,
     baseWhPerKm: 124,
     massTonnes: 1.2,
@@ -6753,6 +7365,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nammi:01:2025:01",
     label: "Nammi 01 (2025)",
+    make: "Nammi",
     batteryKwh: 29.5,
     baseWhPerKm: 124,
     massTonnes: 1.2,
@@ -6764,6 +7377,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nammi:01:2023:01_42_3kwh",
     label: "Nammi 01 42.3 kWh (2023)",
+    make: "Nammi",
     batteryKwh: 40,
     baseWhPerKm: 129,
     massTonnes: 1.28,
@@ -6775,6 +7389,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nammi:01:2024:01_42_3kwh",
     label: "Nammi 01 42.3 kWh (2024)",
+    make: "Nammi",
     batteryKwh: 40,
     baseWhPerKm: 129,
     massTonnes: 1.28,
@@ -6786,6 +7401,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nammi:01:2025:01_42_3kwh",
     label: "Nammi 01 42.3 kWh (2025)",
+    make: "Nammi",
     batteryKwh: 40,
     baseWhPerKm: 129,
     massTonnes: 1.28,
@@ -6797,6 +7413,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nammi:06:2023:06",
     label: "Nammi 06 (2023)",
+    make: "Nammi",
     batteryKwh: 42.5,
     baseWhPerKm: 147,
     massTonnes: 1.975,
@@ -6808,6 +7425,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nammi:06:2024:06",
     label: "Nammi 06 (2024)",
+    make: "Nammi",
     batteryKwh: 42.5,
     baseWhPerKm: 147,
     massTonnes: 1.975,
@@ -6819,6 +7437,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nammi:06:2025:06",
     label: "Nammi 06 (2025)",
+    make: "Nammi",
     batteryKwh: 42.5,
     baseWhPerKm: 147,
     massTonnes: 1.975,
@@ -6830,6 +7449,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nammi:06:2023:06_51_87kwh",
     label: "Nammi 06 51.87 kWh (2023)",
+    make: "Nammi",
     batteryKwh: 49,
     baseWhPerKm: 144,
     massTonnes: 2.05,
@@ -6841,6 +7461,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nammi:06:2024:06_51_87kwh",
     label: "Nammi 06 51.87 kWh (2024)",
+    make: "Nammi",
     batteryKwh: 49,
     baseWhPerKm: 144,
     massTonnes: 2.05,
@@ -6852,6 +7473,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nammi:06:2025:06_51_87kwh",
     label: "Nammi 06 51.87 kWh (2025)",
+    make: "Nammi",
     batteryKwh: 49,
     baseWhPerKm: 144,
     massTonnes: 2.05,
@@ -6863,6 +7485,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:ec6:2023:ec6",
     label: "NIO EC6 (2023)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 209,
     massTonnes: 2.35,
@@ -6874,6 +7497,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:ec6:2024:ec6",
     label: "NIO EC6 (2024)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 209,
     massTonnes: 2.35,
@@ -6885,6 +7509,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:ec6:2025:ec6",
     label: "NIO EC6 (2025)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 209,
     massTonnes: 2.35,
@@ -6896,6 +7521,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:ec6:2023:ec6_100kwh",
     label: "NIO EC6 100 kWh (2023)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 213,
     massTonnes: 2.35,
@@ -6907,6 +7533,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:ec6:2024:ec6_100kwh",
     label: "NIO EC6 100 kWh (2024)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 213,
     massTonnes: 2.35,
@@ -6918,6 +7545,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:ec6:2025:ec6_100kwh",
     label: "NIO EC6 100 kWh (2025)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 213,
     massTonnes: 2.35,
@@ -6929,6 +7557,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:ec6:2023:ec6_150kwh",
     label: "NIO EC6 150 kWh (2023)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 216,
     massTonnes: 2.35,
@@ -6940,6 +7569,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:ec6:2024:ec6_150kwh",
     label: "NIO EC6 150 kWh (2024)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 216,
     massTonnes: 2.35,
@@ -6951,6 +7581,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:ec6:2025:ec6_150kwh",
     label: "NIO EC6 150 kWh (2025)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 216,
     massTonnes: 2.35,
@@ -6962,6 +7593,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:ec7:2023:ec7",
     label: "NIO EC7 (2023)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 200,
     massTonnes: 2.4,
@@ -6973,6 +7605,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:ec7:2024:ec7",
     label: "NIO EC7 (2024)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 200,
     massTonnes: 2.4,
@@ -6984,6 +7617,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:ec7:2025:ec7",
     label: "NIO EC7 (2025)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 200,
     massTonnes: 2.4,
@@ -6995,6 +7629,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:ec7:2023:ec7_100kwh",
     label: "NIO EC7 100 kWh (2023)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 208,
     massTonnes: 2.4,
@@ -7006,6 +7641,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:ec7:2024:ec7_100kwh",
     label: "NIO EC7 100 kWh (2024)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 208,
     massTonnes: 2.4,
@@ -7017,6 +7653,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:ec7:2025:ec7_100kwh",
     label: "NIO EC7 100 kWh (2025)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 208,
     massTonnes: 2.4,
@@ -7028,6 +7665,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:ec7:2023:ec7_150kwh",
     label: "NIO EC7 150 kWh (2023)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 209,
     massTonnes: 2.4,
@@ -7039,6 +7677,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:ec7:2024:ec7_150kwh",
     label: "NIO EC7 150 kWh (2024)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 209,
     massTonnes: 2.4,
@@ -7050,6 +7689,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:ec7:2025:ec7_150kwh",
     label: "NIO EC7 150 kWh (2025)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 209,
     massTonnes: 2.4,
@@ -7061,6 +7701,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es6:2023:es6",
     label: "NIO ES6 (2023)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 209,
     massTonnes: 2.35,
@@ -7072,6 +7713,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es6:2024:es6",
     label: "NIO ES6 (2024)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 209,
     massTonnes: 2.35,
@@ -7083,6 +7725,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es6:2025:es6",
     label: "NIO ES6 (2025)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 209,
     massTonnes: 2.35,
@@ -7094,6 +7737,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es6:2023:es6_100kwh",
     label: "NIO ES6 100 kWh (2023)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 213,
     massTonnes: 2.35,
@@ -7105,6 +7749,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es6:2024:es6_100kwh",
     label: "NIO ES6 100 kWh (2024)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 213,
     massTonnes: 2.35,
@@ -7116,6 +7761,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es6:2025:es6_100kwh",
     label: "NIO ES6 100 kWh (2025)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 213,
     massTonnes: 2.35,
@@ -7127,6 +7773,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es6:2023:es6_150kwh",
     label: "NIO ES6 150 kWh (2023)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 216,
     massTonnes: 2.35,
@@ -7138,6 +7785,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es6:2024:es6_150kwh",
     label: "NIO ES6 150 kWh (2024)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 216,
     massTonnes: 2.35,
@@ -7149,6 +7797,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es6:2025:es6_150kwh",
     label: "NIO ES6 150 kWh (2025)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 216,
     massTonnes: 2.35,
@@ -7160,6 +7809,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es7:2023:es7",
     label: "NIO ES7 (2023)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 200,
     massTonnes: 2.4,
@@ -7171,6 +7821,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es7:2024:es7",
     label: "NIO ES7 (2024)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 200,
     massTonnes: 2.4,
@@ -7182,6 +7833,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es7:2025:es7",
     label: "NIO ES7 (2025)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 200,
     massTonnes: 2.4,
@@ -7193,6 +7845,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es7:2023:es7_100kwh",
     label: "NIO ES7 100 kWh (2023)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 208,
     massTonnes: 2.4,
@@ -7204,6 +7857,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es7:2024:es7_100kwh",
     label: "NIO ES7 100 kWh (2024)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 208,
     massTonnes: 2.4,
@@ -7215,6 +7869,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es7:2025:es7_100kwh",
     label: "NIO ES7 100 kWh (2025)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 208,
     massTonnes: 2.4,
@@ -7226,6 +7881,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es7:2023:es7_150kwh",
     label: "NIO ES7 150 kWh (2023)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 209,
     massTonnes: 2.4,
@@ -7237,6 +7893,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es7:2024:es7_150kwh",
     label: "NIO ES7 150 kWh (2024)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 209,
     massTonnes: 2.4,
@@ -7248,6 +7905,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es7:2025:es7_150kwh",
     label: "NIO ES7 150 kWh (2025)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 209,
     massTonnes: 2.4,
@@ -7259,6 +7917,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es8:2023:es8",
     label: "NIO ES8 (2023)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 209,
     massTonnes: 2.45,
@@ -7270,6 +7929,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es8:2024:es8",
     label: "NIO ES8 (2024)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 209,
     massTonnes: 2.45,
@@ -7281,6 +7941,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es8:2025:es8",
     label: "NIO ES8 (2025)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 209,
     massTonnes: 2.5,
@@ -7292,6 +7953,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es8:2023:es8_100kwh",
     label: "NIO ES8 100 kWh (2023)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 213,
     massTonnes: 2.45,
@@ -7303,6 +7965,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es8:2024:es8_100kwh",
     label: "NIO ES8 100 kWh (2024)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 213,
     massTonnes: 2.45,
@@ -7314,6 +7977,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es8:2025:es8_100kwh",
     label: "NIO ES8 100 kWh (2025)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 213,
     massTonnes: 2.5,
@@ -7325,6 +7989,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es8:2023:es8_150kwh",
     label: "NIO ES8 150 kWh (2023)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 216,
     massTonnes: 2.45,
@@ -7336,6 +8001,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es8:2024:es8_150kwh",
     label: "NIO ES8 150 kWh (2024)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 216,
     massTonnes: 2.45,
@@ -7347,6 +8013,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:es8:2025:es8_150kwh",
     label: "NIO ES8 150 kWh (2025)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 216,
     massTonnes: 2.5,
@@ -7358,6 +8025,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:et5:2023:et5",
     label: "NIO ET5 (2023)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 177,
     massTonnes: 2.15,
@@ -7369,6 +8037,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:et5:2024:et5",
     label: "NIO ET5 (2024)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 177,
     massTonnes: 2.15,
@@ -7380,6 +8049,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:et5:2025:et5",
     label: "NIO ET5 (2025)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 177,
     massTonnes: 2.15,
@@ -7391,6 +8061,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:et5:2023:et5_100kwh",
     label: "NIO ET5 100 kWh (2023)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 185,
     massTonnes: 2.15,
@@ -7402,6 +8073,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:et5:2024:et5_100kwh",
     label: "NIO ET5 100 kWh (2024)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 185,
     massTonnes: 2.15,
@@ -7413,6 +8085,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:et5:2025:et5_100kwh",
     label: "NIO ET5 100 kWh (2025)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 185,
     massTonnes: 2.15,
@@ -7424,6 +8097,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:et5:2023:et5_150kwh",
     label: "NIO ET5 150 kWh (2023)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 194,
     massTonnes: 2.15,
@@ -7435,6 +8109,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:et5:2024:et5_150kwh",
     label: "NIO ET5 150 kWh (2024)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 194,
     massTonnes: 2.15,
@@ -7446,6 +8121,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:et5:2025:et5_150kwh",
     label: "NIO ET5 150 kWh (2025)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 194,
     massTonnes: 2.15,
@@ -7457,6 +8133,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:et7:2023:et7",
     label: "NIO ET7 (2023)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 194,
     massTonnes: 2.3,
@@ -7468,6 +8145,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:et7:2024:et7",
     label: "NIO ET7 (2024)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 194,
     massTonnes: 2.3,
@@ -7479,6 +8157,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:et7:2025:et7",
     label: "NIO ET7 (2025)",
+    make: "NIO",
     batteryKwh: 70,
     baseWhPerKm: 194,
     massTonnes: 2.3,
@@ -7490,6 +8169,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:et7:2023:et7_100kwh",
     label: "NIO ET7 100 kWh (2023)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 185,
     massTonnes: 2.3,
@@ -7501,6 +8181,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:et7:2024:et7_100kwh",
     label: "NIO ET7 100 kWh (2024)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 185,
     massTonnes: 2.3,
@@ -7512,6 +8193,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:et7:2025:et7_100kwh",
     label: "NIO ET7 100 kWh (2025)",
+    make: "NIO",
     batteryKwh: 93,
     baseWhPerKm: 185,
     massTonnes: 2.3,
@@ -7523,6 +8205,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:et7:2023:et7_150kwh",
     label: "NIO ET7 150 kWh (2023)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 194,
     massTonnes: 2.3,
@@ -7534,6 +8217,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:et7:2024:et7_150kwh",
     label: "NIO ET7 150 kWh (2024)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 194,
     massTonnes: 2.3,
@@ -7545,6 +8229,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:et7:2025:et7_150kwh",
     label: "NIO ET7 150 kWh (2025)",
+    make: "NIO",
     batteryKwh: 140,
     baseWhPerKm: 185,
     massTonnes: 2.3,
@@ -7556,6 +8241,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:et9:2025:et9",
     label: "NIO ET9 (2025)",
+    make: "NIO",
     batteryKwh: 111,
     baseWhPerKm: 237,
     massTonnes: 2.55,
@@ -7567,6 +8253,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nio:firefly_ev:2025:firefly_ev",
     label: "NIO Firefly EV (2025)",
+    make: "NIO",
     batteryKwh: 57,
     baseWhPerKm: 198,
     massTonnes: 1.65,
@@ -7578,6 +8265,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nissan:ariya:2023:ariya",
     label: "Nissan Ariya Engage (2023)",
+    make: "Nissan",
     batteryKwh: 63,
     baseWhPerKm: 179,
     massTonnes: 1.92,
@@ -7589,6 +8277,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nissan:ariya:2024:ariya",
     label: "Nissan Ariya Engage (2024)",
+    make: "Nissan",
     batteryKwh: 63,
     baseWhPerKm: 179,
     massTonnes: 1.92,
@@ -7600,6 +8289,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nissan:ariya:2025:ariya",
     label: "Nissan Ariya Engage (2025)",
+    make: "Nissan",
     batteryKwh: 63,
     baseWhPerKm: 179,
     massTonnes: 1.92,
@@ -7611,6 +8301,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nissan:ariya:2023:ariya_87_kwh",
     label: "Nissan Ariya Engage 87 kWh (2023)",
+    make: "Nissan",
     batteryKwh: 87,
     baseWhPerKm: 212,
     massTonnes: 2.1,
@@ -7622,6 +8313,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nissan:ariya:2024:ariya_87_kwh",
     label: "Nissan Ariya Engage 87 kWh (2024)",
+    make: "Nissan",
     batteryKwh: 87,
     baseWhPerKm: 212,
     massTonnes: 2.1,
@@ -7633,6 +8325,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nissan:ariya:2025:ariya_87_kwh",
     label: "Nissan Ariya Engage 87 kWh (2025)",
+    make: "Nissan",
     batteryKwh: 87,
     baseWhPerKm: 212,
     massTonnes: 2.1,
@@ -7644,6 +8337,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nissan:ariya:2023:ariya_awd",
     label: "Nissan Ariya Engage AWD e-4ORCE (2023)",
+    make: "Nissan",
     batteryKwh: 63,
     baseWhPerKm: 179,
     massTonnes: 2.2,
@@ -7655,6 +8349,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nissan:ariya:2024:ariya_awd",
     label: "Nissan Ariya Engage AWD e-4ORCE (2024)",
+    make: "Nissan",
     batteryKwh: 63,
     baseWhPerKm: 179,
     massTonnes: 2.2,
@@ -7666,6 +8361,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nissan:ariya:2025:ariya_awd",
     label: "Nissan Ariya Engage AWD e-4ORCE (2025)",
+    make: "Nissan",
     batteryKwh: 63,
     baseWhPerKm: 179,
     massTonnes: 2.2,
@@ -7677,6 +8373,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nissan:ariya:2023:ariya_awd_87_kwh",
     label: "Nissan Ariya Engage AWD e-4ORCE 87 kWh (2023)",
+    make: "Nissan",
     batteryKwh: 87,
     baseWhPerKm: 226,
     massTonnes: 2.3,
@@ -7688,6 +8385,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nissan:ariya:2024:ariya_awd_87_kwh",
     label: "Nissan Ariya Engage AWD e-4ORCE 87 kWh (2024)",
+    make: "Nissan",
     batteryKwh: 87,
     baseWhPerKm: 226,
     massTonnes: 2.3,
@@ -7699,6 +8397,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nissan:ariya:2025:ariya_awd_87_kwh",
     label: "Nissan Ariya Engage AWD e-4ORCE 87 kWh (2025)",
+    make: "Nissan",
     batteryKwh: 87,
     baseWhPerKm: 226,
     massTonnes: 2.3,
@@ -7710,6 +8409,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nissan:ariya_nismo:2025:ariya_nismo",
     label: "Nissan Ariya Nismo (2025)",
+    make: "Nissan",
     batteryKwh: 66,
     baseWhPerKm: 192,
     massTonnes: 2.15,
@@ -7721,6 +8421,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nissan:ariya_nismo:2025:ariya_nismo_b9",
     label: "Nissan Ariya Nismo B9 (2025)",
+    make: "Nissan",
     batteryKwh: 91,
     baseWhPerKm: 222,
     massTonnes: 2.3,
@@ -7732,6 +8433,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nissan:leaf:2023:leaf",
     label: "Nissan LEAF (2023)",
+    make: "Nissan",
     batteryKwh: 40,
     baseWhPerKm: 181,
     massTonnes: 1.58,
@@ -7743,6 +8445,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nissan:leaf:2024:leaf",
     label: "Nissan LEAF (2024)",
+    make: "Nissan",
     batteryKwh: 40,
     baseWhPerKm: 181,
     massTonnes: 1.58,
@@ -7754,6 +8457,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nissan:leaf:2023:leaf_62_kwh",
     label: "Nissan LEAF 62 kWh (2023)",
+    make: "Nissan",
     batteryKwh: 62,
     baseWhPerKm: 196,
     massTonnes: 1.68,
@@ -7765,6 +8469,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nissan:leaf:2024:leaf_62_kwh",
     label: "Nissan LEAF 62 kWh (2024)",
+    make: "Nissan",
     batteryKwh: 62,
     baseWhPerKm: 196,
     massTonnes: 1.68,
@@ -7776,6 +8481,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nissan:micra_ev:2025:micra_ev",
     label: "Nissan Micra EV (2025)",
+    make: "Nissan",
     batteryKwh: 40,
     baseWhPerKm: 158,
     massTonnes: 1.45,
@@ -7787,6 +8493,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "nissan:micra_ev:2025:micra_ev_52_kwh",
     label: "Nissan Micra EV 52 kWh (2025)",
+    make: "Nissan",
     batteryKwh: 52,
     baseWhPerKm: 155,
     massTonnes: 1.52,
@@ -7798,6 +8505,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "peugeot:e_2008:2023:e_2008",
     label: "Peugeot e-2008 (2023)",
+    make: "Peugeot",
     batteryKwh: 46,
     baseWhPerKm: 163,
     massTonnes: 1.55,
@@ -7809,6 +8517,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "peugeot:e_2008:2024:e_2008",
     label: "Peugeot e-2008 (2024)",
+    make: "Peugeot",
     batteryKwh: 50,
     baseWhPerKm: 150,
     massTonnes: 1.55,
@@ -7820,6 +8529,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "peugeot:e_2008:2025:e_2008",
     label: "Peugeot e-2008 (2025)",
+    make: "Peugeot",
     batteryKwh: 50,
     baseWhPerKm: 150,
     massTonnes: 1.55,
@@ -7831,6 +8541,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "peugeot:e_208:2023:e_208",
     label: "Peugeot e-208 (2023)",
+    make: "Peugeot",
     batteryKwh: 46,
     baseWhPerKm: 155,
     massTonnes: 1.455,
@@ -7842,6 +8553,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "peugeot:e_208:2024:e_208",
     label: "Peugeot e-208 (2024)",
+    make: "Peugeot",
     batteryKwh: 50,
     baseWhPerKm: 152,
     massTonnes: 1.455,
@@ -7853,6 +8565,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "peugeot:e_208:2025:e_208",
     label: "Peugeot e-208 (2025)",
+    make: "Peugeot",
     batteryKwh: 50,
     baseWhPerKm: 149,
     massTonnes: 1.455,
@@ -7864,6 +8577,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "peugeot:e_3008:2023:e_3008",
     label: "Peugeot e-3008 (2023)",
+    make: "Peugeot",
     batteryKwh: 70,
     baseWhPerKm: 163,
     massTonnes: 2.2,
@@ -7875,6 +8589,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "peugeot:e_3008:2024:e_3008",
     label: "Peugeot e-3008 (2024)",
+    make: "Peugeot",
     batteryKwh: 70,
     baseWhPerKm: 163,
     massTonnes: 2.2,
@@ -7886,6 +8601,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "peugeot:e_3008:2025:e_3008",
     label: "Peugeot e-3008 (2025)",
+    make: "Peugeot",
     batteryKwh: 70,
     baseWhPerKm: 163,
     massTonnes: 2.2,
@@ -7897,6 +8613,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "peugeot:e_3008:2025:e_3008_dual_motor",
     label: "Peugeot e-3008 Dual Motor (2025)",
+    make: "Peugeot",
     batteryKwh: 70,
     baseWhPerKm: 174,
     massTonnes: 2.2,
@@ -7908,6 +8625,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "peugeot:e_3008:2024:e_3008_long_range",
     label: "Peugeot e-3008 Long Range (2024)",
+    make: "Peugeot",
     batteryKwh: 96.9,
     baseWhPerKm: 169,
     massTonnes: 2.2,
@@ -7919,6 +8637,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "peugeot:e_3008:2025:e_3008_long_range",
     label: "Peugeot e-3008 Long Range (2025)",
+    make: "Peugeot",
     batteryKwh: 96.9,
     baseWhPerKm: 169,
     massTonnes: 2.2,
@@ -7930,6 +8649,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "peugeot:e_408:2024:e_408",
     label: "Peugeot e-408 (2024)",
+    make: "Peugeot",
     batteryKwh: 70,
     baseWhPerKm: 188,
     massTonnes: 1.9,
@@ -7941,6 +8661,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "peugeot:e_408:2025:e_408",
     label: "Peugeot e-408 (2025)",
+    make: "Peugeot",
     batteryKwh: 70,
     baseWhPerKm: 188,
     massTonnes: 1.9,
@@ -7952,6 +8673,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "peugeot:e_5008:2024:e_5008",
     label: "Peugeot e-5008 (2024)",
+    make: "Peugeot",
     batteryKwh: 70,
     baseWhPerKm: 171,
     massTonnes: 2.2,
@@ -7963,6 +8685,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "peugeot:e_5008:2025:e_5008",
     label: "Peugeot e-5008 (2025)",
+    make: "Peugeot",
     batteryKwh: 70,
     baseWhPerKm: 171,
     massTonnes: 2.2,
@@ -7974,6 +8697,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "peugeot:e_5008:2025:e_5008_dual_motor",
     label: "Peugeot e-5008 Dual Motor (2025)",
+    make: "Peugeot",
     batteryKwh: 70,
     baseWhPerKm: 183,
     massTonnes: 2.2,
@@ -7985,6 +8709,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "peugeot:e_5008:2024:e_5008_long_range",
     label: "Peugeot e-5008 Long Range (2024)",
+    make: "Peugeot",
     batteryKwh: 96.9,
     baseWhPerKm: 177,
     massTonnes: 2.2,
@@ -7996,6 +8721,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "peugeot:e_5008:2025:e_5008_long_range",
     label: "Peugeot e-5008 Long Range (2025)",
+    make: "Peugeot",
     batteryKwh: 96.9,
     baseWhPerKm: 177,
     massTonnes: 2.2,
@@ -8007,6 +8733,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "polestar:polestar_2:2023:polestar_2",
     label: "Polestar 2 Long Range Dual Motor (2023)",
+    make: "Polestar",
     batteryKwh: 75,
     baseWhPerKm: 179,
     massTonnes: 2.113,
@@ -8018,6 +8745,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "polestar:polestar_2:2024:polestar_2",
     label: "Polestar 2 Long Range Dual Motor (2024)",
+    make: "Polestar",
     batteryKwh: 75,
     baseWhPerKm: 179,
     massTonnes: 2.113,
@@ -8029,6 +8757,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "polestar:polestar_2:2023:polestar_2_long_range_single_motor",
     label: "Polestar 2 Long Range Single Motor (2023)",
+    make: "Polestar",
     batteryKwh: 75,
     baseWhPerKm: 179,
     massTonnes: 2.01,
@@ -8040,6 +8769,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "polestar:polestar_2:2024:polestar_2_long_range_single_motor",
     label: "Polestar 2 Long Range Single Motor (2024)",
+    make: "Polestar",
     batteryKwh: 75,
     baseWhPerKm: 179,
     massTonnes: 2.01,
@@ -8051,6 +8781,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "polestar:polestar_2:2025:polestar_2_long_range_single_motor",
     label: "Polestar 2 Long Range Single Motor (2025)",
+    make: "Polestar",
     batteryKwh: 75,
     baseWhPerKm: 179,
     massTonnes: 2.01,
@@ -8062,6 +8793,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "polestar:polestar_2:2025:polestar_2",
     label: "Polestar 2 Performance Pack (2025)",
+    make: "Polestar",
     batteryKwh: 75,
     baseWhPerKm: 179,
     massTonnes: 2.113,
@@ -8073,6 +8805,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "polestar:polestar_2:2025:polestar_2_long_range_dual_motor",
     label: "Polestar 2 Performance Pack Long Range Dual Motor (2025)",
+    make: "Polestar",
     batteryKwh: 75,
     baseWhPerKm: 179,
     massTonnes: 2.113,
@@ -8084,6 +8817,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "polestar:polestar_2:2023:polestar_2_standard_range_single_motor",
     label: "Polestar 2 Standard Range Single Motor (2023)",
+    make: "Polestar",
     batteryKwh: 67,
     baseWhPerKm: 248,
     massTonnes: 1.94,
@@ -8095,6 +8829,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "polestar:polestar_2:2024:polestar_2_standard_range_single_motor",
     label: "Polestar 2 Standard Range Single Motor (2024)",
+    make: "Polestar",
     batteryKwh: 67,
     baseWhPerKm: 248,
     massTonnes: 1.94,
@@ -8106,6 +8841,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "polestar:polestar_2:2025:polestar_2_standard_range_single_motor",
     label: "Polestar 2 Standard Range Single Motor (2025)",
+    make: "Polestar",
     batteryKwh: 67,
     baseWhPerKm: 248,
     massTonnes: 1.94,
@@ -8117,6 +8853,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "polestar:polestar_3:2024:polestar_3",
     label: "Polestar 3 Long Range Dual Motor (2024)",
+    make: "Polestar",
     batteryKwh: 107,
     baseWhPerKm: 214,
     massTonnes: 2.403,
@@ -8128,6 +8865,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "polestar:polestar_3:2025:polestar_3",
     label: "Polestar 3 Long Range Dual Motor (2025)",
+    make: "Polestar",
     batteryKwh: 107,
     baseWhPerKm: 214,
     massTonnes: 2.403,
@@ -8139,6 +8877,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "polestar:polestar_3:2024:polestar_3_performance_pack",
     label: "Polestar 3 Long Range Dual Motor Performance Pack (2024)",
+    make: "Polestar",
     batteryKwh: 107,
     baseWhPerKm: 214,
     massTonnes: 2.403,
@@ -8150,6 +8889,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "polestar:polestar_3:2025:polestar_3_performance_pack",
     label: "Polestar 3 Long Range Dual Motor Performance Pack (2025)",
+    make: "Polestar",
     batteryKwh: 107,
     baseWhPerKm: 214,
     massTonnes: 2.403,
@@ -8161,6 +8901,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "polestar:polestar_4:2024:polestar_4",
     label: "Polestar 4 Long Range Dual Motor (2024)",
+    make: "Polestar",
     batteryKwh: 100,
     baseWhPerKm: 222,
     massTonnes: 2.23,
@@ -8172,6 +8913,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "polestar:polestar_4:2025:polestar_4",
     label: "Polestar 4 Long Range Dual Motor (2025)",
+    make: "Polestar",
     batteryKwh: 100,
     baseWhPerKm: 222,
     massTonnes: 2.23,
@@ -8183,6 +8925,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "polestar:polestar_4:2024:polestar_4_long_range_single_motor",
     label: "Polestar 4 Long Range Single Motor (2024)",
+    make: "Polestar",
     batteryKwh: 100,
     baseWhPerKm: 203,
     massTonnes: 2.13,
@@ -8194,6 +8937,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "polestar:polestar_4:2025:polestar_4_long_range_single_motor",
     label: "Polestar 4 Long Range Single Motor (2025)",
+    make: "Polestar",
     batteryKwh: 100,
     baseWhPerKm: 203,
     massTonnes: 2.13,
@@ -8205,6 +8949,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "polestar:polestar_5:2025:polestar_5",
     label: "Polestar 5 Dual Motor (2025)",
+    make: "Polestar",
     batteryKwh: 100,
     baseWhPerKm: 182,
     massTonnes: 2.2,
@@ -8216,6 +8961,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "porsche:718_boxster:2025:718_boxster",
     label: "Porsche 718 Boxster (2025)",
+    make: "Porsche",
     batteryKwh: 75,
     baseWhPerKm: 197,
     massTonnes: 1.65,
@@ -8227,6 +8973,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "porsche:718_cayman:2025:718_cayman",
     label: "Porsche 718 Cayman (2025)",
+    make: "Porsche",
     batteryKwh: 75,
     baseWhPerKm: 197,
     massTonnes: 1.63,
@@ -8238,6 +8985,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "porsche:macan:2024:macan",
     label: "Porsche Macan (2024)",
+    make: "Porsche",
     batteryKwh: 95,
     baseWhPerKm: 250,
     massTonnes: 2.235,
@@ -8249,6 +8997,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "porsche:macan:2025:macan",
     label: "Porsche Macan (2025)",
+    make: "Porsche",
     batteryKwh: 95,
     baseWhPerKm: 250,
     massTonnes: 2.235,
@@ -8260,6 +9009,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "porsche:macan:2024:macan_turbo",
     label: "Porsche Macan Turbo (2024)",
+    make: "Porsche",
     batteryKwh: 95,
     baseWhPerKm: 260,
     massTonnes: 2.31,
@@ -8271,6 +9021,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "porsche:macan:2025:macan_turbo",
     label: "Porsche Macan Turbo (2025)",
+    make: "Porsche",
     batteryKwh: 95,
     baseWhPerKm: 260,
     massTonnes: 2.31,
@@ -8282,6 +9033,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "porsche:taycan:2023:taycan",
     label: "Porsche Taycan (2023)",
+    make: "Porsche",
     batteryKwh: 71,
     baseWhPerKm: 221,
     massTonnes: 2.105,
@@ -8293,6 +9045,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "porsche:taycan:2024:taycan",
     label: "Porsche Taycan (2024)",
+    make: "Porsche",
     batteryKwh: 71,
     baseWhPerKm: 221,
     massTonnes: 2.105,
@@ -8304,6 +9057,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "porsche:taycan:2025:taycan",
     label: "Porsche Taycan (2025)",
+    make: "Porsche",
     batteryKwh: 71,
     baseWhPerKm: 221,
     massTonnes: 2.105,
@@ -8315,6 +9069,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "porsche:taycan:2023:taycan_4s",
     label: "Porsche Taycan 4S (2023)",
+    make: "Porsche",
     batteryKwh: 83.7,
     baseWhPerKm: 229,
     massTonnes: 2.215,
@@ -8326,6 +9081,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "porsche:taycan:2024:taycan_4s",
     label: "Porsche Taycan 4S (2024)",
+    make: "Porsche",
     batteryKwh: 83.7,
     baseWhPerKm: 229,
     massTonnes: 2.215,
@@ -8337,6 +9093,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "porsche:taycan:2025:taycan_4s",
     label: "Porsche Taycan 4S (2025)",
+    make: "Porsche",
     batteryKwh: 83.7,
     baseWhPerKm: 229,
     massTonnes: 2.215,
@@ -8348,6 +9105,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "porsche:taycan:2023:taycan_turbo",
     label: "Porsche Taycan Turbo (2023)",
+    make: "Porsche",
     batteryKwh: 83.7,
     baseWhPerKm: 243,
     massTonnes: 2.305,
@@ -8359,6 +9117,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "porsche:taycan:2024:taycan_turbo",
     label: "Porsche Taycan Turbo (2024)",
+    make: "Porsche",
     batteryKwh: 83.7,
     baseWhPerKm: 243,
     massTonnes: 2.305,
@@ -8370,6 +9129,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "porsche:taycan:2025:taycan_turbo",
     label: "Porsche Taycan Turbo (2025)",
+    make: "Porsche",
     batteryKwh: 83.7,
     baseWhPerKm: 243,
     massTonnes: 2.305,
@@ -8381,6 +9141,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "porsche:taycan:2024:taycan_turbo_gt",
     label: "Porsche Taycan Turbo GT (2024)",
+    make: "Porsche",
     batteryKwh: 83.7,
     baseWhPerKm: 198,
     massTonnes: 2.295,
@@ -8392,6 +9153,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "porsche:taycan:2025:taycan_turbo_gt",
     label: "Porsche Taycan Turbo GT (2025)",
+    make: "Porsche",
     batteryKwh: 83.7,
     baseWhPerKm: 198,
     massTonnes: 2.295,
@@ -8403,6 +9165,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "porsche:taycan:2023:taycan_turbo_s",
     label: "Porsche Taycan Turbo S (2023)",
+    make: "Porsche",
     batteryKwh: 83.7,
     baseWhPerKm: 250,
     massTonnes: 2.325,
@@ -8414,6 +9177,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "porsche:taycan:2024:taycan_turbo_s",
     label: "Porsche Taycan Turbo S (2024)",
+    make: "Porsche",
     batteryKwh: 83.7,
     baseWhPerKm: 250,
     massTonnes: 2.325,
@@ -8425,6 +9189,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "porsche:taycan:2025:taycan_turbo_s",
     label: "Porsche Taycan Turbo S (2025)",
+    make: "Porsche",
     batteryKwh: 83.7,
     baseWhPerKm: 250,
     massTonnes: 2.325,
@@ -8436,6 +9201,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:4_e_tech:2025:4_e_tech",
     label: "Renault 4 E-Tech (2025)",
+    make: "Renault",
     batteryKwh: 50,
     baseWhPerKm: 152,
     massTonnes: 1.55,
@@ -8447,6 +9213,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:4_e_tech:2025:4_e_tech_40kwh",
     label: "Renault 4 E-Tech 40 kWh (2025)",
+    make: "Renault",
     batteryKwh: 38,
     baseWhPerKm: 154,
     massTonnes: 1.5,
@@ -8458,6 +9225,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:5_e_tech:2024:5_e_tech",
     label: "Renault 5 E-Tech (2024)",
+    make: "Renault",
     batteryKwh: 50,
     baseWhPerKm: 152,
     massTonnes: 1.5,
@@ -8469,6 +9237,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:5_e_tech:2025:5_e_tech",
     label: "Renault 5 E-Tech (2025)",
+    make: "Renault",
     batteryKwh: 50,
     baseWhPerKm: 152,
     massTonnes: 1.5,
@@ -8480,6 +9249,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:5_e_tech:2024:5_e_tech_110kw",
     label: "Renault 5 E-Tech 110 kW (2024)",
+    make: "Renault",
     batteryKwh: 50,
     baseWhPerKm: 152,
     massTonnes: 1.5,
@@ -8491,6 +9261,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:5_e_tech:2025:5_e_tech_110kw",
     label: "Renault 5 E-Tech 110 kW (2025)",
+    make: "Renault",
     batteryKwh: 50,
     baseWhPerKm: 152,
     massTonnes: 1.5,
@@ -8502,6 +9273,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:5_e_tech:2024:5_e_tech_40kwh",
     label: "Renault 5 E-Tech 40 kWh (2024)",
+    make: "Renault",
     batteryKwh: 38,
     baseWhPerKm: 154,
     massTonnes: 1.45,
@@ -8513,6 +9285,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:5_e_tech:2025:5_e_tech_40kwh",
     label: "Renault 5 E-Tech 40 kWh (2025)",
+    make: "Renault",
     batteryKwh: 38,
     baseWhPerKm: 154,
     massTonnes: 1.45,
@@ -8524,6 +9297,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:kangoo_e_tech:2023:kangoo_e_tech",
     label: "Renault Kangoo E-Tech (2023)",
+    make: "Renault",
     batteryKwh: 43,
     baseWhPerKm: 175,
     massTonnes: 1.502,
@@ -8535,6 +9309,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:kangoo_e_tech:2024:kangoo_e_tech",
     label: "Renault Kangoo E-Tech (2024)",
+    make: "Renault",
     batteryKwh: 43,
     baseWhPerKm: 175,
     massTonnes: 1.502,
@@ -8546,6 +9321,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:kangoo_e_tech:2025:kangoo_e_tech",
     label: "Renault Kangoo E-Tech (2025)",
+    make: "Renault",
     batteryKwh: 43,
     baseWhPerKm: 175,
     massTonnes: 1.502,
@@ -8557,6 +9333,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:megane_e_tech:2023:megane_e_tech",
     label: "Renault Megane E-Tech Electric (2023)",
+    make: "Renault",
     batteryKwh: 57,
     baseWhPerKm: 148,
     massTonnes: 1.642,
@@ -8568,6 +9345,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:megane_e_tech:2024:megane_e_tech",
     label: "Renault Megane E-Tech Electric (2024)",
+    make: "Renault",
     batteryKwh: 57,
     baseWhPerKm: 148,
     massTonnes: 1.642,
@@ -8579,6 +9357,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:megane_e_tech:2025:megane_e_tech",
     label: "Renault Megane E-Tech Electric (2025)",
+    make: "Renault",
     batteryKwh: 57,
     baseWhPerKm: 148,
     massTonnes: 1.642,
@@ -8590,6 +9369,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:megane_e_tech:2023:megane_e_tech_40kwh",
     label: "Renault Megane E-Tech Electric 40 kWh (2023)",
+    make: "Renault",
     batteryKwh: 38,
     baseWhPerKm: 154,
     massTonnes: 1.58,
@@ -8601,6 +9381,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:megane_e_tech:2024:megane_e_tech_40kwh",
     label: "Renault Megane E-Tech Electric 40 kWh (2024)",
+    make: "Renault",
     batteryKwh: 38,
     baseWhPerKm: 154,
     massTonnes: 1.58,
@@ -8612,6 +9393,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:megane_e_tech:2025:megane_e_tech_40kwh",
     label: "Renault Megane E-Tech Electric 40 kWh (2025)",
+    make: "Renault",
     batteryKwh: 38,
     baseWhPerKm: 154,
     massTonnes: 1.58,
@@ -8623,6 +9405,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:scenic_e_tech:2024:scenic_e_tech",
     label: "Renault Scenic E-Tech (2024)",
+    make: "Renault",
     batteryKwh: 84,
     baseWhPerKm: 165,
     massTonnes: 1.92,
@@ -8634,6 +9417,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:scenic_e_tech:2025:scenic_e_tech",
     label: "Renault Scenic E-Tech (2025)",
+    make: "Renault",
     batteryKwh: 84,
     baseWhPerKm: 165,
     massTonnes: 1.92,
@@ -8645,6 +9429,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:scenic_e_tech:2024:scenic_e_tech_60kwh",
     label: "Renault Scenic E-Tech 60 kWh (2024)",
+    make: "Renault",
     batteryKwh: 57,
     baseWhPerKm: 162,
     massTonnes: 1.82,
@@ -8656,6 +9441,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "renault:scenic_e_tech:2025:scenic_e_tech_60kwh",
     label: "Renault Scenic E-Tech 60 kWh (2025)",
+    make: "Renault",
     batteryKwh: 57,
     baseWhPerKm: 162,
     massTonnes: 1.82,
@@ -8667,6 +9453,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rimac:nevera:2023:nevera",
     label: "Rimac Nevera (2023)",
+    make: "Rimac",
     batteryKwh: 120,
     baseWhPerKm: 266,
     massTonnes: 2.15,
@@ -8678,6 +9465,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rimac:nevera:2024:nevera",
     label: "Rimac Nevera (2024)",
+    make: "Rimac",
     batteryKwh: 120,
     baseWhPerKm: 266,
     massTonnes: 2.15,
@@ -8689,6 +9477,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rimac:nevera:2025:nevera",
     label: "Rimac Nevera (2025)",
+    make: "Rimac",
     batteryKwh: 120,
     baseWhPerKm: 266,
     massTonnes: 2.15,
@@ -8700,6 +9489,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rimac:nevera:2025:nevera_nevera_r",
     label: "Rimac Nevera R (2025)",
+    make: "Rimac",
     batteryKwh: 120,
     baseWhPerKm: 266,
     massTonnes: 2.15,
@@ -8711,6 +9501,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rising_auto:f7:2023:f7",
     label: "Rising Auto F7 (2023)",
+    make: "Rising Auto",
     batteryKwh: 85,
     baseWhPerKm: 198,
     massTonnes: 1.9,
@@ -8722,6 +9513,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rising_auto:f7:2024:f7",
     label: "Rising Auto F7 (2024)",
+    make: "Rising Auto",
     batteryKwh: 85,
     baseWhPerKm: 198,
     massTonnes: 1.9,
@@ -8733,6 +9525,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rising_auto:f7:2025:f7",
     label: "Rising Auto F7 (2025)",
+    make: "Rising Auto",
     batteryKwh: 85,
     baseWhPerKm: 198,
     massTonnes: 1.9,
@@ -8744,6 +9537,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rising_auto:r7:2023:r7",
     label: "Rising Auto R7 (2023)",
+    make: "Rising Auto",
     batteryKwh: 85,
     baseWhPerKm: 215,
     massTonnes: 2.2,
@@ -8755,6 +9549,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rising_auto:r7:2024:r7",
     label: "Rising Auto R7 (2024)",
+    make: "Rising Auto",
     batteryKwh: 85,
     baseWhPerKm: 215,
     massTonnes: 2.2,
@@ -8766,6 +9561,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rising_auto:r7:2025:r7",
     label: "Rising Auto R7 (2025)",
+    make: "Rising Auto",
     batteryKwh: 85,
     baseWhPerKm: 215,
     massTonnes: 2.2,
@@ -8777,6 +9573,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rising_auto:r7:2023:r7_awd",
     label: "Rising Auto R7 All-Wheel Drive (2023)",
+    make: "Rising Auto",
     batteryKwh: 85,
     baseWhPerKm: 215,
     massTonnes: 2.2,
@@ -8788,6 +9585,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rising_auto:r7:2024:r7_awd",
     label: "Rising Auto R7 All-Wheel Drive (2024)",
+    make: "Rising Auto",
     batteryKwh: 85,
     baseWhPerKm: 215,
     massTonnes: 2.2,
@@ -8799,6 +9597,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rising_auto:r7:2025:r7_awd",
     label: "Rising Auto R7 All-Wheel Drive (2025)",
+    make: "Rising Auto",
     batteryKwh: 85,
     baseWhPerKm: 215,
     massTonnes: 2.2,
@@ -8810,6 +9609,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1s:2023:r1s",
     label: "Rivian R1S Adventure (2023)",
+    make: "Rivian",
     batteryKwh: 128.9,
     baseWhPerKm: 254,
     massTonnes: 2.72,
@@ -8821,6 +9621,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1s:2024:r1s",
     label: "Rivian R1S Adventure (2024)",
+    make: "Rivian",
     batteryKwh: 128.9,
     baseWhPerKm: 254,
     massTonnes: 2.72,
@@ -8832,6 +9633,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1s:2025:r1s",
     label: "Rivian R1S Adventure (2025)",
+    make: "Rivian",
     batteryKwh: 128.9,
     baseWhPerKm: 254,
     massTonnes: 2.72,
@@ -8843,6 +9645,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1s:2023:r1s_dual_motor_max_pack",
     label: "Rivian R1S Adventure Dual Motor Max Pack (2023)",
+    make: "Rivian",
     batteryKwh: 171.5,
     baseWhPerKm: 260,
     massTonnes: 2.82,
@@ -8854,6 +9657,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1s:2024:r1s_dual_motor_max_pack",
     label: "Rivian R1S Adventure Dual Motor Max Pack (2024)",
+    make: "Rivian",
     batteryKwh: 171.5,
     baseWhPerKm: 260,
     massTonnes: 2.82,
@@ -8865,6 +9669,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1s:2025:r1s_dual_motor_max_pack",
     label: "Rivian R1S Adventure Dual Motor Max Pack (2025)",
+    make: "Rivian",
     batteryKwh: 171.5,
     baseWhPerKm: 260,
     massTonnes: 2.82,
@@ -8876,6 +9681,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1s:2023:r1s_quad_motor_large_pack",
     label: "Rivian R1S Adventure Quad Motor Large Pack (2023)",
+    make: "Rivian",
     batteryKwh: 128.9,
     baseWhPerKm: 254,
     massTonnes: 2.87,
@@ -8887,6 +9693,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1s:2024:r1s_quad_motor_large_pack",
     label: "Rivian R1S Adventure Quad Motor Large Pack (2024)",
+    make: "Rivian",
     batteryKwh: 128.9,
     baseWhPerKm: 254,
     massTonnes: 2.87,
@@ -8898,6 +9705,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1s:2025:r1s_quad_motor_large_pack",
     label: "Rivian R1S Adventure Quad Motor Large Pack (2025)",
+    make: "Rivian",
     batteryKwh: 128.9,
     baseWhPerKm: 254,
     massTonnes: 2.87,
@@ -8909,6 +9717,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1s:2023:r1s_quad_motor_max_pack",
     label: "Rivian R1S Adventure Quad Motor Max Pack (2023)",
+    make: "Rivian",
     batteryKwh: 171.5,
     baseWhPerKm: 260,
     massTonnes: 2.97,
@@ -8920,6 +9729,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1s:2024:r1s_quad_motor_max_pack",
     label: "Rivian R1S Adventure Quad Motor Max Pack (2024)",
+    make: "Rivian",
     batteryKwh: 171.5,
     baseWhPerKm: 260,
     massTonnes: 2.97,
@@ -8931,6 +9741,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1s:2025:r1s_quad_motor_max_pack",
     label: "Rivian R1S Adventure Quad Motor Max Pack (2025)",
+    make: "Rivian",
     batteryKwh: 171.5,
     baseWhPerKm: 260,
     massTonnes: 2.97,
@@ -8942,6 +9753,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1t:2023:r1t",
     label: "Rivian R1T Adventure (2023)",
+    make: "Rivian",
     batteryKwh: 128.9,
     baseWhPerKm: 255,
     massTonnes: 2.65,
@@ -8953,6 +9765,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1t:2024:r1t",
     label: "Rivian R1T Adventure (2024)",
+    make: "Rivian",
     batteryKwh: 128.9,
     baseWhPerKm: 255,
     massTonnes: 2.65,
@@ -8964,6 +9777,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1t:2025:r1t",
     label: "Rivian R1T Adventure (2025)",
+    make: "Rivian",
     batteryKwh: 128.9,
     baseWhPerKm: 255,
     massTonnes: 2.65,
@@ -8975,6 +9789,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1t:2023:r1t_dual_motor_max_pack",
     label: "Rivian R1T Adventure Dual Motor Max Pack (2023)",
+    make: "Rivian",
     batteryKwh: 171.5,
     baseWhPerKm: 268,
     massTonnes: 2.75,
@@ -8986,6 +9801,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1t:2024:r1t_dual_motor_max_pack",
     label: "Rivian R1T Adventure Dual Motor Max Pack (2024)",
+    make: "Rivian",
     batteryKwh: 171.5,
     baseWhPerKm: 268,
     massTonnes: 2.75,
@@ -8997,6 +9813,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1t:2025:r1t_dual_motor_max_pack",
     label: "Rivian R1T Adventure Dual Motor Max Pack (2025)",
+    make: "Rivian",
     batteryKwh: 171.5,
     baseWhPerKm: 268,
     massTonnes: 2.75,
@@ -9008,6 +9825,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1t:2023:r1t_quad_motor_large_pack",
     label: "Rivian R1T Adventure Quad Motor Large Pack (2023)",
+    make: "Rivian",
     batteryKwh: 128.9,
     baseWhPerKm: 255,
     massTonnes: 2.8,
@@ -9019,6 +9837,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1t:2024:r1t_quad_motor_large_pack",
     label: "Rivian R1T Adventure Quad Motor Large Pack (2024)",
+    make: "Rivian",
     batteryKwh: 128.9,
     baseWhPerKm: 255,
     massTonnes: 2.8,
@@ -9030,6 +9849,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1t:2025:r1t_quad_motor_large_pack",
     label: "Rivian R1T Adventure Quad Motor Large Pack (2025)",
+    make: "Rivian",
     batteryKwh: 128.9,
     baseWhPerKm: 255,
     massTonnes: 2.8,
@@ -9041,6 +9861,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1t:2023:r1t_quad_motor_max_pack",
     label: "Rivian R1T Adventure Quad Motor Max Pack (2023)",
+    make: "Rivian",
     batteryKwh: 171.5,
     baseWhPerKm: 268,
     massTonnes: 2.9,
@@ -9052,6 +9873,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1t:2024:r1t_quad_motor_max_pack",
     label: "Rivian R1T Adventure Quad Motor Max Pack (2024)",
+    make: "Rivian",
     batteryKwh: 171.5,
     baseWhPerKm: 268,
     massTonnes: 2.9,
@@ -9063,6 +9885,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rivian:r1t:2025:r1t_quad_motor_max_pack",
     label: "Rivian R1T Adventure Quad Motor Max Pack (2025)",
+    make: "Rivian",
     batteryKwh: 171.5,
     baseWhPerKm: 268,
     massTonnes: 2.9,
@@ -9074,6 +9897,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "roewe:d6:2025:d6",
     label: "Roewe D6 (2025)",
+    make: "Roewe",
     batteryKwh: 40,
     baseWhPerKm: 132,
     massTonnes: 1.9,
@@ -9085,6 +9909,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "roewe:d7:2023:d7",
     label: "Roewe D7 Standard Range (2023)",
+    make: "Roewe",
     batteryKwh: 56,
     baseWhPerKm: 153,
     massTonnes: 1.9,
@@ -9096,6 +9921,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "roewe:d7:2024:d7",
     label: "Roewe D7 Standard Range (2024)",
+    make: "Roewe",
     batteryKwh: 56,
     baseWhPerKm: 153,
     massTonnes: 1.9,
@@ -9107,6 +9933,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "roewe:d7:2025:d7",
     label: "Roewe D7 Standard Range (2025)",
+    make: "Roewe",
     batteryKwh: 56,
     baseWhPerKm: 153,
     massTonnes: 1.9,
@@ -9118,6 +9945,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "roewe:d7:2023:d7_long_range",
     label: "Roewe D7 Standard Range Long Range (2023)",
+    make: "Roewe",
     batteryKwh: 65,
     baseWhPerKm: 148,
     massTonnes: 1.9,
@@ -9129,6 +9957,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "roewe:d7:2024:d7_long_range",
     label: "Roewe D7 Standard Range Long Range (2024)",
+    make: "Roewe",
     batteryKwh: 65,
     baseWhPerKm: 148,
     massTonnes: 1.9,
@@ -9140,6 +9969,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "roewe:d7:2025:d7_long_range",
     label: "Roewe D7 Standard Range Long Range (2025)",
+    make: "Roewe",
     batteryKwh: 65,
     baseWhPerKm: 148,
     massTonnes: 1.9,
@@ -9151,6 +9981,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rolls_royce:spectre:2023:spectre",
     label: "Rolls-Royce Spectre (2023)",
+    make: "Rolls-Royce",
     batteryKwh: 102,
     baseWhPerKm: 239,
     massTonnes: 2.975,
@@ -9162,6 +9993,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rolls_royce:spectre:2024:spectre",
     label: "Rolls-Royce Spectre (2024)",
+    make: "Rolls-Royce",
     batteryKwh: 102,
     baseWhPerKm: 239,
     massTonnes: 2.975,
@@ -9173,6 +10005,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rolls_royce:spectre:2025:spectre",
     label: "Rolls-Royce Spectre (2025)",
+    make: "Rolls-Royce",
     batteryKwh: 102,
     baseWhPerKm: 239,
     massTonnes: 2.975,
@@ -9184,6 +10017,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "rolls_royce:spectre:2025:spectre_black_badge",
     label: "Rolls-Royce Spectre Black Badge (2025)",
+    make: "Rolls-Royce",
     batteryKwh: 102,
     baseWhPerKm: 308,
     massTonnes: 2.9,
@@ -9195,6 +10029,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:elroq:2025:elroq",
     label: "Škoda Elroq (2025)",
+    make: "Škoda",
     batteryKwh: 77,
     baseWhPerKm: 162,
     massTonnes: 2.2,
@@ -9206,6 +10041,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:elroq_rs:2025:elroq_rs",
     label: "Škoda Elroq RS (2025)",
+    make: "Škoda",
     batteryKwh: 77,
     baseWhPerKm: 171,
     massTonnes: 2.2,
@@ -9217,6 +10053,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_coupe_iv:2023:enyaq_coupe_iv",
     label: "Škoda Enyaq Coupé iV 80 (2023)",
+    make: "Škoda",
     batteryKwh: 77,
     baseWhPerKm: 172,
     massTonnes: 2.2,
@@ -9228,6 +10065,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_coupe_iv:2024:enyaq_coupe_iv",
     label: "Škoda Enyaq Coupé iV 80 (2024)",
+    make: "Škoda",
     batteryKwh: 77,
     baseWhPerKm: 165,
     massTonnes: 2.2,
@@ -9239,6 +10077,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_coupe_iv:2025:enyaq_coupe_iv",
     label: "Škoda Enyaq Coupé iV 80 (2025)",
+    make: "Škoda",
     batteryKwh: 77,
     baseWhPerKm: 165,
     massTonnes: 2.2,
@@ -9250,6 +10089,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_coupe_iv:2023:enyaq_coupe_iv_80x",
     label: "Škoda Enyaq Coupé iV 80x (2023)",
+    make: "Škoda",
     batteryKwh: 77,
     baseWhPerKm: 182,
     massTonnes: 2.2,
@@ -9261,6 +10101,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_coupe_iv:2024:enyaq_coupe_iv_80x",
     label: "Škoda Enyaq Coupé iV 80x (2024)",
+    make: "Škoda",
     batteryKwh: 77,
     baseWhPerKm: 174,
     massTonnes: 2.2,
@@ -9272,6 +10113,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_coupe_iv:2025:enyaq_coupe_iv_80x",
     label: "Škoda Enyaq Coupé iV 80x (2025)",
+    make: "Škoda",
     batteryKwh: 77,
     baseWhPerKm: 174,
     massTonnes: 2.2,
@@ -9283,6 +10125,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_coupe_iv:2023:enyaq_coupe_iv_rs",
     label: "Škoda Enyaq Coupé iV RS (2023)",
+    make: "Škoda",
     batteryKwh: 77,
     baseWhPerKm: 186,
     massTonnes: 2.2,
@@ -9294,6 +10137,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_coupe_iv:2024:enyaq_coupe_iv_rs",
     label: "Škoda Enyaq Coupé iV RS (2024)",
+    make: "Škoda",
     batteryKwh: 77,
     baseWhPerKm: 177,
     massTonnes: 2.2,
@@ -9305,6 +10149,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_coupe_iv:2025:enyaq_coupe_iv_rs",
     label: "Škoda Enyaq Coupé iV RS (2025)",
+    make: "Škoda",
     batteryKwh: 77,
     baseWhPerKm: 177,
     massTonnes: 2.2,
@@ -9316,6 +10161,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_iv:2023:enyaq_iv_60",
     label: "Škoda Enyaq iV 60 (2023)",
+    make: "Škoda",
     batteryKwh: 58,
     baseWhPerKm: 177,
     massTonnes: 2.2,
@@ -9327,6 +10173,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_iv:2024:enyaq_iv_60",
     label: "Škoda Enyaq iV 60 (2024)",
+    make: "Škoda",
     batteryKwh: 58,
     baseWhPerKm: 173,
     massTonnes: 2.2,
@@ -9338,6 +10185,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_iv:2025:enyaq_iv_60",
     label: "Škoda Enyaq iV 60 (2025)",
+    make: "Škoda",
     batteryKwh: 58,
     baseWhPerKm: 173,
     massTonnes: 2.2,
@@ -9349,6 +10197,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_iv:2023:enyaq_iv",
     label: "Škoda Enyaq iV 80 (2023)",
+    make: "Škoda",
     batteryKwh: 77,
     baseWhPerKm: 181,
     massTonnes: 2.2,
@@ -9360,6 +10209,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_iv:2024:enyaq_iv",
     label: "Škoda Enyaq iV 80 (2024)",
+    make: "Škoda",
     batteryKwh: 77,
     baseWhPerKm: 171,
     massTonnes: 2.2,
@@ -9371,6 +10221,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_iv:2025:enyaq_iv",
     label: "Škoda Enyaq iV 80 (2025)",
+    make: "Škoda",
     batteryKwh: 77,
     baseWhPerKm: 171,
     massTonnes: 2.2,
@@ -9382,6 +10233,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_iv:2023:enyaq_iv_80x",
     label: "Škoda Enyaq iV 80x (2023)",
+    make: "Škoda",
     batteryKwh: 77,
     baseWhPerKm: 192,
     massTonnes: 2.2,
@@ -9393,6 +10245,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_iv:2024:enyaq_iv_80x",
     label: "Škoda Enyaq iV 80x (2024)",
+    make: "Škoda",
     batteryKwh: 77,
     baseWhPerKm: 181,
     massTonnes: 2.2,
@@ -9404,6 +10257,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_iv:2025:enyaq_iv_80x",
     label: "Škoda Enyaq iV 80x (2025)",
+    make: "Škoda",
     batteryKwh: 77,
     baseWhPerKm: 181,
     massTonnes: 2.2,
@@ -9415,6 +10269,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_iv:2023:enyaq_iv_rs",
     label: "Škoda Enyaq iV RS (2023)",
+    make: "Škoda",
     batteryKwh: 77,
     baseWhPerKm: 196,
     massTonnes: 2.2,
@@ -9426,6 +10281,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_iv:2024:enyaq_iv_rs",
     label: "Škoda Enyaq iV RS (2024)",
+    make: "Škoda",
     batteryKwh: 77,
     baseWhPerKm: 184,
     massTonnes: 2.2,
@@ -9437,6 +10293,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "skoda:enyaq_iv:2025:enyaq_iv_rs",
     label: "Škoda Enyaq iV RS (2025)",
+    make: "Škoda",
     batteryKwh: 77,
     baseWhPerKm: 184,
     massTonnes: 2.2,
@@ -9448,6 +10305,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "smart:1:2023:1",
     label: "Smart #1 (2023)",
+    make: "Smart",
     batteryKwh: 62,
     baseWhPerKm: 172,
     massTonnes: 1.82,
@@ -9459,6 +10317,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "smart:1:2024:1",
     label: "Smart #1 (2024)",
+    make: "Smart",
     batteryKwh: 62,
     baseWhPerKm: 172,
     massTonnes: 1.82,
@@ -9470,6 +10329,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "smart:1:2025:1",
     label: "Smart #1 (2025)",
+    make: "Smart",
     batteryKwh: 62,
     baseWhPerKm: 172,
     massTonnes: 1.82,
@@ -9481,6 +10341,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "smart:3:2024:3",
     label: "Smart #3 (2024)",
+    make: "Smart",
     batteryKwh: 62,
     baseWhPerKm: 172,
     massTonnes: 1.85,
@@ -9492,6 +10353,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "smart:3:2025:3",
     label: "Smart #3 (2025)",
+    make: "Smart",
     batteryKwh: 62,
     baseWhPerKm: 172,
     massTonnes: 1.85,
@@ -9503,6 +10365,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tata:harrier_ev:2025:harrier_ev",
     label: "Tata Motors Harrier EV (2025)",
+    make: "Tata Motors",
     batteryKwh: 65,
     baseWhPerKm: 122,
     massTonnes: 2.2,
@@ -9514,6 +10377,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tata:harrier_ev:2025:harrier_ev_75kwh",
     label: "Tata Motors Harrier EV 75 kWh (2025)",
+    make: "Tata Motors",
     batteryKwh: 75,
     baseWhPerKm: 141,
     massTonnes: 2.2,
@@ -9525,6 +10389,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tata:nexon_ev:2023:nexon_ev",
     label: "Tata Motors Nexon EV (2023)",
+    make: "Tata Motors",
     batteryKwh: 30.2,
     baseWhPerKm: 114,
     massTonnes: 2.2,
@@ -9536,6 +10401,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tata:nexon_ev:2024:nexon_ev",
     label: "Tata Motors Nexon EV (2024)",
+    make: "Tata Motors",
     batteryKwh: 30.2,
     baseWhPerKm: 114,
     massTonnes: 2.2,
@@ -9547,6 +10413,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tata:nexon_ev:2025:nexon_ev",
     label: "Tata Motors Nexon EV (2025)",
+    make: "Tata Motors",
     batteryKwh: 30.2,
     baseWhPerKm: 114,
     massTonnes: 2.2,
@@ -9558,6 +10425,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tata:punch_ev:2023:punch_ev",
     label: "Tata Motors Punch EV (2023)",
+    make: "Tata Motors",
     batteryKwh: 25,
     baseWhPerKm: 93,
     massTonnes: 2.2,
@@ -9569,6 +10437,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tata:punch_ev:2024:punch_ev",
     label: "Tata Motors Punch EV (2024)",
+    make: "Tata Motors",
     batteryKwh: 25,
     baseWhPerKm: 93,
     massTonnes: 2.2,
@@ -9580,6 +10449,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tata:punch_ev:2025:punch_ev",
     label: "Tata Motors Punch EV (2025)",
+    make: "Tata Motors",
     batteryKwh: 25,
     baseWhPerKm: 93,
     massTonnes: 2.2,
@@ -9591,6 +10461,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tata:sierra_ev:2025:sierra_ev",
     label: "Tata Motors Sierra EV (2025)",
+    make: "Tata Motors",
     batteryKwh: 60,
     baseWhPerKm: 141,
     massTonnes: 2.2,
@@ -9602,6 +10473,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tata:tiago_ev:2023:tiago_ev",
     label: "Tata Motors Tiago EV (2023)",
+    make: "Tata Motors",
     batteryKwh: 19.2,
     baseWhPerKm: 90,
     massTonnes: 1.9,
@@ -9613,6 +10485,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tata:tiago_ev:2024:tiago_ev",
     label: "Tata Motors Tiago EV (2024)",
+    make: "Tata Motors",
     batteryKwh: 19.2,
     baseWhPerKm: 90,
     massTonnes: 1.9,
@@ -9624,6 +10497,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tata:tiago_ev:2025:tiago_ev",
     label: "Tata Motors Tiago EV (2025)",
+    make: "Tata Motors",
     batteryKwh: 19.2,
     baseWhPerKm: 90,
     massTonnes: 1.9,
@@ -9635,6 +10509,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tata:tiago_ev:2023:tiago_ev_long_range",
     label: "Tata Motors Tiago EV Long Range (2023)",
+    make: "Tata Motors",
     batteryKwh: 24,
     baseWhPerKm: 90,
     massTonnes: 1.9,
@@ -9646,6 +10521,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tata:tiago_ev:2024:tiago_ev_long_range",
     label: "Tata Motors Tiago EV Long Range (2024)",
+    make: "Tata Motors",
     batteryKwh: 24,
     baseWhPerKm: 90,
     massTonnes: 1.9,
@@ -9657,6 +10533,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tata:tiago_ev:2025:tiago_ev_long_range",
     label: "Tata Motors Tiago EV Long Range (2025)",
+    make: "Tata Motors",
     batteryKwh: 24,
     baseWhPerKm: 90,
     massTonnes: 1.9,
@@ -9668,6 +10545,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tata:tigor_ev:2023:tigor_ev",
     label: "Tata Motors Tigor EV (2023)",
+    make: "Tata Motors",
     batteryKwh: 21.5,
     baseWhPerKm: 119,
     massTonnes: 1.9,
@@ -9679,6 +10557,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tata:tigor_ev:2024:tigor_ev",
     label: "Tata Motors Tigor EV (2024)",
+    make: "Tata Motors",
     batteryKwh: 21.5,
     baseWhPerKm: 119,
     massTonnes: 1.9,
@@ -9690,6 +10569,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tata:tigor_ev:2025:tigor_ev",
     label: "Tata Motors Tigor EV (2025)",
+    make: "Tata Motors",
     batteryKwh: 21.5,
     baseWhPerKm: 119,
     massTonnes: 1.9,
@@ -9701,6 +10581,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:cybertruck:2024:cybertruck",
     label: "Tesla Cybertruck All-Wheel Drive (2024)",
+    make: "Tesla",
     batteryKwh: 122,
     baseWhPerKm: 237,
     massTonnes: 3.02,
@@ -9712,6 +10593,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:cybertruck:2025:cybertruck",
     label: "Tesla Cybertruck All-Wheel Drive (2025)",
+    make: "Tesla",
     batteryKwh: 122,
     baseWhPerKm: 237,
     massTonnes: 3.02,
@@ -9723,6 +10605,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:cybertruck:2024:cybertruck_cyberbeast",
     label: "Tesla Cybertruck Cyberbeast (2024)",
+    make: "Tesla",
     batteryKwh: 122,
     baseWhPerKm: 237,
     massTonnes: 3.13,
@@ -9734,6 +10617,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:cybertruck:2025:cybertruck_cyberbeast",
     label: "Tesla Cybertruck Cyberbeast (2025)",
+    make: "Tesla",
     batteryKwh: 122,
     baseWhPerKm: 237,
     massTonnes: 3.13,
@@ -9745,6 +10629,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:cybertruck:2024:cybertruck_long_range",
     label: "Tesla Cybertruck Long Range RWD (2024)",
+    make: "Tesla",
     batteryKwh: 122,
     baseWhPerKm: 217,
     massTonnes: 2.9,
@@ -9756,6 +10641,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:cybertruck:2025:cybertruck_long_range",
     label: "Tesla Cybertruck Long Range RWD (2025)",
+    make: "Tesla",
     batteryKwh: 122,
     baseWhPerKm: 217,
     massTonnes: 2.9,
@@ -9767,6 +10653,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:model_3:2024:model_3_long_range",
     label: "Tesla Model 3 Long Range (2024)",
+    make: "Tesla",
     batteryKwh: 75,
     baseWhPerKm: 135,
     massTonnes: 1.828,
@@ -9778,6 +10665,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:model_3:2025:model_3_long_range",
     label: "Tesla Model 3 Long Range (2025)",
+    make: "Tesla",
     batteryKwh: 75,
     baseWhPerKm: 135,
     massTonnes: 1.828,
@@ -9789,6 +10677,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:model_3:2024:model_3_performance",
     label: "Tesla Model 3 Performance (2024)",
+    make: "Tesla",
     batteryKwh: 79,
     baseWhPerKm: 182,
     massTonnes: 1.84,
@@ -9800,6 +10689,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:model_3:2025:model_3_performance",
     label: "Tesla Model 3 Performance (2025)",
+    make: "Tesla",
     batteryKwh: 79,
     baseWhPerKm: 182,
     massTonnes: 1.84,
@@ -9811,6 +10701,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:model_3:2024:model_3",
     label: "Tesla Model 3 Rear-Wheel Drive (2024)",
+    make: "Tesla",
     batteryKwh: 57,
     baseWhPerKm: 130,
     massTonnes: 1.765,
@@ -9822,6 +10713,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:model_3:2025:model_3",
     label: "Tesla Model 3 Rear-Wheel Drive (2025)",
+    make: "Tesla",
     batteryKwh: 57,
     baseWhPerKm: 130,
     massTonnes: 1.765,
@@ -9833,6 +10725,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:model_s:2025:model_s",
     label: "Tesla Model S Long Range (2025)",
+    make: "Tesla",
     batteryKwh: 95,
     baseWhPerKm: 183,
     massTonnes: 2.069,
@@ -9844,6 +10737,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:model_s:2025:model_s_plaid",
     label: "Tesla Model S Plaid (2025)",
+    make: "Tesla",
     batteryKwh: 95,
     baseWhPerKm: 193,
     massTonnes: 2.162,
@@ -9855,6 +10749,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:model_x:2025:model_x",
     label: "Tesla Model X Long Range (2025)",
+    make: "Tesla",
     batteryKwh: 95,
     baseWhPerKm: 207,
     massTonnes: 2.459,
@@ -9866,6 +10761,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:model_x:2025:model_x_plaid",
     label: "Tesla Model X Plaid (2025)",
+    make: "Tesla",
     batteryKwh: 95,
     baseWhPerKm: 213,
     massTonnes: 2.65,
@@ -9877,6 +10773,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:model_y:2024:model_y_long_range_awd",
     label: "Tesla Model Y Long Range AWD (2024)",
+    make: "Tesla",
     batteryKwh: 79,
     baseWhPerKm: 158,
     massTonnes: 2.003,
@@ -9888,6 +10785,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:model_y:2025:model_y_long_range_awd",
     label: "Tesla Model Y Long Range AWD (2025)",
+    make: "Tesla",
     batteryKwh: 79,
     baseWhPerKm: 158,
     massTonnes: 2.003,
@@ -9899,6 +10797,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:model_y:2024:model_y",
     label: "Tesla Model Y Long Range RWD (2024)",
+    make: "Tesla",
     batteryKwh: 75,
     baseWhPerKm: 152,
     massTonnes: 1.9,
@@ -9910,6 +10809,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:model_y:2025:model_y",
     label: "Tesla Model Y Long Range RWD (2025)",
+    make: "Tesla",
     batteryKwh: 75,
     baseWhPerKm: 152,
     massTonnes: 1.9,
@@ -9921,6 +10821,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:model_y:2024:model_y_performance",
     label: "Tesla Model Y Performance (2024)",
+    make: "Tesla",
     batteryKwh: 79,
     baseWhPerKm: 187,
     massTonnes: 2.054,
@@ -9932,6 +10833,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "tesla:model_y:2025:model_y_performance",
     label: "Tesla Model Y Performance (2025)",
+    make: "Tesla",
     batteryKwh: 79,
     baseWhPerKm: 187,
     massTonnes: 2.054,
@@ -9943,6 +10845,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "toyota:bz3:2023:bz3",
     label: "Toyota bZ3 (2023)",
+    make: "Toyota",
     batteryKwh: 65,
     baseWhPerKm: 150,
     massTonnes: 1.71,
@@ -9954,6 +10857,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "toyota:bz3:2024:bz3",
     label: "Toyota bZ3 (2024)",
+    make: "Toyota",
     batteryKwh: 65,
     baseWhPerKm: 150,
     massTonnes: 1.71,
@@ -9965,6 +10869,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "toyota:bz3:2025:bz3",
     label: "Toyota bZ3 (2025)",
+    make: "Toyota",
     batteryKwh: 65,
     baseWhPerKm: 150,
     massTonnes: 1.71,
@@ -9976,6 +10881,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "toyota:bz3x:2025:bz3x",
     label: "Toyota bZ3X (2025)",
+    make: "Toyota",
     batteryKwh: 50,
     baseWhPerKm: 161,
     massTonnes: 1.68,
@@ -9987,6 +10893,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "toyota:bz3x:2025:bz3x_58kwh",
     label: "Toyota bZ3X 58 kWh (2025)",
+    make: "Toyota",
     batteryKwh: 58,
     baseWhPerKm: 161,
     massTonnes: 1.72,
@@ -9998,6 +10905,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "toyota:bz3x:2025:bz3x_67_9kwh",
     label: "Toyota bZ3X 67.9 kWh (2025)",
+    make: "Toyota",
     batteryKwh: 67.9,
     baseWhPerKm: 152,
     massTonnes: 1.78,
@@ -10009,6 +10917,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "toyota:bz4x:2023:bz4x",
     label: "Toyota bZ4X Front-Wheel Drive (2023)",
+    make: "Toyota",
     batteryKwh: 71.4,
     baseWhPerKm: 176,
     massTonnes: 1.92,
@@ -10020,6 +10929,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "toyota:bz4x:2024:bz4x",
     label: "Toyota bZ4X Front-Wheel Drive (2024)",
+    make: "Toyota",
     batteryKwh: 71.4,
     baseWhPerKm: 176,
     massTonnes: 1.92,
@@ -10031,6 +10941,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "toyota:bz4x:2025:bz4x",
     label: "Toyota bZ4X Front-Wheel Drive (2025)",
+    make: "Toyota",
     batteryKwh: 71.4,
     baseWhPerKm: 176,
     massTonnes: 1.92,
@@ -10042,6 +10953,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "toyota:bz4x:2023:bz4x_awd",
     label: "Toyota bZ4X Front-Wheel Drive All-Wheel Drive (2023)",
+    make: "Toyota",
     batteryKwh: 71.4,
     baseWhPerKm: 195,
     massTonnes: 2.01,
@@ -10053,6 +10965,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "toyota:bz4x:2024:bz4x_awd",
     label: "Toyota bZ4X Front-Wheel Drive All-Wheel Drive (2024)",
+    make: "Toyota",
     batteryKwh: 71.4,
     baseWhPerKm: 195,
     massTonnes: 2.01,
@@ -10064,6 +10977,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "toyota:bz4x:2025:bz4x_awd",
     label: "Toyota bZ4X Front-Wheel Drive All-Wheel Drive (2025)",
+    make: "Toyota",
     batteryKwh: 71.4,
     baseWhPerKm: 195,
     massTonnes: 2.01,
@@ -10075,6 +10989,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "toyota:bz5:2025:bz5",
     label: "Toyota bZ5 (2025)",
+    make: "Toyota",
     batteryKwh: 73,
     baseWhPerKm: 184,
     massTonnes: 1.85,
@@ -10086,6 +11001,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "toyota:bz7:2025:bz7",
     label: "Toyota bZ7 (2025)",
+    make: "Toyota",
     batteryKwh: 78,
     baseWhPerKm: 167,
     massTonnes: 1.95,
@@ -10097,6 +11013,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "toyota:c_hr_plus:2025:c_hr_plus",
     label: "Toyota C-HR+ Front-Wheel Drive (2025)",
+    make: "Toyota",
     batteryKwh: 70,
     baseWhPerKm: 142,
     massTonnes: 1.85,
@@ -10108,6 +11025,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "toyota:c_hr_plus:2025:c_hr_plus_awd",
     label: "Toyota C-HR+ Front-Wheel Drive All-Wheel Drive (2025)",
+    make: "Toyota",
     batteryKwh: 70,
     baseWhPerKm: 155,
     massTonnes: 1.95,
@@ -10119,6 +11037,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "toyota:urban_cruiser:2025:urban_cruiser",
     label: "Toyota Urban Cruiser (2025)",
+    make: "Toyota",
     batteryKwh: 48,
     baseWhPerKm: 146,
     massTonnes: 1.65,
@@ -10130,6 +11049,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "toyota:urban_cruiser:2025:urban_cruiser_61kwh",
     label: "Toyota Urban Cruiser 61 kWh (2025)",
+    make: "Toyota",
     batteryKwh: 60,
     baseWhPerKm: 146,
     massTonnes: 1.72,
@@ -10141,6 +11061,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:ec_van:2025:ec_van",
     label: "VinFast EC Van (2025)",
+    make: "VinFast",
     batteryKwh: 17,
     baseWhPerKm: 109,
     massTonnes: 2.6,
@@ -10152,6 +11073,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_3:2023:vf_3",
     label: "VinFast VF 3 (2023)",
+    make: "VinFast",
     batteryKwh: 18.64,
     baseWhPerKm: 114,
     massTonnes: 2.2,
@@ -10163,6 +11085,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_3:2024:vf_3",
     label: "VinFast VF 3 (2024)",
+    make: "VinFast",
     batteryKwh: 18.64,
     baseWhPerKm: 114,
     massTonnes: 2.2,
@@ -10174,6 +11097,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_3:2025:vf_3",
     label: "VinFast VF 3 (2025)",
+    make: "VinFast",
     batteryKwh: 18.64,
     baseWhPerKm: 114,
     massTonnes: 2.2,
@@ -10185,6 +11109,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_5:2023:vf_5",
     label: "VinFast VF 5 (2023)",
+    make: "VinFast",
     batteryKwh: 40,
     baseWhPerKm: 171,
     massTonnes: 2.2,
@@ -10196,6 +11121,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_5:2024:vf_5",
     label: "VinFast VF 5 (2024)",
+    make: "VinFast",
     batteryKwh: 40,
     baseWhPerKm: 171,
     massTonnes: 2.2,
@@ -10207,6 +11133,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_5:2025:vf_5",
     label: "VinFast VF 5 (2025)",
+    make: "VinFast",
     batteryKwh: 40,
     baseWhPerKm: 171,
     massTonnes: 2.2,
@@ -10218,6 +11145,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_6:2024:vf_6",
     label: "VinFast VF 6 (2024)",
+    make: "VinFast",
     batteryKwh: 59.6,
     baseWhPerKm: 182,
     massTonnes: 2.2,
@@ -10229,6 +11157,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_6:2025:vf_6",
     label: "VinFast VF 6 (2025)",
+    make: "VinFast",
     batteryKwh: 59.6,
     baseWhPerKm: 182,
     massTonnes: 2.2,
@@ -10240,6 +11169,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_6:2024:vf_6_eco",
     label: "VinFast VF 6 Eco (2024)",
+    make: "VinFast",
     batteryKwh: 59.6,
     baseWhPerKm: 182,
     massTonnes: 2.2,
@@ -10251,6 +11181,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_6:2025:vf_6_eco",
     label: "VinFast VF 6 Eco (2025)",
+    make: "VinFast",
     batteryKwh: 59.6,
     baseWhPerKm: 182,
     massTonnes: 2.2,
@@ -10262,6 +11193,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_6:2024:vf_6_plus",
     label: "VinFast VF 6 Plus (2024)",
+    make: "VinFast",
     batteryKwh: 59.6,
     baseWhPerKm: 191,
     massTonnes: 2.2,
@@ -10273,6 +11205,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_6:2025:vf_6_plus",
     label: "VinFast VF 6 Plus (2025)",
+    make: "VinFast",
     batteryKwh: 59.6,
     baseWhPerKm: 191,
     massTonnes: 2.2,
@@ -10284,6 +11217,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_7:2024:vf_7",
     label: "VinFast VF 7 (2024)",
+    make: "VinFast",
     batteryKwh: 75.3,
     baseWhPerKm: 204,
     massTonnes: 2.2,
@@ -10295,6 +11229,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_7:2025:vf_7",
     label: "VinFast VF 7 (2025)",
+    make: "VinFast",
     batteryKwh: 75.3,
     baseWhPerKm: 204,
     massTonnes: 2.2,
@@ -10306,6 +11241,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_7:2024:vf_7_eco",
     label: "VinFast VF 7 Eco (2024)",
+    make: "VinFast",
     batteryKwh: 75.3,
     baseWhPerKm: 204,
     massTonnes: 2.2,
@@ -10317,6 +11253,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_7:2025:vf_7_eco",
     label: "VinFast VF 7 Eco (2025)",
+    make: "VinFast",
     batteryKwh: 75.3,
     baseWhPerKm: 204,
     massTonnes: 2.2,
@@ -10328,6 +11265,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_7:2024:vf_7_plus",
     label: "VinFast VF 7 Plus (2024)",
+    make: "VinFast",
     batteryKwh: 75.3,
     baseWhPerKm: 213,
     massTonnes: 2.2,
@@ -10339,6 +11277,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_7:2025:vf_7_plus",
     label: "VinFast VF 7 Plus (2025)",
+    make: "VinFast",
     batteryKwh: 75.3,
     baseWhPerKm: 213,
     massTonnes: 2.2,
@@ -10350,6 +11289,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_8:2023:vf_8",
     label: "VinFast VF 8 (2023)",
+    make: "VinFast",
     batteryKwh: 82,
     baseWhPerKm: 246,
     massTonnes: 2.54,
@@ -10361,6 +11301,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_8:2024:vf_8",
     label: "VinFast VF 8 (2024)",
+    make: "VinFast",
     batteryKwh: 82,
     baseWhPerKm: 246,
     massTonnes: 2.54,
@@ -10372,6 +11313,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_8:2025:vf_8",
     label: "VinFast VF 8 (2025)",
+    make: "VinFast",
     batteryKwh: 82,
     baseWhPerKm: 246,
     massTonnes: 2.54,
@@ -10383,6 +11325,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_8:2023:vf_8_eco_awd",
     label: "VinFast VF 8 Eco AWD (2023)",
+    make: "VinFast",
     batteryKwh: 82,
     baseWhPerKm: 246,
     massTonnes: 2.54,
@@ -10394,6 +11337,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_8:2024:vf_8_eco_awd",
     label: "VinFast VF 8 Eco AWD (2024)",
+    make: "VinFast",
     batteryKwh: 82,
     baseWhPerKm: 246,
     massTonnes: 2.54,
@@ -10405,6 +11349,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_8:2025:vf_8_eco_awd",
     label: "VinFast VF 8 Eco AWD (2025)",
+    make: "VinFast",
     batteryKwh: 82,
     baseWhPerKm: 246,
     massTonnes: 2.54,
@@ -10416,6 +11361,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_8:2023:vf_8_plus_awd",
     label: "VinFast VF 8 Plus AWD (2023)",
+    make: "VinFast",
     batteryKwh: 82,
     baseWhPerKm: 267,
     massTonnes: 2.54,
@@ -10427,6 +11373,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_8:2024:vf_8_plus_awd",
     label: "VinFast VF 8 Plus AWD (2024)",
+    make: "VinFast",
     batteryKwh: 82,
     baseWhPerKm: 267,
     massTonnes: 2.54,
@@ -10438,6 +11385,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_8:2025:vf_8_plus_awd",
     label: "VinFast VF 8 Plus AWD (2025)",
+    make: "VinFast",
     batteryKwh: 82,
     baseWhPerKm: 267,
     massTonnes: 2.54,
@@ -10449,6 +11397,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_9:2023:vf_9",
     label: "VinFast VF 9 (2023)",
+    make: "VinFast",
     batteryKwh: 92,
     baseWhPerKm: 231,
     massTonnes: 2.2,
@@ -10460,6 +11409,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_9:2024:vf_9",
     label: "VinFast VF 9 (2024)",
+    make: "VinFast",
     batteryKwh: 92,
     baseWhPerKm: 231,
     massTonnes: 2.2,
@@ -10471,6 +11421,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_9:2025:vf_9",
     label: "VinFast VF 9 (2025)",
+    make: "VinFast",
     batteryKwh: 92,
     baseWhPerKm: 231,
     massTonnes: 2.2,
@@ -10482,6 +11433,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_e34:2023:vf_e34",
     label: "VinFast VF e34 (2023)",
+    make: "VinFast",
     batteryKwh: 44.5,
     baseWhPerKm: 190,
     massTonnes: 2.2,
@@ -10493,6 +11445,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_e34:2024:vf_e34",
     label: "VinFast VF e34 (2024)",
+    make: "VinFast",
     batteryKwh: 44.5,
     baseWhPerKm: 190,
     massTonnes: 2.2,
@@ -10504,6 +11457,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "vinfast:vf_e34:2025:vf_e34",
     label: "VinFast VF e34 (2025)",
+    make: "VinFast",
     batteryKwh: 44.5,
     baseWhPerKm: 190,
     massTonnes: 2.2,
@@ -10515,6 +11469,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_buzz:2023:id_buzz_cargo",
     label: "Volkswagen ID. Buzz Cargo (2023)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 222,
     massTonnes: 2.28,
@@ -10526,6 +11481,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_buzz:2024:id_buzz_cargo",
     label: "Volkswagen ID. Buzz Cargo (2024)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 222,
     massTonnes: 2.28,
@@ -10537,6 +11493,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_buzz:2025:id_buzz_cargo",
     label: "Volkswagen ID. Buzz Cargo (2025)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 222,
     massTonnes: 2.28,
@@ -10548,6 +11505,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_buzz:2023:id_buzz",
     label: "Volkswagen ID. Buzz PRO (2023)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 222,
     massTonnes: 2.416,
@@ -10559,6 +11517,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_buzz:2024:id_buzz",
     label: "Volkswagen ID. Buzz PRO (2024)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 222,
     massTonnes: 2.416,
@@ -10570,6 +11529,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_buzz:2025:id_buzz",
     label: "Volkswagen ID. Buzz PRO (2025)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 222,
     massTonnes: 2.416,
@@ -10581,6 +11541,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_3:2024:id_3_gtx",
     label: "Volkswagen ID.3 GTX (2024)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 157,
     massTonnes: 2.07,
@@ -10592,6 +11553,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_3:2025:id_3_gtx",
     label: "Volkswagen ID.3 GTX (2025)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 157,
     massTonnes: 2.07,
@@ -10603,6 +11565,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_3:2023:id_3",
     label: "Volkswagen ID.3 PRO (2023)",
+    make: "Volkswagen",
     batteryKwh: 58,
     baseWhPerKm: 165,
     massTonnes: 1.83,
@@ -10614,6 +11577,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_3:2024:id_3",
     label: "Volkswagen ID.3 PRO (2024)",
+    make: "Volkswagen",
     batteryKwh: 58,
     baseWhPerKm: 165,
     massTonnes: 1.83,
@@ -10625,6 +11589,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_3:2025:id_3",
     label: "Volkswagen ID.3 PRO (2025)",
+    make: "Volkswagen",
     batteryKwh: 58,
     baseWhPerKm: 165,
     massTonnes: 1.83,
@@ -10636,6 +11601,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_3:2023:id_3_pro_s",
     label: "Volkswagen ID.3 PRO S (2023)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 168,
     massTonnes: 1.92,
@@ -10647,6 +11613,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_3:2024:id_3_pro_s",
     label: "Volkswagen ID.3 PRO S (2024)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 168,
     massTonnes: 1.92,
@@ -10658,6 +11625,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_3:2025:id_3_pro_s",
     label: "Volkswagen ID.3 PRO S (2025)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 168,
     massTonnes: 1.92,
@@ -10669,6 +11637,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_4:2023:id_4_gtx",
     label: "Volkswagen ID.4 GTX (2023)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 196,
     massTonnes: 2.25,
@@ -10680,6 +11649,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_4:2024:id_4_gtx",
     label: "Volkswagen ID.4 GTX (2024)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 196,
     massTonnes: 2.25,
@@ -10691,6 +11661,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_4:2025:id_4_gtx",
     label: "Volkswagen ID.4 GTX (2025)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 196,
     massTonnes: 2.25,
@@ -10702,6 +11673,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_4:2023:id_4",
     label: "Volkswagen ID.4 PRO (2023)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 181,
     massTonnes: 2.124,
@@ -10713,6 +11685,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_4:2024:id_4",
     label: "Volkswagen ID.4 PRO (2024)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 181,
     massTonnes: 2.124,
@@ -10724,6 +11697,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_4:2025:id_4",
     label: "Volkswagen ID.4 PRO (2025)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 181,
     massTonnes: 2.124,
@@ -10735,6 +11709,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_5:2023:id_5_gtx",
     label: "Volkswagen ID.5 GTX (2023)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 196,
     massTonnes: 2.236,
@@ -10746,6 +11721,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_5:2024:id_5_gtx",
     label: "Volkswagen ID.5 GTX (2024)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 196,
     massTonnes: 2.236,
@@ -10757,6 +11733,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_5:2025:id_5_gtx",
     label: "Volkswagen ID.5 GTX (2025)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 196,
     massTonnes: 2.236,
@@ -10768,6 +11745,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_5:2023:id_5",
     label: "Volkswagen ID.5 PRO (2023)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 181,
     massTonnes: 2.11,
@@ -10779,6 +11757,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_5:2024:id_5",
     label: "Volkswagen ID.5 PRO (2024)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 181,
     massTonnes: 2.11,
@@ -10790,6 +11769,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_5:2025:id_5",
     label: "Volkswagen ID.5 PRO (2025)",
+    make: "Volkswagen",
     batteryKwh: 77,
     baseWhPerKm: 181,
     massTonnes: 2.11,
@@ -10801,6 +11781,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_7:2024:id_7",
     label: "Volkswagen ID.7 PRO (2024)",
+    make: "Volkswagen",
     batteryKwh: 86,
     baseWhPerKm: 150,
     massTonnes: 2.12,
@@ -10812,6 +11793,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_7:2025:id_7",
     label: "Volkswagen ID.7 PRO (2025)",
+    make: "Volkswagen",
     batteryKwh: 86,
     baseWhPerKm: 150,
     massTonnes: 2.12,
@@ -10823,6 +11805,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_7:2024:id_7_tour",
     label: "Volkswagen ID.7 Tour (2024)",
+    make: "Volkswagen",
     batteryKwh: 86,
     baseWhPerKm: 150,
     massTonnes: 2.12,
@@ -10834,6 +11817,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volkswagen:id_7:2025:id_7_tour",
     label: "Volkswagen ID.7 Tour (2025)",
+    make: "Volkswagen",
     batteryKwh: 86,
     baseWhPerKm: 150,
     massTonnes: 2.12,
@@ -10845,6 +11829,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ec40:2023:ec40",
     label: "Volvo EC40 (2023)",
+    make: "Volvo",
     batteryKwh: 69,
     baseWhPerKm: 200,
     massTonnes: 2.1,
@@ -10856,6 +11841,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ec40:2024:ec40",
     label: "Volvo EC40 (2024)",
+    make: "Volvo",
     batteryKwh: 69,
     baseWhPerKm: 200,
     massTonnes: 2.1,
@@ -10867,6 +11853,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ec40:2025:ec40",
     label: "Volvo EC40 (2025)",
+    make: "Volvo",
     batteryKwh: 69,
     baseWhPerKm: 200,
     massTonnes: 2.1,
@@ -10878,6 +11865,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ec40:2023:ec40_twin_motor",
     label: "Volvo EC40 Twin Motor (2023)",
+    make: "Volvo",
     batteryKwh: 69,
     baseWhPerKm: 204,
     massTonnes: 2.18,
@@ -10889,6 +11877,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ec40:2024:ec40_twin_motor",
     label: "Volvo EC40 Twin Motor (2024)",
+    make: "Volvo",
     batteryKwh: 69,
     baseWhPerKm: 204,
     massTonnes: 2.18,
@@ -10900,6 +11889,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ec40:2025:ec40_twin_motor",
     label: "Volvo EC40 Twin Motor (2025)",
+    make: "Volvo",
     batteryKwh: 69,
     baseWhPerKm: 204,
     massTonnes: 2.18,
@@ -10911,6 +11901,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ex30:2023:ex30",
     label: "Volvo EX30 (2023)",
+    make: "Volvo",
     batteryKwh: 49,
     baseWhPerKm: 174,
     massTonnes: 1.83,
@@ -10922,6 +11913,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ex30:2024:ex30",
     label: "Volvo EX30 (2024)",
+    make: "Volvo",
     batteryKwh: 49,
     baseWhPerKm: 174,
     massTonnes: 1.83,
@@ -10933,6 +11925,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ex30:2025:ex30",
     label: "Volvo EX30 (2025)",
+    make: "Volvo",
     batteryKwh: 49,
     baseWhPerKm: 174,
     massTonnes: 1.83,
@@ -10944,6 +11937,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ex30:2023:ex30_69kwh",
     label: "Volvo EX30 69 kWh (2023)",
+    make: "Volvo",
     batteryKwh: 66,
     baseWhPerKm: 168,
     massTonnes: 1.9,
@@ -10955,6 +11949,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ex30:2024:ex30_69kwh",
     label: "Volvo EX30 69 kWh (2024)",
+    make: "Volvo",
     batteryKwh: 66,
     baseWhPerKm: 168,
     massTonnes: 1.9,
@@ -10966,6 +11961,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ex30:2025:ex30_69kwh",
     label: "Volvo EX30 69 kWh (2025)",
+    make: "Volvo",
     batteryKwh: 66,
     baseWhPerKm: 168,
     massTonnes: 1.9,
@@ -10977,6 +11973,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ex30:2023:ex30_twin_motor_performance",
     label: "Volvo EX30 Performance Twin Motor Performance (2023)",
+    make: "Volvo",
     batteryKwh: 66,
     baseWhPerKm: 175,
     massTonnes: 2.01,
@@ -10988,6 +11985,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ex30:2024:ex30_twin_motor_performance",
     label: "Volvo EX30 Performance Twin Motor Performance (2024)",
+    make: "Volvo",
     batteryKwh: 66,
     baseWhPerKm: 175,
     massTonnes: 2.01,
@@ -10999,6 +11997,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ex30:2025:ex30_twin_motor_performance",
     label: "Volvo EX30 Performance Twin Motor Performance (2025)",
+    make: "Volvo",
     batteryKwh: 66,
     baseWhPerKm: 175,
     massTonnes: 2.01,
@@ -11010,6 +12009,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ex30:2023:ex30_twin_motor",
     label: "Volvo EX30 Twin Motor (2023)",
+    make: "Volvo",
     batteryKwh: 66,
     baseWhPerKm: 175,
     massTonnes: 2.01,
@@ -11021,6 +12021,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ex30:2024:ex30_twin_motor",
     label: "Volvo EX30 Twin Motor (2024)",
+    make: "Volvo",
     batteryKwh: 66,
     baseWhPerKm: 175,
     massTonnes: 2.01,
@@ -11032,6 +12033,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ex30:2025:ex30_twin_motor",
     label: "Volvo EX30 Twin Motor (2025)",
+    make: "Volvo",
     batteryKwh: 66,
     baseWhPerKm: 175,
     massTonnes: 2.01,
@@ -11043,6 +12045,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ex40:2023:ex40",
     label: "Volvo EX40 (2023)",
+    make: "Volvo",
     batteryKwh: 69,
     baseWhPerKm: 198,
     massTonnes: 2.118,
@@ -11054,6 +12057,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ex40:2024:ex40",
     label: "Volvo EX40 (2024)",
+    make: "Volvo",
     batteryKwh: 69,
     baseWhPerKm: 198,
     massTonnes: 2.118,
@@ -11065,6 +12069,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ex40:2025:ex40",
     label: "Volvo EX40 (2025)",
+    make: "Volvo",
     batteryKwh: 69,
     baseWhPerKm: 198,
     massTonnes: 2.118,
@@ -11076,6 +12081,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ex40:2023:ex40_twin_motor",
     label: "Volvo EX40 Twin Motor (2023)",
+    make: "Volvo",
     batteryKwh: 69,
     baseWhPerKm: 201,
     massTonnes: 2.2,
@@ -11087,6 +12093,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ex40:2024:ex40_twin_motor",
     label: "Volvo EX40 Twin Motor (2024)",
+    make: "Volvo",
     batteryKwh: 69,
     baseWhPerKm: 201,
     massTonnes: 2.2,
@@ -11098,6 +12105,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ex40:2025:ex40_twin_motor",
     label: "Volvo EX40 Twin Motor (2025)",
+    make: "Volvo",
     batteryKwh: 69,
     baseWhPerKm: 201,
     massTonnes: 2.2,
@@ -11109,6 +12117,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ex90:2024:ex90",
     label: "Volvo EX90 (2024)",
+    make: "Volvo",
     batteryKwh: 107,
     baseWhPerKm: 217,
     massTonnes: 2.818,
@@ -11120,6 +12129,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "volvo:ex90:2025:ex90",
     label: "Volvo EX90 (2025)",
+    make: "Volvo",
     batteryKwh: 107,
     baseWhPerKm: 217,
     massTonnes: 2.818,
@@ -11131,6 +12141,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "voyah:courage:2023:courage",
     label: "Voyah Courage (2023)",
+    make: "Voyah",
     batteryKwh: 75,
     baseWhPerKm: 192,
     massTonnes: 2.15,
@@ -11142,6 +12153,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "voyah:courage:2024:courage",
     label: "Voyah Courage (2024)",
+    make: "Voyah",
     batteryKwh: 75,
     baseWhPerKm: 192,
     massTonnes: 2.15,
@@ -11153,6 +12165,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "voyah:courage:2025:courage",
     label: "Voyah Courage (2025)",
+    make: "Voyah",
     batteryKwh: 75,
     baseWhPerKm: 192,
     massTonnes: 2.15,
@@ -11164,6 +12177,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "voyah:courage:2023:courage_awd",
     label: "Voyah Courage All-Wheel Drive (2023)",
+    make: "Voyah",
     batteryKwh: 75,
     baseWhPerKm: 205,
     massTonnes: 2.28,
@@ -11175,6 +12189,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "voyah:courage:2024:courage_awd",
     label: "Voyah Courage All-Wheel Drive (2024)",
+    make: "Voyah",
     batteryKwh: 75,
     baseWhPerKm: 205,
     massTonnes: 2.28,
@@ -11186,6 +12201,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "voyah:courage:2025:courage_awd",
     label: "Voyah Courage All-Wheel Drive (2025)",
+    make: "Voyah",
     batteryKwh: 75,
     baseWhPerKm: 205,
     massTonnes: 2.28,
@@ -11197,6 +12213,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "voyah:dream:2023:dream",
     label: "Voyah Dream (2023)",
+    make: "Voyah",
     batteryKwh: 102,
     baseWhPerKm: 258,
     massTonnes: 2.54,
@@ -11208,6 +12225,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "voyah:dream:2024:dream",
     label: "Voyah Dream (2024)",
+    make: "Voyah",
     batteryKwh: 102,
     baseWhPerKm: 258,
     massTonnes: 2.54,
@@ -11219,6 +12237,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "voyah:dream:2025:dream",
     label: "Voyah Dream (2025)",
+    make: "Voyah",
     batteryKwh: 102,
     baseWhPerKm: 258,
     massTonnes: 2.54,
@@ -11230,6 +12249,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "voyah:free:2023:free",
     label: "Voyah Free (2023)",
+    make: "Voyah",
     batteryKwh: 100,
     baseWhPerKm: 244,
     massTonnes: 2.35,
@@ -11241,6 +12261,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "voyah:free:2024:free",
     label: "Voyah Free (2024)",
+    make: "Voyah",
     batteryKwh: 100,
     baseWhPerKm: 244,
     massTonnes: 2.35,
@@ -11252,6 +12273,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "voyah:free:2025:free",
     label: "Voyah Free (2025)",
+    make: "Voyah",
     batteryKwh: 100,
     baseWhPerKm: 244,
     massTonnes: 2.35,
@@ -11263,6 +12285,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:g6:2023:g6_awd_performance",
     label: "XPeng G6 AWD Performance (2023)",
+    make: "XPeng",
     batteryKwh: 87.5,
     baseWhPerKm: 174,
     massTonnes: 2.116,
@@ -11274,6 +12297,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:g6:2024:g6_awd_performance",
     label: "XPeng G6 AWD Performance (2024)",
+    make: "XPeng",
     batteryKwh: 87.5,
     baseWhPerKm: 174,
     massTonnes: 2.116,
@@ -11285,6 +12309,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:g6:2025:g6_awd_performance",
     label: "XPeng G6 AWD Performance (2025)",
+    make: "XPeng",
     batteryKwh: 87.5,
     baseWhPerKm: 174,
     massTonnes: 2.116,
@@ -11296,6 +12321,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:g6:2023:g6_long_range",
     label: "XPeng G6 Long Range (2023)",
+    make: "XPeng",
     batteryKwh: 80.8,
     baseWhPerKm: 160,
     massTonnes: 2.05,
@@ -11307,6 +12333,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:g6:2024:g6_long_range",
     label: "XPeng G6 Long Range (2024)",
+    make: "XPeng",
     batteryKwh: 80.8,
     baseWhPerKm: 160,
     massTonnes: 2.05,
@@ -11318,6 +12345,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:g6:2025:g6_long_range",
     label: "XPeng G6 Long Range (2025)",
+    make: "XPeng",
     batteryKwh: 80.8,
     baseWhPerKm: 160,
     massTonnes: 2.05,
@@ -11329,6 +12357,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:g6:2023:g6",
     label: "XPeng G6 Standard Range (2023)",
+    make: "XPeng",
     batteryKwh: 66,
     baseWhPerKm: 158,
     massTonnes: 1.995,
@@ -11340,6 +12369,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:g6:2024:g6",
     label: "XPeng G6 Standard Range (2024)",
+    make: "XPeng",
     batteryKwh: 66,
     baseWhPerKm: 158,
     massTonnes: 1.995,
@@ -11351,6 +12381,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:g6:2025:g6",
     label: "XPeng G6 Standard Range (2025)",
+    make: "XPeng",
     batteryKwh: 66,
     baseWhPerKm: 158,
     massTonnes: 1.995,
@@ -11362,6 +12393,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:g6:2023:g6_ultra_long_range",
     label: "XPeng G6 Ultra Long Range (2023)",
+    make: "XPeng",
     batteryKwh: 87.5,
     baseWhPerKm: 161,
     massTonnes: 2.116,
@@ -11373,6 +12405,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:g6:2024:g6_ultra_long_range",
     label: "XPeng G6 Ultra Long Range (2024)",
+    make: "XPeng",
     batteryKwh: 87.5,
     baseWhPerKm: 161,
     massTonnes: 2.116,
@@ -11384,6 +12417,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:g6:2025:g6_ultra_long_range",
     label: "XPeng G6 Ultra Long Range (2025)",
+    make: "XPeng",
     batteryKwh: 87.5,
     baseWhPerKm: 161,
     massTonnes: 2.116,
@@ -11395,6 +12429,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:g7:2025:g7",
     label: "XPeng G7 (2025)",
+    make: "XPeng",
     batteryKwh: 68.5,
     baseWhPerKm: 165,
     massTonnes: 2.085,
@@ -11406,6 +12441,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:g7:2025:g7_long_range",
     label: "XPeng G7 Long Range (2025)",
+    make: "XPeng",
     batteryKwh: 80.8,
     baseWhPerKm: 160,
     massTonnes: 2.16,
@@ -11417,6 +12453,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:mona_m03:2024:mona_m03",
     label: "XPeng Mona M03 (2024)",
+    make: "XPeng",
     batteryKwh: 51.8,
     baseWhPerKm: 140,
     massTonnes: 1.661,
@@ -11428,6 +12465,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:mona_m03:2025:mona_m03",
     label: "XPeng Mona M03 (2025)",
+    make: "XPeng",
     batteryKwh: 51.8,
     baseWhPerKm: 140,
     massTonnes: 1.661,
@@ -11439,6 +12477,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:mona_m03:2024:mona_m03_extended_range",
     label: "XPeng Mona M03 Extended Range (2024)",
+    make: "XPeng",
     batteryKwh: 62.2,
     baseWhPerKm: 139,
     massTonnes: 1.739,
@@ -11450,6 +12489,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:mona_m03:2025:mona_m03_extended_range",
     label: "XPeng Mona M03 Extended Range (2025)",
+    make: "XPeng",
     batteryKwh: 62.2,
     baseWhPerKm: 139,
     massTonnes: 1.739,
@@ -11461,6 +12501,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:p7_gen2:2025:p7_gen2",
     label: "XPeng P7 (2nd Generation) (2025)",
+    make: "XPeng",
     batteryKwh: 74.9,
     baseWhPerKm: 149,
     massTonnes: 2.1,
@@ -11472,6 +12513,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:p7_gen2:2025:p7_gen2_long_range",
     label: "XPeng P7 (2nd Generation) Long Range (2025)",
+    make: "XPeng",
     batteryKwh: 92.2,
     baseWhPerKm: 156,
     massTonnes: 2.2,
@@ -11483,6 +12525,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:p7_plus:2024:p7_plus",
     label: "XPeng P7+ (2024)",
+    make: "XPeng",
     batteryKwh: 60.7,
     baseWhPerKm: 140,
     massTonnes: 2.16,
@@ -11494,6 +12537,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:p7_plus:2025:p7_plus",
     label: "XPeng P7+ (2025)",
+    make: "XPeng",
     batteryKwh: 60.7,
     baseWhPerKm: 140,
     massTonnes: 2.16,
@@ -11505,6 +12549,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:p7_plus:2025:p7_plus_flagship",
     label: "XPeng P7+ Flagship (2025)",
+    make: "XPeng",
     batteryKwh: 74.9,
     baseWhPerKm: 139,
     massTonnes: 2.16,
@@ -11516,6 +12561,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:p7_plus:2024:p7_plus_long_range",
     label: "XPeng P7+ Long Range (2024)",
+    make: "XPeng",
     batteryKwh: 76.3,
     baseWhPerKm: 146,
     massTonnes: 2.16,
@@ -11527,6 +12573,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:p7_plus:2025:p7_plus_long_range",
     label: "XPeng P7+ Long Range (2025)",
+    make: "XPeng",
     batteryKwh: 76.3,
     baseWhPerKm: 146,
     massTonnes: 2.16,
@@ -11538,6 +12585,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:x9:2024:x9",
     label: "XPeng X9 (2024)",
+    make: "XPeng",
     batteryKwh: 84.5,
     baseWhPerKm: 192,
     massTonnes: 2.555,
@@ -11549,6 +12597,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:x9:2025:x9",
     label: "XPeng X9 (2025)",
+    make: "XPeng",
     batteryKwh: 84.5,
     baseWhPerKm: 192,
     massTonnes: 2.555,
@@ -11560,6 +12609,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:x9:2024:x9_awd",
     label: "XPeng X9 AWD (2024)",
+    make: "XPeng",
     batteryKwh: 101.5,
     baseWhPerKm: 201,
     massTonnes: 2.75,
@@ -11571,6 +12621,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:x9:2025:x9_awd",
     label: "XPeng X9 AWD (2025)",
+    make: "XPeng",
     batteryKwh: 101.5,
     baseWhPerKm: 201,
     massTonnes: 2.75,
@@ -11582,6 +12633,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:x9:2024:x9_long_range",
     label: "XPeng X9 Long Range (2024)",
+    make: "XPeng",
     batteryKwh: 101.5,
     baseWhPerKm: 201,
     massTonnes: 2.65,
@@ -11593,6 +12645,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "xpeng:x9:2025:x9_long_range",
     label: "XPeng X9 Long Range (2025)",
+    make: "XPeng",
     batteryKwh: 101.5,
     baseWhPerKm: 201,
     massTonnes: 2.65,
@@ -11604,6 +12657,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "yangwang:u7:2025:u7",
     label: "YangWang U7 (2025)",
+    make: "YangWang",
     batteryKwh: 135.5,
     baseWhPerKm: 235,
     massTonnes: 1.9,
@@ -11615,6 +12669,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "yangwang:u8:2023:u8",
     label: "YangWang U8 (2023)",
+    make: "YangWang",
     batteryKwh: 49.05,
     baseWhPerKm: 378,
     massTonnes: 2.2,
@@ -11626,6 +12681,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "yangwang:u8:2024:u8",
     label: "YangWang U8 (2024)",
+    make: "YangWang",
     batteryKwh: 49.05,
     baseWhPerKm: 378,
     massTonnes: 2.2,
@@ -11637,6 +12693,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "yangwang:u8:2025:u8",
     label: "YangWang U8 (2025)",
+    make: "YangWang",
     batteryKwh: 49.05,
     baseWhPerKm: 378,
     massTonnes: 2.2,
@@ -11648,6 +12705,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "yangwang:u9:2023:u9",
     label: "YangWang U9 (2023)",
+    make: "YangWang",
     batteryKwh: 80,
     baseWhPerKm: 239,
     massTonnes: 1.9,
@@ -11659,6 +12717,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "yangwang:u9:2024:u9",
     label: "YangWang U9 (2024)",
+    make: "YangWang",
     batteryKwh: 80,
     baseWhPerKm: 239,
     massTonnes: 1.9,
@@ -11670,6 +12729,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "yangwang:u9:2025:u9",
     label: "YangWang U9 (2025)",
+    make: "YangWang",
     batteryKwh: 80,
     baseWhPerKm: 239,
     massTonnes: 1.9,
@@ -11681,6 +12741,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:001:2023:001",
     label: "Zeekr 001 (2023)",
+    make: "Zeekr",
     batteryKwh: 95,
     baseWhPerKm: 191,
     massTonnes: 2.29,
@@ -11692,6 +12753,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:001:2024:001",
     label: "Zeekr 001 (2024)",
+    make: "Zeekr",
     batteryKwh: 95,
     baseWhPerKm: 191,
     massTonnes: 2.29,
@@ -11703,6 +12765,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:001:2025:001",
     label: "Zeekr 001 (2025)",
+    make: "Zeekr",
     batteryKwh: 95,
     baseWhPerKm: 191,
     massTonnes: 2.29,
@@ -11714,6 +12777,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:001:2023:001_140kwh",
     label: "Zeekr 001 Extended Range 140 kWh Extended Range (2023)",
+    make: "Zeekr",
     batteryKwh: 133,
     baseWhPerKm: 191,
     massTonnes: 2.45,
@@ -11725,6 +12789,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:001:2024:001_140kwh",
     label: "Zeekr 001 Extended Range 140 kWh Extended Range (2024)",
+    make: "Zeekr",
     batteryKwh: 133,
     baseWhPerKm: 191,
     massTonnes: 2.45,
@@ -11736,6 +12801,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:001:2025:001_140kwh",
     label: "Zeekr 001 Extended Range 140 kWh Extended Range (2025)",
+    make: "Zeekr",
     batteryKwh: 133,
     baseWhPerKm: 191,
     massTonnes: 2.45,
@@ -11747,6 +12813,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:007:2023:007",
     label: "Zeekr 007 (2023)",
+    make: "Zeekr",
     batteryKwh: 72,
     baseWhPerKm: 157,
     massTonnes: 2.05,
@@ -11758,6 +12825,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:007:2024:007",
     label: "Zeekr 007 (2024)",
+    make: "Zeekr",
     batteryKwh: 72,
     baseWhPerKm: 157,
     massTonnes: 2.05,
@@ -11769,6 +12837,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:007:2025:007",
     label: "Zeekr 007 (2025)",
+    make: "Zeekr",
     batteryKwh: 72,
     baseWhPerKm: 157,
     massTonnes: 2.05,
@@ -11780,6 +12849,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:007:2023:007_awd",
     label: "Zeekr 007 All-Wheel Drive (2023)",
+    make: "Zeekr",
     batteryKwh: 95,
     baseWhPerKm: 163,
     massTonnes: 2.15,
@@ -11791,6 +12861,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:007:2024:007_awd",
     label: "Zeekr 007 All-Wheel Drive (2024)",
+    make: "Zeekr",
     batteryKwh: 95,
     baseWhPerKm: 163,
     massTonnes: 2.15,
@@ -11802,6 +12873,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:007:2025:007_awd",
     label: "Zeekr 007 All-Wheel Drive (2025)",
+    make: "Zeekr",
     batteryKwh: 95,
     baseWhPerKm: 163,
     massTonnes: 2.15,
@@ -11813,6 +12885,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:009:2024:009",
     label: "Zeekr 009 (2024)",
+    make: "Zeekr",
     batteryKwh: 102,
     baseWhPerKm: 206,
     massTonnes: 2.83,
@@ -11824,6 +12897,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:009:2025:009",
     label: "Zeekr 009 (2025)",
+    make: "Zeekr",
     batteryKwh: 102,
     baseWhPerKm: 206,
     massTonnes: 2.83,
@@ -11835,6 +12909,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:009:2024:009_grand",
     label: "Zeekr 009 Grand (2024)",
+    make: "Zeekr",
     batteryKwh: 102,
     baseWhPerKm: 206,
     massTonnes: 2.83,
@@ -11846,6 +12921,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:009:2025:009_grand",
     label: "Zeekr 009 Grand (2025)",
+    make: "Zeekr",
     batteryKwh: 102,
     baseWhPerKm: 206,
     massTonnes: 2.83,
@@ -11857,6 +12933,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:009:2024:009_platinum",
     label: "Zeekr 009 Platinum (2024)",
+    make: "Zeekr",
     batteryKwh: 102,
     baseWhPerKm: 206,
     massTonnes: 2.83,
@@ -11868,6 +12945,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:009:2025:009_platinum",
     label: "Zeekr 009 Platinum (2025)",
+    make: "Zeekr",
     batteryKwh: 102,
     baseWhPerKm: 206,
     massTonnes: 2.83,
@@ -11879,6 +12957,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:7x:2024:7x",
     label: "Zeekr 7X (2024)",
+    make: "Zeekr",
     batteryKwh: 72,
     baseWhPerKm: 177,
     massTonnes: 2.15,
@@ -11890,6 +12969,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:7x:2025:7x",
     label: "Zeekr 7X (2025)",
+    make: "Zeekr",
     batteryKwh: 72,
     baseWhPerKm: 177,
     massTonnes: 2.15,
@@ -11901,6 +12981,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:7x:2024:7x_awd",
     label: "Zeekr 7X All-Wheel Drive (2024)",
+    make: "Zeekr",
     batteryKwh: 72,
     baseWhPerKm: 177,
     massTonnes: 2.25,
@@ -11912,6 +12993,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:7x:2025:7x_awd",
     label: "Zeekr 7X All-Wheel Drive (2025)",
+    make: "Zeekr",
     batteryKwh: 72,
     baseWhPerKm: 177,
     massTonnes: 2.25,
@@ -11923,6 +13005,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:7x:2024:7x_awd_100kwh",
     label: "Zeekr 7X All-Wheel Drive Extended Range All-Wheel Drive 100 kWh (2024)",
+    make: "Zeekr",
     batteryKwh: 95,
     baseWhPerKm: 181,
     massTonnes: 2.35,
@@ -11934,6 +13017,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:7x:2025:7x_awd_100kwh",
     label: "Zeekr 7X All-Wheel Drive Extended Range All-Wheel Drive 100 kWh (2025)",
+    make: "Zeekr",
     batteryKwh: 95,
     baseWhPerKm: 181,
     massTonnes: 2.35,
@@ -11945,6 +13029,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:7x:2024:7x_100kwh",
     label: "Zeekr 7X Extended Range 100 kWh Extended Range (2024)",
+    make: "Zeekr",
     batteryKwh: 95,
     baseWhPerKm: 181,
     massTonnes: 2.25,
@@ -11956,6 +13041,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:7x:2025:7x_100kwh",
     label: "Zeekr 7X Extended Range 100 kWh Extended Range (2025)",
+    make: "Zeekr",
     batteryKwh: 95,
     baseWhPerKm: 181,
     massTonnes: 2.25,
@@ -11967,6 +13053,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:x:2023:x",
     label: "Zeekr X (2023)",
+    make: "Zeekr",
     batteryKwh: 62,
     baseWhPerKm: 172,
     massTonnes: 1.85,
@@ -11978,6 +13065,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:x:2024:x",
     label: "Zeekr X (2024)",
+    make: "Zeekr",
     batteryKwh: 62,
     baseWhPerKm: 172,
     massTonnes: 1.85,
@@ -11989,6 +13077,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:x:2025:x",
     label: "Zeekr X (2025)",
+    make: "Zeekr",
     batteryKwh: 62,
     baseWhPerKm: 172,
     massTonnes: 1.85,
@@ -12000,6 +13089,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:x:2023:x_awd",
     label: "Zeekr X All-Wheel Drive (2023)",
+    make: "Zeekr",
     batteryKwh: 62,
     baseWhPerKm: 172,
     massTonnes: 1.95,
@@ -12011,6 +13101,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:x:2024:x_awd",
     label: "Zeekr X All-Wheel Drive (2024)",
+    make: "Zeekr",
     batteryKwh: 62,
     baseWhPerKm: 172,
     massTonnes: 1.95,
@@ -12022,6 +13113,7 @@ export const GENERATED_VEHICLES: readonly GeneratedVehicleRecord[] = [
   {
     id: "zeekr:x:2025:x_awd",
     label: "Zeekr X All-Wheel Drive (2025)",
+    make: "Zeekr",
     batteryKwh: 62,
     baseWhPerKm: 172,
     massTonnes: 1.95,

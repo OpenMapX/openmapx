@@ -32,6 +32,8 @@ export interface RawVehicle {
 export interface GeneratedVehicle {
   id: string;
   label: string;
+  /** Manufacturer on its own, so the picker can group by it without parsing the label. */
+  make: string;
   batteryKwh: number;
   baseWhPerKm: number;
   massTonnes: number;
@@ -300,6 +302,7 @@ export function mapVehicle(raw: RawVehicle): { ok: GeneratedVehicle } | { drop: 
     ok: {
       id: raw.unique_code ?? "",
       label: buildLabel(raw),
+      make: (raw.make?.name ?? "").trim(),
       batteryKwh,
       baseWhPerKm: Math.round((batteryKwh / (range.km * factor)) * 1000),
       massTonnes: estimateMassTonnes(raw),

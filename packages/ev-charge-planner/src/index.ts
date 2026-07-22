@@ -1,6 +1,7 @@
 export { routeEnergyKwh, tempDerate } from "./consumption"; // D12 — client-side route energy
 export { COMMON_EV_NETWORKS } from "./networks";
 export { planCharges } from "./plan";
+export type { VehicleListEntry } from "./presets";
 export {
   getVehiclePreset,
   listVehicles,

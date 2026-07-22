@@ -51,6 +51,7 @@ function renderRecord(vehicle: GeneratedVehicle): string {
     "  {",
     `    id: ${JSON.stringify(vehicle.id)},`,
     `    label: ${JSON.stringify(vehicle.label)},`,
+    `    make: ${JSON.stringify(vehicle.make)},`,
     `    batteryKwh: ${vehicle.batteryKwh},`,
     `    baseWhPerKm: ${vehicle.baseWhPerKm},`,
     `    massTonnes: ${vehicle.massTonnes},`,
@@ -82,6 +83,7 @@ import type { ConnectorStandard } from "@openmapx/core";
 export interface GeneratedVehicleRecord {
   id: string;
   label: string;
+  make: string;
   batteryKwh: number;
   baseWhPerKm: number;
   massTonnes: number;
@@ -120,7 +122,14 @@ async function main(): Promise<void> {
 
   const { kept, collapsed } = dedupeVehicles(mapped);
   const vehicles = disambiguateLabels(kept);
-  vehicles.sort((a, b) => a.label.localeCompare(b.label, "en") || a.id.localeCompare(b.id));
+  // Make first: the picker groups by it, and MUI emits a duplicate group header
+  // whenever a group's options are not contiguous in the option array.
+  vehicles.sort(
+    (a, b) =>
+      a.make.localeCompare(b.make, "en") ||
+      a.label.localeCompare(b.label, "en") ||
+      a.id.localeCompare(b.id),
+  );
 
   await mkdir(dirname(OUT_PATH), { recursive: true });
   await writeFile(OUT_PATH, renderModule(vehicles), "utf8");
