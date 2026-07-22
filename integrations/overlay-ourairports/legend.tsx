@@ -154,6 +154,7 @@ export function AirportsOverlayLegend() {
         >
           <Box
             component="span"
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: buildAttributionHtml routes manifest overrides through sanitizeAttributionHtml, self-escapes text, and validates URLs
             dangerouslySetInnerHTML={{
               __html: buildAttributionHtml({
                 name: attributionSource.name,
