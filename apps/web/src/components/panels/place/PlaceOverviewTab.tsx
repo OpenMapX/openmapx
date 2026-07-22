@@ -54,6 +54,7 @@ import { useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { resolveListIcon } from "@/lib/listIcon";
 import { TEAL } from "@/lib/theme";
+import { useOpeningHoursText } from "@/lib/useOpeningHoursText";
 import { PlaceTransitSection } from "../transit/PlaceTransitSection";
 import { DataSourceSections } from "./DataSourceSections";
 import { PlaceActionButtons } from "./PlaceActionButtons";
@@ -197,6 +198,7 @@ export function PlaceOverviewTab({
   const tSun = useTranslations("sunTimes");
   const tTides = useTranslations("tides");
   const tMarine = useTranslations("marineWeather");
+  const ohText = useOpeningHoursText();
   const isCity = isCityOrSmaller(place);
   const hours = place.openingHoursInfo?.status ?? null;
   const plusCode = computePlusCode(place.coordinates);
@@ -444,9 +446,9 @@ export function PlaceOverviewTab({
                         fontWeight: 500,
                       }}
                     >
-                      {hours.isOpen ? tc("open") : tc("closed")}
+                      {ohText.state(hours)}
                     </Typography>
-                    {hours.detail && (
+                    {ohText.detail(hours) && (
                       <Typography
                         variant="body2"
                         component="span"
@@ -455,34 +457,34 @@ export function PlaceOverviewTab({
                         }}
                       >
                         {" · "}
-                        {hours.detail}
+                        {ohText.detail(hours)}
                       </Typography>
                     )}
                   </>
                 }
               >
                 <Box sx={{ mt: 1, mb: 0.5 }}>
-                  {hours.weekSchedule.map(({ day, hours: h, isToday }) => (
-                    <Box key={day} sx={{ display: "flex", gap: 2, py: 0.4 }}>
+                  {hours.weekSchedule.map((entry) => (
+                    <Box key={entry.weekday} sx={{ display: "flex", gap: 2, py: 0.4 }}>
                       <Typography
                         variant="body2"
-                        color={isToday ? "text.primary" : "text.secondary"}
+                        color={entry.isToday ? "text.primary" : "text.secondary"}
                         sx={{
-                          fontWeight: isToday ? 600 : 400,
+                          fontWeight: entry.isToday ? 600 : 400,
                           width: 96,
                           flexShrink: 0,
                         }}
                       >
-                        {day}
+                        {ohText.weekday(entry.weekday)}
                       </Typography>
                       <Typography
                         variant="body2"
-                        color={isToday ? "text.primary" : "text.secondary"}
+                        color={entry.isToday ? "text.primary" : "text.secondary"}
                         sx={{
-                          fontWeight: isToday ? 600 : 400,
+                          fontWeight: entry.isToday ? 600 : 400,
                         }}
                       >
-                        {h}
+                        {ohText.dayHours(entry)}
                       </Typography>
                     </Box>
                   ))}
@@ -498,7 +500,7 @@ export function PlaceOverviewTab({
                       color: "text.secondary",
                     }}
                   >
-                    {hours.detail}
+                    {hours.text}
                   </Typography>
                 ) : (
                   <>
@@ -510,9 +512,9 @@ export function PlaceOverviewTab({
                         fontWeight: 500,
                       }}
                     >
-                      {hours.isOpen ? tc("open") : tc("closed")}
+                      {ohText.state(hours)}
                     </Typography>
-                    {hours.detail && (
+                    {ohText.detail(hours) && (
                       <Typography
                         variant="body2"
                         component="span"
@@ -521,7 +523,7 @@ export function PlaceOverviewTab({
                         }}
                       >
                         {" · "}
-                        {hours.detail}
+                        {ohText.detail(hours)}
                       </Typography>
                     )}
                   </>

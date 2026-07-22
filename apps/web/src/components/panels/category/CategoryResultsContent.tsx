@@ -30,6 +30,7 @@ import { ResultItemName, ResultList, ResultListItem } from "@/components/ui/Resu
 import { useMap } from "@/lib/MapContext";
 import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
 import { useExploreReachResults } from "@/lib/useExploreReachResults";
+import { useOpeningHoursText } from "@/lib/useOpeningHoursText";
 import { ExploreTravelTimeControl } from "./ExploreTravelTimeControl";
 
 const TRANSIT_MODE_ICONS: Partial<Record<TransportMode, typeof TrainIcon>> = {
@@ -85,6 +86,7 @@ function CategoryPlaceCard({
 }) {
   const tp = useTranslations("place");
   const tc = useTranslations("common");
+  const ohText = useOpeningHoursText();
   const tagLabel = place.category
     ? place.category.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
     : undefined;
@@ -141,15 +143,14 @@ function CategoryPlaceCard({
                   color: "text.secondary",
                 }}
               >
-                {hours.detail}
+                {hours.text}
               </Typography>
             );
           }
+          const detail = ohText.detail(hours);
           return (
             <Typography variant="caption" color={hours.isOpen ? "success.main" : "error.main"}>
-              {hours.isOpen
-                ? tp("openDetail", { detail: hours.detail })
-                : tp("closedDetail", { detail: hours.detail })}
+              {hours.isOpen ? tp("openDetail", { detail }) : tp("closedDetail", { detail })}
             </Typography>
           );
         }

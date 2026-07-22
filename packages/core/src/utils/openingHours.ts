@@ -9,27 +9,20 @@ import tzLookup from "tz-lookup";
 import type {
   DaySchedule,
   LocationContext,
+  OpeningHoursChange,
   OpeningHoursInfo,
   OpeningHoursStatus,
+  OpeningInterval,
 } from "../types/openingHoursInfo";
 
 export type {
   DaySchedule,
   LocationContext,
+  OpeningHoursChange,
   OpeningHoursInfo,
   OpeningHoursStatus,
+  OpeningInterval,
 } from "../types/openingHoursInfo";
-
-const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const FULL_DAY_NAMES = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
 
 function buildNominatim(loc?: LocationContext): nominatim_object | undefined {
   if (!loc?.countryCode) return undefined;
@@ -116,6 +109,7 @@ function nextChangeWithin(oh: opening_hours, now: Date): Date | undefined {
 
 /**
  * Builds a 7-day schedule starting from today using the library's interval API.
+ * Spans stay as wall-clock strings — the client turns them into text.
  */
 function buildWeekSchedule(oh: opening_hours, now: Date): DaySchedule[] {
   const schedule: DaySchedule[] = [];
@@ -129,36 +123,37 @@ function buildWeekSchedule(oh: opening_hours, now: Date): DaySchedule[] {
     dayEnd.setDate(dayStart.getDate() + 1);
 
     const intervals = oh.getOpenIntervals(dayStart, dayEnd);
-    const dayIdx = dayStart.getDay();
 
-    // Filter out intervals in "unknown" state (ambiguous hours like
-    // "by appointment" or cinema showtimes) so they don't display as definite
-    const definiteIntervals = intervals.filter(([start]) => {
+    // Drop intervals in "unknown" state (ambiguous hours like "by appointment"
+    // or cinema showtimes) so they don't display as definite
+    const definite = intervals.filter(([start]) => {
       const t = new Date(Math.max(start.getTime(), dayStart.getTime()));
       return !oh.getUnknown(t);
     });
 
-    let hours: string;
-    if (definiteIntervals.length === 0) {
-      hours = "Closed";
-    } else {
-      const parts = definiteIntervals.map(([start, end]) => {
-        const s = start < dayStart ? "00:00" : fmt(start);
-        const e = end >= dayEnd ? "24:00" : fmt(end);
-        if (s === "00:00" && e === "24:00") return "Open 24 hours";
-        return `${s}–${e}`;
-      });
-      hours = parts.includes("Open 24 hours") ? "Open 24 hours" : parts.join(", ");
-    }
+    // Clamp spans that run past midnight to the day they're listed under.
+    const spans: OpeningInterval[] = definite.map(([start, end]) => ({
+      from: start < dayStart ? "00:00" : fmt(start),
+      to: end >= dayEnd ? "24:00" : fmt(end),
+    }));
 
     schedule.push({
-      day: FULL_DAY_NAMES[dayIdx],
-      hours,
+      weekday: dayStart.getDay(),
+      intervals: spans,
       isToday: i === 0,
     });
   }
 
   return schedule;
+}
+
+/** Describes the upcoming flip relative to the place's own today. */
+function describeChange(nextChange: Date, now: Date, isOpen: boolean): OpeningHoursChange {
+  const weekday = nextChange.getDay();
+  const todayIdx = now.getDay();
+  const day =
+    weekday === todayIdx ? "today" : weekday === (todayIdx + 1) % 7 ? "tomorrow" : "other";
+  return { kind: isOpen ? "closes" : "opens", at: fmt(nextChange), weekday, day };
 }
 
 /**
@@ -181,71 +176,22 @@ export function parseOpeningHours(
     const nextChange = nextChangeWithin(oh, now);
 
     // When the current state is unknown (ambiguous hours like "by appointment",
-    // cinema showtimes, etc.), don't show a definitive "Open" or "Closed" status
+    // cinema showtimes, etc.), don't state a definitive "Open" or "Closed"
     if (isUnknown) {
-      const unknownDetail = comment || raw;
       return {
         isOpen: false,
         isUnknown: true,
-        label: unknownDetail,
-        detail: unknownDetail,
+        text: comment || raw,
         comment: comment ?? undefined,
         isWeekStable: oh.isWeekStable(),
       };
     }
 
-    const effectiveOpen = isOpen;
-
-    // Build detail string based on next state change
-    let detail: string;
-    if (nextChange) {
-      const changeDay = nextChange.getDay();
-      const todayIdx = now.getDay();
-      const tomorrowIdx = (todayIdx + 1) % 7;
-      const timeStr = fmt(nextChange);
-
-      if (effectiveOpen) {
-        if (changeDay === todayIdx) {
-          detail = `Closes at ${timeStr}`;
-        } else if (changeDay === tomorrowIdx) {
-          detail = `Closes tomorrow at ${timeStr}`;
-        } else {
-          detail = `Closes ${DAY_NAMES[changeDay]} at ${timeStr}`;
-        }
-      } else {
-        if (changeDay === todayIdx) {
-          detail = `Opens at ${timeStr}`;
-        } else if (changeDay === tomorrowIdx) {
-          detail = `Opens tomorrow at ${timeStr}`;
-        } else {
-          detail = `Opens ${DAY_NAMES[changeDay]} at ${timeStr}`;
-        }
-      }
-    } else {
-      // No next change — either always open or permanently closed
-      detail = effectiveOpen ? "Open 24 hours" : "Closed";
-    }
-
-    // Append comment if present
-    if (comment) {
-      detail = `${detail} (${comment})`;
-    }
-
-    const label = effectiveOpen ? `Open now · ${detail}` : `Closed · ${detail}`;
-
-    // Build week schedule
-    const weekSchedule = buildWeekSchedule(oh, now);
-
-    // Today's hours summary
-    const todayEntry = weekSchedule[0];
-    const todayHours = todayEntry?.hours === "Closed" ? "Closed today" : todayEntry?.hours;
-
     return {
-      isOpen: effectiveOpen,
-      label,
-      detail,
-      todayHours,
-      weekSchedule,
+      isOpen,
+      // Absent when nothing changes within a year: always open, or always closed.
+      nextChange: nextChange ? describeChange(nextChange, now, isOpen) : undefined,
+      weekSchedule: buildWeekSchedule(oh, now),
       comment: comment ?? undefined,
       isWeekStable: oh.isWeekStable(),
     };
@@ -253,7 +199,7 @@ export function parseOpeningHours(
     // Unevaluable opening_hours value — malformed syntax, or a selector we
     // can't resolve here (a `PH` rule needs a country code we may not have).
     // Show the raw value rather than a definite "Closed" we can't stand behind.
-    return { isOpen: false, isUnknown: true, label: raw, detail: raw };
+    return { isOpen: false, isUnknown: true, text: raw };
   }
 }
 

@@ -3,28 +3,61 @@
 // browser bundle. Server code that needs the builder imports from
 // `../utils/openingHours`; client/shared code only references the types here.
 
+/**
+ * A span the place is open, as local wall-clock "HH:MM". `to` may be "24:00"
+ * to mean end-of-day. Rendered client-side so the user's 12h/24h preference
+ * and locale apply.
+ */
+export interface OpeningInterval {
+  from: string;
+  to: string;
+}
+
 export interface DaySchedule {
-  day: string;
-  /** e.g. "09:00–17:00", "Closed", or "Open 24 hours" */
-  hours: string;
+  /** 0 = Sunday … 6 = Saturday. */
+  weekday: number;
+  /** Open spans for the day; empty means closed all day. */
+  intervals: OpeningInterval[];
   isToday: boolean;
 }
 
+/**
+ * The upcoming open/closed flip. `day` is relative to the place's own today so
+ * the client can pick between "at 17:00", "tomorrow at 17:00" and naming the
+ * weekday, without re-deriving the place's calendar.
+ */
+export interface OpeningHoursChange {
+  kind: "opens" | "closes";
+  /** Local wall-clock "HH:MM". */
+  at: string;
+  /** 0 = Sunday … 6 = Saturday. */
+  weekday: number;
+  day: "today" | "tomorrow" | "other";
+}
+
+/**
+ * Current status as data, never as prose. Every user-facing string is built in
+ * the client from these fields (see `useOpeningHoursText` in the web app) so
+ * the panel follows the active locale and the Settings time-format preference.
+ */
 export interface OpeningHoursStatus {
   isOpen: boolean;
-  /** Full human-readable label, e.g. "Open now · Closes at 17:00" */
-  label: string;
-  /** The suffix portion only, e.g. "Closes at 17:00" or "Opens Mon at 09:00" */
-  detail: string;
-  todayHours?: string;
+  /** Absent when nothing changes within a year — i.e. always open or always closed. */
+  nextChange?: OpeningHoursChange;
   /** Per-day schedule starting from today, used for the expandable hours row. */
   weekSchedule?: DaySchedule[];
   /** Comment from the opening_hours value, e.g. "by appointment" or a holiday name. */
   comment?: string;
   /** True if the schedule is the same every week (no seasonal or date-specific rules). */
   isWeekStable?: boolean;
-  /** True when hours are ambiguous (e.g. "by appointment", cinema showtimes). */
+  /**
+   * True when the hours can't be stated definitively — ambiguous values like
+   * "by appointment", or a value we failed to evaluate at all. Show `text`
+   * rather than an open/closed verdict.
+   */
   isUnknown?: boolean;
+  /** Free text for the `isUnknown` case: the comment, else the raw OSM value. */
+  text?: string;
 }
 
 export interface LocationContext {
@@ -41,7 +74,7 @@ export interface LocationContext {
  * `../utils/openingHours.ts`.
  */
 export interface OpeningHoursInfo {
-  /** Display-ready current status. Null when the raw value is unparseable. */
+  /** Current status as structured data. Null when there is no raw value. */
   status: OpeningHoursStatus | null;
   /** True iff the place is open 24/7 (no upcoming state change). */
   isAlwaysOpen: boolean;

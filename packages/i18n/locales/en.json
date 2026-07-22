@@ -623,6 +623,15 @@
       }
     }
   },
+  "openingHours": {
+    "open24Hours": "Open 24 hours",
+    "closesAt": "Closes at {time}",
+    "closesTomorrowAt": "Closes tomorrow at {time}",
+    "closesOnAt": "Closes {day} at {time}",
+    "opensAt": "Opens at {time}",
+    "opensTomorrowAt": "Opens tomorrow at {time}",
+    "opensOnAt": "Opens {day} at {time}"
+  },
   "place": {
     "overview": "Overview",
     "reviews": "Reviews",
