@@ -609,8 +609,6 @@
       "noAllowedNetwork": "No charger on your allowed networks in range.",
       "tightMargin": "This route arrives with little charge to spare — consider charging longer or adding a stop.",
       "routeWithoutRestriction": "Route without the network restriction",
-      "editVehicle": "edit",
-      "addVehicle": "Add vehicle",
       "connector": {
         "ccs2": "CCS2",
         "ccs1": "CCS1",

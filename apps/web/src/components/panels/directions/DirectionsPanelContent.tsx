@@ -10,7 +10,6 @@ import ScheduleIcon from "@mui/icons-material/Schedule";
 import ShareIcon from "@mui/icons-material/Share";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
@@ -55,11 +54,10 @@ import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DetailsView } from "@/components/panels/directions/DetailsView";
 import { EvPlanCard } from "@/components/panels/directions/EvPlanCard";
-import { EvVehiclePanel, vehicleLabel } from "@/components/panels/directions/EvVehiclePanel";
+import { EvVehiclePanel } from "@/components/panels/directions/EvVehiclePanel";
 import { FlightPanel } from "@/components/panels/directions/FlightPanel";
 import { MODES, ModeButton } from "@/components/panels/directions/ModeSelector";
 import { RouteCard } from "@/components/panels/directions/RouteCard";
-import { RouteEnergyEstimate } from "@/components/panels/directions/RouteEnergyEstimate";
 import { RouteOptions } from "@/components/panels/directions/RouteOptions";
 import {
   type TimeMode,
@@ -72,7 +70,7 @@ import { WaypointList } from "@/components/panels/directions/WaypointList";
 import { AutocompleteDropdown } from "@/components/search/AutocompleteDropdown";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { attributionsForProviders } from "@/lib/attributionForProviders";
-import { buildEvDirectionsRequest, CUSTOM_VEHICLE_ID } from "@/lib/buildEvDirectionsRequest";
+import { buildEvDirectionsRequest } from "@/lib/buildEvDirectionsRequest";
 import { shareCurrentUrl } from "@/lib/deepLink";
 import { TEAL } from "@/lib/theme";
 import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
@@ -733,7 +731,9 @@ export function DirectionsPanelContent() {
           of driving, not its own top-level mode, so it lives here rather than in
           the mode row. */}
       {mode === "driving" && (
-        <Box sx={{ px: 1.5, pt: 1 }}>
+        // Left-aligned with the waypoint inputs rather than the panel edge:
+        // WaypointList's px (12px) + WaypointRow's 24px icon column + its 4px gap.
+        <Box sx={{ pl: 5, pr: 1.5, pt: 1 }}>
           <ToggleButtonGroup
             size="small"
             exclusive
@@ -951,29 +951,6 @@ export function DirectionsPanelContent() {
 
         {/* Plain-route energy/cost + vehicle chip, driving mode only (EV mode
             gets its own vehicle inputs via EvVehiclePanel above). */}
-        {mode === "driving" && !isEvMode && allWaypointsFilled && (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 0.5 }}>
-            <Chip
-              icon={<EvStationIcon sx={{ fontSize: 16 }} />}
-              label={
-                evVehicleId === CUSTOM_VEHICLE_ID
-                  ? t("ev.customVehicle")
-                  : evVehicleId
-                    ? vehicleLabel(evVehicleId)
-                    : t("ev.addVehicle")
-              }
-              size="small"
-              onClick={() => setEvMode(true)}
-              sx={{ cursor: "pointer" }}
-            />
-            {data?.routes[activeRouteIndex] && (
-              <RouteEnergyEstimate
-                route={data.routes[activeRouteIndex]}
-                onEditVehicle={() => setEvMode(true)}
-              />
-            )}
-          </Box>
-        )}
 
         {/* Route results */}
         {isFlightMode ? (

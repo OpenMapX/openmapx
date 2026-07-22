@@ -609,8 +609,6 @@
       "noAllowedNetwork": "Kein Ladepunkt in deinen erlaubten Netzwerken in Reichweite.",
       "tightMargin": "Diese Route kommt mit wenig Restladung an — lade länger oder füge einen Stopp hinzu.",
       "routeWithoutRestriction": "Route ohne Netzwerkbeschränkung",
-      "editVehicle": "bearbeiten",
-      "addVehicle": "Fahrzeug hinzufügen",
       "connector": {
         "ccs2": "CCS2",
         "ccs1": "CCS1",

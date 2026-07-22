@@ -28,13 +28,6 @@ interface VehicleOption {
 
 const VEHICLE_OPTIONS = listVehicles();
 
-const VEHICLE_LABELS = new Map(VEHICLE_OPTIONS.map((o) => [o.id, o.label]));
-
-/** Display name for a stored vehicle id; falls back to the raw id. */
-export function vehicleLabel(id: string): string {
-  return VEHICLE_LABELS.get(id) ?? id;
-}
-
 /** Over a thousand options: render at most a screenful so the dropdown stays responsive. */
 const filterVehicleOptions = createFilterOptions<VehicleOption>({ limit: 50 });
 
