@@ -10,6 +10,7 @@
     "tag": "latest",
     "expose": [4000],
     "user": "${UID:-1000}:${GID:-1000}",
+    "envFile": [".env"],
     "environment": {
       "HOME": "/tmp",
       "DATA_DIR": "/data",
@@ -87,11 +88,6 @@
       "TRAFFIC_PREDICTED_CRON": "${TRAFFIC_PREDICTED_CRON:-}",
       "TRAFFIC_PREDICTED_CSV_DIR": "${TRAFFIC_PREDICTED_CSV_DIR:-}",
       "TRAFFIC_TAR_PATH": "${TRAFFIC_TAR_PATH:-}",
-      "UTMC_USERNAME": "${UTMC_USERNAME:-}",
-      "UTMC_PASSWORD": "${UTMC_PASSWORD:-}",
-      "DB_BAHNPARK_CLIENT_ID": "${DB_BAHNPARK_CLIENT_ID:-}",
-      "DB_BAHNPARK_API_KEY": "${DB_BAHNPARK_API_KEY:-}",
-      "NSW_TRANSPORT_API_KEY": "${NSW_TRANSPORT_API_KEY:-}",
       "TRANSITOUS_FEED_PROXY_KEY_FILE": "/secrets/transitous-feed-proxy.age",
       "OLLAMA_URL": "${OLLAMA_URL:-http://local-ai:11434}"
     },
