@@ -4,6 +4,27 @@ import { createPanoramaxProvider } from "./provider.js";
 const DEFAULT_INSTANCE_URL = "https://api.panoramax.xyz/api";
 const TILE_PATH = "/api/integrations/street-level-imagery-panoramax/tiles/{z}/{x}/{y}";
 
+/**
+ * Upstream failures (timeout, rate-limit, 5xx) are reported as 502, never as a
+ * 404. Answering "no imagery here" for a transient blip is a lie the caller
+ * cannot distinguish from genuine absence, and it is the kind of lie that gets
+ * cached and reasoned about downstream.
+ */
+async function upstream<T>(
+  ctx: IntegrationContext,
+  reply: { status: (code: number) => { send: (data: unknown) => void } },
+  what: string,
+  run: () => Promise<T>,
+): Promise<{ ok: true; value: T } | { ok: false }> {
+  try {
+    return { ok: true, value: await run() };
+  } catch (error) {
+    ctx.log.warn(`${what} failed: ${error instanceof Error ? error.message : String(error)}`);
+    reply.status(502).send({ message: `${what} is unavailable` });
+    return { ok: false };
+  }
+}
+
 export function setup(ctx: IntegrationContext): void {
   const instanceUrl = (ctx.config.instanceUrl as string | undefined) || DEFAULT_INSTANCE_URL;
   const provider = createPanoramaxProvider({
@@ -27,7 +48,10 @@ export function setup(ctx: IntegrationContext): void {
     const url = `${instanceUrl.replace(/\/$/, "")}/map/${z}/${x}/${y}.mvt`;
     // Raw fetch: forwards the upstream's binary tile body, content-type, and
     // status verbatim — fetchJson always parses JSON, so it can't express this.
-    const upstream = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    // 10s proved too tight in production: a viewport change fans out
+    // 30-60 tile requests and these tiles run to hundreds of KB, so the
+    // public instances regularly overran it and coverage went missing.
+    const upstream = await fetch(url, { signal: AbortSignal.timeout(25_000) });
     if (!upstream.ok) {
       ctx.log.warn(`Panoramax tile request failed: ${upstream.status}`);
       reply.status(upstream.status).send({ message: "Panoramax tile unavailable" });
@@ -49,7 +73,11 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const image = await provider.findNearest([lng, lat]);
+    const found = await upstream(ctx, reply, "Panoramax imagery search", () =>
+      provider.findNearest([lng, lat]),
+    );
+    if (!found.ok) return;
+    const image = found.value;
     if (!image) {
       reply.status(404).send({ message: "No imagery found near this location" });
       return;
@@ -59,7 +87,9 @@ export function setup(ctx: IntegrationContext): void {
 
   ctx.registerRoute("GET", "/images/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const image = await provider.getImage(id);
+    const found = await upstream(ctx, reply, "Panoramax imagery", () => provider.getImage(id));
+    if (!found.ok) return;
+    const image = found.value;
     if (!image) {
       reply.status(404).send({ message: "Image not found" });
       return;
@@ -69,6 +99,10 @@ export function setup(ctx: IntegrationContext): void {
 
   ctx.registerRoute("GET", "/images/:id/links", async (req, reply) => {
     const { id } = req.params as { id: string };
-    reply.send(await provider.getLinks(id));
+    const found = await upstream(ctx, reply, "Panoramax imagery links", () =>
+      provider.getLinks(id),
+    );
+    if (!found.ok) return;
+    reply.send(found.value);
   });
 }

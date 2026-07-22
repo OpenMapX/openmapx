@@ -149,8 +149,10 @@ export function createPanoramaxProvider(options: {
         .map((d) => d.toFixed(7))
         .join(",");
 
+      // No `nullOnError`: a timeout or 5xx must surface as an upstream failure,
+      // not as "there is no imagery here" — those need different answers.
       const data = await fetchJson<StacFeatureCollection>(`${base}/search?bbox=${bbox}&limit=1`, {
-        nullOnError: true,
+        label: "Panoramax search",
       });
       const feature = data?.features?.[0];
       return feature ? stacItemToImage(feature, id) : null;
@@ -158,7 +160,7 @@ export function createPanoramaxProvider(options: {
 
     async getImage(imageId: string): Promise<StreetLevelImage | null> {
       const item = await fetchJson<StacItem>(`${base}/pictures/${encodeURIComponent(imageId)}`, {
-        nullOnError: true,
+        label: "Panoramax picture",
       });
       return item ? stacItemToImage(item, id) : null;
     },
@@ -167,7 +169,7 @@ export function createPanoramaxProvider(options: {
       // The single-picture endpoint is the only one that emits `related`
       // links; search and item-list responses omit them.
       const item = await fetchJson<StacItem>(`${base}/pictures/${encodeURIComponent(imageId)}`, {
-        nullOnError: true,
+        label: "Panoramax picture",
       });
       return stacLinksToStreetLevelLinks(item?.links, id);
     },

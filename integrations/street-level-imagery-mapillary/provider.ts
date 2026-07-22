@@ -66,9 +66,11 @@ export function createMapillaryProvider(options: {
   const token = options.accessToken;
 
   async function fetchImage(imageId: string): Promise<GraphImage | null> {
+    // No `nullOnError`: an upstream timeout or rate-limit must not be reported
+    // to the user as "this image does not exist".
     return fetchJson<GraphImage>(
       `${GRAPH}/${encodeURIComponent(imageId)}?fields=${FIELDS}&access_token=${token}`,
-      { nullOnError: true },
+      { label: "Mapillary image" },
     );
   }
 
@@ -118,7 +120,7 @@ export function createMapillaryProvider(options: {
         const bbox = `${lng - delta},${lat - delta},${lng + delta},${lat + delta}`;
         const data = await fetchJson<GraphImagesResponse>(
           `${GRAPH}/images?bbox=${bbox}&fields=${FIELDS}&access_token=${token}&limit=20`,
-          { nullOnError: true },
+          { label: "Mapillary search" },
         );
         const images = data?.data ?? [];
         const first = images[0];
@@ -156,7 +158,7 @@ export function createMapillaryProvider(options: {
       // order — index arithmetic on an unordered response misnavigates.
       const data = await fetchJson<GraphImagesResponse>(
         `${GRAPH}/images?sequence_ids=${encodeURIComponent(current.sequence)}&fields=${FIELDS}&access_token=${token}&limit=500`,
-        { nullOnError: true },
+        { label: "Mapillary sequence" },
       );
       const images = [...(data?.data ?? [])].sort(
         (a, b) => (a.captured_at ?? 0) - (b.captured_at ?? 0),

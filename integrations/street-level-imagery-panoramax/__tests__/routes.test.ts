@@ -1,6 +1,6 @@
 // IntegrationContext and RouteHandler live in integration-framework, NOT core.
 import type { IntegrationContext, RouteHandler } from "@openmapx/integration-framework";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setup } from "../index";
 
 interface RouteRegistration {
@@ -82,5 +82,53 @@ describe("street-level-imagery-panoramax setup", () => {
       .find((r) => r.path === "/nearest")
       ?.handler({ params: {}, query: { lat: "nope", lng: "2" } } as never, reply as never);
     expect(reply.status).toHaveBeenCalledWith(400);
+  });
+});
+
+describe("upstream failure handling", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("reports an upstream failure as 502, not as missing imagery", async () => {
+    // A timeout or rate-limit answered as 404 is indistinguishable from
+    // "there is genuinely nothing here", which is a lie the caller acts on.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("upstream timeout");
+      }),
+    );
+
+    const { ctx, routes } = buildCtx();
+    setup(ctx);
+    const reply = makeReply();
+    await routes
+      .find((r) => r.path === "/nearest")
+      ?.handler({ params: {}, query: { lat: "48.85", lng: "2.35" } } as never, reply as never);
+
+    expect(reply.status).toHaveBeenCalledWith(502);
+  });
+
+  it("still reports genuine absence as 404", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({ type: "FeatureCollection", features: [] }),
+        text: async () => '{"type":"FeatureCollection","features":[]}',
+      })),
+    );
+
+    const { ctx, routes } = buildCtx();
+    setup(ctx);
+    const reply = makeReply();
+    await routes
+      .find((r) => r.path === "/nearest")
+      ?.handler({ params: {}, query: { lat: "48.85", lng: "2.35" } } as never, reply as never);
+
+    expect(reply.status).toHaveBeenCalledWith(404);
   });
 });
