@@ -1,11 +1,48 @@
 --
 -- Migrate credential keys from camelCase to region-first hyphenated format.
 --
--- This is a one-time migration that updates vault rows in the `integration_secret`
--- table. The old key strings (configSchema property names) are renamed to the new
--- hyphenated format. The vault key is data, independent of code; the manifest and
--- env-var migrations (already deployed) do not affect this script's timing. Run this
--- once against production after images ship.
+-- This is a one-time migration that renames vault rows in the `integration_secret`
+-- table from the old configSchema property names to the new hyphenated ones.
+--
+-- TIMING IS CRITICAL — vault rows are NOT independent of code. `apps/api` applies a
+-- vault secret to an integration only when its key is present in that integration's
+-- manifest `configSchema` (see the `knownKeys.has(key)` filter in
+-- `apps/api/src/integration-config.ts`). Renaming these rows while the OLD manifest
+-- is still live silently drops the renamed credentials — the running code no longer
+-- recognizes the new key name. So the new images (which ship the new manifests)
+-- MUST already be running in production before this script executes.
+--
+-- A restart of `app-api` is REQUIRED after running this script. Integrations
+-- capture their credentials once at `setup(ctx)` (see `integrations/*/index.ts`),
+-- so renamed vault rows do not reach a provider until the integration reloads.
+--
+-- Correct end-to-end order on prod:
+--   1. Push to main; let CI build the `app-api`, `app-web`, `data-manager` images.
+--   2. On the prod host, `git pull` — the compose-render step below reads
+--      `services/data-manager/service.json` from the checkout, not from an image.
+--   3. Rename the `INTEGRATION_*` vars in the prod `infra/docker/.env` to their new
+--      derived names BEFORE recreating containers (`env_file` is read at
+--      container-create time, not on every start). Also add entries for the
+--      parking/webcam credentials that were previously bare env names, now under
+--      their derived `INTEGRATION_PARKING_*` / `INTEGRATION_WEBCAM_*` names.
+--   4. `pnpm openmapx compose render` — MANDATORY. Skipping this leaves
+--      data-manager on the deleted curated passthrough with no `env_file`, so
+--      parking ingest loses its credentials regardless of step 3.
+--   5. `docker compose up -d` — a recreate, not a restart, so the new images and
+--      the rendered compose file actually take effect.
+--   6. Run this script.
+--   7. Restart `app-api` so the vault-sourced credentials reach `setup(ctx)`.
+--   8. Run the orphan-row SELECT below and decide whether to delete leftovers.
+--
+-- Expected window: between step 5 and step 7, credentials that come only from the
+-- vault (no `.env` override) resolve to `undefined`, so the affected integrations'
+-- health probes may go red. That is expected mid-deploy behavior, not a failed
+-- deploy — it clears once `app-api` restarts in step 7.
+--
+-- Rollback: rolling the images back after step 6 leaves the vault on the NEW keys
+-- while the rolled-back code expects the OLD keys — every migrated credential goes
+-- silently missing. Rolling back requires also running the inverse `UPDATE`s (new
+-- key -> old key) against the vault before reverting `app-api`.
 --
 -- Idempotent and collision-guarded: if a row with the new key already exists for that
 -- integration (e.g. a re-entered credential post-deploy), the UPDATE skips rather than

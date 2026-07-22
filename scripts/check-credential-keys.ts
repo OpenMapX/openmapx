@@ -14,6 +14,12 @@
  *      sourceId + "-" + field`), not `startsWith`, so a sourceId that is
  *      itself a hyphenated prefix of another (e.g. `dot-ga` vs a hypothetical
  *      `dot-g`) can never be mis-attributed.
+ *   3. Every `ctx.config["<literal>"]` / `ctx.config.<identifier>` access in
+ *      that integration's own `.ts` files reads a key its `configSchema`
+ *      actually declares. `ctx.config` is typed `Record<string, unknown>`
+ *      (an unchecked string index), so renaming a manifest key without
+ *      updating the accessor passes `tsc` silently — this check is the only
+ *      thing that catches that drift.
  *
  * All other integrations are exempt: single-provider integrations whose id
  * already names the provider legitimately keep bare camelCase keys (e.g.
@@ -21,8 +27,8 @@
  *
  * Run on demand with `pnpm check-credential-keys`.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { IntegrationManifest } from "@openmapx/integration-framework";
 
@@ -122,7 +128,92 @@ export function checkCredentialKey(
 }
 
 /**
- * Checks #1–2 against the repo at `repoRoot`. Returns a flat list of
+ * All `configSchema.properties` keys, secret or not — an accessor reading a
+ * non-secret key (e.g. `enabled`) is just as much a manifest/accessor
+ * mismatch as one reading a secret.
+ */
+export function allConfigKeysOf(manifest: IntegrationManifest): Set<string> {
+  const properties = manifest.configSchema?.properties as
+    | Record<string, Record<string, unknown>>
+    | undefined;
+  if (!properties || typeof properties !== "object") return new Set();
+  return new Set(Object.keys(properties));
+}
+
+/**
+ * Config keys that some integration legitimately reads off `ctx.config` even
+ * though the host injects them rather than the integration's own
+ * `configSchema` declaring them (e.g. `gtfsDeps`/`swissGtfsDeps` on transit
+ * integrations, or a shared `redis`/`endpoint` handle). None of the six
+ * `CREDENTIAL_KEYED_INTEGRATIONS` currently do this — this set exists so a
+ * future one that legitimately needs to can be exempted here, with a comment,
+ * instead of the check being weakened.
+ */
+export const CONFIG_ACCESSOR_EXEMPTIONS: ReadonlySet<string> = new Set([]);
+
+const CONFIG_ACCESSOR_RE = /\bctx\.config(?:\[\s*(['"])([^'"]+)\1\s*\]|\.([A-Za-z_$][\w$]*))/g;
+
+/** `ctx.config["<literal>"]` / `ctx.config.<identifier>` accesses found in one file's source. */
+export function findConfigAccessors(source: string): string[] {
+  const keys: string[] = [];
+  for (const match of source.matchAll(CONFIG_ACCESSOR_RE)) {
+    const key = match[2] ?? match[3];
+    if (key) keys.push(key);
+  }
+  return keys;
+}
+
+/** Recursively lists `.ts` files under `dir`, skipping tests and non-source dirs. */
+function listSourceFiles(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === "__tests__" || entry.name === "node_modules") continue;
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...listSourceFiles(full));
+    } else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+/**
+ * Check #3: every `ctx.config` accessor in a governed integration's own
+ * source files reads a key its own `configSchema` declares (or an explicitly
+ * named exemption). Catches a manifest key rename that forgot to update the
+ * `index.ts` (or other) accessor — `ctx.config` is an unchecked string index,
+ * so `tsc` cannot catch this.
+ */
+export function collectConfigAccessorViolations(repoRoot: string): string[] {
+  const violations: string[] = [];
+  const integrationsDir = join(repoRoot, "integrations");
+
+  for (const integrationId of CREDENTIAL_KEYED_INTEGRATIONS) {
+    const loaded = loadManifest(integrationId, integrationsDir);
+    if (!loaded) continue; // already reported by collectCredentialKeyViolations
+
+    const declaredKeys = allConfigKeysOf(loaded.manifest);
+    const dir = join(integrationsDir, integrationId);
+    for (const file of listSourceFiles(dir)) {
+      const source = readFileSync(file, "utf-8");
+      for (const key of findConfigAccessors(source)) {
+        if (declaredKeys.has(key) || CONFIG_ACCESSOR_EXEMPTIONS.has(key)) continue;
+        violations.push(
+          `${integrationId}: ${relative(repoRoot, file)} reads ctx.config["${key}"], which is ` +
+            `not declared in ${integrationId}'s configSchema (and is not in ` +
+            `CONFIG_ACCESSOR_EXEMPTIONS) — likely a stale accessor after a key rename`,
+        );
+      }
+    }
+  }
+
+  return violations;
+}
+
+/**
+ * Checks #1–3 against the repo at `repoRoot`. Returns a flat list of
  * human-readable violation strings — empty means the gate is clean.
  */
 export function collectCredentialKeyViolations(repoRoot: string): string[] {
@@ -143,6 +234,8 @@ export function collectCredentialKeyViolations(repoRoot: string): string[] {
       if (violation) violations.push(violation);
     }
   }
+
+  violations.push(...collectConfigAccessorViolations(repoRoot));
 
   return violations;
 }

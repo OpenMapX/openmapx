@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { coerceEnvValue } from "./integration-config";
+import { coerceEnvValue, isEnvValuePresent } from "./integration-config";
 
 describe("coerceEnvValue", () => {
   it("coerces integer and number types to numbers", () => {
@@ -36,5 +36,24 @@ describe("coerceEnvValue", () => {
   it("passes strings and unknown/undefined types through unchanged", () => {
     expect(coerceEnvValue("http://local-ai:11434", "string")).toBe("http://local-ai:11434");
     expect(coerceEnvValue("http://local-ai:11434", undefined)).toBe("http://local-ai:11434");
+  });
+});
+
+describe("isEnvValuePresent", () => {
+  it("treats undefined as absent", () => {
+    expect(isEnvValuePresent(undefined)).toBe(false);
+  });
+
+  it("treats an empty string as absent, not a real override", () => {
+    // Compose's `${VAR:-}` convention injects "" for an unset var. An empty
+    // string must NOT be treated as present, or it would silently override a
+    // lower-priority (vault/database) value with "" instead of leaving it alone.
+    expect(isEnvValuePresent("")).toBe(false);
+  });
+
+  it("treats any non-empty string as present", () => {
+    expect(isEnvValuePresent("some-value")).toBe(true);
+    expect(isEnvValuePresent("0")).toBe(true);
+    expect(isEnvValuePresent(" ")).toBe(true);
   });
 });

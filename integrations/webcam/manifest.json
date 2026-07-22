@@ -60,7 +60,7 @@
       "dot-ga-api-key": {
         "type": "string",
         "title": "Georgia 511 API Key",
-        "description": "Register at https://511ga.org/my511/register",
+        "description": "Register at https://511ga.org/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_DOT_GA_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://511ga.org/developers/doc",
@@ -78,7 +78,7 @@
       "dot-fl-api-key": {
         "type": "string",
         "title": "Florida 511 API Key",
-        "description": "Register at https://fl511.com/my511/register",
+        "description": "Register at https://fl511.com/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_DOT_FL_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://fl511.com",
@@ -100,7 +100,7 @@
       "dot-az-api-key": {
         "type": "string",
         "title": "Arizona 511 API Key",
-        "description": "Register at https://az511.com/my511/register",
+        "description": "Register at https://az511.com/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_DOT_AZ_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://az511.com/developers/doc",
@@ -118,7 +118,7 @@
       "dot-id-api-key": {
         "type": "string",
         "title": "Idaho 511 API Key",
-        "description": "Register at https://511.idaho.gov/my511/register",
+        "description": "Register at https://511.idaho.gov/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_DOT_ID_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://511.idaho.gov/developers/doc",
@@ -136,7 +136,7 @@
       "dot-ut-api-key": {
         "type": "string",
         "title": "Utah 511 API Key",
-        "description": "Register at https://prod-ut.ibi511.com/my511/register",
+        "description": "Register at https://prod-ut.ibi511.com/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_DOT_UT_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://udottraffic.utah.gov/developers/doc",
@@ -153,7 +153,7 @@
       "dot-la-api-key": {
         "type": "string",
         "title": "Louisiana 511 API Key",
-        "description": "Register at https://511la.org/my511/register",
+        "description": "Register at https://511la.org/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_DOT_LA_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://www.511la.org/developers/doc",
@@ -171,7 +171,7 @@
       "dot-pa-api-key": {
         "type": "string",
         "title": "Pennsylvania 511 API Key",
-        "description": "Register at https://www.511pa.com/my511/register",
+        "description": "Register at https://www.511pa.com/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_DOT_PA_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://www.pa.gov/agencies/penndot/programs-and-doing-business/online-services/developer-resources-documentation-api",
@@ -194,7 +194,7 @@
       "dot-sc-api-key": {
         "type": "string",
         "title": "South Carolina 511 API Key",
-        "description": "Register at https://511sc.org/my511/register",
+        "description": "Register at https://511sc.org/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_DOT_SC_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://511sc.org/developers/doc",
@@ -212,7 +212,7 @@
       "dot-ma-api-key": {
         "type": "string",
         "title": "Massachusetts 511 API Key",
-        "description": "Register at https://www.mass511.com/my511/register",
+        "description": "Register at https://www.mass511.com/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_DOT_MA_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://www.mass511.com/developers/doc",

@@ -53,6 +53,20 @@ export function coerceEnvValue(raw: string, type: string | undefined): unknown {
   }
 }
 
+/**
+ * Whether a raw `process.env[...]` read should be treated as an override.
+ * Compose's `${VAR:-}` convention (used throughout this repo's generated
+ * compose file) injects an empty string when a var is unset, rather than
+ * leaving it undefined. Without this check, that empty string would win the
+ * env layer's "highest priority" and blank out a lower-priority vault or
+ * database value instead of leaving it alone — matching how
+ * `apps/api/src/routes/admin.ts` already treats an empty env var as absent
+ * when computing credential-source status.
+ */
+export function isEnvValuePresent(raw: string | undefined): raw is string {
+  return raw !== undefined && raw !== "";
+}
+
 export async function resolveConfigWithSources(
   manifest: IntegrationManifest,
   directory: string,
@@ -128,7 +142,7 @@ export async function resolveConfigWithSources(
   // match `INTEGRATION_X_APIKEY` and region-first hyphenated keys match too).
   for (const key of knownKeys) {
     const envVal = process.env[integrationEnvVarName(manifest.id, key)];
-    if (envVal === undefined) continue;
+    if (!isEnvValuePresent(envVal)) continue;
     result[key] = { value: coerceEnvValue(envVal, keyTypes.get(key)), source: "env" };
   }
 

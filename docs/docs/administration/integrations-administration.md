@@ -93,13 +93,22 @@ value through. The same logic governs every layer of the cascade.
 :::
 
 The environment-variable name follows a fixed pattern: `INTEGRATION_`, then the
-integration's id uppercased with hyphens turned into underscores, then `_`, then
-the config key uppercased. The key match is case-insensitive, so a camelCase
-schema key like `apiKey` is set by `INTEGRATION_<ID>_APIKEY`:
+integration's id, then `_`, then the config key — both the id and the key are
+hyphen-normalized (hyphens become underscores) and upper-cased. A camelCase
+schema key like `apiKey` has no hyphens to normalize, so it is set by
+`INTEGRATION_<ID>_APIKEY`:
 
 ```bash
 # infra/docker/.env — overrides the `apiKey` setting of the `geocoding-maptiler` integration
 INTEGRATION_GEOCODING_MAPTILER_APIKEY=your-key-here
+```
+
+Region-first hyphenated keys are normalized the same way. For example, the
+`de-tankerkoenig-api-key` config key of the `fuel` integration is set by:
+
+```bash
+# infra/docker/.env — overrides the `de-tankerkoenig-api-key` setting of the `fuel` integration
+INTEGRATION_FUEL_DE_TANKERKOENIG_API_KEY=your-key-here
 ```
 
 For the bigger picture of where settings live — `.env`, the admin panel, and how

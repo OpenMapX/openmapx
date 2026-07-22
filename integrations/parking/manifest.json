@@ -26,7 +26,7 @@
       "de-db-bahnpark-client-id": {
         "type": "string",
         "title": "DB BahnPark Client ID",
-        "description": "Deutsche Bahn Parking API client ID.",
+        "description": "Deutsche Bahn Parking API client ID. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_PARKING_DE_DB_BAHNPARK_CLIENT_ID instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/product/parking-information-db-bahnpark",
@@ -44,7 +44,7 @@
       "de-db-bahnpark-api-key": {
         "type": "string",
         "title": "DB BahnPark API Key",
-        "description": "Deutsche Bahn Parking API key.",
+        "description": "Deutsche Bahn Parking API key. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_PARKING_DE_DB_BAHNPARK_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-sharedSecretName": "db-parking-api-key",
         "x-openmapx-setup": {
@@ -63,7 +63,7 @@
       "gb-eng-utmc-username": {
         "type": "string",
         "title": "UTMC Username",
-        "description": "NE Travel Data (Newcastle) username. Request via data@glasgow.gov.uk. The data-manager POI ingest reads the same derived env var as this field; there is no separate credential.",
+        "description": "NE Travel Data (Newcastle) username. Request via data@glasgow.gov.uk. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_PARKING_GB_ENG_UTMC_USERNAME instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://www.netraveldata.co.uk/?page_id=9",
@@ -85,7 +85,7 @@
       "gb-eng-utmc-password": {
         "type": "string",
         "title": "UTMC Password",
-        "description": "NE Travel Data (Newcastle) password. The data-manager POI ingest reads the same derived env var as this field; there is no separate credential.",
+        "description": "NE Travel Data (Newcastle) password. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_PARKING_GB_ENG_UTMC_PASSWORD instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://www.netraveldata.co.uk/?page_id=9",
@@ -102,7 +102,7 @@
       "au-nsw-api-key": {
         "type": "string",
         "title": "NSW Transport API Key",
-        "description": "Register at https://opendata.transport.nsw.gov.au/",
+        "description": "Register at https://opendata.transport.nsw.gov.au/. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_PARKING_AU_NSW_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://opendata.transport.nsw.gov.au/",
