@@ -148,10 +148,10 @@ Street-level imagery works out of the box: the default provider is Panoramax,
 which needs no credentials. Imagery is proxied through the API, so no provider
 token is bundled into the browser JavaScript.
 
-Mapillary is available as an opt-in extra. Enable it in the admin panel, set its
-access token, and list it in `INTEGRATION_STREET_LEVEL_IMAGERY_PROVIDER`
-(e.g. `panoramax,mapillary`). Review Mapillary's Terms first — they restrict use
-in connection with real-time navigation or route guidance.
+Mapillary is available as an opt-in extra: enable it in the admin panel and set
+its access token, and its coverage joins the layer. Review Mapillary's Terms
+first — they restrict use in connection with real-time navigation or route
+guidance.
 :::
 
 ## Run both at once

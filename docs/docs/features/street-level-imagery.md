@@ -43,14 +43,17 @@ layer, colour-coded per provider, and the viewer moves between them seamlessly.
 | Panoramax | Enabled  | None         | Open STAC API. Self-hostable. Imagery under CC BY-SA 4.0 or Etalab 2.0. |
 | Mapillary | Disabled | Access token | Opt-in. Review its Terms before enabling — see below.                   |
 
-Set the active providers, in priority order:
+Every enabled provider is active. Enabling one in the admin panel is all it
+takes — its coverage joins the layer in its own colour.
+
+To pin the set and its priority order explicitly, set:
 
 ```bash
 # infra/docker/.env
 INTEGRATION_STREET_LEVEL_IMAGERY_PROVIDER=panoramax,mapillary
 ```
 
-A provider that is installed but not listed here stays inactive.
+When this is set, a provider that is enabled but not listed stays inactive.
 
 :::caution[Mapillary is opt-in for a reason]
 Mapillary's imagery is openly licensed (CC BY-SA 4.0), but its **platform Terms**
@@ -73,9 +76,9 @@ INTEGRATION_STREET_LEVEL_IMAGERY_MAPILLARY_ACCESSTOKEN=MLY|<app_id>|<token>
 INTEGRATION_PHOTOS_MAPILLARY_ACCESSTOKEN=MLY|<app_id>|<token>
 ```
 
-Then add `mapillary` to `INTEGRATION_STREET_LEVEL_IMAGERY_PROVIDER`. With no token
-configured, the integration's backend routes return a "not configured" response
-and its coverage stays empty — nothing breaks, it is simply inactive.
+With no token configured, the integration's backend routes return a "not
+configured" response and its coverage stays empty — nothing breaks, it is
+simply inactive.
 
 The token stays server-side. Imagery is proxied through the OpenMapX API, so no
 provider token is bundled into the browser JavaScript.

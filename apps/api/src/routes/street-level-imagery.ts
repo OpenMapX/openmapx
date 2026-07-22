@@ -4,21 +4,27 @@ import type { FastifyInstance } from "fastify";
 import { getAllIntegrations, getIntegrationProviders } from "../integration-host.js";
 import { envString } from "../utils/env.js";
 
-const DEFAULT_CHAIN = "panoramax";
-
 /**
- * Order and filter provider capabilities by the configured chain. A provider
- * that is registered but absent from the chain stays disabled, which is how
- * Mapillary remains opt-in.
+ * Order and filter provider capabilities by the configured chain.
+ *
+ * An empty chain means "every provider that registered", in registration
+ * order. The opt-in gate is the integration's own `enabled` flag — the one an
+ * operator actually sees and toggles in the admin panel. Defaulting this to a
+ * single hardcoded provider instead would add a second, invisible gate that
+ * silently swallows a provider the operator had just enabled.
+ *
+ * Setting the chain explicitly still pins both the set and its priority.
  */
 export function orderProviders<T extends { id: string }>(
   capabilities: readonly T[],
   chain: string,
 ): T[] {
-  const wanted = (chain || DEFAULT_CHAIN)
+  const wanted = chain
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
+
+  if (wanted.length === 0) return [...capabilities];
 
   const byId = new Map(capabilities.map((capability) => [capability.id, capability]));
   const ordered: T[] = [];
@@ -67,7 +73,7 @@ function collectCapabilities(): StreetLevelCapabilities[] {
  */
 export async function streetLevelRoute(app: FastifyInstance): Promise<void> {
   app.get("/street-level-imagery/providers", async (_req, reply) => {
-    const chain = envString("INTEGRATION_STREET_LEVEL_IMAGERY_PROVIDER", DEFAULT_CHAIN);
+    const chain = envString("INTEGRATION_STREET_LEVEL_IMAGERY_PROVIDER", "");
     return reply.send(orderProviders(collectCapabilities(), chain));
   });
 }

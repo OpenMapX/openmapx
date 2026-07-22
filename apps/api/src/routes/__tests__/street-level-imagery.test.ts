@@ -38,7 +38,17 @@ describe("orderProviders", () => {
     ]);
   });
 
-  it("falls back to panoramax when the chain is empty", () => {
-    expect(orderProviders(CAPS, "").map((c) => c.id)).toEqual(["panoramax"]);
+  it("returns every registered provider when no chain is configured", () => {
+    // The opt-in gate is the integration's own `enabled` flag, not this list —
+    // a hardcoded default here would silently drop a just-enabled provider.
+    expect(orderProviders(CAPS, "").map((c) => c.id)).toEqual(["mapillary", "panoramax"]);
+  });
+
+  it("returns every registered provider when the chain is only separators", () => {
+    expect(orderProviders(CAPS, " , , ").map((c) => c.id)).toEqual(["mapillary", "panoramax"]);
+  });
+
+  it("returns nothing when no provider registered", () => {
+    expect(orderProviders([], "panoramax")).toEqual([]);
   });
 });
