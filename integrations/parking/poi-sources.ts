@@ -35,11 +35,13 @@ import { parseNlRdwStatic } from "./providers/nl-rdw-parser.js";
 import { parseSgHdbLive } from "./providers/sg-hdb-live-parser.js";
 import { parseSgHdbStatic } from "./providers/sg-hdb-static-parser.js";
 
-// UTMC requires HTTP Basic on every request. The credential cascade lives in
-// data-manager env vars (the derived `gb-eng-utmc-username` / `-password`
-// names) rather than the integration's config-resolved cascade so the
-// ingest scanner can synthesise the auth header at fetch time without
-// round-tripping through apps/api.
+// UTMC requires HTTP Basic on every request. The credential is read straight
+// from the data-manager environment — config keys `gb-eng-utmc-username` /
+// `-password` derive the env vars INTEGRATION_PARKING_GB_ENG_UTMC_USERNAME /
+// _PASSWORD — rather than through the integration's config-resolved cascade,
+// so the ingest scanner can synthesise the auth header at fetch time without
+// round-tripping through apps/api. Note this means the admin credential vault
+// does NOT reach these: they must be set as environment variables.
 // When unset we deliberately return {} and let the upstream 401 surface in
 // the ingest status — operators see "missing creds" instead of a silent skip.
 function utmcAuthHeader(): Record<string, string> {
@@ -63,8 +65,9 @@ function dbBahnParkHeaders(): Record<string, string> {
   return { "DB-Client-Id": id, "DB-Api-Key": key, Accept: "application/json" };
 }
 
-// NSW Transport API key — same pattern. The bundled parser also reads the
-// same derived env var directly when fanning out per-facility detail calls,
+// NSW Transport API key — same pattern (config key `au-nsw-api-key` derives
+// the env var INTEGRATION_PARKING_AU_NSW_API_KEY). The bundled parser reads
+// that same env var directly when fanning out per-facility detail calls,
 // since the data-manager fetch stage only wraps the configured `url`.
 function nswAuHeaders(): Record<string, string> {
   const key = process.env[integrationEnvVarName("parking", "au-nsw-api-key")];
