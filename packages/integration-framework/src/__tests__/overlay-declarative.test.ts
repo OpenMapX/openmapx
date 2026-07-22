@@ -16,7 +16,7 @@ function withOverlay(overlay: unknown) {
 describe("frontend.overlay spec (lightweight config; markers/popups live in code)", () => {
   it("preserves excludes, minZoom and a declarative legend", () => {
     const r = withOverlay({
-      excludes: ["street-view", "earthquakes"],
+      excludes: ["street-level-imagery", "earthquakes"],
       minZoom: 5,
       legend: {
         kind: "categorical",
@@ -27,7 +27,7 @@ describe("frontend.overlay spec (lightweight config; markers/popups live in code
     expect(r.success).toBe(true);
     if (!r.success) return;
     const overlay = r.data.frontend?.overlay;
-    expect(overlay?.excludes).toEqual(["street-view", "earthquakes"]);
+    expect(overlay?.excludes).toEqual(["street-level-imagery", "earthquakes"]);
     expect(overlay?.minZoom).toBe(5);
     expect(overlay?.legend?.kind).toBe("categorical");
     expect(overlay?.legend?.items?.[0]?.color).toBe("#cc0033");
@@ -69,9 +69,9 @@ describe("frontend.overlay spec (lightweight config; markers/popups live in code
   });
 
   it("still accepts the minimal overlay (excludes only)", () => {
-    const r = withOverlay({ excludes: ["street-view"] });
+    const r = withOverlay({ excludes: ["street-level-imagery"] });
     expect(r.success).toBe(true);
     if (!r.success) return;
-    expect(r.data.frontend?.overlay?.excludes).toEqual(["street-view"]);
+    expect(r.data.frontend?.overlay?.excludes).toEqual(["street-level-imagery"]);
   });
 });

@@ -180,6 +180,14 @@ export { fusePoiResults } from "./poiFusion";
 export { pointInIsochroneGeometry } from "./pointInPolygon";
 export { decodePolyline, encodePolyline } from "./polyline";
 export { sectionSlug } from "./sectionSlug";
+export {
+  bearingDegrees,
+  type DirectionSector,
+  directionSector,
+  type StreetLevelArrow,
+  selectArrowLinks,
+} from "./streetLevelLinks";
+export { formatStreetLevelRef, parseStreetLevelRef } from "./streetLevelRef";
 export type { TideExtremaOptions, TideExtreme, TideSample } from "./tideExtrema";
 export { despikeSeries, findTideExtrema } from "./tideExtrema";
 export { timeZoneAt } from "./timezone";

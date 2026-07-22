@@ -62,7 +62,7 @@ export const TILE_PUBLIC_PATTERNS = [
   /^\/api\/maptiler\//,
   /^\/api\/tiles\//,
   /^\/api\/traffic\//,
-  /^\/api\/integrations\/street-view-mapillary\/tiles\//,
+  /^\/api\/integrations\/street-level-imagery-[a-z0-9-]+\/tiles\//,
 ];
 
 export const EXPENSIVE_PUBLIC_PATTERNS = [

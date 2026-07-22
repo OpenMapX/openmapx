@@ -13,7 +13,6 @@ import { useLayerSelectorConfig } from "./useLayerSelectorConfig";
 
 const env: ClientEnv = {
   apiUrl: "",
-  mapillaryToken: "",
   mapStyleUrl: "",
   tilesUrl: "",
   styleProvider: "openmapx",
@@ -25,7 +24,7 @@ const env: ClientEnv = {
 
 function getPreview(preview: string | null | undefined): ReactNode {
   const integration = {
-    id: "street-view-mapillary",
+    id: "street-level-imagery-mapillary",
     name: "Community preview",
     enabled: true,
     domains: ["map-overlay"],
@@ -33,7 +32,7 @@ function getPreview(preview: string | null | undefined): ReactNode {
     frontend: {
       layerSelector: {
         group: "map-details" as const,
-        labelKey: "streetView",
+        labelKey: "streetLevel",
         ...(preview === undefined ? {} : { preview }),
       },
     },
@@ -54,11 +53,11 @@ describe("useLayerSelectorConfig previews", () => {
     expect(isValidElement(preview)).toBe(true);
     if (!isValidElement<{ integrationId: string }>(preview)) return;
     expect(preview.type).toBe(IntegrationLayerPreview);
-    expect(preview.props.integrationId).toBe("street-view-mapillary");
+    expect(preview.props.integrationId).toBe("street-level-imagery-mapillary");
 
     const { container } = render(<EnvProvider config={env}>{preview}</EnvProvider>);
     expect(container.querySelector("img")?.getAttribute("src")).toBe(
-      "/api/integrations/street-view-mapillary/preview",
+      "/api/integrations/street-level-imagery-mapillary/preview",
     );
   });
 

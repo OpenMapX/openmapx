@@ -47,3 +47,4 @@ export {
   type VoiceGuidanceTiming,
 } from "./settingsStore";
 export { useSidebarStore } from "./sidebarStore";
+export { useStreetLevelStore } from "./streetLevelStore";

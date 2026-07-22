@@ -1,0 +1,11 @@
+{
+  "name": "@openmapx/integration-street-level-imagery-mapillary",
+  "license": "AGPL-3.0-or-later",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openmapx/core": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^"
+  }
+}

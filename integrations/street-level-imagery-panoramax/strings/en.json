@@ -1,0 +1,11 @@
+{
+  "name": "Panoramax Street Imagery",
+  "description": "Street-level imagery from the Panoramax open federated network",
+  "dataSources": {
+    "panoramax": {
+      "purpose": "Street-level imagery. Coverage tiles and image metadata are proxied via BFF. Panoramic imagery is loaded directly from the configured Panoramax instance once an in-app notice is confirmed.",
+      "dataSent": "Coverage tile and metadata requests are proxied. After confirmation, direct browser requests may expose IP address, browser/device request metadata, and the viewed image ID to the Panoramax instance.",
+      "dataReceived": "Nearest image ID, image metadata and navigation links, vector tiles (sequence lines + picture points), and panoramic imagery."
+    }
+  }
+}

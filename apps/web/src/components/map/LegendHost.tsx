@@ -17,6 +17,7 @@ import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
 import { useMobilePanelMaxHeight } from "@/lib/mobilePanelHeight";
 import { DeclarativeLegend } from "./overlay/DeclarativeLegend";
 import { useAnyOverlayPanelOpen } from "./overlay/useOverlayStoreState";
+import { dedupeSharedMapLayers } from "./sharedIntegrationLayer";
 
 const FLUSH_BOTTOM = "var(--omx-safe-bottom)";
 
@@ -109,7 +110,9 @@ export function LegendHost() {
   // the host; they take precedence over the code legend path.
   const declarative = registry.getAll().filter((i) => i.enabled && i.frontend?.overlay?.legend);
   const declarativeIds = new Set(declarative.map((i) => i.id));
-  const codeLegends = registry.getWithLegend().filter((i) => !declarativeIds.has(i.id));
+  const codeLegends = dedupeSharedMapLayers(
+    registry.getWithLegend().filter((i) => !declarativeIds.has(i.id)),
+  );
 
   // A legend integration being *enabled* (installed) doesn't mean its overlay is
   // active — each legend renders only when its overlay panel is open (see

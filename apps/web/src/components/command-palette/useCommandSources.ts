@@ -45,7 +45,8 @@ const PARSED = {
 /** Overlay ID mapping: integration IDs like "overlay-earthquakes" -> "earthquakes". */
 function integrationIdToOverlayId(integrationId: string): string {
   if (integrationId === "overlay-traffic-tomtom") return "traffic";
-  if (integrationId === "street-view-mapillary") return "street-view";
+  // Every street-level-imagery provider shares a single overlay toggle and exclusion group.
+  if (integrationId.startsWith("street-level-imagery-")) return "street-level-imagery";
   return integrationId.replace(/^overlay-/, "").replace(/^tool-/, "");
 }
 

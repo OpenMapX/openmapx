@@ -7,6 +7,7 @@ import {
 } from "@openmapx/integration-framework/react";
 import type { ComponentType } from "react";
 import { lazy, Suspense, useMemo } from "react";
+import { dedupeSharedMapLayers } from "./sharedIntegrationLayer";
 
 function resolveDefault(mod: Record<string, unknown>): { default: ComponentType } {
   const Component = (mod.default ??
@@ -47,7 +48,7 @@ export function MapLayerHost() {
 
   // Every map overlay renders from integration code (`map-layer.tsx`): built-in
   // overlays via a static import, community ones via their runtime bundle.
-  const codeLayers = registry.getWithMapLayer();
+  const codeLayers = dedupeSharedMapLayers(registry.getWithMapLayer());
 
   if (codeLayers.length === 0) return null;
 

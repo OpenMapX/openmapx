@@ -193,6 +193,13 @@ const searchCategorySchema = z.object({
 
 const frontendSchema = z.object({
   mapLayer: z.boolean().optional(),
+  /**
+   * Groups integrations that render ONE shared map-layer component. Several
+   * providers can back a single overlay (street-level imagery is served by
+   * Panoramax, Mapillary and others through one coverage layer); MapLayerHost
+   * mounts such a layer once, for the first integration in registry order.
+   */
+  sharedMapLayer: z.string().optional(),
   legend: z.boolean().optional(),
   panel: z.boolean().optional(),
   searchCategory: searchCategorySchema.optional(),

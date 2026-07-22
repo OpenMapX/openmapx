@@ -126,14 +126,7 @@ token ships in the browser bundle.
 
 | Variable                  | Description                                                                                                                                 | Required / Default        |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
-| `MAPILLARY_TOKEN`         | Server-side Mapillary token used by the `/api/mapillary/*` vector-tile proxy and integrations that fetch Mapillary on the user's behalf. Stays server-side — never expose it in `NEXT_PUBLIC_*`. | Optional. Default unset   |
-| `MAPILLARY_VIEWER_TOKEN`  | Client token for the in-browser Mapillary viewer. Ships in the public JS bundle — use a dedicated read-only OAuth app with a quota you're comfortable exposing. Leave unset to hide the on-map entry point entirely. | Optional. Commented       |
-
-:::caution[Two different Mapillary tokens]
-`MAPILLARY_TOKEN` is secret and must never be copied into `MAPILLARY_VIEWER_TOKEN`
-or any `NEXT_PUBLIC_*` variable — Next.js would bundle it into the JavaScript
-the browser downloads.
-:::
+| `MAPILLARY_TOKEN`         | Server-side Mapillary token used by the `/api/mapillary/*` vector-tile proxy and integrations that fetch Mapillary on the user's behalf. Stays server-side — street-level imagery is proxied through the API, so no Mapillary token reaches the browser. | Optional. Default unset   |
 
 ## Backend endpoint overrides
 

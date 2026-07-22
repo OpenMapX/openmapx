@@ -17,7 +17,7 @@
       "preview": "preview.svg"
     },
     "overlay": {
-      "excludes": ["street-view", "air-quality", "wildfires"]
+      "excludes": ["street-level-imagery", "air-quality", "wildfires"]
     }
   },
   "backend": {

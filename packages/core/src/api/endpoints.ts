@@ -32,7 +32,6 @@ export const API_ENDPOINTS = {
   places: "/api/places",
   neighborhoods: "/api/neighborhoods",
   traffic: "/api/traffic",
-  streetViewImages: "/api/integrations/street-view-mapillary/streetview/images",
   categorySearch: "/api/integrations/poi-search/search",
   textSearch: "/api/integrations/poi-search/text",
   presetSuggest: "/api/integrations/poi-search/preset-suggest",

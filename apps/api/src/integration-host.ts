@@ -504,6 +504,11 @@ function buildIntegrationContext(args: {
       existing.push(provider);
       providers.set("photos", existing);
     },
+    registerStreetLevelProvider(provider) {
+      const existing = providers.get("street-level-imagery") ?? [];
+      existing.push(provider);
+      providers.set("street-level-imagery", existing);
+    },
     registerReviewProvider(provider) {
       const existing = providers.get("reviews") ?? [];
       existing.push(provider);

@@ -1,5 +1,5 @@
 {
-  "name": "Mapillary Street View",
+  "name": "Mapillary Street-Level Imagery",
   "description": "Street-level imagery and navigation",
   "dataSources": {
     "mapillary": {

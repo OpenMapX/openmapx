@@ -13,7 +13,6 @@
 
 export interface ClientEnv {
   apiUrl: string;
-  mapillaryToken: string;
   mapStyleUrl: string;
   tilesUrl: string;
   styleProvider: "maptiler" | "openmapx";
@@ -33,7 +32,6 @@ export function buildClientEnv(): ClientEnv {
 
   return {
     apiUrl: process.env.NEXT_PUBLIC_API_URL ?? "",
-    mapillaryToken: process.env.NEXT_PUBLIC_MAPILLARY_TOKEN ?? "",
     mapStyleUrl: process.env.NEXT_PUBLIC_MAP_STYLE_URL ?? "",
     tilesUrl: process.env.NEXT_PUBLIC_TILES_URL ?? "",
     styleProvider:

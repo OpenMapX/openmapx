@@ -1,18 +1,18 @@
 "use client";
 
-import { useStreetViewStore } from "@integrations/street-view-mapillary/store";
 import BoyIcon from "@mui/icons-material/Boy";
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Tooltip from "@mui/material/Tooltip";
+import { useStreetLevelStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
-import { useEnv } from "@/lib/EnvProvider";
+import {
+  pictureLayerIds,
+  providerIdByLayer,
+} from "@/components/map/street-level-imagery/StreetLevelCoverageLayer";
+import { useStreetLevelProviders } from "@/components/map/street-level-imagery/useStreetLevelProviders";
 import { useMap } from "@/lib/MapContext";
-
-// Must match the layer IDs defined in StreetViewLayer.tsx
-const MLY_PHOTO_LAYER = "mapillary-photo-layer";
-const MLY_PANO_LAYER = "mapillary-pano-layer";
 
 const SEARCH_BUF = 20; // feature query buffer (px) — logic only
 const CIRCLE_R = 10; // visual indicator radius — smaller than the boy
@@ -20,49 +20,80 @@ const GHOST_SIZE = 38; // px rendered height of the ghost icon
 // Boy icon feet land at y=20 in a 24-unit viewBox
 const PIN_TIP_OFFSET = GHOST_SIZE * (20 / 24);
 
+export interface PegmanCandidate {
+  id: string;
+  providerId: string;
+  screenX: number;
+  screenY: number;
+}
+
+/** Closest candidate to a drop point, measured in screen pixels. */
+export function nearestFeature(
+  candidates: PegmanCandidate[],
+  x: number,
+  y: number,
+): PegmanCandidate | null {
+  let best: PegmanCandidate | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const candidate of candidates) {
+    const distance = Math.hypot(candidate.screenX - x, candidate.screenY - y);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = candidate;
+    }
+  }
+  return best;
+}
+
 export function Pegman() {
   const { mapRef, mapReady } = useMap();
-  const env = useEnv();
-  const t = useTranslations("streetView");
-  const setLayerVisible = useStreetViewStore((s) => s.setLayerVisible);
-  const requestImageLoad = useStreetViewStore((s) => s.requestImageLoad);
+  const t = useTranslations("streetLevel");
+  const { providers } = useStreetLevelProviders();
+  const setLayerVisible = useStreetLevelStore((s) => s.setLayerVisible);
+  const requestImageLoad = useStreetLevelStore((s) => s.requestImageLoad);
   const [dragging, setDragging] = useState(false);
   const [ghostPos, setGhostPos] = useState({ x: 0, y: 0 });
   const pegmanRef = useRef<HTMLDivElement>(null);
 
-  // Street View requires a Mapillary client token, which is bundled into the
-  // browser by design (Mapillary's `MLY|<app>|<token>` shape is intended for
-  // client-side use). Operators who don't want to expose any token can leave
-  // `MAPILLARY_VIEWER_TOKEN` unset; the feature then hides entirely. The
-  // integration's tile-proxy token (INTEGRATION_STREET_VIEW_MAPILLARY_ACCESSTOKEN)
-  // is the server-side counterpart and never reaches the bundle.
-  if (!env.mapillaryToken) return null;
+  // No street-level-imagery provider enabled → the feature hides entirely.
+  if (providers.length === 0) return null;
 
   const findNearestDot = (clientX: number, clientY: number) => {
     const map = mapRef.current;
     if (!map || !mapReady) return null;
 
+    const layers = pictureLayerIds(providers).filter((id) => !!map.getLayer(id));
+    if (layers.length === 0) return null;
+
+    const byLayer = providerIdByLayer(providers);
     const rect = map.getCanvas().getBoundingClientRect();
     const x = clientX - rect.left;
     const y = clientY - rect.top;
 
-    const feature = map.queryRenderedFeatures(
+    const candidates: PegmanCandidate[] = [];
+    for (const feature of map.queryRenderedFeatures(
       [
         [x - SEARCH_BUF, y - SEARCH_BUF],
         [x + SEARCH_BUF, y + SEARCH_BUF],
       ],
-      { layers: [MLY_PHOTO_LAYER, MLY_PANO_LAYER] },
-    )[0];
+      { layers },
+    )) {
+      if (feature.geometry.type !== "Point") continue;
+      const imageId = feature.properties?.id;
+      const providerId = byLayer.get(feature.layer?.id ?? "");
+      if (imageId == null || !providerId) continue;
 
-    if (feature?.geometry.type !== "Point") return null;
+      const [lng, lat] = feature.geometry.coordinates as [number, number];
+      const point = map.project([lng, lat]);
+      candidates.push({
+        id: String(imageId),
+        providerId,
+        screenX: point.x,
+        screenY: point.y,
+      });
+    }
 
-    const [lng, lat] = feature.geometry.coordinates as [number, number];
-    const screenPt = map.project([lng, lat]);
-    return {
-      screenX: screenPt.x + rect.left,
-      screenY: screenPt.y + rect.top,
-      id: feature.properties?.id as string | number | null,
-    };
+    return nearestFeature(candidates, x, y);
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -83,12 +114,8 @@ export function Pegman() {
     setDragging(false);
 
     const dot = findNearestDot(e.clientX, e.clientY);
-    if (dot?.id != null) {
-      setLayerVisible(false);
-      requestImageLoad(String(dot.id));
-    } else {
-      setLayerVisible(false);
-    }
+    setLayerVisible(false);
+    if (dot) requestImageLoad({ providerId: dot.providerId, imageId: dot.id });
   };
 
   return (

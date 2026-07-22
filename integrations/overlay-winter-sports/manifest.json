@@ -16,7 +16,7 @@
       "preview": "preview.svg"
     },
     "overlay": {
-      "excludes": ["street-view", "hiking"]
+      "excludes": ["street-level-imagery", "hiking"]
     }
   },
   "backend": {

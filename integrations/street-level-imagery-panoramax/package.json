@@ -1,5 +1,5 @@
 {
-  "name": "@openmapx/integration-street-view-mapillary",
+  "name": "@openmapx/integration-street-level-imagery-panoramax",
   "license": "AGPL-3.0-or-later",
   "version": "1.0.0",
   "private": true,

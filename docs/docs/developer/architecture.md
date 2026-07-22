@@ -207,7 +207,7 @@ a code change a developer ships.
 
 Every integration registers into one or more **domains** — `geocoding`,
 `routing`, `transit`, `live-transit`, `data-source`, `poi-search`, `photos`,
-`reviews`, `weather`, `knowledge`, `map-overlay`, `street-view`,
+`reviews`, `weather`, `knowledge`, `map-overlay`, `street-level-imagery`,
 `road-conditions`, `gtfs-catalog`. Each domain has
 a dedicated **orchestrator integration** (`integrations/geocoding/`,
 `integrations/routing/`, `integrations/transit/`, and so on) that owns the

@@ -38,7 +38,7 @@ import { MapLayerHost } from "@/components/map/MapLayerHost";
 import { MapStylePoiClickHandler } from "@/components/map/MapStylePoiClickHandler";
 import { SearchInAreaChip } from "@/components/map/SearchInAreaChip";
 import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
-import { StreetViewViewer } from "@/components/map/StreetViewViewer";
+import { StreetLevelViewer } from "@/components/map/StreetLevelViewer";
 import { TopRightControls } from "@/components/map/TopRightControls";
 import { UserLocationMarker } from "@/components/map/UserLocationMarker";
 import { WaypointMarkers } from "@/components/map/WaypointMarkers";
@@ -180,7 +180,7 @@ export default function HomePage() {
           <HideDuringNavigation>
             <TopRightControls />
           </HideDuringNavigation>
-          <StreetViewViewer />
+          <StreetLevelViewer />
           {/* Overlay legends — self-positioned (sheet-aware), hidden behind a
               toggle during navigation / when a panel is expanded. */}
           <LegendHost />

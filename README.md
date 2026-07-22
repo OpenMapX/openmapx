@@ -27,7 +27,7 @@ OpenMapX is a complete mapping platform you run on your own infrastructure: sear
 
 ## Highlights
 
-- **Complete mapping platform** — geocoding, routing, public transit, live vehicles, street view, POI search, knowledge enrichment, reviews, weather, dozens of overlays
+- **Complete mapping platform** — geocoding, routing, public transit, live vehicles, street-level imagery, POI search, knowledge enrichment, reviews, weather, dozens of overlays
 - **Two-layer plugin system** — *services* (containers: Valhalla, Nominatim, MOTIS, …) and *integrations* (app features: providers, overlays, data sources, tools). Both support community plugins from any Git URL
 - **85+ built-in integrations** across roughly a dozen domains and **20+ built-in services** rendered into a generated `docker-compose.yml`
 - **Self-host everything** — no service is mandatory and every external dependency can be replaced by a self-hosted alternative

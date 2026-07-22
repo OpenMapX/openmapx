@@ -226,9 +226,9 @@ const serwist = new Serwist({
 
     // Mapillary coverage tiles via API proxy — StaleWhileRevalidate
     {
-      matcher: /\/api\/mapillary\/tiles\//i,
+      matcher: /\/api\/integrations\/street-level-imagery-[a-z0-9-]+\/tiles\//i,
       handler: new StaleWhileRevalidate({
-        cacheName: "mapillary-tiles",
+        cacheName: "street-level-imagery-tiles",
         plugins: [new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 3 * 24 * 60 * 60 })],
       }),
     },

@@ -52,12 +52,47 @@ function stripComments(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
 }
 
+const WEB_SRC_DIR = fileURLToPath(new URL("..", import.meta.url));
+
+function mentionsWire(src: string): boolean {
+  // Whole-identifier match so a symbol can't slip in as a substring of an
+  // unrelated name; the symbols are plain identifiers, safe to embed in RegExp.
+  return ATTRIBUTION_WIRES.some((symbol) => new RegExp(`\\b${symbol}\\b`).test(src));
+}
+
+/**
+ * Files an integration re-exports from the web app via the `@/` alias.
+ *
+ * An integration whose manifest sets `frontend.sharedMapLayer` renders a layer
+ * component owned by the app and shared with sibling providers (street-level-imagery
+ * imagery is served by Panoramax, Mapillary and others through one coverage
+ * layer). Attribution is wired once, in that shared component, so follow the
+ * re-export rather than demanding each integration wire it again — otherwise
+ * this guard would push every provider to register duplicate attributions.
+ */
+function reExportedWebFiles(src: string): string[] {
+  const out: string[] = [];
+  for (const match of src.matchAll(/from\s+"@\/([^"]+)"/g)) {
+    const rel = match[1];
+    if (!rel) continue;
+    for (const candidate of [`${rel}.tsx`, `${rel}.ts`, `${rel}/index.tsx`, `${rel}/index.ts`]) {
+      const full = path.join(WEB_SRC_DIR, candidate);
+      if (fs.existsSync(full)) {
+        out.push(full);
+        break;
+      }
+    }
+  }
+  return out;
+}
+
 function wiresAttribution(integrationDir: string): boolean {
   return listSourceFiles(integrationDir).some((file) => {
     const src = stripComments(fs.readFileSync(file, "utf8"));
-    // Whole-identifier match so a symbol can't slip in as a substring of an
-    // unrelated name; the symbols are plain identifiers, safe to embed in RegExp.
-    return ATTRIBUTION_WIRES.some((symbol) => new RegExp(`\\b${symbol}\\b`).test(src));
+    if (mentionsWire(src)) return true;
+    return reExportedWebFiles(src).some((target) =>
+      mentionsWire(stripComments(fs.readFileSync(target, "utf8"))),
+    );
   });
 }
 

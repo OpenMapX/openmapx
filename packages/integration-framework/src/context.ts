@@ -9,6 +9,7 @@ import type { RealtimeProvider } from "./contracts/realtime-provider.js";
 import type { ReviewProvider } from "./contracts/review-provider.js";
 import type { RoadConditionsProvider } from "./contracts/road-conditions-provider.js";
 import type { RoutingProvider } from "./contracts/routing-provider.js";
+import type { StreetLevelProvider } from "./contracts/street-level-imagery-provider.js";
 import type { TransitProvider } from "./contracts/transit-provider.js";
 import type { WeatherProvider } from "./contracts/weather-provider.js";
 import type { LoadedIntegration } from "./loader";
@@ -304,6 +305,8 @@ export interface IntegrationContext {
   registerRoadConditionsProvider(provider: RoadConditionsProvider): void;
   /** Typed registrar for photo providers. Stored under the `photos` key. */
   registerPhotoProvider(provider: PhotoProvider): void;
+  /** Typed registrar for street-level imagery providers. Stored under the `street-level-imagery` key. */
+  registerStreetLevelProvider(provider: StreetLevelProvider): void;
   /** Typed registrar for review providers. Stored under the `reviews` key. */
   registerReviewProvider(provider: ReviewProvider): void;
   /** Typed registrar for POI search providers. Stored under the `poi-search` key. */

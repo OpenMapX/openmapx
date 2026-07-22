@@ -93,7 +93,7 @@ export function MapStylePoiClickHandler() {
       if (layerIds.length === 0) return;
 
       // Skip if the click landed on one of our own overlay layers (category results,
-      // data source markers, street view, etc.) — those have their own handlers.
+      // data source markers, street-level imagery, etc.) — those have their own handlers.
       const ownLayers = [...INTERACTIVE_LAYER_IDS].filter(
         (id) => !layerIds.includes(id) && !!map.getLayer(id),
       );

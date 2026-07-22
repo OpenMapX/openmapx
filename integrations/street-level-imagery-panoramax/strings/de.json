@@ -1,0 +1,11 @@
+{
+  "name": "Panoramax Straßenbilder",
+  "description": "Straßenansichten aus dem offenen föderierten Panoramax-Netzwerk",
+  "dataSources": {
+    "panoramax": {
+      "purpose": "Straßenansichten. Kacheln und Bild-Metadaten werden über das BFF weitergeleitet. Panoramabilder werden nach Bestätigung eines In-App-Hinweises direkt von der konfigurierten Panoramax-Instanz geladen.",
+      "dataSent": "Kachel- und Metadaten-Anfragen werden weitergeleitet. Nach Bestätigung können direkte Browser-Anfragen IP-Adresse, Browser-/Geräte-Metadaten und die angezeigte Bild-ID an die Panoramax-Instanz übermitteln.",
+      "dataReceived": "Nächstgelegene Bild-ID, Bild-Metadaten und Navigationslinks, Vektorkacheln (Sequenzlinien + Bildpunkte) sowie Panoramabilder."
+    }
+  }
+}

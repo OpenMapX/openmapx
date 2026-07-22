@@ -36,7 +36,7 @@ export const DOMAIN_TO_SECTION_KEY: Record<string, string> = {
   transit: "transit",
   "map-overlay": "mapOverlays",
   "data-source": "dataSources",
-  "street-view": "streetView",
+  "street-level-imagery": "streetLevel",
   photos: "photos",
   knowledge: "knowledge",
   "poi-search": "poiSearch",

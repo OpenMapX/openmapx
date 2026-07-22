@@ -17,7 +17,7 @@
       "preview": "preview.svg"
     },
     "overlay": {
-      "excludes": ["street-view", "winter-sports"]
+      "excludes": ["street-level-imagery", "winter-sports"]
     }
   },
   "backend": {

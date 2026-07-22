@@ -60,7 +60,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: June 14, 2026
+        Last updated: July 22, 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -524,8 +524,8 @@ export default function PrivacyContent({
           <li>
             <Typography>
               <strong>Direct browser connections to US providers:</strong> The MapillaryJS
-              street-view viewer (Meta Platforms, Inc.) is loaded only after you confirm an in-app
-              notice. It then connects directly from your browser, exposing your IP address,
+              street-level imagery viewer (Meta Platforms, Inc.) is loaded only after you confirm an
+              in-app notice. It then connects directly from your browser, exposing your IP address,
               browser/device request metadata, selected image ID, and viewed coordinates. Some
               webcam video/player providers may also receive your IP address when you click
               &quot;Load media&quot; or otherwise open the live media. Meta is certified under the

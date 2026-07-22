@@ -17,7 +17,7 @@
       "preview": "preview.svg"
     },
     "overlay": {
-      "excludes": ["street-view", "earthquakes", "wildfires"],
+      "excludes": ["street-level-imagery", "earthquakes", "wildfires"],
       "minZoom": 5
     }
   },

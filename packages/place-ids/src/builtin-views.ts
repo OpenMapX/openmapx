@@ -130,7 +130,7 @@ export function registerBuiltinIdSchemeViews(): void {
 
   // Internal schemes (hidden from user-facing id lists)
 
-  for (const scheme of ["coordinate", "stylePoi", "label", "saved", "streetView"]) {
+  for (const scheme of ["coordinate", "stylePoi", "label", "saved", "streetLevel"]) {
     registerIdSchemeView({ scheme, label: scheme, internal: true });
   }
 }

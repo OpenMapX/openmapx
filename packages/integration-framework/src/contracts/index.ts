@@ -109,6 +109,13 @@ export {
   NL_CONFIDENCE_FLOOR,
 } from "./search-nlp-provider.js";
 export type {
+  StreetLevelCapabilities,
+  StreetLevelCoverage,
+  StreetLevelImage,
+  StreetLevelLink,
+  StreetLevelProvider,
+} from "./street-level-imagery-provider.js";
+export type {
   ProviderAttribution,
   TimetableEntry,
   TransitCapabilities,

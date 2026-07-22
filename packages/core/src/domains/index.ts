@@ -9,4 +9,3 @@ export type {
   MapOverlayDetail,
   MapOverlayProvider,
 } from "./map-overlay";
-export type { StreetViewProvider } from "./street-view";

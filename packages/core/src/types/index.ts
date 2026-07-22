@@ -149,6 +149,14 @@ export type {
 export type { LabeledPlace, SavedList, SavedPlace } from "./saved";
 export type { SearchIntent, SpatialConstraint, TimeConstraint } from "./search";
 export type {
+  StreetLevelCapabilities,
+  StreetLevelCoverage,
+  StreetLevelImage,
+  StreetLevelLink,
+  StreetLevelRef,
+  StreetLevelTiledAsset,
+} from "./streetLevel";
+export type {
   CurrentWeather,
   DailyForecastPoint,
   HourlyForecastPoint,

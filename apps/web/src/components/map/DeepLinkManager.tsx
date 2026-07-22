@@ -26,7 +26,6 @@ import {
 } from "@integrations/overlay-weather-alerts/store";
 import { useWildfireStore } from "@integrations/overlay-wildfires/store";
 import { useWinterSportsStore } from "@integrations/overlay-winter-sports/store";
-import { useStreetViewStore } from "@integrations/street-view-mapillary/store";
 import type { WeatherSubLayer } from "@openmapx/core";
 import {
   type BoundingBox,
@@ -34,6 +33,7 @@ import {
   type CategoryId,
   closeExclusionPeers,
   createPlace,
+  formatStreetLevelRef,
   getOverlayEntry,
   getRegisteredOverlayIds,
   getRegisteredOverlayStore,
@@ -44,6 +44,7 @@ import {
   OVERLAY_REGISTRY,
   PANEL,
   type Place,
+  parseStreetLevelRef,
   type TravelMode,
   type UnitSystem,
   useCategorySearchStore,
@@ -55,6 +56,7 @@ import {
   useSavedPlacesStore,
   useSearchStore,
   useSidebarStore,
+  useStreetLevelStore,
 } from "@openmapx/core";
 import type { TransportMode } from "@openmapx/mobility-core/transit";
 import type maplibregl from "maplibre-gl";
@@ -146,7 +148,7 @@ const OVERLAY_STORES: SubscribableStore[] = [
   useWeatherStore,
   useWildfireStore,
   useWinterSportsStore,
-  useStreetViewStore,
+  useStreetLevelStore,
 ];
 
 const APP_STATE_STORES: SubscribableStore[] = [
@@ -249,7 +251,7 @@ function applyOverlayState(parsed: ParsedDeepLink): void {
   if (settings.neDays || settings.neCat) requested.add("natural-events");
   if (settings.alertSev) requested.add("weather-alerts");
   if (settings.envSensor) requested.add("environment");
-  if (settings.sv) requested.add("street-view");
+  if (settings.sli) requested.add("street-level-imagery");
   if (settings.trail) requested.add("hiking");
   if (settings.winter) requested.add("winter-sports");
   if (settings.cycleAuto) requested.add("cycling");
@@ -320,7 +322,10 @@ function applyOverlaySettings(parsed: ParsedDeepLink): void {
   const environmentSensor = oneOf(settings.envSensor, ENVIRONMENT_SENSORS);
   if (environmentSensor) useEnvironmentStore.getState().setSensorType(environmentSensor);
 
-  if (settings.sv) useStreetViewStore.getState().requestImageLoad(settings.sv);
+  if (settings.sli) {
+    const ref = parseStreetLevelRef(settings.sli, "mapillary");
+    if (ref) useStreetLevelStore.getState().requestImageLoad(ref);
+  }
 
   const trailId = finiteNumber(settings.trail);
   if (trailId !== undefined) useHikingStore.getState().selectTrail(trailId);
@@ -648,9 +653,9 @@ function encodeOverlaySettings(params: URLSearchParams): void {
     params.set("envSensor", useEnvironmentStore.getState().sensorType);
   }
 
-  const streetView = useStreetViewStore.getState();
-  if (overlays.has("street-view") && streetView.activeImageId) {
-    params.set("sv", streetView.activeImageId);
+  const streetLevel = useStreetLevelStore.getState();
+  if (overlays.has("street-level-imagery") && streetLevel.activeImage) {
+    params.set("sli", formatStreetLevelRef(streetLevel.activeImage));
   }
 
   const hiking = useHikingStore.getState();

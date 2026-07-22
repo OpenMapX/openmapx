@@ -10,7 +10,6 @@ import { IntegrationLayerPreview } from "./IntegrationLayerPreview";
 function withEnv(children: ReactNode, apiUrl = "") {
   const env: ClientEnv = {
     apiUrl,
-    mapillaryToken: "",
     mapStyleUrl: "",
     tilesUrl: "",
     styleProvider: "openmapx",

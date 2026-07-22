@@ -17,7 +17,7 @@
       "preview": "preview.svg"
     },
     "overlay": {
-      "excludes": ["street-view", "air-quality", "earthquakes"]
+      "excludes": ["street-level-imagery", "air-quality", "earthquakes"]
     }
   },
   "backend": {

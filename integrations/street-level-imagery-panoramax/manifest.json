@@ -1,0 +1,63 @@
+{
+  "id": "street-level-imagery-panoramax",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "AGPL-3.0-or-later",
+  "documentation": "https://docs.panoramax.fr/",
+  "domains": ["street-level-imagery", "map-overlay"],
+  "frontend": {
+    "mapLayer": true,
+    "sharedMapLayer": "street-level-imagery",
+    "legend": true,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "streetLevelImagery",
+      "icon": "panorama",
+      "preview": "preview.svg"
+    },
+    "overlay": {
+      "excludes": ["air-quality", "earthquakes", "wildfires", "winter-sports", "hiking"]
+    }
+  },
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "instanceUrl": {
+        "type": "string",
+        "title": "Panoramax Instance URL",
+        "description": "STAC API base URL. Point this at a self-hosted instance to avoid depending on a public one.",
+        "default": "https://api.panoramax.xyz/api"
+      }
+    }
+  },
+  "healthCheck": {
+    "type": "http",
+    "urlTemplate": "${instanceUrl}/search?limit=1"
+  },
+  "quality": "built-in",
+  "category": "Imagery",
+  "dataSources": [
+    {
+      "sourceId": "panoramax",
+      "name": "Panoramax",
+      "url": "https://panoramax.xyz/",
+      "license": "Licence Ouverte v2.0 (IGN); CC BY-SA 4.0 (OSM France)",
+      "licenseUrl": "https://docs.panoramax.fr/",
+      "commercialUse": "yes",
+      "providerCountry": "FR",
+      "providerPrivacyUrl": "https://www.ign.fr/institut/donnees-caractere-personnel",
+      "endUserExposure": "direct",
+      "personalData": true,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

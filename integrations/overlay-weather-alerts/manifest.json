@@ -17,7 +17,7 @@
       "preview": "preview.svg"
     },
     "overlay": {
-      "excludes": ["street-view"]
+      "excludes": ["street-level-imagery"]
     }
   },
   "backend": {

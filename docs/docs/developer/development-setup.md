@@ -143,11 +143,15 @@ pnpm dev
 
 The web app runs on `http://localhost:3000`.
 
-:::note[Optional street-level imagery]
-The in-browser street-level imagery viewer needs a Mapillary client token in
-`NEXT_PUBLIC_MAPILLARY_TOKEN`. It is bundled into the public JavaScript by
-design — use a dedicated, low-quota Mapillary app for it, never the server-side
-`MAPILLARY_TOKEN`. Leave it unset and the on-map entry point is simply hidden.
+:::note[Street-level imagery]
+Street-level imagery works out of the box: the default provider is Panoramax,
+which needs no credentials. Imagery is proxied through the API, so no provider
+token is bundled into the browser JavaScript.
+
+Mapillary is available as an opt-in extra. Enable it in the admin panel, set its
+access token, and list it in `INTEGRATION_STREET_LEVEL_IMAGERY_PROVIDER`
+(e.g. `panoramax,mapillary`). Review Mapillary's Terms first — they restrict use
+in connection with real-time navigation or route guidance.
 :::
 
 ## Run both at once

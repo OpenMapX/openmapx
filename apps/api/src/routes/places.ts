@@ -336,7 +336,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
             // No resolver registered for this scheme. The coord-fallback
             // below would happily snap to the nearest OSM POI — fine for
             // freeform UI schemes (saved labels, basemap POI clicks,
-            // Street View drops) that aren't backed by any integration,
+            // street-level imagery drops) that aren't backed by any integration,
             // dangerous for an integration whose `setup()` failed and
             // never got to register its resolver. The manifest registry
             // tells us which is which: any scheme matching an installed

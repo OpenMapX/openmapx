@@ -52,7 +52,9 @@ const RAW_FETCH_ALLOWLIST: Record<string, string> = {
     "manual per-hop redirect loop with SSRF re-check + binary HTML byte cap",
   "integrations/search-nlp/index.ts":
     "Ollama generate/pull: streaming responses and multi-minute model downloads",
-  "integrations/street-view-mapillary/index.ts":
+  "integrations/street-level-imagery-panoramax/index.ts":
+    "tile proxy: forwards the binary MVT tile body, content-type and status verbatim",
+  "integrations/street-level-imagery-mapillary/index.ts":
     "Mapillary vector tiles: forwards the binary tile body, content-type, and status verbatim",
   "integrations/transit-otp/provider.ts":
     "isOtpAvailable() reachability probe: reads only res.ok, never the body",

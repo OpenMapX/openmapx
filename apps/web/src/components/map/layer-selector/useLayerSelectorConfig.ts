@@ -17,7 +17,8 @@ export interface GeneratedLayerEntry {
 /** Overlay ID mapping: integration IDs like "overlay-earthquakes" → overlay IDs like "earthquakes" */
 function integrationIdToOverlayId(integrationId: string): string {
   if (integrationId === "overlay-traffic-tomtom") return "traffic";
-  if (integrationId === "street-view-mapillary") return "street-view";
+  // Every street-level imagery provider shares a single overlay toggle and exclusion group.
+  if (integrationId.startsWith("street-level-imagery-")) return "street-level-imagery";
   return integrationId.replace(/^overlay-/, "").replace(/^tool-/, "");
 }
 
@@ -31,10 +32,18 @@ export function useLayerSelectorConfig() {
     const mapTools: GeneratedLayerEntry[] = [];
     const quickDetails: GeneratedLayerEntry[] = [];
 
+    // Several integrations can back one overlay (street-level imagery is served
+    // by Panoramax, Mapillary and others). They must yield a single toggle —
+    // entries are keyed by overlay id, so duplicates would also collide on the
+    // React key. First in registry order wins, so provider priority decides.
+    const claimedOverlayIds = new Set<string>();
+
     for (const integration of withLayerSelector) {
       const ls = integration.frontend?.layerSelector;
       if (!ls) continue;
       const overlayId = integrationIdToOverlayId(integration.id);
+      if (claimedOverlayIds.has(overlayId)) continue;
+      claimedOverlayIds.add(overlayId);
       const iconName = ls.icon;
       const entry: GeneratedLayerEntry = {
         id: overlayId,

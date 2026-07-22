@@ -1,18 +1,19 @@
 {
-  "id": "street-view-mapillary",
+  "id": "street-level-imagery-mapillary",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://www.mapillary.com/developer",
-  "domains": ["street-view", "map-overlay"],
+  "domains": ["street-level-imagery", "map-overlay"],
   "frontend": {
     "mapLayer": true,
+    "sharedMapLayer": "street-level-imagery",
     "legend": true,
     "panel": false,
     "layerSelector": {
       "group": "map-details",
       "labelKey": "streetLevelImagery",
-      "icon": "streetview",
+      "icon": "panorama",
       "preview": "preview.svg"
     },
     "overlay": {
@@ -28,7 +29,8 @@
     "properties": {
       "enabled": {
         "type": "boolean",
-        "default": true
+        "default": false,
+        "description": "Disabled by default. Mapillary's Terms restrict use in connection with real-time navigation or route guidance, and require apps to materially supplement rather than replicate Mapillary. Enable only if you have reviewed those terms for your deployment."
       },
       "accessToken": {
         "type": "string",

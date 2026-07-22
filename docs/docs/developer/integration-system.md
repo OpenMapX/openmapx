@@ -99,7 +99,7 @@ integrations and the orchestrators that consume them: a domain orchestrator asks
 the host for every enabled integration in its domain and merges their providers.
 The field is a free-form string array, so one integration can serve several
 domains, and frontend-only conventions (for example `map-overlay` or
-`street-view`, which have no backend registrar) are expressed the same way. The
+`street-level-imagery`, which have no backend registrar) are expressed the same way. The
 domains that carry a typed provider contract are enumerated in
 [Domains and provider contracts](#domains-and-provider-contracts).
 
@@ -440,7 +440,7 @@ A few patterns recur across the contracts and are worth calling out:
   integrations that front many feeds, each with its own license.
 
 Domains without a typed contract — frontend-only conventions such as
-`map-overlay` or `street-view` — still appear in `domains`, but they contribute
+`map-overlay` or `street-level-imagery` — still appear in `domains`, but they contribute
 UI surfaces and routes rather than a registered provider object.
 
 The per-contract authoring guides live alongside this reference: the

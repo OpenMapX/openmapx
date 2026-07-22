@@ -7,7 +7,7 @@
  *
  * Everything else is left alone — notably `offline-area-*` (user-pinned offline
  * maps, intentionally kept across style deploys) and the other runtime caches
- * (`pages`, `mapillary-tiles`, `api-*`), which manage their own expiry.
+ * (`pages`, `street-level-imagery-tiles`, `api-*`), which manage their own expiry.
  */
 export function isStalePrecacheName(
   name: string,
