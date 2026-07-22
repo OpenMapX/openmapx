@@ -9,6 +9,7 @@ import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import { useOverlayMinZoom } from "@/lib/overlayZoomGate";
 import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { useAirQualityStore } from "./store";
 
@@ -86,6 +87,10 @@ export function AirQualityLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
   const layerVisible = useAirQualityStore((s) => s.layerVisible);
+  // Declared in this integration's manifest, the same gate the layer selector
+  // applies: below it we skip fetching and keep the circles hidden, so an
+  // overlay left on while zooming out can't pull stations for a continent.
+  const minZoom = useOverlayMinZoom("air-quality");
   const setLoading = useAirQualityStore((s) => s.setLoading);
   useIntegrationAttribution("overlay-air-quality", layerVisible);
   useOverlayExclusion("air-quality", layerVisible);
@@ -95,7 +100,7 @@ export function AirQualityLayer() {
 
   const fetchStations = useCallback(async () => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || map.getZoom() < minZoom) return;
 
     const bounds = map.getBounds();
     const { apiUrl } = env;
@@ -117,7 +122,7 @@ export function AirQualityLayer() {
     } finally {
       setLoading(false);
     }
-  }, [env, mapRef, setLoading]);
+  }, [env, mapRef, setLoading, minZoom]);
 
   useEffect(() => {
     void styleVersion;
@@ -161,6 +166,7 @@ export function AirQualityLayer() {
             id: AQ_LAYER_ID,
             type: "circle",
             source: AQ_SOURCE_ID,
+            minzoom: minZoom,
             paint: {
               "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 4, 8, 8, 12, 14],
               "circle-color": colorExpr as maplibregl.ExpressionSpecification,
@@ -190,7 +196,7 @@ export function AirQualityLayer() {
     return () => {
       map.off("styledata", syncLayer);
     };
-  }, [mapReady, styleVersion, mapRef, layerVisible, fetchStations]);
+  }, [mapReady, styleVersion, mapRef, layerVisible, fetchStations, minZoom]);
 
   const debouncedFetch = useDebouncedCallback(() => fetchStations(), 800);
 

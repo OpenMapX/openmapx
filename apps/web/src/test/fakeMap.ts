@@ -19,6 +19,8 @@ export interface FakeMapState {
   filters: Map<string, unknown>;
   images: Set<string>;
   styleLoaded: boolean;
+  /** Backing value for `getZoom()` — mutate then emit("moveend") to simulate a zoom gesture. */
+  zoom: number;
   handlers: Map<string, Set<(...args: unknown[]) => void>>;
 }
 
@@ -35,6 +37,8 @@ export interface FakeMap {
 
 export interface CreateFakeMapOptions {
   styleLoaded?: boolean;
+  /** Initial `getZoom()` value (default 10). */
+  zoom?: number;
 }
 
 export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
@@ -46,6 +50,7 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     filters: new Map(),
     images: new Set(),
     styleLoaded: options.styleLoaded ?? true,
+    zoom: options.zoom ?? 10,
     handlers: new Map(),
   };
 
@@ -124,7 +129,7 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     querySourceFeatures: () => [],
     project: (lngLat: unknown) => ({ x: 0, y: 0, lngLat }),
     unproject: () => ({ lng: 0, lat: 0 }),
-    getZoom: () => 10,
+    getZoom: () => state.zoom,
     getCenter: () => ({ lng: 0, lat: 0 }),
     getBounds: () => ({
       getWest: () => -180,

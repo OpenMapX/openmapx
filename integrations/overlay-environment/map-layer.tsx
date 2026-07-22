@@ -9,6 +9,7 @@ import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import { useOverlayMinZoom } from "@/lib/overlayZoomGate";
 import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { type EnvironmentSensorType, useEnvironmentStore } from "./store";
 
@@ -143,6 +144,10 @@ export function EnvironmentLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
   const layerVisible = useEnvironmentStore((s) => s.layerVisible);
+  // Declared in this integration's manifest, the same gate the layer selector
+  // applies: below it we skip fetching and keep the circles hidden, so an
+  // overlay left on while zooming out can't pull stations for a continent.
+  const minZoom = useOverlayMinZoom("environment");
   useIntegrationAttribution("overlay-environment", layerVisible);
   const sensorType = useEnvironmentStore((s) => s.sensorType);
   const setLoading = useEnvironmentStore((s) => s.setLoading);
@@ -157,7 +162,7 @@ export function EnvironmentLayer() {
 
   const fetchStations = useCallback(async () => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || map.getZoom() < minZoom) return;
 
     const bounds = map.getBounds();
     const url =
@@ -183,7 +188,7 @@ export function EnvironmentLayer() {
     } finally {
       setLoading(false);
     }
-  }, [env.apiUrl, mapRef, sensorType, setLoading, setStationCount]);
+  }, [env.apiUrl, mapRef, sensorType, setLoading, setStationCount, minZoom]);
 
   // Refetch when sensor type changes
   useEffect(() => {
@@ -235,6 +240,7 @@ export function EnvironmentLayer() {
             id: ENV_LAYER_ID,
             type: "circle",
             source: ENV_SOURCE_ID,
+            minzoom: minZoom,
             paint: {
               "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 5, 10, 14, 14, 18],
               "circle-color": colorExpr as maplibregl.ExpressionSpecification,
@@ -289,7 +295,16 @@ export function EnvironmentLayer() {
     return () => {
       map.off("styledata", syncLayer);
     };
-  }, [mapReady, styleVersion, mapRef, layerVisible, sensorType, fetchStations, setStationCount]);
+  }, [
+    mapReady,
+    styleVersion,
+    mapRef,
+    layerVisible,
+    sensorType,
+    fetchStations,
+    setStationCount,
+    minZoom,
+  ]);
 
   const debouncedFetch = useDebouncedCallback(() => {
     fetchedRef.current = true;

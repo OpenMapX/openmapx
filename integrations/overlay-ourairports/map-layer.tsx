@@ -14,6 +14,7 @@ import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import { useOverlayMinZoom } from "@/lib/overlayZoomGate";
 import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { type AirportTypeFilter, useAirportsOverlayStore } from "./store";
 
@@ -85,6 +86,10 @@ export function AirportsOverlay() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
   const layerVisible = useAirportsOverlayStore((s) => s.layerVisible);
+  // Declared in this integration's manifest, the same gate the layer selector
+  // applies: below it we skip fetching and keep the markers hidden, so an
+  // overlay left on while zooming out can't pull a world-sized airport list.
+  const minZoom = useOverlayMinZoom("ourairports");
   useIntegrationAttribution("overlay-ourairports", layerVisible);
   const filter = useAirportsOverlayStore((s) => s.filter);
   const setLoading = useAirportsOverlayStore((s) => s.setLoading);
@@ -95,7 +100,9 @@ export function AirportsOverlay() {
 
   const fetchAirports = useCallback(async () => {
     const map = mapRef.current;
-    if (!map) return;
+    // Checked before the fetched-key de-dup so a skipped fetch never claims
+    // the key — crossing back over the threshold refetches the same viewport.
+    if (!map || map.getZoom() < minZoom) return;
     const b = map.getBounds();
     const params = new URLSearchParams({
       west: String(b.getWest()),
@@ -130,7 +137,7 @@ export function AirportsOverlay() {
     } finally {
       setLoading(false);
     }
-  }, [env, mapRef, filter, setLoading, setLastUpdated]);
+  }, [env, mapRef, filter, setLoading, setLastUpdated, minZoom]);
 
   // Layer add / remove + initial load
   useEffect(() => {
@@ -165,6 +172,7 @@ export function AirportsOverlay() {
               id: CIRCLE_LAYER_ID,
               type: "circle",
               source: SOURCE_ID,
+              minzoom: minZoom,
               paint: {
                 "circle-radius": CIRCLE_RADIUS_EXPR,
                 "circle-color": RANK_COLOR_EXPR,
@@ -221,7 +229,7 @@ export function AirportsOverlay() {
     return () => {
       map.off("styledata", syncLayers);
     };
-  }, [mapReady, mapRef, styleVersion, layerVisible, fetchAirports]);
+  }, [mapReady, mapRef, styleVersion, layerVisible, fetchAirports, minZoom]);
 
   // Refetch on viewport change (debounced via moveend)
   useEffect(() => {
@@ -236,12 +244,13 @@ export function AirportsOverlay() {
     };
   }, [mapRef, mapReady, layerVisible, fetchAirports]);
 
-  // Refetch when filter changes
+  // Refetch when the filter changes — `fetchAirports` is recreated with the
+  // new filter baked in, so its identity is the change signal here.
   useEffect(() => {
     if (!layerVisible) return;
     fetchedKeyRef.current = null;
     void fetchAirports();
-  }, [filter, layerVisible, fetchAirports]);
+  }, [layerVisible, fetchAirports]);
 
   // Click → open place panel via the coordinate scheme. The reverse-geocode
   // chain will resolve the aerodrome, and `knowledge-ourairports` will
