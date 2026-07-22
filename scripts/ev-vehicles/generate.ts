@@ -11,6 +11,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   type DropReason,
+  dedupeVehicles,
+  disambiguateLabels,
   type GeneratedVehicle,
   mapVehicle,
   type RawVehicle,
@@ -105,17 +107,19 @@ async function main(): Promise<void> {
   }
   const records = extractRecords(await response.json());
 
-  const vehicles: GeneratedVehicle[] = [];
+  const mapped: GeneratedVehicle[] = [];
   const drops = new Map<DropReason, number>();
   for (const record of records) {
     const result = mapVehicle(record);
     if ("ok" in result) {
-      vehicles.push(result.ok);
+      mapped.push(result.ok);
     } else {
       drops.set(result.drop, (drops.get(result.drop) ?? 0) + 1);
     }
   }
 
+  const { kept, collapsed } = dedupeVehicles(mapped);
+  const vehicles = disambiguateLabels(kept);
   vehicles.sort((a, b) => a.label.localeCompare(b.label, "en") || a.id.localeCompare(b.id));
 
   await mkdir(dirname(OUT_PATH), { recursive: true });
@@ -124,6 +128,7 @@ async function main(): Promise<void> {
   console.log(`\nDataset ${DATASET_TAG}`);
   console.log(`  total records: ${records.length}`);
   console.log(`  usable:        ${vehicles.length}`);
+  console.log(`  collapsed:     ${collapsed} (identical duplicate records)`);
   console.log("  dropped:");
   for (const reason of DROP_REASONS) {
     console.log(`    ${reason.padEnd(15)} ${drops.get(reason) ?? 0}`);

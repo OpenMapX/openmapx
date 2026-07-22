@@ -1,13 +1,32 @@
 import { describe, expect, it } from "vitest";
 import {
   buildLabel,
+  dedupeVehicles,
+  disambiguateLabels,
   estimateMassTonnes,
+  type GeneratedVehicle,
   isHybrid,
   mapConnectors,
   mapVehicle,
   pickRange,
   type RawVehicle,
 } from "../map-vehicle.ts";
+
+/** A distilled record; individual tests override the fields they exercise. */
+function generated(overrides: Partial<GeneratedVehicle> = {}): GeneratedVehicle {
+  return {
+    id: "bmw:i4:2024:i4",
+    label: "BMW i4 eDrive40 (2024)",
+    batteryKwh: 81.3,
+    baseWhPerKm: 168,
+    massTonnes: 2.05,
+    maxDcKw: 207,
+    maxAcKw: 11,
+    vehicleTaperSocPct: 80,
+    connectors: ["ccs2", "type2"],
+    ...overrides,
+  };
+}
 
 /** A complete, mappable record; individual tests override the fields they exercise. */
 function raw(overrides: Partial<RawVehicle> = {}): RawVehicle {
@@ -408,5 +427,84 @@ describe("mapVehicle", () => {
   ])("drops with reason %s", (reason, overrides) => {
     const r = mapVehicle(raw(overrides as Partial<RawVehicle>));
     expect(r).toEqual({ drop: reason });
+  });
+});
+
+describe("dedupeVehicles", () => {
+  it("collapses two records that distil to the same car", () => {
+    const { kept, collapsed } = dedupeVehicles([
+      generated({ id: "bmw:i4:2024:i4_edrive40" }),
+      generated({ id: "bmw:i4:2024:i4" }),
+    ]);
+    expect(collapsed).toBe(1);
+    expect(kept).toHaveLength(1);
+    // Deterministic: the lowest id wins regardless of input order.
+    expect(kept[0].id).toBe("bmw:i4:2024:i4");
+  });
+
+  it("ignores connector order when comparing but leaves the stored order alone", () => {
+    const { kept, collapsed } = dedupeVehicles([
+      generated({ id: "a:b:2024:x", connectors: ["type2", "ccs2"] }),
+      generated({ id: "a:b:2024:y", connectors: ["ccs2", "type2"] }),
+    ]);
+    expect(collapsed).toBe(1);
+    expect(kept[0].connectors).toEqual(["type2", "ccs2"]);
+  });
+
+  it.each([
+    ["label", { label: "BMW i4 M50 (2024)" }],
+    ["batteryKwh", { batteryKwh: 70 }],
+    ["baseWhPerKm", { baseWhPerKm: 200 }],
+    ["massTonnes", { massTonnes: 2.3 }],
+    ["maxDcKw", { maxDcKw: 150 }],
+    ["maxAcKw", { maxAcKw: 22 }],
+    ["vehicleTaperSocPct", { vehicleTaperSocPct: 70 }],
+    ["connectors", { connectors: ["ccs1", "type1"] }],
+  ])("keeps both records when %s differs", (_field, difference) => {
+    const { kept, collapsed } = dedupeVehicles([
+      generated({ id: "a:b:2024:x" }),
+      generated({ id: "a:b:2024:y", ...(difference as Partial<GeneratedVehicle>) }),
+    ]);
+    expect(collapsed).toBe(0);
+    expect(kept).toHaveLength(2);
+  });
+
+  it("returns an empty result for an empty list", () => {
+    expect(dedupeVehicles([])).toEqual({ kept: [], collapsed: 0 });
+  });
+});
+
+describe("disambiguateLabels", () => {
+  it("leaves every label alone when none collide", () => {
+    const list = [
+      generated({ id: "a:b:2024:x" }),
+      generated({ id: "a:b:2024:y", label: "BMW i4 M50 (2024)" }),
+    ];
+    expect(disambiguateLabels(list).map((v) => v.label)).toEqual([
+      "BMW i4 eDrive40 (2024)",
+      "BMW i4 M50 (2024)",
+    ]);
+  });
+
+  it("appends the battery size when two different cars share a name", () => {
+    const list = [
+      generated({ id: "a:b:2024:x", batteryKwh: 81.3 }),
+      generated({ id: "a:b:2024:y", batteryKwh: 70.2 }),
+    ];
+    expect(disambiguateLabels(list).map((v) => v.label)).toEqual([
+      "BMW i4 eDrive40 (2024) · 81.3 kWh",
+      "BMW i4 eDrive40 (2024) · 70.2 kWh",
+    ]);
+  });
+
+  it("falls back to DC power when the battery is equal too", () => {
+    const list = [
+      generated({ id: "a:b:2024:x", maxDcKw: 207 }),
+      generated({ id: "a:b:2024:y", maxDcKw: 150 }),
+    ];
+    expect(disambiguateLabels(list).map((v) => v.label)).toEqual([
+      "BMW i4 eDrive40 (2024) · 207 kW",
+      "BMW i4 eDrive40 (2024) · 150 kW",
+    ]);
   });
 });

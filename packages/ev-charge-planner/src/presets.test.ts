@@ -28,6 +28,11 @@ describe("vehicle presets", () => {
     expect(labels).toEqual([...labels].sort((a, b) => a.localeCompare(b, "en")));
   });
 
+  it("has no duplicate display labels", () => {
+    const labels = listVehicles().map((v) => v.label);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
   it("looks a preset up by id", () => {
     expect(getVehiclePreset(listVehicles()[0].id)).toBeTruthy();
     expect(getVehiclePreset("nope")).toBeNull();

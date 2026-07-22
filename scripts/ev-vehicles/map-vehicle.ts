@@ -217,6 +217,67 @@ export function buildLabel(raw: RawVehicle): string {
   return raw.year ? `${name} (${raw.year})` : name;
 }
 
+/** Everything the app actually shows or plans with — two records equal on all of it are the same car. */
+function specSignature(vehicle: GeneratedVehicle): string {
+  return JSON.stringify([
+    vehicle.label,
+    vehicle.batteryKwh,
+    vehicle.baseWhPerKm,
+    vehicle.massTonnes,
+    vehicle.maxDcKw,
+    vehicle.maxAcKw,
+    vehicle.vehicleTaperSocPct,
+    // Sorted for comparison only; the stored order is meaningful (it drives
+    // connector preference) and must not be touched.
+    [...vehicle.connectors].sort(),
+  ]);
+}
+
+/**
+ * Upstream ships both a bare record and a trim-qualified one for some cars
+ * (`bmw:i4:2024:i4` and `bmw:i4:2024:i4_edrive40`); once distilled they carry
+ * identical labels and identical specs, so the picker would offer the same car
+ * twice. Keep the first by ascending id, which makes the choice deterministic.
+ */
+export function dedupeVehicles(list: GeneratedVehicle[]): {
+  kept: GeneratedVehicle[];
+  collapsed: number;
+} {
+  const seen = new Map<string, GeneratedVehicle>();
+  let collapsed = 0;
+  for (const vehicle of [...list].sort((a, b) => a.id.localeCompare(b.id))) {
+    const signature = specSignature(vehicle);
+    if (seen.has(signature)) {
+      collapsed += 1;
+      continue;
+    }
+    seen.set(signature, vehicle);
+  }
+  return { kept: [...seen.values()], collapsed };
+}
+
+/**
+ * Safety net for a future dataset release: if two genuinely different cars end
+ * up sharing a display name, tell them apart by the figure that differs rather
+ * than shipping two indistinguishable entries. A no-op when no label collides,
+ * which is the case today.
+ */
+export function disambiguateLabels(list: GeneratedVehicle[]): GeneratedVehicle[] {
+  const groups = new Map<string, GeneratedVehicle[]>();
+  for (const vehicle of list) {
+    const group = groups.get(vehicle.label);
+    if (group) group.push(vehicle);
+    else groups.set(vehicle.label, [vehicle]);
+  }
+  return list.map((vehicle) => {
+    const group = groups.get(vehicle.label) as GeneratedVehicle[];
+    if (group.length < 2) return vehicle;
+    const batteryDiffers = group.some((other) => other.batteryKwh !== group[0].batteryKwh);
+    const suffix = batteryDiffers ? `${vehicle.batteryKwh} kWh` : `${vehicle.maxDcKw} kW`;
+    return { ...vehicle, label: `${vehicle.label} · ${suffix}` };
+  });
+}
+
 export function mapVehicle(raw: RawVehicle): { ok: GeneratedVehicle } | { drop: DropReason } {
   const batteryKwh = raw.battery?.pack_capacity_kwh_net;
   if (typeof batteryKwh !== "number" || batteryKwh <= 0) return { drop: "no-battery" };
