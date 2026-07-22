@@ -889,7 +889,7 @@ export function DirectionsPanelContent() {
               }}
               onClick={() => setShowOptions((v) => !v)}
             >
-              {isTransitMode ? t("routeOptions") : t("options")}
+              {t("options")}
             </Typography>
           </Box>
         )}
