@@ -31,8 +31,8 @@ export function setup(ctx: IntegrationContext): void {
   if (motis?.url) setSharedMobilityMotisUrl(motis.url);
   if (nominatim?.url) setSharedMobilityNominatimUrl(nominatim.url);
   setDbBikeCredentials({
-    clientId: ctx.config.dbClientId as string | undefined,
-    apiKey: ctx.config.dbApiKey as string | undefined,
+    clientId: ctx.config["db-bike-client-id"] as string | undefined,
+    apiKey: ctx.config["db-bike-api-key"] as string | undefined,
   });
   ctx.registerMobilityDataSource(bikeSharingProvider);
   registerPlaceResolver(bikeSharingProvider.id, createDataSourceResolver(bikeSharingProvider));

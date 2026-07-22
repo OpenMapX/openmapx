@@ -31,8 +31,8 @@ export function setup(ctx: IntegrationContext): void {
   if (motis?.url) setSharedMobilityMotisUrl(motis.url);
   if (nominatim?.url) setSharedMobilityNominatimUrl(nominatim.url);
   setDeNwMobidromScooterCredentials({
-    clientId: ctx.config.nrwMobidromClientId as string | undefined,
-    clientSecret: ctx.config.nrwMobidromClientSecret as string | undefined,
+    clientId: ctx.config["de-nw-mobidrom-scooter-client-id"] as string | undefined,
+    clientSecret: ctx.config["de-nw-mobidrom-scooter-client-secret"] as string | undefined,
   });
   ctx.registerMobilityDataSource(scooterSharingProvider);
   registerPlaceResolver(

@@ -23,7 +23,7 @@
         "type": "boolean",
         "default": true
       },
-      "nrwMobidromClientId": {
+      "de-nw-mobidrom-scooter-client-id": {
         "type": "string",
         "title": "NRW Mobidrom Client ID",
         "description": "OAuth2 client ID override for the NRW Mobidrom GBFS API. Defaults to the publicly documented 'gbfs-api' client.",
@@ -41,7 +41,7 @@
           "notes": "Optional override — the integration ships with the publicly documented default client (client_id 'gbfs-api'), so most operators leave this blank unless the published credentials get rotated."
         }
       },
-      "nrwMobidromClientSecret": {
+      "de-nw-mobidrom-scooter-client-secret": {
         "type": "string",
         "title": "NRW Mobidrom Client Secret",
         "description": "OAuth2 client secret override for the NRW Mobidrom GBFS API. Defaults to the publicly documented secret (see dataset page).",
@@ -100,7 +100,7 @@
       "name": "NRW Mobidrom E-Scooter",
       "type": "http",
       "url": "https://www.mobilitaetsdaten.nrw/api/systemadapter-gbfs-provider/conflated/v3.0/e-scooter-sharing-nrw/manifest.json",
-      "requiredConfigKeys": ["nrwMobidromClientId", "nrwMobidromClientSecret"]
+      "requiredConfigKeys": ["de-nw-mobidrom-scooter-client-id", "de-nw-mobidrom-scooter-client-secret"]
     }
   ],
   "quality": "built-in",
