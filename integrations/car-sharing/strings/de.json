@@ -138,6 +138,21 @@
       "purpose": "Anreicherung norwegischer Carsharing-Stationen und -Fahrzeuge mit Betreiber-Branding, Preisplänen, Verleih-Apps und Geofencing-Zonen über die Entur-Mobility-API",
       "dataSent": "GBFS-Stations- und Fahrzeugkennungen (sowie System-Kennungen für Geofencing) bereits im Kartenausschnitt gefundener Objekte. Keine Nutzerkonto- oder Rohstandortdaten",
       "dataReceived": "Betreiber-Branding, Preispläne, Fahrzeugtypdetails, Verleih-Apps/-URIs, Stationsadressen, Geofencing-Zonen"
+    },
+    "ca-communauto": {
+      "purpose": "Stationsbasiertes Carsharing in kanadischen Städten (Montréal, Toronto, Ottawa, Québec, Calgary, Edmonton, Winnipeg, Halifax u. a.)",
+      "dataSent": "Stadtkennung und ein fester landesweiter Begrenzungsrahmen in der URL (anhand der Nähe zum Kartenmittelpunkt gewählt). Keine Standort- oder Kontodaten der Nutzer",
+      "dataReceived": "Stationsstandorte, -namen und ob aktuell ein Fahrzeug buchbar ist"
+    },
+    "be-coopstroom": {
+      "purpose": "Genossenschaftliches Elektro-Carsharing in Flandern, Belgien (CoopStroom)",
+      "dataSent": "Keine Nutzerdaten (gesamte Flotte einmalig geladen und serverseitig auf den Kartenausschnitt gefiltert)",
+      "dataReceived": "Fahrzeugstandorte, Verfügbarkeit, Marke/Modell und Kraftstoffart"
+    },
+    "be-degage": {
+      "purpose": "Genossenschaftliches Peer-to-Peer-Carsharing in Flandern, Belgien (Dégage)",
+      "dataSent": "Keine Nutzerdaten (gesamte Flotte einmalig geladen und serverseitig auf den Kartenausschnitt gefiltert)",
+      "dataReceived": "Fahrzeugstandorte, Kraftstoffart und Getriebe"
     }
   }
 }

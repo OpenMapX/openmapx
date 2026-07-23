@@ -70,6 +70,21 @@
       "name": "Transitous Rentals",
       "type": "http",
       "url": "https://api.transitous.org/api/v1/geocode?text=test"
+    },
+    {
+      "name": "Communauto",
+      "type": "ping",
+      "url": "https://restapifrontoffice.reservauto.net/ReservautoFrontOffice/index.html"
+    },
+    {
+      "name": "CoopStroom",
+      "type": "http",
+      "url": "https://app.coopstroom.be/api/partago/v1/fleet/coopstroom"
+    },
+    {
+      "name": "Dégage",
+      "type": "http",
+      "url": "https://degapp.be/api/car/stands"
     }
   ],
   "quality": "built-in",
@@ -159,6 +174,51 @@
       "commercialUse": "yes",
       "providerCountry": "NO",
       "providerPrivacyUrl": "https://om.entur.no/personvern/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "ca-communauto",
+      "name": "Communauto",
+      "url": "https://www.communauto.com/",
+      "apiHosts": ["restapifrontoffice.reservauto.net"],
+      "license": "© Communauto — no open-data license",
+      "licenseUrl": "https://www.communauto.com/",
+      "commercialUse": "conditional",
+      "providerCountry": "CA",
+      "providerPrivacyUrl": "https://www.communauto.com/en/privacy-policy/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "be-coopstroom",
+      "name": "CoopStroom",
+      "url": "https://www.coopstroom.be",
+      "apiHosts": ["app.coopstroom.be"],
+      "license": "Unspecified — see provider terms",
+      "licenseUrl": "https://www.coopstroom.be",
+      "commercialUse": "unknown",
+      "providerCountry": "BE",
+      "providerPrivacyUrl": "https://www.coopstroom.be",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "be-degage",
+      "name": "Dégage",
+      "url": "https://www.degage.be",
+      "apiHosts": ["degapp.be"],
+      "license": "Unspecified — see provider terms",
+      "licenseUrl": "https://www.degage.be",
+      "commercialUse": "unknown",
+      "providerCountry": "BE",
+      "providerPrivacyUrl": "https://www.degage.be/privacy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,

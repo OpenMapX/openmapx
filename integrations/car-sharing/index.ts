@@ -5,6 +5,8 @@ import { setSharedMobilityMotisUrl } from "@openmapx/mobility-core/motis-rentals
 import { setSharedMobilityNominatimUrl } from "@openmapx/mobility-core/nominatim";
 import { setSharedMobilityDecisionObserver } from "@openmapx/mobility-core/shared-mobility-orchestrator";
 import { registerPlaceResolver } from "@openmapx/place-ids";
+import { beCoopstroomClient, beDegageClient } from "./providers/be-degapp.js";
+import { caCommunautoClient } from "./providers/ca-communauto-client.js";
 import { deCambioClient } from "./providers/de-cambio-client.js";
 import { deNwBielefeldClient } from "./providers/de-nw-bielefeld-client.js";
 import { deNwWuppertalClient } from "./providers/de-nw-wuppertal-client.js";
@@ -29,6 +31,9 @@ export function setup(ctx: IntegrationContext): void {
   registerCarSharingClient(deStadtteilautoClient);
   registerCarSharingClient(deNwWuppertalClient);
   registerCarSharingClient(deNwBielefeldClient);
+  registerCarSharingClient(caCommunautoClient);
+  registerCarSharingClient(beCoopstroomClient);
+  registerCarSharingClient(beDegageClient);
 
   setManifestDataSources(ctx.manifest.dataSources ?? []);
   setSharedMobilityDecisionObserver((category, decision) => {
