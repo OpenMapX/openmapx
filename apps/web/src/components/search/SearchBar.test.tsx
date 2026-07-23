@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createFakeMap, createQueryWrapper, fireEvent, render, screen, waitFor } from "@/test";
+import { act, createFakeMap, createQueryWrapper, fireEvent, render, screen, waitFor } from "@/test";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
@@ -86,6 +86,47 @@ describe("SearchBar", () => {
   it("mounts and renders the search input", () => {
     renderBar();
     screen.getByLabelText("search.ariaLabel");
+  });
+
+  it("surfaces a message when voice recognition errors instead of failing silently", async () => {
+    let lastRec: {
+      lang: string;
+      start: ReturnType<typeof vi.fn>;
+      onerror: ((e: { error: string }) => void) | null;
+    } | null = null;
+    class FakeRecognition {
+      lang = "";
+      continuous = false;
+      interimResults = false;
+      maxAlternatives = 1;
+      onresult: ((e: unknown) => void) | null = null;
+      onerror: ((e: { error: string }) => void) | null = null;
+      onend: (() => void) | null = null;
+      start = vi.fn();
+      stop = vi.fn();
+      abort = vi.fn();
+      constructor() {
+        lastRec = this;
+      }
+    }
+    (window as unknown as { webkitSpeechRecognition: unknown }).webkitSpeechRecognition =
+      FakeRecognition;
+    try {
+      renderBar();
+      // The mic button only renders after the mount effect feature-detects the API.
+      const micButton = await screen.findByLabelText("search.voiceSearchAriaLabel");
+      fireEvent.click(micButton);
+      expect(lastRec).not.toBeNull();
+      expect(lastRec?.start).toHaveBeenCalled();
+      // Recognition must use a region-qualified tag, not the bare app locale.
+      expect(lastRec?.lang).toContain("-");
+
+      // The browser rejects mic access: previously swallowed, now surfaced.
+      act(() => lastRec?.onerror?.({ error: "not-allowed" }));
+      await screen.findByText("search.voiceErrorNotAllowed");
+    } finally {
+      delete (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
+    }
   });
 
   it("dispatches a debounced autocomplete query on typing (fresh text: 150ms)", async () => {

@@ -8,6 +8,7 @@ import MenuIcon from "@mui/icons-material/Menu";
 import MicIcon from "@mui/icons-material/Mic";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 import SearchIcon from "@mui/icons-material/Search";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
@@ -15,6 +16,7 @@ import IconButton from "@mui/material/IconButton";
 import InputBase from "@mui/material/InputBase";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
+import Snackbar from "@mui/material/Snackbar";
 import { useTheme } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
@@ -191,6 +193,44 @@ function getSpeechRecognition(): SpeechRecognitionCtor | undefined {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition;
 }
 
+/**
+ * Resolve a region-qualified BCP-47 tag for recognition. Android's speech
+ * service rejects region-less tags (next-intl exposes `"en"`/`"de"`) with a
+ * `language-not-supported` error, so prefer the device's own fully-qualified
+ * language when it matches the app locale, then fall back to a default region.
+ */
+function speechLang(locale: string): string {
+  const nav = typeof navigator !== "undefined" ? navigator.language : "";
+  if (nav.includes("-") && nav.split("-")[0].toLowerCase() === locale.toLowerCase()) {
+    return nav;
+  }
+  const fallback: Record<string, string> = { en: "en-US", de: "de-DE" };
+  return fallback[locale] ?? locale;
+}
+
+/**
+ * Map a Web Speech API error code (`SpeechRecognitionErrorEvent.error`, or a
+ * `start()` exception) to a translation key under the `search` namespace, so a
+ * failed dictation shows an actionable message instead of failing silently.
+ */
+function voiceErrorKey(code: string | undefined): string {
+  switch (code) {
+    case "not-allowed":
+    case "service-not-allowed":
+      return "voiceErrorNotAllowed";
+    case "audio-capture":
+      return "voiceErrorNoMicrophone";
+    case "network":
+      return "voiceErrorNetwork";
+    case "language-not-supported":
+      return "voiceErrorLanguage";
+    case "no-speech":
+      return "voiceErrorNoSpeech";
+    default:
+      return "voiceErrorGeneric";
+  }
+}
+
 export function SearchBar() {
   const t = useTranslations("search");
   const tModes = useTranslations("searchModes");
@@ -276,12 +316,16 @@ export function SearchBar() {
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const [voicePendingSubmit, setVoicePendingSubmit] = useState(false);
+  // Surfaced when dictation fails (permission blocked, no network, etc.) so the
+  // mic button reports the reason instead of silently doing nothing.
+  const [voiceError, setVoiceError] = useState<string | null>(null);
 
   const startVoiceSearch = useCallback(() => {
     if (!speechCtor) return;
+    setVoiceError(null);
     recognitionRef.current?.abort();
     const rec = new speechCtor();
-    rec.lang = locale;
+    rec.lang = speechLang(locale);
     rec.interimResults = true;
     rec.continuous = false;
     rec.maxAlternatives = 1;
@@ -296,16 +340,22 @@ export function SearchBar() {
       setQuery(transcript);
       if (event.results[event.results.length - 1]?.isFinal) setVoicePendingSubmit(true);
     };
-    rec.onerror = () => setListening(false);
+    rec.onerror = (event) => {
+      setListening(false);
+      console.warn("[voice-search] recognition error:", event.error);
+      setVoiceError(t(voiceErrorKey(event.error)));
+    };
     rec.onend = () => setListening(false);
     recognitionRef.current = rec;
     setListening(true);
     try {
       rec.start();
-    } catch {
+    } catch (err) {
       setListening(false);
+      console.warn("[voice-search] start() threw:", err);
+      setVoiceError(t(voiceErrorKey(undefined)));
     }
-  }, [speechCtor, locale, setQuery]);
+  }, [speechCtor, locale, setQuery, t]);
 
   const toggleVoiceSearch = useCallback(() => {
     if (listening) {
@@ -1098,6 +1148,22 @@ export function SearchBar() {
                 />
               </IconButton>
             )}
+
+            <Snackbar
+              open={voiceError !== null}
+              autoHideDuration={6000}
+              onClose={() => setVoiceError(null)}
+              anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+            >
+              <Alert
+                severity="warning"
+                variant="filled"
+                onClose={() => setVoiceError(null)}
+                sx={{ width: "100%" }}
+              >
+                {voiceError}
+              </Alert>
+            </Snackbar>
 
             {fullScreen && query.length > 0 ? (
               <IconButton
