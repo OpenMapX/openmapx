@@ -9,7 +9,37 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { scheduledJobs } from "croner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// The cron handlers reach the module-level drizzle `db` directly (e.g.
+// `finalizeJobRow` in `runSync`/`runAutoBump`'s finally block). Against the
+// real `postgres-js` pool there is no server in the unit env, so the query
+// never resolves and the test hangs to the 15s timeout. Mock the db module to
+// a chainable thenable that resolves immediately — no query ever executes.
+vi.mock("../src/db/index.js", () => {
+  const makeChain = (result: unknown[] = []) => {
+    const chain: Record<string, unknown> = {
+      select: () => chain,
+      from: () => chain,
+      where: () => chain,
+      orderBy: () => chain,
+      limit: () => Promise.resolve(result),
+      returning: () => Promise.resolve(result),
+      insert: () => chain,
+      values: () => chain,
+      update: () => chain,
+      set: () => chain,
+      // Make the chain awaitable so a terminal `.where(...)`/`.values(...)`
+      // resolves like a real drizzle query.
+      // biome-ignore lint/suspicious/noThenProperty: mocks Drizzle's thenable query builder
+      then: (onFulfilled: (v: unknown[]) => unknown, onRejected?: (e: unknown) => unknown) =>
+        Promise.resolve(result).then(onFulfilled, onRejected),
+    };
+    return chain;
+  };
+  return { db: makeChain(), sql: { end: async () => {} } };
+});
 
 import { awaitInflightSync, type CronSetupOptions, setupCron } from "../src/cron.js";
 import {
@@ -118,6 +148,12 @@ describe("setupCron", () => {
   });
 
   afterEach(() => {
+    // Croner keeps a *global* named-job registry. A test that throws or times
+    // out before its own `handles.stop()` runs would otherwise leak its named
+    // jobs, and the next `setupCron` fails with "name already taken". Stop
+    // everything still registered regardless of how the test ended. Iterate a
+    // copy — `.stop()` mutates `scheduledJobs`.
+    for (const job of [...scheduledJobs]) job.stop();
     rmSync(dataDir, { recursive: true, force: true });
     vi.restoreAllMocks();
   });
