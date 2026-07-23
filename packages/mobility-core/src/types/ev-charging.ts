@@ -18,6 +18,9 @@ export interface EvChargingTariffRestriction {
   minPowerKw?: number;
   maxPowerKw?: number;
   currentType?: "ac" | "dc";
+  /** Charging-duration bounds (minutes) a price component applies within — e.g. a blocking fee that only applies past a minimum session length. */
+  minDurationMinutes?: number;
+  maxDurationMinutes?: number;
 }
 
 export interface EvChargingTariff {

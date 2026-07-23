@@ -190,6 +190,20 @@ export function nlDotnlLocationPoiId(location: OcpiLocationIdentity): string | u
   return encodeURIComponent(key);
 }
 
+/**
+ * Derives the OCPDB station poiId. Unlike the raw DOT-NL feed, OCPDB assigns
+ * its own already-deduplicated, globally-stable numeric `id` per location, so
+ * no composite country/party key is needed. Used by BOTH the static and live
+ * OCPDB parsers — they MUST stay identical or live-merge stops joining to the
+ * right station. Returns undefined when `id` is missing/blank.
+ */
+export function deOcpdbLocationPoiId(location: { id?: unknown }): string | undefined {
+  // `id` is an upstream DB id serialized as a string today, but harden against
+  // OCPDB ever emitting it as a JSON number — otherwise every row would drop.
+  if (typeof location.id === "number" && Number.isFinite(location.id)) return String(location.id);
+  return cleanString(location.id);
+}
+
 export function connector(input: EvChargingConnector): EvChargingConnector {
   return {
     ...input,

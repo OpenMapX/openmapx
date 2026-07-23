@@ -303,4 +303,35 @@ describe("deduplicateChargingStations", () => {
 
     expect(merged).toHaveLength(2);
   });
+
+  it("keeps de-ocpdb tariffs and availability when merged with a de-bnetza duplicate", () => {
+    const bnetza = makeStation({
+      id: "de-bnetza:x",
+      name: "Marktplatz",
+      coordinates: [8.4, 49.0],
+      sources: ["de-bnetza"],
+    });
+    const ocpdb = makeStation({
+      id: "de-ocpdb:y",
+      name: "Marktplatz",
+      coordinates: [8.4, 49.0],
+      sources: ["de-ocpdb"],
+      status: "operational",
+      isLive: true,
+      availability: { available: 1, total: 2, updatedAt: "2026-07-23T00:00:00Z" },
+      tariffs: [
+        {
+          elements: [{ type: "energy", price: 0.66, currency: "EUR" }],
+          source: "de-ocpdb",
+        },
+      ],
+    });
+
+    const merged = deduplicateChargingStations([bnetza, ocpdb]);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].tariffs?.[0]?.elements[0]?.price).toBe(0.66);
+    expect(merged[0].availability?.available).toBe(1);
+    expect(merged[0].isLive).toBe(true);
+  });
 });

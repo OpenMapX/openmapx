@@ -1,6 +1,7 @@
 import type { EvChargingSource, EvChargingStation } from "@openmapx/mobility-core/ev-charging";
 import { fetchChSfoeChargingDetail, searchChSfoeCharging } from "./ch-sfoe.js";
 import { fetchDeBnetzaChargingDetail, searchDeBnetzaCharging } from "./de-bnetza.js";
+import { fetchDeOcpdbChargingDetail, searchDeOcpdbCharging } from "./de-ocpdb.js";
 import { fetchFrIrveChargingDetail, searchFrIrveCharging } from "./fr-irve.js";
 import { fetchNlDotnlChargingDetail, searchNlDotnlCharging } from "./nl-dotnl.js";
 import { fetchNoNobilChargingDetail, searchNoNobilCharging } from "./no-nobil.js";
@@ -29,6 +30,7 @@ function source(
 export const EV_CHARGING_SOURCE_REGISTRY: EvChargingSource[] = [
   source("us-afdc", searchUsAfdcCharging, "us-afdc:", fetchUsAfdcChargingDetail),
   source("de-bnetza", searchDeBnetzaCharging, "de-bnetza:", fetchDeBnetzaChargingDetail),
+  source("de-ocpdb", searchDeOcpdbCharging, "de-ocpdb:", fetchDeOcpdbChargingDetail),
   source("fr-irve", searchFrIrveCharging, "fr-irve:", fetchFrIrveChargingDetail),
   source("ch-sfoe", searchChSfoeCharging, "ch-sfoe:", fetchChSfoeChargingDetail),
   source("nl-dotnl", searchNlDotnlCharging, "nl-dotnl:", fetchNlDotnlChargingDetail),

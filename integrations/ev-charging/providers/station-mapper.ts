@@ -157,10 +157,17 @@ const TARIFF_DIMENSION_TOKENS: Record<EvTariffDimension, I18nToken> = {
   parking: token("row.pricingParking"),
 };
 
+// Formats a duration in minutes as "2 h" (whole hours) or "90 min", keeping
+// the qualifier terse and language-neutral like the "≤22 kW" parts.
+function formatDurationMinutes(minutes: number): string {
+  return minutes % 60 === 0 ? `${minutes / 60} h` : `${minutes} min`;
+}
+
 // Renders a tariff's `restrictions` as a compact human-readable qualifier
-// (e.g. "AC · ≤22 kW") so an AC and a DC energy tariff don't collapse into
-// two identically-labelled "Energy" rows. Parts are universal/numeric
-// (current type, power, time-of-day) so no further i18n is needed.
+// (e.g. "AC · ≤22 kW", "≥2 h") so an AC and a DC energy tariff, or a base
+// price and a duration-gated blocking fee, don't collapse into two
+// identically-labelled rows. Parts are universal/numeric (current type, power,
+// time-of-day, duration) so no further i18n is needed.
 function tariffQualifier(restrictions: EvChargingTariffRestriction | undefined): string {
   if (!restrictions) return "";
   const parts: string[] = [];
@@ -175,6 +182,16 @@ function tariffQualifier(restrictions: EvChargingTariffRestriction | undefined):
   }
   if (timeOfDayStart && timeOfDayEnd) {
     parts.push(`${timeOfDayStart}–${timeOfDayEnd}`);
+  }
+  const { minDurationMinutes, maxDurationMinutes } = restrictions;
+  if (minDurationMinutes !== undefined && maxDurationMinutes !== undefined) {
+    parts.push(
+      `${formatDurationMinutes(minDurationMinutes)}–${formatDurationMinutes(maxDurationMinutes)}`,
+    );
+  } else if (minDurationMinutes !== undefined) {
+    parts.push(`≥${formatDurationMinutes(minDurationMinutes)}`);
+  } else if (maxDurationMinutes !== undefined) {
+    parts.push(`≤${formatDurationMinutes(maxDurationMinutes)}`);
   }
   return parts.join(" · ");
 }

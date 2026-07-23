@@ -51,6 +51,11 @@
       "dataSent": "No query parameters — the full national CSV dataset is downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
       "dataReceived": "Charging station records with location, operator, connector types, rated power, EVSE ids, and operational status"
     },
+    "de-ocpdb": {
+      "purpose": "Nationwide German charging data aggregated by MobiData BW (OCPDB) from the Bundesnetzagentur registry and charge point operators via Mobilithek, adding structured ad-hoc tariffs and live availability",
+      "dataSent": "No query parameters carrying user data — the full national OCPI dataset is paged server-side on a schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
+      "dataReceived": "Charging station records with location, operator, connector types, rated power, EVSE ids, live status and availability, and structured per-EVSE tariffs (energy/time price, currency, VAT)"
+    },
     "fr-irve": {
       "purpose": "French national consolidated EV charging dataset (Base nationale consolidée des IRVE) covering public charging points in France",
       "dataSent": "Bounding-box coordinates as an in_bbox(point_geo, north, west, south, east) filter with pagination (limit/offset) — sent server-side per map request; no API key",

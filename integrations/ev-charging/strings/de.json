@@ -51,6 +51,11 @@
       "dataSent": "Keine Abfrageparameter – der vollständige nationale CSV-Datensatz wird serverseitig täglich in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
       "dataReceived": "Ladestationsdatensätze mit Standort, Betreiber, Steckertypen, Nennleistung, EVSE-IDs und Betriebsstatus"
     },
+    "de-ocpdb": {
+      "purpose": "Bundesweite deutsche Ladedaten, von MobiData BW (OCPDB) aus dem Bundesnetzagentur-Register und von Ladepunktbetreibern über die Mobilithek aggregiert, ergänzt um strukturierte Ad-hoc-Tarife und Live-Verfügbarkeit",
+      "dataSent": "Keine Abfrageparameter mit Nutzerdaten – der vollständige nationale OCPI-Datensatz wird serverseitig planmäßig in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
+      "dataReceived": "Ladestationsdatensätze mit Standort, Betreiber, Steckertypen, Nennleistung, EVSE-IDs, Live-Status und Verfügbarkeit sowie strukturierte Tarife je EVSE (Energie-/Zeitpreis, Währung, MwSt.)"
+    },
     "fr-irve": {
       "purpose": "Französischer nationaler konsolidierter Ladedatensatz (Base nationale consolidée des IRVE) mit öffentlichen Ladepunkten in Frankreich",
       "dataSent": "Begrenzungsrahmen-Koordinaten als in_bbox(point_geo, Nord, West, Süd, Ost)-Filter mit Seitennummerierung (limit/offset) – serverseitig pro Kartenabfrage gesendet; kein API-Schlüssel",

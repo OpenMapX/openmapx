@@ -7,6 +7,9 @@ import {
 } from "./providers/ch-sfoe-live-parser.js";
 import { parseChSfoeOicp } from "./providers/ch-sfoe-parser.js";
 import { parseDeBnetzaCsv, resolveDeBnetzaCsvUrl } from "./providers/de-bnetza-parser.js";
+import { DE_OCPDB_LOCATIONS_URL } from "./providers/de-ocpdb-client.js";
+import { parseDeOcpdbLive } from "./providers/de-ocpdb-live-parser.js";
+import { parseDeOcpdb } from "./providers/de-ocpdb-parser.js";
 import { parseNlDotnlLive } from "./providers/nl-dotnl-live-parser.js";
 import { NL_DOTNL_LOCATIONS_URL, parseNlDotnl } from "./providers/nl-dotnl-parser.js";
 
@@ -37,6 +40,28 @@ export function declarePoiSources(): PoiSource[] {
         parse: parseDeBnetzaCsv,
         // Sanity floor — registry today is ~65k; anything below this is a feed regression.
         minRowCount: 1000,
+      },
+    },
+    {
+      parts: { country: "de", operator: "ocpdb" },
+      domain: "ev-charging",
+      name: "OCPDB (MobiData BW) — German charging locations, live status & tariffs",
+      // [west, south, east, north]
+      coverage: [5.5, 47.1, 15.6, 55.2],
+      static: {
+        cron: "0 4 * * *",
+        fetch: { type: "http", url: DE_OCPDB_LOCATIONS_URL, timeoutMs: 30_000 },
+        parse: parseDeOcpdb,
+        // Feed today is ~91k locations nationwide.
+        minRowCount: 10_000,
+      },
+      live: {
+        // Re-pages all ~91 location pages, so a conservative interval keeps the
+        // request volume sane; ttl = 2× the cron so one missed run stays warm.
+        cron: "*/30 * * * *",
+        fetch: { type: "http", url: DE_OCPDB_LOCATIONS_URL, timeoutMs: 30_000 },
+        parse: parseDeOcpdbLive,
+        ttlSeconds: 3600,
       },
     },
     {

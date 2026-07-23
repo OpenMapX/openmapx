@@ -1,0 +1,110 @@
+{
+  "items": [
+    {
+      "id": "1063",
+      "original_id": "DE*EBW*E904900*1:adHoc",
+      "source": "datex2_enbw",
+      "currency": "EUR",
+      "elements": [
+        {
+          "price_components": [
+            {
+              "type": "ENERGY",
+              "price": 0.58823529,
+              "taxes": [{ "name": "VAT", "percentage": "19" }]
+            }
+          ]
+        },
+        {
+          "price_components": [
+            { "type": "TIME", "price": 0.1, "taxes": [{ "name": "VAT", "percentage": "19" }] }
+          ],
+          "restrictions": { "min_duration": 7200, "max_duration": 0 }
+        }
+      ],
+      "start_date_time": "2026-04-27T14:50:00.938000+00:00",
+      "last_updated": "2026-04-27T14:50:00.938000+00:00",
+      "type": "AD_HOC_PAYMENT"
+    },
+    {
+      "id": "1064",
+      "original_id": "DE*EBW*E904900*2:adHoc",
+      "source": "datex2_enbw",
+      "currency": "EUR",
+      "elements": [
+        {
+          "price_components": [
+            {
+              "type": "ENERGY",
+              "price": 0.58823529,
+              "taxes": [{ "name": "VAT", "percentage": "19" }]
+            }
+          ]
+        },
+        {
+          "price_components": [
+            { "type": "TIME", "price": 0.1, "taxes": [{ "name": "VAT", "percentage": "19" }] }
+          ],
+          "restrictions": { "min_duration": 7200, "max_duration": 0 }
+        }
+      ],
+      "start_date_time": "2026-04-27T14:50:00.981000+00:00",
+      "last_updated": "2026-04-27T14:50:00.981000+00:00",
+      "type": "AD_HOC_PAYMENT"
+    },
+    {
+      "id": "1065",
+      "original_id": "DE*EBW*E904899*1:adHoc",
+      "source": "datex2_enbw",
+      "currency": "EUR",
+      "elements": [
+        {
+          "price_components": [
+            {
+              "type": "ENERGY",
+              "price": 0.58823529,
+              "taxes": [{ "name": "VAT", "percentage": "19" }]
+            }
+          ]
+        },
+        {
+          "price_components": [
+            { "type": "TIME", "price": 0.1, "taxes": [{ "name": "VAT", "percentage": "19" }] }
+          ],
+          "restrictions": { "min_duration": 7200, "max_duration": 0 }
+        }
+      ],
+      "start_date_time": "2026-04-27T14:49:42.459000+00:00",
+      "last_updated": "2026-04-27T14:49:42.459000+00:00",
+      "type": "AD_HOC_PAYMENT"
+    },
+    {
+      "id": "1066",
+      "original_id": "DE*EBW*E904899*2:adHoc",
+      "source": "datex2_enbw",
+      "currency": "EUR",
+      "elements": [
+        {
+          "price_components": [
+            {
+              "type": "ENERGY",
+              "price": 0.58823529,
+              "taxes": [{ "name": "VAT", "percentage": "19" }]
+            }
+          ]
+        },
+        {
+          "price_components": [
+            { "type": "TIME", "price": 0.1, "taxes": [{ "name": "VAT", "percentage": "19" }] }
+          ],
+          "restrictions": { "min_duration": 7200, "max_duration": 0 }
+        }
+      ],
+      "start_date_time": "2026-04-27T14:49:42.526000+00:00",
+      "last_updated": "2026-04-27T14:49:42.526000+00:00",
+      "type": "AD_HOC_PAYMENT"
+    }
+  ],
+  "total_count": 4,
+  "next_offset": null
+}

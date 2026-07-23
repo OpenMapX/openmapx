@@ -359,6 +359,34 @@ describe("mapStationToDetail pricing section", () => {
     );
   });
 
+  it("renders a duration-gated blocking fee as an '≥2 h' condition on the time row only", () => {
+    const station = makeStation({
+      tariffs: [
+        {
+          elements: [{ type: "energy", price: 0.588, currency: "EUR" }],
+          scope: "cpo",
+          source: "de-ocpdb",
+          updatedAt: "2026-07-01T00:00:00.000Z",
+        },
+        {
+          elements: [{ type: "time", price: 0.1, currency: "EUR" }],
+          restrictions: { minDurationMinutes: 120 },
+          scope: "cpo",
+          source: "de-ocpdb",
+          updatedAt: "2026-07-01T00:00:00.000Z",
+        },
+      ],
+    });
+    const detail = mapStationToDetail(station);
+    const pricing = detail.sections.find((s) => s.sectionIcon === "payments" && s.caption);
+    expect(pricing?.rows).toEqual(
+      expect.arrayContaining([
+        [expect.anything(), expect.anything(), "-"],
+        [expect.anything(), expect.anything(), "≥2 h"],
+      ]),
+    );
+  });
+
   it("gives rows without restrictions an empty conditions cell once the column exists", () => {
     const station = makeStation({
       tariffs: [

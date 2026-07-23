@@ -183,6 +183,22 @@
       "dpaAvailable": false
     },
     {
+      "sourceId": "de-ocpdb",
+      "name": "OCPDB (MobiData BW) — German EV charging data",
+      "url": "https://mobidata-bw.de/dataset/e-ladesaulen",
+      "apiHosts": ["api.mobidata-bw.de"],
+      "license": "Datenlizenz Deutschland – Namensnennung 2.0 (dl-de/by-2-0)",
+      "licenseUrl": "https://www.govdata.de/dl-de/by-2-0",
+      "attribution": "Charging data via <a href=\"https://mobidata-bw.de\">MobiData BW</a> / OCPDB, Bundesnetzagentur and charge point operators",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://mobidata-bw.de/pages/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
       "sourceId": "fr-irve",
       "name": "Base nationale consolidée des IRVE",
       "url": "https://www.data.gouv.fr/fr/datasets/fichier-consolide-des-bornes-de-recharge-pour-vehicules-electriques/",

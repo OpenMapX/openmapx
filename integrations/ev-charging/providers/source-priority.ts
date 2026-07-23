@@ -8,6 +8,7 @@
 const SOURCE_PRIORITY: Record<string, number> = {
   "us-afdc": 0,
   "de-bnetza": 0,
+  "de-ocpdb": 0,
   "fr-irve": 0,
   "ch-sfoe": 0,
   "nl-dotnl": 0,
