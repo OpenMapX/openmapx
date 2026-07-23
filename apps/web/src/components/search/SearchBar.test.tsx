@@ -89,11 +89,17 @@ describe("SearchBar", () => {
   });
 
   it("surfaces a message when voice recognition errors instead of failing silently", async () => {
-    let lastRec: {
-      lang: string;
-      start: ReturnType<typeof vi.fn>;
-      onerror: ((e: { error: string }) => void) | null;
-    } | null = null;
+    // Held in a ref object rather than a bare `let`: the instance is captured
+    // inside the constructor closure below, and TS's flow analysis mis-narrows
+    // a closure-assigned `let` (to `null`/`never`) at the read sites — an
+    // object property keeps its declared union type.
+    const recRef: {
+      current: {
+        lang: string;
+        start: ReturnType<typeof vi.fn>;
+        onerror: ((e: { error: string }) => void) | null;
+      } | null;
+    } = { current: null };
     class FakeRecognition {
       lang = "";
       continuous = false;
@@ -106,7 +112,7 @@ describe("SearchBar", () => {
       stop = vi.fn();
       abort = vi.fn();
       constructor() {
-        lastRec = this;
+        recRef.current = this;
       }
     }
     (window as unknown as { webkitSpeechRecognition: unknown }).webkitSpeechRecognition =
@@ -116,13 +122,13 @@ describe("SearchBar", () => {
       // The mic button only renders after the mount effect feature-detects the API.
       const micButton = await screen.findByLabelText("search.voiceSearchAriaLabel");
       fireEvent.click(micButton);
-      expect(lastRec).not.toBeNull();
-      expect(lastRec?.start).toHaveBeenCalled();
+      expect(recRef.current).not.toBeNull();
+      expect(recRef.current?.start).toHaveBeenCalled();
       // Recognition must use a region-qualified tag, not the bare app locale.
-      expect(lastRec?.lang).toContain("-");
+      expect(recRef.current?.lang).toContain("-");
 
       // The browser rejects mic access: previously swallowed, now surfaced.
-      act(() => lastRec?.onerror?.({ error: "not-allowed" }));
+      act(() => recRef.current?.onerror?.({ error: "not-allowed" }));
       await screen.findByText("search.voiceErrorNotAllowed");
     } finally {
       delete (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
