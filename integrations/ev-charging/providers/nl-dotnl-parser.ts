@@ -77,7 +77,7 @@ function roundKw(watts: number | undefined): number | undefined {
   return Math.round((watts / 1000) * 10) / 10;
 }
 
-function mapLocationToRow(raw: unknown, tariffMap: Map<string, EvChargingTariff>): PoiRow | null {
+function mapLocationToRow(raw: unknown, tariffMap: Map<string, EvChargingTariff[]>): PoiRow | null {
   if (!raw || typeof raw !== "object") return null;
   const location = raw as OcpiLocation;
 
@@ -130,7 +130,7 @@ function mapLocationToRow(raw: unknown, tariffMap: Map<string, EvChargingTariff>
   };
 }
 
-async function fetchTariffMap(log: PoiSourceLogger): Promise<Map<string, EvChargingTariff>> {
+async function fetchTariffMap(log: PoiSourceLogger): Promise<Map<string, EvChargingTariff[]>> {
   try {
     const res = await globalThis.fetch(NL_DOTNL_TARIFFS_URL, {
       signal: AbortSignal.timeout(TARIFFS_FETCH_TIMEOUT_MS),

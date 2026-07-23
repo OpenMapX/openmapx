@@ -1,33 +1,26 @@
-import type {
-  EvChargingPriceComponent,
-  EvChargingTariff,
-  EvChargingTariffRestriction,
-  EvTariffDimension,
-} from "@openmapx/mobility-core/ev-charging";
+import type { EvChargingTariff } from "@openmapx/mobility-core/ev-charging";
+import {
+  type OcpiPriceComponentLike,
+  type OcpiRestrictionsLike,
+  splitOcpiTariffElements,
+} from "./ocpi-tariff.js";
 import { cleanString } from "./utils.js";
 
-// NDW/DOT-NL national open charging data — OCPI 2.2 Tariffs array.
+// NDW/DOT-NL national open charging data — OCPI 2.2 Tariffs array. Element and
+// restriction mapping is shared with de-ocpdb via ocpi-tariff.ts; NL differs
+// only in carrying VAT inline (`vat`) and in resolving tariffs to stations by
+// the connector `tariff_ids` → `id` join.
 export const NL_DOTNL_TARIFFS_URL = "https://opendata.ndw.nu/charging_point_tariffs_ocpi.json.gz";
 
 const SOURCE_ID = "nl-dotnl";
 
-interface OcpiPriceComponent {
-  type?: string;
-  price?: number;
+interface OcpiPriceComponent extends OcpiPriceComponentLike {
   vat?: number | null;
-  step_size?: number;
-}
-
-interface OcpiRestrictions {
-  start_time?: string | null;
-  end_time?: string | null;
-  min_power?: number | null;
-  max_power?: number | null;
 }
 
 interface OcpiTariffElement {
-  price_components?: OcpiPriceComponent[];
-  restrictions?: OcpiRestrictions | null;
+  price_components?: OcpiPriceComponent[] | null;
+  restrictions?: OcpiRestrictionsLike | null;
 }
 
 interface OcpiDisplayText {
@@ -45,40 +38,8 @@ interface OcpiTariff {
   last_updated?: string;
 }
 
-function mapPriceComponentType(type: string | undefined): EvTariffDimension | undefined {
-  switch (type) {
-    case "ENERGY":
-      return "energy";
-    case "TIME":
-      return "time";
-    case "FLAT":
-      return "flat";
-    case "PARKING_TIME":
-      return "parking";
-    default:
-      // Stray/unmapped types (e.g. the top-level-only "REGULAR") are dropped
-      // rather than emitted with `type: undefined`.
-      return undefined;
-  }
-}
-
-function mapPriceComponents(
-  components: OcpiPriceComponent[] | undefined,
-  currency: string,
-): EvChargingPriceComponent[] {
-  const out: EvChargingPriceComponent[] = [];
-  for (const component of components ?? []) {
-    const type = mapPriceComponentType(component.type);
-    if (!type || typeof component.price !== "number") continue;
-    out.push({
-      type,
-      price: component.price,
-      currency,
-      vat: typeof component.vat === "number" ? component.vat : undefined,
-      stepSize: typeof component.step_size === "number" ? component.step_size : undefined,
-    });
-  }
-  return out;
+function vatOf(component: OcpiPriceComponent): number | undefined {
+  return typeof component.vat === "number" ? component.vat : undefined;
 }
 
 /**
@@ -96,69 +57,51 @@ function pickAltText(entries: OcpiDisplayText[] | null | undefined): string | un
   return preferred ? cleanString(preferred.text) : undefined;
 }
 
-function mapRestrictions(
-  restrictions: OcpiRestrictions | null | undefined,
-): EvChargingTariffRestriction | undefined {
-  if (!restrictions) return undefined;
-  const out: EvChargingTariffRestriction = {
-    timeOfDayStart: cleanString(restrictions.start_time ?? undefined),
-    timeOfDayEnd: cleanString(restrictions.end_time ?? undefined),
-    minPowerKw: typeof restrictions.min_power === "number" ? restrictions.min_power : undefined,
-    maxPowerKw: typeof restrictions.max_power === "number" ? restrictions.max_power : undefined,
-  };
-  return Object.values(out).some((value) => value !== undefined) ? out : undefined;
-}
-
 /**
- * Maps one OCPI Tariff object to an `EvChargingTariff`.
- *
- * `EvChargingTariff.restrictions` is a single (optional) object, but an OCPI
- * tariff can carry multiple `elements`, each with its own restrictions. Real
- * DOT-NL records overwhelmingly have exactly one element (confirmed in the
- * scout report), so this flattens every element's price_components into one
- * `elements` array and takes `restrictions` from the first element that has
- * any — the simpler of the two options the build brief allows, at the cost
- * of losing per-element restrictions on the rare multi-element tariff.
+ * Maps one OCPI Tariff object to one or more `EvChargingTariff`s, splitting the
+ * price components by their element's restrictions (see `splitOcpiTariffElements`).
+ * NL tariffs are frequently multi-element with differing restrictions (a base
+ * energy price plus a duration-gated parking/blocking fee), so splitting keeps
+ * each condition on its own component instead of flat-stamping one across the
+ * whole tariff. Returns an empty array when no priceable component survives.
  */
-export function mapNlDotnlTariff(raw: OcpiTariff): EvChargingTariff | null {
+export function mapNlDotnlTariff(raw: OcpiTariff): EvChargingTariff[] {
   const currency = cleanString(raw.currency);
-  if (!currency) return null;
+  if (!currency) return [];
 
-  const elements: EvChargingPriceComponent[] = [];
-  let restrictions: EvChargingTariffRestriction | undefined;
-  for (const element of raw.elements ?? []) {
-    elements.push(...mapPriceComponents(element.price_components, currency));
-    if (!restrictions) restrictions = mapRestrictions(element.restrictions);
-  }
-  if (elements.length === 0) return null;
+  const groups = splitOcpiTariffElements(raw.elements, currency, vatOf);
+  if (groups.length === 0) return [];
 
-  return {
-    elements,
-    restrictions,
-    scope: "cpo",
+  const base = {
+    scope: "cpo" as const,
     isDirectPayment: raw.type === "AD_HOC_PAYMENT" || undefined,
     source: SOURCE_ID,
     sourceUrl: cleanString(raw.tariff_alt_url ?? undefined),
     altText: pickAltText(raw.tariff_alt_text),
     updatedAt: cleanString(raw.last_updated) ?? new Date().toISOString(),
   };
+  return groups.map((group) => ({
+    elements: group.elements,
+    restrictions: group.restrictions,
+    ...base,
+  }));
 }
 
-export function buildTariffMap(rawTariffs: unknown): Map<string, EvChargingTariff> {
-  const map = new Map<string, EvChargingTariff>();
+export function buildTariffMap(rawTariffs: unknown): Map<string, EvChargingTariff[]> {
+  const map = new Map<string, EvChargingTariff[]>();
   if (!Array.isArray(rawTariffs)) return map;
   for (const entry of rawTariffs) {
     if (!entry || typeof entry !== "object") continue;
     const raw = entry as OcpiTariff;
     const id = cleanString(raw.id);
     if (!id) continue;
-    const tariff = mapNlDotnlTariff(raw);
-    if (tariff) map.set(id, tariff);
+    const tariffs = mapNlDotnlTariff(raw);
+    if (tariffs.length > 0) map.set(id, tariffs);
   }
   return map;
 }
 
-export function parseNlDotnlTariffs(buffer: Buffer): Map<string, EvChargingTariff> {
+export function parseNlDotnlTariffs(buffer: Buffer): Map<string, EvChargingTariff[]> {
   const parsed = JSON.parse(buffer.toString("utf-8")) as unknown;
   return buildTariffMap(parsed);
 }
@@ -166,11 +109,12 @@ export function parseNlDotnlTariffs(buffer: Buffer): Map<string, EvChargingTarif
 /**
  * Resolves a station's collected `connector.tariff_ids` (deduped, opaque
  * exact-match strings — see the NDW scout report §6) against the tariff map
- * built from the tariffs feed.
+ * built from the tariffs feed. One tariff id can map to several `EvChargingTariff`s
+ * (one per distinct restriction), so matches are flattened.
  */
 export function attachTariffs(
   tariffIds: readonly string[] | undefined,
-  tariffMap: Map<string, EvChargingTariff>,
+  tariffMap: Map<string, EvChargingTariff[]>,
 ): EvChargingTariff[] | undefined {
   if (!tariffIds || tariffIds.length === 0) return undefined;
   const seen = new Set<string>();
@@ -178,8 +122,8 @@ export function attachTariffs(
   for (const id of tariffIds) {
     if (seen.has(id)) continue;
     seen.add(id);
-    const tariff = tariffMap.get(id);
-    if (tariff) out.push(tariff);
+    const tariffs = tariffMap.get(id);
+    if (tariffs) out.push(...tariffs);
   }
   return out.length > 0 ? out : undefined;
 }
