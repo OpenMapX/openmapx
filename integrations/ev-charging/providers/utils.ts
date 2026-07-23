@@ -198,10 +198,18 @@ export function nlDotnlLocationPoiId(location: OcpiLocationIdentity): string | u
  * right station. Returns undefined when `id` is missing/blank.
  */
 export function deOcpdbLocationPoiId(location: { id?: unknown }): string | undefined {
-  // `id` is an upstream DB id serialized as a string today, but harden against
-  // OCPDB ever emitting it as a JSON number — otherwise every row would drop.
-  if (typeof location.id === "number" && Number.isFinite(location.id)) return String(location.id);
-  return cleanString(location.id);
+  return idString(location.id);
+}
+
+/**
+ * Coerces an OCPDB id (tariff id, evse uid, location id) to a stable string
+ * key. Ids are JSON strings today, but harden against OCPDB ever emitting a
+ * number — otherwise a bare string check would drop every row and silently kill
+ * the pricing join.
+ */
+export function idString(value: unknown): string | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return cleanString(value);
 }
 
 export function connector(input: EvChargingConnector): EvChargingConnector {

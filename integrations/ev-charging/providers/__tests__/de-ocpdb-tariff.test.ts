@@ -1,25 +1,7 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import {
-  buildTariffMapByEvseId,
-  mapOcpdbTariff,
-  tariffStemFromOriginalId,
-} from "../de-ocpdb-tariff.js";
-
-const tariffs = JSON.parse(
-  readFileSync(
-    fileURLToPath(new URL("./fixtures/de-ocpdb-tariffs.json", import.meta.url)),
-    "utf-8",
-  ),
-).items;
+import { buildEvseUidToTariffIds, buildTariffMapById, mapOcpdbTariff } from "../de-ocpdb-tariff.js";
 
 describe("de-ocpdb tariff", () => {
-  it("strips the :suffix to the evse_id stem", () => {
-    expect(tariffStemFromOriginalId("DE*EBW*E914082*2:adHoc")).toBe("DE*EBW*E914082*2");
-    expect(tariffStemFromOriginalId("DE*EBW*E914082*2")).toBe("DE*EBW*E914082*2");
-  });
-
   it("maps an ENERGY component with VAT from taxes[]", () => {
     const tariffs = mapOcpdbTariff({
       currency: "EUR",
@@ -69,10 +51,44 @@ describe("de-ocpdb tariff", () => {
       mapOcpdbTariff({ currency: "EUR", elements: [{ price_components: [{ type: "REGULAR" }] }] }),
     ).toEqual([]);
   });
+});
 
-  it("builds a map keyed by evse_id stem from the fixture", () => {
-    const map = buildTariffMapByEvseId(tariffs);
-    expect(map.size).toBeGreaterThan(0);
-    for (const key of map.keys()) expect(key).not.toContain(":");
+describe("buildTariffMapById", () => {
+  it("keys tariffs by their id", () => {
+    const map = buildTariffMapById([
+      {
+        id: "78893",
+        currency: "EUR",
+        type: "AD_HOC_PAYMENT",
+        elements: [{ price_components: [{ type: "ENERGY", price: 0.56 }] }],
+      },
+    ]);
+    expect(map.has("78893")).toBe(true);
+    expect(map.get("78893")?.[0].elements[0].price).toBe(0.56);
+  });
+
+  it("coerces a numeric id to a string key", () => {
+    const map = buildTariffMapById([
+      {
+        id: 42,
+        currency: "EUR",
+        elements: [{ price_components: [{ type: "ENERGY", price: 0.3 }] }],
+      },
+    ]);
+    expect(map.has("42")).toBe(true);
+  });
+});
+
+describe("buildEvseUidToTariffIds", () => {
+  it("maps each evse_uid to its association's tariff_id and skips empty-evses rows", () => {
+    const map = buildEvseUidToTariffIds([
+      { tariff_id: "1", evses: [{ evse_uid: "100" }, { evse_uid: "101" }] },
+      { tariff_id: "2", evses: [{ evse_uid: "100" }] },
+      { tariff_id: "3", evses: [] },
+      { tariff_id: "4" },
+    ]);
+    expect([...(map.get("100") ?? [])].sort()).toEqual(["1", "2"]);
+    expect([...(map.get("101") ?? [])]).toEqual(["1"]);
+    expect(map.has("nope")).toBe(false);
   });
 });

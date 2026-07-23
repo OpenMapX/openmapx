@@ -1,14 +1,54 @@
 import type { PoiSourceLogger } from "@openmapx/poi-source-registry";
 
 // MobiData BW's OCPDB deployment aggregates German charging data nationwide
-// (all 16 states, via Mobilithek/DATEX II) and exposes it as OCPI 2.2 with NO
-// auth under Datenlizenz Deutschland – Namensnennung 2.0. Both feeds are
-// paginated (?limit=&offset=; response carries items + next_offset), max
-// limit 1000. The server-side ?source= filter is ignored, so the parsers page
-// the whole feed.
+// (all 16 states, via Mobilithek/DATEX II) and exposes it as OCPI with NO auth
+// under Datenlizenz Deutschland – Namensnennung 2.0. Feeds are paginated
+// (?limit=&offset=; response carries items + next_offset), max limit 1000. The
+// `?source=` param is IGNORED, but `?source_uid=<uid>` filters to one source
+// (used by the live tier); the static tier pages the whole feed.
 const BASE = "https://api.mobidata-bw.de/ocpdb/api/ocpi/2.2";
 export const DE_OCPDB_LOCATIONS_URL = `${BASE}/locations?limit=1000`;
 export const DE_OCPDB_TARIFFS_URL = `${BASE}/tariffs?limit=1000`;
+// The tariff↔EVSE link OCPDB omits from OCPI 2.2 (empty connector.tariff_ids)
+// is exposed at the OCPI 3.0 tariff-associations endpoint; /sources lists every
+// source with a realtime flag so the live tier can page only realtime ones.
+export const DE_OCPDB_ASSOCIATIONS_URL =
+  "https://api.mobidata-bw.de/ocpdb/api/public/ocpi/3.0/tariff-associations?limit=1000";
+export const DE_OCPDB_SOURCES_URL =
+  "https://api.mobidata-bw.de/ocpdb/api/public/v1/sources?limit=100";
+
+export function sourceUidUrl(baseUrl: string, sourceUid: string): string {
+  return `${baseUrl}&source_uid=${encodeURIComponent(sourceUid)}`;
+}
+
+interface OcpdbSource {
+  uid?: string;
+  realtime_data_updated_at?: string | null;
+}
+
+/** Parses a `/sources` response, returning the `uid`s that carry realtime data. */
+export function realtimeSourceUids(sourcesBuffer: Buffer): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(sourcesBuffer.toString("utf-8"));
+  } catch {
+    return [];
+  }
+  const items = (parsed as { items?: unknown })?.items;
+  if (!Array.isArray(items)) return [];
+  const uids: string[] = [];
+  for (const raw of items) {
+    const s = raw as OcpdbSource;
+    if (
+      typeof s.uid === "string" &&
+      typeof s.realtime_data_updated_at === "string" &&
+      s.realtime_data_updated_at.length > 0
+    ) {
+      uids.push(s.uid);
+    }
+  }
+  return uids;
+}
 
 const PAGE_TIMEOUT_MS = 30_000;
 // ~91k locations and ~125k tariffs at limit=1000 need ~91 and ~126 pages; cap

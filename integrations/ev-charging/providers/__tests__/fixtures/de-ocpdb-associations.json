@@ -1,0 +1,77 @@
+{
+  "items": [
+    {
+      "id": "13133",
+      "original_id": "14f781715a90e28da2ca8e9b1a41bd79",
+      "source": "datex2_enbw",
+      "tariff_id": "13133",
+      "start_date_time": "2026-07-21T12:42:16.749000+00:00",
+      "last_updated": "2026-07-21T12:42:16.749000+00:00",
+      "audience": "AD_HOC_PAYMENT",
+      "evses": [
+        {
+          "evse_uid": "262348472"
+        }
+      ],
+      "connectors": []
+    },
+    {
+      "id": "13134",
+      "original_id": "22ce992dc317da367acd9b6cbf3b7d4a",
+      "source": "datex2_enbw",
+      "tariff_id": "13134",
+      "start_date_time": "2026-07-21T12:42:16.805000+00:00",
+      "last_updated": "2026-07-21T12:42:16.805000+00:00",
+      "audience": "AD_HOC_PAYMENT",
+      "evses": [
+        {
+          "evse_uid": "262348473"
+        }
+      ],
+      "connectors": []
+    },
+    {
+      "id": "13135",
+      "original_id": "91ff0575d405f0fe8ac3923eb0bcdcc0",
+      "source": "datex2_enbw",
+      "tariff_id": "13135",
+      "start_date_time": "2026-07-21T12:43:17.479000+00:00",
+      "last_updated": "2026-07-21T12:43:17.479000+00:00",
+      "audience": "AD_HOC_PAYMENT",
+      "evses": [
+        {
+          "evse_uid": "262348474"
+        }
+      ],
+      "connectors": []
+    },
+    {
+      "id": "13136",
+      "original_id": "78d218fa9570ad214204e46ed0cfbc05",
+      "source": "datex2_enbw",
+      "tariff_id": "13136",
+      "start_date_time": "2026-07-21T12:43:17.534000+00:00",
+      "last_updated": "2026-07-21T12:43:17.534000+00:00",
+      "audience": "AD_HOC_PAYMENT",
+      "evses": [
+        {
+          "evse_uid": "262348475"
+        }
+      ],
+      "connectors": []
+    },
+    {
+      "id": "1",
+      "original_id": "DE*EBW*E914082*2:adHoc",
+      "source": "datex2_enbw",
+      "tariff_id": "1",
+      "start_date_time": "2026-04-27T14:49:52.924000+00:00",
+      "last_updated": "2026-04-27T14:49:52.924000+00:00",
+      "audience": "AD_HOC_PAYMENT",
+      "evses": [],
+      "connectors": []
+    }
+  ],
+  "total_count": 5,
+  "next_offset": null
+}

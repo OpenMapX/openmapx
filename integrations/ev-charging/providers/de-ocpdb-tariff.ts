@@ -4,13 +4,13 @@ import {
   type OcpiRestrictionsLike,
   splitOcpiTariffElements,
 } from "./ocpi-tariff.js";
-import { cleanString } from "./utils.js";
+import { cleanString, idString } from "./utils.js";
 
 // OCPDB (MobiData BW) OCPI 2.2 Tariffs. Element/restriction mapping is shared
 // with nl-dotnl via ocpi-tariff.ts; OCPDB differs only in carrying VAT as a
-// `taxes: [{name, percentage}]` array (not an inline `vat`), and in joining to
-// stations by the `evse_id` stem of `original_id` (connector.tariff_ids is
-// empty in this feed).
+// `taxes: [{name, percentage}]` array (not an inline `vat`). Tariffs join to
+// stations via the OCPI 3.0 tariff-associations endpoint: evse_uid → tariff_id
+// → this by-id map (connector.tariff_ids is empty in the OCPI 2.2 feed).
 const SOURCE_ID = "de-ocpdb";
 
 interface OcpdbTax {
@@ -72,30 +72,46 @@ export function mapOcpdbTariff(raw: OcpdbTariff): EvChargingTariff[] {
   }));
 }
 
-export function tariffStemFromOriginalId(originalId: string): string {
-  return originalId.split(":")[0];
-}
-
-/**
- * Builds an `evse_id → tariff[]` map from the OCPDB tariffs feed. The key is the
- * `original_id` stem (everything before the first `:`), which equals the
- * station's `evse.evse_id` (verified against real EnBW data). Multiple tariffs
- * can target one EVSE, so values accumulate.
- */
-export function buildTariffMapByEvseId(rawTariffs: unknown): Map<string, EvChargingTariff[]> {
+/** Builds a `tariff.id → tariff[]` map from the OCPDB tariffs feed. */
+export function buildTariffMapById(rawTariffs: unknown): Map<string, EvChargingTariff[]> {
   const map = new Map<string, EvChargingTariff[]>();
   if (!Array.isArray(rawTariffs)) return map;
   for (const entry of rawTariffs) {
     if (!entry || typeof entry !== "object") continue;
     const raw = entry as OcpdbTariff;
-    const originalId = cleanString(raw.original_id);
-    if (!originalId) continue;
+    const id = idString(raw.id);
+    if (!id) continue;
     const tariffs = mapOcpdbTariff(raw);
-    if (tariffs.length === 0) continue;
-    const key = tariffStemFromOriginalId(originalId);
-    const list = map.get(key);
-    if (list) list.push(...tariffs);
-    else map.set(key, [...tariffs]);
+    if (tariffs.length > 0) map.set(id, tariffs);
+  }
+  return map;
+}
+
+interface OcpdbAssociation {
+  tariff_id?: string | number;
+  evses?: Array<{ evse_uid?: string | number }> | null;
+}
+
+/**
+ * Builds an `evse_uid → tariff_id set` map from the OCPI 3.0 tariff-associations
+ * feed. Rows with no `evses` (or no `tariff_id`) are skipped; one evse_uid can
+ * appear on several associations, so tariff ids accumulate.
+ */
+export function buildEvseUidToTariffIds(rawAssociations: unknown): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>();
+  if (!Array.isArray(rawAssociations)) return map;
+  for (const entry of rawAssociations) {
+    if (!entry || typeof entry !== "object") continue;
+    const assoc = entry as OcpdbAssociation;
+    const tariffId = idString(assoc.tariff_id);
+    if (!tariffId || !Array.isArray(assoc.evses)) continue;
+    for (const evse of assoc.evses) {
+      const uid = idString(evse?.evse_uid);
+      if (!uid) continue;
+      const set = map.get(uid);
+      if (set) set.add(tariffId);
+      else map.set(uid, new Set([tariffId]));
+    }
   }
   return map;
 }

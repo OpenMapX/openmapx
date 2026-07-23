@@ -12,15 +12,23 @@ const tariffsPage = JSON.parse(
     "utf-8",
   ),
 );
+const associationsPage = JSON.parse(
+  readFileSync(
+    fileURLToPath(new URL("./fixtures/de-ocpdb-associations.json", import.meta.url)),
+    "utf-8",
+  ),
+);
 const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
 
 async function collect() {
-  // The seed IS the full locations page (next_offset null), so the parser only
-  // fetches the tariffs feed over the network.
+  // The seed IS the full locations page (next_offset null); the parser fetches
+  // the tariffs and tariff-associations feeds over the network.
   const fetchMock = vi.fn(async (url: string) =>
-    url.includes("/tariffs")
-      ? new Response(JSON.stringify(tariffsPage))
-      : new Response(JSON.stringify({ items: [], next_offset: null })),
+    url.includes("/tariff-associations")
+      ? new Response(JSON.stringify(associationsPage))
+      : url.includes("/tariffs")
+        ? new Response(JSON.stringify(tariffsPage))
+        : new Response(JSON.stringify({ items: [], next_offset: null })),
   );
   vi.stubGlobal("fetch", fetchMock);
   const rows: Array<{ poiId: string; lng: number; lat: number; payload: Record<string, unknown> }> =
@@ -39,7 +47,7 @@ describe("parseDeOcpdb", () => {
     expect(Number.isFinite(withConnectors?.lat)).toBe(true);
   });
 
-  it("attaches tariffs to the station whose evse_id matches a tariff stem", async () => {
+  it("attaches tariffs to the station whose evse uid appears in a tariff association", async () => {
     const rows = await collect();
     const priced = rows.filter(
       (r) => Array.isArray(r.payload.tariffs) && (r.payload.tariffs as unknown[]).length > 0,

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fetchAllOcpdbItems } from "../de-ocpdb-client.js";
+import { fetchAllOcpdbItems, realtimeSourceUids, sourceUidUrl } from "../de-ocpdb-client.js";
 
 const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
 
@@ -49,5 +49,32 @@ describe("fetchAllOcpdbItems", () => {
     expect(items.map((i) => (i as { id: string }).id)).toEqual(["1"]);
     expect(log.error).toHaveBeenCalled();
     vi.unstubAllGlobals();
+  });
+});
+
+describe("sourceUidUrl", () => {
+  it("appends an encoded source_uid to a limit base url", () => {
+    expect(sourceUidUrl("https://x/locations?limit=1000", "datex2_enbw")).toBe(
+      "https://x/locations?limit=1000&source_uid=datex2_enbw",
+    );
+  });
+});
+
+describe("realtimeSourceUids", () => {
+  it("keeps sources with a realtime timestamp and drops static-only ones", () => {
+    const buf = Buffer.from(
+      JSON.stringify({
+        items: [
+          { uid: "bnetza_api", realtime_data_updated_at: null },
+          { uid: "datex2_enbw", realtime_data_updated_at: "2026-07-22T23:00:00Z" },
+          { uid: "datex2_tesla", realtime_data_updated_at: "2026-07-23T19:09:58Z" },
+        ],
+      }),
+    );
+    expect(realtimeSourceUids(buf)).toEqual(["datex2_enbw", "datex2_tesla"]);
+  });
+
+  it("returns [] for a malformed body", () => {
+    expect(realtimeSourceUids(Buffer.from("not json"))).toEqual([]);
   });
 });

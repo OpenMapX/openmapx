@@ -7,7 +7,7 @@ import {
 } from "./providers/ch-sfoe-live-parser.js";
 import { parseChSfoeOicp } from "./providers/ch-sfoe-parser.js";
 import { parseDeBnetzaCsv, resolveDeBnetzaCsvUrl } from "./providers/de-bnetza-parser.js";
-import { DE_OCPDB_LOCATIONS_URL } from "./providers/de-ocpdb-client.js";
+import { DE_OCPDB_LOCATIONS_URL, DE_OCPDB_SOURCES_URL } from "./providers/de-ocpdb-client.js";
 import { parseDeOcpdbLive } from "./providers/de-ocpdb-live-parser.js";
 import { parseDeOcpdb } from "./providers/de-ocpdb-parser.js";
 import { parseNlDotnlLive } from "./providers/nl-dotnl-live-parser.js";
@@ -56,12 +56,12 @@ export function declarePoiSources(): PoiSource[] {
         minRowCount: 10_000,
       },
       live: {
-        // Re-pages all ~91 location pages sequentially (~11 min/run), so run
-        // hourly to keep request volume sane and stay well clear of a run
-        // overrunning its own interval. ttl = 2× the cron so one missed run
-        // stays warm (kept in sync with the mapper's staleness guard).
+        // Derives realtime sources from /sources (the seed), then pages only
+        // those via source_uid — skips the static BNetzA bulk (~63% of
+        // locations). Runs hourly; ttl = 2× the cron so one missed run stays
+        // warm (kept in sync with the mapper's staleness guard).
         cron: "0 * * * *",
-        fetch: { type: "http", url: DE_OCPDB_LOCATIONS_URL, timeoutMs: 30_000 },
+        fetch: { type: "http", url: DE_OCPDB_SOURCES_URL, timeoutMs: 30_000 },
         parse: parseDeOcpdbLive,
         ttlSeconds: 7200,
       },
