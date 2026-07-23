@@ -9,11 +9,12 @@ import type {
 } from "@openmapx/mobility-core/ev-charging";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
 
-// The live cron re-pages the OCPDB locations feed every 30 min; ttlSeconds is
-// set to 2x that interval (60 min) in poi-sources.ts. Keep the merge-side
-// staleness guard aligned with that Redis TTL so a search never trusts live
-// data that's already expired from cache.
-const MAX_LIVE_AGE_MS = 60 * 60 * 1000;
+// The live cron re-pages the OCPDB locations feed hourly (a run takes ~11 min);
+// ttlSeconds is set to 2x that interval (120 min) in poi-sources.ts. Keep the
+// merge-side staleness guard aligned with that Redis TTL — 2× the interval — so
+// availability survives one full cycle plus a skipped run rather than flickering
+// to "unknown" late in each hour, while never trusting data already expired.
+const MAX_LIVE_AGE_MS = 2 * 60 * 60 * 1000;
 
 const STATION_ID_PREFIX = "de-ocpdb:";
 const SOURCE_ID = "de-ocpdb";

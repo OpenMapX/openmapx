@@ -56,12 +56,14 @@ export function declarePoiSources(): PoiSource[] {
         minRowCount: 10_000,
       },
       live: {
-        // Re-pages all ~91 location pages, so a conservative interval keeps the
-        // request volume sane; ttl = 2× the cron so one missed run stays warm.
-        cron: "*/30 * * * *",
+        // Re-pages all ~91 location pages sequentially (~11 min/run), so run
+        // hourly to keep request volume sane and stay well clear of a run
+        // overrunning its own interval. ttl = 2× the cron so one missed run
+        // stays warm (kept in sync with the mapper's staleness guard).
+        cron: "0 * * * *",
         fetch: { type: "http", url: DE_OCPDB_LOCATIONS_URL, timeoutMs: 30_000 },
         parse: parseDeOcpdbLive,
-        ttlSeconds: 3600,
+        ttlSeconds: 7200,
       },
     },
     {
