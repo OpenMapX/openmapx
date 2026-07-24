@@ -1,54 +1,34 @@
-<svg
-    viewBox="0 0 80 80"
-    xmlns="http://www.w3.org/2000/svg"
-    width="100%"
-    height="100%"
-  >
-    <rect width="80" height="80" fill="#bee0ef" />
-    <!-- land -->
-    <path d="M0 18 Q22 14 44 20 Q66 26 80 20 L80 80 L0 80Z" fill="#c7e9d8" opacity="0.5" />
-    <!-- isochrone rings -->
-    <ellipse
-      cx="36"
-      cy="40"
-      rx="30"
-      ry="28"
-      fill="none"
-      stroke="#4f83f1"
-      stroke-width="1"
-      stroke-dasharray="4,3"
-      opacity="0.4"
-    />
-    <ellipse
-      cx="36"
-      cy="40"
-      rx="20"
-      ry="18"
-      fill="none"
-      stroke="#4f83f1"
-      stroke-width="1.2"
-      stroke-dasharray="4,3"
-      opacity="0.6"
-    />
-    <ellipse
-      cx="36"
-      cy="40"
-      rx="10"
-      ry="9"
-      fill="none"
-      stroke="#4f83f1"
-      stroke-width="1.5"
-      stroke-dasharray="3,2"
-      opacity="0.8"
-    />
-    <!-- center pin -->
-    <path d="M36 44 C32 38 28 34 28 31 A8 8 0 1 1 44 31 C44 34 40 38 36 44Z" fill="#4f83f1" />
-    <circle cx="36" cy="31" r="2.5" fill="#fff" />
-    <!-- time labels -->
-    <text x="62" y="26" font-size="6" fill="#4f83f1" font-family="sans-serif" font-weight="600">
-      5m
-    </text>
-    <text x="66" y="44" font-size="6" fill="#4f83f1" font-family="sans-serif" opacity="0.7">
-      15m
-    </text>
-  </svg>
+<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
+  <rect width="80" height="80" fill="#f0eee8" />
+  <path d="M63 0H80v15q-9 3-14-4-5-6-3-11Z" fill="#cfe9c6" />
+  <path d="M0 55q12 5 18 13 3 5 3 12H0Z" fill="#a9d6f0" />
+  <g fill="#e3ded4">
+    <rect x="4" y="4" width="17" height="12" rx="1.5" />
+    <rect x="35" y="4" width="14" height="12" rx="1.5" />
+    <rect x="4" y="26" width="9" height="14" rx="1.5" />
+    <rect x="17" y="26" width="8" height="14" rx="1.5" />
+    <rect x="62" y="50" width="14" height="12" rx="1.5" />
+    <rect x="31" y="55" width="11" height="9" rx="1.5" />
+  </g>
+  <g fill="none" stroke="#d6dae0" stroke-linecap="round">
+    <path d="M0 20.5H80" stroke-width="3.4" />
+    <path d="M22 68H80" stroke-width="3.4" />
+    <path d="M14.5 21V56" stroke-width="3" />
+    <path d="M0 46Q26 43 44 47T80 47" stroke-width="6.8" />
+    <path d="M28 0Q31 20 28 40T29 80" stroke-width="5.8" />
+  </g>
+  <g fill="none" stroke="#fff" stroke-linecap="round">
+    <path d="M0 20.5H80" stroke-width="2.1" />
+    <path d="M22 68H80" stroke-width="2.1" />
+    <path d="M14.5 21V56" stroke-width="1.7" />
+    <path d="M0 46Q26 43 44 47T80 47" stroke-width="5" />
+    <path d="M28 0Q31 20 28 40T29 80" stroke-width="4" />
+  </g>
+  <!-- isochrone bands: reachable area grows with the time budget -->
+  <path d="M38 4q16 1 22 12t10 18-8 20-20 18-22-6-14-18 0-20 10-18 14-6 22-0Z" fill="#1a73e8" opacity="0.1" stroke="#1a73e8" stroke-width="1" stroke-dasharray="3.5 2.5" />
+  <path d="M39 16q12 0 17 8t5 16-9 14-16 3-14-8-3-15 8-14 12-4Z" fill="#1a73e8" opacity="0.13" stroke="#1a73e8" stroke-width="1.1" stroke-dasharray="3.5 2.5" />
+  <path d="M39 27q8-1 11 5t-1 12-9 5-9-5-1-11 9-6Z" fill="#1a73e8" opacity="0.18" stroke="#1a73e8" stroke-width="1.2" />
+  <!-- origin pin -->
+  <path d="M39 47c-4.6-6.6-7.6-10-7.6-13.4a7.6 7.6 0 1 1 15.2 0c0 3.4-3 6.8-7.6 13.4Z" fill="#1a73e8" stroke="#fff" stroke-width="1.4" />
+  <circle cx="39" cy="33.4" r="2.7" fill="#fff" />
+</svg>

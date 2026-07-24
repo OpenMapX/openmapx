@@ -1,34 +1,45 @@
-<svg
-    viewBox="0 0 80 80"
-    xmlns="http://www.w3.org/2000/svg"
-    width="100%"
-    height="100%"
-  >
-    <rect width="80" height="80" fill="#bee0ef" />
-    <!-- land -->
-    <path d="M0 22 Q22 18 44 24 Q66 30 80 22 L80 80 L0 80Z" fill="#c7e9d8" opacity="0.5" />
-    <!-- measurement line -->
-    <line x1="16" y1="60" x2="64" y2="22" stroke="#111827" stroke-width="2" stroke-linecap="round" />
-    <!-- endpoints -->
-    <circle cx="16" cy="60" r="4" fill="#fff" stroke="#111827" stroke-width="2" />
-    <circle cx="64" cy="22" r="4" fill="#fff" stroke="#111827" stroke-width="2" />
-    <!-- ruler ticks -->
-    <line x1="23" y1="54" x2="25.5" y2="56" stroke="#111827" stroke-width="1.2" />
-    <line x1="30" y1="48" x2="32.5" y2="50" stroke="#111827" stroke-width="1.2" />
-    <line x1="40" y1="40" x2="42.5" y2="42" stroke="#111827" stroke-width="1.5" />
-    <line x1="48" y1="34" x2="50.5" y2="36" stroke="#111827" stroke-width="1.2" />
-    <line x1="55" y1="28" x2="57.5" y2="30" stroke="#111827" stroke-width="1.2" />
-    <!-- distance label -->
-    <rect x="29" y="34" width="22" height="10" rx="2" fill="#fff" opacity="0.9" />
-    <text
-      x="40"
-      y="41.5"
-      font-size="7"
-      fill="#111827"
-      text-anchor="middle"
-      font-family="sans-serif"
-      font-weight="600"
-    >
-      2.4 km
-    </text>
-  </svg>
+<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
+  <rect width="80" height="80" fill="#f0eee8" />
+  <path d="M63 0H80v15q-9 3-14-4-5-6-3-11Z" fill="#cfe9c6" />
+  <path d="M0 55q12 5 18 13 3 5 3 12H0Z" fill="#a9d6f0" />
+  <g fill="#e3ded4">
+    <rect x="4" y="4" width="17" height="12" rx="1.5" />
+    <rect x="35" y="4" width="14" height="12" rx="1.5" />
+    <rect x="4" y="26" width="9" height="14" rx="1.5" />
+    <rect x="17" y="26" width="8" height="14" rx="1.5" />
+    <rect x="62" y="50" width="14" height="12" rx="1.5" />
+    <rect x="31" y="55" width="11" height="9" rx="1.5" />
+  </g>
+  <g fill="none" stroke="#d6dae0" stroke-linecap="round">
+    <path d="M0 20.5H80" stroke-width="3.4" />
+    <path d="M22 68H80" stroke-width="3.4" />
+    <path d="M14.5 21V56" stroke-width="3" />
+    <path d="M0 46Q26 43 44 47T80 47" stroke-width="6.8" />
+    <path d="M28 0Q31 20 28 40T29 80" stroke-width="5.8" />
+  </g>
+  <g fill="none" stroke="#fff" stroke-linecap="round">
+    <path d="M0 20.5H80" stroke-width="2.1" />
+    <path d="M22 68H80" stroke-width="2.1" />
+    <path d="M14.5 21V56" stroke-width="1.7" />
+    <path d="M0 46Q26 43 44 47T80 47" stroke-width="5" />
+    <path d="M28 0Q31 20 28 40T29 80" stroke-width="4" />
+  </g>
+  <!-- direct line between the end points, for the path to depart from -->
+  <path d="M12 66 68 18" fill="none" stroke="#1a73e8" stroke-width="1.1" stroke-dasharray="3 2.6" opacity="0.5" />
+  <!-- measured path: white casing, blue line, segment ticks -->
+  <path d="M12 66 29 38 52 47 68 18" fill="none" stroke="#fff" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M12 66 29 38 52 47 68 18" fill="none" stroke="#1a73e8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+  <g stroke="#1a73e8" stroke-width="1.1" stroke-linecap="round">
+    <path d="M17.7 56.6l2.6 1.6" />
+    <path d="M23.4 47.2l2.6 1.6" />
+    <path d="M37.5 41.4l-0.8 2.8" />
+    <path d="M45.3 44.5l-0.8 2.8" />
+    <path d="M59 34l2.6 1.4" />
+    <path d="M64 25l2.6 1.4" />
+  </g>
+  <!-- vertices -->
+  <circle cx="12" cy="66" r="3.4" fill="#fff" stroke="#1a73e8" stroke-width="2" />
+  <circle cx="29" cy="38" r="2.8" fill="#fff" stroke="#1a73e8" stroke-width="1.7" />
+  <circle cx="52" cy="47" r="2.8" fill="#fff" stroke="#1a73e8" stroke-width="1.7" />
+  <circle cx="68" cy="18" r="3.4" fill="#1a73e8" stroke="#fff" stroke-width="1.7" />
+</svg>

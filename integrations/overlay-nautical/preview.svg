@@ -1,66 +1,52 @@
-<svg
-    viewBox="0 0 80 80"
-    xmlns="http://www.w3.org/2000/svg"
-    width="100%"
-    height="100%"
-  >
-    <!-- deep sea — gradient from deep to shallow -->
-    <defs>
-      <linearGradient id="nauticalSea" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#1a4a7a" />
-        <stop offset="55%" stop-color="#3677b0" />
-        <stop offset="100%" stop-color="#9fc6e8" />
-      </linearGradient>
-    </defs>
-    <rect width="80" height="80" fill="url(#nauticalSea)" />
-    <!-- depth contour lines -->
-    <path
-      d="M0 18 Q20 14 40 18 Q60 22 80 18"
-      stroke="#dfeefb"
-      stroke-width="0.6"
-      fill="none"
-      opacity="0.55"
-    />
-    <path
-      d="M0 30 Q20 26 40 30 Q60 34 80 30"
-      stroke="#dfeefb"
-      stroke-width="0.6"
-      fill="none"
-      opacity="0.55"
-    />
-    <path
-      d="M0 42 Q20 38 40 42 Q60 46 80 42"
-      stroke="#dfeefb"
-      stroke-width="0.6"
-      fill="none"
-      opacity="0.45"
-    />
-    <!-- coastline at bottom-right -->
-    <path d="M52 80 Q56 70 64 66 Q72 62 80 66 L80 80 Z" fill="#e8dcb7" />
-    <path
-      d="M52 80 Q56 70 64 66 Q72 62 80 66"
-      stroke="#a39568"
-      stroke-width="0.8"
-      fill="none"
-      opacity="0.65"
-    />
-    <!-- lateral buoy — red (port hand, IALA region A) -->
-    <circle cx="22" cy="46" r="3.2" fill="#d6336c" stroke="#fff" stroke-width="0.8" />
-    <line x1="22" y1="42.8" x2="22" y2="38" stroke="#d6336c" stroke-width="1" />
-    <circle cx="22" cy="37" r="1.4" fill="#d6336c" />
-    <!-- lateral buoy — green (starboard hand) -->
-    <circle cx="38" cy="56" r="3.2" fill="#22a564" stroke="#fff" stroke-width="0.8" />
-    <polygon points="38,52.8 36,49 40,49" fill="#22a564" />
-    <!-- cardinal mark (yellow/black, north) -->
-    <line x1="54" y1="56" x2="54" y2="40" stroke="#1f1f1f" stroke-width="1" />
-    <polygon points="54,38 51,42 57,42" fill="#1f1f1f" />
-    <polygon points="54,38 51,42 57,42" fill="none" stroke="#f6c945" stroke-width="0.5" />
-    <!-- lighthouse on the coast -->
-    <rect x="66" y="56" width="3" height="8" fill="#fff" stroke="#94a3b8" stroke-width="0.5" />
-    <rect x="66" y="59" width="3" height="2" fill="#d6336c" />
-    <polygon points="64.5,56 70.5,56 67.5,53" fill="#1f1f1f" />
-    <circle cx="67.5" cy="54" r="0.8" fill="#f6c945" />
-    <!-- compass rose hint top-right -->
-    <circle cx="68" cy="14" r="4" fill="none" stroke="#fff" stroke-width="0.5" opacity="0.6" />
-    <polygon points="68,10 66.8,14 68,18 69.2,14" fill="#fff" opacity="0.65" />
-  </svg>
+<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
+  <rect width="80" height="80" fill="#4f9ecb" />
+  <!-- depth areas shoaling diagonally towards the coast -->
+  <path d="M80 0v80H4Q28 46 52 24T80 0Z" fill="#7fbfe4" />
+  <path d="M80 10v70H26Q44 50 62 32T80 10Z" fill="#aed8ef" />
+  <path d="M80 26v54H48Q58 58 68 44T80 26Z" fill="#d3ebf8" />
+  <!-- depth contours -->
+  <g fill="none" stroke="#f2fafe" stroke-width="0.6" opacity="0.75">
+    <path d="M4 80Q28 46 52 24T80 0" />
+    <path d="M26 80Q44 50 62 32T80 10" />
+    <path d="M48 80Q58 58 68 44T80 26" />
+  </g>
+  <!-- coast, beach and a harbour mole in the corner -->
+  <path d="M80 46v34H62q4-16 10-24t8-10Z" fill="#f0e6c4" />
+  <path d="M80 46q-4 2-8 10t-10 24" fill="none" stroke="#9c8f63" stroke-width="0.9" />
+  <path d="M70 62q4-3 8-2" fill="none" stroke="#8c8471" stroke-width="1.8" stroke-linecap="round" />
+  <!-- Buoyed fairway: red and green marks flank the dashed centreline. -->
+  <path d="M4 64Q22 55 39 56T68 60" fill="none" stroke="#ffffff" stroke-width="1.1" stroke-dasharray="3 3" opacity="0.75" />
+  <!-- port-hand mark: red can with cylindrical topmark -->
+  <g>
+    <path d="M30 46v-8" stroke="#d6336c" stroke-width="1.3" />
+    <rect x="28" y="33.5" width="4" height="4" fill="#d6336c" stroke="#fff" stroke-width="0.6" />
+    <path d="M26 46h8l-1.2 5.2h-5.6Z" fill="#d6336c" stroke="#fff" stroke-width="0.8" />
+  </g>
+  <!-- starboard-hand mark: green cone -->
+  <g>
+    <path d="M43 63v-8" stroke="#22a564" stroke-width="1.3" />
+    <path d="M43 50.5l2.4 4.4h-4.8Z" fill="#22a564" stroke="#fff" stroke-width="0.6" />
+    <path d="M43 59l4 7h-8Z" fill="#22a564" stroke="#fff" stroke-width="0.8" />
+  </g>
+  <!-- north cardinal mark on the shoal -->
+  <g>
+    <path d="M56 36V22" stroke="#1f1f1f" stroke-width="1.3" />
+    <path d="M56 16.4l2.8 4.6h-5.6Z" fill="#1f1f1f" />
+    <path d="M56 21.4l2.8 4.6h-5.6Z" fill="#1f1f1f" />
+    <path d="M53.4 36h5.2v5h-5.2Z" fill="#f6c945" stroke="#1f1f1f" stroke-width="0.7" />
+  </g>
+  <!-- lighthouse with its light sector -->
+  <path d="M71 55 53 47a20 20 0 0 0 6 20Z" fill="#f6c945" opacity="0.32" />
+  <g>
+    <path d="M69.4 58h3.6V46l-1.8-3.4L69.4 46Z" fill="#fff" stroke="#5b6b7b" stroke-width="0.7" />
+    <rect x="69.4" y="49" width="3.6" height="2.6" fill="#d6336c" />
+    <circle cx="71.2" cy="41.4" r="1.4" fill="#f6c945" stroke="#5b6b7b" stroke-width="0.5" />
+  </g>
+  <!-- harbour marker -->
+  <g>
+    <circle cx="18" cy="18" r="10.5" fill="#0284c7" stroke="#fff" stroke-width="1.5" />
+    <circle cx="18" cy="13.5" r="1.5" fill="none" stroke="#fff" stroke-width="1.35" />
+    <path d="M18 15v9.5M14.2 17.5h7.6" stroke="#fff" stroke-width="1.35" stroke-linecap="round" />
+    <path d="M13.2 20.5a4.8 4.8 0 0 0 9.6 0" fill="none" stroke="#fff" stroke-width="1.35" stroke-linecap="round" />
+  </g>
+</svg>

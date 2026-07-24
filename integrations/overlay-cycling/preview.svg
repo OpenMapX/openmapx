@@ -1,34 +1,24 @@
-<svg
-    viewBox="0 0 80 80"
-    xmlns="http://www.w3.org/2000/svg"
-    width="100%"
-    height="100%"
-  >
-    <rect width="80" height="80" fill="#d5e8dc" />
-    <!-- park/green area -->
-    <ellipse cx="62" cy="18" rx="22" ry="18" fill="#c0dcc0" />
-    <ellipse cx="12" cy="64" rx="18" ry="16" fill="#c0dcc0" />
-    <!-- road -->
-    <path d="M0 44 Q22 38 40 42 Q58 46 80 40" stroke="#fff" stroke-width="6" fill="none" />
-    <!-- cycling lane alongside road — green solid -->
-    <path d="M0 50 Q22 44 40 48 Q58 52 80 46" stroke="#0D7C3D" stroke-width="3" fill="none" />
-    <!-- second bike path through park -->
-    <path
-      d="M60 0 Q54 24 48 36 Q42 48 34 80"
-      stroke="#0D7C3D"
-      stroke-width="2"
-      fill="none"
-      stroke-dasharray="5,3"
-    />
-    <!-- bike lane diamond marker -->
-    <g transform="translate(36,44)">
-      <polygon points="4,0 8,4 4,8 0,4" fill="#fff" stroke="#0D7C3D" stroke-width="1" />
-      <circle cx="4" cy="4" r="1.5" fill="#0D7C3D" />
-    </g>
-    <!-- trees in park -->
-    <circle cx="56" cy="14" r="4" fill="#7ab87a" />
-    <circle cx="64" cy="12" r="3.5" fill="#6aaa6a" />
-    <circle cx="68" cy="18" r="3" fill="#7ab87a" />
-    <circle cx="10" cy="60" r="3.5" fill="#7ab87a" />
-    <circle cx="16" cy="64" r="3" fill="#6aaa6a" />
-  </svg>
+<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
+  <rect width="80" height="80" fill="#f0eee8" />
+  <path d="M63 0h17v15q-9 3-14-4-5-6-3-11Z" fill="#cfe9c6" />
+  <path d="M0 55q12 5 18 13 3 5 3 12H0Z" fill="#a9d6f0" />
+  <g fill="#e3ded4">
+    <rect x="4" y="4" width="17" height="12" rx="1.5" />
+    <rect x="35" y="4" width="14" height="12" rx="1.5" />
+    <rect x="4" y="26" width="9" height="14" rx="1.5" />
+    <rect x="62" y="50" width="14" height="12" rx="1.5" />
+  </g>
+  <g fill="none" stroke="#d6dae0" stroke-linecap="round">
+    <path d="M0 20.5h80M22 68h58" stroke-width="3.4" />
+    <path d="M0 46q26-3 44 1t36 0" stroke-width="6.8" />
+    <path d="M28 0q3 20 0 40t1 40" stroke-width="5.8" />
+  </g>
+  <g fill="none" stroke="#fff" stroke-linecap="round">
+    <path d="M0 20.5h80M22 68h58" stroke-width="2.1" />
+    <path d="M0 46q26-3 44 1t36 0" stroke-width="5" />
+    <path d="M28 0q3 20 0 40t1 40" stroke-width="4" />
+  </g>
+  <circle cx="40" cy="41" r="21" fill="#334155" opacity="0.14" />
+  <circle cx="40" cy="39" r="20" fill="#188a58" />
+  <path d="m46.18 34-1.7-4.68C44.19 28.53 43.44 28 42.6 28H40v2h2.6l1.46 4h-4.81l-.36-1H40v-2h-5v2h1.75l1.82 5h-.67c-.44-2.23-2.31-3.88-4.65-3.99-2.8-.14-5.25 2.19-5.25 4.99s2.2 5 5 5c2.46 0 4.45-1.69 4.9-4h4.2c.44 2.23 2.31 3.88 4.65 3.99 2.8.13 5.25-2.19 5.25-5 0-2.8-2.2-5-5-5h-.82ZM35.82 40c-.4 1.17-1.49 2-2.82 2-1.68 0-3-1.32-3-3s1.32-3 3-3c1.33 0 2.42.83 2.82 2H33v2Zm6.28-2h-1.4l-.73-2H43c-.44.58-.76 1.25-.9 2m4.9 4c-1.68 0-3-1.32-3-3 0-.93.41-1.73 1.05-2.28l.96 2.64 1.88-.68-.97-2.67c.03 0 .06-.01.09-.01 1.68 0 3 1.32 3 3S48.68 42 47 42" fill="#fff" transform="translate(0 1.25)" />
+</svg>

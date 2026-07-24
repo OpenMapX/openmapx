@@ -1,43 +1,24 @@
-<svg
-    viewBox="0 0 80 80"
-    xmlns="http://www.w3.org/2000/svg"
-    width="100%"
-    height="100%"
-  >
-    <rect width="80" height="80" fill="#e3f2fd" />
-    <!-- mountain -->
-    <polygon points="40,8 10,60 70,60" fill="#bbdefb" />
-    <polygon points="40,8 30,26 50,26" fill="#e8f4fd" />
-    <!-- snow cap -->
-    <polygon points="40,8 32,22 48,22" fill="#fff" />
-    <!-- blue piste -->
-    <path
-      d="M36 22 Q32 34 30 44 Q28 52 24 60"
-      stroke="#2196F3"
-      stroke-width="2.5"
-      fill="none"
-      stroke-linecap="round"
-    />
-    <!-- red piste -->
-    <path
-      d="M44 22 Q48 34 52 44 Q54 50 58 60"
-      stroke="#F44336"
-      stroke-width="2.5"
-      fill="none"
-      stroke-linecap="round"
-    />
-    <!-- black piste -->
-    <path
-      d="M40 24 Q40 36 40 48 Q40 54 40 60"
-      stroke="#333"
-      stroke-width="1.8"
-      fill="none"
-      stroke-linecap="round"
-    />
-    <!-- lift line -->
-    <line x1="18" y1="56" x2="34" y2="18" stroke="#666" stroke-width="1" stroke-dasharray="3,2" />
-    <!-- lift tower -->
-    <line x1="26" y1="36" x2="26" y2="40" stroke="#666" stroke-width="1.5" />
-    <!-- snow base -->
-    <rect x="0" y="60" width="80" height="20" fill="#f0f7ff" />
-  </svg>
+<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
+  <rect width="80" height="80" fill="#f0eee8" />
+  <path d="M63 0h17v15q-9 3-14-4-5-6-3-11Z" fill="#cfe9c6" />
+  <path d="M0 55q12 5 18 13 3 5 3 12H0Z" fill="#a9d6f0" />
+  <g fill="#e3ded4">
+    <rect x="4" y="4" width="17" height="12" rx="1.5" />
+    <rect x="35" y="4" width="14" height="12" rx="1.5" />
+    <rect x="4" y="26" width="9" height="14" rx="1.5" />
+    <rect x="62" y="50" width="14" height="12" rx="1.5" />
+  </g>
+  <g fill="none" stroke="#d6dae0" stroke-linecap="round">
+    <path d="M0 20.5h80M22 68h58" stroke-width="3.4" />
+    <path d="M0 46q26-3 44 1t36 0" stroke-width="6.8" />
+    <path d="M28 0q3 20 0 40t1 40" stroke-width="5.8" />
+  </g>
+  <g fill="none" stroke="#fff" stroke-linecap="round">
+    <path d="M0 20.5h80M22 68h58" stroke-width="2.1" />
+    <path d="M0 46q26-3 44 1t36 0" stroke-width="5" />
+    <path d="M28 0q3 20 0 40t1 40" stroke-width="4" />
+  </g>
+  <circle cx="40" cy="41" r="21" fill="#334155" opacity="0.14" />
+  <circle cx="40" cy="39" r="20" fill="#2587bd" />
+  <path d="M18.5 4.5c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2m-2.72 16.4.76.27c.62.21 1.27.33 1.96.33.84 0 1.65-.18 2.38-.5L22 22.13c-1.05.55-2.24.87-3.5.87-.86 0-1.68-.14-2.45-.41L2 17.47l.5-1.41 6.9 2.51 1.72-4.44-3.57-3.73c-.89-.94-.67-2.47.45-3.12l3.48-2.01c1.1-.64 2.52-.1 2.91 1.11l.33 1.08c.44 1.42 1.48 2.57 2.83 3.14l.52-1.6 1.43.46-1.12 3.45c-2.45-.4-4.48-2.07-5.38-4.32l-2.53 1.45 3.03 3.46-2.22 5.76 3.09 1.12 2.1-6.44c.46.18.94.31 1.44.41Z" fill="#fff" transform="translate(26 27)" />
+</svg>

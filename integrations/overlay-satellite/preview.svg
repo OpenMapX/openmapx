@@ -1,34 +1,25 @@
-<svg
-    viewBox="0 0 80 80"
-    xmlns="http://www.w3.org/2000/svg"
-    width="100%"
-    height="100%"
-  >
-    <!-- dark space/ocean background -->
-    <rect width="80" height="80" fill="#1a2744" />
-    <!-- Earth-like land masses in satellite green/brown tones -->
-    <path
-      d="M8 16 Q18 10 30 18 Q38 24 46 18 L56 14 Q64 20 72 16 L80 22 L80 38 Q66 34 52 38 L38 36 Q26 40 14 34 L0 38Z"
-      fill="#3a6b35"
-      opacity="0.7"
-    />
-    <path
-      d="M0 50 Q14 44 28 52 Q42 58 58 50 Q70 44 80 52 L80 80 L0 80Z"
-      fill="#3a6b35"
-      opacity="0.6"
-    />
-    <!-- desert/arid region -->
-    <ellipse cx="52" cy="30" rx="10" ry="6" fill="#a67c52" opacity="0.5" />
-    <!-- snow/ice caps -->
-    <path d="M0 0 L80 0 L80 8 Q60 12 40 8 Q20 4 0 10Z" fill="#dce8f0" opacity="0.5" />
-    <!-- cloud wisps -->
-    <ellipse cx="22" cy="38" rx="12" ry="3" fill="#fff" opacity="0.35" />
-    <ellipse cx="60" cy="54" rx="10" ry="2.5" fill="#fff" opacity="0.3" />
-    <ellipse cx="44" cy="68" rx="14" ry="3" fill="#fff" opacity="0.25" />
-    <!-- satellite icon accent -->
-    <g transform="translate(62, 8)" opacity="0.7">
-      <rect x="0" y="2" width="8" height="4" rx="1" fill="#90caf9" />
-      <rect x="-4" y="3" width="4" height="2" rx="0.5" fill="#64b5f6" />
-      <rect x="8" y="3" width="4" height="2" rx="0.5" fill="#64b5f6" />
-    </g>
-  </svg>
+<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
+  <rect width="80" height="80" fill="#f0eee8" />
+  <path d="M63 0h17v15q-9 3-14-4-5-6-3-11Z" fill="#cfe9c6" />
+  <path d="M0 55q12 5 18 13 3 5 3 12H0Z" fill="#a9d6f0" />
+  <g fill="#e3ded4">
+    <rect x="4" y="4" width="17" height="12" rx="1.5" />
+    <rect x="35" y="4" width="14" height="12" rx="1.5" />
+    <rect x="4" y="26" width="9" height="14" rx="1.5" />
+    <rect x="62" y="50" width="14" height="12" rx="1.5" />
+  </g>
+  <g fill="none" stroke="#d6dae0" stroke-linecap="round">
+    <path d="M0 20.5h80M22 68h58" stroke-width="3.4" />
+    <path d="M0 46q26-3 44 1t36 0" stroke-width="6.8" />
+    <path d="M28 0q3 20 0 40t1 40" stroke-width="5.8" />
+  </g>
+  <g fill="none" stroke="#fff" stroke-linecap="round">
+    <path d="M0 20.5h80M22 68h58" stroke-width="2.1" />
+    <path d="M0 46q26-3 44 1t36 0" stroke-width="5" />
+    <path d="M28 0q3 20 0 40t1 40" stroke-width="4" />
+  </g>
+  <circle cx="40" cy="41" r="21" fill="#334155" opacity="0.14" />
+  <circle cx="40" cy="39" r="20" fill="#4f55a7" />
+  <!-- Satellite rather than a miniature raster swatch; the layer spans many datasets. -->
+  <path d="m43.44 27.59-3.18 3.18c-.78.78-.78 2.05 0 2.83l1.24 1.24-.71.71-1.24-1.25c-.78-.78-2.05-.78-2.83 0l-1.42 1.42c-.78.78-.78 2.05 0 2.83l1.24 1.24-.71.71-1.23-1.25c-.78-.78-2.05-.78-2.83 0l-3.18 3.18c-.78.78-.78 2.05 0 2.83l3.54 3.54c.78.78 2.05.78 2.83 0l3.18-3.18c.78-.78.78-2.05 0-2.83l-1.24-1.24.71-.71 1.24 1.24c.78.78 2.05.78 2.83 0l1.41-1.41c.78-.78.78-2.05 0-2.83l-1.25-1.24.71-.71 1.24 1.24c.78.78 2.05.78 2.83 0l3.18-3.18c.78-.78.78-2.05 0-2.83l-3.54-3.54c-.78-.78-2.04-.78-2.82.01M34.6 46.32l-1.06 1.06L30 43.85l1.06-1.06Zm2.12-2.12-1.06 1.06-3.54-3.54 1.06-1.06Zm9.54-9.54-1.06 1.06-3.54-3.54 1.06-1.06Zm2.12-2.12-1.06 1.06-3.54-3.54L44.85 29ZM42 48v2c4.97 0 9-4.03 9-9h-2c0 3.87-3.13 7-7 7m0-4v2c2.76 0 5-2.24 5-5h-2c0 1.66-1.34 3-3 3" fill="#fff" />
+</svg>

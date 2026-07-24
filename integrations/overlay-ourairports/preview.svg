@@ -1,59 +1,24 @@
-<svg
-    viewBox="0 0 80 80"
-    xmlns="http://www.w3.org/2000/svg"
-    width="100%"
-    height="100%"
-  >
-    <rect width="80" height="80" fill="#eaf2f7" />
-    <!-- simplified land outline -->
-    <path
-      d="M0 30 Q14 24 28 28 Q42 32 56 24 Q66 18 80 22 L80 64 Q66 70 50 64 Q34 58 20 64 L0 60Z"
-      fill="#d6e3ec"
-      opacity="0.7"
-    />
-    <!-- a couple of runway strips behind markers -->
-    <g opacity="0.55">
-      <rect
-        x="30"
-        y="46"
-        width="22"
-        height="3"
-        rx="1"
-        fill="#94a3b8"
-        transform="rotate(-22 41 47.5)"
-      />
-      <rect
-        x="36"
-        y="56"
-        width="14"
-        height="2.4"
-        rx="1"
-        fill="#94a3b8"
-        transform="rotate(40 43 57)"
-      />
-    </g>
-    <!-- large airport — big sky-blue marker (e.g. DUS) -->
-    <circle cx="44" cy="40" r="9" fill="#0ea5e9" opacity="0.18" />
-    <circle cx="44" cy="40" r="5.5" fill="#0ea5e9" stroke="#fff" stroke-width="1.4" />
-    <!-- medium airport — blue marker -->
-    <circle cx="22" cy="22" r="3.8" fill="#3b82f6" stroke="#fff" stroke-width="1.2" />
-    <!-- small airport — indigo marker -->
-    <circle cx="62" cy="22" r="2.8" fill="#6366f1" stroke="#fff" stroke-width="1.1" />
-    <!-- heliport — orange marker -->
-    <circle cx="62" cy="60" r="3" fill="#f97316" stroke="#fff" stroke-width="1.1" />
-    <!-- seaplane base — cyan marker -->
-    <circle cx="18" cy="56" r="2.8" fill="#0891b2" stroke="#fff" stroke-width="1.1" />
-    <!-- IATA code chip below the headline marker -->
-    <rect x="34" y="52" width="20" height="9" rx="2" fill="#fff" opacity="0.85" />
-    <text
-      x="44"
-      y="59"
-      font-size="6.5"
-      font-family="ui-monospace, Menlo, monospace"
-      font-weight="700"
-      fill="#0284c7"
-      text-anchor="middle"
-    >
-      DUS
-    </text>
-  </svg>
+<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
+  <rect width="80" height="80" fill="#f0eee8" />
+  <path d="M63 0h17v15q-9 3-14-4-5-6-3-11Z" fill="#cfe9c6" />
+  <path d="M0 55q12 5 18 13 3 5 3 12H0Z" fill="#a9d6f0" />
+  <g fill="#e3ded4">
+    <rect x="4" y="4" width="17" height="12" rx="1.5" />
+    <rect x="35" y="4" width="14" height="12" rx="1.5" />
+    <rect x="4" y="26" width="9" height="14" rx="1.5" />
+    <rect x="62" y="50" width="14" height="12" rx="1.5" />
+  </g>
+  <g fill="none" stroke="#d6dae0" stroke-linecap="round">
+    <path d="M0 20.5h80M22 68h58" stroke-width="3.4" />
+    <path d="M0 46q26-3 44 1t36 0" stroke-width="6.8" />
+    <path d="M28 0q3 20 0 40t1 40" stroke-width="5.8" />
+  </g>
+  <g fill="none" stroke="#fff" stroke-linecap="round">
+    <path d="M0 20.5h80M22 68h58" stroke-width="2.1" />
+    <path d="M0 46q26-3 44 1t36 0" stroke-width="5" />
+    <path d="M28 0q3 20 0 40t1 40" stroke-width="4" />
+  </g>
+  <circle cx="40" cy="41" r="21" fill="#334155" opacity="0.14" />
+  <circle cx="40" cy="39" r="20" fill="#1598d2" />
+  <path d="M49 43v-2l-8-5v-5.5c0-.83-.67-1.5-1.5-1.5S38 29.67 38 30.5V36l-8 5v2l8-2.5V46l-2 1.5V50l3.5-1 3.5 1v-1.5L41 46v-5.5Z" fill="#fff" transform="translate(0.5 -1.25)" />
+</svg>

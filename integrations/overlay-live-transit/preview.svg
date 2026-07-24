@@ -1,24 +1,26 @@
-<svg
-    viewBox="0 0 80 80"
-    xmlns="http://www.w3.org/2000/svg"
-    width="100%"
-    height="100%"
-  >
-    <rect width="80" height="80" fill="#e8eef4" />
-    <!-- railway tracks -->
-    <line x1="10" y1="60" x2="70" y2="20" stroke="#999" stroke-width="1.5" stroke-dasharray="4,3" />
-    <line x1="5" y1="40" x2="75" y2="45" stroke="#999" stroke-width="1.5" stroke-dasharray="4,3" />
-    <line x1="30" y1="10" x2="50" y2="70" stroke="#999" stroke-width="1" stroke-dasharray="4,3" />
-    <!-- train dots -->
-    <circle cx="28" cy="46" r="5" fill="#EC0016" />
-    <circle cx="52" cy="32" r="5" fill="#FF6600" />
-    <circle cx="60" cy="44" r="4" fill="#15A3DB" />
-    <circle cx="38" cy="22" r="3.5" fill="#059500" />
-    <!-- labels -->
-    <text x="28" y="58" font-size="6" fill="#333" font-family="sans-serif" text-anchor="middle">
-      ICE
-    </text>
-    <text x="52" y="27" font-size="6" fill="#333" font-family="sans-serif" text-anchor="middle">
-      IC
-    </text>
-  </svg>
+<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
+  <rect width="80" height="80" fill="#f0eee8" />
+  <path d="M63 0h17v15q-9 3-14-4-5-6-3-11Z" fill="#cfe9c6" />
+  <path d="M0 55q12 5 18 13 3 5 3 12H0Z" fill="#a9d6f0" />
+  <g fill="#e3ded4">
+    <rect x="4" y="4" width="17" height="12" rx="1.5" />
+    <rect x="35" y="4" width="14" height="12" rx="1.5" />
+    <rect x="4" y="26" width="9" height="14" rx="1.5" />
+    <rect x="62" y="50" width="14" height="12" rx="1.5" />
+  </g>
+  <g fill="none" stroke="#d6dae0" stroke-linecap="round">
+    <path d="M0 20.5h80M22 68h58" stroke-width="3.4" />
+    <path d="M0 46q26-3 44 1t36 0" stroke-width="6.8" />
+    <path d="M28 0q3 20 0 40t1 40" stroke-width="5.8" />
+  </g>
+  <g fill="none" stroke="#fff" stroke-linecap="round">
+    <path d="M0 20.5h80M22 68h58" stroke-width="2.1" />
+    <path d="M0 46q26-3 44 1t36 0" stroke-width="5" />
+    <path d="M28 0q3 20 0 40t1 40" stroke-width="4" />
+  </g>
+  <circle cx="40" cy="41" r="21" fill="#334155" opacity="0.14" />
+  <circle cx="40" cy="39" r="20" fill="#6552bd" />
+  <!-- A centered vehicle with a contained status dot differentiates live transit from routes. -->
+  <path d="M39 28c-4 0-8 .5-8 4v9.5c0 1.93 1.57 3.5 3.5 3.5L33 46.5v.5h2.23l2-2H41l2 2h2v-.5L43.5 45c1.93 0 3.5-1.57 3.5-3.5V32c0-3.5-3.58-4-8-4m-4.5 15c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5M38 36h-5v-4h5Zm2 0v-4h5v4Zm3.5 7c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5" fill="#fff" transform="translate(1)" />
+  <circle cx="51" cy="29.5" r="4" fill="#8ee6ad" stroke="#fff" stroke-width="1.3" />
+</svg>

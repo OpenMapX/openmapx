@@ -2,11 +2,8 @@
 
 import { useMeasurementStore } from "@integrations/overlay-tool-measurement/store";
 import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
-import CheckBoxIcon from "@mui/icons-material/CheckBox";
-import CheckBoxOutlineBlankIcon from "@mui/icons-material/CheckBoxOutlineBlank";
 import CloseIcon from "@mui/icons-material/Close";
 import Box from "@mui/material/Box";
-import Checkbox from "@mui/material/Checkbox";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
@@ -15,6 +12,7 @@ import { OVERLAY_REGISTRY, toggleOverlay, useCapabilities, useLayerStore } from 
 import { useTranslations } from "next-intl";
 import { useOverlayZoomGate } from "@/lib/overlayZoomGate";
 import { DesktopMoreTile } from "./DesktopMoreTile";
+import { globePreview } from "./layerPreviewSvgs";
 import { DESKTOP_MORE_MAP_TYPES } from "./layerSelectorConfig";
 import type { GeneratedLayerEntry } from "./useLayerSelectorConfig";
 import { useLayerSelectorConfig } from "./useLayerSelectorConfig";
@@ -119,7 +117,7 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
       <Box
         sx={{
           display: "grid",
-          gridTemplateColumns: "repeat(2, minmax(0,1fr))",
+          gridTemplateColumns: "repeat(3, minmax(0,1fr))",
           justifyItems: "center",
           columnGap: 0.5,
           rowGap: 0.4,
@@ -161,6 +159,12 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
             />
           );
         })}
+        <DesktopMoreTile
+          item={{ preview: globePreview, selected: globeView }}
+          label={t("globeView")}
+          labelWidth={96}
+          onClick={() => setGlobeView(!globeView)}
+        />
       </Box>
 
       <Divider sx={{ my: 0.8 }} />
@@ -190,20 +194,6 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
             }}
           />
         ))}
-      </Box>
-
-      <Box sx={{ mt: 0.2, display: "flex", alignItems: "center" }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.2 }}>
-          <Checkbox
-            size="small"
-            checked={globeView}
-            onChange={() => setGlobeView(!globeView)}
-            icon={<CheckBoxOutlineBlankIcon sx={{ fontSize: 19, color: "text.primary" }} />}
-            checkedIcon={<CheckBoxIcon sx={{ fontSize: 19, color: "#0b7d8b" }} />}
-            sx={{ p: 0.3 }}
-          />
-          <Typography sx={{ fontSize: 12.5, color: "text.primary" }}>{t("globeView")}</Typography>
-        </Box>
       </Box>
     </Box>
   );

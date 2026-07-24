@@ -1,42 +1,36 @@
-<svg
-    viewBox="0 0 80 80"
-    xmlns="http://www.w3.org/2000/svg"
-    width="100%"
-    height="100%"
-  >
-    <rect width="80" height="80" fill="#c5d9a8" />
-    <!-- hills -->
-    <ellipse cx="22" cy="58" rx="26" ry="20" fill="#a8c48a" />
-    <ellipse cx="60" cy="52" rx="24" ry="22" fill="#96b87a" />
-    <!-- trees on left hill -->
-    <polygon points="10,44 7,52 13,52" fill="#5a8a48" />
-    <polygon points="10,47 8,52 12,52" fill="#4a7a3a" />
-    <polygon points="20,42 17,50 23,50" fill="#5a8a48" />
-    <polygon points="20,45 18,50 22,50" fill="#4a7a3a" />
-    <polygon points="30,44 27,52 33,52" fill="#5a8a48" />
-    <polygon points="14,54 11,62 17,62" fill="#5a8a48" />
-    <polygon points="14,57 12,62 16,62" fill="#4a7a3a" />
-    <polygon points="26,52 23,60 29,60" fill="#5a8a48" />
-    <!-- trees on right hill -->
-    <polygon points="52,36 49,44 55,44" fill="#5a8a48" />
-    <polygon points="52,39 50,44 54,44" fill="#4a7a3a" />
-    <polygon points="64,34 61,42 67,42" fill="#5a8a48" />
-    <polygon points="64,37 62,42 66,42" fill="#4a7a3a" />
-    <polygon points="58,44 55,52 61,52" fill="#5a8a48" />
-    <polygon points="70,42 67,50 73,50" fill="#5a8a48" />
-    <polygon points="70,45 68,50 72,50" fill="#4a7a3a" />
-    <polygon points="46,48 43,56 49,56" fill="#5a8a48" />
-    <polygon points="46,51 44,56 48,56" fill="#4a7a3a" />
-    <!-- trail path - red dashed -->
-    <path
-      d="M4 70 Q18 50 32 44 Q44 40 56 30 Q64 24 76 14"
-      stroke="#c0392b"
-      stroke-width="2"
-      fill="none"
-      stroke-dasharray="4,2.5"
-      stroke-linecap="round"
-    />
-    <!-- trail blaze (red-white-red) -->
-    <rect x="53" y="26" width="7" height="9" rx="1" fill="#c0392b" />
-    <rect x="53" y="29" width="7" height="3" fill="#fff" />
-  </svg>
+<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
+  <rect width="80" height="80" fill="#e4edd4" />
+  <!-- open ground between two wooded slopes -->
+  <path d="M0 0h34q8 12-2 22T8 30 0 20Z" fill="#cfe2b4" />
+  <path d="M56 44q14-6 24 2v34H50q-8-18 6-36Z" fill="#cfe2b4" />
+  <g fill="none" stroke="#bcd19d" stroke-width="0.7">
+    <path d="M0 24q16 8 32 2t48 2" />
+    <path d="M0 40q18 8 34 0t46 2" />
+    <path d="M0 58q18 8 34 2t46 0" />
+  </g>
+  <!-- two waymarked routes meeting at a junction -->
+  <g fill="none" stroke="#fff" stroke-width="4.8" stroke-linecap="round">
+    <path d="M0 76Q22 70 40 60T80 30" />
+    <path d="M76 78Q56 70 40 60T10 18" />
+  </g>
+  <path d="M0 76Q22 70 40 60T80 30" fill="none" stroke="#d84315" stroke-width="2.4" stroke-linecap="round" />
+  <path d="M76 78Q56 70 40 60T10 18" fill="none" stroke="#0288d1" stroke-width="2.2" stroke-linecap="round" />
+  <!-- junction signpost -->
+  <path d="M39 60V26" stroke="#7a6544" stroke-width="2.4" stroke-linecap="round" />
+  <g stroke="#fff" stroke-width="1.1" stroke-linejoin="round">
+    <path d="M39 26h16l5.5 4-5.5 4H39Z" fill="#f6c945" />
+    <path d="M39 37h-17l-5.5 4 5.5 4h17Z" fill="#f6c945" />
+  </g>
+  <g fill="#7a6544" opacity="0.85">
+    <rect x="42" y="29" width="10" height="1.4" rx="0.7" />
+    <rect x="24" y="40" width="11" height="1.4" rx="0.7" />
+  </g>
+  <!-- conifers on the slopes -->
+  <g>
+    <path d="M14 40l3.4 7h-6.8Z" fill="#5f9147" />
+    <path d="M14 35.6l2.6 5.4h-5.2Z" fill="#4d7f39" />
+    <path d="M64 52l3.2 6.6h-6.4Z" fill="#5f9147" />
+    <path d="M64 47.8l2.4 5h-4.8Z" fill="#4d7f39" />
+    <path d="M70 62l2.8 5.8h-5.6Z" fill="#5f9147" />
+  </g>
+</svg>

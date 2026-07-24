@@ -1,91 +1,25 @@
-<svg
-    viewBox="0 0 80 80"
-    xmlns="http://www.w3.org/2000/svg"
-    width="100%"
-    height="100%"
-  >
-    <rect width="80" height="80" fill="#e4eef2" />
-    <!-- subtle roads -->
-    <line x1="0" y1="32" x2="80" y2="32" stroke="#d5dce6" stroke-width="2.5" />
-    <line x1="50" y1="0" x2="50" y2="80" stroke="#d5dce6" stroke-width="2" />
-    <line x1="20" y1="0" x2="20" y2="80" stroke="#d5dce6" stroke-width="1.5" />
-    <!-- sensor stations — colored circles with value labels -->
-    <circle cx="14" cy="20" r="6" fill="#42A5F5" opacity="0.8" />
-    <text
-      x="14"
-      y="22.5"
-      font-size="5.5"
-      fill="#fff"
-      font-family="sans-serif"
-      font-weight="700"
-      text-anchor="middle"
-    >
-      8°
-    </text>
-    <circle cx="38" cy="16" r="6" fill="#66BB6A" opacity="0.8" />
-    <text
-      x="38"
-      y="18.5"
-      font-size="5.5"
-      fill="#fff"
-      font-family="sans-serif"
-      font-weight="700"
-      text-anchor="middle"
-    >
-      15°
-    </text>
-    <circle cx="62" cy="24" r="6" fill="#FFA726" opacity="0.85" />
-    <text
-      x="62"
-      y="26.5"
-      font-size="5.5"
-      fill="#fff"
-      font-family="sans-serif"
-      font-weight="700"
-      text-anchor="middle"
-    >
-      24°
-    </text>
-    <circle cx="26" cy="50" r="7" fill="#E53935" opacity="0.8" />
-    <text
-      x="26"
-      y="52.5"
-      font-size="6"
-      fill="#fff"
-      font-family="sans-serif"
-      font-weight="700"
-      text-anchor="middle"
-    >
-      32°
-    </text>
-    <circle cx="56" cy="54" r="5.5" fill="#66BB6A" opacity="0.75" />
-    <text
-      x="56"
-      y="56.2"
-      font-size="5"
-      fill="#fff"
-      font-family="sans-serif"
-      font-weight="700"
-      text-anchor="middle"
-    >
-      17°
-    </text>
-    <circle cx="42" cy="68" r="5" fill="#4FC3F7" opacity="0.75" />
-    <text
-      x="42"
-      y="70.2"
-      font-size="5"
-      fill="#fff"
-      font-family="sans-serif"
-      font-weight="700"
-      text-anchor="middle"
-    >
-      11°
-    </text>
-    <!-- wifi-like sensor icon in corner -->
-    <g transform="translate(66, 62)" opacity="0.4">
-      <circle cx="4" cy="8" r="1.5" fill="#546E7A" />
-      <path d="M0 4 Q4 0 8 4" fill="none" stroke="#546E7A" stroke-width="1.2" />
-      <path d="M-2 1 Q4 -4 10 1" fill="none" stroke="#546E7A" stroke-width="1" />
-    </g>
-  </svg>
+<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
+  <rect width="80" height="80" fill="#f0eee8" />
+  <path d="M63 0h17v15q-9 3-14-4-5-6-3-11Z" fill="#cfe9c6" />
+  <path d="M0 55q12 5 18 13 3 5 3 12H0Z" fill="#a9d6f0" />
+  <g fill="#e3ded4">
+    <rect x="4" y="4" width="17" height="12" rx="1.5" />
+    <rect x="35" y="4" width="14" height="12" rx="1.5" />
+    <rect x="4" y="26" width="9" height="14" rx="1.5" />
+    <rect x="62" y="50" width="14" height="12" rx="1.5" />
+  </g>
+  <g fill="none" stroke="#d6dae0" stroke-linecap="round">
+    <path d="M0 20.5h80M22 68h58" stroke-width="3.4" />
+    <path d="M0 46q26-3 44 1t36 0" stroke-width="6.8" />
+    <path d="M28 0q3 20 0 40t1 40" stroke-width="5.8" />
+  </g>
+  <g fill="none" stroke="#fff" stroke-linecap="round">
+    <path d="M0 20.5h80M22 68h58" stroke-width="2.1" />
+    <path d="M0 46q26-3 44 1t36 0" stroke-width="5" />
+    <path d="M28 0q3 20 0 40t1 40" stroke-width="4" />
+  </g>
+  <circle cx="40" cy="41" r="21" fill="#334155" opacity="0.14" />
+  <circle cx="40" cy="39" r="20" fill="#4c78d5" />
+  <!-- Citizen-science sensor stations. -->
+  <path d="M35.76 43.24C34.67 42.16 34 40.66 34 39s.67-3.16 1.76-4.24l1.42 1.42C36.45 36.9 36 37.9 36 39s.45 2.1 1.17 2.83zm8.48 0C45.33 42.16 46 40.66 46 39s-.67-3.16-1.76-4.24l-1.42 1.42C43.55 36.9 44 37.9 44 39s-.45 2.1-1.17 2.83zM40 37c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2m8 2c0 2.21-.9 4.21-2.35 5.65l1.42 1.42C48.88 44.26 50 41.76 50 39s-1.12-5.26-2.93-7.07l-1.42 1.42A7.94 7.94 0 0 1 48 39m-13.65-5.65-1.42-1.42C31.12 33.74 30 36.24 30 39s1.12 5.26 2.93 7.07l1.42-1.42C32.9 43.21 32 41.21 32 39s.9-4.21 2.35-5.65" fill="#fff" />
+</svg>
