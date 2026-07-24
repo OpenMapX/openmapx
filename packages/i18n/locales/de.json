@@ -379,6 +379,7 @@
       "heavy": "Starker Verkehr",
       "queuing": "Rückstau",
       "stationary": "Stillstand",
+      "blocked": "Gesperrt",
       "unknown": "Unbekannt"
     },
     "panel": {

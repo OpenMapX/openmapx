@@ -22,23 +22,43 @@ const LAYER_MIN_ZOOM = 6;
 
 /**
  * Relative-speed (`speed_ratio` = current ÷ free-flow) → TomTom-style color
- * bands. `speed_ratio` is coalesced to 1 (free-flow) so a base segment
- * with no `segment_speed` row yet still renders green rather than transparent.
+ * bands. A segment with no measured ratio (`speed_ratio` null — a declared-LoS
+ * segment carrying only `los`, or a base segment with no `segment_speed` row)
+ * is coloured by its `los` instead of defaulting to green: queuing → red,
+ * stationary/blocked → dark red, heavy → orange, free_flow/unknown → green (so
+ * a base segment still reads green, but a declared jam reads red).
  */
 const COLOR_EXPR: maplibregl.ExpressionSpecification = [
-  "interpolate",
-  ["linear"],
-  ["coalesce", ["get", "speed_ratio"], 1],
-  0.0,
-  "#7e0023",
-  0.25,
-  "#e8112d",
-  0.5,
-  "#ff8c00",
-  0.75,
-  "#ffd500",
-  1.0,
-  "#2ecc40",
+  "case",
+  ["==", ["get", "speed_ratio"], null],
+  [
+    "match",
+    ["get", "los"],
+    "queuing",
+    "#e8112d",
+    "stationary",
+    "#7e0023",
+    "blocked",
+    "#7e0023",
+    "heavy",
+    "#ff8c00",
+    "#2ecc40",
+  ],
+  [
+    "interpolate",
+    ["linear"],
+    ["get", "speed_ratio"],
+    0.0,
+    "#7e0023",
+    0.25,
+    "#e8112d",
+    0.5,
+    "#ff8c00",
+    0.75,
+    "#ffd500",
+    1.0,
+    "#2ecc40",
+  ],
 ];
 
 /**

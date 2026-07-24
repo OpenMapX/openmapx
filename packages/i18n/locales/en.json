@@ -379,6 +379,7 @@
       "heavy": "Heavy traffic",
       "queuing": "Queuing",
       "stationary": "Stationary",
+      "blocked": "Blocked",
       "unknown": "Unknown"
     },
     "panel": {
