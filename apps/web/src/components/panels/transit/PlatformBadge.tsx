@@ -8,7 +8,7 @@ import { useTranslations } from "next-intl";
  * transfer guidance, and the live stop list. When `changed` is set it takes an
  * attention colour to flag a realtime platform change.
  *
- * `tone` picks the palette so the pill stays legible both on the teal banner
+ * `tone` picks the palette so the pill stays legible both on the brand-coloured banner
  * ("onBanner") and on the light sheet surface ("surface").
  */
 export function PlatformBadge({

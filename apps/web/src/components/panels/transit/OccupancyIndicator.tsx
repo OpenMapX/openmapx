@@ -10,7 +10,7 @@ import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
  * Crowding indicator — a seat icon coloured by occupancy level with a localized
  * tooltip. Shared by the departure list, trip detail and transit navigation so
  * the crowding cue reads the same everywhere. Pass `inheritColor` on a coloured
- * surface (e.g. the teal nav banner) to keep the icon legible.
+ * surface (e.g. the brand-coloured nav banner) to keep the icon legible.
  */
 export function OccupancyIndicator({
   level,

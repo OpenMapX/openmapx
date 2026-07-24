@@ -53,7 +53,7 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { resolveListIcon } from "@/lib/listIcon";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { useOpeningHoursText } from "@/lib/useOpeningHoursText";
 import { PlaceTransitSection } from "../transit/PlaceTransitSection";
 import { DataSourceSections } from "./DataSourceSections";
@@ -122,7 +122,7 @@ function DetailRow({
           : {}),
       }}
     >
-      <Box sx={{ color: TEAL, flexShrink: 0, display: "flex" }}>{icon}</Box>
+      <Box sx={{ color: BRAND, flexShrink: 0, display: "flex" }}>{icon}</Box>
       <Box sx={{ flex: 1, minWidth: 0 }}>{children}</Box>
       {copyValue && (
         <Tooltip title={copied ? tc("copied") : (copyLabel ?? tc("copy"))}>
@@ -169,7 +169,7 @@ function ExpandableDetailRow({
       }}
     >
       <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
-        <Box sx={{ color: TEAL, flexShrink: 0, display: "flex" }}>{icon}</Box>
+        <Box sx={{ color: BRAND, flexShrink: 0, display: "flex" }}>{icon}</Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>{label}</Box>
         {expanded ? (
           <ExpandLessIcon sx={{ fontSize: 18, color: "text.secondary", flexShrink: 0 }} />
@@ -631,7 +631,7 @@ export function PlaceOverviewTab({
               "&:hover": { bgcolor: "action.hover" },
             }}
           >
-            <Box sx={{ color: TEAL, flexShrink: 0, display: "flex" }}>
+            <Box sx={{ color: BRAND, flexShrink: 0, display: "flex" }}>
               <FlagOutlinedIcon sx={{ fontSize: 22 }} />
             </Box>
             {existingLabel ? (
@@ -771,8 +771,8 @@ export function PlaceOverviewTab({
               onClick={() => toggleLabel("home")}
               sx={
                 existingLabel?.label === "home"
-                  ? { bgcolor: TEAL, color: "#fff", "& .MuiChip-icon": { color: "#fff" } }
-                  : { borderColor: TEAL, color: TEAL, "& .MuiChip-icon": { color: TEAL } }
+                  ? { bgcolor: BRAND, color: "#fff", "& .MuiChip-icon": { color: "#fff" } }
+                  : { borderColor: BRAND, color: BRAND, "& .MuiChip-icon": { color: BRAND } }
               }
             />
             <Chip
@@ -782,8 +782,8 @@ export function PlaceOverviewTab({
               onClick={() => toggleLabel("work")}
               sx={
                 existingLabel?.label === "work"
-                  ? { bgcolor: TEAL, color: "#fff", "& .MuiChip-icon": { color: "#fff" } }
-                  : { borderColor: TEAL, color: TEAL, "& .MuiChip-icon": { color: TEAL } }
+                  ? { bgcolor: BRAND, color: "#fff", "& .MuiChip-icon": { color: "#fff" } }
+                  : { borderColor: BRAND, color: BRAND, "& .MuiChip-icon": { color: BRAND } }
               }
             />
           </Box>
@@ -807,7 +807,7 @@ export function PlaceOverviewTab({
           <Button
             onClick={handleLabelSubmit}
             disabled={!labelName.trim() && !isEditingLabel}
-            sx={{ color: TEAL }}
+            sx={{ color: BRAND }}
           >
             {tc("done")}
           </Button>

@@ -7,7 +7,7 @@ import Typography from "@mui/material/Typography";
 import { useHotelSearchStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { type ChangeEvent, useEffect } from "react";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 const inputSx = {
   border: "1px solid",
@@ -20,7 +20,7 @@ const inputSx = {
   py: 1,
   width: "100%",
   fontFamily: "inherit",
-  "&:focus": { outline: "none", borderColor: TEAL },
+  "&:focus": { outline: "none", borderColor: BRAND },
 } as const;
 
 function Stepper({
@@ -48,7 +48,7 @@ function Stepper({
     justifyContent: "center",
     cursor: "pointer",
     color: "text.primary",
-    "&:hover": { borderColor: TEAL, color: TEAL },
+    "&:hover": { borderColor: BRAND, color: BRAND },
     "&:disabled": { opacity: 0.4, cursor: "default" },
   } as const;
   return (

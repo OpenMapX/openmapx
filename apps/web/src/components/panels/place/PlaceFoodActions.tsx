@@ -24,7 +24,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { type MouseEvent, type ReactNode, useId, useState } from "react";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { BrandMark } from "../shared/BrandMark";
 
 /**
@@ -76,7 +76,7 @@ function FoodRow({
         }),
       }}
     >
-      <Box sx={{ color: TEAL, flexShrink: 0, display: "flex" }}>{icon}</Box>
+      <Box sx={{ color: BRAND, flexShrink: 0, display: "flex" }}>{icon}</Box>
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography className="food-primary" variant="body2" sx={{ color: "text.primary" }}>
           {primary}

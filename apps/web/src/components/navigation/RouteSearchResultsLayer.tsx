@@ -5,14 +5,14 @@ import type maplibregl from "maplibre-gl";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
 import { createMarkerSvg } from "@/lib/markerSvg";
-import { TEAL_HEX } from "@/lib/theme";
+import { BRAND_HEX } from "@/lib/theme";
 
 const SOURCE = "route-search-source";
 const LAYER = "route-search-layer";
 
 function ensurePinImage(map: maplibregl.Map, id: string, iconPath: string): void {
   if (map.hasImage(id) || !iconPath) return;
-  const svg = createMarkerSvg(iconPath, TEAL_HEX, 56);
+  const svg = createMarkerSvg(iconPath, BRAND_HEX, 56);
   const img = new Image(56, 56);
   img.onload = () => {
     if (!map.hasImage(id)) map.addImage(id, img, { pixelRatio: 2 });

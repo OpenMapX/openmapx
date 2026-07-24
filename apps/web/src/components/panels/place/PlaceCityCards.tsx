@@ -4,7 +4,7 @@ import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
 import Typography from "@mui/material/Typography";
 import type { ReactNode } from "react";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 const CARD_WIDTH = 168;
 const CARD_IMAGE_HEIGHT = 112;
@@ -47,7 +47,7 @@ export function CityCardRow({
         <Box sx={{ display: "flex", justifyContent: "center", mt: 1.5 }}>
           <ButtonBase
             onClick={action.onClick}
-            sx={{ color: TEAL, fontWeight: 500, fontSize: 14, py: 0.5, px: 1, borderRadius: 1 }}
+            sx={{ color: BRAND, fontWeight: 500, fontSize: 14, py: 0.5, px: 1, borderRadius: 1 }}
           >
             {action.label}
           </ButtonBase>

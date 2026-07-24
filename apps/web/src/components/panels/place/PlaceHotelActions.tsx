@@ -18,7 +18,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useId, useState } from "react";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { HotelCompareList } from "./HotelCompareList";
 import { HotelPriceBadge } from "./HotelPriceBadge";
 import { HotelRateOptions } from "./HotelRateOptions";
@@ -99,12 +99,12 @@ export function PlaceHotelActions({
         startIcon={<HotelOutlinedIcon />}
         onClick={() => setOpen(true)}
         sx={{
-          bgcolor: TEAL,
+          bgcolor: BRAND,
           textTransform: "none",
           fontWeight: 600,
           borderRadius: 99,
           py: 1,
-          "&:hover": { bgcolor: TEAL, filter: "brightness(0.92)" },
+          "&:hover": { bgcolor: BRAND, filter: "brightness(0.92)" },
         }}
       >
         {t("checkAvailability")}
@@ -169,7 +169,7 @@ export function PlaceHotelActions({
                 setOpen(false);
                 onOpenPrices();
               }}
-              sx={{ textTransform: "none", color: TEAL, mt: 0.5 }}
+              sx={{ textTransform: "none", color: BRAND, mt: 0.5 }}
             >
               {t("seeAllPrices")}
             </Button>

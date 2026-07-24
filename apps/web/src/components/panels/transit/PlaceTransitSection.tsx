@@ -28,7 +28,7 @@ import { useTranslations } from "next-intl";
 import type { KeyboardEvent } from "react";
 import { useMemo } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
 import { AlertsBanner } from "./AlertsBanner";
 import { DepartureRow } from "./DepartureRow";
@@ -128,7 +128,7 @@ export function PlaceTransitSection({
       <Divider sx={{ mb: 1.5 }} />
       {/* Section header */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 1.25 }}>
-        <DirectionsTransitIcon sx={{ fontSize: 20, color: TEAL }} />
+        <DirectionsTransitIcon sx={{ fontSize: 20, color: BRAND }} />
         <Typography
           variant="subtitle2"
           sx={{
@@ -205,7 +205,7 @@ export function PlaceTransitSection({
                   role="button"
                   tabIndex={0}
                   variant="caption"
-                  color={TEAL}
+                  color={BRAND}
                   onClick={() => onOpenDepartures(mode)}
                   onKeyDown={(e: KeyboardEvent) => {
                     if (e.key === "Enter" || e.key === " ") {
@@ -285,9 +285,9 @@ export function PlaceTransitSection({
         sx={{
           mt: 1,
           textTransform: "none",
-          borderColor: TEAL,
-          color: TEAL,
-          "&:hover": { borderColor: "var(--omx-teal-hover)", bgcolor: "var(--omx-hover-bg)" },
+          borderColor: BRAND,
+          color: BRAND,
+          "&:hover": { borderColor: "var(--omx-brand-hover)", bgcolor: "var(--omx-hover-bg)" },
         }}
       >
         {t("viewDeparturesArrivals")}

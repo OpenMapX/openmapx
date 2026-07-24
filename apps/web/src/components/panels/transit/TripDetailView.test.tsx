@@ -124,7 +124,7 @@ vi.mock("@/lib/formatTime", () => ({
 }));
 
 vi.mock("@/lib/theme", () => ({
-  TEAL: "#008080",
+  BRAND: "#008080",
 }));
 
 vi.mock("@/lib/transitOccupancy", () => ({

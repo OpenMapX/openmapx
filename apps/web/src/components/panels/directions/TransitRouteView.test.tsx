@@ -56,8 +56,8 @@ vi.mock("@/lib/formatTime", () => ({
 }));
 
 vi.mock("@/lib/theme", () => ({
-  TEAL: "#0f9d58",
-  TEAL_HEX: "#0f9d58",
+  BRAND: "#0f9d58",
+  BRAND_HEX: "#0f9d58",
 }));
 
 vi.mock("@/lib/transitOccupancy", () => ({

@@ -11,7 +11,7 @@ import type { Route } from "@openmapx/core";
 import { useElevation } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { ElevationChart } from "./ElevationChart";
 import { useElevationHover } from "./ElevationHoverContext";
 import { ElevationStats } from "./ElevationStats";
@@ -69,7 +69,7 @@ export function ElevationProfile({ route, units }: ElevationProfileProps) {
           userSelect: "none",
         }}
       >
-        <TerrainIcon sx={{ fontSize: 18, color: TEAL }} />
+        <TerrainIcon sx={{ fontSize: 18, color: BRAND }} />
         <Typography
           variant="body2"
           sx={{
@@ -80,7 +80,7 @@ export function ElevationProfile({ route, units }: ElevationProfileProps) {
           {t("title")}
         </Typography>
         {hasData && !expanded && <ElevationStats stats={profile.stats} units={units} compact />}
-        {isLoading && <CircularProgress size={14} sx={{ color: TEAL }} />}
+        {isLoading && <CircularProgress size={14} sx={{ color: BRAND }} />}
         {expanded ? (
           <ExpandLessIcon sx={{ fontSize: 18, color: "text.secondary" }} />
         ) : (
@@ -101,7 +101,7 @@ export function ElevationProfile({ route, units }: ElevationProfileProps) {
       )}
       {expanded && isLoading && (
         <Box sx={{ display: "flex", justifyContent: "center", py: 2 }}>
-          <CircularProgress size={24} sx={{ color: TEAL }} />
+          <CircularProgress size={24} sx={{ color: BRAND }} />
         </Box>
       )}
     </Box>

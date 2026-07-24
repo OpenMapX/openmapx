@@ -11,7 +11,7 @@ import { routeColor, useRouteAlerts, useVehicleJourney } from "@openmapx/core";
 import type { MergedDeparture, TripRemark } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
 import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
@@ -38,7 +38,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
 
   const isDelayed = (departure.delaySeconds ?? 0) > 60;
   const isCanceled = departure.canceled === true;
-  const lineColor = routeColor(departure.route, TEAL);
+  const lineColor = routeColor(departure.route, BRAND);
   const serviceInfo = journey?.serviceInfo;
   const formationDetails = journey?.formationDetails;
 
@@ -341,7 +341,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
         </Typography>
         {isLoading ? (
           <Box sx={{ display: "flex", justifyContent: "center", py: 2 }}>
-            <CircularProgress size={20} sx={{ color: TEAL }} />
+            <CircularProgress size={20} sx={{ color: BRAND }} />
           </Box>
         ) : isError ? (
           <Box sx={{ textAlign: "center", py: 2 }}>
@@ -361,9 +361,12 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
               onClick={() => refetch()}
               sx={{
                 textTransform: "none",
-                borderColor: TEAL,
-                color: TEAL,
-                "&:hover": { borderColor: "var(--omx-teal-hover)", bgcolor: "var(--omx-hover-bg)" },
+                borderColor: BRAND,
+                color: BRAND,
+                "&:hover": {
+                  borderColor: "var(--omx-brand-hover)",
+                  bgcolor: "var(--omx-hover-bg)",
+                },
               }}
             >
               {tc("retry")}

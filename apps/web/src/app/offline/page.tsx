@@ -19,7 +19,7 @@ export default async function OfflinePage() {
   return (
     <main className="flex min-h-dvh items-center justify-center px-6 py-10">
       <div className="w-full max-w-md text-center">
-        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--omx-teal-light)] text-[var(--omx-teal)]">
+        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--omx-brand-light)] text-[var(--omx-brand)]">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="32"

@@ -30,7 +30,7 @@ import type { Translatable } from "@openmapx/integration-framework/strings";
 import { useTranslations } from "next-intl";
 import { Fragment, type ReactNode } from "react";
 import { AttributionText } from "@/components/ui/AttributionText";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { BrandMark } from "../shared/BrandMark";
 import { type StructuredSection, StructuredSections } from "../shared/StructuredSections";
 import { DataSourceNearbyTransit } from "./DataSourceNearbyTransit";
@@ -322,7 +322,7 @@ export function DataSourceSections({ detail, domain }: Props) {
       <Divider sx={{ mx: 2, my: 1 }} />
       {/* Section header — like Transit section */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, px: 2, pt: 1.5, pb: 0.5 }}>
-        <Box sx={{ color: TEAL, display: "flex" }}>{header.icon}</Box>
+        <Box sx={{ color: BRAND, display: "flex" }}>{header.icon}</Box>
         <Typography
           variant="subtitle2"
           sx={{
@@ -368,7 +368,7 @@ export function DataSourceSections({ detail, domain }: Props) {
           {detail.branding ? (
             <BrandMark branding={detail.branding} fallbackName={detail.operator.name} size={34} />
           ) : (
-            <Box sx={{ color: TEAL, flexShrink: 0, display: "flex" }}>
+            <Box sx={{ color: BRAND, flexShrink: 0, display: "flex" }}>
               <BusinessIcon />
             </Box>
           )}
@@ -414,7 +414,7 @@ export function DataSourceSections({ detail, domain }: Props) {
       {/* Usage info */}
       {detail.usageInfo && (
         <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start", py: 1.25, px: 2 }}>
-          <Box sx={{ color: TEAL, flexShrink: 0, display: "flex", mt: 0.25 }}>
+          <Box sx={{ color: BRAND, flexShrink: 0, display: "flex", mt: 0.25 }}>
             <LockOpenIcon />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>

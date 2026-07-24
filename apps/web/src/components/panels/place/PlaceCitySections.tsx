@@ -20,7 +20,7 @@ import {
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import type { ReactNode } from "react";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { useInView } from "@/lib/useInView";
 import { CityCard, CityCardRow } from "./PlaceCityCards";
 
@@ -88,7 +88,7 @@ function QuickFacts({ place, onNavigateToInfo }: Props) {
       </Typography>
       <ButtonBase
         onClick={onNavigateToInfo}
-        sx={{ color: TEAL, fontWeight: 500, fontSize: 14, mt: 0.5, borderRadius: 1 }}
+        sx={{ color: BRAND, fontWeight: 500, fontSize: 14, mt: 0.5, borderRadius: 1 }}
       >
         {t("more")}
       </ButtonBase>

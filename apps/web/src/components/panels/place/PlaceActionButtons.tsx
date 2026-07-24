@@ -24,7 +24,7 @@ import { useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { SavePlaceDialog } from "@/components/panels/saved/SavePlaceDialog";
 import { shareCurrentUrl } from "@/lib/deepLink";
-import { TEAL, TEAL_LIGHT } from "@/lib/theme";
+import { BRAND, BRAND_LIGHT } from "@/lib/theme";
 
 interface ActionButtonProps {
   icon: ReactNode;
@@ -51,13 +51,13 @@ function ActionButton({ icon, label, filled = false, onClick }: ActionButtonProp
           width: 40,
           height: 40,
           borderRadius: "50%",
-          bgcolor: filled ? TEAL : TEAL_LIGHT,
+          bgcolor: filled ? BRAND : BRAND_LIGHT,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           transition: "filter 0.15s",
           "&:hover": { filter: "brightness(0.93)" },
-          "& svg": { fontSize: 20, color: filled ? "#fff" : TEAL },
+          "& svg": { fontSize: 20, color: filled ? "#fff" : BRAND },
         }}
       >
         {icon}
@@ -67,7 +67,7 @@ function ActionButton({ icon, label, filled = false, onClick }: ActionButtonProp
         align="center"
         sx={{
           fontWeight: 500,
-          color: TEAL,
+          color: BRAND,
           lineHeight: 1.3,
         }}
       >

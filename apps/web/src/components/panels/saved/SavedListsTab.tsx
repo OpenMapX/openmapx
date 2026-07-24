@@ -24,7 +24,7 @@ import { useTranslations } from "next-intl";
 import type React from "react";
 import { useState } from "react";
 import { resolveListIcon } from "@/lib/listIcon";
-import { TEAL, TEAL_LIGHT } from "@/lib/theme";
+import { BRAND, BRAND_LIGHT } from "@/lib/theme";
 
 export function SavedListsTab() {
   const t = useTranslations("saved");
@@ -82,7 +82,7 @@ export function SavedListsTab() {
   if (isLoading) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-        <CircularProgress size={28} sx={{ color: TEAL }} />
+        <CircularProgress size={28} sx={{ color: BRAND }} />
       </Box>
     );
   }
@@ -96,12 +96,12 @@ export function SavedListsTab() {
         disabled={createListMutation.isPending}
         sx={{
           borderRadius: 24,
-          bgcolor: TEAL_LIGHT,
-          color: TEAL,
+          bgcolor: BRAND_LIGHT,
+          color: BRAND,
           textTransform: "none",
           fontWeight: 500,
           mb: 1.5,
-          "&:hover": { bgcolor: TEAL_LIGHT, filter: "brightness(0.95)" },
+          "&:hover": { bgcolor: BRAND_LIGHT, filter: "brightness(0.95)" },
         }}
       >
         {t("newList")}

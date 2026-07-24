@@ -4,7 +4,7 @@ import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
 import Typography from "@mui/material/Typography";
 import type { ReactNode } from "react";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 interface LayerPreviewTileProps {
   preview: ReactNode;
@@ -45,7 +45,7 @@ export function LayerPreviewTile({
           height: size,
           borderRadius: `${Math.round(size * 0.22)}px`,
           overflow: "hidden",
-          border: selected ? `2px solid ${TEAL}` : "1px solid rgba(60,64,67,0.1)",
+          border: selected ? `2px solid ${BRAND}` : "1px solid rgba(60,64,67,0.1)",
           boxShadow: selected ? "0 0 0 1px rgba(11,125,139,0.22)" : "0 1px 3px rgba(0,0,0,0.06)",
           "& > svg, & > img": {
             display: "block",
@@ -68,14 +68,14 @@ export function LayerPreviewTile({
         }}
       >
         {icon ? (
-          <Box sx={{ display: "flex", color: selected ? TEAL : "text.secondary" }}>{icon}</Box>
+          <Box sx={{ display: "flex", color: selected ? BRAND : "text.secondary" }}>{icon}</Box>
         ) : null}
         <Typography
           sx={{
             fontSize: size >= 48 ? 12 : 11,
             lineHeight: 1.2,
             fontWeight: selected ? 600 : 500,
-            color: selected ? TEAL : "text.secondary",
+            color: selected ? BRAND : "text.secondary",
             whiteSpace: "pre-line",
             textAlign: "center",
           }}

@@ -12,7 +12,7 @@ import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { PANEL_WIDTH } from "@/lib/layout";
 import { useMap } from "@/lib/MapContext";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 // Floating card: sidebar(400) + gap(24) + card(376) = 800px from left edge
 const FLOATING_CARD_RIGHT_EDGE = 800;
@@ -109,7 +109,7 @@ export function SearchInAreaChip() {
         userSelect: "none",
         border: "1px solid var(--omx-shadow-soft)",
         "& .MuiChip-icon": {
-          color: TEAL,
+          color: BRAND,
           ml: "10px",
           mr: "-4px",
         },

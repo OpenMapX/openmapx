@@ -40,7 +40,7 @@ const theme = createTheme({
   colorSchemes: {
     light: {
       palette: {
-        primary: { main: "#007b8b", contrastText: "#ffffff" },
+        primary: { main: "#43A047", contrastText: "#ffffff" },
         secondary: { main: "#34A853" },
         background: { default: "#f5f5f5", paper: "#ffffff" },
         text: { primary: "#202124", secondary: "#5f6368" },
@@ -49,7 +49,7 @@ const theme = createTheme({
     },
     dark: {
       palette: {
-        primary: { main: "#4DB6AC", contrastText: "#000000" },
+        primary: { main: "#81C784", contrastText: "#000000" },
         secondary: { main: "#81C995" },
         background: { default: "#1C1C1C", paper: "#2D2D2D" },
         text: { primary: "#E8EAED", secondary: "#9AA0A6" },

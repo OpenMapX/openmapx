@@ -12,7 +12,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { TravelMode } from "@openmapx/core";
 import type { ReactNode } from "react";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 const MODES: { mode: TravelMode; icon: ReactNode; labelKey: string; disabled?: boolean }[] = [
   { mode: "driving", icon: <DirectionsCarIcon sx={{ fontSize: 22 }} />, labelKey: "driving" },
@@ -71,7 +71,7 @@ function ModeButton({
             px: 1,
             height: 32,
             borderRadius: 99,
-            bgcolor: active ? "var(--omx-teal-light)" : "background.paper",
+            bgcolor: active ? "var(--omx-brand-light)" : "background.paper",
             // `action.hover` is translucent — using it as the full bgcolor
             // would let the panel background show through and make the pill
             // disappear. Use the opaque theme-aware chip hover.
@@ -100,7 +100,7 @@ function ModeButton({
               sx={{
                 fontSize: 11,
                 lineHeight: 1,
-                color: active ? TEAL : "text.secondary",
+                color: active ? BRAND : "text.secondary",
                 fontWeight: 600,
                 whiteSpace: "nowrap",
                 overflow: "hidden",

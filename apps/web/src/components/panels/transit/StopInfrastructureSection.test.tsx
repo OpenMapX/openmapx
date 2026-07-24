@@ -90,7 +90,7 @@ vi.mock("next-intl", () => ({
 }));
 
 vi.mock("@/lib/theme", () => ({
-  TEAL: "#0f9d58",
+  BRAND: "#0f9d58",
 }));
 
 const parentInfrastructure: TransitStopInfrastructure = {

@@ -47,7 +47,7 @@ import { shareCurrentUrl } from "@/lib/deepLink";
 import { exportSavedList } from "@/lib/exportSavedList";
 import { resolveListIcon } from "@/lib/listIcon";
 import { useMap } from "@/lib/MapContext";
-import { TEAL, TEAL_LIGHT } from "@/lib/theme";
+import { BRAND, BRAND_LIGHT } from "@/lib/theme";
 import { PlaceThumbnail } from "./PlaceThumbnail";
 
 export function SavedListDetail() {
@@ -303,14 +303,14 @@ export function SavedListDetail() {
             onClick={handleShare}
             sx={{
               borderRadius: 24,
-              bgcolor: TEAL_LIGHT,
-              color: TEAL,
+              bgcolor: BRAND_LIGHT,
+              color: BRAND,
               textTransform: "none",
               fontWeight: 500,
               fontSize: 13,
               px: 2,
               py: 0.75,
-              "&:hover": { bgcolor: TEAL_LIGHT, filter: "brightness(0.95)" },
+              "&:hover": { bgcolor: BRAND_LIGHT, filter: "brightness(0.95)" },
             }}
           >
             {t("share")}
@@ -319,14 +319,14 @@ export function SavedListDetail() {
             startIcon={<AddIcon sx={{ fontSize: 18 }} />}
             sx={{
               borderRadius: 24,
-              bgcolor: TEAL_LIGHT,
-              color: TEAL,
+              bgcolor: BRAND_LIGHT,
+              color: BRAND,
               textTransform: "none",
               fontWeight: 500,
               fontSize: 13,
               px: 2,
               py: 0.75,
-              "&:hover": { bgcolor: TEAL_LIGHT, filter: "brightness(0.95)" },
+              "&:hover": { bgcolor: BRAND_LIGHT, filter: "brightness(0.95)" },
             }}
           >
             {t("addPlace")}
@@ -336,7 +336,7 @@ export function SavedListDetail() {
       <Divider />
       {placesLoading ? (
         <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-          <CircularProgress size={28} sx={{ color: TEAL }} />
+          <CircularProgress size={28} sx={{ color: BRAND }} />
         </Box>
       ) : !places || places.length === 0 ? (
         <Typography
@@ -411,7 +411,7 @@ export function SavedListDetail() {
                     variant="caption"
                     onClick={(e) => handleAddNoteClick(e, place)}
                     sx={{
-                      color: TEAL,
+                      color: BRAND,
                       display: "block",
                       mt: 0.25,
                       cursor: "pointer",
@@ -427,7 +427,7 @@ export function SavedListDetail() {
                   variant="caption"
                   onClick={(e) => handleAddNoteClick(e, place)}
                   sx={{
-                    color: TEAL,
+                    color: BRAND,
                     cursor: "pointer",
                     flexShrink: 0,
                     ml: 1,

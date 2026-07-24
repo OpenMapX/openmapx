@@ -10,7 +10,7 @@ import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import type { Waypoint } from "@openmapx/core";
 import { WaypointInput } from "@/components/panels/directions/WaypointInput";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 interface WaypointRowProps {
   waypoint: Waypoint;
@@ -87,7 +87,7 @@ export function WaypointRow({
               width: 20,
               height: 20,
               borderRadius: "4px",
-              bgcolor: TEAL,
+              bgcolor: BRAND,
               color: "#fff",
               fontWeight: 700,
               fontSize: 11,
@@ -112,9 +112,9 @@ export function WaypointRow({
           borderRadius: "8px",
           bgcolor: "action.hover",
           "&:focus-within": {
-            borderColor: TEAL,
+            borderColor: BRAND,
             bgcolor: "background.paper",
-            boxShadow: `0 0 0 2px ${TEAL}22`,
+            boxShadow: `0 0 0 2px ${BRAND}22`,
           },
           transition: "box-shadow 0.15s",
         }}

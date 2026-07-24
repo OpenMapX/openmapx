@@ -1,5 +1,5 @@
 import type { SxProps, Theme } from "@mui/material/styles";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 /**
  * Shared "floating pill chip" styling used by the map-overlay chip rows
@@ -21,9 +21,9 @@ export function floatingChipSx(active: boolean, variant: "category" | "toggle"):
     borderRadius: "18px",
     fontWeight: 500,
     fontSize: 13,
-    bgcolor: active ? TEAL : "background.paper",
+    bgcolor: active ? BRAND : "background.paper",
     color: active ? "#fff" : "text.primary",
-    borderColor: active ? TEAL : "var(--omx-border)",
+    borderColor: active ? BRAND : "var(--omx-border)",
     boxShadow: active ? "none" : "0 1px 3px var(--omx-shadow-soft)",
     cursor: "pointer",
     userSelect: "none",
@@ -35,7 +35,7 @@ export function floatingChipSx(active: boolean, variant: "category" | "toggle"):
       ...base,
       flexShrink: 0,
       "&&:hover": {
-        bgcolor: active ? "var(--omx-teal-hover)" : "var(--omx-chip-hover)",
+        bgcolor: active ? "var(--omx-brand-hover)" : "var(--omx-chip-hover)",
       },
     };
   }
@@ -44,7 +44,7 @@ export function floatingChipSx(active: boolean, variant: "category" | "toggle"):
     ...base,
     pointerEvents: "auto",
     "& .MuiChip-label": { pr: "10px" },
-    "&&:hover": { bgcolor: active ? "var(--omx-teal-hover)" : "var(--omx-chip-hover)" },
+    "&&:hover": { bgcolor: active ? "var(--omx-brand-hover)" : "var(--omx-chip-hover)" },
   };
 }
 

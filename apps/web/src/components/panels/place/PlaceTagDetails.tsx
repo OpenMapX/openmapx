@@ -61,7 +61,7 @@ import {
   SiVk,
 } from "react-icons/si";
 import { humanizeOsmTagValue } from "@/lib/humanizeOsmTagValue";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 /** Language code → country code for emoji flag rendering. */
 const LANG_TO_COUNTRY: Record<string, string> = {
@@ -491,7 +491,7 @@ function isHttpUrl(s: string): boolean {
 function DetailItem({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 0.75 }}>
-      <Box sx={{ color: TEAL, flexShrink: 0, display: "flex", fontSize: 20 }}>{icon}</Box>
+      <Box sx={{ color: BRAND, flexShrink: 0, display: "flex", fontSize: 20 }}>{icon}</Box>
       <Box sx={{ flex: 1, minWidth: 0 }}>{children}</Box>
     </Box>
   );
@@ -1277,7 +1277,7 @@ export function PlaceTagDetails({ osmTags }: Props) {
         {/* Multilingual text entries (description, note, *:location, etc.) */}
         {multilingualEntries.map((entry) => (
           <Box key={entry.label} sx={{ display: "flex", gap: 1.5, py: 0.75 }}>
-            <Box sx={{ color: TEAL, flexShrink: 0, display: "flex", mt: "2px" }}>
+            <Box sx={{ color: BRAND, flexShrink: 0, display: "flex", mt: "2px" }}>
               <NotesIcon sx={{ fontSize: 20 }} />
             </Box>
             <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -1298,7 +1298,7 @@ export function PlaceTagDetails({ osmTags }: Props) {
                     mt: 0.25,
                   }}
                 >
-                  <Linkified text={entry.defaultValue} color={TEAL} />
+                  <Linkified text={entry.defaultValue} color={BRAND} />
                 </Typography>
               )}
               {entry.translations.map(({ lang, flag, value }) => (
@@ -1315,7 +1315,7 @@ export function PlaceTagDetails({ osmTags }: Props) {
                       color: "text.secondary",
                     }}
                   >
-                    <Linkified text={value} color={TEAL} />
+                    <Linkified text={value} color={BRAND} />
                   </Typography>
                 </Box>
               ))}
@@ -1334,7 +1334,7 @@ export function PlaceTagDetails({ osmTags }: Props) {
                   target="_blank"
                   rel="noopener noreferrer"
                   size="small"
-                  sx={{ color: "text.secondary", "&:hover": { color: TEAL } }}
+                  sx={{ color: "text.secondary", "&:hover": { color: BRAND } }}
                 >
                   {icon}
                 </IconButton>

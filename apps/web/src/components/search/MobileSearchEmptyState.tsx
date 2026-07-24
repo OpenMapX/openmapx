@@ -9,7 +9,7 @@ import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import { type LabeledPlace, useLabeledPlaces, useSession } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 interface Props {
   onSelectPlace: (place: LabeledPlace) => void;
@@ -17,9 +17,9 @@ interface Props {
 
 function iconFor(label: string): React.ReactNode {
   const lower = label.trim().toLowerCase();
-  if (lower === "home") return <HomeIcon sx={{ color: TEAL }} />;
-  if (lower === "work") return <WorkIcon sx={{ color: TEAL }} />;
-  return <FlagIcon sx={{ color: TEAL }} />;
+  if (lower === "home") return <HomeIcon sx={{ color: BRAND }} />;
+  if (lower === "work") return <WorkIcon sx={{ color: BRAND }} />;
+  return <FlagIcon sx={{ color: BRAND }} />;
 }
 
 /**

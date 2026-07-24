@@ -24,7 +24,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { haptics } from "@/lib/haptics";
 import { resolveListIcon } from "@/lib/listIcon";
-import { TEAL, TEAL_LIGHT } from "@/lib/theme";
+import { BRAND, BRAND_LIGHT } from "@/lib/theme";
 
 interface Props {
   open: boolean;
@@ -146,7 +146,7 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
       <DialogContent sx={{ px: 3, pb: 3 }}>
         {listsLoading ? (
           <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
-            <CircularProgress size={28} sx={{ color: TEAL }} />
+            <CircularProgress size={28} sx={{ color: BRAND }} />
           </Box>
         ) : (
           <>
@@ -168,7 +168,7 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
                   checked={checkedLists.has(list.id)}
                   sx={{
                     color: "text.secondary",
-                    "&.Mui-checked": { color: TEAL },
+                    "&.Mui-checked": { color: BRAND },
                   }}
                   size="small"
                   tabIndex={-1}
@@ -205,11 +205,11 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
                 sx={{
                   mt: 1.5,
                   borderRadius: 24,
-                  bgcolor: TEAL_LIGHT,
-                  color: TEAL,
+                  bgcolor: BRAND_LIGHT,
+                  color: BRAND,
                   textTransform: "none",
                   fontWeight: 500,
-                  "&:hover": { bgcolor: TEAL_LIGHT, filter: "brightness(0.95)" },
+                  "&:hover": { bgcolor: BRAND_LIGHT, filter: "brightness(0.95)" },
                 }}
               >
                 {t("createNewList")}

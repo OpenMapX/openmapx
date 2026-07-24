@@ -26,7 +26,7 @@ import {
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useMap } from "@/lib/MapContext";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 interface PlaceholderLabel {
   key: "home" | "work";
@@ -34,8 +34,8 @@ interface PlaceholderLabel {
 }
 
 const PLACEHOLDER_LABELS: PlaceholderLabel[] = [
-  { key: "home", icon: <HomeIcon sx={{ color: TEAL }} /> },
-  { key: "work", icon: <WorkIcon sx={{ color: TEAL }} /> },
+  { key: "home", icon: <HomeIcon sx={{ color: BRAND }} /> },
+  { key: "work", icon: <WorkIcon sx={{ color: BRAND }} /> },
 ];
 
 export function SavedLabeledTab() {
@@ -86,7 +86,7 @@ export function SavedLabeledTab() {
   if (isLoading) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-        <CircularProgress size={28} sx={{ color: TEAL }} />
+        <CircularProgress size={28} sx={{ color: BRAND }} />
       </Box>
     );
   }
@@ -164,7 +164,7 @@ export function SavedLabeledTab() {
           }}
         >
           <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-            <FlagIcon sx={{ color: TEAL }} />
+            <FlagIcon sx={{ color: BRAND }} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography

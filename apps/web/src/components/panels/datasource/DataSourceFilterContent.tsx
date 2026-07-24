@@ -49,7 +49,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
 import { ResultItemName, ResultList, ResultListItem } from "@/components/ui/ResultListItem";
 import { translateDataSourceLabel, translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { BrandMark } from "../shared/BrandMark";
 
 /** Matches 3-decimal Euro prices like "2.119" within a summary string. */
@@ -471,9 +471,9 @@ export function DataSourceFilterContent() {
                   fontSize: 12,
                   height: 28,
                   "& .MuiSelect-select": { py: 0, pl: 0.5, pr: "8px !important" },
-                  "& .MuiOutlinedInput-notchedOutline": { borderColor: TEAL },
-                  "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: TEAL },
-                  "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: TEAL },
+                  "& .MuiOutlinedInput-notchedOutline": { borderColor: BRAND },
+                  "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: BRAND },
+                  "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: BRAND },
                 }}
               >
                 <MenuItem value="" sx={{ fontSize: 12 }}>
@@ -706,9 +706,9 @@ function ConnectorTypeSection({
               sx={{
                 fontSize: 12,
                 ...(isSelected && {
-                  bgcolor: TEAL,
+                  bgcolor: BRAND,
                   color: "#fff",
-                  "&:hover": { bgcolor: "var(--omx-teal-hover)" },
+                  "&:hover": { bgcolor: "var(--omx-brand-hover)" },
                 }),
               }}
             />
@@ -730,7 +730,7 @@ function ConnectorTypeSection({
               border: "none",
               background: "none",
               cursor: "pointer",
-              color: TEAL,
+              color: BRAND,
               fontSize: 12,
               fontFamily: "inherit",
             }}
@@ -761,9 +761,9 @@ function ConnectorTypeSection({
                     sx={{
                       fontSize: 12,
                       ...(isSelected && {
-                        bgcolor: TEAL,
+                        bgcolor: BRAND,
                         color: "#fff",
-                        "&:hover": { bgcolor: "var(--omx-teal-hover)" },
+                        "&:hover": { bgcolor: "var(--omx-brand-hover)" },
                       }),
                     }}
                   />
@@ -827,9 +827,9 @@ function ChipFilterSection({
               sx={{
                 fontSize: 12,
                 ...(isSelected && {
-                  bgcolor: TEAL,
+                  bgcolor: BRAND,
                   color: "#fff",
-                  "&:hover": { bgcolor: "var(--omx-teal-hover)" },
+                  "&:hover": { bgcolor: "var(--omx-brand-hover)" },
                 }),
               }}
             />
@@ -944,10 +944,10 @@ function AccessTypeSection({
                 mb: 0.25,
                 py: 0.5,
                 ...(allSelected && {
-                  bgcolor: `${TEAL}14`,
+                  bgcolor: `${BRAND}14`,
                   "&.Mui-selected": {
-                    bgcolor: `${TEAL}14`,
-                    "&:hover": { bgcolor: `${TEAL}22` },
+                    bgcolor: `${BRAND}14`,
+                    "&:hover": { bgcolor: `${BRAND}22` },
                   },
                 }),
               }}
@@ -955,7 +955,7 @@ function AccessTypeSection({
               <ListItemIcon
                 sx={{
                   minWidth: 32,
-                  color: allSelected ? TEAL : "text.secondary",
+                  color: allSelected ? BRAND : "text.secondary",
                 }}
               >
                 {group.icon}
@@ -967,7 +967,7 @@ function AccessTypeSection({
                     variant: "body2",
                     sx: {
                       fontWeight: allSelected ? 600 : 400,
-                      color: allSelected ? TEAL : "text.primary",
+                      color: allSelected ? BRAND : "text.primary",
                     },
                   },
                 }}
@@ -1037,10 +1037,10 @@ function StatusSection({
                 mb: 0.25,
                 py: 0.5,
                 ...(allSelected && {
-                  bgcolor: `${TEAL}14`,
+                  bgcolor: `${BRAND}14`,
                   "&.Mui-selected": {
-                    bgcolor: `${TEAL}14`,
-                    "&:hover": { bgcolor: `${TEAL}22` },
+                    bgcolor: `${BRAND}14`,
+                    "&:hover": { bgcolor: `${BRAND}22` },
                   },
                 }),
               }}
@@ -1053,7 +1053,7 @@ function StatusSection({
                     variant: "body2",
                     sx: {
                       fontWeight: allSelected ? 600 : 400,
-                      color: allSelected ? TEAL : "text.primary",
+                      color: allSelected ? BRAND : "text.primary",
                     },
                   },
                 }}
@@ -1121,7 +1121,7 @@ function OperatorSection({
                 {...rest}
                 sx={{
                   fontSize: 11,
-                  bgcolor: TEAL,
+                  bgcolor: BRAND,
                   color: "#fff",
                   "& .MuiChip-deleteIcon": {
                     color: "rgba(255,255,255,0.7)",

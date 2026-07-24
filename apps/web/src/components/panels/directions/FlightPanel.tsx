@@ -30,7 +30,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { type ChangeEvent, type ReactNode, useEffect, useId, useMemo, useState } from "react";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 type T = ReturnType<typeof useTranslations>;
 
@@ -68,7 +68,7 @@ const inputSx = {
   color: "text.primary",
   bgcolor: "background.paper",
   outline: "none",
-  "&:focus": { borderColor: TEAL },
+  "&:focus": { borderColor: BRAND },
   width: "100%",
   boxSizing: "border-box",
 } as const;
@@ -158,12 +158,12 @@ function AirportField({
               sx={{
                 border: "none",
                 bgcolor: "transparent",
-                color: TEAL,
+                color: BRAND,
                 cursor: "pointer",
                 display: "flex",
                 p: 0.5,
                 borderRadius: 1,
-                "&:hover": { bgcolor: `${TEAL}18` },
+                "&:hover": { bgcolor: `${BRAND}18` },
               }}
             >
               <EditIcon sx={{ fontSize: 16 }} />
@@ -254,7 +254,7 @@ function PaxStepper({
     justifyContent: "center",
     cursor: "pointer",
     color: "text.primary",
-    "&:hover": { borderColor: TEAL, color: TEAL },
+    "&:hover": { borderColor: BRAND, color: BRAND },
     "&:disabled": {
       opacity: 0.4,
       cursor: "default",
@@ -475,7 +475,7 @@ export function FlightPanel() {
       </Box>
 
       {estMinutes !== null && (
-        <Typography variant="caption" sx={{ color: TEAL, fontWeight: 600 }}>
+        <Typography variant="caption" sx={{ color: BRAND, fontWeight: 600 }}>
           {t("estFlightTime", { duration: formatDuration(estMinutes * 60) })}
         </Typography>
       )}
@@ -500,16 +500,16 @@ export function FlightPanel() {
               alignItems: "center",
               justifyContent: "center",
               border: "1px solid",
-              borderColor: roundTrip === val ? TEAL : "divider",
-              bgcolor: roundTrip === val ? `${TEAL}18` : "background.paper",
-              "&:hover": { borderColor: TEAL },
+              borderColor: roundTrip === val ? BRAND : "divider",
+              bgcolor: roundTrip === val ? `${BRAND}18` : "background.paper",
+              "&:hover": { borderColor: BRAND },
               transition: "border-color 0.15s",
             }}
           >
             <Typography
               variant="caption"
               sx={{ fontWeight: 500 }}
-              color={roundTrip === val ? TEAL : "text.primary"}
+              color={roundTrip === val ? BRAND : "text.primary"}
             >
               {t(key)}
             </Typography>
@@ -605,11 +605,11 @@ export function FlightPanel() {
           gap: 1,
           cursor: "pointer",
           opacity: supports("directOnly") ? 1 : 0.5,
-          "&:hover": { color: TEAL },
+          "&:hover": { color: BRAND },
         }}
       >
         {directOnly ? (
-          <CheckBoxIcon sx={{ fontSize: 20, color: TEAL }} />
+          <CheckBoxIcon sx={{ fontSize: 20, color: BRAND }} />
         ) : (
           <CheckBoxOutlineBlankIcon sx={{ fontSize: 20, color: "text.secondary" }} />
         )}
@@ -635,16 +635,16 @@ export function FlightPanel() {
                   alignItems: "center",
                   justifyContent: "center",
                   border: "1px solid",
-                  borderColor: selected ? TEAL : "divider",
-                  bgcolor: selected ? `${TEAL}18` : "background.paper",
-                  "&:hover": { borderColor: TEAL },
+                  borderColor: selected ? BRAND : "divider",
+                  bgcolor: selected ? `${BRAND}18` : "background.paper",
+                  "&:hover": { borderColor: BRAND },
                   transition: "border-color 0.15s",
                 }}
               >
                 <Typography
                   variant="caption"
                   sx={{ fontWeight: 500 }}
-                  color={selected ? TEAL : "text.primary"}
+                  color={selected ? BRAND : "text.primary"}
                 >
                   {p.name}
                 </Typography>
@@ -674,7 +674,7 @@ export function FlightPanel() {
           border: "none",
           borderRadius: "10px",
           py: 1.25,
-          bgcolor: TEAL,
+          bgcolor: BRAND,
           color: "#fff",
           fontSize: "0.9rem",
           fontWeight: 600,

@@ -34,7 +34,7 @@ export function ReportFab() {
           aria-label={t("reportButton")}
         >
           {/* Amber, like Google Maps' report control — a warm cue that stands
-              out from the teal-tinted controls around it. */}
+              out from the brand-tinted controls around it. */}
           <ReportProblemOutlinedIcon sx={{ fontSize: 18, color: "#f9a825" }} />
         </IconButton>
       </Paper>

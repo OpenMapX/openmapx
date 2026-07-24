@@ -14,7 +14,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { BrandMark } from "../shared/BrandMark";
 
 function Row({
@@ -118,7 +118,7 @@ export function HotelCompareList({
       {place.website && (
         <Row
           onClick={openOfficial}
-          mark={<VerifiedIcon sx={{ fontSize: 28, color: TEAL, flexShrink: 0 }} />}
+          mark={<VerifiedIcon sx={{ fontSize: 28, color: BRAND, flexShrink: 0 }} />}
           primary={place.name}
           secondary={officialUrl ? t("officialSiteDated") : t("officialSite")}
         />

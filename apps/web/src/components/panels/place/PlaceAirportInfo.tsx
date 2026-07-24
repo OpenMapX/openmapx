@@ -19,7 +19,7 @@ import type {
 import { safeHref } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { SectionAttribution } from "@/components/ui/SectionAttribution";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { SectionLabel } from "../shared/SectionLabel";
 import { useDataSourceAttribution } from "./useDataSourceAttribution";
 
@@ -46,7 +46,7 @@ export function PlaceAirportInfo({ airport }: Props) {
       <Divider sx={{ mx: 2, my: 1 }} />
       {/* Header */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, px: 2, pt: 1.5, pb: 0.5 }}>
-        <Box sx={{ color: TEAL, display: "flex" }}>
+        <Box sx={{ color: BRAND, display: "flex" }}>
           <FlightTakeoffIcon sx={{ fontSize: 20 }} />
         </Box>
         <Typography
@@ -247,7 +247,7 @@ function CodeChip({
         letterSpacing: 0.5,
         borderRadius: 1,
         bgcolor: tone === "primary" ? "rgba(0, 128, 128, 0.12)" : "action.hover",
-        color: tone === "primary" ? TEAL : "text.primary",
+        color: tone === "primary" ? BRAND : "text.primary",
         border: 1,
         borderColor: tone === "primary" ? "rgba(0, 128, 128, 0.35)" : "divider",
         "& .MuiChip-label": {

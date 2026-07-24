@@ -6,7 +6,7 @@ import Typography from "@mui/material/Typography";
 import type { SearchIntent } from "@openmapx/integration-framework";
 import { useTranslations } from "next-intl";
 import { AiBadge } from "@/components/ui/AiBadge";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 interface NlpSearchCardProps {
   intent: SearchIntent;
@@ -23,7 +23,7 @@ export function NlpSearchCard({ intent, provider, onActivate }: NlpSearchCardPro
       sx={{
         alignItems: "flex-start",
         gap: 1,
-        borderLeft: `3px solid ${TEAL}`,
+        borderLeft: `3px solid ${BRAND}`,
         bgcolor: "rgba(0,128,128,0.06)",
       }}
     >

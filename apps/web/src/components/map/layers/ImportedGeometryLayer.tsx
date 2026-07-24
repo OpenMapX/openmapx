@@ -10,7 +10,7 @@ const SOURCE = "imported-geometry-source";
 const FILL = "imported-geometry-fill";
 const LINE = "imported-geometry-line";
 const POINT = "imported-geometry-point";
-// Purple — distinct from the route (teal) and admin-boundary (red) overlays.
+// Purple — distinct from the route (blue) and admin-boundary (red) overlays.
 const COLOR = "#7c3aed";
 
 /**

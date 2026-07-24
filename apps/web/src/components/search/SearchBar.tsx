@@ -80,7 +80,7 @@ import {
 } from "@/lib/launchExplore";
 import { useMap } from "@/lib/MapContext";
 import { isConfidentPlaceMatch } from "@/lib/placeMatch";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
 import { MobileSearchEmptyState } from "./MobileSearchEmptyState";
 import { NlpSearchCard } from "./NlpSearchCard";
@@ -249,7 +249,7 @@ export function SearchBar() {
   const anchor = useCategorySearchStore((s) => s.anchor);
   const exploreBoxOpen = useCategorySearchStore((s) => s.exploreBoxOpen);
   // Nearby/Explore mode: a place is the anchor. Reuses this search bar, adding a
-  // teal pill and routing selections to the place-anchored category search.
+  // brand-coloured pill and routing selections to the place-anchored category search.
   const nearbyMode = anchor !== null;
   const activeSource = useDataSourceStore((s) => s.activeSource);
   const setActiveSource = useDataSourceStore((s) => s.setActiveSource);
@@ -986,7 +986,7 @@ export function SearchBar() {
     else handleSelect(result);
   };
 
-  // Cancel nearby search (the teal pill's ✕): exit nearby mode and reopen the
+  // Cancel nearby search (the brand pill's ✕): exit nearby mode and reopen the
   // place the search was started from.
   const handleCancelNearby = () => {
     const place = anchor;
@@ -1261,7 +1261,7 @@ export function SearchBar() {
                       useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
                     }}
                   >
-                    <DirectionsIcon sx={{ fontSize: 22, color: TEAL }} />
+                    <DirectionsIcon sx={{ fontSize: 22, color: BRAND }} />
                   </IconButton>
                 </Tooltip>
               ))}
@@ -1283,7 +1283,7 @@ export function SearchBar() {
                 sx={{
                   display: "flex",
                   alignItems: "center",
-                  bgcolor: TEAL,
+                  bgcolor: BRAND,
                   color: "#fff",
                   borderRadius: 999,
                   ml: 1,

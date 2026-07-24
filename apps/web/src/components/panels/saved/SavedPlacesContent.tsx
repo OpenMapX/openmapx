@@ -5,7 +5,7 @@ import Tabs from "@mui/material/Tabs";
 import { useSavedPlacesStore, useSession, useSidebarStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect } from "react";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { SavedLabeledTab } from "./SavedLabeledTab";
 import { SavedListDetail } from "./SavedListDetail";
 import { SavedListsTab } from "./SavedListsTab";
@@ -51,7 +51,7 @@ export function SavedPlacesContent() {
             minWidth: "auto",
             color: "text.secondary",
           },
-          "& .Mui-selected": { color: `${TEAL} !important` },
+          "& .Mui-selected": { color: `${BRAND} !important` },
           "& .MuiTabs-indicator": {
             height: 3,
             display: "flex",
@@ -61,7 +61,7 @@ export function SavedPlacesContent() {
               content: '""',
               display: "block",
               width: "calc(100% - 32px)",
-              backgroundColor: TEAL,
+              backgroundColor: BRAND,
               borderRadius: "2px 2px 0 0",
             },
           },

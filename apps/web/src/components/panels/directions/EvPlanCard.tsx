@@ -14,7 +14,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { runtimeAttributionToAttribution } from "@/lib/attributionForProviders";
 import { EV_CHARGING_SOURCE_ID, openChargerPlace } from "@/lib/openChargerPlace";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 export function EvPlanCard({
   result,
@@ -72,7 +72,7 @@ export function EvPlanCard({
           <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
             {t("totalTime")}
           </Typography>
-          <Typography variant="body2" sx={{ fontWeight: 600, color: TEAL }}>
+          <Typography variant="body2" sx={{ fontWeight: 600, color: BRAND }}>
             {formatDuration(totalSeconds)}
           </Typography>
         </Box>
@@ -204,7 +204,7 @@ function EvPlanStopRow({
               />
             )}
           </Box>
-          <Typography variant="body2" sx={{ fontWeight: 600, color: TEAL, flexShrink: 0 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600, color: BRAND, flexShrink: 0 }}>
             {`${stop.powerKw} kW`}
           </Typography>
         </Box>

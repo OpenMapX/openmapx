@@ -19,7 +19,7 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import { formatCo2Emission } from "@/lib/formatCo2";
 import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { requestHeadingPermission } from "@/lib/useHeading";
 
 const GROUND_MODES = new Set<Route["mode"]>(["driving", "walking", "cycling", "motorcycle"]);
@@ -69,13 +69,13 @@ export function RouteCard({
 
   const modeIcon =
     route.mode === "driving" ? (
-      <DirectionsCarIcon sx={{ fontSize: 22, color: active ? TEAL : "text.disabled" }} />
+      <DirectionsCarIcon sx={{ fontSize: 22, color: active ? BRAND : "text.disabled" }} />
     ) : route.mode === "walking" ? (
-      <DirectionsWalkIcon sx={{ fontSize: 22, color: active ? TEAL : "text.disabled" }} />
+      <DirectionsWalkIcon sx={{ fontSize: 22, color: active ? BRAND : "text.disabled" }} />
     ) : route.mode === "motorcycle" ? (
-      <TwoWheelerIcon sx={{ fontSize: 22, color: active ? TEAL : "text.disabled" }} />
+      <TwoWheelerIcon sx={{ fontSize: 22, color: active ? BRAND : "text.disabled" }} />
     ) : (
-      <DirectionsBikeIcon sx={{ fontSize: 22, color: active ? TEAL : "text.disabled" }} />
+      <DirectionsBikeIcon sx={{ fontSize: 22, color: active ? BRAND : "text.disabled" }} />
     );
 
   return (
@@ -87,7 +87,7 @@ export function RouteCard({
         px: 2,
         py: 1.5,
         cursor: "pointer",
-        borderLeft: active ? `4px solid ${TEAL}` : "4px solid transparent",
+        borderLeft: active ? `4px solid ${BRAND}` : "4px solid transparent",
         bgcolor: active ? "rgba(0,123,139,0.04)" : "transparent",
         "&:hover": { bgcolor: active ? "rgba(0,123,139,0.07)" : "action.hover" },
         transition: "background-color 0.15s",
@@ -110,7 +110,7 @@ export function RouteCard({
           </Typography>
           <Typography
             variant="body2"
-            color={active ? TEAL : "text.primary"}
+            color={active ? BRAND : "text.primary"}
             sx={{
               fontWeight: 600,
               flexShrink: 0,
@@ -153,13 +153,13 @@ export function RouteCard({
               component="span"
               variant="caption"
               sx={{
-                color: TEAL,
+                color: BRAND,
                 cursor: "pointer",
                 fontWeight: 500,
                 px: 1.5,
                 py: 0.75,
                 borderRadius: 99,
-                "&:hover": { bgcolor: `${TEAL}18` },
+                "&:hover": { bgcolor: `${BRAND}18` },
                 transition: "background-color 0.15s",
               }}
               onClick={(e) => {
@@ -179,10 +179,10 @@ export function RouteCard({
                   void handleStart();
                 }}
                 sx={{
-                  bgcolor: TEAL,
+                  bgcolor: BRAND,
                   textTransform: "none",
                   borderRadius: 99,
-                  "&:hover": { bgcolor: TEAL },
+                  "&:hover": { bgcolor: BRAND },
                 }}
               >
                 {tNav("start")}

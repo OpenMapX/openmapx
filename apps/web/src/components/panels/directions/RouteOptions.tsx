@@ -22,7 +22,7 @@ import {
   useTransitPlanningCapabilities,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 function ColumnHeading({ label }: { label: string }) {
   return (
@@ -67,11 +67,11 @@ function CheckRow({
         gap: 1,
         py: 0.5,
         cursor: "pointer",
-        "&:hover": { color: TEAL },
+        "&:hover": { color: BRAND },
       }}
     >
       {checked ? (
-        <CheckBoxIcon sx={{ fontSize: 20, color: TEAL }} />
+        <CheckBoxIcon sx={{ fontSize: 20, color: BRAND }} />
       ) : (
         <CheckBoxOutlineBlankIcon sx={{ fontSize: 20, color: "text.secondary" }} />
       )}
@@ -111,11 +111,11 @@ function RadioRow({
         py: 0.5,
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.45 : 1,
-        "&:hover": { color: TEAL },
+        "&:hover": { color: BRAND },
       }}
     >
       {selected ? (
-        <RadioButtonCheckedIcon sx={{ fontSize: 20, color: TEAL }} />
+        <RadioButtonCheckedIcon sx={{ fontSize: 20, color: BRAND }} />
       ) : (
         <RadioButtonUncheckedIcon sx={{ fontSize: 20, color: "text.secondary" }} />
       )}

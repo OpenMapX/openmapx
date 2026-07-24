@@ -46,7 +46,7 @@ function legStopsFor(
 
 /**
  * Transit follow-along banner for the current leg. Reuses {@link NavBannerShell}
- * so it matches the driving {@link ManeuverBanner}: a teal card with the mode
+ * so it matches the driving {@link ManeuverBanner}: a brand-coloured card with the mode
  * badge + "{line} to {destination}" + a leg counter, the live next-stop preview
  * in the darkened sub-row (the transit analogue of the driving "Then …" line),
  * and — when the alight stop is one away — a prominent "get off now" card below

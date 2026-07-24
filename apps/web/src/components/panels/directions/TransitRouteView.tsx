@@ -28,7 +28,7 @@ import { extractFareSummary, formatFare } from "@/lib/fareUtils";
 import { itineraryTransferRisk } from "@/lib/navigation/connectionRisk";
 import { ensureNotificationPermission } from "@/lib/navigation/navNotify";
 import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
-import { TEAL, TEAL_HEX } from "@/lib/theme";
+import { BRAND, BRAND_HEX } from "@/lib/theme";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { formatCo2Emission } from "../../../lib/formatCo2";
 
@@ -100,7 +100,7 @@ function TransitLiveBadge({ tripId }: { tripId: string }) {
         px: 0.75,
         py: 0.25,
         borderRadius: 99,
-        bgcolor: `${TEAL_HEX}1a`,
+        bgcolor: `${BRAND_HEX}1a`,
       }}
     >
       <Box sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: "#4caf50", flexShrink: 0 }} />
@@ -108,7 +108,7 @@ function TransitLiveBadge({ tripId }: { tripId: string }) {
         variant="caption"
         sx={{
           fontWeight: 600,
-          color: TEAL,
+          color: BRAND,
           fontSize: 10,
         }}
       >
@@ -197,7 +197,7 @@ function TransitEmissionsBadge({
           width: 8,
           height: 8,
           borderRadius: "50%",
-          bgcolor: isLowest ? TEAL : "text.secondary",
+          bgcolor: isLowest ? BRAND : "text.secondary",
           flexShrink: 0,
         }}
       />
@@ -205,7 +205,7 @@ function TransitEmissionsBadge({
         variant="caption"
         sx={{
           fontWeight: 600,
-          color: isLowest ? TEAL : "text.secondary",
+          color: isLowest ? BRAND : "text.secondary",
           fontSize: 10.5,
         }}
       >
@@ -267,7 +267,7 @@ export function TransitItineraryCard({
         px: 2,
         py: 1.5,
         cursor: "pointer",
-        borderLeft: active ? `4px solid ${TEAL}` : "4px solid transparent",
+        borderLeft: active ? `4px solid ${BRAND}` : "4px solid transparent",
         bgcolor: active ? "rgba(0,123,139,0.04)" : "transparent",
         "&:hover": { bgcolor: active ? "rgba(0,123,139,0.07)" : "action.hover" },
         transition: "background-color 0.15s",
@@ -275,7 +275,7 @@ export function TransitItineraryCard({
     >
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-          <DirectionsTransitIcon sx={{ fontSize: 18, color: active ? TEAL : "text.disabled" }} />
+          <DirectionsTransitIcon sx={{ fontSize: 18, color: active ? BRAND : "text.disabled" }} />
           <Typography
             variant="body2"
             sx={{
@@ -289,7 +289,7 @@ export function TransitItineraryCard({
           {occupancy && <OccupancyIndicator level={occupancy} size={16} />}
           <Typography
             variant="body2"
-            color={active ? TEAL : "text.primary"}
+            color={active ? BRAND : "text.primary"}
             sx={{
               fontWeight: 600,
             }}
@@ -377,13 +377,13 @@ export function TransitItineraryCard({
             component="span"
             variant="caption"
             sx={{
-              color: TEAL,
+              color: BRAND,
               cursor: "pointer",
               fontWeight: 500,
               px: 1.5,
               py: 0.75,
               borderRadius: 99,
-              "&:hover": { bgcolor: `${TEAL}18` },
+              "&:hover": { bgcolor: `${BRAND}18` },
               transition: "background-color 0.15s",
             }}
             onClick={(e) => {
@@ -433,10 +433,10 @@ export function TransitItineraryCard({
               startTransitNavigation(itinerary, replanOptions);
             }}
             sx={{
-              bgcolor: TEAL,
+              bgcolor: BRAND,
               textTransform: "none",
               borderRadius: 99,
-              "&:hover": { bgcolor: TEAL },
+              "&:hover": { bgcolor: BRAND },
             }}
           >
             {tNav("start")}

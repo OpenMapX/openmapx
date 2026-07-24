@@ -5,7 +5,7 @@ import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import type { ChangeEvent } from "react";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 export function WaypointInput({
   value,
@@ -49,7 +49,7 @@ export function WaypointInput({
           <IconButton
             size="small"
             onClick={onUseMyLocation}
-            sx={{ color: TEAL, p: 0.25, flexShrink: 0 }}
+            sx={{ color: BRAND, p: 0.25, flexShrink: 0 }}
           >
             <MyLocationIcon sx={{ fontSize: 16 }} />
           </IconButton>

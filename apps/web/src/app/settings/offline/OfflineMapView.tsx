@@ -11,8 +11,8 @@ import type { OfflineArea, OfflineAreaBbox } from "@/lib/offlineAreas";
 const RECT_SOURCE = "offline-areas-source";
 const RECT_FILL = "offline-areas-fill";
 const RECT_LINE = "offline-areas-line";
-// Teal brand color so the highlighted download extents read as "ours".
-const RECT_COLOR = "#007b8b";
+// Brand color so the highlighted download extents read as "ours".
+const RECT_COLOR = "#43A047";
 
 function areaToFeature(area: OfflineArea): GeoJSON.Feature {
   const { west, south, east, north } = area.bbox;

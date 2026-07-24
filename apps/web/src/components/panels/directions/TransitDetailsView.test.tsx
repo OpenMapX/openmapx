@@ -98,7 +98,7 @@ vi.mock("@/lib/MapContext", () => ({
 }));
 
 vi.mock("@/lib/theme", () => ({
-  TEAL: "#0f9d58",
+  BRAND: "#0f9d58",
 }));
 
 vi.mock("@/lib/transitOccupancy", () => ({

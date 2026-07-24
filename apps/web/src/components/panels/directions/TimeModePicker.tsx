@@ -4,7 +4,7 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { useTranslations } from "next-intl";
 import type { ChangeEvent } from "react";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 export type TimeMode = "now" | "depart" | "arrive";
 
@@ -47,8 +47,8 @@ export function TimeModePicker({
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
-              bgcolor: timeMode === m ? TEAL : "action.hover",
-              "&:hover": { bgcolor: timeMode === m ? TEAL : "action.selected" },
+              bgcolor: timeMode === m ? BRAND : "action.hover",
+              "&:hover": { bgcolor: timeMode === m ? BRAND : "action.selected" },
               transition: "background-color 0.15s",
             }}
           >
@@ -83,7 +83,7 @@ export function TimeModePicker({
             color: "text.primary",
             bgcolor: "background.paper",
             outline: "none",
-            "&:focus": { borderColor: TEAL },
+            "&:focus": { borderColor: BRAND },
             width: "100%",
             boxSizing: "border-box",
           }}

@@ -15,7 +15,7 @@ import { useReviewAggregate } from "@openmapx/mangrove-react";
 import type { MergedRoute, TransportMode } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { useFloatingMobileSheetHandle } from "../mobileSheetShared";
 import { LineDetail } from "../transit/LineDetail";
 import { PlaceDeparturesView } from "../transit/PlaceDeparturesView";
@@ -367,7 +367,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
             minWidth: "auto",
             color: "text.secondary",
           },
-          "& .Mui-selected": { color: `${TEAL} !important` },
+          "& .Mui-selected": { color: `${BRAND} !important` },
           "& .MuiTabs-indicator": {
             height: 3,
             display: "flex",
@@ -377,7 +377,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
               content: '""',
               display: "block",
               width: "calc(100% - 32px)",
-              backgroundColor: TEAL,
+              backgroundColor: BRAND,
               borderRadius: "2px 2px 0 0",
             },
           },

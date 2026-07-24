@@ -27,7 +27,7 @@ import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { useMap } from "@/lib/MapContext";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 const DEFAULT_RADIUS_M = 500;
 const MAX_STOPS = 6;
@@ -142,7 +142,7 @@ export function DataSourceNearbyTransit({
     <Box sx={{ px: 2, py: 1 }}>
       <Divider sx={{ mb: 1.5 }} />
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 1 }}>
-        <DirectionsTransitIcon sx={{ fontSize: 20, color: TEAL }} />
+        <DirectionsTransitIcon sx={{ fontSize: 20, color: BRAND }} />
         <Typography
           variant="subtitle2"
           sx={{

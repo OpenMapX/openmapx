@@ -16,7 +16,7 @@ import ListItemText from "@mui/material/ListItemText";
 import type { AutocompleteResult } from "@openmapx/core";
 import { isTransitRawCategory } from "@openmapx/core";
 import { useEffect, useRef } from "react";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { PresetIcon } from "./PresetIcon";
 
 interface AutocompleteDropdownProps {
@@ -26,8 +26,8 @@ interface AutocompleteDropdownProps {
 }
 
 const labeledPlaceIcon: Record<string, React.ReactNode> = {
-  home: <HomeIcon sx={{ fontSize: 20, color: TEAL }} />,
-  work: <WorkIcon sx={{ fontSize: 20, color: TEAL }} />,
+  home: <HomeIcon sx={{ fontSize: 20, color: BRAND }} />,
+  work: <WorkIcon sx={{ fontSize: 20, color: BRAND }} />,
 };
 
 const iconByType: Record<AutocompleteResult["type"], React.ReactNode> = {
@@ -35,10 +35,10 @@ const iconByType: Record<AutocompleteResult["type"], React.ReactNode> = {
   poi: <SearchIcon sx={{ fontSize: 20, color: "text.secondary" }} />,
   street: <LocationOnIcon sx={{ fontSize: 20, color: "text.secondary" }} />,
   region: <LocationOnIcon sx={{ fontSize: 20, color: "text.secondary" }} />,
-  category: <CategoryIcon sx={{ fontSize: 20, color: TEAL }} />,
-  transit_stop: <DirectionsTransitIcon sx={{ fontSize: 20, color: TEAL }} />,
-  labeled_place: <FlagIcon sx={{ fontSize: 20, color: TEAL }} />,
-  nlp_search: <AutoAwesomeIcon sx={{ fontSize: 20, color: TEAL }} />,
+  category: <CategoryIcon sx={{ fontSize: 20, color: BRAND }} />,
+  transit_stop: <DirectionsTransitIcon sx={{ fontSize: 20, color: BRAND }} />,
+  labeled_place: <FlagIcon sx={{ fontSize: 20, color: BRAND }} />,
+  nlp_search: <AutoAwesomeIcon sx={{ fontSize: 20, color: BRAND }} />,
 };
 
 function CategorySvgIcon({ path }: { path: string }) {
@@ -48,7 +48,7 @@ function CategorySvgIcon({ path }: { path: string }) {
       viewBox="0 0 24 24"
       width={20}
       height={20}
-      fill={TEAL}
+      fill={BRAND}
       aria-hidden="true"
     >
       <path d={path} />
@@ -70,7 +70,7 @@ function getResultIcon(s: AutocompleteResult): React.ReactNode {
   // false-fired on POIs whose names merely contain "Airport", "Bahnhof",
   // "Station" etc. (e.g. "Frankfurt Airport Center I" is an office building).
   if (s.type === "transit_stop" || (s.rawCategory && isTransitRawCategory(s.rawCategory))) {
-    return <DirectionsTransitIcon sx={{ fontSize: 20, color: TEAL }} />;
+    return <DirectionsTransitIcon sx={{ fontSize: 20, color: BRAND }} />;
   }
 
   return iconByType[s.type];

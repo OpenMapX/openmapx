@@ -35,7 +35,7 @@ import type {
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { useMap } from "@/lib/MapContext";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { type StructuredSection, StructuredSections } from "../shared/StructuredSections";
 
 interface StopInfrastructureSectionProps {
@@ -218,7 +218,7 @@ function InfrastructureBlock({
   return (
     <Box sx={{ px: 2, py: 1.25 }}>
       <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
-        <Box sx={{ color: TEAL, flexShrink: 0, display: "flex", mt: 0.25 }}>{icon}</Box>
+        <Box sx={{ color: BRAND, flexShrink: 0, display: "flex", mt: 0.25 }}>{icon}</Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography
             variant="body2"
@@ -295,7 +295,7 @@ function StopAreaRow({
         size="small"
         startIcon={<ScheduleIcon />}
         onClick={() => onOpenBoard(stop.id, stop.name)}
-        sx={{ textTransform: "none", color: TEAL, flexShrink: 0 }}
+        sx={{ textTransform: "none", color: BRAND, flexShrink: 0 }}
       >
         {boardLabel}
       </Button>
@@ -468,7 +468,7 @@ export function StopInfrastructureSection({
         }}
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
-          <TrainIcon sx={{ fontSize: 20, color: TEAL }} />
+          <TrainIcon sx={{ fontSize: 20, color: BRAND }} />
           <Typography
             variant="subtitle2"
             sx={{
@@ -489,7 +489,7 @@ export function StopInfrastructureSection({
                 { reveal: true },
               )
             }
-            sx={{ textTransform: "none", color: TEAL, flexShrink: 0 }}
+            sx={{ textTransform: "none", color: BRAND, flexShrink: 0 }}
           >
             {t("revealOnMap")}
           </Button>
@@ -641,7 +641,7 @@ export function StopInfrastructureSection({
                             px: 0,
                             minWidth: 0,
                             textTransform: "none",
-                            color: TEAL,
+                            color: BRAND,
                           }}
                         >
                           {t("showOnMap")}
@@ -653,7 +653,7 @@ export function StopInfrastructureSection({
                         onClick={() =>
                           onOpenStopBoard(platform.id, platformTitle(platform, parentStop?.name))
                         }
-                        sx={{ textTransform: "none", color: TEAL, flexShrink: 0 }}
+                        sx={{ textTransform: "none", color: BRAND, flexShrink: 0 }}
                       >
                         {t("openBoard")}
                       </Button>
@@ -740,10 +740,10 @@ export function StopInfrastructureSection({
                     }
                     sx={{
                       textTransform: "none",
-                      color: isFocused ? "#FFFFFF" : TEAL,
-                      bgcolor: isFocused ? TEAL : undefined,
+                      color: isFocused ? "#FFFFFF" : BRAND,
+                      bgcolor: isFocused ? BRAND : undefined,
                       "&:hover": isFocused
-                        ? { bgcolor: "var(--omx-teal-hover)" }
+                        ? { bgcolor: "var(--omx-brand-hover)" }
                         : { bgcolor: "var(--omx-hover-bg)" },
                     }}
                   >
@@ -753,7 +753,7 @@ export function StopInfrastructureSection({
                     size="small"
                     startIcon={<OpenInNewIcon />}
                     onClick={() => openParkingDetail(parking)}
-                    sx={{ textTransform: "none", color: TEAL }}
+                    sx={{ textTransform: "none", color: BRAND }}
                   >
                     {t("parkingDetails")}
                   </Button>
@@ -852,11 +852,11 @@ export function StopInfrastructureSection({
                     }
                     sx={{
                       textTransform: "none",
-                      color: isFocused ? "#FFFFFF" : TEAL,
-                      bgcolor: isFocused ? TEAL : undefined,
+                      color: isFocused ? "#FFFFFF" : BRAND,
+                      bgcolor: isFocused ? BRAND : undefined,
                       flexShrink: 0,
                       "&:hover": isFocused
-                        ? { bgcolor: "var(--omx-teal-hover)" }
+                        ? { bgcolor: "var(--omx-brand-hover)" }
                         : { bgcolor: "var(--omx-hover-bg)" },
                     }}
                   >

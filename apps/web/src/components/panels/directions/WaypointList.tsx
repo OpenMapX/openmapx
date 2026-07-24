@@ -23,7 +23,7 @@ import Typography from "@mui/material/Typography";
 import type { Waypoint } from "@openmapx/core";
 import type { useTranslations } from "next-intl";
 import { WaypointRow } from "@/components/panels/directions/WaypointRow";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 const MAX_WAYPOINTS = 10;
 
@@ -138,7 +138,7 @@ export function WaypointList({
             px: 0.25,
             cursor: "pointer",
             color: "text.secondary",
-            "&:hover": { color: TEAL },
+            "&:hover": { color: BRAND },
           }}
         >
           <AddCircleOutlineIcon sx={{ fontSize: 18, ml: 3 }} />

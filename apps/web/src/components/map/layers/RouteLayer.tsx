@@ -18,7 +18,7 @@ import { attributionsForProviders } from "@/lib/attributionForProviders";
 import { buildEvDirectionsRequest } from "@/lib/buildEvDirectionsRequest";
 import { useMap } from "@/lib/MapContext";
 import { EV_CHARGING_SOURCE_ID, openChargerPlace } from "@/lib/openChargerPlace";
-import { PRIMARY_BLUE_HEX, TEAL_HEX } from "@/lib/theme";
+import { PRIMARY_BLUE_HEX } from "@/lib/theme";
 import { useMapAttributions } from "@/lib/useMapAttributions";
 import { upsertGeoJsonSource } from "./layerStyleUtils";
 
@@ -31,8 +31,11 @@ const LAYER_ACTIVE_CASING = "route-active-casing";
 const LAYER_ACTIVE_LINE = "route-active-line";
 
 // EV charge-stop pins reuse the same circle-marker style DataSourceLayer uses
-// for EV charging (green/amber availability, teal default) — do not invent a
+// for EV charging (green/amber availability, neutral default) — do not invent a
 // new marker.
+// Neutral grey rather than the brand colour: the brand is itself green, so an
+// unknown-availability pin would otherwise read as "available".
+const UNKNOWN_AVAILABILITY_COLOR = "#5F6368";
 const EV_STOPS_SOURCE_ID = "ev-stops-source";
 const EV_STOPS_LAYER_ID = "ev-stops-layer";
 
@@ -331,7 +334,7 @@ export function RouteLayer() {
   }, [activeResult, activeRouteIndex, mode, isEvMode, evData, mapRef, fitBounds, navigating]);
 
   // EV charge-stop pins: circle markers in the same style DataSourceLayer
-  // uses for EV charging (green = available, amber = busy, teal = unknown).
+  // uses for EV charging (green = available, amber = busy, grey = unknown).
   useEffect(() => {
     void styleVersion;
     const map = mapRef.current;
@@ -391,7 +394,7 @@ export function RouteLayer() {
               "#2E7D32",
               "busy",
               "#F9A825",
-              TEAL_HEX,
+              UNKNOWN_AVAILABILITY_COLOR,
             ],
             "circle-stroke-color": "#ffffff",
             "circle-stroke-width": 1.5,

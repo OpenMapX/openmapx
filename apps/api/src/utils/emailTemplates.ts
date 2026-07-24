@@ -1,5 +1,5 @@
-const BRAND_COLOR = "#007b8b";
-const BRAND_COLOR_DARK = "#005f6b";
+const BRAND_COLOR = "#43A047";
+const BRAND_COLOR_DARK = "#2E7D32";
 const TEXT_PRIMARY = "#202124";
 const TEXT_SECONDARY = "#5f6368";
 const BG_BODY = "#f2f4f6";

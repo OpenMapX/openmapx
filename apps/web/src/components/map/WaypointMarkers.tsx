@@ -5,7 +5,7 @@ import { useDirectionsStore } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { useMap } from "@/lib/MapContext";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 const PIN_SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -23,7 +23,7 @@ function createWaypointElement(number: number): HTMLDivElement {
   const el = document.createElement("div");
   el.style.cssText = "cursor:grab;";
   const badge = document.createElement("div");
-  badge.style.cssText = `width:24px;height:24px;border-radius:4px;background:${TEAL};color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.3);line-height:1;`;
+  badge.style.cssText = `width:24px;height:24px;border-radius:4px;background:${BRAND};color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.3);line-height:1;`;
   badge.textContent = String(number);
   el.appendChild(badge);
   return el;

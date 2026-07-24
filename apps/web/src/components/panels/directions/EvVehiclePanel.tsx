@@ -30,7 +30,7 @@ import {
 } from "react";
 import { List, type ListImperativeAPI, type RowComponentProps, useListRef } from "react-window";
 import { CUSTOM_VEHICLE_ID } from "@/lib/buildEvDirectionsRequest";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 const HOME_CURRENCIES = ["EUR", "USD", "GBP", "CHF"];
 
@@ -451,7 +451,7 @@ export function EvVehiclePanel() {
             checked={evExclusiveNetworks}
             disabled={evPreferredNetworks.length === 0}
             onChange={(e) => setEvExclusiveNetworks(e.target.checked)}
-            sx={{ color: TEAL, "&.Mui-checked": { color: TEAL } }}
+            sx={{ color: BRAND, "&.Mui-checked": { color: BRAND } }}
           />
         }
         label={t("exclusiveNetworks")}
@@ -462,7 +462,7 @@ export function EvVehiclePanel() {
           <Switch
             checked={evPreferCheaper}
             onChange={(e) => setEvPreferCheaper(e.target.checked)}
-            sx={{ "& .MuiSwitch-switchBase.Mui-checked": { color: TEAL } }}
+            sx={{ "& .MuiSwitch-switchBase.Mui-checked": { color: BRAND } }}
           />
         }
         label={t("preferCheaper")}

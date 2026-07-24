@@ -30,7 +30,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { CategoryFiltersPanel } from "./CategoryFiltersPanel";
 import { floatingChipSx, floatingToolbarSx } from "./floatingChipSx";
 import { NlpUnmappedNotice } from "./NlpFilterChips";
@@ -129,16 +129,16 @@ function PickerButton({
         px: 1.5,
         py: 0.75,
         border: "1px solid",
-        borderColor: selected ? TEAL : "var(--omx-border)",
+        borderColor: selected ? BRAND : "var(--omx-border)",
         borderRadius: "20px",
         bgcolor: selected ? "var(--omx-hover-bg)" : "transparent",
-        color: selected ? TEAL : "text.primary",
+        color: selected ? BRAND : "text.primary",
         fontWeight: selected ? 600 : 400,
         fontSize: 13,
         cursor: "pointer",
         textAlign: "center",
         transition: "border-color 0.15s, background 0.15s",
-        "&:hover": { borderColor: TEAL, bgcolor: "var(--omx-hover-bg)" },
+        "&:hover": { borderColor: BRAND, bgcolor: "var(--omx-hover-bg)" },
       }}
     >
       {label}
@@ -303,7 +303,7 @@ export function CategoryFilterBar() {
     setAnchorEl(null);
   };
 
-  const radioSx = { color: TEAL, "&.Mui-checked": { color: TEAL }, p: 0.5 };
+  const radioSx = { color: BRAND, "&.Mui-checked": { color: BRAND }, p: 0.5 };
 
   return (
     <Box sx={{ ...floatingToolbarSx, gap: 1, flexWrap: "wrap", pointerEvents: "none" }}>
@@ -469,7 +469,7 @@ export function CategoryFilterBar() {
               variant="text"
               size="small"
               onClick={handleApply}
-              sx={{ textTransform: "none", color: TEAL, fontWeight: 600 }}
+              sx={{ textTransform: "none", color: BRAND, fontWeight: 600 }}
             >
               {tc("apply")}
             </Button>
@@ -499,7 +499,7 @@ export function CategoryFilterBar() {
               <Badge
                 badgeContent={activePanelCount}
                 color="primary"
-                sx={{ "& .MuiBadge-badge": { right: -10, top: 2, bgcolor: TEAL } }}
+                sx={{ "& .MuiBadge-badge": { right: -10, top: 2, bgcolor: BRAND } }}
               >
                 {t("filters")}
               </Badge>

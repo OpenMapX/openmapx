@@ -23,7 +23,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMapOptional } from "@/lib/MapContext";
 import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
 import { useRouteSearch } from "@/lib/navigation/useRouteSearch";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { RouteSearchResultsLayer } from "./RouteSearchResultsLayer";
 
 // MUI LocalGasStation glyph — fuel isn't a poi-search chip category, so we carry
@@ -207,7 +207,7 @@ export function RouteSearchControl() {
                   flexDirection: "column",
                   alignItems: "center",
                   gap: 0.5,
-                  color: TEAL,
+                  color: BRAND,
                   "&:hover": { bgcolor: "action.hover" },
                 }}
               >
@@ -240,7 +240,7 @@ export function RouteSearchControl() {
             color="inherit"
             startIcon={isLoading ? <CircularProgress size={16} /> : <MyLocationIcon />}
             onClick={handleCenter}
-            sx={{ bgcolor: "background.paper", borderRadius: 99, color: TEAL }}
+            sx={{ bgcolor: "background.paper", borderRadius: 99, color: BRAND }}
           >
             {t("rsCenter")}
           </Button>
@@ -278,7 +278,7 @@ export function RouteSearchControl() {
                 width: 40,
                 height: 40,
                 borderRadius: "50%",
-                bgcolor: TEAL,
+                bgcolor: BRAND,
                 color: "#fff",
                 display: "flex",
                 alignItems: "center",

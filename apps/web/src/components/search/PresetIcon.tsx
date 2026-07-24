@@ -1,12 +1,12 @@
 "use client";
 
 import PlaceIcon from "@mui/icons-material/Place";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 interface PresetIconProps {
   iconKey: string | undefined;
   size?: number;
-  /** Override the icon color. Defaults to the brand teal so preset results match
+  /** Override the icon color. Defaults to the brand colour so preset results match
    *  the chip-bar category icons in the same dropdown. */
   color?: string;
 }
@@ -17,7 +17,7 @@ interface PresetIconProps {
  *  Temaki SVGs are copied into `/icons/{maki,temaki}/` at build time (see
  *  `apps/web/scripts/copy-preset-icons.mjs`). Unknown prefixes (e.g. `fas-`) fall
  *  back to a generic Material `place` icon. */
-export function PresetIcon({ iconKey, size = 20, color = TEAL }: PresetIconProps) {
+export function PresetIcon({ iconKey, size = 20, color = BRAND }: PresetIconProps) {
   if (!iconKey) {
     return <PlaceIcon sx={{ fontSize: size, color }} />;
   }

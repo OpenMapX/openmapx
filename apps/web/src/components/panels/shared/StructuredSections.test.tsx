@@ -32,7 +32,7 @@ vi.mock("next-intl", () => ({
 }));
 
 vi.mock("@/lib/theme", () => ({
-  TEAL: "#008080",
+  BRAND: "#008080",
 }));
 
 describe("StructuredSections", () => {

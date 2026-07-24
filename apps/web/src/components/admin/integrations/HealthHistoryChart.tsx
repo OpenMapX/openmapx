@@ -171,12 +171,12 @@ export function HealthHistoryChart({ integrationId }: HealthHistoryChartProps) {
               <Line
                 type="monotone"
                 dataKey="uptimePercent"
-                stroke="var(--omx-teal, #1A73E8)"
+                stroke="var(--omx-brand, #1A73E8)"
                 strokeWidth={2}
                 dot={false}
                 activeDot={{
                   r: 4,
-                  fill: "var(--omx-teal, #1A73E8)",
+                  fill: "var(--omx-brand, #1A73E8)",
                   stroke: "#fff",
                   strokeWidth: 2,
                 }}

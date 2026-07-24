@@ -72,7 +72,7 @@ import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { attributionsForProviders } from "@/lib/attributionForProviders";
 import { buildEvDirectionsRequest } from "@/lib/buildEvDirectionsRequest";
 import { shareCurrentUrl } from "@/lib/deepLink";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 
@@ -795,7 +795,7 @@ export function DirectionsPanelContent() {
               variant="body2"
               onClick={handleOptimize}
               sx={{
-                color: TEAL,
+                color: BRAND,
                 cursor: "pointer",
                 fontWeight: 500,
                 display: "inline-flex",
@@ -804,13 +804,13 @@ export function DirectionsPanelContent() {
                 px: 1.5,
                 py: 0.5,
                 borderRadius: 99,
-                "&:hover": { bgcolor: `${TEAL}18` },
+                "&:hover": { bgcolor: `${BRAND}18` },
                 transition: "background-color 0.15s",
               }}
             >
               {optimizeMutation.isPending ? (
                 <>
-                  <CircularProgress size={14} sx={{ color: TEAL }} />
+                  <CircularProgress size={14} sx={{ color: BRAND }} />
                   {t("optimizing")}
                 </>
               ) : (
@@ -845,20 +845,20 @@ export function DirectionsPanelContent() {
                   px: 1.75,
                   py: 0.75,
                   borderRadius: "12px",
-                  bgcolor: activeTimeMode !== "now" ? `${TEAL}18` : "action.hover",
+                  bgcolor: activeTimeMode !== "now" ? `${BRAND}18` : "action.hover",
                   cursor: "pointer",
                   "&:hover": {
-                    bgcolor: activeTimeMode !== "now" ? `${TEAL}28` : "action.selected",
+                    bgcolor: activeTimeMode !== "now" ? `${BRAND}28` : "action.selected",
                   },
                   transition: "background-color 0.15s",
                 }}
               >
                 <ScheduleIcon
-                  sx={{ fontSize: 18, color: activeTimeMode !== "now" ? TEAL : "text.primary" }}
+                  sx={{ fontSize: 18, color: activeTimeMode !== "now" ? BRAND : "text.primary" }}
                 />
                 <Typography
                   variant="body2"
-                  color={activeTimeMode !== "now" ? TEAL : "text.primary"}
+                  color={activeTimeMode !== "now" ? BRAND : "text.primary"}
                   sx={{
                     fontWeight: 500,
                   }}
@@ -870,7 +870,7 @@ export function DirectionsPanelContent() {
                       : `${t("arriveBy")} ${activeTimeValue ? fmt.time(activeTimeValue) : ""}`}
                 </Typography>
                 <ExpandMoreIcon
-                  sx={{ fontSize: 18, color: activeTimeMode !== "now" ? TEAL : "text.primary" }}
+                  sx={{ fontSize: 18, color: activeTimeMode !== "now" ? BRAND : "text.primary" }}
                 />
               </Box>
             )}
@@ -878,13 +878,13 @@ export function DirectionsPanelContent() {
             <Typography
               variant="body2"
               sx={{
-                color: showOptions ? TEAL : "text.secondary",
+                color: showOptions ? BRAND : "text.secondary",
                 cursor: "pointer",
                 fontWeight: 500,
                 px: 1.5,
                 py: 0.75,
                 borderRadius: 99,
-                "&:hover": { bgcolor: `${TEAL}18`, color: TEAL },
+                "&:hover": { bgcolor: `${BRAND}18`, color: BRAND },
                 transition: "background-color 0.15s, color 0.15s",
               }}
               onClick={() => setShowOptions((v) => !v)}
@@ -929,7 +929,7 @@ export function DirectionsPanelContent() {
                 gap: 0.75,
                 border: 0,
                 bgcolor: "transparent",
-                color: TEAL,
+                color: BRAND,
                 cursor: "pointer",
                 fontWeight: 500,
                 fontFamily: "inherit",
@@ -937,7 +937,7 @@ export function DirectionsPanelContent() {
                 px: 1,
                 py: 0.5,
                 borderRadius: 99,
-                "&:hover": { bgcolor: `${TEAL}18` },
+                "&:hover": { bgcolor: `${BRAND}18` },
                 transition: "background-color 0.15s",
               }}
             >
@@ -971,7 +971,7 @@ export function DirectionsPanelContent() {
             <EvVehiclePanel />
             {!evVehicleId ? null : evLoading ? (
               <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-                <CircularProgress size={28} sx={{ color: TEAL }} />
+                <CircularProgress size={28} sx={{ color: BRAND }} />
               </Box>
             ) : evIsError ? (
               <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
@@ -989,7 +989,7 @@ export function DirectionsPanelContent() {
         ) : isTransitMode ? (
           transitLoading ? (
             <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-              <CircularProgress size={28} sx={{ color: TEAL }} />
+              <CircularProgress size={28} sx={{ color: BRAND }} />
             </Box>
           ) : transitError ? (
             <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
@@ -1075,7 +1075,7 @@ export function DirectionsPanelContent() {
           )
         ) : isLoading ? (
           <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-            <CircularProgress size={28} sx={{ color: TEAL }} />
+            <CircularProgress size={28} sx={{ color: BRAND }} />
           </Box>
         ) : isError ? (
           <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
@@ -1097,7 +1097,7 @@ export function DirectionsPanelContent() {
                   px: 2,
                   py: 1.5,
                   cursor: "pointer",
-                  borderLeft: `4px solid ${TEAL}`,
+                  borderLeft: `4px solid ${BRAND}`,
                   bgcolor: "rgba(0,123,139,0.04)",
                   "&:hover": { bgcolor: "rgba(0,123,139,0.07)" },
                 }}
@@ -1159,13 +1159,13 @@ export function DirectionsPanelContent() {
                     component="span"
                     variant="caption"
                     sx={{
-                      color: TEAL,
+                      color: BRAND,
                       cursor: "pointer",
                       fontWeight: 500,
                       px: 1.5,
                       py: 0.75,
                       borderRadius: 99,
-                      "&:hover": { bgcolor: `${TEAL}18` },
+                      "&:hover": { bgcolor: `${BRAND}18` },
                       transition: "background-color 0.15s",
                     }}
                     onClick={(e) => {

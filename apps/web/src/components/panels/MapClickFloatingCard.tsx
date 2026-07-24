@@ -20,7 +20,7 @@ import {
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useMap } from "@/lib/MapContext";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 export function MapClickFloatingCard() {
   const tc = useTranslations("common");
@@ -119,7 +119,7 @@ export function MapClickFloatingCard() {
             type="button"
             onClick={handleCoordClick}
             sx={{
-              color: TEAL,
+              color: BRAND,
               fontWeight: 500,
               fontSize: 12,
               cursor: "pointer",
@@ -137,12 +137,12 @@ export function MapClickFloatingCard() {
             onClick={handleDirections}
             aria-label={tp("directions")}
             sx={{
-              bgcolor: TEAL,
+              bgcolor: BRAND,
               color: "white",
               width: 32,
               height: 32,
               borderRadius: "50%",
-              "&:hover": { bgcolor: "var(--omx-teal-hover)" },
+              "&:hover": { bgcolor: "var(--omx-brand-hover)" },
             }}
           >
             <DirectionsIcon sx={{ fontSize: 18 }} />

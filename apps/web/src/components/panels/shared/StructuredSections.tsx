@@ -20,7 +20,7 @@ import { type PricingPlanEntry, proxyImageUrl, safeHref } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { type ReactNode, useState } from "react";
 import { HlsVideo } from "@/components/ui/HlsVideo";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 
 export interface StructuredSection {
@@ -559,7 +559,7 @@ function StructuredSectionCard({
         <Box sx={{ display: "flex", gap: 2, alignItems: "center", minWidth: 0, flex: 1 }}>
           <Box
             sx={{
-              color: TEAL,
+              color: BRAND,
               flexShrink: 0,
               display: "flex",
               justifyContent: "center",

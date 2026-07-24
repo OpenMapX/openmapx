@@ -84,7 +84,7 @@ function LogLine({ entry }: { entry: AppLogEntry }) {
       <Typography
         component="span"
         sx={{
-          color: "#4db6ac",
+          color: "#81C784",
           fontSize: 11,
           flexShrink: 0,
           width: 140,

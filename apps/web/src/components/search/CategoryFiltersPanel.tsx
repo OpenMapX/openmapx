@@ -12,7 +12,7 @@ import Typography from "@mui/material/Typography";
 import type { CategoryFacet } from "@openmapx/core";
 import { useCategoryFacetStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { TEAL } from "@/lib/theme";
+import { BRAND } from "@/lib/theme";
 
 function prettifyCuisine(value: string): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -60,7 +60,7 @@ export function CategoryFiltersPanel({ anchorEl, onClose, facets, cuisineOptions
           checked={(selections[facet.id]?.length ?? 0) > 0}
           onChange={() => toggleFacet(facet.id)}
           size="small"
-          sx={{ color: TEAL, "&.Mui-checked": { color: TEAL }, py: 0.5 }}
+          sx={{ color: BRAND, "&.Mui-checked": { color: BRAND }, py: 0.5 }}
         />
       }
       label={<Typography variant="body2">{t(facet.id)}</Typography>}
@@ -117,10 +117,10 @@ export function CategoryFiltersPanel({ anchorEl, onClose, facets, cuisineOptions
                       variant={selected ? "filled" : "outlined"}
                       sx={{
                         fontSize: 12,
-                        bgcolor: selected ? TEAL : "transparent",
+                        bgcolor: selected ? BRAND : "transparent",
                         color: selected ? "#fff" : "text.primary",
-                        borderColor: selected ? TEAL : "var(--omx-border)",
-                        "&&:hover": { bgcolor: selected ? "var(--omx-teal-hover)" : "grey.200" },
+                        borderColor: selected ? BRAND : "var(--omx-border)",
+                        "&&:hover": { bgcolor: selected ? "var(--omx-brand-hover)" : "grey.200" },
                       }}
                     />
                   );
@@ -144,7 +144,7 @@ export function CategoryFiltersPanel({ anchorEl, onClose, facets, cuisineOptions
             variant="text"
             size="small"
             onClick={onClose}
-            sx={{ textTransform: "none", color: TEAL, fontWeight: 600 }}
+            sx={{ textTransform: "none", color: BRAND, fontWeight: 600 }}
           >
             {tc("done")}
           </Button>
