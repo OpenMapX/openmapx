@@ -46,7 +46,19 @@ export function LayerSelector() {
   const activeBaseOption =
     BASE_LAYER_OPTIONS.find((option) => option.id === activeLayer) ?? BASE_LAYER_OPTIONS[0];
 
+  const clearDesktopCloseTimer = () => {
+    if (closeTimerRef.current === undefined) return;
+    window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = undefined;
+  };
+
   const handleOpen = (event: MouseEvent<HTMLElement>) => {
+    // The "Map Details" panel supersedes the quick selector — collapse it right
+    // away. It is usually opened from the quick selector's own "More" tile, so
+    // neither the mouse-leave nor the blur heuristic below fires on its own
+    // (the pointer stays on the tile, and the popover keeps focus where it is).
+    clearDesktopCloseTimer();
+    setDesktopExpanded(false);
     if (desktopDock && desktopAnchorRef.current) {
       setAnchorEl(desktopAnchorRef.current);
       return;
@@ -59,13 +71,11 @@ export function LayerSelector() {
     setDesktopExpanded(false);
   };
 
-  const clearDesktopCloseTimer = () => {
-    if (closeTimerRef.current === undefined) return;
-    window.clearTimeout(closeTimerRef.current);
-    closeTimerRef.current = undefined;
-  };
-
   const openDesktopSelector = () => {
+    // Hovering or focusing the dock must not bring the quick selector back
+    // underneath an open panel — the popover has no backdrop on desktop, so
+    // pointer events still reach the dock behind it.
+    if (anchorEl) return;
     clearDesktopCloseTimer();
     setDesktopExpanded(true);
   };
@@ -92,14 +102,18 @@ export function LayerSelector() {
   }, []);
 
   // Allow the command palette (and other callers) to open the layer selector
-  // programmatically by dispatching `LAYER_SELECTOR_OPEN_EVENT`. We only
-  // open the full "Map Details" popover — not the desktop quick-selector dock
-  // (which would otherwise show simultaneously).
+  // programmatically by dispatching `LAYER_SELECTOR_OPEN_EVENT`. We only open
+  // the full "Map Details" popover, collapsing the desktop quick-selector dock
+  // if it happened to be expanded (both showing at once is never wanted).
   useEffect(() => {
     const onOpen = () => {
-      if (desktopAnchorRef.current) {
-        setAnchorEl(desktopAnchorRef.current);
+      if (!desktopAnchorRef.current) return;
+      if (closeTimerRef.current !== undefined) {
+        window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = undefined;
       }
+      setDesktopExpanded(false);
+      setAnchorEl(desktopAnchorRef.current);
     };
     window.addEventListener(LAYER_SELECTOR_OPEN_EVENT, onOpen);
     return () => window.removeEventListener(LAYER_SELECTOR_OPEN_EVENT, onOpen);
