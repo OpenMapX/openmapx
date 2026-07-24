@@ -1,6 +1,6 @@
 "use client";
 
-import { useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
+import { formatDuration, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -57,6 +57,8 @@ const POPUP_SPEC: PopupCardSpec = {
     // free-text description — many feeds don't put it in the text). Pre-formatted
     // into `validity` at click time.
     { field: "validity", labelKey: "panel.validity", variant: "row" },
+    // Pre-formatted "+X min" delay (Verlustzeit); set at click time when >= 60 s.
+    { field: "delayText", labelKey: "panel.delay", variant: "row" },
     { field: "description", labelKey: "panel.description", variant: "block" },
   ],
 };
@@ -211,6 +213,9 @@ function buildSources(features: RawFeature[]): { markers: GeoJsonData; lines: Ge
         props.schedule = JSON.stringify(p.schedule);
       }
       if (p.description) props.description = String(p.description);
+      // Carry the raw delay (Verlustzeit) through; formatted to "+X min" at click
+      // time (popupCard has no generic duration formatter).
+      if (typeof p.delaySeconds === "number") props.delaySeconds = p.delaySeconds;
       // Flatten affected-road refs into a compact label for the popup row.
       if (Array.isArray(p.roads) && p.roads.length > 0) {
         const names = (p.roads as Array<{ name?: unknown; ref?: unknown }>)
@@ -450,7 +455,16 @@ export function RoadConditionsLayer() {
           dtfRef.current.dateTime,
           dtfRef.current.date,
         );
-        entries.push(validity ? { ...p, validity } : p);
+        const delaySeconds = Number(p.delaySeconds);
+        const delayText =
+          Number.isFinite(delaySeconds) && delaySeconds >= 60
+            ? `+${formatDuration(delaySeconds)}`
+            : undefined;
+        entries.push({
+          ...p,
+          ...(validity ? { validity } : {}),
+          ...(delayText ? { delayText } : {}),
+        });
       }
       entries.sort((a, b) => (Number(b._sev) || 0) - (Number(a._sev) || 0));
 

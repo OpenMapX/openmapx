@@ -52,6 +52,20 @@ describe("projectEventsToRoute", () => {
     expect(out[0]?.alongMeters).toBeLessThan(3900);
   });
 
+  it("carries the event's delaySeconds onto the projected alert", () => {
+    const out = projectEventsToRoute(
+      [
+        ev("d", "high", { type: "Point", coordinates: [13.05, 52.00008] }, "accident", {
+          delaySeconds: 900,
+        }),
+      ],
+      route,
+      0,
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]?.delaySeconds).toBe(900);
+  });
+
   it("drops incidents off the corridor", () => {
     const out = projectEventsToRoute(
       [ev("b", "high", { type: "Point", coordinates: [13.05, 52.02] })], // ~2.2 km off

@@ -38,6 +38,7 @@ function featureToEvent(feature: RoadConditionFeature): RoadConditionEvent | nul
     geometry: feature.geometry,
     headline: str(p.headline) ?? "",
     description: str(p.description),
+    ...(typeof p.delaySeconds === "number" ? { delaySeconds: p.delaySeconds } : {}),
     roadState: p.roadState as RoadConditionEvent["roadState"],
     roads: (p.roads as RoadConditionEvent["roads"]) ?? undefined,
     validFrom: (p.validFrom as string | null) ?? null,

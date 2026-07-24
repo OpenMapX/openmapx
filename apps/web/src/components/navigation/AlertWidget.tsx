@@ -7,6 +7,7 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import type { ActiveAlert, IncidentAlert, RoadAlertType } from "@openmapx/core";
 import {
+  formatDuration,
   formatIncidentAnnouncement,
   formatMeasurementDistance,
   useNavigationStore,
@@ -53,7 +54,12 @@ export function AlertWidget({ alert }: { alert: ActiveAlert }) {
   const type = alert.alert.type;
   const Icon = ICON[type];
   const incident = type === "traffic_incident" ? (alert.alert as IncidentAlert) : null;
-  const label = incident ? t(`incidentType.${incident.eventType}`) : t(LABEL_KEY[type]);
+  const baseLabel = incident ? t(`incidentType.${incident.eventType}`) : t(LABEL_KEY[type]);
+  const delayText =
+    incident && typeof incident.delaySeconds === "number" && incident.delaySeconds >= 60
+      ? `+${formatDuration(incident.delaySeconds)}`
+      : null;
+  const label = delayText ? `${baseLabel} · ${delayText}` : baseLabel;
   const distanceText = formatMeasurementDistance(alert.distanceMeters, units);
   const announceText = incident ? formatIncidentAnnouncement(incident, distanceText, t) : label;
 

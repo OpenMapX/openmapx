@@ -35,6 +35,7 @@ export function eventsToFeatureCollection(
         severity: e.severity,
         headline: e.headline,
         description: e.description ?? null,
+        delaySeconds: e.delaySeconds ?? null,
         roadState: e.roadState ?? null,
         roads: e.roads ?? null,
         validFrom: e.validFrom ?? null,

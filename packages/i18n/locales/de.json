@@ -353,6 +353,7 @@
       "roadState": "Status",
       "roads": "Betroffene Straßen",
       "validity": "Aktiv",
+      "delay": "Verzögerung",
       "description": "Details",
       "conditionsHere": "{count, plural, one {# Meldung hier} other {# Meldungen hier}}"
     }

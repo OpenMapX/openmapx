@@ -50,6 +50,24 @@ describe("fetchRoadConditions", () => {
     });
   });
 
+  it("reads a numeric delaySeconds off the feature into the event", async () => {
+    vi.spyOn(apiClient, "get").mockResolvedValue({
+      features: [
+        {
+          geometry: { type: "Point", coordinates: [5, 52] },
+          properties: { id: "d:1", delaySeconds: 1500 },
+        },
+        {
+          geometry: { type: "Point", coordinates: [5, 52] },
+          properties: { id: "d:2", delaySeconds: null },
+        },
+      ],
+    } as never);
+    const out = await fetchRoadConditions([0, 0, 1, 1]);
+    expect(out.find((e) => e.id === "d:1")?.delaySeconds).toBe(1500);
+    expect(out.find((e) => e.id === "d:2")?.delaySeconds).toBeUndefined();
+  });
+
   it("drops features without an id or geometry", async () => {
     vi.spyOn(apiClient, "get").mockResolvedValue({
       features: [

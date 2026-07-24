@@ -353,6 +353,7 @@
       "roadState": "Status",
       "roads": "Roads affected",
       "validity": "Active",
+      "delay": "Delay",
       "description": "Details",
       "conditionsHere": "{count, plural, one {# condition here} other {# conditions here}}"
     }
