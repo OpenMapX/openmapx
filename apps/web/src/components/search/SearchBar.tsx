@@ -824,6 +824,10 @@ export function SearchBar() {
   };
 
   const handleSubmit = (e: React.FormEvent) => {
+    // AuthDialog is portaled from the mobile account avatar inside this form.
+    // React portal events follow the component tree, so its inner form's submit
+    // reaches this handler unless we limit search handling to this form itself.
+    if (e.target !== e.currentTarget) return;
     e.preventDefault();
     if (nearbyMode) {
       inputRef.current?.blur();
@@ -1261,7 +1265,6 @@ export function SearchBar() {
                   </IconButton>
                 </Tooltip>
               ))}
-
             {/* Account avatar — inline in the search bar on mobile.
               The desktop equivalent is a separate floating control
               rendered by TopRightControls. Hidden when the search

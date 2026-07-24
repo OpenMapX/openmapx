@@ -38,9 +38,18 @@ vi.mock("@/lib/MapContext", () => ({
   }),
 }));
 
-vi.mock("@/components/auth/AccountAvatarButton", () => ({
-  AccountAvatarButton: () => null,
-}));
+vi.mock("@/components/auth/AccountAvatarButton", async () => {
+  const { createPortal } = await import("react-dom");
+  return {
+    AccountAvatarButton: () =>
+      createPortal(
+        <form onSubmit={(e) => e.preventDefault()}>
+          <button type="submit">complete auth</button>
+        </form>,
+        document.body,
+      ),
+  };
+});
 
 const launchExploreFromPlace = vi.fn();
 const launchExploreTextSearch = vi.fn();
@@ -86,6 +95,17 @@ describe("SearchBar", () => {
   it("mounts and renders the search input", () => {
     renderBar();
     screen.getByLabelText("search.ariaLabel");
+  });
+
+  it("does not treat an auth-dialog submit as a search submit", () => {
+    renderBar();
+
+    // AuthDialog is portaled out of the search bar in the DOM, but React portal
+    // events bubble through their component ancestors. The search form must
+    // ignore a submit whose target is the dialog's inner form.
+    fireEvent.click(screen.getByRole("button", { name: "complete auth" }));
+
+    expect(useSearchStore.getState().isFocused).toBe(false);
   });
 
   it("surfaces a message when voice recognition errors instead of failing silently", async () => {
