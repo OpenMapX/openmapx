@@ -12,7 +12,7 @@ const RECT_SOURCE = "offline-areas-source";
 const RECT_FILL = "offline-areas-fill";
 const RECT_LINE = "offline-areas-line";
 // Brand color so the highlighted download extents read as "ours".
-const RECT_COLOR = "#43A047";
+const RECT_COLOR = "#207E23";
 
 function areaToFeature(area: OfflineArea): GeoJSON.Feature {
   const { west, south, east, north } = area.bbox;

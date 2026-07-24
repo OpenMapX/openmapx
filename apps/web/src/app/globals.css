@@ -3,9 +3,13 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --omx-brand: #43A047;
+  /* Landing-page brand green (#43A047) at a higher saturation and lower
+   * lightness so white-on-brand clears WCAG AA (5.2:1) and brand text on
+   * --omx-brand-light clears it too (4.6:1). Saturation rather than lightness
+   * does the work: darkening alone lands in Organic Maps' forest green. */
+  --omx-brand: #207E23;
   --omx-brand-light: #E8F5E9;
-  --omx-brand-hover: #388E3C;
+  --omx-brand-hover: #1B6A1D;
   --omx-primary-blue: #1A73E8;
   --omx-border: rgba(0, 0, 0, 0.23);
   --omx-border-light: rgba(0, 0, 0, 0.1);

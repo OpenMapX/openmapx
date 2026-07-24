@@ -38,7 +38,7 @@ export function ElevationHoverMarker() {
       el.style.width = "14px";
       el.style.height = "14px";
       el.style.borderRadius = "50%";
-      el.style.backgroundColor = "#43A047";
+      el.style.backgroundColor = "#207E23";
       el.style.border = "2px solid #fff";
       el.style.boxShadow = "0 1px 4px rgba(0,0,0,0.3)";
       el.style.pointerEvents = "none";

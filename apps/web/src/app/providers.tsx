@@ -40,7 +40,7 @@ const theme = createTheme({
   colorSchemes: {
     light: {
       palette: {
-        primary: { main: "#43A047", contrastText: "#ffffff" },
+        primary: { main: "#207E23", contrastText: "#ffffff" },
         secondary: { main: "#34A853" },
         background: { default: "#f5f5f5", paper: "#ffffff" },
         text: { primary: "#202124", secondary: "#5f6368" },

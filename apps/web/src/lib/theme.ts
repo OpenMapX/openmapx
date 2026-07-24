@@ -10,4 +10,4 @@ export const PRIMARY_BLUE = "var(--omx-primary-blue)";
 
 /** Raw hex values for contexts that don't support CSS variables (e.g. MapLibre paint). */
 export const PRIMARY_BLUE_HEX = "#1A73E8";
-export const BRAND_HEX = "#43A047";
+export const BRAND_HEX = "#207E23";
