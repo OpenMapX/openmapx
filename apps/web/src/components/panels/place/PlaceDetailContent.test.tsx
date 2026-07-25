@@ -162,17 +162,30 @@ describe("PlaceDetailContent mobile-sheet chrome bridge", () => {
     expect(within(screen.getByTestId("chrome-header")).queryByText("Test Place")).toBeNull();
   });
 
-  it("registers a pinned header once the sheet is fully expanded", () => {
+  // Expansion alone is not enough: at the top of an expanded sheet the real
+  // title is still on screen, so a pinned copy would repeat the name and its
+  // band would push the photo hero off the sheet's top edge.
+  it("does not register a pinned header while the real title is still visible", () => {
+    sentinelState.passed = false;
+    renderChrome("full", true);
+    expect(within(screen.getByTestId("chrome-header")).queryByText("Test Place")).toBeNull();
+  });
+
+  it("registers a pinned header once the real title has scrolled away", () => {
+    sentinelState.passed = true;
     renderChrome("full", true);
     expect(within(screen.getByTestId("chrome-header")).getByText("Test Place")).toBeDefined();
+    sentinelState.passed = false;
   });
 
   it("unregisters the pinned header when the sheet collapses back", () => {
+    sentinelState.passed = true;
     const { rerenderWith } = renderChrome("full", true);
     expect(within(screen.getByTestId("chrome-header")).getByText("Test Place")).toBeDefined();
 
     rerenderWith("mid", false);
     expect(within(screen.getByTestId("chrome-header")).queryByText("Test Place")).toBeNull();
+    sentinelState.passed = false;
   });
 
   it("keeps the docked footer empty while the inline chips are still visible", () => {

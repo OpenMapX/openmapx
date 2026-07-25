@@ -79,6 +79,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
   const locale = useLocale();
   const { detent, isExpanded, inSheet } = useMobileSheet();
   const { ref: chipsRef, passed: chipsScrolledAway } = useSheetSentinel();
+  const { ref: titleRef, passed: titleScrolledAway } = useSheetSentinel();
   const [tab, setTab] = useState(0);
   const [galleryOpen, setGalleryOpen] = useState(false);
   // Hero photos whose <img> failed to load — e.g. an OSM `image=` tag pointing
@@ -142,12 +143,14 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
   // on every render of this component (tab switches, query refetches, ...) —
   // a fresh JSX element identity each time would otherwise re-trigger those
   // effects and their DetailShell state updates for no visible change.
+  // Only once the real title has scrolled out of view. Keying this on
+  // expansion alone would repeat the name in a band above the still-visible
+  // title, and that band would push the photo hero down from the sheet's top
+  // edge.
+  const pinnedTitleShown = isMainView && isExpanded && titleScrolledAway;
   const headerNode = useMemo(
-    () =>
-      isMainView && isExpanded ? (
-        <CompactTitleBar placeName={place.name} onClose={onClose} />
-      ) : null,
-    [isMainView, isExpanded, place.name, onClose],
+    () => (pinnedTitleShown ? <CompactTitleBar placeName={place.name} onClose={onClose} /> : null),
+    [pinnedTitleShown, place.name, onClose],
   );
   // The inline row stays mounted when it scrolls out of the scrollport, so
   // while the docked copy is up there are two of every action in the tree.
@@ -193,7 +196,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
   // and floating it would paint the place name across the photo. No-op on
   // desktop and when no photo is showing. Must be called before any conditional
   // return — hooks rules.
-  useFloatingMobileSheetHandle(showHero && !isExpanded);
+  useFloatingMobileSheetHandle(showHero && !pinnedTitleShown);
 
   // View priority: TripDetailView > LineDetail > StopBoardView > DeparturesView > StopMode > normal
   if (activeTripDep) {
@@ -374,6 +377,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
         <Box sx={{ display: "flex", alignItems: "flex-start" }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography
+              ref={titleRef}
               variant="h6"
               gutterBottom
               noWrap={detent === "peek"}
