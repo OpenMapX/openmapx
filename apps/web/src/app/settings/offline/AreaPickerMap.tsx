@@ -5,8 +5,9 @@ import { useColorScheme } from "@mui/material/styles";
 import type { AreaGeometry } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
+import { MapCredits } from "@/components/map/MapCredits";
 import { useEnv } from "@/lib/EnvProvider";
-import { baseMapCustomAttribution, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
+import { baseMapCreditsHtml, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
 import type { OfflineAreaBbox } from "@/lib/offlineAreas";
 
 type GeoJSONSource = maplibregl.GeoJSONSource;
@@ -104,7 +105,9 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
         style: style as string | maplibregl.StyleSpecification,
         center: initialCenter,
         zoom: initialZoom,
-        attributionControl: { compact: true, customAttribution: baseMapCustomAttribution(env) },
+        // Credits render inline below via `<MapCredits>`, like the main map's
+        // footer, instead of behind MapLibre's ⓘ toggle.
+        attributionControl: false,
         canvasContextAttributes: { antialias: true },
         // Keep the picker north-up: a rotated/pitched viewport makes the
         // downloaded bounding box (always axis-aligned) confusing to reason about.
@@ -207,6 +210,7 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
           },
         }}
       />
+      <MapCredits html={baseMapCreditsHtml(env)} />
     </Box>
   );
 }

@@ -57,11 +57,13 @@ export function MapCanvas() {
 
       if (destroyed || !containerRef.current) return;
 
-      // MapLibre's built-in AttributionControl handles the bottom-right
-      // attribution strip. With the default options it auto-collapses to the
-      // ⓘ toggle on narrow viewports and expands on desktop. Per-layer
-      // attribution is contributed via the `useMapAttributions` hook (see
-      // apps/web/src/lib/useMapAttributions.ts).
+      // MapLibre's built-in AttributionControl is disabled: it collapses to a
+      // ⓘ toggle on narrow viewports and lives in its own DOM subtree, so it
+      // can't share a bar with the legal links. The credits are rendered by
+      // `<MapFooter>` instead, fed by the `useMapAttributions` hook (see
+      // apps/web/src/lib/useMapAttributions.ts) via the attribution registry.
+      // Every style we load has its source-level `attribution` stripped (see
+      // lib/map.ts), so no credit is lost by turning the control off.
       const map = new maplibregl.Map({
         container: containerRef.current,
         style: style as string | maplibregl.StyleSpecification,
@@ -69,6 +71,7 @@ export function MapCanvas() {
         zoom: initialZoom,
         bearing,
         pitch,
+        attributionControl: false,
         canvasContextAttributes: { antialias: true },
       });
 

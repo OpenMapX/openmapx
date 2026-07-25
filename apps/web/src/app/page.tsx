@@ -29,7 +29,6 @@ import { TransitItineraryLayer } from "@/components/map/layers/TransitItineraryL
 import { TransitRouteLayer } from "@/components/map/layers/TransitRouteLayer";
 import { TransitVehicleLayer } from "@/components/map/layers/TransitVehicleLayer";
 import { VehicleLiveLayer } from "@/components/map/layers/VehicleLiveLayer";
-import { MapAttributionPositioner } from "@/components/map/MapAttributionPositioner";
 import { MapCanvas } from "@/components/map/MapCanvas";
 import { MapClickHandler } from "@/components/map/MapClickHandler";
 import { MapControls } from "@/components/map/MapControls";
@@ -115,7 +114,6 @@ export default function HomePage() {
           <MapCanvas />
           <GlobeProjection />
           <BaseAttributions />
-          <MapAttributionPositioner />
           <RasterBaseLayer
             sourceId="openmapx-satellite-source"
             layerId="openmapx-satellite-layer"

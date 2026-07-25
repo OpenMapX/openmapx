@@ -3,66 +3,30 @@
 import { useLayerStore } from "@openmapx/core";
 import { render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useMapAttributionStore } from "@/lib/mapAttributionStore";
 import { BaseAttributions } from "./BaseAttributions";
 
 /**
- * Fake MapLibre map that records every source registered through the real
- * `useMapAttributions` hook. MapLibre's AttributionControl renders the
- * concatenation of each used source's `attribution` string, so asserting on the
- * strings we register here is asserting on what the control would display.
- *
- * `state`/`fakeMap` are referenced only inside the mock factories' returned
- * callbacks (called at render time), so they're safe to declare as plain module
- * consts even though Vitest hoists the `vi.mock` calls above them.
+ * `<MapFooter>` renders whatever the attribution registry holds, so asserting
+ * on the registry contents after rendering `<BaseAttributions>` is asserting on
+ * what the credits strip would display.
  */
 const state = {
-  sources: new Map<string, { attribution?: string }>(),
-  layers: new Set<string>(),
   env: { styleProvider: "openmapx" as "openmapx" | "maptiler" },
 };
-
-const fakeMap = {
-  isStyleLoaded: () => true,
-  getSource: (id: string) => state.sources.get(id),
-  addSource: (id: string, opts: { attribution?: string }) => {
-    state.sources.set(id, opts);
-  },
-  removeSource: (id: string) => {
-    state.sources.delete(id);
-  },
-  getLayer: (id: string) => state.layers.has(id),
-  addLayer: (layer: { id: string }) => {
-    state.layers.add(layer.id);
-  },
-  removeLayer: (id: string) => {
-    state.layers.delete(id);
-  },
-  on: () => {},
-  off: () => {},
-  once: () => {},
-};
-
-vi.mock("@/lib/MapContext", () => ({
-  useMap: () => ({
-    mapRef: { current: fakeMap as unknown as import("maplibre-gl").Map },
-    mapReady: true,
-    styleVersion: 0,
-  }),
-}));
 
 vi.mock("@/lib/EnvProvider", () => ({
   useEnv: () => state.env,
 }));
 
 function registeredAttributions(): string[] {
-  return [...state.sources.values()].map((s) => s.attribution ?? "");
+  return Object.values(useMapAttributionStore.getState().byLayer).flat();
 }
 
 const creditsOsm = () => registeredAttributions().some((a) => a.includes("OpenStreetMap"));
 
 beforeEach(() => {
-  state.sources.clear();
-  state.layers.clear();
+  useMapAttributionStore.setState({ byLayer: {} });
   state.env.styleProvider = "openmapx";
   useLayerStore.setState({ activeLayer: "default" });
 });

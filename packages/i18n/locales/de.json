@@ -247,7 +247,8 @@
     "legalNotice": "Impressum",
     "privacy": "Datenschutz",
     "terms": "Nutzungsbedingungen",
-    "licenses": "Lizenzen"
+    "licenses": "Lizenzen",
+    "credits": "Kartendaten"
   },
   "layers": {
     "layers": "Ebenen",

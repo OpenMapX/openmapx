@@ -5,10 +5,10 @@ import type { ClientEnv } from "./env";
 /**
  * Canonical base-map credits — the single source of truth for the OSM /
  * OpenMapTiles / MapTiler attribution shown across the app. `BaseAttributions`
- * registers these as side-channel sources on the main map's AttributionControl;
- * `baseMapCustomAttribution` (below) renders the same objects as
- * `customAttribution` HTML for the direct-style maps that don't mount
- * `BaseAttributions`. Defined once here so a credit/URL/license change can't
+ * registers these in the main map's attribution registry (rendered by
+ * `MapFooter`); `baseMapCreditsHtml` (below) renders the same objects as HTML
+ * for the embedded maps, which render them through `<MapCredits>` instead of
+ * registering them. Defined once here so a credit/URL/license change can't
  * drift between the two rendering paths.
  *
  * Publisher names are proper nouns rendered verbatim across locales (the
@@ -38,10 +38,9 @@ export const MAPTILER_ATTRIBUTION: Attribution = {
 };
 
 /**
- * Render a base-map credit as an HTML anchor for MapLibre's `customAttribution`,
- * keeping the leading "© " outside the link to match the form
- * `useMapAttributions` registers — so MapLibre's substring dedup collapses
- * identical credits regardless of which path emitted them.
+ * Render a base-map credit as an HTML anchor, keeping the leading "© " outside
+ * the link to match the form `useMapAttributions` registers — so the substring
+ * dedup collapses identical credits regardless of which path emitted them.
  */
 function creditHtml(attr: Attribution): string {
   const hasCopyright = attr.name.startsWith("© ");
@@ -106,9 +105,9 @@ export async function loadMaptilerStyle(
 }
 
 /**
- * Base-map credits as `customAttribution` HTML for a directly-loaded style on a
- * map that does NOT mount `BaseAttributions`/`useMapAttributions` — the offline
- * area picker, the offline preview, and the place mini-map. Both
+ * Base-map credits as HTML for `<MapCredits>` on an embedded map that does NOT
+ * mount `BaseAttributions`/`useMapAttributions` — the offline area picker, the
+ * offline preview, and the place / street-level mini-map. Both
  * `loadMaptilerStyle` and `loadOpenMapXStyle` blank the style's own source
  * `attribution`, so these strings are the single source of truth for credits on
  * those maps. Credits (see {@link baseMapVectorCredits}): OSM (data) +
@@ -117,7 +116,7 @@ export async function loadMaptilerStyle(
  * shared {@link OSM_ATTRIBUTION} et al. so the metadata can't drift from the
  * main map's.
  */
-export function baseMapCustomAttribution(env: ClientEnv): string[] {
+export function baseMapCreditsHtml(env: ClientEnv): string[] {
   return baseMapVectorCredits(env).map(creditHtml);
 }
 

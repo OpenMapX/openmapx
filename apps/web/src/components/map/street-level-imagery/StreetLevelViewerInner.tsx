@@ -301,7 +301,8 @@ export default function StreetLevelViewerInner() {
           sx={{
             position: "absolute",
             right: 12,
-            // Clear of the MapLibre attribution strip the minimap renders.
+            // Lifted off the bottom edge so the whole minimap — including the
+            // credits control in its corner — stays clear of the screen edge.
             bottom: 28,
             width: { xs: 132, sm: 196 },
             height: { xs: 96, sm: 132 },

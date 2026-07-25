@@ -4,8 +4,9 @@ import Box from "@mui/material/Box";
 import { useColorScheme } from "@mui/material/styles";
 import type maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
+import { MapCredits } from "@/components/map/MapCredits";
 import { useEnv } from "@/lib/EnvProvider";
-import { baseMapCustomAttribution, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
+import { baseMapCreditsHtml, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
 import type { OfflineArea, OfflineAreaBbox } from "@/lib/offlineAreas";
 
 const RECT_SOURCE = "offline-areas-source";
@@ -115,7 +116,9 @@ export function OfflineMapView({ areas, fitTo, height = 360 }: Props) {
         style: style as string | maplibregl.StyleSpecification,
         center: frame ? [(frame.west + frame.east) / 2, (frame.south + frame.north) / 2] : [0, 20],
         zoom: frame ? 6 : 1,
-        attributionControl: { compact: true, customAttribution: baseMapCustomAttribution(env) },
+        // Credits render inline below via `<MapCredits>`, like the main map's
+        // footer, instead of behind MapLibre's ⓘ toggle.
+        attributionControl: false,
         canvasContextAttributes: { antialias: true },
         // North-up only: the download rectangles are axis-aligned.
         dragRotate: false,
@@ -166,6 +169,7 @@ export function OfflineMapView({ areas, fitTo, height = 360 }: Props) {
       }}
     >
       <Box ref={containerRef} sx={{ position: "absolute", inset: 0 }} />
+      <MapCredits html={baseMapCreditsHtml(env)} />
     </Box>
   );
 }

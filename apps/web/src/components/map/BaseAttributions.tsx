@@ -15,7 +15,7 @@ import { useMapAttributions } from "@/lib/useMapAttributions";
  * raster overlay) without us having to track who-shows-what.
  *
  * The credit constants are defined once in `@/lib/map` and shared with
- * `baseMapCustomAttribution` (the offline / mini maps), so the metadata can't
+ * `baseMapCreditsHtml` (the offline / mini maps), so the metadata can't
  * drift between the two rendering paths.
  *
  * Renders no UI; the hook is the entire side-effect.

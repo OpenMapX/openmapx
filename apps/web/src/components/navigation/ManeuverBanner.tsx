@@ -35,7 +35,7 @@ interface Props {
   nextManeuver?: Maneuver;
   /**
    * Turn-lane guidance for the upcoming maneuver. When present it takes the
-   * banner's sub-row (like Google Maps), replacing the "Then …" preview.
+   * banner's sub-row, replacing the "Then …" preview.
    */
   lanes?: ManeuverLane[];
   units: "metric" | "imperial";
