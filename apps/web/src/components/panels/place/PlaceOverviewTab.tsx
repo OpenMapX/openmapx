@@ -396,7 +396,11 @@ export function PlaceOverviewTab({
           </>
         )}
 
-        <Divider sx={{ my: 1 }} />
+        {/* Only when something actually precedes the detail rows. In a sheet
+            the actions sit above the tab bar and the description moved below,
+            so the rows can start directly under the tabs — a rule there would
+            sit immediately beneath the tab strip's own edge. */}
+        {(!inSheet || isCity || savedInLists.length > 0) && <Divider sx={{ my: 1 }} />}
 
         {/* Detail rows */}
         <Box sx={{ px: 0 }}>

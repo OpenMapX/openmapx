@@ -348,7 +348,10 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
         sx={{
           px: 2,
           pt: clearSearchBar && !showHero ? { xs: 2, sm: "72px" } : 2,
-          pb: 1,
+          // In a sheet the action row is the last thing in here and brings its
+          // own padding on both sides; adding more below would leave the icons
+          // sitting closer to the title above them than to the tabs below.
+          pb: inSheet ? 0 : 1,
           position: "relative",
         }}
       >
@@ -442,7 +445,11 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
           // not announced twice. It stays mounted because the sentinel that
           // decides which copy is live observes it — intersection still works
           // on an inert node. Scrolling back up clears both together.
-          <Box ref={chipsRef} inert={dockedActionsShown}>
+          // The row's own padding is symmetric, but the labels sit in a caption
+          // line box whose leading adds empty space under the text and nothing
+          // above the icons — so equal padding reads as bottom-heavy. Nudge the
+          // box gaps apart to bring the visible gaps level.
+          <Box ref={chipsRef} inert={dockedActionsShown} sx={{ pt: 0.5, mb: -0.25 }}>
             <PlaceActionButtons place={place} />
           </Box>
         )}
