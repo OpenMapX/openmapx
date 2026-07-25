@@ -196,7 +196,6 @@
     "searchAriaLabel": "Suchen",
     "voiceSearchAriaLabel": "Per Sprache suchen",
     "voiceErrorNotAllowed": "Mikrofonzugriff ist blockiert. Erlaube ihn in den Website-Einstellungen deines Browsers und versuche es erneut.",
-    "voiceErrorMicBlocked": "Mikrofonzugriff wurde verweigert. Erlaube die Mikrofonberechtigung für diese App in den Geräteeinstellungen und versuche es erneut.",
     "voiceErrorNoMicrophone": "Es wurde kein Mikrofon gefunden.",
     "voiceErrorNetwork": "Die Sprachsuche benötigt eine Internetverbindung.",
     "voiceErrorLanguage": "Die Sprachsuche ist für diese Sprache nicht verfügbar.",

@@ -5,10 +5,8 @@ import CloseIcon from "@mui/icons-material/Close";
 import DirectionsIcon from "@mui/icons-material/Directions";
 import HighlightOffIcon from "@mui/icons-material/HighlightOff";
 import MenuIcon from "@mui/icons-material/Menu";
-import MicIcon from "@mui/icons-material/Mic";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 import SearchIcon from "@mui/icons-material/Search";
-import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
@@ -16,7 +14,6 @@ import IconButton from "@mui/material/IconButton";
 import InputBase from "@mui/material/InputBase";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
-import Snackbar from "@mui/material/Snackbar";
 import { useTheme } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
@@ -84,6 +81,7 @@ import { BRAND } from "@/lib/theme";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
 import { MobileSearchEmptyState } from "./MobileSearchEmptyState";
 import { NlpSearchCard } from "./NlpSearchCard";
+import { VoiceSearchButton } from "./VoiceSearchButton";
 
 /** Pre-parsed once at module load — the shortcut never changes, no need to
  *  re-parse it on every SearchBar render. */
@@ -153,84 +151,6 @@ const MODE_LABEL_KEYS: Record<string, string> = {
   walking: "walking",
 };
 
-interface SpeechRecognitionAlternativeLike {
-  readonly transcript: string;
-}
-interface SpeechRecognitionResultLike {
-  readonly isFinal: boolean;
-  readonly length: number;
-  readonly [index: number]: SpeechRecognitionAlternativeLike;
-}
-interface SpeechRecognitionResultListLike {
-  readonly length: number;
-  readonly [index: number]: SpeechRecognitionResultLike;
-}
-interface SpeechRecognitionEventLike {
-  readonly resultIndex: number;
-  readonly results: SpeechRecognitionResultListLike;
-}
-interface SpeechRecognitionLike {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  maxAlternatives: number;
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: { readonly error: string }) => void) | null;
-  onend: (() => void) | null;
-}
-type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
-
-/** Browser SpeechRecognition constructor, if available (incl. the webkit prefix). */
-function getSpeechRecognition(): SpeechRecognitionCtor | undefined {
-  if (typeof window === "undefined") return undefined;
-  const w = window as unknown as {
-    SpeechRecognition?: SpeechRecognitionCtor;
-    webkitSpeechRecognition?: SpeechRecognitionCtor;
-  };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition;
-}
-
-/**
- * Resolve a region-qualified BCP-47 tag for recognition. Android's speech
- * service rejects region-less tags (next-intl exposes `"en"`/`"de"`) with a
- * `language-not-supported` error, so prefer the device's own fully-qualified
- * language when it matches the app locale, then fall back to a default region.
- */
-function speechLang(locale: string): string {
-  const nav = typeof navigator !== "undefined" ? navigator.language : "";
-  if (nav.includes("-") && nav.split("-")[0].toLowerCase() === locale.toLowerCase()) {
-    return nav;
-  }
-  const fallback: Record<string, string> = { en: "en-US", de: "de-DE" };
-  return fallback[locale] ?? locale;
-}
-
-/**
- * Map a Web Speech API error code (`SpeechRecognitionErrorEvent.error`, or a
- * `start()` exception) to a translation key under the `search` namespace, so a
- * failed dictation shows an actionable message instead of failing silently.
- */
-function voiceErrorKey(code: string | undefined): string {
-  switch (code) {
-    case "not-allowed":
-    case "service-not-allowed":
-      return "voiceErrorNotAllowed";
-    case "audio-capture":
-      return "voiceErrorNoMicrophone";
-    case "network":
-      return "voiceErrorNetwork";
-    case "language-not-supported":
-      return "voiceErrorLanguage";
-    case "no-speech":
-      return "voiceErrorNoSpeech";
-    default:
-      return "voiceErrorGeneric";
-  }
-}
-
 export function SearchBar() {
   const t = useTranslations("search");
   const tModes = useTranslations("searchModes");
@@ -299,118 +219,26 @@ export function SearchBar() {
   // never per keystroke. Any edit to the query resets this (see handleChange).
   const [nlpSubmitted, setNlpSubmitted] = useState(false);
 
-  // Voice search (Web Speech API). Feature-detected — the mic button only
-  // renders when the browser exposes SpeechRecognition. Dictation fills the
-  // input and, on a final result, runs through the normal submit path.
-  // Resolved in an effect (not during render) so the first client render matches
-  // the server, which has no `window`: rendering the mic button at hydration
-  // time would otherwise diverge from the SSR markup (hydration mismatch). The
-  // button appears immediately after mount.
-  const [speechCtor, setSpeechCtor] = useState<SpeechRecognitionCtor | undefined>(undefined);
-  useEffect(() => {
-    // Updater form: the value we store IS a function (the constructor), which
-    // React would otherwise treat as a state updater and invoke (throws — the
-    // ctor needs `new`).
-    setSpeechCtor(() => getSpeechRecognition());
-  }, []);
-  const [listening, setListening] = useState(false);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  // Voice search dictation (see VoiceSearchButton) fills the input and, on a
+  // final result, runs through the normal submit path so voice and typed
+  // queries behave identically.
   const [voicePendingSubmit, setVoicePendingSubmit] = useState(false);
-  // Surfaced when dictation fails (permission blocked, no network, etc.) so the
-  // mic button reports the reason instead of silently doing nothing.
-  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const handleVoiceResult = useCallback(
+    (transcript: string, isFinal: boolean) => {
+      setNlpSubmitted(false);
+      setQuery(transcript);
+      if (isFinal) setVoicePendingSubmit(true);
+    },
+    [setQuery],
+  );
 
-  const startVoiceSearch = useCallback(() => {
-    if (!speechCtor) return;
-    setVoiceError(null);
-
-    const beginRecognition = () => {
-      recognitionRef.current?.abort();
-      const rec = new speechCtor();
-      rec.lang = speechLang(locale);
-      rec.interimResults = true;
-      rec.continuous = false;
-      rec.maxAlternatives = 1;
-      rec.onresult = (event) => {
-        let transcript = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0]?.transcript ?? "";
-        }
-        transcript = transcript.trim();
-        if (!transcript) return;
-        setNlpSubmitted(false);
-        setQuery(transcript);
-        if (event.results[event.results.length - 1]?.isFinal) setVoicePendingSubmit(true);
-      };
-      rec.onerror = (event) => {
-        setListening(false);
-        console.warn("[voice-search] recognition error:", event.error);
-        setVoiceError(t(voiceErrorKey(event.error)));
-      };
-      rec.onend = () => setListening(false);
-      recognitionRef.current = rec;
-      try {
-        rec.start();
-      } catch (err) {
-        setListening(false);
-        console.warn("[voice-search] start() threw:", err);
-        setVoiceError(t(voiceErrorKey(undefined)));
-      }
-    };
-
-    setListening(true);
-
-    // SpeechRecognition's own microphone-permission flow is broken in installed
-    // PWAs on Android: start() fails with `not-allowed` and never shows a prompt
-    // even when the app could be granted. getUserMedia *does* reliably raise the
-    // prompt (an Android system dialog for the PWA's own WebAPK) and grant mic
-    // access, so request (and immediately release) it first, then start
-    // recognition. Each failure mode maps to a distinct message so the cause is
-    // legible without a console (unreachable in a standalone PWA).
-    const media = typeof navigator !== "undefined" ? navigator.mediaDevices : undefined;
-    if (!media?.getUserMedia) {
-      // No MediaDevices API (non-secure context or an unusual PWA/WebView). Fall
-      // back to recognition directly; if it too is blocked its own onerror shows
-      // `voiceErrorNotAllowed`, distinct from the getUserMedia-denied message.
-      console.warn("[voice-search] navigator.mediaDevices.getUserMedia unavailable");
-      beginRecognition();
-      return;
-    }
-    media
-      .getUserMedia({ audio: true })
-      .then((stream) => {
-        // Release the mic immediately so recognition can capture it.
-        for (const track of stream.getTracks()) track.stop();
-        beginRecognition();
-      })
-      .catch((err: unknown) => {
-        setListening(false);
-        const name = err instanceof DOMException ? err.name : String(err);
-        console.warn("[voice-search] getUserMedia error:", name);
-        const noMic = name === "NotFoundError" || name === "DevicesNotFoundError";
-        setVoiceError(t(noMic ? "voiceErrorNoMicrophone" : "voiceErrorMicBlocked"));
-      });
-  }, [speechCtor, locale, setQuery, t]);
-
-  const toggleVoiceSearch = useCallback(() => {
-    if (listening) {
-      recognitionRef.current?.stop();
-      setListening(false);
-    } else {
-      startVoiceSearch();
-    }
-  }, [listening, startVoiceSearch]);
-
-  // Once the final transcript has flushed into the query, run the existing
-  // submit path so voice and typed queries behave identically.
+  // Once the final transcript has flushed into the query, submit — deferred to
+  // an effect so the query state has updated before `requestSubmit` reads it.
   useEffect(() => {
     if (!voicePendingSubmit) return;
     setVoicePendingSubmit(false);
     inputRef.current?.form?.requestSubmit();
   }, [voicePendingSubmit]);
-
-  // Stop recognition if the component unmounts mid-listen.
-  useEffect(() => () => recognitionRef.current?.abort(), []);
 
   // The natural-language parse is opt-out: when AI search is disabled in
   // Settings the parse never fires, so search falls back to plain autocomplete.
@@ -1175,34 +1003,7 @@ export function SearchBar() {
               }}
             />
 
-            {speechCtor && (
-              <IconButton
-                size="small"
-                onClick={toggleVoiceSearch}
-                onMouseDown={(e) => e.preventDefault()}
-                aria-label={t("voiceSearchAriaLabel")}
-              >
-                <MicIcon
-                  sx={{ fontSize: 22, color: listening ? "error.main" : "text.secondary" }}
-                />
-              </IconButton>
-            )}
-
-            <Snackbar
-              open={voiceError !== null}
-              autoHideDuration={6000}
-              onClose={() => setVoiceError(null)}
-              anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-            >
-              <Alert
-                severity="warning"
-                variant="filled"
-                onClose={() => setVoiceError(null)}
-                sx={{ width: "100%" }}
-              >
-                {voiceError}
-              </Alert>
-            </Snackbar>
+            <VoiceSearchButton onResult={handleVoiceResult} />
 
             {fullScreen && query.length > 0 ? (
               <IconButton
