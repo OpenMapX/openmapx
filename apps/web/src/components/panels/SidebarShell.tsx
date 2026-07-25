@@ -5,6 +5,7 @@ import type { SxProps, Theme } from "@mui/material/styles";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useSidebarStore } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import { lazy, type ReactNode, Suspense, useState } from "react";
 import { SidebarCollapseToggle } from "@/components/ui/SidebarCollapseToggle";
 import { PANEL_WIDTH } from "@/lib/layout";
@@ -21,16 +22,35 @@ interface SidebarShellProps {
   contentSx?: SxProps<Theme>;
   /** Mobile sheet detents for the surface rendered inside. Defaults to LIST_DETENTS. */
   detents?: DetentConfig;
+  /**
+   * A detail panel is stacked on top. Mobile shows one sheet at a time, so this
+   * one steps aside; desktop shows the rail and the detail card together and
+   * never sets it.
+   */
+  obscured?: boolean;
 }
 
-export function SidebarShell({ children, contentSx, detents = LIST_DETENTS }: SidebarShellProps) {
+export function SidebarShell({
+  children,
+  contentSx,
+  detents = LIST_DETENTS,
+  obscured,
+}: SidebarShellProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const t = useTranslations("common");
 
   if (isMobile) {
     return (
       <Suspense fallback={null}>
-        <MobileBottomSheet id="sidebar" zIndex={11} detents={detents} contentSx={contentSx}>
+        <MobileBottomSheet
+          id="sidebar"
+          zIndex={11}
+          detents={detents}
+          contentSx={contentSx}
+          obscured={obscured}
+          ariaLabel={t("resultsPanelAriaLabel")}
+        >
           {children}
         </MobileBottomSheet>
       </Suspense>

@@ -62,7 +62,14 @@ export function PanelHost() {
           nav overlay owns the screen. They restore when navigation ends. */}
       <HideDuringNavigation>
         {sidebarEntry && (
-          <SidebarShell contentSx={sidebarEntry.contentSx} detents={sidebarEntry.detents}>
+          // Both panels sit side by side on desktop, but stack as bottom sheets
+          // on mobile, where only the top one is reachable — so tell the lower
+          // one to step aside while a detail panel is open.
+          <SidebarShell
+            contentSx={sidebarEntry.contentSx}
+            detents={sidebarEntry.detents}
+            obscured={Boolean(DetailContent)}
+          >
             <Suspense fallback={null}>
               <sidebarEntry.component />
             </Suspense>

@@ -4,6 +4,7 @@ import Paper from "@mui/material/Paper";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useSidebarStore } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import { lazy, type ReactNode, Suspense, useContext, useEffect, useState } from "react";
 import { PANEL_WIDTH } from "@/lib/layout";
 import { useMobilePanelHeightTracker } from "@/lib/mobilePanelHeight";
@@ -36,11 +37,17 @@ export function useDetailChrome(header: ReactNode, footer: ReactNode) {
 export function DetailShell({ children }: { children: ReactNode }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const t = useTranslations("common");
 
   if (isMobile) {
     return (
       <Suspense fallback={null}>
-        <MobileBottomSheet id="detail" zIndex={11} detents={PLACE_DETENTS}>
+        <MobileBottomSheet
+          id="detail"
+          zIndex={11}
+          detents={PLACE_DETENTS}
+          ariaLabel={t("detailsPanelAriaLabel")}
+        >
           {children}
         </MobileBottomSheet>
       </Suspense>

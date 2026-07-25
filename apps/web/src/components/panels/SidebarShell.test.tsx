@@ -3,6 +3,8 @@ import { render, screen } from "@/test";
 
 vi.mock("@mui/material/useMediaQuery", () => ({ default: () => true }));
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
+
 vi.mock("./sheet/MobileBottomSheet", () => ({
   MobileBottomSheet: ({
     detents,

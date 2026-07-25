@@ -185,7 +185,9 @@
     "dataSources": "Data sources",
     "showMore": "+{count} more",
     "showLess": "Show less",
-    "panelAriaLabel": "Panel"
+    "panelAriaLabel": "Panel",
+    "resultsPanelAriaLabel": "Search results",
+    "detailsPanelAriaLabel": "Place details"
   },
   "search": {
     "placeholder": "Search OpenMapX",

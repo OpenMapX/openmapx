@@ -85,6 +85,19 @@ interface Props {
    * regions is currently the sheet's visible bottom edge.
    */
   disableContentSafeArea?: boolean;
+  /**
+   * Another sheet is stacked on top of this one. Mobile shows one sheet at a
+   * time, so the covered one is taken out of play entirely — hidden, untouchable,
+   * out of the tab order and the accessibility tree — while staying mounted so
+   * its scroll position and state survive the trip. Desktop shows both panels
+   * side by side and never sets this.
+   */
+  obscured?: boolean;
+  /**
+   * Accessible name for the sheet's landmark. Two sheets both announcing
+   * "Panel" tells a screen-reader user nothing about which is which.
+   */
+  ariaLabel?: string;
   /** Applied to the scrollable content, not the host. */
   contentSx?: SxProps<Theme>;
   children: ReactNode;
@@ -98,6 +111,8 @@ export function MobileBottomSheet({
   onDetentChange,
   hideHandle,
   disableContentSafeArea,
+  obscured,
+  ariaLabel,
   contentSx,
   children,
 }: Props) {
@@ -174,7 +189,7 @@ export function MobileBottomSheet({
     };
   }, [host]);
 
-  useMobilePanelFollowCap(id, midPx);
+  useMobilePanelFollowCap(id, obscured ? null : midPx);
 
   const snapTo = useCallback(
     (target: Detent, options?: { animate?: boolean }) => {
@@ -225,6 +240,12 @@ export function MobileBottomSheet({
   // to accompany that.
   useEffect(() => {
     if (!host) return;
+    // A covered sheet is not on screen, so map chrome must clear the visible
+    // one rather than whichever of the two happens to be taller.
+    if (obscured) {
+      publishMobilePanelHeight(id, null);
+      return;
+    }
     let frame = 0;
     const publish = () => {
       frame = 0;
@@ -243,7 +264,7 @@ export function MobileBottomSheet({
       if (frame) cancelAnimationFrame(frame);
       publishMobilePanelHeight(id, null);
     };
-  }, [host, id]);
+  }, [host, id, obscured]);
 
   // Resolve the mid snap to pixels for the follow cap. Snap markers are 1px
   // targets offset by `top: calc(var(--snap) - 1px)` inside the fixed host, so
@@ -354,8 +375,12 @@ export function MobileBottomSheet({
             nested-scroll
             expand-to-scroll
             role="region"
-            aria-label={t("panelAriaLabel")}
-            tabIndex={0}
+            aria-label={ariaLabel ?? t("panelAriaLabel")}
+            // `visibility: hidden` (below) already drops a covered sheet from
+            // the tab order; clearing tabIndex keeps that explicit rather than
+            // relying on it, and `inert` covers anything focusable inside.
+            tabIndex={obscured ? -1 : 0}
+            {...(obscured ? { inert: true } : {})}
             // Inline `bottom` outranks the shadow `:host` rule, so this is how
             // the host actually moves; `--sheet-max-height` is shrunk by the
             // same amount so the top edge stays on-screen.
@@ -376,6 +401,12 @@ export function MobileBottomSheet({
               SHEET_PART_STYLES(theme),
               disableContentSafeArea ? { "&::part(content)": { paddingBottom: 0 } } : {},
               hideHandle ? { "&::part(handle)": { display: "none" } } : {},
+              // Hidden rather than unmounted: the sheet keeps its scroll
+              // position and state for when the sheet above it closes, while
+              // `visibility` takes it out of paint, hit-testing, the tab order
+              // and the accessibility tree — so its handle stops showing above
+              // the visible sheet and can no longer swallow that sheet's drags.
+              obscured ? { visibility: "hidden" } : {},
             ]}
             {...(floating ? { "floating-handle": "" } : {})}
             onKeyDown={(event: ReactKeyboardEvent) => {
