@@ -44,7 +44,20 @@ export function sheetChromeVars(
  */
 export function SHEET_PART_STYLES(theme: Theme) {
   return {
-    "&::part(content)": { padding: 0, paddingBottom: "var(--omx-safe-bottom)" },
+    "&::part(content)": {
+      padding: 0,
+      paddingBottom: "var(--omx-safe-bottom)",
+      // The library reserves a permanent scrollbar gutter here
+      // (`scrollbar-gutter: stable`) while hiding the scrollbar on the host
+      // only. Where scrollbars are classic rather than overlay — a desktop
+      // window narrowed below the mobile breakpoint — that gutter is real
+      // width, and full-bleed content like the photo hero stops short of the
+      // right edge by exactly a scrollbar. Padded rows hide it; the photo does
+      // not. A zero-width scrollbar reserves a zero-width gutter, which keeps
+      // the library's no-reflow intent and matches how it treats the host.
+      scrollbarWidth: "none",
+    },
+    "&::part(content)::-webkit-scrollbar": { display: "none" },
     "&::part(footer)": { paddingBottom: "var(--omx-safe-bottom)" },
     "&::part(handle)": { width: 32, height: 4 },
     // Separates the sheet from the map behind it, matching the elevation the
