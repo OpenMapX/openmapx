@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  type MouseEvent,
   type RefCallback,
   useCallback,
   useContext,
@@ -37,6 +38,31 @@ export const MobileSheetContext = createContext<MobileSheetApi>(DESKTOP_DEFAULT)
 
 export function useMobileSheet(): MobileSheetApi {
   return useContext(MobileSheetContext);
+}
+
+/** Controls that own their own tap, so a background-tap handler must not act on them. */
+const INTERACTIVE =
+  'button, a, input, select, textarea, label, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="option"]';
+
+/**
+ * Expands a collapsed sheet when the user taps its background.
+ *
+ * Returns an onClick for a panel's outermost element. It deliberately ignores
+ * taps that started on a control: those already do something, and letting the
+ * expand run as the event bubbles would undo whatever the control just did —
+ * selecting a route collapses the sheet, and an unguarded handler would
+ * immediately re-expand it.
+ */
+export function useExpandOnBackgroundTap(): (event: MouseEvent<HTMLElement>) => void {
+  const { detent, snapTo } = useMobileSheet();
+  return useCallback(
+    (event: MouseEvent<HTMLElement>) => {
+      if (detent !== "peek") return;
+      if (event.target instanceof Element && event.target.closest(INTERACTIVE)) return;
+      snapTo("mid");
+    },
+    [detent, snapTo],
+  );
 }
 
 export function detentFromSnapEvent(detail: SnapDetail): { detent: Detent; isExpanded: boolean } {

@@ -67,6 +67,7 @@ import {
 import { TransitDetailsView } from "@/components/panels/directions/TransitDetailsView";
 import { TransitItineraryCard } from "@/components/panels/directions/TransitRouteView";
 import { WaypointList } from "@/components/panels/directions/WaypointList";
+import { useExpandOnBackgroundTap, useMobileSheet } from "@/components/panels/sheet/sheetState";
 import { AutocompleteDropdown } from "@/components/search/AutocompleteDropdown";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { attributionsForProviders } from "@/lib/attributionForProviders";
@@ -82,6 +83,8 @@ export function DirectionsPanelContent() {
   const tp = useTranslations("place");
   const locale = useLocale();
   const fmt = useDateTimeFormat();
+  const { snapTo } = useMobileSheet();
+  const expandOnBackgroundTap = useExpandOnBackgroundTap();
   const {
     waypoints,
     origin,
@@ -466,6 +469,16 @@ export function DirectionsPanelContent() {
     setTimeout(() => setFocusedField(null), 150);
   }, []);
 
+  // Expand to full so the autocomplete dropdown that opens under the focused
+  // field has room — mid only shows a couple of rows.
+  const handleWaypointFocus = useCallback(
+    (index: number) => {
+      setFocusedField(index);
+      snapTo("full");
+    },
+    [snapTo],
+  );
+
   const handleInputChange = useCallback(
     (index: number, value: string) => {
       setInputValues((prev) => {
@@ -644,7 +657,8 @@ export function DirectionsPanelContent() {
   };
 
   return (
-    <Box>
+    // Tapping the collapsed sheet's background opens it to mid.
+    <Box onClick={expandOnBackgroundTap}>
       {/* Top row: hamburger | mode buttons | close */}
       <Box
         sx={{
@@ -763,7 +777,7 @@ export function DirectionsPanelContent() {
         waypoints={waypoints}
         inputValues={inputValues}
         onInputChange={handleInputChange}
-        onFocus={setFocusedField}
+        onFocus={handleWaypointFocus}
         onBlur={handleWaypointBlur}
         onReorder={reorderWaypoints}
         onAdd={handleAdd}
@@ -1023,7 +1037,10 @@ export function DirectionsPanelContent() {
                     active={i === activeItineraryIndex}
                     isLowestCo2={lowestCo2Grams !== null && itin.co2Grams === lowestCo2Grams}
                     replanOptions={transitReplanOptions}
-                    onSelect={() => setActiveItineraryIndex(i)}
+                    onSelect={() => {
+                      setActiveItineraryIndex(i);
+                      snapTo("peek");
+                    }}
                     onDetails={() => setTransitDetailsIndex(i)}
                     onRefreshed={(updated, changed, fallbackOccurred) => {
                       const current = useDirectionsStore.getState().transitItineraries;
@@ -1193,7 +1210,10 @@ export function DirectionsPanelContent() {
                   route={route}
                   index={i}
                   active={i === activeRouteIndex}
-                  onSelect={() => setActiveRouteIndex(i)}
+                  onSelect={() => {
+                    setActiveRouteIndex(i);
+                    snapTo("peek");
+                  }}
                   onDetails={() => setDetailsRouteIndex(i)}
                   units={units}
                   alternatives={data.routes.filter((_, idx) => idx !== i)}

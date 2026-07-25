@@ -159,20 +159,38 @@ export function MobileBottomSheet({
   useEffect(() => {
     if (!peekEl || !host || !defined) return;
     const headerEl = host.shadowRoot?.querySelector(".sheet-header") ?? null;
-    // A panel marks the subtree it wants visible when collapsed. Without that
-    // marker the whole panel is measured, which the clamp then folds onto the
-    // middle detent — leaving the sheet with two reachable positions instead of
+    // A panel marks the subtree it wants visible when collapsed. Resolve that
+    // marker on every measurement rather than capturing it once: a panel swaps
+    // its subtree as data loads, and an observer left watching the detached
+    // original freezes peek at whatever was measured mid-load.
+    //
+    // A panel with no marker keeps the configured peek height. Measuring the
+    // whole panel instead would exceed the middle detent, and the clamp would
+    // then fold peek onto it — two reachable positions where there should be
     // three.
-    const subtree = peekEl.querySelector<HTMLElement>("[data-omx-peek]") ?? peekEl;
+    const ro = new ResizeObserver(() => measure());
     const measure = () => {
+      const subtree = peekEl.querySelector<HTMLElement>("[data-omx-peek]");
+      if (!subtree) {
+        setPeekPx(null);
+        return;
+      }
+      ro.observe(subtree);
       const header = headerEl ? headerEl.getBoundingClientRect().height : 0;
       const next = Math.round(subtree.getBoundingClientRect().height + header);
       setPeekPx((prev) => (prev != null && Math.abs(prev - next) < 4 ? prev : next));
     };
-    const ro = new ResizeObserver(measure);
-    ro.observe(subtree);
+    // The container catches the reflow when children are added or removed; the
+    // mutation observer catches a marker that moves to a different element.
+    ro.observe(peekEl);
     if (headerEl) ro.observe(headerEl);
-    return () => ro.disconnect();
+    const mo = new MutationObserver(() => measure());
+    mo.observe(peekEl, { childList: true, subtree: true });
+    measure();
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+    };
   }, [peekEl, host, defined]);
 
   useEffect(() => {

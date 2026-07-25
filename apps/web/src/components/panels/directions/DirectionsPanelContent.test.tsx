@@ -30,6 +30,7 @@ vi.mock("@/components/panels/directions/TransitRouteView", () => ({
 }));
 
 import { useDirectionsStore, useMapStore, useSidebarStore } from "@openmapx/core";
+import { MobileSheetContext } from "@/components/panels/sheet/sheetState";
 import { DirectionsPanelContent } from "./DirectionsPanelContent";
 
 /** Last positional call arg of a mocked hook, typed for the fields under test.
@@ -303,5 +304,62 @@ describe("DirectionsPanelContent", () => {
       "Munich",
     ]);
     expect(screen.queryByText("directions.addStop")).toBeNull();
+  });
+
+  describe("mobile sheet interactions", () => {
+    // Wraps the panel with a peek-state MobileSheetContext and a spy snapTo,
+    // the way the real MobileBottomSheet does once collapsed.
+    function renderAtPeek() {
+      const snapTo = vi.fn();
+      const Wrapper = createQueryWrapper();
+      const { container } = render(
+        <Wrapper>
+          <MobileSheetContext.Provider value={{ detent: "peek", isExpanded: false, snapTo }}>
+            <DirectionsPanelContent />
+          </MobileSheetContext.Provider>
+        </Wrapper>,
+      );
+      return { snapTo, container };
+    }
+
+    it("tapping the collapsed panel's background expands the sheet to mid", () => {
+      const { snapTo, container } = renderAtPeek();
+      fireEvent.click(container.firstElementChild as Element);
+      expect(snapTo).toHaveBeenCalledWith("mid");
+    });
+
+    // A control already does something; expanding as the event bubbles would
+    // undo it — selecting a route collapses the sheet, and an unguarded handler
+    // would immediately re-expand it.
+    it("tapping a control inside the collapsed panel does not expand the sheet", () => {
+      const { snapTo } = renderAtPeek();
+      fireEvent.click(screen.getByLabelText("directions.menu"));
+      expect(snapTo).not.toHaveBeenCalledWith("mid");
+    });
+
+    it("focusing a waypoint field expands the sheet to full", () => {
+      const { snapTo } = renderAtPeek();
+      fireEvent.focus(screen.getByPlaceholderText("directions.chooseOrigin"));
+      expect(snapTo).toHaveBeenCalledWith("full");
+    });
+
+    it("selecting a route collapses the sheet to peek", () => {
+      seedOriginDestination();
+      useDirectionsMock.mockReturnValue({
+        data: {
+          provider: "osrm",
+          routes: [
+            { mode: "driving", duration: 600, distance: 5000, legs: [] },
+            { mode: "driving", duration: 700, distance: 5200, legs: [] },
+          ],
+        },
+        isLoading: false,
+        isError: false,
+      });
+      const { snapTo } = renderAtPeek();
+
+      fireEvent.click(screen.getAllByText("directions.bestRoute")[1]);
+      expect(snapTo).toHaveBeenCalledWith("peek");
+    });
   });
 });

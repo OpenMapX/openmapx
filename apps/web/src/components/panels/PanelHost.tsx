@@ -62,7 +62,7 @@ export function PanelHost() {
           nav overlay owns the screen. They restore when navigation ends. */}
       <HideDuringNavigation>
         {sidebarEntry && (
-          <SidebarShell contentSx={sidebarEntry.contentSx}>
+          <SidebarShell contentSx={sidebarEntry.contentSx} detents={sidebarEntry.detents}>
             <Suspense fallback={null}>
               <sidebarEntry.component />
             </Suspense>

@@ -25,6 +25,7 @@ import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit
 import type maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
+import { useExpandOnBackgroundTap } from "@/components/panels/sheet/sheetState";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { ResultItemName, ResultList, ResultListItem } from "@/components/ui/ResultListItem";
 import { useMap } from "@/lib/MapContext";
@@ -188,6 +189,7 @@ export function CategoryResultsContent() {
   const isViewportText = mode === "text" && anchor === null;
   const { setSelectedPlace } = usePlaceStore();
   const { flyTo, mapRef, mapReady } = useMap();
+  const expandOnBackgroundTap = useExpandOnBackgroundTap();
 
   const { filtered, isLoading, isError, error, partial, relaxed, isTransitCategory } =
     useExploreReachResults();
@@ -269,7 +271,12 @@ export function CategoryResultsContent() {
   };
 
   return (
-    <Box sx={{ flex: 1, overflowY: "auto", pt: { xs: 2, sm: "72px" } }}>
+    // Tapping the collapsed sheet opens it to mid — at peek height only the
+    // top of the results list is visible, so any tap should reveal the rest.
+    <Box
+      onClick={expandOnBackgroundTap}
+      sx={{ flex: 1, overflowY: "auto", pt: { xs: 2, sm: "72px" } }}
+    >
       {(anchor || activeCategory || isViewportText) && (
         <Box
           sx={{

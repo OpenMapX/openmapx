@@ -57,7 +57,6 @@ import { BRAND } from "@/lib/theme";
 import { useOpeningHoursText } from "@/lib/useOpeningHoursText";
 import { PlaceTransitSection } from "../transit/PlaceTransitSection";
 import { DataSourceSections } from "./DataSourceSections";
-import { PlaceActionButtons } from "./PlaceActionButtons";
 import { PlaceAirportInfo } from "./PlaceAirportInfo";
 import { PlaceCitySections } from "./PlaceCitySections";
 import { PlaceFoodActions } from "./PlaceFoodActions";
@@ -281,8 +280,9 @@ export function PlaceOverviewTab({
   return (
     <>
       <Box sx={{ px: 2, py: 1 }}>
-        {/* Action buttons */}
-        <PlaceActionButtons place={place} />
+        {/* Action buttons now render once in PlaceDetailContent's header, above
+            the tabs, so they stay visible across tabs and can double as the
+            mobile sheet's peek content / docked footer. */}
 
         {/* City-only sections: Quick facts, Hotels, Neighborhoods */}
         {isCity && <PlaceCitySections place={place} onNavigateToInfo={onNavigateToInfo} />}

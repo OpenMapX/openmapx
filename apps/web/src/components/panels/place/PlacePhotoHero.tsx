@@ -37,6 +37,7 @@ export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos, onPho
 
   return (
     <Box
+      data-testid="place-photo-hero"
       sx={{
         height: 220,
         position: "relative",

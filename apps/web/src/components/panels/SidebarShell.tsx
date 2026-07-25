@@ -9,7 +9,7 @@ import { lazy, type ReactNode, Suspense, useState } from "react";
 import { SidebarCollapseToggle } from "@/components/ui/SidebarCollapseToggle";
 import { PANEL_WIDTH } from "@/lib/layout";
 import { useMobilePanelHeightTracker } from "@/lib/mobilePanelHeight";
-import { LIST_DETENTS } from "./sheet/detents";
+import { type DetentConfig, LIST_DETENTS } from "./sheet/detents";
 
 const MobileBottomSheet = lazy(() =>
   import("./sheet/MobileBottomSheet").then((m) => ({ default: m.MobileBottomSheet })),
@@ -19,16 +19,18 @@ interface SidebarShellProps {
   children: ReactNode;
   /** Optional sx overrides merged onto the Paper (e.g. extra top padding). */
   contentSx?: SxProps<Theme>;
+  /** Mobile sheet detents for the surface rendered inside. Defaults to LIST_DETENTS. */
+  detents?: DetentConfig;
 }
 
-export function SidebarShell({ children, contentSx }: SidebarShellProps) {
+export function SidebarShell({ children, contentSx, detents = LIST_DETENTS }: SidebarShellProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   if (isMobile) {
     return (
       <Suspense fallback={null}>
-        <MobileBottomSheet id="sidebar" zIndex={11} detents={LIST_DETENTS} contentSx={contentSx}>
+        <MobileBottomSheet id="sidebar" zIndex={11} detents={detents} contentSx={contentSx}>
           {children}
         </MobileBottomSheet>
       </Suspense>

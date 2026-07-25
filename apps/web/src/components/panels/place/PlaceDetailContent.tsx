@@ -14,15 +14,18 @@ import { isCityOrSmaller, isLodging, usePlaceStore } from "@openmapx/core";
 import { useReviewAggregate } from "@openmapx/mangrove-react";
 import type { MergedRoute, TransportMode } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BRAND } from "@/lib/theme";
+import { useDetailChrome } from "../DetailShell";
 import { useFloatingMobileSheetHandle } from "../sheet/mobileSheetShared";
+import { useMobileSheet, useSheetSentinel } from "../sheet/sheetState";
 import { LineDetail } from "../transit/LineDetail";
 import { PlaceDeparturesView } from "../transit/PlaceDeparturesView";
 import { PlaceTransitSection } from "../transit/PlaceTransitSection";
 import { StopBoardView } from "../transit/StopBoardView";
 import { StopInfrastructureSection } from "../transit/StopInfrastructureSection";
 import { TripDetailView } from "../transit/TripDetailView";
+import { PlaceActionButtons } from "./PlaceActionButtons";
 import { PlaceHeaderWeather } from "./PlaceHeaderWeather";
 import { PlaceHotelPricesTab } from "./PlaceHotelPricesTab";
 import { PlaceInfoTab } from "./PlaceInfoTab";
@@ -39,10 +42,43 @@ interface Props {
   clearSearchBar?: boolean;
 }
 
+// Pinned mobile-sheet header shown once the sheet is fully expanded. Only the
+// place name and close affordance travel up here — Directions/Save/Share stay
+// reachable through the inline chips (or the docked action bar once those
+// scroll away), so the pinned bar doesn't need to duplicate them.
+function CompactTitleBar({ placeName, onClose }: { placeName: string; onClose?: () => void }) {
+  const tc = useTranslations("common");
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 1.5 }}>
+      <Typography variant="subtitle1" noWrap sx={{ flex: 1, fontWeight: 600 }}>
+        {placeName}
+      </Typography>
+      {onClose && (
+        <IconButton onClick={onClose} aria-label={tc("close")} size="small">
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      )}
+    </Box>
+  );
+}
+
+// Docked mobile-sheet footer shown once the inline action row has scrolled
+// out of view at full expansion, so Directions/Save/Nearby/Share stay one tap
+// away without scrolling back up.
+function DockedActionBar({ place }: { place: Place }) {
+  return (
+    <Box sx={{ display: "flex", gap: 1, overflowX: "auto", pt: 1 }}>
+      <PlaceActionButtons place={place} />
+    </Box>
+  );
+}
+
 export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar = false }: Props) {
   const t = useTranslations("place");
   const tc = useTranslations("common");
   const locale = useLocale();
+  const { detent, isExpanded } = useMobileSheet();
+  const { ref: chipsRef, passed: chipsScrolledAway } = useSheetSentinel();
   const [tab, setTab] = useState(0);
   const [galleryOpen, setGalleryOpen] = useState(false);
   // Hero photos whose <img> failed to load — e.g. an OSM `image=` tag pointing
@@ -96,6 +132,29 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
   // The transit section still shows up as part of the overview tab.
   const isAirportEntity = place.airport !== undefined || place.osmTags?.aeroway === "aerodrome";
   const isStopMode = place.rawCategory === "transit_stop" && !isAirportEntity;
+  // The pinned header / docked footer only apply to the default place view —
+  // the transit sub-views and stop mode render their own minimal headers and
+  // have no action row to dock.
+  const isMainView =
+    !activeTripDep && !selectedRoute && !activeStopBoard && !showDepartures && !isStopMode;
+  // Memoized so setHeader/setFooter (registered by useDetailChrome below) only
+  // re-fire when something the chrome actually renders has changed, instead of
+  // on every render of this component (tab switches, query refetches, ...) —
+  // a fresh JSX element identity each time would otherwise re-trigger those
+  // effects and their DetailShell state updates for no visible change.
+  const headerNode = useMemo(
+    () =>
+      isMainView && isExpanded ? (
+        <CompactTitleBar placeName={place.name} onClose={onClose} />
+      ) : null,
+    [isMainView, isExpanded, place.name, onClose],
+  );
+  const footerNode = useMemo(
+    () =>
+      isMainView && isExpanded && chipsScrolledAway ? <DockedActionBar place={place} /> : null,
+    [isMainView, isExpanded, chipsScrolledAway, place],
+  );
+  useDetailChrome(headerNode, footerNode);
   const [lng, lat] = place.coordinates;
   const headerAggregateQuery = useReviewAggregate<ReviewAggregate>(lat, lng, place.name, {
     osmId: place.ids?.osm,
@@ -118,11 +177,18 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
     viableHeroPhotos.length > 0 &&
     (viableHeroPhotos[0].url.startsWith("https://") ||
       viableHeroPhotos[0].url.startsWith("http://"));
+  // The hero is suppressed at peek (below) so the collapsed sheet shows the
+  // marked [data-omx-peek] subtree — title + chips — instead of a cropped
+  // slice of a 220px-tall photo sitting above it and uncounted toward the
+  // collapsed height. Everything that depends on whether the hero is
+  // actually on screen (the floating drag handle, the peek box's own close
+  // button, its top padding) keys off this rather than `hasPhoto` alone.
+  const showHero = hasPhoto && detent !== "peek";
   // When a photo hero is rendered as the first child, let the mobile sheet's
   // drag pill float over it so the image reaches the rounded sheet corners.
-  // No-op on desktop and when no photo is available. Must be called before
-  // any conditional return — hooks rules.
-  useFloatingMobileSheetHandle(hasPhoto);
+  // No-op on desktop and when no photo is showing. Must be called before any
+  // conditional return — hooks rules.
+  useFloatingMobileSheetHandle(showHero);
 
   // View priority: TripDetailView > LineDetail > StopBoardView > DeparturesView > StopMode > normal
   if (activeTripDep) {
@@ -236,8 +302,12 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
 
   return (
     <>
-      {/* Header photo with "View photos" */}
-      {hasPhoto ? (
+      {/* Header photo with "View photos" — hidden at peek so the collapsed
+          sheet shows the marked [data-omx-peek] subtree (title + chips)
+          instead of a cropped slice of the photo. The photo sits ABOVE that
+          subtree, so anything rendered here at peek would occupy the visible
+          collapsed window without being counted in its measured height. */}
+      {showHero ? (
         <PlacePhotoHero
           photos={viableHeroPhotos}
           placeName={place.name}
@@ -261,17 +331,21 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
         lat={place.coordinates[1]}
         lng={place.coordinates[0]}
       />
-      {/* Name / rating / category */}
+      {/* Name / rating / category / actions — marked data-omx-peek: this is
+          exactly what stays visible when the mobile sheet is collapsed to
+          peek, so keep it tight. The rating/category rows drop out at peek
+          (below) to keep that collapsed height small. */}
       <Box
+        data-omx-peek
         sx={{
           px: 2,
-          pt: clearSearchBar && !hasPhoto ? { xs: 2, sm: "72px" } : 2,
+          pt: clearSearchBar && !showHero ? { xs: 2, sm: "72px" } : 2,
           pb: 1,
           position: "relative",
         }}
       >
-        {/* Close button when there is no photo */}
-        {onClose && !hasPhoto && (
+        {/* Close button when the hero isn't showing (no photo, or hidden at peek) */}
+        {onClose && !showHero && (
           <IconButton
             onClick={onClose}
             aria-label={tc("close")}
@@ -297,6 +371,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
             <Typography
               variant="h6"
               gutterBottom
+              noWrap
               sx={{
                 fontWeight: 600,
                 pr: onClose && !showHeaderWeather ? 4 : 0,
@@ -304,42 +379,55 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
             >
               {place.name}
             </Typography>
-            {headerReviewStats && (
-              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.75 }}>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    fontWeight: 600,
-                  }}
-                >
-                  {headerReviewStats.rating.toFixed(1)}
-                </Typography>
-                <StarIcon sx={{ fontSize: 16, color: "#FBBC04" }} />
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: "text.secondary",
-                  }}
-                >
-                  ({headerReviewStats.count.toLocaleString(locale)})
-                </Typography>
+            {detent !== "peek" && (
+              <Box data-testid="place-meta-rows">
+                {headerReviewStats && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.75 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontWeight: 600,
+                      }}
+                    >
+                      {headerReviewStats.rating.toFixed(1)}
+                    </Typography>
+                    <StarIcon sx={{ fontSize: 16, color: "#FBBC04" }} />
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: "text.secondary",
+                      }}
+                    >
+                      ({headerReviewStats.count.toLocaleString(locale)})
+                    </Typography>
+                  </Box>
+                )}
+                {place.category && (
+                  <Chip
+                    label={place.category.toLowerCase() === "poi" ? "POI" : place.category}
+                    size="small"
+                    sx={{ borderRadius: "4px", fontSize: 12 }}
+                  />
+                )}
               </Box>
-            )}
-            {place.category && (
-              <Chip
-                label={place.category.toLowerCase() === "poi" ? "POI" : place.category}
-                size="small"
-                sx={{ borderRadius: "4px", fontSize: 12 }}
-              />
             )}
           </Box>
           {showHeaderWeather && (
-            // Shift down past the absolute close button when there is no photo
-            // hero, so the weather icon never sits under it.
-            <Box sx={{ mt: onClose && !hasPhoto ? 4 : 0 }}>
+            // Shift down past the absolute close button when the hero isn't
+            // showing, so the weather icon never sits under it.
+            <Box sx={{ mt: onClose && !showHero ? 4 : 0 }}>
               <PlaceHeaderWeather lat={place.coordinates[1]} lng={place.coordinates[0]} />
             </Box>
           )}
+        </Box>
+
+        {/* Inline action row — moved here from the Overview tab so it's
+            visible regardless of which tab is active and so it can sit
+            inside the peek-collapsed subtree above. useSheetSentinel reports
+            once this has scrolled out of view at full expansion, which is
+            when the docked footer (DockedActionBar) takes over. */}
+        <Box ref={chipsRef}>
+          <PlaceActionButtons place={place} />
         </Box>
       </Box>
       {/* Tabs */}
