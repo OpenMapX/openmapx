@@ -106,6 +106,7 @@
     "delayMinutes": "+{minutes} min",
     "overview": "Route overview",
     "moreOptions": "More options",
+    "resizePanel": "Resize navigation panel",
     "menu": {
       "directions": "Directions",
       "showTraffic": "Show traffic",

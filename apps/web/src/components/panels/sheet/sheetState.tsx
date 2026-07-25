@@ -9,7 +9,7 @@ import {
   useEffect,
   useState,
 } from "react";
-import { type Detent, detentFromSnapIndex } from "./detents";
+import { type Detent, type DetentConfig, detentFromSnapIndex } from "./detents";
 
 export interface SnapDetail {
   sheetState: "collapsed" | "partially-expanded" | "expanded";
@@ -72,9 +72,12 @@ export function useExpandOnBackgroundTap(): (event: MouseEvent<HTMLElement>) => 
   );
 }
 
-export function detentFromSnapEvent(detail: SnapDetail): { detent: Detent; isExpanded: boolean } {
+export function detentFromSnapEvent(
+  detail: SnapDetail,
+  config: DetentConfig,
+): { detent: Detent; isExpanded: boolean } {
   return {
-    detent: detentFromSnapIndex(detail.snapIndex),
+    detent: detentFromSnapIndex(detail.snapIndex, config),
     isExpanded: detail.sheetState === "expanded",
   };
 }

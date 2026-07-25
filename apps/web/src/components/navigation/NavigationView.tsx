@@ -23,6 +23,7 @@ import { useEffect, useState } from "react";
 import { NavigationSettingsDialog } from "@/components/settings/NavigationSettingsDialog";
 import { NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
 import { useMapOptional } from "@/lib/MapContext";
+import { useMobilePanelClearance } from "@/lib/mobilePanelHeight";
 import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
 import { useNavAlerts } from "@/lib/navigation/useNavAlerts";
 import { useNavCamera } from "@/lib/navigation/useNavCamera";
@@ -75,6 +76,19 @@ export function NavigationView() {
   useEffect(() => {
     if (rerouteFailedNonce > 0) setRerouteToastOpen(true);
   }, [rerouteFailedNonce]);
+
+  // The mobile sheet is a fixed-position host (it lives above the map, not in
+  // this column's flow), so nothing here reserves space for it any more —
+  // lift the speed limit badge by its live height, the same way MapControls
+  // and LegendHost lift the map's own bottom-anchored chrome.
+  const [vh, setVh] = useState(0);
+  useEffect(() => {
+    const update = () => setVh(window.innerHeight);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  const sheetClearance = useMobilePanelClearance(vh);
 
   if (!active) return null;
 
@@ -258,7 +272,18 @@ export function NavigationView() {
             }}
           >
             {currentSpeedLimit !== null && (
-              <Box sx={{ pointerEvents: "auto", alignSelf: "flex-start", pl: 2, pb: 1 }}>
+              <Box
+                sx={{
+                  pointerEvents: "auto",
+                  alignSelf: "flex-start",
+                  pl: 2,
+                  pb: 1,
+                  // Lifts the badge above the fixed-position mobile sheet;
+                  // inert on desktop, where the panel stays in-flow below it
+                  // and the sheet (so this clearance) never mounts.
+                  mb: isMobile && sheetClearance > 0 ? `${sheetClearance}px` : 0,
+                }}
+              >
                 <SpeedLimitBadge
                   speedLimit={currentSpeedLimit}
                   units={units}

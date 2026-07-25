@@ -1,5 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { detentIndex } from "@/components/panels/sheet/detents";
 import {
   publishMobilePanelHeight,
   useMobilePanelClearance,
@@ -173,5 +174,30 @@ describe("mobilePanelHeight clearance", () => {
     expect(clearance.result.current).toBe(900);
 
     act(() => publishMobilePanelHeight("nav-sheet", null));
+  });
+
+  // MobileBottomSheet derives its follow cap from `detentIndex(detents).mid` —
+  // undefined for a two-snap config (the navigation sheet has no mid, only
+  // peek and full) — and only registers a cap when that index resolves to a
+  // marker. A two-snap surface must therefore publish no cap at all and let
+  // the default viewport-fraction fallback apply, the same as a panel that
+  // never calls useMobilePanelFollowCap in the first place.
+  it("registers no follow cap for a two-snap config (no mid detent)", () => {
+    const twoSnap = { peek: "96px", maxHeight: "480px", initial: "peek" as const };
+    expect(detentIndex(twoSnap).mid).toBeUndefined();
+
+    const clearance = renderHook(() => useMobilePanelClearance(1000));
+    const cap = renderHook(() =>
+      useMobilePanelFollowCap("nav-sheet", detentIndex(twoSnap).mid ?? null),
+    );
+    act(() => publishMobilePanelHeight("nav-sheet", 900));
+
+    // No cap registered for "nav-sheet" -> falls back to the default fraction,
+    // exactly like the "before layout reports a height" case above rather than
+    // clamping to a (nonexistent) mid marker.
+    expect(clearance.result.current).toBe(650);
+
+    act(() => publishMobilePanelHeight("nav-sheet", null));
+    cap.unmount();
   });
 });

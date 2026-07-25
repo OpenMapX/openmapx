@@ -106,6 +106,7 @@
     "delayMinutes": "+{minutes} Min.",
     "overview": "Routenübersicht",
     "moreOptions": "Weitere Optionen",
+    "resizePanel": "Navigationsbereich anpassen",
     "menu": {
       "directions": "Wegbeschreibung",
       "showTraffic": "Verkehr anzeigen",

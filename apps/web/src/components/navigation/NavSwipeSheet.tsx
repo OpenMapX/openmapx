@@ -1,29 +1,40 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import Paper from "@mui/material/Paper";
-import { motion, type PanInfo } from "framer-motion";
-import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useMobilePanelHeightTracker } from "@/lib/mobilePanelHeight";
+import { useTranslations } from "next-intl";
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { DetentConfig } from "@/components/panels/sheet/detents";
+import { MobileBottomSheet } from "@/components/panels/sheet/MobileBottomSheet";
 
 // Cap the expanded sheet so the maneuver banner up top stays visible.
 const MAX_HEIGHT_FRACTION = 0.9;
-// |velocity.y| above which a flick decides the snap regardless of position.
-const FLICK_VELOCITY = 500;
-const SNAP_MS = 260;
-const SNAP_EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
 
 /**
  * The navigation sheet: a bottom-anchored card with a pinned header (the summary
- * bar) that swipes up to reveal the menu below it. Two snap states — collapsed
- * (just the header) and expanded (header + menu) — measured from content so the
- * collapsed state is exactly the summary bar. Controlled: `expanded` reflects the
- * menu state so a menu row (or the resize) can collapse it, and a drag reports
- * back through `onExpandedChange`.
+ * bar) that swipes up to reveal the menu below it. A thin adapter over the
+ * shared mobile bottom sheet, configured with a two-snap detent (no mid) so the
+ * two rest positions are exactly the header and the header-plus-menu, rather
+ * than viewport fractions like every other sheet in the app. Controlled:
+ * `expanded` drives which of the two snaps the sheet rests at, and a drag or a
+ * tap on the handle reports back through `onExpandedChange`.
  *
- * `box-sizing: content-box` + `paddingBottom` keeps the safe-area strip below the
- * content: the JS height is content-only, so a collapsed sheet still lifts the
- * header above the home indicator, and expanded has no gap before the menu.
+ * The header and menu are measured with a `ResizeObserver` and fed to the
+ * shared sheet as pixel peek/max-height detents, rather than using its
+ * `content-height` mode — that mode is mutually exclusive with the
+ * `nested-scroll` + `expand-to-scroll` mode this sheet (like every other one)
+ * runs in. The measurement is seeded synchronously in a layout effect, so the
+ * first paint already has the right numbers instead of momentarily collapsing
+ * to a 0px sheet.
+ *
+ * Safe-area handling is a dedicated spacer that swaps position instead of
+ * padding baked onto either measured box: it sits right after the header while
+ * collapsed (so the summary bar lifts above the home indicator with nothing
+ * else visible below it) and right after the menu while expanded (matching the
+ * generic sheet's convention of landing the inset once, after the content).
+ * Moving it keeps `headerPx`/`menuPx` themselves invariant across `expanded`
+ * toggling — the inset is composed into the detent lengths as a CSS `calc()`
+ * against `--omx-safe-bottom` instead, so there is nothing to re-measure or
+ * resnap to when the swap happens.
  */
 export function NavSwipeSheet({
   expanded,
@@ -36,102 +47,87 @@ export function NavSwipeSheet({
   header: ReactNode;
   children: ReactNode;
 }) {
-  const paperRef = useRef<HTMLDivElement | null>(null);
-  const topRef = useRef<HTMLDivElement | null>(null); // handle + header (collapsed height)
-  const fullRef = useRef<HTMLDivElement | null>(null); // handle + header + menu (expanded height)
-  const dragStartRef = useRef(0);
+  const t = useTranslations("navigation");
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [headerPx, setHeaderPx] = useState(0);
+  const [menuPx, setMenuPx] = useState(0);
+  // Starts at 0, matching the server render, and is filled in by the mount
+  // effect below. Reading window.innerHeight up front (even as a lazy useState
+  // initializer) would make the client's first render diverge from the
+  // server-rendered markup and trip a hydration mismatch.
+  const [viewportH, setViewportH] = useState(0);
 
-  // Publish the sheet's live height (collapsed, mid-drag, or expanded) through
-  // the shared mobile-panel registry, so bottom-anchored map chrome (the map
-  // controls, the legend stack) sits flush above the sheet's real top edge
-  // instead of guessing a clearance. State-backed alongside the imperative ref
-  // so the tracker's effect re-runs on attach/detach.
-  const [paperEl, setPaperEl] = useState<HTMLDivElement | null>(null);
-  const attachPaper = useCallback((el: HTMLDivElement | null) => {
-    paperRef.current = el;
-    setPaperEl(el);
-  }, []);
-  useMobilePanelHeightTracker("nav-sheet", paperEl);
-
-  const collapsedH = useCallback(() => topRef.current?.offsetHeight ?? 0, []);
-  const expandedH = useCallback(
-    () => Math.min(fullRef.current?.offsetHeight ?? 0, window.innerHeight * MAX_HEIGHT_FRACTION),
-    [],
-  );
-
-  const applyHeight = useCallback((px: number, animate: boolean) => {
-    const el = paperRef.current;
-    if (!el) return;
-    el.style.transition = animate ? `height ${SNAP_MS}ms ${SNAP_EASE}` : "none";
-    el.style.height = `${px}px`;
-  }, []);
-
-  // Reflect the controlled state (and keep it right across content/viewport
-  // changes). Layout effect so the first paint is already at the right height.
+  // Layout effects so the first paint already has the right numbers: an
+  // ordinary effect only fills these in after the browser has already painted
+  // a 0px sheet, and the library's own IntersectionObserver bails on a
+  // zero-height host (`if (!entries[0]?.rootBounds?.height) return`), so no
+  // snap state would exist until a second pass.
   useLayoutEffect(() => {
-    applyHeight(expanded ? expandedH() : collapsedH(), false);
-  }, [expanded, applyHeight, expandedH, collapsedH]);
+    const el = headerRef.current;
+    if (!el) return;
+    setHeaderPx(el.offsetHeight);
+    const ro = new ResizeObserver(() => setHeaderPx(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    setMenuPx(el.offsetHeight);
+    const ro = new ResizeObserver(() => setMenuPx(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
-    const onResize = () => applyHeight(expanded ? expandedH() : collapsedH(), false);
+    const onResize = () => setViewportH(window.innerHeight);
+    onResize();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [expanded, applyHeight, expandedH, collapsedH]);
+  }, []);
 
-  const onPanStart = () => {
-    dragStartRef.current = paperRef.current?.offsetHeight ?? collapsedH();
-    if (paperRef.current) paperRef.current.style.transition = "none";
-  };
-  const onPan = (_: PointerEvent, info: PanInfo) => {
-    const next = Math.max(
-      collapsedH(),
-      Math.min(expandedH(), dragStartRef.current - info.offset.y),
-    );
-    if (paperRef.current) paperRef.current.style.height = `${next}px`;
-  };
-  const onPanEnd = (_: PointerEvent, info: PanInfo) => {
-    const h = paperRef.current?.offsetHeight ?? collapsedH();
-    let next = h >= (collapsedH() + expandedH()) / 2;
-    if (info.velocity.y < -FLICK_VELOCITY) next = true;
-    else if (info.velocity.y > FLICK_VELOCITY) next = false;
-    applyHeight(next ? expandedH() : collapsedH(), true);
-    onExpandedChange(next);
-  };
+  // `headerPx` and `menuPx` are pure content measurements — no safe-area inset
+  // baked in — so this stays invariant across `expanded` toggling too.
+  const cap = viewportH > 0 ? viewportH * MAX_HEIGHT_FRACTION : headerPx + menuPx;
+  const expandedContentPx = Math.min(headerPx + menuPx, cap);
+
+  // No mid: the shared sheet then falls back to the default follow-cap
+  // fraction for the map chrome above it, instead of tracking this sheet.
+  const detents = useMemo<DetentConfig>(
+    () => ({
+      peek: `calc(${Math.round(headerPx)}px + var(--omx-safe-bottom))`,
+      maxHeight: `calc(${Math.round(expandedContentPx)}px + var(--omx-safe-bottom))`,
+      initial: "peek",
+    }),
+    [headerPx, expandedContentPx],
+  );
 
   return (
-    <Paper
-      ref={attachPaper}
-      elevation={6}
-      sx={(theme) => ({
-        pointerEvents: "auto",
-        width: "100%",
-        boxSizing: "content-box",
-        paddingBottom: "var(--omx-safe-bottom)",
-        overflow: "hidden",
-        borderRadius: "16px 16px 0 0",
-        boxShadow: 6,
-        ...theme.applyStyles("dark", { bgcolor: "background.default" }),
-      })}
+    <MobileBottomSheet
+      id="nav-sheet"
+      zIndex={1}
+      detents={detents}
+      detent={expanded ? "full" : "peek"}
+      onDetentChange={(next) => onExpandedChange(next === "full")}
+      hideHandle
+      disableContentSafeArea
     >
-      <Box ref={fullRef}>
-        <Box ref={topRef}>
-          <motion.div
-            onPanStart={onPanStart}
-            onPan={onPan}
-            onPanEnd={onPanEnd}
-            onClick={() => onExpandedChange(!expanded)}
-            style={{ touchAction: "none", cursor: "grab" }}
-            aria-label="Resize navigation panel"
-            role="separator"
-          >
-            <Box sx={{ display: "flex", justifyContent: "center", pt: 1, pb: 0.5 }}>
-              <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: "action.disabled" }} />
-            </Box>
-          </motion.div>
-          {header}
+      <Box ref={headerRef}>
+        <Box
+          onClick={() => onExpandedChange(!expanded)}
+          aria-label={t("resizePanel")}
+          role="separator"
+          sx={{ display: "flex", justifyContent: "center", pt: 1, pb: 0.5 }}
+        >
+          <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: "action.disabled" }} />
         </Box>
-        {children}
+        {header}
       </Box>
-    </Paper>
+      {!expanded && <Box sx={{ height: "var(--omx-safe-bottom)" }} />}
+      <Box ref={menuRef}>{children}</Box>
+      {expanded && <Box sx={{ height: "var(--omx-safe-bottom)" }} />}
+    </MobileBottomSheet>
   );
 }

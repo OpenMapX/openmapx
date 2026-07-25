@@ -19,7 +19,7 @@ import { haptics } from "@/lib/haptics";
 import { publishMobilePanelHeight, useMobilePanelFollowCap } from "@/lib/mobilePanelHeight";
 import { useVisualViewport } from "@/lib/useVisualViewport";
 import { SHEET_PART_STYLES, sheetChromeVars } from "./chrome";
-import { DETENT_INDEX, type Detent, type DetentConfig, snapSlots } from "./detents";
+import { type Detent, type DetentConfig, detentIndex, snapSlots } from "./detents";
 import { DetailChromeContext, FloatingHandleContext } from "./mobileSheetShared";
 import { visibleSheetHeight } from "./sheetMetrics";
 import {
@@ -29,20 +29,21 @@ import {
   type SnapDetail,
 } from "./sheetState";
 
-const KEYBOARD_STEP_ORDER: Detent[] = ["peek", "mid", "full"];
-
 /**
  * Resizing the sheet from the keyboard. The handle lives in the shadow root
  * and cannot take our handlers, so this binds to the host — which is also the
  * scroll container, so arrow keys already move the sheet natively; this makes
- * the movement land on detents.
+ * the movement land on detents. Steps straight from peek to full when the
+ * config has no mid detent.
  */
-export function keyboardDetent(key: string, current: Detent): Detent | null {
+export function keyboardDetent(key: string, current: Detent, config: DetentConfig): Detent | null {
   if (key === "Home") return current === "peek" ? null : "peek";
   if (key === "End") return current === "full" ? null : "full";
   const step = key === "ArrowUp" ? 1 : key === "ArrowDown" ? -1 : 0;
   if (step === 0) return null;
-  return KEYBOARD_STEP_ORDER[KEYBOARD_STEP_ORDER.indexOf(current) + step] ?? null;
+  const order: Detent[] = config.mid != null ? ["peek", "mid", "full"] : ["peek", "full"];
+  const next = order[order.indexOf(current) + step];
+  return next ?? null;
 }
 
 /**
@@ -60,12 +61,46 @@ interface Props {
   id: string;
   zIndex: number;
   detents: DetentConfig;
+  /**
+   * Drives the sheet's resting detent from outside — e.g. a caller collapsing
+   * it after handling a menu action. A no-op when it already matches the
+   * sheet's current detent, so this never fights a drag or tap in progress.
+   */
+  detent?: Detent;
+  /**
+   * Fires as the resting detent changes. Not just on rest, despite the name:
+   * the library dispatches `snap-position-change` from an IntersectionObserver
+   * (`rootMargin: "100% 0px -100% 0px"`) as snap markers cross during the
+   * drag itself, so this can fire mid-gesture, before the finger lifts.
+   */
+  onDetentChange?: (detent: Detent) => void;
+  /**
+   * Hides the library's own drag-pill part, for a caller that renders its own
+   * (labeled, tappable) handle as part of `header` instead.
+   */
+  hideHandle?: boolean;
+  /**
+   * Omits the generic bottom safe-area padding from the content part, for a
+   * caller that positions its own safe-area padding depending on which of its
+   * regions is currently the sheet's visible bottom edge.
+   */
+  disableContentSafeArea?: boolean;
   /** Applied to the scrollable content, not the host. */
   contentSx?: SxProps<Theme>;
   children: ReactNode;
 }
 
-export function MobileBottomSheet({ id, zIndex, detents, contentSx, children }: Props) {
+export function MobileBottomSheet({
+  id,
+  zIndex,
+  detents,
+  detent,
+  onDetentChange,
+  hideHandle,
+  disableContentSafeArea,
+  contentSx,
+  children,
+}: Props) {
   const theme = useTheme();
   const t = useTranslations("common");
   const [host, setHost] = useState<BottomSheetElement | null>(null);
@@ -79,6 +114,12 @@ export function MobileBottomSheet({ id, zIndex, detents, contentSx, children }: 
     isExpanded: false,
   });
   const detentRef = useRef<Detent>(detents.initial);
+  // Read fresh inside the snap listener without re-subscribing it whenever
+  // the caller passes a new callback identity.
+  const onDetentChangeRef = useRef(onDetentChange);
+  useEffect(() => {
+    onDetentChangeRef.current = onDetentChange;
+  }, [onDetentChange]);
   // Registered by descendant content through useDetailChrome — the pinned
   // header / docked footer slots. Owned here (rather than by DetailShell)
   // so every surface that renders a sheet gets the bridge, not just the
@@ -136,12 +177,14 @@ export function MobileBottomSheet({ id, zIndex, detents, contentSx, children }: 
   useMobilePanelFollowCap(id, midPx);
 
   const snapTo = useCallback(
-    (detent: Detent, options?: { animate?: boolean }) => {
+    (target: Detent, options?: { animate?: boolean }) => {
+      const index = detentIndex(detents)[target];
+      if (index == null) return;
       const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       const behavior = options?.animate === false || reduced ? "auto" : "smooth";
-      host?.snapToPoint?.(DETENT_INDEX[detent], { behavior });
+      host?.snapToPoint?.(index, { behavior });
     },
-    [host],
+    [host, detents],
   );
 
   // The React wrapper only spreads props onto the custom element; it wires no
@@ -149,10 +192,11 @@ export function MobileBottomSheet({ id, zIndex, detents, contentSx, children }: 
   useEffect(() => {
     if (!host) return;
     const onSnap = (event: Event) => {
-      const next = detentFromSnapEvent((event as CustomEvent<SnapDetail>).detail);
+      const next = detentFromSnapEvent((event as CustomEvent<SnapDetail>).detail, detents);
       if (detentRef.current !== next.detent) {
         detentRef.current = next.detent;
         haptics.tap();
+        onDetentChangeRef.current?.(next.detent);
       }
       setState((prev) =>
         prev.detent === next.detent && prev.isExpanded === next.isExpanded ? prev : next,
@@ -160,10 +204,25 @@ export function MobileBottomSheet({ id, zIndex, detents, contentSx, children }: 
     };
     host.addEventListener("snap-position-change", onSnap);
     return () => host.removeEventListener("snap-position-change", onSnap);
-  }, [host]);
+  }, [host, detents]);
 
-  // The host's box never changes size, so the visible height has to be derived
-  // from its scroll offset and published directly.
+  // Controlled operation: an external change to `detent` (a caller collapsing
+  // the sheet after handling a menu action, or driving it from a boolean prop
+  // like the navigation sheet's `expanded`) snaps the host to match. Guarded
+  // against the sheet's own current detent so this never re-fires for a
+  // change that originated from the sheet itself (a drag or a tap), which
+  // would otherwise fight the gesture that's already in progress.
+  useEffect(() => {
+    if (detent == null || detent === detentRef.current) return;
+    snapTo(detent);
+  }, [detent, snapTo]);
+
+  // The visible height has to be derived from the host's scroll offset, not
+  // measured directly, so it needs republishing on scroll. It also needs
+  // republishing on resize: the host's own box is not fixed for every sheet —
+  // the navigation sheet's `--sheet-max-height` (and so `clientHeight`)
+  // changes whenever its measured content changes, with no scroll guaranteed
+  // to accompany that.
   useEffect(() => {
     if (!host) return;
     let frame = 0;
@@ -171,13 +230,16 @@ export function MobileBottomSheet({ id, zIndex, detents, contentSx, children }: 
       frame = 0;
       publishMobilePanelHeight(id, visibleSheetHeight(host));
     };
-    const onScroll = () => {
+    const onChange = () => {
       if (!frame) frame = requestAnimationFrame(publish);
     };
     publish();
-    host.addEventListener("scroll", onScroll, { passive: true });
+    host.addEventListener("scroll", onChange, { passive: true });
+    const ro = new ResizeObserver(onChange);
+    ro.observe(host);
     return () => {
-      host.removeEventListener("scroll", onScroll);
+      host.removeEventListener("scroll", onChange);
+      ro.disconnect();
       if (frame) cancelAnimationFrame(frame);
       publishMobilePanelHeight(id, null);
     };
@@ -187,17 +249,13 @@ export function MobileBottomSheet({ id, zIndex, detents, contentSx, children }: 
   // targets offset by `top: calc(var(--snap) - 1px)` inside the fixed host, so
   // offsetTop + 1 is the detent height — the same arithmetic the library does.
   // Requires `defined`: before the host upgrades, `::slotted` rules haven't
-  // applied yet and every marker sits at the same flow position. Requires
-  // `detents`: PanelHost renders SidebarShell at a fixed JSX position, so
-  // switching panels changes the `detents` prop without remounting the sheet
-  // — without this dependency the previous panel's mid marker would stay
-  // published after the switch.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: detents isn't read in the body, but its identity changing must re-run the DOM read below
+  // applied yet and every marker sits at the same flow position.
   useEffect(() => {
     if (!host || !defined) return;
     const update = () => {
+      const midIndex = detentIndex(detents).mid;
       const markers = host.querySelectorAll<HTMLElement>(':scope > [slot="snap"]');
-      const mid = markers[DETENT_INDEX.mid - 1];
+      const mid = midIndex != null ? markers[midIndex - 1] : undefined;
       setMidPx(mid ? mid.offsetTop + 1 : null);
     };
     update();
@@ -271,6 +329,7 @@ export function MobileBottomSheet({ id, zIndex, detents, contentSx, children }: 
     () => ({ detent: state.detent, isExpanded: state.isExpanded, inSheet: true, snapTo }),
     [state, snapTo],
   );
+  const maxHeight = detents.maxHeight;
 
   return (
     <DetailChromeContext.Provider value={chromeApi}>
@@ -289,15 +348,26 @@ export function MobileBottomSheet({ id, zIndex, detents, contentSx, children }: 
             // same amount so the top edge stays on-screen.
             style={
               {
-                ...sheetChromeVars(theme, detents.maxHeight, keyboardLift),
+                ...sheetChromeVars(theme, maxHeight, keyboardLift),
                 bottom: keyboardLift,
               } as CSSProperties
             }
-            sx={{ zIndex, ...SHEET_PART_STYLES(theme) }}
+            // Pointer events are deliberately left to the shadow stylesheet:
+            // the host is a full-height transparent scroll container and only
+            // the sheet inside it is hit-testable, which is what keeps the map
+            // draggable in the empty region above a collapsed sheet. Setting
+            // `pointer-events` here would win over `:host` and swallow those
+            // gestures — slotted content is already interactive without it.
+            sx={[
+              { zIndex },
+              SHEET_PART_STYLES(theme),
+              disableContentSafeArea ? { "&::part(content)": { paddingBottom: 0 } } : {},
+              hideHandle ? { "&::part(handle)": { display: "none" } } : {},
+            ]}
             {...(floating ? { "floating-handle": "" } : {})}
             onKeyDown={(event: ReactKeyboardEvent) => {
               if (!isHostKeyDown(event)) return;
-              const next = keyboardDetent(event.key, state.detent);
+              const next = keyboardDetent(event.key, state.detent, detents);
               if (!next) return;
               event.preventDefault();
               snapTo(next);
@@ -305,7 +375,12 @@ export function MobileBottomSheet({ id, zIndex, detents, contentSx, children }: 
           >
             {slots.map((slot) => (
               <div
-                key={slot.snap}
+                // Keyed by which detent this is, not by `slot.snap`: for the
+                // navigation sheet that value is the measured header height,
+                // which changes whenever the maneuver banner rewraps. Keying
+                // by value would remount the very marker the browser is
+                // snapped to mid-drive.
+                key={slot.detent}
                 slot="snap"
                 className={slot.className}
                 style={{ "--snap": slot.snap } as CSSProperties}
