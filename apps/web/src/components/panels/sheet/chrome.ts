@@ -20,19 +20,34 @@ import type { Theme } from "@mui/material/styles";
  * MobileBottomSheet; if a browser ever makes the library's mechanism resolve
  * non-zero, this one needs to come out rather than gain a sibling.
  */
-export function sheetChromeVars(
-  theme: Theme,
-  maxHeight: string,
-  keyboardInset = 0,
-): Record<string, string> {
-  const dark = theme.palette.mode === "dark";
+export function sheetChromeVars(maxHeight: string, keyboardInset = 0): Record<string, string> {
   return {
     "--sheet-max-height": keyboardInset > 0 ? `calc(${maxHeight} - ${keyboardInset}px)` : maxHeight,
     // MD3 bottom sheet: 28dp top corners (library default is 12px).
     "--sheet-border-radius": "28px",
-    // Dark mode sits on background.default so sticky children pinned to that
-    // surface stay flush, matching the desktop panels.
-    "--sheet-background": dark ? theme.palette.background.default : theme.palette.background.paper,
+  };
+}
+
+/**
+ * The sheet's surface colour.
+ *
+ * This has to go through `sx` rather than the inline properties above, because
+ * the palette slot differs per scheme and `theme.palette.mode` cannot tell us
+ * which is active: under this app's CSS-variable theme it always reads
+ * "light". `applyStyles` scopes the override to the `.dark` class instead, and
+ * `theme.vars` resolves to the custom property that flips with it — an inline
+ * value would also outrank whatever we set here.
+ *
+ * Dark deliberately takes `background.default` rather than `paper`, so sticky
+ * children pinned to that surface stay flush and the desktop detail card still
+ * reads as lifted off the rail.
+ */
+function sheetSurface(theme: Theme) {
+  const paper = theme.vars?.palette.background.paper ?? theme.palette.background.paper;
+  const base = theme.vars?.palette.background.default ?? theme.palette.background.default;
+  return {
+    "--sheet-background": paper,
+    ...theme.applyStyles("dark", { "--sheet-background": base }),
   };
 }
 
@@ -44,6 +59,7 @@ export function sheetChromeVars(
  */
 export function SHEET_PART_STYLES(theme: Theme) {
   return {
+    ...sheetSurface(theme),
     "&::part(content)": {
       padding: 0,
       paddingBottom: "var(--omx-safe-bottom)",

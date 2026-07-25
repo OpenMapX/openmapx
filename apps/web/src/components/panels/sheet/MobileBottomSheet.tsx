@@ -386,7 +386,7 @@ export function MobileBottomSheet({
             // same amount so the top edge stays on-screen.
             style={
               {
-                ...sheetChromeVars(theme, maxHeight, keyboardLift),
+                ...sheetChromeVars(maxHeight, keyboardLift),
                 bottom: keyboardLift,
               } as CSSProperties
             }
