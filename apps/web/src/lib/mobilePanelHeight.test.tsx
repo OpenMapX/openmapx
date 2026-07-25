@@ -1,6 +1,12 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useMobilePanelHeightTracker, useMobilePanelMaxHeight } from "./mobilePanelHeight";
+import {
+  publishMobilePanelHeight,
+  useMobilePanelClearance,
+  useMobilePanelFollowCap,
+  useMobilePanelHeightTracker,
+  useMobilePanelMaxHeight,
+} from "./mobilePanelHeight";
 
 // The tracker is mobile-only via useMediaQuery; the ref lets tests flip the
 // viewport without re-mocking (read lazily so hoisting is safe).
@@ -94,5 +100,79 @@ describe("mobilePanelHeight registry", () => {
     track.rerender({ el: null });
     expect(max.result.current).toBe(0);
     track.unmount();
+  });
+});
+
+describe("mobilePanelHeight direct publication", () => {
+  it("publishes a height with no element to measure", () => {
+    const max = renderHook(() => useMobilePanelMaxHeight());
+
+    act(() => publishMobilePanelHeight("detail", 420));
+    expect(max.result.current).toBe(420);
+
+    act(() => publishMobilePanelHeight("detail", 260));
+    expect(max.result.current).toBe(260);
+
+    act(() => publishMobilePanelHeight("detail", null));
+    expect(max.result.current).toBe(0);
+  });
+});
+
+describe("mobilePanelHeight clearance", () => {
+  it("clamps the tracked height to the registered cap", () => {
+    const clearance = renderHook(() => useMobilePanelClearance(1000));
+    const cap = renderHook(() => useMobilePanelFollowCap("detail", 400));
+    act(() => publishMobilePanelHeight("detail", 700));
+
+    expect(clearance.result.current).toBe(400);
+
+    act(() => publishMobilePanelHeight("detail", null));
+    cap.unmount();
+  });
+
+  it("falls back to a fraction of the viewport when no cap is registered", () => {
+    const clearance = renderHook(() => useMobilePanelClearance(1000));
+    act(() => publishMobilePanelHeight("nav-sheet", 900));
+
+    expect(clearance.result.current).toBe(650);
+
+    act(() => publishMobilePanelHeight("nav-sheet", null));
+  });
+
+  it("does not raise clearance above the panel's own height", () => {
+    const clearance = renderHook(() => useMobilePanelClearance(1000));
+    const cap = renderHook(() => useMobilePanelFollowCap("detail", 400));
+    act(() => publishMobilePanelHeight("detail", 120));
+
+    expect(clearance.result.current).toBe(120);
+
+    act(() => publishMobilePanelHeight("detail", null));
+    cap.unmount();
+  });
+
+  // With two surfaces registered at once, the tightest cap has to win — chrome
+  // that cleared only the looser one would sit behind the other panel.
+  it("applies the tightest cap when several are registered", () => {
+    const clearance = renderHook(() => useMobilePanelClearance(1000));
+    const loose = renderHook(() => useMobilePanelFollowCap("detail", 600));
+    const tight = renderHook(() => useMobilePanelFollowCap("sidebar", 300));
+    act(() => publishMobilePanelHeight("detail", 900));
+
+    expect(clearance.result.current).toBe(300);
+
+    tight.unmount();
+    expect(clearance.result.current).toBe(600);
+
+    act(() => publishMobilePanelHeight("detail", null));
+    loose.unmount();
+  });
+
+  it("ignores the viewport fallback before layout reports a height", () => {
+    const clearance = renderHook(() => useMobilePanelClearance(0));
+    act(() => publishMobilePanelHeight("nav-sheet", 900));
+
+    expect(clearance.result.current).toBe(900);
+
+    act(() => publishMobilePanelHeight("nav-sheet", null));
   });
 });

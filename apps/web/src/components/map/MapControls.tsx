@@ -15,9 +15,8 @@ import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { Suspense, useEffect, useState } from "react";
 import { useMyLocation } from "@/components/command-palette/useMyLocation";
-import { MOBILE_SHEET_FOLLOW_CAP_FRACTION } from "@/components/panels/mobileSheetShared";
 import { useMap } from "@/lib/MapContext";
-import { useMobilePanelMaxHeight } from "@/lib/mobilePanelHeight";
+import { useMobilePanelClearance } from "@/lib/mobilePanelHeight";
 import { CrowdApproachPromptLazy, ReportDialogLazy, ReportFabLazy } from "./crowdReportsLazy";
 import { Pegman } from "./Pegman";
 
@@ -43,7 +42,6 @@ export function MapControls() {
   const handleMyLocation = useMyLocation();
   const registry = useIntegrationRegistry();
   const crowdReportsEnabled = Boolean(registry.get("crowd-reports"));
-  const mobilePanelHeight = useMobilePanelMaxHeight();
   const [vh, setVh] = useState(0);
   useEffect(() => {
     const update = () => setVh(window.innerHeight);
@@ -55,8 +53,7 @@ export function MapControls() {
   // medium snap, the sheet covers the controls anyway, so freezing the offset
   // here keeps them in their last reachable position rather than scrolling
   // them off the top of the visible map area.
-  const followHeight =
-    vh > 0 ? Math.min(mobilePanelHeight, vh * MOBILE_SHEET_FOLLOW_CAP_FRACTION) : mobilePanelHeight;
+  const followHeight = useMobilePanelClearance(vh);
 
   return (
     <>

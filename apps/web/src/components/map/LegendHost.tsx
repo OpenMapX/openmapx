@@ -12,9 +12,8 @@ import {
 } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { type ComponentType, lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { MOBILE_SHEET_FOLLOW_CAP_FRACTION } from "@/components/panels/mobileSheetShared";
 import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
-import { useMobilePanelMaxHeight } from "@/lib/mobilePanelHeight";
+import { useMobilePanelClearance } from "@/lib/mobilePanelHeight";
 import { DeclarativeLegend } from "./overlay/DeclarativeLegend";
 import { useAnyOverlayPanelOpen } from "./overlay/useOverlayStoreState";
 import { dedupeSharedMapLayers } from "./sharedIntegrationLayer";
@@ -95,7 +94,6 @@ export function LegendHost() {
   // behind it — same follow logic MapControls uses. Browsing panels and the
   // navigation swipe sheet all register their live height in the same registry,
   // so there is no per-context clearance to keep in sync. 0 on desktop.
-  const mobilePanelHeight = useMobilePanelMaxHeight();
   const [vh, setVh] = useState(0);
   useEffect(() => {
     const update = () => setVh(window.innerHeight);
@@ -103,8 +101,7 @@ export function LegendHost() {
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, []);
-  const followHeight =
-    vh > 0 ? Math.min(mobilePanelHeight, vh * MOBILE_SHEET_FOLLOW_CAP_FRACTION) : mobilePanelHeight;
+  const followHeight = useMobilePanelClearance(vh);
 
   // Declarative legends (manifest `frontend.overlay.legend` data) are rendered by
   // the host; they take precedence over the code legend path.
