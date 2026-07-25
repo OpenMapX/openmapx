@@ -77,7 +77,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
   const t = useTranslations("place");
   const tc = useTranslations("common");
   const locale = useLocale();
-  const { detent, isExpanded } = useMobileSheet();
+  const { detent, isExpanded, inSheet } = useMobileSheet();
   const { ref: chipsRef, passed: chipsScrolledAway } = useSheetSentinel();
   const [tab, setTab] = useState(0);
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -184,11 +184,13 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
   // actually on screen (the floating drag handle, the peek box's own close
   // button, its top padding) keys off this rather than `hasPhoto` alone.
   const showHero = hasPhoto && detent !== "peek";
-  // When a photo hero is rendered as the first child, let the mobile sheet's
-  // drag pill float over it so the image reaches the rounded sheet corners.
-  // No-op on desktop and when no photo is showing. Must be called before any
-  // conditional return — hooks rules.
-  useFloatingMobileSheetHandle(showHero);
+  // When a photo hero is the first child, let the mobile sheet's drag pill
+  // float over it so the image reaches the rounded sheet corners. Not once the
+  // sheet is fully expanded: the pinned title bar then occupies that same band,
+  // and floating it would paint the place name across the photo. No-op on
+  // desktop and when no photo is showing. Must be called before any conditional
+  // return — hooks rules.
+  useFloatingMobileSheetHandle(showHero && !isExpanded);
 
   // View priority: TripDetailView > LineDetail > StopBoardView > DeparturesView > StopMode > normal
   if (activeTripDep) {
@@ -421,14 +423,17 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
           )}
         </Box>
 
-        {/* Inline action row — moved here from the Overview tab so it's
-            visible regardless of which tab is active and so it can sit
-            inside the peek-collapsed subtree above. useSheetSentinel reports
-            once this has scrolled out of view at full expansion, which is
-            when the docked footer (DockedActionBar) takes over. */}
-        <Box ref={chipsRef}>
-          <PlaceActionButtons place={place} />
-        </Box>
+        {/* Inline action row, sheet only. It sits above the tabs here so it
+            falls inside the peek-collapsed subtree and stays reachable
+            whichever tab is active; useSheetSentinel reports once it has
+            scrolled out of view at full expansion, which is when the docked
+            footer takes over. Outside a sheet the Overview tab keeps its own
+            copy in the original position. */}
+        {inSheet && (
+          <Box ref={chipsRef}>
+            <PlaceActionButtons place={place} />
+          </Box>
+        )}
       </Box>
       {/* Tabs */}
       <Tabs

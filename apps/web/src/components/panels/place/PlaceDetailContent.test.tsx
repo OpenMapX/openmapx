@@ -54,7 +54,7 @@ function renderAtDetent(detent: "peek" | "mid" | "full") {
   return render(
     <QueryClientProvider client={client}>
       <MobileSheetContext.Provider
-        value={{ detent, isExpanded: detent === "full", snapTo: () => {} }}
+        value={{ detent, isExpanded: detent === "full", inSheet: true, snapTo: () => {} }}
       >
         <PlaceDetailContent place={place} isLoading={false} />
       </MobileSheetContext.Provider>
@@ -91,7 +91,7 @@ function renderPhotoPlaceAtDetent(detent: "peek" | "mid" | "full") {
   return render(
     <QueryClientProvider client={client}>
       <MobileSheetContext.Provider
-        value={{ detent, isExpanded: detent === "full", snapTo: () => {} }}
+        value={{ detent, isExpanded: detent === "full", inSheet: true, snapTo: () => {} }}
       >
         <PlaceDetailContent place={placeWithPhoto} isLoading={false} />
       </MobileSheetContext.Provider>
@@ -130,7 +130,7 @@ function ChromeHarness({
   return (
     <DetailChromeContext.Provider value={{ setHeader, setFooter }}>
       <div data-testid="chrome-header">{header}</div>
-      <MobileSheetContext.Provider value={{ detent, isExpanded, snapTo: () => {} }}>
+      <MobileSheetContext.Provider value={{ detent, isExpanded, inSheet: true, snapTo: () => {} }}>
         <PlaceDetailContent place={place} isLoading={false} />
       </MobileSheetContext.Provider>
       <div data-testid="chrome-footer">{footer}</div>

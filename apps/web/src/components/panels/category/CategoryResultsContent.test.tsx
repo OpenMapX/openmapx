@@ -22,7 +22,9 @@ function renderPanel(snapTo: (detent: "peek" | "mid" | "full") => void) {
   return render(
     <Wrapper>
       <MapProvider>
-        <MobileSheetContext.Provider value={{ detent: "peek", isExpanded: false, snapTo }}>
+        <MobileSheetContext.Provider
+          value={{ detent: "peek", inSheet: true, isExpanded: false, snapTo }}
+        >
           <CategoryResultsContent />
         </MobileSheetContext.Provider>
       </MapProvider>
@@ -46,7 +48,9 @@ describe("CategoryResultsContent mobile sheet interactions", () => {
     const { container } = render(
       <Wrapper>
         <MapProvider>
-          <MobileSheetContext.Provider value={{ detent: "mid", isExpanded: true, snapTo }}>
+          <MobileSheetContext.Provider
+            value={{ detent: "mid", inSheet: true, isExpanded: true, snapTo }}
+          >
             <CategoryResultsContent />
           </MobileSheetContext.Provider>
         </MapProvider>

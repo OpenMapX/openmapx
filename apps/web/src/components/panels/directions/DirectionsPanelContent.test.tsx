@@ -314,7 +314,9 @@ describe("DirectionsPanelContent", () => {
       const Wrapper = createQueryWrapper();
       const { container } = render(
         <Wrapper>
-          <MobileSheetContext.Provider value={{ detent: "peek", isExpanded: false, snapTo }}>
+          <MobileSheetContext.Provider
+            value={{ detent: "peek", inSheet: true, isExpanded: false, snapTo }}
+          >
             <DirectionsPanelContent />
           </MobileSheetContext.Provider>
         </Wrapper>,

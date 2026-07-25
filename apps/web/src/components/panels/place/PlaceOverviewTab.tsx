@@ -55,8 +55,10 @@ import { AuthDialog } from "@/components/auth/AuthDialog";
 import { resolveListIcon } from "@/lib/listIcon";
 import { BRAND } from "@/lib/theme";
 import { useOpeningHoursText } from "@/lib/useOpeningHoursText";
+import { useMobileSheet } from "../sheet/sheetState";
 import { PlaceTransitSection } from "../transit/PlaceTransitSection";
 import { DataSourceSections } from "./DataSourceSections";
+import { PlaceActionButtons } from "./PlaceActionButtons";
 import { PlaceAirportInfo } from "./PlaceAirportInfo";
 import { PlaceCitySections } from "./PlaceCitySections";
 import { PlaceFoodActions } from "./PlaceFoodActions";
@@ -197,6 +199,7 @@ export function PlaceOverviewTab({
   const tSun = useTranslations("sunTimes");
   const tTides = useTranslations("tides");
   const tMarine = useTranslations("marineWeather");
+  const { inSheet } = useMobileSheet();
   const ohText = useOpeningHoursText();
   const isCity = isCityOrSmaller(place);
   const hours = place.openingHoursInfo?.status ?? null;
@@ -277,9 +280,46 @@ export function PlaceOverviewTab({
     toggleLabel(trimmed);
   };
 
+  // Clickable row leading to the Info tab. Suppressed for cities, where the
+  // Quick facts section already surfaces the same text.
+  const descriptionRow =
+    place.description && !isCity ? (
+      <Box
+        role="button"
+        tabIndex={0}
+        onClick={onNavigateToInfo}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onNavigateToInfo();
+          }
+        }}
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 1,
+          cursor: "pointer",
+          py: 1.5,
+          mx: -2,
+          px: 2,
+          "&:hover": { bgcolor: "action.hover" },
+        }}
+      >
+        <Typography variant="body2" sx={{ flex: 1, color: "text.primary" }}>
+          {place.description}
+        </Typography>
+        <ChevronRightIcon sx={{ fontSize: 20, color: "text.disabled", flexShrink: 0 }} />
+      </Box>
+    ) : null;
+
   return (
     <>
-      <Box sx={{ px: 2 }}>
+      <Box sx={{ px: 2, py: 1 }}>
+        {/* Outside a sheet the actions stay here, at the top of the tab. In a
+            sheet they render once above the tabs instead, where they can form
+            the collapsed peek layout. */}
+        {!inSheet && <PlaceActionButtons place={place} />}
+
         {/* City-only sections: Quick facts, Hotels, Neighborhoods */}
         {isCity && <PlaceCitySections place={place} onNavigateToInfo={onNavigateToInfo} />}
 
@@ -341,36 +381,16 @@ export function PlaceOverviewTab({
           </>
         )}
 
-        {/* Description — clickable row leading to Info tab. Suppressed for
-            cities, where the Quick facts section already surfaces it. */}
-        {place.description && !isCity && <Divider sx={{ my: 1 }} />}
-        {place.description && !isCity && (
-          <Box
-            role="button"
-            tabIndex={0}
-            onClick={onNavigateToInfo}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onNavigateToInfo();
-              }
-            }}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-              cursor: "pointer",
-              py: 1.5,
-              mx: -2,
-              px: 2,
-              "&:hover": { bgcolor: "action.hover" },
-            }}
-          >
-            <Typography variant="body2" sx={{ flex: 1, color: "text.primary" }}>
-              {place.description}
-            </Typography>
-            <ChevronRightIcon sx={{ fontSize: 20, color: "text.disabled", flexShrink: 0 }} />
-          </Box>
+        {/* Description sits above the detail rows here. In a sheet it moves
+            below them instead — with the actions above the tabs, leading with
+            a paragraph pushes the address and phone too far down. Rendered in
+            exactly one of the two places, so the dividers stay paired with
+            whichever block actually follows. */}
+        {descriptionRow && !inSheet && (
+          <>
+            <Divider sx={{ my: 1 }} />
+            {descriptionRow}
+          </>
         )}
 
         <Divider sx={{ my: 1 }} />
@@ -749,6 +769,13 @@ export function PlaceOverviewTab({
             </ExpandableDetailRow>
           )}
         </Box>
+
+        {descriptionRow && inSheet && (
+          <>
+            <Divider sx={{ my: 1 }} />
+            {descriptionRow}
+          </>
+        )}
       </Box>
       {/* Add label dialog */}
       <Dialog

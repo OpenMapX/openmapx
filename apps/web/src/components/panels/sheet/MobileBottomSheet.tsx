@@ -268,7 +268,7 @@ export function MobileBottomSheet({ id, zIndex, detents, contentSx, children }: 
 
   const slots = useMemo(() => snapSlots(detents, peekPx), [detents, peekPx]);
   const api = useMemo<MobileSheetApi>(
-    () => ({ detent: state.detent, isExpanded: state.isExpanded, snapTo }),
+    () => ({ detent: state.detent, isExpanded: state.isExpanded, inSheet: true, snapTo }),
     [state, snapTo],
   );
 

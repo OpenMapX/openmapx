@@ -20,6 +20,12 @@ export interface MobileSheetApi {
   detent: Detent;
   /** True once the content scroller has unlocked. */
   isExpanded: boolean;
+  /**
+   * Whether the consumer is actually inside a sheet. `detent` cannot answer
+   * this: a fully expanded sheet and the desktop panel both report "full", so
+   * a layout that should differ between the two has to key off this instead.
+   */
+  inSheet: boolean;
   snapTo(detent: Detent, options?: { animate?: boolean }): void;
 }
 
@@ -31,6 +37,7 @@ export interface MobileSheetApi {
 const DESKTOP_DEFAULT: MobileSheetApi = {
   detent: "full",
   isExpanded: true,
+  inSheet: false,
   snapTo: () => {},
 };
 
