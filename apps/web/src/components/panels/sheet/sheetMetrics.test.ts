@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { visibleSheetHeight } from "./sheetMetrics";
+import { peekContentHeight, visibleSheetHeight } from "./sheetMetrics";
 
 // The host scrolls a track whose extra scrollable length equals the sheet's
 // max height: at scrollTop 0 nothing shows, at max scroll the sheet fills the
@@ -36,5 +36,28 @@ describe("visibleSheetHeight", () => {
   it("never reports more than the host height when the track overshoots it", () => {
     expect(visibleSheetHeight({ scrollTop: 726, scrollHeight: 1448, clientHeight: 723 })).toBe(723);
     expect(visibleSheetHeight({ scrollTop: 674, scrollHeight: 1345, clientHeight: 671 })).toBe(671);
+  });
+});
+
+describe("peekContentHeight", () => {
+  // Real numbers off a place card: the marked subtree measures 162px while the
+  // sheet is open, of which a 26px meta block disappears at peek, under a 20px
+  // sticky header band. Aiming at 182 would land and then drop to 156.
+  it("discounts the parts the panel drops at peek", () => {
+    expect(peekContentHeight(162, [26], 20)).toBe(156);
+  });
+
+  // The point of the discount: the same target either way, so collapsing has
+  // nothing left to correct once it arrives.
+  it("is the same whether or not those parts are currently rendered", () => {
+    expect(peekContentHeight(162, [26], 20)).toBe(peekContentHeight(136, [], 20));
+  });
+
+  it("sums several discounted regions", () => {
+    expect(peekContentHeight(200, [10, 15, 5], 0)).toBe(170);
+  });
+
+  it("never returns a negative height", () => {
+    expect(peekContentHeight(40, [80], 0)).toBe(0);
   });
 });

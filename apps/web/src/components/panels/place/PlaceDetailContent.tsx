@@ -391,8 +391,10 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
             >
               {place.name}
             </Typography>
+            {/* data-omx-peek-hidden: these rows are gone at peek, so the sheet
+                must not count them when it works out the collapsed height. */}
             {detent !== "peek" && (
-              <Box data-testid="place-meta-rows">
+              <Box data-omx-peek-hidden data-testid="place-meta-rows">
                 {headerReviewStats && (
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.75 }}>
                     <Typography

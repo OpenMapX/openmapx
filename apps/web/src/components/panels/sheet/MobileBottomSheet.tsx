@@ -21,7 +21,7 @@ import { useVisualViewport } from "@/lib/useVisualViewport";
 import { SHEET_PART_STYLES, sheetChromeVars } from "./chrome";
 import { type Detent, type DetentConfig, detentIndex, snapSlots } from "./detents";
 import { DetailChromeContext, FloatingHandleContext } from "./mobileSheetShared";
-import { visibleSheetHeight } from "./sheetMetrics";
+import { peekContentHeight, visibleSheetHeight } from "./sheetMetrics";
 import {
   detentFromSnapEvent,
   type MobileSheetApi,
@@ -304,7 +304,20 @@ export function MobileBottomSheet({
         observedSubtree = subtree;
       }
       const header = headerEl ? headerEl.getBoundingClientRect().height : 0;
-      const next = Math.round(subtree.getBoundingClientRect().height + header);
+      // Regions the panel drops once collapsed. They are still rendered while
+      // the sheet is open, so counting them would aim the collapse at a height
+      // that ceases to exist on arrival.
+      const hidden = [...subtree.querySelectorAll<HTMLElement>("[data-omx-peek-hidden]")].map(
+        (region) => {
+          const cs = getComputedStyle(region);
+          return (
+            region.getBoundingClientRect().height +
+            (Number.parseFloat(cs.marginTop) || 0) +
+            (Number.parseFloat(cs.marginBottom) || 0)
+          );
+        },
+      );
+      const next = peekContentHeight(subtree.getBoundingClientRect().height, hidden, header);
       setPeekPx((prev) => (prev != null && Math.abs(prev - next) < 4 ? prev : next));
     };
     // The container catches the reflow when children are added or removed; the
