@@ -323,38 +323,67 @@ export function SearchBar() {
   const startVoiceSearch = useCallback(() => {
     if (!speechCtor) return;
     setVoiceError(null);
-    recognitionRef.current?.abort();
-    const rec = new speechCtor();
-    rec.lang = speechLang(locale);
-    rec.interimResults = true;
-    rec.continuous = false;
-    rec.maxAlternatives = 1;
-    rec.onresult = (event) => {
-      let transcript = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        transcript += event.results[i][0]?.transcript ?? "";
+
+    const beginRecognition = () => {
+      recognitionRef.current?.abort();
+      const rec = new speechCtor();
+      rec.lang = speechLang(locale);
+      rec.interimResults = true;
+      rec.continuous = false;
+      rec.maxAlternatives = 1;
+      rec.onresult = (event) => {
+        let transcript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0]?.transcript ?? "";
+        }
+        transcript = transcript.trim();
+        if (!transcript) return;
+        setNlpSubmitted(false);
+        setQuery(transcript);
+        if (event.results[event.results.length - 1]?.isFinal) setVoicePendingSubmit(true);
+      };
+      rec.onerror = (event) => {
+        setListening(false);
+        console.warn("[voice-search] recognition error:", event.error);
+        setVoiceError(t(voiceErrorKey(event.error)));
+      };
+      rec.onend = () => setListening(false);
+      recognitionRef.current = rec;
+      try {
+        rec.start();
+      } catch (err) {
+        setListening(false);
+        console.warn("[voice-search] start() threw:", err);
+        setVoiceError(t(voiceErrorKey(undefined)));
       }
-      transcript = transcript.trim();
-      if (!transcript) return;
-      setNlpSubmitted(false);
-      setQuery(transcript);
-      if (event.results[event.results.length - 1]?.isFinal) setVoicePendingSubmit(true);
     };
-    rec.onerror = (event) => {
-      setListening(false);
-      console.warn("[voice-search] recognition error:", event.error);
-      setVoiceError(t(voiceErrorKey(event.error)));
-    };
-    rec.onend = () => setListening(false);
-    recognitionRef.current = rec;
+
     setListening(true);
-    try {
-      rec.start();
-    } catch (err) {
-      setListening(false);
-      console.warn("[voice-search] start() threw:", err);
-      setVoiceError(t(voiceErrorKey(undefined)));
+
+    // SpeechRecognition's own microphone-permission flow is broken in installed
+    // PWAs on Android: start() fails with `not-allowed` and never shows a prompt
+    // even when the origin could be granted. getUserMedia *does* reliably raise
+    // the prompt and grant the origin mic access, so request (and immediately
+    // release) it first, then start recognition. Falls straight through where
+    // mediaDevices is unavailable (older browsers, SSR, tests).
+    const media = typeof navigator !== "undefined" ? navigator.mediaDevices : undefined;
+    if (!media?.getUserMedia) {
+      beginRecognition();
+      return;
     }
+    media
+      .getUserMedia({ audio: true })
+      .then((stream) => {
+        // Release the mic immediately so recognition can capture it.
+        for (const track of stream.getTracks()) track.stop();
+        beginRecognition();
+      })
+      .catch((err: unknown) => {
+        setListening(false);
+        const name = err instanceof DOMException ? err.name : undefined;
+        console.warn("[voice-search] mic permission error:", name);
+        setVoiceError(t(voiceErrorKey(name === "NotFoundError" ? "audio-capture" : "not-allowed")));
+      });
   }, [speechCtor, locale, setQuery, t]);
 
   const toggleVoiceSearch = useCallback(() => {

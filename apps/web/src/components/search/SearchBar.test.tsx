@@ -155,6 +155,78 @@ describe("SearchBar", () => {
     }
   });
 
+  it("requests the microphone via getUserMedia before starting recognition", async () => {
+    // SpeechRecognition's own permission flow is broken in installed PWAs; the
+    // mic is requested via getUserMedia first (which raises the prompt), then
+    // the acquired track is released so recognition can capture it.
+    const recRef: { current: { start: ReturnType<typeof vi.fn> } | null } = { current: null };
+    class FakeRecognition {
+      lang = "";
+      continuous = false;
+      interimResults = false;
+      maxAlternatives = 1;
+      onresult: ((e: unknown) => void) | null = null;
+      onerror: ((e: { error: string }) => void) | null = null;
+      onend: (() => void) | null = null;
+      start = vi.fn();
+      stop = vi.fn();
+      abort = vi.fn();
+      constructor() {
+        recRef.current = this;
+      }
+    }
+    const stopTrack = vi.fn();
+    const getUserMedia = vi.fn().mockResolvedValue({ getTracks: () => [{ stop: stopTrack }] });
+    (window as unknown as { webkitSpeechRecognition: unknown }).webkitSpeechRecognition =
+      FakeRecognition;
+    Object.defineProperty(navigator, "mediaDevices", {
+      value: { getUserMedia },
+      configurable: true,
+    });
+    try {
+      renderBar();
+      const micButton = await screen.findByLabelText("search.voiceSearchAriaLabel");
+      fireEvent.click(micButton);
+      await waitFor(() => expect(getUserMedia).toHaveBeenCalledWith({ audio: true }));
+      await waitFor(() => expect(recRef.current?.start).toHaveBeenCalled());
+      expect(stopTrack).toHaveBeenCalled();
+    } finally {
+      delete (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
+      delete (navigator as unknown as { mediaDevices?: unknown }).mediaDevices;
+    }
+  });
+
+  it("shows the blocked message when microphone permission is denied", async () => {
+    class FakeRecognition {
+      lang = "";
+      continuous = false;
+      interimResults = false;
+      maxAlternatives = 1;
+      onresult: ((e: unknown) => void) | null = null;
+      onerror: ((e: { error: string }) => void) | null = null;
+      onend: (() => void) | null = null;
+      start = vi.fn();
+      stop = vi.fn();
+      abort = vi.fn();
+    }
+    const getUserMedia = vi.fn().mockRejectedValue(new DOMException("denied", "NotAllowedError"));
+    (window as unknown as { webkitSpeechRecognition: unknown }).webkitSpeechRecognition =
+      FakeRecognition;
+    Object.defineProperty(navigator, "mediaDevices", {
+      value: { getUserMedia },
+      configurable: true,
+    });
+    try {
+      renderBar();
+      const micButton = await screen.findByLabelText("search.voiceSearchAriaLabel");
+      fireEvent.click(micButton);
+      await screen.findByText("search.voiceErrorNotAllowed");
+    } finally {
+      delete (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
+      delete (navigator as unknown as { mediaDevices?: unknown }).mediaDevices;
+    }
+  });
+
   it("dispatches a debounced autocomplete query on typing (fresh text: 150ms)", async () => {
     renderBar();
     const input = screen.getByLabelText("search.ariaLabel");
