@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { BottomSheet, type BottomSheetElement } from "pure-web-bottom-sheet/react";
 import {
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -16,6 +17,7 @@ import {
 } from "react";
 import { haptics } from "@/lib/haptics";
 import { publishMobilePanelHeight, useMobilePanelFollowCap } from "@/lib/mobilePanelHeight";
+import { useVisualViewport } from "@/lib/useVisualViewport";
 import { SHEET_PART_STYLES, sheetChromeVars } from "./chrome";
 import { DETENT_INDEX, type Detent, type DetentConfig, snapSlots } from "./detents";
 import { FloatingHandleContext } from "./mobileSheetShared";
@@ -26,6 +28,22 @@ import {
   MobileSheetContext,
   type SnapDetail,
 } from "./sheetState";
+
+const KEYBOARD_STEP_ORDER: Detent[] = ["peek", "mid", "full"];
+
+/**
+ * Resizing the sheet from the keyboard. The handle lives in the shadow root
+ * and cannot take our handlers, so this binds to the host — which is also the
+ * scroll container, so arrow keys already move the sheet natively; this makes
+ * the movement land on detents.
+ */
+export function keyboardDetent(key: string, current: Detent): Detent | null {
+  if (key === "Home") return current === "peek" ? null : "peek";
+  if (key === "End") return current === "full" ? null : "full";
+  const step = key === "ArrowUp" ? 1 : key === "ArrowDown" ? -1 : 0;
+  if (step === 0) return null;
+  return KEYBOARD_STEP_ORDER[KEYBOARD_STEP_ORDER.indexOf(current) + step] ?? null;
+}
 
 interface Props {
   id: string;
@@ -56,6 +74,7 @@ export function MobileBottomSheet({
   const [peekPx, setPeekPx] = useState<number | null>(null);
   const [midPx, setMidPx] = useState<number | null>(null);
   const [floating, setFloating] = useState(false);
+  const [focusInside, setFocusInside] = useState(false);
   const [state, setState] = useState<{ detent: Detent; isExpanded: boolean }>({
     detent: detents.initial,
     isExpanded: false,
@@ -63,6 +82,11 @@ export function MobileBottomSheet({
   const detentRef = useRef<Detent>(detents.initial);
   const onDetentChangeRef = useRef(onDetentChange);
   onDetentChangeRef.current = onDetentChange;
+  const { keyboardInset } = useVisualViewport();
+  // Only lift the sheet when the keyboard was raised by a field inside it —
+  // the app's top search bar also raises the keyboard, and lifting the sheet
+  // then would be wrong.
+  const keyboardLift = focusInside ? keyboardInset : 0;
 
   // The React wrapper defines the custom element inside its own effect via an
   // async dynamic import, so on first mount the host exists but isn't upgraded
@@ -80,6 +104,30 @@ export function MobileBottomSheet({
       live = false;
     };
   }, [defined]);
+
+  // Track whether focus is on an element *inside* the sheet, so the keyboard
+  // lift below only applies when the user is typing in the sheet itself.
+  useEffect(() => {
+    if (!host) return;
+    let frame = 0;
+    const onFocusIn = () => setFocusInside(host.contains(document.activeElement));
+    // Defer: during focusout the next element has not been focused yet, so
+    // reading activeElement now would drop the lift whenever focus moves
+    // between two fields inside the sheet.
+    const onFocusOut = () => {
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        setFocusInside(host.contains(document.activeElement));
+      });
+    };
+    host.addEventListener("focusin", onFocusIn);
+    host.addEventListener("focusout", onFocusOut);
+    return () => {
+      host.removeEventListener("focusin", onFocusIn);
+      host.removeEventListener("focusout", onFocusOut);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [host]);
 
   useMobilePanelFollowCap(id, midPx);
 
@@ -213,9 +261,23 @@ export function MobileBottomSheet({
           expand-to-scroll
           role="region"
           aria-label={t("panelAriaLabel")}
-          style={sheetChromeVars(theme, detents.maxHeight) as CSSProperties}
+          // Inline `bottom` outranks the shadow `:host` rule, so this is how
+          // the host actually moves; `--sheet-max-height` is shrunk by the
+          // same amount so the top edge stays on-screen.
+          style={
+            {
+              ...sheetChromeVars(theme, detents.maxHeight, keyboardLift),
+              bottom: keyboardLift,
+            } as CSSProperties
+          }
           sx={{ zIndex, ...SHEET_PART_STYLES(theme) }}
           {...(floating ? { "floating-handle": "" } : {})}
+          onKeyDown={(event: ReactKeyboardEvent) => {
+            const next = keyboardDetent(event.key, state.detent);
+            if (!next) return;
+            event.preventDefault();
+            snapTo(next);
+          }}
         >
           {slots.map((slot) => (
             <div

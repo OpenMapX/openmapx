@@ -5,11 +5,19 @@ import type { Theme } from "@mui/material/styles";
  * root, so theme values reach it through properties and ::part rules rather
  * than through Emotion. Slotted content stays in the light DOM and is styled
  * normally.
+ *
+ * `keyboardInset` shrinks `--sheet-max-height` by the same amount the host is
+ * lifted inline, so the sheet's top edge never runs off the top of the
+ * shrunken viewport while the keyboard is up.
  */
-export function sheetChromeVars(theme: Theme, maxHeight: string): Record<string, string> {
+export function sheetChromeVars(
+  theme: Theme,
+  maxHeight: string,
+  keyboardInset = 0,
+): Record<string, string> {
   const dark = theme.palette.mode === "dark";
   return {
-    "--sheet-max-height": maxHeight,
+    "--sheet-max-height": keyboardInset > 0 ? `calc(${maxHeight} - ${keyboardInset}px)` : maxHeight,
     // MD3 bottom sheet: 28dp top corners (library default is 12px).
     "--sheet-border-radius": "28px",
     // Dark mode sits on background.default so sticky children pinned to that
