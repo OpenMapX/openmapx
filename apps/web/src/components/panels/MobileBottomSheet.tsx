@@ -189,7 +189,19 @@ export function MobileBottomSheet({ id, zIndex, contentSx, children }: Props) {
           zIndex,
           display: "flex",
           flexDirection: "column",
-          ...theme.applyStyles("dark", { bgcolor: "background.default" }),
+          // Dark mode: sit on background.default (#1c1c1c) like SidebarShell
+          // and the floating DetailShell card, so sticky children pinned to
+          // that surface (e.g. the place panel tab strip) stay flush.
+          //
+          // backgroundImage: "none" disables MUI's dark-mode elevation
+          // overlay (a translucent white gradient Paper adds at elevation>0);
+          // without it the sheet body is lifted above #1c1c1c and the tab
+          // strip reads as a darker band. The boxShadow still separates the
+          // sheet from the map.
+          ...theme.applyStyles("dark", {
+            bgcolor: "background.default",
+            backgroundImage: "none",
+          }),
         }),
         ...(Array.isArray(contentSx) ? contentSx : contentSx ? [contentSx] : []),
       ]}
