@@ -63,7 +63,16 @@ export function detentFromSnapIndex(index: number): Detent {
  * unreachable position.
  */
 export function snapSlots(config: DetentConfig, peekPx: number | null): SnapSlot[] {
-  const peek = peekPx != null && peekPx > 0 ? `${Math.round(peekPx)}px` : config.peek;
+  // Clamp against the middle detent: unlike `--snap: 100%`, a px value never
+  // resolves against the host height, so an unclamped measurement (a tall
+  // panel can run to several thousand px) makes the peek detent unreachable
+  // and, past roughly 188dvh, inflates `host.scrollHeight` enough to break
+  // the visible-height derivation in sheetMetrics.ts. The ceiling is `mid`
+  // rather than a fixed fraction so peek can never meet or overtake it —
+  // surfaces set their own mid, and the smallest today is well under half
+  // the viewport.
+  const peek =
+    peekPx != null && peekPx > 0 ? `min(${Math.round(peekPx)}px, ${config.mid})` : config.peek;
   const initial = (detent: Exclude<Detent, "full">) =>
     config.initial === detent ? { className: "initial" } : {};
   return [

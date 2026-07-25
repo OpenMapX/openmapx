@@ -76,6 +76,22 @@ overrides:
   # complete. recharts@3.8.1 (the only consumer in apps/web) accepts both ranges.
   "react-redux": "9.3.0"
   "reselect": "5.2.0"
+  # pure-web-bottom-sheet ships separate React, Vue and vanilla entries but declares
+  # `vue` and `@vue/language-core` as unconditional peers (no
+  # peerDependenciesMeta.optional), and @vue/language-core is a dev-time language
+  # server that has no business being a peer at all — an upstream packaging bug.
+  # We import only the React entry, so auto-install drags in a Vue toolchain we
+  # never load, and @vue/language-core@3.0.11 lost the trusted-publisher evidence
+  # its predecessors had, which `trustPolicy: no-downgrade` rightly refuses.
+  # 3.0.10 is trusted and satisfies the ~3.0.10 peer range.
+  #
+  # The alternatives were worse: `autoInstallPeers: false` fixes it repo-wide but
+  # rewrote 220 lockfile lines and dropped @testing-library/dom, breaking the test
+  # toolchain; `peerDependencyRules.ignoreMissing` does not stop the auto-install.
+  # Nothing imports these packages and none of them are on the `allowBuilds`
+  # allowlist, so no install scripts run. Drop this pin if the peer ever becomes
+  # optional upstream.
+  "@vue/language-core": "3.0.10"
   # tinyexec switched from trusted-publisher to provenance-attestation at 1.2.x,
   # which `trustPolicy: no-downgrade` flags as a downgrade. 1.1.2 (trusted-
   # publisher) satisfies commitlint's `^1.0.0` range, so pin to it until

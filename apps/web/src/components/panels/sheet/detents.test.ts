@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { DETENT_INDEX, detentFromSnapIndex, PLACE_DETENTS, snapSlots } from "./detents";
+import {
+  DETENT_INDEX,
+  DIRECTIONS_DETENTS,
+  detentFromSnapIndex,
+  PLACE_DETENTS,
+  snapSlots,
+} from "./detents";
 
 describe("snapSlots", () => {
   // Largest first: the library reverses the slot's assigned elements, so the
@@ -8,7 +14,7 @@ describe("snapSlots", () => {
     expect(snapSlots(PLACE_DETENTS, 180)).toEqual([
       { snap: "100%", className: "top" },
       { snap: "52dvh", className: "initial" },
-      { snap: "180px" },
+      { snap: "min(180px, 52dvh)" },
     ]);
   });
 
@@ -25,6 +31,14 @@ describe("snapSlots", () => {
   it("marks exactly one snap as the initial one", () => {
     const initial = snapSlots(PLACE_DETENTS, 180).filter((s) => s.className === "initial");
     expect(initial).toEqual([{ snap: "52dvh", className: "initial" }]);
+  });
+
+  // The ceiling is the surface's own mid detent, so peek can never meet or
+  // overtake it — a fixed fraction would invert the two on a surface whose mid
+  // sits below that fraction.
+  it("clamps a large measured peek below the middle detent", () => {
+    expect(snapSlots(PLACE_DETENTS, 2400).at(-1)).toEqual({ snap: "min(2400px, 52dvh)" });
+    expect(snapSlots(DIRECTIONS_DETENTS, 2400).at(-1)).toEqual({ snap: "min(2400px, 42dvh)" });
   });
 });
 

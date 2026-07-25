@@ -9,9 +9,10 @@ import { lazy, type ReactNode, Suspense, useState } from "react";
 import { SidebarCollapseToggle } from "@/components/ui/SidebarCollapseToggle";
 import { PANEL_WIDTH } from "@/lib/layout";
 import { useMobilePanelHeightTracker } from "@/lib/mobilePanelHeight";
+import { LIST_DETENTS } from "./sheet/detents";
 
 const MobileBottomSheet = lazy(() =>
-  import("./MobileBottomSheet").then((m) => ({ default: m.MobileBottomSheet })),
+  import("./sheet/MobileBottomSheet").then((m) => ({ default: m.MobileBottomSheet })),
 );
 
 interface SidebarShellProps {
@@ -27,7 +28,7 @@ export function SidebarShell({ children, contentSx }: SidebarShellProps) {
   if (isMobile) {
     return (
       <Suspense fallback={null}>
-        <MobileBottomSheet id="sidebar" zIndex={11} contentSx={contentSx}>
+        <MobileBottomSheet id="sidebar" zIndex={11} detents={LIST_DETENTS} contentSx={contentSx}>
           {children}
         </MobileBottomSheet>
       </Suspense>

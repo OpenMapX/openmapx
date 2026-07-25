@@ -7,9 +7,10 @@ import { useSidebarStore } from "@openmapx/core";
 import { lazy, type ReactNode, Suspense, useState } from "react";
 import { PANEL_WIDTH } from "@/lib/layout";
 import { useMobilePanelHeightTracker } from "@/lib/mobilePanelHeight";
+import { PLACE_DETENTS } from "./sheet/detents";
 
 const MobileBottomSheet = lazy(() =>
-  import("./MobileBottomSheet").then((m) => ({ default: m.MobileBottomSheet })),
+  import("./sheet/MobileBottomSheet").then((m) => ({ default: m.MobileBottomSheet })),
 );
 
 const CARD_GAP = 24;
@@ -21,7 +22,7 @@ export function DetailShell({ children }: { children: ReactNode }) {
   if (isMobile) {
     return (
       <Suspense fallback={null}>
-        <MobileBottomSheet id="detail" zIndex={11}>
+        <MobileBottomSheet id="detail" zIndex={11} detents={PLACE_DETENTS}>
           {children}
         </MobileBottomSheet>
       </Suspense>

@@ -183,7 +183,8 @@
     "share": "Share",
     "dataSources": "Data sources",
     "showMore": "+{count} more",
-    "showLess": "Show less"
+    "showLess": "Show less",
+    "panelAriaLabel": "Panel"
   },
   "search": {
     "placeholder": "Search OpenMapX",

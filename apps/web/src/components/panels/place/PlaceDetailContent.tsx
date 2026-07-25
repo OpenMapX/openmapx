@@ -16,7 +16,7 @@ import type { MergedRoute, TransportMode } from "@openmapx/mobility-core/transit
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { BRAND } from "@/lib/theme";
-import { useFloatingMobileSheetHandle } from "../mobileSheetShared";
+import { useFloatingMobileSheetHandle } from "../sheet/mobileSheetShared";
 import { LineDetail } from "../transit/LineDetail";
 import { PlaceDeparturesView } from "../transit/PlaceDeparturesView";
 import { PlaceTransitSection } from "../transit/PlaceTransitSection";
