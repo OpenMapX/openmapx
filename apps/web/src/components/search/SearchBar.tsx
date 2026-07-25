@@ -362,12 +362,17 @@ export function SearchBar() {
 
     // SpeechRecognition's own microphone-permission flow is broken in installed
     // PWAs on Android: start() fails with `not-allowed` and never shows a prompt
-    // even when the origin could be granted. getUserMedia *does* reliably raise
-    // the prompt and grant the origin mic access, so request (and immediately
-    // release) it first, then start recognition. Falls straight through where
-    // mediaDevices is unavailable (older browsers, SSR, tests).
+    // even when the app could be granted. getUserMedia *does* reliably raise the
+    // prompt (an Android system dialog for the PWA's own WebAPK) and grant mic
+    // access, so request (and immediately release) it first, then start
+    // recognition. Each failure mode maps to a distinct message so the cause is
+    // legible without a console (unreachable in a standalone PWA).
     const media = typeof navigator !== "undefined" ? navigator.mediaDevices : undefined;
     if (!media?.getUserMedia) {
+      // No MediaDevices API (non-secure context or an unusual PWA/WebView). Fall
+      // back to recognition directly; if it too is blocked its own onerror shows
+      // `voiceErrorNotAllowed`, distinct from the getUserMedia-denied message.
+      console.warn("[voice-search] navigator.mediaDevices.getUserMedia unavailable");
       beginRecognition();
       return;
     }
@@ -380,9 +385,10 @@ export function SearchBar() {
       })
       .catch((err: unknown) => {
         setListening(false);
-        const name = err instanceof DOMException ? err.name : undefined;
-        console.warn("[voice-search] mic permission error:", name);
-        setVoiceError(t(voiceErrorKey(name === "NotFoundError" ? "audio-capture" : "not-allowed")));
+        const name = err instanceof DOMException ? err.name : String(err);
+        console.warn("[voice-search] getUserMedia error:", name);
+        const noMic = name === "NotFoundError" || name === "DevicesNotFoundError";
+        setVoiceError(t(noMic ? "voiceErrorNoMicrophone" : "voiceErrorMicBlocked"));
       });
   }, [speechCtor, locale, setQuery, t]);
 

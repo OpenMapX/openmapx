@@ -196,7 +196,7 @@ describe("SearchBar", () => {
     }
   });
 
-  it("shows the blocked message when microphone permission is denied", async () => {
+  it("shows the mic-blocked message when getUserMedia permission is denied", async () => {
     class FakeRecognition {
       lang = "";
       continuous = false;
@@ -220,7 +220,7 @@ describe("SearchBar", () => {
       renderBar();
       const micButton = await screen.findByLabelText("search.voiceSearchAriaLabel");
       fireEvent.click(micButton);
-      await screen.findByText("search.voiceErrorNotAllowed");
+      await screen.findByText("search.voiceErrorMicBlocked");
     } finally {
       delete (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
       delete (navigator as unknown as { mediaDevices?: unknown }).mediaDevices;

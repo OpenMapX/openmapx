@@ -196,6 +196,7 @@
     "searchAriaLabel": "Search",
     "voiceSearchAriaLabel": "Search by voice",
     "voiceErrorNotAllowed": "Microphone access is blocked. Allow it in your browser's site settings, then try again.",
+    "voiceErrorMicBlocked": "Microphone access was denied. Allow the microphone permission for this app in your device settings, then try again.",
     "voiceErrorNoMicrophone": "No microphone was found.",
     "voiceErrorNetwork": "Voice search needs an internet connection.",
     "voiceErrorLanguage": "Voice search isn't available for this language.",
