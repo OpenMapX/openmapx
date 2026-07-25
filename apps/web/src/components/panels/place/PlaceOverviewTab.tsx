@@ -279,11 +279,7 @@ export function PlaceOverviewTab({
 
   return (
     <>
-      <Box sx={{ px: 2, py: 1 }}>
-        {/* Action buttons now render once in PlaceDetailContent's header, above
-            the tabs, so they stay visible across tabs and can double as the
-            mobile sheet's peek content / docked footer. */}
-
+      <Box sx={{ px: 2 }}>
         {/* City-only sections: Quick facts, Hotels, Neighborhoods */}
         {isCity && <PlaceCitySections place={place} onNavigateToInfo={onNavigateToInfo} />}
 

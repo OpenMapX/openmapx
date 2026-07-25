@@ -1,8 +1,25 @@
 "use client";
 
-import { createContext, useContext, useEffect } from "react";
+import { createContext, type ReactNode, useContext, useEffect } from "react";
 
 export const FloatingHandleContext = createContext<((floating: boolean) => void) | null>(null);
+
+interface DetailChromeApi {
+  setHeader: (node: ReactNode) => void;
+  setFooter: (node: ReactNode) => void;
+}
+
+// Content rendered inside a mobile sheet can be several components deep (the
+// sheet host -> a lazily-looked-up panel -> the actual detail card), so there
+// is no prop path from that content back up to the sheet's pinned header /
+// docked footer slots. This context gives it one. MobileBottomSheet provides
+// it for every sheet it renders — place detail and list panels alike; desktop
+// renders the same content inline via Paper and never mounts a sheet, so
+// useDetailChrome is a no-op there.
+//
+// Exported so tests can provide a stub DetailChromeApi and observe what
+// consumers register, without needing a full MobileBottomSheet host.
+export const DetailChromeContext = createContext<DetailChromeApi | null>(null);
 
 /**
  * Opt the surrounding mobile bottom sheet into a floating handle layout —

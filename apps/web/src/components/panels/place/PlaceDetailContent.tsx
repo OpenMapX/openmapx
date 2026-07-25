@@ -371,7 +371,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
             <Typography
               variant="h6"
               gutterBottom
-              noWrap
+              noWrap={detent === "peek"}
               sx={{
                 fontWeight: 600,
                 pr: onClose && !showHeaderWeather ? 4 : 0,

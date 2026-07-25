@@ -81,6 +81,7 @@ export function RouteCard({
   return (
     <Box
       onClick={onSelect}
+      role="button"
       sx={{
         display: "flex",
         gap: 1.5,

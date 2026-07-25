@@ -5,7 +5,6 @@ import {
   useMobilePanelClearance,
   useMobilePanelFollowCap,
   useMobilePanelHeightTracker,
-  useMobilePanelMaxHeight,
 } from "./mobilePanelHeight";
 
 // The tracker is mobile-only via useMediaQuery; the ref lets tests flip the
@@ -59,7 +58,7 @@ describe("mobilePanelHeight registry", () => {
   it("reports the max across registered panels and follows resizes and unmounts", () => {
     const sidebar = makePanel(100);
     const navSheet = makePanel(220);
-    const max = renderHook(() => useMobilePanelMaxHeight());
+    const max = renderHook(() => useMobilePanelClearance(0));
     expect(max.result.current).toBe(0);
 
     const trackSidebar = renderHook(() => useMobilePanelHeightTracker("sidebar", sidebar.el));
@@ -83,7 +82,7 @@ describe("mobilePanelHeight registry", () => {
   it("does not register heights on desktop viewports", () => {
     isMobileRef.current = false;
     const panel = makePanel(300);
-    const max = renderHook(() => useMobilePanelMaxHeight());
+    const max = renderHook(() => useMobilePanelClearance(0));
     const track = renderHook(() => useMobilePanelHeightTracker("panel", panel.el));
     expect(max.result.current).toBe(0);
     track.unmount();
@@ -91,7 +90,7 @@ describe("mobilePanelHeight registry", () => {
 
   it("drops a panel whose element detaches (null element)", () => {
     const panel = makePanel(150);
-    const max = renderHook(() => useMobilePanelMaxHeight());
+    const max = renderHook(() => useMobilePanelClearance(0));
     const track = renderHook(({ el }) => useMobilePanelHeightTracker("panel", el), {
       initialProps: { el: panel.el as HTMLElement | null },
     });
@@ -105,7 +104,7 @@ describe("mobilePanelHeight registry", () => {
 
 describe("mobilePanelHeight direct publication", () => {
   it("publishes a height with no element to measure", () => {
-    const max = renderHook(() => useMobilePanelMaxHeight());
+    const max = renderHook(() => useMobilePanelClearance(0));
 
     act(() => publishMobilePanelHeight("detail", 420));
     expect(max.result.current).toBe(420);

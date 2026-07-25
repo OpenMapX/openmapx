@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { keyboardDetent } from "./MobileBottomSheet";
+import { isHostKeyDown, keyboardDetent } from "./MobileBottomSheet";
 
 describe("keyboardDetent", () => {
   it("steps up and down between detents", () => {
@@ -20,5 +20,18 @@ describe("keyboardDetent", () => {
 
   it("ignores unrelated keys", () => {
     expect(keyboardDetent("Enter", "mid")).toBeNull();
+  });
+});
+
+describe("isHostKeyDown", () => {
+  it("accepts a key that originated on the host itself", () => {
+    const host = {};
+    expect(isHostKeyDown({ target: host, currentTarget: host })).toBe(true);
+  });
+
+  it("ignores a key bubbling up from a descendant field", () => {
+    const host = {};
+    const dateInput = {};
+    expect(isHostKeyDown({ target: dateInput, currentTarget: host })).toBe(false);
   });
 });

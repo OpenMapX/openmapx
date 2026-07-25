@@ -20,7 +20,7 @@ import { publishMobilePanelHeight, useMobilePanelFollowCap } from "@/lib/mobileP
 import { useVisualViewport } from "@/lib/useVisualViewport";
 import { SHEET_PART_STYLES, sheetChromeVars } from "./chrome";
 import { DETENT_INDEX, type Detent, type DetentConfig, snapSlots } from "./detents";
-import { FloatingHandleContext } from "./mobileSheetShared";
+import { DetailChromeContext, FloatingHandleContext } from "./mobileSheetShared";
 import { visibleSheetHeight } from "./sheetMetrics";
 import {
   detentFromSnapEvent,
@@ -45,28 +45,27 @@ export function keyboardDetent(key: string, current: Detent): Detent | null {
   return KEYBOARD_STEP_ORDER[KEYBOARD_STEP_ORDER.indexOf(current) + step] ?? null;
 }
 
+/**
+ * React delegates keydown, so the host's handler also fires for events
+ * bubbling up from every descendant — date/time inputs, Autocomplete lists,
+ * anything with its own arrow-key or Home/End behavior. Only a key that
+ * originated on the host itself (reachable via its `tabIndex`, not by
+ * delegation) should move the sheet.
+ */
+export function isHostKeyDown(event: { target: unknown; currentTarget: unknown }): boolean {
+  return event.target === event.currentTarget;
+}
+
 interface Props {
   id: string;
   zIndex: number;
   detents: DetentConfig;
-  header?: ReactNode;
-  footer?: ReactNode;
   /** Applied to the scrollable content, not the host. */
   contentSx?: SxProps<Theme>;
-  onDetentChange?: (detent: Detent) => void;
   children: ReactNode;
 }
 
-export function MobileBottomSheet({
-  id,
-  zIndex,
-  detents,
-  header,
-  footer,
-  contentSx,
-  onDetentChange,
-  children,
-}: Props) {
+export function MobileBottomSheet({ id, zIndex, detents, contentSx, children }: Props) {
   const theme = useTheme();
   const t = useTranslations("common");
   const [host, setHost] = useState<BottomSheetElement | null>(null);
@@ -80,8 +79,13 @@ export function MobileBottomSheet({
     isExpanded: false,
   });
   const detentRef = useRef<Detent>(detents.initial);
-  const onDetentChangeRef = useRef(onDetentChange);
-  onDetentChangeRef.current = onDetentChange;
+  // Registered by descendant content through useDetailChrome — the pinned
+  // header / docked footer slots. Owned here (rather than by DetailShell)
+  // so every surface that renders a sheet gets the bridge, not just the
+  // place detail one.
+  const [chromeHeader, setChromeHeader] = useState<ReactNode>(null);
+  const [chromeFooter, setChromeFooter] = useState<ReactNode>(null);
+  const chromeApi = useMemo(() => ({ setHeader: setChromeHeader, setFooter: setChromeFooter }), []);
   const { keyboardInset } = useVisualViewport();
   // Only lift the sheet when the keyboard was raised by a field inside it —
   // the app's top search bar also raises the keyboard, and lifting the sheet
@@ -149,7 +153,6 @@ export function MobileBottomSheet({
       if (detentRef.current !== next.detent) {
         detentRef.current = next.detent;
         haptics.tap();
-        onDetentChangeRef.current?.(next.detent);
       }
       setState((prev) =>
         prev.detent === next.detent && prev.isExpanded === next.isExpanded ? prev : next,
@@ -184,7 +187,12 @@ export function MobileBottomSheet({
   // targets offset by `top: calc(var(--snap) - 1px)` inside the fixed host, so
   // offsetTop + 1 is the detent height — the same arithmetic the library does.
   // Requires `defined`: before the host upgrades, `::slotted` rules haven't
-  // applied yet and every marker sits at the same flow position.
+  // applied yet and every marker sits at the same flow position. Requires
+  // `detents`: PanelHost renders SidebarShell at a fixed JSX position, so
+  // switching panels changes the `detents` prop without remounting the sheet
+  // — without this dependency the previous panel's mid marker would stay
+  // published after the switch.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: detents isn't read in the body, but its identity changing must re-run the DOM read below
   useEffect(() => {
     if (!host || !defined) return;
     const update = () => {
@@ -195,7 +203,7 @@ export function MobileBottomSheet({
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
-  }, [host, defined]);
+  }, [host, defined, detents]);
 
   // Peek follows its content instead of a fixed fraction. The handle and the
   // header slot sit in a sticky band ABOVE the content box, so the rendered
@@ -217,13 +225,26 @@ export function MobileBottomSheet({
     // then fold peek onto it — two reachable positions where there should be
     // three.
     const ro = new ResizeObserver(() => measure());
+    // A panel swap replaces the marked subtree without re-running this effect
+    // (deps are [peekEl, host, defined]), so `ro.observe` alone would leave
+    // every previous panel's now-detached subtree under observation for the
+    // life of the sheet. Track the one currently observed and swap it out.
+    let observedSubtree: HTMLElement | null = null;
     const measure = () => {
       const subtree = peekEl.querySelector<HTMLElement>("[data-omx-peek]");
       if (!subtree) {
+        if (observedSubtree) {
+          ro.unobserve(observedSubtree);
+          observedSubtree = null;
+        }
         setPeekPx(null);
         return;
       }
-      ro.observe(subtree);
+      if (subtree !== observedSubtree) {
+        if (observedSubtree) ro.unobserve(observedSubtree);
+        ro.observe(subtree);
+        observedSubtree = subtree;
+      }
       const header = headerEl ? headerEl.getBoundingClientRect().height : 0;
       const next = Math.round(subtree.getBoundingClientRect().height + header);
       setPeekPx((prev) => (prev != null && Math.abs(prev - next) < 4 ? prev : next));
@@ -252,48 +273,52 @@ export function MobileBottomSheet({
   );
 
   return (
-    <MobileSheetContext.Provider value={api}>
-      <FloatingHandleContext.Provider value={setFloating}>
-        <Box
-          component={BottomSheet}
-          ref={setHost}
-          nested-scroll
-          expand-to-scroll
-          role="region"
-          aria-label={t("panelAriaLabel")}
-          // Inline `bottom` outranks the shadow `:host` rule, so this is how
-          // the host actually moves; `--sheet-max-height` is shrunk by the
-          // same amount so the top edge stays on-screen.
-          style={
-            {
-              ...sheetChromeVars(theme, detents.maxHeight, keyboardLift),
-              bottom: keyboardLift,
-            } as CSSProperties
-          }
-          sx={{ zIndex, ...SHEET_PART_STYLES(theme) }}
-          {...(floating ? { "floating-handle": "" } : {})}
-          onKeyDown={(event: ReactKeyboardEvent) => {
-            const next = keyboardDetent(event.key, state.detent);
-            if (!next) return;
-            event.preventDefault();
-            snapTo(next);
-          }}
-        >
-          {slots.map((slot) => (
-            <div
-              key={slot.snap}
-              slot="snap"
-              className={slot.className}
-              style={{ "--snap": slot.snap } as CSSProperties}
-            />
-          ))}
-          {header ? <div slot="header">{header}</div> : null}
-          <Box ref={setPeekEl} sx={contentSx}>
-            {children}
+    <DetailChromeContext.Provider value={chromeApi}>
+      <MobileSheetContext.Provider value={api}>
+        <FloatingHandleContext.Provider value={setFloating}>
+          <Box
+            component={BottomSheet}
+            ref={setHost}
+            nested-scroll
+            expand-to-scroll
+            role="region"
+            aria-label={t("panelAriaLabel")}
+            tabIndex={0}
+            // Inline `bottom` outranks the shadow `:host` rule, so this is how
+            // the host actually moves; `--sheet-max-height` is shrunk by the
+            // same amount so the top edge stays on-screen.
+            style={
+              {
+                ...sheetChromeVars(theme, detents.maxHeight, keyboardLift),
+                bottom: keyboardLift,
+              } as CSSProperties
+            }
+            sx={{ zIndex, ...SHEET_PART_STYLES(theme) }}
+            {...(floating ? { "floating-handle": "" } : {})}
+            onKeyDown={(event: ReactKeyboardEvent) => {
+              if (!isHostKeyDown(event)) return;
+              const next = keyboardDetent(event.key, state.detent);
+              if (!next) return;
+              event.preventDefault();
+              snapTo(next);
+            }}
+          >
+            {slots.map((slot) => (
+              <div
+                key={slot.snap}
+                slot="snap"
+                className={slot.className}
+                style={{ "--snap": slot.snap } as CSSProperties}
+              />
+            ))}
+            {chromeHeader ? <div slot="header">{chromeHeader}</div> : null}
+            <Box ref={setPeekEl} sx={contentSx}>
+              {children}
+            </Box>
+            {chromeFooter ? <div slot="footer">{chromeFooter}</div> : null}
           </Box>
-          {footer ? <div slot="footer">{footer}</div> : null}
-        </Box>
-      </FloatingHandleContext.Provider>
-    </MobileSheetContext.Provider>
+        </FloatingHandleContext.Provider>
+      </MobileSheetContext.Provider>
+    </DetailChromeContext.Provider>
   );
 }

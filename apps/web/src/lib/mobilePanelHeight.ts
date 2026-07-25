@@ -73,11 +73,6 @@ const getServerSnapshot = () => 0;
 const getCapSnapshot = () => cachedCap;
 const getServerCapSnapshot = (): number | null => null;
 
-/** Max rendered height (px) of the bottom-anchored mobile panels. */
-export function useMobilePanelMaxHeight(): number {
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-}
-
 /**
  * Tracks the rendered height of a bottom-anchored mobile panel so other UI
  * (like the right-side map controls) can sit just above its top edge.

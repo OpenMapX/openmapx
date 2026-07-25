@@ -9,6 +9,16 @@ import type { Theme } from "@mui/material/styles";
  * `keyboardInset` shrinks `--sheet-max-height` by the same amount the host is
  * lifted inline, so the sheet's top edge never runs off the top of the
  * shrunken viewport while the keyboard is up.
+ *
+ * The library independently computes its own
+ * `--sheet-safe-max-height: calc(var(--sheet-max-height) - env(keyboard-inset-height,
+ * var(--sw-keyboard-height, 0px)))`, setting `--sw-keyboard-height` itself from
+ * `visualViewport.offsetTop`. On every browser this has been tested against,
+ * `env(keyboard-inset-height)` and the library's own inset both resolve to 0,
+ * so this shrink and the library's are inert together — but they measure the
+ * same thing. Do not add a third keyboard-height compensation here or in
+ * MobileBottomSheet; if a browser ever makes the library's mechanism resolve
+ * non-zero, this one needs to come out rather than gain a sibling.
  */
 export function sheetChromeVars(
   theme: Theme,

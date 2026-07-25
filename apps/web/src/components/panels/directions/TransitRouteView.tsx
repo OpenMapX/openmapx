@@ -263,6 +263,7 @@ export function TransitItineraryCard({
   return (
     <Box
       onClick={onSelect}
+      role="button"
       sx={{
         px: 2,
         py: 1.5,
