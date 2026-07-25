@@ -314,7 +314,10 @@ export function PlaceOverviewTab({
 
   return (
     <>
-      <Box sx={{ px: 2, py: 1 }}>
+      {/* No bottom padding when the description trails the detail rows: it is
+          the last child there, so the padding would land between it and the
+          next section's divider and read as a wider gap than the one above it. */}
+      <Box sx={{ px: 2, pt: 1, pb: descriptionRow && inSheet ? 0 : 1 }}>
         {/* Outside a sheet the actions stay here, at the top of the tab. In a
             sheet they render once above the tabs instead, where they can form
             the collapsed peek layout. */}
