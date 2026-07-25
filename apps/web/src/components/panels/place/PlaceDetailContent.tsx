@@ -149,10 +149,13 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
       ) : null,
     [isMainView, isExpanded, place.name, onClose],
   );
+  // The inline row stays mounted when it scrolls out of the scrollport, so
+  // while the docked copy is up there are two of every action in the tree.
+  // One flag drives both, so they cannot disagree about which copy is live.
+  const dockedActionsShown = isMainView && isExpanded && chipsScrolledAway;
   const footerNode = useMemo(
-    () =>
-      isMainView && isExpanded && chipsScrolledAway ? <DockedActionBar place={place} /> : null,
-    [isMainView, isExpanded, chipsScrolledAway, place],
+    () => (dockedActionsShown ? <DockedActionBar place={place} /> : null),
+    [dockedActionsShown, place],
   );
   useDetailChrome(headerNode, footerNode);
   const [lng, lat] = place.coordinates;
@@ -430,7 +433,12 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
             footer takes over. Outside a sheet the Overview tab keeps its own
             copy in the original position. */}
         {inSheet && (
-          <Box ref={chipsRef}>
+          // `inert` while the docked copy is up: it drops this row from the
+          // accessibility tree and the tab order, so the same four actions are
+          // not announced twice. It stays mounted because the sentinel that
+          // decides which copy is live observes it — intersection still works
+          // on an inert node. Scrolling back up clears both together.
+          <Box ref={chipsRef} inert={dockedActionsShown}>
             <PlaceActionButtons place={place} />
           </Box>
         )}

@@ -187,4 +187,21 @@ describe("PlaceDetailContent mobile-sheet chrome bridge", () => {
     expect(within(screen.getByTestId("chrome-footer")).getByText("directions")).toBeDefined();
     sentinelState.passed = false;
   });
+
+  // The inline row stays mounted behind the docked copy, so without `inert`
+  // every action would be announced and tabbed to twice.
+  it("takes the inline chips out of the tree while the docked copy is up", () => {
+    sentinelState.passed = true;
+    const { container } = renderChrome("full", true);
+    const inline = container.querySelector("[inert]");
+    expect(inline).toBeDefined();
+    expect(within(inline as HTMLElement).getByText("directions")).toBeDefined();
+    sentinelState.passed = false;
+  });
+
+  it("leaves the inline chips reachable while the docked copy is absent", () => {
+    sentinelState.passed = false;
+    const { container } = renderChrome("full", true);
+    expect(container.querySelector("[inert]")).toBeNull();
+  });
 });
