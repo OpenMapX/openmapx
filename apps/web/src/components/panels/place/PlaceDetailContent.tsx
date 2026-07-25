@@ -66,8 +66,13 @@ function CompactTitleBar({ placeName, onClose }: { placeName: string; onClose?: 
 // out of view at full expansion, so Directions/Save/Nearby/Share stay one tap
 // away without scrolling back up.
 function DockedActionBar({ place }: { place: Place }) {
+  // Only the panel's own side padding, so the buttons land on exactly the same
+  // x positions as the inline row. The wrapper must not be a flex container:
+  // PlaceActionButtons already spreads its buttons across the width it is
+  // given, and as a flex item it would shrink to its content instead, leaving
+  // that spread nothing to distribute and bunching the buttons to the left.
   return (
-    <Box sx={{ display: "flex", gap: 1, overflowX: "auto", pt: 1 }}>
+    <Box sx={{ px: 2 }}>
       <PlaceActionButtons place={place} />
     </Box>
   );
