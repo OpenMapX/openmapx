@@ -2,10 +2,16 @@
 
 import { useOverlayExclusion } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getFirstSymbolLayerId, setLayerVisibility } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useMap } from "@/lib/MapContext";
+import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
+import {
+  type BasemapLod2Layer,
+  createBasemapLod2Layer,
+  supportsBasemapLod2View,
+} from "./basemap-lod2";
 import {
   EXTRUSION_BASE,
   EXTRUSION_COLOR,
@@ -15,9 +21,13 @@ import {
 import { useBuildingsStore } from "./store";
 
 const LAYER_ID = "openmapx-3d-buildings";
+const DETAILED_LAYER_ID = "openmapx-3d-buildings-lod2";
+const REANCHOR_LAYER_IDS = [LAYER_ID, DETAILED_LAYER_ID] as const;
 const MIN_ZOOM = 14;
 const AUTO_PITCH = 45;
 const MAX_PITCH_3D = 85;
+const DETAIL_READY_POLL_MS = 100;
+const DETAIL_READY_MAX_POLLS = 150;
 
 interface CameraState {
   pitch: number;
@@ -45,11 +55,21 @@ function setOriginalBuildingLayersVisibility(map: maplibregl.Map, visible: boole
   }
 }
 
+function removeDetailedLayer(map: maplibregl.Map): void {
+  try {
+    if (map.getLayer(DETAILED_LAYER_ID)) map.removeLayer(DETAILED_LAYER_ID);
+  } catch {
+    // The style may already be tearing down.
+  }
+}
+
 export function BuildingExtrusionLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const layerVisible = useBuildingsStore((s) => s.layerVisible);
+  const [usingDetailedBuildings, setUsingDetailedBuildings] = useState(false);
+  useIntegrationAttribution("overlay-3d-buildings", usingDetailedBuildings);
   useOverlayExclusion("3d-buildings", layerVisible);
-  useLayerReanchor(LAYER_ID, layerVisible);
+  useLayerReanchor(REANCHOR_LAYER_IDS, layerVisible);
 
   const prevVisibleRef = useRef(false);
   const cameraBeforeEnableRef = useRef<CameraState | null>(null);
@@ -58,6 +78,96 @@ export function BuildingExtrusionLayer() {
     void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
+
+    let cancelled = false;
+    let detailedLayer: BasemapLod2Layer | null = null;
+    let detailedLoadPromise: Promise<void> | null = null;
+    let readinessTimer: number | undefined;
+    let readinessGeneration = 0;
+    let detailedVisible = false;
+
+    const showFallback = () => {
+      detailedVisible = false;
+      setLayerVisibility(map, LAYER_ID, true);
+      setLayerVisibility(map, DETAILED_LAYER_ID, false);
+      if (!cancelled) setUsingDetailedBuildings(false);
+    };
+
+    const stopDetailedLayer = () => {
+      readinessGeneration += 1;
+      if (readinessTimer !== undefined) window.clearTimeout(readinessTimer);
+      readinessTimer = undefined;
+      removeDetailedLayer(map);
+      detailedLayer = null;
+      showFallback();
+    };
+
+    const revealWhenReady = (layer: BasemapLod2Layer, generation: number, poll = 0) => {
+      if (
+        cancelled ||
+        generation !== readinessGeneration ||
+        !layerVisible ||
+        !supportsBasemapLod2View(map) ||
+        !map.getLayer(DETAILED_LAYER_ID)
+      ) {
+        return;
+      }
+
+      if (layer.loadStatus === 1) {
+        detailedVisible = true;
+        setLayerVisibility(map, DETAILED_LAYER_ID, true);
+        setLayerVisibility(map, LAYER_ID, false);
+        setUsingDetailedBuildings(true);
+        map.triggerRepaint();
+        return;
+      }
+
+      if (poll >= DETAIL_READY_MAX_POLLS) {
+        showFallback();
+        return;
+      }
+
+      readinessTimer = window.setTimeout(() => {
+        readinessTimer = undefined;
+        revealWhenReady(layer, generation, poll + 1);
+      }, DETAIL_READY_POLL_MS);
+    };
+
+    const startDetailedLayer = () => {
+      if (map.getLayer(DETAILED_LAYER_ID) && detailedLayer) {
+        if (detailedVisible) return;
+        if (readinessTimer !== undefined) return;
+        const generation = ++readinessGeneration;
+        revealWhenReady(detailedLayer, generation);
+        return;
+      }
+      if (detailedLoadPromise) return;
+
+      // Set the guard before changing layout visibility: MapLibre may emit a
+      // synchronous styledata event from setLayoutProperty.
+      detailedLoadPromise = Promise.resolve();
+      showFallback();
+      const generation = ++readinessGeneration;
+      detailedLoadPromise = createBasemapLod2Layer(DETAILED_LAYER_ID)
+        .then((layer) => {
+          if (cancelled || generation !== readinessGeneration) return;
+          if (!layerVisible || !supportsBasemapLod2View(map) || !map.isStyleLoaded()) return;
+
+          if (!map.getLayer(DETAILED_LAYER_ID)) {
+            map.addLayer(layer, getFirstSymbolLayerId(map));
+            setLayerVisibility(map, DETAILED_LAYER_ID, false);
+          }
+          detailedLayer = layer;
+          revealWhenReady(layer, generation);
+        })
+        .catch((error: unknown) => {
+          console.warn("Detailed basemap.de buildings unavailable; using vector fallback", error);
+          showFallback();
+        })
+        .finally(() => {
+          detailedLoadPromise = null;
+        });
+    };
 
     const syncLayer = () => {
       if (!map.isStyleLoaded()) {
@@ -98,8 +208,13 @@ export function BuildingExtrusionLayer() {
           );
         }
 
-        setLayerVisibility(map, LAYER_ID, true);
+        if (supportsBasemapLod2View(map)) {
+          startDetailedLayer();
+        } else {
+          stopDetailedLayer();
+        }
       } else {
+        stopDetailedLayer();
         setLayerVisibility(map, LAYER_ID, false);
         setOriginalBuildingLayersVisibility(map, true);
       }
@@ -107,8 +222,14 @@ export function BuildingExtrusionLayer() {
 
     syncLayer();
     map.on("styledata", syncLayer);
+    map.on("moveend", syncLayer);
     return () => {
+      cancelled = true;
+      readinessGeneration += 1;
+      if (readinessTimer !== undefined) window.clearTimeout(readinessTimer);
       map.off("styledata", syncLayer);
+      map.off("moveend", syncLayer);
+      removeDetailedLayer(map);
     };
   }, [mapReady, styleVersion, mapRef, layerVisible]);
 

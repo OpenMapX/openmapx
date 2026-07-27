@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
+  "documentation": "https://basemap.de/produkte-und-dienste/3d/",
   "domains": ["map-overlay"],
   "frontend": {
     "mapLayer": true,
@@ -32,5 +33,23 @@
     }
   },
   "quality": "built-in",
-  "category": "Map Overlays"
+  "category": "Map Overlays",
+  "dataSources": [
+    {
+      "sourceId": "basemap-de-3d-buildings",
+      "name": "GeoBasis-DE / BKG",
+      "url": "https://sgx.geodatenzentrum.de/gdz_basemapde_3d_gebaeude/lod2_3857_null.json",
+      "license": "basemap.de 3D test-operation terms",
+      "licenseUrl": "https://sgx.geodatenzentrum.de/public/gdz/lizenz/deu/lizenz_basemapde_3d-testbetrieb.pdf",
+      "attribution": "© <a href=\"https://www.bkg.bund.de/\">GeoBasis-DE/BKG</a> 2026 · display modified by OpenMapX",
+      "commercialUse": "conditional",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.bkg.bund.de/SharedDocs/Datenschutz/DE/datenschutz.html",
+      "endUserExposure": "direct",
+      "personalData": true,
+      "cookies": true,
+      "dpaAvailable": false,
+      "notes": "Free hosted test service. Direct runtime use and combination are permitted for test purposes; downloading, extracting, mirroring, persistent storage, and reuse outside the service are prohibited. Written BKG approval is required before relying on it for regular commercial production."
+    }
+  ]
 }

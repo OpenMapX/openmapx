@@ -21,6 +21,7 @@ export interface FakeMapState {
   styleLoaded: boolean;
   /** Backing value for `getZoom()` — mutate then emit("moveend") to simulate a zoom gesture. */
   zoom: number;
+  center: { lng: number; lat: number };
   pitch: number;
   maxPitch: number;
   cameraTransitions: Array<{
@@ -47,6 +48,7 @@ export interface CreateFakeMapOptions {
   styleLoaded?: boolean;
   /** Initial `getZoom()` value (default 10). */
   zoom?: number;
+  center?: { lng: number; lat: number };
   /** Initial camera pitch and pitch constraint. */
   pitch?: number;
   maxPitch?: number;
@@ -62,6 +64,7 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     images: new Set(),
     styleLoaded: options.styleLoaded ?? true,
     zoom: options.zoom ?? 10,
+    center: options.center ?? { lng: 0, lat: 0 },
     pitch: options.pitch ?? 0,
     maxPitch: options.maxPitch ?? 60,
     cameraTransitions: [],
@@ -156,7 +159,11 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     setLight: (light: Record<string, unknown>) => {
       state.light = light;
     },
-    getCenter: () => ({ lng: 0, lat: 0 }),
+    getCenter: () => state.center,
+    setCenter: (center: { lng: number; lat: number }) => {
+      state.center = center;
+    },
+    getProjection: () => ({ type: "mercator" }),
     getBounds: () => ({
       getWest: () => -180,
       getSouth: () => -90,
@@ -177,6 +184,7 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       if (typeof options.pitch === "number") state.pitch = options.pitch;
     },
     fitBounds: () => {},
+    triggerRepaint: () => {},
     on,
     off,
     once: on,

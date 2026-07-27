@@ -1,4 +1,11 @@
 {
   "name": "3D-Gebäude",
-  "description": "3D-Gebäudeextrusionen aus vorhandenen Kartenkacheldaten"
+  "description": "3D-Gebäudeextrusionen aus vorhandenen Kartenkacheldaten",
+  "dataSources": {
+    "basemap-de-3d-buildings": {
+      "purpose": "Darstellung detaillierter amtlicher LoD2-Dach- und Wandgeometrien in Deutschland ab Zoomstufe 16",
+      "dataSent": "Direkte Browseranfragen übermitteln IP-Adresse, Browserkennung, Referrer und angeforderte 3D-Kachel-URLs, aus denen der ungefähr sichtbare Kartenausschnitt und die Zoomstufe hervorgehen. Such-, Konto- oder genaue Gerätestandortdaten werden diesen Anfragen nicht hinzugefügt.",
+      "dataReceived": "LoD2-Gebäudegeometrien und -attribute für die angeforderten sichtbaren Kacheln"
+    }
+  }
 }

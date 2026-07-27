@@ -133,7 +133,23 @@ a glance.
 | **Winter sports**    | Ski areas, pistes, and lifts                          | OpenSnowMap                  |
 | **Nautical**         | Sea marks, depths, tides, and water levels            | OpenSeaMap and marine agencies |
 | **Satellite imagery**| A true-color satellite overlay (distinct from the satellite base) | NASA GIBS / MODIS |
-| **3D buildings**     | Extruded building footprints                          | OpenMapTiles building data   |
+| **3D buildings**     | Detailed LoD2 roofs in Germany at z16+, with extruded-footprint fallback | GeoBasis-DE/BKG and OpenMapTiles |
+
+The **3D buildings** overlay uses the official basemap.de LoD2 building service
+when the map is in Germany, in Web Mercator, and zoomed to level 16 or closer.
+Roofs and building parts then use their generalized official geometry instead
+of remaining flat-topped boxes. At lower zooms, outside Germany, on the globe,
+while the detailed tiles load, or if the external service is unavailable, the
+overlay keeps rendering the lightweight OpenMapTiles footprint extrusion.
+
+The detailed source is a hosted BKG test service rather than downloadable open
+data. OpenMapX streams it directly at runtime, does not mirror or persist its
+tiles, and displays the required `© GeoBasis-DE/BKG` credit and modification
+notice while it is active. Its current terms cover testing, demos, and genuine
+beta use; operators planning regular commercial-production use must first
+obtain written permission from BKG. See the
+[basemap.de 3D product page](https://basemap.de/produkte-und-dienste/3d/) and
+[test-operation terms](https://sgx.geodatenzentrum.de/public/gdz/lizenz/deu/lizenz_basemapde_3d-testbetrieb.pdf).
 
 ### Map tools
 

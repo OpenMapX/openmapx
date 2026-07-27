@@ -21,7 +21,9 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   "worker-src 'self' blob:",
   "connect-src 'self' https: http: ws: wss: data: blob:",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:",
+  // The only third-party script is BKG's official basemap.de 3D renderer.
+  // Its loader also enforces a reviewed SHA-384 Subresource Integrity hash.
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://sgx.geodatenzentrum.de",
 ].join("; ");
 
 // Security headers applied to every route. CSP enforces object/base/frame/form

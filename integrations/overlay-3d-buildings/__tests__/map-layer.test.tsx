@@ -5,6 +5,16 @@ import { useBuildingsStore } from "../store";
 
 let fake: FakeMap;
 
+const createBasemapLod2LayerMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../basemap-lod2", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../basemap-lod2")>();
+  return {
+    ...actual,
+    createBasemapLod2Layer: createBasemapLod2LayerMock,
+  };
+});
+
 vi.mock("@/lib/MapContext", () => ({
   useMap: () => ({
     mapRef: { current: fake.map },
@@ -16,6 +26,7 @@ vi.mock("@/lib/MapContext", () => ({
 import { BuildingExtrusionLayer } from "../map-layer";
 
 const LAYER_ID = "openmapx-3d-buildings";
+const DETAILED_LAYER_ID = "openmapx-3d-buildings-lod2";
 const BUILDING_LAYER_ID = "base-buildings";
 const SYMBOL_LAYER_ID = "place-labels";
 
@@ -46,6 +57,14 @@ function addBaseStyle(): void {
 beforeEach(() => {
   fake = createFakeMap({ zoom: 16, pitch: 20, maxPitch: 70 });
   addBaseStyle();
+  createBasemapLod2LayerMock.mockReset();
+  createBasemapLod2LayerMock.mockImplementation(async (id: string) => ({
+    id,
+    type: "custom",
+    renderingMode: "3d",
+    loadStatus: 1,
+    render: vi.fn(),
+  }));
   useBuildingsStore.setState({ panelOpen: false, layerVisible: false });
   vi.stubGlobal(
     "matchMedia",
@@ -69,6 +88,58 @@ describe("BuildingExtrusionLayer", () => {
     expect(layer?.source).toBe("city");
     expect(layer?.["source-layer"]).toBe("building");
     expect(layer?.source).not.toBe("unrelated");
+  });
+
+  it("replaces the fallback with detailed LoD2 geometry at z16 in Germany", async () => {
+    fake.state.center = { lng: 8.6821, lat: 50.1109 };
+    useBuildingsStore.setState({ layerVisible: true });
+
+    render(<BuildingExtrusionLayer />);
+    await vi.waitFor(() => expect(fake.state.layers.has(DETAILED_LAYER_ID)).toBe(true));
+    expect(createBasemapLod2LayerMock).toHaveBeenCalled();
+    expect(fake.state.layout.get(DETAILED_LAYER_ID)?.visibility).toBe("visible");
+    expect(fake.state.layout.get(LAYER_ID)?.visibility).toBe("none");
+    expect(fake.state.layout.get(BUILDING_LAYER_ID)?.visibility).toBe("none");
+
+    act(() => {
+      fake.state.center = { lng: -73.9855, lat: 40.758 };
+      fake.emit("moveend");
+    });
+    expect(fake.state.layers.has(DETAILED_LAYER_ID)).toBe(false);
+    expect(fake.state.layout.get(LAYER_ID)?.visibility).toBe("visible");
+  });
+
+  it("keeps the extrusion fallback below z16 and outside Germany", async () => {
+    fake.state.center = { lng: 8.6821, lat: 50.1109 };
+    fake.state.zoom = 15;
+    useBuildingsStore.setState({ layerVisible: true });
+
+    render(<BuildingExtrusionLayer />);
+    await act(async () => Promise.resolve());
+
+    expect(createBasemapLod2LayerMock).not.toHaveBeenCalled();
+    expect(fake.state.layout.get(LAYER_ID)?.visibility).toBe("visible");
+
+    fake.state.zoom = 16;
+    fake.state.center = { lng: -73.9855, lat: 40.758 };
+    act(() => fake.emit("moveend"));
+    await act(async () => Promise.resolve());
+
+    expect(createBasemapLod2LayerMock).not.toHaveBeenCalled();
+    expect(fake.state.layout.get(LAYER_ID)?.visibility).toBe("visible");
+  });
+
+  it("falls back without hiding buildings when the detailed renderer fails", async () => {
+    fake.state.center = { lng: 8.6821, lat: 50.1109 };
+    createBasemapLod2LayerMock.mockRejectedValueOnce(new Error("renderer unavailable"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    useBuildingsStore.setState({ layerVisible: true });
+
+    render(<BuildingExtrusionLayer />);
+
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(1));
+    expect(fake.state.layers.has(DETAILED_LAYER_ID)).toBe(false);
+    expect(fake.state.layout.get(LAYER_ID)?.visibility).toBe("visible");
   });
 
   it("re-anchors after idle when the overlay is restored before its layer exists", () => {
