@@ -3,8 +3,6 @@
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
-import { buildIntegrationAttribution } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { type EnvironmentSensorType, useEnvironmentStore } from "./store";
@@ -57,9 +55,6 @@ const SENSOR_CHIPS: { key: EnvironmentSensorType }[] = [
 
 export function EnvironmentLegend() {
   const t = useTranslations("environment");
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-environment");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useEnvironmentStore((s) => s.panelOpen);
   const layerVisible = useEnvironmentStore((s) => s.layerVisible);
   const setLayerVisible = useEnvironmentStore((s) => s.setLayerVisible);
@@ -79,10 +74,8 @@ export function EnvironmentLegend() {
       loading={loading}
       setLayerVisible={setLayerVisible}
       toggleAriaLabel={t("toggleOverlay")}
-      attributionHtml={attributionHtml}
       paperSx={{ maxWidth: { xs: "90vw", sm: 420 }, minWidth: 260 }}
       headerSx={{ mb: 0.5 }}
-      attributionSx={{ mt: 0.5, display: "block", fontSize: 10.5 }}
     >
       {/* Sensor type chips */}
       <Box

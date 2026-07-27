@@ -6,8 +6,6 @@ import Switch from "@mui/material/Switch";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
-import { buildIntegrationAttribution } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { useEarthquakeStore } from "./store";
@@ -44,9 +42,6 @@ const MAG_SIZES = [
 
 export function EarthquakeLegend() {
   const t = useTranslations("earthquakes");
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-earthquakes");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useEarthquakeStore((s) => s.panelOpen);
   const layerVisible = useEarthquakeStore((s) => s.layerVisible);
   const loading = useEarthquakeStore((s) => s.loading);
@@ -69,10 +64,8 @@ export function EarthquakeLegend() {
       loading={loading}
       setLayerVisible={setLayerVisible}
       toggleAriaLabel={t("toggleOverlay")}
-      attributionHtml={attributionHtml}
       paperSx={{ maxWidth: "calc(100vw - 24px)" }}
       headerSx={{ mb: 0.75 }}
-      attributionSx={{ mt: 0.5 }}
     >
       <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start", flexWrap: "wrap" }}>
         <Box>

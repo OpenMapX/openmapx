@@ -11,8 +11,6 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { buildIntegrationAttribution } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
@@ -83,9 +81,6 @@ function SubLayerRow({ icon, label, description, region, checked, onChange }: Su
 
 export function NauticalLegend() {
   const t = useTranslations("nautical");
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-nautical");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useNauticalStore((s) => s.panelOpen);
   const layerVisible = useNauticalStore((s) => s.layerVisible);
   const loading = useNauticalStore((s) => s.loading);
@@ -115,10 +110,8 @@ export function NauticalLegend() {
       loading={loading}
       setLayerVisible={setLayerVisible}
       toggleAriaLabel={t("toggleOverlay")}
-      attributionHtml={attributionHtml}
       paperSx={{ maxWidth: { xs: "calc(100vw - 24px)", sm: 320 }, minWidth: 240 }}
       headerSx={{ mb: 0.6 }}
-      attributionSx={{ mt: 1, display: "block", fontSize: 10, lineHeight: 1.4 }}
     >
       <Typography
         sx={{

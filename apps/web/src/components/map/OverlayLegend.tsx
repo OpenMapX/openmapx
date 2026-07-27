@@ -7,7 +7,6 @@ import Switch from "@mui/material/Switch";
 import type { SxProps, Theme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import type { ReactNode } from "react";
-import { AttributionText } from "@/components/ui/AttributionText";
 
 export interface OverlayLegendProps {
   /** Resolved title string (already translated by the caller). */
@@ -22,9 +21,7 @@ export interface OverlayLegendProps {
   setLayerVisible: (visible: boolean) => void;
   /** Translated aria-label for the header toggle (e.g. t("toggleOverlay")). */
   toggleAriaLabel: string;
-  /** Trusted attribution HTML from manifest dataSources; footer is omitted when falsy. */
-  attributionHtml?: string | null;
-  /** Per-overlay swatch / control content rendered between header and attribution. */
+  /** Per-overlay swatch / control content rendered below the header. */
   children: ReactNode;
   /**
    * Extra sx merged onto the Paper shell to reproduce per-overlay variations
@@ -39,20 +36,23 @@ export interface OverlayLegendProps {
    * name and truncates it).
    */
   titleSx?: SxProps<Theme>;
-  /** sx for the attribution footer Typography (varies by mt/display/fontSize). */
-  attributionSx?: SxProps<Theme>;
 }
 
 /**
  * Shared shell for every overlay legend: the <Paper> wrapper,
- * absolutely-positioned loading bar, the title + toggle header, and the
- * attribution footer. The per-overlay swatch content is passed as children.
+ * absolutely-positioned loading bar, and the title + toggle header. The
+ * per-overlay swatch content is passed as children.
  *
- * Per-overlay differences (Paper extras, header margin, title constraints,
- * attribution sx) are passed in as props, so a legend keeps its own look while
- * the shell — and above all the single attribution footer — lives here. The
- * overlay tools (measurement, travel time) deliberately stay standalone: they
- * are toolbars with a close button, not legends with a visibility toggle.
+ * Per-overlay differences (Paper extras, header margin, title constraints) are
+ * passed in as props, so a legend keeps its own look while the shell lives
+ * here. The overlay tools (measurement, travel time) deliberately stay
+ * standalone: they are toolbars with a close button, not legends with a
+ * visibility toggle.
+ *
+ * Legends carry no credits. An overlay's sources are credited once, in the map
+ * credits strip (`<MapFooter>`), which every layer registers into via
+ * `useMapAttributions` and which renders the same "Publisher (License)" HTML
+ * these legends used to duplicate.
  */
 export function OverlayLegend({
   title,
@@ -61,12 +61,10 @@ export function OverlayLegend({
   loading,
   setLayerVisible,
   toggleAriaLabel,
-  attributionHtml,
   children,
   paperSx,
   headerSx,
   titleSx,
-  attributionSx,
 }: OverlayLegendProps) {
   if (!panelOpen) return null;
 
@@ -119,19 +117,6 @@ export function OverlayLegend({
         />
       </Box>
       {children}
-      {/* Attribution (from manifest dataSources, trusted static config) */}
-      {attributionHtml && (
-        <Typography
-          variant="caption"
-          component="div"
-          sx={[
-            { color: "text.secondary" },
-            ...(Array.isArray(attributionSx) ? attributionSx : [attributionSx]),
-          ]}
-        >
-          <AttributionText html={attributionHtml} />
-        </Typography>
-      )}
     </Paper>
   );
 }

@@ -2,8 +2,6 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { buildIntegrationAttribution } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { useWinterSportsStore } from "./store";
@@ -19,9 +17,6 @@ const DIFFICULTY_ITEMS = [
 
 export function WinterSportsLegend() {
   const t = useTranslations("winterSports");
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-winter-sports");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useWinterSportsStore((s) => s.panelOpen);
   const layerVisible = useWinterSportsStore((s) => s.layerVisible);
   const loading = useWinterSportsStore((s) => s.loading);
@@ -35,10 +30,8 @@ export function WinterSportsLegend() {
       loading={loading}
       setLayerVisible={setLayerVisible}
       toggleAriaLabel={t("toggleOverlay")}
-      attributionHtml={attributionHtml}
       paperSx={{ whiteSpace: "nowrap" }}
       headerSx={{ mb: 1 }}
-      attributionSx={{ mt: 0.75, display: "block", fontSize: 10.5 }}
     >
       <Box sx={{ display: "flex", flexDirection: "row", gap: 1.5 }}>
         {DIFFICULTY_ITEMS.map((d) => (

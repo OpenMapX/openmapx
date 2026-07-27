@@ -4,8 +4,6 @@ import Box from "@mui/material/Box";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
-import { buildAttributionHtml } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { type AirportTypeFilter, useAirportsOverlayStore } from "./store";
@@ -20,19 +18,6 @@ const TYPE_SWATCHES: Array<{ key: string; color: string }> = [
 
 export function AirportsOverlayLegend() {
   const t = useTranslations("airportsOverlay");
-  const registry = useIntegrationRegistry();
-  const attributionSource = registry
-    .get("overlay-ourairports")
-    ?.dataSources?.find((ds) => ds.sourceId === "ourairports");
-  const attributionHtml = attributionSource
-    ? buildAttributionHtml({
-        name: attributionSource.name,
-        url: attributionSource.url ?? "",
-        license: attributionSource.license ?? "",
-        licenseUrl: attributionSource.licenseUrl,
-        attribution: attributionSource.attribution,
-      })
-    : "";
   const panelOpen = useAirportsOverlayStore((s) => s.panelOpen);
   const layerVisible = useAirportsOverlayStore((s) => s.layerVisible);
   const loading = useAirportsOverlayStore((s) => s.loading);
@@ -52,10 +37,8 @@ export function AirportsOverlayLegend() {
       loading={loading}
       setLayerVisible={setLayerVisible}
       toggleAriaLabel={t("toggleOverlay")}
-      attributionHtml={attributionHtml}
       paperSx={{ maxWidth: "calc(100vw - 24px)" }}
       headerSx={{ mb: 0.75 }}
-      attributionSx={{ mt: 1, display: "block", fontSize: 10 }}
     >
       <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start", flexWrap: "wrap" }}>
         <Box>

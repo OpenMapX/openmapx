@@ -7,12 +7,7 @@ import Slider from "@mui/material/Slider";
 import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import {
-  buildIntegrationAttribution,
-  type WeatherSubLayer,
-  weatherCodeToInfo,
-} from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import { type WeatherSubLayer, weatherCodeToInfo } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { WeatherIcon } from "@/components/weather/WeatherIcon";
@@ -41,9 +36,6 @@ export function WeatherLegend() {
   const t = useTranslations("weather");
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-weather");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useWeatherStore((s) => s.panelOpen);
   const layerVisible = useWeatherStore((s) => s.layerVisible);
   const setLayerVisible = useWeatherStore((s) => s.setLayerVisible);
@@ -76,7 +68,6 @@ export function WeatherLegend() {
       loading={loading || radarLoading}
       setLayerVisible={setLayerVisible}
       toggleAriaLabel={t("toggleOverlay")}
-      attributionHtml={attributionHtml}
       paperSx={{ maxWidth: { xs: "90vw", sm: 440 }, minWidth: 280 }}
       headerSx={{ mb: 1 }}
       // The title interpolates a place name, so it has to truncate.
@@ -86,7 +77,6 @@ export function WeatherLegend() {
         whiteSpace: "nowrap",
         maxWidth: 300,
       }}
-      attributionSx={{ mt: 1 }}
     >
       {/* Current weather conditions */}
       {currentWeather ? (

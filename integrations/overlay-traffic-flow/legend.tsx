@@ -2,8 +2,6 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { buildIntegrationAttribution, combineAttributions } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { useTrafficFlowStore } from "./store";
@@ -24,26 +22,8 @@ const CONFIDENCE_STEPS: { key: string; opacity: number }[] = [
   { key: "typical", opacity: 0.4 },
 ];
 
-/**
- * The actual NDW/Fintraffic/Trafikverket/NYC DOT feed credits live on the
- * external `road-conditions-openconditions` provider's manifest, registered
- * under the shared `road-conditions` domain — not on this overlay's own
- * (data-source-less) manifest. Aggregate across the domain, mirroring
- * `overlay-live-transit/legend.tsx`'s `buildProviderAttribution`.
- */
-function buildProviderAttribution(registry: ReturnType<typeof useIntegrationRegistry>): string {
-  return combineAttributions(
-    registry
-      .getByDomain("road-conditions")
-      .map((integration) => buildIntegrationAttribution(integration.dataSources))
-      .filter(Boolean),
-  );
-}
-
 export function TrafficFlowLegend() {
   const t = useTranslations("trafficFlow");
-  const registry = useIntegrationRegistry();
-  const attributionHtml = buildProviderAttribution(registry);
   const panelOpen = useTrafficFlowStore((s) => s.panelOpen);
   const layerVisible = useTrafficFlowStore((s) => s.layerVisible);
   const setLayerVisible = useTrafficFlowStore((s) => s.setLayerVisible);
@@ -56,7 +36,6 @@ export function TrafficFlowLegend() {
       loading={false}
       setLayerVisible={setLayerVisible}
       toggleAriaLabel={t("toggleOverlay")}
-      attributionHtml={attributionHtml}
       paperSx={{ maxWidth: { xs: "90vw", sm: 340 }, minWidth: 240 }}
     >
       <Box sx={{ mb: 1 }}>

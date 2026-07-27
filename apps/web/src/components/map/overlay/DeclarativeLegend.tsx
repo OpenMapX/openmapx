@@ -2,7 +2,7 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { buildIntegrationAttribution, integrationIdToOverlayId } from "@openmapx/core";
+import { integrationIdToOverlayId } from "@openmapx/core";
 import type {
   IntegrationOverlayLegend,
   LoadedIntegrationMeta,
@@ -19,8 +19,13 @@ import {
 /**
  * Renders an overlay legend entirely from its manifest `frontend.overlay.legend`
  * spec (categorical swatches or a value→color ramp) — no integration-shipped
- * legend code. Reuses the shared OverlayLegend chrome (title, toggle,
- * attribution) so it looks identical to built-in legends.
+ * legend code. Reuses the shared OverlayLegend chrome (title, toggle) so it
+ * looks identical to built-in legends.
+ *
+ * Credits are not shown here: like every other legend, they belong to the map
+ * credits strip, which the integration's own map layer registers into. A legend
+ * is the wrong surface for them anyway — legends can be collapsed away entirely
+ * from `LegendHost`, while the strip is always on.
  */
 export function DeclarativeLegend({ integration }: { integration: LoadedIntegrationMeta }) {
   const legend = integration.frontend?.overlay?.legend;
@@ -38,7 +43,6 @@ function DeclarativeLegendInner({
   const t = useTranslations();
   const registry = useIntegrationRegistry();
   const meta = registry.get(integration.id);
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const overlayId = integrationIdToOverlayId(integration.id);
   const panelOpen = useOverlayPanelOpen(overlayId);
   const layerVisible = useOverlayLayerVisible(overlayId);
@@ -57,10 +61,8 @@ function DeclarativeLegendInner({
       loading={false}
       setLayerVisible={setLayerVisible}
       toggleAriaLabel={toggleAriaLabel}
-      attributionHtml={attributionHtml}
       paperSx={{ whiteSpace: "nowrap" }}
       headerSx={{ mb: 1 }}
-      attributionSx={{ mt: 1 }}
     >
       {legend.kind === "ramp" ? (
         <RampSwatches legend={legend} />

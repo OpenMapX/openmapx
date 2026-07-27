@@ -2,8 +2,7 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { buildIntegrationAttribution, SAC_GRADES } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import { SAC_GRADES } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { useHikingStore } from "./store";
@@ -26,9 +25,6 @@ const SHELTER_ITEMS = [
 
 export function HikingTrailsLegend() {
   const t = useTranslations("hiking");
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-hiking");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useHikingStore((s) => s.panelOpen);
   const layerVisible = useHikingStore((s) => s.layerVisible);
   const loading = useHikingStore((s) => s.loading);
@@ -42,10 +38,8 @@ export function HikingTrailsLegend() {
       loading={loading}
       setLayerVisible={setLayerVisible}
       toggleAriaLabel={t("toggleOverlay")}
-      attributionHtml={attributionHtml}
       paperSx={{ whiteSpace: "nowrap" }}
       headerSx={{ mb: 1 }}
-      attributionSx={{ mt: 1 }}
     >
       <Box sx={{ display: "flex", flexDirection: "row", gap: 1.5 }}>
         {GRADES.map((key) => {

@@ -3,7 +3,7 @@
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
-import { buildIntegrationAttribution, combineAttributions, relativeTime } from "@openmapx/core";
+import { relativeTime } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { TransportMode } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
@@ -24,15 +24,6 @@ const MODE_LABEL_KEYS: Partial<Record<TransportMode, string>> = {
   monorail: "monorail",
 };
 
-function buildProviderAttribution(registry: ReturnType<typeof useIntegrationRegistry>): string {
-  return combineAttributions(
-    registry
-      .getByDomain("live-transit")
-      .map((integration) => buildIntegrationAttribution(integration.dataSources))
-      .filter(Boolean),
-  );
-}
-
 function providerLabel(
   registry: ReturnType<typeof useIntegrationRegistry>,
   sourceId: string,
@@ -50,7 +41,6 @@ export function LiveTransitLegend() {
   const t = useTranslations("liveTransit");
   const transitT = useTranslations("transit");
   const registry = useIntegrationRegistry();
-  const attributionHtml = buildProviderAttribution(registry);
   const panelOpen = useLiveTransitStore((s) => s.panelOpen);
   const layerVisible = useLiveTransitStore((s) => s.layerVisible);
   const setLayerVisible = useLiveTransitStore((s) => s.setLayerVisible);
@@ -86,10 +76,8 @@ export function LiveTransitLegend() {
       loading={loading}
       setLayerVisible={setLayerVisible}
       toggleAriaLabel={t("toggleOverlay")}
-      attributionHtml={attributionHtml}
       paperSx={{ maxWidth: { xs: "90vw", sm: 420 }, minWidth: 260 }}
       headerSx={{ mb: 0.5 }}
-      attributionSx={{ fontSize: 10.5, mt: 0.5 }}
     >
       {availableProviders.length > 0 && (
         <Box sx={{ mb: 1 }}>

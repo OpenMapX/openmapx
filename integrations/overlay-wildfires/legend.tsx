@@ -6,8 +6,6 @@ import Switch from "@mui/material/Switch";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
-import { buildIntegrationAttribution } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { useWildfireStore } from "./store";
@@ -31,9 +29,6 @@ const FRP_SIZES = [
 
 export function WildfireLegend() {
   const t = useTranslations("wildfires");
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-wildfires");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useWildfireStore((s) => s.panelOpen);
   const layerVisible = useWildfireStore((s) => s.layerVisible);
   const loading = useWildfireStore((s) => s.loading);
@@ -54,10 +49,8 @@ export function WildfireLegend() {
       loading={loading}
       setLayerVisible={setLayerVisible}
       toggleAriaLabel={t("toggleOverlay")}
-      attributionHtml={attributionHtml}
       paperSx={{ maxWidth: "calc(100vw - 24px)" }}
       headerSx={{ mb: 0.75 }}
-      attributionSx={{ mt: 0.5 }}
     >
       <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start", flexWrap: "wrap" }}>
         <Box>

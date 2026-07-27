@@ -3,8 +3,7 @@
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
-import { buildIntegrationAttribution, relativeTime } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import { relativeTime } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { SEVERITY_COLORS } from "./map-layer";
@@ -12,9 +11,6 @@ import { ALL_SEVERITIES, useWeatherAlertStore } from "./store";
 
 export function WeatherAlertLegend() {
   const t = useTranslations("weatherAlerts");
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-weather-alerts");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useWeatherAlertStore((s) => s.panelOpen);
   const layerVisible = useWeatherAlertStore((s) => s.layerVisible);
   const setLayerVisible = useWeatherAlertStore((s) => s.setLayerVisible);
@@ -32,10 +28,8 @@ export function WeatherAlertLegend() {
       loading={loading}
       setLayerVisible={setLayerVisible}
       toggleAriaLabel={t("toggleOverlay")}
-      attributionHtml={attributionHtml}
       paperSx={{ maxWidth: { xs: "90vw", sm: 420 }, minWidth: 260 }}
       headerSx={{ mb: 0.5 }}
-      attributionSx={{ fontSize: 10.5, mt: 0.5 }}
     >
       {/* Severity chips */}
       <Box sx={{ mb: 1 }}>

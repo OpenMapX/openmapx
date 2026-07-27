@@ -5,8 +5,7 @@ import Chip from "@mui/material/Chip";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
-import { buildIntegrationAttribution, relativeTime } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import { relativeTime } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { CATEGORY_COLORS } from "./map-layer";
@@ -21,9 +20,6 @@ const DAY_OPTIONS: { value: number | null; labelKey: string }[] = [
 
 export function NaturalEventLegend() {
   const t = useTranslations("naturalEvents");
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-natural-events");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useNaturalEventStore((s) => s.panelOpen);
   const layerVisible = useNaturalEventStore((s) => s.layerVisible);
   const setLayerVisible = useNaturalEventStore((s) => s.setLayerVisible);
@@ -43,10 +39,8 @@ export function NaturalEventLegend() {
       loading={loading}
       setLayerVisible={setLayerVisible}
       toggleAriaLabel={t("toggleOverlay")}
-      attributionHtml={attributionHtml}
       paperSx={{ maxWidth: { xs: "90vw", sm: 420 }, minWidth: 260 }}
       headerSx={{ mb: 0.5 }}
-      attributionSx={{ mt: 0.5, display: "block", fontSize: 10.5 }}
     >
       {/* Time range */}
       <Box sx={{ mb: 1 }}>

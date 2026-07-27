@@ -5,8 +5,6 @@ import Chip from "@mui/material/Chip";
 import Slider from "@mui/material/Slider";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { buildIntegrationAttribution } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { useEnv } from "@/lib/EnvProvider";
@@ -15,9 +13,6 @@ import { GIBS_LAYERS, today, useSatelliteStore, yesterday } from "./store";
 export function SatelliteLegend() {
   const t = useTranslations("satelliteImagery");
   const env = useEnv();
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-satellite");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useSatelliteStore((s) => s.panelOpen);
   const layerVisible = useSatelliteStore((s) => s.layerVisible);
   const setLayerVisible = useSatelliteStore((s) => s.setLayerVisible);
@@ -43,10 +38,8 @@ export function SatelliteLegend() {
       loading={false}
       setLayerVisible={setLayerVisible}
       toggleAriaLabel={t("toggleOverlay")}
-      attributionHtml={attributionHtml}
       paperSx={{ maxWidth: { xs: "90vw", sm: 420 }, minWidth: 260 }}
       headerSx={{ mb: 1 }}
-      attributionSx={{ mt: 1 }}
     >
       {/* Layer picker */}
       <Box sx={{ mb: 1.5 }}>

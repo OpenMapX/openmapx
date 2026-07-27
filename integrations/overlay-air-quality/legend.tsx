@@ -2,8 +2,6 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { buildIntegrationAttribution } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { useAirQualityStore } from "./store";
@@ -19,9 +17,6 @@ const AQI_LEVEL_KEYS = [
 
 export function AirQualityLegend() {
   const t = useTranslations("airQuality");
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-air-quality");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useAirQualityStore((s) => s.panelOpen);
   const layerVisible = useAirQualityStore((s) => s.layerVisible);
   const loading = useAirQualityStore((s) => s.loading);
@@ -35,10 +30,8 @@ export function AirQualityLegend() {
       loading={loading}
       setLayerVisible={setLayerVisible}
       toggleAriaLabel={t("toggleOverlay")}
-      attributionHtml={attributionHtml}
       paperSx={{ whiteSpace: "nowrap" }}
       headerSx={{ mb: 1 }}
-      attributionSx={{ mt: 1 }}
     >
       <Box sx={{ display: "flex", flexDirection: "row", gap: 1.5 }}>
         {AQI_LEVEL_KEYS.map((level) => (
