@@ -6,6 +6,12 @@ import { useEffect, useRef } from "react";
 import { getFirstSymbolLayerId, setLayerVisibility } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useMap } from "@/lib/MapContext";
+import {
+  EXTRUSION_BASE,
+  EXTRUSION_COLOR,
+  EXTRUSION_HEIGHT,
+  findBuildingSourceReference,
+} from "./building-style";
 import { useBuildingsStore } from "./store";
 
 const LAYER_ID = "openmapx-3d-buildings";
@@ -16,35 +22,6 @@ const MAX_PITCH_3D = 85;
 interface CameraState {
   pitch: number;
   maxPitch: number;
-}
-
-const EXTRUSION_COLOR: maplibregl.ExpressionSpecification = [
-  "interpolate",
-  ["linear"],
-  ["get", "render_height"],
-  0,
-  "#d4d0cc",
-  20,
-  "#c8c4c0",
-  60,
-  "#b8b4b2",
-  150,
-  "#a8a6a8",
-  300,
-  "#9898a0",
-];
-
-const EXTRUSION_HEIGHT: maplibregl.ExpressionSpecification = ["get", "render_height"];
-
-const EXTRUSION_BASE: maplibregl.ExpressionSpecification = ["get", "render_min_height"];
-
-function findVectorSource(map: maplibregl.Map): string | null {
-  const sources = map.getStyle().sources;
-  if (!sources) return null;
-  for (const [id, source] of Object.entries(sources)) {
-    if (source.type === "vector") return id;
-  }
-  return null;
 }
 
 function setOriginalBuildingLayersVisibility(map: maplibregl.Map, visible: boolean): void {
@@ -77,6 +54,9 @@ export function BuildingExtrusionLayer() {
       }
 
       if (layerVisible) {
+        const buildingSource = findBuildingSourceReference(map);
+        if (!buildingSource) return;
+
         setOriginalBuildingLayersVisibility(map, false);
         map.setLight({
           anchor: "viewport",
@@ -86,15 +66,12 @@ export function BuildingExtrusionLayer() {
         });
 
         if (!map.getLayer(LAYER_ID)) {
-          const source = findVectorSource(map);
-          if (!source) return;
-
           map.addLayer(
             {
               id: LAYER_ID,
               type: "fill-extrusion",
-              source,
-              "source-layer": "building",
+              source: buildingSource.source,
+              "source-layer": buildingSource.sourceLayer,
               minzoom: MIN_ZOOM,
               filter: ["!=", ["get", "hide_3d"], true],
               paint: {
