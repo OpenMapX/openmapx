@@ -11,8 +11,15 @@ import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { CATEGORY_COLORS } from "./map-layer";
 import { ALL_CATEGORIES, useNaturalEventStore } from "./store";
 
-const DAY_OPTIONS: { value: number | null; labelKey: string }[] = [
-  { value: null, labelKey: "allOpen" },
+/**
+ * Stands in for "no day limit" as a toggle-button value. A ToggleButton's value
+ * cannot be null — the group reserves null for "nothing selected" — so the
+ * store's `days: null` is mapped to this sentinel at the boundary.
+ */
+const ALL_DAYS = 0;
+
+const DAY_OPTIONS: { value: number; labelKey: string }[] = [
+  { value: ALL_DAYS, labelKey: "allOpen" },
   { value: 30, labelKey: "nDays" },
   { value: 90, labelKey: "nDays" },
   { value: 365, labelKey: "nDays" },
@@ -48,17 +55,17 @@ export function NaturalEventLegend() {
           {t("timeRange")}
         </Typography>
         <ToggleButtonGroup
-          value={days}
+          value={days ?? ALL_DAYS}
           exclusive
           size="small"
-          onChange={(_, v) => {
-            if (v !== undefined) setDays(v);
-          }}
+          // An exclusive group emits null when the selected button is clicked
+          // again; both that and picking "all" mean no day limit.
+          onChange={(_, v: number | null) => setDays(v === null || v === ALL_DAYS ? null : v)}
           sx={{ "& .MuiToggleButton-root": { px: 1.5, py: 0.25, fontSize: 12 } }}
         >
           {DAY_OPTIONS.map((opt) => (
-            <ToggleButton key={String(opt.value)} value={opt.value}>
-              {opt.value == null ? t("allOpen") : t("nDays", { count: opt.value })}
+            <ToggleButton key={opt.value} value={opt.value}>
+              {opt.value === ALL_DAYS ? t("allOpen") : t("nDays", { count: opt.value })}
             </ToggleButton>
           ))}
         </ToggleButtonGroup>

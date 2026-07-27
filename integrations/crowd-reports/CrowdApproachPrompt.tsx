@@ -65,7 +65,7 @@ export function CrowdApproachPrompt() {
         maxWidth: 360,
       }}
     >
-      <Stack direction="row" spacing={1} alignItems="center">
+      <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="body2" noWrap>
             {nearest.headline || t("approachStillThere")}

@@ -73,7 +73,7 @@ function SubLayerRow({ icon, label, description, region, checked, onChange }: Su
         size="small"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        inputProps={{ "aria-label": label }}
+        slotProps={{ input: { "aria-label": label } }}
       />
     </Box>
   );

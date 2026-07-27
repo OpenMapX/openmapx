@@ -264,8 +264,10 @@ export function AirportsOverlay() {
       const f = e.features?.[0];
       if (!f) return;
       const p = f.properties as Record<string, string | number | undefined>;
-      const coords = (f.geometry as { coordinates: [number, number] }).coordinates;
-      const [lng, lat] = coords;
+      // These layers render Point features; narrowing beats a cast, which
+      // silently produced undefined coordinates for any other geometry.
+      if (f.geometry.type !== "Point") return;
+      const [lng, lat] = f.geometry.coordinates;
       const ident = String(p.ident ?? p.icao ?? p.iata ?? "")
         .trim()
         .toUpperCase();
@@ -276,7 +278,6 @@ export function AirportsOverlay() {
       // hitting Nominatim reverse-geocode at the click point, which can land
       // on a building inside the airport polygon and skip the enrichment.
       const place = createPlace({
-        id: `oa:${ident}`,
         primaryScheme: "oa",
         ids: { oa: ident },
         name,

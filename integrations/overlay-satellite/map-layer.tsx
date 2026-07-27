@@ -1,6 +1,7 @@
 "use client";
 
 import { useOverlayExclusion } from "@openmapx/core";
+import type maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
@@ -106,11 +107,14 @@ export function SatelliteLayer() {
     // Must run BEFORE isStyleLoaded() because that returns false while the
     // source's initial tiles are still loading — which is exactly the case
     // when capabilities auto-adjusts the date on mount.
-    if (prevKeyRef.current !== key && map.getSource(SOURCE_ID)) {
+    const existing = map.getSource(SOURCE_ID);
+    if (prevKeyRef.current !== key && existing) {
       const prevLayerId = prevKeyRef.current ? prevKeyRef.current.split(":")[0] : "";
       if (prevLayerId === def.id) {
         prevKeyRef.current = key;
-        (map.getSource(SOURCE_ID) as { setTiles: (t: string[]) => void }).setTiles([tileUrl]);
+        // The source is the raster source added below; `setTiles` lives on
+        // RasterTileSource, not the Source base type.
+        (existing as maplibregl.RasterTileSource).setTiles([tileUrl]);
         map.triggerRepaint();
       }
     }

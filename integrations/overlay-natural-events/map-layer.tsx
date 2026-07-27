@@ -37,16 +37,15 @@ const ALERT_STROKE_COLORS: Record<string, string> = {
 };
 
 function buildColorExpr(): maplibregl.ExpressionSpecification {
-  const cases: (string | string[])[] = [];
+  // Accumulate into `unknown[]` and cast once, the shape the other overlays
+  // use: a match expression built from a variable number of cases can't be
+  // spread into the fixed tuple `ExpressionSpecification` describes.
+  const expr: unknown[] = ["match", ["get", "categoryId"]];
   for (const [id, color] of Object.entries(CATEGORY_COLORS)) {
-    cases.push(id, color);
+    expr.push(id, color);
   }
-  return [
-    "match",
-    ["get", "categoryId"],
-    ...cases,
-    "#78909c",
-  ] as maplibregl.ExpressionSpecification;
+  expr.push("#78909c");
+  return expr as maplibregl.ExpressionSpecification;
 }
 
 function buildStrokeColorExpr(): maplibregl.ExpressionSpecification {

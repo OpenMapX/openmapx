@@ -64,6 +64,9 @@ export function RoadConditionsLegend() {
       title={t("trafficIncidents")}
       panelOpen={panelOpen}
       layerVisible={layerVisible}
+      // This overlay's store tracks no fetch state, so the legend has no
+      // loading bar to show.
+      loading={false}
       setLayerVisible={setLayerVisible}
       toggleAriaLabel={t("toggleOverlay")}
       paperSx={{ maxWidth: "calc(100vw - 24px)" }}

@@ -14,14 +14,14 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import type { LngLat, MeasurementMode, UnitSystem } from "@openmapx/core";
+import type { LngLat, UnitSystem } from "@openmapx/core";
 import { formatArea, formatMeasurementDistance } from "@openmapx/core";
 import { area } from "@turf/area";
 import { lineString, polygon as turfPolygon } from "@turf/helpers";
 import { length } from "@turf/length";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
-import { useMeasurementStore } from "./store";
+import { type MeasurementMode, useMeasurementStore } from "./store";
 
 function computeTotalDistance(points: LngLat[]): number {
   if (points.length < 2) return 0;

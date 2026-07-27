@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Own build-info file (named to match the repo's `*.tsbuildinfo` ignore):
+    // this project and the app's own check run back to back, and a shared
+    // default path would make each invalidate the other.
+    "tsBuildInfoFile": "./integrations.tsbuildinfo",
+    // The app targets ES2017 and lets Next downlevel. Source-only workspace
+    // packages an integration pulls in are authored against their own, newer
+    // target (openconditions-contrib-client is ES2024 and uses BigInt
+    // literals), so type-checking them at the app's target reports syntax
+    // errors their own `check-types` does not have. Raise the floor here; each
+    // package still enforces its real target.
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "ES2022"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@integrations/*": ["../../integrations/*"],
+      "@openmapx/integration-framework": ["../../packages/integration-framework/src/index.ts"],
+      "@openmapx/mobility-core/*": [
+        "../../packages/mobility-core/src/*.ts",
+        "../../packages/mobility-core/src/types/*.ts"
+      ],
+      // An integration package declares no react dependency of its own — Next
+      // compiles these files as part of apps/web, through the `@integrations/*`
+      // alias. TS instead walks up from integrations/<id>/ looking for
+      // `@types/react` and finds none (it is installed under apps/web), so
+      // point react's declarations at the copy that actually applies. Every
+      // other frontend dep (@mui, maplibre-gl, next-intl, @openmapx/*) ships
+      // its own types alongside the package and resolves without help.
+      "react": ["./node_modules/@types/react"],
+      "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime"],
+      "react-dom": ["./node_modules/@types/react-dom"]
+    }
+  },
+  // Integration frontends (map layers, legends, panels). The app can't reach
+  // them from its own project: the hosts load them through template-literal
+  // dynamic imports (`@integrations/${id}/map-layer`), which TS cannot resolve,
+  // so nothing checked these files against the app's component APIs — a legend
+  // passing a prop that no longer existed type-checked clean.
+  //
+  // The `.ts` modules a component imports (store.ts, config helpers) come in
+  // transitively. Integration *backends* are checked separately by
+  // apps/api/tsconfig.integrations.json.
+  "include": ["next-env.d.ts", "../../integrations/**/*.tsx"],
+  "exclude": [
+    "../../integrations/**/node_modules/**",
+    "../../integrations/**/dist/**",
+    "../../integrations/**/*.test.tsx",
+    "../../integrations/**/__tests__/**"
+  ]
+}
