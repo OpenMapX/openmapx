@@ -121,7 +121,7 @@ describe("food-delivery deep-link builders", () => {
     );
   });
 
-  it("uber eats builds the location-feed URL and appends the operator scid", () => {
+  it("uber eats builds the location-scoped search URL and appends the operator scid", () => {
     const q: DeliveryQuery = {
       name: "Joe's Pizza",
       city: "New York",
@@ -130,7 +130,12 @@ describe("food-delivery deep-link builders", () => {
       lng: -74,
     };
     const base = prov("ubereats").build(q, NO_CONFIG);
-    expect(base.startsWith("https://www.ubereats.com/feed?diningMode=DELIVERY&pl=")).toBe(true);
+    const parsed = new URL(base);
+    expect(parsed.pathname).toBe("/search");
+    expect(parsed.searchParams.get("diningMode")).toBe("DELIVERY");
+    expect(parsed.searchParams.get("sc")).toBe("SEARCH_BAR");
+    expect(parsed.searchParams.get("searchType")).toBe("GLOBAL_SEARCH");
+    expect(parsed.searchParams.get("vertical")).toBe("ALL");
     const withScid = prov("ubereats").build(q, { uberEatsScid: "abc123" });
     expect(withScid).toContain("&scid=abc123");
   });

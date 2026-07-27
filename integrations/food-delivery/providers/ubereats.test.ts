@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DeliveryQuery } from "../types.js";
-import { matchUberEatsStoreUrl, type UberFeedItem } from "./ubereats.js";
+import { matchUberEatsStoreUrl, type UberFeedItem, uberEatsProvider } from "./ubereats.js";
 
 const query: DeliveryQuery = {
   name: "L'Osteria",
@@ -44,6 +44,31 @@ describe("Uber Eats exact-store matching", () => {
     expect(matchUberEatsStoreUrl({ ...query, name: "Pizza" }, [store("Pizza Hut")])).toBeNull();
   });
 
+  it("matches a nearby distinctive one-word brand with an Uber branch suffix", () => {
+    const frittenwerk = { ...query, name: "Frittenwerk", lat: 50.775068, lng: 6.08779 };
+    expect(
+      matchUberEatsStoreUrl(frittenwerk, [
+        store(
+          "Frittenwerk Aachen Holzgraben",
+          50.7751,
+          6.0878,
+          "/store/frittenwerk-aachen-holzgraben/af0fUjcsVYG8WCs5EqgQmQ",
+        ),
+      ]),
+    ).toBe(
+      "https://www.ubereats.com/de/store/frittenwerk-aachen-holzgraben/af0fUjcsVYG8WCs5EqgQmQ",
+    );
+  });
+
+  it("rejects a distant branch for the relaxed one-word brand match", () => {
+    const frittenwerk = { ...query, name: "Frittenwerk", lat: 50.775068, lng: 6.08779 };
+    expect(
+      matchUberEatsStoreUrl(frittenwerk, [
+        store("Frittenwerk Aachen", 50.779, 6.0878, "/store/frittenwerk-aachen/other"),
+      ]),
+    ).toBeNull();
+  });
+
   it("preserves non-Latin names for exact matching", () => {
     expect(matchUberEatsStoreUrl({ ...query, name: "すし処" }, [store("すし処")])).toContain(
       "/store/",
@@ -60,5 +85,31 @@ describe("Uber Eats exact-store matching", () => {
     expect(
       matchUberEatsStoreUrl(query, [store("L'Osteria", undefined, undefined, "/search")]),
     ).toBeNull();
+  });
+});
+
+describe("Uber Eats search handoff", () => {
+  it("uses the working search-bar route instead of the broken feed query route", () => {
+    const url = new URL(
+      uberEatsProvider.build(
+        {
+          name: "Frittenwerk",
+          countryCode: "de",
+          city: "Aachen",
+          address: "Holzgraben 4, 52062 Aachen, Germany",
+          lat: 50.775068,
+          lng: 6.08779,
+        },
+        {},
+      ),
+    );
+
+    expect(url.pathname).toBe("/de/search");
+    expect(url.searchParams.get("q")).toBe("Frittenwerk");
+    expect(url.searchParams.get("diningMode")).toBe("DELIVERY");
+    expect(url.searchParams.get("sc")).toBe("SEARCH_BAR");
+    expect(url.searchParams.get("searchType")).toBe("GLOBAL_SEARCH");
+    expect(url.searchParams.get("vertical")).toBe("ALL");
+    expect(url.searchParams.get("pl")).toBeTruthy();
   });
 });

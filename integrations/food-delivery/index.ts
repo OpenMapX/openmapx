@@ -18,8 +18,8 @@ const RESOLVE_TTL = 7 * 24 * 60 * 60;
 const RESOLVE_NEGATIVE_TTL = 24 * 60 * 60;
 
 type CachedResolution =
-  | { version: 2; kind: "exact"; url: string }
-  | { version: 2; kind: "not_found" };
+  | { version: 3; kind: "exact"; url: string }
+  | { version: 3; kind: "not_found" };
 
 /**
  * Food-delivery integration. Exposes deep-link builders for external delivery
@@ -90,27 +90,27 @@ export function setup(ctx: IntegrationContext): void {
   ): Promise<{ url: string; linkKind: DeliveryLinkKind; degraded?: boolean }> {
     const fallback = () => provider.build(query, providerConfig);
     if (provider.resolve && typeof query.lat === "number" && typeof query.lng === "number") {
-      const cacheKey = `resolve:v2:${provider.id}:${query.countryCode ?? ""}:${query.lat.toFixed(5)}:${query.lng.toFixed(5)}:${resolveConfigTag(provider)}:${query.name.toLowerCase()}`;
+      const cacheKey = `resolve:v3:${provider.id}:${query.countryCode ?? ""}:${query.lat.toFixed(5)}:${query.lng.toFixed(5)}:${resolveConfigTag(provider)}:${query.name.toLowerCase()}`;
       try {
         const cached = await ctx.cache.get<CachedResolution>(cacheKey);
-        if (cached?.version === 2 && cached.kind === "exact") {
+        if (cached?.version === 3 && cached.kind === "exact") {
           return { url: cached.url, linkKind: "exact" };
         }
-        if (cached?.version === 2 && cached.kind === "not_found") {
+        if (cached?.version === 3 && cached.kind === "not_found") {
           return { url: fallback(), linkKind: provider.fallbackKind };
         }
         const resolved = await provider.resolve(query, providerConfig);
         if (resolved.kind === "exact") {
           await ctx.cache.set(
             cacheKey,
-            { version: 2, kind: "exact", url: resolved.url } satisfies CachedResolution,
+            { version: 3, kind: "exact", url: resolved.url } satisfies CachedResolution,
             RESOLVE_TTL,
           );
           return { url: resolved.url, linkKind: "exact" };
         }
         await ctx.cache.set(
           cacheKey,
-          { version: 2, kind: "not_found" } satisfies CachedResolution,
+          { version: 3, kind: "not_found" } satisfies CachedResolution,
           RESOLVE_NEGATIVE_TTL,
         );
       } catch (err) {

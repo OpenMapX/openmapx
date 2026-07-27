@@ -100,6 +100,29 @@ interface UberFeedResponse {
  */
 const UBEREATS_MAX_MATCH_KM = 1;
 
+/**
+ * A one-word brand followed by Uber's branch label (for example,
+ * "Frittenwerk Aachen Holzgraben") is useful evidence only very close to the
+ * queried POI. Keeping this radius much tighter than the normal branch radius
+ * avoids turning a generic one-word query into a match elsewhere in the city.
+ */
+const UBEREATS_SINGLE_BRAND_MAX_MATCH_KM = 0.25;
+const UBEREATS_SINGLE_BRAND_MIN_LENGTH = 8;
+const GENERIC_SINGLE_NAME_TOKENS = new Set([
+  "bar",
+  "bistro",
+  "burger",
+  "cafe",
+  "diner",
+  "grill",
+  "imbiss",
+  "kebab",
+  "pizza",
+  "pub",
+  "restaurant",
+  "sushi",
+]);
+
 /** Lowercase, strip diacritics, collapse non-alphanumerics — for name matching. */
 function normalizeName(s: string): string {
   return foldDiacritics(s)
@@ -112,10 +135,19 @@ function nameScore(target: string, candidate: string): number {
   if (target === candidate) return 3;
   const targetTokens = target.split(" ").filter(Boolean);
   const candidateTokens = candidate.split(" ").filter(Boolean);
-  // A single generic token ("Pizza", "Mo") is never enough to establish
-  // identity against a longer candidate. Multi-token queries may accept a
-  // provider-added branch suffix when every query token is preserved.
-  if (targetTokens.length < 2) return 0;
+  // Uber commonly appends a city/branch label to one-word brands. Accept that
+  // shape only for a distinctive, whole first token; matchUberEatsStoreUrl()
+  // additionally requires it to be within a much tighter distance. This finds
+  // "Frittenwerk Aachen Holzgraben" without reviving substring mistakes such
+  // as "Mo" -> "Moco Chicken" or generic "Pizza" -> "Pizza Hut".
+  if (targetTokens.length === 1) {
+    const token = targetTokens[0] ?? "";
+    return token.length >= UBEREATS_SINGLE_BRAND_MIN_LENGTH &&
+      !GENERIC_SINGLE_NAME_TOKENS.has(token) &&
+      candidateTokens[0] === token
+      ? 1
+      : 0;
+  }
   const candidateSet = new Set(candidateTokens);
   const targetContained = targetTokens.every((token) => candidateSet.has(token));
   return targetContained ? 2 : 0;
@@ -163,7 +195,8 @@ export function matchUberEatsStoreUrl(
     const score = nameScore(target, normalizeName(item.store?.title?.text ?? ""));
     if (score === 0) continue;
     const km = haversineKm(q.lat, q.lng, lat, lng);
-    if (km <= UBEREATS_MAX_MATCH_KM) ranked.push({ url: actionUrl, score, km });
+    const maxKm = score === 1 ? UBEREATS_SINGLE_BRAND_MAX_MATCH_KM : UBEREATS_MAX_MATCH_KM;
+    if (km <= maxKm) ranked.push({ url: actionUrl, score, km });
   }
   ranked.sort((a, b) => b.score - a.score || a.km - b.km);
   return ranked[0] ? toUberStoreUrl(ranked[0].url, q.countryCode) : null;
@@ -249,7 +282,7 @@ export const uberEatsProvider: DeliveryProvider = {
     const prefix = cc === "us" ? "" : `/${cc}`;
     const pl = buildUberEatsPl(q);
     const url = pl
-      ? `https://www.ubereats.com${prefix}/feed?diningMode=DELIVERY&pl=${enc(pl)}&q=${enc(q.name)}`
+      ? `https://www.ubereats.com${prefix}/search?diningMode=DELIVERY&pl=${enc(pl)}&q=${enc(q.name)}&sc=SEARCH_BAR&searchType=GLOBAL_SEARCH&vertical=ALL`
       : `https://www.ubereats.com${prefix}/search?q=${term(q)}`;
     return withAffiliate("ubereats", appendScid(url, config), config);
   },
