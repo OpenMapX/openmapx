@@ -7,6 +7,7 @@ export const ifoodProvider: DeliveryProvider = {
   name: "iFood",
   homepage: "https://www.ifood.com.br/",
   color: "#EA1D2C",
+  fallbackKind: "search",
   regions: ["br"],
   build(q, config) {
     // `/busca?q=` is iFood's documented search path (address-first SPA).

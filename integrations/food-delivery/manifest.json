@@ -34,12 +34,12 @@
       "sourceId": "ubereats",
       "name": "Uber Eats",
       "url": "https://www.ubereats.com/",
-      "license": "Proprietary (deep-link only)",
+      "license": "Proprietary (deep-link + server-side exact-store lookup)",
       "licenseUrl": "https://www.uber.com/legal/en/document/?name=general-terms-of-use&country=united-states&lang=en",
       "commercialUse": "conditional",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.uber.com/legal/privacy/",
-      "endUserExposure": "direct"
+      "endUserExposure": "mixed"
     },
     {
       "sourceId": "wolt",

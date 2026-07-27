@@ -7,6 +7,7 @@ export const glovoProvider: DeliveryProvider = {
   name: "Glovo",
   homepage: "https://glovoapp.com/",
   color: "#F9C200",
+  fallbackKind: "browse",
   regions: [
     "es",
     "it",

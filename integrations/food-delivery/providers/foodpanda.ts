@@ -25,6 +25,7 @@ export const foodpandaProvider: DeliveryProvider = {
   name: "foodpanda",
   homepage: "https://www.foodpanda.com/",
   color: "#D70F64",
+  fallbackKind: "browse",
   regions: ["sg", "my", "ph", "tw", "hk", "pk", "bd", "kh", "la", "mm"],
   build(q, config) {
     // The global `foodpanda.com` is a country-router, and `?q=` is ignored. Use

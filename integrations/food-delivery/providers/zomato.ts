@@ -20,6 +20,7 @@ export const zomatoProvider: DeliveryProvider = {
   name: "Zomato",
   homepage: "https://www.zomato.com/",
   color: "#E23744",
+  fallbackKind: "search",
   regions: ["in", "ae"],
   build(q, config) {
     // `/search?q=` 404s, and Zomato has exited every market except India

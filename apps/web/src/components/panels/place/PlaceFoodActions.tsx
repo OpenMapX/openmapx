@@ -15,12 +15,16 @@ import type { Place } from "@openmapx/core";
 import {
   bareDomain,
   buildDeliveryOpenUrl,
+  buildDeliveryOptions,
+  classifyDeliveryUrl,
   type DeliveryProviderInfo,
   isFoodPlace,
   resolveOsmMenuUrl,
+  resolveOsmOrderUrl,
   useCountryFromCoordinates,
+  useDeliveryProviderCatalog,
   useDeliveryProviders,
-  useRestaurantMenu,
+  useRestaurantLinks,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { type MouseEvent, type ReactNode, useId, useState } from "react";
@@ -121,11 +125,10 @@ export function PlaceFoodActions({ place }: { place: Place }) {
   const food = isFoodPlace(place);
   const osmMenuUrl = resolveOsmMenuUrl(place);
 
-  // Crawl the site only when there's no explicit OSM menu tag.
-  const { data: crawledMenu } = useRestaurantMenu(
-    place.website,
-    food && !osmMenuUrl && Boolean(place.website),
-  );
+  // One robots-aware homepage fetch can discover both a missing menu and a
+  // strongly signalled first-party online-order link.
+  const firstPartyWebsite = place.website ? classifyDeliveryUrl(place.website) === null : false;
+  const { data: crawledLinks } = useRestaurantLinks(place.website, food && firstPartyWebsite);
   // When the place carries no country, resolve one from its coordinates so the
   // provider list is region-filtered and the deep links target the right
   // country — otherwise every worldwide platform would show on an un-geocoded
@@ -135,16 +138,33 @@ export function PlaceFoodActions({ place }: { place: Place }) {
     food && !place.countryCode,
   );
   const countryCode = place.countryCode ?? resolvedCountry ?? undefined;
-  const { data: providersData } = useDeliveryProviders(countryCode, food);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const dialogTitleId = useId();
 
+  const [lng, lat] = place.coordinates;
+  const deliveryParams = {
+    name: place.name,
+    city: place.city,
+    countryCode,
+    lat,
+    lng,
+    postcode: place.osmTags?.["addr:postcode"],
+    address: place.address,
+  };
+  const { data: catalogData } = useDeliveryProviderCatalog(countryCode, food);
+  const { data: resolvedProvidersData } = useDeliveryProviders(deliveryParams, food && dialogOpen);
+
   if (!food) return null;
 
-  const menuUrl = osmMenuUrl ?? crawledMenu?.menuUrl ?? null;
-  const providers = providersData?.providers ?? [];
+  const menuUrl = osmMenuUrl ?? crawledLinks?.menuUrl ?? null;
+  const directOrderUrl = resolveOsmOrderUrl(place) ?? crawledLinks?.orderUrl ?? null;
+  const providers = buildDeliveryOptions(
+    place,
+    resolvedProvidersData?.providers ?? catalogData?.providers ?? [],
+    crawledLinks?.providerOrderUrls,
+  );
 
   const openMenu = (e?: MouseEvent) => {
     // The whole row and the open-in-new icon both call this. Stop the icon
@@ -165,21 +185,16 @@ export function PlaceFoodActions({ place }: { place: Place }) {
     );
   };
   const openProvider = (provider: DeliveryProviderInfo) => {
-    const [lng, lat] = place.coordinates;
-    const url = buildDeliveryOpenUrl(provider.id, {
-      name: place.name,
-      city: place.city,
-      countryCode,
-      lat,
-      lng,
-      postcode: place.osmTags?.["addr:postcode"],
-      address: place.address,
-    });
+    const url = provider.url ?? buildDeliveryOpenUrl(provider.id, deliveryParams);
     window.open(url, "_blank", "noopener,noreferrer");
     setDialogOpen(false);
   };
 
-  if (!menuUrl && providers.length === 0) return null;
+  const openDirectOrder = () => {
+    if (directOrderUrl) window.open(directOrderUrl, "_blank", "noopener,noreferrer");
+  };
+
+  if (!menuUrl && !directOrderUrl && providers.length === 0) return null;
 
   return (
     <>
@@ -216,6 +231,16 @@ export function PlaceFoodActions({ place }: { place: Place }) {
               </Tooltip>
             </>
           }
+        />
+      )}
+      {directOrderUrl && (
+        <FoodRow
+          icon={<DeliveryDiningOutlinedIcon sx={{ fontSize: 22 }} />}
+          primary={t("orderDirect")}
+          secondary={bareDomain(directOrderUrl)}
+          onClick={openDirectOrder}
+          underlineOnHover
+          trailing={<OpenInNewIcon sx={{ fontSize: 18, color: "text.secondary" }} />}
         />
       )}
       {providers.length > 0 && (
@@ -269,10 +294,22 @@ export function PlaceFoodActions({ place }: { place: Place }) {
               <BrandMark branding={{ name: provider.name, color: provider.color }} size={28} />
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  {provider.name}
+                  {provider.linkKind === "exact"
+                    ? t("deliveryExact", { provider: provider.name })
+                    : provider.linkKind === "search"
+                      ? t("deliverySearch", { provider: provider.name })
+                      : t("deliveryBrowse", {
+                          provider: provider.name,
+                          city: place.city ?? place.address,
+                        })}
                 </Typography>
                 <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                  {provider.domain}
+                  {provider.domain} ·{" "}
+                  {provider.evidence === "delivery-partner"
+                    ? t("deliveryPartner")
+                    : provider.availability === "confirmed"
+                      ? t("deliveryConfirmed")
+                      : t("deliveryUnconfirmed")}
                 </Typography>
               </Box>
               <OpenInNewIcon sx={{ fontSize: 16, color: "text.disabled", flexShrink: 0 }} />

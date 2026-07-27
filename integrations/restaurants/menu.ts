@@ -1,4 +1,8 @@
-import { assertResolvesToPublicIp, toHttpUrl } from "@openmapx/core/server";
+import {
+  assertResolvesToPublicIp,
+  deliveryProviderIdForHost,
+  toHttpUrl,
+} from "@openmapx/core/server";
 import type { Logger } from "@openmapx/integration-framework";
 
 const MAX_REDIRECTS = 5;
@@ -10,6 +14,12 @@ export interface MenuResult {
   menuUrl: string;
   source: MenuSource;
   format: "html" | "pdf";
+}
+
+export interface RestaurantLinksResult {
+  menu: MenuResult | null;
+  orderUrl: string | null;
+  providerOrderUrls: string[];
 }
 
 const FETCH_TIMEOUT_MS = 8000;
@@ -69,6 +79,23 @@ const MENU_PATH_TOKENS = [
   "jadlospis",
   "ementa",
 ];
+
+const ORDER_TEXT_KEYWORDS = [
+  "order online",
+  "order now",
+  "order food",
+  "bestellen",
+  "jetzt bestellen",
+  "online bestellen",
+  "lieferung bestellen",
+];
+const ORDER_PATH_TOKENS = ["order", "ordering", "bestellen", "bestellung", "delivery"];
+/** Provider storefronts are hand-off targets, never first-party sites to crawl. */
+export function isDeliveryProviderWebsite(input: string): boolean {
+  const normalized = normalizeWebsite(input);
+  if (!normalized) return false;
+  return deliveryProviderIdForHost(new URL(normalized).hostname) !== null;
+}
 
 /** Common named HTML entities that appear inside menu-link anchor text. */
 const NAMED_ENTITIES: Record<string, string> = {
@@ -382,6 +409,58 @@ function fromHeuristics(html: string, base: string): MenuResult | null {
   return null;
 }
 
+export interface ExtractedOrderLinks {
+  directOrderUrl: string | null;
+  providerOrderUrls: string[];
+}
+
+/** Find strongly signalled order links without crawling beyond the homepage. */
+export function extractOrderLinks(html: string, base: string): ExtractedOrderLinks {
+  const anchorRe = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  const baseHost = new URL(base).hostname.toLowerCase().replace(/^www\./, "");
+  let best: { url: string; score: number } | null = null;
+  const providerOrderUrls: string[] = [];
+  for (const match of html.matchAll(anchorRe)) {
+    const href = match[1]?.trim();
+    if (!href || /^(mailto:|tel:|javascript:|#)/i.test(href)) continue;
+    let url: URL;
+    try {
+      url = new URL(href, base);
+    } catch {
+      continue;
+    }
+    if (!/^https?:$/.test(url.protocol) || url.username || url.password) continue;
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    const text = stripTags(match[2] ?? "").toLowerCase();
+    const path = `${url.pathname.toLowerCase()}${url.hash.toLowerCase()}`;
+    const textMatch = ORDER_TEXT_KEYWORDS.some((keyword) => containsWord(text, keyword));
+    const pathMatch = ORDER_PATH_TOKENS.some((keyword) => containsWord(path, keyword));
+    const providerHost = deliveryProviderIdForHost(host) !== null;
+    if (providerHost) {
+      if (textMatch) providerOrderUrls.push(url.toString());
+      continue;
+    }
+    const normalizedHost = url.hostname.toLowerCase().replace(/^www\./, "");
+    const sameSite =
+      normalizedHost === baseHost ||
+      normalizedHost.endsWith(`.${baseHost}`) ||
+      baseHost.endsWith(`.${normalizedHost}`);
+    // “Direct” means first-party: unrelated cross-domain order-looking links
+    // are not promoted without a maintained hosted-order registry.
+    if (!sameSite || (!textMatch && !pathMatch)) continue;
+    const score = (textMatch ? 3 : 0) + (pathMatch ? 2 : 0) + (sameSite ? 1 : 0);
+    if (!best || score > best.score) best = { url: url.toString(), score };
+  }
+  return {
+    directOrderUrl: best && best.score >= 3 ? best.url : null,
+    providerOrderUrls: [...new Set(providerOrderUrls)],
+  };
+}
+
+export function extractOrderUrl(html: string, base: string): string | null {
+  return extractOrderLinks(html, base).directOrderUrl;
+}
+
 /**
  * Resolve a restaurant's menu URL from its own website. Fetches the homepage
  * (robots.txt permitting), reads schema.org `hasMenu` first, then falls back to
@@ -389,17 +468,34 @@ function fromHeuristics(html: string, base: string): MenuResult | null {
  * menu content.
  */
 export async function resolveMenuUrl(websiteUrl: string, log: Logger): Promise<MenuResult | null> {
+  return (await resolveRestaurantLinks(websiteUrl, log)).menu;
+}
+
+export async function resolveRestaurantLinks(
+  websiteUrl: string,
+  log: Logger,
+): Promise<RestaurantLinksResult> {
   const normalized = normalizeWebsite(websiteUrl);
-  if (!normalized) return null;
+  if (!normalized) return { menu: null, orderUrl: null, providerOrderUrls: [] };
+  if (isDeliveryProviderWebsite(normalized)) {
+    log.debug?.(`[restaurants] skipping provider storefront ${new URL(normalized).origin}`);
+    return { menu: null, orderUrl: null, providerOrderUrls: [] };
+  }
   const origin = new URL(normalized).origin;
 
   if (!(await rootCrawlAllowed(origin, log))) {
     log.debug?.(`[restaurants] robots.txt disallows crawl of ${origin}`);
-    return null;
+    return { menu: null, orderUrl: null, providerOrderUrls: [] };
   }
 
   const html = await fetchText(normalized, log);
-  if (!html) return null;
+  if (!html) return { menu: null, orderUrl: null, providerOrderUrls: [] };
 
-  return fromJsonLd(html, normalized) ?? fromHeuristics(html, normalized);
+  const orderLinks = extractOrderLinks(html, normalized);
+
+  return {
+    menu: fromJsonLd(html, normalized) ?? fromHeuristics(html, normalized),
+    orderUrl: orderLinks.directOrderUrl,
+    providerOrderUrls: orderLinks.providerOrderUrls,
+  };
 }

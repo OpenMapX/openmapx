@@ -27,9 +27,10 @@
       "licenseUrl": "https://opendatacommons.org/licenses/odbl/",
       "commercialUse": "yes",
       "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
+      "notes": "The integration uses the contributed official website URL for one robots-aware, byte-capped server-side homepage request to discover menu and ordering links.",
       "providerCountry": "GB",
       "providerPrivacyUrl": "https://wiki.osmfoundation.org/wiki/Privacy_Policy",
-      "endUserExposure": "build-time"
+      "endUserExposure": "server-only"
     }
   ]
 }

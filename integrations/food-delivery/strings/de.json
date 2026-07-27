@@ -1,10 +1,10 @@
 {
   "name": "Essenslieferung",
-  "description": "Direktverlinkungen, die einen Ort an gängige Essensbestellplattformen übergeben, vorausgefüllt mit dem Namen des Restaurants und dem Lieferort. Es werden keine Live-Daten zu Speisekarten, Preisen oder Lieferungen abgerufen.",
+  "description": "Restaurantbezogene Übergaben an Essensbestellplattformen. Exakte beigesteuerte Links werden bevorzugt; Suchen und Stadtübersichten sind eindeutig gekennzeichnet. Es werden keine Live-Daten zu Speisekarten, Preisen oder Lieferstatus abgerufen.",
   "dataSources": {
     "ubereats": {
       "purpose": "Direktlink zur Bestellung bei Uber Eats für das ausgewählte Restaurant, vorausgefüllt mit dessen Namen und Lieferort.",
-      "dataSent": "Für den Direktlink selbst sendet OpenMapX nichts — ein ausgehender Link (der den Restaurantnamen und, sofern bekannt, die Koordinaten/Adresse/Stadt/Postleitzahl als URL-Parameter enthält) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken. Separat kann eine optionale serverseitige Abfrage den Restaurantnamen und einen Lieferort an den Store-Feed-Endpunkt von Uber Eats senden, um die genaue Restaurantseite zu ermitteln; dies erfolgt auf dem OpenMapX-Server, nicht in Ihrem Browser.",
+      "dataSent": "Beim Öffnen der Lieferoptionen kann der OpenMapX-Server den Restaurantnamen und Lieferort an den Store-Feed-Endpunkt von Uber Eats senden, um eine exakte Restaurantseite zu ermitteln. Bei Auswahl von Uber Eats öffnet der Browser einen ausgehenden Link mit Restaurantname und, sofern bekannt, Koordinaten/Adresse/Stadt/Postleitzahl.",
       "dataReceived": "Nur bei der optionalen serverseitigen Abfrage: eine Liste übereinstimmender Restaurantnamen, URLs und Kartenmarkierungen, anhand derer die nächstgelegene Filiale ausgewählt wird. Der Direktlink selbst liefert nichts an OpenMapX zurück."
     },
     "wolt": {

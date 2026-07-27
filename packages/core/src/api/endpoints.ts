@@ -20,6 +20,7 @@ export const API_ENDPOINTS = {
   airportNearest: "/api/integrations/knowledge-ourairports/nearest",
   foodDelivery: "/api/integrations/food-delivery", // used as `${base}/${provider}/open`
   foodDeliveryProviders: "/api/integrations/food-delivery/providers",
+  foodDeliveryResolve: "/api/integrations/food-delivery/resolve",
   restaurantMenu: "/api/integrations/restaurants/menu",
   hotels: "/api/integrations/hotels", // used as `${base}/${provider}/open`
   hotelProviders: "/api/integrations/hotels/providers",

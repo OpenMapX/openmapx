@@ -17,6 +17,7 @@ export const justeatProvider: DeliveryProvider = {
   name: "Just Eat",
   homepage: "https://www.just-eat.co.uk/",
   color: "#F36D00",
+  fallbackKind: "browse",
   regions: ["gb", "ie", "es", "it", "dk", "ch"],
   build(q, config) {
     // `/search?q=` is not a real Just Eat route. UK/IE expose a city takeaway

@@ -1,10 +1,10 @@
 {
   "name": "Restaurants",
-  "description": "Restaurant menu links resolved from each venue's own website",
+  "description": "Restaurant menu and ordering links resolved from each venue's own website",
   "dataSources": {
     "openstreetmap": {
-      "purpose": "Provides the venue's official website tag used as the starting point for finding a link to its menu",
-      "dataSent": "None — the OpenStreetMap website tag is read from already-loaded place data; no request is made to OpenStreetMap by this integration"
+      "purpose": "Provides the venue's official website tag used to find menu, first-party order, and explicitly linked provider-order pages",
+      "dataSent": "No request is made to OpenStreetMap. The OpenMapX server makes one robots-aware, byte-capped request to the contributed venue website (plus its robots.txt) and sends only normal HTTP request metadata. It does not submit forms or crawl provider sites."
     }
   }
 }

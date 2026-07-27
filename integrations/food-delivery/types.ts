@@ -1,13 +1,10 @@
 /**
  * Shared types for the food-delivery integration.
  *
- * Like the `flights` integration, this fetches NO live data from the delivery
- * platforms — no public consumer API resolves "this restaurant → its order
- * page", and the platform APIs are merchant/POS-side. Each provider is therefore a
- * pure deep-link builder that turns a normalised {@link DeliveryQuery} into a
- * URL that opens the platform pre-filled with the restaurant name AND a delivery
- * location (so results are scoped to the right city, not the platform default).
- * Adding a platform is one entry in `providers.ts`.
+ * Most providers are pure deep-link builders because their public APIs are
+ * merchant/POS-side. Uber Eats additionally has a conservative, lazy exact-page
+ * resolver; it must degrade to the same location-scoped search on any ambiguity
+ * or upstream failure. Adding a provider remains one registry entry.
  */
 
 /** Normalised, validated delivery hand-off request. Built by `query.ts`. */
@@ -42,6 +39,10 @@ export interface DeliveryProviderConfig {
   uberEatsScid?: string;
 }
 
+export type DeliveryFallbackKind = "search" | "browse";
+
+export type DeliveryResolveResult = { kind: "exact"; url: string } | { kind: "not_found" };
+
 /**
  * A deep-link builder for one external food-delivery platform.
  *
@@ -60,15 +61,17 @@ export interface DeliveryProvider {
   color: string;
   /** Countries served, or `"*"` for global. */
   regions: readonly string[] | "*";
+  /** Honest description of what `build()` opens when no exact venue is resolved. */
+  fallbackKind: DeliveryFallbackKind;
   /** Build the pre-filled external search URL for `query` (synchronous, always available). */
   build(query: DeliveryQuery, config: DeliveryProviderConfig): string;
   /**
    * Optional async resolver to a precise restaurant URL (e.g. an Uber Eats
-   * `/store/<slug>/<uuid>` page) by querying the platform server-side. Returns
-   * null when it can't resolve; the host then falls back to {@link build}. Runs
-   * on the API host (it sets a Cookie + calls the platform cross-origin).
+   * `/store/<slug>/<uuid>` page) by querying the platform server-side. A valid
+   * miss is distinct from a thrown transport/schema failure so only real misses
+   * receive negative caching. Runs on the API host.
    */
-  resolve?(query: DeliveryQuery, config: DeliveryProviderConfig): Promise<string | null>;
+  resolve?(query: DeliveryQuery, config: DeliveryProviderConfig): Promise<DeliveryResolveResult>;
 }
 
 // The serialisable `/providers` response shape (DeliveryProviderInfo) is the

@@ -4,6 +4,15 @@
  */
 
 /** Provider descriptor as returned by `GET /api/integrations/food-delivery/providers`. */
+export type DeliveryAvailability = "confirmed" | "unknown" | "unavailable";
+export type DeliveryLinkKind = "exact" | "search" | "browse";
+export type DeliveryEvidence =
+  | "provider-url"
+  | "delivery-partner"
+  | "delivery-no"
+  | "resolver"
+  | "fallback";
+
 export interface DeliveryProviderInfo {
   id: string;
   name: string;
@@ -12,6 +21,15 @@ export interface DeliveryProviderInfo {
   homepage: string;
   /** Brand colour (hex) for the provider chip mark. */
   color: string;
+  /** Whether the handoff is a confirmed venue, a name search, or a broad listing. */
+  linkKind: DeliveryLinkKind;
+  /** Exact destination when the backend resolved one; absent for search/browse fallbacks. */
+  url?: string;
+}
+
+export interface DeliveryOption extends DeliveryProviderInfo {
+  availability: DeliveryAvailability;
+  evidence: DeliveryEvidence;
 }
 
 /** A delivery hand-off the user triggers from a restaurant's place panel. */

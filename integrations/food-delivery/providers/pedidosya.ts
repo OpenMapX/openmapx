@@ -17,6 +17,7 @@ export const pedidosyaProvider: DeliveryProvider = {
   name: "PedidosYa",
   homepage: "https://www.pedidosya.com/",
   color: "#FA0050",
+  fallbackKind: "browse",
   regions: ["ar", "uy", "bo", "py", "cl", "pe", "ec", "ve", "do", "pa", "gt", "cr", "ni", "hn"],
   build(q, config) {
     // No name-search route exists (`/search?q=` 404s). The city restaurant

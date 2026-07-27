@@ -37,6 +37,7 @@ export const woltProvider: DeliveryProvider = {
   name: "Wolt",
   homepage: "https://wolt.com/",
   color: "#00C2E8",
+  fallbackKind: "search",
   regions: [
     "de",
     "at",

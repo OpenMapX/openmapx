@@ -52,7 +52,7 @@ export {
   useDataSources,
 } from "./useDataSources";
 export { useDebounce, useDebouncedCallback } from "./useDebounce";
-export { useDeliveryProviders } from "./useDeliveryProviders";
+export { useDeliveryProviderCatalog, useDeliveryProviders } from "./useDeliveryProviders";
 export { directionsQueryKey, useDirections } from "./useDirections";
 export { useElevation } from "./useElevation";
 export { evDirectionsQueryKey, useEvDirections } from "./useEvDirections";
@@ -89,6 +89,7 @@ export { usePlaceDetails } from "./usePlaceDetails";
 export { usePlacePhotos } from "./usePlacePhotos";
 export { usePresetSuggest } from "./usePresetSuggest";
 export { useResolvedHotelProviders } from "./useResolvedHotelProviders";
+export { useRestaurantLinks } from "./useRestaurantLinks";
 export { useRestaurantMenu } from "./useRestaurantMenu";
 export { useReverseGeocoding } from "./useReverseGeocoding";
 export { useRouteInGermany } from "./useRouteInGermany";

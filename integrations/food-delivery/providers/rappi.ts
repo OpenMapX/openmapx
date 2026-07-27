@@ -23,6 +23,7 @@ export const rappiProvider: DeliveryProvider = {
   name: "Rappi",
   homepage: "https://www.rappi.com/",
   color: "#FE3008",
+  fallbackKind: "search",
   regions: ["mx", "co", "br", "ar", "cl", "pe", "ec", "uy", "cr"],
   build(q, config) {
     // Bare `rappi.com` 302s to a country homepage and drops the query — the

@@ -73,6 +73,8 @@ export const EXPENSIVE_PUBLIC_PATTERNS = [
   /^\/api\/image-proxy(\/|$|\?)/,
   /^\/api\/winter-sports(\/|$)/,
   /^\/api\/integrations\/search-nlp(\/|$|\?)/,
+  /^\/api\/integrations\/food-delivery\/(resolve|[^/]+\/(open|url))(\/|$|\?)/,
+  /^\/api\/integrations\/restaurants\/menu(\/|$|\?)/,
 ];
 
 export const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);

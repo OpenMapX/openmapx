@@ -7,6 +7,7 @@ export const grubhubProvider: DeliveryProvider = {
   name: "Grubhub",
   homepage: "https://www.grubhub.com/",
   color: "#EB1700",
+  fallbackKind: "search",
   regions: ["us"],
   build(q, config) {
     return withAffiliate("grubhub", `https://www.grubhub.com/search?queryText=${term(q)}`, config);

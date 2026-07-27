@@ -38,7 +38,16 @@ export {
   type RelativeTimeOptions,
   type TimeFormat,
 } from "./dateTimeFormat";
+export {
+  buildDeliveryOptions,
+  classifyDeliveryUrl,
+  resolveOsmOrderUrl,
+} from "./deliveryEvidence";
 export { buildDeliveryOpenUrl } from "./deliveryLink";
+export {
+  DELIVERY_PROVIDER_HOSTS,
+  deliveryProviderIdForHost,
+} from "./deliveryProviderHosts";
 export {
   buildElevationProfile,
   buildElevationProfileFromApi,

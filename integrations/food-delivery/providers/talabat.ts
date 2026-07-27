@@ -22,6 +22,7 @@ export const talabatProvider: DeliveryProvider = {
   name: "Talabat",
   homepage: "https://www.talabat.com/",
   color: "#FF5A00",
+  fallbackKind: "search",
   regions: ["ae", "sa", "kw", "bh", "qa", "om", "eg", "jo", "iq"],
   build(q, config) {
     // `/search?q=` 404s. The name-slug brand page (`/<country>/<name>`) opens

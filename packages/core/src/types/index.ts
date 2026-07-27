@@ -27,7 +27,14 @@ export type {
   OsmIdentity,
   PricingPlanEntry,
 } from "./dataSource";
-export type { DeliveryProviderInfo, DeliverySearchParams } from "./delivery";
+export type {
+  DeliveryAvailability,
+  DeliveryEvidence,
+  DeliveryLinkKind,
+  DeliveryOption,
+  DeliveryProviderInfo,
+  DeliverySearchParams,
+} from "./delivery";
 export type {
   ElevationApiResponse,
   ElevationPoint,
@@ -96,7 +103,7 @@ export {
   idsFromPrimary,
   idsFromPrimaryOrCoords,
 } from "./placeIds";
-export type { RestaurantMenu } from "./restaurantMenu";
+export type { RestaurantLinks, RestaurantMenu } from "./restaurantMenu";
 export type {
   Review,
   ReviewAction,

@@ -17,6 +17,13 @@ function build(id: string, q: DeliveryQuery): string {
 }
 
 describe("food-delivery deep-link builders", () => {
+  it("declares an honest fallback kind for every provider", () => {
+    for (const provider of ["ubereats", "wolt", "lieferando", "doordash", "deliveroo", "justeat"]) {
+      expect(["search", "browse"]).toContain(prov(provider).fallbackKind);
+    }
+    expect(prov("lieferando").fallbackKind).toBe("browse");
+    expect(prov("wolt").fallbackKind).toBe("search");
+  });
   // Restaurants verified live in a browser while fixing these builders.
   it("rappi uses the country TLD + /search (bare rappi.com drops the query)", () => {
     expect(build("rappi", { name: "El Califa", city: "Mexico City", countryCode: "mx" })).toBe(

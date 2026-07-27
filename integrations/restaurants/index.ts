@@ -1,5 +1,5 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { normalizeWebsite, resolveMenuUrl } from "./menu.js";
+import { normalizeWebsite, resolveRestaurantLinks } from "./menu.js";
 
 const POSITIVE_TTL = 7 * 24 * 60 * 60; // 7 days — menus rarely move
 const NEGATIVE_TTL = 24 * 60 * 60; // 1 day — give new menus a chance to appear
@@ -9,6 +9,8 @@ interface CachedMenu {
   menuUrl?: string;
   source?: string;
   format?: string;
+  orderUrl?: string;
+  providerOrderUrls?: string[];
 }
 
 /**
@@ -36,15 +38,18 @@ export function setup(ctx: IntegrationContext): void {
     if (cached) {
       result = cached;
     } else {
-      const resolved = await resolveMenuUrl(normalized, ctx.log);
-      result = resolved
-        ? {
-            found: true,
-            menuUrl: resolved.menuUrl,
-            source: resolved.source,
-            format: resolved.format,
-          }
-        : { found: false };
+      const resolved = await resolveRestaurantLinks(normalized, ctx.log);
+      result =
+        resolved.menu || resolved.orderUrl || resolved.providerOrderUrls.length > 0
+          ? {
+              found: true,
+              menuUrl: resolved.menu?.menuUrl,
+              source: resolved.menu?.source,
+              format: resolved.menu?.format,
+              orderUrl: resolved.orderUrl ?? undefined,
+              providerOrderUrls: resolved.providerOrderUrls,
+            }
+          : { found: false };
       await ctx.cache.set(cacheKey, result, result.found ? POSITIVE_TTL : NEGATIVE_TTL);
     }
 
@@ -54,6 +59,12 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
     reply.header("Cache-Control", "public, max-age=86400");
-    reply.send({ menuUrl: result.menuUrl, source: result.source, format: result.format });
+    reply.send({
+      menuUrl: result.menuUrl,
+      source: result.source,
+      format: result.format,
+      orderUrl: result.orderUrl,
+      providerOrderUrls: result.providerOrderUrls,
+    });
   });
 }

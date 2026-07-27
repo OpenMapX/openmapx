@@ -135,6 +135,10 @@ describe("makeRateLimitTierHook", () => {
     { url: "/api/tiles/1/2/3", tier: "tile" },
     { url: "/api/isochrone?x=1", tier: "expensive" },
     { url: "/api/motis/plan", tier: "expensive" },
+    { url: "/api/integrations/food-delivery/resolve", tier: "expensive" },
+    { url: "/api/integrations/food-delivery/ubereats/open", tier: "expensive" },
+    { url: "/api/integrations/restaurants/menu?website=https://example.com", tier: "expensive" },
+    { url: "/api/integrations/food-delivery/providers?country=de", tier: "public" },
     { url: "/api/saved", tier: "public" },
     { url: "/whatever", tier: null },
   ];

@@ -1,10 +1,10 @@
 {
   "name": "Food Delivery",
-  "description": "Deep links that hand a place off to popular food-ordering platforms, pre-filled with the restaurant name and delivery location. No live menu, price, or delivery data is fetched.",
+  "description": "Restaurant-aware handoffs to food-ordering platforms. Exact contributed links are preferred; searches and city listings are labelled honestly. No live menu, price, or delivery-status data is fetched.",
   "dataSources": {
     "ubereats": {
       "purpose": "Deep link to order from Uber Eats for the selected restaurant, pre-filling its name and delivery location.",
-      "dataSent": "None sent by OpenMapX for the deep link itself — an outbound link (carrying the restaurant name and, when known, the coordinates/address/city/postcode as URL parameters) is opened in your browser only when you click it. Separately, an optional server-side lookup may send the restaurant name and a delivery location to Uber Eats' store-feed endpoint to resolve the exact store page; this runs on the OpenMapX server, not in your browser.",
+      "dataSent": "Opening the delivery choices may send the restaurant name and delivery location to Uber Eats' store-feed endpoint from the OpenMapX server to resolve an exact store page. Selecting Uber Eats opens an outbound link in your browser carrying the restaurant name and, when known, coordinates/address/city/postcode.",
       "dataReceived": "Only for the optional server-side lookup: a list of matching store names, URLs, and map markers used to pick the closest branch. The deep link itself returns nothing to OpenMapX."
     },
     "wolt": {

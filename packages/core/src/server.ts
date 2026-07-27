@@ -41,7 +41,7 @@ export * as services from "./services";
 export { type SpawnWithBufferedLogsOptions, spawnWithBufferedLogs } from "./spawn";
 export { categoryPlaceToPlace } from "./types/category";
 // Shared food-delivery wire contract (also re-exported from the client barrel).
-export type { DeliveryProviderInfo } from "./types/delivery";
+export type { DeliveryLinkKind, DeliveryProviderInfo } from "./types/delivery";
 export type { HotelOffer, HotelOffersResponse, HotelProviderInfo } from "./types/hotel";
 export type { Identified, Ids } from "./types/identified";
 export { makeId, parseId, withId } from "./types/identified";
@@ -58,6 +58,10 @@ export {
   combineAttributions,
 } from "./utils/attribution";
 export { applyHoursFilter } from "./utils/categoryFilter";
+export {
+  DELIVERY_PROVIDER_HOSTS,
+  deliveryProviderIdForHost,
+} from "./utils/deliveryProviderHosts";
 // Server-side geo helpers (great-circle distance, etc.).
 export { haversineKm } from "./utils/geo-server";
 export { bareDomain, toHttpUrl } from "./utils/httpUrl";

@@ -21,6 +21,7 @@ export const deliverooProvider: DeliveryProvider = {
   name: "Deliveroo",
   homepage: "https://deliveroo.co.uk/",
   color: "#00CCBC",
+  fallbackKind: "browse",
   regions: ["gb", "ie", "fr", "it", "be", "ae", "kw", "qa", "sg", "hk"],
   build(q, config) {
     // Deliveroo is address-first with no public name-search URL (`/search?q=`

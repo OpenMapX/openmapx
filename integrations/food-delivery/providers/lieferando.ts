@@ -7,6 +7,7 @@ export const lieferandoProvider: DeliveryProvider = {
   name: "Lieferando",
   homepage: "https://www.lieferando.de/",
   color: "#FF8000",
+  fallbackKind: "browse",
   regions: ["de", "at"],
   build(q, config) {
     const domain = q.countryCode === "at" ? "lieferando.at" : "lieferando.de";

@@ -2,7 +2,12 @@ import { fetchJson } from "@openmapx/core";
 import { haversineKm } from "@openmapx/core/server";
 import { withAffiliate } from "../affiliate.js";
 import { enc, foldDiacritics, term } from "../slug.js";
-import type { DeliveryProvider, DeliveryProviderConfig, DeliveryQuery } from "../types.js";
+import type {
+  DeliveryProvider,
+  DeliveryProviderConfig,
+  DeliveryQuery,
+  DeliveryResolveResult,
+} from "../types.js";
 
 /** English country names, used only inside the Uber Eats `pl` location blob. */
 const COUNTRY_NAMES: Record<string, string> = {
@@ -73,7 +78,7 @@ const UBEREATS_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const UBEREATS_RESOLVE_TIMEOUT_MS = 6000;
 
-interface UberFeedItem {
+export interface UberFeedItem {
   type?: string;
   store?: {
     actionUrl?: string;
@@ -98,8 +103,22 @@ const UBEREATS_MAX_MATCH_KM = 1;
 /** Lowercase, strip diacritics, collapse non-alphanumerics — for name matching. */
 function normalizeName(s: string): string {
   return foldDiacritics(s)
-    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
+}
+
+function nameScore(target: string, candidate: string): number {
+  if (!target || !candidate) return 0;
+  if (target === candidate) return 3;
+  const targetTokens = target.split(" ").filter(Boolean);
+  const candidateTokens = candidate.split(" ").filter(Boolean);
+  // A single generic token ("Pizza", "Mo") is never enough to establish
+  // identity against a longer candidate. Multi-token queries may accept a
+  // provider-added branch suffix when every query token is preserved.
+  if (targetTokens.length < 2) return 0;
+  const candidateSet = new Set(candidateTokens);
+  const targetContained = targetTokens.every((token) => candidateSet.has(token));
+  return targetContained ? 2 : 0;
 }
 
 function toUberStoreUrl(actionUrl: string, countryCode?: string): string {
@@ -126,79 +145,61 @@ function toUberStoreUrl(actionUrl: string, countryCode?: string): string {
  * itself uses, is a single cached server-side request to a fixed host, and
  * degrades gracefully.
  */
-async function resolveUberEatsStoreUrl(q: DeliveryQuery): Promise<string | null> {
-  const loc = buildUberEatsLocation(q);
-  if (!loc) return null;
-  const cc = q.countryCode ?? "us";
-  try {
-    const json = await fetchJson<UberFeedResponse>(
-      `https://www.ubereats.com/_p/api/getFeedV1?localeCode=${enc(cc)}`,
-      {
-        timeoutMs: UBEREATS_RESOLVE_TIMEOUT_MS,
-        userAgent: null,
-        headers: {
-          "content-type": "application/json",
-          "x-csrf-token": "x",
-          "accept-language": cc,
-          "user-agent": UBEREATS_UA,
-          cookie: `uev2.loc=${encodeURIComponent(JSON.stringify(loc))}`,
-        },
-        nullOnError: true,
-        init: {
-          method: "POST",
-          body: JSON.stringify({
-            userQuery: q.name,
-            pageInfo: { offset: 0, pageSize: 80 },
-            diningMode: "DELIVERY",
-            source: "manual",
-          }),
-        },
-      },
-    );
-    if (!json) return null;
-    const items = json.data?.feedItems;
-    if (!Array.isArray(items)) return null;
-    const target = normalizeName(q.name);
-    if (!target) return null;
-
-    // Collect every name-matching store with a usable /store/ URL.
-    const matches: Array<{ url: string; lat?: number; lng?: number }> = [];
-    for (const it of items) {
-      if (it.type !== "REGULAR_STORE") continue;
-      const url = it.store?.actionUrl;
-      if (typeof url !== "string" || !url.startsWith("/store/")) continue;
-      const title = normalizeName(it.store?.title?.text ?? "");
-      if (title && (title.includes(target) || target.includes(title))) {
-        matches.push({
-          url,
-          lat: it.store?.mapMarker?.latitude,
-          lng: it.store?.mapMarker?.longitude,
-        });
-      }
-    }
-    if (matches.length === 0) return null;
-
-    // Disambiguate same-named branches by proximity to the queried coordinates.
-    const ranked = matches
-      .map((m) => ({
-        url: m.url,
-        km:
-          typeof m.lat === "number" && typeof m.lng === "number"
-            ? haversineKm(q.lat as number, q.lng as number, m.lat, m.lng)
-            : Number.POSITIVE_INFINITY,
-      }))
-      .sort((a, b) => a.km - b.km);
-
-    const best = ranked[0];
-    // If no candidate has marker coords, ranked distances are all Infinity →
-    // fall back to the first match (best we can do without location signal).
-    if (!Number.isFinite(best.km)) return toUberStoreUrl(matches[0].url, cc);
-    // Reject a too-far nearest match: the real branch isn't listed.
-    if (best.km > UBEREATS_MAX_MATCH_KM) return null;
-    return toUberStoreUrl(best.url, cc);
-  } catch {
-    return null;
+export function matchUberEatsStoreUrl(
+  q: DeliveryQuery,
+  items: readonly UberFeedItem[],
+): string | null {
+  if (typeof q.lat !== "number" || typeof q.lng !== "number") return null;
+  const target = normalizeName(q.name);
+  if (!target) return null;
+  const ranked: Array<{ url: string; score: number; km: number }> = [];
+  for (const item of items) {
+    if (item.type !== "REGULAR_STORE") continue;
+    const actionUrl = item.store?.actionUrl;
+    const lat = item.store?.mapMarker?.latitude;
+    const lng = item.store?.mapMarker?.longitude;
+    if (typeof actionUrl !== "string" || !actionUrl.startsWith("/store/")) continue;
+    if (typeof lat !== "number" || typeof lng !== "number") continue;
+    const score = nameScore(target, normalizeName(item.store?.title?.text ?? ""));
+    if (score === 0) continue;
+    const km = haversineKm(q.lat, q.lng, lat, lng);
+    if (km <= UBEREATS_MAX_MATCH_KM) ranked.push({ url: actionUrl, score, km });
   }
+  ranked.sort((a, b) => b.score - a.score || a.km - b.km);
+  return ranked[0] ? toUberStoreUrl(ranked[0].url, q.countryCode) : null;
+}
+
+async function resolveUberEatsStoreUrl(q: DeliveryQuery): Promise<DeliveryResolveResult> {
+  const loc = buildUberEatsLocation(q);
+  if (!loc) return { kind: "not_found" };
+  const cc = q.countryCode ?? "us";
+  const json = await fetchJson<UberFeedResponse>(
+    `https://www.ubereats.com/_p/api/getFeedV1?localeCode=${enc(cc)}`,
+    {
+      timeoutMs: UBEREATS_RESOLVE_TIMEOUT_MS,
+      userAgent: null,
+      headers: {
+        "content-type": "application/json",
+        "x-csrf-token": "x",
+        "accept-language": cc,
+        "user-agent": UBEREATS_UA,
+        cookie: `uev2.loc=${encodeURIComponent(JSON.stringify(loc))}`,
+      },
+      init: {
+        method: "POST",
+        body: JSON.stringify({
+          userQuery: q.name,
+          pageInfo: { offset: 0, pageSize: 80 },
+          diningMode: "DELIVERY",
+          source: "manual",
+        }),
+      },
+    },
+  );
+  const items = json.data?.feedItems;
+  if (!Array.isArray(items)) throw new Error("Uber Eats feed schema missing feedItems");
+  const url = matchUberEatsStoreUrl(q, items);
+  return url ? { kind: "exact", url } : { kind: "not_found" };
 }
 
 /** Append the operator's Impact click id (`scid`) when configured. */
@@ -242,6 +243,7 @@ export const uberEatsProvider: DeliveryProvider = {
     "sa",
     "in",
   ],
+  fallbackKind: "search",
   build(q, config) {
     const cc = q.countryCode ?? "us";
     const prefix = cc === "us" ? "" : `/${cc}`;
@@ -254,8 +256,11 @@ export const uberEatsProvider: DeliveryProvider = {
   // Resolve the precise /store/ page server-side; everyone else relies on
   // build()'s location-scoped deep link.
   async resolve(q, config) {
-    const url = await resolveUberEatsStoreUrl(q);
-    if (!url) return null;
-    return withAffiliate("ubereats", appendScid(url, config), config);
+    const result = await resolveUberEatsStoreUrl(q);
+    if (result.kind === "not_found") return result;
+    return {
+      kind: "exact",
+      url: withAffiliate("ubereats", appendScid(result.url, config), config),
+    };
   },
 };

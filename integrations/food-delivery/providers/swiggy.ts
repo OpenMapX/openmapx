@@ -7,6 +7,7 @@ export const swiggyProvider: DeliveryProvider = {
   name: "Swiggy",
   homepage: "https://www.swiggy.com/",
   color: "#FC8019",
+  fallbackKind: "search",
   regions: ["in"],
   build(q, config) {
     // Swiggy is a client-side SPA with no deep-linkable restaurant URL; the

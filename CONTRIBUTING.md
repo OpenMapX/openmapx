@@ -165,7 +165,9 @@ are skipped automatically because those packages are marked `private`.
 2. Open an issue first if the change is non-trivial — saves rework when
    scope or approach needs alignment.
 3. Push your branch and open a PR. Fill out the PR template.
-4. CI runs lint, types, tests, and the Docker build. Iterate until green.
+4. PR CI runs lint, types, and tests. Docker images build and publish after a
+   merge to `main` (or through a manual workflow dispatch), so use a local or
+   manually dispatched image build before merging image-sensitive changes.
 5. A maintainer reviews. Squash-merge is the default; we keep the merged
    PR's title and summary as the squash commit message, so make both
    accurate.
