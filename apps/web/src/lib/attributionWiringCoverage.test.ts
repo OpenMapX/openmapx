@@ -58,10 +58,10 @@ function stripComments(src: string): string {
 
 const WEB_SRC_DIR = fileURLToPath(new URL("..", import.meta.url));
 
-function mentionsWire(src: string): boolean {
+function mentionsWire(src: string, wires: string[] = ATTRIBUTION_WIRES): boolean {
   // Whole-identifier match so a symbol can't slip in as a substring of an
   // unrelated name; the symbols are plain identifiers, safe to embed in RegExp.
-  return ATTRIBUTION_WIRES.some((symbol) => new RegExp(`\\b${symbol}\\b`).test(src));
+  return wires.some((symbol) => new RegExp(`\\b${symbol}\\b`).test(src));
 }
 
 /**
@@ -73,10 +73,15 @@ function mentionsWire(src: string): boolean {
  * layer). Attribution is wired once, in that shared component, so follow the
  * re-export rather than demanding each integration wire it again — otherwise
  * this guard would push every provider to register duplicate attributions.
+ *
+ * Only `export … from "@/…"` counts, never a plain `import`. Following imports
+ * too made the guard vacuous: importing the hook module `@/lib/useIntegrationAttribution`
+ * pulled in every symbol that file names, so any integration that imported one
+ * attribution hook appeared to wire all of them.
  */
 function reExportedWebFiles(src: string): string[] {
   const out: string[] = [];
-  for (const match of src.matchAll(/from\s+"@\/([^"]+)"/g)) {
+  for (const match of src.matchAll(/\bexport\s+[^;]*?\bfrom\s+"@\/([^"]+)"/g)) {
     const rel = match[1];
     if (!rel) continue;
     for (const candidate of [`${rel}.tsx`, `${rel}.ts`, `${rel}/index.tsx`, `${rel}/index.ts`]) {
@@ -90,15 +95,27 @@ function reExportedWebFiles(src: string): string[] {
   return out;
 }
 
-function wiresAttribution(integrationDir: string): boolean {
+function wiresAttribution(integrationDir: string, wires: string[] = ATTRIBUTION_WIRES): boolean {
   return listSourceFiles(integrationDir).some((file) => {
     const src = stripComments(fs.readFileSync(file, "utf8"));
-    if (mentionsWire(src)) return true;
+    if (mentionsWire(src, wires)) return true;
     return reExportedWebFiles(src).some((target) =>
-      mentionsWire(stripComments(fs.readFileSync(target, "utf8"))),
+      mentionsWire(stripComments(fs.readFileSync(target, "utf8")), wires),
     );
   });
 }
+
+/**
+ * The subset of ATTRIBUTION_WIRES that can credit sources an integration does
+ * not declare itself. `useIntegrationAttribution` is deliberately absent: it
+ * reads the integration's *own* `manifest.dataSources`, so on an integration
+ * that declares none it registers an empty list — it looks wired to a symbol
+ * scan while crediting nobody. That is exactly how the road-conditions overlay
+ * shipped without ever crediting the feeds it paints.
+ */
+const BORROWED_CREDIT_WIRES = ATTRIBUTION_WIRES.filter(
+  (symbol) => symbol !== "useIntegrationAttribution",
+);
 
 /**
  * Integrations that render UI, declare no `dataSources`, and legitimately owe
@@ -171,7 +188,7 @@ describe("attribution-display coverage", () => {
   it("every map-layer/panel integration without dataSources credits a sibling or is exempt", () => {
     const unwired = borrowing
       .filter((c) => !(c.id in NO_CREDIT_OWED))
-      .filter((c) => !wiresAttribution(path.join(INTEGRATIONS_DIR, c.id)))
+      .filter((c) => !wiresAttribution(path.join(INTEGRATIONS_DIR, c.id), BORROWED_CREDIT_WIRES))
       .map((c) => c.id);
 
     // On failure the diff prints `unwired` — integrations that paint UI while
@@ -179,6 +196,8 @@ describe("attribution-display coverage", () => {
     // Either wire `useIntegrationDomainAttribution` (credits go to the sibling
     // integrations publishing the feeds) or `useMapAttributions` (credits ride
     // along on the response), or add the id to NO_CREDIT_OWED with a reason.
+    // `useIntegrationAttribution` does not count here — see
+    // BORROWED_CREDIT_WIRES.
     expect(unwired).toEqual([]);
   });
 

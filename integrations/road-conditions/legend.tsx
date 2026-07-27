@@ -5,8 +5,6 @@ import Chip from "@mui/material/Chip";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
-import { buildIntegrationAttribution } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { SEVERITY_COLORS, TYPE_GLYPHS } from "./markers";
@@ -51,9 +49,6 @@ function Glyph({ type, className }: { type: string; className?: string }) {
 
 export function RoadConditionsLegend() {
   const t = useTranslations("roadConditions");
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("road-conditions");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useRoadConditionsStore((s) => s.panelOpen);
   const layerVisible = useRoadConditionsStore((s) => s.layerVisible);
   const types = useRoadConditionsStore((s) => s.types);
@@ -71,7 +66,6 @@ export function RoadConditionsLegend() {
       layerVisible={layerVisible}
       setLayerVisible={setLayerVisible}
       toggleAriaLabel={t("toggleOverlay")}
-      attributionHtml={attributionHtml}
       paperSx={{ maxWidth: "calc(100vw - 24px)" }}
     >
       <Box sx={{ mb: 0.75 }}>

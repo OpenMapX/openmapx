@@ -14,7 +14,7 @@ import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
 import { useOverlayMinZoom } from "@/lib/overlayZoomGate";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
-import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
+import { useIntegrationDomainAttribution } from "@/lib/useIntegrationAttribution";
 import { isUnconfirmedCrowd } from "./evidence";
 import { markerImageData, markerImageId, parseMarkerImageId, representativePoint } from "./markers";
 // The named import also runs the module side-effect that registers the
@@ -255,7 +255,12 @@ export function RoadConditionsLayer() {
   // country-sized viewport can't pull thousands of incidents.
   const minZoom = useOverlayMinZoom(OVERLAY_ID);
   const layerVisible = useOverlayLayerVisible(OVERLAY_ID);
-  useIntegrationAttribution(OVERLAY_ID, layerVisible);
+  // This overlay's manifest declares no dataSources of its own — the feeds it
+  // paints (NDW, Autobahn GmbH, Digitraffic, DriveBC, WZDx) are published by
+  // the external `road-conditions-openconditions` provider registered under the
+  // shared domain. Credit the domain, the same way overlay-traffic-flow does;
+  // crediting this integration's own manifest registered nothing at all.
+  useIntegrationDomainAttribution(OVERLAY_ID, layerVisible);
   useOverlayExclusion(OVERLAY_ID, layerVisible);
   useLayerReanchor([LINE_LAYER, MARKER_LAYER], layerVisible);
   const popupRef = useRef<maplibregl.Popup | null>(null);
