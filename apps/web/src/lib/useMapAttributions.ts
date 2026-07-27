@@ -1,6 +1,11 @@
 "use client";
 
-import { escapeHtml, sanitizeUrl } from "@openmapx/core";
+import {
+  buildRuntimeAttributionHtml,
+  escapeHtml,
+  sanitizeAttributionHtml,
+  sanitizeUrl,
+} from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { useEffect } from "react";
 import { useMapAttributionStore } from "./mapAttributionStore";
@@ -22,85 +27,50 @@ import { useMapAttributionStore } from "./mapAttributionStore";
  */
 
 /**
- * Allow `<a>` elements with `href`/`target`/`rel`/`title`; strip everything
- * else (other tags are unwrapped to text, all other attributes are dropped,
- * scripts and event handlers are removed by the HTML parser since DOMParser
- * does not execute them). Used for the verbatim `attributionText` field,
- * which by manifest convention may embed working anchors (the license-
- * required publisher link).
+ * Render one `Attribution` as the credit HTML the strip displays.
  *
- * Runs in the client only — `useMapAttributions` invokes it inside an
- * effect, so `DOMParser` is defined.
+ * Both branches delegate to the same builders the overlay legends use
+ * (`buildAttributionHtml` → `sanitizeAttributionHtml` /
+ * `buildRuntimeAttributionHtml`), so a source credited in a legend and in the
+ * strip produces byte-identical HTML. That is what makes the legend copy a
+ * true duplicate, and it is also what the substring dedup in
+ * `dedupeAttributionHtml` relies on to collapse a credit two layers both owe.
  */
-function sanitizeAttributionHtml(html: string): string {
-  if (typeof DOMParser === "undefined") return escapeHtml(html);
-  // DOMParser is inert: it parses without executing scripts or fetching
-  // resources, which is exactly the safety property we need before the
-  // allowlist walk.
-  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
-  const root = doc.body.firstElementChild;
-  if (!root) return "";
-  const walk = (parent: Node) => {
-    for (const child of Array.from(parent.childNodes)) {
-      if (child.nodeType === Node.TEXT_NODE) continue;
-      if (child.nodeType !== Node.ELEMENT_NODE) {
-        child.parentNode?.removeChild(child);
-        continue;
-      }
-      const el = child as HTMLElement;
-      if (el.tagName.toLowerCase() === "a") {
-        const rawHref = el.getAttribute("href") ?? "";
-        const safeHref = /^https?:\/\//i.test(rawHref) ? rawHref : "";
-        if (!safeHref) {
-          while (el.firstChild) el.parentNode?.insertBefore(el.firstChild, el);
-          el.parentNode?.removeChild(el);
-          continue;
-        }
-        const title = el.getAttribute("title");
-        const target = el.getAttribute("target") === "_self" ? "_self" : "_blank";
-        for (const a of Array.from(el.attributes)) el.removeAttribute(a.name);
-        el.setAttribute("href", safeHref);
-        el.setAttribute("target", target);
-        el.setAttribute("rel", "noopener noreferrer");
-        if (title) el.setAttribute("title", title);
-        walk(el);
-      } else {
-        while (el.firstChild) el.parentNode?.insertBefore(el.firstChild, el);
-        el.parentNode?.removeChild(el);
-      }
-    }
-  };
-  walk(root);
-  return root.innerHTML;
-}
-
-function htmlFor(attr: Attribution): string {
+export function attributionToHtml(attr: Attribution): string {
   // `attributionText` is the license-required verbatim wording. The manifest
   // convention (see integrations/*/manifest.json) embeds working `<a>` links
   // in this field, so render it as sanitized HTML rather than escaping it
-  // into literal markup. When only `name` is provided, fall back to the
-  // escape-and-wrap path that builds an anchor from `attr.url`.
+  // into literal markup.
   if (attr.attributionText) {
     return sanitizeAttributionHtml(attr.attributionText);
   }
-  // Keep a leading "© " outside the anchor. Every manifest-authored credit
-  // uses the "© <a>Publisher</a>" form; if we left "©" inside the anchor
-  // here, the resulting HTML wouldn't `includes()` (or be included by) the
-  // manifest form, and the substring dedup would render the same credit
-  // twice when a base layer and an overlay both register it. The
-  // fallback also has to match the post-sanitization attribute order
-  // (`target="_blank" rel="noopener noreferrer"`) for the same reason.
-  const hasCopyright = attr.name.startsWith("© ");
-  const inner = hasCopyright ? attr.name.slice(2) : attr.name;
-  const escapedInner = escapeHtml(inner);
-  if (attr.url) {
-    const safeUrl = sanitizeUrl(attr.url);
+  // A name that already opens with "© " is a complete, hand-authored copyright
+  // notice (the base-map credits in `lib/map.ts` and `page.tsx`), not a bare
+  // publisher name — it carries its own wording and gets no license suffix.
+  // The "©" also has to stay outside the anchor: leaving it inside would stop
+  // the result from `includes()`-matching the "© <a>Publisher</a>" form
+  // manifests author, and the substring dedup would render the same credit
+  // twice when a base layer and an overlay both register it.
+  if (attr.name.startsWith("© ")) {
+    const escapedInner = escapeHtml(attr.name.slice(2));
+    const safeUrl = attr.url ? sanitizeUrl(attr.url) : undefined;
     if (safeUrl) {
-      const anchor = `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${escapedInner}</a>`;
-      return hasCopyright ? `© ${anchor}` : anchor;
+      return `© <a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${escapedInner}</a>`;
     }
+    return escapeHtml(attr.name);
   }
-  return escapeHtml(attr.name);
+  // Manifest-authored credit: publisher name + license, the same "Name
+  // (License)" form the legends render. Dropping the license here is what used
+  // to make the strip say less than the legend for CC-BY-style sources, whose
+  // licenses require the license itself to be indicated.
+  return buildRuntimeAttributionHtml({
+    text: attr.name,
+    // An empty url is what the manifest path passes for a source without one;
+    // the builder validates it and falls back to plain text either way.
+    url: attr.url ?? "",
+    license: attr.spdxLicense,
+    licenseUrl: attr.licenseUrl,
+  });
 }
 
 export function useMapAttributions(layerKey: string, attributions: Attribution[]): void {
@@ -108,18 +78,19 @@ export function useMapAttributions(layerKey: string, attributions: Attribution[]
   const clearLayer = useMapAttributionStore((s) => s.clearLayer);
 
   // Equality key over the parts that actually drive the rendered HTML, so
-  // identical contents across renders don't re-register. Includes every field
-  // htmlFor reads, so changes to license-required `attributionText` re-run the
-  // effect.
+  // identical contents across renders don't re-register. Covers every field
+  // `attributionToHtml` reads — including the license, which the strip now
+  // renders — so a metadata change re-runs the effect.
   const memoKey = attributions
-    .map((a) => `${a.sourceId}|${a.url ?? ""}|${a.name}|${a.attributionText ?? ""}`)
+    .map(
+      (a) =>
+        `${a.sourceId}|${a.url ?? ""}|${a.name}|${a.spdxLicense ?? ""}|${a.licenseUrl ?? ""}|${a.attributionText ?? ""}`,
+    )
     .join("\n");
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: memoKey captures attributions
   useEffect(() => {
-    // htmlFor sanitizes via DOMParser, so it has to run client-side — inside
-    // the effect, never during render.
-    setLayer(layerKey, attributions.map(htmlFor));
+    setLayer(layerKey, attributions.map(attributionToHtml));
     return () => clearLayer(layerKey);
   }, [layerKey, memoKey, setLayer, clearLayer]);
 }
