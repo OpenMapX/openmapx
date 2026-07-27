@@ -24,6 +24,18 @@ interface CameraState {
   maxPitch: number;
 }
 
+function prefersReducedMotion(): boolean {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+}
+
+function moveToPitch(map: maplibregl.Map, pitch: number, duration: number): void {
+  if (prefersReducedMotion()) {
+    map.jumpTo({ pitch });
+    return;
+  }
+  map.easeTo({ pitch, duration });
+}
+
 function setOriginalBuildingLayersVisibility(map: maplibregl.Map, visible: boolean): void {
   const layers = map.getStyle().layers ?? [];
   for (const layer of layers) {
@@ -114,7 +126,7 @@ export function BuildingExtrusionLayer() {
       cameraBeforeEnableRef.current = cameraBeforeEnable;
       map.setMaxPitch(Math.max(cameraBeforeEnable.maxPitch, MAX_PITCH_3D));
       if (map.getPitch() < 10) {
-        map.easeTo({ pitch: AUTO_PITCH, duration: 800 });
+        moveToPitch(map, AUTO_PITCH, 800);
       }
     }
 
@@ -122,7 +134,7 @@ export function BuildingExtrusionLayer() {
       const cameraBeforeEnable = cameraBeforeEnableRef.current;
       if (cameraBeforeEnable) {
         if (Math.abs(map.getPitch() - cameraBeforeEnable.pitch) > 0.1) {
-          map.easeTo({ pitch: cameraBeforeEnable.pitch, duration: 600 });
+          moveToPitch(map, cameraBeforeEnable.pitch, 600);
         }
         map.setMaxPitch(cameraBeforeEnable.maxPitch);
       }
