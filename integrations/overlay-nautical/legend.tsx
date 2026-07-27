@@ -6,8 +6,6 @@ import MapIcon from "@mui/icons-material/Map";
 import SailingIcon from "@mui/icons-material/Sailing";
 import WavesIcon from "@mui/icons-material/Waves";
 import Box from "@mui/material/Box";
-import LinearProgress from "@mui/material/LinearProgress";
-import Paper from "@mui/material/Paper";
 import Switch from "@mui/material/Switch";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
@@ -17,6 +15,7 @@ import { buildIntegrationAttribution } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
+import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { type TideStationFilter, useNauticalStore } from "./store";
 
 const STATION_TYPE_SWATCHES: Array<{ key: string; color: string }> = [
@@ -108,43 +107,19 @@ export function NauticalLegend() {
     if (value !== null) setTideStationFilter(value);
   };
 
-  if (!panelOpen) return null;
-
   return (
-    <Paper
-      elevation={3}
-      sx={{
-        position: "relative",
-        px: 2,
-        py: 1.5,
-        borderRadius: "12px",
-        overflow: "hidden",
-        maxWidth: { xs: "calc(100vw - 24px)", sm: 320 },
-        minWidth: 240,
-      }}
+    <OverlayLegend
+      title={t("title")}
+      panelOpen={panelOpen}
+      layerVisible={layerVisible}
+      loading={loading}
+      setLayerVisible={setLayerVisible}
+      toggleAriaLabel={t("toggleOverlay")}
+      attributionHtml={attributionHtml}
+      paperSx={{ maxWidth: { xs: "calc(100vw - 24px)", sm: 320 }, minWidth: 240 }}
+      headerSx={{ mb: 0.6 }}
+      attributionSx={{ mt: 1, display: "block", fontSize: 10, lineHeight: 1.4 }}
     >
-      {loading && (
-        <LinearProgress
-          sx={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 2,
-            borderRadius: "12px 12px 0 0",
-          }}
-        />
-      )}
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.6 }}>
-        <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{t("title")}</Typography>
-        <Switch
-          size="small"
-          checked={layerVisible}
-          onChange={(e) => setLayerVisible(e.target.checked)}
-          inputProps={{ "aria-label": t("toggleOverlay") }}
-          sx={{ ml: 2 }}
-        />
-      </Box>
       <Typography
         sx={{
           fontSize: 10.5,
@@ -274,20 +249,7 @@ export function NauticalLegend() {
           </Box>
         )}
       </Box>
-      {attributionHtml && (
-        <Typography
-          variant="caption"
-          dangerouslySetInnerHTML={{ __html: attributionHtml }}
-          sx={{
-            color: "text.secondary",
-            mt: 1,
-            display: "block",
-            fontSize: 10,
-            lineHeight: 1.4,
-          }}
-        />
-      )}
-    </Paper>
+    </OverlayLegend>
   );
 }
 

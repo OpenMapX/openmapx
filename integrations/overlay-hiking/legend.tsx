@@ -1,13 +1,11 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import LinearProgress from "@mui/material/LinearProgress";
-import Paper from "@mui/material/Paper";
-import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
 import { buildIntegrationAttribution, SAC_GRADES } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
+import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { useHikingStore } from "./store";
 
 const GRADES = [
@@ -36,42 +34,19 @@ export function HikingTrailsLegend() {
   const loading = useHikingStore((s) => s.loading);
   const setLayerVisible = useHikingStore((s) => s.setLayerVisible);
 
-  if (!panelOpen) return null;
-
   return (
-    <Paper
-      elevation={3}
-      sx={{
-        position: "relative",
-        px: 2,
-        py: 1.5,
-        borderRadius: "12px",
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-      }}
+    <OverlayLegend
+      title={t("trailDifficulty")}
+      panelOpen={panelOpen}
+      layerVisible={layerVisible}
+      loading={loading}
+      setLayerVisible={setLayerVisible}
+      toggleAriaLabel={t("toggleOverlay")}
+      attributionHtml={attributionHtml}
+      paperSx={{ whiteSpace: "nowrap" }}
+      headerSx={{ mb: 1 }}
+      attributionSx={{ mt: 1 }}
     >
-      {loading && (
-        <LinearProgress
-          sx={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 2,
-            borderRadius: "12px 12px 0 0",
-          }}
-        />
-      )}
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
-        <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{t("trailDifficulty")}</Typography>
-        <Switch
-          size="small"
-          checked={layerVisible}
-          onChange={(e) => setLayerVisible(e.target.checked)}
-          inputProps={{ "aria-label": t("toggleOverlay") }}
-          sx={{ ml: 2 }}
-        />
-      </Box>
       <Box sx={{ display: "flex", flexDirection: "row", gap: 1.5 }}>
         {GRADES.map((key) => {
           const grade = SAC_GRADES[key];
@@ -120,16 +95,6 @@ export function HikingTrailsLegend() {
           </Box>
         ))}
       </Box>
-      {attributionHtml && (
-        <Typography
-          variant="caption"
-          dangerouslySetInnerHTML={{ __html: attributionHtml }}
-          sx={{
-            color: "text.secondary",
-            mt: 1,
-          }}
-        />
-      )}
-    </Paper>
+    </OverlayLegend>
   );
 }

@@ -33,18 +33,26 @@ export interface OverlayLegendProps {
   paperSx?: SxProps<Theme>;
   /** sx for the header Box (varies only by bottom margin across callers). */
   headerSx?: SxProps<Theme>;
+  /**
+   * sx merged onto the title Typography. Only needed by legends whose title is
+   * dynamic and has to be constrained (the weather legend interpolates a place
+   * name and truncates it).
+   */
+  titleSx?: SxProps<Theme>;
   /** sx for the attribution footer Typography (varies by mt/display/fontSize). */
   attributionSx?: SxProps<Theme>;
 }
 
 /**
- * Shared shell for overlay legends: the <Paper> wrapper, absolutely-positioned
- * loading bar, the title + toggle header, and the dangerouslySetInnerHTML
+ * Shared shell for every overlay legend: the <Paper> wrapper,
+ * absolutely-positioned loading bar, the title + toggle header, and the
  * attribution footer. The per-overlay swatch content is passed as children.
  *
- * The markup and sx values are reproduced byte-for-byte from the original
- * standalone legends; per-overlay differences (Paper extras, header margin,
- * attribution sx) are passed in as props so the rendered output is unchanged.
+ * Per-overlay differences (Paper extras, header margin, title constraints,
+ * attribution sx) are passed in as props, so a legend keeps its own look while
+ * the shell — and above all the single attribution footer — lives here. The
+ * overlay tools (measurement, travel time) deliberately stay standalone: they
+ * are toolbars with a close button, not legends with a visibility toggle.
  */
 export function OverlayLegend({
   title,
@@ -57,6 +65,7 @@ export function OverlayLegend({
   children,
   paperSx,
   headerSx,
+  titleSx,
   attributionSx,
 }: OverlayLegendProps) {
   if (!panelOpen) return null;
@@ -93,7 +102,14 @@ export function OverlayLegend({
           ...(Array.isArray(headerSx) ? headerSx : [headerSx]),
         ]}
       >
-        <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{title}</Typography>
+        <Typography
+          sx={[
+            { fontWeight: 600, fontSize: 14 },
+            ...(Array.isArray(titleSx) ? titleSx : [titleSx]),
+          ]}
+        >
+          {title}
+        </Typography>
         <Switch
           size="small"
           checked={layerVisible}

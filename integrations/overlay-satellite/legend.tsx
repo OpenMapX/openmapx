@@ -2,14 +2,13 @@
 
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
-import Paper from "@mui/material/Paper";
 import Slider from "@mui/material/Slider";
-import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { buildIntegrationAttribution } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
+import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { useEnv } from "@/lib/EnvProvider";
 import { GIBS_LAYERS, today, useSatelliteStore, yesterday } from "./store";
 
@@ -30,8 +29,6 @@ export function SatelliteLegend() {
   const setOpacity = useSatelliteStore((s) => s.setOpacity);
   const capabilities = useSatelliteStore((s) => s.capabilities);
 
-  if (!panelOpen) return null;
-
   const layerCap = capabilities?.[activeLayer];
   const maxDate = layerCap?.defaultDate ?? today();
   const minDate = layerCap?.startDate ?? "2000-01-01";
@@ -39,29 +36,18 @@ export function SatelliteLegend() {
   const yesterdayInRange = yesterday() >= minDate && yesterday() <= maxDate;
 
   return (
-    <Paper
-      elevation={3}
-      sx={{
-        position: "relative",
-        px: 2,
-        py: 1.5,
-        borderRadius: "12px",
-        overflow: "hidden",
-        maxWidth: { xs: "90vw", sm: 420 },
-        minWidth: 260,
-      }}
+    <OverlayLegend
+      title={t("satelliteImagery")}
+      panelOpen={panelOpen}
+      layerVisible={layerVisible}
+      loading={false}
+      setLayerVisible={setLayerVisible}
+      toggleAriaLabel={t("toggleOverlay")}
+      attributionHtml={attributionHtml}
+      paperSx={{ maxWidth: { xs: "90vw", sm: 420 }, minWidth: 260 }}
+      headerSx={{ mb: 1 }}
+      attributionSx={{ mt: 1 }}
     >
-      {/* Header */}
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
-        <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{t("satelliteImagery")}</Typography>
-        <Switch
-          size="small"
-          checked={layerVisible}
-          onChange={(e) => setLayerVisible(e.target.checked)}
-          inputProps={{ "aria-label": t("toggleOverlay") }}
-          sx={{ ml: 2 }}
-        />
-      </Box>
       {/* Layer picker */}
       <Box sx={{ mb: 1.5 }}>
         <Typography sx={{ fontSize: 11, color: "text.secondary", mb: 0.5 }}>
@@ -155,17 +141,6 @@ export function SatelliteLegend() {
           sx={{ py: 0.5 }}
         />
       </Box>
-      {/* Attribution (from manifest dataSources — trusted, not user-generated) */}
-      {attributionHtml && (
-        <Typography
-          variant="caption"
-          dangerouslySetInnerHTML={{ __html: attributionHtml }}
-          sx={{
-            color: "text.secondary",
-            mt: 1,
-          }}
-        />
-      )}
-    </Paper>
+    </OverlayLegend>
   );
 }

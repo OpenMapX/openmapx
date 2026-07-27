@@ -1,15 +1,13 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import LinearProgress from "@mui/material/LinearProgress";
-import Paper from "@mui/material/Paper";
-import Switch from "@mui/material/Switch";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import { buildAttributionHtml } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
+import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { type AirportTypeFilter, useAirportsOverlayStore } from "./store";
 
 const TYPE_SWATCHES: Array<{ key: string; color: string }> = [
@@ -26,6 +24,15 @@ export function AirportsOverlayLegend() {
   const attributionSource = registry
     .get("overlay-ourairports")
     ?.dataSources?.find((ds) => ds.sourceId === "ourairports");
+  const attributionHtml = attributionSource
+    ? buildAttributionHtml({
+        name: attributionSource.name,
+        url: attributionSource.url ?? "",
+        license: attributionSource.license ?? "",
+        licenseUrl: attributionSource.licenseUrl,
+        attribution: attributionSource.attribution,
+      })
+    : "";
   const panelOpen = useAirportsOverlayStore((s) => s.panelOpen);
   const layerVisible = useAirportsOverlayStore((s) => s.layerVisible);
   const loading = useAirportsOverlayStore((s) => s.loading);
@@ -33,48 +40,23 @@ export function AirportsOverlayLegend() {
   const setLayerVisible = useAirportsOverlayStore((s) => s.setLayerVisible);
   const setFilter = useAirportsOverlayStore((s) => s.setFilter);
 
-  if (!panelOpen) return null;
-
   const handleFilter = (_e: unknown, value: AirportTypeFilter | null) => {
     if (value !== null) setFilter(value);
   };
 
   return (
-    <Paper
-      elevation={3}
-      sx={{
-        position: "relative",
-        px: 2,
-        py: 1.5,
-        borderRadius: "12px",
-        overflow: "hidden",
-        maxWidth: "calc(100vw - 24px)",
-      }}
+    <OverlayLegend
+      title={t("title")}
+      panelOpen={panelOpen}
+      layerVisible={layerVisible}
+      loading={loading}
+      setLayerVisible={setLayerVisible}
+      toggleAriaLabel={t("toggleOverlay")}
+      attributionHtml={attributionHtml}
+      paperSx={{ maxWidth: "calc(100vw - 24px)" }}
+      headerSx={{ mb: 0.75 }}
+      attributionSx={{ mt: 1, display: "block", fontSize: 10 }}
     >
-      {loading && (
-        <LinearProgress
-          sx={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 2,
-            borderRadius: "12px 12px 0 0",
-          }}
-        />
-      )}
-      <Box
-        sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.75 }}
-      >
-        <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{t("title")}</Typography>
-        <Switch
-          size="small"
-          checked={layerVisible}
-          onChange={(e) => setLayerVisible(e.target.checked)}
-          inputProps={{ "aria-label": t("toggleOverlay") }}
-          sx={{ ml: 2 }}
-        />
-      </Box>
       <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start", flexWrap: "wrap" }}>
         <Box>
           <Typography sx={{ fontSize: 10.5, color: "text.secondary", mb: 0.3 }}>
@@ -140,34 +122,7 @@ export function AirportsOverlayLegend() {
           </Box>
         </Box>
       </Box>
-      {attributionSource && (
-        <Typography
-          variant="caption"
-          component="div"
-          sx={{
-            color: "text.secondary",
-            mt: 1,
-            display: "block",
-            fontSize: 10,
-            "& a": { color: "inherit" },
-          }}
-        >
-          <Box
-            component="span"
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: buildAttributionHtml routes manifest overrides through sanitizeAttributionHtml, self-escapes text, and validates URLs
-            dangerouslySetInnerHTML={{
-              __html: buildAttributionHtml({
-                name: attributionSource.name,
-                url: attributionSource.url ?? "",
-                license: attributionSource.license ?? "",
-                licenseUrl: attributionSource.licenseUrl,
-                attribution: attributionSource.attribution,
-              }),
-            }}
-          />
-        </Typography>
-      )}
-    </Paper>
+    </OverlayLegend>
   );
 }
 

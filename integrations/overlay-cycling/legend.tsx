@@ -1,11 +1,10 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import Paper from "@mui/material/Paper";
-import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
 import { useTranslations } from "next-intl";
 import { CYCLING_COLORS } from "@/components/map/layers/cyclingConfig";
+import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { useCyclingStore } from "./store";
 
 const LINE_ITEMS = [
@@ -69,29 +68,19 @@ export function CyclingLegend() {
   const layerVisible = useCyclingStore((s) => s.layerVisible);
   const setLayerVisible = useCyclingStore((s) => s.setLayerVisible);
 
-  if (!panelOpen) return null;
-
   return (
-    <Paper
-      elevation={3}
-      sx={{
-        px: 2,
-        py: 1.5,
-        borderRadius: "12px",
-        whiteSpace: "nowrap",
-      }}
+    <OverlayLegend
+      title={t("cyclingInfrastructure")}
+      panelOpen={panelOpen}
+      layerVisible={layerVisible}
+      // The overlay restyles source-layers the basemap already loads, so there
+      // is nothing to fetch and no credit of its own to show.
+      loading={false}
+      setLayerVisible={setLayerVisible}
+      toggleAriaLabel={t("toggleOverlay")}
+      paperSx={{ whiteSpace: "nowrap" }}
+      headerSx={{ mb: 1 }}
     >
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
-        <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{t("cyclingInfrastructure")}</Typography>
-        <Switch
-          size="small"
-          checked={layerVisible}
-          onChange={(e) => setLayerVisible(e.target.checked)}
-          inputProps={{ "aria-label": t("toggleOverlay") }}
-          sx={{ ml: 2 }}
-        />
-      </Box>
-
       <Box sx={{ display: "flex", flexDirection: "row", gap: 2 }}>
         {LINE_ITEMS.map((item) => (
           <Box key={item.colorKey} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -119,6 +108,6 @@ export function CyclingLegend() {
           </Box>
         ))}
       </Box>
-    </Paper>
+    </OverlayLegend>
   );
 }

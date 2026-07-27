@@ -3,10 +3,7 @@
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import IconButton from "@mui/material/IconButton";
-import LinearProgress from "@mui/material/LinearProgress";
-import Paper from "@mui/material/Paper";
 import Slider from "@mui/material/Slider";
-import Switch from "@mui/material/Switch";
 import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
@@ -17,6 +14,7 @@ import {
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
+import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { WeatherIcon } from "@/components/weather/WeatherIcon";
 import { useWeatherStore } from "./store";
 
@@ -66,59 +64,30 @@ export function WeatherLegend() {
   const locationName = useWeatherStore((s) => s.locationName);
   const radarUnavailable = useWeatherStore((s) => s.radarUnavailable);
 
-  if (!panelOpen) return null;
-
   const allFrames = [...radarPastFrames, ...radarNowcastFrames];
   const availableSubLayers = SUB_LAYERS.filter(({ needsOwm }) => !needsOwm || owmAvailable);
   const showRadarControls = activeSubLayer === "radar" && allFrames.length > 0 && !radarUnavailable;
 
   return (
-    <Paper
-      elevation={3}
-      sx={{
-        position: "relative",
-        px: 2,
-        py: 1.5,
-        borderRadius: "12px",
+    <OverlayLegend
+      title={locationName ? t("weatherAt", { location: locationName }) : t("weather")}
+      panelOpen={panelOpen}
+      layerVisible={layerVisible}
+      loading={loading || radarLoading}
+      setLayerVisible={setLayerVisible}
+      toggleAriaLabel={t("toggleOverlay")}
+      attributionHtml={attributionHtml}
+      paperSx={{ maxWidth: { xs: "90vw", sm: 440 }, minWidth: 280 }}
+      headerSx={{ mb: 1 }}
+      // The title interpolates a place name, so it has to truncate.
+      titleSx={{
         overflow: "hidden",
-        maxWidth: { xs: "90vw", sm: 440 },
-        minWidth: 280,
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+        maxWidth: 300,
       }}
+      attributionSx={{ mt: 1 }}
     >
-      {(loading || radarLoading) && (
-        <LinearProgress
-          sx={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 2,
-            borderRadius: "12px 12px 0 0",
-          }}
-        />
-      )}
-      {/* Header: title with location + toggle */}
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
-        <Typography
-          sx={{
-            fontWeight: 600,
-            fontSize: 14,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            maxWidth: 300,
-          }}
-        >
-          {locationName ? t("weatherAt", { location: locationName }) : t("weather")}
-        </Typography>
-        <Switch
-          size="small"
-          checked={layerVisible}
-          onChange={(e) => setLayerVisible(e.target.checked)}
-          inputProps={{ "aria-label": t("toggleOverlay") }}
-          sx={{ ml: 2 }}
-        />
-      </Box>
       {/* Current weather conditions */}
       {currentWeather ? (
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
@@ -239,17 +208,6 @@ export function WeatherLegend() {
           {t("radarUnavailable")}
         </Typography>
       )}
-      {/* Attribution (from manifest dataSources -- trusted, not user-generated) */}
-      {attributionHtml && (
-        <Typography
-          variant="caption"
-          dangerouslySetInnerHTML={{ __html: attributionHtml }}
-          sx={{
-            color: "text.secondary",
-            mt: 1,
-          }}
-        />
-      )}
-    </Paper>
+    </OverlayLegend>
   );
 }
