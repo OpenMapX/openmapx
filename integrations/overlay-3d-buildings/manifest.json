@@ -15,7 +15,8 @@
       "preview": "preview.svg"
     },
     "overlay": {
-      "excludes": []
+      "excludes": [],
+      "minZoom": 14
     }
   },
   "backend": {
