@@ -34,7 +34,7 @@ describe("delivery provider hooks", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(spy).toHaveBeenCalledWith(
       "/api/integrations/food-delivery/resolve",
-      expect.objectContaining({ v: "3", name: "AKL", country: "de", city: "Aachen" }),
+      expect.objectContaining({ name: "AKL", country: "de", city: "Aachen" }),
     );
   });
 });

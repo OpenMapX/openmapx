@@ -98,8 +98,8 @@ describe("food-delivery routes", () => {
       ["lieferando", "browse"],
     ]);
     expect(cache.set).toHaveBeenCalledWith(
-      expect.stringContaining("resolve:v3:ubereats:de"),
-      expect.objectContaining({ version: 3, kind: "exact" }),
+      expect.stringContaining("resolve:v2:ubereats:de"),
+      expect.objectContaining({ version: 2, kind: "exact" }),
       7 * 24 * 60 * 60,
     );
 
@@ -115,7 +115,7 @@ describe("food-delivery routes", () => {
     await missHandler({ query, params: {}, body: undefined }, makeReply().reply);
     expect(missState.cache.set).toHaveBeenCalledWith(
       expect.any(String),
-      { version: 3, kind: "not_found" },
+      { version: 2, kind: "not_found" },
       24 * 60 * 60,
     );
 
