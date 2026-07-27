@@ -393,8 +393,7 @@
       "freeFlowSpeed": "Free-flow speed",
       "ratio": "Of free flow",
       "los": "Traffic"
-    },
-    "coverageNote": "Live speeds: NL · SE · FI · NYC"
+    }
   },
   "earthquakes": {
     "earthquakes": "Earthquakes",

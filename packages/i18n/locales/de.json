@@ -393,8 +393,7 @@
       "freeFlowSpeed": "Geschwindigkeit bei freier Fahrt",
       "ratio": "Von freier Fahrt",
       "los": "Verkehr"
-    },
-    "coverageNote": "Live-Geschwindigkeiten: NL · SE · FI · NYC"
+    }
   },
   "earthquakes": {
     "earthquakes": "Erdbeben",

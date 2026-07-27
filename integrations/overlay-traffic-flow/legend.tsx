@@ -100,8 +100,6 @@ export function TrafficFlowLegend() {
           ))}
         </Box>
       </Box>
-
-      <Typography sx={{ fontSize: 10.5, color: "text.secondary" }}>{t("coverageNote")}</Typography>
     </OverlayLegend>
   );
 }
