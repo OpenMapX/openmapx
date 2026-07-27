@@ -8,6 +8,11 @@ interface DeliveryProvidersResponse {
   degraded?: boolean;
 }
 
+// Keep this aligned with the backend resolver cache namespace. Including it in
+// the request URL prevents a browser-cached negative result from surviving a
+// resolver deployment (for example, the Frittenwerk single-brand match fix).
+const DELIVERY_RESOLUTION_VERSION = "3";
+
 export function useDeliveryProviderCatalog(countryCode?: string, enabled = true) {
   const cc = countryCode?.toLowerCase();
   return useQuery<DeliveryProvidersResponse>({
@@ -31,6 +36,7 @@ export function useDeliveryProviders(params: DeliverySearchParams, enabled = tru
   return useQuery<DeliveryProvidersResponse>({
     queryKey: [
       "delivery-providers",
+      DELIVERY_RESOLUTION_VERSION,
       params.name,
       cc ?? "",
       params.city ?? "",
@@ -41,6 +47,7 @@ export function useDeliveryProviders(params: DeliverySearchParams, enabled = tru
     ],
     queryFn: () =>
       apiClient.get<DeliveryProvidersResponse>(API_ENDPOINTS.foodDeliveryResolve, {
+        v: DELIVERY_RESOLUTION_VERSION,
         name: params.name,
         ...(cc ? { country: cc } : {}),
         ...(params.city ? { city: params.city } : {}),
