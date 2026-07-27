@@ -258,19 +258,17 @@ imperative — they are operator instructions, not prose.
 ### Adding a map overlay
 
 This walkthrough builds a route-only provider, so its `frontend` flags are all
-`false`. If your integration instead draws on the map, you have two options:
+`false`. If your integration instead draws on the map, ship a `map-layer.tsx`
+(and optionally `legend.tsx` / `panel.tsx`), set the matching
+`frontend.mapLayer` / `legend` / `panel` flag, add `domains: ["map-overlay"]`
+and a `layerSelector` entry so users can toggle it. Community overlays reach the
+map via `useHostMap()` from `@openmapx/integration-framework/react`. A simple
+legend can be declared as `frontend.overlay.legend` in the manifest rather than
+written, and the layer registers the credits that appear in the map credits
+strip while it is drawn.
 
-- **Declarative** (recommended, no frontend code): put a `frontend.overlay.source`
-  + `layers` + `legend` + `popup` block in the manifest and the host renders it —
-  a community integration needs no frontend bundle at all. Add a `layerSelector`
-  entry so users can toggle it, and `domains: ["map-overlay"]`.
-- **Code**: ship a `map-layer.tsx` (and optionally `legend.tsx` / `panel.tsx`)
-  and set the matching `frontend.mapLayer` / `legend` / `panel` flag; community
-  overlays reach the map via `useHostMap()` from
-  `@openmapx/integration-framework/react`.
-
-Both paths — the full `frontend.overlay` schema and the community frontend
-runtime — are documented in
+The full `frontend.overlay` schema and the community frontend runtime are
+documented in
 [Integration system → Map overlays](./integration-system.md#map-overlays).
 
 ## Implement `setup(ctx)`

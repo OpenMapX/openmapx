@@ -71,9 +71,9 @@ externals: [
 ]
 ```
 
-If your integration contributes a **code** frontend component (a map overlay
-written in React, not a declarative one — see [Add a map overlay](#add-a-map-overlay)),
-also externalize the React + map surfaces the host provides:
+If your integration contributes a frontend component (a map overlay written in
+React — see [Add a map overlay](#add-a-map-overlay)), also externalize the React
++ map surfaces the host provides:
 
 ```js
 externals: [
@@ -194,15 +194,15 @@ Exits non-zero and prints errors if the manifest is invalid.
 
 ## Add a map overlay
 
-If your extension draws on the map, prefer the **declarative** path — it needs no
-frontend bundle at all, which keeps your artifact backend-only and is the most
-secure option (no third-party JavaScript runs in the app). Put the overlay in the
-manifest:
+If your extension draws on the map, it ships a `map-layer.tsx` frontend bundle.
+The legend is the one part you can declare instead of writing, and the layer
+selector entry is manifest-only either way:
 
 ```jsonc
 {
   "domains": ["map-overlay"],
   "frontend": {
+    "mapLayer": true,
     "layerSelector": {
       "group": "map-details",
       "labelKey": "myOverlay",
@@ -210,10 +210,8 @@ manifest:
       "preview": "preview.svg"
     },
     "overlay": {
-      "source": { "kind": "geojson-bbox", "route": "/observations", "bboxParam": "bbox" },
-      "layers": [{ "id": "points", "type": "circle", "interactive": true, "paint": { "circle-color": "#cc0033" } }],
-      "legend": { "kind": "categorical", "title": "My overlay", "items": [{ "color": "#cc0033", "label": "High" }] },
-      "popup": { "titleField": "headline", "rows": [{ "field": "type", "label": "Type" }] }
+      "minZoom": 6,
+      "legend": { "kind": "categorical", "title": "My overlay", "items": [{ "color": "#cc0033", "label": "High" }] }
     }
   }
 }
@@ -233,21 +231,21 @@ integrations/
 ```
 
 The preview must be an SVG no larger than 64 KiB. The package command includes
-this static asset automatically, and declaring it does not create or require a
-frontend bundle. If the preview is omitted or cannot be loaded, the layer
-selector displays its generic placeholder.
+this static asset automatically. If the preview is omitted or cannot be loaded,
+the layer selector displays its generic placeholder.
 
-The host fetches your integration's `route` (here `/observations`) as the user
-pans, draws the Style-Spec `layers`, and renders the legend and click popup — no
-shipped code. OpenConditions' road-conditions overlay works exactly this way.
-
-For overlays that need imperative logic, ship a `map-layer.tsx` instead, reach
-the map with `useHostMap()` from `@openmapx/integration-framework/react`, and
-externalize the React + `maplibre-gl` surfaces (see
+In `map-layer.tsx`, reach the map with `useHostMap()` from
+`@openmapx/integration-framework/react`, register your credits so they appear in
+the map credits strip, and externalize the React + `maplibre-gl` surfaces (see
 [Mark host-injected packages as externals](#mark-host-injected-packages-as-externals)).
 The full `frontend.overlay` schema and the community frontend runtime are
 documented in
 [Integration system → Map overlays](./integration-system.md#map-overlays).
+
+An extension does not have to draw anything itself. OpenConditions is
+backend-only: it declares no `frontend` block at all, publishing its road and
+traffic feeds as `dataSources` under the `road-conditions` domain, and the
+app's own overlays render and credit them.
 
 ## Package and install the integration
 

@@ -40,10 +40,9 @@ two things to be present:
   integration registers providers, routes, and lifecycle hooks.
 
 Most integrations also ship `strings/<locale>.json` localization files and, when
-they have a frontend, a map overlay. An overlay can be **declarative** (described
-entirely in the manifest and drawn by the host — no shipped frontend code) or
-**code** (MapLibre layer / legend / panel components the integration ships). Both
-are covered in [Map overlays](#map-overlays).
+they have a frontend, a map overlay — the MapLibre layer component, plus
+optional legend and panel components. An overlay's legend can be declared in the
+manifest instead of shipped as code. See [Map overlays](#map-overlays).
 
 A backend entry point is typically very small — it wires implementations into
 the context and returns:
@@ -137,28 +136,14 @@ described in [Capability requirement resolution](#capability-requirement-resolut
     overlay?: {
       excludes?: string[];   // overlay ids this one is mutually exclusive with
       minZoom?: number;
-      // Declarative overlay — when `source` is present the host draws it from the
-      // manifest with no shipped code (see "Map overlays" below):
-      source?: {
-        kind: "geojson-bbox" | "geojson" | "vector";
-        route?: string;                       // integration-relative, e.g. "/observations"
-        bboxParam?: "bbox" | "wsen";          // how the viewport is passed (geojson-bbox)
-        extraParams?: Record<string, string>;
-        tiles?: string[];                     // vector tile URL templates
-      };
-      layers?: Array<{
-        id: string;
-        type: "circle" | "line" | "fill" | "symbol";
-        paint?: object; layout?: object; filter?: unknown[];  // MapLibre Style-Spec
-        interactive?: boolean;                // register for click popup + hover cursor
-      }>;
+      // Declarative legend — the host renders it, so no legend.tsx is needed
+      // (see "Map overlays" below):
       legend?: {
         kind: "categorical" | "ramp";
         title?: string; titleKey?: string;
         items?: Array<{ color: string; label?: string; labelKey?: string }>;  // categorical
         stops?: Array<{ value: number; color: string }>;                      // ramp
       };
-      popup?: { titleField: string; rows?: Array<{ field: string; label?: string; format?: "text" | "number" | "date" }> };
     };
   };
   backend?: {
@@ -171,11 +156,11 @@ described in [Capability requirement resolution](#capability-requirement-resolut
 `mapLayer` / `legend` / `panel` are advertisement flags for **code** components
 the integration ships. `searchCategory` and `layerSelector` are pure
 declarations the host renders (a search-bar category chip; a layer-selector
-entry). `overlay` carries mutual-exclusion rules (`excludes`) and `minZoom`,
-**and**, when it includes a `source`, a full **declarative overlay** the host
-draws from the manifest with no shipped code. `backend.routes` signals that the
-integration registers HTTP routes; `backend.cron` declares a recurring task. How
-the two overlay paths render is detailed in [Map overlays](#map-overlays).
+entry). `overlay` carries mutual-exclusion rules (`excludes`), `minZoom`, and an
+optional **declarative legend** the host draws from the manifest, which an
+overlay can use instead of shipping a `legend.tsx`. `backend.routes` signals that
+the integration registers HTTP routes; `backend.cron` declares a recurring task.
+How an overlay renders is detailed in [Map overlays](#map-overlays).
 
 When `layerSelector.preview` is set, it names an SVG file relative to the
 integration root, such as `preview.svg` or `assets/layer-preview.svg`. The host
@@ -450,44 +435,27 @@ integration, are separate developer pages.
 ## Map overlays
 
 An integration that draws on the map (`domains` includes `map-overlay`, with a
-`layerSelector` entry so users can toggle it) renders one of two ways.
+`layerSelector` entry so users can toggle it) ships a `map-layer.tsx`. Its
+legend is the one part it can declare instead of writing.
 
-### Declarative overlays (no shipped code)
+### Declarative legends (no shipped legend code)
 
-When `frontend.overlay.source` is present, the overlay is **fully described in the
-manifest** and a generic host renderer draws it — the integration ships no
-frontend code. This is the preferred path: it is the most secure (no third-party
-JavaScript runs in the app), works for community integrations without a frontend
-bundle, and the host gets the lifecycle right once for everyone. The manifest
-declares:
+`frontend.overlay.legend` describes the legend in the manifest and a generic host
+renderer draws it, so an overlay needs no `legend.tsx`. Declare a `kind` of
+`categorical` (discrete `items`, each a color plus a `label` or `labelKey`) or
+`ramp` (a value→color gradient given as `stops`), with an optional `title` or
+`titleKey`. The host escapes every value it renders.
 
-- a **`source`** — `geojson-bbox` (the host fetches the integration's own
-  `route` and refetches it, debounced, as the user pans/zooms, substituting the
-  viewport per `bboxParam`), `geojson` (fetched once), or `vector` (`tiles`);
-- one or more **`layers`** — MapLibre Style-Spec layer objects (`type`, `paint`,
-  `layout`, `filter`); mark a layer `interactive` to get a click popup;
-- an optional **`legend`** (categorical swatches or a value→color ramp) and
-  **`popup`** (a title field plus rows), both rendered by the host with every
-  value escaped.
+`frontend.overlay` also carries `excludes` (sibling overlays that switch off when
+this one switches on) and `minZoom`.
 
-The host owns add/remove, re-anchoring beneath labels on base-map switch, the
-bbox refetch, popups, interactive-layer registration, attribution (from the
-manifest `dataSources`), and teardown. OpenConditions' road-conditions overlay is
-the canonical example: a `geojson-bbox` source pointing at its `/observations`
-route, a severity-colored circle layer, a categorical legend, and a popup —
-all manifest, no bundle. See
-[Building an external extension](./building-an-external-extension.md) for the
-complete OpenConditions walkthrough (provider integration + companion ingest
-service).
+### Map layers (shipped components)
 
-### Code overlays (shipped components)
-
-When an overlay needs imperative logic (custom WebGL layers, animation, bespoke
-interaction) it ships `map-layer.tsx` (and optionally `legend.tsx` / `panel.tsx`)
-and sets the matching `frontend.mapLayer` / `legend` / `panel` flag. Built-in
-overlays import the app's internals directly. **Community** code overlays reach
-the map through the curated runtime surface exported from
-`@openmapx/integration-framework/react`:
+The layer itself is always a shipped component: `map-layer.tsx`, with the
+`frontend.mapLayer` flag set (and `frontend.legend` plus a `legend.tsx` when the
+declarative legend above isn't expressive enough). Built-in overlays import the
+app's internals directly. **Community** overlays reach the map through the
+curated runtime surface exported from `@openmapx/integration-framework/react`:
 
 ```tsx
 import { useHostMap } from "@openmapx/integration-framework/react";
@@ -502,6 +470,21 @@ export default function MapLayer() {
 
 `useHostMap()` returns the live host map (`mapRef`, `mapReady`, `styleVersion`)
 plus helpers (`getFirstSymbolLayerId`, `anchorBelowLabels`, `setLayerInteractive`).
+
+### Crediting an overlay's sources
+
+The map layer registers its credits, and they appear in the map credits strip
+along the bottom of the map for as long as the layer is drawn. Legends never
+carry credits — they explain colors and symbols only, and can be collapsed away.
+
+Credit an overlay's own `dataSources` with `useIntegrationAttribution(id,
+visible)`. When the overlay paints data published by *sibling* integrations
+(a domain orchestrator such as live transit or road conditions), its own
+`dataSources` list is empty, so credit the whole domain instead with
+`useIntegrationDomainAttribution(domain, visible)` — crediting an empty list
+registers nothing. Credits that arrive with a response rather than a manifest
+(`MobilityResult.attributions`) go through `useMapAttributions(key, attributions)`.
+Either way the wording comes from the manifest, never from hand-rolled strings.
 
 ### The community frontend runtime
 
