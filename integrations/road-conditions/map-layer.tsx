@@ -24,6 +24,12 @@ import { useRoadConditionsStore } from "./store";
 type GeoJsonData = Parameters<GeoJSONSource["setData"]>[0];
 
 const OVERLAY_ID = "road-conditions";
+/**
+ * The manifest domain the feeds are published under, which happens to spell the
+ * same as this overlay's id — they are separate identifiers, so don't collapse
+ * them: renaming the overlay would otherwise silently drop the credits.
+ */
+const CREDIT_DOMAIN = "road-conditions";
 const MARKER_SOURCE = "omx-road-conditions-markers";
 const LINE_SOURCE = "omx-road-conditions-lines";
 const LINE_LAYER = "omx-road-conditions-line";
@@ -260,7 +266,7 @@ export function RoadConditionsLayer() {
   // the external `road-conditions-openconditions` provider registered under the
   // shared domain. Credit the domain, the same way overlay-traffic-flow does;
   // crediting this integration's own manifest registered nothing at all.
-  useIntegrationDomainAttribution(OVERLAY_ID, layerVisible);
+  useIntegrationDomainAttribution(CREDIT_DOMAIN, layerVisible);
   useOverlayExclusion(OVERLAY_ID, layerVisible);
   useLayerReanchor([LINE_LAYER, MARKER_LAYER], layerVisible);
   const popupRef = useRef<maplibregl.Popup | null>(null);
