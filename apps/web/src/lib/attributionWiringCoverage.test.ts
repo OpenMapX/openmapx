@@ -8,12 +8,16 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * Coverage invariant: any integration that paints a map layer or a panel from
- * its own declared `dataSources` must wire one of the attribution
- * hooks/components, so the source is credited in the UI (MapLibre attribution
- * control for layers, an attribution strip for panels). This is a static
- * source scan — a guardrail that fails loudly when a new map-layer/panel
- * integration ships data without crediting it, rather than a runtime render.
+ * Coverage invariant: any integration that paints a map layer or a panel must
+ * wire one of the attribution hooks/components, so whatever it renders is
+ * credited in the UI (the map credits strip for layers, an attribution strip
+ * for panels). This is a static source scan — a guardrail that fails loudly
+ * when a new map-layer/panel integration ships data without crediting it,
+ * rather than a runtime render.
+ *
+ * It applies whether the credits are the integration's own (`dataSources` on
+ * its manifest), a sibling's (a domain aggregate) or the response's (a runtime
+ * envelope); only the documented NO_CREDIT_OWED exemptions are out of scope.
  *
  * If a future integration credits its source through a mechanism not listed in
  * ATTRIBUTION_WIRES, add that symbol here rather than silencing the test.
@@ -96,10 +100,30 @@ function wiresAttribution(integrationDir: string): boolean {
   });
 }
 
+/**
+ * Integrations that render UI, declare no `dataSources`, and legitimately owe
+ * no credit of their own — so the "wire an attribution hook" rule does not
+ * apply to them. Every entry needs a reason; anything else with an empty
+ * `dataSources` list is either aggregating a sibling's credits (wire
+ * `useIntegrationDomainAttribution`) or crediting a runtime envelope (wire
+ * `useMapAttributions`), and the test below says so.
+ *
+ * The empty-dataSources case is the one the original scan skipped entirely:
+ * overlay-traffic-flow, overlay-live-transit and overlay-transit paint
+ * third-party data through a domain/runtime credit, and dropping that call
+ * used to fail nothing.
+ */
+const NO_CREDIT_OWED: Record<string, string> = {
+  "overlay-3d-buildings":
+    "extrudes the basemap's own `building` source-layer; the base style's credits already cover it",
+  "overlay-cycling":
+    "restyles the basemap's own `transportation`/`poi` source-layers; the base style's credits already cover it",
+  "overlay-tool-measurement": "draws only the user's own measurement geometry — no external data",
+};
+
 interface Candidate {
   id: string;
-  mapLayer: boolean;
-  panel: boolean;
+  hasDataSources: boolean;
 }
 
 function collectCandidates(): Candidate[] {
@@ -115,25 +139,26 @@ function collectCandidates(): Candidate[] {
     }
     const frontend = manifest.frontend ?? {};
     const hasUi = frontend.mapLayer === true || frontend.panel === true;
-    const hasDataSources = (manifest.dataSources ?? []).length > 0;
-    if (hasUi && hasDataSources) {
-      candidates.push({ id, mapLayer: frontend.mapLayer === true, panel: frontend.panel === true });
-    }
+    if (!hasUi) continue;
+    candidates.push({ id, hasDataSources: (manifest.dataSources ?? []).length > 0 });
   }
   return candidates;
 }
 
 describe("attribution-display coverage", () => {
   const candidates = collectCandidates();
+  const owning = candidates.filter((c) => c.hasDataSources);
+  const borrowing = candidates.filter((c) => !c.hasDataSources);
 
-  it("finds integrations that render a map layer or panel from their own data sources", () => {
+  it("finds integrations that render a map layer or panel", () => {
     // If the scan matches nothing (e.g. the integrations dir moved), the
-    // coverage assertion below would pass vacuously — fail here instead.
-    expect(candidates.length > 0).toBe(true);
+    // coverage assertions below would pass vacuously — fail here instead.
+    expect(owning.length > 0).toBe(true);
+    expect(borrowing.length > 0).toBe(true);
   });
 
   it("every map-layer/panel integration with dataSources wires an attribution hook", () => {
-    const unwired = candidates
+    const unwired = owning
       .filter((c) => !wiresAttribution(path.join(INTEGRATIONS_DIR, c.id)))
       .map((c) => c.id);
 
@@ -141,5 +166,26 @@ describe("attribution-display coverage", () => {
     // frontend.mapLayer/panel + dataSources but never reference an attribution
     // hook (${ATTRIBUTION_WIRES}). Wire one so their source is credited.
     expect(unwired).toEqual([]);
+  });
+
+  it("every map-layer/panel integration without dataSources credits a sibling or is exempt", () => {
+    const unwired = borrowing
+      .filter((c) => !(c.id in NO_CREDIT_OWED))
+      .filter((c) => !wiresAttribution(path.join(INTEGRATIONS_DIR, c.id)))
+      .map((c) => c.id);
+
+    // On failure the diff prints `unwired` — integrations that paint UI while
+    // declaring no data sources of their own and crediting nobody else's.
+    // Either wire `useIntegrationDomainAttribution` (credits go to the sibling
+    // integrations publishing the feeds) or `useMapAttributions` (credits ride
+    // along on the response), or add the id to NO_CREDIT_OWED with a reason.
+    expect(unwired).toEqual([]);
+  });
+
+  it("keeps the NO_CREDIT_OWED exemptions honest", () => {
+    // A stale exemption is worse than none: it would silently excuse an
+    // integration that has since grown its own data sources.
+    const stale = Object.keys(NO_CREDIT_OWED).filter((id) => !borrowing.some((c) => c.id === id));
+    expect(stale).toEqual([]);
   });
 });
