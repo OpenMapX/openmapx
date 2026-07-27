@@ -11,8 +11,10 @@ export {
 export {
   type ComposeServiceSnippet,
   GENERATED_SECRETS_DIRNAME,
+  mergeServiceSecretKeys,
   type RenderContext,
   readServiceSecretKeysFromCompose,
+  readServiceSecretKeysFromDisk,
   renderCompose,
   renderServiceSnippet,
 } from "./compose-renderer";

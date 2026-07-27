@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
@@ -12,7 +12,10 @@ import { applyServiceSelection } from "../lib/service-selection";
 const {
   buildAppApiServiceEnv,
   flattenResolvedConfig,
+  GENERATED_SECRETS_DIRNAME,
+  mergeServiceSecretKeys,
   readServiceSecretKeysFromCompose,
+  readServiceSecretKeysFromDisk,
   renderCompose,
   resolveServiceConfigFromEnv,
   ServiceRegistry,
@@ -22,6 +25,15 @@ export interface RenderRepoOptions {
   rootDir?: string;
   domain: string;
   services?: string[];
+  /**
+   * Render even when vault-managed service credentials exist on disk
+   * (`.generated-secrets/` present) but their key names cannot be recovered
+   * from the existing compose — which strips every `/run/secrets` mount from
+   * the output. Off by default so a CLI render can never silently
+   * un-credential services; surfaced as `--drop-secrets` on `compose render`
+   * and `compose up`.
+   */
+  dropSecrets?: boolean;
 }
 
 export interface RenderRepoResult {
@@ -72,16 +84,37 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
     );
   }
 
+  // Preserve vault secret mounts without DB access: reconstruct the key names
+  // from the existing generated compose's `secrets:` block (world-readable —
+  // the admin render last wrote it) plus, when this process can list it, the
+  // 0700 `.generated-secrets/` dir itself (a non-root CLI gets EACCES there,
+  // swallowed inside the reader). Union of both so a CLI re-render keeps every
+  // known vault mount instead of silently dropping it.
+  const serviceSecretKeys = mergeServiceSecretKeys(
+    readServiceSecretKeysFromCompose(paths.composeOutPath),
+    readServiceSecretKeysFromDisk(composeOutDir),
+  );
+  // Fail-loud guard: the app-api render only keeps `.generated-secrets/`
+  // around while at least one vault credential exists (it removes the whole
+  // tree when the vault is empty). So if that dir is present but neither
+  // source above yielded a single key (compose deleted/rewritten without a
+  // secrets block + dir unreadable), this render would strip every
+  // `/run/secrets` mount and silently un-credential the affected services.
+  // Refuse instead — the operator can re-render from the admin panel (which
+  // reads the vault) or explicitly opt into dropping the secrets.
+  const generatedSecretsDir = join(composeOutDir, GENERATED_SECRETS_DIRNAME);
+  if (serviceSecretKeys.size === 0 && existsSync(generatedSecretsDir) && !opts.dropSecrets) {
+    throw new Error(
+      `vault-managed service credentials exist on disk (${generatedSecretsDir}) but their key names could not be recovered from the existing generated compose, so this render would strip every /run/secrets mount and silently un-credential the affected services. Re-render from the admin panel (Admin → Services → Recreate reads the credential vault directly), or — if the credentials are intentionally decommissioned — remove the .generated-secrets directory (root-owned; sudo rm -rf) or re-run with --drop-secrets to render without them.`,
+    );
+  }
+
   const result = renderCompose(enabled, {
     domain: opts.domain,
     composeOutDir,
     allServices: registry.list(),
     resolvedServiceConfigs,
-    // Preserve vault secret mounts by reading them from the existing generated
-    // compose (world-readable) the admin render last wrote, rather than the
-    // 0700 `.generated-secrets/` dir a non-root CLI can't scan — so a CLI
-    // re-render keeps the `secrets:` block instead of silently dropping it.
-    serviceSecretKeys: readServiceSecretKeysFromCompose(paths.composeOutPath),
+    serviceSecretKeys: opts.dropSecrets ? undefined : serviceSecretKeys,
   });
 
   writeFileSync(paths.composeOutPath, result.composeYaml, "utf-8");
@@ -116,25 +149,37 @@ export function registerComposeCommands(program: Command): void {
       "--preset <names>",
       "Comma/space-separated preset names (app, routing, transit, pelias, nominatim, photon, overpass, tiles, martin, proxy, dev)",
     )
-    .action(async (options: { domain: string; services?: string; preset?: string }) => {
-      try {
-        const services = combineServiceSelection(options.services, options.preset);
-        const r = await renderComposeForRepo({
-          domain: options.domain,
-          services,
-        });
-        log.ok(`Rendered ${r.servicesRendered} services → ${r.composePath}`);
-        if (r.enabledServiceIds.length > 0) {
-          log.dim(`Selected services → ${r.enabledServiceIds.join(", ")}`);
+    .option(
+      "--drop-secrets",
+      "Render without the vault-managed service secret mounts (DANGEROUS — affected services run uncredentialed)",
+    )
+    .action(
+      async (options: {
+        domain: string;
+        services?: string;
+        preset?: string;
+        dropSecrets?: boolean;
+      }) => {
+        try {
+          const services = combineServiceSelection(options.services, options.preset);
+          const r = await renderComposeForRepo({
+            domain: options.domain,
+            services,
+            dropSecrets: options.dropSecrets,
+          });
+          log.ok(`Rendered ${r.servicesRendered} services → ${r.composePath}`);
+          if (r.enabledServiceIds.length > 0) {
+            log.dim(`Selected services → ${r.enabledServiceIds.join(", ")}`);
+          }
+          for (const warning of r.selectionWarnings) log.warn(warning);
+          for (const warning of r.renderWarnings) log.warn(warning);
+          log.dim(`Hardlink plan → ${r.hardlinkPath}`);
+        } catch (err) {
+          log.err(`Render failed: ${(err as Error).message}`);
+          process.exit(1);
         }
-        for (const warning of r.selectionWarnings) log.warn(warning);
-        for (const warning of r.renderWarnings) log.warn(warning);
-        log.dim(`Hardlink plan → ${r.hardlinkPath}`);
-      } catch (err) {
-        log.err(`Render failed: ${(err as Error).message}`);
-        process.exit(1);
-      }
-    });
+      },
+    );
 
   compose
     .command("up")
@@ -145,27 +190,39 @@ export function registerComposeCommands(program: Command): void {
       "--preset <names>",
       "Comma/space-separated preset names (app, routing, transit, pelias, nominatim, photon, overpass, tiles, martin, proxy, dev)",
     )
-    .action(async (options: { domain: string; services?: string; preset?: string }) => {
-      try {
-        const services = combineServiceSelection(options.services, options.preset);
-        const r = await renderComposeForRepo({
-          domain: options.domain,
-          services,
-        });
-        log.ok(`Rendered ${r.servicesRendered} services → ${r.composePath}`);
-        for (const warning of r.selectionWarnings) log.warn(warning);
-        for (const warning of r.renderWarnings) log.warn(warning);
-        const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
-        log.ok(
-          `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
-        );
-      } catch (err) {
-        log.err(`Render failed: ${(err as Error).message}`);
-        process.exit(1);
-      }
-      const code = await dockerComposeStream(["up", "-d"]);
-      process.exit(code);
-    });
+    .option(
+      "--drop-secrets",
+      "Render without the vault-managed service secret mounts (DANGEROUS — affected services run uncredentialed)",
+    )
+    .action(
+      async (options: {
+        domain: string;
+        services?: string;
+        preset?: string;
+        dropSecrets?: boolean;
+      }) => {
+        try {
+          const services = combineServiceSelection(options.services, options.preset);
+          const r = await renderComposeForRepo({
+            domain: options.domain,
+            services,
+            dropSecrets: options.dropSecrets,
+          });
+          log.ok(`Rendered ${r.servicesRendered} services → ${r.composePath}`);
+          for (const warning of r.selectionWarnings) log.warn(warning);
+          for (const warning of r.renderWarnings) log.warn(warning);
+          const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
+          log.ok(
+            `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
+          );
+        } catch (err) {
+          log.err(`Render failed: ${(err as Error).message}`);
+          process.exit(1);
+        }
+        const code = await dockerComposeStream(["up", "-d"]);
+        process.exit(code);
+      },
+    );
 
   compose
     .command("down")

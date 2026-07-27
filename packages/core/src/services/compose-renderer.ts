@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { isAbsolute, relative, resolve } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { dump as yamlDump, load as yamlLoad } from "js-yaml";
 import { detectConsumesCycle } from "./resolver";
 import type {
@@ -156,8 +156,11 @@ export interface RenderContext {
    * the value. The secret values themselves are written to
    * `<composeOutDir>/.generated-secrets/<serviceId>/<KEY>` by the caller
    * (app-api's render step), which holds the decryption key. The renderer stays
-   * pure: it only needs the key names. Absent on the plain CLI render path (no
-   * vault), so no secrets block is emitted there.
+   * pure: it only needs the key names. The DB-free CLI reconstructs this map
+   * from the previously generated compose (and, when readable, the
+   * `.generated-secrets/` dir) so its renders preserve the vault mounts. May
+   * contain services outside the rendered subset — their top-level `secrets:`
+   * entries are carried forward so a narrowed render never erases the record.
    */
   serviceSecretKeys?: Map<string, string[]>;
   /**
@@ -377,6 +380,58 @@ export function readServiceSecretKeysFromCompose(composePath: string): Map<strin
   }
   for (const [id, keys] of byService) byService.set(id, keys.sort());
   return byService;
+}
+
+/**
+ * Best-effort reconstruction of per-service vault secret KEY names from the
+ * materialised `.generated-secrets/<serviceId>/<KEY>` files themselves. This is
+ * the same on-disk layout the app-api render step writes, so when the CLI runs
+ * with enough privilege to list the (0700, root-owned) directory it recovers
+ * the keys even when the previous compose is missing or was written without a
+ * `secrets:` block. A non-root CLI gets EACCES on the readdir — swallowed, the
+ * compose-derived keys remain the only source then. Only key names are read,
+ * never file contents.
+ */
+export function readServiceSecretKeysFromDisk(composeOutDir: string): Map<string, string[]> {
+  const byService = new Map<string, string[]>();
+  const root = join(composeOutDir, GENERATED_SECRETS_DIRNAME);
+  let serviceIds: string[];
+  try {
+    serviceIds = readdirSync(root);
+  } catch {
+    // Missing dir, or unreadable (0700 root-owned, non-root CLI) — both fine.
+    return byService;
+  }
+  for (const serviceId of serviceIds) {
+    let keys: string[];
+    try {
+      keys = readdirSync(join(root, serviceId));
+    } catch {
+      // Stray file or unreadable per-service dir — skip, never crash a render.
+      continue;
+    }
+    if (keys.length > 0) byService.set(serviceId, [...keys].sort());
+  }
+  return byService;
+}
+
+/**
+ * Union of per-service secret-key maps (deduplicated, sorted per service).
+ * Used by the CLI to combine the compose-derived and disk-derived key sets so
+ * a render never drops a key that either source still knows about.
+ */
+export function mergeServiceSecretKeys(
+  ...sources: Array<Map<string, string[]>>
+): Map<string, string[]> {
+  const merged = new Map<string, Set<string>>();
+  for (const source of sources) {
+    for (const [serviceId, keys] of source) {
+      const set = merged.get(serviceId) ?? new Set<string>();
+      for (const key of keys) set.add(key);
+      merged.set(serviceId, set);
+    }
+  }
+  return new Map([...merged].map(([serviceId, set]) => [serviceId, [...set].sort()]));
 }
 
 export function renderServiceSnippet(
@@ -760,15 +815,22 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
     }
   }
 
-  // Top-level `secrets:` block: one entry per (enabled service, vault key),
-  // each a file source the app-api render step materialises. Only emitted when
-  // the caller supplied secret keys (never on the plain CLI render).
+  // Top-level `secrets:` block: one entry per (service, vault key) in the
+  // caller-supplied map, each a file source the app-api render step
+  // materialises. Deliberately NOT limited to the services rendered in this
+  // pass: the DB-free CLI's only durable record of vault key names is this
+  // block, so a narrowed render (`--services`/`--preset`) must keep carrying
+  // the entries of the services it excludes — dropping them here would make
+  // the next full CLI render silently strip those credentials (real prod
+  // incident: every keyed road-conditions feed ran uncredentialed). Top-level
+  // secrets unreferenced by any rendered service are inert to docker compose.
+  // The app-api render path only ever passes keys for enabled services, so its
+  // output is unchanged.
   const composeSecrets: Record<string, { file: string }> = {};
-  for (const s of sorted) {
-    if (!s.enabled) continue;
-    for (const key of ctx.serviceSecretKeys?.get(s.manifest.id) ?? []) {
-      composeSecrets[serviceSecretName(s.manifest.id, key)] = {
-        file: serviceSecretFilePath(s.manifest.id, key),
+  for (const [serviceId, keys] of ctx.serviceSecretKeys ?? []) {
+    for (const key of keys) {
+      composeSecrets[serviceSecretName(serviceId, key)] = {
+        file: serviceSecretFilePath(serviceId, key),
       };
     }
   }
