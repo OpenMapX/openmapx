@@ -193,16 +193,48 @@ function parseVehicleSpec(v: unknown): EvVehicleSpec | undefined {
 }
 
 /**
- * Cache TTL (seconds). When the caller pins a wall-clock (`departAt` or
- * `arriveBy`), the engine response is deterministic for that time and we can
- * cache aggressively. Without a pinned time, Valhalla treats the request as
- * "now" — once predicted-traffic tiles land, the answer drifts as
- * "now" advances, so we keep the implicit-time TTL short.
+ * Cache TTL (seconds), tuned for turn-by-turn-grade freshness. Live traffic is
+ * re-baked into Valhalla every ~2 min, so any answer that rides current
+ * conditions — an immediate ("now") trip, or one departing within the
+ * live-traffic horizon — must stay fresh: a short TTL keeps the ETA within
+ * roughly one traffic cycle instead of serving a pre-jam number for minutes.
+ * A *far-future* pinned departure depends only on the deterministic
+ * predicted-speed profiles (rebuilt weekly), so it can be cached aggressively.
+ *
+ * NOTE: the older assumption that any pinned time is "deterministic" is wrong —
+ * a near-now pinned departure still drives current live traffic, so it gets the
+ * short TTL, not the long one.
+ *
+ * Active turn-by-turn navigation must NOT rely on this shared cache: it
+ * re-routes continuously against the freshest traffic (and should send
+ * `Cache-Control: no-cache`). This cache serves the planning/preview path and
+ * dedupes popular identical requests.
  */
-const CACHE_TTL_PINNED_SECONDS = 3600;
-const CACHE_TTL_IMPLICIT_SECONDS = 300;
-function cacheTtlSeconds(hasExplicitTime: boolean): number {
-  return hasExplicitTime ? CACHE_TTL_PINNED_SECONDS : CACHE_TTL_IMPLICIT_SECONDS;
+const CACHE_TTL_LIVE_SECONDS = 60;
+const CACHE_TTL_PREDICTED_SECONDS = 3600;
+/**
+ * A pinned departure/arrival within this window of "now" still rides current
+ * live traffic, so it gets the short live TTL; beyond it, only the (weekly,
+ * deterministic) predicted profiles apply and the long TTL is safe.
+ */
+const LIVE_TRAFFIC_HORIZON_SECONDS = 3600;
+/**
+ * `stale-while-revalidate` window: the browser/CDN may paint a just-expired
+ * response instantly while it refreshes in the background. Kept small so a
+ * preview never lags the underlying data by more than ~one extra window.
+ */
+const STALE_WHILE_REVALIDATE_SECONDS = 30;
+
+/**
+ * @param travelInstant the resolved departure/arrival time (TZ-correct), or
+ *   `undefined` for an immediate ("now") trip.
+ */
+export function cacheTtlSeconds(travelInstant: Date | undefined): number {
+  if (!travelInstant) return CACHE_TTL_LIVE_SECONDS;
+  const offsetSeconds = (travelInstant.getTime() - Date.now()) / 1000;
+  return offsetSeconds <= LIVE_TRAFFIC_HORIZON_SECONDS
+    ? CACHE_TTL_LIVE_SECONDS
+    : CACHE_TTL_PREDICTED_SECONDS;
 }
 
 /**
@@ -347,7 +379,7 @@ export function setup(ctx: IntegrationContext): void {
         excludePolygons: exclusions.polygons,
       }),
     };
-    const ttl = cacheTtlSeconds(requireTimeAware);
+    const ttl = cacheTtlSeconds(closureRefTime);
 
     try {
       const result = await ctx.cache.withCache(
@@ -371,7 +403,10 @@ export function setup(ctx: IntegrationContext): void {
           throw lastErr ?? new Error("All routing providers failed");
         },
       );
-      reply.header("Cache-Control", `public, max-age=${ttl}`);
+      reply.header(
+        "Cache-Control",
+        `public, max-age=${ttl}, stale-while-revalidate=${STALE_WHILE_REVALIDATE_SECONDS}`,
+      );
       reply.send(result);
     } catch (err) {
       ctx.log.error("All routing providers failed", err as Error);
@@ -511,7 +546,7 @@ export function setup(ctx: IntegrationContext): void {
         excludePolygons: exclusions.polygons,
       }),
     };
-    const ttl = cacheTtlSeconds(requireTimeAware);
+    const ttl = cacheTtlSeconds(closureRefTime);
 
     try {
       const result = await ctx.cache.withCache(
@@ -523,7 +558,10 @@ export function setup(ctx: IntegrationContext): void {
           return r;
         },
       );
-      reply.header("Cache-Control", `public, max-age=${ttl}`);
+      reply.header(
+        "Cache-Control",
+        `public, max-age=${ttl}, stale-while-revalidate=${STALE_WHILE_REVALIDATE_SECONDS}`,
+      );
       reply.send(result);
     } catch {
       reply.status(502).send({ error: "Route optimization unavailable" });
