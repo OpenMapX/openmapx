@@ -12,7 +12,11 @@ const LAYER_ID = "openmapx-3d-buildings";
 const MIN_ZOOM = 14;
 const AUTO_PITCH = 45;
 const MAX_PITCH_3D = 85;
-const MAX_PITCH_DEFAULT = 60;
+
+interface CameraState {
+  pitch: number;
+  maxPitch: number;
+}
 
 const EXTRUSION_COLOR: maplibregl.ExpressionSpecification = [
   "interpolate",
@@ -59,6 +63,7 @@ export function BuildingExtrusionLayer() {
   useLayerReanchor(LAYER_ID, layerVisible);
 
   const prevVisibleRef = useRef(false);
+  const cameraBeforeEnableRef = useRef<CameraState | null>(null);
 
   useEffect(() => {
     void styleVersion;
@@ -118,24 +123,33 @@ export function BuildingExtrusionLayer() {
     };
   }, [mapReady, styleVersion, mapRef, layerVisible]);
 
-  // Auto-pitch on enable, reset on disable
+  // Auto-pitch on enable, restore the user's previous camera on disable.
   useEffect(() => {
     void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
     if (layerVisible && !prevVisibleRef.current) {
-      map.setMaxPitch(MAX_PITCH_3D);
+      const cameraBeforeEnable = {
+        pitch: map.getPitch(),
+        maxPitch: map.getMaxPitch(),
+      };
+      cameraBeforeEnableRef.current = cameraBeforeEnable;
+      map.setMaxPitch(Math.max(cameraBeforeEnable.maxPitch, MAX_PITCH_3D));
       if (map.getPitch() < 10) {
         map.easeTo({ pitch: AUTO_PITCH, duration: 800 });
       }
     }
 
     if (!layerVisible && prevVisibleRef.current) {
-      if (map.getPitch() > 0) {
-        map.easeTo({ pitch: 0, duration: 600 });
+      const cameraBeforeEnable = cameraBeforeEnableRef.current;
+      if (cameraBeforeEnable) {
+        if (Math.abs(map.getPitch() - cameraBeforeEnable.pitch) > 0.1) {
+          map.easeTo({ pitch: cameraBeforeEnable.pitch, duration: 600 });
+        }
+        map.setMaxPitch(cameraBeforeEnable.maxPitch);
       }
-      map.setMaxPitch(MAX_PITCH_DEFAULT);
+      cameraBeforeEnableRef.current = null;
     }
 
     prevVisibleRef.current = layerVisible;
