@@ -31,6 +31,16 @@ interface RawRoadAlert {
  */
 const MAX_ALERT_BBOX_DEG2 = 0.6;
 
+/**
+ * Motorised costings (car/motorcycle) fold live "current" speeds into
+ * Valhalla's `speed_types` so ETAs reflect congestion; foot/bike ignore it.
+ * This is the route-handler-layer default the `useLiveTraffic` contract in
+ * `RoutingOptions` expects callers to supply.
+ */
+function isMotorisedMode(mode: TravelMode): boolean {
+  return mode === "driving" || mode === "motorcycle";
+}
+
 /** Parse an OSM `maxspeed` tag to km/h, or undefined when not a plain number. */
 function parseMaxspeedKmh(value: string | undefined): number | undefined {
   if (!value) return undefined;
@@ -374,6 +384,7 @@ export function setup(ctx: IntegrationContext): void {
       lang,
       departAt,
       arriveBy,
+      useLiveTraffic: isMotorisedMode(travelMode),
       ...(hasExclusions && {
         excludeLocations: exclusions.points,
         excludePolygons: exclusions.polygons,
@@ -541,6 +552,7 @@ export function setup(ctx: IntegrationContext): void {
       lang,
       departAt,
       arriveBy,
+      useLiveTraffic: isMotorisedMode(travelMode),
       ...(hasExclusions && {
         excludeLocations: exclusions.points,
         excludePolygons: exclusions.polygons,
