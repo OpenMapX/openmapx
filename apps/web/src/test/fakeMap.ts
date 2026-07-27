@@ -21,6 +21,14 @@ export interface FakeMapState {
   styleLoaded: boolean;
   /** Backing value for `getZoom()` — mutate then emit("moveend") to simulate a zoom gesture. */
   zoom: number;
+  pitch: number;
+  maxPitch: number;
+  cameraTransitions: Array<{
+    method: "easeTo" | "jumpTo";
+    options: Record<string, unknown>;
+  }>;
+  movedLayers: Array<{ layerId: string; beforeId?: string }>;
+  light: Record<string, unknown> | null;
   handlers: Map<string, Set<(...args: unknown[]) => void>>;
 }
 
@@ -39,6 +47,9 @@ export interface CreateFakeMapOptions {
   styleLoaded?: boolean;
   /** Initial `getZoom()` value (default 10). */
   zoom?: number;
+  /** Initial camera pitch and pitch constraint. */
+  pitch?: number;
+  maxPitch?: number;
 }
 
 export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
@@ -51,6 +62,11 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     images: new Set(),
     styleLoaded: options.styleLoaded ?? true,
     zoom: options.zoom ?? 10,
+    pitch: options.pitch ?? 0,
+    maxPitch: options.maxPitch ?? 60,
+    cameraTransitions: [],
+    movedLayers: [],
+    light: null,
     handlers: new Map(),
   };
 
@@ -95,7 +111,9 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     removeLayer: (id: string) => {
       state.layers.delete(id);
     },
-    moveLayer: () => {},
+    moveLayer: (layerId: string, beforeId?: string) => {
+      state.movedLayers.push({ layerId, beforeId });
+    },
     setPaintProperty: (layerId: string, name: string, value: unknown) => {
       const m = state.paint.get(layerId) ?? {};
       m[name] = value;
@@ -130,6 +148,14 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     project: (lngLat: unknown) => ({ x: 0, y: 0, lngLat }),
     unproject: () => ({ lng: 0, lat: 0 }),
     getZoom: () => state.zoom,
+    getPitch: () => state.pitch,
+    getMaxPitch: () => state.maxPitch,
+    setMaxPitch: (maxPitch: number) => {
+      state.maxPitch = maxPitch;
+    },
+    setLight: (light: Record<string, unknown>) => {
+      state.light = light;
+    },
     getCenter: () => ({ lng: 0, lat: 0 }),
     getBounds: () => ({
       getWest: () => -180,
@@ -142,8 +168,14 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     addControl: () => {},
     removeControl: () => {},
     flyTo: () => {},
-    easeTo: () => {},
-    jumpTo: () => {},
+    easeTo: (options: Record<string, unknown>) => {
+      state.cameraTransitions.push({ method: "easeTo", options });
+      if (typeof options.pitch === "number") state.pitch = options.pitch;
+    },
+    jumpTo: (options: Record<string, unknown>) => {
+      state.cameraTransitions.push({ method: "jumpTo", options });
+      if (typeof options.pitch === "number") state.pitch = options.pitch;
+    },
     fitBounds: () => {},
     on,
     off,
