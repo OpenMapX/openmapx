@@ -20,9 +20,21 @@ export function useLayerReanchor(layerIds: string | readonly string[], visible: 
     const map = mapRef.current;
     if (!map || !mapReady || !visible) return;
 
-    const ids = typeof layerIds === "string" ? [layerIds] : layerIds;
-    for (const id of ids) {
-      moveLayerBeforeFirstSymbol(map, id);
-    }
+    const reanchor = () => {
+      const ids = typeof layerIds === "string" ? [layerIds] : layerIds;
+      for (const id of ids) {
+        moveLayerBeforeFirstSymbol(map, id);
+      }
+    };
+
+    reanchor();
+
+    // Raster and overlay effects attach independently. On a restored deep link,
+    // this effect can run before either layer exists, so retry after all pending
+    // style mutations and tile work have settled.
+    map.once("idle", reanchor);
+    return () => {
+      map.off("idle", reanchor);
+    };
   }, [activeLayer, mapReady, styleVersion, mapRef, visible, layerIds]);
 }
