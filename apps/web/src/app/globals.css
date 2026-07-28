@@ -29,9 +29,11 @@
 }
 
 .dark {
-  --omx-brand: #81C784;
-  --omx-brand-light: #1b3a20;
-  --omx-brand-hover: #A5D6A7;
+  /* Same hue and saturation family as the light tokens, lifted for dark
+   * surfaces: 9.4:1 on the page background, 6.1:1 for brand text on the tint. */
+  --omx-brand: #71D674;
+  --omx-brand-light: #114513;
+  --omx-brand-hover: #9CDE9E;
   --omx-primary-blue: #8AB4F8;
   --omx-border: rgba(255, 255, 255, 0.2);
   --omx-border-light: rgba(255, 255, 255, 0.08);

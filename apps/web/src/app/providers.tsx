@@ -49,7 +49,7 @@ const theme = createTheme({
     },
     dark: {
       palette: {
-        primary: { main: "#81C784", contrastText: "#000000" },
+        primary: { main: "#71D674", contrastText: "#000000" },
         secondary: { main: "#81C995" },
         background: { default: "#1C1C1C", paper: "#2D2D2D" },
         text: { primary: "#E8EAED", secondary: "#9AA0A6" },
