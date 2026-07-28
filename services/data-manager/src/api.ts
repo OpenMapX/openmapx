@@ -13,6 +13,7 @@ import { conflateOverture } from "./jobs/overture/conflate.js";
 import { extractOsmPois } from "./jobs/overture/extract-osm-pois.js";
 import { ingestOverture } from "./jobs/overture/ingest.js";
 import { assertValidRegion, pullOverture } from "./jobs/overture/pull.js";
+import { syncOvertureRegion } from "./jobs/overture/sync.js";
 import {
   CatalogBumpError,
   candidateMatchesLock,
@@ -354,6 +355,35 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         onProgress: (msg) => writeLine({ event: "progress", message: msg }),
       });
       writeLine({ event: "done", ok: true, path: result });
+    } catch (err) {
+      writeLine({ event: "error", message: (err as Error).message });
+    } finally {
+      reply.raw.end();
+    }
+  });
+
+  app.post<{ Body: { region: string } }>("/overture/sync", async (req, reply) => {
+    const { region } = req.body;
+    if (!region) throw new Error("region required");
+    assertValidRegion(region);
+
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      "Content-Type": "application/x-ndjson",
+      "Cache-Control": "no-cache",
+      "X-Accel-Buffering": "no",
+    });
+    const writeLine = (obj: Record<string, unknown>) => {
+      reply.raw.write(`${JSON.stringify(obj)}\n`);
+    };
+
+    try {
+      const result = await syncOvertureRegion({
+        region,
+        dataDir,
+        onProgress: (message) => writeLine({ event: "progress", message }),
+      });
+      writeLine({ event: "done", ok: true, ...result });
     } catch (err) {
       writeLine({ event: "error", message: (err as Error).message });
     } finally {

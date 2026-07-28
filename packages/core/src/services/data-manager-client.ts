@@ -225,6 +225,26 @@ export class DataManagerClient {
     return readOvertureStream(res, "overture/pull", opts.onProgress);
   }
 
+  async syncOverture(
+    region: string,
+    opts: { onProgress?: (msg: string) => void } = {},
+  ): Promise<{ ok: boolean; message?: string; release?: string; linked?: number }> {
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/overture/sync`,
+      this.authed({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ region }),
+      }),
+    );
+    return readOvertureStream(res, "overture/sync", opts.onProgress) as Promise<{
+      ok: boolean;
+      message?: string;
+      release?: string;
+      linked?: number;
+    }>;
+  }
+
   async ingestOverture(
     region: string,
     opts: { onProgress?: (msg: string) => void } = {},

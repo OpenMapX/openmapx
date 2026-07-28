@@ -561,6 +561,31 @@ export function registerDataCommands(program: Command): void {
     });
 
   data
+    .command("overture-sync [region]")
+    .description("Atomically refresh Overture places and rebuild regional OSM links")
+    .action(async (region: string | undefined) => {
+      const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
+      const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/germany/berlin";
+      try {
+        log.dim(`Refreshing Overture places for "${resolvedRegion}"…`);
+        const result = await client.syncOverture(resolvedRegion, {
+          onProgress: (msg) => log.dim(msg),
+        });
+        if (!result.ok) {
+          log.err(`overture-sync failed: ${result.message ?? "unknown error"}`);
+          process.exit(1);
+        }
+        log.ok(
+          `Overture ${result.release ?? "release"} active for "${resolvedRegion}" (${result.linked ?? 0} OSM links)`,
+        );
+      } catch (err) {
+        log.err(`overture-sync failed: ${(err as Error).message}`);
+        dataManagerHint();
+        process.exit(1);
+      }
+    });
+
+  data
     .command("overture-pull [region]")
     .description("Pull Overture Maps places parquet for a region from S3")
     .action(async (region: string | undefined) => {

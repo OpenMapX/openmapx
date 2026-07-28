@@ -11,8 +11,8 @@ import { and, eq } from "drizzle-orm";
 import { execa } from "execa";
 import type { FastifyBaseLogger } from "fastify";
 import { db } from "./db/index.js";
-import { applyOvertureChangelog } from "./jobs/overture/changelog.js";
 import { discoverLatestOvertureRelease } from "./jobs/overture/pull.js";
+import { syncOvertureRegion } from "./jobs/overture/sync.js";
 import {
   type BakePredictedDeps,
   type BakePredictedResult,
@@ -177,7 +177,7 @@ export interface CronSetupOptions {
   /** Test seam: read the release currently installed in Postgres. */
   getInstalledOvertureRelease?: () => Promise<string | null>;
   /** Test seam: run the Overture update for a resolved release. */
-  syncOvertureRelease?: typeof applyOvertureChangelog;
+  syncOvertureRelease?: typeof syncOvertureRegion;
   /** Test seam: persist successful Overture release state. */
   writeOvertureFeedState?: typeof writeFeedState;
   /** Override the traffic-extract guard cron schedule (e.g. for tests). */
@@ -807,7 +807,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       options.overtureRegion ?? (process.env.OPENMAPX_REGION || "europe/germany/berlin");
     const discoverRelease = options.discoverOvertureRelease ?? discoverLatestOvertureRelease;
     const readInstalledRelease = options.getInstalledOvertureRelease ?? getInstalledOvertureRelease;
-    const syncRelease = options.syncOvertureRelease ?? applyOvertureChangelog;
+    const syncRelease = options.syncOvertureRelease ?? syncOvertureRegion;
     const persistFeedState = options.writeOvertureFeedState ?? writeFeedState;
     try {
       const release = await discoverRelease();

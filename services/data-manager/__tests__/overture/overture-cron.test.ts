@@ -133,7 +133,7 @@ describe("Overture cron gating", () => {
     handles.stop();
   });
 
-  it("runOvertureNow with overtureEnabled=true does not throw when changelog job is stubbed", async () => {
+  it("runOvertureNow with overtureEnabled=true contains sync failures", async () => {
     let overtureCalled = false;
     const handles = setupCron({
       dataDir,
@@ -154,7 +154,7 @@ describe("Overture cron gating", () => {
     });
     expect(typeof handles.runOvertureNow).toBe("function");
     handles.stop();
-    // runOvertureNow calls applyOvertureChangelog which will fail (no duckdb/postgres)
+    // The real sync will fail (no DuckDB/Postgres), but the cron handler contains errors.
     // but the cron handler swallows errors — assert it resolves without throwing.
     await expect(handles.runOvertureNow()).resolves.toBeUndefined();
     void overtureCalled;
@@ -177,7 +177,12 @@ describe("Overture cron gating", () => {
       getInstalledOvertureRelease: async () => "2026-06-17.0",
       syncOvertureRelease: async ({ release }) => {
         calls.push(`sync:${release}`);
-        return { added: -1, updated: -1, removed: -1 };
+        return {
+          release: release ?? "2026-07-22.0",
+          path: "/tmp/region.parquet",
+          conflation: "skipped",
+          linked: 0,
+        };
       },
       writeOvertureFeedState: async (_region, release) => {
         calls.push(`state:${release}`);

@@ -134,7 +134,7 @@ export async function applyOvertureSchema(schema: string): Promise<void> {
 /**
  * Returns the DDL for the `osm_pois` table within a given schema.
  * `IF NOT EXISTS` guards make this idempotent — safe to call on both a fresh
- * staging schema and an existing live schema during incremental refreshes.
+ * staging schema and an existing live schema during full regional refreshes.
  */
 export function buildOsmPoisTableDDL(schema: string): string {
   return `
