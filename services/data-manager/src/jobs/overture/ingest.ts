@@ -6,6 +6,7 @@ import { runDuckDb } from "./duckdb.js";
 import { validateOvertureQuality } from "./eval/quality-gate.js";
 import { regionSlug, resolveOvertureRelease } from "./pull.js";
 import { assertValidOvertureSchema, buildSchemaDDL } from "./schema.js";
+import { readOverturePullContract } from "./stac.js";
 
 /**
  * Backfills the local H3 acceleration column. Category hierarchy and
@@ -78,6 +79,9 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
   assertValidOvertureSchema(schema);
   assertValidOvertureSchema(stagingSchema);
 
+  opts.onProgress?.("Verifying Overture STAC pull contract...");
+  const pullContract = readOverturePullContract(opts.dataDir, release, opts.region);
+
   const databaseUrl =
     process.env.DATABASE_URL ?? "postgresql://postgres:postgres@postgis:5432/openmapx";
 
@@ -135,7 +139,19 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
   await backfillDerivedColumns(stagingSchema);
 
   opts.onProgress?.("Validating contributor attribution coverage...");
-  await validateOvertureContributors(stagingSchema);
+  const contributors = await validateOvertureContributors(stagingSchema);
+  if (contributors.join("\0") !== pullContract.contributors.join("\0")) {
+    throw new Error("Ingested Overture contributors do not match the pull contract");
+  }
+  const [{ count }] = await sql.unsafe<{ count: number }[]>(
+    `SELECT COUNT(*)::INTEGER AS count FROM "${stagingSchema}".places`,
+    [],
+  );
+  if (count !== pullContract.rowCount) {
+    throw new Error(
+      `Ingested Overture row count ${count} does not match pull contract ${pullContract.rowCount}`,
+    );
+  }
 
   opts.onProgress?.("Running labeled regional quality regression gate...");
   const quality = await validateOvertureQuality(stagingSchema, opts.region);

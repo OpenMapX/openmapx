@@ -1,49 +1,23 @@
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { execa } from "execa";
 import { resolveOsmPolyUrl } from "../download-osm.js";
+import { runDuckDb } from "./duckdb.js";
+import {
+  assertValidOvertureRelease,
+  buildOverturePullContract,
+  discoverLatestOvertureRelease,
+  OVERTURE_PLACE_COLUMNS,
+  pullContractPath,
+  resolveOvertureStacContract,
+} from "./stac.js";
 
-export const OVERTURE_STAC_URL = "https://stac.overturemaps.org/catalog.json";
-const OVERTURE_RELEASE_RE = /^\d{4}-\d{2}-\d{2}\.\d+$/;
-
-export function assertValidOvertureRelease(release: string): void {
-  if (!OVERTURE_RELEASE_RE.test(release)) {
-    throw new Error(
-      `Invalid Overture release "${release}": expected the upstream YYYY-MM-DD.N format`,
-    );
-  }
-}
-
-export function latestReleaseFromCatalog(catalog: unknown): string {
-  if (!catalog || typeof catalog !== "object") {
-    throw new Error("Overture STAC catalog response is not an object");
-  }
-
-  const candidate = (catalog as { latest?: unknown }).latest;
-  if (typeof candidate !== "string") {
-    throw new Error('Overture STAC catalog is missing its string "latest" release');
-  }
-  assertValidOvertureRelease(candidate);
-  return candidate;
-}
-
-export async function discoverLatestOvertureRelease(
-  fetchImpl: typeof fetch = fetch,
-): Promise<string> {
-  let response: Response;
-  try {
-    response = await fetchImpl(OVERTURE_STAC_URL, {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(15_000),
-    });
-  } catch (error) {
-    throw new Error(`Could not fetch the Overture STAC catalog: ${(error as Error).message}`);
-  }
-  if (!response.ok) {
-    throw new Error(`Overture STAC catalog returned HTTP ${response.status}`);
-  }
-  return latestReleaseFromCatalog(await response.json());
-}
+export {
+  assertValidOvertureRelease,
+  discoverLatestOvertureRelease,
+  latestReleaseFromCatalog,
+  OVERTURE_STAC_URL,
+} from "./stac.js";
 
 export async function resolveOvertureRelease(release?: string): Promise<string> {
   if (release !== undefined) {
@@ -143,34 +117,141 @@ export interface PullOvertureOptions {
   region: string;
   dataDir: string;
   release?: string;
+  fetchImpl?: typeof fetch;
   onProgress?: (msg: string) => void;
 }
 
+function requireTextStdout(stdout: unknown, label: string): string {
+  if (typeof stdout !== "string") {
+    throw new Error(`DuckDB returned non-text output for ${label}`);
+  }
+  return stdout;
+}
+
 export async function pullOverture(opts: PullOvertureOptions): Promise<string> {
-  const release = await resolveOvertureRelease(opts.release);
+  const release = opts.release ?? (await discoverLatestOvertureRelease(opts.fetchImpl ?? fetch));
+  assertValidOvertureRelease(release);
   opts.onProgress?.(`Resolving ${opts.region} boundary from Geofabrik...`);
   const bbox = await fetchRegionBbox(opts.region);
+  opts.onProgress?.(`Resolving exact Overture ${release} Places assets from STAC...`);
+  const stac = await resolveOvertureStacContract(release, bbox, opts.fetchImpl ?? fetch);
   const slug = regionSlug(opts.region);
   const outDir = join(opts.dataDir, "overture", release);
   mkdirSync(outDir, { recursive: true });
   const outPath = join(outDir, `${slug}.parquet`);
+  const partialPath = join(outDir, `${slug}.${process.pid}.${Date.now()}.partial.parquet`);
+  const contractPath = pullContractPath(opts.dataDir, release, opts.region);
+  const partialContractPath = `${contractPath}.${process.pid}.${Date.now()}.partial`;
+
+  const sqlLiteral = (value: string): string => `'${value.replaceAll("'", "''")}'`;
+  const assetList = stac.assets.map((asset) => sqlLiteral(asset.href)).join(", ");
+  const projectedColumns = OVERTURE_PLACE_COLUMNS.map((column) => `  ${column}`).join(",\n");
 
   const duckSql = [
     "INSTALL httpfs; LOAD httpfs;",
     "INSTALL spatial; LOAD spatial;",
-    "SET s3_region='us-west-2';",
     `COPY (`,
-    `  SELECT *`,
-    `  FROM read_parquet('s3://overturemaps-us-west-2/release/${release}/theme=places/type=place/*')`,
+    `  SELECT`,
+    projectedColumns,
+    `  FROM read_parquet([${assetList}], union_by_name=false)`,
     `  WHERE bbox.xmin <= ${bbox.east}`,
     `    AND bbox.xmax >= ${bbox.west}`,
     `    AND bbox.ymin <= ${bbox.north}`,
     `    AND bbox.ymax >= ${bbox.south}`,
-    `) TO '${outPath}' (FORMAT parquet);`,
+    `) TO ${sqlLiteral(partialPath)} (FORMAT parquet);`,
   ].join("\n");
 
-  opts.onProgress?.(`Pulling Overture ${release} for ${opts.region} → ${outPath}`);
-  await execa("duckdb", ["-c", duckSql], { stdio: "inherit" });
-  opts.onProgress?.(`Done: ${outPath}`);
-  return outPath;
+  opts.onProgress?.(
+    `Pulling Overture ${release} for ${opts.region} from ${stac.assets.length} exact STAC asset(s)...`,
+  );
+  try {
+    await runDuckDb(["-c", duckSql], { stdio: "inherit" });
+
+    // This compatibility probe intentionally exercises every nested field used
+    // by ingest. LIMIT 0 makes it a schema/type check without scanning rows.
+    const compatibilitySql = [
+      "INSTALL spatial; LOAD spatial;",
+      `SELECT id::VARCHAR, names.primary::VARCHAR, basic_category::VARCHAR,`,
+      `       taxonomy.primary::VARCHAR, taxonomy.hierarchy::VARCHAR[],`,
+      `       taxonomy.alternates::VARCHAR[], ST_AsHEXWKB(geometry),`,
+      `       addresses[1].country::VARCHAR, websites::VARCHAR[], socials::VARCHAR[],`,
+      `       emails::VARCHAR[], phones::VARCHAR[], to_json(brand), confidence::DOUBLE,`,
+      `       operating_status::VARCHAR, to_json(sources), version::INTEGER`,
+      `FROM read_parquet(${sqlLiteral(partialPath)}) LIMIT 0;`,
+    ].join("\n");
+    await runDuckDb(["-c", compatibilitySql]);
+
+    const statsSql = [
+      "INSTALL spatial; LOAD spatial;",
+      `SELECT count(*)::BIGINT AS row_count,`,
+      `       count(*) FILTER (WHERE id IS NULL OR trim(id) = '')::BIGINT AS invalid_ids,`,
+      `       (count(*) - count(DISTINCT id))::BIGINT AS duplicate_ids,`,
+      `       count(*) FILTER (WHERE geometry IS NULL)::BIGINT AS null_geometries,`,
+      `       count(*) FILTER (WHERE geometry IS NOT NULL AND ST_GeometryType(geometry) <> 'POINT')::BIGINT AS non_point_geometries,`,
+      `       count(*) FILTER (WHERE theme <> 'places' OR type <> 'place')::BIGINT AS wrong_type_rows`,
+      `FROM read_parquet(${sqlLiteral(partialPath)});`,
+    ].join("\n");
+    const statsResult = await runDuckDb(["-json", "-c", statsSql]);
+    const statsRows = JSON.parse(
+      requireTextStdout(statsResult.stdout, "Overture snapshot statistics"),
+    ) as Array<Record<string, number>>;
+    const stats = statsRows[0];
+    if (!stats || !Number.isSafeInteger(stats.row_count) || stats.row_count <= 0) {
+      throw new Error("Overture regional snapshot contains no rows");
+    }
+    for (const field of [
+      "invalid_ids",
+      "duplicate_ids",
+      "null_geometries",
+      "non_point_geometries",
+      "wrong_type_rows",
+    ] as const) {
+      if (stats[field] !== 0) {
+        throw new Error(`Overture regional snapshot failed ${field}: ${stats[field]} row(s)`);
+      }
+    }
+
+    const contributorSql = [
+      `SELECT DISTINCT dataset`,
+      `FROM (`,
+      `  SELECT UNNEST(LIST_TRANSFORM(sources, lambda source: source.dataset)) AS dataset`,
+      `  FROM read_parquet(${sqlLiteral(partialPath)})`,
+      `  WHERE sources IS NOT NULL`,
+      `)`,
+      `WHERE dataset IS NOT NULL AND trim(dataset) <> ''`,
+      `ORDER BY dataset;`,
+    ].join("\n");
+    const contributorResult = await runDuckDb(["-json", "-c", contributorSql]);
+    const contributorRows = JSON.parse(
+      requireTextStdout(contributorResult.stdout, "Overture contributors"),
+    ) as Array<{ dataset: string }>;
+    const contract = buildOverturePullContract(
+      stac,
+      opts.region,
+      bbox,
+      partialPath,
+      {
+        rowCount: stats.row_count,
+        contributors: contributorRows.map((row) => row.dataset),
+      },
+      basename(outPath),
+    );
+
+    writeFileSync(partialContractPath, `${JSON.stringify(contract, null, 2)}\n`, {
+      encoding: "utf8",
+      flag: "wx",
+    });
+    renameSync(partialPath, outPath);
+    // Publish the contract last: ingest never observes a new contract pointing
+    // at a partial parquet snapshot.
+    renameSync(partialContractPath, contractPath);
+    opts.onProgress?.(
+      `Validated ${contract.rowCount} places and ${contract.contributors.length} contributor(s).`,
+    );
+    opts.onProgress?.(`Done: ${outPath}`);
+    return outPath;
+  } finally {
+    rmSync(partialPath, { force: true });
+    rmSync(partialContractPath, { force: true });
+  }
 }

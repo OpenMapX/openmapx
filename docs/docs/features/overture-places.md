@@ -46,9 +46,21 @@ same-business duplicates are removed, and the response is capped at 50 places.
 ## Releases and regional refreshes
 
 OpenMapX discovers the current release from Overture's official STAC catalog
-and skips a release already installed. A newer release is filtered to the
-configured Geofabrik region, loaded into a staging schema, and atomically
-swapped into service. Optional OSM↔GERS links are rebuilt when the matching
+and skips a release already installed. The pull follows the release → Places →
+place hierarchy and uses the exact immutable Parquet assets declared by STAC;
+it does not construct a wildcard storage path. STAC item extents first remove
+global partitions that cannot intersect the configured Geofabrik region, then
+DuckDB applies the regional bounding box and projects only the fields OpenMapX
+uses.
+
+Before publishing the local snapshot, the job checks the nested ingest schema,
+row and ID integrity, Point geometry, theme/type identity, and contributor
+coverage. It writes a release contract beside the Parquet file containing the
+resolved STAC items, source row counts, region bounds, projected columns,
+observed rows, contributors, and file size. Ingest requires that contract and
+checks its row and contributor counts again in the staging schema before the
+atomic swap. A standalone or stale Parquet file therefore cannot be labeled as
+a different release. Optional OSM↔GERS links are rebuilt when the matching
 regional OSM PBF exists. A failed pull or ingest cannot partially update the
 live places table; the regional database does not use global changelog data.
 

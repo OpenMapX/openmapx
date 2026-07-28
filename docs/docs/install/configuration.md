@@ -294,9 +294,10 @@ Schedules and switches for the monthly regional Overture Maps Places refresh.
 | `OVERTURE_SYNC_CRON`| Cron schedule for checking and refreshing the regional snapshot. | Optional. Default `0 5 1 * *` (monthly) |
 
 The job uses Overture's official STAC catalog, skips an installed release,
-pulls only the configured region, and swaps a fully loaded staging schema into
-service. If the region's OSM PBF exists, it also rebuilds OSM↔GERS links. See
-[Overture Places](../features/overture-places.md).
+resolves exact spatially relevant Places assets, validates a local release
+contract, pulls only the configured region, and swaps a fully validated staging
+schema into service. If the region's OSM PBF exists, it also rebuilds OSM↔GERS
+links. See [Overture Places](../features/overture-places.md).
 
 ## Natural-language search
 
