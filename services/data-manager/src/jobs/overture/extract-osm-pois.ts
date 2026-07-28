@@ -309,6 +309,15 @@ export function representativePoint(geom: {
 
 const OSM_POIS_INSERT_BATCH = 5_000;
 
+/** Keeps the last geometry emitted for an OSM object within one bounded batch. */
+export function deduplicateOsmPoiRecords(records: OsmPoiRecord[]): OsmPoiRecord[] {
+  const bySource = new Map<string, OsmPoiRecord>();
+  for (const record of records) {
+    bySource.set(`${record.osmType}:${record.osmId}`, record);
+  }
+  return [...bySource.values()];
+}
+
 /**
  * Batch-inserts OSM POI records into the fresh staging table.
  * osm_id is BIGINT in the table; OsmPoiRecord.osmId is a numeric string — we
@@ -324,7 +333,7 @@ async function insertOsmPois(
   if (records.length === 0) return;
 
   for (let i = 0; i < records.length; i += OSM_POIS_INSERT_BATCH) {
-    const batch = records.slice(i, i + OSM_POIS_INSERT_BATCH);
+    const batch = deduplicateOsmPoiRecords(records.slice(i, i + OSM_POIS_INSERT_BATCH));
 
     const osmTypes = batch.map((r) => r.osmType);
     const osmIds = batch.map((r) => parseInt(r.osmId, 10));

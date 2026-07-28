@@ -1,9 +1,43 @@
 import { describe, expect, it } from "vitest";
 import {
+  deduplicateOsmPoiRecords,
   featureToOsmPoiRecord,
   OSMIUM_EXPORT_STREAM_OPTIONS,
   representativePoint,
 } from "../../src/jobs/overture/extract-osm-pois.js";
+
+describe("OSM POI batch deduplication", () => {
+  it("keeps the later geometry for duplicate source identities", () => {
+    const first = featureToOsmPoiRecord({
+      id: "w42",
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [1, 1],
+          [2, 2],
+        ],
+      },
+      properties: { name: "First" },
+    });
+    const later = featureToOsmPoiRecord({
+      id: "a84",
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [1, 1],
+            [2, 1],
+            [1, 1],
+          ],
+        ],
+      },
+      properties: { name: "Later" },
+    });
+    if (!first || !later) throw new Error("expected records");
+
+    expect(deduplicateOsmPoiRecords([first, later])).toEqual([later]);
+  });
+});
 
 describe("OSM POI export streaming", () => {
   it("disables Execa buffering for country-scale GeoJSON output", () => {
