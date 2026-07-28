@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setupCron } from "../../src/cron.js";
 import {
   createSingleFlightController,
@@ -158,6 +158,90 @@ describe("Overture cron gating", () => {
     // but the cron handler swallows errors — assert it resolves without throwing.
     await expect(handles.runOvertureNow()).resolves.toBeUndefined();
     void overtureCalled;
+  });
+
+  it("discovers and imports a newer release before updating feed state", async () => {
+    const calls: string[] = [];
+    const handles = setupCron({
+      dataDir,
+      repoRoot: "/tmp/nope",
+      countries: [],
+      store: {} as never,
+      singleFlight: makeController(),
+      logger: { info: () => {}, warn: () => {}, error: () => {} },
+      syncCronExpression: "disabled",
+      feedProxyReloadCronExpression: "disabled",
+      overtureEnabled: true,
+      overtureCronExpression: "disabled",
+      discoverOvertureRelease: async () => "2026-07-22.0",
+      getInstalledOvertureRelease: async () => "2026-06-17.0",
+      syncOvertureRelease: async ({ release }) => {
+        calls.push(`sync:${release}`);
+        return { added: -1, updated: -1, removed: -1 };
+      },
+      writeOvertureFeedState: async (_region, release) => {
+        calls.push(`state:${release}`);
+      },
+      runStalenessCheck: async () => {
+        calls.push("staleness");
+      },
+    });
+
+    await handles.runOvertureNow();
+    expect(calls).toEqual(["sync:2026-07-22.0", "state:2026-07-22.0", "staleness"]);
+    handles.stop();
+  });
+
+  it("does not re-import or refresh state when the latest release is installed", async () => {
+    const syncOvertureRelease = vi.fn();
+    const writeOvertureFeedState = vi.fn();
+    const handles = setupCron({
+      dataDir,
+      repoRoot: "/tmp/nope",
+      countries: [],
+      store: {} as never,
+      singleFlight: makeController(),
+      logger: { info: () => {}, warn: () => {}, error: () => {} },
+      syncCronExpression: "disabled",
+      feedProxyReloadCronExpression: "disabled",
+      overtureEnabled: true,
+      overtureCronExpression: "disabled",
+      discoverOvertureRelease: async () => "2026-07-22.0",
+      getInstalledOvertureRelease: async () => "2026-07-22.0",
+      syncOvertureRelease,
+      writeOvertureFeedState,
+    });
+
+    await handles.runOvertureNow();
+    expect(syncOvertureRelease).not.toHaveBeenCalled();
+    expect(writeOvertureFeedState).not.toHaveBeenCalled();
+    handles.stop();
+  });
+
+  it("does not mark a release imported when the sync fails", async () => {
+    const writeOvertureFeedState = vi.fn();
+    const handles = setupCron({
+      dataDir,
+      repoRoot: "/tmp/nope",
+      countries: [],
+      store: {} as never,
+      singleFlight: makeController(),
+      logger: { info: () => {}, warn: () => {}, error: () => {} },
+      syncCronExpression: "disabled",
+      feedProxyReloadCronExpression: "disabled",
+      overtureEnabled: true,
+      overtureCronExpression: "disabled",
+      discoverOvertureRelease: async () => "2026-07-22.0",
+      getInstalledOvertureRelease: async () => "2026-06-17.0",
+      syncOvertureRelease: async () => {
+        throw new Error("import failed");
+      },
+      writeOvertureFeedState,
+    });
+
+    await handles.runOvertureNow();
+    expect(writeOvertureFeedState).not.toHaveBeenCalled();
+    handles.stop();
   });
 
   it("overtureCron is registered when OVERTURE_ENABLED env var is 'true'", () => {

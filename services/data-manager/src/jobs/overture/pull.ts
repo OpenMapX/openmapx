@@ -3,7 +3,55 @@ import { join } from "node:path";
 import { execa } from "execa";
 import { resolveOsmPolyUrl } from "../download-osm.js";
 
-export const OVERTURE_RELEASE = "2026-06-17.0";
+export const OVERTURE_STAC_URL = "https://stac.overturemaps.org/catalog.json";
+const OVERTURE_RELEASE_RE = /^\d{4}-\d{2}-\d{2}\.\d+$/;
+
+export function assertValidOvertureRelease(release: string): void {
+  if (!OVERTURE_RELEASE_RE.test(release)) {
+    throw new Error(
+      `Invalid Overture release "${release}": expected the upstream YYYY-MM-DD.N format`,
+    );
+  }
+}
+
+export function latestReleaseFromCatalog(catalog: unknown): string {
+  if (!catalog || typeof catalog !== "object") {
+    throw new Error("Overture STAC catalog response is not an object");
+  }
+
+  const candidate = (catalog as { latest?: unknown }).latest;
+  if (typeof candidate !== "string") {
+    throw new Error('Overture STAC catalog is missing its string "latest" release');
+  }
+  assertValidOvertureRelease(candidate);
+  return candidate;
+}
+
+export async function discoverLatestOvertureRelease(
+  fetchImpl: typeof fetch = fetch,
+): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetchImpl(OVERTURE_STAC_URL, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (error) {
+    throw new Error(`Could not fetch the Overture STAC catalog: ${(error as Error).message}`);
+  }
+  if (!response.ok) {
+    throw new Error(`Overture STAC catalog returned HTTP ${response.status}`);
+  }
+  return latestReleaseFromCatalog(await response.json());
+}
+
+export async function resolveOvertureRelease(release?: string): Promise<string> {
+  if (release !== undefined) {
+    assertValidOvertureRelease(release);
+    return release;
+  }
+  return discoverLatestOvertureRelease();
+}
 
 export interface RegionBbox {
   west: number;
@@ -99,7 +147,7 @@ export interface PullOvertureOptions {
 }
 
 export async function pullOverture(opts: PullOvertureOptions): Promise<string> {
-  const release = opts.release ?? OVERTURE_RELEASE;
+  const release = await resolveOvertureRelease(opts.release);
   opts.onProgress?.(`Resolving ${opts.region} boundary from Geofabrik...`);
   const bbox = await fetchRegionBbox(opts.region);
   const slug = regionSlug(opts.region);

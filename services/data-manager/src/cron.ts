@@ -12,7 +12,7 @@ import { execa } from "execa";
 import type { FastifyBaseLogger } from "fastify";
 import { db } from "./db/index.js";
 import { applyOvertureChangelog } from "./jobs/overture/changelog.js";
-import { OVERTURE_RELEASE } from "./jobs/overture/pull.js";
+import { discoverLatestOvertureRelease } from "./jobs/overture/pull.js";
 import {
   type BakePredictedDeps,
   type BakePredictedResult,
@@ -172,6 +172,14 @@ export interface CronSetupOptions {
    * OVERTURE_ENABLED. When omitted, the env var governs.
    */
   overtureEnabled?: boolean;
+  /** Test seam: resolve the latest published Overture release. */
+  discoverOvertureRelease?: () => Promise<string>;
+  /** Test seam: read the release currently installed in Postgres. */
+  getInstalledOvertureRelease?: () => Promise<string | null>;
+  /** Test seam: run the Overture update for a resolved release. */
+  syncOvertureRelease?: typeof applyOvertureChangelog;
+  /** Test seam: persist successful Overture release state. */
+  writeOvertureFeedState?: typeof writeFeedState;
   /** Override the traffic-extract guard cron schedule (e.g. for tests). */
   trafficExtractCronExpression?: string;
   /**
@@ -376,7 +384,15 @@ async function writeFeedState(region: string, hash: string, log: CronLogger): Pr
     if (existing[0]) {
       await db
         .update(feedState)
-        .set({ hash, lastFetchedAt: new Date(), status: "active" })
+        .set({
+          hash,
+          lastFetchedAt: new Date(),
+          lastImportedAt: new Date(),
+          validationStatus: "ok",
+          validationMessage: `Imported Overture release ${hash}`,
+          consecutiveFailures: 0,
+          status: "active",
+        })
         .where(eq(feedState.id, existing[0].id));
     } else {
       await db.insert(feedState).values({
@@ -384,11 +400,29 @@ async function writeFeedState(region: string, hash: string, log: CronLogger): Pr
         name: feedName,
         hash,
         lastFetchedAt: new Date(),
+        lastImportedAt: new Date(),
+        validationStatus: "ok",
+        validationMessage: `Imported Overture release ${hash}`,
+        consecutiveFailures: 0,
         status: "active",
       });
     }
   } catch (err) {
     log.warn("overture-cron: feed_state write failed", { err: (err as Error).message });
+  }
+}
+
+export async function getInstalledOvertureRelease(): Promise<string | null> {
+  try {
+    const rows = await db.execute<{ release: string }>(
+      `SELECT release
+       FROM overture_places.places
+       ORDER BY imported_at DESC
+       LIMIT 1`,
+    );
+    return rows[0]?.release ?? null;
+  } catch {
+    return null;
   }
 }
 
@@ -771,15 +805,33 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   const runOvertureSync = async (): Promise<void> => {
     const region =
       options.overtureRegion ?? (process.env.OPENMAPX_REGION || "europe/germany/berlin");
-    const release = OVERTURE_RELEASE;
+    const discoverRelease = options.discoverOvertureRelease ?? discoverLatestOvertureRelease;
+    const readInstalledRelease = options.getInstalledOvertureRelease ?? getInstalledOvertureRelease;
+    const syncRelease = options.syncOvertureRelease ?? applyOvertureChangelog;
+    const persistFeedState = options.writeOvertureFeedState ?? writeFeedState;
     try {
-      await applyOvertureChangelog({
+      const release = await discoverRelease();
+      const installedRelease = await readInstalledRelease();
+      if (installedRelease === release) {
+        log.info("overture-cron: latest release already installed", { region, release });
+        return;
+      }
+      if (installedRelease && installedRelease.localeCompare(release) > 0) {
+        log.warn("overture-cron: installed release is newer than upstream catalog", {
+          region,
+          installedRelease,
+          upstreamRelease: release,
+        });
+        return;
+      }
+
+      await syncRelease({
         region,
         release,
         dataDir: options.dataDir,
         onProgress: (msg) => log.info(msg),
       });
-      await writeFeedState(region, release, log);
+      await persistFeedState(region, release, log);
       await runStalenessCheck();
     } catch (err) {
       log.error("overture-cron: sync failed", { err: (err as Error).message });

@@ -3,7 +3,7 @@ import { overtureCategoryToOpenMapX } from "@openmapx/core/utils/overtureCategor
 import { latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";
 import { runDuckDb } from "./duckdb.js";
-import { OVERTURE_RELEASE, regionSlug } from "./pull.js";
+import { regionSlug, resolveOvertureRelease } from "./pull.js";
 import { assertValidOvertureSchema, buildSchemaDDL } from "./schema.js";
 
 /**
@@ -84,7 +84,7 @@ export interface IngestOvertureOptions {
 }
 
 export async function ingestOverture(opts: IngestOvertureOptions): Promise<void> {
-  const release = opts.release ?? OVERTURE_RELEASE;
+  const release = await resolveOvertureRelease(opts.release);
   const slug = regionSlug(opts.region);
   const parquetPath = join(opts.dataDir, "overture", release, `${slug}.parquet`);
   const schema = "overture_places";

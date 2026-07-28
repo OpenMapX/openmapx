@@ -14,7 +14,7 @@ import {
 import { gridDisk, latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";
 import { cosineSimilarity, DEFAULT_MODEL, embed, ensureEmbeddingModel } from "./embeddings.js";
-import { assertValidRegion, OVERTURE_RELEASE } from "./pull.js";
+import { assertValidRegion, resolveOvertureRelease } from "./pull.js";
 import { applyOsmPoisTable } from "./schema.js";
 
 // Overture confidence floor for conflation candidates. Calibrated to 0.5 (vs
@@ -305,7 +305,8 @@ export async function conflateOverture(opts: {
   onProgress?: (msg: string) => void;
 }): Promise<{ linked: number }> {
   assertValidRegion(opts.region);
-  const { release = OVERTURE_RELEASE, ollamaUrl, useEmbeddings = false, onProgress } = opts;
+  const { ollamaUrl, useEmbeddings = false, onProgress } = opts;
+  const release = await resolveOvertureRelease(opts.release);
   const schema = opts.schema ?? "overture_places";
 
   const placesRows = await sql.unsafe<

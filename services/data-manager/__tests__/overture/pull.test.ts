@@ -1,9 +1,45 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertValidOvertureRelease,
   assertValidRegion,
   computeBboxFromPoly,
+  discoverLatestOvertureRelease,
+  latestReleaseFromCatalog,
   regionSlug,
 } from "../../src/jobs/overture/pull.js";
+
+describe("Overture release discovery", () => {
+  it("reads and validates the catalog's canonical latest field", () => {
+    expect(latestReleaseFromCatalog({ latest: "2026-07-22.0" })).toBe("2026-07-22.0");
+    expect(() => latestReleaseFromCatalog({})).toThrow(/missing.*latest/i);
+    expect(() => latestReleaseFromCatalog({ latest: "latest" })).toThrow(
+      /Invalid Overture release/,
+    );
+  });
+
+  it("rejects release values that could escape SQL or S3 paths", () => {
+    expect(() => assertValidOvertureRelease("2026-07-22.0")).not.toThrow();
+    expect(() => assertValidOvertureRelease("2026-07-22.0/*")).toThrow(/Invalid Overture release/);
+    expect(() => assertValidOvertureRelease("2026-7-22.0")).toThrow(/Invalid Overture release/);
+  });
+
+  it("discovers the latest release through the official STAC catalog", async () => {
+    const fetchImpl = async (input: string | URL | Request) => {
+      expect(String(input)).toBe("https://stac.overturemaps.org/catalog.json");
+      return new Response(JSON.stringify({ latest: "2026-07-22.0" }), { status: 200 });
+    };
+    await expect(discoverLatestOvertureRelease(fetchImpl as typeof fetch)).resolves.toBe(
+      "2026-07-22.0",
+    );
+  });
+
+  it("fails closed when discovery cannot produce a valid release", async () => {
+    const fetchImpl = async () => new Response("unavailable", { status: 503 });
+    await expect(discoverLatestOvertureRelease(fetchImpl as typeof fetch)).rejects.toThrow(
+      /HTTP 503/,
+    );
+  });
+});
 
 describe("assertValidRegion", () => {
   it("accepts well-formed Geofabrik-style regions", () => {
