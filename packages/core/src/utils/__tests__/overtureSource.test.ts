@@ -1,12 +1,39 @@
 import { describe, expect, it } from "vitest";
-import { normalizeOvertureProvenance, overtureDatasetSourceId } from "../overtureSource";
+import {
+  assertSupportedOvertureContributors,
+  normalizeOvertureProvenance,
+  overtureDatasetSourceId,
+} from "../overtureSource";
 
 describe("Overture source provenance", () => {
   it("maps current dataset names to attribution ids", () => {
     expect(overtureDatasetSourceId("Foursquare")).toBe("foursquare");
     expect(overtureDatasetSourceId("meta")).toBe("meta-places");
     expect(overtureDatasetSourceId("AllThePlaces")).toBe("alltheplaces");
-    expect(overtureDatasetSourceId("A future contributor")).toBe("overture");
+    expect(overtureDatasetSourceId("Overture")).toBe("overture");
+    expect(() => overtureDatasetSourceId("A future contributor")).toThrow(
+      /Add its required attribution/,
+    );
+  });
+
+  it("rejects release activation when any contributor is unsupported", () => {
+    expect(() =>
+      assertSupportedOvertureContributors(["Meta", "Foursquare", "A future contributor"]),
+    ).toThrow(/unsupported contributor dataset\(s\): A future contributor/);
+    expect(() =>
+      assertSupportedOvertureContributors([
+        "Meta",
+        "Microsoft",
+        "Overture",
+        "PinMeTo",
+        "Krick",
+        "RenderSEO",
+        "DAC",
+        "BrightQuery",
+        "Foursquare",
+        "AllThePlaces",
+      ]),
+    ).not.toThrow();
   });
 
   it("keeps property-level record lineage and the release", () => {

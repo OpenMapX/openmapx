@@ -1,5 +1,34 @@
 import type { PlaceProvenance } from "../types/place";
 
+/**
+ * Overture Places contributors represented by OpenMapX manifest data sources.
+ *
+ * Keep this list exact and deliberately closed: an upstream contributor must
+ * not silently inherit the generic Overture attribution. Release activation
+ * validates every observed `sources[].dataset` against this map.
+ */
+export const OVERTURE_PLACE_DATASET_SOURCE_IDS = {
+  alltheplaces: "alltheplaces",
+  brightquery: "brightquery",
+  dac: "dac",
+  foursquare: "foursquare",
+  krick: "krick",
+  meta: "meta-places",
+  microsoft: "microsoft-places",
+  overture: "overture",
+  pinmeto: "pinmeto",
+  renderseo: "renderseo",
+} as const;
+
+export type OverturePlaceDataset = keyof typeof OVERTURE_PLACE_DATASET_SOURCE_IDS;
+
+function normalizeDatasetName(dataset: string): string {
+  return dataset
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
 export interface OvertureSourceItem {
   property?: string | null;
   dataset?: string | null;
@@ -8,19 +37,38 @@ export interface OvertureSourceItem {
   update_time?: string | null;
 }
 
-/** Maps current upstream dataset names to manifest source ids without losing unknown names. */
+/** Maps a current upstream dataset name to its manifest source id. */
 export function overtureDatasetSourceId(dataset: string): string {
-  const normalized = dataset.toLowerCase().replace(/[^a-z0-9]/g, "");
-  if (normalized.includes("foursquare")) return "foursquare";
-  if (normalized.includes("alltheplaces")) return "alltheplaces";
-  if (normalized.includes("brightquery")) return "brightquery";
-  if (normalized.includes("microsoft")) return "microsoft-places";
-  if (normalized.includes("pinmeto")) return "pinmeto";
-  if (normalized.includes("renderseo")) return "renderseo";
-  if (normalized === "dac" || normalized.includes("dacgroup")) return "dac";
-  if (normalized.includes("krick")) return "krick";
-  if (normalized === "meta" || normalized.includes("metaplaces")) return "meta-places";
-  return "overture";
+  const normalized = normalizeDatasetName(dataset) as OverturePlaceDataset;
+  const sourceId = OVERTURE_PLACE_DATASET_SOURCE_IDS[normalized];
+  if (!sourceId) {
+    throw new Error(
+      `Unsupported Overture Places contributor "${dataset}". ` +
+        "Add its required attribution before activating this release.",
+    );
+  }
+  return sourceId;
+}
+
+/** Fails closed when a release contains an unrepresented contributor. */
+export function assertSupportedOvertureContributors(datasets: Iterable<string>): void {
+  const unsupported = [...new Set(datasets)]
+    .filter((dataset) => {
+      try {
+        overtureDatasetSourceId(dataset);
+        return false;
+      } catch {
+        return true;
+      }
+    })
+    .sort((a, b) => a.localeCompare(b));
+
+  if (unsupported.length > 0) {
+    throw new Error(
+      `Overture Places release contains unsupported contributor dataset(s): ${unsupported.join(", ")}. ` +
+        "Add manifest attribution and the dataset mapping before activation.",
+    );
+  }
 }
 
 export function normalizeOvertureProvenance(

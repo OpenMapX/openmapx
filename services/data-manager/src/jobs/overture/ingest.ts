@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { assertSupportedOvertureContributors } from "@openmapx/core";
 import { latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";
 import { runDuckDb } from "./duckdb.js";
@@ -43,6 +44,27 @@ export interface IngestOvertureOptions {
   dataDir: string;
   release?: string;
   onProgress?: (msg: string) => void;
+}
+
+/**
+ * Verifies that every contributor in the staged release has an explicit
+ * OpenMapX attribution entry. This must run before the atomic schema swap.
+ */
+export async function validateOvertureContributors(schema: string): Promise<string[]> {
+  assertValidOvertureSchema(schema);
+  const rows = await sql.unsafe<{ dataset: string }[]>(
+    `SELECT DISTINCT source->>'dataset' AS dataset
+     FROM "${schema}".places AS place
+     CROSS JOIN LATERAL jsonb_array_elements(
+       CASE WHEN jsonb_typeof(place.sources) = 'array' THEN place.sources ELSE '[]'::jsonb END
+     ) AS source
+     WHERE NULLIF(BTRIM(source->>'dataset'), '') IS NOT NULL
+     ORDER BY dataset`,
+    [],
+  );
+  const datasets = rows.map((row) => row.dataset);
+  assertSupportedOvertureContributors(datasets);
+  return datasets;
 }
 
 export async function ingestOverture(opts: IngestOvertureOptions): Promise<void> {
@@ -110,6 +132,9 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
 
   opts.onProgress?.("Backfilling h3_r8...");
   await backfillDerivedColumns(stagingSchema);
+
+  opts.onProgress?.("Validating contributor attribution coverage...");
+  await validateOvertureContributors(stagingSchema);
 
   // Indexes (geom GIST + h3 + Overture taxonomy) are created by
   // buildSchemaDDL; the geom GIST is rebuilt automatically by the SRID ALTER.

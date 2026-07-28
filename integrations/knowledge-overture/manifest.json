@@ -44,7 +44,7 @@
       "url": "https://foursquare.com",
       "license": "Apache-2.0",
       "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
-      "attribution": "Copyright 2024 Foursquare Labs, Inc. All rights reserved. Data transformed to the Overture schema; changed 2026-07-28.",
+      "attribution": "Data from Foursquare. Copyright 2024 Foursquare Labs, Inc. All rights reserved. Available under Apache 2.0. Foursquare data was transformed to the Overture schema. Changed: 2026-03-18.",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://foursquare.com/legal/privacy-center/",

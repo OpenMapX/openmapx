@@ -164,7 +164,10 @@ export {
   overtureTaxonomyToOpenMapX,
 } from "./overtureCategoryTyped";
 export {
+  assertSupportedOvertureContributors,
   normalizeOvertureProvenance,
+  OVERTURE_PLACE_DATASET_SOURCE_IDS,
+  type OverturePlaceDataset,
   type OvertureSourceItem,
   overtureDatasetSourceId,
 } from "./overtureSource";
