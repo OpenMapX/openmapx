@@ -89,13 +89,8 @@
     },
     {
       "name": "Deutsche Bahn GBFS",
-      "type": "http",
-      "url": "https://apis.deutschebahn.com/db-api-marketplace/apis/shared-mobility-gbfs/v2/de/CallABike/system_information",
-      "headers": {
-        "DB-Client-ID": "${db-bike-client-id}",
-        "DB-Api-Key": "${db-bike-api-key}"
-      },
-      "requiredConfigKeys": ["db-bike-client-id", "db-bike-api-key"]
+      "type": "ping",
+      "url": "https://apis.deutschebahn.com/db-api-marketplace/apis/shared-mobility-gbfs/v2/de/CallABike/system_information"
     },
     {
       "name": "GBFS Catalog",

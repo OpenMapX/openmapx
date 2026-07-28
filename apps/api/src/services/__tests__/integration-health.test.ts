@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { LoadedIntegration } from "@openmapx/integration-framework";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,6 +25,8 @@ vi.mock("@openmapx/integration-framework/impersonate", () => ({
 
 import { impersonatingFetch } from "@openmapx/integration-framework/impersonate";
 import { executeIntegrationHealthCheck } from "../integration-health";
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../");
 
 function makeIntegration(hc: unknown): LoadedIntegration {
   return {
@@ -235,5 +240,52 @@ describe("integration-health impersonation", () => {
 
     expect(fetchSpy).toHaveBeenCalledOnce();
     expect(impersonatingFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("metered DB API Marketplace health checks", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    // The credentialless DB API routes reject the request before forwarding it,
+    // which proves gateway reachability without consuming an account quota.
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 401 }));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    ["bike-sharing", "Deutsche Bahn GBFS"],
+    ["parking", "DB BahnPark"],
+  ])("probes %s without sending credentials", async (integrationId, checkName) => {
+    const manifest = JSON.parse(
+      readFileSync(resolve(REPO_ROOT, "integrations", integrationId, "manifest.json"), "utf8"),
+    ) as { healthCheck: Array<Record<string, unknown>> };
+    const healthCheck = manifest.healthCheck.find((check) => check.name === checkName);
+
+    expect(healthCheck).toBeDefined();
+    expect(healthCheck?.type).toBe("ping");
+    expect(healthCheck).not.toHaveProperty("headers");
+    expect(healthCheck).not.toHaveProperty("requiredConfigKeys");
+
+    const integration = makeIntegration(healthCheck);
+    integration.config = {
+      "db-bike-client-id": "must-not-be-sent",
+      "db-bike-api-key": "must-not-be-sent",
+      "de-db-bahnpark-client-id": "must-not-be-sent",
+      "de-db-bahnpark-api-key": "must-not-be-sent",
+    };
+
+    const results = await executeIntegrationHealthCheck(integration);
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.status).toBe("up");
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const init = fetchSpy.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.headers).not.toHaveProperty("DB-Client-ID");
+    expect(init?.headers).not.toHaveProperty("DB-Client-Id");
+    expect(init?.headers).not.toHaveProperty("DB-Api-Key");
   });
 });

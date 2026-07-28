@@ -136,13 +136,8 @@
     },
     {
       "name": "DB BahnPark",
-      "type": "http",
-      "urlTemplate": "https://apis.deutschebahn.com/db-api-marketplace/apis/parking-information/db-bahnpark/v2/parking-facilities?limit=1",
-      "headers": {
-        "DB-Client-Id": "${de-db-bahnpark-client-id}",
-        "DB-Api-Key": "${de-db-bahnpark-api-key}"
-      },
-      "requiredConfigKeys": ["de-db-bahnpark-client-id", "de-db-bahnpark-api-key"]
+      "type": "ping",
+      "url": "https://apis.deutschebahn.com/db-api-marketplace/apis/parking-information/db-bahnpark/v2/parking-facilities?limit=1"
     },
     {
       "name": "ParkenDD",
