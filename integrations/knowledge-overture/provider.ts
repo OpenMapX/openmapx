@@ -20,14 +20,20 @@ interface SpatialRow {
 interface OvertureDetailRow {
   gers_id: string;
   name: string;
-  names: Record<string, string> | null;
+  names: { primary?: string; common?: Record<string, string> | null } | null;
   // Overture nests the brand name under brand.names.primary (NOT brand.name);
   // wikidata is a sibling. Type it the way the data actually arrives.
   brand: { names?: { primary?: string } | null; wikidata?: string } | null;
-  opening_hours: string | null;
   phones: string[] | null;
   websites: string[] | null;
   socials: string[] | null;
+  emails: string[] | null;
+  addresses: Array<{
+    freeform?: string | null;
+    locality?: string | null;
+    postcode?: string | null;
+    country?: string | null;
+  }> | null;
 }
 
 /**
@@ -159,7 +165,7 @@ async function fetchOverturePlaceByGers(
 ): Promise<OvertureDetailRow | null> {
   const rows = await database.execute<OvertureDetailRow[]>(
     `
-    SELECT gers_id, name, names, brand, opening_hours, phones, websites, socials
+    SELECT gers_id, name, names, brand, phones, websites, socials, emails, addresses
     FROM overture_places.places
     WHERE gers_id = $1
     LIMIT 1
@@ -184,12 +190,8 @@ function overtureRowToKnowledgeResult(row: OvertureDetailRow): KnowledgeResult |
     result.externalIds = { ...result.externalIds, wikidata: row.brand.wikidata };
   }
 
-  if (row.names && Object.keys(row.names).length > 0) {
-    result.names = row.names;
-  }
-
-  if (row.opening_hours) {
-    result.structuredOpeningHours = row.opening_hours;
+  if (row.names?.common && Object.keys(row.names.common).length > 0) {
+    result.names = row.names.common;
   }
 
   const phone = row.phones?.[0];
@@ -198,7 +200,18 @@ function overtureRowToKnowledgeResult(row: OvertureDetailRow): KnowledgeResult |
   const website = row.websites?.[0];
   if (website) result.website = website;
 
+  const email = row.emails?.[0];
+  if (email) result.email = email;
+
   if (row.socials?.length) result.socials = row.socials;
+
+  const address = row.addresses?.[0];
+  if (address) {
+    const localityLine = [address.postcode, address.locality].filter(Boolean).join(" ");
+    result.address = [address.freeform, localityLine || undefined].filter(Boolean).join(", ");
+    result.city = address.locality ?? undefined;
+    result.countryCode = address.country?.toLowerCase() ?? undefined;
+  }
 
   // Always non-empty: externalIds.gers is set for every match.
   return result;

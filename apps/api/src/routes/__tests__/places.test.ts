@@ -179,6 +179,35 @@ describe("GET /places/:id", () => {
     expect(res.headers["cache-control"]).toBe("public, max-age=86400");
   });
 
+  it("gap-fills address, email, brand, and social contacts from Overture knowledge", async () => {
+    mockLookupByOsmRef.mockResolvedValue({ ...MOCK_PLACE, address: "" });
+    mockGetPlaceKnowledge.mockResolvedValue({
+      address: "Friedrichstraße 1, 10117 Berlin",
+      city: "Berlin",
+      countryCode: "de",
+      email: "hello@example.test",
+      socials: ["https://instagram.com/example"],
+      brand: { name: "Example Brand", wikidata: "Q1" },
+    });
+    mockBuildReviewLinks.mockReturnValue([]);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/places/${encodeURIComponent("osm:node/12345")}`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.address).toBe("Friedrichstraße 1, 10117 Berlin");
+    expect(body.city).toBe("Berlin");
+    expect(body.countryCode).toBe("de");
+    expect(body.email).toBe("hello@example.test");
+    expect(body.osmTags.email).toBe("hello@example.test");
+    expect(body.osmTags["contact:instagram"]).toBe("https://instagram.com/example");
+    expect(body.osmTags.brand).toBe("Example Brand");
+    expect(body.osmTags["brand:wikidata"]).toBe("Q1");
+  });
+
   it("folds safe OSM Tripadvisor contact tags into external ids", async () => {
     mockLookupByOsmRef.mockResolvedValue({
       ...MOCK_PLACE,

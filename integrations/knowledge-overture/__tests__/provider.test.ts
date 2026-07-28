@@ -62,13 +62,16 @@ function makeOvertureDetailRow() {
   return {
     gers_id: "overture-abc-123",
     name: "Starbucks",
-    names: { de: "Starbucks", fr: "Starbucks" },
+    names: { primary: "Starbucks", common: { de: "Starbucks", fr: "Starbucks" } },
     // Overture nests the brand name under brand.names.primary (NOT brand.name).
     brand: { names: { primary: "Starbucks" }, wikidata: "Q37158" },
-    opening_hours: "Mo-Fr 07:00-21:00; Sa-Su 08:00-20:00",
     phones: ["+49 30 1234567"],
     websites: ["https://starbucks.de"],
     socials: ["https://www.facebook.com/starbucks"],
+    emails: ["berlin@starbucks.example"],
+    addresses: [
+      { freeform: "Friedrichstraße 1", locality: "Berlin", postcode: "10117", country: "DE" },
+    ],
   };
 }
 
@@ -156,7 +159,7 @@ describe("knowledge-overture provider lookup", () => {
     expect(db.execute.mock.calls[0][1]).toEqual(["overture-abc-123"]);
   });
 
-  it("returns brand, names, hours, wikidata, phone and website from the Overture row", async () => {
+  it("returns normalized brand, names, address, wikidata, and contacts from the Overture row", async () => {
     const ctx = makeCtx(detailRowDb(makeOvertureDetailRow()));
     const { setup, overtureKnowledgeSource } = await import("../index.js");
     setup(ctx);
@@ -171,13 +174,16 @@ describe("knowledge-overture provider lookup", () => {
     // Brand name comes from the NESTED brand.names.primary, not brand.name.
     expect(result?.brand).toEqual({ name: "Starbucks", wikidata: "Q37158" });
     expect(result?.names).toEqual({ de: "Starbucks", fr: "Starbucks" });
-    expect(result?.structuredOpeningHours).toBe("Mo-Fr 07:00-21:00; Sa-Su 08:00-20:00");
     expect(result?.externalIds?.wikidata).toBe("Q37158");
     // The GERS id is always exposed so the place card can credit Overture.
     expect(result?.externalIds?.gers).toBe("overture-abc-123");
     expect(result?.phone).toBe("+49 30 1234567");
     expect(result?.website).toBe("https://starbucks.de");
+    expect(result?.email).toBe("berlin@starbucks.example");
     expect(result?.socials).toEqual(["https://www.facebook.com/starbucks"]);
+    expect(result?.address).toBe("Friedrichstraße 1, 10117 Berlin");
+    expect(result?.city).toBe("Berlin");
+    expect(result?.countryCode).toBe("de");
   });
 
   it("exposes wikidata via externalIds even when the brand has no resolvable name", async () => {
@@ -200,7 +206,6 @@ describe("knowledge-overture provider lookup", () => {
   it("surfaces phone/website even for an unbranded place with no hours", async () => {
     const row = makeOvertureDetailRow();
     row.brand = null as never;
-    row.opening_hours = null as never;
     row.names = null as never;
     const ctx = makeCtx(detailRowDb(row));
     const { setup, overtureKnowledgeSource } = await import("../index.js");

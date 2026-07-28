@@ -405,6 +405,12 @@ describe("fusePoiResults", () => {
       makePoi("overture:gers-abc-123", "Starbucks Coffee", 52.52, 13.4, {
         gersId: "gers-abc-123",
         category: "cafes",
+        address: "Friedrichstraße 1, 10117 Berlin",
+        email: "mitte@starbucks.example",
+        website: "https://starbucks.example/mitte",
+        socials: ["https://instagram.com/starbucks"],
+        brand: { name: "Starbucks", wikidata: "Q37158" },
+        names: { de: "Starbucks Mitte" },
         osmTags: { brand: "Starbucks", "brand:wikidata": "Q37158" },
       }),
     ];
@@ -417,6 +423,12 @@ describe("fusePoiResults", () => {
     expect(fused.osmTags?.brand).toBe("Starbucks");
     expect(fused.osmTags?.["brand:wikidata"]).toBe("Q37158");
     expect(fused.openingHours).toBe("Mo-Su 07:00-22:00");
+    expect(fused.address).toBe("Friedrichstraße 1, 10117 Berlin");
+    expect(fused.email).toBe("mitte@starbucks.example");
+    expect(fused.website).toBe("https://starbucks.example/mitte");
+    expect(fused.socials).toEqual(["https://instagram.com/starbucks"]);
+    expect(fused.brand).toEqual({ name: "Starbucks", wikidata: "Q37158" });
+    expect(fused.names).toEqual({ de: "Starbucks Mitte" });
     expect(fused.coordinates).toEqual([13.4, 52.52]);
   });
 

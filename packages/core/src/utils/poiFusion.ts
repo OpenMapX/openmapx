@@ -32,6 +32,12 @@ function fuseOsmOverturePair(osmR: PoiSearchResult, overtR: PoiSearchResult): Po
     coordinates: osmR.coordinates,
     openingHours: osmR.openingHours ?? overtR.openingHours,
     phone: osmR.phone ?? overtR.phone,
+    email: osmR.email ?? overtR.email,
+    website: osmR.website ?? overtR.website,
+    socials: osmR.socials ?? overtR.socials,
+    address: osmR.address ?? overtR.address,
+    brand: osmR.brand ?? overtR.brand,
+    names: osmR.names ?? overtR.names,
     category: osmR.category ?? overtR.category,
     osmTags: { ...osmR.osmTags, ...overtureBrandTags },
   };

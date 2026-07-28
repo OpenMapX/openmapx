@@ -6,6 +6,7 @@ import ArticleIcon from "@mui/icons-material/Article";
 import CheckIcon from "@mui/icons-material/Check";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import EmailOutlinedIcon from "@mui/icons-material/EmailOutlined";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined";
@@ -614,6 +615,24 @@ export function PlaceOverviewTab({
                 </Link>
               </DetailRow>
             )
+          )}
+
+          {/* Email */}
+          {place.email && (
+            <DetailRow
+              icon={<EmailOutlinedIcon sx={{ fontSize: 22 }} />}
+              copyValue={place.email}
+              copyLabel={t("copyEmail")}
+            >
+              <Link
+                href={`mailto:${place.email}`}
+                variant="body2"
+                underline="hover"
+                sx={{ color: "text.primary" }}
+              >
+                {place.email}
+              </Link>
+            </DetailRow>
           )}
 
           {/* Wikipedia */}

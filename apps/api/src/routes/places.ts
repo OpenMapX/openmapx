@@ -128,6 +128,19 @@ function applyKnowledgeSocials(
   return out;
 }
 
+function applyKnowledgeContactTags(
+  osmTags: Record<string, string> | undefined,
+  email: string | undefined,
+  brand: Place["brand"],
+): Record<string, string> | undefined {
+  if (!email && !brand) return osmTags;
+  const out = { ...(osmTags ?? {}) };
+  if (email && !out.email && !out["contact:email"]) out.email = email;
+  if (brand?.name && !out.brand) out.brand = brand.name;
+  if (brand?.wikidata && !out["brand:wikidata"]) out["brand:wikidata"] = brand.wikidata;
+  return out;
+}
+
 function websitePathDepth(url: string): number {
   try {
     const path = new URL(url).pathname.replace(/\/+$/, "");
@@ -213,8 +226,12 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
     externalIds,
     photos: knowledgePhotos,
     phone: knowledgePhone,
+    email: knowledgeEmail,
     website: knowledgeWebsite,
     socials: knowledgeSocials,
+    address: knowledgeAddress,
+    city: knowledgeCity,
+    countryCode: knowledgeCountryCode,
     ...knowledge
   } = await getPlaceKnowledge(place, lang);
   const enriched = foldExternalIdsIntoPlace(place, externalIds);
@@ -248,11 +265,20 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
     ...knowledge,
     // Social profiles: gap-fill the OSM `contact:*` tags from a knowledge
     // source so they render in the existing social-links row.
-    osmTags: applyKnowledgeSocials(enriched.osmTags, knowledgeSocials),
+    osmTags: applyKnowledgeContactTags(
+      applyKnowledgeSocials(enriched.osmTags, knowledgeSocials),
+      knowledgeEmail,
+      knowledge.brand,
+    ),
     // Contact details: OSM is fresher, so phone wins; for the website, prefer
     // the more specific URL (a deep outlet link beats a bare brand homepage).
     phone: enriched.phone ?? knowledgePhone,
+    email: enriched.email ?? knowledgeEmail,
     website: pickMoreSpecificWebsite(enriched.website, knowledgeWebsite),
+    socials: enriched.socials ?? knowledgeSocials,
+    address: enriched.address || knowledgeAddress || "",
+    city: enriched.city ?? knowledgeCity,
+    countryCode: enriched.countryCode ?? knowledgeCountryCode,
     photos,
     reviewLinks: buildReviewLinks(enriched),
     rating: reviewStats?.stars,

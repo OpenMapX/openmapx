@@ -40,4 +40,24 @@ describe("categoryPlaceToPlace", () => {
     expect(place.id).toBe("coordinate:50.770000-6.080000");
     expect(place.primaryScheme).toBe("coordinate");
   });
+
+  it("preserves normalized Overture attributes without using the name as an address", () => {
+    const place = categoryPlaceToPlace(
+      makePlace({
+        address: undefined,
+        email: "hello@example.test",
+        website: "https://example.test",
+        socials: ["https://instagram.com/example"],
+        brand: { name: "Example", wikidata: "Q1" },
+        names: { de: "Beispiel" },
+      }),
+    );
+
+    expect(place.address).toBe("");
+    expect(place.email).toBe("hello@example.test");
+    expect(place.website).toBe("https://example.test");
+    expect(place.socials).toEqual(["https://instagram.com/example"]);
+    expect(place.brand).toEqual({ name: "Example", wikidata: "Q1" });
+    expect(place.names).toEqual({ de: "Beispiel" });
+  });
 });

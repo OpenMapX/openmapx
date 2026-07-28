@@ -60,5 +60,6 @@ describe("current Overture taxonomy schema", () => {
     expect(ddl).toContain("taxonomy_alternates");
     expect(ddl).toContain("USING GIN (taxonomy_hierarchy)");
     expect(ddl).not.toContain("openmapx_category");
+    expect(ddl).not.toContain("opening_hours");
   });
 });

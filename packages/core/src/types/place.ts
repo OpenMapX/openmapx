@@ -111,7 +111,9 @@ export interface Place extends Identified {
   /** Raw category string from the geocoding provider (e.g. "railway/station", "highway/bus_stop"). */
   rawCategory?: string;
   phone?: string;
+  email?: string;
   website?: string;
+  socials?: string[];
   openingHours?: string;
   rating?: number;
   reviewCount?: number;
@@ -147,6 +149,4 @@ export interface Place extends Identified {
   brand?: { name: string; wikidata?: string };
   /** Multilingual name variants keyed by BCP-47 language tag (from Overture Places). */
   names?: Record<string, string>;
-  /** Raw opening_hours string from Overture structured hours (OSM-format compatible). */
-  structuredOpeningHours?: string;
 }

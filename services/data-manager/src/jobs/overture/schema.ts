@@ -76,7 +76,6 @@ export function buildSchemaDDL(schema: string): string {
       emails            TEXT[],
       phones            TEXT[],
       brand             JSONB,
-      opening_hours     TEXT,
       confidence        DOUBLE PRECISION,
       operating_status  TEXT,
       sources           JSONB,

@@ -14,9 +14,15 @@ const FIXTURE_ROWS = [
     taxonomy_primary: "coffee_shop",
     taxonomy_hierarchy: ["food_and_drink", "cafe", "coffee_shop"],
     taxonomy_alternates: [],
-    brand_name: "Starbucks",
-    brand_wikidata: "Q37158",
-    phone: null,
+    names: { primary: "Starbucks Mitte", common: { de: "Starbucks Mitte DE" } },
+    addresses: [
+      { freeform: "Friedrichstraße 1", locality: "Berlin", postcode: "10117", country: "DE" },
+    ],
+    brand: { names: { primary: "Starbucks" }, wikidata: "Q37158" },
+    phones: null,
+    websites: ["https://starbucks.example/mitte"],
+    socials: ["https://instagram.com/starbucks"],
+    emails: ["mitte@starbucks.example"],
   },
   {
     gers_id: "gers-abc-002",
@@ -27,9 +33,13 @@ const FIXTURE_ROWS = [
     taxonomy_primary: "burger_restaurant",
     taxonomy_hierarchy: ["food_and_drink", "restaurant", "burger_restaurant"],
     taxonomy_alternates: [],
-    brand_name: "McDonald's",
-    brand_wikidata: "Q38076",
-    phone: "+49 30 12345678",
+    names: { primary: "McDonald's Alexanderplatz", common: null },
+    addresses: null,
+    brand: { names: { primary: "McDonald's" }, wikidata: "Q38076" },
+    phones: ["+49 30 12345678"],
+    websites: null,
+    socials: null,
+    emails: null,
   },
 ];
 
@@ -76,7 +86,7 @@ describe("poi-overture provider.search", () => {
     const { setup } = await import("../index.js");
     setup(ctx);
     const provider = ctx.registered.poiSearch[0] as PoiSearchProvider;
-    const results = await provider.search("cafes", BBOX);
+    const results = await provider.search("cafes", BBOX, { lang: "de-DE" });
     expect(results.length).toBe(2);
     const first = results[0];
     expect(first.id).toBe("overture:gers-abc-001");
@@ -84,6 +94,10 @@ describe("poi-overture provider.search", () => {
     expect(first.osmTags?.brand).toBe("Starbucks");
     expect(first.osmTags?.["brand:wikidata"]).toBe("Q37158");
     expect(first.coordinates).toEqual([13.4, 52.51]);
+    expect(first.name).toBe("Starbucks Mitte DE");
+    expect(first.address).toBe("Friedrichstraße 1, 10117 Berlin");
+    expect(first.website).toBe("https://starbucks.example/mitte");
+    expect(first.email).toBe("mitte@starbucks.example");
     expect(first.category).toBe("cafes");
     expect(db.execute.mock.calls[0][0]).toContain("taxonomy_hierarchy && $5::TEXT[]");
     expect(db.execute.mock.calls[0][1][4]).toEqual(["cafe", "coffee_shop", "tea_house"]);

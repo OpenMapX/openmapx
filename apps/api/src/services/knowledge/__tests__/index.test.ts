@@ -211,16 +211,18 @@ describe("getPlaceKnowledge", () => {
     expect(result.description).toBe("Wikidata desc");
     expect(result.brand).toBeUndefined();
     expect(result.names).toBeUndefined();
-    expect(result.structuredOpeningHours).toBeUndefined();
   });
 
-  it("merges brand, names, structuredOpeningHours from first non-null source", async () => {
+  it("merges brand, names, address, and contacts from the first non-null source", async () => {
     wikidataLookup.mockReset();
     wikipediaLookup.mockReset();
     wikidataLookup.mockResolvedValueOnce({
       brand: { name: "Starbucks", wikidata: "Q37158" },
       names: { de: "Starbucks" },
-      structuredOpeningHours: "Mo-Fr 07:00-21:00",
+      email: "hello@example.test",
+      address: "Example Street 1",
+      city: "Berlin",
+      countryCode: "de",
     });
     wikipediaLookup.mockResolvedValueOnce({
       brand: { name: "Other Brand" },
@@ -231,6 +233,9 @@ describe("getPlaceKnowledge", () => {
 
     expect(result.brand).toEqual({ name: "Starbucks", wikidata: "Q37158" });
     expect(result.names).toEqual({ de: "Starbucks" });
-    expect(result.structuredOpeningHours).toBe("Mo-Fr 07:00-21:00");
+    expect(result.email).toBe("hello@example.test");
+    expect(result.address).toBe("Example Street 1");
+    expect(result.city).toBe("Berlin");
+    expect(result.countryCode).toBe("de");
   });
 });

@@ -12,9 +12,13 @@ const FIXTURE_ROW = {
   taxonomy_primary: "coffee_shop",
   taxonomy_hierarchy: ["food_and_drink", "cafe", "coffee_shop"],
   taxonomy_alternates: [],
-  brand_name: "Starbucks",
-  brand_wikidata: "Q37158",
-  phone: "+49 30 12345",
+  names: { primary: "Test Cafe Berlin", common: { de: "Testcafé Berlin" } },
+  addresses: [{ freeform: "Teststraße 4", locality: "Berlin", postcode: "10115", country: "DE" }],
+  brand: { names: { primary: "Starbucks" }, wikidata: "Q37158" },
+  phones: ["+49 30 12345"],
+  websites: ["https://example.test/location"],
+  socials: ["https://instagram.com/example"],
+  emails: ["cafe@example.test"],
 };
 
 function makeFakeDb(row: unknown | null) {
@@ -45,12 +49,17 @@ describe("overture place resolver", () => {
     const resolver = getPlaceResolver("overture");
     expect(resolver).toBeDefined();
 
-    const place = await resolver?.(GERS_ID, {});
+    const place = await resolver?.(GERS_ID, { lang: "de-DE" });
     expect(place).not.toBeNull();
     expect(place?.primaryScheme).toBe("overture");
     expect(place?.id).toBe(`overture:${GERS_ID}`);
     expect(place?.ids.overture).toBe(GERS_ID);
-    expect(place?.name).toBe("Test Cafe Berlin");
+    expect(place?.name).toBe("Testcafé Berlin");
+    expect(place?.address).toBe("Teststraße 4, 10115 Berlin");
+    expect(place?.city).toBe("Berlin");
+    expect(place?.countryCode).toBe("de");
+    expect(place?.website).toBe("https://example.test/location");
+    expect(place?.email).toBe("cafe@example.test");
     expect(place?.coordinates).toEqual([13.405, 52.52]);
     expect(place?.osmTags?.brand).toBe("Starbucks");
     expect(place?.osmTags?.["brand:wikidata"]).toBe("Q37158");

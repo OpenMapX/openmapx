@@ -469,7 +469,11 @@ export interface CategoryPlace {
   category?: string;
   address?: string;
   phone?: string;
+  email?: string;
   website?: string;
+  socials?: string[];
+  brand?: { name: string; wikidata?: string };
+  names?: Record<string, string>;
   openingHours?: string;
   isOpen?: boolean;
   /** Server-precomputed status/bitmap; absent when `openingHours` is missing. */
@@ -512,12 +516,16 @@ export function categoryPlaceToPlace(place: CategoryPlace, categoryId?: string):
   return createPlace({
     ...identity,
     name: place.name,
-    address: place.address ?? place.name,
+    address: place.address ?? "",
     coordinates: place.coordinates,
     category: place.category,
     rawCategory: categoryId,
     phone: place.phone,
+    email: place.email,
     website: place.website,
+    socials: place.socials,
+    brand: place.brand,
+    names: place.names,
     openingHours: place.openingHours,
     isOpen: place.isOpen,
     openingHoursInfo: place.openingHoursInfo,
@@ -534,7 +542,11 @@ export interface PoiSearchResult {
   category?: string;
   address?: string;
   phone?: string;
+  email?: string;
   website?: string;
+  socials?: string[];
+  brand?: { name: string; wikidata?: string };
+  names?: Record<string, string>;
   openingHours?: string;
   isOpen?: boolean;
   osmTags?: Record<string, string>;

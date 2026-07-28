@@ -55,10 +55,13 @@ export async function getPlaceKnowledge(place: Place, lang?: string): Promise<Kn
       airport,
       brand,
       names,
-      structuredOpeningHours,
       phone,
+      email,
       website,
       socials,
+      address,
+      city,
+      countryCode,
     } = result.value;
 
     if (description && !merged.description) merged.description = description;
@@ -75,12 +78,13 @@ export async function getPlaceKnowledge(place: Place, lang?: string): Promise<Kn
     if (airport && !merged.airport) merged.airport = airport;
     if (brand && !merged.brand) merged.brand = brand;
     if (names && !merged.names) merged.names = names;
-    if (structuredOpeningHours && !merged.structuredOpeningHours) {
-      merged.structuredOpeningHours = structuredOpeningHours;
-    }
     if (phone && !merged.phone) merged.phone = phone;
+    if (email && !merged.email) merged.email = email;
     if (website && !merged.website) merged.website = website;
     if (socials?.length && !merged.socials) merged.socials = socials;
+    if (address && !merged.address) merged.address = address;
+    if (city && !merged.city) merged.city = city;
+    if (countryCode && !merged.countryCode) merged.countryCode = countryCode;
   }
 
   return merged;

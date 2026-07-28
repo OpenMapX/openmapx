@@ -17,14 +17,18 @@ export interface KnowledgeResult {
   brand?: { name: string; wikidata?: string };
   /** Multilingual name variants keyed by BCP-47 language tag. */
   names?: Record<string, string>;
-  /** Raw OSM-compatible opening_hours string from Overture structured hours. */
-  structuredOpeningHours?: string;
   /** Contact phone supplied by a source — fills a gap when the base place lacks one. */
   phone?: string;
+  /** Contact email supplied by a source — fills a gap when the base place lacks one. */
+  email?: string;
   /** Contact website/homepage supplied by a source — fills a gap when the base place lacks one. */
   website?: string;
   /** Social-profile URLs (e.g. Facebook/Instagram) supplied by a source. */
   socials?: string[];
+  /** Formatted street address supplied by a source. */
+  address?: string;
+  city?: string;
+  countryCode?: string;
 }
 
 /**
