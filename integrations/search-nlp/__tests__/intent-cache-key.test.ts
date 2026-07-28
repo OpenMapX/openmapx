@@ -11,10 +11,10 @@ describe("intentCacheKey privacy partitioning", () => {
     );
   });
 
-  it("differs by the no-cloud flag (a strict/noCloud request can't hit a cloud entry)", () => {
-    const cloud = intentCacheKey(Q, C, 2, "local,claude,keyword", false);
-    const noCloud = intentCacheKey(Q, C, 2, "local,claude,keyword", true);
-    expect(cloud).not.toBe(noCloud);
+  it("partitions local-only and cloud-authorized entries", () => {
+    const localOnly = intentCacheKey(Q, C, 2, "local,claude,keyword", false);
+    const cloud = intentCacheKey(Q, C, 2, "local,claude,keyword", true);
+    expect(cloud).not.toBe(localOnly);
   });
 
   it("differs by configured provider chain", () => {

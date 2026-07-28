@@ -3,15 +3,16 @@
  * JSON-Schema-shaped manifest `configSchema` block used by both integrations
  * and services.
  *
- * Supports the field shapes the admin config form actually emits:
- * - `type: "boolean" | "number" | "integer" | "string"`
- * - `enum: unknown[]`
+ * Supports the JSON Schema subset emitted by integration manifests:
+ * - scalar, array, and object types
+ * - enum / const / oneOf / allOf / if-then-else
+ * - required and additionalProperties
+ * - string, numeric, and collection bounds
+ * - nested URL validation
  * - `x-openmapx-secret: true` (must be set via credentials API, not config)
  *
- * Anything more complex (oneOf, refs, nested objects, arrays) falls through
- * unchanged — those shapes don't render in the form yet anyway. The validator
- * returns an `{ updates, errors }` pair; callers persist `updates` only when
- * `errors` is empty.
+ * The validator returns an `{ updates, errors }` pair; callers persist updates
+ * only when errors is empty.
  */
 
 import { type CredentialSetup, readCredentialSetup } from "@openmapx/integration-framework";
@@ -70,6 +71,129 @@ export interface ValidateConfigOptions {
   rejectSecrets?: boolean;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function validateSchemaValue(
+  value: unknown,
+  schema: Record<string, unknown>,
+  path: string,
+): string[] {
+  if (Array.isArray(schema.allOf)) {
+    const { allOf, ...baseSchema } = schema;
+    return [
+      ...validateSchemaValue(value, baseSchema, path),
+      ...allOf.flatMap((entry) =>
+        isRecord(entry)
+          ? validateSchemaValue(value, entry, path)
+          : [`${path} has an invalid schema`],
+      ),
+    ];
+  }
+
+  if (isRecord(schema.if)) {
+    const { if: condition, then, else: otherwise, ...baseSchema } = schema;
+    const conditionMatches = validateSchemaValue(value, condition, path).length === 0;
+    const branch = conditionMatches ? then : otherwise;
+    return [
+      ...validateSchemaValue(value, baseSchema, path),
+      ...(isRecord(branch) ? validateSchemaValue(value, branch, path) : []),
+    ];
+  }
+
+  const oneOf = schema.oneOf;
+  if (Array.isArray(oneOf)) {
+    const candidateResults = oneOf.map((candidate) =>
+      isRecord(candidate)
+        ? validateSchemaValue(value, candidate, path)
+        : [`${path} has an invalid schema`],
+    );
+    const matches = candidateResults.filter((errors) => errors.length === 0);
+    if (matches.length === 1) return [];
+    if (matches.length > 1) return [`${path} matches more than one allowed shape`];
+    const discriminator =
+      isRecord(value) && typeof value.type === "string" ? ` for type "${value.type}"` : "";
+    return [`${path} does not match an allowed shape${discriminator}`];
+  }
+
+  if ("const" in schema && value !== schema.const) {
+    return [`${path} must equal ${JSON.stringify(schema.const)}`];
+  }
+  if (Array.isArray(schema.enum) && !schema.enum.includes(value)) {
+    return [`${path} must be one of: ${schema.enum.join(", ")}`];
+  }
+
+  const type = schema.type;
+  if (type === "boolean" && typeof value !== "boolean") return [`${path} must be a boolean`];
+  if (type === "string") {
+    if (typeof value !== "string") return [`${path} must be a string`];
+    if (typeof schema.minLength === "number" && value.length < schema.minLength) {
+      return [`${path} must have at least ${schema.minLength} characters`];
+    }
+    if (typeof schema.maxLength === "number" && value.length > schema.maxLength) {
+      return [`${path} must have at most ${schema.maxLength} characters`];
+    }
+    if (typeof schema.pattern === "string" && !new RegExp(schema.pattern).test(value)) {
+      return [`${path} has an invalid format`];
+    }
+    if (schema.format === "url" && value !== "") {
+      try {
+        const parsed = new URL(value);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+          return [`${path} must be a valid http(s) URL`];
+        }
+      } catch {
+        return [`${path} must be a valid http(s) URL`];
+      }
+    }
+    return [];
+  }
+  if (type === "number" || type === "integer") {
+    if (typeof value !== "number" || !Number.isFinite(value)) return [`${path} must be a number`];
+    if (type === "integer" && !Number.isInteger(value)) return [`${path} must be an integer`];
+    if (typeof schema.minimum === "number" && value < schema.minimum) {
+      return [`${path} must be at least ${schema.minimum}`];
+    }
+    if (typeof schema.maximum === "number" && value > schema.maximum) {
+      return [`${path} must be at most ${schema.maximum}`];
+    }
+    return [];
+  }
+  if (type === "array") {
+    if (!Array.isArray(value)) return [`${path} must be an array`];
+    if (typeof schema.minItems === "number" && value.length < schema.minItems) {
+      return [`${path} must contain at least ${schema.minItems} item(s)`];
+    }
+    if (typeof schema.maxItems === "number" && value.length > schema.maxItems) {
+      return [`${path} must contain at most ${schema.maxItems} item(s)`];
+    }
+    if (!isRecord(schema.items)) return [];
+    return value.flatMap((entry, index) =>
+      validateSchemaValue(entry, schema.items as Record<string, unknown>, `${path}[${index}]`),
+    );
+  }
+  if (type === "object") {
+    if (!isRecord(value)) return [`${path} must be an object`];
+    const properties = isRecord(schema.properties) ? schema.properties : {};
+    const required = Array.isArray(schema.required) ? new Set(schema.required) : new Set<unknown>();
+    const errors: string[] = [];
+    for (const key of required) {
+      if (typeof key === "string" && !(key in value)) errors.push(`${path}.${key} is required`);
+    }
+    for (const [key, nestedValue] of Object.entries(value)) {
+      const nestedSchema = properties[key];
+      if (!isRecord(nestedSchema)) {
+        if (schema.additionalProperties === false) errors.push(`${path}.${key} is not allowed`);
+        continue;
+      }
+      errors.push(...validateSchemaValue(nestedValue, nestedSchema, `${path}.${key}`));
+    }
+    return errors;
+  }
+  return [];
+}
+
 export function validateConfigBody(
   body: unknown,
   configSchema: Record<string, unknown> | undefined,
@@ -104,34 +228,9 @@ export function validateConfigBody(
       continue;
     }
 
-    const type = def.type as string | undefined;
-    if (type === "boolean" && typeof value !== "boolean") {
-      result.errors.push(`"${key}" must be a boolean`);
-      continue;
-    }
-    if ((type === "number" || type === "integer") && typeof value !== "number") {
-      result.errors.push(`"${key}" must be a number`);
-      continue;
-    }
-    if (type === "string" && typeof value !== "string") {
-      result.errors.push(`"${key}" must be a string`);
-      continue;
-    }
-    const format = def.format as string | undefined;
-    if (format === "url" && typeof value === "string" && value !== "") {
-      let parsed: URL | null = null;
-      try {
-        parsed = new URL(value);
-      } catch {
-        parsed = null;
-      }
-      if (!parsed || (parsed.protocol !== "http:" && parsed.protocol !== "https:")) {
-        result.errors.push(`"${key}" must be a valid http(s) URL`);
-        continue;
-      }
-    }
-    if (def.enum && !(def.enum as unknown[]).includes(value)) {
-      result.errors.push(`"${key}" must be one of: ${(def.enum as unknown[]).join(", ")}`);
+    const errors = validateSchemaValue(value, def, `"${key}"`);
+    if (errors.length > 0) {
+      result.errors.push(...errors);
       continue;
     }
 

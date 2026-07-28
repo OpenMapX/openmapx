@@ -7,14 +7,19 @@ import { serverApiUrl } from "./server-url";
  * doesn't depend on integration-framework (which itself depends on core).
  */
 
-export type CloudAiVendor = "anthropic" | "openai";
+export interface AiCloudProcessor {
+  id: string;
+  name: string;
+  countryCode: string;
+  privacyUrl: string;
+}
 export interface AiSearchDisclosure {
   type: "ai-search";
   integrationId: string;
   aiActive: boolean;
   localActive: boolean;
   cloudActive: boolean;
-  cloudVendors: CloudAiVendor[];
+  cloudProcessors: AiCloudProcessor[];
 }
 
 export type EmailProvider = "emaillabs" | "lettermint" | "smtp";

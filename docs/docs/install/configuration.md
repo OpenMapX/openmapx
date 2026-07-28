@@ -297,21 +297,21 @@ Schedules and switches for the monthly Overture Maps POI data ingestion.
 
 [Natural-language search](../features/natural-language-search.md) (the
 `search-nlp` integration) is configured at `/admin/integrations`, not in `.env`.
-It is **cloud-off by default**: the provider chain is `local, keyword`, and a
+It is **cloud-off by default**: the provider list contains local Ollama followed by keyword, and a
 cloud model is used only when it is both listed in the chain and given an API
 key. If you'd rather pin its config from the environment, use the
-per-integration override form below (`INTEGRATION_SEARCH_NLP_<KEY>`) — scalar
-keys map cleanly; the `providerChain` array is best set from the admin UI.
+per-integration override form below (`INTEGRATION_SEARCH_NLP_<KEY>`). Set the
+`providers` array as JSON or edit it in the admin UI.
 
 | Variable                                   | Description                                                                                       | Required / Default                  |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------- | ----------------------------------- |
 | `INTEGRATION_SEARCH_NLP_PRIVACYMODE`       | `strict` (cloud disabled server-side), `consent` (cloud behind explicit opt-in), or `open`.       | Default `consent`                   |
-| `INTEGRATION_SEARCH_NLP_OLLAMAMODEL`       | Local LLM served by the `local-ai` (Ollama) service; pulled automatically on first start.         | Default `gemma3:4b-it-qat`          |
-| `INTEGRATION_SEARCH_NLP_OLLAMAENDPOINT`    | Ollama base URL. Defaults to the `local-ai` service URL when that service is enabled.             | Default `http://localhost:11434`    |
-| `INTEGRATION_SEARCH_NLP_ANTHROPICAPIKEY`   | Anthropic key. Required to activate the `claude` cloud provider; without it the provider is skipped. | Optional. Default unset          |
-| `INTEGRATION_SEARCH_NLP_CLAUDEMODEL`       | Anthropic model id for the `claude` provider.                                                     | Default `claude-haiku-4-5-20251001` |
-| `INTEGRATION_SEARCH_NLP_OPENAIAPIKEY`      | OpenAI key. Required to activate the `openai` cloud provider; without it the provider is skipped.  | Optional. Default unset             |
-| `INTEGRATION_SEARCH_NLP_OPENAIMODEL`       | OpenAI model id for the `openai` provider.                                                         | Default `gpt-4o-mini`               |
+| `INTEGRATION_SEARCH_NLP_PROVIDERS`         | Ordered JSON array of typed provider definitions.                                                 | Local Ollama, then keyword          |
+| `INTEGRATION_SEARCH_NLP_ANTHROPICAPIKEY`   | Vault/env credential for `anthropic` definitions.                                                 | Optional. Default unset             |
+| `INTEGRATION_SEARCH_NLP_OPENAIAPIKEY`      | Vault/env credential for `openai` definitions.                                                    | Optional. Default unset             |
+| `INTEGRATION_SEARCH_NLP_GOOGLEAPIKEY`      | Vault/env credential for `google` (Gemini) definitions.                                           | Optional. Default unset             |
+| `INTEGRATION_SEARCH_NLP_OPENROUTERAPIKEY`  | Vault/env credential for `openrouter` definitions.                                                | Optional. Default unset             |
+| `INTEGRATION_SEARCH_NLP_COMPATIBLEAPIKEY`  | Shared vault/env credential for compatible endpoint definitions that select it.                   | Optional. Default unset             |
 
 To run the local model, enable the **`local-ai`** backend service (Ollama). Its
 container tuning uses the usual per-service form — `LOCAL_AI_MEMORY` (default

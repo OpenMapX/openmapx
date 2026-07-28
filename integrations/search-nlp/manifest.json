@@ -1,7 +1,7 @@
 {
   "id": "search-nlp",
   "name": "Natural-Language Search",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "license": "MIT",
   "quality": "built-in",
   "domains": ["search-nlp"],
@@ -12,60 +12,243 @@
     "type": "object",
     "properties": {
       "enabled": { "type": "boolean", "default": true },
-      "providerChain": {
+      "providers": {
         "type": "array",
-        "items": { "type": "string", "enum": ["local", "claude", "openai", "keyword"] },
-        "default": ["local", "keyword"],
-        "title": "Provider chain (ordered, with auto-fallback)"
+        "title": "Provider chain",
+        "description": "Ordered provider definitions. The first successful provider wins. A deterministic keyword provider is always appended if none is configured. Provider ids are operator-defined and must be unique.",
+        "minItems": 1,
+        "maxItems": 20,
+        "default": [
+          { "id": "local", "type": "ollama", "model": "gemma3:4b-it-qat" },
+          { "id": "keyword", "type": "keyword" }
+        ],
+        "items": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "type"],
+              "properties": {
+                "id": { "type": "string", "maxLength": 64, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+                "type": { "const": "keyword" },
+                "label": { "type": "string", "minLength": 1, "maxLength": 100 }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "type", "model"],
+              "properties": {
+                "id": { "type": "string", "maxLength": 64, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+                "type": { "const": "ollama" },
+                "label": { "type": "string", "minLength": 1, "maxLength": 100 },
+                "model": { "type": "string", "minLength": 1, "maxLength": 200 },
+                "baseURL": {
+                  "type": "string",
+                  "format": "url",
+                  "description": "Ollama server root. OpenMapX appends /v1 for model requests."
+                },
+                "timeoutMs": { "type": "integer", "minimum": 250, "maximum": 120000 }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "type", "model"],
+              "properties": {
+                "id": { "type": "string", "maxLength": 64, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+                "type": { "const": "anthropic" },
+                "label": { "type": "string", "minLength": 1, "maxLength": 100 },
+                "model": { "type": "string", "minLength": 1, "maxLength": 200 },
+                "timeoutMs": { "type": "integer", "minimum": 250, "maximum": 120000 }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "type", "model"],
+              "properties": {
+                "id": { "type": "string", "maxLength": 64, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+                "type": { "const": "openai" },
+                "label": { "type": "string", "minLength": 1, "maxLength": 100 },
+                "model": { "type": "string", "minLength": 1, "maxLength": 200 },
+                "api": { "type": "string", "enum": ["responses", "chat"], "default": "responses" },
+                "timeoutMs": { "type": "integer", "minimum": 250, "maximum": 120000 }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "type", "model"],
+              "properties": {
+                "id": { "type": "string", "maxLength": 64, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+                "type": { "const": "google" },
+                "label": { "type": "string", "minLength": 1, "maxLength": 100 },
+                "model": { "type": "string", "minLength": 1, "maxLength": 200 },
+                "timeoutMs": { "type": "integer", "minimum": 250, "maximum": 120000 }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "type", "model"],
+              "properties": {
+                "id": { "type": "string", "maxLength": 64, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+                "type": { "const": "openrouter" },
+                "label": { "type": "string", "minLength": 1, "maxLength": 100 },
+                "model": { "type": "string", "minLength": 1, "maxLength": 200 },
+                "timeoutMs": { "type": "integer", "minimum": 250, "maximum": 120000 },
+                "providerOrder": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "default": []
+                },
+                "allowFallbacks": { "type": "boolean", "default": true },
+                "dataCollection": {
+                  "type": "string",
+                  "enum": ["allow", "deny"],
+                  "default": "deny"
+                },
+                "zeroDataRetention": { "type": "boolean", "default": true }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "type", "model", "baseURL"],
+              "allOf": [
+                {
+                  "if": {
+                    "type": "object",
+                    "properties": { "local": { "const": false } }
+                  },
+                  "then": {
+                    "type": "object",
+                    "required": ["processor"],
+                    "properties": {
+                      "baseURL": { "type": "string", "pattern": "^https://" }
+                    }
+                  }
+                }
+              ],
+              "properties": {
+                "id": { "type": "string", "maxLength": 64, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+                "type": { "const": "openai-compatible" },
+                "label": { "type": "string", "minLength": 1, "maxLength": 100 },
+                "model": { "type": "string", "minLength": 1, "maxLength": 200 },
+                "baseURL": {
+                  "type": "string",
+                  "format": "url",
+                  "description": "OpenAI-compatible API root; include /v1 when required by the service."
+                },
+                "credential": {
+                  "type": "string",
+                  "enum": ["none", "compatibleApiKey"],
+                  "default": "compatibleApiKey"
+                },
+                "supportsStructuredOutputs": { "type": "boolean", "default": true },
+                "local": { "type": "boolean", "default": false },
+                "timeoutMs": { "type": "integer", "minimum": 250, "maximum": 120000 },
+                "processor": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["id", "name", "countryCode", "privacyUrl"],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "maxLength": 64,
+                      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                    },
+                    "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+                    "countryCode": { "type": "string", "minLength": 2, "maxLength": 10 },
+                    "privacyUrl": { "type": "string", "format": "url", "pattern": "^https://" }
+                  }
+                }
+              }
+            }
+          ]
+        }
       },
-      "localTimeoutMs": { "type": "integer", "default": 10000 },
-      "cloudTimeoutMs": { "type": "integer", "default": 3000 },
-      "ollamaEndpoint": { "type": "string", "format": "url" },
-      "ollamaModel": { "type": "string", "default": "gemma3:4b-it-qat" },
-      "claudeModel": { "type": "string", "default": "claude-haiku-4-5-20251001" },
       "anthropicApiKey": {
         "type": "string",
+        "title": "Anthropic API key",
         "format": "password",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://console.anthropic.com/settings/keys",
           "urlLabel": "Get API key",
           "steps": [
-            "Sign up / log in at console.anthropic.com.",
-            "Open Settings → Billing and add a payment method.",
-            "Open Settings → API Keys and click 'Create Key'.",
-            "Copy the sk-ant-... key immediately (shown only once)."
+            "Create or sign in to an Anthropic account.",
+            "Add billing under Settings.",
+            "Create an API key and copy it."
           ],
-          "cost": "Paid, usage-based",
-          "notes": "Optional — local Ollama is the default LLM. Only set this to use Claude as a cloud fallback for natural-language search."
+          "cost": "Paid, usage-based"
         }
       },
-      "openaiModel": { "type": "string", "default": "gpt-4o-mini" },
       "openaiApiKey": {
         "type": "string",
+        "title": "OpenAI API key",
         "format": "password",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://platform.openai.com/api-keys",
           "urlLabel": "Get API key",
           "steps": [
-            "Sign up / log in at platform.openai.com.",
-            "Open the 'API keys' page and click 'Create new secret key'.",
-            "Copy the sk-... key immediately (shown only once).",
-            "Add billing/credit under Settings → Billing so requests are not rejected."
+            "Create or sign in to an OpenAI account.",
+            "Add API billing credit.",
+            "Create an API key and copy it."
           ],
-          "cost": "Paid, usage-based",
-          "notes": "Optional — local Ollama is the default LLM. Only set this to use OpenAI as a cloud fallback for natural-language search."
+          "cost": "Paid, usage-based"
         }
+      },
+      "googleApiKey": {
+        "type": "string",
+        "title": "Google Gemini API key",
+        "format": "password",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://aistudio.google.com/app/apikey",
+          "urlLabel": "Get Gemini API key",
+          "steps": [
+            "Open Google AI Studio.",
+            "Choose or create a Google Cloud project.",
+            "Create an API key and copy it."
+          ],
+          "cost": "Free tier and paid usage are available"
+        }
+      },
+      "openrouterApiKey": {
+        "type": "string",
+        "title": "OpenRouter API key",
+        "format": "password",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://openrouter.ai/settings/keys",
+          "urlLabel": "Get OpenRouter API key",
+          "steps": [
+            "Create or sign in to OpenRouter.",
+            "Add credits if required.",
+            "Create an API key and copy it."
+          ],
+          "cost": "Usage-based; model prices vary"
+        }
+      },
+      "compatibleApiKey": {
+        "type": "string",
+        "title": "OpenAI-compatible endpoint API key",
+        "description": "Shared credential for provider definitions whose credential field is compatibleApiKey.",
+        "format": "password",
+        "x-openmapx-secret": true
       },
       "privacyMode": {
         "type": "string",
         "enum": ["strict", "consent", "open"],
-        "default": "consent"
+        "default": "consent",
+        "description": "strict never calls cloud providers; consent requires browser opt-in before a cloud request; open permits cloud calls without a consent gate."
       },
-      "roundCoordsDecimals": { "type": "integer", "default": 2 },
-      "intentCacheTtlSeconds": { "type": "integer", "default": 86400 },
-      "rateLimitPerIpPerHour": { "type": "integer", "default": 200 }
+      "roundCoordsDecimals": { "type": "integer", "default": 2, "minimum": 0, "maximum": 5 },
+      "intentCacheTtlSeconds": { "type": "integer", "default": 86400, "minimum": 0 },
+      "rateLimitPerIpPerHour": { "type": "integer", "default": 200, "minimum": 1 }
     }
   }
 }

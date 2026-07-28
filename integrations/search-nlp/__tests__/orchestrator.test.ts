@@ -31,7 +31,11 @@ function provider(
 ): NlpProvider {
   return {
     id,
+    label: id,
+    cacheKey: id,
+    isAi: id !== "keyword",
     requiresNetwork: net,
+    cloudProcessors: [],
     parseQuery: vi.fn(impl),
   };
 }
@@ -49,7 +53,7 @@ describe("createChain", () => {
     const chain = createChain([p1, p2]);
 
     const result = await chain.parse("coffee", ctx);
-    expect(result.provider).toBe("local");
+    expect(result.provider).toEqual({ id: "local", label: "local", cloud: false });
     expect(result.intent).toEqual(okIntent);
     expect(p2.parseQuery).not.toHaveBeenCalled();
   });
@@ -60,7 +64,7 @@ describe("createChain", () => {
     const chain = createChain([p1, p2]);
 
     const result = await chain.parse("coffee", ctx);
-    expect(result.provider).toBe("keyword");
+    expect(result.provider.id).toBe("keyword");
     expect(result.intent).toEqual(okIntent);
     expect(p1.parseQuery).toHaveBeenCalledOnce();
     expect(p2.parseQuery).toHaveBeenCalledOnce();
@@ -83,5 +87,17 @@ describe("createChain", () => {
 
     await chain.parse("vegan restaurant", ctx);
     expect(parseQuery).toHaveBeenCalledWith("vegan restaurant", ctx);
+  });
+
+  it("reports an individual failure even when a later provider succeeds", async () => {
+    const failed = provider("cloud", () => Promise.reject(new Error("unavailable")), true);
+    const fallback = provider("keyword", () => Promise.resolve(okIntent));
+    const onProviderFailure = vi.fn();
+    const chain = createChain([failed, fallback], { onProviderFailure });
+
+    await expect(chain.parse("coffee", ctx)).resolves.toMatchObject({
+      provider: { id: "keyword" },
+    });
+    expect(onProviderFailure).toHaveBeenCalledWith(failed, expect.any(Error));
   });
 });

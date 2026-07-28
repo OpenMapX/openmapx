@@ -39,15 +39,18 @@ ordinary search.
 Parsing runs through an **ordered provider chain**, tried left to right until one
 returns a usable intent. The default chain is `local, keyword`:
 
-| Provider | What it is | Network |
+| Provider type | What it is | Network |
 | --- | --- | --- |
-| `local` | A self-hosted LLM (Ollama, default model `gemma3:4b-it-qat`) run by the optional `local-ai` service | None — runs on your hardware |
+| `ollama` | A self-hosted LLM (default model `gemma3:4b-it-qat`) run by the optional `local-ai` service | None — runs on your hardware |
 | `keyword` | A deterministic rule-based parser | None — always the floor of the chain |
-| `claude` | Anthropic's hosted models (default `claude-haiku-4-5-20251001`) | Cloud — needs an API key |
-| `openai` | OpenAI's hosted models (default `gpt-4o-mini`) | Cloud — needs an API key |
+| `anthropic` | Anthropic Claude models | Cloud — needs an Anthropic key |
+| `openai` | OpenAI Responses or Chat models | Cloud — needs an OpenAI key |
+| `google` | Google Gemini models | Cloud — needs a Gemini API key |
+| `openrouter` | Hundreds of models through OpenRouter, with structured-output and privacy routing enforced | Cloud — needs an OpenRouter key |
+| `openai-compatible` | Any endpoint implementing OpenAI-compatible chat completions and structured output | Local or cloud, declared per definition |
 
-The `keyword` provider is always kept at the end of the chain, so even with no
-LLM at all, common phrases ("coffee near me open now") still parse — the feature
+The `keyword` provider is always present (and appended when omitted), so even
+with no LLM at all, common phrases ("coffee near me open now") still parse — the feature
 degrades, it doesn't break.
 
 :::note[Cloud is off until you turn it on]
@@ -82,12 +85,29 @@ When a cloud provider is active, OpenMapX also discloses it automatically on you
 All of this lives in the **`search-nlp`** integration at `/admin/integrations` —
 no environment variables required. The keys you'll touch most:
 
-- **`providerChain`** — the ordered list, e.g. `["local","keyword"]` or
-  `["claude","local","keyword"]`.
+- **`providers`** — the ordered provider definitions. Each has an operator-defined
+  `id`, an adapter `type`, and type-specific settings such as `model`, `baseURL`,
+  timeout, or OpenRouter routing policy.
 - **`privacyMode`** — `strict`, `consent`, or `open`.
-- **`anthropicApiKey` / `openaiApiKey`** — supply a key to activate that cloud
-  provider; without it, the provider is silently skipped.
-- **`ollamaModel` / `ollamaEndpoint`** — the local model and where to reach it.
+- **Credentials** — Anthropic, OpenAI, Google, OpenRouter, and compatible-endpoint
+  keys live in the vault-backed Credentials tab, never in the provider JSON.
+
+For example, a Gemini-first chain with a local fallback is:
+
+```json
+[
+  { "id": "gemini", "type": "google", "model": "gemini-2.5-flash" },
+  { "id": "local", "type": "ollama", "model": "gemma3:4b-it-qat" },
+  { "id": "keyword", "type": "keyword" }
+]
+```
+
+Provider ids are not an enum. You can configure multiple models of the same
+type; cache entries include the complete provider definition, while circuit
+breakers are isolated by provider id.
+Arbitrary cloud-compatible endpoints must include their processor name, country,
+and privacy URL so the runtime privacy page remains accurate. Their `baseURL`
+must be the OpenAI-compatible API root, including `/v1` when the service expects it.
 
 To run the local model, enable the **`local-ai`** backend
 [service](../install/managing-services.md) (Ollama). The configured model is

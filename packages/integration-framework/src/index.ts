@@ -11,7 +11,6 @@ export type {
   AiSearchDisclosure,
   AttributionIndexHandle,
   CacheClient,
-  CloudAiVendor,
   CustomHealthCheckFn,
   DatabaseClient,
   Disclosure,
@@ -37,6 +36,7 @@ export {
   assertTransitProviderContract,
 } from "./contracts/assert-contract";
 export type {
+  AiCloudProcessor,
   AutocompleteResult,
   CurrentWeather,
   DailyForecastPoint,

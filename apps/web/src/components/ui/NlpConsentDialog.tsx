@@ -10,19 +10,14 @@ import { useTranslations } from "next-intl";
 
 interface NlpConsentDialogProps {
   open: boolean;
-  provider: string;
+  providers: string[];
   onAccept: () => void;
   onDecline: () => void;
 }
 
-const PROVIDER_LABELS: Record<string, string> = {
-  claude: "Claude (Anthropic)",
-  openai: "OpenAI",
-};
-
-export function NlpConsentDialog({ open, provider, onAccept, onDecline }: NlpConsentDialogProps) {
+export function NlpConsentDialog({ open, providers, onAccept, onDecline }: NlpConsentDialogProps) {
   const t = useTranslations("search");
-  const providerLabel = PROVIDER_LABELS[provider] ?? provider;
+  const providerLabel = providers.join(", ");
 
   // No onClose prop — the dialog is a consent gate that requires an explicit choice.
   return (

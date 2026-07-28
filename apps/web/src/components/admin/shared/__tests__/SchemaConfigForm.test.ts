@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractConfigFields } from "../SchemaConfigForm";
+import { buildConfigDiff, extractConfigFields } from "../SchemaConfigForm";
 
 const schema = {
   type: "object",
@@ -7,6 +7,7 @@ const schema = {
     enabled: { type: "boolean", default: true },
     region: { type: "string", title: "Region" },
     timeout: { type: "integer", default: 30 },
+    providers: { type: "array", default: [{ id: "keyword", type: "keyword" }] },
     API_KEY: { type: "string", format: "password", "x-openmapx-secret": true },
     PASSWORD: { type: "string", "x-openmapx-secret": true },
   },
@@ -18,6 +19,7 @@ describe("extractConfigFields", () => {
     expect(keys).toContain("region");
     expect(keys).toContain("timeout");
     expect(keys).toContain("enabled");
+    expect(keys).toContain("providers");
     expect(keys).not.toContain("API_KEY");
     expect(keys).not.toContain("PASSWORD");
   });
@@ -40,5 +42,39 @@ describe("extractConfigFields", () => {
   it("derives a humanized title when none is given", () => {
     const fields = extractConfigFields({ properties: { maxRetries: { type: "integer" } } });
     expect(fields[0]?.title).toBe("Max Retries");
+  });
+
+  it("preserves structured field metadata for the JSON editor", () => {
+    const field = extractConfigFields(schema).find((candidate) => candidate.key === "providers");
+    expect(field).toMatchObject({
+      type: "array",
+      default: [{ id: "keyword", type: "keyword" }],
+    });
+  });
+});
+
+describe("buildConfigDiff", () => {
+  const fields = extractConfigFields(schema);
+
+  it("parses structured JSON while preserving scalar types", () => {
+    expect(
+      buildConfigDiff(
+        fields,
+        {
+          providers: '[{"id":"gemini","type":"google","model":"gemini-2.5-flash"}]',
+          timeout: 45,
+        },
+        ["providers", "timeout"],
+      ),
+    ).toEqual({
+      providers: [{ id: "gemini", type: "google", model: "gemini-2.5-flash" }],
+      timeout: 45,
+    });
+  });
+
+  it("rejects malformed structured JSON before calling the API", () => {
+    expect(() => buildConfigDiff(fields, { providers: "not-json" }, ["providers"])).toThrow(
+      "Providers must be valid JSON",
+    );
   });
 });

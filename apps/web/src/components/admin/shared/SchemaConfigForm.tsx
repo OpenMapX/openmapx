@@ -68,6 +68,42 @@ export interface SchemaConfigField {
   setup?: CredentialSetup;
 }
 
+function isStructuredField(field: SchemaConfigField): boolean {
+  return field.type === "array" || field.type === "object";
+}
+
+function toFormValue(field: SchemaConfigField, value: unknown): unknown {
+  if (!isStructuredField(field)) return value;
+  if (typeof value === "string") return value;
+  return JSON.stringify(value, null, 2);
+}
+
+function comparable(value: unknown): string {
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+export function buildConfigDiff(
+  fields: SchemaConfigField[],
+  values: Record<string, unknown>,
+  changedKeys: string[],
+): Record<string, unknown> {
+  const diff: Record<string, unknown> = {};
+  for (const key of changedKeys) {
+    const field = fields.find((candidate) => candidate.key === key);
+    const value = values[key];
+    if (field && isStructuredField(field)) {
+      try {
+        diff[key] = JSON.parse(String(value));
+      } catch {
+        throw new Error(`${field.title} must be valid JSON`);
+      }
+    } else {
+      diff[key] = value;
+    }
+  }
+  return diff;
+}
+
 function humanize(key: string): string {
   return key
     .replace(/([A-Z])/g, " $1")
@@ -140,7 +176,7 @@ export function SchemaConfigForm({
     for (const field of fields) {
       const entry = resolvedConfig[field.key];
       if (entry?.source !== "env") {
-        initial[field.key] = entry?.value ?? field.default ?? "";
+        initial[field.key] = toFormValue(field, entry?.value ?? field.default ?? "");
       }
     }
     return initial;
@@ -160,13 +196,18 @@ export function SchemaConfigForm({
     const orig: Record<string, unknown> = {};
     for (const field of fields) {
       const entry = resolvedConfig[field.key];
-      if (entry?.source !== "env") orig[field.key] = entry?.value ?? field.default ?? "";
+      if (entry?.source !== "env") {
+        orig[field.key] = toFormValue(field, entry?.value ?? field.default ?? "");
+      }
     }
     return orig;
   }, [fields, resolvedConfig]);
 
   const changedKeys = useMemo(
-    () => Object.keys(values).filter((k) => String(values[k]) !== String(originalValues[k] ?? "")),
+    () =>
+      Object.keys(values).filter(
+        (k) => comparable(values[k]) !== comparable(originalValues[k] ?? ""),
+      ),
     [values, originalValues],
   );
 
@@ -177,8 +218,7 @@ export function SchemaConfigForm({
     setSaved(null);
     setPending(kind);
     try {
-      const diff: Record<string, unknown> = {};
-      for (const k of changedKeys) diff[k] = values[k];
+      const diff = buildConfigDiff(fields, values, changedKeys);
       await fn(diff);
       setSaved(kind === "apply" ? "applied" : "saved");
     } catch (err) {
@@ -232,7 +272,7 @@ export function SchemaConfigForm({
         const entry = resolvedConfig[field.key];
         const source: ConfigFieldSource = entry?.source ?? "default";
         const isEnvOverridden = source === "env";
-        const displayValue = isEnvOverridden ? entry?.value : values[field.key];
+        const displayValue = isEnvOverridden ? toFormValue(field, entry?.value) : values[field.key];
 
         return (
           <Stack key={field.key} sx={{ gap: 0.5 }}>
@@ -282,6 +322,22 @@ export function SchemaConfigForm({
                   </Typography>
                 }
               />
+            ) : isStructuredField(field) ? (
+              <TextField
+                size="small"
+                value={String(displayValue ?? "")}
+                onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                disabled={isEnvOverridden || saving}
+                multiline
+                minRows={6}
+                maxRows={24}
+                spellCheck={false}
+                helperText="JSON"
+                sx={{
+                  maxWidth: 760,
+                  "& textarea": { fontFamily: "monospace", fontSize: "0.8rem" },
+                }}
+              />
             ) : field.enum ? (
               <Select
                 size="small"
@@ -300,7 +356,18 @@ export function SchemaConfigForm({
               <TextField
                 size="small"
                 value={String(displayValue ?? "")}
-                onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setValues((prev) => ({
+                    ...prev,
+                    [field.key]:
+                      field.type === "number" || field.type === "integer"
+                        ? raw === ""
+                          ? ""
+                          : Number(raw)
+                        : raw,
+                  }));
+                }}
                 disabled={isEnvOverridden || saving}
                 type={
                   field.type === "number" || field.type === "integer"

@@ -97,6 +97,7 @@ export type {
   Waypoint,
 } from "./routing-provider.js";
 export type {
+  AiCloudProcessor,
   NlpProvider,
   NlpProviderId,
   ParseContext,

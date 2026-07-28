@@ -10,11 +10,11 @@ import { BRAND } from "@/lib/theme";
 
 interface NlpSearchCardProps {
   intent: SearchIntent;
-  provider: string;
+  providerLabel: string;
   onActivate: () => void;
 }
 
-export function NlpSearchCard({ intent, provider, onActivate }: NlpSearchCardProps) {
+export function NlpSearchCard({ intent, providerLabel, onActivate }: NlpSearchCardProps) {
   const t = useTranslations("search");
 
   return (
@@ -35,7 +35,7 @@ export function NlpSearchCard({ intent, provider, onActivate }: NlpSearchCardPro
           </Typography>
         </Box>
         <Typography variant="caption" color="text.secondary">
-          {t("aiPoweredSearch")} · {provider}
+          {t("aiPoweredSearch")} · {providerLabel}
         </Typography>
       </Box>
     </ListItemButton>

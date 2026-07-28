@@ -15,8 +15,8 @@
 
 export { fetchCapabilities, isServiceAvailable } from "./api/capabilities";
 export {
+  type AiCloudProcessor,
   type AiSearchDisclosure,
-  type CloudAiVendor,
   type Disclosure,
   fetchDisclosures,
   fetchIntegrations,

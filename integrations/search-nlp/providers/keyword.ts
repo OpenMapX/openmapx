@@ -138,7 +138,11 @@ function looksLikeProperName(originalQuery: string): boolean {
 
 export const keywordProvider: NlpProvider = {
   id: "keyword",
+  label: "Keyword parser",
+  cacheKey: "keyword:v1",
+  isAi: false,
   requiresNetwork: false,
+  cloudProcessors: [],
   async parseQuery(query: string, _ctx: ParseContext): Promise<SearchIntent> {
     const q = query.toLowerCase();
 

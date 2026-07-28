@@ -1,7 +1,7 @@
 {
   "name": "@openmapx/integration-search-nlp",
   "license": "AGPL-3.0-or-later",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "main": "./index.ts",
@@ -17,10 +17,14 @@
     }
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.111.0",
+    "@ai-sdk/anthropic": "^4.0.21",
+    "@ai-sdk/google": "^4.0.24",
+    "@ai-sdk/openai": "^4.0.20",
+    "@ai-sdk/openai-compatible": "^3.0.14",
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
-    "openai": "^6.42.0",
+    "@openrouter/ai-sdk-provider": "^3.0.0",
+    "ai": "^7.0.37",
     "zod": "^4.4.3"
   }
 }

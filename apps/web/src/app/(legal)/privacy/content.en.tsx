@@ -60,7 +60,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: July 22, 2026
+        Last updated: July 28, 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -444,56 +444,34 @@ export default function PrivacyContent({
         />
 
         {(() => {
-          const cloudVendors = [
-            ...new Set(
-              disclosures.flatMap((d) =>
-                d.type === "ai-search" && d.cloudActive ? d.cloudVendors : [],
-              ),
-            ),
+          const cloudProcessors = [
+            ...new Map(
+              disclosures
+                .flatMap((d) => (d.type === "ai-search" && d.cloudActive ? d.cloudProcessors : []))
+                .map((processor) => [processor.id, processor]),
+            ).values(),
           ];
-          if (cloudVendors.length === 0) return null;
+          if (cloudProcessors.length === 0) return null;
           return (
             <>
               <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 3, mb: 1 }}>
                 AI Query Interpretation (Cloud)
               </Typography>
               <ServiceTable
-                rows={[
-                  ...(cloudVendors.includes("anthropic")
-                    ? [
-                        {
-                          service: "Anthropic (Claude)",
-                          purpose:
-                            "Interpret your natural-language search query into a structured search",
-                          dataSent:
-                            "Your search query text and approximate map center (rounded coordinates)",
-                          endUserExposure: "Server-only",
-                          country: "USA",
-                          privacy: "https://www.anthropic.com/legal/privacy",
-                        },
-                      ]
-                    : []),
-                  ...(cloudVendors.includes("openai")
-                    ? [
-                        {
-                          service: "OpenAI",
-                          purpose:
-                            "Interpret your natural-language search query into a structured search",
-                          dataSent:
-                            "Your search query text and approximate map center (rounded coordinates)",
-                          endUserExposure: "Server-only",
-                          country: "USA",
-                          privacy: "https://openai.com/policies/privacy-policy/",
-                        },
-                      ]
-                    : []),
-                ]}
+                rows={cloudProcessors.map((processor) => ({
+                  service: processor.name,
+                  purpose: "Interpret your natural-language search query into a structured search",
+                  dataSent:
+                    "Your search query text and approximate map center (rounded coordinates)",
+                  endUserExposure: "Server-only",
+                  country: processor.countryCode,
+                  privacy: processor.privacyUrl,
+                }))}
               />
               <Typography variant="body2" sx={{ mt: 1 }}>
-                These providers are based in the USA. The transfer is made on the basis of the EU
-                Standard Contractual Clauses (Art.&nbsp;46(2)(c) GDPR); where a provider is
-                certified under the EU-U.S. Data Privacy Framework, the transfer additionally relies
-                on the European Commission&apos;s adequacy decision.
+                Where processing takes place outside the EEA, transfers use the safeguards stated by
+                the configured processor, such as an adequacy decision or the EU Standard
+                Contractual Clauses (Art.&nbsp;46(2)(c) GDPR).
               </Typography>
             </>
           );

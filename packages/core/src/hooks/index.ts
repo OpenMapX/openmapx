@@ -81,7 +81,7 @@ export {
 export { useMergedPlace } from "./useMergedPlace";
 export { type NearestAirportHit, useNearestAirports } from "./useNearestAirports";
 export { useNeighborhoods } from "./useNeighborhoods";
-export { type NlpParseResponse, useNlpSearch } from "./useNlpSearch";
+export { type NlpCloudAccess, type NlpParseResponse, useNlpSearch } from "./useNlpSearch";
 export { useOfficialBookingUrl } from "./useOfficialBookingUrl";
 export { useOptimizeRoute } from "./useOptimizeRoute";
 export { useOverlayExclusion } from "./useOverlayExclusion";

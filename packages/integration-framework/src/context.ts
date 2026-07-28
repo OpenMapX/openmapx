@@ -9,6 +9,7 @@ import type { RealtimeProvider } from "./contracts/realtime-provider.js";
 import type { ReviewProvider } from "./contracts/review-provider.js";
 import type { RoadConditionsProvider } from "./contracts/road-conditions-provider.js";
 import type { RoutingProvider } from "./contracts/routing-provider.js";
+import type { AiCloudProcessor } from "./contracts/search-nlp-provider.js";
 import type { StreetLevelProvider } from "./contracts/street-level-imagery-provider.js";
 import type { TransitProvider } from "./contracts/transit-provider.js";
 import type { WeatherProvider } from "./contracts/weather-provider.js";
@@ -106,12 +107,9 @@ export interface HealthCheckResult {
 
 export type CustomHealthCheckFn = () => Promise<HealthCheckResult>;
 
-export type CloudAiVendor = "anthropic" | "openai";
-
 /**
  * A secret-free, server-computed legal disclosure signal surfaced to the
- * client on /api/integrations. Booleans + vendor names only — never config or
- * secrets.
+ * client on /api/integrations. Processor metadata only — never config or secrets.
  */
 export interface AiSearchDisclosure {
   type: "ai-search";
@@ -121,7 +119,7 @@ export interface AiSearchDisclosure {
   localActive: boolean;
   /** A cloud provider configured + in chain → show the Privacy data-transfer row. */
   cloudActive: boolean;
-  cloudVendors: CloudAiVendor[];
+  cloudProcessors: AiCloudProcessor[];
 }
 
 export type EmailProvider = "emaillabs" | "lettermint" | "smtp";

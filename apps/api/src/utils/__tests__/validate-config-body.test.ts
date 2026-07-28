@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { getSecretFields, validateConfigBody } from "../validate-config-body";
 
@@ -23,6 +24,13 @@ const schema = {
     enabled: { type: "boolean" },
   },
 };
+
+const searchNlpManifest = JSON.parse(
+  readFileSync(
+    new URL("../../../../../integrations/search-nlp/manifest.json", import.meta.url),
+    "utf8",
+  ),
+) as { configSchema: Record<string, unknown> };
 
 describe("getSecretFields", () => {
   it("extracts only fields marked x-openmapx-secret", () => {
@@ -166,6 +174,164 @@ describe("validateConfigBody valid values", () => {
     );
     expect(result.errors).toEqual([]);
     expect(result.updates).toEqual({ baseUrl: "https://x.test" });
+  });
+});
+
+describe("validateConfigBody nested schemas", () => {
+  const nestedSchema = {
+    properties: {
+      providers: {
+        type: "array",
+        minItems: 1,
+        items: {
+          oneOf: [
+            {
+              type: "object",
+              required: ["id", "type"],
+              additionalProperties: false,
+              properties: {
+                id: { type: "string", pattern: "^[a-z]+$" },
+                type: { const: "keyword" },
+              },
+            },
+            {
+              type: "object",
+              required: ["id", "type", "baseURL"],
+              additionalProperties: false,
+              properties: {
+                id: { type: "string", pattern: "^[a-z]+$" },
+                type: { const: "compatible" },
+                baseURL: { type: "string", format: "url" },
+              },
+            },
+          ],
+        },
+      },
+    },
+  };
+
+  it("accepts arrays of discriminated objects", () => {
+    const providers = [
+      { id: "remote", type: "compatible", baseURL: "https://models.example/v1" },
+      { id: "keyword", type: "keyword" },
+    ];
+    expect(validateConfigBody({ providers }, nestedSchema)).toEqual({
+      updates: { providers },
+      errors: [],
+    });
+  });
+
+  it("rejects invalid variants, nested URLs, and extra properties", () => {
+    expect(
+      validateConfigBody(
+        { providers: [{ id: "remote", type: "compatible", baseURL: "file:///tmp/x" }] },
+        nestedSchema,
+      ).errors,
+    ).toEqual(['"providers"[0] does not match an allowed shape for type "compatible"']);
+    expect(
+      validateConfigBody(
+        { providers: [{ id: "keyword", type: "keyword", secret: "nope" }] },
+        nestedSchema,
+      ).errors,
+    ).toEqual(['"providers"[0] does not match an allowed shape for type "keyword"']);
+  });
+
+  it("enforces collection bounds", () => {
+    expect(validateConfigBody({ providers: [] }, nestedSchema).errors).toEqual([
+      '"providers" must contain at least 1 item(s)',
+    ]);
+  });
+
+  it("supports conditional requirements", () => {
+    const conditionalSchema = JSON.parse(`{
+      "properties": {
+        "provider": {
+          "type": "object",
+          "properties": {
+            "local": { "type": "boolean" },
+            "processor": { "type": "string" }
+          },
+          "allOf": [{
+            "if": { "type": "object", "properties": { "local": { "const": false } } },
+            "then": { "type": "object", "required": ["processor"] }
+          }]
+        }
+      }
+    }`) as Record<string, unknown>;
+
+    expect(validateConfigBody({ provider: { local: false } }, conditionalSchema).errors).toEqual([
+      '"provider".processor is required',
+    ]);
+    expect(validateConfigBody({ provider: { local: true } }, conditionalSchema).errors).toEqual([]);
+  });
+});
+
+describe("search-nlp manifest provider schema", () => {
+  const processor = {
+    id: "groq",
+    name: "Groq",
+    countryCode: "US",
+    privacyUrl: "https://groq.com/privacy-policy/",
+  };
+
+  it("accepts maintained, local, and custom cloud provider definitions", () => {
+    const providers = [
+      { id: "gemini", type: "google", model: "gemini-2.5-flash" },
+      { id: "router", type: "openrouter", model: "openai/gpt-4.1-mini" },
+      {
+        id: "local-compatible",
+        type: "openai-compatible",
+        model: "local-model",
+        baseURL: "http://local-ai:8000/v1",
+        credential: "none",
+        local: true,
+      },
+      {
+        id: "groq",
+        type: "openai-compatible",
+        model: "llama-3.3-70b-versatile",
+        baseURL: "https://api.groq.com/openai/v1",
+        processor,
+      },
+    ];
+
+    expect(validateConfigBody({ providers }, searchNlpManifest.configSchema)).toEqual({
+      updates: { providers },
+      errors: [],
+    });
+  });
+
+  it("rejects undisclosed or plaintext custom cloud providers", () => {
+    const withoutDisclosure = validateConfigBody(
+      {
+        providers: [
+          {
+            id: "custom",
+            type: "openai-compatible",
+            model: "model",
+            baseURL: "https://models.example.com/v1",
+          },
+        ],
+      },
+      searchNlpManifest.configSchema,
+    );
+    expect(withoutDisclosure.errors).toHaveLength(1);
+
+    const plaintext = validateConfigBody(
+      {
+        providers: [
+          {
+            id: "custom",
+            type: "openai-compatible",
+            model: "model",
+            baseURL: "http://models.example.com/v1",
+            processor: { ...processor, id: "custom" },
+          },
+        ],
+      },
+      searchNlpManifest.configSchema,
+    );
+    expect(plaintext.errors).toHaveLength(1);
   });
 });
 

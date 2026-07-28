@@ -1,27 +1,23 @@
 import { createHash } from "node:crypto";
-import Anthropic from "@anthropic-ai/sdk";
 import { fetchJson } from "@openmapx/core";
 import type {
   AiSearchDisclosure,
-  CloudAiVendor,
   IntegrationContext,
   NlpProvider,
 } from "@openmapx/integration-framework";
-import OpenAI from "openai";
 import { createChain } from "./orchestrator";
-import { createClaudeProvider } from "./providers/claude";
+import {
+  DEFAULT_OLLAMA_ENDPOINT,
+  isPrivateEndpoint,
+  type ProviderDefinition,
+  providerLabel,
+  readProviderDefinitions,
+} from "./provider-config";
+import { createConfiguredAiProvider } from "./providers/ai-sdk";
 import { keywordProvider } from "./providers/keyword";
-import { createOllamaProvider } from "./providers/ollama";
-import { createOpenAiProvider } from "./providers/openai";
 import { resolveSpatialConstraint } from "./spatial-resolver";
 import type { ParseContext } from "./types";
 
-const DEFAULT_OLLAMA_ENDPOINT = "http://localhost:11434";
-const DEFAULT_OLLAMA_MODEL = "gemma3:4b-it-qat";
-const DEFAULT_CLAUDE_MODEL = "claude-haiku-4-5-20251001";
-const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
-const DEFAULT_LOCAL_TIMEOUT = 10000;
-const DEFAULT_CLOUD_TIMEOUT = 3000;
 const DEFAULT_ROUND_DECIMALS = 2;
 const DEFAULT_INTENT_TTL = 86400;
 const DEFAULT_RATE_LIMIT = 200;
@@ -37,72 +33,40 @@ function readNumber(ctx: IntegrationContext, key: string): number | undefined {
   return typeof v === "number" && Number.isFinite(v) ? v : undefined;
 }
 
-function ollamaEndpoint(ctx: IntegrationContext): string {
-  return (
-    ctx.getRequiredService("local-ai")?.url ??
-    readString(ctx, "ollamaEndpoint") ??
-    DEFAULT_OLLAMA_ENDPOINT
-  );
+function localAiEndpoint(ctx: IntegrationContext): string | undefined {
+  return ctx.getRequiredService("local-ai")?.url;
 }
 
 /**
  * Build the configured provider list once at setup. Always guarantees a
  * deterministic keyword floor so `chain.parse` can never fail outright.
  */
-export function __buildProviders(ctx: IntegrationContext): NlpProvider[] {
-  const chain = (ctx.config.providerChain as string[] | undefined) ?? ["local", "keyword"];
+export function __buildProviders(
+  ctx: IntegrationContext,
+  definitions: ProviderDefinition[] = readProviderDefinitions(ctx),
+): NlpProvider[] {
   const roundDecimals = readNumber(ctx, "roundCoordsDecimals") ?? DEFAULT_ROUND_DECIMALS;
-  const localTimeoutMs = readNumber(ctx, "localTimeoutMs") ?? DEFAULT_LOCAL_TIMEOUT;
-  const cloudTimeoutMs = readNumber(ctx, "cloudTimeoutMs") ?? DEFAULT_CLOUD_TIMEOUT;
-
   const providers: NlpProvider[] = [];
 
-  for (const id of chain) {
-    if (id === "keyword") {
-      providers.push(keywordProvider);
-    } else if (id === "local") {
-      providers.push(
-        createOllamaProvider({
-          endpoint: ollamaEndpoint(ctx),
-          model: readString(ctx, "ollamaModel") ?? DEFAULT_OLLAMA_MODEL,
-          timeoutMs: localTimeoutMs,
-          roundDecimals,
-        }),
-      );
-    } else if (id === "claude") {
-      const apiKey = readString(ctx, "anthropicApiKey");
-      if (apiKey) {
-        const client = new Anthropic({ apiKey });
-        providers.push(
-          createClaudeProvider({
-            model: readString(ctx, "claudeModel") ?? DEFAULT_CLAUDE_MODEL,
-            timeoutMs: cloudTimeoutMs,
-            client: client as unknown as Parameters<typeof createClaudeProvider>[0]["client"],
-            roundDecimals,
-          }),
-        );
-      } else {
-        ctx.log.warn("[search-nlp] claude in chain but anthropicApiKey not set; skipping");
-      }
-    } else if (id === "openai") {
-      const apiKey = readString(ctx, "openaiApiKey");
-      if (apiKey) {
-        const client = new OpenAI({ apiKey });
-        providers.push(
-          createOpenAiProvider({
-            model: readString(ctx, "openaiModel") ?? DEFAULT_OPENAI_MODEL,
-            timeoutMs: cloudTimeoutMs,
-            client: client as unknown as Parameters<typeof createOpenAiProvider>[0]["client"],
-            roundDecimals,
-          }),
-        );
-      } else {
-        ctx.log.warn("[search-nlp] openai in chain but openaiApiKey not set; skipping");
-      }
+  for (const definition of definitions) {
+    if (definition.type === "keyword") {
+      providers.push({
+        ...keywordProvider,
+        id: definition.id,
+        label: providerLabel(definition),
+        cacheKey: JSON.stringify(definition),
+      });
+      continue;
     }
+
+    const provider = createConfiguredAiProvider(ctx, definition, {
+      roundDecimals,
+      ollamaEndpoint: localAiEndpoint(ctx),
+    });
+    if (provider) providers.push(provider);
   }
 
-  if (!providers.some((p) => p.id === "keyword")) {
+  if (!providers.some((provider) => !provider.isAi)) {
     providers.push(keywordProvider);
   }
 
@@ -132,7 +96,7 @@ export async function __filterOpenBreakers(
     if (!open) out.push(p);
   }
   // Keyword floor: if filtering removed everything but keyword stays.
-  if (!out.some((p) => p.id === "keyword")) out.push(keywordProvider);
+  if (!out.some((provider) => !provider.isAi)) out.push(keywordProvider);
   return out;
 }
 
@@ -140,9 +104,9 @@ export async function __filterOpenBreakers(
  * When the client has declined cloud consent, strip any provider that requires
  * network access (cloud) from the active list. The keyword floor is preserved.
  */
-export function applyNoCloud(providers: NlpProvider[]): NlpProvider[] {
+export function applyLocalOnly(providers: NlpProvider[]): NlpProvider[] {
   const local = providers.filter((p) => !p.requiresNetwork);
-  if (local.some((p) => p.id === "keyword")) return local;
+  if (local.some((provider) => !provider.isAi)) return local;
   return [...local, keywordProvider];
 }
 
@@ -151,12 +115,12 @@ export function intentCacheKey(
   center: [number, number],
   decimals: number,
   chainId: string,
-  noCloud: boolean,
+  cloudAllowed: boolean,
 ): string {
   const normalized = query.trim().toLowerCase().replace(/\s+/g, " ");
   const lng = center[0].toFixed(decimals);
   const lat = center[1].toFixed(decimals);
-  const material = `${normalized}|${lng},${lat}|${chainId}|${noCloud ? "nc" : "cl"}`;
+  const material = `${normalized}|${lng},${lat}|${chainId}|${cloudAllowed ? "cl" : "nc"}`;
   return `nlp:intent:${createHash("sha256").update(material).digest("hex").slice(0, 32)}`;
 }
 
@@ -196,10 +160,17 @@ async function rateLimitAllow(
  * Model-ensure: if the configured Ollama model isn't pulled yet, pull it.
  * Never throws, never blocks setup.
  */
-async function ensureOllamaModel(ctx: IntegrationContext): Promise<void> {
+async function ensureOllamaModel(
+  ctx: IntegrationContext,
+  definition: Extract<ProviderDefinition, { type: "ollama" }>,
+): Promise<void> {
   try {
-    const endpoint = ollamaEndpoint(ctx);
-    const model = readString(ctx, "ollamaModel") ?? DEFAULT_OLLAMA_MODEL;
+    const endpoint = definition.baseURL ?? localAiEndpoint(ctx) ?? DEFAULT_OLLAMA_ENDPOINT;
+    const model = definition.model;
+    if (!isPrivateEndpoint(endpoint)) {
+      ctx.log.error("[search-nlp] refusing to pull from a non-private Ollama endpoint");
+      return;
+    }
     const data = await fetchJson<{ models?: Array<{ name?: string }> }>(`${endpoint}/api/tags`, {
       nullOnError: true,
     });
@@ -221,28 +192,30 @@ async function ensureOllamaModel(ctx: IntegrationContext): Promise<void> {
   }
 }
 
-export function computeAiSearchDisclosure(ctx: IntegrationContext): AiSearchDisclosure {
-  const chain = (ctx.config.providerChain as string[] | undefined) ?? ["local", "keyword"];
-  const localActive = chain.includes("local");
-  const claudeActive = chain.includes("claude") && Boolean(readString(ctx, "anthropicApiKey"));
-  const openaiActive = chain.includes("openai") && Boolean(readString(ctx, "openaiApiKey"));
-  const cloudVendors: CloudAiVendor[] = [];
-  if (claudeActive) cloudVendors.push("anthropic");
-  if (openaiActive) cloudVendors.push("openai");
-  const cloudActive = cloudVendors.length > 0;
+export function computeAiSearchDisclosure(providers: NlpProvider[]): AiSearchDisclosure {
+  const processors = new Map(
+    providers
+      .flatMap((provider) => provider.cloudProcessors)
+      .map((processor) => [processor.id, processor]),
+  );
+  const cloudProcessors = [...processors.values()];
+  const localActive = providers.some((provider) => provider.isAi && !provider.requiresNetwork);
+  const cloudActive = providers.some((provider) => provider.isAi && provider.requiresNetwork);
   return {
     type: "ai-search",
     integrationId: "search-nlp",
-    aiActive: localActive || cloudActive,
+    aiActive: providers.some((provider) => provider.isAi),
     localActive,
     cloudActive,
-    cloudVendors,
+    cloudProcessors,
   };
 }
 
 export function setup(ctx: IntegrationContext): void {
-  const providers = __buildProviders(ctx);
-  ctx.registerDisclosure(computeAiSearchDisclosure(ctx));
+  const definitions = readProviderDefinitions(ctx);
+  const providers = __buildProviders(ctx, definitions);
+  const disclosure = computeAiSearchDisclosure(providers);
+  ctx.registerDisclosure(disclosure);
   const roundDecimals = readNumber(ctx, "roundCoordsDecimals") ?? DEFAULT_ROUND_DECIMALS;
   const intentTtl = readNumber(ctx, "intentCacheTtlSeconds") ?? DEFAULT_INTENT_TTL;
   const rateLimit = readNumber(ctx, "rateLimitPerIpPerHour") ?? DEFAULT_RATE_LIMIT;
@@ -254,7 +227,7 @@ export function setup(ctx: IntegrationContext): void {
           mapCenter?: unknown;
           mapBbox?: unknown;
           lang?: unknown;
-          noCloud?: unknown;
+          cloudAccess?: unknown;
         }
       | null
       | undefined;
@@ -265,7 +238,10 @@ export function setup(ctx: IntegrationContext): void {
       | { south: number; west: number; north: number; east: number }
       | undefined;
     const lang = typeof body?.lang === "string" ? body.lang : undefined;
-    const noCloud = body?.noCloud === true;
+    const cloudAccess =
+      body?.cloudAccess === "consented" || body?.cloudAccess === "defer-to-server"
+        ? body.cloudAccess
+        : "deny";
 
     if (
       !query ||
@@ -295,21 +271,29 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     const afterBreakers = await __filterOpenBreakers(providers, ctx);
-    // privacyMode "strict" enforces no-cloud server-side: cloud providers are
-    // always excluded regardless of the client's noCloud flag, so a request can
-    // never reach a requiresNetwork provider in strict mode.
-    const strictPrivacy = readString(ctx, "privacyMode") === "strict";
-    const active = noCloud || strictPrivacy ? applyNoCloud(afterBreakers) : afterBreakers;
-    const chain = createChain(active);
+    // Cloud access is fail-closed. Consent mode needs an explicit positive
+    // authorization on every request; open mode additionally accepts a client
+    // request to defer to server policy. Strict mode always excludes cloud.
+    const privacyMode = readString(ctx, "privacyMode") ?? "consent";
+    const strictPrivacy = privacyMode === "strict";
+    const cloudAllowed =
+      !strictPrivacy &&
+      (cloudAccess === "consented" ||
+        (privacyMode === "open" && cloudAccess === "defer-to-server"));
+    const active = cloudAllowed ? afterBreakers : applyLocalOnly(afterBreakers);
+    const chain = createChain(active, {
+      onProviderFailure: async (provider, error) => {
+        if (!provider.requiresNetwork) return;
+        await ctx.cache.set(breakerKey(provider.id), 1, BREAKER_TTL_SECONDS).catch(() => {});
+        ctx.log.warn(`[search-nlp] provider ${provider.id} failed`, (error as Error).message);
+      },
+    });
     const parseCtx: ParseContext = { mapCenter, mapBbox, lang };
 
-    const noCloudEffective = noCloud || strictPrivacy;
-    const chainId = (
-      (ctx.config.providerChain as string[] | undefined) ?? ["local", "keyword"]
-    ).join(",");
+    const chainId = active.map((provider) => provider.cacheKey).join("|");
 
     let cached = true;
-    const key = intentCacheKey(query, mapCenter, roundDecimals, chainId, noCloudEffective);
+    const key = intentCacheKey(query, mapCenter, roundDecimals, chainId, cloudAllowed);
 
     try {
       const result = await ctx.cache.withCache(key, intentTtl, async () => {
@@ -325,24 +309,27 @@ export function setup(ctx: IntegrationContext): void {
         lang,
       );
 
-      reply.send({ intent: result.intent, resolvedBbox, provider: result.provider, cached });
+      reply.send({
+        intent: result.intent,
+        resolvedBbox,
+        provider: result.provider.id,
+        providerLabel: result.provider.label,
+        cloud: result.provider.cloud,
+        cloudAvailable: !strictPrivacy && disclosure.cloudActive,
+        cloudConsentRequired: privacyMode === "consent",
+        cloudProviderLabels: providers
+          .filter((provider) => provider.requiresNetwork)
+          .map((provider) => provider.label),
+        cached,
+      });
     } catch (err) {
-      // Best-effort breaker: trip any cloud provider that participated. A
-      // chain failure here is unexpected (keyword floor is deterministic),
-      // so we trip every cloud provider in the active set.
-      for (const p of active) {
-        if (p.requiresNetwork) {
-          await ctx.cache.set(breakerKey(p.id), 1, BREAKER_TTL_SECONDS).catch(() => {});
-        }
-      }
       ctx.log.error("[search-nlp] parse failed", (err as Error).message);
       reply.status(502).send({ error: "nlp_unavailable" });
     }
   });
 
-  const chainIds = (ctx.config.providerChain as string[] | undefined) ?? ["local", "keyword"];
-  if (chainIds.includes("local")) {
-    void ensureOllamaModel(ctx);
+  for (const definition of definitions) {
+    if (definition.type === "ollama") void ensureOllamaModel(ctx, definition);
   }
 
   ctx.log.info("[search-nlp] ready");

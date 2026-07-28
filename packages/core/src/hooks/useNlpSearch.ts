@@ -7,9 +7,20 @@ import type { SearchIntent } from "../types/search";
 export interface NlpParseResponse {
   intent: SearchIntent;
   resolvedBbox: BoundingBox;
-  provider: "local" | "claude" | "openai" | "keyword";
+  provider: string;
+  providerLabel: string;
+  cloud: boolean;
+  cloudAvailable: boolean;
+  cloudConsentRequired: boolean;
+  cloudProviderLabels: string[];
   cached: boolean;
 }
+
+/**
+ * Explicit cloud authorization carried with every parse request.
+ * Missing/unknown values are treated as "deny" by the server.
+ */
+export type NlpCloudAccess = "deny" | "consented" | "defer-to-server";
 
 export function useNlpSearch(
   query: string,
@@ -17,19 +28,19 @@ export function useNlpSearch(
   mapBbox: BoundingBox | null,
   enabled: boolean,
   lang?: string,
-  noCloud?: boolean,
+  cloudAccess: NlpCloudAccess = "deny",
 ) {
   const centerKey = mapCenter ? `${mapCenter[0].toFixed(2)},${mapCenter[1].toFixed(2)}` : null;
 
   return useQuery<NlpParseResponse>({
-    queryKey: ["nlp-search", query, lang, centerKey, noCloud ?? false],
+    queryKey: ["nlp-search", query, lang, centerKey, cloudAccess],
     queryFn: () =>
       apiClient.post<NlpParseResponse>(API_ENDPOINTS.nlpParse, {
         query,
         mapCenter,
         mapBbox,
         lang,
-        ...(noCloud ? { noCloud: true } : {}),
+        cloudAccess,
       }),
     enabled: enabled && query.trim().length >= 4 && !!mapCenter && !!mapBbox,
     staleTime: 60_000,

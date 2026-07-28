@@ -27,23 +27,24 @@ describe("useNlpSearch", () => {
       mapCenter: center,
       mapBbox: bbox,
       lang: "en",
+      cloudAccess: "deny",
     });
   });
 
-  it("includes noCloud in the body when requested", async () => {
+  it("includes explicit consent in the body when granted", async () => {
     const spy = vi
       .spyOn(apiClient, "post")
       .mockResolvedValue({ provider: "local", cached: false } as never);
 
     const { result } = renderHook(
-      () => useNlpSearch("pizza places", center, bbox, true, undefined, true),
+      () => useNlpSearch("pizza places", center, bbox, true, undefined, "consented"),
       { wrapper: createQueryWrapper() },
     );
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(spy).toHaveBeenCalledWith(
       API_ENDPOINTS.nlpParse,
-      expect.objectContaining({ noCloud: true }),
+      expect.objectContaining({ cloudAccess: "consented" }),
     );
   });
 

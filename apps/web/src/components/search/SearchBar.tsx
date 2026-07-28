@@ -19,7 +19,13 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { formatShortcut, getPlatform, parseShortcut } from "@openmapx/command-palette";
-import type { AutocompleteResult, BoundingBox, CategoryId, LngLat } from "@openmapx/core";
+import type {
+  AutocompleteResult,
+  BoundingBox,
+  CategoryId,
+  LngLat,
+  NlpCloudAccess,
+} from "@openmapx/core";
 import {
   API_ENDPOINTS,
   apiClient,
@@ -206,11 +212,12 @@ export function SearchBar() {
       }
     : null;
 
-  // Cloud consent gating: when the user has declined cloud providers, re-issue
-  // the parse with noCloud:true so the server falls back to local/keyword.
-  // Lazy init from localStorage so a returning decliner never triggers a cloud
-  // call or the consent dialog on subsequent sessions.
-  const [nlpNoCloud, setNlpNoCloud] = useState(() => isNlpCloudDeclined());
+  // Cloud consent gating is fail-closed: until consent is already stored, the
+  // first parse is local-only. The server response then tells us whether cloud
+  // is available and whether this deployment requires an explicit opt-in.
+  const [nlpCloudAccess, setNlpCloudAccess] = useState<NlpCloudAccess>(() =>
+    hasNlpConsent() ? "consented" : "deny",
+  );
   // consentGranted tracks local acceptance within this session so the card
   // renders immediately after the user clicks "Enable" without a re-fetch.
   const [consentGranted, setConsentGranted] = useState(false);
@@ -250,8 +257,24 @@ export function SearchBar() {
     mapBbox,
     nlpSubmitted && aiSearchEnabled,
     locale,
-    nlpNoCloud,
+    nlpCloudAccess,
   );
+
+  // Even in operator-configured "open" mode, the first request is local-only
+  // until the server reports the active policy. If no consent gate is required,
+  // immediately re-run against the full provider chain. A remembered decline
+  // always wins over open mode.
+  useEffect(() => {
+    if (
+      nlpSubmitted &&
+      nlpCloudAccess === "deny" &&
+      nlpData?.cloudAvailable &&
+      !nlpData.cloudConsentRequired &&
+      !isNlpCloudDeclined()
+    ) {
+      setNlpCloudAccess("defer-to-server");
+    }
+  }, [nlpCloudAccess, nlpData, nlpSubmitted]);
 
   // Stop search — slower debounce to reduce transit API load
   const rawStopQuery = query.trim().length >= 2 ? query.trim() : "";
@@ -571,26 +594,23 @@ export function SearchBar() {
   // intents (confidence + at least one category). It never replaces the
   // parallel geocode/autocomplete suggestions below it.
   const nlpIntent = nlpData?.intent;
-  const nlpProvider = nlpData?.provider;
-  const isCloudProvider = nlpProvider === "claude" || nlpProvider === "openai";
-  // Cloud consent: suppress the card if the result came from a cloud provider
-  // and the user has not yet consented (either via localStorage or this session).
   const storedConsent = hasNlpConsent();
-  const consentOk = !isCloudProvider || consentGranted || storedConsent;
-  const showNlpCard =
-    !nearbyMode && nlpIntent !== undefined && isPlausibleNlSearch(nlpIntent) && consentOk;
+  const cloudDeclined = isNlpCloudDeclined();
+  const showNlpCard = !nearbyMode && nlpIntent !== undefined && isPlausibleNlSearch(nlpIntent);
   const showConsentDialog =
     !nearbyMode &&
     nlpIntent !== undefined &&
     isPlausibleNlSearch(nlpIntent) &&
-    isCloudProvider &&
+    nlpData?.cloudAvailable === true &&
+    nlpData.cloudConsentRequired &&
     !consentGranted &&
-    !storedConsent;
+    !storedConsent &&
+    !cloudDeclined;
   const nlpCard =
     showNlpCard && nlpData ? (
       <NlpSearchCard
         intent={nlpData.intent}
-        provider={nlpData.provider}
+        providerLabel={nlpData.providerLabel}
         onActivate={handleActivateNlp}
       />
     ) : null;
@@ -882,17 +902,18 @@ export function SearchBar() {
 
   return (
     <>
-      {showConsentDialog && nlpProvider && (
+      {showConsentDialog && nlpData && (
         <NlpConsentDialog
           open
-          provider={nlpProvider}
+          providers={nlpData.cloudProviderLabels}
           onAccept={() => {
             setNlpConsent(true);
             setConsentGranted(true);
+            setNlpCloudAccess("consented");
           }}
           onDecline={() => {
             setNlpConsent(false);
-            setNlpNoCloud(true);
+            setNlpCloudAccess("deny");
           }}
         />
       )}

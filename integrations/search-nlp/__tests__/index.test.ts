@@ -3,12 +3,12 @@ import type {
   NlpProvider,
   RouteHandler,
 } from "@openmapx/integration-framework";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __buildProviders,
   __filterOpenBreakers,
   __rateLimitKey,
-  applyNoCloud,
+  applyLocalOnly,
   setup,
 } from "../index";
 
@@ -115,9 +115,13 @@ describe("search-nlp setup / POST /parse", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
+  afterEach(() => vi.unstubAllGlobals());
 
   it("parses a query through the keyword provider", async () => {
-    const { ctx, routes } = makeCtx({ providerChain: ["keyword"], enabled: true });
+    const { ctx, routes } = makeCtx({
+      providers: [{ id: "keyword", type: "keyword" }],
+      enabled: true,
+    });
     setup(ctx);
     const handler = getHandler(routes);
 
@@ -142,7 +146,10 @@ describe("search-nlp setup / POST /parse", () => {
   });
 
   it("returns 400 when required body fields are missing", async () => {
-    const { ctx, routes } = makeCtx({ providerChain: ["keyword"], enabled: true });
+    const { ctx, routes } = makeCtx({
+      providers: [{ id: "keyword", type: "keyword" }],
+      enabled: true,
+    });
     setup(ctx);
     const handler = getHandler(routes);
 
@@ -153,7 +160,7 @@ describe("search-nlp setup / POST /parse", () => {
 
   it("rate-limits per IP once the hourly limit is exceeded", async () => {
     const { ctx, routes } = makeCtx({
-      providerChain: ["keyword"],
+      providers: [{ id: "keyword", type: "keyword" }],
       enabled: true,
       rateLimitPerIpPerHour: 2,
     });
@@ -176,7 +183,7 @@ describe("search-nlp setup / POST /parse", () => {
   it("allows exactly N requests then 429s the (N+1)th, incrementing a shared bucket", async () => {
     const limit = 5;
     const { ctx, routes, store } = makeCtx({
-      providerChain: ["keyword"],
+      providers: [{ id: "keyword", type: "keyword" }],
       enabled: true,
       rateLimitPerIpPerHour: limit,
     });
@@ -219,26 +226,37 @@ describe("search-nlp setup / POST /parse", () => {
   });
 
   it("guarantees a keyword floor when chain has none", () => {
-    const { ctx } = makeCtx({ providerChain: [], enabled: true });
-    const providers = __buildProviders(ctx);
+    const { ctx } = makeCtx({ enabled: true });
+    const providers = __buildProviders(ctx, []);
     expect(providers.some((p) => p.id === "keyword")).toBe(true);
   });
 });
 
 describe("circuit breaker filtering", () => {
   it("excludes a cloud provider whose breaker key is set", async () => {
-    const { ctx, store } = makeCtx({ providerChain: ["keyword"], enabled: true });
+    const { ctx, store } = makeCtx({
+      providers: [{ id: "keyword", type: "keyword" }],
+      enabled: true,
+    });
     // The cache stub reads keys verbatim (the real cache would namespace them).
     store.map.set("nlp:breaker:claude", { value: 1, expires: null });
 
     const cloud: NlpProvider = {
       id: "claude",
+      label: "Claude",
+      cacheKey: "claude:model",
+      isAi: true,
       requiresNetwork: true,
+      cloudProcessors: [],
       parseQuery: vi.fn(),
     };
     const local: NlpProvider = {
       id: "keyword",
+      label: "Keyword",
+      cacheKey: "keyword:v1",
+      isAi: false,
       requiresNetwork: false,
+      cloudProcessors: [],
       parseQuery: vi.fn(),
     };
 
@@ -248,63 +266,135 @@ describe("circuit breaker filtering", () => {
   });
 });
 
-describe("applyNoCloud", () => {
+describe("applyLocalOnly", () => {
   const cloudProvider: NlpProvider = {
     id: "claude",
+    label: "Claude",
+    cacheKey: "claude:model",
+    isAi: true,
     requiresNetwork: true,
+    cloudProcessors: [],
     parseQuery: vi.fn(),
   };
   const localProvider: NlpProvider = {
     id: "local",
+    label: "Local",
+    cacheKey: "local:model",
+    isAi: true,
     requiresNetwork: false,
+    cloudProcessors: [],
     parseQuery: vi.fn(),
   };
   const keywordProv: NlpProvider = {
     id: "keyword",
+    label: "Keyword",
+    cacheKey: "keyword:v1",
+    isAi: false,
     requiresNetwork: false,
+    cloudProcessors: [],
     parseQuery: vi.fn(),
   };
 
   it("removes cloud (requiresNetwork) providers and preserves local ones", () => {
-    const result = applyNoCloud([cloudProvider, localProvider, keywordProv]);
+    const result = applyLocalOnly([cloudProvider, localProvider, keywordProv]);
     expect(result.some((p) => p.id === "claude")).toBe(false);
     expect(result.some((p) => p.id === "local")).toBe(true);
     expect(result.some((p) => p.id === "keyword")).toBe(true);
   });
 
   it("guarantees the keyword floor even when keyword is not in input", () => {
-    const result = applyNoCloud([cloudProvider]);
+    const result = applyLocalOnly([cloudProvider]);
     expect(result.some((p) => p.id === "claude")).toBe(false);
     expect(result.some((p) => p.id === "keyword")).toBe(true);
   });
 
   it("is a no-op when there are no cloud providers", () => {
-    const result = applyNoCloud([localProvider, keywordProv]);
+    const result = applyLocalOnly([localProvider, keywordProv]);
     expect(result).toHaveLength(2);
     expect(result.some((p) => p.id === "local")).toBe(true);
     expect(result.some((p) => p.id === "keyword")).toBe(true);
   });
 
-  it("noCloud:true in POST /parse body falls back to keyword when cloud-only chain", async () => {
-    const { ctx, routes } = makeCtx({ providerChain: ["keyword"], enabled: true });
+  it("denies cloud by default in consent mode", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("cloud request attempted"));
+    vi.stubGlobal("fetch", fetchMock);
+    const { ctx, routes } = makeCtx({
+      providers: [{ id: "claude", type: "anthropic", model: "claude-haiku-4-5" }],
+      anthropicApiKey: "sk-test-key",
+      enabled: true,
+    });
     setup(ctx);
     const handler = getHandler(routes);
 
     const reply = makeReply();
-    await handler({ query: {}, params: {}, body: { ...baseBody, noCloud: true } }, reply);
+    await handler({ query: {}, params: {}, body: baseBody }, reply);
 
     expect(reply.statusCode).toBe(200);
     const payload = reply.payload as { provider: string };
     expect(payload.provider).toBe("keyword");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("allows cloud only after an explicit positive consent signal", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("expected cloud attempt"));
+    vi.stubGlobal("fetch", fetchMock);
+    const { ctx, routes } = makeCtx({
+      providers: [{ id: "claude", type: "anthropic", model: "claude-haiku-4-5" }],
+      anthropicApiKey: "sk-test-key",
+      enabled: true,
+    });
+    setup(ctx);
+
+    const reply = makeReply();
+    await getHandler(routes)(
+      { query: {}, params: {}, body: { ...baseBody, cloudAccess: "consented" } },
+      reply,
+    );
+
+    expect(reply.statusCode).toBe(200);
+    expect((reply.payload as { provider: string }).provider).toBe("keyword");
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it("honors defer-to-server only when the operator selected open mode", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("expected cloud attempt"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const consentDeployment = makeCtx({
+      providers: [{ id: "claude", type: "anthropic", model: "claude-haiku-4-5" }],
+      anthropicApiKey: "sk-test-key",
+      privacyMode: "consent",
+    });
+    setup(consentDeployment.ctx);
+    await getHandler(consentDeployment.routes)(
+      { query: {}, params: {}, body: { ...baseBody, cloudAccess: "defer-to-server" } },
+      makeReply(),
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const openDeployment = makeCtx({
+      providers: [{ id: "claude", type: "anthropic", model: "claude-haiku-4-5" }],
+      anthropicApiKey: "sk-test-key",
+      privacyMode: "open",
+    });
+    setup(openDeployment.ctx);
+    await getHandler(openDeployment.routes)(
+      { query: {}, params: {}, body: { ...baseBody, cloudAccess: "defer-to-server" } },
+      makeReply(),
+    );
+    expect(fetchMock).toHaveBeenCalled();
   });
 });
 
 describe("privacyMode strict", () => {
-  it("excludes cloud providers server-side even when the body does not set noCloud", async () => {
+  it("excludes cloud providers server-side even with an explicit consent signal", async () => {
     // A chain with a cloud provider (claude, with an API key so it is built)
     // plus the keyword floor. In strict mode the cloud provider must never run.
     const { ctx, routes } = makeCtx({
-      providerChain: ["claude", "keyword"],
+      providers: [
+        { id: "claude", type: "anthropic", model: "claude-haiku-4-5" },
+        { id: "keyword", type: "keyword" },
+      ],
       anthropicApiKey: "sk-test-key",
       privacyMode: "strict",
       enabled: true,
@@ -312,20 +402,25 @@ describe("privacyMode strict", () => {
 
     // Sanity: the cloud provider is actually present in the built chain, so the
     // keyword result below proves strict mode stripped it (not that it was never
-    // built). A wrong API key would silently drop claude and void the test.
+    // built). A missing API key would silently drop claude and void the test.
     expect(__buildProviders(ctx).some((p) => p.id === "claude")).toBe(true);
 
     setup(ctx);
     const handler = getHandler(routes);
 
     const reply = makeReply();
-    // Note: body has no noCloud flag — strict mode enforces it server-side. The
-    // claude provider has a bogus key; if it were ever reached it would throw
-    // and the route would 502. A 200 from "keyword" proves it was excluded.
-    await handler({ query: {}, params: {}, body: baseBody }, reply);
+    // Strict mode overrides the client's positive signal. The bogus key would
+    // otherwise cause a network attempt before the keyword fallback.
+    const fetchMock = vi.fn().mockRejectedValue(new Error("must not be called"));
+    vi.stubGlobal("fetch", fetchMock);
+    await handler(
+      { query: {}, params: {}, body: { ...baseBody, cloudAccess: "consented" } },
+      reply,
+    );
 
     expect(reply.statusCode).toBe(200);
     const payload = reply.payload as { provider: string };
     expect(payload.provider).toBe("keyword");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

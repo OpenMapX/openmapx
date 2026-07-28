@@ -2,6 +2,6 @@
   "_doc": "Accepted data-flow exceptions for scripts/check-data-flows.ts. 'global' = registrable domains accepted everywhere; 'perIntegration' = hosts accepted for a specific integration id. Currently EMPTY: every contacted host is disclosed either by a dataSources[].url, a dataSources[].apiHosts entry (the real data-API host when it differs from the portal url), or the gate's built-in allowlist of shared/license/own-infra hosts. Add entries here only for a genuine exception you've reviewed.",
   "global": [],
   "perIntegration": {
-    "search-nlp": ["api.anthropic.com", "api.openai.com"]
+    "search-nlp": ["anthropic.com", "openai.com", "openrouter.ai"]
   }
 }

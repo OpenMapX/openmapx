@@ -1,19 +1,22 @@
 const KEY = "openmapx.nlp.cloudConsent";
 
-export function hasNlpConsent(): boolean {
+export function getNlpConsent(): boolean | null {
   try {
-    return localStorage.getItem(KEY) === "true";
+    const value = localStorage.getItem(KEY);
+    if (value === "true") return true;
+    if (value === "false") return false;
+    return null;
   } catch {
-    return false;
+    return null;
   }
 }
 
+export function hasNlpConsent(): boolean {
+  return getNlpConsent() === true;
+}
+
 export function isNlpCloudDeclined(): boolean {
-  try {
-    return localStorage.getItem(KEY) === "false";
-  } catch {
-    return false;
-  }
+  return getNlpConsent() === false;
 }
 
 export function setNlpConsent(value: boolean): void {
