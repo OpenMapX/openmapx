@@ -286,12 +286,17 @@ for what each class covers.
 
 ## Overture Maps POIs
 
-Schedules and switches for the monthly Overture Maps POI data ingestion.
+Schedules and switches for the monthly regional Overture Maps Places refresh.
 
 | Variable           | Description                                                                                  | Required / Default        |
 | ------------------ | ------------------------------------------------------------------------------------------- | ------------------------- |
-| `OVERTURE_ENABLED`  | Set to `true` to enable the monthly download and ingestion of Overture Maps POI data.        | Optional. Default unset   |
-| `OVERTURE_SYNC_CRON`| Cron schedule for the monthly Overture POI ingestion run.                                  | Optional. Default `0 5 1 * *` (monthly) |
+| `OVERTURE_ENABLED`  | Set to `true` to discover and atomically import newer Overture Places releases for `OPENMAPX_REGION`. | Optional. Default unset |
+| `OVERTURE_SYNC_CRON`| Cron schedule for checking and refreshing the regional snapshot. | Optional. Default `0 5 1 * *` (monthly) |
+
+The job uses Overture's official STAC catalog, skips an installed release,
+pulls only the configured region, and swaps a fully loaded staging schema into
+service. If the region's OSM PBF exists, it also rebuilds OSM↔GERS links. See
+[Overture Places](../features/overture-places.md).
 
 ## Natural-language search
 

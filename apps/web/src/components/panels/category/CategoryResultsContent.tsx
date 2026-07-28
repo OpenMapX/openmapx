@@ -21,6 +21,7 @@ import {
   useSidebarStore,
   useTransitStops,
 } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 import type maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -28,6 +29,7 @@ import { useEffect, useRef } from "react";
 import { useExpandOnBackgroundTap } from "@/components/panels/sheet/sheetState";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { ResultItemName, ResultList, ResultListItem } from "@/components/ui/ResultListItem";
+import { attributionsForSources } from "@/lib/attributionForProviders";
 import { useMap } from "@/lib/MapContext";
 import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
 import { useExploreReachResults } from "@/lib/useExploreReachResults";
@@ -190,6 +192,7 @@ export function CategoryResultsContent() {
   const { setSelectedPlace } = usePlaceStore();
   const { flyTo, mapRef, mapReady } = useMap();
   const expandOnBackgroundTap = useExpandOnBackgroundTap();
+  const registry = useIntegrationRegistry();
 
   const { filtered, isLoading, isError, error, partial, relaxed, isTransitCategory } =
     useExploreReachResults();
@@ -201,6 +204,10 @@ export function CategoryResultsContent() {
   const prevCategoryRef = useRef<string | null>(null);
 
   const results = filtered;
+  const poiAttributions = attributionsForSources(
+    registry,
+    results?.flatMap((place) => place.provenance?.map((source) => source.sourceId) ?? []) ?? [],
+  );
 
   // Auto-search when category becomes active or changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional trigger on activeCategory change
@@ -404,6 +411,12 @@ export function CategoryResultsContent() {
               {tc("resultsCount", { count: results.length })}
             </Typography>
           </Box>
+          <AttributionStrip
+            attributions={poiAttributions}
+            variant="inline"
+            label={tc("dataSources")}
+            maxVisible={3}
+          />
           <ResultList
             items={results}
             getKey={(place) => place.id}

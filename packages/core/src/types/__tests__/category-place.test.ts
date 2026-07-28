@@ -50,6 +50,7 @@ describe("categoryPlaceToPlace", () => {
         socials: ["https://instagram.com/example"],
         brand: { name: "Example", wikidata: "Q1" },
         names: { de: "Beispiel" },
+        provenance: [{ sourceId: "overture", dataset: "Overture Maps" }],
       }),
     );
 
@@ -59,5 +60,6 @@ describe("categoryPlaceToPlace", () => {
     expect(place.socials).toEqual(["https://instagram.com/example"]);
     expect(place.brand).toEqual({ name: "Example", wikidata: "Q1" });
     expect(place.names).toEqual({ de: "Beispiel" });
+    expect(place.provenance).toEqual([{ sourceId: "overture", dataset: "Overture Maps" }]);
   });
 });

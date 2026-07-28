@@ -4,11 +4,43 @@
   "dataSources": {
     "overture": {
       "purpose": "Einen angeklickten OSM-Ort mit seinem Overture-Zwilling abgleichen, um Markenidentität, mehrsprachige Namen, Adressen, Kontaktdaten und Wikidata-Querverweise zu ergänzen",
-      "dataSent": "Ortsname, Koordinaten, OSM-Kategorie-Tag und OSM-Knoten-/Linien-/Relationskennung des angezeigten Ortes"
+      "dataSent": "Es werden keine Endnutzerdaten gesendet; Ortskoordinaten und Kennungen werden mit dem lokal importierten Overture-Snapshot verglichen"
     },
     "foursquare": {
       "purpose": "Zusätzliche Marken- und Kontaktdaten für kommerzielle Orte über den Overture-Places-Datensatz bereitstellen (Foursquare ist eine der beitragenden Overture-Quellen)",
       "dataSent": "Es werden keine Daten direkt an Foursquare übermittelt; der Zugriff erfolgt über den lokal importierten Overture-Places-Snapshot"
+    },
+    "meta-places": {
+      "purpose": "Liefert über Overture Maps verteilte Ortsattribute",
+      "dataSent": "Es werden keine Daten direkt an Meta gesendet"
+    },
+    "microsoft-places": {
+      "purpose": "Liefert über Overture Maps verteilte Ortsattribute",
+      "dataSent": "Es werden keine Daten direkt an Microsoft gesendet"
+    },
+    "pinmeto": {
+      "purpose": "Liefert über Overture Maps verteilte Ortsattribute",
+      "dataSent": "Es werden keine Daten direkt an PinMeTo gesendet"
+    },
+    "krick": {
+      "purpose": "Liefert über Overture Maps verteilte Ortsattribute",
+      "dataSent": "Es werden keine Daten direkt an Krick gesendet"
+    },
+    "renderseo": {
+      "purpose": "Liefert über Overture Maps verteilte Ortsattribute",
+      "dataSent": "Es werden keine Daten direkt an RenderSEO gesendet"
+    },
+    "dac": {
+      "purpose": "Liefert über Overture Maps verteilte Ortsattribute",
+      "dataSent": "Es werden keine Daten direkt an DAC gesendet"
+    },
+    "brightquery": {
+      "purpose": "Liefert über Overture Maps verteilte Ortsattribute",
+      "dataSent": "Es werden keine Daten direkt an BrightQuery gesendet"
+    },
+    "alltheplaces": {
+      "purpose": "Liefert über Overture Maps verteilte Ortsattribute",
+      "dataSent": "Es werden keine Daten direkt an AllThePlaces gesendet"
     }
   }
 }

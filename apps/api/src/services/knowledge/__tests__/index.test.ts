@@ -142,6 +142,22 @@ describe("getPlaceKnowledge", () => {
     expect(result.facts).toEqual([fact1, fact2]);
   });
 
+  it("provenance: merges actual record sources and removes duplicates", async () => {
+    const overture = { sourceId: "overture", dataset: "Overture Maps", release: "2026-07-22.0" };
+    const foursquare = {
+      sourceId: "foursquare",
+      dataset: "Foursquare",
+      recordId: "fsq-1",
+    };
+    wikidataLookup.mockResolvedValueOnce({ provenance: [overture, foursquare] });
+    wikipediaLookup.mockResolvedValueOnce({ provenance: [overture] });
+
+    const { getPlaceKnowledge } = await import("../index.js");
+    const result = await getPlaceKnowledge(makePlace({ wikidata: "Q42" }));
+
+    expect(result.provenance).toEqual([overture, foursquare]);
+  });
+
   it("external IDs: merged, first value per key wins", async () => {
     wikidataLookup.mockResolvedValueOnce({
       externalIds: { yelp: "biz-abc", google_maps: "123456" },

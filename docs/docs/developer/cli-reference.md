@@ -123,6 +123,7 @@ hardlinks, authenticated feeds — lives in
 | `data remove-feed <slug>` | Remove a single GTFS feed by slug. |
 | `data clean <target>` | Remove local data for one type alias (e.g. `osm`, `gtfs`, `style`, `osrm-graph`) or `all`. |
 | `data generate-api-keys` | Generate the Transitous API-key template for feeds that require keys. Flags: `--repo-url <url>`, `--output <path>`. |
+| `data overture-sync [region]` | Run the release-pinned regional refresh: pull, atomic ingest, and optional OSM↔GERS link rebuild. |
 | `data overture-pull [region]` | Pull Overture Maps places parquet for a region from S3. |
 | `data overture-ingest [region]` | Ingest Overture places parquet into PostGIS for a region. |
 | `data overture-conflate [region]` | Run OSM↔Overture conflation for a region and write link records. |

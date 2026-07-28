@@ -44,11 +44,14 @@ side and resolved without a round trip to a geocoder at all.
 Beyond named places, you can search by *category* — "restaurants," "pharmacies,"
 "EV charging." Category search asks a separate POI-search service for everything
 of that kind inside the current map viewport and plots the lot. It is backed by
-[poi-overpass](./places.md), which queries OpenStreetMap (through a self-hosted
-or public Overpass endpoint) and shrinks the search area automatically if the
-query would otherwise time out. Free-text searches scoped to the visible map
+`poi-overpass`, which queries OpenStreetMap through Overpass. Deployments can
+also enable [Overture Places](./overture-places.md): its locally ingested records
+are fused with OSM and Overture-only places fill coverage gaps. The orchestrator
+shrinks the search area automatically if Overpass times out. Free-text searches scoped to the visible map
 ("`bakery near me`") run through the same path. Category results carry opening
 hours and other place metadata, which feeds the [place panel](./places.md).
+Attribution identifies the sources that actually contributed returned records;
+if one provider fails while another succeeds, the result is marked partial.
 
 For queries that read like a question rather than a place name — "quiet vegan
 cafe with wifi open now" — OpenMapX can parse the sentence into a structured

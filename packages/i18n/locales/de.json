@@ -804,7 +804,8 @@
     "heritageRegional": "Regionales Denkmal",
     "heritageYes": "Denkmalgeschützt",
     "minAge": "Mindestalter {age}",
-    "source": "Quelle"
+    "source": "Quelle",
+    "dataSources": "Datenquellen"
   },
   "airportsOverlay": {
     "title": "Flughäfen",

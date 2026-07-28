@@ -22,6 +22,19 @@ export interface PlaceFact {
   value: string;
 }
 
+/** Property-level source lineage carried by Overture and other POI providers. */
+export interface PlaceProvenance {
+  /** Manifest data-source id used for runtime attribution. */
+  sourceId: string;
+  /** Upstream dataset name exactly as reported by the provider. */
+  dataset: string;
+  property?: string;
+  recordId?: string;
+  updatedAt?: string;
+  license?: string;
+  release?: string;
+}
+
 export type AirportType =
   | "large_airport"
   | "medium_airport"
@@ -149,4 +162,6 @@ export interface Place extends Identified {
   brand?: { name: string; wikidata?: string };
   /** Multilingual name variants keyed by BCP-47 language tag (from Overture Places). */
   names?: Record<string, string>;
+  /** Actual upstream records that supplied this place or individual properties. */
+  provenance?: PlaceProvenance[];
 }

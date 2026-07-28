@@ -188,7 +188,7 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
             bbox,
           ).catch((err: unknown) => {
             if (err instanceof OverpassTimeoutError) throw err;
-            return { results: [] as PoiSearchResult[], partial: false };
+            return { results: [] as PoiSearchResult[], partial: true };
           })
         : { results: [] as PoiSearchResult[], partial: false };
 
@@ -197,7 +197,7 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
         runWithShrink(
           (currentBbox) => p.search(lookupCategory, currentBbox, { lang: options?.lang, osmTags }),
           bbox,
-        ).catch(() => ({ results: [] as PoiSearchResult[], partial: false })),
+        ).catch(() => ({ results: [] as PoiSearchResult[], partial: true })),
       ),
     );
 

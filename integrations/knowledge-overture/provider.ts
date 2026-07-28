@@ -1,7 +1,13 @@
-import type { KnowledgeContext, KnowledgeProvider, KnowledgeResult } from "@openmapx/core";
+import type {
+  KnowledgeContext,
+  KnowledgeProvider,
+  KnowledgeResult,
+  OvertureSourceItem,
+} from "@openmapx/core";
 import {
   CATEGORY_FILTERS,
   nameSimilarity,
+  normalizeOvertureProvenance,
   openMapXCategoryToOvertureConcepts,
 } from "@openmapx/core";
 import type { DatabaseClient } from "@openmapx/integration-framework";
@@ -34,6 +40,8 @@ interface OvertureDetailRow {
     postcode?: string | null;
     country?: string | null;
   }> | null;
+  sources: OvertureSourceItem[] | null;
+  release: string;
 }
 
 /**
@@ -165,7 +173,8 @@ async function fetchOverturePlaceByGers(
 ): Promise<OvertureDetailRow | null> {
   const rows = await database.execute<OvertureDetailRow[]>(
     `
-    SELECT gers_id, name, names, brand, phones, websites, socials, emails, addresses
+    SELECT gers_id, name, names, brand, phones, websites, socials, emails, addresses,
+           sources, release
     FROM overture_places.places
     WHERE gers_id = $1
     LIMIT 1
@@ -179,7 +188,10 @@ async function fetchOverturePlaceByGers(
 function overtureRowToKnowledgeResult(row: OvertureDetailRow): KnowledgeResult | null {
   // A successful match always credits Overture as a source via its GERS id,
   // which surfaces as an "Overture Maps" external reference on the place card.
-  const result: KnowledgeResult = { externalIds: { gers: row.gers_id } };
+  const result: KnowledgeResult = {
+    externalIds: { gers: row.gers_id },
+    provenance: normalizeOvertureProvenance(row.sources, row.release),
+  };
 
   const brandName = row.brand?.names?.primary;
   if (brandName) {

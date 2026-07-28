@@ -72,6 +72,8 @@ function makeOvertureDetailRow() {
     addresses: [
       { freeform: "Friedrichstraße 1", locality: "Berlin", postcode: "10117", country: "DE" },
     ],
+    sources: [{ property: "", dataset: "meta", record_id: "meta-1" }],
+    release: "2026-07-22.0",
   };
 }
 
@@ -184,6 +186,10 @@ describe("knowledge-overture provider lookup", () => {
     expect(result?.address).toBe("Friedrichstraße 1, 10117 Berlin");
     expect(result?.city).toBe("Berlin");
     expect(result?.countryCode).toBe("de");
+    expect(result?.provenance?.map((source) => source.sourceId)).toEqual([
+      "overture",
+      "meta-places",
+    ]);
   });
 
   it("exposes wikidata via externalIds even when the brand has no resolvable name", async () => {

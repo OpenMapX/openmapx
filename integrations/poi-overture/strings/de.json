@@ -4,11 +4,43 @@
   "dataSources": {
     "overture": {
       "purpose": "Stellt kommerzielle POI-Daten für Kategorien wie Restaurants, Hotels und Geschäfte bereit",
-      "dataSent": "Begrenzungsrahmen-Koordinaten des Suchbereichs"
+      "dataSent": "Es werden keine Endnutzerdaten gesendet; OpenMapX durchsucht einen lokal importierten regionalen Snapshot"
     },
     "foursquare": {
       "purpose": "Liefert zusätzliche Ortsdaten für kommerzielle POI-Kategorien",
-      "dataSent": "Begrenzungsrahmen-Koordinaten des Suchbereichs"
+      "dataSent": "Es werden keine Daten direkt an Foursquare gesendet; die Datensätze stammen aus dem lokalen Overture-Snapshot"
+    },
+    "meta-places": {
+      "purpose": "Trägt über Overture Maps verteilte Ortsdatensätze bei",
+      "dataSent": "Es werden keine Daten direkt an Meta gesendet"
+    },
+    "microsoft-places": {
+      "purpose": "Trägt über Overture Maps verteilte Ortsdatensätze bei",
+      "dataSent": "Es werden keine Daten direkt an Microsoft gesendet"
+    },
+    "pinmeto": {
+      "purpose": "Trägt über Overture Maps verteilte Ortsdatensätze bei",
+      "dataSent": "Es werden keine Daten direkt an PinMeTo gesendet"
+    },
+    "krick": {
+      "purpose": "Trägt über Overture Maps verteilte Ortsdatensätze bei",
+      "dataSent": "Es werden keine Daten direkt an Krick gesendet"
+    },
+    "renderseo": {
+      "purpose": "Trägt über Overture Maps verteilte Ortsdatensätze bei",
+      "dataSent": "Es werden keine Daten direkt an RenderSEO gesendet"
+    },
+    "dac": {
+      "purpose": "Trägt über Overture Maps verteilte Ortsdatensätze bei",
+      "dataSent": "Es werden keine Daten direkt an DAC gesendet"
+    },
+    "brightquery": {
+      "purpose": "Trägt über Overture Maps verteilte Ortsdatensätze bei",
+      "dataSent": "Es werden keine Daten direkt an BrightQuery gesendet"
+    },
+    "alltheplaces": {
+      "purpose": "Trägt über Overture Maps verteilte Ortsdatensätze bei",
+      "dataSent": "Es werden keine Daten direkt an AllThePlaces gesendet"
     }
   }
 }

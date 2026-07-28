@@ -804,7 +804,8 @@
     "heritageRegional": "Regional heritage",
     "heritageYes": "Heritage site",
     "minAge": "Min. age {age}",
-    "source": "Source"
+    "source": "Source",
+    "dataSources": "Data sources"
   },
   "airportsOverlay": {
     "title": "Airports",

@@ -204,6 +204,38 @@ describe("(C2) OverpassTimeoutError propagates from fused search", () => {
   });
 });
 
+describe("(C3) Partial provider failures", () => {
+  it("marks a fused response partial when an augment provider fails", async () => {
+    const failingAugment: PoiSearchProvider = {
+      id: "overture",
+      categories: ["cafes"],
+      async search() {
+        throw new Error("database unavailable");
+      },
+    };
+    const result = await createPoiSearchOrchestrator(
+      makeCtx([overpassProvider, failingAugment]),
+    ).search("cafes", BBOX);
+    expect(result.results).toHaveLength(2);
+    expect(result.partial).toBe(true);
+  });
+
+  it("marks a fused response partial when the base provider fails", async () => {
+    const failingBase: PoiSearchProvider = {
+      id: "overpass",
+      categories: ["cafes"],
+      async search() {
+        throw new Error("upstream unavailable");
+      },
+    };
+    const result = await createPoiSearchOrchestrator(
+      makeCtx([failingBase, overtureProvider]),
+    ).search("cafes", BBOX);
+    expect(result.results).toHaveLength(2);
+    expect(result.partial).toBe(true);
+  });
+});
+
 describe("(D) Link-table wiring — ctx.db integration", () => {
   // OSM at 52.5100 — Overture at 52.5104 (~45m apart, beyond alwaysMergeM=25m).
   // Names "HARMANS KFC #189" vs "Starbucks Coffee" have Dice << 0.8, so union-find

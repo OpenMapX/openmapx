@@ -17,6 +17,8 @@ import { buildAttributionHtml, safeHref } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { attributionsForSources } from "@/lib/attributionForProviders";
 import { buildExternalRefs, type ExternalRef } from "./externalIdLinks";
 import { getOverviewConsumedKeys } from "./PlaceTagDetails";
 
@@ -269,7 +271,12 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
   const hasOsmTags = Boolean(place.osmTags && Object.keys(place.osmTags).length > 0);
   const externalRefs = buildExternalRefs(place.ids, place.coordinates);
   const hasExternalRefs = externalRefs.length > 0;
-  const hasAnyContent = hasDescription || hasFacts || hasOsmTags || hasExternalRefs;
+  const placeAttributions = attributionsForSources(
+    registry,
+    place.provenance?.map((source) => source.sourceId) ?? [],
+  );
+  const hasAnyContent =
+    hasDescription || hasFacts || hasOsmTags || hasExternalRefs || placeAttributions.length > 0;
 
   if (isLoading && !hasAnyContent) {
     return (
@@ -468,6 +475,17 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
               ))}
             </Box>
           </Box>
+        </>
+      )}
+      {placeAttributions.length > 0 && (
+        <>
+          {(hasDescription || hasFacts || osmGroups.length > 0 || hasExternalRefs) && <Divider />}
+          <AttributionStrip
+            attributions={placeAttributions}
+            variant="panel-header"
+            label={t("dataSources")}
+            maxVisible={3}
+          />
         </>
       )}
     </Box>

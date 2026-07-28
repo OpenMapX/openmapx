@@ -62,6 +62,7 @@ export async function getPlaceKnowledge(place: Place, lang?: string): Promise<Kn
       address,
       city,
       countryCode,
+      provenance,
     } = result.value;
 
     if (description && !merged.description) merged.description = description;
@@ -85,6 +86,22 @@ export async function getPlaceKnowledge(place: Place, lang?: string): Promise<Kn
     if (address && !merged.address) merged.address = address;
     if (city && !merged.city) merged.city = city;
     if (countryCode && !merged.countryCode) merged.countryCode = countryCode;
+    if (provenance?.length) {
+      const known = new Set(
+        (merged.provenance ?? []).map(
+          (source) =>
+            `${source.sourceId}|${source.dataset}|${source.property ?? ""}|${source.recordId ?? ""}`,
+        ),
+      );
+      merged.provenance = [...(merged.provenance ?? [])];
+      for (const source of provenance) {
+        const key = `${source.sourceId}|${source.dataset}|${source.property ?? ""}|${source.recordId ?? ""}`;
+        if (!known.has(key)) {
+          known.add(key);
+          merged.provenance.push(source);
+        }
+      }
+    }
   }
 
   return merged;

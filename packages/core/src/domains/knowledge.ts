@@ -1,6 +1,6 @@
 import type { LngLat } from "../types/geometry";
 import type { Ids } from "../types/identified";
-import type { AirportInfo, PlaceFact, PlacePhoto } from "../types/place";
+import type { AirportInfo, PlaceFact, PlacePhoto, PlaceProvenance } from "../types/place";
 
 export interface KnowledgeResult {
   photos?: PlacePhoto[];
@@ -29,6 +29,7 @@ export interface KnowledgeResult {
   address?: string;
   city?: string;
   countryCode?: string;
+  provenance?: PlaceProvenance[];
 }
 
 /**

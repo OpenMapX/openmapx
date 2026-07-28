@@ -38,9 +38,25 @@ function fuseOsmOverturePair(osmR: PoiSearchResult, overtR: PoiSearchResult): Po
     address: osmR.address ?? overtR.address,
     brand: osmR.brand ?? overtR.brand,
     names: osmR.names ?? overtR.names,
+    provenance: mergeProvenance(osmR.provenance, overtR.provenance),
     category: osmR.category ?? overtR.category,
     osmTags: { ...osmR.osmTags, ...overtureBrandTags },
   };
+}
+
+function mergeProvenance(
+  first: PoiSearchResult["provenance"],
+  second: PoiSearchResult["provenance"],
+): PoiSearchResult["provenance"] {
+  const values = [...(first ?? []), ...(second ?? [])];
+  if (values.length === 0) return undefined;
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    const key = `${value.sourceId}|${value.dataset}|${value.property ?? ""}|${value.recordId ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /**

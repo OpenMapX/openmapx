@@ -4,11 +4,43 @@
   "dataSources": {
     "overture": {
       "purpose": "Match a clicked OSM place to its Overture twin to fill in brand identity, multilingual names, addresses, contact details, and Wikidata cross-reference",
-      "dataSent": "Place name, coordinates, OSM category tag, and OSM node/way/relation ID for the viewed place"
+      "dataSent": "No end-user data is sent; place coordinates and identifiers are compared with the locally ingested Overture snapshot"
     },
     "foursquare": {
       "purpose": "Provide additional venue brand and contact data for commercial places via the Overture Places dataset (Foursquare is one of the Overture contributing sources)",
       "dataSent": "No data sent directly to Foursquare; data is accessed via the locally-ingested Overture Places snapshot"
+    },
+    "meta-places": {
+      "purpose": "Provides place attributes distributed through Overture Maps",
+      "dataSent": "No data is sent directly to Meta"
+    },
+    "microsoft-places": {
+      "purpose": "Provides place attributes distributed through Overture Maps",
+      "dataSent": "No data is sent directly to Microsoft"
+    },
+    "pinmeto": {
+      "purpose": "Provides place attributes distributed through Overture Maps",
+      "dataSent": "No data is sent directly to PinMeTo"
+    },
+    "krick": {
+      "purpose": "Provides place attributes distributed through Overture Maps",
+      "dataSent": "No data is sent directly to Krick"
+    },
+    "renderseo": {
+      "purpose": "Provides place attributes distributed through Overture Maps",
+      "dataSent": "No data is sent directly to RenderSEO"
+    },
+    "dac": {
+      "purpose": "Provides place attributes distributed through Overture Maps",
+      "dataSent": "No data is sent directly to DAC"
+    },
+    "brightquery": {
+      "purpose": "Provides place attributes distributed through Overture Maps",
+      "dataSent": "No data is sent directly to BrightQuery"
+    },
+    "alltheplaces": {
+      "purpose": "Provides place attributes distributed through Overture Maps",
+      "dataSent": "No data is sent directly to AllThePlaces"
     }
   }
 }

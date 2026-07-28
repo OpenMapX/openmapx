@@ -4,11 +4,43 @@
   "dataSources": {
     "overture": {
       "purpose": "Provides commercial POI data for categories like restaurants, hotels, and shops",
-      "dataSent": "Bounding box coordinates for the search area"
+      "dataSent": "No end-user data is sent; OpenMapX queries a locally ingested regional snapshot"
     },
     "foursquare": {
       "purpose": "Provides additional venue data for commercial POI categories",
-      "dataSent": "Bounding box coordinates for the search area"
+      "dataSent": "No data is sent directly to Foursquare; records are read from the local Overture snapshot"
+    },
+    "meta-places": {
+      "purpose": "Contributes place records distributed through Overture Maps",
+      "dataSent": "No data is sent directly to Meta"
+    },
+    "microsoft-places": {
+      "purpose": "Contributes place records distributed through Overture Maps",
+      "dataSent": "No data is sent directly to Microsoft"
+    },
+    "pinmeto": {
+      "purpose": "Contributes place records distributed through Overture Maps",
+      "dataSent": "No data is sent directly to PinMeTo"
+    },
+    "krick": {
+      "purpose": "Contributes place records distributed through Overture Maps",
+      "dataSent": "No data is sent directly to Krick"
+    },
+    "renderseo": {
+      "purpose": "Contributes place records distributed through Overture Maps",
+      "dataSent": "No data is sent directly to RenderSEO"
+    },
+    "dac": {
+      "purpose": "Contributes place records distributed through Overture Maps",
+      "dataSent": "No data is sent directly to DAC"
+    },
+    "brightquery": {
+      "purpose": "Contributes place records distributed through Overture Maps",
+      "dataSent": "No data is sent directly to BrightQuery"
+    },
+    "alltheplaces": {
+      "purpose": "Contributes place records distributed through Overture Maps",
+      "dataSent": "No data is sent directly to AllThePlaces"
     }
   }
 }

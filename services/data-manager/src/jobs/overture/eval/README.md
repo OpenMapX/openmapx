@@ -77,3 +77,34 @@ becomes the runtime pre-filter value in the ingest job, not part of
 | `candidates.ts`               | `generateCandidatePairs` with band sampling    |
 | `run.ts`                      | CLI entrypoint — loads labels, sweeps, prints  |
 | `labeled-berlin.example.json` | Template for the labeled dataset               |
+| `search-quality.ts`           | Overture-only relevance and duplicate metrics  |
+| `search-quality-run.ts`       | CLI for labeled search-result JSON             |
+
+## Overture-only search quality
+
+Conflation metrics do not measure the relevance or ordering of Overture-only
+gap-fill. Capture production-ordered category responses for representative
+regions and label each returned result with `relevant` and, when applicable,
+`duplicateOf`. Record the assessor's `totalRelevant` count for recall. The pure
+`evaluateSearchQuality` helper reports macro precision@50, recall@50, mean
+reciprocal rank, and duplicate rate, making before/after ranking changes
+comparable without coupling the evaluator to a running API.
+
+```sh
+node --import tsx/esm src/jobs/overture/eval/search-quality-run.ts \
+  --labeled search-quality-aachen.json
+```
+
+The JSON-compatible case shape is:
+
+```json
+{
+  "query": "cafes in Aachen",
+  "totalRelevant": 2,
+  "results": [
+    { "id": "overture:…", "relevant": true },
+    { "id": "overture:…", "relevant": false },
+    { "id": "overture:…", "relevant": true, "duplicateOf": "overture:…" }
+  ]
+}
+```

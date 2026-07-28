@@ -399,6 +399,7 @@ describe("fusePoiResults", () => {
         category: "cafes",
         openingHours: "Mo-Su 07:00-22:00",
         osmTags: { wheelchair: "yes" },
+        provenance: [{ sourceId: "overpass", dataset: "OpenStreetMap" }],
       }),
     ];
     const overture: PoiSearchResult[] = [
@@ -412,6 +413,10 @@ describe("fusePoiResults", () => {
         brand: { name: "Starbucks", wikidata: "Q37158" },
         names: { de: "Starbucks Mitte" },
         osmTags: { brand: "Starbucks", "brand:wikidata": "Q37158" },
+        provenance: [
+          { sourceId: "overture", dataset: "Overture Maps" },
+          { sourceId: "foursquare", dataset: "Foursquare", recordId: "fsq-1" },
+        ],
       }),
     ];
     const result = fusePoiResults(osm, overture, DEFAULT_CONFLATION_THRESHOLDS);
@@ -429,6 +434,11 @@ describe("fusePoiResults", () => {
     expect(fused.socials).toEqual(["https://instagram.com/starbucks"]);
     expect(fused.brand).toEqual({ name: "Starbucks", wikidata: "Q37158" });
     expect(fused.names).toEqual({ de: "Starbucks Mitte" });
+    expect(fused.provenance?.map((source) => source.sourceId)).toEqual([
+      "overpass",
+      "overture",
+      "foursquare",
+    ]);
     expect(fused.coordinates).toEqual([13.4, 52.52]);
   });
 

@@ -23,6 +23,16 @@ const FIXTURE_ROWS = [
     websites: ["https://starbucks.example/mitte"],
     socials: ["https://instagram.com/starbucks"],
     emails: ["mitte@starbucks.example"],
+    sources: [
+      {
+        property: "",
+        dataset: "Foursquare",
+        record_id: "fsq-1",
+        update_time: "2026-03-18T00:00:00Z",
+        license: "Apache-2.0",
+      },
+    ],
+    release: "2026-07-22.0",
   },
   {
     gers_id: "gers-abc-002",
@@ -40,6 +50,8 @@ const FIXTURE_ROWS = [
     websites: null,
     socials: null,
     emails: null,
+    sources: [{ property: "", dataset: "meta", record_id: "meta-2" }],
+    release: "2026-07-22.0",
   },
 ];
 
@@ -99,6 +111,7 @@ describe("poi-overture provider.search", () => {
     expect(first.website).toBe("https://starbucks.example/mitte");
     expect(first.email).toBe("mitte@starbucks.example");
     expect(first.category).toBe("cafes");
+    expect(first.provenance?.map((source) => source.sourceId)).toEqual(["overture", "foursquare"]);
     expect(db.execute.mock.calls[0][0]).toContain("taxonomy_hierarchy && $5::TEXT[]");
     expect(db.execute.mock.calls[0][0]).toContain("ORDER BY");
     expect(db.execute.mock.calls[0][0]).toContain("confidence DESC NULLS LAST");

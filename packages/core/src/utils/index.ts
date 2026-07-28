@@ -164,6 +164,11 @@ export {
   overtureTaxonomyToOpenMapX,
 } from "./overtureCategoryTyped";
 export {
+  normalizeOvertureProvenance,
+  type OvertureSourceItem,
+  overtureDatasetSourceId,
+} from "./overtureSource";
+export {
   parseCoordinateInput,
   parseDMSCoordinateInput,
 } from "./parseCoordinates";

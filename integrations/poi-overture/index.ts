@@ -1,6 +1,7 @@
-import type { BoundingBox } from "@openmapx/core";
+import type { BoundingBox, OvertureSourceItem } from "@openmapx/core";
 import {
   createPlace,
+  normalizeOvertureProvenance,
   OVERTURE_COMMERCIAL_CATEGORIES,
   openMapXCategoryToOvertureConcepts,
   overtureTaxonomyToOpenMapX,
@@ -29,6 +30,8 @@ interface OvertureRow {
   emails: string[] | null;
   phones: string[] | null;
   brand: OvertureBrand | null;
+  sources: OvertureSourceItem[] | null;
+  release: string;
 }
 
 interface OvertureNames {
@@ -138,6 +141,7 @@ function overtureRowToPoiSearchResult(
     socials: row.socials ?? undefined,
     brand,
     names: localized.variants,
+    provenance: normalizeOvertureProvenance(row.sources, row.release),
     osmTags: Object.keys(osmTags).length > 0 ? osmTags : undefined,
   };
 }
@@ -163,7 +167,9 @@ async function queryOverturePlaces(
       socials,
       emails,
       phones,
-      brand
+      brand,
+      sources,
+      release
     FROM overture_places.places
     WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
       AND (operating_status IS NULL OR operating_status <> 'permanently_closed')
@@ -207,7 +213,9 @@ async function fetchOverturePlaceByGers(
        socials,
        emails,
        phones,
-       brand
+       brand,
+       sources,
+       release
      FROM overture_places.places
      WHERE gers_id = $1
      LIMIT 1`,
@@ -248,6 +256,7 @@ function overtureRowToPlace(row: OvertureRow, lang?: string) {
     socials: row.socials ?? undefined,
     brand,
     names: localized.variants,
+    provenance: normalizeOvertureProvenance(row.sources, row.release),
     osmTags: Object.keys(osmTags).length > 0 ? osmTags : undefined,
   });
 }

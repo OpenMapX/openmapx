@@ -1,4 +1,5 @@
 import type { BoundingBox } from "../types/geometry";
+import type { PlaceProvenance } from "../types/place";
 import type { OsmFilter } from "./osmCategoryFilters";
 import { overpassQuery } from "./overpass";
 import type { OverpassElement } from "./overpass/types";
@@ -20,6 +21,7 @@ export interface CategoryPlaceResult {
   website?: string;
   openingHours?: string;
   isOpen?: boolean;
+  provenance?: PlaceProvenance[];
   /** Curated subset of OSM tags surfaced for client-side facet filters (see FILTERABLE_TAG_KEYS). */
   osmTags?: Record<string, string>;
   fuelPrices?: { e5?: number; e10?: number; diesel?: number };
@@ -165,6 +167,7 @@ export function mapOverpassElements(elements: readonly OverpassElement[]): Categ
       website: tags.website ?? tags["contact:website"] ?? undefined,
       openingHours: tags.opening_hours ?? undefined,
       osmTags: pickFilterableTags(tags),
+      provenance: [{ sourceId: "overpass", dataset: "OpenStreetMap" }],
     });
   }
   return results;

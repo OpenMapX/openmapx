@@ -180,7 +180,11 @@ describe("GET /places/:id", () => {
   });
 
   it("gap-fills address, email, brand, and social contacts from Overture knowledge", async () => {
-    mockLookupByOsmRef.mockResolvedValue({ ...MOCK_PLACE, address: "" });
+    mockLookupByOsmRef.mockResolvedValue({
+      ...MOCK_PLACE,
+      address: "",
+      provenance: [{ sourceId: "overpass", dataset: "OpenStreetMap" }],
+    });
     mockGetPlaceKnowledge.mockResolvedValue({
       address: "Friedrichstraße 1, 10117 Berlin",
       city: "Berlin",
@@ -188,6 +192,10 @@ describe("GET /places/:id", () => {
       email: "hello@example.test",
       socials: ["https://instagram.com/example"],
       brand: { name: "Example Brand", wikidata: "Q1" },
+      provenance: [
+        { sourceId: "overture", dataset: "Overture Maps", release: "2026-07-22.0" },
+        { sourceId: "foursquare", dataset: "Foursquare", recordId: "fsq-1" },
+      ],
     });
     mockBuildReviewLinks.mockReturnValue([]);
 
@@ -206,6 +214,11 @@ describe("GET /places/:id", () => {
     expect(body.osmTags["contact:instagram"]).toBe("https://instagram.com/example");
     expect(body.osmTags.brand).toBe("Example Brand");
     expect(body.osmTags["brand:wikidata"]).toBe("Q1");
+    expect(body.provenance).toEqual([
+      { sourceId: "overpass", dataset: "OpenStreetMap" },
+      { sourceId: "overture", dataset: "Overture Maps", release: "2026-07-22.0" },
+      { sourceId: "foursquare", dataset: "Foursquare", recordId: "fsq-1" },
+    ]);
   });
 
   it("folds safe OSM Tripadvisor contact tags into external ids", async () => {

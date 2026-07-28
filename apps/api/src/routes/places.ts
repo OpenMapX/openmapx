@@ -232,6 +232,7 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
     address: knowledgeAddress,
     city: knowledgeCity,
     countryCode: knowledgeCountryCode,
+    provenance: knowledgeProvenance,
     ...knowledge
   } = await getPlaceKnowledge(place, lang);
   const enriched = foldExternalIdsIntoPlace(place, externalIds);
@@ -279,6 +280,7 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
     address: enriched.address || knowledgeAddress || "",
     city: enriched.city ?? knowledgeCity,
     countryCode: enriched.countryCode ?? knowledgeCountryCode,
+    provenance: mergePlaceProvenance(enriched.provenance, knowledgeProvenance),
     photos,
     reviewLinks: buildReviewLinks(enriched),
     rating: reviewStats?.stars,
@@ -286,6 +288,21 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
     boundary: adminBoundary?.boundary,
     boundingBox: adminBoundary?.boundingBox,
   };
+}
+
+function mergePlaceProvenance(
+  first: Place["provenance"],
+  second: Place["provenance"],
+): Place["provenance"] {
+  const combined = [...(first ?? []), ...(second ?? [])];
+  if (combined.length === 0) return undefined;
+  const seen = new Set<string>();
+  return combined.filter((source) => {
+    const key = `${source.sourceId}|${source.dataset}|${source.property ?? ""}|${source.recordId ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 interface PlaceByIdQuery {

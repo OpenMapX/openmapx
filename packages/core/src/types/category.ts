@@ -1,6 +1,6 @@
 import type { LngLat } from "./geometry";
 import type { OpeningHoursInfo } from "./openingHoursInfo";
-import type { Place } from "./place";
+import type { Place, PlaceProvenance } from "./place";
 import { createPlace, idsFromPrimaryOrCoords } from "./placeIds";
 
 export type CategoryId =
@@ -474,6 +474,7 @@ export interface CategoryPlace {
   socials?: string[];
   brand?: { name: string; wikidata?: string };
   names?: Record<string, string>;
+  provenance?: PlaceProvenance[];
   openingHours?: string;
   isOpen?: boolean;
   /** Server-precomputed status/bitmap; absent when `openingHours` is missing. */
@@ -526,6 +527,7 @@ export function categoryPlaceToPlace(place: CategoryPlace, categoryId?: string):
     socials: place.socials,
     brand: place.brand,
     names: place.names,
+    provenance: place.provenance,
     openingHours: place.openingHours,
     isOpen: place.isOpen,
     openingHoursInfo: place.openingHoursInfo,
@@ -547,6 +549,7 @@ export interface PoiSearchResult {
   socials?: string[];
   brand?: { name: string; wikidata?: string };
   names?: Record<string, string>;
+  provenance?: PlaceProvenance[];
   openingHours?: string;
   isOpen?: boolean;
   osmTags?: Record<string, string>;
