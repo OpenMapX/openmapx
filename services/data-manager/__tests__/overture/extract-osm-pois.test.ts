@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   featureToOsmPoiRecord,
+  OSMIUM_EXPORT_STREAM_OPTIONS,
   representativePoint,
 } from "../../src/jobs/overture/extract-osm-pois.js";
+
+describe("OSM POI export streaming", () => {
+  it("disables Execa buffering for country-scale GeoJSON output", () => {
+    expect(OSMIUM_EXPORT_STREAM_OPTIONS).toMatchObject({ stdout: "pipe", buffer: false });
+  });
+});
 
 describe("featureToOsmPoiRecord", () => {
   it("maps a named Point feature with a type_id to an OsmPoiRecord", () => {

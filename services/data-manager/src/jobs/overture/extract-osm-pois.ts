@@ -39,6 +39,13 @@ export interface ExtractOsmPoisOptions {
   onCheckpoint?: (extracted: number) => Promise<void>;
 }
 
+/** Execa must not retain the country-scale GeoJSON stream in memory. */
+export const OSMIUM_EXPORT_STREAM_OPTIONS = {
+  stdout: "pipe",
+  stderr: "inherit",
+  buffer: false,
+} as const;
+
 export interface OsmPoiRecord {
   osmType: "node" | "way" | "relation";
   osmId: string;
@@ -159,7 +166,9 @@ export async function extractOsmPois(opts: ExtractOsmPoisOptions): Promise<{ ext
   const exportProcess = execa(
     "osmium",
     ["export", "-f", "geojsonseq", "--add-unique-id=type_id", filteredPbf],
-    { stdout: "pipe", stderr: "inherit" },
+    // Execa buffers piped output by default. Germany-scale GeoJSON exceeds
+    // that buffer, so consume stdout exclusively through the line iterator.
+    OSMIUM_EXPORT_STREAM_OPTIONS,
   );
   opts.onProgress?.("Streaming osmium GeoJSON output into PostGIS...");
   const { createInterface } = await import("node:readline");
