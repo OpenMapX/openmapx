@@ -69,6 +69,31 @@ Update `DEFAULT_CONFLATION_THRESHOLDS` in
 becomes the runtime pre-filter value in the ingest job, not part of
 `ConflationThresholds`.
 
+## Permanent staged-release quality gate
+
+Every import runs `quality-gate.ts` against the staging schema before the
+atomic activation swap. The committed human-reviewed corpus in
+`quality-baseline.ts` contains stable GERS anchors, known category mistakes,
+and known duplicates for four environments:
+
+- Aachen (medium German city)
+- Berlin (large German city)
+- Monschau (rural Germany)
+- Maastricht (non-German city)
+
+Cases are applied only when their most-specific Geofabrik region is contained
+by the imported region. For example, a Germany import runs all three German
+cases, while a Netherlands import runs Maastricht. A region with no applicable
+case is reported as zero applicable cases and is not blocked.
+
+The gate uses the same taxonomy fields, confidence floor, production ordering,
+and top-50 limit as Overture POI search. It blocks activation when anchor recall
+or result count drops below its reviewed floor, or when known irrelevant and
+duplicate hits exceed the recorded ceiling. Updating a judgment requires
+checking the named place and coordinates against the new release and recording
+the new release in `OVERTURE_QUALITY_BASELINE_RELEASE`; never relax a threshold
+only to make a release pass.
+
 ## File reference
 
 | File                          | Purpose                                        |
@@ -76,9 +101,10 @@ becomes the runtime pre-filter value in the ingest job, not part of
 | `metrics.ts`                  | `computeMetrics` + `SWEEP_GRID` (54 cells)     |
 | `candidates.ts`               | `generateCandidatePairs` with band sampling    |
 | `run.ts`                      | CLI entrypoint — loads labels, sweeps, prints  |
-| `labeled-berlin.example.json` | Template for the labeled dataset               |
 | `search-quality.ts`           | Overture-only relevance and duplicate metrics  |
 | `search-quality-run.ts`       | CLI for labeled search-result JSON             |
+| `quality-baseline.ts`         | Permanent multi-region human-reviewed corpus   |
+| `quality-gate.ts`             | Pre-activation staged-release regression gate  |
 
 ## Overture-only search quality
 

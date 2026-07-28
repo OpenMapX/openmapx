@@ -3,6 +3,7 @@ import { assertSupportedOvertureContributors } from "@openmapx/core";
 import { latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";
 import { runDuckDb } from "./duckdb.js";
+import { validateOvertureQuality } from "./eval/quality-gate.js";
 import { regionSlug, resolveOvertureRelease } from "./pull.js";
 import { assertValidOvertureSchema, buildSchemaDDL } from "./schema.js";
 
@@ -135,6 +136,10 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
 
   opts.onProgress?.("Validating contributor attribution coverage...");
   await validateOvertureContributors(stagingSchema);
+
+  opts.onProgress?.("Running labeled regional quality regression gate...");
+  const quality = await validateOvertureQuality(stagingSchema, opts.region);
+  opts.onProgress?.(`Quality gate passed (${quality.applicableCases} applicable cases).`);
 
   // Indexes (geom GIST + h3 + Overture taxonomy) are created by
   // buildSchemaDDL; the geom GIST is rebuilt automatically by the SRID ALTER.
