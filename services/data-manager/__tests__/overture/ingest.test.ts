@@ -19,15 +19,19 @@ describe("Overture staged-release contributor validation", () => {
     mocks.unsafe.mockResolvedValue([
       { dataset: "AllThePlaces" },
       { dataset: "Foursquare" },
-      { dataset: "Meta" },
+      // A locale-aware database collation can place lowercase `meta` before
+      // `Microsoft`; the pull contract uses JavaScript code-point ordering.
+      { dataset: "meta" },
+      { dataset: "Microsoft" },
       { dataset: "Overture" },
     ]);
 
     await expect(validateOvertureContributors("overture_places__staging")).resolves.toEqual([
       "AllThePlaces",
       "Foursquare",
-      "Meta",
+      "Microsoft",
       "Overture",
+      "meta",
     ]);
     expect(mocks.unsafe).toHaveBeenCalledWith(
       expect.stringContaining('FROM "overture_places__staging".places'),

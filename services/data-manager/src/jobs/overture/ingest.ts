@@ -64,7 +64,10 @@ export async function validateOvertureContributors(schema: string): Promise<stri
      ORDER BY dataset`,
     [],
   );
-  const datasets = rows.map((row) => row.dataset);
+  // PostgreSQL ORDER BY follows the database collation, while pull contracts
+  // are canonicalized with JavaScript's code-point sort. Normalize here too so
+  // activation compares contributor sets deterministically across locales.
+  const datasets = rows.map((row) => row.dataset).sort();
   assertSupportedOvertureContributors(datasets);
   return datasets;
 }
