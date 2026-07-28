@@ -286,17 +286,19 @@ function solveComponent(edges: ScoredConflationPair[]): ScoredConflationPair[] {
   }
 
   // Hungarian assignment over this connected candidate component. Every real
-  // edge gets a cardinality bonus of 1, so the optimum first maximizes the
-  // number of accepted links and then their total identity confidence.
+  // edge gets a bonus greater than the largest possible total confidence delta
+  // across the component. One additional link therefore always outweighs every
+  // confidence trade-off; confidence breaks ties only at equal cardinality.
+  const cardinalityBonus = size + 1;
   const weights = Array.from({ length: size }, () => new Array<number>(size).fill(0));
   for (let i = 0; i < aIds.length; i++) {
     for (let j = 0; j < bIds.length; j++) {
       const edge = edgeByPair.get(`${aIds[i]}\u0000${bIds[j]}`);
-      if (edge) weights[i][j] = 1 + edge.score.matchConfidence;
+      if (edge) weights[i][j] = cardinalityBonus + edge.score.matchConfidence;
     }
   }
 
-  const maxWeight = 2;
+  const maxWeight = cardinalityBonus + 1;
   const u = new Array<number>(size + 1).fill(0);
   const v = new Array<number>(size + 1).fill(0);
   const p = new Array<number>(size + 1).fill(0);

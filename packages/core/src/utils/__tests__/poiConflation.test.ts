@@ -391,6 +391,27 @@ describe("conflate — scored global assignment", () => {
     expect(selected.map((edge) => `${edge.a.id}:${edge.b.id}`)).toEqual(["a1:b2", "a2:b1"]);
   });
 
+  it("keeps cardinality lexicographically dominant in larger components", () => {
+    const a = Array.from({ length: 8 }, (_, index) => pt(`a${index}`, `A${index}`, 0, 0));
+    const b = Array.from({ length: 8 }, (_, index) => pt(`b${index}`, `B${index}`, 0, 0));
+    const edges = a.map((point, index) => ({
+      a: point,
+      b: b[index],
+      score: score(0.72),
+    }));
+    // Seven high-confidence shifted edges form a tempting but smaller matching.
+    // With a fixed +1 bonus they outweighed the eight-edge diagonal (14 > 13.76).
+    for (let index = 0; index < 7; index++) {
+      edges.push({ a: a[index], b: b[index + 1], score: score(1) });
+    }
+
+    const selected = assignConflationPairs(edges);
+    expect(selected).toHaveLength(8);
+    expect(selected.map((edge) => `${edge.a.id}:${edge.b.id}`)).toEqual(
+      a.map((_, index) => `a${index}:b${index}`),
+    );
+  });
+
   it("is deterministic when candidate edge order changes", () => {
     const a1 = pt("a1", "Same", 0, 0);
     const a2 = pt("a2", "Same", 0, 0);
