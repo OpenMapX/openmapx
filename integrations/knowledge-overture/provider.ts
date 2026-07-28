@@ -71,6 +71,12 @@ async function resolveGers(
   osmTags: Record<string, string>,
   context: KnowledgeContext | undefined,
 ): Promise<string | null> {
+  // Overture-produced places and already-enriched OSM places carry a stable
+  // identifier. Trust that identity and let the detail lookup below validate
+  // that the row still exists before considering any fuzzy matching.
+  const directGers = context?.ids?.overture ?? context?.ids?.gers;
+  if (directGers) return directGers;
+
   const osmRef = context?.ids?.osm;
   if (osmRef) {
     const parsed = parseOsmRef(osmRef);

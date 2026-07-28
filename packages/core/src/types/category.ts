@@ -1,7 +1,7 @@
 import type { LngLat } from "./geometry";
 import type { OpeningHoursInfo } from "./openingHoursInfo";
 import type { Place } from "./place";
-import { createPlace, parseId } from "./placeIds";
+import { createPlace, idsFromPrimaryOrCoords } from "./placeIds";
 
 export type CategoryId =
   | "restaurants"
@@ -462,6 +462,8 @@ export const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
 
 export interface CategoryPlace {
   id: string;
+  /** GERS id when Overture supplied or was conflated with this result. */
+  gersId?: string;
   name: string;
   coordinates: LngLat;
   category?: string;
@@ -491,18 +493,24 @@ export const FOOD_FILTER_CATEGORY_IDS: ReadonlySet<string> = new Set(
   CATEGORY_DEFINITIONS.filter((c) => c.supportsFoodFilters).map((c) => c.id),
 );
 
-/** Converts a CategoryPlace to a Place, using name as address fallback.
+/** Converts a CategoryPlace to a Place while preserving its provider identity.
  *  When `categoryId` is provided it is stored as `rawCategory` so that
  *  `useDataSourceMatch` can resolve the matching data source. */
 export function categoryPlaceToPlace(place: CategoryPlace, categoryId?: string): Place {
-  // CategoryPlace.id is always an Overpass-derived canonical id
-  // (`osm:node/…`, `osm:way/…`). Parse it so `ids.osm` holds the bare
-  // OSM ref value expected by downstream consumers.
-  const parsed = parseId(place.id);
-  const osmRef = parsed?.scheme === "osm" ? parsed.value : place.id;
+  const identity = idsFromPrimaryOrCoords(place.id, place.coordinates);
+  const gersId =
+    place.gersId ?? (identity.primaryScheme === "overture" ? identity.ids.overture : undefined);
+
+  // `overture` is the resolver scheme; `gers` is the user-facing external-ID
+  // scheme. Keep both so Overture-only places resolve directly while fused OSM
+  // places retain their stable GERS cross-reference.
+  if (gersId) {
+    identity.ids.overture = gersId;
+    identity.ids.gers = gersId;
+  }
+
   return createPlace({
-    primaryScheme: "osm",
-    ids: { osm: osmRef },
+    ...identity,
     name: place.name,
     address: place.address ?? place.name,
     coordinates: place.coordinates,

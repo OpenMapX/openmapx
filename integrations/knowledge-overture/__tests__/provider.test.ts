@@ -1,9 +1,10 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// The knowledge-overture provider performs a two-phase GERS lookup:
-// 1. Link-first: osm_type + osm_id → poi_conflation_link (empty until plan 03, always null)
-// 2. Spatial+name: ST_DWithin(geom::geography, …, 150) filtered by category, then
+// The knowledge-overture provider performs a three-phase GERS lookup:
+// 1. Direct identity: an existing overture/GERS id needs no matching query
+// 2. Link-first: osm_type + osm_id → poi_conflation_link
+// 3. Spatial+name: ST_DWithin(geom::geography, …, 150) filtered by category, then
 //    diceSimilarity(candidate.name, context.name) >= 0.8
 // These tests drive the provider in isolation with a mock DatabaseClient.
 
@@ -129,6 +130,31 @@ describe("knowledge-overture provider lookup", () => {
         return Promise.resolve([]);
       }),
     );
+
+  it.each([
+    "overture",
+    "gers",
+  ] as const)("uses a direct %s id without link or spatial matching", async (scheme) => {
+    const detailRow = makeOvertureDetailRow();
+    const db = makeDb(
+      vi.fn().mockImplementation((sql: string) => {
+        if (sql.includes("WHERE gers_id = $1")) return Promise.resolve([detailRow]);
+        return Promise.resolve([]);
+      }),
+    );
+    const ctx = makeCtx(db);
+    const { setup, overtureKnowledgeSource } = await import("../index.js");
+    setup(ctx);
+
+    const result = await overtureKnowledgeSource.lookup({}, "en", {
+      ids: { [scheme]: "overture-abc-123" },
+    });
+
+    expect(result?.externalIds?.gers).toBe("overture-abc-123");
+    expect(db.execute).toHaveBeenCalledTimes(1);
+    expect(db.execute.mock.calls[0][0]).toContain("WHERE gers_id = $1");
+    expect(db.execute.mock.calls[0][1]).toEqual(["overture-abc-123"]);
+  });
 
   it("returns brand, names, hours, wikidata, phone and website from the Overture row", async () => {
     const ctx = makeCtx(detailRowDb(makeOvertureDetailRow()));
