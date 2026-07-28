@@ -253,13 +253,15 @@ actually enabled:
 - `/terms` shows an **AI-assisted search** reliability disclaimer whenever any AI
   provider is active. The local provider is on by default, so this normally
   appears.
-- `/privacy` adds a **cloud data-transfer** row naming each active cloud AI vendor
-  (Anthropic, OpenAI) — shown only when you have configured a cloud provider and
-  placed it in the search chain. With the local-only default, nothing is
-  transferred and no row appears.
+- `/privacy` adds a **cloud data-transfer** row for each active processor. The
+  built-in Anthropic, OpenAI, Google, and OpenRouter adapters supply this metadata
+  automatically. An arbitrary cloud-compatible endpoint must declare its
+  processor name, country, and privacy URL before configuration is accepted.
+  With the local-only default, nothing is transferred and no row appears.
 
-The signal is computed server-side from booleans and vendor names only; API keys
-are never exposed.
+The signal is computed server-side from booleans and secret-free processor
+metadata only; provider configuration and API keys are never exposed. Duplicate
+processor IDs are collapsed in the rendered table.
 
 ## Bulk operations
 

@@ -296,22 +296,39 @@ Schedules and switches for the monthly Overture Maps POI data ingestion.
 ## Natural-language search
 
 [Natural-language search](../features/natural-language-search.md) (the
-`search-nlp` integration) is configured at `/admin/integrations`, not in `.env`.
-It is **cloud-off by default**: the provider list contains local Ollama followed by keyword, and a
-cloud model is used only when it is both listed in the chain and given an API
-key. If you'd rather pin its config from the environment, use the
-per-integration override form below (`INTEGRATION_SEARCH_NLP_<KEY>`). Set the
-`providers` array as JSON or edit it in the admin UI.
+`search-nlp` integration) is normally configured at `/admin/integrations`.
+It is **cloud-off by default**: the provider list contains local Ollama followed
+by keyword parsing. A cloud model is used only when it is listed, its credential
+exists, and the active privacy policy authorizes cloud. If you would rather pin
+the configuration from the environment, use the per-integration form below
+(`INTEGRATION_SEARCH_NLP_<KEY>`). `PROVIDERS` must contain a JSON array.
 
-| Variable                                   | Description                                                                                       | Required / Default                  |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| `INTEGRATION_SEARCH_NLP_PRIVACYMODE`       | `strict` (cloud disabled server-side), `consent` (cloud behind explicit opt-in), or `open`.       | Default `consent`                   |
-| `INTEGRATION_SEARCH_NLP_PROVIDERS`         | Ordered JSON array of typed provider definitions.                                                 | Local Ollama, then keyword          |
-| `INTEGRATION_SEARCH_NLP_ANTHROPICAPIKEY`   | Vault/env credential for `anthropic` definitions.                                                 | Optional. Default unset             |
-| `INTEGRATION_SEARCH_NLP_OPENAIAPIKEY`      | Vault/env credential for `openai` definitions.                                                    | Optional. Default unset             |
-| `INTEGRATION_SEARCH_NLP_GOOGLEAPIKEY`      | Vault/env credential for `google` (Gemini) definitions.                                           | Optional. Default unset             |
-| `INTEGRATION_SEARCH_NLP_OPENROUTERAPIKEY`  | Vault/env credential for `openrouter` definitions.                                                | Optional. Default unset             |
-| `INTEGRATION_SEARCH_NLP_COMPATIBLEAPIKEY`  | Shared vault/env credential for compatible endpoint definitions that select it.                   | Optional. Default unset             |
+| Variable | Description | Required / Default |
+| --- | --- | --- |
+| `INTEGRATION_SEARCH_NLP_PROVIDERS` | Ordered JSON definitions for `keyword`, `ollama`, `anthropic`, `openai`, `google`, `openrouter`, or `openai-compatible`. | Local Ollama, then keyword |
+| `INTEGRATION_SEARCH_NLP_PRIVACYMODE` | `strict` disables cloud server-side; `consent` requires explicit user consent; `open` permits server-policy-deferred cloud use. | `consent` |
+| `INTEGRATION_SEARCH_NLP_ROUNDCOORDSDECIMALS` | Decimal places retained for the map center sent to a model and used in cache partitioning. | `2`; range 0–5 |
+| `INTEGRATION_SEARCH_NLP_INTENTCACHETTLSECONDS` | Parsed-intent cache lifetime in seconds. | `86400` |
+| `INTEGRATION_SEARCH_NLP_RATELIMITPERIPPERHOUR` | Fixed-window parse limit per client IP. | `200` |
+| `INTEGRATION_SEARCH_NLP_ANTHROPICAPIKEY` | Credential for `anthropic` definitions. | Optional; unset |
+| `INTEGRATION_SEARCH_NLP_OPENAIAPIKEY` | Credential for `openai` definitions. | Optional; unset |
+| `INTEGRATION_SEARCH_NLP_GOOGLEAPIKEY` | Credential for `google` (Gemini) definitions. | Optional; unset |
+| `INTEGRATION_SEARCH_NLP_OPENROUTERAPIKEY` | Credential for `openrouter` definitions. | Optional; unset |
+| `INTEGRATION_SEARCH_NLP_COMPATIBLEAPIKEY` | Dedicated credential for custom compatible endpoint definitions. | Optional; unset |
+
+For example, this pins a Gemini-first chain from `.env`:
+
+```bash
+INTEGRATION_SEARCH_NLP_PROVIDERS='[{"id":"gemini","type":"google","model":"gemini-2.5-flash"},{"id":"local","type":"ollama","model":"gemma3:4b-it-qat"},{"id":"keyword","type":"keyword"}]'
+INTEGRATION_SEARCH_NLP_PRIVACYMODE=consent
+INTEGRATION_SEARCH_NLP_GOOGLEAPIKEY=replace-with-vault-or-environment-secret
+```
+
+Environment values override admin-stored values. Prefer the Credentials tab for
+secrets when you do not need an immutable deployment-level override. See the
+[provider reference](../features/natural-language-search.md#provider-architecture)
+for every definition field, OpenRouter privacy controls, and custom endpoint
+requirements.
 
 To run the local model, enable the **`local-ai`** backend service (Ollama). Its
 container tuning uses the usual per-service form — `LOCAL_AI_MEMORY` (default

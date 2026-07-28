@@ -34,65 +34,75 @@ The intent also carries a confidence score; low-confidence parses — and querie
 that look like a proper place name — are dropped, so a misread never hijacks an
 ordinary search.
 
-## Local-first by default
+## Provider architecture
 
-Parsing runs through an **ordered provider chain**, tried left to right until one
-returns a usable intent. The default chain is `local, keyword`:
+Parsing runs through one **ordered provider array**, tried from left to right.
+The first provider that returns a valid structured intent wins. A failed or
+timed-out provider does not fail the search: OpenMapX continues to the next
+definition. If the array contains no `keyword` definition, the deterministic
+keyword parser is appended automatically as the final safety net.
 
-| Provider type | What it is | Network |
+The default is entirely local:
+
+```json
+[
+  { "id": "local", "type": "ollama", "model": "gemma3:4b-it-qat" },
+  { "id": "keyword", "type": "keyword" }
+]
+```
+
+| Provider type | What it connects to | Credential | Cloud |
+| --- | --- | --- | --- |
+| `keyword` | Built-in deterministic parser | None | No |
+| `ollama` | Ollama's OpenAI-compatible API | None | No; public endpoints are rejected |
+| `anthropic` | Anthropic Claude | `anthropicApiKey` | Yes |
+| `openai` | OpenAI Responses or Chat Completions | `openaiApiKey` | Yes |
+| `google` | Google Gemini | `googleApiKey` | Yes |
+| `openrouter` | OpenRouter and its model/provider catalogue | `openrouterApiKey` | Yes |
+| `openai-compatible` | Any compatible local or hosted endpoint | `compatibleApiKey` or none | Declared by `local` |
+
+All model-backed providers use the AI SDK through direct provider instances.
+OpenMapX does not route them through the Vercel AI Gateway, so no Vercel account,
+gateway key, or gateway model identifier is involved.
+
+### Common provider fields
+
+Every definition has an operator-chosen `id`; it is not restricted to a fixed
+provider enum. This allows multiple models or endpoints of the same type in one
+chain.
+
+| Field | Required | Meaning |
 | --- | --- | --- |
-| `ollama` | A self-hosted LLM (default model `gemma3:4b-it-qat`) run by the optional `local-ai` service | None — runs on your hardware |
-| `keyword` | A deterministic rule-based parser | None — always the floor of the chain |
-| `anthropic` | Anthropic Claude models | Cloud — needs an Anthropic key |
-| `openai` | OpenAI Responses or Chat models | Cloud — needs an OpenAI key |
-| `google` | Google Gemini models | Cloud — needs a Gemini API key |
-| `openrouter` | Hundreds of models through OpenRouter, with structured-output and privacy routing enforced | Cloud — needs an OpenRouter key |
-| `openai-compatible` | Any endpoint implementing OpenAI-compatible chat completions and structured output | Local or cloud, declared per definition |
+| `id` | Yes | Unique lowercase identifier, 1–64 characters: letters, digits, `.`, `_`, and `-` |
+| `type` | Yes | One of the provider types listed above |
+| `label` | No | Operator-facing/result label; otherwise derived from type and model |
+| `model` | All except `keyword` | Exact model identifier understood by that provider |
+| `timeoutMs` | Model-backed types only | Per-attempt timeout, 250–120,000 ms; defaults to 10 seconds for Ollama and 3 seconds for the other adapters |
 
-The `keyword` provider is always present (and appended when omitted), so even
-with no LLM at all, common phrases ("coffee near me open now") still parse — the feature
-degrades, it doesn't break.
+Provider order is significant. Provider IDs must be unique even when their
+types differ. The full normalized definition participates in the intent-cache
+key, while the short-lived circuit breaker is isolated by provider ID.
+Definitions of the same built-in type share that type's vault credential; each
+definition can still select a different model, label, timeout, and position.
 
-:::note[Cloud is off until you turn it on]
-A cloud provider is only ever used if it is **both** listed in the chain **and**
-configured with its API key. Out of the box there are no keys, no cloud calls,
-and nothing is sent to a third-party model.
-:::
+### Provider-specific fields
 
-## Privacy
+`keyword` has no additional fields.
 
-The feature is built so that no query leaves your server unless an operator and a
-user both opt in:
+| Type | Additional fields |
+| --- | --- |
+| `ollama` | Optional `baseURL`, which must use a private/local hostname or IP. OpenMapX appends `/v1` and defaults to the enabled `local-ai` service, then `http://localhost:11434`. |
+| `openai` | `api` may be `responses` (default) or `chat`. |
+| `openrouter` | `providerOrder` (default `[]`), `allowFallbacks` (default `true`), `dataCollection` (`deny` by default), and `zeroDataRetention` (`true` by default). |
+| `openai-compatible` | `baseURL`, `credential` (`compatibleApiKey` by default, or `none`), `supportsStructuredOutputs` (default `true`), `local` (default `false`), and processor metadata for cloud endpoints. |
 
-- **`privacyMode: strict`** is a server-side hard floor. Cloud providers are
-  stripped from every request regardless of any client setting — useful when you
-  want a guarantee that searches stay on-premises.
-- **`privacyMode: consent`** (the default) keeps cloud providers available but
-  the web app gates them: the first time a result would come from a cloud model,
-  the user is asked to enable it. Declining is remembered and re-runs the search
-  locally from then on.
-- Only the **query text and an approximate (rounded) map center** are ever sent to
-  a model — never an account, a precise location, or an address.
-- Parsed intents are cached per privacy posture, so a cloud-derived result can
-  never be served to a later no-cloud request for the same query.
+The built-in Anthropic, Google, and OpenAI adapters need only their model and
+optional common fields.
 
-When a cloud provider is active, OpenMapX also discloses it automatically on your
-`/terms` and `/privacy` pages — see
-[Data-use policy & disclosure](../administration/integrations-administration.md#ai-assisted-search-disclosure).
+### Gemini
 
-## Configuring it
-
-All of this lives in the **`search-nlp`** integration at `/admin/integrations` —
-no environment variables required. The keys you'll touch most:
-
-- **`providers`** — the ordered provider definitions. Each has an operator-defined
-  `id`, an adapter `type`, and type-specific settings such as `model`, `baseURL`,
-  timeout, or OpenRouter routing policy.
-- **`privacyMode`** — `strict`, `consent`, or `open`.
-- **Credentials** — Anthropic, OpenAI, Google, OpenRouter, and compatible-endpoint
-  keys live in the vault-backed Credentials tab, never in the provider JSON.
-
-For example, a Gemini-first chain with a local fallback is:
+Store `googleApiKey` on the Credentials tab, then put a Google definition in the
+array. This example tries Gemini, then local Ollama, then keyword parsing:
 
 ```json
 [
@@ -102,25 +112,232 @@ For example, a Gemini-first chain with a local fallback is:
 ]
 ```
 
-Provider ids are not an enum. You can configure multiple models of the same
-type; cache entries include the complete provider definition, while circuit
-breakers are isolated by provider id.
-Arbitrary cloud-compatible endpoints must include their processor name, country,
-and privacy URL so the runtime privacy page remains accurate. Their `baseURL`
-must be the OpenAI-compatible API root, including `/v1` when the service expects it.
+### OpenAI and Anthropic
 
-To run the local model, enable the **`local-ai`** backend
-[service](../install/managing-services.md) (Ollama). The configured model is
-pulled automatically on first start. See
-[Configuration](../install/configuration.md#natural-language-search) for the
-full key list and how to pin values from `.env`.
+```json
+[
+  { "id": "openai-fast", "type": "openai", "model": "gpt-5-mini" },
+  { "id": "claude", "type": "anthropic", "model": "claude-haiku-4-5" },
+  { "id": "keyword", "type": "keyword" }
+]
+```
+
+Set `api: "chat"` on an OpenAI definition only when the selected model or
+deployment requires Chat Completions. Anthropic definitions mark the stable
+system prompt for provider-side ephemeral prompt caching.
+
+### OpenRouter
+
+OpenRouter provides broad model coverage without adding a new OpenMapX adapter
+for every inference vendor. OpenMapX always asks OpenRouter to choose only routes
+that support the required parameters. Its defaults deny data collection and
+require zero-data-retention routes.
+
+```json
+[
+  {
+    "id": "router",
+    "type": "openrouter",
+    "model": "google/gemini-2.5-flash",
+    "providerOrder": ["Google"],
+    "allowFallbacks": false,
+    "dataCollection": "deny",
+    "zeroDataRetention": true
+  },
+  { "id": "keyword", "type": "keyword" }
+]
+```
+
+`providerOrder` uses OpenRouter's provider identifiers. Keeping it empty lets
+OpenRouter select among compatible routes. Relaxing `dataCollection` or
+`zeroDataRetention` is an explicit operator decision; it may increase route
+availability but changes the privacy posture.
+
+### OpenAI-compatible endpoints
+
+Use this adapter for services such as vLLM, LM Studio, Groq, or another API that
+implements OpenAI-compatible chat completions. Give it a dedicated
+`compatibleApiKey`; standard OpenAI, Anthropic, Google, and OpenRouter secrets
+cannot be selected here, preventing accidental credential disclosure to a
+custom URL.
+
+A local vLLM service can be configured without a credential:
+
+```json
+[
+  {
+    "id": "vllm",
+    "type": "openai-compatible",
+    "model": "local-instruct-model",
+    "baseURL": "http://vllm:8000/v1",
+    "credential": "none",
+    "local": true,
+    "supportsStructuredOutputs": true
+  },
+  { "id": "keyword", "type": "keyword" }
+]
+```
+
+A cloud-compatible endpoint must use HTTPS and include processor disclosure
+metadata. OpenMapX uses that metadata to build the live privacy table:
+
+```json
+[
+  {
+    "id": "groq",
+    "type": "openai-compatible",
+    "model": "llama-3.3-70b-versatile",
+    "baseURL": "https://api.groq.com/openai/v1",
+    "credential": "compatibleApiKey",
+    "local": false,
+    "processor": {
+      "id": "groq",
+      "name": "Groq",
+      "countryCode": "US",
+      "privacyUrl": "https://groq.com/privacy-policy/"
+    }
+  },
+  { "id": "keyword", "type": "keyword" }
+]
+```
+
+Set `supportsStructuredOutputs` to `false` if the compatible service accepts
+JSON mode but not OpenAI-style `json_schema`. OpenMapX still validates the
+returned object before using it.
+
+## Structured output and fallback behavior
+
+The AI SDK gives every model the same typed-output interface, but provider JSON
+Schema dialects differ. OpenMapX therefore uses a portable wire schema with
+required arrays and nullable variant fields—avoiding unions that Gemini's
+structured-output API cannot accept—then normalizes and validates it against the
+stricter application intent schema.
+
+Each attempt uses:
+
+- structured object output with schema validation;
+- temperature `0` and a 1,024-token output limit;
+- no SDK-level retry (`maxRetries: 0`), because the ordered chain owns fallback;
+- an explicit per-provider timeout; and
+- AI SDK telemetry disabled.
+
+Invalid JSON, schema violations, provider errors, and timeouts all move to the
+next provider. A failed cloud provider opens a 60-second circuit breaker so
+subsequent searches do not repeatedly wait for an unhealthy service.
+
+## Privacy and consent
+
+Cloud access is fail-closed at both the client and integration boundary:
+
+- **`privacyMode: strict`** always removes network providers, even if a client
+  sends a positive cloud-consent signal.
+- **`privacyMode: consent`** (default) requires an explicit positive consent
+  signal on every cloud-authorized request. Missing or unknown values mean
+  local-only. The first browser request is local-only; if cloud is available,
+  the user can enable it and the search is repeated against the full chain.
+- **`privacyMode: open`** permits policy-deferred cloud access. The browser still
+  begins with a local-only policy-discovery request, then repeats against the
+  full chain. A user's previously remembered decline continues to win.
+
+Only the **query text and rounded map center** are included in the model prompt.
+Account identity, exact device location, and the map bounding box are not sent.
+Cache keys include the complete provider chain and whether cloud was authorized,
+so a cloud-produced result cannot satisfy a local-only request.
+
+When cloud is active, OpenMapX publishes secret-free processor metadata on the
+legal pages. Built-in providers supply their own metadata; custom cloud-compatible
+definitions must supply `id`, `name`, `countryCode`, and an HTTPS `privacyUrl`.
+See [AI-assisted search disclosure](../administration/integrations-administration.md#ai-assisted-search-disclosure).
+
+:::note[Cloud is off by default]
+A cloud adapter must be present in `providers`, its credential must exist, and
+the active privacy policy must authorize the request. The shipped configuration
+has no cloud definition or cloud credential.
+:::
+
+## Administration and operational settings
+
+Configure **`search-nlp`** under `/admin/integrations`. Provider definitions are
+edited as JSON; the API validates nested objects, discriminated provider shapes,
+URLs, conditional processor requirements, bounds, and unknown properties before
+saving them. Credentials remain in the vault-backed Credentials tab.
+`providers` is the sole provider/model configuration surface; there is no
+parallel per-vendor model or endpoint setting.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `providers` | Local Ollama, then keyword | Ordered definitions described above |
+| `privacyMode` | `consent` | `strict`, `consent`, or `open` |
+| `roundCoordsDecimals` | `2` | Coordinate precision included in the model prompt and intent cache key |
+| `intentCacheTtlSeconds` | `86400` | Parsed-intent cache lifetime |
+| `rateLimitPerIpPerHour` | `200` | Fixed-window parse limit per client IP |
+
+Definitions whose required credential is absent are skipped with an operator
+warning. If the whole provider array is invalid—for example, duplicate IDs or a
+public endpoint marked `local`—OpenMapX logs the validation error and uses the
+safe local-first defaults.
+
+To run Ollama, enable the optional **`local-ai`** backend
+[service](../install/managing-services.md). OpenMapX checks each configured
+Ollama model during setup and pulls a missing model as a best-effort background
+operation.
+
+See [Configuration](../install/configuration.md#natural-language-search) for
+environment overrides and service resource settings.
 
 :::caution[Local inference needs RAM]
-The `local-ai` service reserves ~8 GB by default. A small instruction-tuned
-model like `gemma3:4b-it-qat` runs comfortably on CPU; larger models benefit
-from a GPU. If you'd rather not host a model, use the `keyword` floor alone, or
-opt into a cloud provider with `privacyMode: consent`.
+The `local-ai` service reserves about 8 GB by default. A small instruction-tuned
+model such as `gemma3:4b-it-qat` can run on CPU; larger models benefit from a GPU.
+If you do not want local inference, use the keyword parser alone or configure a
+cloud provider under the desired privacy mode.
 :::
+
+## Parse API
+
+Custom clients can call `POST /api/integrations/search-nlp/parse`. The request
+body is:
+
+```json
+{
+  "query": "wheelchair-accessible museums near the station",
+  "mapCenter": [13.405, 52.52],
+  "mapBbox": {
+    "south": 52.48,
+    "west": 13.32,
+    "north": 52.56,
+    "east": 13.49
+  },
+  "lang": "en",
+  "cloudAccess": "deny"
+}
+```
+
+`mapCenter` is `[longitude, latitude]`. `query`, `mapCenter`, and `mapBbox` are
+required; `lang` is optional. `cloudAccess` is deliberately explicit and
+fail-closed:
+
+| Value | Behavior |
+| --- | --- |
+| `deny` | Local and keyword providers only; also the default for missing or unknown values |
+| `consented` | Allows cloud in `consent` and `open`; `strict` still overrides it |
+| `defer-to-server` | Allows cloud only when the operator selected `open` |
+
+The response includes the validated `intent`, its `resolvedBbox`, provider ID
+and label, whether that result used cloud, whether cloud is available under the
+current policy and needs consent, the available cloud provider labels, and
+whether the intent came from cache. A request rejected by the hourly limit returns `429` with
+`Retry-After: 3600`; complete provider-chain failure returns `502`.
+
+## Troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| Cloud definition never runs | Confirm the matching vault credential exists, the provider is before `keyword`, and privacy mode/consent permits cloud. |
+| Custom endpoint is rejected | Cloud endpoints require HTTPS and processor metadata; local endpoints require a private hostname/IP. |
+| Compatible endpoint rejects `response_format` | Set `supportsStructuredOutputs` to `false`. |
+| Ollama requests use the wrong path | Configure the Ollama server root; OpenMapX appends `/v1`. |
+| Every model falls back to keyword | Inspect provider warnings for timeout, invalid model ID, or structured-output validation errors. |
+| A recently failed cloud provider is skipped | Wait up to 60 seconds for its circuit breaker after correcting the underlying problem. |
 
 ## Related features
 
