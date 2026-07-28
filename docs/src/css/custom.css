@@ -26,15 +26,19 @@
     U+2C60-2C7F, U+A720-A7FF;
 }
 
-/* OpenMapX brand: Material Green (primary = #43A047). */
+/* OpenMapX brand green (primary = #207E23). The steps are taken straight from
+ * the landing page's --immich-ui-primary-* scale (200-800) so all three
+ * properties share one ramp; primary and -dark are the app's --omx-brand and
+ * --omx-brand-hover. Link text sits on white here, so primary has to clear
+ * WCAG AA on its own: it reads 5.2:1. */
 :root {
-  --ifm-color-primary: #43a047;
-  --ifm-color-primary-dark: #3d9140;
-  --ifm-color-primary-darker: #388e3c;
-  --ifm-color-primary-darkest: #2e7d32;
-  --ifm-color-primary-light: #4caf50;
-  --ifm-color-primary-lighter: #58b55c;
-  --ifm-color-primary-lightest: #66bb6a;
+  --ifm-color-primary: #207e23;
+  --ifm-color-primary-dark: #1b6a1d;
+  --ifm-color-primary-darker: #155b18;
+  --ifm-color-primary-darkest: #114b12;
+  --ifm-color-primary-light: #3bb03f;
+  --ifm-color-primary-lighter: #79c87c;
+  --ifm-color-primary-lightest: #a6d9a7;
   --ifm-code-font-size: 95%;
   --ifm-font-family-base: 'Google Sans Flex', system-ui, -apple-system, 'Segoe UI', Roboto,
     Helvetica, Arial, sans-serif;
@@ -43,13 +47,13 @@
 
 /* A lighter green reads better on the dark background. */
 [data-theme='dark'] {
-  --ifm-color-primary: #81c784;
-  --ifm-color-primary-dark: #66bb6a;
-  --ifm-color-primary-darker: #4caf50;
-  --ifm-color-primary-darkest: #43a047;
-  --ifm-color-primary-light: #a5d6a7;
-  --ifm-color-primary-lighter: #c8e6c9;
-  --ifm-color-primary-lightest: #e8f5e9;
+  --ifm-color-primary: #71d674;
+  --ifm-color-primary-dark: #45c94a;
+  --ifm-color-primary-darker: #2fa733;
+  --ifm-color-primary-darkest: #238527;
+  --ifm-color-primary-light: #9cde9e;
+  --ifm-color-primary-lighter: #c0e7c1;
+  --ifm-color-primary-lightest: #e6f4e7;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
 }
 
