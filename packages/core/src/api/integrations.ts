@@ -20,6 +20,9 @@ export interface AiSearchDisclosure {
   localActive: boolean;
   cloudActive: boolean;
   cloudProcessors: AiCloudProcessor[];
+  cloudAvailable: boolean;
+  cloudConsentRequired: boolean;
+  cloudProviderLabels: string[];
 }
 
 export type EmailProvider = "emaillabs" | "lettermint" | "smtp";

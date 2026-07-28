@@ -120,6 +120,12 @@ export interface AiSearchDisclosure {
   /** A cloud provider configured + in chain → show the Privacy data-transfer row. */
   cloudActive: boolean;
   cloudProcessors: AiCloudProcessor[];
+  /** Cloud execution is permitted by the instance privacy policy. */
+  cloudAvailable: boolean;
+  /** The client must obtain an explicit opt-in before sending a query to cloud AI. */
+  cloudConsentRequired: boolean;
+  /** Secret-free, operator-facing labels for the configured cloud provider chain. */
+  cloudProviderLabels: string[];
 }
 
 export type EmailProvider = "emaillabs" | "lettermint" | "smtp";

@@ -71,6 +71,8 @@ import {
   useSettingsStore,
   useSidebarStore,
 } from "@openmapx/core";
+import type { Disclosure } from "@openmapx/integration-framework";
+import { IntegrationDisclosuresProvider } from "@/lib/integrationDisclosuresContext";
 import { SearchBar } from "./SearchBar";
 
 beforeEach(() => {
@@ -87,9 +89,16 @@ beforeEach(() => {
   usePlaceStore.setState({ selectedPlace: null });
   useSidebarStore.setState({ activeSidebarId: null });
   useSettingsStore.setState({ aiSearchEnabled: true });
+  localStorage.clear();
 });
 
-const renderBar = () => render(<SearchBar />, { wrapper: createQueryWrapper() });
+const renderBar = (disclosures: Disclosure[] = []) =>
+  render(
+    <IntegrationDisclosuresProvider value={disclosures}>
+      <SearchBar />
+    </IntegrationDisclosuresProvider>,
+    { wrapper: createQueryWrapper() },
+  );
 
 describe("SearchBar", () => {
   it("mounts and renders the search input", () => {
@@ -185,6 +194,66 @@ describe("SearchBar", () => {
     expect(useNlpSearchStore.getState().isNlpActive).toBe(true);
     expect(useNlpSearchStore.getState().provider).toBe("local");
     expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.CATEGORY);
+  });
+
+  it("asks for cloud consent before parsing even when the local fallback has no plausible intent", async () => {
+    const cloudDisclosure: Disclosure = {
+      type: "ai-search",
+      integrationId: "search-nlp",
+      aiActive: true,
+      localActive: true,
+      cloudActive: true,
+      cloudAvailable: true,
+      cloudConsentRequired: true,
+      cloudProviderLabels: ["Gemini · gemini-3.5-flash-lite"],
+      cloudProcessors: [
+        {
+          id: "google",
+          name: "Google (Gemini)",
+          countryCode: "US",
+          privacyUrl: "https://policies.google.com/privacy",
+        },
+      ],
+    };
+    const cloudIntent = {
+      filter: { selectors: [{ tags: [{ key: "amenity", value: "cafe" }] }] },
+      spatial_constraint: null,
+      time_constraint: null,
+      sort_by: "relevance" as const,
+      unmapped_attributes: [],
+      confidence: 0.95,
+      explanation: "Accessible cafés with outdoor seating",
+    };
+    useNlpSearchMock.mockImplementation((...args: unknown[]) =>
+      args[5] === "consented"
+        ? {
+            data: {
+              intent: cloudIntent,
+              resolvedBbox: null,
+              provider: "gemini",
+              providerLabel: "Gemini · gemini-3.5-flash-lite",
+            },
+            isFetching: false,
+          }
+        : { data: undefined, isFetching: false },
+    );
+
+    renderBar([cloudDisclosure]);
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "accessible cafes with outdoor seating" } });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    await screen.findByText("search.nlpConsentTitle");
+    expect(useNlpSearchMock.mock.calls.at(-1)?.[3]).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "search.enable" }));
+
+    await waitFor(() => {
+      expect(useNlpSearchMock.mock.calls.at(-1)?.[3]).toBe(true);
+      expect(useNlpSearchMock.mock.calls.at(-1)?.[5]).toBe("consented");
+    });
+    await screen.findByText("Accessible cafés with outdoor seating");
   });
 
   it("shows no dropdown and keeps suggestions empty when the query is short", () => {

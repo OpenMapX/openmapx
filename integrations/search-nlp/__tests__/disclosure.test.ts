@@ -38,6 +38,9 @@ describe("computeAiSearchDisclosure", () => {
       localActive: false,
       cloudActive: false,
       cloudProcessors: [],
+      cloudAvailable: false,
+      cloudConsentRequired: false,
+      cloudProviderLabels: [],
     });
   });
 
@@ -58,5 +61,23 @@ describe("computeAiSearchDisclosure", () => {
     ]);
     expect(disclosure.cloudActive).toBe(true);
     expect(disclosure.cloudProcessors).toEqual([google]);
+    expect(disclosure.cloudAvailable).toBe(true);
+    expect(disclosure.cloudConsentRequired).toBe(true);
+    expect(disclosure.cloudProviderLabels).toEqual(["gemini-fast", "gemini-quality"]);
+  });
+
+  it("publishes the effective cloud privacy policy", () => {
+    const providers = [provider({ id: "gemini", ai: true, cloud: true, processors: [google] })];
+
+    expect(computeAiSearchDisclosure(providers, "strict")).toMatchObject({
+      cloudActive: true,
+      cloudAvailable: false,
+      cloudConsentRequired: false,
+    });
+    expect(computeAiSearchDisclosure(providers, "open")).toMatchObject({
+      cloudActive: true,
+      cloudAvailable: true,
+      cloudConsentRequired: false,
+    });
   });
 });

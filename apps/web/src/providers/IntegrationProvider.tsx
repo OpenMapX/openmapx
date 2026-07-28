@@ -12,6 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { FrameworkStringsProvider } from "@/lib/frameworkStringsContext";
+import { IntegrationDisclosuresProvider } from "@/lib/integrationDisclosuresContext";
 
 export function IntegrationProvider({ children }: { children: React.ReactNode }) {
   const { apiUrl } = useEnv();
@@ -33,7 +34,7 @@ export function IntegrationProvider({ children }: { children: React.ReactNode })
     }
   }, []);
 
-  const { data } = useQuery({
+  const { data, isPending } = useQuery({
     queryKey: ["integrations", apiBase],
     queryFn: async () => {
       const res = await fetch(`${apiBase}/api/integrations`, { credentials: "include" });
@@ -44,6 +45,10 @@ export function IntegrationProvider({ children }: { children: React.ReactNode })
   });
   const integrations = data?.integrations;
   const frameworkStrings = data?.frameworkStrings;
+  // Keep policy-dependent features paused only while the shared integration
+  // metadata is loading. If the request fails, an empty disclosure list lets
+  // their non-cloud fallback paths continue instead of remaining disabled.
+  const disclosures = isPending ? undefined : (data?.disclosures ?? []);
 
   // Community integration bundles import `react`, `react/jsx-runtime`, and
   // `@openmapx/core` as externals. The page's import map (apps/web/src/app/
@@ -86,7 +91,11 @@ export function IntegrationProvider({ children }: { children: React.ReactNode })
 
   return (
     <IntegrationRegistryContext.Provider value={registry}>
-      <FrameworkStringsProvider value={frameworkStrings ?? {}}>{children}</FrameworkStringsProvider>
+      <IntegrationDisclosuresProvider value={disclosures}>
+        <FrameworkStringsProvider value={frameworkStrings ?? {}}>
+          {children}
+        </FrameworkStringsProvider>
+      </IntegrationDisclosuresProvider>
     </IntegrationRegistryContext.Provider>
   );
 }

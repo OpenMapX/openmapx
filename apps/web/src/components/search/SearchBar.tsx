@@ -77,6 +77,10 @@ import { NlpConsentDialog } from "@/components/ui/NlpConsentDialog";
 import { hasNlpConsent, isNlpCloudDeclined, setNlpConsent } from "@/components/ui/nlpConsent";
 import { attributionsForProviders } from "@/lib/attributionForProviders";
 import {
+  useAiSearchDisclosure,
+  useIntegrationDisclosures,
+} from "@/lib/integrationDisclosuresContext";
+import {
   launchExploreFromPlace,
   launchExploreTextSearch,
   launchTextSearch,
@@ -221,6 +225,7 @@ export function SearchBar() {
   // consentGranted tracks local acceptance within this session so the card
   // renders immediately after the user clicks "Enable" without a re-fetch.
   const [consentGranted, setConsentGranted] = useState(false);
+  const [consentDeclined, setConsentDeclined] = useState(false);
   // The natural-language parse is expensive on this deployment (~10-20s CPU
   // inference), so it fires only when the user submits (Enter / search button),
   // never per keystroke. Any edit to the query resets this (see handleChange).
@@ -251,19 +256,40 @@ export function SearchBar() {
   // Settings the parse never fires, so search falls back to plain autocomplete.
   const aiSearchEnabled = useSettingsStore((s) => s.aiSearchEnabled);
 
+  const disclosures = useIntegrationDisclosures();
+  const aiSearchDisclosure = useAiSearchDisclosure();
+  const storedConsent = hasNlpConsent();
+  const cloudDeclined = consentDeclined || isNlpCloudDeclined();
+  const waitingForConsent =
+    nlpSubmitted &&
+    aiSearchEnabled &&
+    nlpCloudAccess === "deny" &&
+    aiSearchDisclosure?.cloudAvailable === true &&
+    aiSearchDisclosure.cloudConsentRequired &&
+    !consentGranted &&
+    !storedConsent &&
+    !cloudDeclined;
+  const integrationsLoading = disclosures === undefined;
+  const effectiveCloudAccess: NlpCloudAccess =
+    nlpCloudAccess === "deny" &&
+    aiSearchDisclosure?.cloudAvailable === true &&
+    !aiSearchDisclosure.cloudConsentRequired &&
+    !cloudDeclined
+      ? "defer-to-server"
+      : nlpCloudAccess;
+
   const { data: nlpData, isFetching: nlpFetching } = useNlpSearch(
     debouncedQuery,
     mapCenter,
     mapBbox,
-    nlpSubmitted && aiSearchEnabled,
+    nlpSubmitted && aiSearchEnabled && !waitingForConsent && !integrationsLoading,
     locale,
-    nlpCloudAccess,
+    effectiveCloudAccess,
   );
 
-  // Even in operator-configured "open" mode, the first request is local-only
-  // until the server reports the active policy. If no consent gate is required,
-  // immediately re-run against the full provider chain. A remembered decline
-  // always wins over open mode.
+  // Fallback for a server that reveals an open cloud policy on the parse
+  // response rather than in its integration metadata. Current servers normally
+  // select defer-to-server before the first request via effectiveCloudAccess.
   useEffect(() => {
     if (
       nlpSubmitted &&
@@ -594,18 +620,16 @@ export function SearchBar() {
   // intents (confidence + at least one category). It never replaces the
   // parallel geocode/autocomplete suggestions below it.
   const nlpIntent = nlpData?.intent;
-  const storedConsent = hasNlpConsent();
-  const cloudDeclined = isNlpCloudDeclined();
   const showNlpCard = !nearbyMode && nlpIntent !== undefined && isPlausibleNlSearch(nlpIntent);
   const showConsentDialog =
     !nearbyMode &&
-    nlpIntent !== undefined &&
-    isPlausibleNlSearch(nlpIntent) &&
-    nlpData?.cloudAvailable === true &&
-    nlpData.cloudConsentRequired &&
-    !consentGranted &&
-    !storedConsent &&
-    !cloudDeclined;
+    (waitingForConsent ||
+      (nlpSubmitted &&
+        nlpData?.cloudAvailable === true &&
+        nlpData.cloudConsentRequired &&
+        !consentGranted &&
+        !storedConsent &&
+        !cloudDeclined));
   const nlpCard =
     showNlpCard && nlpData ? (
       <NlpSearchCard
@@ -902,17 +926,19 @@ export function SearchBar() {
 
   return (
     <>
-      {showConsentDialog && nlpData && (
+      {showConsentDialog && (
         <NlpConsentDialog
           open
-          providers={nlpData.cloudProviderLabels}
+          providers={aiSearchDisclosure?.cloudProviderLabels ?? nlpData?.cloudProviderLabels ?? []}
           onAccept={() => {
             setNlpConsent(true);
             setConsentGranted(true);
+            setConsentDeclined(false);
             setNlpCloudAccess("consented");
           }}
           onDecline={() => {
             setNlpConsent(false);
+            setConsentDeclined(true);
             setNlpCloudAccess("deny");
           }}
         />

@@ -192,7 +192,12 @@ async function ensureOllamaModel(
   }
 }
 
-export function computeAiSearchDisclosure(providers: NlpProvider[]): AiSearchDisclosure {
+type PrivacyMode = "strict" | "consent" | "open";
+
+export function computeAiSearchDisclosure(
+  providers: NlpProvider[],
+  privacyMode: PrivacyMode = "consent",
+): AiSearchDisclosure {
   const processors = new Map(
     providers
       .flatMap((provider) => provider.cloudProcessors)
@@ -201,6 +206,7 @@ export function computeAiSearchDisclosure(providers: NlpProvider[]): AiSearchDis
   const cloudProcessors = [...processors.values()];
   const localActive = providers.some((provider) => provider.isAi && !provider.requiresNetwork);
   const cloudActive = providers.some((provider) => provider.isAi && provider.requiresNetwork);
+  const cloudAvailable = cloudActive && privacyMode !== "strict";
   return {
     type: "ai-search",
     integrationId: "search-nlp",
@@ -208,13 +214,23 @@ export function computeAiSearchDisclosure(providers: NlpProvider[]): AiSearchDis
     localActive,
     cloudActive,
     cloudProcessors,
+    cloudAvailable,
+    cloudConsentRequired: cloudAvailable && privacyMode === "consent",
+    cloudProviderLabels: providers
+      .filter((provider) => provider.requiresNetwork)
+      .map((provider) => provider.label),
   };
 }
 
 export function setup(ctx: IntegrationContext): void {
   const definitions = readProviderDefinitions(ctx);
   const providers = __buildProviders(ctx, definitions);
-  const disclosure = computeAiSearchDisclosure(providers);
+  const configuredPrivacyMode = readString(ctx, "privacyMode");
+  const privacyMode: PrivacyMode =
+    configuredPrivacyMode === "strict" || configuredPrivacyMode === "open"
+      ? configuredPrivacyMode
+      : "consent";
+  const disclosure = computeAiSearchDisclosure(providers, privacyMode);
   ctx.registerDisclosure(disclosure);
   const roundDecimals = readNumber(ctx, "roundCoordsDecimals") ?? DEFAULT_ROUND_DECIMALS;
   const intentTtl = readNumber(ctx, "intentCacheTtlSeconds") ?? DEFAULT_INTENT_TTL;
@@ -274,7 +290,6 @@ export function setup(ctx: IntegrationContext): void {
     // Cloud access is fail-closed. Consent mode needs an explicit positive
     // authorization on every request; open mode additionally accepts a client
     // request to defer to server policy. Strict mode always excludes cloud.
-    const privacyMode = readString(ctx, "privacyMode") ?? "consent";
     const strictPrivacy = privacyMode === "strict";
     const cloudAllowed =
       !strictPrivacy &&
