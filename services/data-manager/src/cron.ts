@@ -12,6 +12,7 @@ import { execa } from "execa";
 import type { FastifyBaseLogger } from "fastify";
 import { db } from "./db/index.js";
 import { discoverLatestOvertureRelease } from "./jobs/overture/pull.js";
+import { rebuildOvertureLinks } from "./jobs/overture/rebuild-links.js";
 import { syncOvertureRegion } from "./jobs/overture/sync.js";
 import {
   type BakePredictedDeps,
@@ -167,6 +168,8 @@ export interface CronSetupOptions {
   overtureRegion?: string;
   /** Override the Overture monthly cron schedule (e.g. for tests). */
   overtureCronExpression?: string;
+  /** Retry schedule for the independently durable OSM↔Overture link rebuild. */
+  overtureConflationRetryCronExpression?: string;
   /**
    * Test seam: directly enable/disable the Overture cron without touching
    * OVERTURE_ENABLED. When omitted, the env var governs.
@@ -178,6 +181,8 @@ export interface CronSetupOptions {
   getInstalledOvertureRelease?: () => Promise<string | null>;
   /** Test seam: run the Overture update for a resolved release. */
   syncOvertureRelease?: typeof syncOvertureRegion;
+  /** Test seam: rebuild links for the installed release without re-importing Places. */
+  rebuildOvertureLinks?: typeof rebuildOvertureLinks;
   /** Test seam: persist successful Overture release state. */
   writeOvertureFeedState?: typeof writeFeedState;
   /** Override the traffic-extract guard cron schedule (e.g. for tests). */
@@ -290,6 +295,7 @@ export interface CronHandles {
   feedProxyReloadCron: Cron | null;
   stalenessCheckCron: Cron | null;
   overtureCron: Cron | null;
+  overtureConflationRetryCron: Cron | null;
   /** Slow guard cron that rebuilds the Valhalla traffic.tar when it's stale. */
   trafficExtractCron: Cron | null;
   /** Live-traffic writer cron; null when OpenConditions isn't configured. */
@@ -308,6 +314,8 @@ export interface CronHandles {
   runStalenessCheckNow: () => Promise<void>;
   /** Test seam: directly invoke the Overture monthly sync handler. */
   runOvertureNow: () => Promise<void>;
+  /** Test seam: retry link rebuilding without release discovery or Places ingest. */
+  runOvertureConflationRetryNow: () => Promise<void>;
   /**
    * Run once at data-manager startup (before any job that depends on
    * traffic.tar existing, e.g. the live-speed writer cron below). Callers
@@ -801,6 +809,51 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   const overtureExpr = overtureEnabled
     ? pickCronExpression(options.overtureCronExpression, "OVERTURE_SYNC_CRON", "0 5 1 * *")
     : null;
+  const overtureConflationRetryExpr = overtureEnabled
+    ? pickCronExpression(
+        options.overtureConflationRetryCronExpression,
+        "OVERTURE_CONFLATION_RETRY_CRON",
+        "15 */6 * * *",
+      )
+    : null;
+
+  const runOvertureConflationRetry = async (): Promise<void> => {
+    const region =
+      options.overtureRegion ?? (process.env.OPENMAPX_REGION || "europe/germany/berlin");
+    const readInstalledRelease = options.getInstalledOvertureRelease ?? getInstalledOvertureRelease;
+    const rebuildLinks = options.rebuildOvertureLinks ?? rebuildOvertureLinks;
+    try {
+      const release = await readInstalledRelease();
+      if (!release) {
+        log.info("overture-conflation: no installed Places release; nothing to rebuild", {
+          region,
+        });
+        return;
+      }
+      const result = await rebuildLinks({
+        region,
+        release,
+        dataDir: options.dataDir,
+        onProgress: (msg) => log.info(msg),
+      });
+      if (result.status === "failed") {
+        log.error("overture-conflation: rebuild failed and remains retryable", {
+          region,
+          release,
+          err: result.error,
+        });
+      } else {
+        log.info("overture-conflation: retry check complete", {
+          region,
+          release,
+          status: result.status,
+          linked: result.linked,
+        });
+      }
+    } catch (err) {
+      log.error("overture-conflation: retry check failed", { err: (err as Error).message });
+    }
+  };
 
   const runOvertureSync = async (): Promise<void> => {
     const region =
@@ -813,7 +866,11 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       const release = await discoverRelease();
       const installedRelease = await readInstalledRelease();
       if (installedRelease === release) {
-        log.info("overture-cron: latest release already installed", { region, release });
+        log.info("overture-cron: latest Places release already installed; checking links", {
+          region,
+          release,
+        });
+        await runOvertureConflationRetry();
         return;
       }
       if (installedRelease && installedRelease.localeCompare(release) > 0) {
@@ -825,7 +882,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         return;
       }
 
-      await syncRelease({
+      const result = await syncRelease({
         region,
         release,
         dataDir: options.dataDir,
@@ -833,6 +890,13 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       });
       await persistFeedState(region, release, log);
       await runStalenessCheck();
+      if (result.conflation === "failed") {
+        log.error("overture-cron: Places imported; link rebuild will retry independently", {
+          region,
+          release,
+          err: result.conflationError,
+        });
+      }
     } catch (err) {
       log.error("overture-cron: sync failed", { err: (err as Error).message });
     }
@@ -844,12 +908,31 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   } else if (!overtureExpr) {
     log.info("overture-cron: disabled by cron expression sentinel");
   } else {
-    overtureCron = new Cron(overtureExpr, { name: "overture-monthly-sync", protect: true }, () => {
-      void runOvertureSync().catch((err) => {
+    overtureCron = new Cron(overtureExpr, { name: "overture-monthly-sync", protect: true }, () =>
+      runOvertureSync().catch((err) => {
         log.error("overture-cron: unexpected rejection", { err: (err as Error).message });
-      });
-    });
+      }),
+    );
     log.info("overture-cron: scheduled", { expression: overtureExpr });
+  }
+
+  let overtureConflationRetryCron: Cron | null = null;
+  if (!overtureEnabled || !overtureConflationRetryExpr) {
+    log.info("overture-conflation: independent retry cron disabled");
+  } else {
+    overtureConflationRetryCron = new Cron(
+      overtureConflationRetryExpr,
+      { name: "overture-conflation-retry", protect: true },
+      () =>
+        runOvertureConflationRetry().catch((err) => {
+          log.error("overture-conflation: unexpected rejection", {
+            err: (err as Error).message,
+          });
+        }),
+    );
+    log.info("overture-conflation: independent retry scheduled", {
+      expression: overtureConflationRetryExpr,
+    });
   }
 
   const ensureExtract = options.ensureTrafficExtract ?? ensureTrafficExtract;
@@ -1098,6 +1181,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     feedProxyReloadCron?.stop();
     stalenessCheckCron?.stop();
     overtureCron?.stop();
+    overtureConflationRetryCron?.stop();
     trafficExtractCron?.stop();
     trafficLiveCron?.stop();
     trafficPredictedCron?.stop();
@@ -1109,6 +1193,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     feedProxyReloadCron,
     stalenessCheckCron,
     overtureCron,
+    overtureConflationRetryCron,
     trafficExtractCron,
     trafficLiveCron,
     trafficPredictedCron,
@@ -1118,6 +1203,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     runFeedProxyReloadNow: runFeedProxyReload,
     runStalenessCheckNow: runStalenessCheck,
     runOvertureNow: runOvertureSync,
+    runOvertureConflationRetryNow: runOvertureConflationRetry,
     runTrafficExtractStartupNow: runTrafficExtractStartup,
     runTrafficExtractGuardNow: runTrafficExtractGuard,
     runWaysToEdgesRefreshNow: runWaysToEdgesRefresh,

@@ -3,10 +3,10 @@ import { join } from "node:path";
 import type { OsmFilter } from "@openmapx/core/utils/osmCategoryFilters";
 import { CATEGORY_FILTERS } from "@openmapx/core/utils/osmCategoryFilters";
 import { execa } from "execa";
+import { latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";
 import { osmPbfName } from "../download-osm.js";
 import { assertValidRegion } from "./pull.js";
-import { applyOsmPoisTable } from "./schema.js";
 
 export type { OsmFilter };
 
@@ -35,6 +35,8 @@ export interface ExtractOsmPoisOptions {
   dataDir: string;
   region: string;
   onProgress?: (msg: string) => void;
+  /** Durable-job heartbeat invoked after each streamed database batch. */
+  onCheckpoint?: (extracted: number) => Promise<void>;
 }
 
 export interface OsmPoiRecord {
@@ -43,6 +45,7 @@ export interface OsmPoiRecord {
   name: string;
   lat: number;
   lng: number;
+  h3R8: string;
   category: string | undefined;
   tags: Record<string, string>;
 }
@@ -86,6 +89,16 @@ export function featureToOsmPoiRecord(feature: GeoJsonFeature): OsmPoiRecord | n
   } else {
     return null;
   }
+  if (
+    !Number.isFinite(lat) ||
+    !Number.isFinite(lng) ||
+    lat < -90 ||
+    lat > 90 ||
+    lng < -180 ||
+    lng > 180
+  ) {
+    return null;
+  }
 
   const rawId = typeof feature.id === "string" ? feature.id : "";
   let osmType: "node" | "way" | "relation" = "node";
@@ -95,7 +108,7 @@ export function featureToOsmPoiRecord(feature: GeoJsonFeature): OsmPoiRecord | n
   if (!osmId || Number.isNaN(Number(osmId))) return null;
 
   const category = osmTagsToCategory(props);
-  return { osmType, osmId, name, lat, lng, category, tags: props };
+  return { osmType, osmId, name, lat, lng, h3R8: latLngToCell(lat, lng, 8), category, tags: props };
 }
 
 /**
@@ -105,13 +118,12 @@ export function featureToOsmPoiRecord(feature: GeoJsonFeature): OsmPoiRecord | n
  * This shells out to `osmium` (same pattern as convert-overpass.ts) so the
  * heavy XML/PBF work stays in the C++ tool rather than Node.
  */
-export async function extractOsmPois(opts: ExtractOsmPoisOptions): Promise<OsmPoiRecord[]> {
+export async function extractOsmPois(opts: ExtractOsmPoisOptions): Promise<{ extracted: number }> {
   assertValidRegion(opts.region);
   const pbfPath = opts.pbfPath ?? join(opts.dataDir, "osm", osmPbfName(opts.region));
   const outDir = join(opts.dataDir, "overture", "osm-extract");
   const slug = opts.region.replace(/\//g, "-");
   const filteredPbf = join(outDir, `${slug}-pois.osm.pbf`);
-  const outPath = join(outDir, `${slug}-pois.geojsonseq`);
 
   const filterExpressions: string[] = [];
   for (const filters of Object.values(CATEGORY_FILTERS)) {
@@ -132,48 +144,91 @@ export async function extractOsmPois(opts: ExtractOsmPoisOptions): Promise<OsmPo
     ["tags-filter", pbfPath, ...uniqueFilters.map((f) => `nwr/${f}`), "-o", filteredPbf, "-O"],
     { stdio: "inherit" },
   );
-  // GeoJSON Text Sequence (one feature per line). A single -f geojson document
-  // for a country-sized extract is gigabytes, which overflows Node's maximum
-  // string length when read in one piece — so emit a sequence and stream it.
-  await execa(
-    "osmium",
-    ["export", "-f", "geojsonseq", "--add-unique-id=type_id", filteredPbf, "-o", outPath, "-O"],
-    { stdio: "inherit" },
+  const schema = "overture_places";
+  const stagingTable = "osm_pois__staging";
+  opts.onProgress?.("Preparing a fresh OSM POI staging table...");
+  await sql.unsafe(`DROP TABLE IF EXISTS "${schema}"."${stagingTable}"`);
+  await sql.unsafe(
+    `CREATE UNLOGGED TABLE "${schema}"."${stagingTable}"
+       (LIKE "${schema}".osm_pois INCLUDING DEFAULTS INCLUDING CONSTRAINTS)`,
   );
 
-  opts.onProgress?.(`Parsing ${outPath}...`);
-
-  const { createReadStream } = await import("node:fs");
+  // GeoJSON Text Sequence (one feature per line). Stream stdout directly into
+  // the database pipeline: a country-sized intermediate is gigabytes and does
+  // not need to exist either as one Node string or as another on-disk file.
+  const exportProcess = execa(
+    "osmium",
+    ["export", "-f", "geojsonseq", "--add-unique-id=type_id", filteredPbf],
+    { stdout: "pipe", stderr: "inherit" },
+  );
+  opts.onProgress?.("Streaming osmium GeoJSON output into PostGIS...");
   const { createInterface } = await import("node:readline");
+  if (!exportProcess.stdout) {
+    exportProcess.kill("SIGTERM");
+    await exportProcess.catch(() => undefined);
+    throw new Error("osmium export did not provide a stdout stream");
+  }
   const rl = createInterface({
-    input: createReadStream(outPath, "utf8"),
+    input: exportProcess.stdout,
     crlfDelay: Number.POSITIVE_INFINITY,
   });
 
-  const records: OsmPoiRecord[] = [];
-  for await (const rawLine of rl) {
-    // geojsonseq may prefix each record with the RS (0x1e) control character.
-    const line = (rawLine.charCodeAt(0) === 0x1e ? rawLine.slice(1) : rawLine).trim();
-    if (!line) continue;
-    let feature: GeoJsonFeature;
-    try {
-      feature = JSON.parse(line);
-    } catch {
-      continue;
+  let extracted = 0;
+  let records: OsmPoiRecord[] = [];
+  try {
+    for await (const rawLine of rl) {
+      // geojsonseq may prefix each record with the RS (0x1e) control character.
+      const line = (rawLine.charCodeAt(0) === 0x1e ? rawLine.slice(1) : rawLine).trim();
+      if (!line) continue;
+      let feature: GeoJsonFeature;
+      try {
+        feature = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      const record = featureToOsmPoiRecord(feature);
+      if (!record) continue;
+      records.push(record);
+      extracted += 1;
+      if (records.length >= OSM_POIS_INSERT_BATCH) {
+        await insertOsmPois(schema, stagingTable, records);
+        records = [];
+        await opts.onCheckpoint?.(extracted);
+        if (extracted % 25_000 === 0) {
+          opts.onProgress?.(`Streamed ${extracted} OSM POIs into PostGIS...`);
+        }
+      }
     }
-    const record = featureToOsmPoiRecord(feature);
-    if (record) records.push(record);
+    await insertOsmPois(schema, stagingTable, records);
+    await exportProcess;
+  } catch (error) {
+    exportProcess.kill("SIGTERM");
+    await exportProcess.catch(() => undefined);
+    throw error;
+  } finally {
+    rl.close();
   }
 
-  opts.onProgress?.(`Extracted ${records.length} POIs.`);
+  opts.onProgress?.(`Extracted ${extracted} POIs; publishing the staged snapshot...`);
+  await sql.begin(async (tx) => {
+    await tx.unsafe(`DROP TABLE IF EXISTS "${schema}".osm_pois__previous`);
+    await tx.unsafe(`ALTER TABLE "${schema}".osm_pois RENAME TO osm_pois__previous`);
+    await tx.unsafe(`ALTER TABLE "${schema}"."${stagingTable}" RENAME TO osm_pois`);
+    await tx.unsafe(`DROP TABLE "${schema}".osm_pois__previous`);
+    await tx.unsafe(`ALTER TABLE "${schema}".osm_pois ADD PRIMARY KEY (osm_type, osm_id)`);
+    await tx.unsafe(`CREATE INDEX idx_osm_pois_category ON "${schema}".osm_pois (category)`);
+    await tx.unsafe(
+      `CREATE INDEX idx_osm_pois_h3
+         ON "${schema}".osm_pois (h3_r8, osm_type, osm_id)`,
+    );
+    await tx.unsafe(
+      `CREATE INDEX idx_osm_pois_geom
+         ON "${schema}".osm_pois USING GIST (ST_Point(lng, lat))`,
+    );
+  });
+  opts.onProgress?.(`Published ${extracted} OSM POIs to ${schema}.osm_pois.`);
 
-  const schema = "overture_places";
-  opts.onProgress?.("Ensuring osm_pois table exists...");
-  await applyOsmPoisTable(schema);
-  await upsertOsmPois(schema, records);
-  opts.onProgress?.(`Persisted ${records.length} OSM POIs to ${schema}.osm_pois.`);
-
-  return records;
+  return { extracted };
 }
 
 /**
@@ -215,15 +270,20 @@ export function representativePoint(geom: {
   return [meanLng, sumLat / ring.length];
 }
 
-const OSM_POIS_INSERT_BATCH = 500;
+const OSM_POIS_INSERT_BATCH = 5_000;
 
 /**
- * Batch-upserts OSM POI records into `<schema>.osm_pois`.
+ * Batch-inserts OSM POI records into the fresh staging table.
  * osm_id is BIGINT in the table; OsmPoiRecord.osmId is a numeric string — we
  * parse it with parseInt and pass as a number so postgres-js can send it.
- * The ON CONFLICT clause makes re-runs idempotent.
+ * Osmium emits each OSM object once; a duplicate therefore fails the staged
+ * extract instead of silently hiding a malformed snapshot.
  */
-async function upsertOsmPois(schema: string, records: OsmPoiRecord[]): Promise<void> {
+async function insertOsmPois(
+  schema: string,
+  table: "osm_pois__staging",
+  records: OsmPoiRecord[],
+): Promise<void> {
   if (records.length === 0) return;
 
   for (let i = 0; i < records.length; i += OSM_POIS_INSERT_BATCH) {
@@ -234,12 +294,13 @@ async function upsertOsmPois(schema: string, records: OsmPoiRecord[]): Promise<v
     const names = batch.map((r) => r.name);
     const lats = batch.map((r) => r.lat);
     const lngs = batch.map((r) => r.lng);
+    const h3Cells = batch.map((r) => r.h3R8);
     const categories = batch.map((r) => r.category ?? null);
     const tags = batch.map((r) => JSON.stringify(r.tags));
 
     await sql.unsafe(
-      `INSERT INTO "${schema}".osm_pois
-         (osm_type, osm_id, name, lat, lng, category, tags)
+      `INSERT INTO "${schema}"."${table}"
+         (osm_type, osm_id, name, lat, lng, h3_r8, category, tags)
        SELECT
          UNNEST($1::TEXT[]),
          UNNEST($2::BIGINT[]),
@@ -247,14 +308,9 @@ async function upsertOsmPois(schema: string, records: OsmPoiRecord[]): Promise<v
          UNNEST($4::DOUBLE PRECISION[]),
          UNNEST($5::DOUBLE PRECISION[]),
          UNNEST($6::TEXT[]),
-         UNNEST($7::JSONB[])
-       ON CONFLICT (osm_type, osm_id) DO UPDATE
-         SET name     = EXCLUDED.name,
-             lat      = EXCLUDED.lat,
-             lng      = EXCLUDED.lng,
-             category = EXCLUDED.category,
-             tags     = EXCLUDED.tags`,
-      [osmTypes, osmIds, names, lats, lngs, categories, tags],
+         UNNEST($7::TEXT[]),
+         UNNEST($8::JSONB[])`,
+      [osmTypes, osmIds, names, lats, lngs, h3Cells, categories, tags],
     );
   }
 }

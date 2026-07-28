@@ -1,10 +1,7 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import { osmPbfName } from "../download-osm.js";
-import { conflateOverture } from "./conflate.js";
-import { extractOsmPois } from "./extract-osm-pois.js";
 import { ingestOverture } from "./ingest.js";
+import { withOvertureOperationLock } from "./operation-lock.js";
 import { assertValidRegion, pullOverture, resolveOvertureRelease } from "./pull.js";
+import { type RebuildOvertureLinksResult, rebuildOvertureLinksUnlocked } from "./rebuild-links.js";
 
 export interface SyncOvertureRegionOptions {
   region: string;
@@ -16,24 +13,23 @@ export interface SyncOvertureRegionOptions {
 export interface SyncOvertureRegionResult {
   release: string;
   path: string;
-  conflation: "completed" | "skipped";
+  conflation: RebuildOvertureLinksResult["status"];
   linked: number;
+  conflationError?: string;
 }
 
 interface SyncOvertureDependencies {
   pull: typeof pullOverture;
   ingest: typeof ingestOverture;
-  extract: typeof extractOsmPois;
-  conflate: typeof conflateOverture;
-  fileExists: typeof existsSync;
+  rebuildLinks: typeof rebuildOvertureLinksUnlocked;
+  withOperationLock: typeof withOvertureOperationLock;
 }
 
 const defaultDependencies: SyncOvertureDependencies = {
   pull: pullOverture,
   ingest: ingestOverture,
-  extract: extractOsmPois,
-  conflate: conflateOverture,
-  fileExists: existsSync,
+  rebuildLinks: rebuildOvertureLinksUnlocked,
+  withOperationLock: withOvertureOperationLock,
 };
 
 /**
@@ -47,27 +43,40 @@ export async function syncOvertureRegion(
   opts: SyncOvertureRegionOptions,
   dependencies: SyncOvertureDependencies = defaultDependencies,
 ): Promise<SyncOvertureRegionResult> {
+  return dependencies.withOperationLock(() => syncOvertureRegionUnlocked(opts, dependencies));
+}
+
+async function syncOvertureRegionUnlocked(
+  opts: SyncOvertureRegionOptions,
+  dependencies: SyncOvertureDependencies,
+): Promise<SyncOvertureRegionResult> {
   assertValidRegion(opts.region);
   const release = await resolveOvertureRelease(opts.release);
   opts.onProgress?.(`Starting atomic regional Overture refresh for ${release}…`);
   const path = await dependencies.pull({ ...opts, release });
   await dependencies.ingest({ ...opts, release });
 
-  const pbfPath = join(opts.dataDir, "osm", osmPbfName(opts.region));
-  if (!dependencies.fileExists(pbfPath)) {
-    opts.onProgress?.(
-      `OSM PBF not found at ${pbfPath}; skipping optional OSM↔Overture link rebuild.`,
-    );
-    return { release, path, conflation: "skipped", linked: 0 };
-  }
-
   opts.onProgress?.("Rebuilding OSM↔Overture links from the regional OSM extract…");
-  await dependencies.extract({ ...opts, pbfPath });
-  const result = await dependencies.conflate({
+  const result = await dependencies.rebuildLinks({
     region: opts.region,
+    dataDir: opts.dataDir,
     release,
     onProgress: opts.onProgress,
   });
-  opts.onProgress?.(`Regional Overture refresh complete: ${result.linked} links.`);
-  return { release, path, conflation: "completed", linked: result.linked };
+  if (result.status === "failed") {
+    opts.onProgress?.(
+      `Places release ${release} is active; independent link rebuild failed and will retry.`,
+    );
+    return {
+      release,
+      path,
+      conflation: result.status,
+      linked: result.linked,
+      conflationError: result.error,
+    };
+  }
+  opts.onProgress?.(
+    `Regional Overture refresh complete; conflation ${result.status} (${result.linked} links).`,
+  );
+  return { release, path, conflation: result.status, linked: result.linked };
 }

@@ -7,7 +7,7 @@ const OPTIONS = {
   release: "2026-07-22.0",
 };
 
-function dependencies(fileExists = true) {
+function dependencies(rebuildStatus: "completed" | "waiting_for_osm" | "failed" = "completed") {
   const calls: string[] = [];
   return {
     calls,
@@ -19,15 +19,21 @@ function dependencies(fileExists = true) {
       ingest: vi.fn(async () => {
         calls.push("ingest");
       }),
-      extract: vi.fn(async () => {
-        calls.push("extract");
-        return [];
+      withOperationLock: vi.fn(<T>(operation: () => Promise<T>) => operation()),
+      rebuildLinks: vi.fn(async () => {
+        calls.push("rebuild");
+        if (rebuildStatus === "failed") {
+          return { status: "failed" as const, linked: 0, error: "scoring failed" };
+        }
+        if (rebuildStatus === "waiting_for_osm") {
+          return {
+            status: "waiting_for_osm" as const,
+            linked: 0,
+            pbfPath: "/data/osm/berlin.osm.pbf",
+          };
+        }
+        return { status: "completed" as const, linked: 17, extracted: 30, candidates: 20 };
       }),
-      conflate: vi.fn(async () => {
-        calls.push("conflate");
-        return { linked: 17, skipped: 0, pruned: 0 };
-      }),
-      fileExists: vi.fn(() => fileExists),
     },
   };
 }
@@ -35,8 +41,8 @@ function dependencies(fileExists = true) {
 describe("syncOvertureRegion", () => {
   it("pulls and atomically ingests the same resolved release before rebuilding links", async () => {
     const deps = dependencies();
-    const result = await syncOvertureRegion(OPTIONS, deps.value);
-    expect(deps.calls).toEqual(["pull", "ingest", "extract", "conflate"]);
+    const result = await syncOvertureRegion(OPTIONS, deps.value as never);
+    expect(deps.calls).toEqual(["pull", "ingest", "rebuild"]);
     expect(deps.value.pull).toHaveBeenCalledWith(
       expect.objectContaining({ release: OPTIONS.release }),
     );
@@ -52,16 +58,32 @@ describe("syncOvertureRegion", () => {
   });
 
   it("keeps the place refresh successful when no optional regional OSM PBF exists", async () => {
-    const deps = dependencies(false);
-    const result = await syncOvertureRegion(OPTIONS, deps.value);
-    expect(deps.calls).toEqual(["pull", "ingest"]);
-    expect(result.conflation).toBe("skipped");
+    const deps = dependencies("waiting_for_osm");
+    const result = await syncOvertureRegion(OPTIONS, deps.value as never);
+    expect(deps.calls).toEqual(["pull", "ingest", "rebuild"]);
+    expect(result.conflation).toBe("waiting_for_osm");
+  });
+
+  it("publishes Places successfully when the independent link rebuild fails", async () => {
+    const deps = dependencies("failed");
+    const result = await syncOvertureRegion(OPTIONS, deps.value as never);
+    expect(deps.calls).toEqual(["pull", "ingest", "rebuild"]);
+    expect(result).toEqual(
+      expect.objectContaining({
+        release: OPTIONS.release,
+        conflation: "failed",
+        linked: 0,
+        conflationError: "scoring failed",
+      }),
+    );
   });
 
   it("never ingests when the regional pull fails", async () => {
     const deps = dependencies();
     deps.value.pull.mockRejectedValueOnce(new Error("download failed"));
-    await expect(syncOvertureRegion(OPTIONS, deps.value)).rejects.toThrow("download failed");
+    await expect(syncOvertureRegion(OPTIONS, deps.value as never)).rejects.toThrow(
+      "download failed",
+    );
     expect(deps.value.ingest).not.toHaveBeenCalled();
   });
 });

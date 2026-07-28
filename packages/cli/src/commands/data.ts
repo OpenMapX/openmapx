@@ -575,9 +575,15 @@ export function registerDataCommands(program: Command): void {
           log.err(`overture-sync failed: ${result.message ?? "unknown error"}`);
           process.exit(1);
         }
-        log.ok(
-          `Overture ${result.release ?? "release"} active for "${resolvedRegion}" (${result.linked ?? 0} OSM links)`,
-        );
+        log.ok(`Overture ${result.release ?? "release"} active for "${resolvedRegion}"`);
+        if (result.conflation === "failed" || result.conflation === "waiting_for_osm") {
+          log.warn(
+            `OSM link rebuild is ${result.conflation.replaceAll("_", " ")} and will retry independently` +
+              (result.conflationError ? `: ${result.conflationError}` : ""),
+          );
+        } else {
+          log.ok(`${result.linked ?? 0} OSM↔Overture links active`);
+        }
       } catch (err) {
         log.err(`overture-sync failed: ${(err as Error).message}`);
         dataManagerHint();
@@ -633,7 +639,7 @@ export function registerDataCommands(program: Command): void {
 
   data
     .command("overture-conflate [region]")
-    .description("Run OSM↔Overture conflation for a region and write link records")
+    .description("Retry the complete OSM extraction and Overture link rebuild independently")
     .action(async (region: string | undefined) => {
       const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
       const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/germany/berlin";
@@ -643,11 +649,18 @@ export function registerDataCommands(program: Command): void {
           onProgress: (msg) => log.dim(msg),
         });
         if (!result.ok) {
-          log.err("overture-conflate failed");
+          log.err(
+            `overture-conflate failed: ${result.message ?? result.status ?? "unknown error"}`,
+          );
           process.exit(1);
         }
         const linked = result.linked ?? 0;
-        log.ok(`Overture conflation complete: ${linked} link${linked === 1 ? "" : "s"} written`);
+        log.ok(
+          `Overture conflation complete: ${linked} link${linked === 1 ? "" : "s"} written` +
+            (result.extracted !== undefined && result.candidates !== undefined
+              ? ` from ${result.extracted} OSM POIs and ${result.candidates} accepted edges`
+              : ""),
+        );
       } catch (err) {
         log.err(`overture-conflate failed: ${(err as Error).message}`);
         dataManagerHint();

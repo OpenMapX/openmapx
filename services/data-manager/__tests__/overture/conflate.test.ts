@@ -1,9 +1,11 @@
 import { DEFAULT_CONFLATION_THRESHOLDS } from "@openmapx/core";
 import { describe, expect, it, vi } from "vitest";
 import {
+  assignLinkRecords,
   computeLinks,
   type OsmPoiPoint,
   type OverturePlacePoint,
+  scoreLinkCandidates,
 } from "../../src/jobs/overture/conflate.js";
 
 const RELEASE = "2026-06-17.0";
@@ -190,6 +192,34 @@ describe("computeLinks", () => {
     expect(reverse).toStrictEqual(forward);
     expect(forward).toHaveLength(1);
     expect(forward[0].osm_id).toBe(10);
+  });
+
+  it("keeps exact region-wide assignment when candidate scoring is paged", async () => {
+    const place = makePlace({
+      gersId: "gers-cross-page",
+      lat: BASE_LAT,
+      lng: BASE_LNG,
+      name: "Cross Page Cafe",
+    });
+    const farther = makeOsm({
+      osm_id: 20,
+      ...offsetLatLng(BASE_LAT, BASE_LNG, 20, 0),
+      name: "Cross Page Cafe",
+    });
+    const exact = makeOsm({
+      osm_id: 21,
+      lat: BASE_LAT,
+      lng: BASE_LNG,
+      name: "Cross Page Cafe",
+    });
+    const options = { thresholds: DEFAULT_CONFLATION_THRESHOLDS, release: RELEASE };
+
+    const firstPage = await scoreLinkCandidates([place], [farther], options);
+    const secondPage = await scoreLinkCandidates([place], [exact], options);
+    const assigned = assignLinkRecords([...firstPage, ...secondPage]);
+
+    expect(assigned).toHaveLength(1);
+    expect(assigned[0].osm_id).toBe(21);
   });
 
   it("does not let embeddings override structured address contradictions", async () => {

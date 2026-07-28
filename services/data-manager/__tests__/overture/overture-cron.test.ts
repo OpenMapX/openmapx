@@ -180,7 +180,7 @@ describe("Overture cron gating", () => {
         return {
           release: release ?? "2026-07-22.0",
           path: "/tmp/region.parquet",
-          conflation: "skipped",
+          conflation: "waiting_for_osm",
           linked: 0,
         };
       },
@@ -197,9 +197,13 @@ describe("Overture cron gating", () => {
     handles.stop();
   });
 
-  it("does not re-import or refresh state when the latest release is installed", async () => {
+  it("does not re-import when the latest release is installed but retries links", async () => {
     const syncOvertureRelease = vi.fn();
     const writeOvertureFeedState = vi.fn();
+    const rebuildOvertureLinks = vi.fn(async () => ({
+      status: "already_completed" as const,
+      linked: 17,
+    }));
     const handles = setupCron({
       dataDir,
       repoRoot: "/tmp/nope",
@@ -214,12 +218,90 @@ describe("Overture cron gating", () => {
       discoverOvertureRelease: async () => "2026-07-22.0",
       getInstalledOvertureRelease: async () => "2026-07-22.0",
       syncOvertureRelease,
+      rebuildOvertureLinks,
       writeOvertureFeedState,
     });
 
     await handles.runOvertureNow();
     expect(syncOvertureRelease).not.toHaveBeenCalled();
+    expect(rebuildOvertureLinks).toHaveBeenCalledWith(
+      expect.objectContaining({ release: "2026-07-22.0" }),
+    );
     expect(writeOvertureFeedState).not.toHaveBeenCalled();
+    handles.stop();
+  });
+
+  it("retries conflation without release discovery or Places import", async () => {
+    const discoverOvertureRelease = vi.fn(async () => {
+      throw new Error("STAC unavailable");
+    });
+    const syncOvertureRelease = vi.fn();
+    const rebuildOvertureLinks = vi.fn(async () => ({
+      status: "completed" as const,
+      linked: 23,
+      extracted: 30,
+      candidates: 25,
+    }));
+    const handles = setupCron({
+      dataDir,
+      repoRoot: "/tmp/nope",
+      countries: [],
+      store: {} as never,
+      singleFlight: makeController(),
+      logger: { info: () => {}, warn: () => {}, error: () => {} },
+      syncCronExpression: "disabled",
+      feedProxyReloadCronExpression: "disabled",
+      overtureEnabled: true,
+      overtureCronExpression: "disabled",
+      overtureConflationRetryCronExpression: "disabled",
+      discoverOvertureRelease,
+      getInstalledOvertureRelease: async () => "2026-07-22.0",
+      syncOvertureRelease,
+      rebuildOvertureLinks,
+    });
+
+    await handles.runOvertureConflationRetryNow();
+    expect(rebuildOvertureLinks).toHaveBeenCalledWith(
+      expect.objectContaining({ release: "2026-07-22.0" }),
+    );
+    expect(discoverOvertureRelease).not.toHaveBeenCalled();
+    expect(syncOvertureRelease).not.toHaveBeenCalled();
+    handles.stop();
+  });
+
+  it("marks Places imported even when the link rebuild reports failure", async () => {
+    const calls: string[] = [];
+    const handles = setupCron({
+      dataDir,
+      repoRoot: "/tmp/nope",
+      countries: [],
+      store: {} as never,
+      singleFlight: makeController(),
+      logger: { info: () => {}, warn: () => {}, error: () => {} },
+      syncCronExpression: "disabled",
+      feedProxyReloadCronExpression: "disabled",
+      overtureEnabled: true,
+      overtureCronExpression: "disabled",
+      overtureConflationRetryCronExpression: "disabled",
+      discoverOvertureRelease: async () => "2026-07-22.0",
+      getInstalledOvertureRelease: async () => "2026-06-17.0",
+      syncOvertureRelease: async () => ({
+        release: "2026-07-22.0",
+        path: "/data/release.parquet",
+        conflation: "failed",
+        linked: 0,
+        conflationError: "temporary failure",
+      }),
+      writeOvertureFeedState: async () => {
+        calls.push("state");
+      },
+      runStalenessCheck: async () => {
+        calls.push("staleness");
+      },
+    });
+
+    await handles.runOvertureNow();
+    expect(calls).toEqual(["state", "staleness"]);
     handles.stop();
   });
 

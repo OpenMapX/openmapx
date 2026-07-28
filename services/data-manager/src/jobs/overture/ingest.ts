@@ -137,6 +137,7 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
 
   opts.onProgress?.("Backfilling h3_r8...");
   await backfillDerivedColumns(stagingSchema);
+  await sql.unsafe(`ALTER TABLE "${stagingSchema}".places ALTER COLUMN h3_r8 SET NOT NULL`);
 
   opts.onProgress?.("Validating contributor attribution coverage...");
   const contributors = await validateOvertureContributors(stagingSchema);
@@ -156,6 +157,13 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
   opts.onProgress?.("Running labeled regional quality regression gate...");
   const quality = await validateOvertureQuality(stagingSchema, opts.region);
   opts.onProgress?.(`Quality gate passed (${quality.applicableCases} applicable cases).`);
+
+  await sql.unsafe(
+    `INSERT INTO "${stagingSchema}".conflation_state
+       (release, region, status)
+     VALUES ($1, $2, 'pending')`,
+    [release, opts.region],
+  );
 
   // Indexes (geom GIST + h3 + Overture taxonomy) are created by
   // buildSchemaDDL; the geom GIST is rebuilt automatically by the SRID ALTER.

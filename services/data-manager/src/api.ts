@@ -9,10 +9,11 @@ import { downloadGtfs, type FeedDescriptor } from "./jobs/download-gtfs.js";
 import { downloadOsm } from "./jobs/download-osm.js";
 import { downloadStyle } from "./jobs/download-style.js";
 import { applyHardlinkPlan, type HardlinkEntry } from "./jobs/link.js";
-import { conflateOverture } from "./jobs/overture/conflate.js";
 import { extractOsmPois } from "./jobs/overture/extract-osm-pois.js";
 import { ingestOverture } from "./jobs/overture/ingest.js";
+import { withOvertureOperationLock } from "./jobs/overture/operation-lock.js";
 import { assertValidRegion, pullOverture } from "./jobs/overture/pull.js";
+import { rebuildOvertureLinks } from "./jobs/overture/rebuild-links.js";
 import { syncOvertureRegion } from "./jobs/overture/sync.js";
 import {
   CatalogBumpError,
@@ -407,11 +408,13 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     };
 
     try {
-      await ingestOverture({
-        region,
-        dataDir,
-        onProgress: (msg) => writeLine({ event: "progress", message: msg }),
-      });
+      await withOvertureOperationLock(() =>
+        ingestOverture({
+          region,
+          dataDir,
+          onProgress: (msg) => writeLine({ event: "progress", message: msg }),
+        }),
+      );
       writeLine({ event: "done", ok: true });
     } catch (err) {
       writeLine({ event: "error", message: (err as Error).message });
@@ -436,11 +439,13 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     };
 
     try {
-      await extractOsmPois({
-        region,
-        dataDir,
-        onProgress: (msg) => writeLine({ event: "progress", message: msg }),
-      });
+      await withOvertureOperationLock(() =>
+        extractOsmPois({
+          region,
+          dataDir,
+          onProgress: (msg) => writeLine({ event: "progress", message: msg }),
+        }),
+      );
       writeLine({ event: "done", ok: true });
     } catch (err) {
       writeLine({ event: "error", message: (err as Error).message });
@@ -467,13 +472,25 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     };
 
     try {
-      const result = await conflateOverture({
+      const result = await rebuildOvertureLinks({
         region,
+        dataDir,
+        force: true,
         ollamaUrl,
         useEmbeddings: false,
         onProgress: (msg) => writeLine({ event: "progress", message: msg }),
       });
-      writeLine({ event: "done", ok: true, ...result });
+      writeLine({
+        event: "done",
+        ok: result.status !== "failed" && result.status !== "waiting_for_osm",
+        message:
+          result.status === "failed"
+            ? result.error
+            : result.status === "waiting_for_osm"
+              ? `OSM PBF not found at ${result.pbfPath}`
+              : undefined,
+        ...result,
+      });
     } catch (err) {
       writeLine({ event: "error", message: (err as Error).message });
     } finally {

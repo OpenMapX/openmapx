@@ -64,10 +64,36 @@ a different release. Optional OSM↔GERS links are rebuilt when the matching
 regional OSM PBF exists. A failed pull or ingest cannot partially update the
 live places table; the regional database does not use global changelog data.
 
+Places publication and link rebuilding are independent lifecycles. Each Places
+release starts with a durable `pending` link state. Extraction and matching move
+that state through `running`, `completed`, `failed`, or `waiting_for_osm`, with
+attempt counts and row counts retained in PostGIS. A failed or interrupted link
+attempt leaves the Places release active and is retried every six hours by
+default. The retry uses the already installed release and local PBF; it does not
+repeat STAC discovery, download, quality validation, or the Places schema swap.
+
+The rebuild is designed for country-scale inputs. OSM GeoJSON sequences are
+parsed directly into fixed-size Postgres batches and published with an atomic
+table swap. Matching reads OSM with keyset pagination, fetches only indexed
+ring-1 H3 cells from Overture, and materializes accepted edges in an unlogged
+working table. Isolated one-to-one edges are selected in SQL; only contested
+graph components enter the exact cardinality-first assignment solver. The live
+link table is replaced in one transaction after the complete assignment is
+ready, so a failed attempt can never expose a partial link set. A newly imported
+release remains usable without precomputed links until its first rebuild
+completes. A PostgreSQL advisory lock serializes schema swaps, OSM snapshot
+publication, and link rebuilding across data-manager processes.
+
 Run the complete workflow manually with:
 
 ```sh
 pnpm openmapx data overture-sync europe/germany/berlin
+```
+
+Retry only extraction and link rebuilding for the installed release with:
+
+```sh
+pnpm openmapx data overture-conflate europe/germany/berlin
 ```
 
 ## Provenance, licensing, and privacy

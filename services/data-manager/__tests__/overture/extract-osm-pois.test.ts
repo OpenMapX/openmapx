@@ -17,6 +17,7 @@ describe("featureToOsmPoiRecord", () => {
       name: "Späti",
       lat: 52.5,
       lng: 13.4,
+      h3R8: expect.any(String),
       category: expect.anything(),
       tags: { name: "Späti", shop: "convenience" },
     });
@@ -54,6 +55,16 @@ describe("featureToOsmPoiRecord", () => {
         id: "",
         geometry: { type: "Point", coordinates: [1, 2] },
         properties: { name: "x" },
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects coordinates that cannot be indexed by H3", () => {
+    expect(
+      featureToOsmPoiRecord({
+        id: "n1",
+        geometry: { type: "Point", coordinates: [13.4, 95] },
+        properties: { name: "Invalid" },
       }),
     ).toBeNull();
   });

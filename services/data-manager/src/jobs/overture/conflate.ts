@@ -20,7 +20,7 @@ import { gridDisk, latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";
 import { cosineSimilarity, DEFAULT_MODEL, embed, ensureEmbeddingModel } from "./embeddings.js";
 import { assertValidRegion, resolveOvertureRelease } from "./pull.js";
-import { applyOsmPoisTable } from "./schema.js";
+import { assertValidOvertureSchema } from "./schema.js";
 
 // Overture confidence floor for conflation candidates. Calibrated to 0.5 (vs
 // the earlier provisional 0.7) by the precision sweep: 0.7 excluded ~99.8% of
@@ -94,6 +94,25 @@ function ensureH3(point: { lat: number; lng: number; h3_r8?: string | null }): s
  *         first and total identity confidence second.
  */
 export async function computeLinks(
+  places: OverturePlacePoint[],
+  osmPois: OsmPoiPoint[],
+  opts: {
+    thresholds: ConflationThresholds;
+    embedFn?: (texts: string[]) => Promise<number[][]>;
+    cosineFloor?: number;
+    release: string;
+  },
+): Promise<LinkRecord[]> {
+  const edges = await scoreLinkCandidates(places, osmPois, opts);
+  return assignLinkRecords(edges);
+}
+
+/**
+ * Scores every accepted edge in one already-bounded H3 candidate batch.
+ * Assignment is deliberately separate: production persists these edges across
+ * batches before solving the region-wide one-to-one graph.
+ */
+export async function scoreLinkCandidates(
   places: OverturePlacePoint[],
   osmPois: OsmPoiPoint[],
   opts: {
@@ -200,7 +219,7 @@ export async function computeLinks(
     }
   }
 
-  return assignConflationPairs(edges).map((edge) => {
+  return edges.map((edge) => {
     const osm = osmById.get(edge.a.id)?.source;
     const place = placeById.get(edge.b.id)?.source;
     if (!osm || !place) throw new Error("Assigned conflation edge lost its source record");
@@ -222,9 +241,159 @@ export async function computeLinks(
   });
 }
 
+/** Applies the exact cardinality-first global assignment to scored links. */
+export function assignLinkRecords(edges: LinkRecord[]): LinkRecord[] {
+  const byPair = new Map<string, LinkRecord>();
+  const scored: ScoredConflationPair[] = edges.map((edge) => {
+    const osmId = `${edge.osm_type}:${edge.osm_id}`;
+    byPair.set(`${osmId}\u0000${edge.gers_id}`, edge);
+    return {
+      a: { id: osmId, name: "", lat: 0, lng: 0 },
+      b: { id: edge.gers_id, name: "", lat: 0, lng: 0 },
+      score: {
+        method: edge.method,
+        matchConfidence: edge.match_confidence,
+        distanceM: edge.distance_m,
+        nameSimilarity: edge.evidence.nameSimilarity,
+        categoryCompatible: edge.evidence.categoryCompatible,
+        evidence: edge.evidence.signals,
+      },
+    };
+  });
+  return assignConflationPairs(scored).map((edge) => {
+    const link = byPair.get(`${edge.a.id}\u0000${edge.b.id}`);
+    if (!link) throw new Error("Assigned conflation edge lost its persisted candidate");
+    return link;
+  });
+}
+
+const OSM_PAGE_SIZE = 2_000;
+const LINK_COLUMN_COUNT = 9;
+const LINK_ROWS_PER_BATCH = Math.floor(65_500 / LINK_COLUMN_COUNT);
+
+interface PlaceRow {
+  gers_id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  h3_r8: string;
+  basic_category: string | null;
+  taxonomy_primary: string | null;
+  taxonomy_hierarchy: string[] | null;
+  taxonomy_alternates: string[] | null;
+  addresses: unknown;
+  wikidata: string | null;
+  phones: string[] | null;
+  website: string | null;
+  confidence: number | null;
+}
+
+interface OsmRow {
+  osm_type: string;
+  osm_id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  h3_r8: string;
+  category: string | null;
+  street: string | null;
+  housenumber: string | null;
+  postcode: string | null;
+  wikidata: string | null;
+  phone: string | null;
+  website: string | null;
+}
+
+function placeRowToPoint(row: PlaceRow): OverturePlacePoint {
+  let freeform: string | undefined;
+  let postcode: string | undefined;
+  if (row.addresses && typeof row.addresses === "object") {
+    const addresses = row.addresses as Array<{ freeform?: string; postcode?: string }>;
+    freeform = addresses[0]?.freeform;
+    postcode = addresses[0]?.postcode;
+  }
+  return {
+    gersId: row.gers_id,
+    name: row.name,
+    lat: Number(row.lat),
+    lng: Number(row.lng),
+    h3_r8: row.h3_r8,
+    category: overtureTaxonomyToOpenMapX({
+      basicCategory: row.basic_category,
+      primary: row.taxonomy_primary,
+      hierarchy: row.taxonomy_hierarchy,
+      alternates: row.taxonomy_alternates,
+    }),
+    address: freeform,
+    confidence: row.confidence ?? undefined,
+    addressKey: overtureAddressKey(freeform, postcode) ?? undefined,
+    wikidata: row.wikidata ?? undefined,
+    phones: parsePhones(row.phones),
+    website: websiteDomain(row.website) ?? undefined,
+  };
+}
+
+function osmRowToPoint(row: OsmRow): OsmPoiPoint {
+  return {
+    osm_type: row.osm_type,
+    osm_id: Number(row.osm_id),
+    name: row.name,
+    lat: Number(row.lat),
+    lng: Number(row.lng),
+    h3_r8: row.h3_r8,
+    category: row.category ?? undefined,
+    addressKey: osmAddressKey(row.street, row.housenumber, row.postcode) ?? undefined,
+    wikidata: row.wikidata ?? undefined,
+    phones: parsePhones(row.phone),
+    website: websiteDomain(row.website) ?? undefined,
+  };
+}
+
+async function insertLinkRows(
+  schema: string,
+  table: "poi_conflation_candidate" | "poi_conflation_link",
+  links: LinkRecord[],
+  execute: (query: string, parameters: (string | number | null)[]) => Promise<unknown>,
+): Promise<void> {
+  for (let i = 0; i < links.length; i += LINK_ROWS_PER_BATCH) {
+    const batch = links.slice(i, i + LINK_ROWS_PER_BATCH);
+    const placeholders = batch
+      .map(
+        (_, k) =>
+          `($${k * LINK_COLUMN_COUNT + 1}, $${k * LINK_COLUMN_COUNT + 2}::BIGINT, ` +
+          `$${k * LINK_COLUMN_COUNT + 3}, $${k * LINK_COLUMN_COUNT + 4}::DOUBLE PRECISION, ` +
+          `$${k * LINK_COLUMN_COUNT + 5}::DOUBLE PRECISION, ` +
+          `$${k * LINK_COLUMN_COUNT + 6}::DOUBLE PRECISION, $${k * LINK_COLUMN_COUNT + 7}, ` +
+          `$${k * LINK_COLUMN_COUNT + 8}::JSONB, $${k * LINK_COLUMN_COUNT + 9})`,
+      )
+      .join(", ");
+    const values: (string | number | null)[] = batch.flatMap((link) => [
+      link.osm_type,
+      link.osm_id,
+      link.gers_id,
+      link.source_confidence,
+      link.match_confidence,
+      link.distance_m,
+      link.method,
+      JSON.stringify(link.evidence),
+      link.release,
+    ]);
+    await execute(
+      `INSERT INTO "${schema}".${table}
+           (osm_type, osm_id, gers_id, source_confidence, match_confidence,
+            distance_m, method, evidence, release)
+         VALUES ${placeholders}
+         ON CONFLICT DO NOTHING`,
+      values,
+    );
+  }
+}
+
 /**
- * Full conflation job: loads places and OSM POIs from the database, runs
- * computeLinks, then batch-upserts results into poi_conflation_link.
+ * Full conflation job. Source rows are read in bounded keyset pages and only
+ * nearby Overture H3 cells are loaded for each page. Accepted edges are
+ * materialized in Postgres so global one-to-one assignment remains exact
+ * without retaining the country-wide source datasets in Node.
  */
 export async function conflateOverture(opts: {
   region: string;
@@ -233,190 +402,149 @@ export async function conflateOverture(opts: {
   useEmbeddings?: boolean;
   schema?: string;
   onProgress?: (msg: string) => void;
-}): Promise<{ linked: number }> {
+  /** Durable-job heartbeat invoked after each bounded source page. */
+  onCheckpoint?: (processed: number, candidates: number) => Promise<void>;
+}): Promise<{ linked: number; candidates: number; processed: number }> {
   assertValidRegion(opts.region);
   const { ollamaUrl, useEmbeddings = false, onProgress } = opts;
   const release = await resolveOvertureRelease(opts.release);
   const schema = opts.schema ?? "overture_places";
-
-  const placesRows = await sql.unsafe<
-    {
-      gers_id: string;
-      name: string;
-      lat: number;
-      lng: number;
-      h3_r8: string | null;
-      basic_category: string | null;
-      taxonomy_primary: string | null;
-      taxonomy_hierarchy: string[] | null;
-      taxonomy_alternates: string[] | null;
-      addresses: unknown;
-      wikidata: string | null;
-      phones: string[] | null;
-      website: string | null;
-      confidence: number | null;
-    }[]
-  >(
-    `SELECT gers_id,
-            name,
-            ST_Y(geom) AS lat,
-            ST_X(geom) AS lng,
-            h3_r8,
-            basic_category,
-            taxonomy_primary,
-            taxonomy_hierarchy,
-            taxonomy_alternates,
-            addresses,
-            brand->>'wikidata' AS wikidata,
-            phones,
-            websites[1] AS website,
-            confidence
-     FROM "${schema}".places
-     WHERE (operating_status IS NULL OR operating_status <> 'permanently_closed')
-       AND (confidence IS NULL OR confidence >= ${MIN_CONFLATE_CONFIDENCE})`,
-    [],
-  );
-
-  const places: OverturePlacePoint[] = placesRows.map((r) => {
-    let freeform: string | undefined;
-    let postcode: string | undefined;
-    if (r.addresses && typeof r.addresses === "object") {
-      const addrArr = r.addresses as Array<{ freeform?: string; postcode?: string }>;
-      freeform = addrArr[0]?.freeform ?? undefined;
-      postcode = addrArr[0]?.postcode ?? undefined;
-    }
-    return {
-      gersId: r.gers_id,
-      name: r.name,
-      lat: Number(r.lat),
-      lng: Number(r.lng),
-      h3_r8: r.h3_r8,
-      category: overtureTaxonomyToOpenMapX({
-        basicCategory: r.basic_category,
-        primary: r.taxonomy_primary,
-        hierarchy: r.taxonomy_hierarchy,
-        alternates: r.taxonomy_alternates,
-      }),
-      address: freeform,
-      confidence: r.confidence ?? undefined,
-      addressKey: overtureAddressKey(freeform, postcode) ?? undefined,
-      wikidata: r.wikidata ?? undefined,
-      phones: parsePhones(r.phones),
-      website: websiteDomain(r.website) ?? undefined,
-    };
-  });
-  onProgress?.(`Loaded ${places.length} Overture places from DB.`);
-
-  await applyOsmPoisTable(schema);
-
-  const osmRows = await sql.unsafe<
-    {
-      osm_type: string;
-      osm_id: string;
-      name: string;
-      lat: number;
-      lng: number;
-      category: string | null;
-      street: string | null;
-      housenumber: string | null;
-      postcode: string | null;
-      wikidata: string | null;
-      phone: string | null;
-      website: string | null;
-    }[]
-  >(
-    `SELECT osm_type, osm_id, name, lat, lng, category,
-            tags->>'addr:street' AS street,
-            tags->>'addr:housenumber' AS housenumber,
-            tags->>'addr:postcode' AS postcode,
-            COALESCE(tags->>'wikidata', tags->>'brand:wikidata') AS wikidata,
-            COALESCE(tags->>'phone', tags->>'contact:phone') AS phone,
-            COALESCE(tags->>'website', tags->>'contact:website', tags->>'url') AS website
-     FROM "${schema}".osm_pois`,
-    [],
-  );
-
-  const osmPois: OsmPoiPoint[] = osmRows.map((r) => ({
-    osm_type: r.osm_type,
-    osm_id: Number(r.osm_id),
-    name: r.name,
-    lat: Number(r.lat),
-    lng: Number(r.lng),
-    category: r.category ?? undefined,
-    addressKey: osmAddressKey(r.street, r.housenumber, r.postcode) ?? undefined,
-    wikidata: r.wikidata ?? undefined,
-    phones: parsePhones(r.phone),
-    website: websiteDomain(r.website) ?? undefined,
-  }));
-  onProgress?.(`Loaded ${osmPois.length} OSM POIs from DB.`);
+  assertValidOvertureSchema(schema);
 
   if (useEmbeddings && ollamaUrl) {
     await ensureEmbeddingModel(DEFAULT_MODEL, ollamaUrl);
   }
 
   const embedFn = useEmbeddings ? (texts: string[]) => embed(texts, { ollamaUrl }) : undefined;
+  await sql.unsafe(`TRUNCATE TABLE "${schema}".poi_conflation_candidate`);
 
-  onProgress?.(`Computing OSM↔Overture links…`);
-  const links = await computeLinks(places, osmPois, {
-    thresholds: DEFAULT_CONFLATION_THRESHOLDS,
-    embedFn,
-    release,
-  });
-  onProgress?.(`Computed ${links.length} candidate links.`);
+  let cursorCell: string | null = null;
+  let cursorType = "";
+  let cursorId = "0";
+  let processed = 0;
+  let candidateCount = 0;
+  while (true) {
+    const osmRows: OsmRow[] = await sql.unsafe<OsmRow[]>(
+      `SELECT osm_type, osm_id, name, lat, lng, h3_r8, category,
+              tags->>'addr:street' AS street,
+              tags->>'addr:housenumber' AS housenumber,
+              tags->>'addr:postcode' AS postcode,
+              COALESCE(tags->>'wikidata', tags->>'brand:wikidata') AS wikidata,
+              COALESCE(tags->>'phone', tags->>'contact:phone') AS phone,
+              COALESCE(tags->>'website', tags->>'contact:website', tags->>'url') AS website
+       FROM "${schema}".osm_pois
+       WHERE ($1::TEXT IS NULL
+          OR h3_r8 > $1
+          OR (h3_r8 = $1 AND osm_type > $2)
+          OR (h3_r8 = $1 AND osm_type = $2 AND osm_id > $3::BIGINT))
+       ORDER BY h3_r8, osm_type, osm_id
+       LIMIT $4`,
+      [cursorCell, cursorType, cursorId, OSM_PAGE_SIZE],
+    );
+    if (osmRows.length === 0) break;
 
-  // Full rebuild: conflate recomputes the complete one-to-one link set.
-  await sql.unsafe(`DELETE FROM "${schema}".poi_conflation_link`);
-
-  if (links.length === 0) {
-    return { linked: 0 };
-  }
-
-  const COLS = 9;
-  const rowsPerBatch = Math.floor(65500 / COLS);
-
-  for (let i = 0; i < links.length; i += rowsPerBatch) {
-    const batch = links.slice(i, i + rowsPerBatch);
-
-    const placeholders = batch
-      .map(
-        (_, k) =>
-          `($${k * COLS + 1}, $${k * COLS + 2}::BIGINT, $${k * COLS + 3}, ` +
-          `$${k * COLS + 4}::DOUBLE PRECISION, $${k * COLS + 5}::DOUBLE PRECISION, ` +
-          `$${k * COLS + 6}::DOUBLE PRECISION, $${k * COLS + 7}, ` +
-          `$${k * COLS + 8}::JSONB, $${k * COLS + 9})`,
-      )
-      .join(", ");
-
-    const values = batch.flatMap((l) => [
-      l.osm_type,
-      l.osm_id,
-      l.gers_id,
-      l.source_confidence,
-      l.match_confidence,
-      l.distance_m,
-      l.method,
-      JSON.stringify(l.evidence),
-      l.release,
-    ]);
-
-    await sql.unsafe(
-      `INSERT INTO "${schema}".poi_conflation_link
-         (osm_type, osm_id, gers_id, source_confidence, match_confidence,
-          distance_m, method, evidence, release)
-       VALUES ${placeholders}
-       ON CONFLICT (osm_type, osm_id)
-       DO UPDATE SET
-         gers_id          = EXCLUDED.gers_id,
-         source_confidence = EXCLUDED.source_confidence,
-         match_confidence  = EXCLUDED.match_confidence,
-         distance_m        = EXCLUDED.distance_m,
-         method            = EXCLUDED.method,
-         evidence          = EXCLUDED.evidence,
-         release           = EXCLUDED.release`,
-      values,
+    const osmPois: OsmPoiPoint[] = osmRows.map(osmRowToPoint);
+    const cells: string[] = [...new Set(osmPois.flatMap((poi) => gridDisk(ensureH3(poi), 1)))];
+    const placeRows: PlaceRow[] = await sql.unsafe<PlaceRow[]>(
+      `SELECT gers_id, name, ST_Y(geom) AS lat, ST_X(geom) AS lng, h3_r8,
+              basic_category, taxonomy_primary, taxonomy_hierarchy, taxonomy_alternates,
+              addresses, brand->>'wikidata' AS wikidata, phones, websites[1] AS website,
+              confidence
+       FROM "${schema}".places
+       WHERE h3_r8 = ANY($1::TEXT[])
+         AND (operating_status IS NULL OR operating_status <> 'permanently_closed')
+         AND (confidence IS NULL OR confidence >= ${MIN_CONFLATE_CONFIDENCE})`,
+      [cells],
+    );
+    const candidates = await scoreLinkCandidates(placeRows.map(placeRowToPoint), osmPois, {
+      thresholds: DEFAULT_CONFLATION_THRESHOLDS,
+      embedFn,
+      release,
+    });
+    await insertLinkRows(schema, "poi_conflation_candidate", candidates, (query, parameters) =>
+      sql.unsafe(query, parameters),
+    );
+    processed += osmRows.length;
+    candidateCount += candidates.length;
+    await opts.onCheckpoint?.(processed, candidateCount);
+    const last: OsmRow | undefined = osmRows[osmRows.length - 1];
+    if (!last) break;
+    cursorCell = last.h3_r8;
+    cursorType = last.osm_type;
+    cursorId = last.osm_id;
+    onProgress?.(
+      `Scored ${processed} OSM POIs in bounded pages (${candidateCount} accepted edges)...`,
     );
   }
 
-  onProgress?.(`Upserted ${links.length} conflation links into poi_conflation_link.`);
-  return { linked: links.length };
+  onProgress?.(`Selecting the exact one-to-one assignment from ${candidateCount} edges...`);
+  const ambiguousRows = await sql.unsafe<
+    (Omit<LinkRecord, "evidence"> & { evidence: LinkRecord["evidence"] })[]
+  >(
+    `WITH osm_degree AS (
+       SELECT osm_type, osm_id, COUNT(*) AS degree
+       FROM "${schema}".poi_conflation_candidate
+       GROUP BY osm_type, osm_id
+     ), gers_degree AS (
+       SELECT gers_id, COUNT(*) AS degree
+       FROM "${schema}".poi_conflation_candidate
+       GROUP BY gers_id
+     )
+     SELECT candidate.osm_type, candidate.osm_id, candidate.gers_id,
+            candidate.source_confidence, candidate.match_confidence,
+            candidate.distance_m, candidate.method, candidate.evidence, candidate.release
+     FROM "${schema}".poi_conflation_candidate AS candidate
+     JOIN osm_degree USING (osm_type, osm_id)
+     JOIN gers_degree USING (gers_id)
+     WHERE osm_degree.degree > 1 OR gers_degree.degree > 1
+     ORDER BY candidate.osm_type, candidate.osm_id, candidate.gers_id`,
+    [],
+  );
+  const ambiguous = ambiguousRows.map((row) => ({
+    ...row,
+    osm_id: Number(row.osm_id),
+    source_confidence: row.source_confidence === null ? null : Number(row.source_confidence),
+    match_confidence: Number(row.match_confidence),
+    distance_m: Number(row.distance_m),
+  }));
+  const selectedAmbiguous = assignLinkRecords(ambiguous);
+
+  await sql.begin(async (tx) => {
+    await tx.unsafe(`DELETE FROM "${schema}".poi_conflation_link`);
+    await tx.unsafe(
+      `WITH osm_degree AS (
+         SELECT osm_type, osm_id, COUNT(*) AS degree
+         FROM "${schema}".poi_conflation_candidate
+         GROUP BY osm_type, osm_id
+       ), gers_degree AS (
+         SELECT gers_id, COUNT(*) AS degree
+         FROM "${schema}".poi_conflation_candidate
+         GROUP BY gers_id
+       )
+       INSERT INTO "${schema}".poi_conflation_link
+         (osm_type, osm_id, gers_id, source_confidence, match_confidence,
+          distance_m, method, evidence, release)
+       SELECT candidate.osm_type, candidate.osm_id, candidate.gers_id,
+              candidate.source_confidence, candidate.match_confidence,
+              candidate.distance_m, candidate.method, candidate.evidence, candidate.release
+       FROM "${schema}".poi_conflation_candidate AS candidate
+       JOIN osm_degree USING (osm_type, osm_id)
+       JOIN gers_degree USING (gers_id)
+       WHERE osm_degree.degree = 1 AND gers_degree.degree = 1`,
+    );
+    await insertLinkRows(schema, "poi_conflation_link", selectedAmbiguous, (query, parameters) =>
+      tx.unsafe(query, parameters),
+    );
+  });
+
+  const [{ linked }] = await sql.unsafe<{ linked: string }[]>(
+    `SELECT COUNT(*)::TEXT AS linked FROM "${schema}".poi_conflation_link`,
+    [],
+  );
+  const linkedCount = Number(linked ?? 0);
+  await sql.unsafe(`TRUNCATE TABLE "${schema}".poi_conflation_candidate`);
+  onProgress?.(
+    `Published ${linkedCount} conflation links atomically (${ambiguous.length} contested edges).`,
+  );
+  return { linked: linkedCount, candidates: candidateCount, processed };
 }

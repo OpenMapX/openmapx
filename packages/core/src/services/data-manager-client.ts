@@ -228,7 +228,14 @@ export class DataManagerClient {
   async syncOverture(
     region: string,
     opts: { onProgress?: (msg: string) => void } = {},
-  ): Promise<{ ok: boolean; message?: string; release?: string; linked?: number }> {
+  ): Promise<{
+    ok: boolean;
+    message?: string;
+    release?: string;
+    linked?: number;
+    conflation?: string;
+    conflationError?: string;
+  }> {
     const res = await this.fetchImpl(
       `${this.baseUrl}/overture/sync`,
       this.authed({
@@ -242,6 +249,8 @@ export class DataManagerClient {
       message?: string;
       release?: string;
       linked?: number;
+      conflation?: string;
+      conflationError?: string;
     }>;
   }
 
@@ -278,7 +287,14 @@ export class DataManagerClient {
   async conflateOverture(
     region: string,
     opts: { onProgress?: (msg: string) => void } = {},
-  ): Promise<{ ok: boolean; linked?: number }> {
+  ): Promise<{
+    ok: boolean;
+    linked?: number;
+    extracted?: number;
+    candidates?: number;
+    status?: string;
+    message?: string;
+  }> {
     const res = await this.fetchImpl(
       `${this.baseUrl}/overture/conflate`,
       this.authed({
@@ -290,6 +306,10 @@ export class DataManagerClient {
     return readOvertureStream(res, "overture/conflate", opts.onProgress) as Promise<{
       ok: boolean;
       linked?: number;
+      extracted?: number;
+      candidates?: number;
+      status?: string;
+      message?: string;
     }>;
   }
 

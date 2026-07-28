@@ -1,5 +1,3 @@
-import { sql } from "../../db/index.js";
-
 /**
  * Schema names that carry ODbL-licensed Overture themes (Buildings,
  * Transportation, Divisions, Base). These are explicitly rejected to enforce
@@ -106,6 +104,41 @@ export function buildSchemaDDL(schema: string): string {
     );
 
     CREATE INDEX idx_link_gers ON "${schema}".poi_conflation_link (gers_id);
+
+    CREATE UNLOGGED TABLE "${schema}".poi_conflation_candidate (
+      osm_type          TEXT NOT NULL,
+      osm_id            BIGINT NOT NULL,
+      gers_id           TEXT NOT NULL REFERENCES "${schema}".places(gers_id) ON DELETE CASCADE,
+      source_confidence DOUBLE PRECISION,
+      match_confidence  DOUBLE PRECISION NOT NULL CHECK (match_confidence BETWEEN 0 AND 1),
+      distance_m        DOUBLE PRECISION NOT NULL CHECK (distance_m >= 0),
+      method            TEXT NOT NULL,
+      evidence          JSONB NOT NULL,
+      release           TEXT NOT NULL,
+      PRIMARY KEY (osm_type, osm_id, gers_id)
+    );
+
+    CREATE INDEX idx_candidate_osm
+      ON "${schema}".poi_conflation_candidate (osm_type, osm_id);
+    CREATE INDEX idx_candidate_gers
+      ON "${schema}".poi_conflation_candidate (gers_id);
+
+    CREATE TABLE "${schema}".conflation_state (
+      singleton         SMALLINT PRIMARY KEY DEFAULT 1 CHECK (singleton = 1),
+      release           TEXT NOT NULL,
+      region            TEXT NOT NULL,
+      status            TEXT NOT NULL CHECK (
+        status IN ('pending', 'running', 'completed', 'failed', 'waiting_for_osm')
+      ),
+      attempt_count     INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+      extracted_count   BIGINT,
+      candidate_count   BIGINT,
+      linked_count      BIGINT,
+      last_error        TEXT,
+      started_at        TIMESTAMPTZ,
+      completed_at      TIMESTAMPTZ,
+      updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   ` +
     buildOsmPoisTableDDL(schema) +
     buildEmbeddingCacheDDL(schema)
@@ -113,81 +146,42 @@ export function buildSchemaDDL(schema: string): string {
 }
 
 /**
- * Creates the overture_places schema in a staging schema, then atomically
- * swaps staging → live (readers never see a missing schema mid-import).
- * Mirrors the GTFS importer's atomic-swap pattern (importer.ts:791-800).
- *
- * This helper creates the *structure* only; data loading is handled by the
- * ingest job which shells out to DuckDB.
- */
-export async function applyOvertureSchema(schema: string): Promise<void> {
-  assertValidOvertureSchema(schema);
-
-  const stagingSchema = `${schema}__staging`;
-  assertValidOvertureSchema(stagingSchema);
-
-  await sql.unsafe(buildSchemaDDL(stagingSchema));
-
-  await sql.begin(async (tx) => {
-    await tx.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-    await tx.unsafe(`ALTER SCHEMA "${stagingSchema}" RENAME TO "${schema}"`);
-  });
-}
-
-/**
  * Returns the DDL for the `osm_pois` table within a given schema.
- * `IF NOT EXISTS` guards make this idempotent — safe to call on both a fresh
- * staging schema and an existing live schema during full regional refreshes.
+ * The parent schema is always freshly created by `buildSchemaDDL`; there is no
+ * legacy-table mutation path.
  */
 export function buildOsmPoisTableDDL(schema: string): string {
   return `
-    CREATE TABLE IF NOT EXISTS "${schema}".osm_pois (
+    CREATE TABLE "${schema}".osm_pois (
       osm_type  TEXT NOT NULL,
       osm_id    BIGINT NOT NULL,
       name      TEXT NOT NULL DEFAULT '',
       lat       DOUBLE PRECISION NOT NULL,
       lng       DOUBLE PRECISION NOT NULL,
+      h3_r8     TEXT NOT NULL,
       category  TEXT,
       tags      JSONB,
       PRIMARY KEY (osm_type, osm_id)
     );
-    CREATE INDEX IF NOT EXISTS idx_osm_pois_category ON "${schema}".osm_pois (category);
-    CREATE INDEX IF NOT EXISTS idx_osm_pois_geom
+    CREATE INDEX idx_osm_pois_category ON "${schema}".osm_pois (category);
+    CREATE INDEX idx_osm_pois_h3
+      ON "${schema}".osm_pois (h3_r8, osm_type, osm_id);
+    CREATE INDEX idx_osm_pois_geom
       ON "${schema}".osm_pois USING GIST (ST_Point(lng, lat));
   `;
 }
 
 /**
- * Creates (or ensures) the `osm_pois` table inside the given schema.
- * The schema must already exist and pass `assertValidOvertureSchema`.
- */
-export async function applyOsmPoisTable(schema: string): Promise<void> {
-  assertValidOvertureSchema(schema);
-  await sql.unsafe(`CREATE EXTENSION IF NOT EXISTS postgis`);
-  await sql.unsafe(buildOsmPoisTableDDL(schema));
-}
-
-/**
  * Returns the DDL for the `embedding_cache` table within a given schema.
- * `IF NOT EXISTS` guards make this idempotent — safe to call on repeated runs.
  * Stores SHA-256 hashes of `model + "\\n" + text` alongside the embedding vector.
  */
 export function buildEmbeddingCacheDDL(schema: string): string {
   return `
-    CREATE TABLE IF NOT EXISTS "${schema}".embedding_cache (
+    CREATE TABLE "${schema}".embedding_cache (
       text_hash  TEXT PRIMARY KEY,
       model      TEXT NOT NULL,
       embedding  DOUBLE PRECISION[] NOT NULL,
       created_at TIMESTAMPTZ DEFAULT now()
     );
   `;
-}
-
-/**
- * Creates (or ensures) the `embedding_cache` table inside the given schema.
- * The schema must already exist and pass `assertValidOvertureSchema`.
- */
-export async function applyEmbeddingCacheTable(schema: string): Promise<void> {
-  assertValidOvertureSchema(schema);
-  await sql.unsafe(buildEmbeddingCacheDDL(schema));
 }

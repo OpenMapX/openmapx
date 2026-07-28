@@ -34,7 +34,7 @@ describe("assertValidOvertureSchema", () => {
     expect(() => assertValidOvertureSchema("")).toThrow(/Invalid Overture schema name/);
   });
 
-  it("accepts 'overture_places__staging' (staging schema variant produced by applyOvertureSchema)", () => {
+  it("accepts 'overture_places__staging' (the ingest staging schema variant)", () => {
     expect(() => assertValidOvertureSchema("overture_places__staging")).not.toThrow();
   });
 
@@ -64,6 +64,10 @@ describe("current Overture taxonomy schema", () => {
     expect(ddl).toContain("evidence          JSONB NOT NULL");
     expect(ddl).toContain("PRIMARY KEY (osm_type, osm_id)");
     expect(ddl).toContain("gers_id           TEXT NOT NULL UNIQUE");
+    expect(ddl).toContain('CREATE UNLOGGED TABLE "overture_places".poi_conflation_candidate');
+    expect(ddl).toContain('CREATE TABLE "overture_places".conflation_state');
+    expect(ddl).toContain("'waiting_for_osm'");
+    expect(ddl).toContain("h3_r8     TEXT NOT NULL");
     expect(ddl).not.toContain("confidence DOUBLE PRECISION NOT NULL");
     expect(ddl).not.toContain("openmapx_category");
     expect(ddl).not.toContain("opening_hours");

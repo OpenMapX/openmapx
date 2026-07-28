@@ -292,12 +292,14 @@ Schedules and switches for the monthly regional Overture Maps Places refresh.
 | ------------------ | ------------------------------------------------------------------------------------------- | ------------------------- |
 | `OVERTURE_ENABLED`  | Set to `true` to discover and atomically import newer Overture Places releases for `OPENMAPX_REGION`. | Optional. Default unset |
 | `OVERTURE_SYNC_CRON`| Cron schedule for checking and refreshing the regional snapshot. | Optional. Default `0 5 1 * *` (monthly) |
+| `OVERTURE_CONFLATION_RETRY_CRON` | Retry an incomplete OSM↔Overture link rebuild without downloading or importing Places again. | Optional. Default `15 */6 * * *` (every six hours) |
 
 The job uses Overture's official STAC catalog, skips an installed release,
 resolves exact spatially relevant Places assets, validates a local release
 contract, pulls only the configured region, and swaps a fully validated staging
-schema into service. If the region's OSM PBF exists, it also rebuilds OSM↔GERS
-links. See [Overture Places](../features/overture-places.md).
+schema into service. OSM↔GERS link rebuilding has a separate durable state and
+retry schedule: a missing PBF or failed rebuild does not roll back a valid
+Places release. See [Overture Places](../features/overture-places.md).
 
 ## Natural-language search
 
