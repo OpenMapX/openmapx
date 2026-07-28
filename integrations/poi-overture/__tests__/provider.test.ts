@@ -100,6 +100,8 @@ describe("poi-overture provider.search", () => {
     expect(first.email).toBe("mitte@starbucks.example");
     expect(first.category).toBe("cafes");
     expect(db.execute.mock.calls[0][0]).toContain("taxonomy_hierarchy && $5::TEXT[]");
+    expect(db.execute.mock.calls[0][0]).toContain("ORDER BY");
+    expect(db.execute.mock.calls[0][0]).toContain("confidence DESC NULLS LAST");
     expect(db.execute.mock.calls[0][1][4]).toEqual(["cafe", "coffee_shop", "tea_house"]);
   });
 

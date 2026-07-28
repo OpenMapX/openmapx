@@ -3,6 +3,7 @@ import {
   DEFAULT_CONFLATION_THRESHOLDS,
   fusePoiResults,
   OverpassTimeoutError,
+  rankAndLimitPoiResults,
   removeFilterPredicate,
 } from "@openmapx/core";
 import { buildOpeningHoursInfo } from "@openmapx/core/server";
@@ -162,11 +163,12 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
 
     if (matching.length === 1) {
       const provider = matching[0];
-      return runWithShrink(
+      const result = await runWithShrink(
         (currentBbox) =>
           provider.search(lookupCategory, currentBbox, { lang: options?.lang, osmTags }),
         bbox,
       );
+      return { ...result, results: rankAndLimitPoiResults(result.results, bbox) };
     }
 
     // The OSM/Overpass provider is the authoritative base set; every other
@@ -205,8 +207,14 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
 
     const linkMap = await buildConflationLinkMap(ctx, osmResults);
 
+    const fused = fusePoiResults(
+      osmResults,
+      augmentResults,
+      DEFAULT_CONFLATION_THRESHOLDS,
+      linkMap,
+    );
     return {
-      results: fusePoiResults(osmResults, augmentResults, DEFAULT_CONFLATION_THRESHOLDS, linkMap),
+      results: rankAndLimitPoiResults(fused, bbox),
       partial,
     };
   }

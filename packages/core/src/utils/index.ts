@@ -186,6 +186,7 @@ export {
 } from "./poiConflation";
 export { fusePoiResults } from "./poiFusion";
 export { pointInIsochroneGeometry } from "./pointInPolygon";
+export { MAX_POI_SEARCH_RESULTS, rankAndLimitPoiResults } from "./poiRanking";
 export { decodePolyline, encodePolyline } from "./polyline";
 export { sectionSlug } from "./sectionSlug";
 export {

@@ -174,6 +174,12 @@ async function queryOverturePlaces(
         OR taxonomy_hierarchy && $5::TEXT[]
         OR taxonomy_alternates && $5::TEXT[]
       )
+    ORDER BY
+      geom <-> ST_SetSRID(ST_MakePoint(($1 + $3) / 2, ($2 + $4) / 2), 4326),
+      confidence DESC NULLS LAST,
+      ((addresses IS NOT NULL)::INT + (websites IS NOT NULL)::INT +
+       (phones IS NOT NULL)::INT + (emails IS NOT NULL)::INT) DESC,
+      gers_id
     LIMIT 200
   `;
   const params: unknown[] = [bbox.west, bbox.south, bbox.east, bbox.north, concepts, minConfidence];

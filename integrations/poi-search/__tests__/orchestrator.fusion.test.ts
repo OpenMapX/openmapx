@@ -42,7 +42,7 @@ const OVERTURE_EXTRA: PoiSearchResult = {
   id: "overture:gers-new-venue-999",
   gersId: "gers-new-venue-999",
   name: "Neue Kaffeebar",
-  coordinates: [13.39, 52.5],
+  coordinates: [13.405, 52.505],
   category: "cafes",
 };
 
@@ -99,6 +99,35 @@ describe("(B) Both registered — fusion", () => {
     const fused = result.results.find((r) => r.id === "osm:node/1");
     expect(fused?.osmTags?.brand).toBe("Starbucks");
     expect(fused?.osmTags?.["brand:wikidata"]).toBe("Q37158");
+  });
+});
+
+describe("(B2) Result quality", () => {
+  it("ranks the fused set around the requested map centre", async () => {
+    const orch = createPoiSearchOrchestrator(makeCtx([overpassProvider, overtureProvider]));
+    const result = await orch.search("cafes", BBOX);
+    expect(result.results.map((entry) => entry.id)).toEqual([
+      "osm:node/1",
+      "overture:gers-new-venue-999",
+      "osm:node/2",
+    ]);
+  });
+
+  it("caps even a single provider at 50 results", async () => {
+    const provider: PoiSearchProvider = {
+      id: "overpass",
+      categories: ["cafes"],
+      async search() {
+        return Array.from({ length: 75 }, (_, index) => ({
+          id: `osm:node/${index}`,
+          name: `Cafe ${index}`,
+          coordinates: [13.4 + index / 100_000, 52.51] as [number, number],
+          category: "cafes",
+        }));
+      },
+    };
+    const result = await createPoiSearchOrchestrator(makeCtx([provider])).search("cafes", BBOX);
+    expect(result.results).toHaveLength(50);
   });
 });
 
