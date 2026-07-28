@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { assertSupportedOvertureContributors } from "@openmapx/core";
+import { assertSupportedOvertureContributors } from "@openmapx/core/utils/overtureSource";
 import { latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";
 import { runDuckDb } from "./duckdb.js";

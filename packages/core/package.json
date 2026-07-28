@@ -38,6 +38,10 @@
       "types": "./src/utils/overtureCategoryMap.ts",
       "default": "./src/utils/overtureCategoryMap.ts"
     },
+    "./utils/overtureSource": {
+      "types": "./src/utils/overtureSource.ts",
+      "default": "./src/utils/overtureSource.ts"
+    },
     "./utils/osmCategoryFilters": {
       "types": "./src/utils/osmCategoryFilters.ts",
       "default": "./src/utils/osmCategoryFilters.ts"

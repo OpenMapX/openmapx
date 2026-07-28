@@ -1,4 +1,3 @@
-import { overtureTaxonomyToOpenMapX } from "@openmapx/core";
 import {
   haversineMeters,
   nameSimilarity,
@@ -7,6 +6,7 @@ import {
   parsePhones,
   websiteDomain,
 } from "@openmapx/core/utils/geo-server";
+import { overtureTaxonomyToOpenMapX } from "@openmapx/core/utils/overtureCategoryMap";
 import {
   assignConflationPairs,
   type ConflationMethod,

@@ -1,6 +1,6 @@
 import { readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
-import { assertSupportedOvertureContributors } from "@openmapx/core";
+import { assertSupportedOvertureContributors } from "@openmapx/core/utils/overtureSource";
 import type { RegionBbox } from "./pull.js";
 
 export const OVERTURE_STAC_URL = "https://stac.overturemaps.org/catalog.json";

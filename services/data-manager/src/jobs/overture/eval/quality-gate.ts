@@ -1,4 +1,4 @@
-import { openMapXCategoryToOvertureConcepts } from "@openmapx/core";
+import { openMapXCategoryToOvertureConcepts } from "@openmapx/core/utils/overtureCategoryMap";
 import { sql } from "../../../db/index.js";
 import { assertValidRegion } from "../pull.js";
 import { assertValidOvertureSchema } from "../schema.js";
