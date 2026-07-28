@@ -23,7 +23,7 @@
     "@opentelemetry/sdk-metrics": "^2.8.0",
     "croner": "^10.0.1",
     "drizzle-orm": "^0.45.2",
-    "execa": "^9.6.1",
+    "execa": "^10.0.0",
     "fastify": "^5.8.5",
     "h3-js": "^4.4.0",
     "ioredis": "^5.11.1",
