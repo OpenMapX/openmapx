@@ -52,6 +52,65 @@ describe("featureToOsmPoiRecord", () => {
     expect(way?.lat).toBeCloseTo(51, 0);
   });
 
+  it("uses Osmium source attributes for areas and excludes them from OSM tags", () => {
+    const area = featureToOsmPoiRecord({
+      id: "a50844156",
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [9, 49],
+            [10, 49],
+            [10, 50],
+            [9, 49],
+          ],
+        ],
+      },
+      properties: { "@type": "way", "@id": 25422078, name: "WVV", amenity: "parking" },
+    });
+
+    expect(area).toMatchObject({
+      osmType: "way",
+      osmId: "25422078",
+      name: "WVV",
+      tags: { name: "WVV", amenity: "parking" },
+    });
+  });
+
+  it("decodes Osmium area IDs when source attributes are unavailable", () => {
+    const wayArea = featureToOsmPoiRecord({
+      id: "a200",
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [1, 1],
+            [2, 1],
+            [1, 1],
+          ],
+        ],
+      },
+      properties: { name: "Way area" },
+    });
+    const relationArea = featureToOsmPoiRecord({
+      id: "a203",
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [1, 1],
+            [2, 1],
+            [1, 1],
+          ],
+        ],
+      },
+      properties: { name: "Relation area" },
+    });
+
+    expect(wayArea).toMatchObject({ osmType: "way", osmId: "100" });
+    expect(relationArea).toMatchObject({ osmType: "relation", osmId: "101" });
+  });
+
   it("returns null for unnamed features, missing geometry, or unparseable ids", () => {
     expect(
       featureToOsmPoiRecord({ id: "n1", geometry: { type: "Point", coordinates: [1, 2] } }),

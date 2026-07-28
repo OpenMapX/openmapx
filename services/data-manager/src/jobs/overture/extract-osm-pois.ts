@@ -61,7 +61,35 @@ interface GeoJsonFeature {
   type?: string;
   id?: string;
   geometry?: { type: string; coordinates: unknown };
-  properties?: Record<string, string>;
+  properties?: Record<string, unknown>;
+}
+
+function sourceIdentity(feature: GeoJsonFeature): {
+  osmType: "node" | "way" | "relation";
+  osmId: string;
+} | null {
+  const attributeType = feature.properties?.["@type"];
+  const attributeId = feature.properties?.["@id"];
+  if (
+    (attributeType === "node" || attributeType === "way" || attributeType === "relation") &&
+    (typeof attributeId === "string" || typeof attributeId === "number")
+  ) {
+    const osmId = String(attributeId);
+    if (/^-?\d+$/.test(osmId)) return { osmType: attributeType, osmId };
+  }
+
+  const match = /^([nwa])(-?\d+)$/.exec(feature.id ?? "");
+  if (!match) return null;
+  const [, kind, encodedId] = match;
+  if (kind === "n") return { osmType: "node", osmId: encodedId };
+  if (kind === "w") return { osmType: "way", osmId: encodedId };
+
+  // Osmium area IDs encode the source object: 2*way or 2*relation+1.
+  const areaId = BigInt(encodedId);
+  if (areaId < 0n) return null;
+  return areaId % 2n === 0n
+    ? { osmType: "way", osmId: String(areaId / 2n) }
+    : { osmType: "relation", osmId: String((areaId - 1n) / 2n) };
 }
 
 /**
@@ -72,7 +100,11 @@ interface GeoJsonFeature {
  * Exported for testing only — internal helper used by `extractOsmPois`.
  */
 export function featureToOsmPoiRecord(feature: GeoJsonFeature): OsmPoiRecord | null {
-  const props = feature.properties ?? {};
+  const props = Object.fromEntries(
+    Object.entries(feature.properties ?? {}).filter(
+      ([key, value]) => !key.startsWith("@") && typeof value === "string",
+    ),
+  ) as Record<string, string>;
   const name = props.name;
   if (!name) return null;
 
@@ -107,15 +139,11 @@ export function featureToOsmPoiRecord(feature: GeoJsonFeature): OsmPoiRecord | n
     return null;
   }
 
-  const rawId = typeof feature.id === "string" ? feature.id : "";
-  let osmType: "node" | "way" | "relation" = "node";
-  if (rawId.startsWith("w")) osmType = "way";
-  else if (rawId.startsWith("r")) osmType = "relation";
-  const osmId = rawId.slice(1);
-  if (!osmId || Number.isNaN(Number(osmId))) return null;
+  const identity = sourceIdentity(feature);
+  if (!identity) return null;
 
   const category = osmTagsToCategory(props);
-  return { osmType, osmId, name, lat, lng, h3R8: latLngToCell(lat, lng, 8), category, tags: props };
+  return { ...identity, name, lat, lng, h3R8: latLngToCell(lat, lng, 8), category, tags: props };
 }
 
 /**
@@ -159,13 +187,14 @@ export async function extractOsmPois(opts: ExtractOsmPoisOptions): Promise<{ ext
     `CREATE UNLOGGED TABLE "${schema}"."${stagingTable}"
        (LIKE "${schema}".osm_pois INCLUDING DEFAULTS INCLUDING CONSTRAINTS)`,
   );
+  await sql.unsafe(`ALTER TABLE "${schema}"."${stagingTable}" ADD PRIMARY KEY (osm_type, osm_id)`);
 
   // GeoJSON Text Sequence (one feature per line). Stream stdout directly into
   // the database pipeline: a country-sized intermediate is gigabytes and does
   // not need to exist either as one Node string or as another on-disk file.
   const exportProcess = execa(
     "osmium",
-    ["export", "-f", "geojsonseq", "--add-unique-id=type_id", filteredPbf],
+    ["export", "-f", "geojsonseq", "--add-unique-id=type_id", "--attributes=type,id", filteredPbf],
     // Execa buffers piped output by default. Germany-scale GeoJSON exceeds
     // that buffer, so consume stdout exclusively through the line iterator.
     OSMIUM_EXPORT_STREAM_OPTIONS,
@@ -224,7 +253,6 @@ export async function extractOsmPois(opts: ExtractOsmPoisOptions): Promise<{ ext
     await tx.unsafe(`ALTER TABLE "${schema}".osm_pois RENAME TO osm_pois__previous`);
     await tx.unsafe(`ALTER TABLE "${schema}"."${stagingTable}" RENAME TO osm_pois`);
     await tx.unsafe(`DROP TABLE "${schema}".osm_pois__previous`);
-    await tx.unsafe(`ALTER TABLE "${schema}".osm_pois ADD PRIMARY KEY (osm_type, osm_id)`);
     await tx.unsafe(`CREATE INDEX idx_osm_pois_category ON "${schema}".osm_pois (category)`);
     await tx.unsafe(
       `CREATE INDEX idx_osm_pois_h3
@@ -318,7 +346,14 @@ async function insertOsmPois(
          UNNEST($5::DOUBLE PRECISION[]),
          UNNEST($6::TEXT[]),
          UNNEST($7::TEXT[]),
-         UNNEST($8::JSONB[])`,
+         UNNEST($8::JSONB[])
+       ON CONFLICT (osm_type, osm_id) DO UPDATE SET
+         name = EXCLUDED.name,
+         lat = EXCLUDED.lat,
+         lng = EXCLUDED.lng,
+         h3_r8 = EXCLUDED.h3_r8,
+         category = EXCLUDED.category,
+         tags = EXCLUDED.tags`,
       [osmTypes, osmIds, names, lats, lngs, h3Cells, categories, tags],
     );
   }
