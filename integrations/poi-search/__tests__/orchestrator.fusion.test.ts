@@ -238,7 +238,7 @@ describe("(C3) Partial provider failures", () => {
 
 describe("(D) Link-table wiring — ctx.db integration", () => {
   // OSM at 52.5100 — Overture at 52.5104 (~45m apart, beyond alwaysMergeM=25m).
-  // Names "HARMANS KFC #189" vs "Starbucks Coffee" have Dice << 0.8, so union-find
+  // Names "HARMANS KFC #189" vs "Starbucks Coffee" have Dice << 0.8, so spatial matching
   // will NOT match. The link table entry forces the fuse.
   const dissimilarOsmProvider: PoiSearchProvider = {
     id: "overpass",
@@ -302,7 +302,7 @@ describe("(D) Link-table wiring — ctx.db integration", () => {
     expect(fused?.osmTags?.brand).toBe("Starbucks");
   });
 
-  it("without ctx.db falls back to union-find only — output deep-equal to no-db baseline", async () => {
+  it("without ctx.db falls back to scored spatial matching only", async () => {
     const orchWithoutDb = createPoiSearchOrchestrator(
       makeCtx([overpassProvider, overtureProvider]),
     );

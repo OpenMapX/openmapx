@@ -59,6 +59,10 @@ describe("computeLinks", () => {
     expect(links[0].gers_id).toBe("gers-1");
     expect(links[0].osm_id).toBe(1);
     expect(links[0].release).toBe(RELEASE);
+    expect(links[0].source_confidence).toBe(0.9);
+    expect(links[0].match_confidence).toBeGreaterThan(0.7);
+    expect(links[0].distance_m).toBeGreaterThan(0);
+    expect(links[0].evidence.signals).toContain("name-match");
   });
 
   it("in-window pair (50m, name dice < 0.8): mock embedFn returns high cosine → method 'embedding'", async () => {
@@ -128,7 +132,7 @@ describe("computeLinks", () => {
     expect(embeddingLinks).toHaveLength(0);
   });
 
-  it("two Overture places both within range of same OSM poi: only best-confidence one in result", async () => {
+  it("uses identity score rather than source confidence to resolve competing edges", async () => {
     const osmPoi = makeOsm({ osm_id: 5, lat: BASE_LAT, lng: BASE_LNG, name: "Bookstore" });
 
     const offset1 = offsetLatLng(BASE_LAT, BASE_LNG, 10, 0);
@@ -137,7 +141,7 @@ describe("computeLinks", () => {
       lat: offset1.lat,
       lng: offset1.lng,
       name: "Bookstore",
-      confidence: 0.95,
+      confidence: 0.2,
     });
 
     const offset2 = offsetLatLng(BASE_LAT, BASE_LNG, 20, 0);
@@ -146,7 +150,7 @@ describe("computeLinks", () => {
       lat: offset2.lat,
       lng: offset2.lng,
       name: "Bookstore",
-      confidence: 0.7,
+      confidence: 0.99,
     });
 
     const links = await computeLinks([place1, place2], [osmPoi], {
@@ -156,5 +160,59 @@ describe("computeLinks", () => {
 
     const osmLinks = links.filter((l) => l.osm_type === "node" && l.osm_id === 5);
     expect(osmLinks).toHaveLength(1);
+    expect(osmLinks[0].gers_id).toBe("gers-5a");
+    expect(osmLinks[0].source_confidence).toBe(0.2);
+    expect(osmLinks[0].match_confidence).toBeGreaterThan(0.7);
+  });
+
+  it("is region-wide, one-to-one, and independent of input order", async () => {
+    const place = makePlace({
+      gersId: "gers-global",
+      lat: BASE_LAT,
+      lng: BASE_LNG,
+      name: "Global Cafe",
+      confidence: 0.8,
+    });
+    const near = makeOsm({
+      osm_id: 10,
+      lat: BASE_LAT,
+      lng: BASE_LNG,
+      name: "Global Cafe",
+    });
+    const farther = makeOsm({
+      osm_id: 11,
+      ...offsetLatLng(BASE_LAT, BASE_LNG, 20, 0),
+      name: "Global Cafe",
+    });
+    const options = { thresholds: DEFAULT_CONFLATION_THRESHOLDS, release: RELEASE };
+    const forward = await computeLinks([place], [farther, near], options);
+    const reverse = await computeLinks([place], [near, farther], options);
+    expect(reverse).toStrictEqual(forward);
+    expect(forward).toHaveLength(1);
+    expect(forward[0].osm_id).toBe(10);
+  });
+
+  it("does not let embeddings override structured address contradictions", async () => {
+    const osmPoi = makeOsm({
+      osm_id: 12,
+      lat: BASE_LAT,
+      lng: BASE_LNG,
+      name: "Cafe One",
+      addressKey: "10115|alpha|1",
+    });
+    const place = makePlace({
+      gersId: "gers-conflict",
+      ...offsetLatLng(BASE_LAT, BASE_LNG, 30, 0),
+      name: "Cafe Two",
+      addressKey: "10115|beta|2",
+    });
+    const embedFn = vi.fn(async (texts: string[]) => texts.map(() => [1, 0]));
+    const links = await computeLinks([place], [osmPoi], {
+      thresholds: DEFAULT_CONFLATION_THRESHOLDS,
+      release: RELEASE,
+      embedFn,
+    });
+    expect(links).toEqual([]);
+    expect(embedFn).not.toHaveBeenCalled();
   });
 });

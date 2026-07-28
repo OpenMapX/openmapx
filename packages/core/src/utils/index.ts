@@ -186,11 +186,16 @@ export {
 } from "./plusCode";
 export { AD_HOC_ICON_PATH, poiCategoryIconPath, resolvePoiIconPath } from "./poi-icon";
 export {
+  assignConflationPairs,
+  type ConflationMethod,
+  type ConflationPairScore,
   type ConflationPoint,
   type ConflationResult,
   type ConflationThresholds,
   conflate,
   DEFAULT_CONFLATION_THRESHOLDS,
+  type ScoredConflationPair,
+  scoreConflationPair,
 } from "./poiConflation";
 export { fusePoiResults } from "./poiFusion";
 export { pointInIsochroneGeometry } from "./pointInPolygon";

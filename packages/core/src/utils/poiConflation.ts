@@ -42,15 +42,37 @@ export interface ConflationThresholds {
 }
 
 export interface ConflationResult {
-  matched: Array<{ a: ConflationPoint; b: ConflationPoint }>;
+  matched: Array<{ a: ConflationPoint; b: ConflationPoint; score: ConflationPairScore }>;
   unmatchedA: ConflationPoint[];
   unmatchedB: ConflationPoint[];
 }
 
-/**
- * Provisional defaults pending conflation-precision calibration against a
- * hand-labeled ground-truth sample. Adjust via thresholds parameter if needed.
- */
+export type ConflationMethod =
+  | "wikidata"
+  | "phone"
+  | "address-name"
+  | "address-category"
+  | "website"
+  | "spatial-name"
+  | "embedding";
+
+/** Auditable evidence and identity confidence for one accepted candidate edge. */
+export interface ConflationPairScore {
+  matchConfidence: number;
+  method: ConflationMethod;
+  distanceM: number;
+  nameSimilarity: number;
+  categoryCompatible: boolean;
+  evidence: string[];
+}
+
+export interface ScoredConflationPair {
+  a: ConflationPoint;
+  b: ConflationPoint;
+  score: ConflationPairScore;
+}
+
+/** Defaults calibrated against the committed human-reviewed quality corpus. */
 export const DEFAULT_CONFLATION_THRESHOLDS: ConflationThresholds = {
   alwaysMergeM: 25,
   softWindowM: 120,
@@ -147,14 +169,39 @@ const SINGULAR_PER_ADDRESS = new Set([
   "ev_charging",
 ]);
 
-function shouldMatch(a: ConflationPoint, b: ConflationPoint, t: ConflationThresholds): boolean {
+function clampConfidence(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+/** Returns an explainable identity score, or null when the pair is rejected. */
+export function scoreConflationPair(
+  a: ConflationPoint,
+  b: ConflationPoint,
+  t: ConflationThresholds,
+): ConflationPairScore | null {
   const d = haversineMeters(a.lat, a.lng, b.lat, b.lng);
-  if (d > t.softWindowM) return false;
+  if (d > t.softWindowM) return null;
+  const names = nameSimilarity(a.name, b.name);
+  const categoriesMatch = categoryCompatible(a, b);
+  const makeScore = (
+    method: ConflationMethod,
+    matchConfidence: number,
+    evidence: string[],
+  ): ConflationPairScore => ({
+    method,
+    matchConfidence: clampConfidence(matchConfidence),
+    distanceM: d,
+    nameSimilarity: names,
+    categoryCompatible: categoriesMatch,
+    evidence,
+  });
 
   // Same specific entity / same brand outlet within the window → same place. An
   // explicit wikidata identity link is honoured over a phone discrepancy (which
   // is often stale or a secondary number).
-  if (a.wikidata && b.wikidata && a.wikidata === b.wikidata) return true;
+  if (a.wikidata && b.wikidata && a.wikidata === b.wikidata) {
+    return makeScore("wikidata", 1, [`wikidata:${a.wikidata}`, "within-soft-window"]);
+  }
 
   // Phone is the most specific business-identity signal. Sets INTERSECT → same
   // business (confirm); both non-empty yet DISJOINT → different numbers, so
@@ -167,8 +214,10 @@ function shouldMatch(a: ConflationPoint, b: ConflationPoint, t: ConflationThresh
   const bPhones = b.phones ?? [];
   const phonesBoth = aPhones.length > 0 && bPhones.length > 0;
   const phonesShare = phonesBoth && aPhones.some((p) => bPhones.includes(p));
-  if (phonesBoth && !phonesShare) return false;
-  if (phonesShare && categoryCompatible(a, b)) return true;
+  if (phonesBoth && !phonesShare) return null;
+  if (phonesShare && categoriesMatch) {
+    return makeScore("phone", 0.99, ["shared-phone", "compatible-category"]);
+  }
 
   // Address corroboration. A shared address is a strong location signal but does
   // NOT confirm the business: OSM and Overture map different POIs at the same
@@ -177,11 +226,21 @@ function shouldMatch(a: ConflationPoint, b: ConflationPoint, t: ConflationThresh
   // match; a matching address confirms only with a name signal, or an equal
   // category that is singular-per-address.
   if (a.addressKey && b.addressKey) {
-    if (a.addressKey !== b.addressKey) return false;
-    if (nameSimilarity(a.name, b.name) >= ADDRESS_MATCH_NAME_FLOOR) return true;
-    return (
+    if (a.addressKey !== b.addressKey) return null;
+    if (names >= ADDRESS_MATCH_NAME_FLOOR) {
+      return makeScore("address-name", 0.94 + 0.05 * names, ["same-address", "name-corroboration"]);
+    }
+    const singularCategory =
       a.category !== undefined && a.category === b.category && SINGULAR_PER_ADDRESS.has(a.category)
-    );
+        ? a.category
+        : undefined;
+    if (singularCategory) {
+      return makeScore("address-category", 0.94, [
+        "same-address",
+        `singular-category:${singularCategory}`,
+      ]);
+    }
+    return null;
   }
 
   // Website-host corroboration. Checked AFTER the address gate so a shared host
@@ -193,60 +252,155 @@ function shouldMatch(a: ConflationPoint, b: ConflationPoint, t: ConflationThresh
     b.website &&
     a.website === b.website &&
     !GENERIC_WEBSITE_HOSTS.has(a.website) &&
-    categoryCompatible(a, b)
+    categoriesMatch
   ) {
-    return true;
+    return makeScore("website", 0.92 + 0.05 * names, [
+      `shared-website:${a.website}`,
+      "compatible-category",
+    ]);
   }
 
   // Name fallback (no usable address on at least one side).
-  const sim = nameSimilarity(a.name, b.name);
-  if (d <= t.alwaysMergeM) return sim >= CLOSE_BAND_NAME_FLOOR;
-  return sim >= t.nameDiceFloor && categoryCompatible(a, b);
+  const floor = d <= t.alwaysMergeM ? CLOSE_BAND_NAME_FLOOR : t.nameDiceFloor;
+  if (names < floor || (d > t.alwaysMergeM && !categoriesMatch)) return null;
+  const normalizedName = (names - floor) / Math.max(1 - floor, Number.EPSILON);
+  const proximity = 1 - d / t.softWindowM;
+  return makeScore("spatial-name", 0.72 + 0.2 * normalizedName + 0.08 * proximity, [
+    d <= t.alwaysMergeM ? "close-band" : "soft-window",
+    "name-match",
+    ...(categoriesMatch ? ["compatible-category"] : []),
+  ]);
 }
 
-class UnionFind {
-  private parent: number[];
-  private rank: number[];
-
-  constructor(n: number) {
-    this.parent = Array.from({ length: n }, (_, i) => i);
-    this.rank = new Array(n).fill(0);
-  }
-
-  find(x: number): number {
-    if (this.parent[x] !== x) this.parent[x] = this.find(this.parent[x]);
-    return this.parent[x];
-  }
-
-  union(a: number, b: number): void {
-    const ra = this.find(a);
-    const rb = this.find(b);
-    if (ra === rb) return;
-    if (this.rank[ra] < this.rank[rb]) this.parent[ra] = rb;
-    else if (this.rank[ra] > this.rank[rb]) this.parent[rb] = ra;
-    else {
-      this.parent[rb] = ra;
-      this.rank[ra]++;
+function solveComponent(edges: ScoredConflationPair[]): ScoredConflationPair[] {
+  const aIds = [...new Set(edges.map((edge) => edge.a.id))].sort();
+  const bIds = [...new Set(edges.map((edge) => edge.b.id))].sort();
+  const size = Math.max(aIds.length, bIds.length);
+  const edgeByPair = new Map<string, ScoredConflationPair>();
+  for (const edge of edges) {
+    const key = `${edge.a.id}\u0000${edge.b.id}`;
+    const existing = edgeByPair.get(key);
+    if (!existing || edge.score.matchConfidence > existing.score.matchConfidence) {
+      edgeByPair.set(key, edge);
     }
   }
+
+  // Hungarian assignment over this connected candidate component. Every real
+  // edge gets a cardinality bonus of 1, so the optimum first maximizes the
+  // number of accepted links and then their total identity confidence.
+  const weights = Array.from({ length: size }, () => new Array<number>(size).fill(0));
+  for (let i = 0; i < aIds.length; i++) {
+    for (let j = 0; j < bIds.length; j++) {
+      const edge = edgeByPair.get(`${aIds[i]}\u0000${bIds[j]}`);
+      if (edge) weights[i][j] = 1 + edge.score.matchConfidence;
+    }
+  }
+
+  const maxWeight = 2;
+  const u = new Array<number>(size + 1).fill(0);
+  const v = new Array<number>(size + 1).fill(0);
+  const p = new Array<number>(size + 1).fill(0);
+  const way = new Array<number>(size + 1).fill(0);
+  for (let i = 1; i <= size; i++) {
+    p[0] = i;
+    let j0 = 0;
+    const minv = new Array<number>(size + 1).fill(Number.POSITIVE_INFINITY);
+    const used = new Array<boolean>(size + 1).fill(false);
+    do {
+      used[j0] = true;
+      const i0 = p[j0];
+      let delta = Number.POSITIVE_INFINITY;
+      let j1 = 0;
+      for (let j = 1; j <= size; j++) {
+        if (used[j]) continue;
+        const cost = maxWeight - weights[i0 - 1][j - 1];
+        const current = cost - u[i0] - v[j];
+        if (current < minv[j]) {
+          minv[j] = current;
+          way[j] = j0;
+        }
+        if (minv[j] < delta) {
+          delta = minv[j];
+          j1 = j;
+        }
+      }
+      for (let j = 0; j <= size; j++) {
+        if (used[j]) {
+          u[p[j]] += delta;
+          v[j] -= delta;
+        } else {
+          minv[j] -= delta;
+        }
+      }
+      j0 = j1;
+    } while (p[j0] !== 0);
+    do {
+      const j1 = way[j0];
+      p[j0] = p[j1];
+      j0 = j1;
+    } while (j0 !== 0);
+  }
+
+  const selected: ScoredConflationPair[] = [];
+  for (let j = 1; j <= size; j++) {
+    const i = p[j] - 1;
+    if (i < 0 || i >= aIds.length || j - 1 >= bIds.length) continue;
+    const edge = edgeByPair.get(`${aIds[i]}\u0000${bIds[j - 1]}`);
+    if (edge) selected.push(edge);
+  }
+  return selected;
+}
+
+/** Deterministic maximum-cardinality, maximum-confidence global assignment. */
+export function assignConflationPairs(
+  candidateEdges: readonly ScoredConflationPair[],
+): ScoredConflationPair[] {
+  if (candidateEdges.length === 0) return [];
+  const edges = [...candidateEdges].sort(
+    (left, right) =>
+      left.a.id.localeCompare(right.a.id) ||
+      left.b.id.localeCompare(right.b.id) ||
+      right.score.matchConfidence - left.score.matchConfidence,
+  );
+  const edgesByNode = new Map<string, ScoredConflationPair[]>();
+  for (const edge of edges) {
+    for (const key of [`a:${edge.a.id}`, `b:${edge.b.id}`]) {
+      const bucket = edgesByNode.get(key);
+      if (bucket) bucket.push(edge);
+      else edgesByNode.set(key, [edge]);
+    }
+  }
+
+  const visited = new Set<string>();
+  const selected: ScoredConflationPair[] = [];
+  for (const start of [...edgesByNode.keys()].sort()) {
+    if (visited.has(start)) continue;
+    const stack = [start];
+    const componentEdges = new Set<ScoredConflationPair>();
+    while (stack.length > 0) {
+      const node = stack.pop();
+      if (!node || visited.has(node)) continue;
+      visited.add(node);
+      for (const edge of edgesByNode.get(node) ?? []) {
+        componentEdges.add(edge);
+        const aKey = `a:${edge.a.id}`;
+        const bKey = `b:${edge.b.id}`;
+        if (!visited.has(aKey)) stack.push(aKey);
+        if (!visited.has(bKey)) stack.push(bKey);
+      }
+    }
+    selected.push(...solveComponent([...componentEdges]));
+  }
+  return selected.sort(
+    (left, right) => left.a.id.localeCompare(right.a.id) || left.b.id.localeCompare(right.b.id),
+  );
 }
 
 /**
  * Bipartite conflation of two POI sets: a (e.g. OSM) vs b (e.g. Overture).
  *
- * Generalizes the union-find pattern from deduplicateChargingStations for a
- * cross-set (bipartite) match rather than within-set dedup:
- *   - ≤ alwaysMergeM: always match
- *   - > alwaysMergeM and ≤ softWindowM: match iff name dice ≥ nameDiceFloor
- *     AND categories are compatible
- *   - > softWindowM: never match
- *
- * Exhaustive pairwise validation prevents transitive chaining: before merging
- * two clusters, every pair (one from each cluster) must individually satisfy
- * the shouldMatch predicate.
- *
- * Each point matches at most once (bipartite constraint enforced by tracking
- * matched indices per side after union-find resolves).
+ * Generates every accepted cross-set edge, then performs deterministic global
+ * one-to-one assignment across each connected candidate component.
  */
 export function conflate(
   a: ConflationPoint[],
@@ -263,110 +417,32 @@ export function conflate(
     return { matched: [], unmatchedA: [...a], unmatchedB: [] };
   }
 
-  const na = a.length;
-  const nb = b.length;
-  const total = na + nb;
-
-  // Index a as 0..na-1, b as na..na+nb-1
-  const uf = new UnionFind(total);
-  const clusterMembers = new Map<number, number[]>();
-  for (let i = 0; i < total; i++) clusterMembers.set(i, [i]);
-
-  function getPoint(idx: number): ConflationPoint {
-    return idx < na ? a[idx] : b[idx - na];
-  }
-
-  function isA(idx: number): boolean {
-    return idx < na;
-  }
-
   // Build spatial buckets for b-side points
   const bBuckets = new Map<string, number[]>();
-  for (let j = 0; j < nb; j++) {
+  for (let j = 0; j < b.length; j++) {
     const key = bucketKey(b[j].lat, b[j].lng);
     const arr = bBuckets.get(key);
     if (arr) arr.push(j);
     else bBuckets.set(key, [j]);
   }
 
-  for (let i = 0; i < na; i++) {
+  const candidateEdges: ScoredConflationPair[] = [];
+  for (let i = 0; i < a.length; i++) {
     const selfKey = bucketKey(a[i].lat, a[i].lng);
     for (const nKey of neighborKeys(selfKey, a[i].lat, t.softWindowM)) {
       const candidates = bBuckets.get(nKey);
       if (!candidates) continue;
       for (const jRel of candidates) {
-        const j = na + jRel;
-        if (!shouldMatch(a[i], b[jRel], t)) continue;
-
-        const ri = uf.find(i);
-        const rj = uf.find(j);
-        if (ri === rj) continue;
-
-        const ma = clusterMembers.get(ri);
-        const mb = clusterMembers.get(rj);
-        if (!ma || !mb) continue;
-
-        // Exhaustive pairwise validation across clusters
-        let ok = true;
-        outer: for (const x of ma) {
-          for (const y of mb) {
-            if (isA(x) === isA(y)) continue; // same side — no cross-check needed
-            const pa = isA(x) ? getPoint(x) : getPoint(y);
-            const pb = isA(x) ? getPoint(y) : getPoint(x);
-            if (!shouldMatch(pa, pb, t)) {
-              ok = false;
-              break outer;
-            }
-          }
-        }
-        if (!ok) continue;
-
-        uf.union(i, j);
-        const root = uf.find(i);
-        const merged = [...ma, ...mb];
-        if (root !== ri) clusterMembers.delete(ri);
-        if (root !== rj) clusterMembers.delete(rj);
-        clusterMembers.set(root, merged);
+        const score = scoreConflationPair(a[i], b[jRel], t);
+        if (score) candidateEdges.push({ a: a[i], b: b[jRel], score });
       }
     }
   }
-
-  // Collect results: a cluster that spans both sides = a match
-  const matched: Array<{ a: ConflationPoint; b: ConflationPoint }> = [];
-  const matchedAIdx = new Set<number>();
-  const matchedBIdx = new Set<number>();
-
-  for (const members of clusterMembers.values()) {
-    const aMembers = members.filter((idx) => isA(idx));
-    const bMembers = members.filter((idx) => !isA(idx));
-    if (aMembers.length === 0 || bMembers.length === 0) continue;
-
-    // Greedy nearest-neighbour pairing: pair each a-member with its nearest
-    // still-unused b-member so dense clusters (food courts, multi-entrance
-    // venues) don't collapse to a single pair and leave duplicate Overture pins.
-    const usedB = new Set<number>();
-    for (const ai of aMembers) {
-      let bestBLocal = -1;
-      let bestDist = Infinity;
-      for (const bi of bMembers) {
-        const biRel = bi - na;
-        if (usedB.has(biRel)) continue;
-        const d = haversineMeters(a[ai].lat, a[ai].lng, b[biRel].lat, b[biRel].lng);
-        if (d < bestDist) {
-          bestDist = d;
-          bestBLocal = biRel;
-        }
-      }
-      if (bestBLocal < 0) break;
-      matched.push({ a: a[ai], b: b[bestBLocal] });
-      matchedAIdx.add(ai);
-      matchedBIdx.add(bestBLocal);
-      usedB.add(bestBLocal);
-    }
-  }
-
-  const unmatchedA = a.filter((_, i) => !matchedAIdx.has(i));
-  const unmatchedB = b.filter((_, j) => !matchedBIdx.has(j));
+  const matched = assignConflationPairs(candidateEdges);
+  const matchedA = new Set(matched.map((pair) => pair.a.id));
+  const matchedB = new Set(matched.map((pair) => pair.b.id));
+  const unmatchedA = a.filter((point) => !matchedA.has(point.id));
+  const unmatchedB = b.filter((point) => !matchedB.has(point.id));
 
   return { matched, unmatchedA, unmatchedB };
 }

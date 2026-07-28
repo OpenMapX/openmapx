@@ -59,6 +59,12 @@ describe("current Overture taxonomy schema", () => {
     expect(ddl).toContain("taxonomy_hierarchy");
     expect(ddl).toContain("taxonomy_alternates");
     expect(ddl).toContain("USING GIN (taxonomy_hierarchy)");
+    expect(ddl).toContain("source_confidence DOUBLE PRECISION");
+    expect(ddl).toContain("match_confidence  DOUBLE PRECISION NOT NULL");
+    expect(ddl).toContain("evidence          JSONB NOT NULL");
+    expect(ddl).toContain("PRIMARY KEY (osm_type, osm_id)");
+    expect(ddl).toContain("gers_id           TEXT NOT NULL UNIQUE");
+    expect(ddl).not.toContain("confidence DOUBLE PRECISION NOT NULL");
     expect(ddl).not.toContain("openmapx_category");
     expect(ddl).not.toContain("opening_hours");
   });

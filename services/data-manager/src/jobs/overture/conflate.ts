@@ -1,16 +1,20 @@
 import { overtureTaxonomyToOpenMapX } from "@openmapx/core";
 import {
   haversineMeters,
+  nameSimilarity,
   osmAddressKey,
   overtureAddressKey,
   parsePhones,
   websiteDomain,
 } from "@openmapx/core/utils/geo-server";
 import {
+  assignConflationPairs,
+  type ConflationMethod,
   type ConflationPoint,
   type ConflationThresholds,
-  conflate,
   DEFAULT_CONFLATION_THRESHOLDS,
+  type ScoredConflationPair,
+  scoreConflationPair,
 } from "@openmapx/core/utils/poiConflation";
 import { gridDisk, latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";
@@ -57,9 +61,22 @@ export interface LinkRecord {
   osm_type: string;
   osm_id: number;
   gers_id: string;
-  confidence: number;
-  method: "spatial-name" | "embedding";
+  source_confidence: number | null;
+  match_confidence: number;
+  distance_m: number;
+  method: ConflationMethod;
+  evidence: {
+    nameSimilarity: number;
+    categoryCompatible: boolean;
+    signals: string[];
+  };
   release: string;
+}
+
+interface CandidatePair {
+  osm: ConflationPoint;
+  place: ConflationPoint;
+  distanceM: number;
 }
 
 function ensureH3(point: { lat: number; lng: number; h3_r8?: string | null }): string {
@@ -67,16 +84,14 @@ function ensureH3(point: { lat: number; lng: number; h3_r8?: string | null }): s
 }
 
 /**
- * Computes OSM↔Overture link records using H3-r8 blocking, spatial-name
- * conflation, and optionally embedding-based residual matching.
+ * Computes OSM↔Overture link records using one region-wide candidate graph.
  *
- * Step 1: Group both sets by H3 r8 cell. Use gridDisk(cell, 1) to include
- *         neighbors, avoiding split-cell boundary misses.
- * Step 2: For each shared-cell group, run the core `conflate` function.
- *         Matches become method: "spatial-name" links.
- * Step 3: For unmatched pairs within softWindowM, embed and accept cosine >
- *         cosineFloor as method: "embedding" links (only when embedFn provided).
- * Step 4: Dedup — per (osm_type, osm_id) and per gers_id keep best confidence.
+ * Step 1: Generate every candidate edge exactly once using H3-r8 ring-1
+ *         blocking and the configured distance window.
+ * Step 2: Add explainable structured scores and optional embedding scores where
+ *         no phone/address/wikidata/category evidence contradicts the match.
+ * Step 3: Assign the complete graph globally, one-to-one, maximizing cardinality
+ *         first and total identity confidence second.
  */
 export async function computeLinks(
   places: OverturePlacePoint[],
@@ -89,208 +104,122 @@ export async function computeLinks(
   },
 ): Promise<LinkRecord[]> {
   const { thresholds, embedFn, cosineFloor = 0.87, release } = opts;
-
-  const overtureByCell = new Map<string, OverturePlacePoint[]>();
-  for (const place of places) {
-    const cell = ensureH3(place);
-    const arr = overtureByCell.get(cell);
-    if (arr) arr.push(place);
-    else overtureByCell.set(cell, [place]);
+  const osmById = new Map<string, { source: OsmPoiPoint; point: ConflationPoint }>();
+  for (const source of osmPois) {
+    const id = `${source.osm_type}:${source.osm_id}`;
+    osmById.set(id, { source, point: { id, ...source } });
   }
 
-  const osmByCell = new Map<string, OsmPoiPoint[]>();
-  for (const poi of osmPois) {
-    const cell = ensureH3(poi);
-    const arr = osmByCell.get(cell);
-    if (arr) arr.push(poi);
-    else osmByCell.set(cell, [poi]);
+  const placeById = new Map<string, { source: OverturePlacePoint; point: ConflationPoint }>();
+  const placesByCell = new Map<string, OverturePlacePoint[]>();
+  for (const source of places) {
+    placeById.set(source.gersId, { source, point: { id: source.gersId, ...source } });
+    const cell = ensureH3(source);
+    const bucket = placesByCell.get(cell);
+    if (bucket) bucket.push(source);
+    else placesByCell.set(cell, [source]);
   }
 
-  const spatialLinks: LinkRecord[] = [];
-  const residualOsm = new Map<string, OsmPoiPoint>();
-  const residualOverture = new Map<string, OverturePlacePoint>();
-
-  const processedOsmCells = new Set<string>();
-
-  for (const [osmCell, osmGroup] of osmByCell) {
-    if (processedOsmCells.has(osmCell)) continue;
-    processedOsmCells.add(osmCell);
-
-    const neighborCells = gridDisk(osmCell, 1);
-    const overtureGroup: OverturePlacePoint[] = [];
-    for (const nc of neighborCells) {
-      const pts = overtureByCell.get(nc);
-      if (pts) overtureGroup.push(...pts);
-    }
-
-    if (overtureGroup.length === 0) {
-      for (const poi of osmGroup) {
-        residualOsm.set(`${poi.osm_type}:${poi.osm_id}`, poi);
+  const candidates = new Map<string, CandidatePair>();
+  for (const { source: osmSource, point: osm } of osmById.values()) {
+    for (const cell of gridDisk(ensureH3(osmSource), 1)) {
+      for (const placeSource of placesByCell.get(cell) ?? []) {
+        const place = placeById.get(placeSource.gersId)?.point;
+        if (!place) continue;
+        const distanceM = haversineMeters(osm.lat, osm.lng, place.lat, place.lng);
+        if (distanceM > thresholds.softWindowM) continue;
+        candidates.set(`${osm.id}\u0000${place.id}`, { osm, place, distanceM });
       }
+    }
+  }
+
+  const edges: ScoredConflationPair[] = [];
+  const embeddingCandidates: CandidatePair[] = [];
+  for (const candidate of candidates.values()) {
+    const score = scoreConflationPair(candidate.osm, candidate.place, thresholds);
+    if (score) {
+      edges.push({ a: candidate.osm, b: candidate.place, score });
       continue;
     }
+    const osmPhones = candidate.osm.phones ?? [];
+    const placePhones = candidate.place.phones ?? [];
+    const phoneConflict =
+      osmPhones.length > 0 &&
+      placePhones.length > 0 &&
+      !osmPhones.some((phone) => placePhones.includes(phone));
+    const addressConflict =
+      candidate.osm.addressKey !== undefined &&
+      candidate.place.addressKey !== undefined &&
+      candidate.osm.addressKey !== candidate.place.addressKey;
+    const wikidataConflict =
+      candidate.osm.wikidata !== undefined &&
+      candidate.place.wikidata !== undefined &&
+      candidate.osm.wikidata !== candidate.place.wikidata;
+    const categoryConflict =
+      candidate.osm.category !== undefined &&
+      candidate.place.category !== undefined &&
+      candidate.osm.category !== candidate.place.category;
+    if (!phoneConflict && !addressConflict && !wikidataConflict && !categoryConflict) {
+      embeddingCandidates.push(candidate);
+    }
+  }
 
-    const osmConflation: ConflationPoint[] = osmGroup.map((p) => ({
-      id: `${p.osm_type}:${p.osm_id}`,
-      name: p.name,
-      lat: p.lat,
-      lng: p.lng,
-      category: p.category,
-      addressKey: p.addressKey,
-      wikidata: p.wikidata,
-      phones: p.phones,
-      website: p.website,
-    }));
-
-    const overtureConflation: ConflationPoint[] = overtureGroup.map((p) => ({
-      id: p.gersId,
-      name: p.name,
-      lat: p.lat,
-      lng: p.lng,
-      category: p.category,
-      addressKey: p.addressKey,
-      wikidata: p.wikidata,
-      phones: p.phones,
-      website: p.website,
-    }));
-
-    const result = conflate(osmConflation, overtureConflation, thresholds);
-
-    const osmGroupByKey = new Map<string, OsmPoiPoint>();
-    for (const p of osmGroup) osmGroupByKey.set(`${p.osm_type}:${p.osm_id}`, p);
-    const overtureGroupByKey = new Map<string, OverturePlacePoint>();
-    for (const p of overtureGroup) overtureGroupByKey.set(p.gersId, p);
-
-    for (const { a: osmPt, b: overturePt } of result.matched) {
-      const osmPoi = osmGroupByKey.get(osmPt.id);
-      const overturePl = overtureGroupByKey.get(overturePt.id);
-      if (!osmPoi || !overturePl) continue;
-
-      const confidence = overturePl.confidence ?? 0.9;
-      spatialLinks.push({
-        osm_type: osmPoi.osm_type,
-        osm_id: osmPoi.osm_id,
-        gers_id: overturePl.gersId,
-        confidence,
-        method: "spatial-name",
-        release,
+  if (embedFn && embeddingCandidates.length > 0) {
+    const osmIds = [...new Set(embeddingCandidates.map((candidate) => candidate.osm.id))].sort();
+    const placeIds = [
+      ...new Set(embeddingCandidates.map((candidate) => candidate.place.id)),
+    ].sort();
+    const osmVectors = await embedFn(osmIds.map((id) => osmById.get(id)?.source.name ?? ""));
+    const placeVectors = await embedFn(
+      placeIds.map((id) => {
+        const place = placeById.get(id)?.source;
+        return [place?.name, place?.address].filter(Boolean).join(" ");
+      }),
+    );
+    const osmVectorById = new Map(osmIds.map((id, index) => [id, osmVectors[index]]));
+    const placeVectorById = new Map(placeIds.map((id, index) => [id, placeVectors[index]]));
+    for (const candidate of embeddingCandidates) {
+      const osmVector = osmVectorById.get(candidate.osm.id);
+      const placeVector = placeVectorById.get(candidate.place.id);
+      if (!osmVector || !placeVector) continue;
+      const cosine = cosineSimilarity(osmVector, placeVector);
+      if (cosine <= cosineFloor) continue;
+      const proximity = 1 - candidate.distanceM / thresholds.softWindowM;
+      edges.push({
+        a: candidate.osm,
+        b: candidate.place,
+        score: {
+          method: "embedding",
+          matchConfidence: Math.min(1, cosine * (0.95 + 0.05 * proximity)),
+          distanceM: candidate.distanceM,
+          nameSimilarity: nameSimilarity(candidate.osm.name, candidate.place.name),
+          categoryCompatible: true,
+          evidence: [`embedding-cosine:${cosine.toFixed(6)}`, "no-structured-conflict"],
+        },
       });
     }
-
-    for (const pt of result.unmatchedA) {
-      const poi = osmGroupByKey.get(pt.id);
-      if (poi) residualOsm.set(pt.id, poi);
-    }
-    for (const pt of result.unmatchedB) {
-      const pl = overtureGroupByKey.get(pt.id);
-      if (pl) residualOverture.set(pt.id, pl);
-    }
   }
 
-  const embeddingLinks: LinkRecord[] = [];
-
-  if (embedFn && residualOsm.size > 0 && residualOverture.size > 0) {
-    const osmArr = Array.from(residualOsm.values());
-    const overtureArr = Array.from(residualOverture.values());
-
-    const overtureByH3 = new Map<string, number[]>();
-    for (let j = 0; j < overtureArr.length; j++) {
-      const cell = latLngToCell(overtureArr[j].lat, overtureArr[j].lng, 8);
-      const arr = overtureByH3.get(cell);
-      if (arr) arr.push(j);
-      else overtureByH3.set(cell, [j]);
-    }
-
-    const candidatePairs: Array<{ osmIdx: number; overtureIdx: number; dist: number }> = [];
-    for (let i = 0; i < osmArr.length; i++) {
-      const osmCell = latLngToCell(osmArr[i].lat, osmArr[i].lng, 8);
-      const neighborCells = gridDisk(osmCell, 1);
-      for (const nc of neighborCells) {
-        const neighbors = overtureByH3.get(nc);
-        if (!neighbors) continue;
-        for (const j of neighbors) {
-          const dist = haversineMeters(
-            osmArr[i].lat,
-            osmArr[i].lng,
-            overtureArr[j].lat,
-            overtureArr[j].lng,
-          );
-          if (dist <= thresholds.softWindowM) {
-            candidatePairs.push({ osmIdx: i, overtureIdx: j, dist });
-          }
-        }
-      }
-    }
-
-    if (candidatePairs.length > 0) {
-      const uniqueOsmIndices = [...new Set(candidatePairs.map((p) => p.osmIdx))];
-      const uniqueOvertureIndices = [...new Set(candidatePairs.map((p) => p.overtureIdx))];
-
-      const osmTexts = uniqueOsmIndices.map((i) => osmArr[i].name);
-      const overtureTexts = uniqueOvertureIndices.map((i) =>
-        [overtureArr[i].name, overtureArr[i].address].filter(Boolean).join(" "),
-      );
-
-      const osmVecList = await embedFn(osmTexts);
-      const overtureVecList = await embedFn(overtureTexts);
-
-      const osmVecByIdx = new Map<number, number[]>();
-      for (let k = 0; k < uniqueOsmIndices.length; k++) {
-        osmVecByIdx.set(uniqueOsmIndices[k], osmVecList[k]);
-      }
-      const overtureVecByIdx = new Map<number, number[]>();
-      for (let k = 0; k < uniqueOvertureIndices.length; k++) {
-        overtureVecByIdx.set(uniqueOvertureIndices[k], overtureVecList[k]);
-      }
-
-      for (const { osmIdx, overtureIdx } of candidatePairs) {
-        const osmVec = osmVecByIdx.get(osmIdx);
-        const overtureVec = overtureVecByIdx.get(overtureIdx);
-        if (!osmVec || !overtureVec) continue;
-        const sim = cosineSimilarity(osmVec, overtureVec);
-        if (sim > cosineFloor) {
-          const osmPoi = osmArr[osmIdx];
-          const overturePl = overtureArr[overtureIdx];
-          // Respect the same phone rejection as shouldMatch: a name-similar pair
-          // with disjoint phone sets is two different businesses, so the
-          // embedding fallback must not re-link what conflate() deliberately
-          // dropped into the residuals.
-          const op = osmPoi.phones;
-          const pp = overturePl.phones;
-          if (op?.length && pp?.length && !op.some((p) => pp.includes(p))) continue;
-          embeddingLinks.push({
-            osm_type: osmPoi.osm_type,
-            osm_id: osmPoi.osm_id,
-            gers_id: overturePl.gersId,
-            confidence: sim * (overturePl.confidence ?? 0.9),
-            method: "embedding",
-            release,
-          });
-        }
-      }
-    }
-  }
-
-  const allLinks = [...spatialLinks, ...embeddingLinks];
-
-  const bestByOsm = new Map<string, LinkRecord>();
-  for (const link of allLinks) {
-    const key = `${link.osm_type}:${link.osm_id}`;
-    const existing = bestByOsm.get(key);
-    if (!existing || link.confidence > existing.confidence) {
-      bestByOsm.set(key, link);
-    }
-  }
-
-  const bestByGers = new Map<string, LinkRecord>();
-  for (const link of bestByOsm.values()) {
-    const existing = bestByGers.get(link.gers_id);
-    if (!existing || link.confidence > existing.confidence) {
-      bestByGers.set(link.gers_id, link);
-    }
-  }
-
-  return Array.from(bestByGers.values());
+  return assignConflationPairs(edges).map((edge) => {
+    const osm = osmById.get(edge.a.id)?.source;
+    const place = placeById.get(edge.b.id)?.source;
+    if (!osm || !place) throw new Error("Assigned conflation edge lost its source record");
+    return {
+      osm_type: osm.osm_type,
+      osm_id: osm.osm_id,
+      gers_id: place.gersId,
+      source_confidence: place.confidence ?? null,
+      match_confidence: edge.score.matchConfidence,
+      distance_m: edge.score.distanceM,
+      method: edge.score.method,
+      evidence: {
+        nameSimilarity: edge.score.nameSimilarity,
+        categoryCompatible: edge.score.categoryCompatible,
+        signals: edge.score.evidence,
+      },
+      release,
+    };
+  });
 }
 
 /**
@@ -435,17 +364,14 @@ export async function conflateOverture(opts: {
   });
   onProgress?.(`Computed ${links.length} candidate links.`);
 
-  // Full rebuild: conflate recomputes the complete link set for the schema, so
-  // clear stale links first. Without this the table accumulates across runs
-  // (ON CONFLICT only overwrites the same osm↔gers triple), leaving links from
-  // prior releases / pre-fix runs behind.
+  // Full rebuild: conflate recomputes the complete one-to-one link set.
   await sql.unsafe(`DELETE FROM "${schema}".poi_conflation_link`);
 
   if (links.length === 0) {
     return { linked: 0 };
   }
 
-  const COLS = 6;
+  const COLS = 9;
   const rowsPerBatch = Math.floor(65500 / COLS);
 
   for (let i = 0; i < links.length; i += rowsPerBatch) {
@@ -454,7 +380,10 @@ export async function conflateOverture(opts: {
     const placeholders = batch
       .map(
         (_, k) =>
-          `($${k * COLS + 1}, $${k * COLS + 2}::BIGINT, $${k * COLS + 3}, $${k * COLS + 4}::DOUBLE PRECISION, $${k * COLS + 5}, $${k * COLS + 6})`,
+          `($${k * COLS + 1}, $${k * COLS + 2}::BIGINT, $${k * COLS + 3}, ` +
+          `$${k * COLS + 4}::DOUBLE PRECISION, $${k * COLS + 5}::DOUBLE PRECISION, ` +
+          `$${k * COLS + 6}::DOUBLE PRECISION, $${k * COLS + 7}, ` +
+          `$${k * COLS + 8}::JSONB, $${k * COLS + 9})`,
       )
       .join(", ");
 
@@ -462,20 +391,28 @@ export async function conflateOverture(opts: {
       l.osm_type,
       l.osm_id,
       l.gers_id,
-      l.confidence,
+      l.source_confidence,
+      l.match_confidence,
+      l.distance_m,
       l.method,
+      JSON.stringify(l.evidence),
       l.release,
     ]);
 
     await sql.unsafe(
       `INSERT INTO "${schema}".poi_conflation_link
-         (osm_type, osm_id, gers_id, confidence, method, release)
+         (osm_type, osm_id, gers_id, source_confidence, match_confidence,
+          distance_m, method, evidence, release)
        VALUES ${placeholders}
-       ON CONFLICT (osm_type, osm_id, gers_id)
+       ON CONFLICT (osm_type, osm_id)
        DO UPDATE SET
-         confidence = EXCLUDED.confidence,
-         method     = EXCLUDED.method,
-         release    = EXCLUDED.release`,
+         gers_id          = EXCLUDED.gers_id,
+         source_confidence = EXCLUDED.source_confidence,
+         match_confidence  = EXCLUDED.match_confidence,
+         distance_m        = EXCLUDED.distance_m,
+         method            = EXCLUDED.method,
+         evidence          = EXCLUDED.evidence,
+         release           = EXCLUDED.release`,
       values,
     );
   }

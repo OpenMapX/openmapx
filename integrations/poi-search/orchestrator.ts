@@ -32,7 +32,7 @@ interface ConflationLinkRow {
  * Issues a single query for the entire result set (no N+1). Returns `undefined`
  * when `ctx.db` is absent (no PostGIS) or when there are no OSM results with
  * a parseable osm_type/osm_id — callers treat `undefined` as "no link, run
- * union-find only", which is deep-equal to the plan-01 behavior.
+ * scored spatial matching only".
  */
 async function buildConflationLinkMap(
   ctx: IntegrationContext,

@@ -93,13 +93,16 @@ export function buildSchemaDDL(schema: string): string {
       ON "${schema}".places USING GIN (taxonomy_alternates);
 
     CREATE TABLE "${schema}".poi_conflation_link (
-      osm_type   TEXT NOT NULL,
-      osm_id     BIGINT NOT NULL,
-      gers_id    TEXT NOT NULL REFERENCES "${schema}".places(gers_id) ON DELETE CASCADE,
-      confidence DOUBLE PRECISION NOT NULL,
-      method     TEXT NOT NULL,
-      release    TEXT NOT NULL,
-      PRIMARY KEY (osm_type, osm_id, gers_id)
+      osm_type          TEXT NOT NULL,
+      osm_id            BIGINT NOT NULL,
+      gers_id           TEXT NOT NULL UNIQUE REFERENCES "${schema}".places(gers_id) ON DELETE CASCADE,
+      source_confidence DOUBLE PRECISION,
+      match_confidence  DOUBLE PRECISION NOT NULL CHECK (match_confidence BETWEEN 0 AND 1),
+      distance_m        DOUBLE PRECISION NOT NULL CHECK (distance_m >= 0),
+      method            TEXT NOT NULL,
+      evidence          JSONB NOT NULL,
+      release           TEXT NOT NULL,
+      PRIMARY KEY (osm_type, osm_id)
     );
 
     CREATE INDEX idx_link_gers ON "${schema}".poi_conflation_link (gers_id);

@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { PoiSearchResult } from "../../types/category";
 import {
+  assignConflationPairs,
+  type ConflationPairScore,
   type ConflationPoint,
   type ConflationThresholds,
   conflate,
   DEFAULT_CONFLATION_THRESHOLDS,
+  scoreConflationPair,
 } from "../poiConflation";
 import { fusePoiResults } from "../poiFusion";
 
@@ -340,7 +343,7 @@ describe("conflate — bipartite matching (each point matches at most once)", ()
     expect(result.unmatchedB).toHaveLength(0);
   });
 
-  it("greedy multi-member: pairs all mutual members, no duplicate Overture pins", () => {
+  it("global multi-member assignment pairs all mutual members with no duplicate pins", () => {
     // Three OSM + three Overture all within alwaysMergeM of each other — every
     // cross-side pair mutually matches, so the cluster covers all six points.
     // Greedy pairing must produce min(3,3)=3 pairs, leaving unmatchedB empty.
@@ -362,6 +365,59 @@ describe("conflate — bipartite matching (each point matches at most once)", ()
     const matchedBIds = result.matched.map((m) => m.b.id).sort();
     expect(matchedAIds).toEqual(["osm:1", "osm:2", "osm:3"]);
     expect(matchedBIds).toEqual(["ov:1", "ov:2", "ov:3"]);
+  });
+});
+
+describe("conflate — scored global assignment", () => {
+  const score = (matchConfidence: number): ConflationPairScore => ({
+    matchConfidence,
+    method: "spatial-name",
+    distanceM: 10,
+    nameSimilarity: matchConfidence,
+    categoryCompatible: true,
+    evidence: ["test"],
+  });
+
+  it("maximizes cardinality before confidence instead of taking a greedy dead end", () => {
+    const a1 = pt("a1", "A1", 0, 0);
+    const a2 = pt("a2", "A2", 0, 0);
+    const b1 = pt("b1", "B1", 0, 0);
+    const b2 = pt("b2", "B2", 0, 0);
+    const selected = assignConflationPairs([
+      { a: a1, b: b1, score: score(0.99) },
+      { a: a1, b: b2, score: score(0.9) },
+      { a: a2, b: b1, score: score(0.89) },
+    ]);
+    expect(selected.map((edge) => `${edge.a.id}:${edge.b.id}`)).toEqual(["a1:b2", "a2:b1"]);
+  });
+
+  it("is deterministic when candidate edge order changes", () => {
+    const a1 = pt("a1", "Same", 0, 0);
+    const a2 = pt("a2", "Same", 0, 0);
+    const b1 = pt("b1", "Same", 0, 0);
+    const edges = [
+      { a: a2, b: b1, score: score(0.9) },
+      { a: a1, b: b1, score: score(0.9) },
+    ];
+    const forward = assignConflationPairs(edges);
+    const reverse = assignConflationPairs([...edges].reverse());
+    expect(reverse).toStrictEqual(forward);
+    expect(forward[0].a.id).toBe("a1");
+  });
+
+  it("returns auditable identity evidence independently of source confidence", () => {
+    const result = scoreConflationPair(
+      { ...pt("osm", "Old Name", 52.52, 13.4, "cafes"), phones: ["3012345"] },
+      { ...pt("gers", "New Name", 52.5202, 13.4, "cafes"), phones: ["3012345"] },
+      T,
+    );
+    expect(result).toMatchObject({
+      method: "phone",
+      matchConfidence: 0.99,
+      categoryCompatible: true,
+      evidence: ["shared-phone", "compatible-category"],
+    });
+    expect(result?.distanceM).toBeGreaterThan(0);
   });
 });
 
@@ -483,9 +539,9 @@ describe("fusePoiResults", () => {
 });
 
 describe("fusePoiResults — link-first pass", () => {
-  it("fuses via link even when names are too dissimilar for the union-find", () => {
+  it("fuses via link even when names are too dissimilar for the scored matcher", () => {
     // OSM: "HARMANS KFC #189" — Overture: "KFC" — Dice similarity << 0.8, far enough apart
-    // that union-find would NOT match, but the link table says they are the same entity.
+    // that the scored matcher would NOT match, but the link table says they are the same entity.
     const osm: PoiSearchResult[] = [
       makePoi("osm:node/999", "HARMANS KFC #189", 52.52, 13.4, { category: "restaurants" }),
     ];
@@ -496,7 +552,7 @@ describe("fusePoiResults — link-first pass", () => {
         osmTags: { brand: "KFC", "brand:wikidata": "Q524757" },
       }),
     ];
-    // Without a link the names are too dissimilar: union-find should NOT match them.
+    // Without a link the names are too dissimilar: the scored matcher should NOT match them.
     const noLinkResult = fusePoiResults(osm, overture, DEFAULT_CONFLATION_THRESHOLDS);
     expect(noLinkResult.find((r) => r.gersId === "gers-kfc-001")?.id).not.toBe("osm:node/999");
 
@@ -544,9 +600,9 @@ describe("fusePoiResults — link-first pass", () => {
     expect(fourArgEmpty).toStrictEqual(threeArg);
   });
 
-  it("link fuses one pair while union-find still fuses a name-similar pair; both carry gers", () => {
+  it("link fuses one pair while the scored matcher fuses a name-similar pair", () => {
     // node/10 ↔ gers-link-only: name-dissimilar, linked via link table
-    // node/20 ↔ gers-name-match: name-similar, matched by union-find
+    // node/20 ↔ gers-name-match: name-similar, matched by the scored matcher
     const osm: PoiSearchResult[] = [
       makePoi("osm:node/10", "TOTALLY DIFFERENT NAME XYZABC", 52.52, 13.4, {
         category: "cafes",
