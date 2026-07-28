@@ -58,7 +58,10 @@ import { loadAllBindingsByIntegration } from "./services/capability-bindings";
 import { searchCatalog } from "./services/gtfs/catalog";
 import { gtfsManager } from "./services/gtfs/index";
 import * as gtfsQueries from "./services/gtfs/queries";
-import { executeAllIntegrationHealthChecks } from "./services/integration-health";
+import {
+  executeAllIntegrationHealthChecks,
+  getCachedIntegrationHealthSnapshot,
+} from "./services/integration-health";
 import { getMetricsRecorder } from "./services/metrics/recorder";
 import {
   getProviderHealth,
@@ -890,11 +893,15 @@ export async function initIntegrations(
     },
   );
 
-  // Health check endpoint for integration-managed services
-  fastify.get("/api/integrations/health", async () => {
+  // Public status reads are deliberately cache-only. The background scheduler
+  // below and the authenticated admin sweep are the only full-check callers.
+  fastify.get("/api/integrations/health", () => {
     const all = Array.from(integrations.values()).filter((i) => i.enabled);
-    const results = await executeAllIntegrationHealthChecks(all);
-    return { timestamp: new Date().toISOString(), services: results };
+    const snapshot = getCachedIntegrationHealthSnapshot(all);
+    return {
+      timestamp: new Date(snapshot.updatedAt ?? Date.now()).toISOString(),
+      services: snapshot.results,
+    };
   });
 
   registerIntegrationRouteDispatcher(fastify, integrations);

@@ -24,7 +24,11 @@ vi.mock("@openmapx/integration-framework/impersonate", () => ({
 }));
 
 import { impersonatingFetch } from "@openmapx/integration-framework/impersonate";
-import { executeIntegrationHealthCheck } from "../integration-health";
+import {
+  executeAllIntegrationHealthChecks,
+  executeIntegrationHealthCheck,
+  getCachedIntegrationHealthSnapshot,
+} from "../integration-health";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../");
 
@@ -287,5 +291,58 @@ describe("metered DB API Marketplace health checks", () => {
     expect(init?.headers).not.toHaveProperty("DB-Client-ID");
     expect(init?.headers).not.toHaveProperty("DB-Client-Id");
     expect(init?.headers).not.toHaveProperty("DB-Api-Key");
+  });
+});
+
+describe("integration health cache snapshots", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns cached sub-checks and their aggregate without running another probe", async () => {
+    const integration = makeIntegration([
+      { name: "Primary", type: "http", url: "https://primary.example.com/health" },
+      { name: "Fallback", type: "http", url: "https://fallback.example.com/health" },
+    ]);
+    integration.id = "snapshot-test";
+
+    await executeAllIntegrationHealthChecks([integration]);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    fetchSpy.mockClear();
+
+    const snapshot = getCachedIntegrationHealthSnapshot([integration]);
+
+    expect(snapshot.updatedAt).not.toBeNull();
+    expect(snapshot.results.map((result) => result.id)).toEqual([
+      "snapshot-test:Primary",
+      "snapshot-test:Fallback",
+      "snapshot-test",
+    ]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not expose cached results for integrations outside the requested set", async () => {
+    const cachedIntegration = makeIntegration({
+      type: "http",
+      url: "https://cached.example.com/health",
+    });
+    cachedIntegration.id = "cached-but-not-requested";
+    await executeAllIntegrationHealthChecks([cachedIntegration]);
+
+    const requestedIntegration = makeIntegration({
+      type: "http",
+      url: "https://requested.example.com/health",
+    });
+    requestedIntegration.id = "requested-without-cache";
+    fetchSpy.mockClear();
+
+    expect(getCachedIntegrationHealthSnapshot([requestedIntegration]).results).toEqual([]);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

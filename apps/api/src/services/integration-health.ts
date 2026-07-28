@@ -423,6 +423,49 @@ export function getCachedHealthStatus(id: string): ServiceStatus | undefined {
   return healthCache.get(id);
 }
 
+export interface IntegrationHealthSnapshot {
+  updatedAt: number | null;
+  results: ServiceStatus[];
+}
+
+/**
+ * Return the latest scheduled health results for the requested integrations.
+ * Result IDs and ordering mirror executeAllIntegrationHealthChecks, including
+ * the synthetic bare-id aggregate for integrations with multiple checks.
+ */
+export function getCachedIntegrationHealthSnapshot(
+  integrations: LoadedIntegration[],
+): IntegrationHealthSnapshot {
+  const results: ServiceStatus[] = [];
+
+  for (const integration of integrations) {
+    const raw = integration.manifest.healthCheck;
+    if (!raw) continue;
+
+    const checks = Array.isArray(raw) ? raw : [raw];
+    if (checks.length === 1) {
+      const cached = healthCache.get(integration.id);
+      if (cached) results.push(cached);
+      continue;
+    }
+
+    for (let i = 0; i < checks.length; i++) {
+      const check = checks[i];
+      if (!check) continue;
+      const cached = healthCache.get(`${integration.id}:${check.name ?? String(i)}`);
+      if (cached) results.push(cached);
+    }
+
+    const aggregate = healthCache.get(integration.id);
+    if (aggregate) results.push(aggregate);
+  }
+
+  return {
+    updatedAt: healthCacheUpdatedAt || null,
+    results,
+  };
+}
+
 /** Whether an integration is considered healthy based on cached health data. */
 export function isIntegrationHealthy(id: string, hasHealthCheck: boolean): boolean {
   if (!hasHealthCheck) return true; // no health check = assume healthy

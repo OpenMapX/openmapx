@@ -22,8 +22,8 @@ behavior, so you can verify and tune rather than guess.
 `/status` is the system-health snapshot — a quick "is everything up?"
 check across the pieces the instance depends on, linked from the admin
 **Overview** page. It calls the API's `/api/status`
-endpoint, which probes each dependency live and reports `up`, `down`, or `not
-configured` with a measured response time.
+endpoint, which reports `up`, `down`, or `not configured` with a measured
+response time.
 
 Two groups of checks run:
 
@@ -34,16 +34,19 @@ Two groups of checks run:
   rather than down, so a deliberately-omitted optional service doesn't show as a
   failure.
 - **Integration health checks**, drawn from each enabled integration's manifest.
-  Every integration that declares a `healthCheck` is exercised and its result
-  folded into the same list, grouped by category. This is how a misconfigured
-  geocoder or an unreachable routing engine surfaces here without any
-  status-page-specific code.
+  The status endpoint reads the latest results produced by the background
+  health scheduler instead of probing providers on every public request. This
+  avoids spending API quota merely because someone opened or refreshed the
+  status page. An administrator can still force a fresh sweep from the
+  integrations health view.
 
 The page groups results by category (Infrastructure first), shows a running
 count of operational / down / not-configured services, and displays each check's
 target URL with passwords masked. A connection string is never shown with its
-secret intact. Toggle **Auto-refresh** to re-probe every 30 seconds while the tab
-is visible, or hit **Refresh** on demand.
+secret intact. Toggle **Auto-refresh** to refresh the view every 30 seconds while
+the tab is visible, or hit **Refresh** on demand. Infrastructure checks run on
+each refresh; integration results advance when the background scheduler
+publishes its next snapshot, unless an administrator forces a sweep.
 
 The same snapshot also rolls up into the admin **Overview** dashboard's
 attention list; see [Admin panel](./admin-panel.md) for that landing view.

@@ -268,6 +268,20 @@ describe("GET /admin/integrations/:id", () => {
   });
 });
 
+describe("POST /admin/integrations/health/run", () => {
+  it("runs a fresh health sweep for enabled integrations", async () => {
+    mockExecuteAllIntegrationHealthChecks.mockResolvedValueOnce([
+      { id: "geocoding-maptiler", status: "up" },
+    ]);
+
+    const res = await app.inject({ method: "POST", url: "/admin/integrations/health/run" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ count: 1, results: [{ id: "geocoding-maptiler" }] });
+    expect(mockExecuteAllIntegrationHealthChecks).toHaveBeenCalledWith([MOCK_INTEGRATION]);
+  });
+});
+
 describe("POST /admin/integrations/:id/enable", () => {
   it("enables an integration, writes audit log, and returns reload result", async () => {
     // DB select for existing config returns empty (no pre-existing config row)

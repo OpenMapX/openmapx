@@ -66,9 +66,15 @@ vi.mock("./services/service-registry.js", () => ({
   resolveRequiresForIntegration: vi.fn().mockReturnValue(new Map()),
 }));
 
-vi.mock("./services/integration-health.js", () => ({
+const integrationHealthMocks = vi.hoisted(() => ({
   executeAllIntegrationHealthChecks: vi.fn().mockResolvedValue([]),
+  getCachedIntegrationHealthSnapshot: vi.fn().mockReturnValue({
+    updatedAt: null,
+    results: [],
+  }),
 }));
+
+vi.mock("./services/integration-health.js", () => integrationHealthMocks);
 
 vi.mock("./services/provider-health/registry.js", () => ({
   getProviderHealth: vi.fn().mockReturnValue(null),
@@ -256,6 +262,40 @@ describe("initIntegrations — route dispatch", () => {
     });
 
     expect(res.statusCode).toBe(404);
+  });
+
+  it("serves cached integration health without running a provider sweep", async () => {
+    integrationHealthMocks.getCachedIntegrationHealthSnapshot.mockReturnValueOnce({
+      updatedAt: Date.parse("2026-07-28T08:00:00.000Z"),
+      results: [
+        {
+          id: "alpha",
+          name: "Alpha",
+          category: "Other",
+          url: "https://example.com/health",
+          status: "up",
+        },
+      ],
+    });
+    integrationHealthMocks.executeAllIntegrationHealthChecks.mockClear();
+
+    const res = await app.inject({ method: "GET", url: "/api/integrations/health" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      timestamp: "2026-07-28T08:00:00.000Z",
+      services: [
+        {
+          id: "alpha",
+          name: "Alpha",
+          category: "Other",
+          url: "https://example.com/health",
+          status: "up",
+        },
+      ],
+    });
+    expect(integrationHealthMocks.getCachedIntegrationHealthSnapshot).toHaveBeenCalledOnce();
+    expect(integrationHealthMocks.executeAllIntegrationHealthChecks).not.toHaveBeenCalled();
   });
 
   it("decodes :param segments and passes them to the handler", async () => {

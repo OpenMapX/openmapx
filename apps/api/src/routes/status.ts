@@ -204,9 +204,11 @@ export const statusRoute: FastifyPluginAsync = async (fastify) => {
 
     // Integration-managed checks (from manifests)
     const { getAllIntegrations } = await import("../integration-host.js");
-    const { executeAllIntegrationHealthChecks } = await import("../services/integration-health.js");
+    const { getCachedIntegrationHealthSnapshot } = await import(
+      "../services/integration-health.js"
+    );
     const allIntegrations = getAllIntegrations().filter((i) => i.enabled);
-    const integrationResults = await executeAllIntegrationHealthChecks(allIntegrations);
+    const integrationResults = getCachedIntegrationHealthSnapshot(allIntegrations).results;
     const multiCheckIntegrationIds = new Set(
       allIntegrations
         .filter((i) => Array.isArray(i.manifest.healthCheck) && i.manifest.healthCheck.length > 1)

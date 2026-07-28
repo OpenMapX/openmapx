@@ -69,6 +69,10 @@ vi.mock("./services/service-registry.js", () => ({
 
 vi.mock("./services/integration-health.js", () => ({
   executeAllIntegrationHealthChecks: vi.fn().mockResolvedValue([]),
+  getCachedIntegrationHealthSnapshot: vi.fn().mockReturnValue({
+    updatedAt: null,
+    results: [],
+  }),
 }));
 
 vi.mock("./services/provider-health/registry.js", () => ({
