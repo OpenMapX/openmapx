@@ -3,7 +3,7 @@ import { existsSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { parseTransitSource } from "@openmapx/transitous-core";
 import { execa } from "execa";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { convertPbfToBz2, convertPbfToBz2ForRegion } from "./jobs/convert-overpass.js";
 import { downloadGtfs, type FeedDescriptor } from "./jobs/download-gtfs.js";
 import { downloadOsm } from "./jobs/download-osm.js";
@@ -76,6 +76,52 @@ function isSafeGitRef(ref: string): boolean {
   );
 }
 
+interface NdjsonStream {
+  writeLine: (obj: Record<string, unknown>) => void;
+  end: () => void;
+}
+
+/**
+ * Opens a long-lived NDJSON response and keeps it active across quiet database
+ * stages. Undici terminates a response body after roughly five minutes with no
+ * bytes; country-scale Overture H3/index work can legitimately be silent for
+ * longer than that. Safe writes also let the server-side operation finish if a
+ * client disconnects for an unrelated reason.
+ */
+function openNdjsonStream(reply: FastifyReply): NdjsonStream {
+  reply.hijack();
+  reply.raw.writeHead(200, {
+    "Content-Type": "application/x-ndjson",
+    "Cache-Control": "no-cache",
+    "X-Accel-Buffering": "no",
+  });
+
+  const write = (chunk: string): void => {
+    if (reply.raw.destroyed || reply.raw.writableEnded) return;
+    try {
+      reply.raw.write(chunk);
+    } catch {
+      // The operation is independently durable; a disconnected observer must
+      // not abort a schema swap or leave a completed staging build unpublished.
+    }
+  };
+  const keepalive = setInterval(() => write(" \n"), 10_000);
+  keepalive.unref();
+
+  return {
+    writeLine: (obj) => write(`${JSON.stringify(obj)}\n`),
+    end: () => {
+      clearInterval(keepalive);
+      if (reply.raw.destroyed || reply.raw.writableEnded) return;
+      try {
+        reply.raw.end();
+      } catch {
+        // Client already disconnected.
+      }
+    },
+  };
+}
+
 export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   const dataDir = opts.dataDir ?? process.env.DATA_DIR ?? "/data";
   const repoRoot = opts.repoRoot ?? process.env.OPENMAPX_ROOT_DIR ?? "";
@@ -140,28 +186,21 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
 
     // Stream NDJSON progress events back to the client. Hijacking the reply
     // lets us write line-by-line; Fastify otherwise buffers the full body.
-    reply.hijack();
-    reply.raw.writeHead(200, {
-      "Content-Type": "application/x-ndjson",
-      "Cache-Control": "no-cache",
-      "X-Accel-Buffering": "no",
-    });
-    const writeLine = (obj: Record<string, unknown>) => {
-      reply.raw.write(`${JSON.stringify(obj)}\n`);
-    };
+    const stream = openNdjsonStream(reply);
 
     try {
       const result = await downloadOsm({
         region,
         dataDir,
         store,
-        onProgress: (bytes, totalBytes) => writeLine({ event: "progress", bytes, totalBytes }),
+        onProgress: (bytes, totalBytes) =>
+          stream.writeLine({ event: "progress", bytes, totalBytes }),
       });
-      writeLine({ event: "done", ok: true, ...result });
+      stream.writeLine({ event: "done", ok: true, ...result });
     } catch (err) {
-      writeLine({ event: "error", message: (err as Error).message });
+      stream.writeLine({ event: "error", message: (err as Error).message });
     } finally {
-      reply.raw.end();
+      stream.end();
     }
   });
 
@@ -339,27 +378,19 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     if (!region) throw new Error("region required");
     assertValidRegion(region);
 
-    reply.hijack();
-    reply.raw.writeHead(200, {
-      "Content-Type": "application/x-ndjson",
-      "Cache-Control": "no-cache",
-      "X-Accel-Buffering": "no",
-    });
-    const writeLine = (obj: Record<string, unknown>) => {
-      reply.raw.write(`${JSON.stringify(obj)}\n`);
-    };
+    const stream = openNdjsonStream(reply);
 
     try {
       const result = await pullOverture({
         region,
         dataDir,
-        onProgress: (msg) => writeLine({ event: "progress", message: msg }),
+        onProgress: (msg) => stream.writeLine({ event: "progress", message: msg }),
       });
-      writeLine({ event: "done", ok: true, path: result });
+      stream.writeLine({ event: "done", ok: true, path: result });
     } catch (err) {
-      writeLine({ event: "error", message: (err as Error).message });
+      stream.writeLine({ event: "error", message: (err as Error).message });
     } finally {
-      reply.raw.end();
+      stream.end();
     }
   });
 
@@ -368,27 +399,19 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     if (!region) throw new Error("region required");
     assertValidRegion(region);
 
-    reply.hijack();
-    reply.raw.writeHead(200, {
-      "Content-Type": "application/x-ndjson",
-      "Cache-Control": "no-cache",
-      "X-Accel-Buffering": "no",
-    });
-    const writeLine = (obj: Record<string, unknown>) => {
-      reply.raw.write(`${JSON.stringify(obj)}\n`);
-    };
+    const stream = openNdjsonStream(reply);
 
     try {
       const result = await syncOvertureRegion({
         region,
         dataDir,
-        onProgress: (message) => writeLine({ event: "progress", message }),
+        onProgress: (message) => stream.writeLine({ event: "progress", message }),
       });
-      writeLine({ event: "done", ok: true, ...result });
+      stream.writeLine({ event: "done", ok: true, ...result });
     } catch (err) {
-      writeLine({ event: "error", message: (err as Error).message });
+      stream.writeLine({ event: "error", message: (err as Error).message });
     } finally {
-      reply.raw.end();
+      stream.end();
     }
   });
 
@@ -397,29 +420,21 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     if (!region) throw new Error("region required");
     assertValidRegion(region);
 
-    reply.hijack();
-    reply.raw.writeHead(200, {
-      "Content-Type": "application/x-ndjson",
-      "Cache-Control": "no-cache",
-      "X-Accel-Buffering": "no",
-    });
-    const writeLine = (obj: Record<string, unknown>) => {
-      reply.raw.write(`${JSON.stringify(obj)}\n`);
-    };
+    const stream = openNdjsonStream(reply);
 
     try {
       await withOvertureOperationLock(() =>
         ingestOverture({
           region,
           dataDir,
-          onProgress: (msg) => writeLine({ event: "progress", message: msg }),
+          onProgress: (msg) => stream.writeLine({ event: "progress", message: msg }),
         }),
       );
-      writeLine({ event: "done", ok: true });
+      stream.writeLine({ event: "done", ok: true });
     } catch (err) {
-      writeLine({ event: "error", message: (err as Error).message });
+      stream.writeLine({ event: "error", message: (err as Error).message });
     } finally {
-      reply.raw.end();
+      stream.end();
     }
   });
 
@@ -428,29 +443,21 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     if (!region) throw new Error("region required");
     assertValidRegion(region);
 
-    reply.hijack();
-    reply.raw.writeHead(200, {
-      "Content-Type": "application/x-ndjson",
-      "Cache-Control": "no-cache",
-      "X-Accel-Buffering": "no",
-    });
-    const writeLine = (obj: Record<string, unknown>) => {
-      reply.raw.write(`${JSON.stringify(obj)}\n`);
-    };
+    const stream = openNdjsonStream(reply);
 
     try {
       await withOvertureOperationLock(() =>
         extractOsmPois({
           region,
           dataDir,
-          onProgress: (msg) => writeLine({ event: "progress", message: msg }),
+          onProgress: (msg) => stream.writeLine({ event: "progress", message: msg }),
         }),
       );
-      writeLine({ event: "done", ok: true });
+      stream.writeLine({ event: "done", ok: true });
     } catch (err) {
-      writeLine({ event: "error", message: (err as Error).message });
+      stream.writeLine({ event: "error", message: (err as Error).message });
     } finally {
-      reply.raw.end();
+      stream.end();
     }
   });
 
@@ -461,15 +468,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
 
     const ollamaUrl = process.env.OLLAMA_URL || "http://local-ai:11434";
 
-    reply.hijack();
-    reply.raw.writeHead(200, {
-      "Content-Type": "application/x-ndjson",
-      "Cache-Control": "no-cache",
-      "X-Accel-Buffering": "no",
-    });
-    const writeLine = (obj: Record<string, unknown>) => {
-      reply.raw.write(`${JSON.stringify(obj)}\n`);
-    };
+    const stream = openNdjsonStream(reply);
 
     try {
       const result = await rebuildOvertureLinks({
@@ -478,9 +477,9 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         force: true,
         ollamaUrl,
         useEmbeddings: false,
-        onProgress: (msg) => writeLine({ event: "progress", message: msg }),
+        onProgress: (msg) => stream.writeLine({ event: "progress", message: msg }),
       });
-      writeLine({
+      stream.writeLine({
         event: "done",
         ok: result.status !== "failed" && result.status !== "waiting_for_osm",
         message:
@@ -492,9 +491,9 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         ...result,
       });
     } catch (err) {
-      writeLine({ event: "error", message: (err as Error).message });
+      stream.writeLine({ event: "error", message: (err as Error).message });
     } finally {
-      reply.raw.end();
+      stream.end();
     }
   });
 
