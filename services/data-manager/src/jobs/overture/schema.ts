@@ -64,8 +64,9 @@ export function buildSchemaDDL(schema: string): string {
       name              TEXT NOT NULL DEFAULT '',
       names             JSONB,
       basic_category    TEXT,
-      taxonomy          TEXT[],
-      openmapx_category TEXT,
+      taxonomy_primary  TEXT,
+      taxonomy_hierarchy TEXT[],
+      taxonomy_alternates TEXT[],
       geom              GEOMETRY NOT NULL,
       h3_r8             TEXT,
       addresses         JSONB,
@@ -85,7 +86,12 @@ export function buildSchemaDDL(schema: string): string {
 
     CREATE INDEX idx_overture_geom ON "${schema}".places USING GIST (geom);
     CREATE INDEX idx_overture_h3   ON "${schema}".places (h3_r8);
-    CREATE INDEX idx_overture_cat  ON "${schema}".places (openmapx_category);
+    CREATE INDEX idx_overture_basic_category ON "${schema}".places (basic_category);
+    CREATE INDEX idx_overture_taxonomy_primary ON "${schema}".places (taxonomy_primary);
+    CREATE INDEX idx_overture_taxonomy_hierarchy
+      ON "${schema}".places USING GIN (taxonomy_hierarchy);
+    CREATE INDEX idx_overture_taxonomy_alternates
+      ON "${schema}".places USING GIN (taxonomy_alternates);
 
     CREATE TABLE "${schema}".poi_conflation_link (
       osm_type   TEXT NOT NULL,

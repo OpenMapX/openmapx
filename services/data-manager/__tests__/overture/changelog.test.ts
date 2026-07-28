@@ -13,6 +13,8 @@ describe("changelog delta SQL builders", () => {
     expect(sql).toContain("gers_id");
     expect(sql).toContain("added");
     expect(sql).toContain("ON CONFLICT");
+    expect(sql).toContain("taxonomy.hierarchy AS taxonomy_hierarchy");
+    expect(sql).not.toContain("categories.primary");
   });
 
   it("buildUpdateSql contains UPDATE and gers_id and data_changed", () => {
@@ -21,6 +23,7 @@ describe("changelog delta SQL builders", () => {
     expect(sql).toContain('"overture_places".places');
     expect(sql).toContain("gers_id");
     expect(sql).toContain("data_changed");
+    expect(sql).toContain("taxonomy_hierarchy = c.taxonomy.hierarchy");
   });
 
   it("buildDeleteSql contains DELETE and gers_id and removed", () => {

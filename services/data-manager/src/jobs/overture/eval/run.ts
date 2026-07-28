@@ -82,7 +82,7 @@ async function loadOverturePlaces(): Promise<OvertureRow[]> {
       name,
       ST_Y(geom) AS lat,
       ST_X(geom) AS lng,
-      openmapx_category AS category,
+      basic_category AS category,
       addresses->0->>'freeform' AS address,
       addresses->0->>'postcode' AS postcode,
       brand->>'wikidata' AS wikidata,

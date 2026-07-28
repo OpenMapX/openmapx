@@ -1,5 +1,9 @@
 import type { KnowledgeContext, KnowledgeProvider, KnowledgeResult } from "@openmapx/core";
-import { nameSimilarity } from "@openmapx/core";
+import {
+  CATEGORY_FILTERS,
+  nameSimilarity,
+  openMapXCategoryToOvertureConcepts,
+} from "@openmapx/core";
 import type { DatabaseClient } from "@openmapx/integration-framework";
 
 let db: DatabaseClient | undefined;
@@ -60,7 +64,7 @@ function parseOsmRef(ref: string): { type: string; id: bigint } | null {
  * through for now (expected).
  *
  * Phase 2 — spatial+name: find candidates within 150 m of the place
- * coordinates and filter by openmapx_category; pick the one whose name
+ * coordinates and filter with Overture's own taxonomy hierarchy; pick the one whose name
  * achieves nameSimilarity >= 0.8 with the place name (normalized fuzzy match).
  *
  * context.ids may be undefined (the neighborhoods call site passes a partial
@@ -96,21 +100,35 @@ async function resolveGers(
   if (!coords || !placeName) return null;
 
   const [lng, lat] = coords;
-  const category = osmTags.openmapx_category ?? osmTags.category ?? null;
+  const explicitCategory = osmTags.openmapx_category ?? osmTags.category;
+  const category =
+    explicitCategory && openMapXCategoryToOvertureConcepts(explicitCategory).length > 0
+      ? explicitCategory
+      : Object.entries(CATEGORY_FILTERS)
+          .reverse()
+          .find(([, filters]) =>
+            filters.some((filter) => osmTags[filter.key] === filter.value),
+          )?.[0];
 
   let sql: string;
   let params: unknown[];
-  if (category) {
+  const concepts = category ? openMapXCategoryToOvertureConcepts(category) : [];
+  if (concepts.length > 0) {
     sql = `
       SELECT gers_id, name
       FROM overture_places.places
       WHERE ST_DWithin(geom::geography, ST_MakePoint($1, $2)::geography, 150)
-        AND openmapx_category = $3
+        AND (
+          basic_category = ANY($3::TEXT[])
+          OR taxonomy_primary = ANY($3::TEXT[])
+          OR taxonomy_hierarchy && $3::TEXT[]
+          OR taxonomy_alternates && $3::TEXT[]
+        )
         AND (operating_status IS NULL OR operating_status <> 'permanently_closed')
       ORDER BY geom <-> ST_MakePoint($1, $2)::geometry
       LIMIT 5
     `;
-    params = [lng, lat, category];
+    params = [lng, lat, concepts];
   } else {
     sql = `
       SELECT gers_id, name

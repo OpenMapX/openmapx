@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertValidOvertureSchema } from "../../src/jobs/overture/schema.js";
+import { assertValidOvertureSchema, buildSchemaDDL } from "../../src/jobs/overture/schema.js";
 
 describe("assertValidOvertureSchema", () => {
   it("accepts 'overture_places'", () => {
@@ -48,5 +48,17 @@ describe("assertValidOvertureSchema", () => {
     expect(() => assertValidOvertureSchema("overture_Places")).toThrow(
       /Invalid Overture schema name/,
     );
+  });
+});
+
+describe("current Overture taxonomy schema", () => {
+  it("stores the upstream taxonomy structure and indexes its hierarchy", () => {
+    const ddl = buildSchemaDDL("overture_places");
+    expect(ddl).toContain("basic_category");
+    expect(ddl).toContain("taxonomy_primary");
+    expect(ddl).toContain("taxonomy_hierarchy");
+    expect(ddl).toContain("taxonomy_alternates");
+    expect(ddl).toContain("USING GIN (taxonomy_hierarchy)");
+    expect(ddl).not.toContain("openmapx_category");
   });
 });

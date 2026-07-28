@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { overtureCategoryToOpenMapX } from "@openmapx/core/utils/overtureCategoryMap";
 import { latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";
 import { runDuckDb } from "./duckdb.js";
@@ -7,9 +6,9 @@ import { regionSlug, resolveOvertureRelease } from "./pull.js";
 import { assertValidOvertureSchema, buildSchemaDDL } from "./schema.js";
 
 /**
- * Backfills `h3_r8` and `openmapx_category` columns in the given schema for
- * any rows that are missing them. Called after ingest and after changelog delta
- * apply so both paths produce fully-populated derived columns.
+ * Backfills the local H3 acceleration column. Category hierarchy and
+ * generalisation come directly from Overture and are never materialised into
+ * an OpenMapX-owned taxonomy.
  */
 export async function backfillDerivedColumns(schema: string): Promise<void> {
   assertValidOvertureSchema(schema);
@@ -35,43 +34,6 @@ export async function backfillDerivedColumns(schema: string): Promise<void> {
        FROM (SELECT UNNEST($1::TEXT[]) AS gers_id, UNNEST($2::TEXT[]) AS h3) AS v
        WHERE p.gers_id = v.gers_id`,
       [gersIds, h3Values],
-    );
-  }
-
-  const catRows = await sql<
-    {
-      gers_id: string;
-      basic_category: string | null;
-      taxonomy: string[] | null;
-    }[]
-  >`
-    SELECT gers_id, basic_category, taxonomy
-    FROM ${sql(schema)}.places
-    WHERE openmapx_category IS NULL
-      AND (basic_category IS NOT NULL OR taxonomy IS NOT NULL)
-  `;
-
-  const updates: Array<{ gers_id: string; category: string }> = [];
-  for (const row of catRows) {
-    const candidates = [row.basic_category, ...(row.taxonomy ?? [])].filter(Boolean) as string[];
-    for (const leaf of candidates) {
-      const matched = overtureCategoryToOpenMapX(leaf);
-      if (matched) {
-        updates.push({ gers_id: row.gers_id, category: matched });
-        break;
-      }
-    }
-  }
-
-  const CAT_BATCH = 5_000;
-  for (let i = 0; i < updates.length; i += CAT_BATCH) {
-    const chunk = updates.slice(i, i + CAT_BATCH);
-    await sql.unsafe(
-      `UPDATE "${schema}".places AS p
-       SET openmapx_category = v.category
-       FROM (SELECT UNNEST($1::TEXT[]) AS gers_id, UNNEST($2::TEXT[]) AS category) AS v
-       WHERE p.gers_id = v.gers_id`,
-      [chunk.map((u) => u.gers_id), chunk.map((u) => u.category)],
     );
   }
 }
@@ -104,16 +66,18 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
     "INSTALL spatial; LOAD spatial;",
     `ATTACH '${databaseUrl}' AS pg (TYPE postgres);`,
     `INSERT INTO pg."${stagingSchema}".places`,
-    `  (gers_id, name, names, basic_category, taxonomy, openmapx_category, geom, h3_r8,`,
+    `  (gers_id, name, names, basic_category, taxonomy_primary, taxonomy_hierarchy,`,
+    `   taxonomy_alternates, geom, h3_r8,`,
     `   addresses, country_code, websites, socials, emails, phones, brand, opening_hours,`,
     `   confidence, operating_status, sources, release)`,
     `SELECT`,
     `  id AS gers_id,`,
     `  COALESCE(names.primary, '') AS name,`,
     `  to_json(names) AS names,`,
-    `  categories.primary AS basic_category,`,
-    `  categories.alternate AS taxonomy,`,
-    `  NULL::TEXT AS openmapx_category,`,
+    `  basic_category,`,
+    `  taxonomy.primary AS taxonomy_primary,`,
+    `  taxonomy.hierarchy AS taxonomy_hierarchy,`,
+    `  taxonomy.alternates AS taxonomy_alternates,`,
     // Overture GeoParquet exposes a single `geometry` (WKB) column, not
     // longitude/latitude. Emit it as hex-WKB so the Postgres COPY parses it
     // into the geometry column (a raw binary transfer is rejected); DuckDB
@@ -145,10 +109,10 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
        ALTER COLUMN geom TYPE geometry(Point, 4326) USING ST_SetSRID(geom, 4326)`,
   );
 
-  opts.onProgress?.("Backfilling h3_r8 and openmapx_category...");
+  opts.onProgress?.("Backfilling h3_r8...");
   await backfillDerivedColumns(stagingSchema);
 
-  // Indexes (geom GIST + h3 + openmapx_category btree) are created by
+  // Indexes (geom GIST + h3 + Overture taxonomy) are created by
   // buildSchemaDDL; the geom GIST is rebuilt automatically by the SRID ALTER.
 
   opts.onProgress?.("Atomic swap staging → live...");

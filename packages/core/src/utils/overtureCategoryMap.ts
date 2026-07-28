@@ -1,86 +1,65 @@
-import mapJson from "./overtureCategoryMap.json" with { type: "json" };
+// This is deliberately a small interoperability bridge, not a copy of
+// Overture's taxonomy. Each OpenMapX UI category points at one or more stable,
+// broad Overture concepts. Matching descendants is delegated to the hierarchy
+// shipped on every Overture place, so new or renamed leaves do not require a
+// generated catalog in this repository.
+const categoryConcepts: Record<string, string[]> = {
+  restaurants: ["restaurant"],
+  cafes: ["cafe", "coffee_shop", "tea_house"],
+  bars: ["bar", "pub"],
+  hotels: ["hotel"],
+  supermarkets: ["supermarket", "grocery_store"],
+  banks: ["bank", "credit_union"],
+  fuel: ["gas_station"],
+  shopping_malls: ["shopping_mall"],
+  bookstores: ["bookstore"],
+  pharmacies: ["pharmacy"],
+  bakeries: ["bakery"],
+  nightlife: ["night_club", "dance_club"],
+  gyms: ["gym", "fitness_center"],
+  hairdressers: ["hair_salon", "barber_shop"],
+  laundromats: ["laundromat", "laundry_service"],
+  opticians: ["optician", "eyewear_store"],
+  car_rental: ["car_rental"],
+  car_repair: ["auto_repair", "car_repair"],
+  veterinarians: ["veterinarian"],
+  markets: ["market", "farmers_market"],
+  cinemas: ["movie_theater", "cinema"],
+  doctors: ["doctor", "medical_clinic"],
+  dentists: ["dentist"],
+  hospitals: ["hospital"],
+  museums: ["museum"],
+};
 
-// overtureCategoryMap.json bridges Overture's ~2k place categories to OpenMapX
-// category ids by composing the cbeddow/overture2osm dictionary (Overture
-// category → OSM tags) with this repo's OSM-tag → CategoryId filters, then
-// merging the hand-curated synonym leaves on top. Regenerate when either the
-// Overture taxonomy or CATEGORY_FILTERS changes.
-type CategoryMap = Record<string, string[]>;
+export const OVERTURE_COMMERCIAL_CATEGORIES = Object.freeze(Object.keys(categoryConcepts));
 
-const categoryMap = mapJson as CategoryMap;
+export interface OvertureTaxonomyValues {
+  basicCategory?: string | null;
+  primary?: string | null;
+  hierarchy?: string[] | null;
+  alternates?: string[] | null;
+}
 
-/**
- * OpenMapX category ids the Overture Places provider fans out to — commercial
- * categories where Overture provides meaningful dense coverage. This is a
- * curated subset of the full `overtureCategoryMap.json`: the JSON also carries
- * leaves for infra/civic categories (transit, parks, schools, churches, …) so
- * the ingest's `openmapx_category` backfill and the conflation category gate
- * cover them, but the provider does NOT search those (OSM is the better source).
- * Excludes OSM-only micro-features (drinking_water, viewpoints, AEDs, toilets,
- * recycling) which have no meaningful Overture analog.
- */
-export const OVERTURE_COMMERCIAL_CATEGORIES: string[] = [
-  "restaurants",
-  "cafes",
-  "bars",
-  "hotels",
-  "supermarkets",
-  "banks",
-  "fuel",
-  "shopping_malls",
-  "bookstores",
-  "pharmacies",
-  "bakeries",
-  "nightlife",
-  "gyms",
-  "hairdressers",
-  "laundromats",
-  "opticians",
-  "car_rental",
-  "car_repair",
-  "veterinarians",
-  "markets",
-  "cinemas",
-  "doctors",
-  "dentists",
-  "hospitals",
-  "museums",
-];
-
-/**
- * Reverse index: Overture taxonomy leaf → OpenMapX category id.
- * Built once at module load from the JSON source of truth.
- */
-const overtureLeafToCategory = new Map<string, string>(
-  Object.entries(categoryMap).flatMap(([catId, leaves]) =>
-    leaves.map((leaf) => [leaf, catId] as [string, string]),
-  ),
-);
-
-/**
- * Maps an Overture `basic_category` or taxonomy leaf to an OpenMapX category
- * id string. Returns `undefined` for unknown or OSM-only categories
- * (drinking_water, viewpoints, AEDs, etc.) that have no Overture equivalent.
- */
-export function overtureCategoryToOpenMapX(leaf: string): string | undefined {
-  return overtureLeafToCategory.get(leaf);
+/** Broad Overture concepts used to query one OpenMapX UI category. */
+export function openMapXCategoryToOvertureConcepts(category: string): string[] {
+  return categoryConcepts[category] ?? [];
 }
 
 /**
- * Maps an OpenMapX category id to the Overture taxonomy leaves that
- * correspond to it. Returns an empty array for OSM-only categories
- * (drinking_water, viewpoints, AEDs) that carry no Overture equivalent.
+ * Resolves a place to an OpenMapX UI category using Overture's own hierarchy.
+ * Specific taxonomy leaves never need to be enumerated here.
  */
-export function openMapXCategoryToOverture(category: string): string[] {
-  return categoryMap[category] ?? [];
-}
-
-/**
- * Returns the Overture category leaf strings for a given OpenMapX category id.
- * Equivalent to `openMapXCategoryToOverture` but signals intent: the result
- * is used to filter Overture Places rows by their taxonomy leaves.
- * Returns an empty array for OSM-only categories.
- */
-export function openmapxCategoryToOvertureLeaves(category: string): string[] {
-  return categoryMap[category] ?? [];
+export function overtureTaxonomyToOpenMapX(taxonomy: OvertureTaxonomyValues): string | undefined {
+  const values = new Set(
+    [
+      taxonomy.basicCategory,
+      taxonomy.primary,
+      ...(taxonomy.hierarchy ?? []),
+      ...(taxonomy.alternates ?? []),
+    ].filter((value): value is string => Boolean(value)),
+  );
+  for (const [category, concepts] of Object.entries(categoryConcepts)) {
+    if (concepts.some((concept) => values.has(concept))) return category;
+  }
+  return undefined;
 }

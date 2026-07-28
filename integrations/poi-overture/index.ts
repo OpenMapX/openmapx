@@ -2,8 +2,8 @@ import type { BoundingBox } from "@openmapx/core";
 import {
   createPlace,
   OVERTURE_COMMERCIAL_CATEGORIES,
-  openmapxCategoryToOvertureLeaves,
-  overtureCategoryToOpenMapX,
+  openMapXCategoryToOvertureConcepts,
+  overtureTaxonomyToOpenMapX,
 } from "@openmapx/core";
 import type { DatabaseClient, IntegrationContext } from "@openmapx/integration-framework";
 import type {
@@ -18,24 +18,32 @@ interface OvertureRow {
   name: string;
   longitude: number;
   latitude: number;
-  openmapx_category: string | null;
   basic_category: string | null;
+  taxonomy_primary: string | null;
+  taxonomy_hierarchy: string[] | null;
+  taxonomy_alternates: string[] | null;
   brand_name: string | null;
   brand_wikidata: string | null;
   phone: string | null;
   website: string | null;
 }
 
-function overtureRowToPoiSearchResult(row: OvertureRow): PoiSearchResult {
+function overtureRowToPoiSearchResult(
+  row: OvertureRow,
+  requestedCategory?: CategoryId,
+): PoiSearchResult {
   const osmTags: Record<string, string> = {};
   if (row.brand_name) osmTags.brand = row.brand_name;
   if (row.brand_wikidata) osmTags["brand:wikidata"] = row.brand_wikidata;
 
-  const category: CategoryId | undefined =
-    (row.openmapx_category as CategoryId | null) ??
-    (row.basic_category
-      ? (overtureCategoryToOpenMapX(row.basic_category) ?? undefined)
-      : undefined);
+  const category =
+    requestedCategory ??
+    overtureTaxonomyToOpenMapX({
+      basicCategory: row.basic_category,
+      primary: row.taxonomy_primary,
+      hierarchy: row.taxonomy_hierarchy,
+      alternates: row.taxonomy_alternates,
+    });
 
   return {
     id: `overture:${row.gers_id}`,
@@ -51,18 +59,19 @@ function overtureRowToPoiSearchResult(row: OvertureRow): PoiSearchResult {
 
 async function queryOverturePlaces(
   db: DatabaseClient,
-  opts: { bbox: BoundingBox; leaves: string[]; lang?: string; minConfidence: number },
+  opts: { bbox: BoundingBox; concepts: string[]; lang?: string; minConfidence: number },
 ): Promise<OvertureRow[]> {
-  const { bbox, leaves, minConfidence } = opts;
-  const leafParams = leaves.map((_, i) => `$${i + 5}`).join(", ");
+  const { bbox, concepts, minConfidence } = opts;
   const sql = `
     SELECT
       gers_id,
       name,
       ST_X(geom) AS longitude,
       ST_Y(geom) AS latitude,
-      openmapx_category,
       basic_category,
+      taxonomy_primary,
+      taxonomy_hierarchy,
+      taxonomy_alternates,
       brand->'names'->>'primary' AS brand_name,
       brand->>'wikidata' AS brand_wikidata,
       phones[1] AS phone,
@@ -70,18 +79,16 @@ async function queryOverturePlaces(
     FROM overture_places.places
     WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
       AND (operating_status IS NULL OR operating_status <> 'permanently_closed')
-      AND (confidence IS NULL OR confidence >= $${leaves.length + 5})
-      AND basic_category IN (${leafParams})
+      AND (confidence IS NULL OR confidence >= $6)
+      AND (
+        basic_category = ANY($5::TEXT[])
+        OR taxonomy_primary = ANY($5::TEXT[])
+        OR taxonomy_hierarchy && $5::TEXT[]
+        OR taxonomy_alternates && $5::TEXT[]
+      )
     LIMIT 200
   `;
-  const params: unknown[] = [
-    bbox.west,
-    bbox.south,
-    bbox.east,
-    bbox.north,
-    ...leaves,
-    minConfidence,
-  ];
+  const params: unknown[] = [bbox.west, bbox.south, bbox.east, bbox.north, concepts, minConfidence];
   return db.execute<OvertureRow[]>(sql, params);
 }
 
@@ -96,8 +103,10 @@ async function fetchOverturePlaceByGers(
        name,
        ST_X(geom) AS longitude,
        ST_Y(geom) AS latitude,
-       openmapx_category,
        basic_category,
+       taxonomy_primary,
+       taxonomy_hierarchy,
+       taxonomy_alternates,
        brand->'names'->>'primary' AS brand_name,
        brand->>'wikidata' AS brand_wikidata,
        phones[1] AS phone,
@@ -115,11 +124,12 @@ function overtureRowToPlace(row: OvertureRow) {
   if (row.brand_name) osmTags.brand = row.brand_name;
   if (row.brand_wikidata) osmTags["brand:wikidata"] = row.brand_wikidata;
 
-  const category: CategoryId | undefined =
-    (row.openmapx_category as CategoryId | null) ??
-    (row.basic_category
-      ? (overtureCategoryToOpenMapX(row.basic_category) ?? undefined)
-      : undefined);
+  const category = overtureTaxonomyToOpenMapX({
+    basicCategory: row.basic_category,
+    primary: row.taxonomy_primary,
+    hierarchy: row.taxonomy_hierarchy,
+    alternates: row.taxonomy_alternates,
+  });
 
   return createPlace({
     primaryScheme: "overture",
@@ -151,18 +161,18 @@ export const overtureProvider: PoiSearchProvider = {
       osmTags?: Record<string, string>;
     },
   ): Promise<PoiSearchResult[]> {
-    const leaves = openmapxCategoryToOvertureLeaves(category);
-    if (!leaves.length) return [];
+    const concepts = openMapXCategoryToOvertureConcepts(category);
+    if (!concepts.length) return [];
     if (!boundDb) return [];
     const rows = await queryOverturePlaces(boundDb, {
       bbox,
-      leaves,
+      concepts,
       lang: _options?.lang,
       // Calibrated to 0.5 (was 0.7): the sweep showed 0.7 excludes most genuine
       // places; matches the offline conflation candidate floor.
       minConfidence: 0.5,
     });
-    return rows.map(overtureRowToPoiSearchResult);
+    return rows.map((row) => overtureRowToPoiSearchResult(row, category as CategoryId));
   },
 };
 

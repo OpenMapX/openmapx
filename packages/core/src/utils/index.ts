@@ -160,9 +160,8 @@ export {
 } from "./overpassFilter";
 export {
   OVERTURE_COMMERCIAL_CATEGORIES,
-  openMapXCategoryToOverture,
-  openmapxCategoryToOvertureLeaves,
-  overtureCategoryToOpenMapX,
+  openMapXCategoryToOvertureConcepts,
+  overtureTaxonomyToOpenMapX,
 } from "./overtureCategoryTyped";
 export {
   parseCoordinateInput,

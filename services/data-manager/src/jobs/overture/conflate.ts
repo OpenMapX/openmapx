@@ -1,3 +1,4 @@
+import { overtureTaxonomyToOpenMapX } from "@openmapx/core";
 import {
   haversineMeters,
   osmAddressKey,
@@ -316,7 +317,10 @@ export async function conflateOverture(opts: {
       lat: number;
       lng: number;
       h3_r8: string | null;
-      category: string | null;
+      basic_category: string | null;
+      taxonomy_primary: string | null;
+      taxonomy_hierarchy: string[] | null;
+      taxonomy_alternates: string[] | null;
       addresses: unknown;
       wikidata: string | null;
       phones: string[] | null;
@@ -329,7 +333,10 @@ export async function conflateOverture(opts: {
             ST_Y(geom) AS lat,
             ST_X(geom) AS lng,
             h3_r8,
-            openmapx_category AS category,
+            basic_category,
+            taxonomy_primary,
+            taxonomy_hierarchy,
+            taxonomy_alternates,
             addresses,
             brand->>'wikidata' AS wikidata,
             phones,
@@ -355,7 +362,12 @@ export async function conflateOverture(opts: {
       lat: Number(r.lat),
       lng: Number(r.lng),
       h3_r8: r.h3_r8,
-      category: r.category ?? undefined,
+      category: overtureTaxonomyToOpenMapX({
+        basicCategory: r.basic_category,
+        primary: r.taxonomy_primary,
+        hierarchy: r.taxonomy_hierarchy,
+        alternates: r.taxonomy_alternates,
+      }),
       address: freeform,
       confidence: r.confidence ?? undefined,
       addressKey: overtureAddressKey(freeform, postcode) ?? undefined,

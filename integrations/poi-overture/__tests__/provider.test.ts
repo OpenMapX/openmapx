@@ -10,8 +10,10 @@ const FIXTURE_ROWS = [
     name: "Starbucks Mitte",
     longitude: 13.4,
     latitude: 52.51,
-    openmapx_category: "cafes",
     basic_category: "coffee_shop",
+    taxonomy_primary: "coffee_shop",
+    taxonomy_hierarchy: ["food_and_drink", "cafe", "coffee_shop"],
+    taxonomy_alternates: [],
     brand_name: "Starbucks",
     brand_wikidata: "Q37158",
     phone: null,
@@ -21,8 +23,10 @@ const FIXTURE_ROWS = [
     name: "McDonald's Alexanderplatz",
     longitude: 13.41,
     latitude: 52.52,
-    openmapx_category: "restaurants",
     basic_category: "burger_restaurant",
+    taxonomy_primary: "burger_restaurant",
+    taxonomy_hierarchy: ["food_and_drink", "restaurant", "burger_restaurant"],
+    taxonomy_alternates: [],
     brand_name: "McDonald's",
     brand_wikidata: "Q38076",
     phone: "+49 30 12345678",
@@ -80,6 +84,9 @@ describe("poi-overture provider.search", () => {
     expect(first.osmTags?.brand).toBe("Starbucks");
     expect(first.osmTags?.["brand:wikidata"]).toBe("Q37158");
     expect(first.coordinates).toEqual([13.4, 52.51]);
+    expect(first.category).toBe("cafes");
+    expect(db.execute.mock.calls[0][0]).toContain("taxonomy_hierarchy && $5::TEXT[]");
+    expect(db.execute.mock.calls[0][1][4]).toEqual(["cafe", "coffee_shop", "tea_house"]);
   });
 
   it("returns [] for non-commercial category that has no Overture leaves", async () => {

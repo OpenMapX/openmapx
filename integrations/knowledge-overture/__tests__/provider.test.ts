@@ -237,6 +237,27 @@ describe("knowledge-overture provider lookup", () => {
     expect(result).toBeNull();
   });
 
+  it("translates OSM tags to broad Overture taxonomy concepts for spatial matching", async () => {
+    const db = makeDb(
+      vi.fn().mockImplementation((sql: string) => {
+        if (sql.includes("ST_DWithin")) return Promise.resolve([]);
+        return Promise.resolve([]);
+      }),
+    );
+    const ctx = makeCtx(db);
+    const { setup, overtureKnowledgeSource } = await import("../index.js");
+    setup(ctx);
+
+    await overtureKnowledgeSource.lookup({ amenity: "cafe" }, "en", {
+      coordinates: [13.4, 52.5],
+      name: "Starbucks",
+    });
+
+    const spatialCall = db.execute.mock.calls.find(([sql]) => String(sql).includes("ST_DWithin"));
+    expect(spatialCall?.[0]).toContain("taxonomy_hierarchy && $3::TEXT[]");
+    expect(spatialCall?.[1]).toEqual([13.4, 52.5, ["cafe", "coffee_shop", "tea_house"]]);
+  });
+
   it("returns null when candidates exist but name similarity is below 0.8", async () => {
     const db = makeDb(
       vi.fn().mockImplementation((sql: string) => {
