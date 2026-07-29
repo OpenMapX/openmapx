@@ -1,6 +1,6 @@
 {
   "name": "EV Charging Stations",
-  "description": "Electric vehicle charging station locations and connector details from official national feeds, OpenChargeMap, NOBIL, and OpenStreetMap",
+  "description": "Electric vehicle charging station locations and connector details",
   "section": {
     "connectors": "Connectors",
     "usage": "Usage"

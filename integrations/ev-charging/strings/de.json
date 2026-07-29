@@ -1,6 +1,6 @@
 {
   "name": "E-Ladestationen",
-  "description": "Standorte von Elektrofahrzeug-Ladestationen aus amtlichen nationalen Datensätzen, OpenChargeMap, NOBIL und OpenStreetMap",
+  "description": "Standorte von Ladestationen für Elektrofahrzeuge und Angaben zu den Steckern",
   "section": {
     "connectors": "Anschlüsse",
     "usage": "Nutzung"
