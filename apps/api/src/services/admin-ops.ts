@@ -273,7 +273,7 @@ export async function serviceStart(service: string, ctx: JobContext): Promise<vo
   await ctx.log(`${service} started.`);
 }
 
-export async function serviceRecreate(service: string, ctx: JobContext): Promise<void> {
+export async function serviceApply(service: string, ctx: JobContext): Promise<void> {
   assertKnownService(service);
   await ctx.log(`Rendering compose for latest config + secrets...`);
   await renderAndPersistCompose();
@@ -283,11 +283,11 @@ export async function serviceRecreate(service: string, ctx: JobContext): Promise
       `Hardlinks applied (${hardlinks.linked} linked, ${hardlinks.skipped} already linked, ${hardlinks.pruned} pruned)`,
     );
   }
-  await ctx.log(`Recreating ${service}...`);
+  await ctx.log(`Applying rendered configuration to ${service}...`);
   const r = await dockerComposeAction(service, "recreate");
   if (r.exitCode !== 0)
     throw new Error(`docker compose up --force-recreate exited with ${r.exitCode}`);
-  await ctx.log(`${service} recreated.`);
+  await ctx.log(`${service} configuration applied.`);
 }
 
 export async function serviceStop(service: string, ctx: JobContext): Promise<void> {

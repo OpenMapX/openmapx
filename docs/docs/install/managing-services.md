@@ -124,7 +124,7 @@ touch running containers. Enabling a service is followed by a render and a start
 
 A **preset** is a named bundle of root services, so you can say "start the
 routing stack" instead of listing every id. Presets work on `services start`,
-`stop`, `restart`, `recreate`, and on `compose render` / `compose up`:
+`stop`, `restart`, `update`, and on `compose render` / `compose up`:
 
 | Preset      | Services                                                  |
 | ----------- | --------------------------------------------------------- |
@@ -200,18 +200,18 @@ expect a rendered compose file to already exist:
 ```bash
 pnpm openmapx services stop motis otp                  # docker compose stop
 pnpm openmapx services restart app-api                 # in-place reboot (does NOT re-render)
-pnpm openmapx services recreate valhalla               # pull images + force-recreate
+pnpm openmapx services update valhalla                 # pull images + replace container
 pnpm openmapx services status                          # container table (all services)
 pnpm openmapx services status valhalla                 # one service
 ```
 
-The distinction between `restart` and `start`/`recreate` matters:
+The distinction between `restart` and `start`/`update` matters:
 
 - **`restart`** reboots the container in place. It does not re-render, so it
   won't pick up a changed manifest, `.env`, or selection — use it to bounce a
   service whose image and config are unchanged.
 - **`start`** re-renders first, so it picks up compose-file changes.
-- **`recreate`** re-renders, pulls the latest images, and force-recreates — the
+- **`update`** re-renders, pulls the latest images, and replaces the container — the
   command to reach for after a `git pull` that bumps image tags.
 
 For a single one-off check of the running containers across the stack:
@@ -275,14 +275,14 @@ PHOTON_REGION=germany
 
 Because the cascade runs at render time rather than container startup, a change
 to `.env` or the admin config form takes effect only after you re-render and
-recreate the affected service:
+apply the change to the affected service:
 
 ```bash
 pnpm openmapx compose render
-pnpm openmapx services recreate valhalla
+pnpm openmapx services update valhalla
 ```
 
-The admin panel's **Save & Apply (recreate)** button does the equivalent in one
+The admin panel's **Save & Apply** button does the equivalent in one
 click. For the broader picture of what goes in `.env` and how the admin panel
 fits in, see [Configuration](./configuration.md).
 

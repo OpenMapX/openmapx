@@ -280,7 +280,7 @@ rather pin configuration in the environment than click through forms. Secret
 *values* are never exposed here — only their variable names and whether each is
 currently set.
 
-For acting on backend services in bulk (start, stop, recreate a whole preset),
+For acting on backend services in bulk (start, stop, or update selected services),
 see [Services administration](./services-administration.md) and
 [Managing services](../install/managing-services.md).
 

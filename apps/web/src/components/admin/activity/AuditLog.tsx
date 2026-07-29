@@ -27,6 +27,7 @@ import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { relativeTimeFromIso } from "@/lib/formatTime";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
+import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { TableSkeleton } from "../shared/TableSkeleton";
 import { useServerPagination } from "../shared/tableHooks";
 import { ActorCell } from "./ActorCell";
@@ -75,7 +76,7 @@ const ACTION_GROUPS: Array<{ label: string; actions: Array<[action: string, labe
       ["service.bulk.start", "Bulk Start"],
       ["service.bulk.stop", "Bulk Stop"],
       ["service.bulk.restart", "Bulk Restart"],
-      ["service.bulk.recreate", "Bulk Recreate"],
+      ["service.bulk.update", "Bulk Update"],
       ["service.bulk.build", "Bulk Build"],
       ["service.selection.update", "Selection Updated"],
       ["service.config.update", "Config Updated"],
@@ -93,6 +94,8 @@ const ACTION_GROUPS: Array<{ label: string; actions: Array<[action: string, labe
       ["data.link", "Link"],
       ["data.clean", "Clean"],
       ["data.generate-api-keys", "Generate API Keys"],
+      ["data.overture-sync", "Sync Overture"],
+      ["data.overture-conflate", "Resume Overture Links"],
     ],
   },
   {
@@ -126,6 +129,15 @@ const ACTION_GROUPS: Array<{ label: string; actions: Array<[action: string, labe
   {
     label: "Jobs",
     actions: [["job.cancel", "Canceled"]],
+  },
+  {
+    label: "System",
+    actions: [
+      ["system.update.check", "Check Updates"],
+      ["system.update.apply", "Update OpenMapX"],
+      ["system.diagnostics.run", "Deep Diagnostics"],
+      ["transit.lock.bump", "Bump Transitous Pin"],
+    ],
   },
   {
     label: "Users",
@@ -255,100 +267,99 @@ export function AuditLog() {
   }
 
   return (
-    <Stack
-      sx={{
-        gap: 2,
-      }}
-    >
-      <Stack
-        direction="row"
-        sx={{
-          alignItems: "center",
-          gap: 1,
-          flexWrap: "wrap",
-        }}
-      >
-        <FormControl size="small" sx={{ minWidth: 180 }}>
-          <InputLabel>Action</InputLabel>
-          <Select
-            value={actionFilter}
-            label="Action"
-            onChange={(e) => {
-              setActionFilter(e.target.value);
-              setPage(0);
-            }}
-          >
-            <MenuItem value="">All actions</MenuItem>
-            {ACTION_GROUPS.flatMap((group) => [
-              <ListSubheader key={`hdr-${group.label}`}>{group.label}</ListSubheader>,
-              ...group.actions.map(([action, label]) => (
-                <MenuItem key={action} value={action}>
-                  {label}
-                </MenuItem>
-              )),
-            ])}
-          </Select>
-        </FormControl>
-
-        <FormControl size="small" sx={{ minWidth: 140 }}>
-          <InputLabel>Target type</InputLabel>
-          <Select
-            value={targetTypeFilter}
-            label="Target type"
-            onChange={(e) => {
-              setTargetTypeFilter(e.target.value);
-              setPage(0);
-            }}
-          >
-            <MenuItem value="">All types</MenuItem>
-            {TARGET_TYPES.map((t) => (
-              <MenuItem key={t} value={t}>
-                {t}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        <TextField
-          size="small"
-          placeholder="Search by target ID…"
-          value={targetSearch}
-          onChange={(e) => {
-            setTargetSearch(e.target.value);
-            setPage(0);
+    <AdminTableSurface
+      toolbar={
+        <Stack
+          direction="row"
+          sx={{
+            alignItems: "center",
+            gap: 1,
+            flexWrap: "wrap",
           }}
-          sx={{ minWidth: 200 }}
-        />
-
-        {hasFilters && <Chip label="Clear filters" size="small" onDelete={resetFilters} />}
-
-        <Box sx={{ flexGrow: 1 }} />
-
-        <Chip label={`${data?.total ?? 0} events`} size="small" variant="outlined" />
-
-        <Button
-          size="small"
-          variant="outlined"
-          startIcon={<DownloadIcon fontSize="small" />}
-          onClick={(e) => setExportAnchor(e.currentTarget)}
         >
-          Export
-        </Button>
-        <Menu anchorEl={exportAnchor} open={!!exportAnchor} onClose={() => setExportAnchor(null)}>
-          <MenuItem onClick={() => handleExport("csv")}>Export as CSV</MenuItem>
-          <MenuItem onClick={() => handleExport("json")}>Export as JSON</MenuItem>
-        </Menu>
+          <FormControl size="small" sx={{ minWidth: 180 }}>
+            <InputLabel>Action</InputLabel>
+            <Select
+              value={actionFilter}
+              label="Action"
+              onChange={(e) => {
+                setActionFilter(e.target.value);
+                setPage(0);
+              }}
+            >
+              <MenuItem value="">All actions</MenuItem>
+              {ACTION_GROUPS.flatMap((group) => [
+                <ListSubheader key={`hdr-${group.label}`}>{group.label}</ListSubheader>,
+                ...group.actions.map(([action, label]) => (
+                  <MenuItem key={action} value={action}>
+                    {label}
+                  </MenuItem>
+                )),
+              ])}
+            </Select>
+          </FormControl>
 
-        <Tooltip title="Refresh">
-          <IconButton
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel>Target type</InputLabel>
+            <Select
+              value={targetTypeFilter}
+              label="Target type"
+              onChange={(e) => {
+                setTargetTypeFilter(e.target.value);
+                setPage(0);
+              }}
+            >
+              <MenuItem value="">All types</MenuItem>
+              {TARGET_TYPES.map((t) => (
+                <MenuItem key={t} value={t}>
+                  {t}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <TextField
             size="small"
-            onClick={() => void queryClient.invalidateQueries({ queryKey: ["admin", "audit"] })}
-            disabled={isFetching}
+            placeholder="Search by target ID…"
+            value={targetSearch}
+            onChange={(e) => {
+              setTargetSearch(e.target.value);
+              setPage(0);
+            }}
+            sx={{ minWidth: 200 }}
+          />
+
+          {hasFilters && <Chip label="Clear filters" size="small" onDelete={resetFilters} />}
+
+          <Box sx={{ flexGrow: 1 }} />
+
+          <Chip label={`${data?.total ?? 0} events`} size="small" variant="outlined" />
+
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<DownloadIcon fontSize="small" />}
+            onClick={(e) => setExportAnchor(e.currentTarget)}
           >
-            <RefreshIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      </Stack>
+            Export
+          </Button>
+          <Menu anchorEl={exportAnchor} open={!!exportAnchor} onClose={() => setExportAnchor(null)}>
+            <MenuItem onClick={() => handleExport("csv")}>Export as CSV</MenuItem>
+            <MenuItem onClick={() => handleExport("json")}>Export as JSON</MenuItem>
+          </Menu>
+
+          <Tooltip title="Refresh">
+            <IconButton
+              size="small"
+              onClick={() => void queryClient.invalidateQueries({ queryKey: ["admin", "audit"] })}
+              disabled={isFetching}
+            >
+              <RefreshIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+      }
+    >
       <TableContainer>
         <Table size="small">
           <TableHead>
@@ -475,6 +486,6 @@ export function AuditLog() {
         rowsPerPageOptions={[50]}
         hideSinglePage={false}
       />
-    </Stack>
+    </AdminTableSurface>
   );
 }

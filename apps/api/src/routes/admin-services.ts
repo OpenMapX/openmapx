@@ -45,8 +45,10 @@ const DATA_JOB_OPERATIONS = new Set([
   "link",
   "clean",
   "generate-api-keys",
+  "overture-sync",
+  "overture-conflate",
 ] as const);
-const BULK_SERVICE_ACTIONS = new Set(["start", "stop", "restart", "recreate", "build"] as const);
+const BULK_SERVICE_ACTIONS = new Set(["start", "stop", "restart", "update", "build"] as const);
 
 function toIdList(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
@@ -235,7 +237,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   // POST /admin/services/bulk-action — enqueue CLI-backed bulk service actions
   app.post<{
     Body: {
-      action?: "start" | "stop" | "restart" | "recreate" | "build";
+      action?: "start" | "stop" | "restart" | "update" | "build";
       serviceIds?: string[];
       all?: boolean;
       region?: string;
@@ -245,7 +247,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     const action = req.body?.action;
     if (!action || !BULK_SERVICE_ACTIONS.has(action)) {
       reply.status(400);
-      return { error: "Invalid action (expected start|stop|restart|recreate|build)" };
+      return { error: "Invalid action (expected start|stop|restart|update|build)" };
     }
 
     const serviceIds = toIdList(req.body?.serviceIds);
@@ -363,15 +365,15 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
 
   // Service credentials (the container vault). Mirrors the integration
   // credentials API, but applying a change re-renders the secret files and
-  // recreates the service (services bake env/secrets at create time — no live
+  // replaces the service container (services bake env/secrets at create time — no live
   // reload). Requires Docker host-control; otherwise the caller gets
-  // `needsRender` and must render + recreate on the host.
+  // `needsRender` and must render + apply on the host.
   async function applyServiceSecretChange(
     serviceId: string,
     userId: string,
   ): Promise<{ ok: true; jobId?: string; needsRender?: boolean }> {
     if (await isDockerAvailable()) {
-      const jobId = await jobRunner.enqueue("service.recreate", { service: serviceId }, userId);
+      const jobId = await jobRunner.enqueue("service.apply", { service: serviceId }, userId);
       return { ok: true, jobId };
     }
     return { ok: true, needsRender: true };
@@ -549,7 +551,9 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         | "convert-overpass"
         | "link"
         | "clean"
-        | "generate-api-keys";
+        | "generate-api-keys"
+        | "overture-sync"
+        | "overture-conflate";
       region?: string;
       countries?: string;
       feedsFile?: string;
@@ -557,6 +561,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       target?: string;
       repoUrl?: string;
       output?: string;
+      restart?: boolean;
     };
   }>("/admin/services/data/action", async (req, reply) => {
     const operation = req.body?.operation;
@@ -581,6 +586,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         target: req.body?.target,
         repoUrl: req.body?.repoUrl,
         output: req.body?.output,
+        restart: req.body?.restart === true,
       },
       adminSession.user.id,
     );
@@ -589,6 +595,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       targetType: "data",
       targetId: operation,
       action: `data.${operation}`,
+      details: { region: req.body?.region, restart: req.body?.restart === true },
       request: req,
     });
     return { ok: true, jobId };

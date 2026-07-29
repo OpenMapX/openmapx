@@ -59,12 +59,12 @@ When the selection is being driven by the `OPENMAPX_ENABLED_SERVICES` environmen
 variable, the panel says so and disables editing — the environment variable wins,
 and the UI keeps that unambiguous rather than letting you save a file that won't
 be read. Saving the selection changes what *will* be rendered and started; it
-doesn't touch running containers until you start or recreate them.
+doesn't touch running containers until you start or update them.
 
 ### Bulk actions
 
 Tick the checkboxes beside one or more services and the bulk-action bar lets you
-**Start**, **Stop**, **Restart**, **Recreate**, or **Build** the selection in one
+**Start**, **Stop**, **Restart**, **Update**, or **Build** the selection in one
 go, plus **Build All** and a **Run Service Check** that refreshes container
 states. Builds take an optional region and a "continue on errors" toggle. Each
 action is queued as a background job — the toast names the job id, and the
@@ -118,7 +118,7 @@ prefix so the override convention is discoverable. Two buttons commit changes:
 - **Save** persists the edited fields to the database. The new value takes effect
   on the next render and container restart — saving alone doesn't restart
   anything.
-- **Save & Apply (recreate)** saves and then immediately queues a start so the
+- **Save & Apply** saves and then immediately queues an apply so the
   change is picked up without a manual step. Service config lands in the
   generated compose environment, so applying a new value goes through a compose
   re-render under the hood.
@@ -144,17 +144,17 @@ declares before trusting it.
 
 The header buttons drive the container, each queued through the job runner:
 
-- **Start / Recreate** — the primary button. It re-renders from the current
+- **Start / Apply changes** — the primary button. It re-renders from the current
   manifests and config and brings the container up, so it picks up changes. The
-  label reads **Recreate** when the service is already running and **Start** when
+  label reads **Apply changes** when the service is already running and **Start** when
   it isn't.
 - **Stop** — stops the container.
 - **Restart** — an *in-place* reboot. It does not re-render, so it won't pick up a
   changed manifest, `.env`, or config — use it to bounce a service whose image
   and config are unchanged.
 
-The distinction between Start/Recreate and Restart matters: if you've just changed
-config or the manifest, use Start (recreate), not Restart. The same nuance applies
+The distinction between Start/Apply changes and Restart matters: if you've just changed
+config or the manifest, use Apply changes, not Restart. The same nuance applies
 on the CLI and is spelled out in
 [Managing services](../install/managing-services.md). Every lifecycle and config
 action is rate-limited and recorded in the audit log.

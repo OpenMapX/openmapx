@@ -1,6 +1,6 @@
 /**
  * Named groups of service ids for the `--preset` flag on services start/stop/
- * restart/recreate and compose render/up. Lets operators say "start the
+ * restart/update and compose render/up. Lets operators say "start the
  * routing stack" instead of memorising which 4–10 ids belong together.
  *
  * When a service is added or removed from a preset, update both the entry

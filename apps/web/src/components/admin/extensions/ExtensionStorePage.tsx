@@ -25,6 +25,7 @@ import Grid from "@mui/material/Grid";
 import IconButton from "@mui/material/IconButton";
 import InputLabel from "@mui/material/InputLabel";
 import MenuItem from "@mui/material/MenuItem";
+import Paper from "@mui/material/Paper";
 import Select from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import Tab from "@mui/material/Tab";
@@ -54,6 +55,7 @@ import {
 } from "@/hooks/useExtensions";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
+import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { useAdminToast } from "../shared/AdminToast";
 import { TableSearchField, TableToolbar } from "../shared/TableToolbar";
 import { useClientPagination } from "../shared/tableHooks";
@@ -137,48 +139,54 @@ function BrowseTab() {
 
   return (
     <Stack sx={{ gap: 2 }}>
-      <TableToolbar>
-        <TableSearchField value={q} onChange={setQ} placeholder="Search extensions…" />
-        <FormControl size="small" sx={{ minWidth: 130 }}>
-          <InputLabel>Trust</InputLabel>
-          <Select label="Trust" value={trust} onChange={(e) => setTrust(e.target.value)}>
-            <MenuItem value="">All</MenuItem>
-            <MenuItem value="verified">Verified</MenuItem>
-            <MenuItem value="community">Community</MenuItem>
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 130 }}>
-          <InputLabel>Type</InputLabel>
-          <Select label="Type" value={type} onChange={(e) => setType(e.target.value)}>
-            <MenuItem value="">All</MenuItem>
-            <MenuItem value="service">Services</MenuItem>
-            <MenuItem value="integration">Integrations</MenuItem>
-          </Select>
-        </FormControl>
-        <Box sx={{ flexGrow: 1 }} />
-        <Button
-          size="small"
-          startIcon={<LinkIcon />}
-          onClick={() => setManifestOpen(true)}
-          variant="outlined"
-        >
-          Install from URL
-        </Button>
-        <Tooltip title="Refresh catalog">
-          <IconButton
+      <Paper variant="outlined" sx={{ p: 1.25 }}>
+        <TableToolbar>
+          <TableSearchField value={q} onChange={setQ} placeholder="Search extensions…" />
+          <FormControl size="small" sx={{ minWidth: 130 }}>
+            <InputLabel>Trust</InputLabel>
+            <Select label="Trust" value={trust} onChange={(e) => setTrust(e.target.value)}>
+              <MenuItem value="">All</MenuItem>
+              <MenuItem value="verified">Verified</MenuItem>
+              <MenuItem value="community">Community</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 130 }}>
+            <InputLabel>Type</InputLabel>
+            <Select label="Type" value={type} onChange={(e) => setType(e.target.value)}>
+              <MenuItem value="">All</MenuItem>
+              <MenuItem value="service">Services</MenuItem>
+              <MenuItem value="integration">Integrations</MenuItem>
+            </Select>
+          </FormControl>
+          <Box sx={{ flexGrow: 1 }} />
+          <Button
             size="small"
-            onClick={() =>
-              refresh.mutate(undefined, {
-                onSuccess: (r) => showToast(`Catalog refreshed (${r.entries} entries)`),
-                onError: (e) => showToast((e as Error).message, "error"),
-              })
-            }
-            disabled={refresh.isPending}
+            startIcon={<LinkIcon />}
+            onClick={() => setManifestOpen(true)}
+            variant="outlined"
           >
-            {refresh.isPending ? <CircularProgress size={18} /> : <RefreshIcon fontSize="small" />}
-          </IconButton>
-        </Tooltip>
-      </TableToolbar>
+            Install from URL
+          </Button>
+          <Tooltip title="Refresh catalog">
+            <IconButton
+              size="small"
+              onClick={() =>
+                refresh.mutate(undefined, {
+                  onSuccess: (r) => showToast(`Catalog refreshed (${r.entries} entries)`),
+                  onError: (e) => showToast((e as Error).message, "error"),
+                })
+              }
+              disabled={refresh.isPending}
+            >
+              {refresh.isPending ? (
+                <CircularProgress size={18} />
+              ) : (
+                <RefreshIcon fontSize="small" />
+              )}
+            </IconButton>
+          </Tooltip>
+        </TableToolbar>
+      </Paper>
 
       {isLoading && (
         <Box sx={{ textAlign: "center", py: 6 }}>
@@ -322,7 +330,9 @@ function InstalledTab() {
     );
 
   return (
-    <Stack sx={{ gap: 1 }}>
+    <AdminTableSurface
+      pagination={<AdminTablePagination {...paginationProps} count={rows.length} />}
+    >
       <TableContainer>
         <Table size="small">
           <TableHead>
@@ -420,8 +430,7 @@ function InstalledTab() {
           </TableBody>
         </Table>
       </TableContainer>
-      <AdminTablePagination {...paginationProps} count={rows.length} />
-    </Stack>
+    </AdminTableSurface>
   );
 }
 
@@ -436,73 +445,78 @@ function SourcesTab() {
   const sources = data?.sources ?? [];
 
   return (
-    <Stack sx={{ gap: 1 }}>
-      <Stack direction="row" sx={{ justifyContent: "flex-end" }}>
-        <Button
-          size="small"
-          startIcon={<AddIcon />}
-          variant="outlined"
-          onClick={() => setOpen(true)}
-        >
-          Add source
-        </Button>
-      </Stack>
-      {isLoading ? (
-        <Box sx={{ textAlign: "center", py: 4 }}>
-          <CircularProgress />
-        </Box>
-      ) : (
-        <TableContainer>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Label</TableCell>
-                <TableCell>URL</TableCell>
-                <TableCell>Trust</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {sources.map((s) => (
-                <TableRow key={s.url} hover>
-                  <TableCell>{s.label}</TableCell>
-                  <TableCell sx={{ wordBreak: "break-all" }}>{s.url}</TableCell>
-                  <TableCell>
-                    {s.isDefault ? (
-                      <Chip
-                        size="small"
-                        icon={<VerifiedIcon />}
-                        color="success"
-                        label="Verified (default)"
-                      />
-                    ) : (
-                      <Chip size="small" color="warning" variant="outlined" label="Community" />
-                    )}
-                  </TableCell>
-                  <TableCell align="right">
-                    {!s.isDefault && (
-                      <Tooltip title="Remove source">
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() =>
-                            remove.mutate(s.url, {
-                              onSuccess: () => showToast("Source removed"),
-                              onError: (e) => showToast((e as Error).message, "error"),
-                            })
-                          }
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                  </TableCell>
+    <>
+      <AdminTableSurface
+        title="Catalog sources"
+        description="Trusted indexes used to discover extensions"
+        toolbar={
+          <Button
+            size="small"
+            startIcon={<AddIcon />}
+            variant="outlined"
+            onClick={() => setOpen(true)}
+          >
+            Add source
+          </Button>
+        }
+      >
+        {isLoading ? (
+          <Box sx={{ textAlign: "center", py: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Label</TableCell>
+                  <TableCell>URL</TableCell>
+                  <TableCell>Trust</TableCell>
+                  <TableCell align="right">Actions</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
+              </TableHead>
+              <TableBody>
+                {sources.map((s) => (
+                  <TableRow key={s.url} hover>
+                    <TableCell>{s.label}</TableCell>
+                    <TableCell sx={{ wordBreak: "break-all" }}>{s.url}</TableCell>
+                    <TableCell>
+                      {s.isDefault ? (
+                        <Chip
+                          size="small"
+                          icon={<VerifiedIcon />}
+                          color="success"
+                          label="Verified (default)"
+                        />
+                      ) : (
+                        <Chip size="small" color="warning" variant="outlined" label="Community" />
+                      )}
+                    </TableCell>
+                    <TableCell align="right">
+                      {!s.isDefault && (
+                        <Tooltip title="Remove source">
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() =>
+                              remove.mutate(s.url, {
+                                onSuccess: () => showToast("Source removed"),
+                                onError: (e) => showToast((e as Error).message, "error"),
+                              })
+                            }
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+      </AdminTableSurface>
 
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>Add catalog source</DialogTitle>
@@ -551,7 +565,7 @@ function SourcesTab() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Stack>
+    </>
   );
 }
 
@@ -563,7 +577,7 @@ export function ExtensionStorePage() {
         title="Extensions"
         subtitle="Browse, install, and manage community extensions — integrations and services."
       />
-      <Tabs value={tab} onChange={(_, v) => setTab(v)}>
+      <Tabs value={tab} onChange={(_, v) => setTab(v)} aria-label="Extension management">
         <Tab label="Browse" />
         <Tab label="Installed" />
         <Tab label="Sources" />

@@ -84,6 +84,7 @@ function makeCtx(): JobContext {
     signal: new AbortController().signal,
     log: vi.fn().mockResolvedValue(undefined),
     setProgress: vi.fn().mockResolvedValue(undefined),
+    checkpoint: vi.fn().mockResolvedValue(undefined),
   };
 }
 

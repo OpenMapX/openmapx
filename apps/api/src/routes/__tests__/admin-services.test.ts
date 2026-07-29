@@ -396,7 +396,7 @@ describe("service credentials", () => {
     expect(body.secretsConfigured).toBe(true);
   });
 
-  it("PUT stores the secret and enqueues a recreate when Docker is available", async () => {
+  it("PUT stores the secret and enqueues an apply when Docker is available", async () => {
     const res = await app.inject({
       method: "PUT",
       url: "/admin/services/openconditions-ingest/credentials/NY_511_API_KEY",
@@ -411,7 +411,7 @@ describe("service credentials", () => {
       fakeSession.user.id,
     );
     expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
-      "service.recreate",
+      "service.apply",
       { service: "openconditions-ingest" },
       fakeSession.user.id,
     );
@@ -421,7 +421,7 @@ describe("service credentials", () => {
     );
   });
 
-  it("PUT returns needsRender (no recreate) when Docker is unavailable", async () => {
+  it("PUT returns needsRender (no apply) when Docker is unavailable", async () => {
     mockIsDockerAvailable.mockResolvedValue(false);
 
     const res = await app.inject({
@@ -458,7 +458,7 @@ describe("service credentials", () => {
     expect(mockSetServiceSecret).not.toHaveBeenCalled();
   });
 
-  it("DELETE removes the secret and enqueues a recreate", async () => {
+  it("DELETE removes the secret and enqueues an apply", async () => {
     const res = await app.inject({
       method: "DELETE",
       url: "/admin/services/openconditions-ingest/credentials/NY_511_API_KEY",
@@ -467,7 +467,7 @@ describe("service credentials", () => {
     expect(res.statusCode).toBe(200);
     expect(mockDeleteServiceSecret).toHaveBeenCalledWith("openconditions-ingest", "NY_511_API_KEY");
     expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
-      "service.recreate",
+      "service.apply",
       { service: "openconditions-ingest" },
       fakeSession.user.id,
     );

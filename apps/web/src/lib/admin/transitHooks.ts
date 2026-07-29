@@ -243,6 +243,25 @@ export function useRestartMotis() {
   });
 }
 
+export function useBumpTransitous() {
+  const { apiUrl } = useEnv();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (branch: string) => {
+      const res = await fetch(`${apiUrl}/api/data-manager/transit/bump-transitous-ref`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branch }),
+      });
+      return jsonOrThrow<{ ok?: boolean; ref?: string; summary?: unknown }>(res);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin", "transit"] });
+    },
+  });
+}
+
 export function useResetProvider() {
   const { apiUrl } = useEnv();
   const qc = useQueryClient();

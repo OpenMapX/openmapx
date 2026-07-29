@@ -105,7 +105,7 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   const generatedSecretsDir = join(composeOutDir, GENERATED_SECRETS_DIRNAME);
   if (serviceSecretKeys.size === 0 && existsSync(generatedSecretsDir) && !opts.dropSecrets) {
     throw new Error(
-      `vault-managed service credentials exist on disk (${generatedSecretsDir}) but their key names could not be recovered from the existing generated compose, so this render would strip every /run/secrets mount and silently un-credential the affected services. Re-render from the admin panel (Admin → Services → Recreate reads the credential vault directly), or — if the credentials are intentionally decommissioned — remove the .generated-secrets directory (root-owned; sudo rm -rf) or re-run with --drop-secrets to render without them.`,
+      `vault-managed service credentials exist on disk (${generatedSecretsDir}) but their key names could not be recovered from the existing generated compose, so this render would strip every /run/secrets mount and silently un-credential the affected services. Re-render from the admin panel (Admin → Services → Apply changes reads the credential vault directly), or — if the credentials are intentionally decommissioned — remove the .generated-secrets directory (root-owned; sudo rm -rf) or re-run with --drop-secrets to render without them.`,
     );
   }
 
@@ -122,7 +122,7 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   writeFileSync(hardlinkPath, JSON.stringify(result.hardlinkPlan, null, 2), "utf-8");
   // Pre-create writable data bind-dirs as the invoking (data-owning) user so a
   // later `docker compose up` doesn't auto-create them as root. Runs on every
-  // render path that precedes a compose up (start/recreate/up/build/link).
+  // render path that precedes a compose up (start/update/up/build/link).
   for (const dir of result.writableBindDirs ?? []) {
     mkdirSync(dir, { recursive: true });
   }

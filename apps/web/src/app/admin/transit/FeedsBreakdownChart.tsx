@@ -25,6 +25,8 @@ const STATUS_COLORS: Record<string, string> = {
   running: "#3b82f6",
 };
 
+const MAX_REGION_BARS = 10;
+
 function colorFor(status: string): string {
   return STATUS_COLORS[status.toLowerCase()] ?? "#94a3b8";
 }
@@ -52,7 +54,7 @@ function Bar({
       <Typography
         variant="caption"
         sx={{
-          minWidth: 140,
+          minWidth: 88,
           fontFamily: "monospace",
           color: "text.secondary",
           textOverflow: "ellipsis",
@@ -63,7 +65,7 @@ function Bar({
       >
         {label}
       </Typography>
-      <Box sx={{ flex: 1, bgcolor: "action.hover", height: 14, borderRadius: 0.5 }}>
+      <Box sx={{ flex: 1, bgcolor: "action.hover", height: 10, borderRadius: 0.5 }}>
         <Box
           sx={{
             width: `${pct}%`,
@@ -82,12 +84,21 @@ function Bar({
 
 export function FeedsBreakdownChart({ state }: { state: TransitStateSummary }) {
   const regionEntries = Object.entries(state.feeds.byRegion).sort((a, b) => b[1] - a[1]);
+  const remainingRegionCount = regionEntries
+    .slice(MAX_REGION_BARS)
+    .reduce((sum, [, count]) => sum + count, 0);
+  const visibleRegionEntries = [
+    ...regionEntries.slice(0, MAX_REGION_BARS),
+    ...(remainingRegionCount > 0
+      ? [["Other regions", remainingRegionCount] as [string, number]]
+      : []),
+  ];
   const statusEntries = Object.entries(state.feeds.byStatus).sort((a, b) => b[1] - a[1]);
   const maxRegion = Math.max(0, ...regionEntries.map(([, v]) => v));
   const maxStatus = Math.max(0, ...statusEntries.map(([, v]) => v));
 
   return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
+    <Paper variant="outlined" sx={{ p: 1.5 }}>
       <Stack
         direction="row"
         spacing={1}
@@ -117,7 +128,7 @@ export function FeedsBreakdownChart({ state }: { state: TransitStateSummary }) {
               mb: 1,
             }}
           >
-            By region
+            By region · {regionEntries.length} total
           </Typography>
           {regionEntries.length === 0 ? (
             <Typography
@@ -129,8 +140,8 @@ export function FeedsBreakdownChart({ state }: { state: TransitStateSummary }) {
               No feeds yet.
             </Typography>
           ) : (
-            <Stack spacing={0.75}>
-              {regionEntries.map(([region, count]) => (
+            <Stack spacing={0.5}>
+              {visibleRegionEntries.map(([region, count]) => (
                 <Bar key={region} label={region} value={count} max={maxRegion} color="#6366f1" />
               ))}
             </Stack>
@@ -157,7 +168,7 @@ export function FeedsBreakdownChart({ state }: { state: TransitStateSummary }) {
               No feeds yet.
             </Typography>
           ) : (
-            <Stack spacing={0.75}>
+            <Stack spacing={0.5}>
               {statusEntries.map(([status, count]) => (
                 <Bar
                   key={status}

@@ -36,6 +36,7 @@ import { useEnv } from "@/lib/EnvProvider";
 import { formatBytes } from "@/lib/storageFormat";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
+import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { useAdminToast } from "../shared/AdminToast";
 import { TableEmptyState } from "../shared/TableEmptyState";
 import { TableSearchField, TableToolbar } from "../shared/TableToolbar";
@@ -178,7 +179,7 @@ export function BackupsPage() {
   return (
     <Stack
       sx={{
-        gap: 3,
+        gap: 2,
       }}
     >
       <AdminPageHeader
@@ -216,10 +217,10 @@ export function BackupsPage() {
             onClick={() => createMutation.mutate(createName)}
             disabled={createMutation.isPending}
           >
-            {createMutation.isPending ? "Queueing..." : "Create Backup"}
+            {createMutation.isPending ? "Queueing…" : "Create backup"}
           </Button>
           <Button component={Link} href="/admin/activity" size="small" variant="outlined">
-            Open Activity
+            Open activity
           </Button>
         </Stack>
         <Typography
@@ -255,147 +256,146 @@ export function BackupsPage() {
         </Alert>
       )}
       {!isLoading && !isError && (
-        <>
-          {sortedBackups.length > 0 && (
-            <TableToolbar>
-              <TableSearchField
-                value={query}
-                onChange={setQuery}
-                placeholder="Search backups by name…"
-              />
-              <FormControl size="small" sx={{ minWidth: 150 }}>
-                <Select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-                >
-                  <MenuItem value="all">All backups</MenuItem>
-                  <MenuItem value="valid">Valid</MenuItem>
-                  <MenuItem value="corrupt">Corrupt</MenuItem>
-                </Select>
-              </FormControl>
-            </TableToolbar>
-          )}
-          <Paper variant="outlined">
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Name</TableCell>
-                    <TableCell>Created</TableCell>
-                    <TableCell>Version</TableCell>
-                    <TableCell>Services</TableCell>
-                    <TableCell>Volumes</TableCell>
-                    <TableCell>Size</TableCell>
-                    <TableCell align="right">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filtered.length === 0 ? (
-                    <TableEmptyState
-                      colSpan={7}
-                      message={
-                        sortedBackups.length === 0
-                          ? "No backups found yet."
-                          : "No backups match your search or filter."
-                      }
-                    />
-                  ) : (
-                    paged.map((backup) => (
-                      <TableRow key={backup.name} hover>
-                        <TableCell>
-                          <Stack
-                            direction="row"
+        <AdminTableSurface
+          toolbar={
+            sortedBackups.length > 0 ? (
+              <TableToolbar>
+                <TableSearchField
+                  value={query}
+                  onChange={setQuery}
+                  placeholder="Search backups by name…"
+                />
+                <FormControl size="small" sx={{ minWidth: 150 }}>
+                  <Select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+                  >
+                    <MenuItem value="all">All backups</MenuItem>
+                    <MenuItem value="valid">Valid</MenuItem>
+                    <MenuItem value="corrupt">Corrupt</MenuItem>
+                  </Select>
+                </FormControl>
+              </TableToolbar>
+            ) : undefined
+          }
+          pagination={<AdminTablePagination {...paginationProps} />}
+        >
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Created</TableCell>
+                  <TableCell>Version</TableCell>
+                  <TableCell>Services</TableCell>
+                  <TableCell>Volumes</TableCell>
+                  <TableCell>Size</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableEmptyState
+                    colSpan={7}
+                    message={
+                      sortedBackups.length === 0
+                        ? "No backups found yet."
+                        : "No backups match your search or filter."
+                    }
+                  />
+                ) : (
+                  paged.map((backup) => (
+                    <TableRow key={backup.name} hover>
+                      <TableCell>
+                        <Stack
+                          direction="row"
+                          sx={{
+                            alignItems: "center",
+                            gap: 1,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <Typography
+                            variant="body2"
                             sx={{
-                              alignItems: "center",
-                              gap: 1,
-                              flexWrap: "wrap",
+                              fontFamily: "monospace",
+                              fontWeight: 600,
                             }}
                           >
-                            <Typography
-                              variant="body2"
-                              sx={{
-                                fontFamily: "monospace",
-                                fontWeight: 600,
-                              }}
-                            >
-                              {backup.name}
-                            </Typography>
-                            {backup.corrupt && (
-                              <Tooltip
-                                title={`Cannot be restored: ${backup.corruptReason ?? "manifest is missing or malformed"}`}
-                              >
-                                <Chip
-                                  label="corrupt"
-                                  size="small"
-                                  color="warning"
-                                  variant="outlined"
-                                />
-                              </Tooltip>
-                            )}
-                          </Stack>
-                        </TableCell>
-                        <TableCell>{new Date(backup.createdAt).toLocaleString()}</TableCell>
-                        <TableCell>
-                          {backup.corrupt ? "—" : (backup.openmapxVersion ?? "—")}
-                        </TableCell>
-                        <TableCell>{backup.corrupt ? "—" : backup.services}</TableCell>
-                        <TableCell>{backup.corrupt ? "—" : backup.volumes}</TableCell>
-                        <TableCell>
-                          {backup.corrupt ? "—" : formatBytes(backup.totalBytes)}
-                        </TableCell>
-                        <TableCell align="right">
-                          <Stack
-                            direction="row"
-                            spacing={0.5}
-                            sx={{
-                              justifyContent: "flex-end",
-                            }}
-                          >
+                            {backup.name}
+                          </Typography>
+                          {backup.corrupt && (
                             <Tooltip
-                              title={
-                                backup.corrupt
-                                  ? "Corrupt backup — cannot be restored"
-                                  : "Restore backup"
-                              }
+                              title={`Cannot be restored: ${backup.corruptReason ?? "manifest is missing or malformed"}`}
                             >
-                              <span>
-                                <IconButton
-                                  size="small"
-                                  color="primary"
-                                  onClick={() => setRestoreTarget(backup)}
-                                  disabled={
-                                    backup.corrupt ||
-                                    restoreMutation.isPending ||
-                                    deleteMutation.isPending
-                                  }
-                                >
-                                  <RestoreIcon fontSize="small" />
-                                </IconButton>
-                              </span>
+                              <Chip
+                                label="corrupt"
+                                size="small"
+                                color="warning"
+                                variant="outlined"
+                              />
                             </Tooltip>
-                            <Tooltip title="Delete backup">
-                              <span>
-                                <IconButton
-                                  size="small"
-                                  color="error"
-                                  onClick={() => setDeleteTarget(backup)}
-                                  disabled={restoreMutation.isPending || deleteMutation.isPending}
-                                >
-                                  <DeleteIcon fontSize="small" />
-                                </IconButton>
-                              </span>
-                            </Tooltip>
-                          </Stack>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-            <AdminTablePagination {...paginationProps} />
-          </Paper>
-        </>
+                          )}
+                        </Stack>
+                      </TableCell>
+                      <TableCell>{new Date(backup.createdAt).toLocaleString()}</TableCell>
+                      <TableCell>
+                        {backup.corrupt ? "—" : (backup.openmapxVersion ?? "—")}
+                      </TableCell>
+                      <TableCell>{backup.corrupt ? "—" : backup.services}</TableCell>
+                      <TableCell>{backup.corrupt ? "—" : backup.volumes}</TableCell>
+                      <TableCell>{backup.corrupt ? "—" : formatBytes(backup.totalBytes)}</TableCell>
+                      <TableCell align="right">
+                        <Stack
+                          direction="row"
+                          spacing={0.5}
+                          sx={{
+                            justifyContent: "flex-end",
+                          }}
+                        >
+                          <Tooltip
+                            title={
+                              backup.corrupt
+                                ? "Corrupt backup — cannot be restored"
+                                : "Restore backup"
+                            }
+                          >
+                            <span>
+                              <IconButton
+                                size="small"
+                                color="primary"
+                                onClick={() => setRestoreTarget(backup)}
+                                disabled={
+                                  backup.corrupt ||
+                                  restoreMutation.isPending ||
+                                  deleteMutation.isPending
+                                }
+                              >
+                                <RestoreIcon fontSize="small" />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                          <Tooltip title="Delete backup">
+                            <span>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => setDeleteTarget(backup)}
+                                disabled={restoreMutation.isPending || deleteMutation.isPending}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </AdminTableSurface>
       )}
       <Dialog open={!!restoreTarget} onClose={() => setRestoreTarget(null)} maxWidth="sm" fullWidth>
         <DialogTitle>Restore Backup</DialogTitle>

@@ -23,7 +23,7 @@ export function TransitPipelinePage() {
 
   return (
     <Box>
-      <Box sx={{ mb: 3 }}>
+      <Box sx={{ mb: 2 }}>
         <AdminPageHeader
           title="Transit pipeline"
           subtitle="Transitous sync · feed state · job history · provider health"
@@ -60,8 +60,8 @@ export function TransitPipelinePage() {
         </Alert>
       )}
       {state && (
-        <Stack spacing={3}>
-          <Stack direction={{ xs: "column", md: "row" }} spacing={3}>
+        <Stack spacing={2}>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <LockfileCard state={state} />
             </Box>

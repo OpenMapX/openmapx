@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+const runCliMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+
 // Stub the heavy import chain so the argv-guard tests don't bring in the real
 // service registry, postgres client, or CLI runner. We only exercise pure
 // validation helpers.
@@ -13,7 +15,7 @@ vi.mock("@openmapx/core", () => ({
 }));
 vi.mock("../admin-cli", () => ({
   assertValidBackupName: vi.fn(),
-  runOpenmapxCliJobCommand: vi.fn(),
+  runOpenmapxCliJobCommand: runCliMock,
 }));
 vi.mock("../service-registry", () => ({
   getServiceRegistry: () => ({
@@ -25,7 +27,7 @@ vi.mock("../service-registry", () => ({
   }),
 }));
 
-const { _argvGuards } = await import("../admin-job-handlers");
+const { _argvGuards, handleDataOperationJob } = await import("../admin-job-handlers");
 
 describe("argv guards", () => {
   describe("rejectFlagLike", () => {
@@ -104,6 +106,40 @@ describe("argv guards", () => {
     });
     it("rejects flag-shaped ids before checking the registry", () => {
       expect(() => _argvGuards.assertKnownServiceIds(["--preset=app"])).toThrow();
+    });
+  });
+
+  describe("Overture operations", () => {
+    it("maps a validated sync region to the CLI", async () => {
+      runCliMock.mockClear();
+      await handleDataOperationJob({
+        jobId: "job",
+        payload: { operation: "overture-sync", region: "europe/germany" },
+        signal: new AbortController().signal,
+        log: vi.fn(),
+        setProgress: vi.fn(),
+        checkpoint: vi.fn(),
+      });
+      expect(runCliMock).toHaveBeenCalledWith(expect.anything(), [
+        "data",
+        "overture-sync",
+        "europe/germany",
+      ]);
+    });
+
+    it("rejects an invalid region before invoking the CLI", async () => {
+      runCliMock.mockClear();
+      await expect(
+        handleDataOperationJob({
+          jobId: "job",
+          payload: { operation: "overture-conflate", region: "../etc", restart: true },
+          signal: new AbortController().signal,
+          log: vi.fn(),
+          setProgress: vi.fn(),
+          checkpoint: vi.fn(),
+        }),
+      ).rejects.toThrow(/region/);
+      expect(runCliMock).not.toHaveBeenCalled();
     });
   });
 });

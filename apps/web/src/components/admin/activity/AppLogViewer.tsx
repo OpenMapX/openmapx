@@ -20,6 +20,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
+import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { useServerPagination } from "../shared/tableHooks";
 
 interface AppLogEntry {
@@ -155,105 +156,106 @@ export function AppLogViewer() {
   const sources = data?.sources ?? [];
 
   return (
-    <Stack
-      sx={{
-        gap: 2,
-      }}
-    >
-      <Stack
-        direction="row"
-        sx={{
-          alignItems: "center",
-          gap: 1,
-          flexWrap: "wrap",
-        }}
-      >
-        <FormControl size="small" sx={{ minWidth: 100 }}>
-          <InputLabel>Level</InputLabel>
-          <Select
-            value={levelFilter}
-            label="Level"
-            onChange={(e) => {
-              setLevelFilter(e.target.value);
-              setPage(0);
-            }}
-          >
-            {LEVEL_OPTIONS.map((l) => (
-              <MenuItem key={l} value={l}>
-                {l === "all" ? "All" : l.toUpperCase()}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        <FormControl size="small" sx={{ minWidth: 140 }}>
-          <InputLabel>Source</InputLabel>
-          <Select
-            value={sourceFilter}
-            label="Source"
-            onChange={(e) => {
-              setSourceFilter(e.target.value);
-              setPage(0);
-            }}
-          >
-            <MenuItem value="all">All sources</MenuItem>
-            {sources.map((s) => (
-              <MenuItem key={s} value={s}>
-                {s}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        <FormControl size="small" sx={{ minWidth: 120 }}>
-          <InputLabel>Time range</InputLabel>
-          <Select
-            value={timeRange}
-            label="Time range"
-            onChange={(e) => {
-              setTimeRange(e.target.value);
-              setPage(0);
-            }}
-          >
-            {Object.keys(TIME_RANGES).map((r) => (
-              <MenuItem key={r} value={r}>
-                {r}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        <TextField
-          size="small"
-          placeholder="Search…"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(0);
+    <AdminTableSurface
+      toolbar={
+        <Stack
+          direction="row"
+          sx={{
+            alignItems: "center",
+            gap: 1,
+            flexWrap: "wrap",
           }}
-          sx={{ minWidth: 180 }}
-        />
+        >
+          <FormControl size="small" sx={{ minWidth: 100 }}>
+            <InputLabel>Level</InputLabel>
+            <Select
+              value={levelFilter}
+              label="Level"
+              onChange={(e) => {
+                setLevelFilter(e.target.value);
+                setPage(0);
+              }}
+            >
+              {LEVEL_OPTIONS.map((l) => (
+                <MenuItem key={l} value={l}>
+                  {l === "all" ? "All" : l.toUpperCase()}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
-        <Box sx={{ flexGrow: 1 }} />
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel>Source</InputLabel>
+            <Select
+              value={sourceFilter}
+              label="Source"
+              onChange={(e) => {
+                setSourceFilter(e.target.value);
+                setPage(0);
+              }}
+            >
+              <MenuItem value="all">All sources</MenuItem>
+              {sources.map((s) => (
+                <MenuItem key={s} value={s}>
+                  {s}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
-        <Chip label={`${data?.total ?? 0} entries`} size="small" variant="outlined" />
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel>Time range</InputLabel>
+            <Select
+              value={timeRange}
+              label="Time range"
+              onChange={(e) => {
+                setTimeRange(e.target.value);
+                setPage(0);
+              }}
+            >
+              {Object.keys(TIME_RANGES).map((r) => (
+                <MenuItem key={r} value={r}>
+                  {r}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
-        <Tooltip title={autoRefresh ? "Pause auto-refresh" : "Resume auto-refresh"}>
-          <IconButton size="small" onClick={() => setAutoRefresh((v) => !v)}>
-            {autoRefresh ? <PauseIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
-          </IconButton>
-        </Tooltip>
-
-        <Tooltip title="Refresh">
-          <IconButton
+          <TextField
             size="small"
-            onClick={() => void qc.invalidateQueries({ queryKey: ["admin", "logs"] })}
-            disabled={isFetching}
-          >
-            {isFetching ? <CircularProgress size={16} /> : <RefreshIcon fontSize="small" />}
-          </IconButton>
-        </Tooltip>
-      </Stack>
+            placeholder="Search…"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(0);
+            }}
+            sx={{ minWidth: 180 }}
+          />
+
+          <Box sx={{ flexGrow: 1 }} />
+
+          <Chip label={`${data?.total ?? 0} entries`} size="small" variant="outlined" />
+
+          <Tooltip title={autoRefresh ? "Pause auto-refresh" : "Resume auto-refresh"}>
+            <IconButton size="small" onClick={() => setAutoRefresh((v) => !v)}>
+              {autoRefresh ? <PauseIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
+            </IconButton>
+          </Tooltip>
+
+          <Tooltip title="Refresh">
+            <span>
+              <IconButton
+                size="small"
+                onClick={() => void qc.invalidateQueries({ queryKey: ["admin", "logs"] })}
+                disabled={isFetching}
+              >
+                {isFetching ? <CircularProgress size={16} /> : <RefreshIcon fontSize="small" />}
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Stack>
+      }
+    >
       <Box
         sx={{
           bgcolor: "grey.900",
@@ -308,6 +310,6 @@ export function AppLogViewer() {
         rowsPerPageOptions={[100, 200, 500]}
         hideSinglePage={false}
       />
-    </Stack>
+    </AdminTableSurface>
   );
 }

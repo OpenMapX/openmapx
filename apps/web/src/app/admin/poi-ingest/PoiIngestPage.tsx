@@ -27,7 +27,7 @@ export function PoiIngestPage() {
 
   return (
     <Box>
-      <Box sx={{ mb: 3 }}>
+      <Box sx={{ mb: 2 }}>
         <AdminPageHeader
           title="POI ingest"
           subtitle="EV charging · parking · per-source PostGIS ingest"
@@ -64,7 +64,7 @@ export function PoiIngestPage() {
         </Alert>
       )}
       {state && (
-        <Stack spacing={3}>
+        <Stack spacing={2}>
           {driftMismatch && (
             <Alert severity="warning">
               POI source registry differs between apps/api and data-manager
@@ -78,7 +78,7 @@ export function PoiIngestPage() {
             </Alert>
           )}
 
-          <Stack direction={{ xs: "column", md: "row" }} spacing={3}>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <OverviewCard state={state} />
             </Box>

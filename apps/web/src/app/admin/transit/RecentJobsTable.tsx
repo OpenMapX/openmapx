@@ -16,6 +16,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
+import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
 import { formatStageError, jobStatusColor } from "@/components/admin/shared/jobStatus";
 import { useTransitJobDetail, useTransitJobs } from "@/lib/admin/transitHooks";
 
@@ -228,33 +229,7 @@ export function RecentJobsTable() {
   const [openJobId, setOpenJobId] = useState<string | null>(null);
 
   return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
-      <Stack
-        direction="row"
-        spacing={1}
-        sx={{
-          alignItems: "center",
-          mb: 1.5,
-        }}
-      >
-        <Typography
-          variant="subtitle1"
-          sx={{
-            fontWeight: 700,
-          }}
-        >
-          Recent jobs
-        </Typography>
-        <Box sx={{ flex: 1 }} />
-        <Typography
-          variant="caption"
-          sx={{
-            color: "text.secondary",
-          }}
-        >
-          showing up to 20 most recent
-        </Typography>
-      </Stack>
+    <AdminTableSurface title="Recent jobs" description="Showing up to 20 most recent">
       {isLoading ? (
         <Box
           sx={{
@@ -266,7 +241,7 @@ export function RecentJobsTable() {
           <CircularProgress size={22} />
         </Box>
       ) : isError ? (
-        <Typography variant="body2" color="error">
+        <Typography variant="body2" color="error" sx={{ p: 2 }}>
           Failed to load jobs.
         </Typography>
       ) : data && data.jobs.length === 0 ? (
@@ -274,6 +249,7 @@ export function RecentJobsTable() {
           variant="body2"
           sx={{
             color: "text.secondary",
+            p: 2,
           }}
         >
           No jobs recorded yet.
@@ -339,6 +315,6 @@ export function RecentJobsTable() {
         </TableContainer>
       )}
       {openJobId && <JobDetailDrawer jobId={openJobId} onClose={() => setOpenJobId(null)} />}
-    </Paper>
+    </AdminTableSurface>
   );
 }

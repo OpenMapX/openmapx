@@ -26,7 +26,7 @@ import { CredentialSetupGuide } from "../integrations/CredentialSetupGuide";
 //
 // Secret fields (`x-openmapx-secret: true`) are deliberately excluded here —
 // they live only on the Credentials tab. Each consumer keeps its own save
-// wrapper (integration: PATCH + reload; service: save vs save-and-recreate).
+// wrapper (integration: PATCH + reload; service: save vs save-and-apply).
 
 export type ConfigFieldSource = "default" | "database" | "vault" | "config.json" | "env";
 
@@ -149,7 +149,7 @@ export interface SchemaConfigFormProps {
   envPrefix?: string;
   /** Persist the changed-keys diff. Throw to surface an inline error. */
   onSave: (diff: Record<string, unknown>) => Promise<void>;
-  /** Optional second action that also applies the change (e.g. recreate). */
+  /** Optional second action that also applies the change. */
   onSaveAndApply?: (diff: Record<string, unknown>) => Promise<void>;
   /** Label for the apply button (default "Save & apply"). */
   applyLabel?: string;

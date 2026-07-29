@@ -124,7 +124,7 @@ Subsequent restarts come up in seconds from the cached index.
 
 **Scope and cost.** By default Photon pulls the full planet index regardless of
 region. To download a smaller country index instead, set `PHOTON_REGION` (a
-country code) in `infra/docker/.env`, then re-render and recreate:
+country code) in `infra/docker/.env`, then re-render and apply:
 
 ```bash
 # infra/docker/.env
@@ -133,7 +133,7 @@ PHOTON_REGION=germany
 
 ```bash
 pnpm openmapx compose render
-pnpm openmapx services recreate photon
+pnpm openmapx services start photon
 ```
 
 Runtime cost is roughly 8 GB RAM (the manifest's ceiling) and the index's disk

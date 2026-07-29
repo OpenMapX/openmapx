@@ -261,7 +261,7 @@ export interface ServiceCredentialsResponse {
   credentials: ServiceCredentialStatus[];
 }
 
-/** Result of a credential set/delete: a recreate was enqueued, or a render is needed. */
+/** Result of a credential set/delete: an apply job was enqueued, or a render is needed. */
 export interface ServiceCredentialApplyResult {
   ok: boolean;
   jobId?: string;

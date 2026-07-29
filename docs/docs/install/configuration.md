@@ -36,10 +36,10 @@ A few conventions are worth knowing before the tables:
   `.env` always wins over an admin-stored value. See
   [How it works](../overview/how-it-works.md) for the service/integration model.
 
-:::caution[Recreate containers after editing]
-Changing `.env` only takes effect when the affected containers are recreated.
-Re-run `docker compose up -d` (Compose detects the changed file and recreates
-what's needed) or restart through the CLI's service commands.
+:::caution[Apply configuration after editing]
+Changing `.env` only takes effect after applying the affected services. Re-run
+`docker compose up -d` (Compose detects the changed file and replaces what's
+needed) or use `pnpm openmapx services start <service>`.
 :::
 
 ## Core / required

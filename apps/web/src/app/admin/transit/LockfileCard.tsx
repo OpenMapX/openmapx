@@ -2,13 +2,20 @@
 
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { useState } from "react";
+import { useAdminToast } from "@/components/admin/shared/AdminToast";
+import { ConfirmDialog } from "@/components/admin/shared/ConfirmDialog";
 import type { TransitStateSummary } from "@/lib/admin/transitHooks";
+import { useBumpTransitous } from "@/lib/admin/transitHooks";
 
 function formatTime(iso: string | null): string {
   if (!iso) return "—";
@@ -27,6 +34,10 @@ function formatTime(iso: string | null): string {
 
 export function LockfileCard({ state }: { state: TransitStateSummary }) {
   const hasLock = !!state.transitousRef;
+  const [branch, setBranch] = useState("main");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const bump = useBumpTransitous();
+  const showToast = useAdminToast();
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Stack
@@ -57,6 +68,15 @@ export function LockfileCard({ state }: { state: TransitStateSummary }) {
           variant="outlined"
           label={hasLock ? "locked" : "no lockfile"}
         />
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<RefreshIcon />}
+          disabled={bump.isPending || !branch.trim()}
+          onClick={() => setConfirmOpen(true)}
+        >
+          Bump pin
+        </Button>
       </Stack>
       {!hasLock && (
         <Alert severity="warning" sx={{ mb: 1 }}>
@@ -121,9 +141,34 @@ export function LockfileCard({ state }: { state: TransitStateSummary }) {
           mt: 1.5,
         }}
       >
-        Bumping the ref is CLI-driven for an explicit audit trail. The web admin shows current lock
-        state only.
+        Pin changes are explicit, admin-only, rate-limited, and written to the audit log. Run a
+        transit sync after reviewing the new catalog diff.
       </Typography>
+      <TextField
+        label="Catalog branch"
+        value={branch}
+        onChange={(event) => setBranch(event.target.value)}
+        sx={{ mt: 1.5, maxWidth: 280 }}
+      />
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Bump Transitous catalog pin"
+        message={`Fetch branch "${branch}" and update the deployment lockfile? This changes the feed catalog used by future transit syncs.`}
+        confirmLabel="Bump pin"
+        confirmColor="warning"
+        loading={bump.isPending}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() =>
+          bump.mutate(branch.trim(), {
+            onSuccess: () => {
+              showToast("Transitous pin updated");
+              setConfirmOpen(false);
+            },
+            onError: (error) =>
+              showToast(error instanceof Error ? error.message : "Pin update failed", "error"),
+          })
+        }
+      />
     </Paper>
   );
 }

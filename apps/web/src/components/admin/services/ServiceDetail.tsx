@@ -416,7 +416,7 @@ function ConfigTab({ data }: { data: ServiceDetailData }) {
           onSaveAndApply={async (values) => {
             // Service configs land in the generated compose env, so applying
             // a new value must go through `docker compose up -d` semantics.
-            // Persist first so a failed start/recreate doesn't lose the edit.
+            // Persist first so a failed apply doesn't lose the edit.
             await saveConfig.mutateAsync(values);
             await action.mutateAsync("start");
           }}
@@ -588,7 +588,7 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
               flexShrink: 0,
             }}
           >
-            <Tooltip title="Recreate this service from the latest rendered compose and hardlink plan.">
+            <Tooltip title="Apply the latest rendered configuration and hardlink plan to this service.">
               <span>
                 <Button
                   size="small"
@@ -598,7 +598,7 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
                   onClick={() => runAction("start")}
                   disabled={isBusy}
                 >
-                  {data.status === "running" ? "Recreate" : "Start"}
+                  {data.status === "running" ? "Apply changes" : "Start"}
                 </Button>
               </span>
             </Tooltip>

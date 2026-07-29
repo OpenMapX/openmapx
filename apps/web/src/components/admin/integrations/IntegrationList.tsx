@@ -3,16 +3,13 @@
 import FilterListIcon from "@mui/icons-material/FilterList";
 import HealthAndSafetyIcon from "@mui/icons-material/HealthAndSafety";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import SearchIcon from "@mui/icons-material/Search";
 import TuneIcon from "@mui/icons-material/Tune";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import FormControl from "@mui/material/FormControl";
-import InputAdornment from "@mui/material/InputAdornment";
 import MenuItem from "@mui/material/MenuItem";
-import Paper from "@mui/material/Paper";
 import Select from "@mui/material/Select";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
@@ -22,9 +19,7 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
-import TablePagination from "@mui/material/TablePagination";
 import TableRow from "@mui/material/TableRow";
-import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -32,8 +27,11 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
+import { AdminTablePagination } from "../shared/AdminTablePagination";
+import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { useAdminToast } from "../shared/AdminToast";
 import { TableEmptyState } from "../shared/TableEmptyState";
+import { TableSearchField, TableToolbar } from "../shared/TableToolbar";
 import { DomainChip } from "./DomainChip";
 import { computeStatusVariant, IntegrationStatusDot } from "./IntegrationStatusDot";
 import { StatusBadge } from "./StatusBadge";
@@ -270,7 +268,7 @@ export function IntegrationList() {
   return (
     <Stack
       sx={{
-        gap: 3,
+        gap: 2,
       }}
     >
       <AdminPageHeader
@@ -311,261 +309,253 @@ export function IntegrationList() {
           </Stack>
         }
       />
-      <Stack
-        direction="row"
-        sx={{
-          gap: 1.5,
-          flexWrap: "wrap",
-          alignItems: "center",
-        }}
-      >
-        <TextField
-          size="small"
-          placeholder="Search by name, id, domain…"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(0);
-          }}
-          sx={{ minWidth: 260 }}
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-            },
-          }}
-        />
+      <AdminTableSurface
+        toolbar={
+          <TableToolbar>
+            <TableSearchField
+              placeholder="Search by name, id, domain…"
+              value={search}
+              onChange={(value) => {
+                setSearch(value);
+                setPage(0);
+              }}
+              minWidth={260}
+            />
 
-        <FormControl size="small" sx={{ minWidth: 140 }}>
-          <Select
-            value={domainFilter}
-            onChange={(e) => {
-              setDomainFilter(e.target.value);
-              setPage(0);
-            }}
-            displayEmpty
-            startAdornment={
-              <FilterListIcon fontSize="small" sx={{ mr: 0.5, color: "text.secondary" }} />
-            }
-          >
-            <MenuItem value="all">All domains</MenuItem>
-            {allDomains.map((d) => (
-              <MenuItem key={d} value={d}>
-                {d}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+            <FormControl size="small" sx={{ minWidth: 140 }}>
+              <Select
+                value={domainFilter}
+                onChange={(e) => {
+                  setDomainFilter(e.target.value);
+                  setPage(0);
+                }}
+                displayEmpty
+                startAdornment={
+                  <FilterListIcon fontSize="small" sx={{ mr: 0.5, color: "text.secondary" }} />
+                }
+              >
+                <MenuItem value="all">All domains</MenuItem>
+                {allDomains.map((d) => (
+                  <MenuItem key={d} value={d}>
+                    {d}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
 
-        <FormControl size="small" sx={{ minWidth: 140 }}>
-          <Select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value as StatusFilter);
-              setPage(0);
-            }}
-          >
-            <MenuItem value="all">All statuses</MenuItem>
-            <MenuItem value="enabled">Enabled</MenuItem>
-            <MenuItem value="disabled">Disabled</MenuItem>
-            <MenuItem value="unhealthy">Unhealthy</MenuItem>
-            <MenuItem value="unconfigured">Unconfigured</MenuItem>
-          </Select>
-        </FormControl>
+            <FormControl size="small" sx={{ minWidth: 140 }}>
+              <Select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value as StatusFilter);
+                  setPage(0);
+                }}
+              >
+                <MenuItem value="all">All statuses</MenuItem>
+                <MenuItem value="enabled">Enabled</MenuItem>
+                <MenuItem value="disabled">Disabled</MenuItem>
+                <MenuItem value="unhealthy">Unhealthy</MenuItem>
+                <MenuItem value="unconfigured">Unconfigured</MenuItem>
+              </Select>
+            </FormControl>
 
-        <FormControl size="small" sx={{ minWidth: 130 }}>
-          <Select
-            value={qualityFilter}
-            onChange={(e) => {
-              setQualityFilter(e.target.value as QualityFilter);
-              setPage(0);
-            }}
-          >
-            <MenuItem value="all">All types</MenuItem>
-            <MenuItem value="built-in">Built-in</MenuItem>
-            <MenuItem value="community">Community</MenuItem>
-          </Select>
-        </FormControl>
+            <FormControl size="small" sx={{ minWidth: 130 }}>
+              <Select
+                value={qualityFilter}
+                onChange={(e) => {
+                  setQualityFilter(e.target.value as QualityFilter);
+                  setPage(0);
+                }}
+              >
+                <MenuItem value="all">All types</MenuItem>
+                <MenuItem value="built-in">Built-in</MenuItem>
+                <MenuItem value="community">Community</MenuItem>
+              </Select>
+            </FormControl>
 
-        {(search ||
-          domainFilter !== "all" ||
-          statusFilter !== "all" ||
-          qualityFilter !== "all") && (
-          <Button
-            size="small"
-            variant="text"
-            onClick={() => {
-              setSearch("");
-              setDomainFilter("all");
-              setStatusFilter("all");
-              setQualityFilter("all");
-              setPage(0);
-            }}
-          >
-            Clear
-          </Button>
-        )}
-
-        <Stack
-          direction="row"
-          sx={{
-            gap: 1.5,
-            flexWrap: "wrap",
-            ml: { sm: "auto" },
-          }}
-        >
-          <Button
-            component={Link}
-            href="/admin/integrations/bulk"
-            variant="outlined"
-            size="small"
-            startIcon={<TuneIcon />}
-          >
-            Bulk Configure
-          </Button>
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={
-              healthMutation.isPending ? <CircularProgress size={14} /> : <HealthAndSafetyIcon />
-            }
-            onClick={() => healthMutation.mutate()}
-            disabled={healthMutation.isPending || reloadMutation.isPending}
-          >
-            Run Health Checks
-          </Button>
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={reloadMutation.isPending ? <CircularProgress size={14} /> : <RefreshIcon />}
-            onClick={() => reloadMutation.mutate()}
-            disabled={reloadMutation.isPending || healthMutation.isPending}
-          >
-            Reload All
-          </Button>
-        </Stack>
-      </Stack>
-      <TableContainer component={Paper} variant="outlined">
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ width: 32 }} />
-              <TableCell>Name</TableCell>
-              <TableCell>Domains</TableCell>
-              <TableCell>Version</TableCell>
-              <TableCell>Quality</TableCell>
-              <TableCell>Health</TableCell>
-              <TableCell>Enabled</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {filtered.length === 0 && (
-              <TableEmptyState colSpan={7} message="No integrations match your filters" />
+            {(search ||
+              domainFilter !== "all" ||
+              statusFilter !== "all" ||
+              qualityFilter !== "all") && (
+              <Button
+                size="small"
+                variant="text"
+                onClick={() => {
+                  setSearch("");
+                  setDomainFilter("all");
+                  setStatusFilter("all");
+                  setQualityFilter("all");
+                  setPage(0);
+                }}
+              >
+                Clear
+              </Button>
             )}
-            {paged.map((integration) => (
-              <TableRow key={integration.id} hover>
-                <TableCell>
-                  <IntegrationStatusDot
-                    enabled={integration.enabled}
-                    configured={integration.configured}
-                    health={integration.health}
-                    hasHealthCheck={integration.hasHealthCheck}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Stack
-                    sx={{
-                      gap: 0.25,
-                    }}
-                  >
-                    <Typography
-                      component={Link}
-                      href={`/admin/integrations/${integration.id}`}
-                      variant="body2"
+
+            <Stack
+              direction="row"
+              sx={{
+                gap: 1.5,
+                flexWrap: "wrap",
+                ml: { sm: "auto" },
+              }}
+            >
+              <Button
+                component={Link}
+                href="/admin/integrations/bulk"
+                variant="outlined"
+                size="small"
+                startIcon={<TuneIcon />}
+              >
+                Bulk Configure
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={
+                  healthMutation.isPending ? (
+                    <CircularProgress size={14} />
+                  ) : (
+                    <HealthAndSafetyIcon />
+                  )
+                }
+                onClick={() => healthMutation.mutate()}
+                disabled={healthMutation.isPending || reloadMutation.isPending}
+              >
+                Run Health Checks
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={
+                  reloadMutation.isPending ? <CircularProgress size={14} /> : <RefreshIcon />
+                }
+                onClick={() => reloadMutation.mutate()}
+                disabled={reloadMutation.isPending || healthMutation.isPending}
+              >
+                Reload All
+              </Button>
+            </Stack>
+          </TableToolbar>
+        }
+        pagination={
+          <AdminTablePagination
+            count={filtered.length}
+            page={page}
+            rowsPerPage={rowsPerPage}
+            onPageChange={(_, nextPage) => setPage(nextPage)}
+            onRowsPerPageChange={(event) => {
+              setRowsPerPage(Number(event.target.value));
+              setPage(0);
+            }}
+          />
+        }
+      >
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ width: 32 }} />
+                <TableCell>Name</TableCell>
+                <TableCell>Domains</TableCell>
+                <TableCell>Version</TableCell>
+                <TableCell>Quality</TableCell>
+                <TableCell>Health</TableCell>
+                <TableCell>Enabled</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filtered.length === 0 && (
+                <TableEmptyState colSpan={7} message="No integrations match your filters" />
+              )}
+              {paged.map((integration) => (
+                <TableRow key={integration.id} hover>
+                  <TableCell>
+                    <IntegrationStatusDot
+                      enabled={integration.enabled}
+                      configured={integration.configured}
+                      health={integration.health}
+                      hasHealthCheck={integration.hasHealthCheck}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Stack
                       sx={{
-                        fontWeight: 600,
-                        lineHeight: 1.2,
-                        textDecoration: "none",
-                        color: "primary.main",
+                        gap: 0.25,
                       }}
                     >
-                      {integration.name}
-                    </Typography>
+                      <Typography
+                        component={Link}
+                        href={`/admin/integrations/${integration.id}`}
+                        variant="body2"
+                        sx={{
+                          fontWeight: 600,
+                          lineHeight: 1.2,
+                          textDecoration: "none",
+                          color: "primary.main",
+                        }}
+                      >
+                        {integration.name}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "text.secondary",
+                        }}
+                      >
+                        {integration.id}
+                      </Typography>
+                    </Stack>
+                  </TableCell>
+                  <TableCell>
+                    <Stack
+                      direction="row"
+                      sx={{
+                        gap: 0.5,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      {integration.domains.map((d) => (
+                        <DomainChip key={d} domain={d} />
+                      ))}
+                    </Stack>
+                  </TableCell>
+                  <TableCell>
                     <Typography
                       variant="caption"
                       sx={{
                         color: "text.secondary",
                       }}
                     >
-                      {integration.id}
+                      {integration.version ?? "—"}
                     </Typography>
-                  </Stack>
-                </TableCell>
-                <TableCell>
-                  <Stack
-                    direction="row"
-                    sx={{
-                      gap: 0.5,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    {integration.domains.map((d) => (
-                      <DomainChip key={d} domain={d} />
-                    ))}
-                  </Stack>
-                </TableCell>
-                <TableCell>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      color: "text.secondary",
-                    }}
-                  >
-                    {integration.version ?? "—"}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  <StatusBadge quality={integration.quality} />
-                </TableCell>
-                <TableCell>
-                  <HealthCell integration={integration} />
-                </TableCell>
-                <TableCell>
-                  <Tooltip
-                    title={integration.enabled ? "Disable integration" : "Enable integration"}
-                  >
-                    <span>
-                      <Switch
-                        size="small"
-                        checked={integration.enabled}
-                        disabled={togglingIds.has(integration.id)}
-                        onChange={(e) => toggleIntegration(integration.id, e.target.checked)}
-                      />
-                    </span>
-                  </Tooltip>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
-      {filtered.length > 0 && (
-        <TablePagination
-          component="div"
-          count={filtered.length}
-          page={page}
-          rowsPerPage={rowsPerPage}
-          rowsPerPageOptions={[25, 50, 100]}
-          onPageChange={(_, p) => setPage(p)}
-          onRowsPerPageChange={(e) => {
-            setRowsPerPage(Number(e.target.value));
-            setPage(0);
-          }}
-        />
-      )}
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge quality={integration.quality} />
+                  </TableCell>
+                  <TableCell>
+                    <HealthCell integration={integration} />
+                  </TableCell>
+                  <TableCell>
+                    <Tooltip
+                      title={integration.enabled ? "Disable integration" : "Enable integration"}
+                    >
+                      <span>
+                        <Switch
+                          size="small"
+                          checked={integration.enabled}
+                          disabled={togglingIds.has(integration.id)}
+                          onChange={(e) => toggleIntegration(integration.id, e.target.checked)}
+                        />
+                      </span>
+                    </Tooltip>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </AdminTableSurface>
     </Stack>
   );
 }

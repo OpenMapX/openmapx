@@ -76,7 +76,7 @@ in full under [Managing services](../install/managing-services.md).
 | `services start [ids...]` | Render, apply hardlinks, then `docker compose up -d` the named services. Flag: `--preset <names>`. |
 | `services stop [ids...]` | `docker compose stop` the named services. Flag: `--preset <names>`. |
 | `services restart [ids...]` | In-place reboot (`docker compose restart`); does **not** re-render. Flag: `--preset <names>`. |
-| `services recreate [ids...]` | Re-render, link, pull images, then `up -d --force-recreate`. Flag: `--preset <names>`. |
+| `services update [ids...]` | Re-render, link, pull images, then replace containers with `up -d --force-recreate`. Flag: `--preset <names>`. |
 | `services status [id]` | Container status table for one or all services (`docker compose ps`). |
 | `services logs <id>` | Stream service logs. Flags: `--tail <n>` (default `100`), `--follow`. |
 | `services capabilities` | Inventory the capability and data-type vocabulary across the registry. Flag: `--unrecognised`. |

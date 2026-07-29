@@ -28,6 +28,11 @@ vi.mock("../../utils/require-admin.js", () => ({
 }));
 
 const fetchMock = vi.hoisted(() => vi.fn());
+const auditMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("../../utils/audit-log.js", () => ({ writeAuditLog: auditMock }));
+vi.mock("../../utils/rate-limit.js", () => ({
+  systemMaintenanceLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
+}));
 
 beforeAll(() => {
   process.env.DATA_MANAGER_AUTH_TOKEN = "service-token";
@@ -85,6 +90,20 @@ describe("POST /data-manager/transit/bump-transitous-ref", () => {
       force: false,
       lockedBy: "admin-1",
     });
+    expect(auditMock).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "transit.lock.bump", actorId: "admin-1" }),
+    );
+  });
+
+  it("rejects flag-shaped and traversal-like branch names", async () => {
+    tryAdminSessionMock.mockResolvedValue({ user: { id: "admin-1", role: "admin" } });
+    const res = await app.inject({
+      method: "POST",
+      url: "/data-manager/transit/bump-transitous-ref",
+      payload: { branch: "--upload-pack=evil" },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("returns 403 when caller authenticates with only a bearer token", async () => {

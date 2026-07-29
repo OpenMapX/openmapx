@@ -13,7 +13,15 @@ import type { ReactNode } from "react";
  */
 export function TableToolbar({ children }: { children: ReactNode }) {
   return (
-    <Stack direction="row" sx={{ gap: 1.5, flexWrap: "wrap", alignItems: "center" }}>
+    <Stack
+      direction="row"
+      sx={{
+        gap: 1,
+        flexWrap: "wrap",
+        alignItems: "center",
+        minHeight: 40,
+      }}
+    >
       {children}
     </Stack>
   );

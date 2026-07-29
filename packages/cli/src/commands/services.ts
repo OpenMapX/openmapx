@@ -367,7 +367,7 @@ export function registerServicesCommands(program: Command): void {
         // compose YAML to just the start target list and drop every other
         // enabled service. Render the full enabled selection (env /
         // service-selection.json) and then `up -d` only the requested
-        // subset. Same rationale as the `recreate` branch below.
+        // subset. Same rationale as the `update` branch below.
         const rendered = await renderComposeForRepo({
           domain: process.env.DOMAIN ?? "localhost",
         });
@@ -415,9 +415,9 @@ export function registerServicesCommands(program: Command): void {
     });
 
   services
-    .command("recreate [ids...]")
+    .command("update [ids...]")
     .description(
-      "Pull latest images, then force-recreate one or more services (render + hardlinks + docker compose up -d --force-recreate)",
+      "Pull latest images and replace one or more services (render + hardlinks + docker compose up -d --force-recreate)",
     )
     .option("--preset <names>", "Comma/space-separated preset names")
     .action(async (ids: string[], options: { preset?: string }) => {
@@ -430,7 +430,7 @@ export function registerServicesCommands(program: Command): void {
         // Render compose with the *currently-enabled* selection (read from
         // env / service-selection.json) — NOT scoped to allIds. Passing
         // `services: allIds` here would narrow the persisted compose YAML
-        // to just the recreate target list, dropping every other enabled
+        // to just the update target list, dropping every other enabled
         // service. The api container would then read the resulting
         // OPENMAPX_ENABLED_SERVICES on next start, narrow its registry to
         // the same subset, and bake the narrow set back into the next
@@ -445,7 +445,7 @@ export function registerServicesCommands(program: Command): void {
           `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
         );
       } catch (err) {
-        log.err(`prepare/recreate failed: ${(err as Error).message}`);
+        log.err(`prepare/update failed: ${(err as Error).message}`);
         process.exit(1);
       }
 

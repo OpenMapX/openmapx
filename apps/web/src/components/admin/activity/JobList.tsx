@@ -23,6 +23,7 @@ import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { relativeTimeFromIso } from "@/lib/formatTime";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
+import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { TableSkeleton } from "../shared/TableSkeleton";
 import { useServerPagination } from "../shared/tableHooks";
 import { ActorCell } from "./ActorCell";
@@ -168,51 +169,51 @@ export function JobList() {
   });
 
   return (
-    <Stack
-      sx={{
-        gap: 2,
-      }}
-    >
-      <Stack
-        direction="row"
-        sx={{
-          alignItems: "center",
-          gap: 1,
-        }}
-      >
-        <ToggleButtonGroup
-          size="small"
-          value={statusFilter}
-          exclusive
-          onChange={(_, v) => {
-            if (v) {
-              setStatusFilter(v);
-              setPage(0);
-            }
+    <AdminTableSurface
+      toolbar={
+        <Stack
+          direction="row"
+          sx={{
+            alignItems: "center",
+            gap: 1,
+            flexWrap: "wrap",
           }}
         >
-          <ToggleButton value="all">All</ToggleButton>
-          <ToggleButton value="active">Active</ToggleButton>
-          <ToggleButton value="success">Completed</ToggleButton>
-          <ToggleButton value="failed">Failed</ToggleButton>
-        </ToggleButtonGroup>
-
-        <Box sx={{ flexGrow: 1 }} />
-
-        <Chip label={`${data?.total ?? 0} jobs`} size="small" variant="outlined" />
-
-        <Tooltip title="Refresh">
-          <IconButton
+          <ToggleButtonGroup
             size="small"
-            onClick={() =>
-              void queryClient.invalidateQueries({ queryKey: ["admin", "jobs", "list"] })
-            }
-            disabled={isFetching}
+            value={statusFilter}
+            exclusive
+            onChange={(_, v) => {
+              if (v) {
+                setStatusFilter(v);
+                setPage(0);
+              }
+            }}
           >
-            <RefreshIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      </Stack>
+            <ToggleButton value="all">All</ToggleButton>
+            <ToggleButton value="active">Active</ToggleButton>
+            <ToggleButton value="success">Completed</ToggleButton>
+            <ToggleButton value="failed">Failed</ToggleButton>
+          </ToggleButtonGroup>
+
+          <Box sx={{ flexGrow: 1 }} />
+
+          <Chip label={`${data?.total ?? 0} jobs`} size="small" variant="outlined" />
+
+          <Tooltip title="Refresh">
+            <IconButton
+              size="small"
+              onClick={() =>
+                void queryClient.invalidateQueries({ queryKey: ["admin", "jobs", "list"] })
+              }
+              disabled={isFetching}
+            >
+              <RefreshIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+      }
+    >
       <TableContainer>
         <Table size="small">
           <TableHead>
@@ -256,6 +257,6 @@ export function JobList() {
         rowsPerPageOptions={[25]}
         hideSinglePage={false}
       />
-    </Stack>
+    </AdminTableSurface>
   );
 }

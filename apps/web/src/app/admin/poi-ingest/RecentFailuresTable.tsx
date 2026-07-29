@@ -1,6 +1,5 @@
 "use client";
 
-import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -10,6 +9,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
 import type { PoiIngestStateSummary } from "@/lib/admin/poiIngestHooks";
 
 function formatTime(iso: string | null): string {
@@ -32,25 +32,7 @@ export function RecentFailuresTable({
   if (state.recentFailures.length === 0) return null;
 
   return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
-      <Stack
-        direction="row"
-        spacing={1}
-        sx={{
-          alignItems: "center",
-          mb: 1.5,
-        }}
-      >
-        <Typography
-          variant="subtitle1"
-          sx={{
-            fontWeight: 700,
-            color: "error.main",
-          }}
-        >
-          Recent failures ({state.recentFailures.length})
-        </Typography>
-      </Stack>
+    <AdminTableSurface title={`Recent failures (${state.recentFailures.length})`}>
       <TableContainer>
         <Table size="small">
           <TableHead>
@@ -113,6 +95,6 @@ export function RecentFailuresTable({
           </TableBody>
         </Table>
       </TableContainer>
-    </Paper>
+    </AdminTableSurface>
   );
 }

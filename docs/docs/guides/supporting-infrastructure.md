@@ -92,7 +92,7 @@ SERVICE_POSTGIS_MEMORY_LIMIT=4g
 
 ```bash
 pnpm openmapx compose render
-pnpm openmapx services recreate postgis
+pnpm openmapx services start postgis
 ```
 
 Schema migrations are automatic: `app-api` applies pending Drizzle migrations on
@@ -236,8 +236,9 @@ services — are covered in [Managing services](../install/managing-services.md)
 under exposure, with the field-level reference in the
 [service manifest](../developer/service-manifest.md) docs.
 
-Traefik watches the Docker socket live, so label changes from a re-render and a
-recreate take effect without restarting the proxy. After editing a manifest:
+Traefik watches the Docker socket live, so label changes take effect after the
+affected service is re-rendered and applied, without restarting the proxy. After
+editing a manifest:
 
 ```bash
 pnpm openmapx compose render

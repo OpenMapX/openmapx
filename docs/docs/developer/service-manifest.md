@@ -396,8 +396,8 @@ The env-var name is `SERVICE_` + the uppercased service id (hyphens become
 underscores) + `_` + the uppercased config key — for `valhalla` and key
 `memory_limit`, that's `SERVICE_VALHALLA_MEMORY_LIMIT`. Environment variables
 always win, which keeps Docker deployments predictable. Because the cascade runs
-at render time, a changed value takes effect only after a re-render and a
-recreate; see [Managing services](../install/managing-services.md#configuring-a-service)
+at render time, a changed value takes effect only after a re-render and apply;
+see [Managing services](../install/managing-services.md#configuring-a-service)
 for the full workflow.
 
 ## `envVars`

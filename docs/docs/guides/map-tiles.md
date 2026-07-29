@@ -176,11 +176,10 @@ style over MapTiler-hosted tiles. When you do serve your own tiles, the base URL
 with the built-in Traefik route is `${DOMAIN}/tiles`; for local development
 against the host port it's `http://localhost:8080`.
 
-After changing these, recreate the web container so it picks up the new
-environment:
+After changing these, apply the web service so it picks up the new environment:
 
 ```bash
-pnpm openmapx services recreate app-web
+pnpm openmapx services start app-web
 ```
 
 ## The OpenMapX style

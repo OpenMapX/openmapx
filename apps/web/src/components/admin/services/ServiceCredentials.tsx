@@ -31,12 +31,11 @@ function applyToast(result: ServiceCredentialApplyResult): {
 } {
   if (result.needsRender) {
     return {
-      message:
-        "Saved. Render + recreate the service on the host to apply (no Docker host-control).",
+      message: "Saved. Render and apply the service on the host (no Docker host-control).",
       severity: "info",
     };
   }
-  return { message: "Saved — recreating the service to apply…", severity: "success" };
+  return { message: "Saved — applying the service credentials…", severity: "success" };
 }
 
 export function ServiceCredentials({ serviceId }: { serviceId: string }) {

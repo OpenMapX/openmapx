@@ -15,12 +15,10 @@ import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import FormControl from "@mui/material/FormControl";
 import IconButton from "@mui/material/IconButton";
-import InputAdornment from "@mui/material/InputAdornment";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
-import Paper from "@mui/material/Paper";
 import Select from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
@@ -30,7 +28,6 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TableSortLabel from "@mui/material/TableSortLabel";
-import TextField from "@mui/material/TextField";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
@@ -42,10 +39,12 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
+import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 import { TableEmptyState } from "../shared/TableEmptyState";
 import { TableSkeleton } from "../shared/TableSkeleton";
+import { TableSearchField, TableToolbar } from "../shared/TableToolbar";
 import { useServerPagination } from "../shared/tableHooks";
 import { BanUserDialog } from "./BanUserDialog";
 import { CreateUserDialog } from "./CreateUserDialog";
@@ -324,7 +323,7 @@ export function UserList() {
   return (
     <Stack
       sx={{
-        gap: 3,
+        gap: 2,
       }}
     >
       <AdminPageHeader
@@ -337,44 +336,39 @@ export function UserList() {
             onClick={() => setCreateOpen(true)}
             size="small"
           >
-            Create User
+            Create user
           </Button>
         }
       />
-      <Stack
-        direction={{ xs: "column", sm: "row" }}
-        sx={{
-          gap: 1,
-          alignItems: { sm: "center" },
-        }}
+      <AdminTableSurface
+        toolbar={
+          <TableToolbar>
+            <TableSearchField
+              placeholder="Search users by email…"
+              value={search}
+              onChange={(value) => {
+                setSearch(value);
+                setPage(0);
+              }}
+              minWidth={280}
+            />
+            <ToggleButtonGroup size="small" exclusive value={filter} onChange={handleFilterChange}>
+              <ToggleButton value="all">All</ToggleButton>
+              <ToggleButton value="active">Active</ToggleButton>
+              <ToggleButton value="banned">Banned</ToggleButton>
+              <ToggleButton value="admins">Admins</ToggleButton>
+            </ToggleButtonGroup>
+          </TableToolbar>
+        }
+        pagination={
+          <AdminTablePagination
+            {...paginationProps}
+            count={total}
+            rowsPerPageOptions={[25, 50, 100]}
+            hideSinglePage={false}
+          />
+        }
       >
-        <TextField
-          size="small"
-          placeholder="Search by email"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(0);
-          }}
-          sx={{ width: { sm: 280 } }}
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <PersonSearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-            },
-          }}
-        />
-        <ToggleButtonGroup size="small" exclusive value={filter} onChange={handleFilterChange}>
-          <ToggleButton value="all">All</ToggleButton>
-          <ToggleButton value="active">Active</ToggleButton>
-          <ToggleButton value="banned">Banned</ToggleButton>
-          <ToggleButton value="admins">Admins</ToggleButton>
-        </ToggleButtonGroup>
-      </Stack>
-      <Paper variant="outlined" sx={{ overflow: "hidden" }}>
         <TableContainer>
           <Table size="small" stickyHeader>
             <TableHead>
@@ -520,13 +514,7 @@ export function UserList() {
             )}
           </Table>
         </TableContainer>
-        <AdminTablePagination
-          {...paginationProps}
-          count={total}
-          rowsPerPageOptions={[25, 50, 100]}
-          hideSinglePage={false}
-        />
-      </Paper>
+      </AdminTableSurface>
       <CreateUserDialog open={createOpen} onClose={() => setCreateOpen(false)} />
       {banTarget && <BanUserDialog user={banTarget} onClose={() => setBanTarget(null)} />}
     </Stack>

@@ -13,7 +13,6 @@ import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
 import FormControl from "@mui/material/FormControl";
-import IconButton from "@mui/material/IconButton";
 import InputLabel from "@mui/material/InputLabel";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
@@ -35,6 +34,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 import { useClientPagination } from "../shared/tableHooks";
@@ -508,27 +508,14 @@ export function UserDetail({ userId }: { userId: string }) {
         gap: 2,
       }}
     >
-      <Stack
-        direction="row"
-        sx={{
-          alignItems: "center",
-          gap: 1,
-        }}
-      >
-        <IconButton component={Link} href="/admin/users" size="small">
-          <ArrowBackIcon fontSize="small" />
-        </IconButton>
-        <Typography
-          variant="h5"
-          sx={{
-            fontWeight: 700,
-          }}
-        >
-          User Detail
-        </Typography>
-      </Stack>
-      <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
-        <Tabs value={tab} onChange={(_, v) => setTab(v)}>
+      <AdminPageHeader
+        title="User details"
+        subtitle={`${userData.name} · ${userData.email}`}
+        backHref="/admin/users"
+        backLabel="Back to users"
+      />
+      <Box>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)} aria-label="User detail sections">
           <Tab label="Profile" />
           <Tab label="Sessions" />
           <Tab label="Accounts" />

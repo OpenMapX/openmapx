@@ -4,7 +4,6 @@ import MapIcon from "@mui/icons-material/Map";
 import MenuIcon from "@mui/icons-material/Menu";
 import AppBar from "@mui/material/AppBar";
 import Avatar from "@mui/material/Avatar";
-import Box from "@mui/material/Box";
 import Breadcrumbs from "@mui/material/Breadcrumbs";
 import IconButton from "@mui/material/IconButton";
 import Toolbar from "@mui/material/Toolbar";
@@ -15,7 +14,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SIDEBAR_WIDTH } from "./AdminSidebar";
 
-export const TOPBAR_HEIGHT = 60;
+export const TOPBAR_HEIGHT = 56;
 
 const SEGMENT_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -72,19 +71,32 @@ export function AdminTopBar({ user, sidebarOpen, onToggleSidebar }: AdminTopBarP
         borderBottom: "1px solid",
         borderColor: "divider",
         color: "text.primary",
-        width: { sm: sidebarOpen ? `calc(100% - ${SIDEBAR_WIDTH}px)` : "100%" },
-        ml: { sm: sidebarOpen ? `${SIDEBAR_WIDTH}px` : 0 },
+        width: { md: sidebarOpen ? `calc(100% - ${SIDEBAR_WIDTH}px)` : "100%" },
+        ml: { md: sidebarOpen ? `${SIDEBAR_WIDTH}px` : 0 },
         transition:
           "width 225ms cubic-bezier(0.4, 0, 0.6, 1) 0ms, margin 225ms cubic-bezier(0.4, 0, 0.6, 1) 0ms",
         zIndex: (theme) => theme.zIndex.drawer - 1,
       }}
     >
-      <Toolbar sx={{ gap: 1, pr: "12px !important", minHeight: `${TOPBAR_HEIGHT}px !important` }}>
-        <IconButton edge="start" onClick={onToggleSidebar} size="small">
+      <Toolbar sx={{ gap: 1, px: { xs: 1.5, sm: 2 }, minHeight: `${TOPBAR_HEIGHT}px !important` }}>
+        <IconButton
+          edge="start"
+          onClick={onToggleSidebar}
+          size="small"
+          aria-label="Toggle navigation"
+        >
           <MenuIcon />
         </IconButton>
 
-        <Breadcrumbs sx={{ flex: 1 }}>
+        <Breadcrumbs
+          aria-label="Breadcrumb"
+          maxItems={3}
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            "& .MuiBreadcrumbs-ol": { flexWrap: "nowrap" },
+          }}
+        >
           {breadcrumbs.map((crumb, i) => {
             const isLast = i === breadcrumbs.length - 1;
             return isLast ? (
@@ -117,27 +129,32 @@ export function AdminTopBar({ user, sidebarOpen, onToggleSidebar }: AdminTopBarP
         </Breadcrumbs>
 
         <Tooltip title="Back to Map">
-          <IconButton component={Link} href="/" size="small" color="inherit">
+          <IconButton
+            component={Link}
+            href="/"
+            size="small"
+            color="inherit"
+            aria-label="Back to map"
+          >
             <MapIcon fontSize="small" />
           </IconButton>
         </Tooltip>
 
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <Tooltip title={`${user.name} · ${user.email}`}>
           <Avatar
             src={avatarSrc}
             alt={user.name}
             sx={{
-              width: 36,
-              height: 36,
-              fontSize: 15,
+              width: 32,
+              height: 32,
+              fontSize: 13,
               fontWeight: 500,
               bgcolor: "primary.main",
-              boxShadow: 2,
             }}
           >
             {!user.image && getInitials(user.name, user.email)}
           </Avatar>
-        </Box>
+        </Tooltip>
       </Toolbar>
     </AppBar>
   );

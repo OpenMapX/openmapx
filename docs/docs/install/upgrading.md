@@ -1,6 +1,6 @@
 ---
 title: Upgrading
-description: Keep a self-hosted OpenMapX deployment current — back up, pull new code and images, re-render the stack, and recreate containers.
+description: Keep a self-hosted OpenMapX deployment current — optionally back up, pull new code and images, re-render the stack, and replace containers.
 sidebar_position: 6
 ---
 
@@ -9,7 +9,7 @@ sidebar_position: 6
 Upgrading an OpenMapX deployment means moving the checkout to newer code and the
 running containers to newer images. The same `openmapx` CLI that brought the
 stack up drives the upgrade: you pull the latest code, re-render the compose
-stack if anything structural changed, fetch the newer images, and recreate the
+stack if anything structural changed, fetch the newer images, and replace the
 containers. Database migrations apply themselves on the next API boot, so there
 is no separate migration step to run.
 
@@ -17,10 +17,10 @@ This page covers a normal code/image upgrade. Refreshing the *data* a deployment
 serves — new OSM extracts, GTFS feeds, rebuilt indexes — is a different cadence
 and lives in [Preparing data](./preparing-data.md).
 
-:::tip[Back up first]
-The very first step of any upgrade is a backup. The
-[Back up first](#1-back-up-first) section below shows the one command that does
-it. Don't skip it — it's the only thing that makes a bad upgrade reversible.
+:::tip[Backup recommended]
+A pre-update backup is optional, but recommended when the deployment contains
+state you cannot readily recover. The admin panel's update confirmation leaves
+this choice with the operator and enables it by default.
 :::
 
 ## How an OpenMapX upgrade works
@@ -39,11 +39,11 @@ Two things move during an upgrade, and they move independently:
 Because of that split, `git pull` alone does **not** update the running app: it
 updates the manifests and the CLI, but the containers keep running whatever image
 they already pulled. You get the new app version when you `compose pull` and
-recreate the containers. The steps below do both, in the right order.
+replace the containers. The steps below do both, in the right order.
 
-## 1. Back up first
+## 1. Optional: create a backup
 
-The CLI snapshots every backup-enabled service volume — the PostGIS database
+When selected, the CLI snapshots every backup-enabled service volume — the PostGIS database
 (streamed `pg_dump | gzip`) and the other small stateful volumes (`tar`) — into
 `infra/docker/backups/`:
 
@@ -57,8 +57,8 @@ from source data and would dominate the snapshot for no recovery benefit. What
 the backup captures is the irreplaceable state: your database (users, admin
 config, integration settings, ingested POI data).
 
-Also copy your environment file aside, since it holds the secrets the whole stack
-depends on and is never part of a code pull:
+You may also copy your environment file aside, since it holds the secrets the
+whole stack depends on and is never part of a code pull:
 
 ```bash
 cp infra/docker/.env infra/docker/.env.bak
@@ -109,17 +109,17 @@ pnpm openmapx compose render
 This rewrites `infra/docker/docker-compose.generated.yml` and the hardlink plan
 from your current manifests and `infra/docker/.env`. The output is deterministic,
 and re-rendering when nothing changed is harmless — so when in doubt, render. The
-recreate command in the next step also re-renders for you, so you can skip this
+update command in the next step also re-renders for you, so you can skip this
 as a standalone step unless you want to inspect the diff first.
 
-## 4. Pull new images and recreate containers
+## 4. Pull new images and replace containers
 
-This is the step that actually swaps in the new app version. `services recreate`
+This is the step that actually swaps in the new app version. `services update`
 re-renders, refreshes the hardlinks, pulls the newest images, and force-recreates
 the containers:
 
 ```bash
-pnpm openmapx services recreate app-api app-web data-manager
+pnpm openmapx services update app-api app-web data-manager
 ```
 
 Under the hood this runs `docker compose pull` followed by
@@ -143,7 +143,7 @@ running untouched.
 
 :::note[Pull vs. build]
 There is no "rebuild the app" step in a normal upgrade. The application images are
-pulled from GHCR — `compose pull` (or the pull baked into `services recreate`) is
+pulled from GHCR — `compose pull` (or the pull baked into `services update`) is
 how you get the new version. You only build images yourself if you're doing local
 development against the source, which is outside the self-hosting flow.
 :::

@@ -10,6 +10,7 @@ import Accordion from "@mui/material/Accordion";
 import AccordionDetails from "@mui/material/AccordionDetails";
 import AccordionSummary from "@mui/material/AccordionSummary";
 import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -149,7 +150,7 @@ function SettingField({
 
   if (setting.type === "select" && setting.options) {
     return (
-      <FormControl size="small" sx={{ minWidth: 200 }} disabled={disabled}>
+      <FormControl size="small" sx={{ width: "100%", maxWidth: 420 }} disabled={disabled}>
         <InputLabel>{setting.label}</InputLabel>
         <Select
           value={String(value ?? "")}
@@ -176,6 +177,8 @@ function SettingField({
       <Stack
         sx={{
           gap: 1,
+          width: "100%",
+          maxWidth: 520,
         }}
       >
         <Typography
@@ -256,7 +259,7 @@ function SettingField({
               }
             : undefined,
       }}
-      sx={{ minWidth: { xs: "100%", sm: 320 } }}
+      sx={{ width: "100%", maxWidth: 420 }}
     />
   );
 }
@@ -321,19 +324,15 @@ function SettingsGroupPanel({
       defaultExpanded={group.id === "general"}
       variant="outlined"
       disableGutters
-      // MUI's Accordion variant rule sets borderRadius: 0 on the root and
-      // only re-rounds the first-of-type's top and last-of-type's bottom,
-      // so middle panels render flat. Match the same .MuiAccordion-rounded
-      // specificity to override every corner on every panel; without the
-      // double-class scope our plain `&` rule loses the cascade.
       sx={{
         "&.MuiAccordion-rounded": {
-          borderRadius: 1,
-          "&:first-of-type, &:last-of-type": { borderRadius: 1 },
+          borderRadius: 2,
+          overflow: "hidden",
+          "&:first-of-type, &:last-of-type": { borderRadius: 2 },
         },
       }}
     >
-      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+      <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 48 }}>
         <Stack
           direction="row"
           sx={{
@@ -359,7 +358,7 @@ function SettingsGroupPanel({
           )}
         </Stack>
       </AccordionSummary>
-      <AccordionDetails>
+      <AccordionDetails sx={{ px: 2, pt: 1.5, pb: 2, borderTop: 1, borderColor: "divider" }}>
         <Stack
           sx={{
             gap: 2.5,
@@ -399,41 +398,45 @@ function SettingsGroupPanel({
                   )}
                 </Stack>
               )}
-              {section.settings.map((s) => (
-                <Stack
-                  key={s.key}
-                  sx={{
-                    gap: 0.5,
-                  }}
-                >
-                  <Stack
-                    direction="row"
-                    sx={{
-                      alignItems: "center",
-                      gap: 1,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <SettingField
-                      setting={s}
-                      value={localValues[s.key]}
-                      onChange={(v) => setLocalValues((prev) => ({ ...prev, [s.key]: v }))}
-                    />
-                    {s.envOverride && s.envVar && <EnvOverrideBadge envVar={s.envVar} />}
-                  </Stack>
-                  {s.source === "database" && !s.envOverride && (
-                    <Typography
-                      variant="caption"
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(280px, 420px))" },
+                  gap: 2,
+                  alignItems: "start",
+                }}
+              >
+                {section.settings.map((s) => (
+                  <Stack key={s.key} sx={{ gap: 0.5, minWidth: 0 }}>
+                    <Stack
+                      direction="row"
                       sx={{
-                        color: "text.secondary",
-                        pl: 0.5,
+                        alignItems: "center",
+                        gap: 1,
+                        flexWrap: "wrap",
                       }}
                     >
-                      Source: database
-                    </Typography>
-                  )}
-                </Stack>
-              ))}
+                      <SettingField
+                        setting={s}
+                        value={localValues[s.key]}
+                        onChange={(v) => setLocalValues((prev) => ({ ...prev, [s.key]: v }))}
+                      />
+                      {s.envOverride && s.envVar && <EnvOverrideBadge envVar={s.envVar} />}
+                    </Stack>
+                    {s.source === "database" && !s.envOverride && (
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "text.secondary",
+                          pl: 0.5,
+                        }}
+                      >
+                        Source: database
+                      </Typography>
+                    )}
+                  </Stack>
+                ))}
+              </Box>
             </Stack>
           ))}
 
@@ -570,7 +573,7 @@ function ExportImportSection({
   };
 
   return (
-    <Paper variant="outlined" sx={{ p: 3 }}>
+    <Paper variant="outlined" sx={{ p: 2 }}>
       <Typography
         variant="subtitle1"
         gutterBottom
@@ -719,7 +722,7 @@ export function SystemSettings() {
   return (
     <Stack
       sx={{
-        gap: 3,
+        gap: 1.5,
       }}
     >
       <AdminPageHeader title="Settings" subtitle="Operator configuration" />

@@ -48,6 +48,7 @@ import { useAdminToast } from "../shared/AdminToast";
 import { TableEmptyState } from "../shared/TableEmptyState";
 import { TableSearchField, TableToolbar } from "../shared/TableToolbar";
 import { useClientPagination, useTextFilter } from "../shared/tableHooks";
+import { OvertureMaintenance } from "./OvertureMaintenance";
 
 interface OsmInfo {
   found: boolean;
@@ -1598,9 +1599,10 @@ export function DataWorkflowsPage() {
           }
         />
       </Box>
-      <Stack spacing={3}>
+      <Stack spacing={2}>
         <DataOperationsSection apiUrl={apiUrl} />
         <OsmSection osm={data.osm} />
+        <OvertureMaintenance apiUrl={apiUrl} />
         <GtfsSection
           feeds={data.gtfsFeeds}
           motisArchives={data.motisGtfsArchives ?? []}

@@ -81,7 +81,7 @@ export function CacheManager() {
       : "Clear the entire application cache (all integration and API caches)? This cannot be undone.";
 
   return (
-    <Stack sx={{ gap: 3 }}>
+    <Stack sx={{ gap: 2 }}>
       <AdminPageHeader
         title="Cache"
         subtitle="Inspect and clear the application cache"

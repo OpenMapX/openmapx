@@ -165,12 +165,12 @@ OVERPASS_SPACE=214748364800
 OVERPASS_FASTCGI_PROCESSES=4
 ```
 
-These resolve at render time, so change them in `.env`, then re-render and
-recreate the service for the change to take effect:
+These resolve at render time, so change them in `.env`, then re-render and apply
+the service configuration:
 
 ```bash
 pnpm openmapx compose render
-pnpm openmapx services recreate overpass
+pnpm openmapx services start overpass
 ```
 
 Once it's serving, Overpass keeps itself current by applying OSM's daily

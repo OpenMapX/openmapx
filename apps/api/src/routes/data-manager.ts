@@ -5,7 +5,9 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../db/index.js";
 import { dataManagerFeedState, dataManagerJobStages, dataManagerJobs } from "../db/schema.js";
 import { getProviderHealth } from "../services/provider-health/registry.js";
+import { writeAuditLog } from "../utils/audit-log.js";
 import { envString } from "../utils/env.js";
+import { systemMaintenanceLimit } from "../utils/rate-limit.js";
 import { tryAdminSession } from "../utils/require-admin.js";
 import { safeEqual } from "../utils/safe-equal.js";
 
@@ -490,6 +492,7 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
 
   app.post<{ Body?: { branch?: string; force?: boolean } }>(
     "/data-manager/transit/bump-transitous-ref",
+    { preHandler: [systemMaintenanceLimit.preHandler()] },
     async (req, reply) => {
       // Admin-session-only — bumps are explicit human decisions that need
       // an audit trail. A service token would let a leaked CI credential
@@ -505,13 +508,40 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
       }
 
       const body = req.body ?? {};
+      const branch = body.branch?.trim() || "main";
+      if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/.test(branch) || branch.includes("..")) {
+        return reply.code(400).send({ error: "Invalid Transitous branch name" });
+      }
       const proxied = await proxyToDataManager("POST", "/transit/bump", {
-        branch: body.branch,
+        branch,
         force: body.force === true,
         lockedBy: auth.userId ?? "admin",
       });
+      if (proxied.status >= 200 && proxied.status < 300) {
+        await writeAuditLog({
+          actorId: auth.userId ?? null,
+          targetType: "transit",
+          targetId: "transitous-lock",
+          action: "transit.lock.bump",
+          details: { branch, force: body.force === true },
+          request: req,
+        });
+      }
       reply.code(proxied.status);
       return proxied.body;
     },
   );
+
+  app.get("/data-manager/overture/status", async (req, reply) => {
+    const auth = await authenticateDataManager(req);
+    if (auth.kind === "denied") {
+      return reply.code(401).send({ error: "Authentication required" });
+    }
+    if (auth.kind === "token") {
+      return reply.code(403).send({ error: "Overture operator status requires an admin session" });
+    }
+    const proxied = await proxyToDataManager("GET", "/overture/status");
+    reply.code(proxied.status);
+    return proxied.body;
+  });
 }

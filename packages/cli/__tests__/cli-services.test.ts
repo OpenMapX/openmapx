@@ -1,8 +1,13 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { formatServicesTable, listServices } from "../src/commands/services";
+import {
+  formatServicesTable,
+  listServices,
+  registerServicesCommands,
+} from "../src/commands/services";
 import {
   disableSelectedServices,
   enableSelectedServices,
@@ -36,6 +41,16 @@ afterEach(() => {
 });
 
 describe("listServices", () => {
+  it("exposes update as the only image-replacement lifecycle name", () => {
+    const program = new Command();
+    registerServicesCommands(program);
+    const services = program.commands.find((command) => command.name() === "services");
+    const update = services?.commands.find((command) => command.name() === "update");
+    expect(update).toBeDefined();
+    expect(update?.aliases()).toEqual([]);
+    expect(services?.commands.some((command) => command.name() === "recreate")).toBe(false);
+  });
+
   it("lists installed services", async () => {
     writeManifest("alpha", { ...baseManifest, id: "alpha", provides: ["routing-engine"] });
     writeManifest("beta", { ...baseManifest, id: "beta", provides: ["geocoder"] });

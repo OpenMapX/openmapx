@@ -29,6 +29,7 @@ import { registerAdminComposeRoutes } from "./routes/admin-compose";
 import { adminExtensionsRoute } from "./routes/admin-extensions";
 import { adminServicesRoute } from "./routes/admin-services";
 import { adminSettingsRoute } from "./routes/admin-settings";
+import { adminSystemRoute } from "./routes/admin-system";
 import { attributionRoute } from "./routes/attribution";
 import { capabilitiesRoute } from "./routes/capabilities";
 import { dataManagerRoute } from "./routes/data-manager";
@@ -62,7 +63,7 @@ import {
   handleDataOperationJob,
   handleServiceBulkJob,
 } from "./services/admin-job-handlers";
-import { serviceRecreate, serviceRestart, serviceStart, serviceStop } from "./services/admin-ops";
+import { serviceApply, serviceRestart, serviceStart, serviceStop } from "./services/admin-ops";
 import { appLogger } from "./services/app-logger";
 import {
   filterGatedSources,
@@ -82,6 +83,7 @@ import { pruneOldRecords } from "./services/health-history";
 import { jobRunner } from "./services/job-runner";
 import { motisManager } from "./services/motis/manager";
 import { initServiceRegistry } from "./services/service-registry";
+import { handleSystemDiagnosticsJob, handleSystemUpdateJob } from "./services/system-maintenance";
 import { envInt, envString } from "./utils/env";
 import {
   authLimit,
@@ -153,11 +155,13 @@ server.setErrorHandler(uniformErrorHandler);
 
 // Run database migrations on startup (idempotent — skips already-applied migrations)
 const migrationsDir = join(import.meta.dirname ?? ".", "db", "migrations");
+let migrationsSucceeded = true;
 if (existsSync(migrationsDir)) {
   try {
     await migrate(db, { migrationsFolder: migrationsDir });
     server.log.info("Database migrations applied");
   } catch (err) {
+    migrationsSucceeded = false;
     server.log.error(err, "Database migration failed");
   }
 }
@@ -284,6 +288,7 @@ await server.register(dataManagerRoute, { prefix: "/api" });
 await server.register(adminSettingsRoute, { prefix: "/api" });
 await server.register(adminExtensionsRoute, { prefix: "/api" });
 await server.register(adminCacheRoute, { prefix: "/api" });
+await server.register(adminSystemRoute, { prefix: "/api" });
 await server.register(attributionRoute, { prefix: "/api" });
 await registerCapabilityBindingRoutes(server);
 await registerAdminComposeRoutes(server);
@@ -353,7 +358,7 @@ server.get("/api/id-schemes", async () =>
 );
 
 // Initialize job runner (picks up interrupted jobs from previous run)
-await jobRunner.initialize();
+await jobRunner.initialize({ completeRestartedUpdates: migrationsSucceeded });
 
 // Prune old health history records daily
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -394,15 +399,17 @@ jobRunner.register("service.restart", async (ctx) => {
   return { service, action: "restart" };
 });
 
-jobRunner.register("service.recreate", async (ctx) => {
+jobRunner.register("service.apply", async (ctx) => {
   const service = ctx.payload.service as string;
-  await serviceRecreate(service, ctx);
-  return { service, action: "recreate" };
+  await serviceApply(service, ctx);
+  return { service, action: "apply" };
 });
 
 jobRunner.register("data.operation", handleDataOperationJob);
 jobRunner.register("backup.operation", handleBackupOperationJob);
 jobRunner.register("service.bulk", handleServiceBulkJob);
+jobRunner.register("system.update", handleSystemUpdateJob);
+jobRunner.register("system.diagnostics", handleSystemDiagnosticsJob);
 
 jobRunner.register("integration.reload", async (ctx) => {
   await ctx.log("Reloading all integrations...");

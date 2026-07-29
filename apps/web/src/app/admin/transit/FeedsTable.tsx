@@ -4,8 +4,6 @@ import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import MenuItem from "@mui/material/MenuItem";
-import Pagination from "@mui/material/Pagination";
-import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -17,6 +15,8 @@ import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useMemo, useState } from "react";
+import { AdminTablePagination } from "@/components/admin/shared/AdminTablePagination";
+import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
 import { type TransitStateSummary, useTransitFeeds } from "@/lib/admin/transitHooks";
 
 const PAGE_SIZE = 50;
@@ -73,64 +73,63 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
     [state.feeds.byStatus],
   );
 
-  const totalPages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
-
   return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
-      <Stack
-        direction={{ xs: "column", sm: "row" }}
-        spacing={1.5}
-        sx={{
-          alignItems: { sm: "center" },
-          mb: 1.5,
-        }}
-      >
-        <Typography
-          variant="subtitle1"
-          sx={{
-            fontWeight: 700,
-          }}
+    <AdminTableSurface
+      title={`Feed state (${data?.total ?? 0})`}
+      toolbar={
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          sx={{ gap: 1, alignItems: { sm: "center" } }}
         >
-          Feed state ({data?.total ?? 0})
-        </Typography>
-        <Box sx={{ flex: 1 }} />
-        <TextField
-          select
-          size="small"
-          label="Region"
-          value={region}
-          onChange={(e) => {
-            setRegion(e.target.value);
-            setPage(0);
-          }}
-          sx={{ minWidth: 160 }}
-        >
-          <MenuItem value="">All regions</MenuItem>
-          {regionOptions.map((r) => (
-            <MenuItem key={r} value={r}>
-              {r}
-            </MenuItem>
-          ))}
-        </TextField>
-        <TextField
-          select
-          size="small"
-          label="Status"
-          value={status}
-          onChange={(e) => {
-            setStatus(e.target.value);
-            setPage(0);
-          }}
-          sx={{ minWidth: 160 }}
-        >
-          <MenuItem value="">All statuses</MenuItem>
-          {statusOptions.map((s) => (
-            <MenuItem key={s} value={s}>
-              {s}
-            </MenuItem>
-          ))}
-        </TextField>
-      </Stack>
+          <TextField
+            select
+            label="Region"
+            value={region}
+            onChange={(e) => {
+              setRegion(e.target.value);
+              setPage(0);
+            }}
+            sx={{ minWidth: 160 }}
+          >
+            <MenuItem value="">All regions</MenuItem>
+            {regionOptions.map((r) => (
+              <MenuItem key={r} value={r}>
+                {r}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            select
+            label="Status"
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setPage(0);
+            }}
+            sx={{ minWidth: 160 }}
+          >
+            <MenuItem value="">All statuses</MenuItem>
+            {statusOptions.map((s) => (
+              <MenuItem key={s} value={s}>
+                {s}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Stack>
+      }
+      pagination={
+        data ? (
+          <AdminTablePagination
+            count={data.total}
+            page={page}
+            rowsPerPage={PAGE_SIZE}
+            rowsPerPageOptions={[PAGE_SIZE]}
+            onPageChange={(_, nextPage) => setPage(nextPage)}
+            onRowsPerPageChange={() => setPage(0)}
+          />
+        ) : null
+      }
+    >
       {isLoading ? (
         <Box
           sx={{
@@ -142,7 +141,7 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
           <CircularProgress size={22} />
         </Box>
       ) : isError ? (
-        <Typography variant="body2" color="error">
+        <Typography variant="body2" color="error" sx={{ p: 2 }}>
           Failed to load feeds.
         </Typography>
       ) : !data || data.feeds.length === 0 ? (
@@ -150,99 +149,81 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
           variant="body2"
           sx={{
             color: "text.secondary",
+            p: 2,
           }}
         >
           No feeds match the current filter.
         </Typography>
       ) : (
-        <>
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Region</TableCell>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Validation</TableCell>
-                  <TableCell>Last fetched</TableCell>
-                  <TableCell>Last imported</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {data.feeds.map((feed) => (
-                  <TableRow key={feed.id} hover>
-                    <TableCell>
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Region</TableCell>
+                <TableCell>Name</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Validation</TableCell>
+                <TableCell>Last fetched</TableCell>
+                <TableCell>Last imported</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {data.feeds.map((feed) => (
+                <TableRow key={feed.id} hover>
+                  <TableCell>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontFamily: "monospace",
+                      }}
+                    >
+                      {feed.region}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Stack spacing={0.25}>
+                      <Typography variant="body2">{feed.name}</Typography>
                       <Typography
                         variant="caption"
                         sx={{
+                          color: "text.secondary",
                           fontFamily: "monospace",
                         }}
                       >
-                        {feed.region}
+                        {feed.id}
                       </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Stack spacing={0.25}>
-                        <Typography variant="body2">{feed.name}</Typography>
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            color: "text.secondary",
-                            fontFamily: "monospace",
-                          }}
-                        >
-                          {feed.id}
-                        </Typography>
-                      </Stack>
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        label={feed.status}
-                        color={statusColor(feed.status)}
-                        variant="outlined"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      {feed.validationStatus ? (
-                        <Tooltip title={feed.validationMessage ?? ""}>
-                          <Chip
-                            size="small"
-                            label={feed.validationStatus}
-                            color={validationColor(feed.validationStatus)}
-                            variant="outlined"
-                          />
-                        </Tooltip>
-                      ) : (
-                        "—"
-                      )}
-                    </TableCell>
-                    <TableCell>{formatTime(feed.lastFetchedAt)}</TableCell>
-                    <TableCell>{formatTime(feed.lastImportedAt)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-
-          {totalPages > 1 && (
-            <Stack
-              direction="row"
-              sx={{
-                justifyContent: "flex-end",
-                mt: 1.5,
-              }}
-            >
-              <Pagination
-                size="small"
-                count={totalPages}
-                page={page + 1}
-                onChange={(_, p) => setPage(p - 1)}
-              />
-            </Stack>
-          )}
-        </>
+                    </Stack>
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      size="small"
+                      label={feed.status}
+                      color={statusColor(feed.status)}
+                      variant="outlined"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    {feed.validationStatus ? (
+                      <Tooltip title={feed.validationMessage ?? ""}>
+                        <Chip
+                          size="small"
+                          label={feed.validationStatus}
+                          color={validationColor(feed.validationStatus)}
+                          variant="outlined"
+                        />
+                      </Tooltip>
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
+                  <TableCell>{formatTime(feed.lastFetchedAt)}</TableCell>
+                  <TableCell>{formatTime(feed.lastImportedAt)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
       )}
-    </Paper>
+    </AdminTableSurface>
   );
 }

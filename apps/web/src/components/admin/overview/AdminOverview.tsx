@@ -95,7 +95,7 @@ function StatCard({
   children: React.ReactNode;
 }) {
   return (
-    <Card variant="outlined">
+    <Card variant="outlined" sx={{ height: "100%" }}>
       <CardActionArea component={Link} href={href} sx={{ height: "100%" }}>
         <CardContent>
           <Stack
@@ -232,8 +232,8 @@ export function AdminOverview() {
       >
         <AdminPageHeader title="Overview" />
         <Grid container spacing={2}>
-          {[1, 2, 3, 4].map((i) => (
-            <Grid key={i} size={{ xs: 12, sm: 6, md: 3 }}>
+          {[1, 2, 3, 4, 5].map((i) => (
+            <Grid key={i} size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
               <Skeleton variant="rounded" height={130} />
             </Grid>
           ))}
@@ -251,22 +251,44 @@ export function AdminOverview() {
     (sum, entry) => sum + entry.missingCredentials,
     0,
   );
+  const generalAttention = data.attention.filter((item) => item.type !== "missing_credentials");
 
   return (
     <Stack
       sx={{
-        gap: 3,
+        gap: 2,
       }}
     >
       {/* Header */}
       <AdminPageHeader
         title="Overview"
-        actions={<HealthBadge status={data.systemHealth.status} />}
+        subtitle="System health and recent operations"
+        actions={
+          <>
+            <HealthBadge status={data.systemHealth.status} />
+            <Button
+              variant="outlined"
+              startIcon={<PlayArrowIcon />}
+              onClick={() => healthSweep.mutate()}
+              disabled={isBusy}
+            >
+              {healthSweep.isPending ? "Running…" : "Health checks"}
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<RefreshIcon />}
+              onClick={() => reloadMutation.mutate()}
+              disabled={isBusy}
+            >
+              {reloadMutation.isPending ? "Reloading…" : "Reload"}
+            </Button>
+          </>
+        }
       />
 
       {/* Summary cards */}
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
           <StatCard title="System Health" icon={<CheckCircleOutlineIcon />} href="/status">
             <Typography
               variant="h4"
@@ -296,7 +318,7 @@ export function AdminOverview() {
           </StatCard>
         </Grid>
 
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
           <StatCard title="Users" icon={<GroupIcon />} href="/admin/users">
             <Typography
               variant="h4"
@@ -332,7 +354,7 @@ export function AdminOverview() {
           </StatCard>
         </Grid>
 
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
           <StatCard title="Integrations" icon={<ExtensionIcon />} href="/admin/integrations">
             <Typography
               variant="h4"
@@ -376,7 +398,7 @@ export function AdminOverview() {
           </StatCard>
         </Grid>
 
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
           {data.services ? (
             <StatCard title="Services" icon={<DnsIcon />} href="/admin/services">
               <Typography
@@ -435,7 +457,7 @@ export function AdminOverview() {
           )}
         </Grid>
 
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
           <StatCard title="Credentials" icon={<KeyIcon />} href="/admin/integrations">
             <Typography
               variant="h4"
@@ -474,7 +496,7 @@ export function AdminOverview() {
         </Grid>
       </Grid>
       {/* Attention list */}
-      {data.attention.length > 0 && (
+      {generalAttention.length > 0 && (
         <Box>
           <Typography
             variant="subtitle1"
@@ -491,8 +513,8 @@ export function AdminOverview() {
             }}
           >
             {(attentionExpanded
-              ? data.attention
-              : data.attention.slice(0, COLLAPSED_LIST_LIMIT)
+              ? generalAttention
+              : generalAttention.slice(0, COLLAPSED_LIST_LIMIT)
             ).map((item) => (
               <Alert
                 key={`${item.type}-${item.message}`}
@@ -508,7 +530,7 @@ export function AdminOverview() {
                 {item.message}
               </Alert>
             ))}
-            {data.attention.length > COLLAPSED_LIST_LIMIT && (
+            {generalAttention.length > COLLAPSED_LIST_LIMIT && (
               <Button
                 size="small"
                 onClick={() => setAttentionExpanded((v) => !v)}
@@ -516,7 +538,7 @@ export function AdminOverview() {
               >
                 {attentionExpanded
                   ? "Show less"
-                  : `Show ${data.attention.length - COLLAPSED_LIST_LIMIT} more`}
+                  : `Show ${generalAttention.length - COLLAPSED_LIST_LIMIT} more`}
               </Button>
             )}
           </Stack>
@@ -592,44 +614,6 @@ export function AdminOverview() {
           )}
         </Box>
       )}
-      {/* Quick actions */}
-      <Box>
-        <Typography
-          variant="subtitle1"
-          gutterBottom
-          sx={{
-            fontWeight: 600,
-          }}
-        >
-          Quick Actions
-        </Typography>
-        <Stack
-          direction="row"
-          sx={{
-            gap: 1,
-            flexWrap: "wrap",
-          }}
-        >
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<PlayArrowIcon />}
-            onClick={() => healthSweep.mutate()}
-            disabled={isBusy}
-          >
-            {healthSweep.isPending ? "Running..." : "Run Health Checks"}
-          </Button>
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<RefreshIcon />}
-            onClick={() => reloadMutation.mutate()}
-            disabled={isBusy}
-          >
-            {reloadMutation.isPending ? "Reloading..." : "Reload Integrations"}
-          </Button>
-        </Stack>
-      </Box>
       <Divider />
       {/* Bottom row: Recent Activity + Active Jobs */}
       <Grid container spacing={3}>

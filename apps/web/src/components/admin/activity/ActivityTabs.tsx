@@ -1,6 +1,6 @@
 "use client";
 
-import Box from "@mui/material/Box";
+import Stack from "@mui/material/Stack";
 import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
 import { useState } from "react";
@@ -13,15 +13,9 @@ export function ActivityTabs() {
   const [tab, setTab] = useState(0);
 
   return (
-    <Box>
-      <Box sx={{ mb: 2 }}>
-        <AdminPageHeader title="Activity" />
-      </Box>
-      <Tabs
-        value={tab}
-        onChange={(_, v) => setTab(v as number)}
-        sx={{ mb: 3, borderBottom: 1, borderColor: "divider" }}
-      >
+    <Stack sx={{ gap: 2 }}>
+      <AdminPageHeader title="Activity" subtitle="Jobs, audit events, and application logs" />
+      <Tabs value={tab} onChange={(_, v) => setTab(v as number)} aria-label="Activity views">
         <Tab label="Jobs" />
         <Tab label="Audit Log" />
         <Tab label="Application Logs" />
@@ -29,6 +23,6 @@ export function ActivityTabs() {
       {tab === 0 && <JobList />}
       {tab === 1 && <AuditLog />}
       {tab === 2 && <AppLogViewer />}
-    </Box>
+    </Stack>
   );
 }

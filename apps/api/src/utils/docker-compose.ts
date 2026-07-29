@@ -35,11 +35,13 @@ export async function dockerComposePs(): Promise<PsEntry[]> {
 export async function dockerComposeAction(
   serviceId: string,
   action: "start" | "stop" | "restart" | "recreate" | "remove" | "pull",
+  options: { noDeps?: boolean } = {},
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   const serviceArgs = serviceId ? [serviceId] : [];
+  const noDepsArgs = options.noDeps && serviceId ? ["--no-deps"] : [];
   const args =
     action === "start"
-      ? ["up", "-d", ...serviceArgs]
+      ? ["up", "-d", ...noDepsArgs, ...serviceArgs]
       : action === "pull"
         ? // Re-fetch the image so a moving tag (e.g. :latest) is refreshed; a
           // following `up -d` then recreates the container on the new digest.
@@ -47,7 +49,7 @@ export async function dockerComposeAction(
         : action === "recreate"
           ? // Force-recreate so a rotated secret (same key/path, new file content)
             // is always picked up, not just config-shape changes.
-            ["up", "-d", "--force-recreate", ...serviceArgs]
+            ["up", "-d", "--force-recreate", ...noDepsArgs, ...serviceArgs]
           : action === "stop"
             ? ["stop", ...serviceArgs]
             : action === "remove"

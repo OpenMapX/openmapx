@@ -5,7 +5,6 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
-import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -15,7 +14,10 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import { AdminTablePagination } from "@/components/admin/shared/AdminTablePagination";
+import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
+import { useClientPagination } from "@/components/admin/shared/tableHooks";
 import { useProviderHealth, useResetProvider } from "@/lib/admin/transitHooks";
 
 function formatPercent(rate: number | undefined): string {
@@ -41,6 +43,8 @@ export function ProviderHealthTable() {
   const showToast = useAdminToast();
   const { data, isLoading, isError } = useProviderHealth();
   const resetMutation = useResetProvider();
+  const providers = data?.providers ?? [];
+  const { paged, paginationProps } = useClientPagination(providers, 25);
 
   const onReset = (providerId: string) => {
     resetMutation.mutate(providerId, {
@@ -51,33 +55,11 @@ export function ProviderHealthTable() {
   };
 
   return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
-      <Stack
-        direction="row"
-        spacing={1}
-        sx={{
-          alignItems: "center",
-          mb: 1.5,
-        }}
-      >
-        <Typography
-          variant="subtitle1"
-          sx={{
-            fontWeight: 700,
-          }}
-        >
-          Provider health
-        </Typography>
-        <Box sx={{ flex: 1 }} />
-        <Typography
-          variant="caption"
-          sx={{
-            color: "text.secondary",
-          }}
-        >
-          Sliding-window failure rate · EMA latency · cooldown state
-        </Typography>
-      </Stack>
+    <AdminTableSurface
+      title="Provider health"
+      description="Sliding-window failure rate · EMA latency · cooldown state"
+      pagination={<AdminTablePagination {...paginationProps} />}
+    >
       {isLoading ? (
         <Box
           sx={{
@@ -117,7 +99,7 @@ export function ProviderHealthTable() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {data.providers.map((p) => {
+              {paged.map((p) => {
                 const disabled = isDisabled(p.disabledUntil);
                 return (
                   <TableRow key={p.id} hover>
@@ -195,6 +177,6 @@ export function ProviderHealthTable() {
           </Table>
         </TableContainer>
       )}
-    </Paper>
+    </AdminTableSurface>
   );
 }

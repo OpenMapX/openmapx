@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob, adminJobLog } from "../db/schema";
 import { dbActorId } from "../utils/actor";
+import { isAppApiRestartCheckpoint } from "./system-update-state";
 
 export interface JobContext {
   jobId: string;
@@ -10,6 +11,8 @@ export interface JobContext {
   signal: AbortSignal;
   log(line: string, stream?: "stdout" | "stderr"): Promise<void>;
   setProgress(progress: number): Promise<void>;
+  /** Persist restart-safe state before an operation intentionally replaces app-api. */
+  checkpoint(result: Record<string, unknown>, progress?: number): Promise<void>;
 }
 
 type JobHandler = (ctx: JobContext) => Promise<Record<string, unknown> | undefined>;
@@ -56,8 +59,55 @@ class AdminJobRunner {
     return result.length > 0;
   }
 
-  async initialize(): Promise<void> {
-    // Mark jobs that were running when the api process died as failed.
+  async findActive(type: string): Promise<{ id: string; status: string } | null> {
+    const [job] = await db
+      .select({ id: adminJob.id, status: adminJob.status })
+      .from(adminJob)
+      .where(and(eq(adminJob.type, type), inArray(adminJob.status, ["queued", "running"])))
+      .orderBy(asc(adminJob.createdAt))
+      .limit(1);
+    return job ?? null;
+  }
+
+  async initialize(options: { completeRestartedUpdates?: boolean } = {}): Promise<void> {
+    // An application update deliberately replaces app-api as its final step.
+    // Reaching this process initialization proves the replacement container
+    // started; the caller separately reports whether startup migrations
+    // completed. Finalize only jobs that wrote the explicit pre-restart
+    // checkpoint and passed that migration gate. Any other interrupted job
+    // remains a failure (including an update that died before the checkpoint).
+    const interruptedUpdates = await db
+      .select({ id: adminJob.id, result: adminJob.result })
+      .from(adminJob)
+      .where(and(eq(adminJob.status, "running"), eq(adminJob.type, "system.update")));
+    const checkpointedUpdateIds = interruptedUpdates
+      .filter((job) => isAppApiRestartCheckpoint(job.result))
+      .map((job) => job.id);
+    const completedUpdateIds =
+      options.completeRestartedUpdates === false ? [] : checkpointedUpdateIds;
+    if (completedUpdateIds.length > 0) {
+      await db
+        .update(adminJob)
+        .set({
+          status: "success",
+          finishedAt: new Date(),
+          progress: 100,
+          result: { phase: "complete", completedAfterRestart: true },
+        })
+        .where(inArray(adminJob.id, completedUpdateIds));
+    }
+    if (options.completeRestartedUpdates === false && checkpointedUpdateIds.length > 0) {
+      await db
+        .update(adminJob)
+        .set({
+          status: "failed",
+          finishedAt: new Date(),
+          error: "Update replaced app-api, but database migrations did not complete",
+        })
+        .where(inArray(adminJob.id, checkpointedUpdateIds));
+    }
+
+    // Mark every other job that was running when the api process died as failed.
     //
     // Earlier this re-queued them, but that turned a job that crashed
     // the api once into a crash loop: the job re-runs immediately on
@@ -75,7 +125,11 @@ class AdminJobRunner {
         finishedAt: new Date(),
         error: "Job interrupted by api restart — re-run if still needed",
       })
-      .where(eq(adminJob.status, "running"));
+      .where(
+        completedUpdateIds.length > 0
+          ? and(eq(adminJob.status, "running"), notInArray(adminJob.id, completedUpdateIds))
+          : eq(adminJob.status, "running"),
+      );
     void this.pump();
   }
 
@@ -175,6 +229,12 @@ class AdminJobRunner {
       },
       setProgress: async (progress) => {
         await db.update(adminJob).set({ progress }).where(eq(adminJob.id, jobId));
+      },
+      checkpoint: async (result, progress) => {
+        await db
+          .update(adminJob)
+          .set({ result, ...(progress === undefined ? {} : { progress }) })
+          .where(eq(adminJob.id, jobId));
       },
     };
 

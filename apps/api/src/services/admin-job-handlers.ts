@@ -13,10 +13,12 @@ type DataOperation =
   | "convert-overpass"
   | "link"
   | "clean"
-  | "generate-api-keys";
+  | "generate-api-keys"
+  | "overture-sync"
+  | "overture-conflate";
 
 type BackupOperation = "create" | "restore" | "delete";
-type BulkServiceAction = "start" | "stop" | "restart" | "recreate" | "build";
+type BulkServiceAction = "start" | "stop" | "restart" | "update" | "build";
 
 function nonEmptyString(input: unknown): string | null {
   if (typeof input !== "string") return null;
@@ -115,6 +117,7 @@ export async function handleDataOperationJob(ctx: JobContext): Promise<Record<st
     target?: string;
     repoUrl?: string;
     output?: string;
+    restart?: boolean;
   };
 
   const op = payload.operation;
@@ -206,6 +209,23 @@ export async function handleDataOperationJob(ctx: JobContext): Promise<Record<st
         const safe = assertInsideRepo(output, "output");
         args.push("--output", safe);
       }
+      break;
+    }
+    case "overture-sync": {
+      args.push("overture-sync");
+      const region = nonEmptyString(payload.region);
+      if (!region) throw new Error("overture-sync requires region");
+      assertRegion(region);
+      args.push(region);
+      break;
+    }
+    case "overture-conflate": {
+      args.push("overture-conflate");
+      const region = nonEmptyString(payload.region);
+      if (!region) throw new Error("overture-conflate requires region");
+      assertRegion(region);
+      args.push(region);
+      if (payload.restart === true) args.push("--restart");
       break;
     }
     default:

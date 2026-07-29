@@ -115,6 +115,8 @@ export const serviceActionLimit = new RateLimiter({
 
 export const storeInstallLimit = new RateLimiter({ max: 1, windowMs: 30_000 });
 
+export const systemMaintenanceLimit = new RateLimiter({ max: 1, windowMs: 30_000 });
+
 export const userModerationLimit = new RateLimiter({ max: 5, windowMs: 60_000 });
 
 export const emailTestLimit = new RateLimiter({ max: 1, windowMs: 15_000 });

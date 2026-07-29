@@ -149,11 +149,11 @@ panel, then the schema default. The env-var form is `SERVICE_VALHALLA_<KEY>`:
 SERVICE_VALHALLA_BUILD_ELEVATION=false
 ```
 
-Because config resolves at render time, re-render and recreate after a change:
+Because config resolves at render time, re-render and apply after a change:
 
 ```bash
 pnpm openmapx compose render
-pnpm openmapx services recreate valhalla
+pnpm openmapx services start valhalla
 ```
 
 The deeper tuning knobs live in the bind-mounted config file at

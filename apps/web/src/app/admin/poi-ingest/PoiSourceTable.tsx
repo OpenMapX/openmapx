@@ -7,7 +7,6 @@ import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import MenuItem from "@mui/material/MenuItem";
-import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -19,7 +18,10 @@ import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useMemo, useState } from "react";
+import { AdminTablePagination } from "@/components/admin/shared/AdminTablePagination";
+import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
+import { useClientPagination } from "@/components/admin/shared/tableHooks";
 import {
   type PoiIngestStateSummary,
   type PoiSourceSummary,
@@ -59,6 +61,8 @@ export function PoiSourceTable({
   const filters = useMemo(() => ({ domain, status }), [domain, status]);
   const { data, isLoading, isError } = usePoiIngestSources(filters);
   const trigger = useTriggerPoiIngest();
+  const rows = data ?? [];
+  const { paged, paginationProps } = useClientPagination(rows, 25);
 
   const domainOptions = useMemo(() => Object.keys(state.byDomain).sort(), [state.byDomain]);
   const statusOptions = useMemo(() => Object.keys(state.byStatus).sort(), [state.byStatus]);
@@ -84,55 +88,45 @@ export function PoiSourceTable({
   };
 
   return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
-      <Stack
-        direction={{ xs: "column", sm: "row" }}
-        spacing={1.5}
-        sx={{
-          alignItems: { sm: "center" },
-          mb: 1.5,
-        }}
-      >
-        <Typography
-          variant="subtitle1"
-          sx={{
-            fontWeight: 700,
-          }}
-        >
-          Sources ({data?.length ?? 0})
-        </Typography>
-        <Box sx={{ flex: 1 }} />
-        <TextField
-          select
-          size="small"
-          label="Domain"
-          value={domain}
-          onChange={(e) => setDomain(e.target.value)}
-          sx={{ minWidth: 160 }}
-        >
-          <MenuItem value="">All domains</MenuItem>
-          {domainOptions.map((d) => (
-            <MenuItem key={d} value={d}>
-              {d}
-            </MenuItem>
-          ))}
-        </TextField>
-        <TextField
-          select
-          size="small"
-          label="Status"
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          sx={{ minWidth: 160 }}
-        >
-          <MenuItem value="">All statuses</MenuItem>
-          {statusOptions.map((s) => (
-            <MenuItem key={s} value={s}>
-              {s}
-            </MenuItem>
-          ))}
-        </TextField>
-      </Stack>
+    <AdminTableSurface
+      title={`Sources (${rows.length})`}
+      description="Configured static and live ingest sources"
+      toolbar={
+        <Stack direction="row" sx={{ gap: 1, flexWrap: "wrap" }}>
+          <TextField
+            select
+            size="small"
+            label="Domain"
+            value={domain}
+            onChange={(e) => setDomain(e.target.value)}
+            sx={{ minWidth: 160 }}
+          >
+            <MenuItem value="">All domains</MenuItem>
+            {domainOptions.map((d) => (
+              <MenuItem key={d} value={d}>
+                {d}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            select
+            size="small"
+            label="Status"
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            sx={{ minWidth: 160 }}
+          >
+            <MenuItem value="">All statuses</MenuItem>
+            {statusOptions.map((s) => (
+              <MenuItem key={s} value={s}>
+                {s}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Stack>
+      }
+      pagination={<AdminTablePagination {...paginationProps} />}
+    >
       {isLoading ? (
         <Box
           sx={{
@@ -174,7 +168,7 @@ export function PoiSourceTable({
               </TableRow>
             </TableHead>
             <TableBody>
-              {data.map((row) => {
+              {paged.map((row) => {
                 const hasLive = row.kinds.includes("live");
                 const isBundled = row.kinds.includes("bundled");
                 return (
@@ -302,6 +296,6 @@ export function PoiSourceTable({
           </Table>
         </TableContainer>
       )}
-    </Paper>
+    </AdminTableSurface>
   );
 }

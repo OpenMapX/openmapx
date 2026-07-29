@@ -97,7 +97,8 @@ The backend control plane, with sub-pages for the day-to-day work:
 - **Compose preview** — the generated `docker-compose` file, so you can see what
   the renderer will do before bringing the stack up.
 - **Data workflows** — the inventory of downloaded data (OSM extracts, GTFS
-  feeds, tiles, styles) plus the GTFS import controls.
+  feeds, tiles, styles), GTFS import controls, and Overture Places release and
+  durable OSM↔GERS link operations.
 - **Backups** — the on-disk snapshot manager. See [Backup and
   restore](./backup-and-restore.md).
 
@@ -105,11 +106,20 @@ The full picture of services and the `openmapx` CLI that backs these pages is in
 [Services administration](./services-administration.md) and [Managing
 services](../install/managing-services.md).
 
+### Maintenance *(self-hosted only)*
+
+Stages current core images without restarting containers, compares them with
+the running application, and updates Data Manager, Web, and API in a controlled
+order. Updates create a database backup by default and checkpoint the operation
+before replacing the API, so the new API process can finalize the job after its
+migrations succeed. The pre-update backup is recommended but optional in the
+confirmation dialog. The same page runs the CLI-equivalent deep service probes.
+
 ### Transit
 
-The public-transit data pipeline: the Transitous feed snapshot, per-feed import
-state and expiry, provider health, and the recent and in-flight pipeline jobs
-that keep the transit engine's data fresh.
+The public-transit data pipeline: the Transitous feed snapshot, audited catalog
+pin changes, per-feed import state and expiry, provider health, and the recent
+and in-flight pipeline jobs that keep the transit engine's data fresh.
 
 ### POI ingest
 
@@ -149,6 +159,29 @@ A field pinned by an env var is read-only, because the environment always wins.
 Settings can be exported and re-imported as JSON (secrets excluded). For how the
 cascade and `infra/docker/.env` fit together, see
 [Configuration](../install/configuration.md).
+
+## CLI coverage and deliberate exclusions
+
+The panel covers the routine operator workflows while keeping development-only
+and unusually destructive primitives in the CLI.
+
+| CLI area | Admin equivalent |
+| --- | --- |
+| Service discovery, selection, lifecycle, builds, status, and logs | **Services** catalog and detail pages |
+| Core image pull/update and deep checks | **Maintenance** |
+| OSM, GTFS, styles, builds, links, cleanup, and Overture full sync/resume/status | **Services → Data workflows** |
+| Extension browse/install/update/remove | **Extensions** |
+| User roles and account administration | **Users** |
+| Backup create/list/restore/delete | **Services → Backups** |
+| Cache inspection and safe namespace clearing | **Cache** |
+| POI ingest state/list/detail/sync/live-only sync | **POI ingest** |
+| Transitous lock inspection and audited pin bump | **Transit** |
+
+Integration scaffolding, validation, building, and packaging remain CLI-only
+because they are developer workflows, not production administration. Raw
+`compose down --volumes`, unrestricted Redis `FLUSHDB`, and individual low-level
+Overture pull/ingest/extract phases are also deliberately not exposed; the panel
+offers the safer orchestrated operation instead.
 
 ## Where to go next
 

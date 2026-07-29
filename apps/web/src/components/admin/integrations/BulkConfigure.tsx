@@ -28,6 +28,7 @@ import type { CredentialSetup } from "@openmapx/integration-framework";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
+import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfigSchemaForm } from "./ConfigSchemaForm";
 import { CredentialSetupGuide } from "./CredentialSetupGuide";
@@ -135,41 +136,24 @@ export function BulkConfigure() {
         gap: 2,
       }}
     >
-      <Stack
-        direction="row"
-        sx={{
-          alignItems: { xs: "flex-start", sm: "center" },
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 1,
-        }}
-      >
-        <Typography
-          variant="h5"
-          sx={{
-            fontWeight: 700,
-          }}
-        >
-          Bulk Configure Integrations
-        </Typography>
-        <Stack
-          direction="row"
-          sx={{
-            gap: 0.75,
-            flexWrap: "wrap",
-          }}
-        >
-          <Chip label={`${sortedIntegrations.length} total`} size="small" variant="outlined" />
-          {unconfiguredCount > 0 && (
-            <Chip
-              label={`${unconfiguredCount} unconfigured`}
-              size="small"
-              color="warning"
-              variant="outlined"
-            />
-          )}
-        </Stack>
-      </Stack>
+      <AdminPageHeader
+        title="Bulk configure integrations"
+        subtitle="Review editable configuration and credentials across providers"
+        backHref="/admin/integrations"
+        backLabel="Back to integrations"
+        actions={
+          <>
+            <Chip label={`${sortedIntegrations.length} total`} variant="outlined" />
+            {unconfiguredCount > 0 && (
+              <Chip
+                label={`${unconfiguredCount} unconfigured`}
+                color="warning"
+                variant="outlined"
+              />
+            )}
+          </>
+        }
+      />
       <Typography
         variant="body2"
         sx={{

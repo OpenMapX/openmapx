@@ -34,6 +34,7 @@ import { useServicesList } from "@/hooks/useServices";
 import { useEnv } from "@/lib/EnvProvider";
 import { StatusBadge } from "../integrations/StatusBadge";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
+import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { useAdminToast } from "../shared/AdminToast";
 import { ServiceStatusChip } from "../shared/ServiceStatusChip";
 import { TableEmptyState } from "../shared/TableEmptyState";
@@ -41,7 +42,7 @@ import { useClientPagination } from "../shared/tableHooks";
 
 type QualityFilter = "all" | ServiceQuality;
 
-type BulkAction = "start" | "stop" | "restart" | "recreate" | "build";
+type BulkAction = "start" | "stop" | "restart" | "update" | "build";
 
 interface ServiceSelectionSummary {
   source: "env" | "file" | "default";
@@ -537,10 +538,10 @@ export function ServiceCatalog() {
             <Button
               size="small"
               variant="outlined"
-              onClick={() => queueBulkAction("recreate")}
+              onClick={() => queueBulkAction("update")}
               disabled={bulkMutation.isPending || selectedIds.size === 0}
             >
-              Recreate Selected
+              Update selected
             </Button>
             <Button
               size="small"
@@ -621,59 +622,63 @@ export function ServiceCatalog() {
         </Stack>
         {isLoading && <CircularProgress size={20} />}
       </Stack>
-      <Stack
-        direction="row"
-        sx={{
-          gap: 1.5,
-          flexWrap: "wrap",
-        }}
-      >
-        <TextField
-          size="small"
-          placeholder="Search by name, ID, or capability…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-            },
-          }}
-          sx={{ minWidth: 280 }}
-        />
-        <FormControl size="small" sx={{ minWidth: 160 }}>
-          <Select
-            value={quality}
-            onChange={(e) => setQuality(e.target.value as QualityFilter)}
-            displayEmpty
+      <AdminTableSurface
+        toolbar={
+          <Stack
+            direction="row"
+            sx={{
+              gap: 1,
+              flexWrap: "wrap",
+            }}
           >
-            <MenuItem value="all">All quality tiers</MenuItem>
-            <MenuItem value="built-in">Built-in</MenuItem>
-            <MenuItem value="community-verified">Community (verified)</MenuItem>
-            <MenuItem value="community">Community</MenuItem>
-          </Select>
-        </FormControl>
-      </Stack>
-      {isError && (
-        <Alert
-          severity="error"
-          action={
-            <Typography
-              variant="body2"
-              sx={{ cursor: "pointer", textDecoration: "underline" }}
-              onClick={() => refetch()}
-            >
-              Retry
-            </Typography>
-          }
-        >
-          Failed to load services. The backend may not be running yet.
-        </Alert>
-      )}
-      <Paper variant="outlined">
+            <TextField
+              size="small"
+              placeholder="Search by name, ID, or capability…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon fontSize="small" />
+                    </InputAdornment>
+                  ),
+                },
+              }}
+              sx={{ minWidth: 280 }}
+            />
+            <FormControl size="small" sx={{ minWidth: 160 }}>
+              <Select
+                value={quality}
+                onChange={(e) => setQuality(e.target.value as QualityFilter)}
+                displayEmpty
+              >
+                <MenuItem value="all">All quality tiers</MenuItem>
+                <MenuItem value="built-in">Built-in</MenuItem>
+                <MenuItem value="community-verified">Community (verified)</MenuItem>
+                <MenuItem value="community">Community</MenuItem>
+              </Select>
+            </FormControl>
+          </Stack>
+        }
+        pagination={<AdminTablePagination {...paginationProps} />}
+      >
+        {isError && (
+          <Alert
+            severity="error"
+            action={
+              <Typography
+                variant="body2"
+                sx={{ cursor: "pointer", textDecoration: "underline" }}
+                onClick={() => refetch()}
+              >
+                Retry
+              </Typography>
+            }
+          >
+            Failed to load services. The backend may not be running yet.
+          </Alert>
+        )}
         <TableContainer>
           <Table size="small">
             <TableHead>
@@ -769,8 +774,7 @@ export function ServiceCatalog() {
             </TableBody>
           </Table>
         </TableContainer>
-        <AdminTablePagination {...paginationProps} />
-      </Paper>
+      </AdminTableSurface>
       {!isLoading && !isError && filtered.length > 0 && (
         <Typography
           variant="caption"
