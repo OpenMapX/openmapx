@@ -165,15 +165,15 @@ pnpm openmapx services logs app-api --tail 100
 ```
 
 A successful upgrade logs `Database migrations applied`. If a migration fails,
-the error is logged there — this is exactly the situation the
-[pre-upgrade backup](#1-back-up-first) exists to protect against, so restore the
-snapshot before investigating.
+the error is logged there. If you created an optional
+[pre-upgrade backup](#1-back-up-first), restore it before attempting a rollback.
 
 :::caution[Migrations move forward only]
 Drizzle migrations are forward-only — there is no automatic down-migration. Once a
 new `app-api` has migrated the database, rolling back to an older app image is not
-supported unless you also restore the matching database backup. This is why the
-backup in step 1 is non-negotiable for any upgrade that crosses a schema change.
+supported unless you also restore the matching database backup. For upgrades
+that cross a schema change, consider taking the optional backup in step 1 when
+the deployment contains state you cannot readily recreate.
 :::
 
 ## 6. Verify the upgrade
