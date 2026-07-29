@@ -154,19 +154,28 @@ async function* iterate(log: PoiSourceLogger): AsyncIterable<PoiRow> {
   }
   const tariffMap = buildLtTariffMapById(tariffs);
 
-  // Composite country+party+id keys are unique per the OCPI spec, but dedupe
-  // defensively so a real-world collision never reaches the Postgres upsert
-  // and aborts the whole batch with a duplicate PK error. Keeps the FIRST.
+  // Dedupe by composite poiId. Two sources of duplicates: (1) the fixed-step
+  // pagination in the client intentionally overlaps offset windows, so the same
+  // location legitimately appears on adjacent pages; (2) a real composite-key
+  // collision must never reach the Postgres upsert and abort the batch on a
+  // duplicate PK. Keeps the FIRST. The overlap count is expected (hundreds), so
+  // log one summary line rather than a warning per dropped row.
   const seen = new Set<string>();
+  let dropped = 0;
   for (const location of locations) {
     const row = mapLocationToRow(location, tariffMap);
     if (!row) continue;
     if (seen.has(row.poiId)) {
-      log.warn(`lt-vialietuva-parser: dropping duplicate location for poiId ${row.poiId}`);
+      dropped += 1;
       continue;
     }
     seen.add(row.poiId);
     yield row;
+  }
+  if (dropped > 0) {
+    log.info(
+      `lt-vialietuva-parser: ${seen.size} unique stations; dropped ${dropped} duplicate/overlapping rows (pagination overlap)`,
+    );
   }
 }
 

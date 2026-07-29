@@ -25,18 +25,22 @@ async function collect() {
 }
 
 describe("parseBeFlanders", () => {
-  it("groups rows sharing a uniek_identificatienummer into one station, merging connectors", async () => {
+  it("groups connector rows sharing a location-id prefix (before '__') into one station", async () => {
     const { rows, fetchMock } = await collect();
-    // 10 fixture rows: 2 share "shared-cluster-1" → merge into 1 station, so
-    // 9 distinct stations total.
-    expect(rows).toHaveLength(9);
+    // 10 fixture rows span 2 physical stations: Roderveldlaan 2 (2 rows sharing a
+    // synthetic id with no "__" separator) and Roderveldlaan 3 (8 real rows all
+    // sharing the prefix "469e655a-…" before "__"). Grouping on the prefix
+    // collapses the 8 connector rows into one station → 2 stations total.
+    expect(rows).toHaveLength(2);
 
-    const merged = rows.find(
-      (r) => (r.payload.connectors as Array<{ type?: string }>).length === 2,
-    );
-    expect(merged).toBeDefined();
-    const types = (merged?.payload.connectors as Array<{ type?: string }>).map((c) => c.type);
-    expect(new Set(types)).toEqual(new Set(["Type 2", "Type 1"]));
+    const rv2 = rows.find((r) => r.payload.name === "50 five – Roderveldlaan 2");
+    const rv2Types = (rv2?.payload.connectors as Array<{ type?: string }>).map((c) => c.type);
+    expect(new Set(rv2Types)).toEqual(new Set(["Type 2", "Type 1"]));
+
+    const rv3 = rows.find((r) => r.payload.name === "50 five – Roderveldlaan 3");
+    expect(rv3).toBeDefined();
+    // 8 rows → 9 connector entries (one row is a compound "CCS; Tesla" DC charger).
+    expect((rv3?.payload.connectors as unknown[]).length).toBe(9);
 
     // Pagination never needed since the fixture page is well under PAGE_SIZE.
     expect(fetchMock).not.toHaveBeenCalled();
@@ -50,19 +54,21 @@ describe("parseBeFlanders", () => {
     expect(row?.payload.coordinates).toEqual([4.437802, 51.19133104]);
   });
 
-  it("splits a compound connector string on '; ' into separate connectors", async () => {
+  it("splits a compound connector string on '; ' into separate DC connectors", async () => {
     const { rows } = await collect();
-    const compound = rows.find((r) =>
+    // The "IEC_62196_T2_COMBO; TESLA_S" row splits into a CCS + a Tesla
+    // connector, both DC. That row is now merged into the Roderveldlaan 3
+    // station alongside its other (Type 2) connectors, so assert those two
+    // specific connectors are present rather than the station's whole set.
+    const station = rows.find((r) =>
       (r.payload.connectors as Array<{ type?: string }>).some((c) => c.type === "CCS"),
     );
-    expect(compound).toBeDefined();
-    const types = (compound?.payload.connectors as Array<{ type?: string }>).map((c) => c.type);
-    expect(new Set(types)).toEqual(new Set(["CCS", "Tesla"]));
-    expect(
-      (compound?.payload.connectors as Array<{ currentType?: string }>).every(
-        (c) => c.currentType === "DC",
-      ),
-    ).toBe(true);
+    expect(station).toBeDefined();
+    const conns = station?.payload.connectors as Array<{ type?: string; currentType?: string }>;
+    const ccs = conns.find((c) => c.type === "CCS");
+    const tesla = conns.find((c) => c.type === "Tesla");
+    expect(ccs?.currentType).toBe("DC");
+    expect(tesla?.currentType).toBe("DC");
   });
 
   it("maps station-level fields (name, address, operator, status, sourceUrl)", async () => {

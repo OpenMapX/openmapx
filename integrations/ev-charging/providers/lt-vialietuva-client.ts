@@ -158,16 +158,19 @@ async function fetchAllPages<T>(url: string, log: PoiSourceLogger): Promise<T[]>
     } else if (pages === 0) {
       break;
     }
-    if (page.items.length === 0) break;
-    // Advance by the ACTUAL item count, not the requested `limit`: the live
-    // feed has an off-by-one quirk where `limit=N` returns only N-1 items
-    // (confirmed against the live API — `?offset=0&limit=5` returns 4 items,
-    // and the next page's first item is the SAME as this page's last, not
-    // the record after it). Advancing by a fixed PAGE_LIMIT would silently
-    // skip one location per page (~15 lost stations over the full feed);
-    // advancing by items.length instead causes a harmless one-item overlap
-    // that the caller's poiId dedupe already absorbs.
-    offset += page.items.length;
+    // Advance by a FIXED page size, NOT the returned item count. The Via
+    // Lietuva /locations server is flaky: for `limit=200` it returns a
+    // variable, smaller window (~140–190 items) whose ids are NOT contiguous
+    // with the previous page (page 0 can end at id 1650 while page 1 starts at
+    // 1525). Stepping by items.length therefore leaves GAPS as well as
+    // overlaps and drops ~2.5% of stations; a fixed offset step lets the loop
+    // sweep the whole range and the caller's composite-key dedupe absorbs the
+    // (now larger) overlap. The header over-reports — `x-total-count` ~2986
+    // while the API only ever serves ~1838 distinct locations no matter how
+    // you page — so it is a safe upper bound to drive the loop to, never an
+    // under-count that would stop early. Don't break on an empty page: a mid-
+    // range gap must not end the sweep before offset reaches `total`.
+    offset += PAGE_LIMIT;
     if (total !== null && offset >= total) break;
     if (pages === MAX_PAGES - 1) {
       log.warn(`lt-vialietuva-client: page cap (${MAX_PAGES}) hit for ${url} — data truncated`);

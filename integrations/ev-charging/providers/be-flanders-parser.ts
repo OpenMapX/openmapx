@@ -126,11 +126,14 @@ interface StationGroup {
 
 /**
  * Groups per-connector WFS rows into one row per physical station. The feed's
- * `uniek_identificatienummer` identifies the connector cluster; rows sharing
- * it are merged, summing/concatenating their connectors. When it's missing
- * (defensive — not observed in practice), rounded coordinates (~1m) stand in
- * so at least co-located rows still merge instead of each becoming its own
- * station.
+ * `uniek_identificatienummer` is `<locationId>__<connectorId>` — the segment
+ * BEFORE "__" is the physical-station id (verified against the live feed: those
+ * prefixes map 1:1 to distinct coordinates — no prefix spans two sites and no
+ * site carries two prefixes), so a hub's many connector rows collapse into one
+ * station instead of one marker per connector. The whole value is unique per
+ * row, so grouping on it (the previous behaviour) produced no merging at all.
+ * Falls back to the whole value, then to rounded coordinates (~1m), when the
+ * "__" separator is absent (defensive — not observed in practice).
  */
 function ingestFeature(feature: BeFlandersFeature, groups: Map<string, StationGroup>): void {
   const props = feature.properties;
@@ -139,8 +142,9 @@ function ingestFeature(feature: BeFlandersFeature, groups: Map<string, StationGr
   if (!coordinates) return;
   const [lng, lat] = coordinates;
 
-  const rawKey = cleanString(props.uniek_identificatienummer);
-  const groupKey = rawKey ?? `coord:${lat.toFixed(5)}:${lng.toFixed(5)}`;
+  const rawUid = cleanString(props.uniek_identificatienummer);
+  const stationKey = rawUid ? rawUid.split("__")[0] || rawUid : undefined;
+  const groupKey = stationKey ?? `coord:${lat.toFixed(5)}:${lng.toFixed(5)}`;
 
   const existing = groups.get(groupKey);
   if (existing) {
