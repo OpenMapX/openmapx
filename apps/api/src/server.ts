@@ -64,6 +64,7 @@ import {
   handleServiceBulkJob,
 } from "./services/admin-job-handlers";
 import { serviceApply, serviceRestart, serviceStart, serviceStop } from "./services/admin-ops";
+import { currentAppApiRuntimeInfo } from "./services/app-api-replacement";
 import { appLogger } from "./services/app-logger";
 import {
   filterGatedSources,
@@ -357,9 +358,6 @@ server.get("/api/id-schemes", async () =>
   })),
 );
 
-// Initialize job runner (picks up interrupted jobs from previous run)
-await jobRunner.initialize({ completeRestartedUpdates: migrationsSucceeded });
-
 // Prune old health history records daily
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const AUDIT_RETENTION_DAYS = envInt("AUDIT_LOG_RETENTION_DAYS", 90);
@@ -454,6 +452,14 @@ try {
   server.log.error(err);
   process.exit(1);
 }
+
+// Only complete a checkpointed self-update after the replacement API is
+// genuinely listening, migrations succeeded, and Docker confirms that this
+// process is running the exact image pulled by the update job.
+await jobRunner.initialize({
+  completeRestartedUpdates: migrationsSucceeded,
+  currentAppApiRuntime: await currentAppApiRuntimeInfo(),
+});
 
 // Graceful shutdown
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

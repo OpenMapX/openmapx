@@ -3,7 +3,13 @@ import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob, adminJobLog } from "../db/schema";
 import { dbActorId } from "../utils/actor";
-import { isAppApiRestartCheckpoint } from "./system-update-state";
+import {
+  type AppApiReplacementOutcome,
+  type AppApiRuntimeInfo,
+  removeAppApiReplacementOutcome,
+  waitForAppApiReplacementOutcome,
+} from "./app-api-replacement";
+import { appApiRestartCheckpoint } from "./system-update-state";
 
 export interface JobContext {
   jobId: string;
@@ -69,22 +75,50 @@ class AdminJobRunner {
     return job ?? null;
   }
 
-  async initialize(options: { completeRestartedUpdates?: boolean } = {}): Promise<void> {
+  async initialize(
+    options: {
+      completeRestartedUpdates?: boolean;
+      currentAppApiRuntime?: AppApiRuntimeInfo | null;
+      resolveReplacementOutcome?: (outcomeFile: string) => Promise<AppApiReplacementOutcome | null>;
+      cleanupReplacementOutcome?: (outcomeFile: string) => Promise<void>;
+    } = {},
+  ): Promise<void> {
     // An application update deliberately replaces app-api as its final step.
-    // Reaching this process initialization proves the replacement container
-    // started; the caller separately reports whether startup migrations
-    // completed. Finalize only jobs that wrote the explicit pre-restart
-    // checkpoint and passed that migration gate. Any other interrupted job
-    // remains a failure (including an update that died before the checkpoint).
+    // The server calls this only after it is listening. Finalize only jobs that
+    // wrote the explicit pre-restart checkpoint, passed the migration gate,
+    // and are now running the exact image that the update pulled. Any other
+    // interrupted job remains a failure (including an update that died before
+    // the checkpoint).
     const interruptedUpdates = await db
       .select({ id: adminJob.id, result: adminJob.result })
       .from(adminJob)
       .where(and(eq(adminJob.status, "running"), eq(adminJob.type, "system.update")));
-    const checkpointedUpdateIds = interruptedUpdates
-      .filter((job) => isAppApiRestartCheckpoint(job.result))
-      .map((job) => job.id);
+    const checkpointedUpdates = interruptedUpdates.flatMap((job) => {
+      const checkpoint = appApiRestartCheckpoint(job.result);
+      return checkpoint ? [{ id: job.id, checkpoint }] : [];
+    });
+    const checkpointedUpdateIds = checkpointedUpdates.map((job) => job.id);
+    const resolveOutcome = options.resolveReplacementOutcome ?? waitForAppApiReplacementOutcome;
+    const evaluatedUpdates = await Promise.all(
+      checkpointedUpdates.map(async (job) => ({
+        ...job,
+        outcome: await resolveOutcome(job.checkpoint.outcomeFile),
+      })),
+    );
+    const runtime = options.currentAppApiRuntime;
+    const cleanupOutcome = options.cleanupReplacementOutcome ?? removeAppApiReplacementOutcome;
     const completedUpdateIds =
-      options.completeRestartedUpdates === false ? [] : checkpointedUpdateIds;
+      options.completeRestartedUpdates === false
+        ? []
+        : evaluatedUpdates
+            .filter(
+              (job) =>
+                job.outcome === "applied" &&
+                runtime?.imageId === job.checkpoint.expectedImageId &&
+                runtime.containerId !== job.checkpoint.previousContainerId &&
+                runtime.updateJobId === job.id,
+            )
+            .map((job) => job.id);
     if (completedUpdateIds.length > 0) {
       await db
         .update(adminJob)
@@ -95,6 +129,11 @@ class AdminJobRunner {
           result: { phase: "complete", completedAfterRestart: true },
         })
         .where(inArray(adminJob.id, completedUpdateIds));
+      await Promise.all(
+        evaluatedUpdates
+          .filter((job) => completedUpdateIds.includes(job.id))
+          .map((job) => cleanupOutcome(job.checkpoint.outcomeFile)),
+      );
     }
     if (options.completeRestartedUpdates === false && checkpointedUpdateIds.length > 0) {
       await db
@@ -105,6 +144,30 @@ class AdminJobRunner {
           error: "Update replaced app-api, but database migrations did not complete",
         })
         .where(inArray(adminJob.id, checkpointedUpdateIds));
+      await Promise.all(evaluatedUpdates.map((job) => cleanupOutcome(job.checkpoint.outcomeFile)));
+    }
+
+    if (options.completeRestartedUpdates !== false) {
+      const failedUpdates = evaluatedUpdates.filter((job) => !completedUpdateIds.includes(job.id));
+      for (const job of failedUpdates) {
+        const error =
+          job.outcome === "rolled-back"
+            ? "Update failed; the previous app-api image was restored"
+            : job.outcome === "failed"
+              ? "Update failed and app-api rollback did not complete"
+              : job.outcome === null
+                ? "Update helper did not report a durable outcome"
+                : "Update restarted app-api with an unexpected container identity or image";
+        await db
+          .update(adminJob)
+          .set({
+            status: "failed",
+            finishedAt: new Date(),
+            error,
+          })
+          .where(eq(adminJob.id, job.id));
+        await cleanupOutcome(job.checkpoint.outcomeFile);
+      }
     }
 
     // Mark every other job that was running when the api process died as failed.
@@ -126,8 +189,8 @@ class AdminJobRunner {
         error: "Job interrupted by api restart — re-run if still needed",
       })
       .where(
-        completedUpdateIds.length > 0
-          ? and(eq(adminJob.status, "running"), notInArray(adminJob.id, completedUpdateIds))
+        checkpointedUpdateIds.length > 0
+          ? and(eq(adminJob.status, "running"), notInArray(adminJob.id, checkpointedUpdateIds))
           : eq(adminJob.status, "running"),
       );
     void this.pump();

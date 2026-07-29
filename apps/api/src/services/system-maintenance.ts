@@ -4,6 +4,11 @@ import { repoPaths } from "@openmapx/core/server";
 import { dockerComposeAction } from "../utils/docker-compose";
 import { runOpenmapxCliJobCommand } from "./admin-cli";
 import { applyHardlinksFromPlan, renderAndPersistCompose } from "./admin-ops";
+import {
+  discardAppApiReplacement,
+  prepareAppApiReplacement,
+  startAppApiReplacement,
+} from "./app-api-replacement";
 import type { JobContext } from "./job-runner";
 import { getServiceRegistry } from "./service-registry";
 import { APP_API_RESTART_PHASE } from "./system-update-state";
@@ -215,14 +220,15 @@ export async function handleSystemUpdateJob(ctx: JobContext): Promise<Record<str
   }
 
   await ctx.log("Updating app-api last. The admin connection will briefly reconnect…");
-  await ctx.checkpoint({ phase: APP_API_RESTART_PHASE }, 95);
-  const apiResult = await dockerComposeAction("app-api", "recreate", { noDeps: true });
-  if (apiResult.exitCode !== 0) {
-    throw new Error(
-      `Failed to update app-api: ${apiResult.stderr.trim() || "docker compose failed"}`,
-    );
+  const targetImage = `${api.manifest.container.image}:${api.manifest.container.tag}`;
+  const replacement = await prepareAppApiReplacement(ctx.jobId, targetImage);
+  try {
+    await ctx.checkpoint({ phase: APP_API_RESTART_PHASE, ...replacement }, 95);
+  } catch (error) {
+    await discardAppApiReplacement(replacement);
+    throw error;
   }
-  return { operation: "apply", phase: "complete", appApiRestarted: true };
+  return startAppApiReplacement(replacement);
 }
 
 export async function handleSystemDiagnosticsJob(

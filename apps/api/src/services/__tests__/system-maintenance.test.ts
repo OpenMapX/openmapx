@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { JobContext } from "../job-runner";
 import { isAppApiRestartCheckpoint } from "../system-update-state";
 
@@ -15,6 +15,24 @@ const composeAction = vi.fn(async (id: string, action: string, options?: { noDep
   events.push(`compose:${action}:${id}:${options?.noDeps === true ? "no-deps" : "deps"}`);
   return { exitCode: 0, stdout: "", stderr: "" };
 });
+const replacement = {
+  helperContainerId: "d".repeat(64),
+  previousContainerId: "a".repeat(64),
+  expectedImageId: `sha256:${"c".repeat(64)}`,
+  outcomeFile: "/repo/infra/docker/.maintenance/app-api-job-1.status",
+};
+const prepareReplacement = vi.fn(async () => {
+  events.push("replacement:prepare");
+  return replacement;
+});
+const discardReplacement = vi.fn(async () => {
+  events.push("replacement:discard");
+});
+const startReplacement = vi.fn(async () => {
+  events.push("replacement:start");
+  throw new Error("replacement helper returned");
+});
+const disabledServices = new Set<string>();
 
 vi.mock("@openmapx/core/server", () => ({
   repoPaths: () => ({ composeOutPath: "/repo/infra/docker/docker-compose.generated.yml" }),
@@ -27,12 +45,17 @@ vi.mock("../admin-ops", () => ({
 vi.mock("../service-registry", () => ({
   getServiceRegistry: () => ({
     get: (id: string) => ({
-      enabled: true,
+      enabled: !disabledServices.has(id),
       manifest: { id, name: id, container: { image: `ghcr.io/openmapx/${id}`, tag: "latest" } },
     }),
   }),
 }));
 vi.mock("../../utils/docker-compose", () => ({ dockerComposeAction: composeAction }));
+vi.mock("../app-api-replacement", () => ({
+  prepareAppApiReplacement: prepareReplacement,
+  discardAppApiReplacement: discardReplacement,
+  startAppApiReplacement: startReplacement,
+}));
 
 const { _systemMaintenanceTestHelpers, handleSystemDiagnosticsJob, handleSystemUpdateJob } =
   await import("../system-maintenance");
@@ -49,14 +72,25 @@ function context(payload: Record<string, unknown>): JobContext {
       events.push(`progress:${progress}`);
     }),
     checkpoint: vi.fn(async (result: Record<string, unknown>, progress?: number) => {
-      events.push(`checkpoint:${String(result.phase)}:${progress}`);
+      events.push(
+        `checkpoint:${String(result.phase)}:${String(result.helperContainerId)}:${progress}`,
+      );
     }),
   };
 }
 
+beforeEach(() => {
+  events.length = 0;
+  disabledServices.clear();
+  vi.clearAllMocks();
+});
+
 describe("system maintenance", () => {
   it("recognizes only the durable API restart completion checkpoint", () => {
-    expect(isAppApiRestartCheckpoint({ phase: "awaiting-app-api-restart" })).toBe(true);
+    expect(isAppApiRestartCheckpoint({ phase: "awaiting-app-api-restart" })).toBe(false);
+    expect(isAppApiRestartCheckpoint({ phase: "awaiting-app-api-restart", ...replacement })).toBe(
+      true,
+    );
     expect(isAppApiRestartCheckpoint({ phase: "complete" })).toBe(false);
     expect(isAppApiRestartCheckpoint(null)).toBe(false);
   });
@@ -69,32 +103,63 @@ describe("system maintenance", () => {
   });
 
   it("updates dependencies before app-api and checkpoints the intentional restart", async () => {
-    events.length = 0;
-    await handleSystemUpdateJob(context({ operation: "apply", createBackup: true }));
+    await expect(
+      handleSystemUpdateJob(context({ operation: "apply", createBackup: true })),
+    ).rejects.toThrow("replacement helper returned");
 
     expect(events[0]).toMatch(/^log:Creating safety backup/);
     expect(events).toContain("render");
     expect(events).toContain("hardlinks");
     const dataManager = events.indexOf("compose:recreate:data-manager:no-deps");
     const appWeb = events.indexOf("compose:recreate:app-web:no-deps");
-    const checkpoint = events.indexOf("checkpoint:awaiting-app-api-restart:95");
-    const appApi = events.indexOf("compose:recreate:app-api:no-deps");
+    const prepare = events.indexOf("replacement:prepare");
+    const checkpoint = events.indexOf(
+      `checkpoint:awaiting-app-api-restart:${replacement.helperContainerId}:95`,
+    );
+    const start = events.indexOf("replacement:start");
     expect(dataManager).toBeGreaterThan(-1);
     expect(appWeb).toBeGreaterThan(dataManager);
-    expect(checkpoint).toBeGreaterThan(appWeb);
-    expect(appApi).toBeGreaterThan(checkpoint);
+    expect(prepare).toBeGreaterThan(appWeb);
+    expect(checkpoint).toBeGreaterThan(prepare);
+    expect(start).toBeGreaterThan(checkpoint);
+    expect(events).not.toContain("compose:recreate:app-api:no-deps");
   });
 
   it("skips the pre-update backup when the operator opts out", async () => {
-    events.length = 0;
-    await handleSystemUpdateJob(context({ operation: "apply", createBackup: false }));
+    await expect(
+      handleSystemUpdateJob(context({ operation: "apply", createBackup: false })),
+    ).rejects.toThrow("replacement helper returned");
 
     expect(events).toContain("log:Safety backup skipped by operator.");
     expect(events.some((event) => event.startsWith("cli:backup create"))).toBe(false);
   });
 
+  it("removes the prepared helper when checkpoint persistence fails", async () => {
+    const ctx = context({ operation: "apply", createBackup: false });
+    ctx.checkpoint = vi.fn(async () => {
+      events.push("checkpoint:failed");
+      throw new Error("database unavailable");
+    });
+
+    await expect(handleSystemUpdateJob(ctx)).rejects.toThrow("database unavailable");
+    expect(events.indexOf("replacement:prepare")).toBeGreaterThan(-1);
+    expect(events.indexOf("replacement:discard")).toBeGreaterThan(
+      events.indexOf("checkpoint:failed"),
+    );
+    expect(events).not.toContain("replacement:start");
+  });
+
+  it("finishes without a helper when app-api is disabled", async () => {
+    disabledServices.add("app-api");
+
+    await expect(
+      handleSystemUpdateJob(context({ operation: "apply", createBackup: false })),
+    ).resolves.toEqual({ operation: "apply", phase: "complete", appApiRestarted: false });
+    expect(prepareReplacement).not.toHaveBeenCalled();
+    expect(startReplacement).not.toHaveBeenCalled();
+  });
+
   it("maps deep diagnostics to the CLI check command", async () => {
-    events.length = 0;
     await handleSystemDiagnosticsJob(context({}));
     expect(events).toContain("cli:check");
   });
