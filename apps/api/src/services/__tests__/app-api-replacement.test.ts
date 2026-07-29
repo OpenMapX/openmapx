@@ -48,7 +48,8 @@ describe("app-api replacement helper", () => {
       "-q",
       "app-api",
     ]);
-    expect(calls[4]).toEqual(
+    const createCall = calls.find(([command]) => command === "create");
+    expect(createCall).toEqual(
       expect.arrayContaining([
         "create",
         "--rm",
@@ -62,8 +63,10 @@ describe("app-api replacement helper", () => {
         currentImageId,
       ]),
     );
-    expect(calls[4]).toContain(expect.stringContaining("--wait --wait-timeout 180 app-api"));
-    expect(calls[4]).toContain(expect.stringContaining("app-api-rollback.yml"));
+    if (!createCall) throw new Error("Expected a docker create invocation");
+    const helperScript = createCall[createCall.indexOf("-c") + 1];
+    expect(helperScript).toContain("--wait --wait-timeout 180 app-api");
+    expect(helperScript).toContain("app-api-rollback.yml");
   });
 
   it("rejects an invalid helper id and cleans up the prepared container", async () => {
