@@ -30,5 +30,7 @@ describe("OvertureMaintenance", () => {
     expect(markup).toContain("europe/germany");
     expect(markup).toContain("Full sync");
     expect(markup).toContain("Resume links");
+    expect(markup).toContain("completed");
+    expect(markup).not.toContain("completed · complete");
   });
 });

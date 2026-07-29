@@ -87,6 +87,8 @@ export function OvertureMaintenance({ apiUrl }: { apiUrl: string }) {
     status?.placeCount && status.processedCount !== null && status.processedCount !== undefined
       ? Math.min(100, (status.processedCount / status.placeCount) * 100)
       : null;
+  const visiblePhase =
+    status?.status === "completed" && status.phase === "complete" ? undefined : status?.phase;
 
   return (
     <Paper component="section" variant="outlined" sx={{ p: 2 }}>
@@ -99,7 +101,7 @@ export function OvertureMaintenance({ apiUrl }: { apiUrl: string }) {
             </Typography>
             {status?.status && (
               <Chip
-                label={`${status.status}${status.phase ? ` · ${status.phase}` : ""}`}
+                label={`${status.status}${visiblePhase ? ` · ${visiblePhase}` : ""}`}
                 color={status.stalled || status.status === "failed" ? "error" : "primary"}
                 variant="outlined"
               />
