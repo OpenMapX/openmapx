@@ -13,7 +13,7 @@ import { extractOsmPois } from "./jobs/overture/extract-osm-pois.js";
 import { ingestOverture } from "./jobs/overture/ingest.js";
 import { withOvertureOperationLock } from "./jobs/overture/operation-lock.js";
 import { assertValidRegion, pullOverture } from "./jobs/overture/pull.js";
-import { rebuildOvertureLinks } from "./jobs/overture/rebuild-links.js";
+import { getOvertureConflationState, rebuildOvertureLinks } from "./jobs/overture/rebuild-links.js";
 import { syncOvertureRegion } from "./jobs/overture/sync.js";
 import {
   CatalogBumpError,
@@ -394,6 +394,21 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     }
   });
 
+  app.get("/overture/status", async (_req, reply) => {
+    const state = await getOvertureConflationState();
+    if (!state) {
+      reply.code(404);
+      return { ok: false, error: "overture_places not ingested" };
+    }
+    const heartbeatAgeMs = Math.max(0, Date.now() - state.updatedAt.getTime());
+    return {
+      ok: true,
+      ...state,
+      heartbeatAgeMs,
+      stalled: state.status === "running" && heartbeatAgeMs > 30 * 60 * 1000,
+    };
+  });
+
   app.post<{ Body: { region: string } }>("/overture/sync", async (req, reply) => {
     const { region } = req.body;
     if (!region) throw new Error("region required");
@@ -461,41 +476,44 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     }
   });
 
-  app.post<{ Body: { region: string } }>("/overture/conflate", async (req, reply) => {
-    const { region } = req.body;
-    if (!region) throw new Error("region required");
-    assertValidRegion(region);
+  app.post<{ Body: { region: string; restart?: boolean } }>(
+    "/overture/conflate",
+    async (req, reply) => {
+      const { region, restart } = req.body;
+      if (!region) throw new Error("region required");
+      assertValidRegion(region);
 
-    const ollamaUrl = process.env.OLLAMA_URL || "http://local-ai:11434";
+      const ollamaUrl = process.env.OLLAMA_URL || "http://local-ai:11434";
 
-    const stream = openNdjsonStream(reply);
+      const stream = openNdjsonStream(reply);
 
-    try {
-      const result = await rebuildOvertureLinks({
-        region,
-        dataDir,
-        force: true,
-        ollamaUrl,
-        useEmbeddings: false,
-        onProgress: (msg) => stream.writeLine({ event: "progress", message: msg }),
-      });
-      stream.writeLine({
-        event: "done",
-        ok: result.status !== "failed" && result.status !== "waiting_for_osm",
-        message:
-          result.status === "failed"
-            ? result.error
-            : result.status === "waiting_for_osm"
-              ? `OSM PBF not found at ${result.pbfPath}`
-              : undefined,
-        ...result,
-      });
-    } catch (err) {
-      stream.writeLine({ event: "error", message: (err as Error).message });
-    } finally {
-      stream.end();
-    }
-  });
+      try {
+        const result = await rebuildOvertureLinks({
+          region,
+          dataDir,
+          force: restart === true,
+          ollamaUrl,
+          useEmbeddings: false,
+          onProgress: (msg) => stream.writeLine({ event: "progress", message: msg }),
+        });
+        stream.writeLine({
+          event: "done",
+          ok: result.status !== "failed" && result.status !== "waiting_for_osm",
+          message:
+            result.status === "failed"
+              ? result.error
+              : result.status === "waiting_for_osm"
+                ? `OSM PBF not found at ${result.pbfPath}`
+                : undefined,
+          ...result,
+        });
+      } catch (err) {
+        stream.writeLine({ event: "error", message: (err as Error).message });
+      } finally {
+        stream.end();
+      }
+    },
+  );
 
   // POST /transit/sync — fire-and-forget Transitous pipeline trigger. Honours
   // the single-flight lock + idempotency key. apps/api proxies user-facing

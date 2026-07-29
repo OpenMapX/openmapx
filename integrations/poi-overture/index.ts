@@ -52,6 +52,16 @@ interface OvertureBrand {
   wikidata?: string | null;
 }
 
+interface OvertureHealthRow {
+  place_count: number | string;
+  place_release: string | null;
+  state_release: string | null;
+  status: string | null;
+  phase: string | null;
+  updated_at: Date | string | null;
+  last_error: string | null;
+}
+
 function firstNonEmpty(values: string[] | null): string | undefined {
   return values?.find((value) => value.trim().length > 0)?.trim();
 }
@@ -306,7 +316,44 @@ export function setup(ctx: IntegrationContext): void {
 
   ctx.registerHealthCheck(async () => {
     try {
-      await db.execute("SELECT 1 FROM overture_places.places LIMIT 1");
+      const rows = await db.execute<OvertureHealthRow[]>(
+        `SELECT
+           state.place_count,
+           (SELECT release FROM overture_places.places LIMIT 1) AS place_release,
+           state.release AS state_release, state.status, state.phase,
+           state.updated_at, state.last_error
+         FROM overture_places.conflation_state AS state
+         WHERE state.singleton = 1`,
+      );
+      const state = rows[0];
+      if (!state || Number(state.place_count) <= 0) {
+        return { status: "down" as const, error: "overture_places is empty" };
+      }
+      if (state.place_release !== state.state_release) {
+        return {
+          status: "down" as const,
+          error: `Overture release mismatch: places=${state.place_release}, state=${state.state_release}`,
+        };
+      }
+      const updatedAt = state.updated_at ? new Date(state.updated_at).getTime() : 0;
+      if (
+        state.status === "running" &&
+        (!Number.isFinite(updatedAt) || Date.now() - updatedAt > 30 * 60 * 1000)
+      ) {
+        return {
+          status: "up" as const,
+          error: `Places available; conflation ${state.phase ?? "unknown"} heartbeat is stale`,
+        };
+      }
+      if (state.status !== "completed" || state.phase !== "complete") {
+        return {
+          status: "up" as const,
+          error:
+            `Places available; conflation is ${state.status ?? "unknown"}` +
+            (state.phase ? ` in ${state.phase}` : "") +
+            (state.last_error ? `: ${state.last_error}` : ""),
+        };
+      }
       return { status: "up" as const };
     } catch {
       return { status: "down" as const, error: "overture_places not ingested" };

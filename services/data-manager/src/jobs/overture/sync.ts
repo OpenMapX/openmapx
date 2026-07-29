@@ -2,6 +2,11 @@ import { ingestOverture } from "./ingest.js";
 import { withOvertureOperationLock } from "./operation-lock.js";
 import { assertValidRegion, pullOverture, resolveOvertureRelease } from "./pull.js";
 import { type RebuildOvertureLinksResult, rebuildOvertureLinksUnlocked } from "./rebuild-links.js";
+import {
+  overtureReleaseRetentionFromEnv,
+  type PruneOvertureReleasesResult,
+  pruneOvertureReleases,
+} from "./retention.js";
 
 export interface SyncOvertureRegionOptions {
   region: string;
@@ -16,6 +21,7 @@ export interface SyncOvertureRegionResult {
   conflation: RebuildOvertureLinksResult["status"];
   linked: number;
   conflationError?: string;
+  retention?: PruneOvertureReleasesResult;
 }
 
 interface SyncOvertureDependencies {
@@ -23,6 +29,7 @@ interface SyncOvertureDependencies {
   ingest: typeof ingestOverture;
   rebuildLinks: typeof rebuildOvertureLinksUnlocked;
   withOperationLock: typeof withOvertureOperationLock;
+  pruneReleases: typeof pruneOvertureReleases;
 }
 
 const defaultDependencies: SyncOvertureDependencies = {
@@ -30,6 +37,7 @@ const defaultDependencies: SyncOvertureDependencies = {
   ingest: ingestOverture,
   rebuildLinks: rebuildOvertureLinksUnlocked,
   withOperationLock: withOvertureOperationLock,
+  pruneReleases: pruneOvertureReleases,
 };
 
 /**
@@ -63,20 +71,36 @@ async function syncOvertureRegionUnlocked(
     release,
     onProgress: opts.onProgress,
   });
-  if (result.status === "failed") {
+  if (
+    result.status === "failed" ||
+    result.status === "waiting_for_osm" ||
+    result.status === "already_running"
+  ) {
     opts.onProgress?.(
-      `Places release ${release} is active; independent link rebuild failed and will retry.`,
+      `Places release ${release} is active; independent link rebuild is ${result.status} ` +
+        "and will retry before old snapshots are pruned.",
     );
     return {
       release,
       path,
       conflation: result.status,
       linked: result.linked,
-      conflationError: result.error,
+      conflationError:
+        result.status === "failed"
+          ? result.error
+          : result.status === "waiting_for_osm"
+            ? `OSM PBF not found at ${result.pbfPath}`
+            : "Another rebuild owns the durable state",
     };
   }
   opts.onProgress?.(
     `Regional Overture refresh complete; conflation ${result.status} (${result.linked} links).`,
   );
-  return { release, path, conflation: result.status, linked: result.linked };
+  const retention = dependencies.pruneReleases({
+    dataDir: opts.dataDir,
+    activeRelease: release,
+    retain: overtureReleaseRetentionFromEnv(process.env.OVERTURE_RELEASE_RETENTION),
+    onProgress: opts.onProgress,
+  });
+  return { release, path, conflation: result.status, linked: result.linked, retention };
 }

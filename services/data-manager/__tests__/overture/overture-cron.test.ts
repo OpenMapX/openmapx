@@ -239,8 +239,11 @@ describe("Overture cron gating", () => {
     const rebuildOvertureLinks = vi.fn(async () => ({
       status: "completed" as const,
       linked: 23,
+      emitted: 32,
       extracted: 30,
       candidates: 25,
+      components: 20,
+      phaseDurationsMs: {},
     }));
     const handles = setupCron({
       dataDir,

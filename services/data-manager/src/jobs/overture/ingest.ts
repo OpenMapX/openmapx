@@ -163,9 +163,9 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
 
   await sql.unsafe(
     `INSERT INTO "${stagingSchema}".conflation_state
-       (release, region, status)
-     VALUES ($1, $2, 'pending')`,
-    [release, opts.region],
+       (release, region, place_count, status)
+     VALUES ($1, $2, $3, 'pending')`,
+    [release, opts.region, count],
   );
 
   // Indexes (geom GIST + h3 + Overture taxonomy) are created by

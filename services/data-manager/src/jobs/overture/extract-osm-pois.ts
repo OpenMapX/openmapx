@@ -7,6 +7,7 @@ import { latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";
 import { osmPbfName } from "../download-osm.js";
 import { assertValidRegion } from "./pull.js";
+import { assertValidOvertureSchema } from "./schema.js";
 
 export type { OsmFilter };
 
@@ -34,6 +35,7 @@ export interface ExtractOsmPoisOptions {
   pbfPath?: string;
   dataDir: string;
   region: string;
+  schema?: string;
   onProgress?: (msg: string) => void;
   /** Durable-job heartbeat invoked after each streamed database batch. */
   onCheckpoint?: (extracted: number) => Promise<void>;
@@ -153,8 +155,12 @@ export function featureToOsmPoiRecord(feature: GeoJsonFeature): OsmPoiRecord | n
  * This shells out to `osmium` (same pattern as convert-overpass.ts) so the
  * heavy XML/PBF work stays in the C++ tool rather than Node.
  */
-export async function extractOsmPois(opts: ExtractOsmPoisOptions): Promise<{ extracted: number }> {
+export async function extractOsmPois(
+  opts: ExtractOsmPoisOptions,
+): Promise<{ emitted: number; extracted: number }> {
   assertValidRegion(opts.region);
+  const schema = opts.schema ?? "overture_places";
+  assertValidOvertureSchema(schema);
   const pbfPath = opts.pbfPath ?? join(opts.dataDir, "osm", osmPbfName(opts.region));
   const outDir = join(opts.dataDir, "overture", "osm-extract");
   const slug = opts.region.replace(/\//g, "-");
@@ -179,12 +185,11 @@ export async function extractOsmPois(opts: ExtractOsmPoisOptions): Promise<{ ext
     ["tags-filter", pbfPath, ...uniqueFilters.map((f) => `nwr/${f}`), "-o", filteredPbf, "-O"],
     { stdio: "inherit" },
   );
-  const schema = "overture_places";
   const stagingTable = "osm_pois__staging";
   opts.onProgress?.("Preparing a fresh OSM POI staging table...");
   await sql.unsafe(`DROP TABLE IF EXISTS "${schema}"."${stagingTable}"`);
   await sql.unsafe(
-    `CREATE UNLOGGED TABLE "${schema}"."${stagingTable}"
+    `CREATE TABLE "${schema}"."${stagingTable}"
        (LIKE "${schema}".osm_pois INCLUDING DEFAULTS INCLUDING CONSTRAINTS)`,
   );
   await sql.unsafe(`ALTER TABLE "${schema}"."${stagingTable}" ADD PRIMARY KEY (osm_type, osm_id)`);
@@ -211,7 +216,7 @@ export async function extractOsmPois(opts: ExtractOsmPoisOptions): Promise<{ ext
     crlfDelay: Number.POSITIVE_INFINITY,
   });
 
-  let extracted = 0;
+  let emitted = 0;
   let records: OsmPoiRecord[] = [];
   try {
     for await (const rawLine of rl) {
@@ -227,13 +232,13 @@ export async function extractOsmPois(opts: ExtractOsmPoisOptions): Promise<{ ext
       const record = featureToOsmPoiRecord(feature);
       if (!record) continue;
       records.push(record);
-      extracted += 1;
+      emitted += 1;
       if (records.length >= OSM_POIS_INSERT_BATCH) {
         await insertOsmPois(schema, stagingTable, records);
         records = [];
-        await opts.onCheckpoint?.(extracted);
-        if (extracted % 25_000 === 0) {
-          opts.onProgress?.(`Streamed ${extracted} OSM POIs into PostGIS...`);
+        await opts.onCheckpoint?.(emitted);
+        if (emitted % 25_000 === 0) {
+          opts.onProgress?.(`Streamed ${emitted} OSM geometries into PostGIS...`);
         }
       }
     }
@@ -247,7 +252,15 @@ export async function extractOsmPois(opts: ExtractOsmPoisOptions): Promise<{ ext
     rl.close();
   }
 
-  opts.onProgress?.(`Extracted ${extracted} POIs; publishing the staged snapshot...`);
+  const [{ count: uniqueCountText }] = await sql.unsafe<{ count: string }[]>(
+    `SELECT COUNT(*)::TEXT AS count FROM "${schema}"."${stagingTable}"`,
+    [],
+  );
+  const extracted = Number(uniqueCountText ?? 0);
+  opts.onProgress?.(
+    `Emitted ${emitted} OSM geometries and retained ${extracted} unique POIs; ` +
+      "publishing the staged snapshot...",
+  );
   await sql.begin(async (tx) => {
     await tx.unsafe(`DROP TABLE IF EXISTS "${schema}".osm_pois__previous`);
     await tx.unsafe(`ALTER TABLE "${schema}".osm_pois RENAME TO osm_pois__previous`);
@@ -262,10 +275,14 @@ export async function extractOsmPois(opts: ExtractOsmPoisOptions): Promise<{ ext
       `CREATE INDEX idx_osm_pois_geom
          ON "${schema}".osm_pois USING GIST (ST_Point(lng, lat))`,
     );
+    await tx.unsafe(`ANALYZE "${schema}".osm_pois`);
   });
-  opts.onProgress?.(`Published ${extracted} OSM POIs to ${schema}.osm_pois.`);
+  opts.onProgress?.(
+    `Published ${extracted} unique OSM POIs to ${schema}.osm_pois ` +
+      `(${emitted} geometries emitted).`,
+  );
 
-  return { extracted };
+  return { emitted, extracted };
 }
 
 /**

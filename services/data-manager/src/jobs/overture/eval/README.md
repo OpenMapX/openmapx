@@ -81,13 +81,16 @@ and known duplicates for four environments:
 - Monschau (rural Germany)
 - Maastricht (non-German city)
 
-Cases are applied only when their most-specific Geofabrik region is contained
+Cases cover cafés, restaurants, supermarkets, pharmacies, hotels, and fuel and
+are applied only when their most-specific Geofabrik region is contained
 by the imported region. For example, a Germany import runs all three German
 cases, while a Netherlands import runs Maastricht. A region with no applicable
 case is reported as zero applicable cases and is not blocked.
 
-The gate uses the same taxonomy fields, confidence floor, production ordering,
-and top-50 limit as Overture POI search. It blocks activation when anchor recall
+The pre-activation gate uses the same taxonomy fields, confidence floor,
+production ordering, and top-50 limit as Overture POI search. After exact link
+assignment, the same corpus also evaluates the final fused OSM + Overture
+response before link publication. It blocks activation when anchor recall
 or result count drops below its reviewed floor, or when known irrelevant and
 duplicate hits exceed the recorded ceiling. Updating a judgment requires
 checking the named place and coordinates against the new release and recording

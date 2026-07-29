@@ -146,13 +146,65 @@ describe("poi-overture health check", () => {
   });
 
   it("returns up when overture_places.places is queryable", async () => {
-    const db = makeFakeDb([{ "?column?": 1 }]);
+    const db = makeFakeDb([
+      {
+        place_count: "3913971",
+        place_release: "2026-07-22.0",
+        state_release: "2026-07-22.0",
+        status: "completed",
+        phase: "complete",
+        updated_at: new Date(),
+        last_error: null,
+      },
+    ]);
     const ctx = createMockIntegrationContext({ db });
     const { setup } = await import("../index.js");
     setup(ctx);
     const healthCheck = ctx.registered.healthChecks[0];
     const status = await healthCheck();
     expect(status.status).toBe("up");
+  });
+
+  it("keeps searchable places up while reporting a failed optional conflation phase", async () => {
+    const db = makeFakeDb([
+      {
+        place_count: 100,
+        place_release: "2026-07-22.0",
+        state_release: "2026-07-22.0",
+        status: "failed",
+        phase: "assign",
+        updated_at: new Date(),
+        last_error: "worker restarted",
+      },
+    ]);
+    const ctx = createMockIntegrationContext({ db });
+    const { setup } = await import("../index.js");
+    setup(ctx);
+    const status = await ctx.registered.healthChecks[0]();
+    expect(status).toEqual({
+      status: "up",
+      error: "Places available; conflation is failed in assign: worker restarted",
+    });
+  });
+
+  it("returns down when the place snapshot and conflation state releases disagree", async () => {
+    const db = makeFakeDb([
+      {
+        place_count: 100,
+        place_release: "2026-07-22.0",
+        state_release: "2026-06-18.0",
+        status: "completed",
+        phase: "complete",
+        updated_at: new Date(),
+        last_error: null,
+      },
+    ]);
+    const ctx = createMockIntegrationContext({ db });
+    const { setup } = await import("../index.js");
+    setup(ctx);
+    const status = await ctx.registered.healthChecks[0]();
+    expect(status.status).toBe("down");
+    expect(status.error).toContain("release mismatch");
   });
 
   it("returns down when overture_places.places query throws", async () => {

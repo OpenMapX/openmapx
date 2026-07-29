@@ -65,24 +65,40 @@ regional OSM PBF exists. A failed pull or ingest cannot partially update the
 live places table; the regional database does not use global changelog data.
 
 Places publication and link rebuilding are independent lifecycles. Each Places
-release starts with a durable `pending` link state. Extraction and matching move
-that state through `running`, `completed`, `failed`, or `waiting_for_osm`, with
-attempt counts and row counts retained in PostGIS. A failed or interrupted link
-attempt leaves the Places release active and is retried every six hours by
-default. The retry uses the already installed release and local PBF; it does not
-repeat STAC discovery, download, quality validation, or the Places schema swap.
+release starts with a durable `pending` link state. The rebuild records
+`extract`, `score`, `assign`, `publish`, and `complete` phases, keyset and
+component cursors, source fingerprint, heartbeats, attempt counts, separate
+emitted-geometry and unique-POI counts, and per-phase durations in PostGIS. A
+failed or interrupted attempt leaves the Places release active and is retried
+every six hours by default. A retry resumes its saved phase: completed OSM
+extraction is not repeated, scoring continues after its last committed keyset
+cursor, and assignment continues after its last completed graph component. If
+the local PBF fingerprint changes, the state safely restarts from extraction.
 
 The rebuild is designed for country-scale inputs. OSM GeoJSON sequences are
 parsed directly into fixed-size Postgres batches and published with an atomic
 table swap. Matching reads OSM with keyset pagination, fetches only indexed
-ring-1 H3 cells from Overture, and materializes accepted edges in an unlogged
-working table. Isolated one-to-one edges are selected in SQL; only contested
-graph components enter the exact cardinality-first assignment solver. The live
-link table is replaced in one transaction after the complete assignment is
-ready, so a failed attempt can never expose a partial link set. A newly imported
-release remains usable without precomputed links until its first rebuild
-completes. A PostgreSQL advisory lock serializes schema swaps, OSM snapshot
-publication, and link rebuilding across data-manager processes.
+ring-1 H3 cells from Overture, and materializes accepted edges in a durable
+working table. A lightweight endpoint pass labels the graph's disconnected
+components. Full scored rows are then read in bounded component groups, while
+each component independently enters the exact cardinality-first assignment
+solver. This preserves the region-wide optimum without loading or sorting the
+country-wide scored graph as one object. The completely assigned next-link
+snapshot is durable and replaces the live link table in one transaction, so a
+failed attempt can never expose a partial link set. A PostgreSQL advisory lock
+serializes schema swaps, OSM snapshot publication, and link rebuilding across
+data-manager processes.
+
+The staged Places snapshot is checked against release-pinned, human-reviewed
+category cases before activation. After link assignment, the final fused
+OSM-authoritative plus Overture-augmenting response is checked again before
+publication. The corpus covers cafés, restaurants, supermarkets, pharmacies,
+hotels, and fuel across urban, rural, German, and cross-border locations,
+including known upstream category mistakes and duplicates.
+
+After a complete ingest, fused quality check, and link publication, OpenMapX
+retains the active local release snapshot and one predecessor by default. Older
+release directories are pruned; incomplete refreshes never trigger pruning.
 
 Run the complete workflow manually with:
 
@@ -90,10 +106,23 @@ Run the complete workflow manually with:
 pnpm openmapx data overture-sync europe/germany/berlin
 ```
 
-Retry only extraction and link rebuilding for the installed release with:
+Resume the installed release's saved rebuild phase with:
 
 ```sh
 pnpm openmapx data overture-conflate europe/germany/berlin
+```
+
+Discard saved progress and deliberately restart from OSM extraction with:
+
+```sh
+pnpm openmapx data overture-conflate europe/germany/berlin --restart
+```
+
+Inspect the installed release, phase, cursors, counts, timings, heartbeat age,
+and last error with:
+
+```sh
+pnpm openmapx data overture-status
 ```
 
 ## Provenance, licensing, and privacy

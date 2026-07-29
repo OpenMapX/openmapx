@@ -105,7 +105,7 @@ export function buildSchemaDDL(schema: string): string {
 
     CREATE INDEX idx_link_gers ON "${schema}".poi_conflation_link (gers_id);
 
-    CREATE UNLOGGED TABLE "${schema}".poi_conflation_candidate (
+    CREATE TABLE "${schema}".poi_conflation_candidate (
       osm_type          TEXT NOT NULL,
       osm_id            BIGINT NOT NULL,
       gers_id           TEXT NOT NULL REFERENCES "${schema}".places(gers_id) ON DELETE CASCADE,
@@ -123,19 +123,61 @@ export function buildSchemaDDL(schema: string): string {
     CREATE INDEX idx_candidate_gers
       ON "${schema}".poi_conflation_candidate (gers_id);
 
+    -- Durable assignment workspace. Candidate scoring and exact assignment are
+    -- separate retry boundaries: a failed assignment never forces another
+    -- country-wide OSM extraction or candidate scan.
+    CREATE UNLOGGED TABLE "${schema}".poi_conflation_component (
+      osm_type          TEXT NOT NULL,
+      osm_id            BIGINT NOT NULL,
+      component_id      BIGINT NOT NULL,
+      PRIMARY KEY (osm_type, osm_id)
+    );
+
+    CREATE INDEX idx_conflation_component
+      ON "${schema}".poi_conflation_component (component_id, osm_type, osm_id);
+
+    CREATE TABLE "${schema}".poi_conflation_link_next (
+      osm_type          TEXT NOT NULL,
+      osm_id            BIGINT NOT NULL,
+      gers_id           TEXT NOT NULL UNIQUE,
+      source_confidence DOUBLE PRECISION,
+      match_confidence  DOUBLE PRECISION NOT NULL CHECK (match_confidence BETWEEN 0 AND 1),
+      distance_m        DOUBLE PRECISION NOT NULL CHECK (distance_m >= 0),
+      method            TEXT NOT NULL,
+      evidence          JSONB NOT NULL,
+      release           TEXT NOT NULL,
+      PRIMARY KEY (osm_type, osm_id)
+    );
+
     CREATE TABLE "${schema}".conflation_state (
       singleton         SMALLINT PRIMARY KEY DEFAULT 1 CHECK (singleton = 1),
       release           TEXT NOT NULL,
       region            TEXT NOT NULL,
+      place_count       BIGINT NOT NULL CHECK (place_count > 0),
       status            TEXT NOT NULL CHECK (
         status IN ('pending', 'running', 'completed', 'failed', 'waiting_for_osm')
       ),
+      phase             TEXT NOT NULL DEFAULT 'extract' CHECK (
+        phase IN ('extract', 'score', 'assign', 'publish', 'complete')
+      ),
       attempt_count     INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+      source_fingerprint TEXT,
+      emitted_count     BIGINT,
       extracted_count   BIGINT,
+      processed_count   BIGINT,
       candidate_count   BIGINT,
+      component_count   BIGINT,
+      assignment_cursor BIGINT,
+      staged_link_count BIGINT,
       linked_count      BIGINT,
+      score_cursor_h3   TEXT,
+      score_cursor_type TEXT,
+      score_cursor_id   BIGINT,
+      phase_durations_ms JSONB NOT NULL DEFAULT '{}'::JSONB,
       last_error        TEXT,
       started_at        TIMESTAMPTZ,
+      attempt_started_at TIMESTAMPTZ,
+      phase_started_at  TIMESTAMPTZ,
       completed_at      TIMESTAMPTZ,
       updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );

@@ -268,6 +268,8 @@ export function assignLinkRecords(edges: LinkRecord[]): LinkRecord[] {
 }
 
 const OSM_PAGE_SIZE = 2_000;
+const ENDPOINT_PAGE_SIZE = 25_000;
+const COMPONENT_BATCH_SIZE = 2_000;
 const LINK_COLUMN_COUNT = 9;
 const LINK_ROWS_PER_BATCH = Math.floor(65_500 / LINK_COLUMN_COUNT);
 
@@ -351,7 +353,7 @@ function osmRowToPoint(row: OsmRow): OsmPoiPoint {
 
 async function insertLinkRows(
   schema: string,
-  table: "poi_conflation_candidate" | "poi_conflation_link",
+  table: "poi_conflation_candidate" | "poi_conflation_link" | "poi_conflation_link_next",
   links: LinkRecord[],
   execute: (query: string, parameters: (string | number | null)[]) => Promise<unknown>,
 ): Promise<void> {
@@ -389,22 +391,42 @@ async function insertLinkRows(
   }
 }
 
+export interface ConflationScoreCursor {
+  h3: string | null;
+  osmType: string;
+  osmId: string;
+}
+
+export interface ScoreOvertureCandidatesResult {
+  candidates: number;
+  processed: number;
+  cursor: ConflationScoreCursor;
+}
+
 /**
- * Full conflation job. Source rows are read in bounded keyset pages and only
- * nearby Overture H3 cells are loaded for each page. Accepted edges are
- * materialized in Postgres so global one-to-one assignment remains exact
- * without retaining the country-wide source datasets in Node.
+ * Scores a release in bounded keyset pages. The caller owns the durable cursor
+ * and decides whether this is a fresh score or a continuation. Each accepted
+ * edge has a stable primary key, so replaying the page immediately before a
+ * crash is harmless.
  */
-export async function conflateOverture(opts: {
+export async function scoreOvertureCandidates(opts: {
   region: string;
   release?: string;
   ollamaUrl?: string;
   useEmbeddings?: boolean;
   schema?: string;
+  resume?: {
+    cursor: ConflationScoreCursor;
+    processed: number;
+    candidates: number;
+  };
   onProgress?: (msg: string) => void;
-  /** Durable-job heartbeat invoked after each bounded source page. */
-  onCheckpoint?: (processed: number, candidates: number) => Promise<void>;
-}): Promise<{ linked: number; candidates: number; processed: number }> {
+  onCheckpoint?: (
+    processed: number,
+    candidates: number,
+    cursor: ConflationScoreCursor,
+  ) => Promise<void>;
+}): Promise<ScoreOvertureCandidatesResult> {
   assertValidRegion(opts.region);
   const { ollamaUrl, useEmbeddings = false, onProgress } = opts;
   const release = await resolveOvertureRelease(opts.release);
@@ -416,13 +438,15 @@ export async function conflateOverture(opts: {
   }
 
   const embedFn = useEmbeddings ? (texts: string[]) => embed(texts, { ollamaUrl }) : undefined;
-  await sql.unsafe(`TRUNCATE TABLE "${schema}".poi_conflation_candidate`);
+  if (!opts.resume) {
+    await sql.unsafe(`TRUNCATE TABLE "${schema}".poi_conflation_candidate`);
+  }
 
-  let cursorCell: string | null = null;
-  let cursorType = "";
-  let cursorId = "0";
-  let processed = 0;
-  let candidateCount = 0;
+  let cursorCell = opts.resume?.cursor.h3 ?? null;
+  let cursorType = opts.resume?.cursor.osmType ?? "";
+  let cursorId = opts.resume?.cursor.osmId ?? "0";
+  let processed = opts.resume?.processed ?? 0;
+  let candidateCount = opts.resume?.candidates ?? 0;
   while (true) {
     const osmRows: OsmRow[] = await sql.unsafe<OsmRow[]>(
       `SELECT osm_type, osm_id, name, lat, lng, h3_r8, category,
@@ -466,74 +490,286 @@ export async function conflateOverture(opts: {
     );
     processed += osmRows.length;
     candidateCount += candidates.length;
-    await opts.onCheckpoint?.(processed, candidateCount);
     const last: OsmRow | undefined = osmRows[osmRows.length - 1];
     if (!last) break;
     cursorCell = last.h3_r8;
     cursorType = last.osm_type;
     cursorId = last.osm_id;
+    await opts.onCheckpoint?.(processed, candidateCount, {
+      h3: cursorCell,
+      osmType: cursorType,
+      osmId: cursorId,
+    });
     onProgress?.(
       `Scored ${processed} OSM POIs in bounded pages (${candidateCount} accepted edges)...`,
     );
   }
 
-  onProgress?.(`Selecting the exact one-to-one assignment from ${candidateCount} edges...`);
-  const ambiguousRows = await sql.unsafe<
-    (Omit<LinkRecord, "evidence"> & { evidence: LinkRecord["evidence"] })[]
-  >(
-    `WITH osm_degree AS (
-       SELECT osm_type, osm_id, COUNT(*) AS degree
-       FROM "${schema}".poi_conflation_candidate
-       GROUP BY osm_type, osm_id
-     ), gers_degree AS (
-       SELECT gers_id, COUNT(*) AS degree
-       FROM "${schema}".poi_conflation_candidate
-       GROUP BY gers_id
-     )
-     SELECT candidate.osm_type, candidate.osm_id, candidate.gers_id,
-            candidate.source_confidence, candidate.match_confidence,
-            candidate.distance_m, candidate.method, candidate.evidence, candidate.release
-     FROM "${schema}".poi_conflation_candidate AS candidate
-     JOIN osm_degree USING (osm_type, osm_id)
-     JOIN gers_degree USING (gers_id)
-     WHERE osm_degree.degree > 1 OR gers_degree.degree > 1
-     ORDER BY candidate.osm_type, candidate.osm_id, candidate.gers_id`,
+  await sql.unsafe(`ANALYZE "${schema}".poi_conflation_candidate`);
+  const [{ count }] = await sql.unsafe<{ count: string }[]>(
+    `SELECT COUNT(*)::TEXT AS count FROM "${schema}".poi_conflation_candidate`,
     [],
   );
-  const ambiguous = ambiguousRows.map((row) => ({
-    ...row,
-    osm_id: Number(row.osm_id),
-    source_confidence: row.source_confidence === null ? null : Number(row.source_confidence),
-    match_confidence: Number(row.match_confidence),
-    distance_m: Number(row.distance_m),
-  }));
-  const selectedAmbiguous = assignLinkRecords(ambiguous);
+  candidateCount = Number(count ?? 0);
+  return {
+    candidates: candidateCount,
+    processed,
+    cursor: { h3: cursorCell, osmType: cursorType, osmId: cursorId },
+  };
+}
+
+class DisjointSet {
+  private readonly index = new Map<string, number>();
+  private readonly keys: string[] = [];
+  private readonly parent: number[] = [];
+  private readonly rank: number[] = [];
+
+  private add(key: string): number {
+    const existing = this.index.get(key);
+    if (existing !== undefined) return existing;
+    const next = this.parent.length;
+    this.index.set(key, next);
+    this.keys.push(key);
+    this.parent.push(next);
+    this.rank.push(0);
+    return next;
+  }
+
+  private findIndex(index: number): number {
+    let root = index;
+    while (this.parent[root] !== root) root = this.parent[root];
+    let cursor = index;
+    while (this.parent[cursor] !== cursor) {
+      const next = this.parent[cursor];
+      this.parent[cursor] = root;
+      cursor = next;
+    }
+    return root;
+  }
+
+  union(left: string, right: string): void {
+    let a = this.findIndex(this.add(left));
+    let b = this.findIndex(this.add(right));
+    if (a === b) return;
+    if (this.rank[a] < this.rank[b]) [a, b] = [b, a];
+    this.parent[b] = a;
+    if (this.rank[a] === this.rank[b]) this.rank[a] += 1;
+  }
+
+  rootOf(key: string): number {
+    const index = this.index.get(key);
+    if (index === undefined) throw new Error(`Unknown conflation endpoint ${key}`);
+    return this.findIndex(index);
+  }
+
+  osmKeys(): string[] {
+    return this.keys.filter((key) => key.startsWith("o:"));
+  }
+}
+
+interface EndpointRow {
+  osm_type: string;
+  osm_id: string;
+  gers_id: string;
+}
+
+async function insertComponentRows(
+  schema: string,
+  rows: Array<{ osmType: string; osmId: string; componentId: number }>,
+): Promise<void> {
+  const batchSize = 10_000;
+  for (let offset = 0; offset < rows.length; offset += batchSize) {
+    const batch = rows.slice(offset, offset + batchSize);
+    await sql.unsafe(
+      `INSERT INTO "${schema}".poi_conflation_component
+         (osm_type, osm_id, component_id)
+       SELECT UNNEST($1::TEXT[]), UNNEST($2::BIGINT[]), UNNEST($3::BIGINT[])`,
+      [
+        batch.map((row) => row.osmType),
+        batch.map((row) => row.osmId),
+        batch.map((row) => row.componentId),
+      ],
+    );
+  }
+}
+
+/**
+ * Builds exact connected-component labels from the persisted bipartite graph.
+ * Only endpoint identifiers are held during this pass; the much wider scored
+ * rows remain in Postgres and are read later one bounded group of components at
+ * a time.
+ */
+export async function buildConflationComponents(
+  schema: string,
+  onProgress?: (msg: string) => void,
+): Promise<number> {
+  assertValidOvertureSchema(schema);
+  await sql.unsafe(
+    `TRUNCATE TABLE "${schema}".poi_conflation_component,
+                    "${schema}".poi_conflation_link_next`,
+  );
+
+  const sets = new DisjointSet();
+  let cursorType = "";
+  let cursorId = "0";
+  let cursorGers = "";
+  let edges = 0;
+  while (true) {
+    const rows = await sql.unsafe<EndpointRow[]>(
+      `SELECT osm_type, osm_id::TEXT, gers_id
+       FROM "${schema}".poi_conflation_candidate
+       WHERE osm_type > $1
+          OR (osm_type = $1 AND osm_id > $2::BIGINT)
+          OR (osm_type = $1 AND osm_id = $2::BIGINT AND gers_id > $3)
+       ORDER BY osm_type, osm_id, gers_id
+       LIMIT $4`,
+      [cursorType, cursorId, cursorGers, ENDPOINT_PAGE_SIZE],
+    );
+    if (rows.length === 0) break;
+    for (const row of rows) {
+      sets.union(`o:${row.osm_type}:${row.osm_id}`, `g:${row.gers_id}`);
+    }
+    edges += rows.length;
+    const last = rows[rows.length - 1];
+    if (!last) break;
+    cursorType = last.osm_type;
+    cursorId = last.osm_id;
+    cursorGers = last.gers_id;
+    onProgress?.(`Indexed ${edges} candidate edges into exact connected components...`);
+  }
+
+  const osmKeys = sets.osmKeys().sort();
+  const componentByRoot = new Map<number, number>();
+  const rows: Array<{ osmType: string; osmId: string; componentId: number }> = [];
+  for (const key of osmKeys) {
+    const root = sets.rootOf(key);
+    let componentId = componentByRoot.get(root);
+    if (componentId === undefined) {
+      componentId = componentByRoot.size + 1;
+      componentByRoot.set(root, componentId);
+    }
+    const [, osmType, osmId] = key.split(":");
+    if (!osmType || !osmId) throw new Error(`Invalid OSM component endpoint ${key}`);
+    rows.push({ osmType, osmId, componentId });
+  }
+  await insertComponentRows(schema, rows);
+  await sql.unsafe(`ANALYZE "${schema}".poi_conflation_component`);
+  onProgress?.(`Materialized ${componentByRoot.size} disconnected components from ${edges} edges.`);
+  return componentByRoot.size;
+}
+
+interface ComponentLinkRow extends LinkRecord {
+  component_id: string;
+}
+
+export interface AssignOvertureCandidatesResult {
+  components: number;
+  assignmentCursor: number;
+  stagedLinks: number;
+}
+
+/** Solves exact one-to-one assignments independently per graph component. */
+export async function assignOvertureCandidates(opts: {
+  schema?: string;
+  componentCount?: number | null;
+  assignmentCursor?: number | null;
+  stagedLinks?: number | null;
+  onProgress?: (msg: string) => void;
+  onWorkspace?: (components: number) => Promise<void>;
+  onCheckpoint?: (assignmentCursor: number, stagedLinks: number) => Promise<void>;
+}): Promise<AssignOvertureCandidatesResult> {
+  const schema = opts.schema ?? "overture_places";
+  assertValidOvertureSchema(schema);
+  let components = opts.componentCount ?? null;
+  let assignmentCursor = opts.assignmentCursor ?? 0;
+  let stagedLinks = opts.stagedLinks ?? 0;
+
+  const [{ mappings }] = await sql.unsafe<{ mappings: string }[]>(
+    `SELECT COUNT(*)::TEXT AS mappings FROM "${schema}".poi_conflation_component`,
+    [],
+  );
+  if (components === null || (components > 0 && Number(mappings ?? 0) === 0)) {
+    components = await buildConflationComponents(schema, opts.onProgress);
+    assignmentCursor = 0;
+    stagedLinks = 0;
+    await opts.onWorkspace?.(components);
+  }
+
+  while (true) {
+    const rows = await sql.unsafe<ComponentLinkRow[]>(
+      `WITH next_components AS MATERIALIZED (
+         SELECT DISTINCT component_id
+         FROM "${schema}".poi_conflation_component
+         WHERE component_id > $1
+         ORDER BY component_id
+         LIMIT $2
+       )
+       SELECT component.component_id::TEXT, candidate.osm_type,
+              candidate.osm_id, candidate.gers_id, candidate.source_confidence,
+              candidate.match_confidence, candidate.distance_m, candidate.method,
+              candidate.evidence, candidate.release
+       FROM next_components
+       JOIN "${schema}".poi_conflation_component AS component USING (component_id)
+       JOIN "${schema}".poi_conflation_candidate AS candidate
+         USING (osm_type, osm_id)
+       ORDER BY component.component_id, candidate.osm_type,
+                candidate.osm_id, candidate.gers_id`,
+      [assignmentCursor, COMPONENT_BATCH_SIZE],
+    );
+    if (rows.length === 0) break;
+
+    const byComponent = new Map<number, LinkRecord[]>();
+    for (const row of rows) {
+      const componentId = Number(row.component_id);
+      const links = byComponent.get(componentId) ?? [];
+      links.push({
+        osm_type: row.osm_type,
+        osm_id: Number(row.osm_id),
+        gers_id: row.gers_id,
+        source_confidence: row.source_confidence === null ? null : Number(row.source_confidence),
+        match_confidence: Number(row.match_confidence),
+        distance_m: Number(row.distance_m),
+        method: row.method,
+        evidence: row.evidence,
+        release: row.release,
+      });
+      byComponent.set(componentId, links);
+    }
+    const selected = [...byComponent.values()].flatMap(assignLinkRecords);
+    await insertLinkRows(schema, "poi_conflation_link_next", selected, (query, parameters) =>
+      sql.unsafe(query, parameters),
+    );
+    assignmentCursor = Math.max(...byComponent.keys());
+    stagedLinks += selected.length;
+    await opts.onCheckpoint?.(assignmentCursor, stagedLinks);
+    opts.onProgress?.(
+      `Assigned ${assignmentCursor}/${components} exact components ` +
+        `(${stagedLinks} staged links)...`,
+    );
+  }
+
+  const [{ linked }] = await sql.unsafe<{ linked: string }[]>(
+    `SELECT COUNT(*)::TEXT AS linked FROM "${schema}".poi_conflation_link_next`,
+    [],
+  );
+  return { components, assignmentCursor, stagedLinks: Number(linked ?? 0) };
+}
+
+/** Atomically publishes the completely assigned next-link snapshot. */
+export async function publishOvertureLinks(
+  schema = "overture_places",
+): Promise<{ linked: number }> {
+  assertValidOvertureSchema(schema);
 
   await sql.begin(async (tx) => {
     await tx.unsafe(`DELETE FROM "${schema}".poi_conflation_link`);
     await tx.unsafe(
-      `WITH osm_degree AS (
-         SELECT osm_type, osm_id, COUNT(*) AS degree
-         FROM "${schema}".poi_conflation_candidate
-         GROUP BY osm_type, osm_id
-       ), gers_degree AS (
-         SELECT gers_id, COUNT(*) AS degree
-         FROM "${schema}".poi_conflation_candidate
-         GROUP BY gers_id
-       )
-       INSERT INTO "${schema}".poi_conflation_link
+      `INSERT INTO "${schema}".poi_conflation_link
          (osm_type, osm_id, gers_id, source_confidence, match_confidence,
           distance_m, method, evidence, release)
-       SELECT candidate.osm_type, candidate.osm_id, candidate.gers_id,
-              candidate.source_confidence, candidate.match_confidence,
-              candidate.distance_m, candidate.method, candidate.evidence, candidate.release
-       FROM "${schema}".poi_conflation_candidate AS candidate
-       JOIN osm_degree USING (osm_type, osm_id)
-       JOIN gers_degree USING (gers_id)
-       WHERE osm_degree.degree = 1 AND gers_degree.degree = 1`,
-    );
-    await insertLinkRows(schema, "poi_conflation_link", selectedAmbiguous, (query, parameters) =>
-      tx.unsafe(query, parameters),
+       SELECT osm_type, osm_id, gers_id, source_confidence, match_confidence,
+              distance_m, method, evidence, release
+       FROM "${schema}".poi_conflation_link_next`,
     );
   });
 
@@ -542,9 +778,17 @@ export async function conflateOverture(opts: {
     [],
   );
   const linkedCount = Number(linked ?? 0);
-  await sql.unsafe(`TRUNCATE TABLE "${schema}".poi_conflation_candidate`);
-  onProgress?.(
-    `Published ${linkedCount} conflation links atomically (${ambiguous.length} contested edges).`,
+  return { linked: linkedCount };
+}
+
+/** Clears retry artifacts only after state has durably reached `completed`. */
+export async function cleanupOvertureConflationWorkspace(
+  schema = "overture_places",
+): Promise<void> {
+  assertValidOvertureSchema(schema);
+  await sql.unsafe(
+    `TRUNCATE TABLE "${schema}".poi_conflation_candidate,
+                    "${schema}".poi_conflation_component,
+                    "${schema}".poi_conflation_link_next`,
   );
-  return { linked: linkedCount, candidates: candidateCount, processed };
 }

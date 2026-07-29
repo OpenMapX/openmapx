@@ -639,13 +639,15 @@ export function registerDataCommands(program: Command): void {
 
   data
     .command("overture-conflate [region]")
-    .description("Retry the complete OSM extraction and Overture link rebuild independently")
-    .action(async (region: string | undefined) => {
+    .description("Resume the durable OSM extraction and Overture link rebuild")
+    .option("--restart", "Discard saved phases and restart from OSM extraction")
+    .action(async (region: string | undefined, options: { restart?: boolean }) => {
       const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
       const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/germany/berlin";
       try {
         log.dim(`Running Overture conflation for "${resolvedRegion}"…`);
         const result = await client.conflateOverture(resolvedRegion, {
+          restart: options.restart,
           onProgress: (msg) => log.dim(msg),
         });
         if (!result.ok) {
@@ -663,6 +665,21 @@ export function registerDataCommands(program: Command): void {
         );
       } catch (err) {
         log.err(`overture-conflate failed: ${(err as Error).message}`);
+        dataManagerHint();
+        process.exit(1);
+      }
+    });
+
+  data
+    .command("overture-status")
+    .description("Show the installed Overture release and durable conflation phase")
+    .action(async () => {
+      const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
+      try {
+        const result = await client.overtureStatus();
+        console.log(JSON.stringify(result, null, 2));
+      } catch (err) {
+        log.err(`overture-status failed: ${(err as Error).message}`);
         dataManagerHint();
         process.exit(1);
       }

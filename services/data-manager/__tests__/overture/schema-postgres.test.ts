@@ -12,27 +12,37 @@ describe.skipIf(skipE2e)("Overture schema in PostGIS", () => {
     try {
       await pg.sql.unsafe(buildSchemaDDL("overture_places"));
       await pg.sql.unsafe(
-        `INSERT INTO overture_places.conflation_state (release, region, status)
-         VALUES ('2026-07-22.0', 'europe/germany/berlin', 'pending')`,
+        `INSERT INTO overture_places.conflation_state (release, region, place_count, status)
+         VALUES ('2026-07-22.0', 'europe/germany/berlin', 100, 'pending')`,
       );
       await expect(
         pg.sql.unsafe(
-          `INSERT INTO overture_places.conflation_state (release, region, status)
-           VALUES ('2026-07-22.0', 'europe/germany/berlin', 'pending')`,
+          `INSERT INTO overture_places.conflation_state (release, region, place_count, status)
+           VALUES ('2026-07-22.0', 'europe/germany/berlin', 100, 'pending')`,
         ),
       ).rejects.toThrow();
 
-      const rows = await pg.sql.unsafe<{ persistence: string; h3_nullable: string }[]>(
-        `SELECT relpersistence AS persistence,
-                (SELECT is_nullable
-                 FROM information_schema.columns
-                 WHERE table_schema = 'overture_places'
-                   AND table_name = 'osm_pois'
-                   AND column_name = 'h3_r8') AS h3_nullable
+      const rows = await pg.sql.unsafe<{ relname: string; persistence: string }[]>(
+        `SELECT relname, relpersistence AS persistence
          FROM pg_class
-         WHERE oid = 'overture_places.poi_conflation_candidate'::regclass`,
+         WHERE oid IN (
+           'overture_places.poi_conflation_candidate'::regclass,
+           'overture_places.poi_conflation_link_next'::regclass,
+           'overture_places.poi_conflation_component'::regclass
+         )
+         ORDER BY relname`,
       );
-      expect(rows[0]).toEqual(expect.objectContaining({ persistence: "u", h3_nullable: "NO" }));
+      expect(rows).toEqual([
+        { relname: "poi_conflation_candidate", persistence: "p" },
+        { relname: "poi_conflation_component", persistence: "u" },
+        { relname: "poi_conflation_link_next", persistence: "p" },
+      ]);
+      const [h3] = await pg.sql.unsafe<{ is_nullable: string }[]>(
+        `SELECT is_nullable FROM information_schema.columns
+         WHERE table_schema = 'overture_places' AND table_name = 'osm_pois'
+           AND column_name = 'h3_r8'`,
+      );
+      expect(h3?.is_nullable).toBe("NO");
     } finally {
       await pg.stop();
     }

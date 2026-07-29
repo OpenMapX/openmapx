@@ -2,9 +2,10 @@
  * Human-reviewed anchors from Overture Places 2026-07-22.0.
  *
  * The labels were reviewed against the named real-world businesses and their
- * coordinates on 2026-07-28. They intentionally cover a large German city, a
- * medium German city, a rural German town, and a non-German city. GERS ids are
- * the stable assertions; names are retained to make future re-labeling auditable.
+ * coordinates on 2026-07-28 and 2026-07-29. They cover multiple commercial
+ * categories across a large German city, a medium German city, a rural German
+ * town, and a non-German city. GERS ids are the stable assertions; names are
+ * retained to make future re-labeling auditable.
  */
 export const OVERTURE_QUALITY_BASELINE_RELEASE = "2026-07-22.0";
 
@@ -80,6 +81,195 @@ export const OVERTURE_QUALITY_BASELINE: readonly OvertureQualityCase[] = [
     minimumRelevantRecall: 0.8,
     minimumResultCount: 30,
     maximumKnownIrrelevantHits: 2,
+    maximumKnownDuplicateHits: 0,
+  },
+  {
+    id: "aachen-centre-restaurants",
+    description: "Medium German city — restaurants around Aachen cathedral",
+    region: "europe/germany/nordrhein-westfalen",
+    category: "restaurants",
+    bbox: { west: 6.08, south: 50.772, east: 6.09, north: 50.779 },
+    judgments: [
+      {
+        gersId: "df482c12-be57-4b1a-8771-978ef26e4ea7",
+        name: "Domkeller",
+        relevant: true,
+      },
+      {
+        gersId: "d778aaef-acce-4ebd-84f2-aa6f4bba33e1",
+        name: "Al Triangolo",
+        relevant: true,
+      },
+      {
+        gersId: "8a931f41-d5cd-45ed-893e-89ec67de69d3",
+        name: "Aix Mediterrane",
+        relevant: true,
+      },
+      {
+        gersId: "c7c8aad5-d307-4c0a-8d35-6f2b711d6c0d",
+        name: "Postwagen Zum Ratskeller",
+        relevant: true,
+      },
+    ],
+    minimumRelevantRecall: 0.75,
+    minimumResultCount: 35,
+    maximumKnownIrrelevantHits: 0,
+    maximumKnownDuplicateHits: 0,
+  },
+  {
+    id: "aachen-supermarkets",
+    description: "Medium German city — supermarkets and grocery stores across central Aachen",
+    region: "europe/germany/nordrhein-westfalen",
+    category: "supermarkets",
+    bbox: { west: 6.07, south: 50.765, east: 6.105, north: 50.79 },
+    judgments: [
+      {
+        gersId: "26f4c066-fc3c-4439-a358-9214905f674b",
+        name: "REWE",
+        relevant: true,
+      },
+      {
+        gersId: "1f03f3f2-8383-4491-a2a4-bf6f5e25fce8",
+        name: "Netto",
+        relevant: true,
+      },
+      {
+        gersId: "9fbd9873-9e67-49cd-9c6e-3802202af79a",
+        name: "go asia Supermarkt",
+        relevant: true,
+      },
+      {
+        gersId: "cf2fe3a2-f17f-4cd5-b492-7444cef4d129",
+        name: "Basic Bio-Supermarkt",
+        relevant: true,
+      },
+      {
+        gersId: "4c18d0e6-2280-4dcd-b65c-92a04f588f61",
+        name: "dm-drogerie markt Deutschland",
+        relevant: false,
+        note: "Drugstore classified as grocery_store, not a supermarket",
+      },
+    ],
+    minimumRelevantRecall: 0.75,
+    minimumResultCount: 15,
+    maximumKnownIrrelevantHits: 1,
+    maximumKnownDuplicateHits: 0,
+  },
+  {
+    id: "aachen-pharmacies",
+    description: "Medium German city — pharmacies around Aachen city centre",
+    region: "europe/germany/nordrhein-westfalen",
+    category: "pharmacies",
+    bbox: { west: 6.08, south: 50.768, east: 6.098, north: 50.78 },
+    judgments: [
+      {
+        gersId: "c9935b99-0328-4e96-95fd-40bd39305772",
+        name: "Aeskulap Apotheke",
+        relevant: true,
+      },
+      {
+        gersId: "9a1d6898-8a77-4464-909c-5abd000535fa",
+        name: "St. Georg-Apotheke",
+        relevant: true,
+      },
+      {
+        gersId: "fe153af4-0e2f-4dd5-9588-d45f30c2ebd9",
+        name: "Hirsch-Apotheke",
+        relevant: true,
+      },
+      {
+        gersId: "fc76bc50-da9f-4abe-9a60-b0a52b3d3615",
+        name: "Aquis Apotheke",
+        relevant: true,
+      },
+      {
+        gersId: "8b9ed93d-feb6-4773-bf29-114023baf124",
+        name: "dm-drogerie markt",
+        relevant: false,
+        note: "Drugstore, not a licensed pharmacy",
+      },
+      {
+        gersId: "2b0b2f08-ce04-4eb0-9582-d1a51fad3892",
+        name: "Rossmann",
+        relevant: false,
+        note: "Drugstore, not a licensed pharmacy",
+      },
+      {
+        gersId: "28513562-58da-4c47-89f5-f16075ce584d",
+        name: "Müller Deutschland",
+        relevant: false,
+        note: "Drugstore, not a licensed pharmacy",
+      },
+    ],
+    minimumRelevantRecall: 0.75,
+    minimumResultCount: 20,
+    maximumKnownIrrelevantHits: 3,
+    maximumKnownDuplicateHits: 0,
+  },
+  {
+    id: "aachen-hotels",
+    description: "Medium German city — hotels from Aachen station to Quellenhof",
+    region: "europe/germany/nordrhein-westfalen",
+    category: "hotels",
+    bbox: { west: 6.08, south: 50.767, east: 6.098, north: 50.783 },
+    judgments: [
+      {
+        gersId: "a5bcd87a-6e76-4c51-93cc-3abdf071289d",
+        name: "Mercure Hotel Aachen am Dom",
+        relevant: true,
+      },
+      {
+        gersId: "772497c5-dcb3-4b1b-ae4b-4d506ba18c92",
+        name: "Aquis Grana Cityhotel",
+        relevant: true,
+      },
+      {
+        gersId: "602e55fb-33f1-41ac-953d-a7d73d481dda",
+        name: "Hotel Motel One Aachen",
+        relevant: true,
+      },
+      {
+        gersId: "c63fcbd4-3d9f-4e84-9a53-ebe67d2ab32e",
+        name: "Novotel Aachen City",
+        relevant: true,
+      },
+    ],
+    minimumRelevantRecall: 0.75,
+    minimumResultCount: 25,
+    maximumKnownIrrelevantHits: 0,
+    maximumKnownDuplicateHits: 0,
+  },
+  {
+    id: "aachen-fuel",
+    description: "Medium German city — fuel stations across Aachen",
+    region: "europe/germany/nordrhein-westfalen",
+    category: "fuel",
+    bbox: { west: 6.065, south: 50.76, east: 6.11, north: 50.795 },
+    judgments: [
+      {
+        gersId: "798188a3-e06f-4dd1-a807-a5ad20fd177e",
+        name: "SB Tankstelle",
+        relevant: true,
+      },
+      {
+        gersId: "8216946e-5577-4bf9-bd35-3274a9b11890",
+        name: "Shell",
+        relevant: true,
+      },
+      {
+        gersId: "f9a06a27-fdf9-4533-a52f-51fabf4f11ec",
+        name: "Aral",
+        relevant: true,
+      },
+      {
+        gersId: "9e4ad950-0249-4fbc-9169-82680066fb9f",
+        name: "Esso",
+        relevant: true,
+      },
+    ],
+    minimumRelevantRecall: 0.75,
+    minimumResultCount: 10,
+    maximumKnownIrrelevantHits: 0,
     maximumKnownDuplicateHits: 0,
   },
   {

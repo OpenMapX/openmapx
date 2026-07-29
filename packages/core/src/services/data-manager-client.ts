@@ -225,6 +225,12 @@ export class DataManagerClient {
     return readOvertureStream(res, "overture/pull", opts.onProgress);
   }
 
+  async overtureStatus(): Promise<Record<string, unknown>> {
+    const res = await this.fetchImpl(`${this.baseUrl}/overture/status`, this.authed());
+    if (!res.ok) throw new Error(`overture/status failed: HTTP ${res.status}`);
+    return (await res.json()) as Record<string, unknown>;
+  }
+
   async syncOverture(
     region: string,
     opts: { onProgress?: (msg: string) => void } = {},
@@ -286,7 +292,7 @@ export class DataManagerClient {
 
   async conflateOverture(
     region: string,
-    opts: { onProgress?: (msg: string) => void } = {},
+    opts: { restart?: boolean; onProgress?: (msg: string) => void } = {},
   ): Promise<{
     ok: boolean;
     linked?: number;
@@ -300,7 +306,7 @@ export class DataManagerClient {
       this.authed({
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ region }),
+        body: JSON.stringify({ region, restart: opts.restart === true }),
       }),
     );
     return readOvertureStream(res, "overture/conflate", opts.onProgress) as Promise<{

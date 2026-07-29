@@ -126,7 +126,8 @@ hardlinks, authenticated feeds — lives in
 | `data overture-sync [region]` | Run the release-pinned regional refresh: pull and atomic ingest, then start the independently retryable OSM↔GERS link rebuild. |
 | `data overture-pull [region]` | Resolve exact Overture Places assets through STAC, pull a regional Parquet snapshot, and write its validated release contract. |
 | `data overture-ingest [region]` | Verify the regional release contract and ingest its Overture Places snapshot into PostGIS. |
-| `data overture-conflate [region]` | Independently retry the installed release's complete OSM extraction and atomic OSM↔Overture link rebuild. |
+| `data overture-conflate [region]` | Resume the installed release's durable extraction, scoring, exact assignment, or publication phase. Flag: `--restart` deliberately discards saved phases and starts from extraction. |
+| `data overture-status` | Show the installed release, durable phase, cursors, counts, timings, heartbeat age, and last error. |
 | `data overture-extract [region]` | Stream OSM POIs from the local PBF and atomically replace `overture_places.osm_pois` (diagnostic/manual use). |
 
 `data download osm`, `data build`, `data convert`, and `data update` fall back to
