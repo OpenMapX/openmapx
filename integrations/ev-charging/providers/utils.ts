@@ -212,6 +212,22 @@ export function idString(value: unknown): string | undefined {
   return cleanString(value);
 }
 
+/**
+ * Deterministic short id derived from arbitrary parts. Many national feeds
+ * (Ireland ESB, NZ EVRoam, Cyprus, Australia, Luxembourg) carry no stable
+ * native station id, so the parser synthesises one from
+ * territory/address/coordinates. djb2 → unsigned base36 keeps it compact and
+ * table-name-safe; stable across re-downloads as long as the inputs are.
+ */
+export function stableHashId(...parts: Array<string | number | undefined>): string {
+  const joined = parts.map((part) => (part === undefined ? "" : String(part))).join("|");
+  let hash = 5381;
+  for (let i = 0; i < joined.length; i++) {
+    hash = ((hash << 5) + hash + joined.charCodeAt(i)) | 0;
+  }
+  return (hash >>> 0).toString(36);
+}
+
 export function connector(input: EvChargingConnector): EvChargingConnector {
   return {
     ...input,

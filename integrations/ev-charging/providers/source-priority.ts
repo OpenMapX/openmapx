@@ -10,6 +10,7 @@ const SOURCE_PRIORITY: Record<string, number> = {
   "de-bnetza": 0,
   "de-ocpdb": 0,
   "fr-irve": 0,
+  "ie-esb": 0,
   "ch-sfoe": 0,
   "nl-dotnl": 0,
   "no-nobil": 0,

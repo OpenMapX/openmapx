@@ -10,6 +10,7 @@ import { parseDeBnetzaCsv, resolveDeBnetzaCsvUrl } from "./providers/de-bnetza-p
 import { DE_OCPDB_LOCATIONS_URL, DE_OCPDB_SOURCES_URL } from "./providers/de-ocpdb-client.js";
 import { parseDeOcpdbLive } from "./providers/de-ocpdb-live-parser.js";
 import { parseDeOcpdb } from "./providers/de-ocpdb-parser.js";
+import { IE_ESB_CSV_URL, parseIeEsb } from "./providers/ie-esb-parser.js";
 import { parseNlDotnlLive } from "./providers/nl-dotnl-live-parser.js";
 import { NL_DOTNL_LOCATIONS_URL, parseNlDotnl } from "./providers/nl-dotnl-parser.js";
 
@@ -64,6 +65,20 @@ export function declarePoiSources(): PoiSource[] {
         fetch: { type: "http", url: DE_OCPDB_SOURCES_URL, timeoutMs: 30_000 },
         parse: parseDeOcpdbLive,
         ttlSeconds: 7200,
+      },
+    },
+    {
+      parts: { country: "ie", operator: "esb" },
+      domain: "ev-charging",
+      name: "ESB ecars — Irish & Northern Ireland public charging network",
+      // [west, south, east, north]
+      coverage: [-10.6, 51.3, -5.3, 55.5],
+      static: {
+        cron: "0 4 * * *",
+        fetch: { type: "http", url: IE_ESB_CSV_URL, timeoutMs: 30_000 },
+        parse: parseIeEsb,
+        // Register today is ~590 sites (RoI + NI).
+        minRowCount: 100,
       },
     },
     {

@@ -3,6 +3,7 @@ import { fetchChSfoeChargingDetail, searchChSfoeCharging } from "./ch-sfoe.js";
 import { fetchDeBnetzaChargingDetail, searchDeBnetzaCharging } from "./de-bnetza.js";
 import { fetchDeOcpdbChargingDetail, searchDeOcpdbCharging } from "./de-ocpdb.js";
 import { fetchFrIrveChargingDetail, searchFrIrveCharging } from "./fr-irve.js";
+import { fetchIeEsbChargingDetail, searchIeEsbCharging } from "./ie-esb.js";
 import { fetchNlDotnlChargingDetail, searchNlDotnlCharging } from "./nl-dotnl.js";
 import { fetchNoNobilChargingDetail, searchNoNobilCharging } from "./no-nobil.js";
 import { getOcmDetail, searchOcm } from "./ocm.js";
@@ -32,6 +33,7 @@ export const EV_CHARGING_SOURCE_REGISTRY: EvChargingSource[] = [
   source("de-bnetza", searchDeBnetzaCharging, "de-bnetza:", fetchDeBnetzaChargingDetail),
   source("de-ocpdb", searchDeOcpdbCharging, "de-ocpdb:", fetchDeOcpdbChargingDetail),
   source("fr-irve", searchFrIrveCharging, "fr-irve:", fetchFrIrveChargingDetail),
+  source("ie-esb", searchIeEsbCharging, "ie-esb:", fetchIeEsbChargingDetail),
   source("ch-sfoe", searchChSfoeCharging, "ch-sfoe:", fetchChSfoeChargingDetail),
   source("nl-dotnl", searchNlDotnlCharging, "nl-dotnl:", fetchNlDotnlChargingDetail),
   source("no-nobil", searchNoNobilCharging, "no-nobil:", fetchNoNobilChargingDetail),

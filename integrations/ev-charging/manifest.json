@@ -117,6 +117,11 @@
       "url": "https://public.opendatasoft.com/api/explore/v2.1/catalog/datasets/mobilityref-france-irve-220/records?limit=1"
     },
     {
+      "name": "ESB ecars (IE)",
+      "type": "http",
+      "url": "https://cdn.esb.ie/media-staging/docs/default-source/ecars/its-data-ecars-sites/its-data-ecars-sites-roi-ni.csv"
+    },
+    {
       "name": "SFOE (CH)",
       "type": "http",
       "url": "https://data.geo.admin.ch/ch.bfe.ladestellen-elektromobilitaet/status/oicp/ch.bfe.ladestellen-elektromobilitaet.json"
@@ -207,6 +212,22 @@
       "commercialUse": "yes",
       "providerCountry": "FR",
       "providerPrivacyUrl": "https://www.data.gouv.fr/pages/suivi",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "ie-esb",
+      "name": "ESB ecars — Irish & Northern Ireland public charging network",
+      "url": "https://data.gov.ie/dataset/esb-ev-public-charging-network",
+      "apiHosts": ["cdn.esb.ie"],
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "ESB ecars (data.gov.ie)",
+      "commercialUse": "yes",
+      "providerCountry": "IE",
+      "providerPrivacyUrl": "https://esb.ie/data-protection",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,

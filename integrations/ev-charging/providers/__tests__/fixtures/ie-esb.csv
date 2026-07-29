@@ -1,0 +1,4 @@
+﻿Territory,County,Address,Nr. Chargers,Max. Sim. CCS,Max. Sim. CHAdeMo,Max. Sim. Fast AC,Max. Sim. AC Socket,CCS kWs,CHAdeMO kWs,AC Fast kWs,AC Socket kWs,Latitude,Longitude,Open Hours,Price - Fast Charger ( 43 - 100kW),Price - High Power Charger (150 -  360 kW),Price AC Charger (22kW),VAT Rate ,Overstay Fees
+RoI,Carlow,"Four Lakes Retail Park, Dublin Road, Carlow Town",1,1,1,1,0,50,50,43,,52.846593,-6.902268,24 x 7,€0.57 /kWh,,€0.52 /kWh,9%,"€0.50 per minute after 45 minutes, up to a maximum of €22.50."
+RoI,Carlow,"The Parade, Bagenalstown",1,0,0,0,2,,,,22(2),52.702794,-6.955983,24 x 7,,,€0.52 /kWh,9%,€0.50 per minute after 10 hours up to a maximum of €22.50.
+NI,,"High Street, Belfast, BT1 1AA",1,1,0,0,0,50,,,,54.597300,-5.930100,24 x 7,£0.462 /kWh,,,20%,

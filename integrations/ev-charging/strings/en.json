@@ -61,6 +61,11 @@
       "dataSent": "Bounding-box coordinates as an in_bbox(point_geo, north, west, south, east) filter with pagination (limit/offset) — sent server-side per map request; no API key",
       "dataReceived": "Charging point records with location, operator/owner, connector types, rated power, access conditions, payment methods, pricing, opening hours, and accessibility metadata"
     },
+    "ie-esb": {
+      "purpose": "ESB ecars public charging network covering the Republic of Ireland and Northern Ireland",
+      "dataSent": "No query parameters — the full ESB ecars CSV dataset is downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
+      "dataReceived": "Charging station records with location, county, connector types and per-type counts, rated power, opening hours, and free-text pricing"
+    },
     "opendatasoft": {
       "purpose": "Opendatasoft (Opendatasoft SAS, France) is the API platform that hosts and serves the French national IRVE charging dataset; requests for French charging points are answered by this platform",
       "dataSent": "The map-viewport bounding box (as an in_bbox(point_geo, north, west, south, east) filter with pagination) reaches the Opendatasoft platform server-side; no user identity, account, or API key is sent",
