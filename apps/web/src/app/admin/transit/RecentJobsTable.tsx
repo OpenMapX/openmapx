@@ -17,7 +17,7 @@ import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
 import { DataManagerJobStages } from "@/components/admin/shared/DataManagerJobStages";
-import { jobStatusColor } from "@/components/admin/shared/jobStatus";
+import { JobStatusChip } from "@/components/admin/shared/JobStatusChip";
 import { useTransitJobDetail, useTransitJobs } from "@/lib/admin/transitHooks";
 
 function formatTime(iso: string | null): string {
@@ -117,12 +117,7 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
                 flexWrap: "wrap",
               }}
             >
-              <Chip
-                size="small"
-                label={data.status}
-                color={jobStatusColor(data.status)}
-                variant={data.status === "running" ? "filled" : "outlined"}
-              />
+              <JobStatusChip status={data.status} />
               <Chip
                 size="small"
                 label={`triggered by ${data.triggeredBy ?? "—"}`}
@@ -214,12 +209,7 @@ export function RecentJobsTable() {
                   <TableCell>{formatTime(job.startedAt)}</TableCell>
                   <TableCell>{formatTime(job.finishedAt)}</TableCell>
                   <TableCell>
-                    <Chip
-                      size="small"
-                      label={job.status}
-                      color={jobStatusColor(job.status)}
-                      variant={job.status === "running" ? "filled" : "outlined"}
-                    />
+                    <JobStatusChip status={job.status} />
                   </TableCell>
                   <TableCell>
                     <Typography

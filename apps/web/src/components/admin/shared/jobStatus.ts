@@ -20,6 +20,24 @@ export function jobStatusColor(status: string): JobStatusColor {
   return JOB_STATUS_COLOR[status] ?? "default";
 }
 
+const JOB_STATUS_DESCRIPTION: Record<string, string> = {
+  queued: "Waiting to start.",
+  running: "Currently in progress.",
+  success: "Completed successfully.",
+  ok: "Completed successfully.",
+  failed: "Stopped because the job failed.",
+  error: "Stopped because this stage failed.",
+  canceled: "Canceled before completion.",
+  partial:
+    "Completed with warnings: one or more stages only partially succeeded. Open the job details to review them.",
+  interrupted: "Stopped before completion, usually because the data manager restarted.",
+  skipped: "Skipped because this stage was disabled or not required.",
+};
+
+export function jobStatusDescription(status: string): string | null {
+  return JOB_STATUS_DESCRIPTION[status] ?? null;
+}
+
 /**
  * Coerce a job/stage `error` value into a displayable string.
  *

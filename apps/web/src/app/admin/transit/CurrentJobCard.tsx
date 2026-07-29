@@ -12,7 +12,9 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import type { ReactNode } from "react";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
+import { JobStatusChip } from "@/components/admin/shared/JobStatusChip";
 import {
   type TransitStateSummary,
   useRestartMotis,
@@ -35,17 +37,21 @@ function formatTime(iso: string | null): string {
   }
 }
 
-function statusColor(status: string | null): "default" | "success" | "error" | "warning" {
-  if (status === "success") return "success";
-  if (status === "failed" || status === "error") return "error";
-  if (status === "partial" || status === "stale") return "warning";
-  return "default";
-}
-
 function durationSecs(startedAtIso: string): number {
   const started = new Date(startedAtIso).getTime();
   if (!Number.isFinite(started)) return 0;
   return Math.max(0, Math.round((Date.now() - started) / 1000));
+}
+
+function SummaryMetric({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Stack spacing={0.25}>
+      <Typography variant="caption" sx={{ color: "text.secondary" }}>
+        {label}
+      </Typography>
+      {children}
+    </Stack>
+  );
 }
 
 function RunningJobDetail({ jobId }: { jobId: string }) {
@@ -87,10 +93,10 @@ function RunningJobDetail({ jobId }: { jobId: string }) {
         />
         <Chip label={`${stages.length} stage(s) recorded`} size="small" variant="outlined" />
         {latest && (
-          <Chip
+          <JobStatusChip
+            status={latest.status}
             label={`stage: ${latest.stage} (${latest.status})`}
-            size="small"
-            color={statusColor(latest.status)}
+            variant="filled"
           />
         )}
       </Stack>
@@ -195,44 +201,15 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
             flexWrap: "wrap",
           }}
         >
-          <Box>
-            <Typography
-              variant="caption"
-              sx={{
-                color: "text.secondary",
-              }}
-            >
-              Last sync
-            </Typography>
+          <SummaryMetric label="Last sync">
             <Typography variant="body2">{formatTime(state.lastSyncAt)}</Typography>
-          </Box>
-          <Box>
-            <Typography
-              variant="caption"
-              sx={{
-                color: "text.secondary",
-              }}
-            >
-              Last status
-            </Typography>
-            <Chip
-              label={state.lastSyncStatus ?? "never"}
-              size="small"
-              color={statusColor(state.lastSyncStatus)}
-              variant="outlined"
-            />
-          </Box>
-          <Box>
-            <Typography
-              variant="caption"
-              sx={{
-                color: "text.secondary",
-              }}
-            >
-              Total feeds tracked
-            </Typography>
+          </SummaryMetric>
+          <SummaryMetric label="Last status">
+            <JobStatusChip status={state.lastSyncStatus} />
+          </SummaryMetric>
+          <SummaryMetric label="Total feeds tracked">
             <Typography variant="body2">{state.feedCount}</Typography>
-          </Box>
+          </SummaryMetric>
         </Stack>
       )}
       {state.lastSyncStatus === "failed" && (

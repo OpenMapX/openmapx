@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { formatStageError, JOB_STATUS_COLOR, jobStatusColor } from "../jobStatus";
+import {
+  formatStageError,
+  JOB_STATUS_COLOR,
+  jobStatusColor,
+  jobStatusDescription,
+} from "../jobStatus";
 
 describe("jobStatusColor", () => {
   it("maps each known status to its color", () => {
@@ -24,6 +29,17 @@ describe("jobStatusColor", () => {
   it("exposes the underlying color map", () => {
     expect(JOB_STATUS_COLOR.success).toBe("success");
     expect(Object.keys(JOB_STATUS_COLOR)).toContain("running");
+  });
+});
+
+describe("jobStatusDescription", () => {
+  it("explains partial as a completed job with warnings", () => {
+    expect(jobStatusDescription("partial")).toContain("Completed with warnings");
+    expect(jobStatusDescription("partial")).toContain("partially succeeded");
+  });
+
+  it("omits a tooltip for an unknown status", () => {
+    expect(jobStatusDescription("custom-status")).toBeNull();
   });
 });
 

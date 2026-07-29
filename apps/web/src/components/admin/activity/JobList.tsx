@@ -24,11 +24,11 @@ import { useEnv } from "@/lib/EnvProvider";
 import { relativeTimeFromIso } from "@/lib/formatTime";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
+import { JobStatusChip } from "../shared/JobStatusChip";
 import { TableSkeleton } from "../shared/TableSkeleton";
 import { useServerPagination } from "../shared/tableHooks";
 import { ActorCell } from "./ActorCell";
 import { JobDetail } from "./JobDetail";
-import { JobStatusChip } from "./JobStatusChip";
 
 interface AdminJob {
   source: "application" | "data-manager";

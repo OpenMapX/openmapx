@@ -11,7 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { DataManagerJobStages } from "../shared/DataManagerJobStages";
-import { JobStatusChip } from "./JobStatusChip";
+import { JobStatusChip } from "../shared/JobStatusChip";
 
 interface JobLog {
   id: string;

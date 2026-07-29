@@ -1,4 +1,3 @@
-import Chip from "@mui/material/Chip";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -7,7 +6,8 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
-import { formatStageError, jobStatusColor } from "./jobStatus";
+import { JobStatusChip } from "./JobStatusChip";
+import { formatStageError } from "./jobStatus";
 
 export interface DataManagerJobStage {
   id: string;
@@ -16,6 +16,7 @@ export interface DataManagerJobStage {
   durationMs: number;
   message: string | null;
   error: unknown;
+  artifacts?: unknown;
 }
 
 function durationLabel(durationMs: number): string {
@@ -25,6 +26,24 @@ function durationLabel(durationMs: number): string {
   const minutes = Math.floor(durationMs / 60_000);
   const seconds = Math.floor((durationMs % 60_000) / 1000);
   return `${minutes}m ${seconds}s`;
+}
+
+function validationDetails(stage: DataManagerJobStage): string | null {
+  if (stage.stage !== "validate" || !stage.artifacts || typeof stage.artifacts !== "object") {
+    return null;
+  }
+  const invalid = (stage.artifacts as { invalid?: unknown }).invalid;
+  if (!Array.isArray(invalid) || invalid.length === 0) return null;
+
+  const details = invalid.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const { id, reason } = entry as { id?: unknown; reason?: unknown };
+    if (typeof id !== "string") return [];
+    return [`${id}${typeof reason === "string" ? `: ${reason}` : ""}`];
+  });
+  if (details.length === 0) return null;
+  const hidden = details.length - 5;
+  return `Invalid archives — ${details.slice(0, 5).join("; ")}${hidden > 0 ? `; +${hidden} more` : ""}`;
 }
 
 export function DataManagerJobStages({
@@ -56,6 +75,7 @@ export function DataManagerJobStages({
             <TableBody>
               {stages.map((stage) => {
                 const error = formatStageError(stage.error);
+                const artifactDetails = validationDetails(stage);
                 return (
                   <TableRow key={stage.id} hover>
                     <TableCell>
@@ -70,14 +90,17 @@ export function DataManagerJobStages({
                           {error ?? stage.message}
                         </Typography>
                       )}
+                      {artifactDetails && (
+                        <Typography
+                          variant="caption"
+                          sx={{ color: "warning.main", display: "block" }}
+                        >
+                          {artifactDetails}
+                        </Typography>
+                      )}
                     </TableCell>
                     <TableCell>
-                      <Chip
-                        size="small"
-                        label={stage.status}
-                        color={jobStatusColor(stage.status)}
-                        variant="outlined"
-                      />
+                      <JobStatusChip status={stage.status} />
                     </TableCell>
                     <TableCell align="right">{durationLabel(stage.durationMs)}</TableCell>
                   </TableRow>
