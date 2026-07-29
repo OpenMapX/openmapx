@@ -5,7 +5,6 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import StopIcon from "@mui/icons-material/Stop";
-import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
@@ -28,6 +27,7 @@ import {
 } from "@/hooks/useServices";
 import { StatusBadge } from "../integrations/StatusBadge";
 import { useAdminToast } from "../shared/AdminToast";
+import { CompactAlert } from "../shared/CompactAlert";
 import { MetaRow } from "../shared/MetaRow";
 import { statusColor, statusLabel } from "../shared/ServiceStatusChip";
 import { ServiceConfigForm } from "./ServiceConfigForm";
@@ -386,10 +386,10 @@ function ConfigTab({ data }: { data: ServiceDetailData }) {
 
   if (!manifest.configSchema) {
     return (
-      <Alert severity="info" variant="outlined">
+      <CompactAlert severity="info" variant="outlined">
         No configSchema declared for this service. Configuration is managed via environment
         variables or bind-mounted config files.
-      </Alert>
+      </CompactAlert>
     );
   }
 
@@ -492,9 +492,9 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
 
   if (isError || !data) {
     return (
-      <Alert severity="error">
+      <CompactAlert severity="error" variant="outlined">
         Failed to load service details. The backend may not be running yet.
-      </Alert>
+      </CompactAlert>
     );
   }
 

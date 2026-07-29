@@ -2,7 +2,6 @@
 
 import SearchIcon from "@mui/icons-material/Search";
 import StorageIcon from "@mui/icons-material/Storage";
-import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
@@ -36,6 +35,7 @@ import { StatusBadge } from "../integrations/StatusBadge";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { useAdminToast } from "../shared/AdminToast";
+import { CompactAlert } from "../shared/CompactAlert";
 import { ServiceStatusChip } from "../shared/ServiceStatusChip";
 import { TableEmptyState } from "../shared/TableEmptyState";
 import { useClientPagination } from "../shared/tableHooks";
@@ -361,17 +361,19 @@ export function ServiceCatalog() {
           </Typography>
 
           {selectionQuery.data?.source === "env" && selectionQuery.data.envVarValue && (
-            <Alert severity="warning">
+            <CompactAlert severity="warning" variant="outlined">
               Selection is currently controlled by environment variable{" "}
               <code>{selectionQuery.data.envVarName}</code>. File edits are disabled until the env
               override is removed.
-            </Alert>
+            </CompactAlert>
           )}
 
           {selectionQuery.isLoading ? (
             <CircularProgress size={20} />
           ) : selectionQuery.isError ? (
-            <Alert severity="error">Failed to load service selection</Alert>
+            <CompactAlert severity="error" variant="outlined">
+              Failed to load service selection
+            </CompactAlert>
           ) : (
             <Stack
               sx={{
@@ -424,19 +426,19 @@ export function ServiceCatalog() {
               </Stack>
 
               {!!selectionQuery.data?.warnings.length && (
-                <Alert severity="warning">
+                <CompactAlert severity="warning" variant="outlined">
                   {selectionQuery.data.warnings.map((warning) => (
                     <Typography key={warning} variant="body2">
                       {warning}
                     </Typography>
                   ))}
-                </Alert>
+                </CompactAlert>
               )}
 
               {!!selectionQuery.data?.missingIds.length && (
-                <Alert severity="error">
+                <CompactAlert severity="error" variant="outlined">
                   Missing service IDs: {selectionQuery.data.missingIds.join(", ")}
-                </Alert>
+                </CompactAlert>
               )}
             </Stack>
           )}
@@ -664,8 +666,9 @@ export function ServiceCatalog() {
         pagination={<AdminTablePagination {...paginationProps} />}
       >
         {isError && (
-          <Alert
+          <CompactAlert
             severity="error"
+            variant="outlined"
             action={
               <Typography
                 variant="body2"
@@ -677,7 +680,7 @@ export function ServiceCatalog() {
             }
           >
             Failed to load services. The backend may not be running yet.
-          </Alert>
+          </CompactAlert>
         )}
         <TableContainer>
           <Table size="small">

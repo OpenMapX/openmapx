@@ -9,7 +9,6 @@ import KeyIcon from "@mui/icons-material/Key";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
-import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
@@ -29,6 +28,8 @@ import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
+import { CompactAlert } from "../shared/CompactAlert";
+import { CompactAlertList } from "../shared/CompactAlertList";
 import { jobStatusColor } from "../shared/jobStatus";
 
 // Types
@@ -158,11 +159,6 @@ function attentionHref(item: AttentionItem): string {
 
 // Main
 
-// Collapsed list size for the Needs Attention + Credentials Overview
-// sections — the page becomes scroll-bound at scale, so we hide the rest
-// behind a "Show N more" toggle.
-const COLLAPSED_LIST_LIMIT = 3;
-
 export function AdminOverview() {
   const env = useEnv();
   const apiUrl = env.apiUrl;
@@ -242,7 +238,13 @@ export function AdminOverview() {
     );
   }
 
-  if (!data) return <Alert severity="error">Failed to load overview data.</Alert>;
+  if (!data) {
+    return (
+      <CompactAlert severity="error" variant="outlined">
+        Failed to load overview data.
+      </CompactAlert>
+    );
+  }
 
   const isBusy = healthSweep.isPending || reloadMutation.isPending;
   const credentials = credentialsOverview.data?.credentials ?? [];
@@ -507,47 +509,23 @@ export function AdminOverview() {
           >
             Needs Attention
           </Typography>
-          <Stack
-            sx={{
-              gap: 1,
-            }}
-          >
-            {(attentionExpanded
-              ? generalAttention
-              : generalAttention.slice(0, COLLAPSED_LIST_LIMIT)
-            ).map((item) => (
-              <Alert
-                key={`${item.type}-${item.message}`}
-                severity={item.severity}
-                variant="outlined"
-                action={
-                  <Button component={Link} href={attentionHref(item)} size="small" color="inherit">
-                    View
-                  </Button>
-                }
-                sx={{ py: 0, "& .MuiAlert-action": { alignItems: "center", pt: 0 } }}
-              >
-                {item.message}
-              </Alert>
-            ))}
-            {generalAttention.length > COLLAPSED_LIST_LIMIT && (
-              <Button
-                size="small"
-                onClick={() => setAttentionExpanded((v) => !v)}
-                sx={{ alignSelf: "flex-start" }}
-              >
-                {attentionExpanded
-                  ? "Show less"
-                  : `Show ${generalAttention.length - COLLAPSED_LIST_LIMIT} more`}
-              </Button>
-            )}
-          </Stack>
+          <CompactAlertList
+            items={generalAttention.map((item) => ({
+              id: `${item.type}-${item.message}`,
+              severity: item.severity,
+              message: item.message,
+              href: attentionHref(item),
+              actionLabel: "View",
+            }))}
+            expanded={attentionExpanded}
+            onExpandedChange={setAttentionExpanded}
+          />
         </Box>
       )}
       {credentialsOverview.isError && (
-        <Alert severity="error" variant="outlined">
+        <CompactAlert severity="error" variant="outlined">
           Failed to load credentials summary.
-        </Alert>
+        </CompactAlert>
       )}
       {credentials.length > 0 && (
         <Box>
@@ -561,56 +539,27 @@ export function AdminOverview() {
             Credentials Overview
           </Typography>
           {!credentialsOverview.data?.secretsConfigured && (
-            <Alert severity="warning" sx={{ mb: 1.25 }}>
+            <CompactAlert severity="warning" variant="outlined" sx={{ mb: 1.25 }}>
               Credentials vault is not configured. Set <code>OPENMAPX_SECRETS_KEY</code> to enable
               secure storage in the admin UI.
-            </Alert>
+            </CompactAlert>
           )}
           {missingCredentialIntegrations.length === 0 ? (
-            <Alert severity="success" variant="outlined">
+            <CompactAlert severity="success" variant="outlined">
               No missing integration credentials detected.
-            </Alert>
+            </CompactAlert>
           ) : (
-            <Stack
-              sx={{
-                gap: 1,
-              }}
-            >
-              {(credentialsExpanded
-                ? missingCredentialIntegrations
-                : missingCredentialIntegrations.slice(0, COLLAPSED_LIST_LIMIT)
-              ).map((entry) => (
-                <Alert
-                  key={entry.integrationId}
-                  severity="warning"
-                  variant="outlined"
-                  action={
-                    <Button
-                      component={Link}
-                      href={`/admin/integrations/${entry.integrationId}`}
-                      size="small"
-                      color="inherit"
-                    >
-                      Open
-                    </Button>
-                  }
-                >
-                  {entry.name}: {entry.missingCredentials} missing credential
-                  {entry.missingCredentials === 1 ? "" : "s"}
-                </Alert>
-              ))}
-              {missingCredentialIntegrations.length > COLLAPSED_LIST_LIMIT && (
-                <Button
-                  size="small"
-                  onClick={() => setCredentialsExpanded((v) => !v)}
-                  sx={{ alignSelf: "flex-start" }}
-                >
-                  {credentialsExpanded
-                    ? "Show less"
-                    : `Show ${missingCredentialIntegrations.length - COLLAPSED_LIST_LIMIT} more`}
-                </Button>
-              )}
-            </Stack>
+            <CompactAlertList
+              items={missingCredentialIntegrations.map((entry) => ({
+                id: entry.integrationId,
+                severity: "warning",
+                message: `${entry.name}: ${entry.missingCredentials} missing credential${entry.missingCredentials === 1 ? "" : "s"}`,
+                href: `/admin/integrations/${entry.integrationId}`,
+                actionLabel: "Open",
+              }))}
+              expanded={credentialsExpanded}
+              onExpandedChange={setCredentialsExpanded}
+            />
           )}
         </Box>
       )}
