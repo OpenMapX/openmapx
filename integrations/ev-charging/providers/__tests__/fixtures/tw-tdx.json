@@ -1,0 +1,64 @@
+{
+  "stations": [
+    {
+      "StationID": "TPE-0001",
+      "StationName": { "Zh_tw": "台北市政府充電站", "En": "Taipei City Hall EV Charging Station" },
+      "OperationType": 2,
+      "PositionLat": 25.0375,
+      "PositionLon": 121.5637,
+      "Connectors": [
+        { "Type": 6, "Power": 1, "Quantity": 2 },
+        { "Type": 1, "Power": 2, "Quantity": 1 }
+      ],
+      "ServiceTime": "24小時開放",
+      "ParkingRate": "首小時免費，超過每小時新臺幣40元",
+      "ChargingRate": "詳見營運業者官網公告費率",
+      "Location": {
+        "Address": { "City": "臺北市", "Town": "信義區", "Road": "市府路", "No": "1" }
+      }
+    },
+    {
+      "StationID": "TPE-0002",
+      "StationName": {
+        "Zh_tw": "北投行政中心充電站",
+        "En": "Beitou Administration Center EV Charging Station"
+      },
+      "OperationType": 2,
+      "PositionLat": 25.1321,
+      "PositionLon": 121.4987,
+      "Connectors": [{ "Type": 6, "Power": 1, "Quantity": 1 }],
+      "ServiceTime": "08:00-22:00",
+      "ParkingRate": "每小時新臺幣20元",
+      "ChargingRate": "每度新臺幣6元",
+      "Location": {
+        "Address": { "City": "臺北市", "Town": "北投區", "Road": "行政中心路", "No": "5" }
+      }
+    }
+  ],
+  "liveStatuses": [
+    {
+      "StationID": "TPE-0001",
+      "ChargingPointID": "TPE-0001-01",
+      "ConnectorID": "TPE-0001-01-A",
+      "ConnectorType": 6,
+      "ConnectorStatus": 1,
+      "LastUpdateTime": "2026-07-29T01:00:00+08:00"
+    },
+    {
+      "StationID": "TPE-0001",
+      "ChargingPointID": "TPE-0001-01",
+      "ConnectorID": "TPE-0001-01-B",
+      "ConnectorType": 6,
+      "ConnectorStatus": 2,
+      "LastUpdateTime": "2026-07-29T01:05:00+08:00"
+    },
+    {
+      "StationID": "TPE-0001",
+      "ChargingPointID": "TPE-0001-02",
+      "ConnectorID": "TPE-0001-02-A",
+      "ConnectorType": 1,
+      "ConnectorStatus": 1,
+      "LastUpdateTime": "2026-07-29T01:10:00+08:00"
+    }
+  ]
+}

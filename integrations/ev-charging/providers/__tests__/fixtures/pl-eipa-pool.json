@@ -1,0 +1,38 @@
+{
+  "data": [
+    {
+      "id": 2,
+      "operator_id": 1,
+      "code": "PL-2DT-P2BOZK57Q",
+      "name": "Centrum Handlowe ABC",
+      "accessibility": "Wejście od ul. Rycerskiej",
+      "charging": true,
+      "filling": false,
+      "elevation": 78,
+      "street": "Rycerska",
+      "house_number": "9",
+      "postal_code": "61-047",
+      "city": "Poznań",
+      "latitude": 52.232128,
+      "longitude": 16.399548,
+      "ts": "2026-06-01T14:00:00+02:00"
+    },
+    {
+      "id": 3,
+      "operator_id": 2,
+      "code": "PL-V1J-P9AK21XYZ",
+      "name": "Stacja Paliw Orlen",
+      "charging": true,
+      "filling": false,
+      "street": "Rynek",
+      "house_number": "12",
+      "postal_code": "55-300",
+      "city": "Przedmoście",
+      "latitude": 51.171,
+      "longitude": 16.605,
+      "operator_name": "Orlen Charge & Drive Sp. z o.o.",
+      "ts": "2026-06-02T08:30:00+02:00"
+    }
+  ],
+  "generated": "2026-07-29T06:00:00+02:00"
+}

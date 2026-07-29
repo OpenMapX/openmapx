@@ -80,6 +80,108 @@
             "body": "Hello,\n\nI would like to request a NOBIL API key (API v3) to display Norwegian/Swedish EV charging station data in a self-hosted OpenMapX map application.\n\nI have read and accept the Creative Commons Attribution 4.0 (CC BY 4.0) terms of use and will attribute NOBIL accordingly.\n\nProject: self-hosted, non-commercial mapping application.\n\nThank you."
           }
         }
+      },
+      "si-nap-api-key": {
+        "type": "string",
+        "title": "NAP Slovenija API Token",
+        "description": "NAP Slovenija (National Access Point) OAuth2 refresh token for the Prometej IDACS Energy Infrastructure Table dataset (Slovenian EV charging). Requires free business-entity registration.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://www.nap.si/en/datasets_details?id=46963663-38dd-eb04-43a9-cca9bdc0e4ba",
+          "urlLabel": "Register with NAP Slovenija",
+          "steps": [
+            "Create a business-entity account at nap.si (click the user icon → Registration) and confirm the email.",
+            "Log in, open your profile, and request permission for the 'Prometej IDACS Energy Infrastructure Table (DATEX II v3.6)' dataset. Accept the general terms of use.",
+            "Wait for NAP to grant the request (shown as 'granted' on your profile page).",
+            "Once granted, do a one-time OAuth2 password-grant login to obtain a refresh token: POST to https://b2b.nap.si/uc/user/token with Content-Type: application/x-www-form-urlencoded and body grant_type=password&username=<your email>&password=<your password>.",
+            "The JSON response includes a 'refresh_token' field — paste that value here (not the 'access_token', which expires in ~24h; OpenMapX exchanges the refresh token for a fresh access token on every ingest run)."
+          ],
+          "cost": "Free (business-entity registration required)",
+          "notes": "NAP Slovenija authenticates via OAuth2 (see nap.si 'Instructions for data access' / B2B documentation), not a static API key — there is no self-service token page. The dataset is documented as 'available for exchange and re-use on a non-discriminatory basis'; the specific dataset page lists a CC BY-SA 4.0 licence, but overall re-use is still gated by NAP's general terms of use, so treat commercial redistribution rights as unconfirmed."
+        }
+      },
+      "at-econtrol-api-key": {
+        "type": "string",
+        "title": "E-Control Ladestellenverzeichnis API Key",
+        "description": "E-Control Austria Ladestellenverzeichnis API key (Austrian national EV charging directory). Requires a matching at-econtrol-referer-domain — the gateway checks both.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://admin.ladestellen.at/#/api/registrieren",
+          "urlLabel": "Register for a Ladestellenverzeichnis API key",
+          "steps": [
+            "Open admin.ladestellen.at and register, accepting the Nutzungsbedingungen (terms of use).",
+            "Provide the domain you'll use — it must match the at-econtrol-referer-domain field below.",
+            "Receive your individual API key by email after registration.",
+            "The email also links the online API documentation, only visible once registered."
+          ],
+          "cost": "Free",
+          "notes": "The gateway compares the Referer header's hostname against the domain registered at signup — set at-econtrol-referer-domain to that same bare hostname or every request 403s. Fair-use limit: 2500 requests/hour, 30 concurrent."
+        }
+      },
+      "at-econtrol-referer-domain": {
+        "type": "string",
+        "title": "E-Control Registered Referer Domain",
+        "description": "Bare hostname (no scheme/port/path) registered together with the API key at admin.ladestellen.at — sent as the Referer header on every request. Must match exactly or E-Control's gateway returns 403."
+      },
+      "pl-eipa-api-key": {
+        "type": "string",
+        "title": "EIPA (UDT) Reader API Key",
+        "description": "Polish UDT alt-fuel/EV register reader credential. Read by the data-manager POI-ingest process from the environment (INTEGRATION_EV_CHARGING_PL_EIPA_API_KEY), not from this vault.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://eipa.udt.gov.pl/reader/register",
+          "urlLabel": "Register a free EIPA reader account",
+          "steps": [
+            "Open eipa.udt.gov.pl/reader/register and submit your email plus the required consent.",
+            "Click the confirmation link sent by email to activate the account.",
+            "A follow-up email arrives with the access data and hourly download limits.",
+            "Verify the exact header/query format against that email; this integration's assumed Bearer-token shape is unconfirmed."
+          ],
+          "cost": "Free",
+          "notes": "License is not stated on the EIPA site — treat reuse terms as unconfirmed; consider emailing eipa@udt.gov.pl before commercial deployment."
+        }
+      },
+      "sg-ltadatamall-api-key": {
+        "type": "string",
+        "title": "LTA DataMall AccountKey",
+        "description": "Singapore Land Transport Authority (LTA) DataMall AccountKey covering the EV Charging Points dataset (station locations, connectors, and real-time availability by postal code).",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://datamall.lta.gov.sg/content/datamall/en/request-for-api.html",
+          "urlLabel": "Register for an LTA DataMall AccountKey",
+          "steps": [
+            "Open datamall.lta.gov.sg and go to 'Request for API Access'.",
+            "Register with your name, email, and organisation, and accept the Singapore Open Data Licence.",
+            "Confirm your email; the AccountKey is issued to your registered email.",
+            "Copy the AccountKey — it is sent in the 'AccountKey' request header."
+          ],
+          "cost": "Free",
+          "notes": "Covers the EV Charging Points APIs (station location, connector types, real-time availability by postal code). Sent via the 'AccountKey' header, never as a query parameter."
+        }
+      },
+      "tw-tdx-client-id": {
+        "type": "string",
+        "title": "TDX Client ID",
+        "description": "TDX (Taiwan Transport Data eXchange) OAuth2 Client ID for Taiwanese EV charging station data.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://tdx.transportdata.tw/register",
+          "urlLabel": "Register for a TDX platform account",
+          "steps": [
+            "Go to tdx.transportdata.tw/register and create a free platform member account.",
+            "Sign in, open Member Center → 資料服務 → 服務金鑰 (API Key).",
+            "Create a Client Id / Client Secret pair (up to 3 per account).",
+            "Copy both values — the Client Secret is only shown once."
+          ],
+          "cost": "Free",
+          "notes": "Used to obtain an OAuth2 client-credentials bearer token from tdx.transportdata.tw for the EV charging Station and ConnectorLiveStatus APIs."
+        }
+      },
+      "tw-tdx-client-secret": {
+        "type": "string",
+        "title": "TDX Client Secret",
+        "description": "TDX OAuth2 Client Secret paired with the Client ID above.",
+        "x-openmapx-secret": true
       }
     }
   },
@@ -142,6 +244,11 @@
       "url": "https://infocar.dgt.es/datex2/v3/miterd/EnergyInfrastructureTablePublication/electrolineras.xml"
     },
     {
+      "name": "PUN (IT)",
+      "type": "http",
+      "url": "https://services-eu1.arcgis.com/iIOeNeT2w8BczYEP/arcgis/rest/services/PdR_latest_ready/FeatureServer/0/query?where=1=1&outFields=OBJECTID&f=geojson&resultRecordCount=1"
+    },
+    {
       "name": "Transport for NSW EV charging (AU-NSW)",
       "type": "http",
       "url": "https://opendata.transport.nsw.gov.au/data/api/3/action/package_show?id=ev-charging-locations"
@@ -186,6 +293,40 @@
       "type": "http",
       "urlTemplate": "https://nobil.no/api/server/search.php?apikey=${no-nobil-api-key}&apiversion=3&action=search&type=rectangle&northeast=%2859.95%2C10.85%29&southwest=%2859.85%2C10.65%29&limit=1&format=json",
       "requiredConfigKeys": ["no-nobil-api-key"]
+    },
+    {
+      "name": "NAP Slovenija",
+      "type": "ping",
+      "url": "https://www.nap.si/en/datasets_details?id=46963663-38dd-eb04-43a9-cca9bdc0e4ba",
+      "requiredConfigKeys": ["si-nap-api-key"]
+    },
+    {
+      "name": "data.go.kr Standard Data (KR EV chargers)",
+      "type": "http",
+      "url": "https://www.data.go.kr/download/standard.json?colNmList=LATITUDE&colNmList=LONGITUDE&svcTableNm=tn_pubr_public_elcty_car_chrstn_svc&totalCount=1&perPage=1&page=1"
+    },
+    {
+      "name": "EIPA (UDT, Poland)",
+      "type": "http",
+      "url": "https://eipa.udt.gov.pl"
+    },
+    {
+      "name": "E-Control Ladestellenverzeichnis (AT)",
+      "type": "ping",
+      "url": "https://api.e-control.at",
+      "requiredConfigKeys": ["at-econtrol-api-key", "at-econtrol-referer-domain"]
+    },
+    {
+      "name": "LTA DataMall (SG)",
+      "type": "ping",
+      "url": "https://datamall2.mytransport.sg",
+      "requiredConfigKeys": ["sg-ltadatamall-api-key"]
+    },
+    {
+      "name": "TDX (Taiwan EV charging)",
+      "type": "ping",
+      "url": "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token",
+      "requiredConfigKeys": ["tw-tdx-client-id", "tw-tdx-client-secret"]
     },
     {
       "name": "OpenStreetMap / Overpass",
@@ -347,6 +488,22 @@
       "commercialUse": "yes",
       "providerCountry": "ES",
       "providerPrivacyUrl": "https://sede.dgt.gob.es/es/proteccion-datos/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "it-pun",
+      "name": "PUN — Italian national EV charging (GSE)",
+      "url": "https://www.piattaformaunicanazionale.it/idr",
+      "apiHosts": ["services-eu1.arcgis.com"],
+      "license": "Public-sector open data (unconfirmed terms)",
+      "licenseUrl": "https://www.piattaformaunicanazionale.it/",
+      "attribution": "GSE — Piattaforma Unica Nazionale (PUN)",
+      "commercialUse": "conditional",
+      "providerCountry": "IT",
+      "providerPrivacyUrl": "https://www.gse.it/",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
@@ -520,6 +677,102 @@
       "commercialUse": "conditional",
       "providerCountry": "NO",
       "providerPrivacyUrl": "https://info.nobil.no/om?catid=8%3Aom&id=246%3Anobil-privacy-policy&view=article",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "si-nap",
+      "name": "NAP Slovenija — Prometej IDACS Energy Infrastructure Table",
+      "url": "https://www.nap.si/en/datasets_details?id=46963663-38dd-eb04-43a9-cca9bdc0e4ba",
+      "apiHosts": ["b2b.nap.si"],
+      "license": "Free-of-charge licence (dataset page cites CC BY-SA 4.0); overall re-use gated by NAP's general terms of use — commercial redistribution rights unconfirmed",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/deed.sl",
+      "attribution": "Ministrstvo za infrastrukturo in energetiko (MZIE) / NAP Slovenija",
+      "commercialUse": "conditional",
+      "providerCountry": "SI",
+      "providerPrivacyUrl": "https://www.nap.si/en/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "kr-datago",
+      "name": "전국전기차충전소표준데이터 — Korea Environment Corporation (nationwide EV charging stations)",
+      "url": "https://www.data.go.kr/data/15013115/standard.do",
+      "apiHosts": ["www.data.go.kr"],
+      "license": "KOGL Type 1 (공공누리 제1유형 — source attribution required)",
+      "licenseUrl": "https://www.kogl.or.kr/info/license.do",
+      "attribution": "한국환경공단 (Korea Environment Corporation) / data.go.kr",
+      "commercialUse": "yes",
+      "providerCountry": "KR",
+      "providerPrivacyUrl": "https://www.data.go.kr/ugs/selectPortalPolicyView.do",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "pl-eipa",
+      "name": "EIPA (UDT) — Polish national alt-fuel/EV charging register",
+      "url": "https://eipa.udt.gov.pl",
+      "apiHosts": ["eipa.udt.gov.pl"],
+      "license": "Unconfirmed — not stated on eipa.udt.gov.pl; confirm reuse terms with eipa@udt.gov.pl before commercial use",
+      "licenseUrl": "https://eipa.udt.gov.pl/reader/docs",
+      "attribution": "Ewidencja Infrastruktury Paliw Alternatywnych (EIPA) — Urząd Dozoru Technicznego (UDT)",
+      "commercialUse": "conditional",
+      "providerCountry": "PL",
+      "providerPrivacyUrl": "https://eipa.udt.gov.pl/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "at-econtrol",
+      "name": "E-Control Ladestellenverzeichnis (AT)",
+      "url": "https://www.ladestellen.at",
+      "apiHosts": ["api.e-control.at"],
+      "license": "Ladestellen.at API Nutzungsbedingungen (E-Control) — free, registration-gated, attribution required",
+      "licenseUrl": "https://admin.ladestellen.at/#/api/registrieren",
+      "attribution": "Datenquelle: E-Control",
+      "commercialUse": "conditional",
+      "providerCountry": "AT",
+      "providerPrivacyUrl": "https://www.e-control.at/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "sg-ltadatamall",
+      "name": "LTA DataMall — Singapore EV Charging Points",
+      "url": "https://datamall.lta.gov.sg/content/datamall/en/dynamic-data.html",
+      "apiHosts": ["datamall2.mytransport.sg"],
+      "license": "Singapore Open Data Licence v1.0",
+      "licenseUrl": "https://datamall.lta.gov.sg/content/datamall/en/SingaporeOpenDataLicence.html",
+      "attribution": "Contains information from LTA DataMall (Land Transport Authority, Singapore), made available under the Singapore Open Data Licence v1.0",
+      "commercialUse": "yes",
+      "providerCountry": "SG",
+      "providerPrivacyUrl": "https://www.lta.gov.sg/content/ltagov/en/privacy-statement.html",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "tw-tdx",
+      "name": "TDX — Taiwan national EV charging stations",
+      "url": "https://tdx.transportdata.tw/",
+      "apiHosts": ["tdx.transportdata.tw"],
+      "license": "政府資料開放授權條款-第1版 (Government Open Data License v1)",
+      "licenseUrl": "https://data.gov.tw/license",
+      "attribution": "交通部運輸資料流通服務平臺 (TDX, Ministry of Transportation and Communications)",
+      "commercialUse": "yes",
+      "providerCountry": "TW",
+      "providerPrivacyUrl": "https://tdx.transportdata.tw/about/privacy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,

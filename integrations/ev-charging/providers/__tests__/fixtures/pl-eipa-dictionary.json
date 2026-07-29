@@ -1,0 +1,42 @@
+{
+  "data": [
+    {
+      "charging_mode": [
+        { "id": 1, "name": "Mode1-AC-1p" },
+        { "id": 2, "name": "Mode1-AC-3p" },
+        { "id": 3, "name": "Mode3-AC-3p" },
+        { "id": 4, "name": "Mode4-DC" }
+      ],
+      "connector_interface": [
+        { "description": "Standard/domowy, typ A", "id": 1, "name": "DOMESTIC-A" },
+        { "description": "CHAdeMO", "id": 2, "name": "CHADEMO" },
+        { "description": "Combo typ 2", "id": 4, "name": "IEC-62196-T2-COMBO" },
+        { "description": "Typ 2 z przewodem", "id": 5, "name": "IEC-62196-T2-F-CABLE" },
+        {
+          "description": "Typ 2 bez przewodu (gniazdo)",
+          "id": 6,
+          "name": "IEC-62196-T2-F-NOCABLE"
+        },
+        { "description": "Combo typ 1", "id": 7, "name": "IEC-62196-T1-COMBO" },
+        {
+          "description": "Typ 3C bez przewodu (gniazdo)",
+          "id": 8,
+          "name": "IEC-62196-T3C-F-NOCABLE"
+        }
+      ],
+      "station_authentication_method": [
+        { "description": "Nieograniczony dostęp", "id": 0 },
+        { "description": "Brak dostępu", "id": 1 },
+        { "description": "Karta RFID / NFC w telefonie - Mifare Classic", "id": 2 }
+      ],
+      "station_payment_method": [
+        { "description": "Nieokreślone", "id": 0 },
+        { "description": "Bezpłatne ładowanie", "id": 1 },
+        { "description": "Płatne ładowanie, umowa z operatorem", "id": 2 },
+        { "description": "Płatne ładowanie, karta płatnicza", "id": 4 },
+        { "description": "Płatne ładowanie, aplikacja", "id": 8 }
+      ]
+    }
+  ],
+  "generated": "2026-07-29T06:00:00+02:00"
+}

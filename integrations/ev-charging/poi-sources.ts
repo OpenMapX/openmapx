@@ -22,12 +22,18 @@ import {
 } from "./providers/fi-digitraffic-parser.js";
 import { HK_EPD_URL, parseHkEpd } from "./providers/hk-epd-parser.js";
 import { IE_ESB_CSV_URL, parseIeEsb } from "./providers/ie-esb-parser.js";
+import { IT_PUN_URL, parseItPun } from "./providers/it-pun-parser.js";
+import { KR_DATAGO_URL, parseKrDatago } from "./providers/kr-datago-parser.js";
 import { LT_VIALIETUVA_LOCATIONS_URL } from "./providers/lt-vialietuva-client.js";
 import { parseLtVialietuva } from "./providers/lt-vialietuva-parser.js";
 import { LU_CHARGY_URL, parseLuChargy } from "./providers/lu-chargy-parser.js";
 import { parseNlDotnlLive } from "./providers/nl-dotnl-live-parser.js";
 import { NL_DOTNL_LOCATIONS_URL, parseNlDotnl } from "./providers/nl-dotnl-parser.js";
 import { NZ_EVROAM_URL, parseNzEvroam } from "./providers/nz-evroam-parser.js";
+import { plEipaAuthHeaders } from "./providers/pl-eipa-client.js";
+import { parsePlEipa } from "./providers/pl-eipa-parser.js";
+import { resolveSiNapHeaders } from "./providers/si-nap.js";
+import { parseSiNap, SI_NAP_URL } from "./providers/si-nap-parser.js";
 
 // The NDW/DOT-NL locations feed is served as a bare gzip body with no
 // Content-Encoding header, so the generic poi-ingest http fetch stage (which
@@ -231,6 +237,55 @@ export function declarePoiSources(): PoiSource[] {
       },
     },
     {
+      parts: { country: "it", operator: "pun" },
+      domain: "ev-charging",
+      name: "PUN — Italian national EV charging (GSE)",
+      // [west, south, east, north]
+      coverage: [6.6, 35.4, 18.6, 47.1],
+      static: {
+        cron: "0 4 * * *",
+        fetch: { type: "http", url: IT_PUN_URL, timeoutMs: 60_000 },
+        parse: parseItPun,
+        // ~48.9k EVSE rows group into ~22.6k stations.
+        minRowCount: 2000,
+      },
+    },
+    {
+      parts: { country: "kr", operator: "datago" },
+      domain: "ev-charging",
+      name: "전국전기차충전소표준데이터 — Korea Environment Corporation (nationwide EV charging)",
+      // [west, south, east, north]
+      coverage: [124.5, 33, 132, 38.7],
+      static: {
+        cron: "0 4 * * *",
+        fetch: { type: "http", url: KR_DATAGO_URL, timeoutMs: 30_000 },
+        parse: parseKrDatago,
+        // Dataset today is ~5,961 stations nationwide.
+        minRowCount: 2000,
+      },
+    },
+    {
+      parts: { country: "pl", operator: "eipa" },
+      domain: "ev-charging",
+      name: "EIPA (UDT) — Polish national alt-fuel/EV charging register",
+      // [west, south, east, north]
+      coverage: [14, 49, 24.2, 54.9],
+      static: {
+        cron: "0 4 * * *",
+        fetch: {
+          type: "http",
+          // Base URL inferred from the operator API's JWT convention; confirm
+          // against the reader credential email. Auth is read from the
+          // environment by plEipaAuthHeaders — inert (skips ingest) when unset.
+          url: "https://eipa.udt.gov.pl/reader/api/station.json",
+          timeoutMs: 30_000,
+          resolveHeaders: async () => plEipaAuthHeaders(),
+        },
+        parse: parsePlEipa,
+        minRowCount: 500,
+      },
+    },
+    {
       parts: { country: "fi", operator: "digitraffic" },
       domain: "ev-charging",
       name: "Fintraffic Digitraffic — Finnish national EV charging (AFIR)",
@@ -306,6 +361,29 @@ export function declarePoiSources(): PoiSource[] {
         parse: parseNlDotnlLiveGzipped,
         // 2× the cron interval — one missed run still leaves cached state alive.
         ttlSeconds: 1800,
+      },
+    },
+    {
+      parts: { country: "si", operator: "nap" },
+      domain: "ev-charging",
+      name: "NAP Slovenija — Prometej IDACS Energy Infrastructure Table",
+      // [west, south, east, north]
+      coverage: [13.3, 45.4, 16.6, 46.9],
+      static: {
+        cron: "0 4 * * *",
+        fetch: {
+          type: "http",
+          url: SI_NAP_URL,
+          timeoutMs: 60_000,
+          // OAuth2 bearer — resolveSiNapHeaders throws when "si-nap-api-key"
+          // isn't configured, which the fetch stage turns into a clean
+          // no-op run (no request made, nothing ingested). See si-nap.ts.
+          resolveHeaders: resolveSiNapHeaders,
+        },
+        parse: parseSiNap,
+        // Documented sample (2025-12) carried ~1.1k sites nationwide; floor
+        // kept conservative since the live feed size is unconfirmed.
+        minRowCount: 50,
       },
     },
   ];

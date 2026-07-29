@@ -1,0 +1,101 @@
+[
+  {
+    "stationId": "E5487EA07",
+    "label": "Rudolfsplatz Wien",
+    "description": "Public charging station in central Vienna",
+    "countryId": "AT",
+    "operatorId": "ECT",
+    "operatorName": "Wien Energie GmbH",
+    "owner": "Wien Energie GmbH",
+    "stationStatus": "ACTIVE",
+    "postCode": "1010",
+    "city": "Wien",
+    "street": "Rudolfsplatz 13a",
+    "location": { "lat": 48.2131, "lon": 16.3684 },
+    "distance": 0.4,
+    "contactName": null,
+    "phoneCountryCode": null,
+    "phoneNumber": null,
+    "email": null,
+    "website": "https://www.wienenergie.at",
+    "greenEnergy": true,
+    "austrianEcoLabel": true,
+    "freeParking": false,
+    "roofedParking": false,
+    "illuminatedParking": true,
+    "cateringService": false,
+    "bathroomsAvailable": false,
+    "restingFacilities": false,
+    "parkingPlaces": 2,
+    "barrierFreeParkingPlaces": 1,
+    "priceUrl": "https://www.wienenergie.at/ladepreise",
+    "openingHours": [
+      { "fromWeekday": "MONDAY", "fromTime": "00:00", "toWeekday": "SUNDAY", "toTime": "24:00" }
+    ],
+    "points": [
+      {
+        "evseId": "AT*ECT*E5487EA07*1",
+        "capacityKw": 22,
+        "connectorType": [
+          { "key": "TYPE_2", "description": "Type 2", "legacy": false, "consumerName": "TYPE_2_AC" }
+        ],
+        "electricityType": ["AC_3_PHASE"],
+        "status": "AVAILABLE",
+        "freeOfCharge": false,
+        "priceCentKwh": 45,
+        "priceCentMin": 0,
+        "startFeeCent": 0,
+        "blockingFeeCentMin": 0,
+        "blockingFeeFromMinute": 0,
+        "authenticationMode": ["APP", "RFID_READER"]
+      },
+      {
+        "evseId": "AT*ECT*E5487EA07*2",
+        "capacityKw": 50,
+        "connectorType": [
+          {
+            "key": "COMBO2_CCS",
+            "description": "CCS",
+            "legacy": false,
+            "consumerName": "COMBO2_CCS_DC"
+          }
+        ],
+        "electricityType": ["DC"],
+        "status": "CHARGING",
+        "freeOfCharge": false,
+        "priceCentKwh": 55,
+        "priceCentMin": 5,
+        "startFeeCent": 50,
+        "blockingFeeCentMin": 10,
+        "blockingFeeFromMinute": 30,
+        "authenticationMode": ["APP", "CREDIT_CARD"]
+      }
+    ]
+  },
+  {
+    "stationId": "E9912GRZ",
+    "label": "Graz Hauptplatz",
+    "countryId": "AT",
+    "operatorId": "GRZ",
+    "operatorName": "Energie Graz GmbH",
+    "stationStatus": "ACTIVE",
+    "postCode": "8010",
+    "city": "Graz",
+    "street": "Hauptplatz 1",
+    "location": { "lat": 47.0707, "lon": 15.4395 },
+    "greenEnergy": false,
+    "points": [
+      {
+        "evseId": "AT*GRZ*E9912GRZ*1",
+        "capacityKw": 11,
+        "connectorType": [
+          { "key": "DOMESTIC_F", "description": "Schuko", "legacy": true, "consumerName": "OTHER" }
+        ],
+        "electricityType": ["AC_1_PHASE"],
+        "status": "OUTOFORDER",
+        "freeOfCharge": true,
+        "authenticationMode": []
+      }
+    ]
+  }
+]

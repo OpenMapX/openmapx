@@ -1,0 +1,676 @@
+<EnergyInfrastructureTablePublication xmlns:com="http://datex2.eu/schema/3/common" xmlns:cex="http://datex2.eu/schema/3/commonExtension" xmlns:fac="http://datex2.eu/schema/3/facilities" xmlns:lr="http://datex2.eu/schema/3/locationReferencing" xmlns:lex="http://datex2.eu/schema/3/locationExtension" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" lang="sl" modelBaseVersion="3" profileVersion="V1" xmlns="http://datex2.eu/schema/3/energyInfrastructure">
+  <com:publicationTime>2025-12-04T15:12:33.7057479Z</com:publicationTime>
+  <com:publicationCreator>
+    <com:country>SI</com:country>
+    <com:nationalIdentifier>realis</com:nationalIdentifier>
+  </com:publicationCreator>
+  <energyInfrastructureTable id="eit1" version="v1">
+        <energyInfrastructureSite id="246ea408-3f25-4378-95a5-b9829851edc2" version="v1">
+      <fac:name>
+        <com:values>
+          <com:value lang="sl">BS AC ČATEŽ - JUG</com:value>
+        </com:values>
+      </fac:name>
+      <fac:operatingHours xsi:type="fac:OperatingHoursSpecification" id="a170b8b7-8702-4f78-a9c5-fcdc16341345" version="1">
+        <fac:overallPeriod>
+          <com:overallStartTime>2025-12-04T16:12:33.0763717+01:00</com:overallStartTime>
+          <com:validPeriod>
+            <com:periodName>
+              <com:values>
+                <com:value lang="en">monday</com:value>
+              </com:values>
+            </com:periodName>
+            <com:recurringTimePeriodOfDay>
+              <com:startTimeOfPeriod>00:00:00.0000000+01:00</com:startTimeOfPeriod>
+              <com:endTimeOfPeriod>23:59:59.0000000+01:00</com:endTimeOfPeriod>
+            </com:recurringTimePeriodOfDay>
+            <com:recurringDayWeekMonthPeriod>
+              <com:applicableDay>monday</com:applicableDay>
+            </com:recurringDayWeekMonthPeriod>
+          </com:validPeriod>
+          <com:validPeriod>
+            <com:periodName>
+              <com:values>
+                <com:value lang="en">tuesday</com:value>
+              </com:values>
+            </com:periodName>
+            <com:recurringTimePeriodOfDay>
+              <com:startTimeOfPeriod>00:00:00.0000000+01:00</com:startTimeOfPeriod>
+              <com:endTimeOfPeriod>23:59:59.0000000+01:00</com:endTimeOfPeriod>
+            </com:recurringTimePeriodOfDay>
+            <com:recurringDayWeekMonthPeriod>
+              <com:applicableDay>tuesday</com:applicableDay>
+            </com:recurringDayWeekMonthPeriod>
+          </com:validPeriod>
+          <com:validPeriod>
+            <com:periodName>
+              <com:values>
+                <com:value lang="en">wednesday</com:value>
+              </com:values>
+            </com:periodName>
+            <com:recurringTimePeriodOfDay>
+              <com:startTimeOfPeriod>00:00:00.0000000+01:00</com:startTimeOfPeriod>
+              <com:endTimeOfPeriod>23:59:59.0000000+01:00</com:endTimeOfPeriod>
+            </com:recurringTimePeriodOfDay>
+            <com:recurringDayWeekMonthPeriod>
+              <com:applicableDay>wednesday</com:applicableDay>
+            </com:recurringDayWeekMonthPeriod>
+          </com:validPeriod>
+          <com:validPeriod>
+            <com:periodName>
+              <com:values>
+                <com:value lang="en">thursday</com:value>
+              </com:values>
+            </com:periodName>
+            <com:recurringTimePeriodOfDay>
+              <com:startTimeOfPeriod>00:00:00.0000000+01:00</com:startTimeOfPeriod>
+              <com:endTimeOfPeriod>23:59:59.0000000+01:00</com:endTimeOfPeriod>
+            </com:recurringTimePeriodOfDay>
+            <com:recurringDayWeekMonthPeriod>
+              <com:applicableDay>thursday</com:applicableDay>
+            </com:recurringDayWeekMonthPeriod>
+          </com:validPeriod>
+          <com:validPeriod>
+            <com:periodName>
+              <com:values>
+                <com:value lang="en">friday</com:value>
+              </com:values>
+            </com:periodName>
+            <com:recurringTimePeriodOfDay>
+              <com:startTimeOfPeriod>00:00:00.0000000+01:00</com:startTimeOfPeriod>
+              <com:endTimeOfPeriod>23:59:59.0000000+01:00</com:endTimeOfPeriod>
+            </com:recurringTimePeriodOfDay>
+            <com:recurringDayWeekMonthPeriod>
+              <com:applicableDay>friday</com:applicableDay>
+            </com:recurringDayWeekMonthPeriod>
+          </com:validPeriod>
+          <com:validPeriod>
+            <com:periodName>
+              <com:values>
+                <com:value lang="en">saturday</com:value>
+              </com:values>
+            </com:periodName>
+            <com:recurringTimePeriodOfDay>
+              <com:startTimeOfPeriod>00:00:00.0000000+01:00</com:startTimeOfPeriod>
+              <com:endTimeOfPeriod>23:59:59.0000000+01:00</com:endTimeOfPeriod>
+            </com:recurringTimePeriodOfDay>
+            <com:recurringDayWeekMonthPeriod>
+              <com:applicableDay>saturday</com:applicableDay>
+            </com:recurringDayWeekMonthPeriod>
+          </com:validPeriod>
+          <com:validPeriod>
+            <com:periodName>
+              <com:values>
+                <com:value lang="en">sunday</com:value>
+              </com:values>
+            </com:periodName>
+            <com:recurringTimePeriodOfDay>
+              <com:startTimeOfPeriod>00:00:00.0000000+01:00</com:startTimeOfPeriod>
+              <com:endTimeOfPeriod>23:59:59.0000000+01:00</com:endTimeOfPeriod>
+            </com:recurringTimePeriodOfDay>
+            <com:recurringDayWeekMonthPeriod>
+              <com:applicableDay>sunday</com:applicableDay>
+            </com:recurringDayWeekMonthPeriod>
+          </com:validPeriod>
+        </fac:overallPeriod>
+      </fac:operatingHours>
+      <fac:locationReference xsi:type="lr:PointLocation">
+        <lr:_locationReferenceExtension>
+          <lr:facilityLocation>
+            <lex:address>
+              <lex:postcode>8250</lex:postcode>
+              <lex:city>
+                <com:values>
+                  <com:value lang="sl">BREŽICE</com:value>
+                </com:values>
+              </lex:city>
+              <lex:countryCode>SI</lex:countryCode>
+              <lex:addressLine order="1">
+                <lex:type>street</lex:type>
+                <lex:text>
+                  <com:values>
+                    <com:value lang="sl">RIMSKA CESTA 11 </com:value>
+                  </com:values>
+                </lex:text>
+              </lex:addressLine>
+            </lex:address>
+          </lr:facilityLocation>
+        </lr:_locationReferenceExtension>
+        <lr:coordinatesForDisplay>
+          <lr:latitude>45.89166</lr:latitude>
+          <lr:longitude>15.59736</lr:longitude>
+        </lr:coordinatesForDisplay>
+        <lr:pointByCoordinates>
+          <lr:pointCoordinates>
+            <lr:latitude>45.89166</lr:latitude>
+            <lr:longitude>15.59736</lr:longitude>
+          </lr:pointCoordinates>
+        </lr:pointByCoordinates>
+      </fac:locationReference>
+      <fac:operator xsi:type="fac:OrganisationSpecification" id="SI*PET" version="1.0">
+        <fac:name>
+          <com:values>
+            <com:value lang="sl">PETROL, d.d</com:value>
+          </com:values>
+        </fac:name>
+        <fac:legalName>
+          <com:values>
+            <com:value lang="sl">PETROL, d.d</com:value>
+          </com:values>
+        </fac:legalName>
+        <fac:vatIdentificationNumber>SI80267432</fac:vatIdentificationNumber>
+        <fac:organisationUnit>
+          <fac:name>
+            <com:values>
+              <com:value lang="sl">PETROL, d.d</com:value>
+            </com:values>
+          </fac:name>
+        </fac:organisationUnit>
+      </fac:operator>
+      <fac:applicableForVehicles>
+        <com:vehicleType>car</com:vehicleType>
+      </fac:applicableForVehicles>
+      <energyInfrastructureStation id="50349049-59d3-41ff-80a5-ae5e556c2142">
+        <authenticationAndIdentificationMethods>rfid</authenticationAndIdentificationMethods>
+        <refillPoint xsi:type="ElectricChargingPoint" id="SIPETE0166*02*1" version="v1">
+          <fac:name>
+            <com:values>
+              <com:value lang="sl">Polnilno mesto 1</com:value>
+            </com:values>
+          </fac:name>
+          <connector>
+            <connectorType>chademo</connectorType>
+            <connectorFormat>otherCable</connectorFormat>
+            <maxPowerAtSocket>50000</maxPowerAtSocket>
+            <voltage>400</voltage>
+            <maximumCurrent>125</maximumCurrent>
+          </connector>
+        </refillPoint>
+      </energyInfrastructureStation>
+      <energyInfrastructureStation id="18adb4ee-658f-4f9d-b788-288b3bac89b0">
+        <authenticationAndIdentificationMethods>rfid</authenticationAndIdentificationMethods>
+        <refillPoint xsi:type="ElectricChargingPoint" id="SIPETE0166*01*1" version="v1">
+          <fac:name>
+            <com:values>
+              <com:value lang="sl">Polnilno mesto 1</com:value>
+            </com:values>
+          </fac:name>
+          <connector>
+            <connectorType>chademo</connectorType>
+            <connectorFormat>otherCable</connectorFormat>
+            <maxPowerAtSocket>50000</maxPowerAtSocket>
+            <voltage>400</voltage>
+            <maximumCurrent>125</maximumCurrent>
+          </connector>
+        </refillPoint>
+      </energyInfrastructureStation>
+      <energyInfrastructureStation id="81c1e24f-e9f8-4b41-a66b-c4716a2d7147">
+        <authenticationAndIdentificationMethods>rfid</authenticationAndIdentificationMethods>
+        <refillPoint xsi:type="ElectricChargingPoint" id="SIPETE0166*03*2" version="v1">
+          <fac:name>
+            <com:values>
+              <com:value lang="sl">Polnilno mesto 1</com:value>
+            </com:values>
+          </fac:name>
+          <connector>
+            <connectorType>iec62196T2COMBO</connectorType>
+            <connectorFormat>otherCable</connectorFormat>
+            <maxPowerAtSocket>249780</maxPowerAtSocket>
+            <voltage>230</voltage>
+            <maximumCurrent>1086</maximumCurrent>
+          </connector>
+        </refillPoint>
+      </energyInfrastructureStation>
+      <energyInfrastructureStation id="df1b5724-1c0f-46ba-b0a6-940a1e8d28b1">
+        <authenticationAndIdentificationMethods>rfid</authenticationAndIdentificationMethods>
+        <refillPoint xsi:type="ElectricChargingPoint" id="SIPETE0166*01*2" version="v1">
+          <fac:name>
+            <com:values>
+              <com:value lang="sl">Polnilno mesto 1</com:value>
+            </com:values>
+          </fac:name>
+          <connector>
+            <connectorType>iec62196T2COMBO</connectorType>
+            <connectorFormat>otherCable</connectorFormat>
+            <maxPowerAtSocket>50000</maxPowerAtSocket>
+            <voltage>400</voltage>
+            <maximumCurrent>125</maximumCurrent>
+          </connector>
+        </refillPoint>
+      </energyInfrastructureStation>
+      <energyInfrastructureStation id="20f7c736-bb81-40ec-aac0-83c909c303d5">
+        <authenticationAndIdentificationMethods>rfid</authenticationAndIdentificationMethods>
+        <refillPoint xsi:type="ElectricChargingPoint" id="SIPETE0166*01*3" version="v1">
+          <fac:name>
+            <com:values>
+              <com:value lang="sl">Polnilno mesto 1</com:value>
+            </com:values>
+          </fac:name>
+          <connector>
+            <connectorType>iec62196T2</connectorType>
+            <connectorFormat>socket</connectorFormat>
+            <maxPowerAtSocket>41296</maxPowerAtSocket>
+            <voltage>230</voltage>
+            <maximumCurrent>179</maximumCurrent>
+          </connector>
+        </refillPoint>
+      </energyInfrastructureStation>
+      <energyInfrastructureStation id="7b7ed359-58ce-46d6-bb08-26d6ae4e4e4b">
+        <authenticationAndIdentificationMethods>rfid</authenticationAndIdentificationMethods>
+        <refillPoint xsi:type="ElectricChargingPoint" id="SIPETE0166*02*3" version="v1">
+          <fac:name>
+            <com:values>
+              <com:value lang="sl">Polnilno mesto 1</com:value>
+            </com:values>
+          </fac:name>
+          <connector>
+            <connectorType>iec62196T2</connectorType>
+            <connectorFormat>otherCable</connectorFormat>
+            <maxPowerAtSocket>41296</maxPowerAtSocket>
+            <voltage>230</voltage>
+            <maximumCurrent>179</maximumCurrent>
+          </connector>
+        </refillPoint>
+      </energyInfrastructureStation>
+      <energyInfrastructureStation id="e39a0a45-110c-417f-9560-7df08f81aa22">
+        <authenticationAndIdentificationMethods>rfid</authenticationAndIdentificationMethods>
+        <refillPoint xsi:type="ElectricChargingPoint" id="SIPETE0166*03*1" version="v1">
+          <fac:name>
+            <com:values>
+              <com:value lang="sl">Polnilno mesto 1</com:value>
+            </com:values>
+          </fac:name>
+          <connector>
+            <connectorType>iec62196T2COMBO</connectorType>
+            <connectorFormat>otherCable</connectorFormat>
+            <maxPowerAtSocket>250000</maxPowerAtSocket>
+            <voltage>400</voltage>
+            <maximumCurrent>625</maximumCurrent>
+          </connector>
+        </refillPoint>
+      </energyInfrastructureStation>
+      <energyInfrastructureStation id="892a5c0e-ec22-4ed2-878e-7b2f1e283b06">
+        <authenticationAndIdentificationMethods>rfid</authenticationAndIdentificationMethods>
+        <refillPoint xsi:type="ElectricChargingPoint" id="SIPETE0166*02*2" version="v1">
+          <fac:name>
+            <com:values>
+              <com:value lang="sl">Polnilno mesto 1</com:value>
+            </com:values>
+          </fac:name>
+          <connector>
+            <connectorType>iec62196T2COMBO</connectorType>
+            <connectorFormat>otherCable</connectorFormat>
+            <maxPowerAtSocket>50000</maxPowerAtSocket>
+            <voltage>400</voltage>
+            <maximumCurrent>125</maximumCurrent>
+          </connector>
+        </refillPoint>
+      </energyInfrastructureStation>
+    </energyInfrastructureSite>
+    <energyInfrastructureSite id="41944637-9579-4337-9546-138bfb068d66" version="v1">
+      <fac:name>
+        <com:values>
+          <com:value lang="sl">Naklo Občina</com:value>
+        </com:values>
+      </fac:name>
+      <fac:operatingHours xsi:type="fac:OperatingHoursSpecification" id="e71b44c4-8f8f-44a6-9455-f807cbf9354e" version="1">
+        <fac:overallPeriod>
+          <com:overallStartTime>2025-12-04T16:12:33.5698789+01:00</com:overallStartTime>
+          <com:validPeriod>
+            <com:periodName>
+              <com:values>
+                <com:value lang="en">monday</com:value>
+              </com:values>
+            </com:periodName>
+            <com:recurringTimePeriodOfDay>
+              <com:startTimeOfPeriod>00:00:00.0000000+01:00</com:startTimeOfPeriod>
+              <com:endTimeOfPeriod>23:59:59.0000000+01:00</com:endTimeOfPeriod>
+            </com:recurringTimePeriodOfDay>
+            <com:recurringDayWeekMonthPeriod>
+              <com:applicableDay>monday</com:applicableDay>
+            </com:recurringDayWeekMonthPeriod>
+          </com:validPeriod>
+          <com:validPeriod>
+            <com:periodName>
+              <com:values>
+                <com:value lang="en">tuesday</com:value>
+              </com:values>
+            </com:periodName>
+            <com:recurringTimePeriodOfDay>
+              <com:startTimeOfPeriod>00:00:00.0000000+01:00</com:startTimeOfPeriod>
+              <com:endTimeOfPeriod>23:59:59.0000000+01:00</com:endTimeOfPeriod>
+            </com:recurringTimePeriodOfDay>
+            <com:recurringDayWeekMonthPeriod>
+              <com:applicableDay>tuesday</com:applicableDay>
+            </com:recurringDayWeekMonthPeriod>
+          </com:validPeriod>
+          <com:validPeriod>
+            <com:periodName>
+              <com:values>
+                <com:value lang="en">wednesday</com:value>
+              </com:values>
+            </com:periodName>
+            <com:recurringTimePeriodOfDay>
+              <com:startTimeOfPeriod>00:00:00.0000000+01:00</com:startTimeOfPeriod>
+              <com:endTimeOfPeriod>23:59:59.0000000+01:00</com:endTimeOfPeriod>
+            </com:recurringTimePeriodOfDay>
+            <com:recurringDayWeekMonthPeriod>
+              <com:applicableDay>wednesday</com:applicableDay>
+            </com:recurringDayWeekMonthPeriod>
+          </com:validPeriod>
+          <com:validPeriod>
+            <com:periodName>
+              <com:values>
+                <com:value lang="en">thursday</com:value>
+              </com:values>
+            </com:periodName>
+            <com:recurringTimePeriodOfDay>
+              <com:startTimeOfPeriod>00:00:00.0000000+01:00</com:startTimeOfPeriod>
+              <com:endTimeOfPeriod>23:59:59.0000000+01:00</com:endTimeOfPeriod>
+            </com:recurringTimePeriodOfDay>
+            <com:recurringDayWeekMonthPeriod>
+              <com:applicableDay>thursday</com:applicableDay>
+            </com:recurringDayWeekMonthPeriod>
+          </com:validPeriod>
+          <com:validPeriod>
+            <com:periodName>
+              <com:values>
+                <com:value lang="en">friday</com:value>
+              </com:values>
+            </com:periodName>
+            <com:recurringTimePeriodOfDay>
+              <com:startTimeOfPeriod>00:00:00.0000000+01:00</com:startTimeOfPeriod>
+              <com:endTimeOfPeriod>23:59:59.0000000+01:00</com:endTimeOfPeriod>
+            </com:recurringTimePeriodOfDay>
+            <com:recurringDayWeekMonthPeriod>
+              <com:applicableDay>friday</com:applicableDay>
+            </com:recurringDayWeekMonthPeriod>
+          </com:validPeriod>
+          <com:validPeriod>
+            <com:periodName>
+              <com:values>
+                <com:value lang="en">saturday</com:value>
+              </com:values>
+            </com:periodName>
+            <com:recurringTimePeriodOfDay>
+              <com:startTimeOfPeriod>00:00:00.0000000+01:00</com:startTimeOfPeriod>
+              <com:endTimeOfPeriod>23:59:59.0000000+01:00</com:endTimeOfPeriod>
+            </com:recurringTimePeriodOfDay>
+            <com:recurringDayWeekMonthPeriod>
+              <com:applicableDay>saturday</com:applicableDay>
+            </com:recurringDayWeekMonthPeriod>
+          </com:validPeriod>
+          <com:validPeriod>
+            <com:periodName>
+              <com:values>
+                <com:value lang="en">sunday</com:value>
+              </com:values>
+            </com:periodName>
+            <com:recurringTimePeriodOfDay>
+              <com:startTimeOfPeriod>00:00:00.0000000+01:00</com:startTimeOfPeriod>
+              <com:endTimeOfPeriod>23:59:59.0000000+01:00</com:endTimeOfPeriod>
+            </com:recurringTimePeriodOfDay>
+            <com:recurringDayWeekMonthPeriod>
+              <com:applicableDay>sunday</com:applicableDay>
+            </com:recurringDayWeekMonthPeriod>
+          </com:validPeriod>
+        </fac:overallPeriod>
+      </fac:operatingHours>
+      <fac:locationReference xsi:type="lr:PointLocation">
+        <lr:_locationReferenceExtension>
+          <lr:facilityLocation>
+            <lex:address>
+              <lex:postcode>4202</lex:postcode>
+              <lex:city>
+                <com:values>
+                  <com:value lang="sl">Naklo</com:value>
+                </com:values>
+              </lex:city>
+              <lex:countryCode>SI</lex:countryCode>
+              <lex:addressLine order="1">
+                <lex:type>street</lex:type>
+                <lex:text>
+                  <com:values>
+                    <com:value lang="sl">Stara cesta 61 </com:value>
+                  </com:values>
+                </lex:text>
+              </lex:addressLine>
+            </lex:address>
+          </lr:facilityLocation>
+        </lr:_locationReferenceExtension>
+        <lr:coordinatesForDisplay>
+          <lr:latitude>46.27604</lr:latitude>
+          <lr:longitude>14.315046</lr:longitude>
+        </lr:coordinatesForDisplay>
+        <lr:pointByCoordinates>
+          <lr:pointCoordinates>
+            <lr:latitude>46.27604</lr:latitude>
+            <lr:longitude>14.315046</lr:longitude>
+          </lr:pointCoordinates>
+        </lr:pointByCoordinates>
+      </fac:locationReference>
+      <fac:operator xsi:type="fac:OrganisationSpecification" id="SI*GNE" version="1.0">
+        <fac:name>
+          <com:values>
+            <com:value lang="sl">Elektro Ljubljana d.d.</com:value>
+          </com:values>
+        </fac:name>
+        <fac:legalName>
+          <com:values>
+            <com:value lang="sl">Elektro Ljubljana d.d.</com:value>
+          </com:values>
+        </fac:legalName>
+        <fac:vatIdentificationNumber>SI49977725</fac:vatIdentificationNumber>
+        <fac:organisationUnit>
+          <fac:name>
+            <com:values>
+              <com:value lang="sl">Elektro Ljubljana d.d.</com:value>
+            </com:values>
+          </fac:name>
+        </fac:organisationUnit>
+      </fac:operator>
+      <fac:applicableForVehicles>
+        <com:vehicleType>car</com:vehicleType>
+      </fac:applicableForVehicles>
+      <energyInfrastructureStation id="5771a977-c49d-4369-804f-72404e19d082">
+        <authenticationAndIdentificationMethods>rfid</authenticationAndIdentificationMethods>
+        <refillPoint xsi:type="ElectricChargingPoint" id="SI*GNE*E1298" version="v1">
+          <fac:name>
+            <com:values>
+              <com:value lang="sl">Polnilno mesto 1</com:value>
+            </com:values>
+          </fac:name>
+          <fac:externalIdentifier>1298</fac:externalIdentifier>
+          <fac:rates xsi:type="fac:RateTable" id="93f12957-586b-45a7-996b-8d75330ef70b-rp-c" version="v1">
+            <fac:applicableCurrency>EUR</fac:applicableCurrency>
+            <fac:energyPricingPolicy>
+              <pricingPolicy>pricePerDeliveryUnit</pricingPolicy>
+            </fac:energyPricingPolicy>
+            <fac:rateLineCollection collectionSequence="1">
+              <fac:rateLine sequence="1">
+                <fac:rateLineType>perUnit</fac:rateLineType>
+                <fac:description>
+                  <com:values>
+                    <com:value lang="sl">Cena na kWh</com:value>
+                    <com:value lang="en">Price per kWh</com:value>
+                  </com:values>
+                </fac:description>
+                <fac:value>0.35</fac:value>
+              </fac:rateLine>
+            </fac:rateLineCollection>
+          </fac:rates>
+          <connector>
+            <connectorType>domesticF</connectorType>
+            <connectorFormat>socket</connectorFormat>
+            <maxPowerAtSocket>1920</maxPowerAtSocket>
+            <voltage>120</voltage>
+            <maximumCurrent>16</maximumCurrent>
+          </connector>
+        </refillPoint>
+      </energyInfrastructureStation>
+      <energyInfrastructureStation id="b3b936ad-35da-4b41-b196-dcc7d51fe2bb">
+        <authenticationAndIdentificationMethods>rfid</authenticationAndIdentificationMethods>
+        <refillPoint xsi:type="ElectricChargingPoint" id="SI*GNE*E1297" version="v1">
+          <fac:name>
+            <com:values>
+              <com:value lang="sl">Polnilno mesto 1</com:value>
+            </com:values>
+          </fac:name>
+          <fac:externalIdentifier>1297</fac:externalIdentifier>
+          <fac:rates xsi:type="fac:RateTable" id="ea9984e6-8786-4c9e-913b-aebe4c167073-rp-c" version="v1">
+            <fac:applicableCurrency>EUR</fac:applicableCurrency>
+            <fac:energyPricingPolicy>
+              <pricingPolicy>pricePerDeliveryUnit</pricingPolicy>
+            </fac:energyPricingPolicy>
+            <fac:rateLineCollection collectionSequence="1">
+              <fac:rateLine sequence="1">
+                <fac:rateLineType>perUnit</fac:rateLineType>
+                <fac:description>
+                  <com:values>
+                    <com:value lang="sl">Cena na kWh</com:value>
+                    <com:value lang="en">Price per kWh</com:value>
+                  </com:values>
+                </fac:description>
+                <fac:value>0.35</fac:value>
+              </fac:rateLine>
+            </fac:rateLineCollection>
+          </fac:rates>
+          <connector>
+            <connectorType>iec62196T2</connectorType>
+            <connectorFormat>socket</connectorFormat>
+            <maxPowerAtSocket>7239</maxPowerAtSocket>
+            <voltage>400</voltage>
+            <maximumCurrent>18</maximumCurrent>
+          </connector>
+        </refillPoint>
+      </energyInfrastructureStation>
+    </energyInfrastructureSite>
+    <energyInfrastructureSite id="SI*EVT*P326P" version="v1">
+      <fac:name>
+        <com:values>
+          <com:value lang="sl">Ruše NK POHORJE polnilnica za kolesa</com:value>
+        </com:values>
+      </fac:name>
+      <fac:operatingHours xsi:type="fac:OperatingHoursSpecification" id="5f3969b1-95d6-4286-ab78-7c9082d74640" version="1">
+        <fac:overallPeriod>
+          <com:overallStartTime>2025-12-04T16:12:33.2224851+01:00</com:overallStartTime>
+        </fac:overallPeriod>
+      </fac:operatingHours>
+      <fac:locationReference xsi:type="lr:PointLocation">
+        <lr:_locationReferenceExtension>
+          <lr:facilityLocation>
+            <lex:address>
+              <lex:postcode>2342</lex:postcode>
+              <lex:city>
+                <com:values>
+                  <com:value lang="sl">Ruše</com:value>
+                </com:values>
+              </lex:city>
+              <lex:countryCode>SI</lex:countryCode>
+              <lex:addressLine order="1">
+                <lex:type>street</lex:type>
+                <lex:text>
+                  <com:values>
+                    <com:value lang="sl">Stadionska ulica 15</com:value>
+                  </com:values>
+                </lex:text>
+              </lex:addressLine>
+            </lex:address>
+          </lr:facilityLocation>
+        </lr:_locationReferenceExtension>
+        <lr:coordinatesForDisplay>
+          <lr:latitude>46.54389</lr:latitude>
+          <lr:longitude>15.50478</lr:longitude>
+        </lr:coordinatesForDisplay>
+        <lr:pointByCoordinates>
+          <lr:pointCoordinates>
+            <lr:latitude>46.54389</lr:latitude>
+            <lr:longitude>15.50478</lr:longitude>
+          </lr:pointCoordinates>
+        </lr:pointByCoordinates>
+      </fac:locationReference>
+      <fac:operator xsi:type="fac:OrganisationSpecification" id="SI*EVT" version="1.0">
+        <fac:name>
+          <com:values>
+            <com:value lang="sl">IMPLERA d.o.o.</com:value>
+          </com:values>
+        </fac:name>
+        <fac:legalName>
+          <com:values>
+            <com:value lang="sl">IMPLERA d.o.o.</com:value>
+          </com:values>
+        </fac:legalName>
+        <fac:vatIdentificationNumber>SI13082221</fac:vatIdentificationNumber>
+        <fac:organisationUnit>
+          <fac:name>
+            <com:values>
+              <com:value lang="sl">IMPLERA d.o.o.</com:value>
+            </com:values>
+          </fac:name>
+        </fac:organisationUnit>
+      </fac:operator>
+      <fac:applicableForVehicles>
+        <com:vehicleType>bicycle</com:vehicleType>
+      </fac:applicableForVehicles>
+      <energyInfrastructureStation id="SI*EVT*S326P1S">
+        <authenticationAndIdentificationMethods>phoneDialog</authenticationAndIdentificationMethods>
+        <refillPoint xsi:type="ElectricChargingPoint" id="SI*EVT*E326P1S385.1769E" version="v1">
+          <fac:name>
+            <com:values>
+              <com:value lang="sl">Polnilno mesto 385</com:value>
+            </com:values>
+          </fac:name>
+          <connector>
+            <connectorType>domesticB</connectorType>
+            <connectorFormat>socket</connectorFormat>
+            <maxPowerAtSocket>2299</maxPowerAtSocket>
+            <voltage>230</voltage>
+            <maximumCurrent>9</maximumCurrent>
+          </connector>
+        </refillPoint>
+        <refillPoint xsi:type="ElectricChargingPoint" id="SI*EVT*E326P1S385.1775E" version="v1">
+          <fac:name>
+            <com:values>
+              <com:value lang="sl">Polnilno mesto 385</com:value>
+            </com:values>
+          </fac:name>
+          <connector>
+            <connectorType>other</connectorType>
+            <connectorFormat>otherCable</connectorFormat>
+            <maxPowerAtSocket>250</maxPowerAtSocket>
+            <voltage>42</voltage>
+            <maximumCurrent>5</maximumCurrent>
+          </connector>
+        </refillPoint>
+        <refillPoint xsi:type="ElectricChargingPoint" id="SI*EVT*E326P1S385.1773E" version="v1">
+          <fac:name>
+            <com:values>
+              <com:value lang="sl">Polnilno mesto 385</com:value>
+            </com:values>
+          </fac:name>
+          <connector>
+            <connectorType>other</connectorType>
+            <connectorFormat>otherCable</connectorFormat>
+            <maxPowerAtSocket>250</maxPowerAtSocket>
+            <voltage>42</voltage>
+            <maximumCurrent>5</maximumCurrent>
+          </connector>
+        </refillPoint>
+        <refillPoint xsi:type="ElectricChargingPoint" id="SI*EVT*E326P1S385.1771E" version="v1">
+          <fac:name>
+            <com:values>
+              <com:value lang="sl">Polnilno mesto 385</com:value>
+            </com:values>
+          </fac:name>
+          <connector>
+            <connectorType>domesticB</connectorType>
+            <connectorFormat>socket</connectorFormat>
+            <maxPowerAtSocket>500</maxPowerAtSocket>
+            <voltage>230</voltage>
+            <maximumCurrent>2</maximumCurrent>
+          </connector>
+        </refillPoint>
+      </energyInfrastructureStation>
+    </energyInfrastructureSite>
+  </energyInfrastructureTable>
+</EnergyInfrastructureTablePublication>

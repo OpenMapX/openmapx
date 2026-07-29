@@ -1,0 +1,45 @@
+[
+  {
+    "address": "123 Road A Singapore 123456",
+    "name": "123 Road A",
+    "longtitude": "103.851959",
+    "latitude": "1.290270",
+    "locationId": "851959123456",
+    "status": "1",
+    "chargingPoints": [
+      {
+        "status": "1",
+        "operationHours": "24 hours",
+        "operator": "EVCO A",
+        "position": "L1 Lot 123",
+        "name": "123 Road A",
+        "id": "R123456A",
+        "plugTypes": [
+          {
+            "plugType": "Type 2",
+            "powerRating": "AC",
+            "chargingSpeed": "7.4",
+            "price": "0.70",
+            "priceType": "kWh"
+          }
+        ],
+        "evIds": [
+          {
+            "id": "R123456A-001",
+            "evCpId": "R123456A-001",
+            "status": "1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "address": "456 Road B Singapore 654321",
+    "name": "456 Road B",
+    "longtitude": "103.75",
+    "latitude": "1.40",
+    "locationId": "750000654321",
+    "status": "100",
+    "chargingPoints": []
+  }
+]

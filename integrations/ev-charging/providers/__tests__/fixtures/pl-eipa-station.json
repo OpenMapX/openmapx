@@ -1,0 +1,47 @@
+{
+  "data": [
+    {
+      "id": 22,
+      "pool_id": 2,
+      "type": "E",
+      "latitude": 52.232128,
+      "longitude": 16.399548,
+      "authentication_methods": [2, 4],
+      "payment_methods": [1, 8],
+      "location": {
+        "city": "Poznań",
+        "community": "Poznań",
+        "district": "poznański",
+        "province": "wielkopolskie"
+      },
+      "ts": "2026-06-01T14:51:51+02:00"
+    },
+    {
+      "id": 46,
+      "pool_id": 3,
+      "type": "E",
+      "location": {
+        "city": "Przedmoście",
+        "community": "Środa Śląska",
+        "district": "średzki",
+        "province": "dolnośląskie"
+      },
+      "ts": "2026-06-02T09:12:03+02:00"
+    },
+    {
+      "id": 71,
+      "pool_id": 4,
+      "type": "G",
+      "latitude": 51.1,
+      "longitude": 17.03,
+      "location": {
+        "city": "Wrocław",
+        "community": "Wrocław",
+        "district": "Wrocław",
+        "province": "dolnośląskie"
+      },
+      "ts": "2026-05-20T08:00:00+02:00"
+    }
+  ],
+  "generated": "2026-07-29T06:00:00+02:00"
+}

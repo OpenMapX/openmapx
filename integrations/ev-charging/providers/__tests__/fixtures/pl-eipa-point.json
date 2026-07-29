@@ -1,0 +1,51 @@
+{
+  "data": [
+    {
+      "id": 18,
+      "code": "PL-2DT-E9FX7M3CL",
+      "station_id": 22,
+      "charging_solutions": [
+        { "mode": 4, "power": 24 },
+        { "mode": 4, "power": 39 },
+        { "mode": 2, "power": 22 }
+      ],
+      "connectors": [
+        {
+          "interfaces": [5, 6],
+          "cable_attached": true,
+          "power": 7,
+          "ts": "2026-06-01T12:00:00+02:00"
+        },
+        {
+          "interfaces": [1, 2, 4, 7, 8],
+          "cable_attached": false,
+          "power": 57,
+          "ts": "2026-06-01T12:00:00+02:00"
+        }
+      ],
+      "fuel_types": [],
+      "gas_connector_interfaces": [],
+      "hydrogen_refill_solutions": [],
+      "ts": "2026-06-01T12:00:00+02:00"
+    },
+    {
+      "id": 90,
+      "code": "PL-V1J-EUEXG3Z5O",
+      "station_id": 46,
+      "charging_solutions": [{ "mode": 4, "power": 50 }],
+      "connectors": [
+        {
+          "interfaces": [2],
+          "cable_attached": true,
+          "power": 50,
+          "ts": "2026-06-02T09:00:00+02:00"
+        }
+      ],
+      "fuel_types": [],
+      "gas_connector_interfaces": [],
+      "hydrogen_refill_solutions": [],
+      "ts": "2026-06-02T09:00:00+02:00"
+    }
+  ],
+  "generated": "2026-07-29T06:00:00+02:00"
+}

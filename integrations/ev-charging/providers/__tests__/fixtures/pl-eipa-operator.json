@@ -1,0 +1,24 @@
+{
+  "data": [
+    {
+      "id": 1,
+      "code": "PL-2DT",
+      "name": "Operator stacji ładowania Sp. z o.o.",
+      "short_name": "Operator",
+      "email": "kontakt@operator.example.pl",
+      "phone": "222510505",
+      "website": "http://www.operator.example.pl",
+      "type": 1
+    },
+    {
+      "id": 2,
+      "code": "PL-V1J",
+      "name": "Orlen Charge & Drive Sp. z o.o.",
+      "short_name": "Orlen",
+      "email": "kontakt@orlen.example.pl",
+      "phone": "182334234",
+      "type": 3
+    }
+  ],
+  "generated": "2026-07-29T06:00:00+02:00"
+}

@@ -1,0 +1,23 @@
+{
+  "data": [
+    {
+      "point_id": 18,
+      "prices": [
+        { "price": "1.63", "unit": "min", "ts": "2026-07-29T05:25:00+02:00" },
+        {
+          "price": "2.54",
+          "unit": "kWh",
+          "literal": "Promocja, 10 min ładowania za darmo",
+          "ts": "2026-07-29T05:14:21+02:00"
+        }
+      ],
+      "status": { "availability": 1, "status": 1, "ts": "2026-07-29T05:38:58+02:00" }
+    },
+    {
+      "point_id": 90,
+      "prices": [{ "price": "2.10", "unit": "kWh", "ts": "2026-07-29T04:59:00+02:00" }],
+      "status": { "availability": 0, "status": 0, "ts": "2026-07-29T04:59:00+02:00" }
+    }
+  ],
+  "generated": "2026-07-29T06:00:00+02:00"
+}

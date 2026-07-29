@@ -86,6 +86,11 @@
       "dataSent": "Keine Abfrageparameter – der vollständige nationale DATEX-II-Datensatz wird serverseitig täglich in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
       "dataReceived": "Ladestandort-Datensätze mit Standort, Adresse, Betreiber, Steckertypen, Nennleistung, Stromart und letztem Aktualisierungszeitpunkt"
     },
+    "it-pun": {
+      "purpose": "Italienisches nationales Ladeinfrastruktur-Register (PUN — Piattaforma Unica Nazionale, GSE/MASE); die Lizenzbedingungen sind unbestätigte öffentliche Open-Data-Bedingungen und werden vorläufig einbezogen",
+      "dataSent": "Keine Abfrageparameter – der vollständige ArcGIS-FeatureServer-Datensatz wird serverseitig täglich in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
+      "dataReceived": "EVSE-Datensätze (zu Stationen gruppiert) mit Standort, Adresse, Steckertypen (Typ 1/Typ 2/CCS/CHAdeMO) mit Leistungswerten, Öffnungszeiten und Betriebsstatus"
+    },
     "au-nsw-ev": {
       "purpose": "Amtliches Register von Transport for NSW zu öffentlichen EV-Ladestandorten in New South Wales",
       "dataSent": "Keine Abfrageparameter – der vollständige NSW-CSV-Datensatz wird serverseitig täglich in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
@@ -121,6 +126,31 @@
       "dataSent": "Keine Abfrageparameter – die vollständigen nationalen OCPI-Standort- und Tarif-Feeds werden serverseitig täglich in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
       "dataReceived": "Ladestationsdatensätze mit Standort, Betreiber, Steckertypen, Nennleistung und strukturierten Tarifen je Anschluss (Energie-/Sitzungspreis, Währung, MwSt.)"
     },
+    "kr-datago": {
+      "purpose": "Landesweiter Standarddatensatz für E-Ladestationen der Korea Environment Corporation (한국환경공단) über data.go.kr",
+      "dataSent": "Keine Abfrageparameter außer der festen Spaltenliste – der vollständige Datensatz wird serverseitig täglich über die schlüssellose Standarddaten-Schnittstelle von data.go.kr in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
+      "dataReceived": "Ladestationsdatensätze mit Name, Adresse, Provinz, Anzahl Normal-/Schnellladepunkte, Schnellladestecker-Typ, Öffnungszeiten, Schließtagen, Parkgebührenhinweis, Betreiber, Telefonnummer und Referenzdatum"
+    },
+    "pl-eipa": {
+      "purpose": "Polnisches nationales Register für alternative Kraftstoffe/E-Ladeinfrastruktur (EIPA, betrieben von UDT) mit öffentlich zugänglichen Ladestationen in Polen, Live-Verfügbarkeit je Ladepunkt und strukturierten PLN-Tarifen",
+      "dataSent": "Keine Abfrageparameter – der vollständige nationale Stations-/Punkt-/Preisfeed wird serverseitig regelmäßig (aus der Umgebung authentifiziert) in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
+      "dataReceived": "Ladestationsdatensätze mit Standort, Betreiber, Steckertypen/-leistung, Live-Verfügbarkeit je Ladepunkt sowie strukturierten Energie- (PLN/kWh) und Zeittarifen (PLN/min)"
+    },
+    "at-econtrol": {
+      "purpose": "Das österreichische Ladestellenverzeichnis der E-Control — öffentliche E-Ladestationen in ganz Österreich mit Live-Status je Ladepunkt und strukturierten Ad-hoc-Preisen",
+      "dataSent": "Breiten-/Längengrad des Kartenausschnitt-Mittelpunkts sowie API-Key und registrierte Referer-Domain des Betreibers — serverseitig pro Kartenanfrage gesendet; keine Nutzerdaten erreichen den Anbieter",
+      "dataReceived": "Ladestations-Datensätze mit Standort, Betreiber, Live-Status je Ladepunkt, Steckertypen, Nennleistung, Öffnungszeiten sowie strukturierte Energie-/Zeit-/Pauschal-/Blockiergebühren-Preise in EUR"
+    },
+    "sg-ltadatamall": {
+      "purpose": "Amtlicher singapurischer Ladestations-Datensatz (LTA DataMall) mit Standorten von Ladepunkten, Steckertypen und Live-Verfügbarkeit nach Postleitzahl",
+      "dataSent": "Keine Begrenzungsrahmen- oder Standortparameter – der Batch-Endpunkt wird nur mit dem AccountKey-Header aufgerufen, der bereitgestellte Download-Link wird abgerufen und der vollständige landesweite Datensatz anschließend lokal nach Begrenzungsrahmen gefiltert; eine Einzelstationsabfrage sendet zusätzlich die abgeleitete 6-stellige Postleitzahl",
+      "dataReceived": "Ladestationsdatensätze mit Adresse, Koordinaten, Betreiber je Ladepunkt, Steckertypen, Nennleistung, Ladepreis und Live-Verfügbarkeitsstatus je Anschluss"
+    },
+    "tw-tdx": {
+      "purpose": "Amtlicher taiwanesischer nationaler Ladestationsdatensatz (TDX – Transport Data eXchange, Ministerium für Verkehr und Kommunikation) mit öffentlich zugänglicher Ladeinfrastruktur nach Stadt/Landkreis, inklusive Live-Status je Anschluss",
+      "dataSent": "Begrenzungsrahmen-Koordinaten, abgeglichen mit angenäherten Stadt-/Landkreisgrenzen zur Auswahl der abzufragenden TDX-Stadt-Endpunkte, sowie ein OAuth2-Client-Credentials-Bearer-Token (serverseitig aus der konfigurierten Client-ID/dem Client-Secret bezogen) – serverseitig pro Kartenabfrage gesendet",
+      "dataReceived": "Ladestationsdatensätze mit Standort, Adresse, Steckertypen und Anzahl je Typ (AC/DC), Freitext-Beschreibungen zu Lade-/Parktarifen, Öffnungszeiten und Live-Verfügbarkeitsstatus je Anschluss"
+    },
     "opendatasoft": {
       "purpose": "Opendatasoft (Opendatasoft SAS, Frankreich) ist die API-Plattform, die den französischen nationalen IRVE-Ladedatensatz hostet und bereitstellt; Anfragen nach französischen Ladepunkten werden von dieser Plattform beantwortet",
       "dataSent": "Der Begrenzungsrahmen des Kartenausschnitts (als in_bbox(point_geo, Nord, West, Süd, Ost)-Filter mit Seitennummerierung) erreicht die Opendatasoft-Plattform serverseitig; es werden keine Nutzeridentität, kein Konto und kein API-Schlüssel gesendet",
@@ -140,6 +170,11 @@
       "purpose": "Nordische Ladestationsdatenbank (NOBIL) mit öffentlichen Ladestationen in Norwegen und Schweden",
       "dataSent": "Begrenzungsrahmen als type=rectangle mit northeast=(Nord, Ost) und southwest=(Süd, West) sowie der NOBIL-API-Schlüssel – serverseitig pro Kartenabfrage gesendet",
       "dataReceived": "Ladestationsdatensätze mit Standort, Betreiber/Eigentümer, Steckertypen, Ladekapazität, Anschlusszahlen, Barrierefreiheit, Öffnungszeiten und Stationsstatus"
+    },
+    "si-nap": {
+      "purpose": "Amtliches slowenisches nationales Ladepunktregister (NAP Slovenija / Prometej IDACS National Access Point) mit öffentlicher Ladeinfrastruktur in Slowenien. Erfordert eine Unternehmensregistrierung und ein OAuth2-Token; inaktiv, solange nicht konfiguriert",
+      "dataSent": "Keine Abfrageparameter von der Karte – der vollständige nationale DATEX-II-Datensatz wird serverseitig täglich mit einem aus dem konfigurierten Refresh-Token abgeleiteten OAuth2-Bearer-Token in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
+      "dataReceived": "Ladestandort-Datensätze mit Standort, Adresse, Betreiber, Steckertypen, Nennleistung und Stromart"
     },
     "osm": {
       "purpose": "Ladestationsstandorte aus OpenStreetMap über Overpass (Sekundärquelle, globaler Fallback)",

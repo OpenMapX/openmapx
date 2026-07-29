@@ -86,6 +86,11 @@
       "dataSent": "No query parameters — the full national DATEX II dataset is downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
       "dataReceived": "Charging site records with location, address, operator, connector types, rated power, current type, and last-updated timestamp"
     },
+    "it-pun": {
+      "purpose": "Italian national EV charging registry (PUN — Piattaforma Unica Nazionale, GSE/MASE); license terms are unconfirmed public-sector open data, included provisionally",
+      "dataSent": "No query parameters — the full ArcGIS FeatureServer dataset is downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
+      "dataReceived": "EVSE-level charging records (grouped into stations) with location, address, connector standards (Type 1/Type 2/CCS/CHAdeMO) with power ratings, opening hours, and operational status"
+    },
     "au-nsw-ev": {
       "purpose": "Official Transport for NSW register of public EV charging locations across New South Wales",
       "dataSent": "No query parameters — the full NSW CSV dataset is downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
@@ -121,6 +126,31 @@
       "dataSent": "No query parameters — the full national OCPI locations and tariffs feeds are downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
       "dataReceived": "Charging station records with location, operator, connector types, rated power, and structured per-connector tariffs (energy/session price, currency, VAT)"
     },
+    "kr-datago": {
+      "purpose": "Nationwide EV charging station standard dataset published by Korea Environment Corporation (한국환경공단) via data.go.kr",
+      "dataSent": "No query parameters beyond the fixed column list — the full dataset is downloaded server-side on a daily schedule via data.go.kr's keyless standard-data endpoint into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
+      "dataReceived": "Charging station records with name, address, province, slow/fast charger counts, fast-charger connector type, opening hours, closed days, parking-fee flag, managing operator, phone number, and reference date"
+    },
+    "pl-eipa": {
+      "purpose": "Polish national alternative-fuel/EV charging register (EIPA, run by UDT) covering publicly accessible charging stations in Poland, with live per-point availability and structured PLN pricing",
+      "dataSent": "No query parameters — the full national station/point/pricing feed is downloaded server-side on a schedule (authenticated from the environment) into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
+      "dataReceived": "Charging station records with location, operator, connector types/power, live per-point availability status, and structured energy (PLN/kWh) and time (PLN/min) pricing"
+    },
+    "at-econtrol": {
+      "purpose": "E-Control Austria's national Ladestellenverzeichnis — public EV charging stations across Austria with live per-connector status and structured ad-hoc pricing",
+      "dataSent": "Latitude/longitude of the searched map area's center, plus the operator's API key and registered Referer domain — sent server-side per map request; no user data reaches the provider",
+      "dataReceived": "Charging station records with location, operator, live per-connector status, connector types, rated power, opening hours, and structured energy/time/flat/blocking-fee pricing in EUR"
+    },
+    "sg-ltadatamall": {
+      "purpose": "Official Singapore EV charging station dataset (LTA DataMall), covering charging point locations, connectors, and real-time availability by postal code",
+      "dataSent": "No bounding-box or location parameters — the batch endpoint is called with only the AccountKey header, its pre-signed download link is fetched, and the full national result set is filtered by bounding box locally; a single-station lookup additionally sends the derived 6-digit postal code",
+      "dataReceived": "Charging station records with address, coordinates, per-charger operator, connector (plug) types, power rating, charging price, and live per-connector availability status"
+    },
+    "tw-tdx": {
+      "purpose": "Official Taiwanese national EV charging station dataset (TDX — Transport Data eXchange, Ministry of Transportation and Communications) covering publicly accessible charging infrastructure by city/county, with live per-connector status",
+      "dataSent": "Bounding-box coordinates matched against approximate city/county boundaries to pick which TDX city endpoints to query, plus an OAuth2 client-credentials bearer token (obtained server-side from the configured Client ID/Secret) — sent server-side per map request",
+      "dataReceived": "Charging station records with location, address, connector types and per-type counts (AC/DC), free-text charging-rate/parking-rate descriptions, opening hours, and live per-connector availability status"
+    },
     "opendatasoft": {
       "purpose": "Opendatasoft (Opendatasoft SAS, France) is the API platform that hosts and serves the French national IRVE charging dataset; requests for French charging points are answered by this platform",
       "dataSent": "The map-viewport bounding box (as an in_bbox(point_geo, north, west, south, east) filter with pagination) reaches the Opendatasoft platform server-side; no user identity, account, or API key is sent",
@@ -140,6 +170,11 @@
       "purpose": "Nordic EV charging station database (NOBIL) covering public charging stations in Norway and Sweden",
       "dataSent": "Bounding box as type=rectangle with northeast=(north, east) and southwest=(south, west), plus the NOBIL API key — sent server-side per map request",
       "dataReceived": "Charging station records with location, operator/owner, connector types, charging capacity, port counts, accessibility, opening hours, and station status"
+    },
+    "si-nap": {
+      "purpose": "Official Slovenian national EV charging registry (NAP Slovenija / Prometej IDACS National Access Point) covering public charging infrastructure in Slovenia. Requires a business-entity registration and OAuth2 token; inactive until configured",
+      "dataSent": "No query parameters from the map — the full national DATEX II dataset is downloaded server-side on a daily schedule using an OAuth2 bearer token exchanged from the configured refresh token, into the local database, then queried by bounding box locally; no user data reaches the provider per map request",
+      "dataReceived": "Charging site records with location, address, operator, connector types, rated power, and current type"
     },
     "osm": {
       "purpose": "EV charging station locations from OpenStreetMap via Overpass (secondary source, global fallback)",
