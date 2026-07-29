@@ -55,6 +55,44 @@ describe("parseChSfoeOicp", () => {
     expect(rows[0].payload.name).toBe("Solo Station");
   });
 
+  it("drops records whose coordinates fall outside Switzerland (sentinel/foreign placeholders)", () => {
+    const feed = {
+      EVSEData: [
+        {
+          OperatorName: "Test Operator",
+          EVSEDataRecord: [
+            // Real Swiss station — kept.
+            {
+              ChargingStationId: "CH-OK-S001",
+              GeoCoordinates: { Google: "47.4 8.5" },
+              Plugs: ["Type 2"],
+            },
+            // Mid-Atlantic sentinel placeholder — dropped.
+            {
+              ChargingStationId: "CH-BAD-SENTINEL",
+              GeoCoordinates: { Google: "50.0 -15.0" },
+              Plugs: ["Type 2"],
+            },
+            // Null island — dropped.
+            {
+              ChargingStationId: "CH-BAD-NULLISLAND",
+              GeoCoordinates: { Google: "0.0 0.0" },
+              Plugs: ["Type 2"],
+            },
+            // Real coordinates but abroad (Malta) — dropped, wrong country for a Swiss source.
+            {
+              ChargingStationId: "CH-BAD-MALTA",
+              GeoCoordinates: { Google: "35.872135 14.395714" },
+              Plugs: ["Type 2"],
+            },
+          ],
+        },
+      ],
+    };
+    const rows = parseChSfoeOicp(Buffer.from(JSON.stringify(feed)));
+    expect(rows.map((r) => r.poiId)).toEqual([encodeURIComponent("CH-OK-S001")]);
+  });
+
   it("collapses multiple EVSE records of one station into a single row with merged connectors", () => {
     const feed = {
       EVSEData: [

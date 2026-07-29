@@ -1,6 +1,12 @@
 import type { EvChargingConnector } from "@openmapx/mobility-core/ev-charging";
-import type { PoiRow } from "@openmapx/poi-source-registry";
-import { cleanString, connector, parseLocalizedNumber, uniqueStrings } from "./utils.js";
+import type { PoiRow, PoiSourceLogger } from "@openmapx/poi-source-registry";
+import {
+  bboxContainsCoordinates,
+  cleanString,
+  connector,
+  parseLocalizedNumber,
+  uniqueStrings,
+} from "./utils.js";
 
 interface ChSfoeEvseDataGroup {
   OperatorID?: string;
@@ -49,6 +55,14 @@ interface ChSfoeEvseRecord {
 
 const DATASET_URL = "https://opendata.swiss/en/dataset/ladestationen-fuer-elektroautos";
 
+// The OICP feed carries a handful of records with unusable coordinates — mostly
+// operator placeholders (mid-Atlantic sentinel "50.0 -15.0", null-island "0.0
+// 0.0") but also a few real stations sitting abroad (Malta, Germany, …) that
+// don't belong in a Swiss source. They inflate the dataset's geographic extent
+// and plot Swiss chargers on the wrong continent, so drop anything outside
+// Switzerland (matches the reader coverage box in ch-sfoe.ts).
+const CH_BOUNDS = { west: 5.9, south: 45.8, east: 10.6, north: 47.9 };
+
 function parseGoogleCoordinates(value: string | undefined): [number, number] | null {
   const parts = value?.trim().split(/\s+/) ?? [];
   if (parts.length < 2) return null;
@@ -94,13 +108,15 @@ function recordConnectors(record: ChSfoeEvseRecord): EvChargingConnector[] {
   return plugs.map((plug) => connector({ type: plug, powerKw, reference: record.EvseID }));
 }
 
-export function parseChSfoeOicp(buffer: Buffer): PoiRow[] {
+export function parseChSfoeOicp(buffer: Buffer, ctx?: { log?: PoiSourceLogger }): PoiRow[] {
+  const log = ctx?.log;
   const feed = JSON.parse(buffer.toString("utf8")) as ChSfoeEvseFeed;
   // OICP emits one record per EVSE, and multiple EVSEs of the same station
   // share a ChargingStationId. Collapse to one row per station (the poiId),
   // merging each EVSE's connectors — otherwise duplicate poiIds violate the
   // static table's primary key.
   const byStation = new Map<string, PoiRow>();
+  let outOfBounds = 0;
 
   for (const group of feed.EVSEData ?? []) {
     const operatorName = cleanString(group.OperatorName) ?? cleanString(group.OperatorID);
@@ -108,6 +124,10 @@ export function parseChSfoeOicp(buffer: Buffer): PoiRow[] {
       const coordinates = parseGoogleCoordinates(record.GeoCoordinates?.Google);
       const stationId = cleanString(record.ChargingStationId) ?? cleanString(record.EvseID);
       if (!coordinates || !stationId) continue;
+      if (!bboxContainsCoordinates(CH_BOUNDS, coordinates)) {
+        outOfBounds += 1;
+        continue;
+      }
 
       const encodedStationId = encodeURIComponent(stationId);
       const encodedEvseId = record.EvseID ? encodeURIComponent(record.EvseID) : undefined;
@@ -163,6 +183,10 @@ export function parseChSfoeOicp(buffer: Buffer): PoiRow[] {
         },
       });
     }
+  }
+
+  if (outOfBounds > 0) {
+    log?.warn(`ch-sfoe: dropped ${outOfBounds} record(s) with coordinates outside Switzerland`);
   }
 
   return Array.from(byStation.values());
