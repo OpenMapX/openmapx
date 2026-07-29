@@ -31,34 +31,40 @@ import { JobDetail } from "./JobDetail";
 import { JobStatusChip } from "./JobStatusChip";
 
 interface AdminJob {
+  source: "application" | "data-manager";
   id: string;
   type: string;
   status: string;
-  payload: Record<string, unknown> | null;
+  payload: unknown;
   error: string | null;
   progress: number | null;
   createdBy: string | null;
   actor: { id: string; name: string; email: string } | null;
+  actorLabel: string;
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
+  cancelable: boolean;
 }
 
-type StatusFilter = "all" | "active" | "success" | "failed";
-
-const STATUS_FILTER_QUERY: Record<StatusFilter, string | undefined> = {
-  all: undefined,
-  active: "running",
-  success: "success",
-  failed: "failed",
-};
+type StatusFilter = "all" | "active" | "completed" | "failed";
 
 function formatJobType(type: string): string {
-  return type.replace(/\./g, " › ").replace(/_/g, " ");
+  return type.replace(/[.:]/g, " › ").replace(/[_-]/g, " ");
+}
+
+function formatPayload(payload: unknown): string | null {
+  if (payload == null) return null;
+  if (Array.isArray(payload)) return JSON.stringify(payload);
+  if (typeof payload !== "object") return String(payload);
+  return Object.entries(payload)
+    .map(([key, value]) => `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`)
+    .join(", ");
 }
 
 function JobRow({ job }: { job: AdminJob }) {
   const [expanded, setExpanded] = useState(false);
+  const payload = formatPayload(job.payload);
 
   return (
     <>
@@ -85,17 +91,20 @@ function JobRow({ job }: { job: AdminJob }) {
           >
             {formatJobType(job.type)}
           </Typography>
-          {job.payload && Object.keys(job.payload).length > 0 && (
-            <Typography
-              variant="caption"
-              sx={{
-                color: "text.secondary",
-                display: "block",
-              }}
-            >
-              {Object.entries(job.payload)
-                .map(([k, v]) => `${k}: ${v}`)
-                .join(", ")}
+          {payload && (
+            <Tooltip title={payload} placement="bottom-start">
+              <Typography
+                variant="caption"
+                noWrap
+                sx={{ color: "text.secondary", display: "block", maxWidth: 520 }}
+              >
+                {payload}
+              </Typography>
+            </Tooltip>
+          )}
+          {job.source === "data-manager" && (
+            <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
+              Data manager
             </Typography>
           )}
         </TableCell>
@@ -103,7 +112,7 @@ function JobRow({ job }: { job: AdminJob }) {
           <JobStatusChip status={job.status} />
         </TableCell>
         <TableCell>
-          <ActorCell actorId={job.createdBy} actor={job.actor} />
+          <ActorCell actorId={job.createdBy} actor={job.actor} fallbackLabel={job.actorLabel} />
         </TableCell>
         <TableCell>
           <Tooltip title={new Date(job.createdAt).toLocaleString()}>
@@ -136,7 +145,7 @@ function JobRow({ job }: { job: AdminJob }) {
                 py: 1.5,
               }}
             >
-              <JobDetail jobId={job.id} />
+              <JobDetail jobId={job.id} source={job.source} />
             </Box>
           </Collapse>
         </TableCell>
@@ -151,16 +160,17 @@ export function JobList() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const { page, rowsPerPage, offset, setPage, paginationProps } = useServerPagination(25);
 
-  const statusParam = STATUS_FILTER_QUERY[statusFilter];
-
-  const { data, isLoading, isFetching } = useQuery<{ jobs: AdminJob[]; total: number }>({
+  const { data, isLoading, isFetching, isError } = useQuery<{
+    jobs: AdminJob[];
+    total: number;
+  }>({
     queryKey: ["admin", "jobs", "list", statusFilter, page],
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: String(rowsPerPage),
         offset: String(offset),
       });
-      if (statusParam) params.set("status", statusParam);
+      if (statusFilter !== "all") params.set("status", statusFilter);
       const res = await fetch(`${env.apiUrl}/api/admin/jobs?${params}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load jobs");
       return res.json();
@@ -192,7 +202,7 @@ export function JobList() {
           >
             <ToggleButton value="all">All</ToggleButton>
             <ToggleButton value="active">Active</ToggleButton>
-            <ToggleButton value="success">Completed</ToggleButton>
+            <ToggleButton value="completed">Completed</ToggleButton>
             <ToggleButton value="failed">Failed</ToggleButton>
           </ToggleButtonGroup>
 
@@ -227,6 +237,16 @@ export function JobList() {
           </TableHead>
           {isLoading ? (
             <TableSkeleton rows={5} columns={5} />
+          ) : isError ? (
+            <TableBody>
+              <TableRow>
+                <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
+                  <Typography variant="body2" color="error">
+                    Failed to load jobs
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            </TableBody>
           ) : !data?.jobs.length ? (
             <TableBody>
               <TableRow>
@@ -245,7 +265,7 @@ export function JobList() {
           ) : (
             <TableBody>
               {data.jobs.map((job) => (
-                <JobRow key={job.id} job={job} />
+                <JobRow key={`${job.source}:${job.id}`} job={job} />
               ))}
             </TableBody>
           )}

@@ -6,12 +6,14 @@ describe("jobStatusColor", () => {
     expect(jobStatusColor("queued")).toBe("default");
     expect(jobStatusColor("running")).toBe("primary");
     expect(jobStatusColor("success")).toBe("success");
+    expect(jobStatusColor("ok")).toBe("success");
     expect(jobStatusColor("failed")).toBe("error");
     expect(jobStatusColor("error")).toBe("error");
     expect(jobStatusColor("canceled")).toBe("warning");
     expect(jobStatusColor("partial")).toBe("warning");
     expect(jobStatusColor("stale")).toBe("warning");
     expect(jobStatusColor("interrupted")).toBe("warning");
+    expect(jobStatusColor("skipped")).toBe("default");
   });
 
   it("falls back to default for an unknown status", () => {

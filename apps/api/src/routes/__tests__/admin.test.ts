@@ -42,6 +42,13 @@ vi.mock("../../services/job-runner.js", () => ({
   },
 }));
 
+const mockListActivityJobs = vi.fn().mockResolvedValue({ jobs: [], total: 0 });
+const mockGetActivityJob = vi.fn().mockResolvedValue(null);
+vi.mock("../../services/activity-jobs.js", () => ({
+  listActivityJobs: (...args: unknown[]) => mockListActivityJobs(...args),
+  getActivityJob: (...args: unknown[]) => mockGetActivityJob(...args),
+}));
+
 // DB — multiple tables used across admin.ts
 const mockDbSelect = vi.fn();
 const mockDbInsert = vi.fn();
@@ -207,9 +214,9 @@ afterEach(() => vi.clearAllMocks());
 
 describe("GET /admin/overview", () => {
   it("returns system health overview with integration stats", async () => {
-    // DB queries in overview: user count, banned count, active sessions,
-    // recent audit, recent jobs, active jobs. The default makeSelectChain
-    // resolves to [] and the handler uses `?? 0` fallbacks.
+    // DB queries in overview: user count, banned count, active sessions, and
+    // recent audit. The default chains resolve to [] and the handler uses
+    // `?? 0` fallbacks; activity jobs use the service mock above.
     const res = await app.inject({ method: "GET", url: "/admin/overview" });
 
     expect(res.statusCode).toBe(200);
@@ -218,6 +225,31 @@ describe("GET /admin/overview", () => {
     expect(body.systemHealth.status).toBe("pass");
     expect(body.users).toMatchObject({ total: 0, active24h: 0, banned: 0 });
     expect(body.integrations).toMatchObject({ total: 1, enabled: 1 });
+  });
+
+  it("includes data-manager jobs and surfaces their failures", async () => {
+    mockListActivityJobs.mockResolvedValueOnce({
+      total: 1,
+      jobs: [
+        {
+          source: "data-manager",
+          id: "job-dm",
+          type: "transitous-sync",
+          status: "failed",
+          error: null,
+        },
+      ],
+    });
+
+    const res = await app.inject({ method: "GET", url: "/admin/overview" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().activeJobs).toEqual([
+      expect.objectContaining({ source: "data-manager", id: "job-dm" }),
+    ]);
+    expect(res.json().attention).toContainEqual(
+      expect.objectContaining({ type: "job_failed", target: "job-dm" }),
+    );
   });
 
   it("rejects unauthenticated requests with 401", async () => {
@@ -319,21 +351,49 @@ describe("POST /admin/integrations/:id/enable", () => {
 
 describe("GET /admin/jobs", () => {
   it("returns jobs list with total count", async () => {
-    // The route does Promise.all([longChain, countChain]).
-    // Call 1: .select().from().where().orderBy().limit().offset() → []
-    // Call 2: .select({total}).from().where() → [{ total: 3 }]
-    let callCount = 0;
-    mockDbSelect.mockImplementation(() => {
-      callCount++;
-      return callCount === 1 ? makeSelectChain([]) : makeSelectChain([{ total: 3 }]);
-    });
+    mockListActivityJobs.mockResolvedValueOnce({ jobs: [], total: 3 });
 
-    const res = await app.inject({ method: "GET", url: "/admin/jobs" });
+    const res = await app.inject({ method: "GET", url: "/admin/jobs?status=active&limit=25" });
 
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.jobs).toBeDefined();
     expect(body.total).toBe(3);
+    expect(mockListActivityJobs).toHaveBeenCalledWith({ filter: "active", limit: 25, offset: 0 });
+  });
+
+  it("rejects an unknown status group", async () => {
+    const res = await app.inject({ method: "GET", url: "/admin/jobs?status=running" });
+
+    expect(res.statusCode).toBe(400);
+    expect(mockListActivityJobs).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /admin/jobs/:id", () => {
+  it("loads a source-aware data-manager job detail", async () => {
+    mockGetActivityJob.mockResolvedValueOnce({
+      source: "data-manager",
+      id: "job-dm",
+      status: "running",
+      stages: [],
+      logs: [],
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/admin/jobs/job-dm?source=data-manager",
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(mockGetActivityJob).toHaveBeenCalledWith("job-dm", "data-manager");
+  });
+
+  it("rejects an unknown job source", async () => {
+    const res = await app.inject({ method: "GET", url: "/admin/jobs/job-dm?source=other" });
+
+    expect(res.statusCode).toBe(400);
+    expect(mockGetActivityJob).not.toHaveBeenCalled();
   });
 });
 
@@ -364,6 +424,26 @@ describe("POST /admin/jobs/:id/cancel", () => {
 
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toContain("cannot be canceled");
+  });
+
+  it("does not offer application cancellation for data-manager jobs", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/admin/jobs/job-dm/cancel?source=data-manager",
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(mockJobRunnerCancel).not.toHaveBeenCalled();
+  });
+
+  it("rejects cancellation for an unknown job source", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/admin/jobs/job-abc/cancel?source=other",
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(mockJobRunnerCancel).not.toHaveBeenCalled();
   });
 });
 

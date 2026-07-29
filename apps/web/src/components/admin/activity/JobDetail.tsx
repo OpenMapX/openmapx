@@ -10,6 +10,7 @@ import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { useEnv } from "@/lib/EnvProvider";
+import { DataManagerJobStages } from "../shared/DataManagerJobStages";
 import { JobStatusChip } from "./JobStatusChip";
 
 interface JobLog {
@@ -21,6 +22,7 @@ interface JobLog {
 }
 
 interface JobDetailData {
+  source: "application" | "data-manager";
   id: string;
   type: string;
   status: string;
@@ -32,7 +34,21 @@ interface JobDetailData {
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
+  cancelable: boolean;
   logs: JobLog[];
+  stages: JobStage[];
+}
+
+interface JobStage {
+  id: string;
+  stage: string;
+  status: string;
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  message: string | null;
+  error: unknown;
+  artifacts: unknown;
 }
 
 function formatDuration(startedAt: string | null, finishedAt: string | null): string {
@@ -49,15 +65,24 @@ function isActive(status: string) {
   return status === "running" || status === "queued";
 }
 
-export function JobDetail({ jobId }: { jobId: string }) {
+export function JobDetail({
+  jobId,
+  source,
+}: {
+  jobId: string;
+  source: "application" | "data-manager";
+}) {
   const env = useEnv();
   const queryClient = useQueryClient();
   const logEndRef = useRef<HTMLDivElement>(null);
 
-  const { data, isLoading } = useQuery<JobDetailData>({
-    queryKey: ["admin", "jobs", jobId],
+  const { data, isLoading, isError } = useQuery<JobDetailData>({
+    queryKey: ["admin", "jobs", source, jobId],
     queryFn: async () => {
-      const res = await fetch(`${env.apiUrl}/api/admin/jobs/${jobId}`, { credentials: "include" });
+      const params = new URLSearchParams({ source });
+      const res = await fetch(`${env.apiUrl}/api/admin/jobs/${jobId}?${params}`, {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to load job");
       return res.json();
     },
@@ -75,7 +100,8 @@ export function JobDetail({ jobId }: { jobId: string }) {
 
   const cancel = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`${env.apiUrl}/api/admin/jobs/${jobId}/cancel`, {
+      const params = new URLSearchParams({ source });
+      const res = await fetch(`${env.apiUrl}/api/admin/jobs/${jobId}/cancel?${params}`, {
         method: "POST",
         credentials: "include",
       });
@@ -85,6 +111,14 @@ export function JobDetail({ jobId }: { jobId: string }) {
       void queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
     },
   });
+
+  if (isError) {
+    return (
+      <Typography variant="body2" color="error">
+        Failed to load job details.
+      </Typography>
+    );
+  }
 
   if (isLoading || !data) {
     return (
@@ -115,9 +149,12 @@ export function JobDetail({ jobId }: { jobId: string }) {
         }}
       >
         <JobStatusChip status={data.status} />
-        {data.progress != null && data.status === "running" && (
+        {data.status === "running" && (
           <Box sx={{ flexGrow: 1, maxWidth: 200 }}>
-            <LinearProgress variant="determinate" value={data.progress} />
+            <LinearProgress
+              variant={data.progress == null ? "indeterminate" : "determinate"}
+              value={data.progress ?? undefined}
+            />
           </Box>
         )}
         <Typography
@@ -128,7 +165,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
         >
           Duration: {formatDuration(data.startedAt, data.finishedAt)}
         </Typography>
-        {isActive(data.status) && (
+        {data.cancelable && isActive(data.status) && (
           <Button
             size="small"
             color="error"
@@ -163,40 +200,42 @@ export function JobDetail({ jobId }: { jobId: string }) {
           </Typography>
         </Box>
       )}
-      <Box
-        sx={{
-          bgcolor: "grey.900",
-          borderRadius: 1,
-          p: 1.5,
-          maxHeight: 300,
-          overflowY: "auto",
-          fontFamily: "monospace",
-          fontSize: "0.75rem",
-          lineHeight: 1.6,
-        }}
-      >
-        {data.logs.length === 0 ? (
-          <Typography
-            variant="caption"
-            sx={{
-              color: "grey.500",
-            }}
-          >
-            {isActive(data.status) ? "Waiting for output..." : "No log output"}
-          </Typography>
-        ) : (
-          data.logs.map((log) => (
-            <Box
-              key={log.id}
-              component="div"
-              sx={{ color: log.stream === "stderr" ? "error.300" : "grey.100" }}
-            >
-              {log.line}
-            </Box>
-          ))
-        )}
-        <div ref={logEndRef} />
-      </Box>
+      {data.source === "data-manager" ? (
+        <DataManagerJobStages
+          stages={data.stages}
+          emptyMessage={isActive(data.status) ? "Waiting for the first stage..." : undefined}
+        />
+      ) : (
+        <Box
+          sx={{
+            bgcolor: "grey.900",
+            borderRadius: 1,
+            p: 1.5,
+            maxHeight: 300,
+            overflowY: "auto",
+            fontFamily: "monospace",
+            fontSize: "0.75rem",
+            lineHeight: 1.6,
+          }}
+        >
+          {data.logs.length === 0 ? (
+            <Typography variant="caption" sx={{ color: "grey.500" }}>
+              {isActive(data.status) ? "Waiting for output..." : "No log output"}
+            </Typography>
+          ) : (
+            data.logs.map((log) => (
+              <Box
+                key={log.id}
+                component="div"
+                sx={{ color: log.stream === "stderr" ? "error.300" : "grey.100" }}
+              >
+                {log.line}
+              </Box>
+            ))
+          )}
+          <div ref={logEndRef} />
+        </Box>
+      )}
       {data.result && Object.keys(data.result).length > 0 && (
         <Box>
           <Typography

@@ -51,6 +51,7 @@ interface AuditEntry {
 }
 
 interface JobEntry {
+  source: "application" | "data-manager";
   id: string;
   type: string;
   status: string;
@@ -674,7 +675,7 @@ export function AdminOverview() {
             >
               {data.activeJobs.map((job) => (
                 <Stack
-                  key={job.id}
+                  key={`${job.source}:${job.id}`}
                   direction="row"
                   sx={{
                     alignItems: "center",

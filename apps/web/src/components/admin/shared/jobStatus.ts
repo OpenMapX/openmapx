@@ -4,6 +4,7 @@ export const JOB_STATUS_COLOR: Record<string, JobStatusColor> = {
   queued: "default",
   running: "primary",
   success: "success",
+  ok: "success",
   failed: "error",
   error: "error",
   canceled: "warning",
@@ -12,6 +13,7 @@ export const JOB_STATUS_COLOR: Record<string, JobStatusColor> = {
   // A job orphaned in `running` by a data-manager restart, reconciled on the
   // next boot (services/data-manager reconcileOrphanedJobs).
   interrupted: "warning",
+  skipped: "default",
 };
 
 export function jobStatusColor(status: string): JobStatusColor {

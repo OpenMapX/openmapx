@@ -6,7 +6,6 @@ import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
-import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -17,7 +16,8 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
-import { formatStageError, jobStatusColor } from "@/components/admin/shared/jobStatus";
+import { DataManagerJobStages } from "@/components/admin/shared/DataManagerJobStages";
+import { jobStatusColor } from "@/components/admin/shared/jobStatus";
 import { useTransitJobDetail, useTransitJobs } from "@/lib/admin/transitHooks";
 
 function formatTime(iso: string | null): string {
@@ -142,81 +142,7 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
               )}
             </Stack>
 
-            <Box>
-              <Typography
-                variant="subtitle2"
-                sx={{
-                  fontWeight: 700,
-                  mb: 1,
-                }}
-              >
-                Stages ({data.stages.length})
-              </Typography>
-              {data.stages.length === 0 ? (
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: "text.secondary",
-                  }}
-                >
-                  No stage records yet.
-                </Typography>
-              ) : (
-                <TableContainer component={Paper} variant="outlined">
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Stage</TableCell>
-                        <TableCell>Status</TableCell>
-                        <TableCell align="right">Duration</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {data.stages.map((stage) => (
-                        <TableRow key={stage.id} hover>
-                          <TableCell>
-                            <Stack spacing={0.25}>
-                              <Typography variant="body2">{stage.stage}</Typography>
-                              {stage.message && (
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    color: "text.secondary",
-                                  }}
-                                >
-                                  {stage.message}
-                                </Typography>
-                              )}
-                              {(() => {
-                                const errorText = formatStageError(stage.error);
-                                return errorText ? (
-                                  <Typography variant="caption" color="error">
-                                    {errorText}
-                                  </Typography>
-                                ) : null;
-                              })()}
-                            </Stack>
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              size="small"
-                              label={stage.status}
-                              color={jobStatusColor(stage.status)}
-                              variant="outlined"
-                            />
-                          </TableCell>
-                          <TableCell align="right">
-                            {stage.durationMs > 0
-                              ? `${(stage.durationMs / 1000).toFixed(1)}s`
-                              : "—"}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              )}
-            </Box>
+            <DataManagerJobStages stages={data.stages} emptyMessage="No stage records yet." />
           </Stack>
         )}
       </Box>

@@ -1,22 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { type CredentialSetup, integrationEnvVarName } from "@openmapx/integration-framework";
-import { and, asc, count, desc, eq, gt, inArray } from "drizzle-orm";
+import { and, count, desc, eq, gt } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
-import {
-  adminAuditLog,
-  adminJob,
-  adminJobLog,
-  integrationConfig,
-  session,
-  user,
-} from "../db/schema";
+import { adminAuditLog, integrationConfig, session, user } from "../db/schema";
 import {
   getAllIntegrations,
   getIntegration,
   reloadIntegrations,
   resolveConfigWithSources,
 } from "../integration-host";
+import {
+  type ActivityJobFilter,
+  type ActivityJobSource,
+  getActivityJob,
+  listActivityJobs,
+} from "../services/activity-jobs";
 import { isDockerAvailable } from "../services/admin-ops";
 import { getTimeline } from "../services/health-history";
 import {
@@ -171,8 +170,7 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
       [activeSessionRow],
       integrations,
       recentAudit,
-      recentJobs,
-      activeJobs,
+      activityJobs,
       dockerServices,
     ] = await Promise.all([
       db.select({ total: count() }).from(user),
@@ -180,18 +178,7 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
       db.select({ total: count() }).from(session).where(gt(session.updatedAt, twentyFourHoursAgo)),
       Promise.resolve(getAllIntegrations()),
       db.select().from(adminAuditLog).orderBy(desc(adminAuditLog.createdAt)).limit(10),
-      db
-        .select()
-        .from(adminJob)
-        .where(inArray(adminJob.status, ["success", "failed", "canceled"]))
-        .orderBy(desc(adminJob.finishedAt))
-        .limit(5),
-      db
-        .select()
-        .from(adminJob)
-        .where(inArray(adminJob.status, ["running", "queued"]))
-        .orderBy(desc(adminJob.createdAt))
-        .limit(5),
+      listActivityJobs({ limit: 10, offset: 0 }),
       selfHosted ? dockerComposePs() : Promise.resolve([] as PsEntry[]),
     ]);
 
@@ -273,13 +260,15 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
       }
     }
 
-    // Failed jobs (in last 5)
-    for (const job of recentJobs) {
-      if (job.status === "failed") {
+    // Failed jobs among the most recent cross-system activity.
+    for (const job of activityJobs.jobs) {
+      if (job.status === "failed" || job.status === "interrupted") {
         attention.push({
           type: "job_failed",
           severity: "error",
-          message: `Job "${job.type}" failed: ${job.error ?? "unknown error"}`,
+          message: job.error
+            ? `Job "${job.type}" failed: ${job.error}`
+            : `Job "${job.type}" ${job.status === "interrupted" ? "was interrupted" : "failed"}`,
           target: job.id,
         });
       }
@@ -324,7 +313,7 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
         : null,
       attention,
       recentActivity: recentAudit,
-      activeJobs: [...activeJobs, ...recentJobs],
+      activeJobs: activityJobs.jobs,
     };
   });
 
@@ -829,7 +818,7 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/admin/jobs", async (request) => {
+  app.get("/admin/jobs", async (request, reply) => {
     const {
       status,
       limit = "50",
@@ -840,62 +829,61 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
       offset?: string;
     };
 
-    const where = status ? eq(adminJob.status, status) : undefined;
-    const [jobs, [countRow]] = await Promise.all([
-      db
-        .select()
-        .from(adminJob)
-        .where(where)
-        .orderBy(desc(adminJob.createdAt))
-        .limit(Math.min(Number(limit), 200))
-        .offset(Number(offset)),
-      db.select({ total: count() }).from(adminJob).where(where),
-    ]);
-    const actors = await resolveActors(jobs.map((j) => j.createdBy));
-    return {
-      jobs: jobs.map((j) => ({
-        ...j,
-        actor: j.createdBy ? (actors.get(j.createdBy) ?? null) : null,
-      })),
-      total: countRow?.total ?? 0,
-    };
-  });
-
-  app.get<{ Params: { id: string } }>("/admin/jobs/:id", async (request, reply) => {
-    const [job] = await db
-      .select()
-      .from(adminJob)
-      .where(eq(adminJob.id, request.params.id))
-      .limit(1);
-    if (!job) return reply.status(404).send({ error: "Job not found" });
-
-    const logs = await db
-      .select()
-      .from(adminJobLog)
-      .where(eq(adminJobLog.jobId, request.params.id))
-      .orderBy(asc(adminJobLog.seq));
-
-    return { ...job, logs };
-  });
-
-  app.post<{ Params: { id: string } }>("/admin/jobs/:id/cancel", async (request, reply) => {
-    const adminSession = getAdminSession(request);
-
-    const canceled = await jobRunner.cancel(request.params.id);
-    if (!canceled) {
-      return reply.status(400).send({ error: "Job cannot be canceled (not running or queued)" });
+    const validFilters = new Set<ActivityJobFilter>(["active", "completed", "failed"]);
+    if (status && !validFilters.has(status as ActivityJobFilter)) {
+      return reply.status(400).send({ error: "Invalid job status filter" });
     }
 
-    await writeAuditLog({
-      actorId: adminSession.user.id,
-      targetId: request.params.id,
-      targetType: "job",
-      action: "job.cancel",
-      request,
+    const parsedLimit = Number.parseInt(limit, 10);
+    const parsedOffset = Number.parseInt(offset, 10);
+    return listActivityJobs({
+      filter: status as ActivityJobFilter | undefined,
+      limit: Number.isFinite(parsedLimit) ? parsedLimit : 50,
+      offset: Number.isFinite(parsedOffset) ? parsedOffset : 0,
     });
-
-    return { ok: true };
   });
+
+  app.get<{ Params: { id: string }; Querystring: { source?: ActivityJobSource } }>(
+    "/admin/jobs/:id",
+    async (request, reply) => {
+      const source = request.query.source ?? "application";
+      if (source !== "application" && source !== "data-manager") {
+        return reply.status(400).send({ error: "Invalid job source" });
+      }
+      const job = await getActivityJob(request.params.id, source);
+      if (!job) return reply.status(404).send({ error: "Job not found" });
+      return job;
+    },
+  );
+
+  app.post<{ Params: { id: string }; Querystring: { source?: ActivityJobSource } }>(
+    "/admin/jobs/:id/cancel",
+    async (request, reply) => {
+      const source = request.query.source ?? "application";
+      if (source !== "application" && source !== "data-manager") {
+        return reply.status(400).send({ error: "Invalid job source" });
+      }
+      if (source === "data-manager") {
+        return reply.status(400).send({ error: "Data-manager jobs cannot be canceled" });
+      }
+      const adminSession = getAdminSession(request);
+
+      const canceled = await jobRunner.cancel(request.params.id);
+      if (!canceled) {
+        return reply.status(400).send({ error: "Job cannot be canceled (not running or queued)" });
+      }
+
+      await writeAuditLog({
+        actorId: adminSession.user.id,
+        targetId: request.params.id,
+        targetType: "job",
+        action: "job.cancel",
+        request,
+      });
+
+      return { ok: true };
+    },
+  );
 
   app.get("/admin/integrations/export", async (request, _reply) => {
     const adminSession = getAdminSession(request);

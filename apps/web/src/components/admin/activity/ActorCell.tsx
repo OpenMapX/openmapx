@@ -13,15 +13,16 @@ interface Actor {
 interface ActorCellProps {
   actorId: string | null;
   actor: Actor | null;
+  fallbackLabel?: string;
 }
 
 /**
  * Render an actor (user) reference: name + email when the user row exists,
  * truncated id when only the id is known (e.g. user since deleted), or
- * "system" / "loopback" when the action came from the API itself or a
- * loopback CLI request.
+ * a source-specific fallback label when the action came from automation or
+ * another internal subsystem.
  */
-export function ActorCell({ actorId, actor }: ActorCellProps) {
+export function ActorCell({ actorId, actor, fallbackLabel = "System" }: ActorCellProps) {
   if (!actorId) {
     return (
       <Typography
@@ -31,7 +32,7 @@ export function ActorCell({ actorId, actor }: ActorCellProps) {
           fontStyle: "italic",
         }}
       >
-        system
+        {fallbackLabel}
       </Typography>
     );
   }
