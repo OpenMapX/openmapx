@@ -4,6 +4,7 @@ import { parseAuNsw, resolveNswUrl } from "./providers/au-nsw-parser.js";
 import { AU_QLD_CSV_URL, parseAuQld } from "./providers/au-qld-parser.js";
 import { parseAuVic } from "./providers/au-vic-parser.js";
 import { BE_FLANDERS_URL, parseBeFlanders } from "./providers/be-flanders-parser.js";
+import { BE_WALLONIA_URL, parseBeWallonia } from "./providers/be-wallonia-parser.js";
 import {
   CH_SFOE_OICP_DATA_URL,
   CH_SFOE_OICP_STATUS_URL,
@@ -220,6 +221,20 @@ export function declarePoiSources(): PoiSource[] {
         parse: parseBeFlanders,
         // ~86,944 per-connector rows grouped into stations today.
         minRowCount: 1000,
+      },
+    },
+    {
+      parts: { country: "be", operator: "wallonia" },
+      domain: "ev-charging",
+      name: "Service public de Wallonie (SPW) — public EV charging",
+      // [west, south, east, north]
+      coverage: [2.8, 49.5, 6.4, 50.8],
+      static: {
+        cron: "0 4 * * *",
+        fetch: { type: "http", url: BE_WALLONIA_URL, timeoutMs: 60_000 },
+        parse: parseBeWallonia,
+        // ~14.6k per-connector rows group into several thousand stations.
+        minRowCount: 500,
       },
     },
     {

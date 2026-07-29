@@ -126,6 +126,11 @@
       "dataSent": "No query parameters — the full national OCPI locations and tariffs feeds are downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
       "dataReceived": "Charging station records with location, operator, connector types, rated power, and structured per-connector tariffs (energy/session price, currency, VAT)"
     },
+    "be-wallonia": {
+      "purpose": "Public EV charging register for Wallonia, published by the Service public de Wallonie (SPW)",
+      "dataSent": "No query parameters — the full regional CSV dataset is downloaded server-side on a daily schedule, reprojected from Belgian Lambert 72 to WGS84 into the local database, and then queried by bounding box locally; no user data reaches the provider per map request",
+      "dataReceived": "Charging records with location, operator, address, province, access type, power tier (inferred connector type), and last-updated date; no live status or pricing"
+    },
     "kr-datago": {
       "purpose": "Nationwide EV charging station standard dataset published by Korea Environment Corporation (한국환경공단) via data.go.kr",
       "dataSent": "No query parameters beyond the fixed column list — the full dataset is downloaded server-side on a daily schedule via data.go.kr's keyless standard-data endpoint into the local database and then queried by bounding box locally; no user data reaches the provider per map request",

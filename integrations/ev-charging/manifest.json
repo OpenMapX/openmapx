@@ -329,6 +329,11 @@
       "requiredConfigKeys": ["tw-tdx-client-id", "tw-tdx-client-secret"]
     },
     {
+      "name": "SPW Bornes de recharge (BE-WA)",
+      "type": "http",
+      "url": "https://geoservices.wallonie.be/arcgis/rest/services/INDUSTRIES_SERVICES/BORNES_RECHARGE/MapServer?f=json"
+    },
+    {
       "name": "OpenStreetMap / Overpass",
       "type": "ping",
       "url": "https://overpass-api.de/api/status"
@@ -773,6 +778,22 @@
       "commercialUse": "yes",
       "providerCountry": "TW",
       "providerPrivacyUrl": "https://tdx.transportdata.tw/about/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "be-wallonia",
+      "name": "Service public de Wallonie (SPW) — public EV charging",
+      "url": "https://geoportail.wallonie.be/catalogue/c731a282-e378-49f3-8ab6-f9a90e7a5683.html",
+      "apiHosts": ["geoservices.wallonie.be"],
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Service public de Wallonie (SPW)",
+      "commercialUse": "yes",
+      "providerCountry": "BE",
+      "providerPrivacyUrl": "https://www.wallonie.be/fr/vie-privee",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,

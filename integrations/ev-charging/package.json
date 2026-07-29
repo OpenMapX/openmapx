@@ -12,6 +12,11 @@
     "@openmapx/mobility-core": "workspace:^",
     "@openmapx/place-ids": "workspace:^",
     "@openmapx/poi-source-registry": "workspace:^",
-    "fast-xml-parser": "^5.8.0"
+    "fast-xml-parser": "^5.8.0",
+    "fflate": "^0.8.2",
+    "proj4": "^2.15.0"
+  },
+  "devDependencies": {
+    "@types/proj4": "^2.5.6"
   }
 }

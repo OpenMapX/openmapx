@@ -4,6 +4,7 @@ import { fetchAuNswChargingDetail, searchAuNswCharging } from "./au-nsw.js";
 import { fetchAuQldChargingDetail, searchAuQldCharging } from "./au-qld.js";
 import { fetchAuVicChargingDetail, searchAuVicCharging } from "./au-vic.js";
 import { fetchBeFlandersChargingDetail, searchBeFlandersCharging } from "./be-flanders.js";
+import { fetchBeWalloniaChargingDetail, searchBeWalloniaCharging } from "./be-wallonia.js";
 import { fetchChSfoeChargingDetail, searchChSfoeCharging } from "./ch-sfoe.js";
 import { fetchCyCynapChargingDetail, searchCyCynapCharging } from "./cy-cynap.js";
 import { fetchDeBnetzaChargingDetail, searchDeBnetzaCharging } from "./de-bnetza.js";
@@ -61,6 +62,7 @@ export const EV_CHARGING_SOURCE_REGISTRY: EvChargingSource[] = [
   source("au-qld-ev", searchAuQldCharging, "au-qld-ev:", fetchAuQldChargingDetail),
   source("au-vic-ev", searchAuVicCharging, "au-vic-ev:", fetchAuVicChargingDetail),
   source("be-flanders", searchBeFlandersCharging, "be-flanders:", fetchBeFlandersChargingDetail),
+  source("be-wallonia", searchBeWalloniaCharging, "be-wallonia:", fetchBeWalloniaChargingDetail),
   source("hk-epd", searchHkEpdCharging, "hk-epd:", fetchHkEpdChargingDetail),
   source(
     "fi-digitraffic",

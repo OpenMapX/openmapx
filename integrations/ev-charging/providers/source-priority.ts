@@ -20,6 +20,7 @@ const SOURCE_PRIORITY: Record<string, number> = {
   "au-qld-ev": 0,
   "au-vic-ev": 0,
   "be-flanders": 0,
+  "be-wallonia": 0,
   "hk-epd": 0,
   "fi-digitraffic": 0,
   "lt-vialietuva": 0,

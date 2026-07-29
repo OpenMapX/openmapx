@@ -1,0 +1,5 @@
+﻿OBJECTID;CONNECTEUR_ID;EMPLACEMENT_ID;OPERATEUR;ADRESSE;CODE_POSTAL;VILLE;PROVINCE;TYPE_ACCES;TYPE_EMPLACEMENT;RESTRICTIONS_EMPLACEMENT;PUISSANCE_KW;TYPE_RECHARGE;DISTANCE_SORTIE_METRE;DISTANCE_AUTOROUTE_METRE;DATETRANS;WKT_GEOM
+"11024";"67409491";"loc-namur";"50 five";"Boulevard de Merckem 60";"5000";"Namur";"Namur";"semi-public";"ON_STREET";"";"22";"Normal";"3551";"3551";"2026-04-10T00:00:00";"POINT (184781.2 128873.1)"
+"11025";"67409492";"loc-namur";"50 five";"Boulevard de Merckem 60";"5000";"Namur";"Namur";"semi-public";"ON_STREET";"";"22";"Normal";"3551";"3551";"2026-04-10T00:00:00";"POINT (184781.2 128873.1)"
+"11026";"67409494";"loc-namur";"50 five";"Boulevard de Merckem 60";"5000";"Namur";"Namur";"semi-public";"ON_STREET";"";"22";"Normal";"3551";"3551";"2026-04-11T00:00:00";"POINT (184781.2 128873.1)"
+"20001";"88000001";"loc-dc";"Fastned";"Aire de Wanlin E411";"5570";"Wanlin";"Namur";"public";"ALONG_MOTORWAY";"";"150";"Ultra-rapide";"10";"10";"2026-05-01T00:00:00";"POINT (200000 130000)"

@@ -126,6 +126,11 @@
       "dataSent": "Keine Abfrageparameter – die vollständigen nationalen OCPI-Standort- und Tarif-Feeds werden serverseitig täglich in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
       "dataReceived": "Ladestationsdatensätze mit Standort, Betreiber, Steckertypen, Nennleistung und strukturierten Tarifen je Anschluss (Energie-/Sitzungspreis, Währung, MwSt.)"
     },
+    "be-wallonia": {
+      "purpose": "Register öffentlicher E-Ladestationen für Wallonien, veröffentlicht vom Service public de Wallonie (SPW)",
+      "dataSent": "Keine Abfrageparameter – der vollständige regionale CSV-Datensatz wird serverseitig täglich heruntergeladen, von Belgisch Lambert 72 nach WGS84 umprojiziert, in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
+      "dataReceived": "Ladedatensätze mit Standort, Betreiber, Adresse, Provinz, Zugangsart, Leistungsstufe (abgeleiteter Steckertyp) und letztem Aktualisierungsdatum; keine Live-Status- oder Preisdaten"
+    },
     "kr-datago": {
       "purpose": "Landesweiter Standarddatensatz für E-Ladestationen der Korea Environment Corporation (한국환경공단) über data.go.kr",
       "dataSent": "Keine Abfrageparameter außer der festen Spaltenliste – der vollständige Datensatz wird serverseitig täglich über die schlüssellose Standarddaten-Schnittstelle von data.go.kr in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
