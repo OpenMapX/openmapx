@@ -3,8 +3,14 @@ import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import type { PoiRow } from "@openmapx/poi-source-registry";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mapNlDotnlPayload } from "../nl-dotnl-mapper.js";
 import { parseNlDotnl } from "../nl-dotnl-parser.js";
+import { createPayloadStationMapper } from "../payload-station.js";
+
+// nl-dotnl rehydrates its static tier through the shared mapper now.
+const mapNlDotnlPayload = createPayloadStationMapper({
+  sourceId: "nl-dotnl",
+  stationIdPrefix: "nl-dotnl:",
+});
 
 const LOCATIONS_FIXTURE = readFileSync(
   join(__dirname, "fixtures", "netherlands-locations-sample.json"),

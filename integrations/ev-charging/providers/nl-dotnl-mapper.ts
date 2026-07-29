@@ -1,81 +1,15 @@
 import { isLiveTooStale } from "@openmapx/integration-framework";
-import type {
-  EvChargingAddress,
-  EvChargingConnector,
-  EvChargingOperator,
-  EvChargingStation,
-  EvChargingStatus,
-  EvChargingTariff,
-} from "@openmapx/mobility-core/ev-charging";
+import type { EvChargingStation, EvChargingStatus } from "@openmapx/mobility-core/ev-charging";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
 
-// The live cron re-fetches the (large) DOT-NL locations file every 15 min
-// (see the build brief); ttlSeconds is set to 2x that interval (30 min) in
-// poi-sources.ts. Keep the merge-side staleness guard aligned with that Redis
-// TTL so a search never trusts live data that's already expired from cache.
+// The static tier rehydrates via the shared createPayloadStationMapper (see
+// nl-dotnl.ts); only the live-merge stays source-specific and lives here.
+//
+// The live cron re-fetches the (large) DOT-NL locations file every 15 min;
+// ttlSeconds is set to 2x that interval (30 min) in poi-sources.ts. Keep the
+// merge-side staleness guard aligned with that Redis TTL so a search never
+// trusts live data that's already expired from cache.
 const MAX_LIVE_AGE_MS = 30 * 60 * 1000;
-
-const STATION_ID_PREFIX = "nl-dotnl:";
-const SOURCE_ID = "nl-dotnl";
-
-function asStringOrUndef(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function asAddress(value: unknown): EvChargingAddress | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const a = value as Record<string, unknown>;
-  const out: EvChargingAddress = {
-    line1: asStringOrUndef(a.line1),
-    town: asStringOrUndef(a.town),
-    postcode: asStringOrUndef(a.postcode),
-    country: asStringOrUndef(a.country),
-  };
-  return Object.values(out).some(Boolean) ? out : undefined;
-}
-
-function asOperator(value: unknown): EvChargingOperator | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const o = value as Record<string, unknown>;
-  const name = asStringOrUndef(o.name);
-  if (!name) return undefined;
-  return { name };
-}
-
-function asConnectors(value: unknown): EvChargingConnector[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((v): v is EvChargingConnector => typeof v === "object" && v !== null);
-}
-
-function asTariffs(value: unknown): EvChargingTariff[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const out = value.filter((v): v is EvChargingTariff => typeof v === "object" && v !== null);
-  return out.length > 0 ? out : undefined;
-}
-
-export function mapNlDotnlPayload(poiId: string, payload: unknown): EvChargingStation {
-  const p = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
-  const stationId = `${STATION_ID_PREFIX}${poiId}`;
-
-  const coordinates = Array.isArray(p.coordinates)
-    ? ([p.coordinates[0] as number, p.coordinates[1] as number] as [number, number])
-    : ([0, 0] as [number, number]);
-
-  return {
-    id: stationId,
-    sources: [SOURCE_ID],
-    sourceItemIds: [stationId],
-    name: asStringOrUndef(p.name) ?? "EV Charging Station",
-    coordinates,
-    address: asAddress(p.address),
-    operator: asOperator(p.operator),
-    // Static-only ingest: live per-EVSE status returns later via the live spec.
-    status: "unknown",
-    connectors: asConnectors(p.connectors),
-    tariffs: asTariffs(p.tariffs),
-    updatedAt: asStringOrUndef(p.updatedAt),
-  };
-}
 
 function asLiveStatus(value: unknown): EvChargingStatus | undefined {
   if (

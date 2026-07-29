@@ -3,14 +3,18 @@ import { createTwoTierPoiReader } from "@openmapx/integration-framework";
 import type { EvChargingSource, EvChargingStation } from "@openmapx/mobility-core/ev-charging";
 import type { BBox } from "@openmapx/poi-source-registry";
 import { getRuntimeContext } from "../runtime.js";
-import { mapDeOcpdbPayload, mergeDeOcpdbLive } from "./de-ocpdb-mapper.js";
+import { mergeDeOcpdbLive } from "./de-ocpdb-mapper.js";
+import { createPayloadStationMapper } from "./payload-station.js";
 import { getEvChargingSourcePriority } from "./source-priority.js";
 
 const STATION_ID_PREFIX = "de-ocpdb:";
 
 const reader = createTwoTierPoiReader<EvChargingStation>({
   sourceId: "de-ocpdb",
-  mapStatic: mapDeOcpdbPayload,
+  mapStatic: createPayloadStationMapper({
+    sourceId: "de-ocpdb",
+    stationIdPrefix: STATION_ID_PREFIX,
+  }),
   mergeWithLive: mergeDeOcpdbLive,
   // [west, south, east, north] — Germany (same as de-bnetza).
   coverage: [5.5, 47.1, 15.6, 55.2],

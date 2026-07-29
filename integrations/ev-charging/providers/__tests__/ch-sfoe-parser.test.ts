@@ -89,9 +89,9 @@ describe("parseChSfoeOicp", () => {
     expect(rows[0].payload.operator).toEqual({ name: "Green Motion AG" });
   });
 
-  it("encodes EvseID into payload.encodedEvseId so the mapper can rebuild sourceItemIds", async () => {
+  it("stores the encoded EvseID under payload.extraItemIds so the shared mapper appends it to sourceItemIds", async () => {
     const rows = await parseChSfoeOicp(FIXTURE);
-    expect(rows[0].payload.encodedEvseId).toBe(encodeURIComponent("CH*GRN*E001"));
+    expect(rows[0].payload.extraItemIds).toEqual([encodeURIComponent("CH*GRN*E001")]);
   });
 
   it("computes connector powerKw from facility max power", async () => {

@@ -140,7 +140,10 @@ export function parseChSfoeOicp(buffer: Buffer): PoiRow[] {
           // geom is consumed by the SQL bbox filter, not echoed back.
           coordinates,
           name: preferredName(record) ?? "EV Charging Station",
-          encodedEvseId,
+          // Extra source-native id(s) the shared payload mapper appends to
+          // sourceItemIds (prefixed) — here the EVSE id, so a station is also
+          // matchable by its EVSE id. Was `encodedEvseId` pre-migration.
+          extraItemIds: encodedEvseId ? [encodedEvseId] : undefined,
           address: {
             line1: cleanString(record.Address?.Street),
             town: cleanString(record.Address?.City),

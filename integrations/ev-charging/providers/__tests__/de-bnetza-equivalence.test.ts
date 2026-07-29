@@ -3,8 +3,8 @@ import { join } from "node:path";
 import type { EvChargingConnector, EvChargingStation } from "@openmapx/mobility-core/ev-charging";
 import { describe, expect, it } from "vitest";
 import { parseDelimited, rowsToObjects } from "../csv.js";
-import { mapDeBnetzaPayload } from "../de-bnetza-mapper.js";
 import { parseDeBnetzaCsv } from "../de-bnetza-parser.js";
+import { createPayloadStationMapper } from "../payload-station.js";
 import {
   cleanString,
   connector,
@@ -126,10 +126,15 @@ function runReferenceParse(buffer: Buffer): EvChargingStation[] {
     .filter((s): s is EvChargingStation => Boolean(s));
 }
 
+const mapDeBnetzaStatic = createPayloadStationMapper({
+  sourceId: "de-bnetza",
+  stationIdPrefix: "de-bnetza:",
+});
+
 function runMigrationParse(buffer: Buffer): EvChargingStation[] {
   const out: EvChargingStation[] = [];
   for (const row of parseDeBnetzaCsv(buffer)) {
-    out.push(mapDeBnetzaPayload(row.poiId, row.payload));
+    out.push(mapDeBnetzaStatic(row.poiId, row.payload));
   }
   return out;
 }

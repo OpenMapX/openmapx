@@ -4,8 +4,8 @@
 // pipeline yet.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { mapDeBnetzaPayload } from "@integrations/ev-charging/providers/de-bnetza-mapper.js";
 import { parseDeBnetzaCsv } from "@integrations/ev-charging/providers/de-bnetza-parser.js";
+import { createPayloadStationMapper } from "@integrations/ev-charging/providers/payload-station.js";
 import type {
   CacheClient,
   DatabaseClient,
@@ -142,7 +142,10 @@ describe.skipIf(skipE2e)("e2e: bnetza ingest → SQL → reader → mapper round
 
       const reader = createStaticPoiReader<EvChargingStation>({
         sourceId: "de-bnetza",
-        mapStatic: mapDeBnetzaPayload,
+        mapStatic: createPayloadStationMapper({
+          sourceId: "de-bnetza",
+          stationIdPrefix: "de-bnetza:",
+        }),
       });
 
       // Mirror apps/api's `integrationDb.execute` exactly — postgres-js's

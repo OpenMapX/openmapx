@@ -3,14 +3,17 @@ import { createStaticPoiReader } from "@openmapx/integration-framework";
 import type { EvChargingSource, EvChargingStation } from "@openmapx/mobility-core/ev-charging";
 import type { BBox } from "@openmapx/poi-source-registry";
 import { getRuntimeContext } from "../runtime.js";
-import { mapDeBnetzaPayload } from "./de-bnetza-mapper.js";
+import { createPayloadStationMapper } from "./payload-station.js";
 import { getEvChargingSourcePriority } from "./source-priority.js";
 
 const STATION_ID_PREFIX = "de-bnetza:";
 
 const reader = createStaticPoiReader<EvChargingStation>({
   sourceId: "de-bnetza",
-  mapStatic: mapDeBnetzaPayload,
+  mapStatic: createPayloadStationMapper({
+    sourceId: "de-bnetza",
+    stationIdPrefix: STATION_ID_PREFIX,
+  }),
   coverage: [5.5, 47.1, 15.6, 55.2],
 });
 

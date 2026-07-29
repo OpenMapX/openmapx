@@ -110,10 +110,15 @@ export function createPayloadStationMapper(opts: {
   return (poiId, payload) => {
     const p = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
     const stationId = `${stationIdPrefix}${poiId}`;
+    // Optional additional source-native ids (bare, un-prefixed) that also
+    // belong to this station — e.g. ch-sfoe stores its EVSE id here so a
+    // cache/detail lookup matches the station by EVSE id as well as by its
+    // primary station id. Each is prefixed the same way as the station id.
+    const extraItemIds = stringArray(p.extraItemIds) ?? [];
     return {
       id: stationId,
       sources: [sourceId],
-      sourceItemIds: [stationId],
+      sourceItemIds: [stationId, ...extraItemIds.map((extra) => `${stationIdPrefix}${extra}`)],
       name: str(p.name) ?? "EV Charging Station",
       coordinates: coordinates(p.coordinates),
       attributions: attributions(p.attributions),

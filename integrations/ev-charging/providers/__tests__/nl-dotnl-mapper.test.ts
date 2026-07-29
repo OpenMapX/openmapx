@@ -1,10 +1,18 @@
 import type { EvChargingStation, EvChargingTariff } from "@openmapx/mobility-core/ev-charging";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mapNlDotnlPayload, mergeNlDotnlLive } from "../nl-dotnl-mapper.js";
+import { mergeNlDotnlLive } from "../nl-dotnl-mapper.js";
+import { createPayloadStationMapper } from "../payload-station.js";
 
-describe("mapNlDotnlPayload", () => {
+// nl-dotnl now rehydrates its static tier through the shared mapper (see
+// nl-dotnl.ts); its live-merge stays bespoke and is exercised below.
+const mapStatic = createPayloadStationMapper({
+  sourceId: "nl-dotnl",
+  stationIdPrefix: "nl-dotnl:",
+});
+
+describe("nl-dotnl static mapper (shared createPayloadStationMapper)", () => {
   it("prefixes the station id nl-dotnl: and threads a single sourceItemIds entry", () => {
-    const station = mapNlDotnlPayload("abc123", {
+    const station = mapStatic("abc123", {
       coordinates: [5.01, 52.3],
       name: "Test Station",
       connectors: [],
@@ -15,12 +23,12 @@ describe("mapNlDotnlPayload", () => {
   });
 
   it("sets status unknown at static ingest regardless of payload contents", () => {
-    const station = mapNlDotnlPayload("abc123", { coordinates: [5, 52], connectors: [] });
+    const station = mapStatic("abc123", { coordinates: [5, 52], connectors: [] });
     expect(station.status).toBe("unknown");
   });
 
   it("falls back to a default name and [0,0] coordinates for a malformed payload", () => {
-    const station = mapNlDotnlPayload("abc123", {});
+    const station = mapStatic("abc123", {});
     expect(station.name).toBe("EV Charging Station");
     expect(station.coordinates).toEqual([0, 0]);
   });
@@ -32,7 +40,7 @@ describe("mapNlDotnlPayload", () => {
       source: "nl-dotnl",
       updatedAt: "2026-07-20T10:00:00Z",
     };
-    const station = mapNlDotnlPayload("abc123", {
+    const station = mapStatic("abc123", {
       coordinates: [5, 52],
       address: { line1: "Street 1", town: "Town", postcode: "1234AB", country: "NL" },
       operator: { name: "Fastned" },
@@ -51,7 +59,7 @@ describe("mapNlDotnlPayload", () => {
   });
 
   it("leaves tariffs undefined when the payload carries no tariffs", () => {
-    const station = mapNlDotnlPayload("abc123", { coordinates: [5, 52], connectors: [] });
+    const station = mapStatic("abc123", { coordinates: [5, 52], connectors: [] });
     expect(station.tariffs).toBeUndefined();
   });
 });

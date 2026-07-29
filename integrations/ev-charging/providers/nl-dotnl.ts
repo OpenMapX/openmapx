@@ -3,14 +3,18 @@ import { createTwoTierPoiReader } from "@openmapx/integration-framework";
 import type { EvChargingSource, EvChargingStation } from "@openmapx/mobility-core/ev-charging";
 import type { BBox } from "@openmapx/poi-source-registry";
 import { getRuntimeContext } from "../runtime.js";
-import { mapNlDotnlPayload, mergeNlDotnlLive } from "./nl-dotnl-mapper.js";
+import { mergeNlDotnlLive } from "./nl-dotnl-mapper.js";
+import { createPayloadStationMapper } from "./payload-station.js";
 import { getEvChargingSourcePriority } from "./source-priority.js";
 
 const STATION_ID_PREFIX = "nl-dotnl:";
 
 const reader = createTwoTierPoiReader<EvChargingStation>({
   sourceId: "nl-dotnl",
-  mapStatic: mapNlDotnlPayload,
+  mapStatic: createPayloadStationMapper({
+    sourceId: "nl-dotnl",
+    stationIdPrefix: STATION_ID_PREFIX,
+  }),
   mergeWithLive: mergeNlDotnlLive,
   // [west, south, east, north]
   coverage: [3.2, 50.7, 7.3, 53.6],

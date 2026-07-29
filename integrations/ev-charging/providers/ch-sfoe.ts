@@ -3,14 +3,18 @@ import { createTwoTierPoiReader } from "@openmapx/integration-framework";
 import type { EvChargingSource, EvChargingStation } from "@openmapx/mobility-core/ev-charging";
 import type { BBox } from "@openmapx/poi-source-registry";
 import { getRuntimeContext } from "../runtime.js";
-import { mapChSfoePayload, mergeChSfoeLive } from "./ch-sfoe-mapper.js";
+import { mergeChSfoeLive } from "./ch-sfoe-mapper.js";
+import { createPayloadStationMapper } from "./payload-station.js";
 import { getEvChargingSourcePriority } from "./source-priority.js";
 
 const STATION_ID_PREFIX = "ch-sfoe:";
 
 const reader = createTwoTierPoiReader<EvChargingStation>({
   sourceId: "ch-sfoe",
-  mapStatic: mapChSfoePayload,
+  mapStatic: createPayloadStationMapper({
+    sourceId: "ch-sfoe",
+    stationIdPrefix: STATION_ID_PREFIX,
+  }),
   mergeWithLive: mergeChSfoeLive,
   coverage: [5.9, 45.8, 10.6, 47.9],
 });

@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { mapDeOcpdbPayload, mergeDeOcpdbLive } from "../de-ocpdb-mapper.js";
+import { mergeDeOcpdbLive } from "../de-ocpdb-mapper.js";
+import { createPayloadStationMapper } from "../payload-station.js";
+
+// de-ocpdb now rehydrates its static tier through the shared mapper (see
+// de-ocpdb.ts); its live-merge stays bespoke.
+const mapStatic = createPayloadStationMapper({
+  sourceId: "de-ocpdb",
+  stationIdPrefix: "de-ocpdb:",
+});
 
 describe("de-ocpdb mapper", () => {
   it("maps payload to a station with the de-ocpdb prefix and source", () => {
-    const station = mapDeOcpdbPayload("42", {
+    const station = mapStatic("42", {
       coordinates: [8.4, 49.0],
       name: "Test",
       connectors: [{ type: "Type 2" }],
@@ -16,7 +24,7 @@ describe("de-ocpdb mapper", () => {
   });
 
   it("merges fresh live availability", () => {
-    const base = mapDeOcpdbPayload("42", { coordinates: [8.4, 49.0] });
+    const base = mapStatic("42", { coordinates: [8.4, 49.0] });
     const merged = mergeDeOcpdbLive(base, {
       asOf: new Date().toISOString(),
       status: "operational",
