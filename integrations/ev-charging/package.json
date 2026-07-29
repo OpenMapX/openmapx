@@ -11,6 +11,7 @@
     "@openmapx/integration-geocoding": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
     "@openmapx/place-ids": "workspace:^",
-    "@openmapx/poi-source-registry": "workspace:^"
+    "@openmapx/poi-source-registry": "workspace:^",
+    "fast-xml-parser": "^5.8.0"
   }
 }

@@ -1,0 +1,9 @@
+OBJECTID,Station_name,Station_address,Operator,Number_of_plugs,Charger_Type,Charger_rating,Latitude,Longitude,LGANAME,PCODE,Source
+,,", Muswellbrook, 2333",EVUp,2,AC,22 kW,-32.26224229,150.8901391,Muswellbrook Shire Council,2333,Existing Destination Chargers
+,,"01 Wallgrove Road, Sydney, 2766",BP,4,DC,150 kW,-33.81100405,150.8495966,Blacktown City Council,2766,Existing Fast Chargers
+,,"1 Bay Ln, Byron Bay, 2481",Tesla,2,AC,19 kW,-28.64181886,153.6136326,Byron Shire Council,2481,Existing Destination Chargers
+,,"1 Bay St, Sydney, 2037",Tesla,16,DC,130 kW,-33.88350355,151.1944334,"Sydney, Council of the City of",2037,Existing Fast Chargers
+,,"50 Example St, Sydney, 2000",ChargeNet,4,Upcoming,,-33.8,151.2,"Sydney, Council of the City of",2000,ARENA - Driving the Nation
+,,"10 River Rd, Wagga Wagga, 2650",Jet Charge,6,DC,300 kW,-35.1,147.3,Wagga Wagga City Council,2650,ARENA - Driving the Nation
+,,"5 Test Ave, Sydney, 2010",FastCharge Co,2,DC,2x350kW,-33.87,151.2,"Sydney, Council of the City of",2010,Existing Fast Chargers
+,,", Muswellbrook, 2333",EVUp,2,AC,22 kW,-32.26224229,150.8901391,Muswellbrook Shire Council,2333,Existing Destination Chargers

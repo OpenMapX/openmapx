@@ -1,18 +1,33 @@
 import { gunzipSync } from "node:zlib";
 import type { PoiSource, PoiStaticParseFn } from "@openmapx/poi-source-registry";
+import { parseAuNsw, resolveNswUrl } from "./providers/au-nsw-parser.js";
+import { AU_QLD_CSV_URL, parseAuQld } from "./providers/au-qld-parser.js";
+import { parseAuVic } from "./providers/au-vic-parser.js";
+import { BE_FLANDERS_URL, parseBeFlanders } from "./providers/be-flanders-parser.js";
 import {
   CH_SFOE_OICP_DATA_URL,
   CH_SFOE_OICP_STATUS_URL,
   parseChSfoeOicpLive,
 } from "./providers/ch-sfoe-live-parser.js";
 import { parseChSfoeOicp } from "./providers/ch-sfoe-parser.js";
+import { CY_CYNAP_URL, parseCyCynap } from "./providers/cy-cynap-parser.js";
 import { parseDeBnetzaCsv, resolveDeBnetzaCsvUrl } from "./providers/de-bnetza-parser.js";
 import { DE_OCPDB_LOCATIONS_URL, DE_OCPDB_SOURCES_URL } from "./providers/de-ocpdb-client.js";
 import { parseDeOcpdbLive } from "./providers/de-ocpdb-live-parser.js";
 import { parseDeOcpdb } from "./providers/de-ocpdb-parser.js";
+import { ES_DGT_URL, parseEsDgt } from "./providers/es-dgt-parser.js";
+import {
+  FI_DIGITRAFFIC_LOCATIONS_URL,
+  parseFiDigitraffic,
+} from "./providers/fi-digitraffic-parser.js";
+import { HK_EPD_URL, parseHkEpd } from "./providers/hk-epd-parser.js";
 import { IE_ESB_CSV_URL, parseIeEsb } from "./providers/ie-esb-parser.js";
+import { LT_VIALIETUVA_LOCATIONS_URL } from "./providers/lt-vialietuva-client.js";
+import { parseLtVialietuva } from "./providers/lt-vialietuva-parser.js";
+import { LU_CHARGY_URL, parseLuChargy } from "./providers/lu-chargy-parser.js";
 import { parseNlDotnlLive } from "./providers/nl-dotnl-live-parser.js";
 import { NL_DOTNL_LOCATIONS_URL, parseNlDotnl } from "./providers/nl-dotnl-parser.js";
+import { NZ_EVROAM_URL, parseNzEvroam } from "./providers/nz-evroam-parser.js";
 
 // The NDW/DOT-NL locations feed is served as a bare gzip body with no
 // Content-Encoding header, so the generic poi-ingest http fetch stage (which
@@ -79,6 +94,174 @@ export function declarePoiSources(): PoiSource[] {
         parse: parseIeEsb,
         // Register today is ~590 sites (RoI + NI).
         minRowCount: 100,
+      },
+    },
+    {
+      parts: { country: "cy", operator: "cynap" },
+      domain: "ev-charging",
+      name: "CYNAP — Cyprus public EV chargers",
+      // [west, south, east, north]
+      coverage: [32, 34.5, 34.65, 35.75],
+      static: {
+        cron: "0 4 * * *",
+        fetch: { type: "http", url: CY_CYNAP_URL, timeoutMs: 30_000 },
+        parse: parseCyCynap,
+        // ~171 charging points nationwide.
+        minRowCount: 50,
+      },
+    },
+    {
+      parts: { country: "lu", operator: "chargy" },
+      domain: "ev-charging",
+      name: "Chargy — Luxembourg public charging network",
+      // [west, south, east, north]
+      coverage: [5.7, 49.4, 6.6, 50.2],
+      static: {
+        cron: "0 4 * * *",
+        fetch: { type: "http", url: LU_CHARGY_URL, timeoutMs: 30_000 },
+        parse: parseLuChargy,
+        // Full feed is ~527 placemarks.
+        minRowCount: 100,
+      },
+    },
+    {
+      parts: { country: "nz", operator: "evroam" },
+      domain: "ev-charging",
+      name: "EVRoam — New Zealand charging network (Waka Kotahi)",
+      // [west, south, east, north]
+      coverage: [166, -47.5, 179, -34],
+      static: {
+        cron: "0 4 * * *",
+        fetch: { type: "http", url: NZ_EVROAM_URL, timeoutMs: 30_000 },
+        parse: parseNzEvroam,
+        // ArcGIS FeatureServer today reports ~638 stations.
+        minRowCount: 200,
+      },
+    },
+    {
+      parts: { country: "es", operator: "dgt" },
+      domain: "ev-charging",
+      name: "DGT — Spanish national EV charging (NAP)",
+      // [west, south, east, north]
+      coverage: [-9.4, 35.9, 4.4, 43.8],
+      static: {
+        cron: "0 4 * * *",
+        fetch: { type: "http", url: ES_DGT_URL, timeoutMs: 60_000 },
+        parse: parseEsDgt,
+        // Feed today is ~12.3k sites nationwide.
+        minRowCount: 2000,
+      },
+    },
+    {
+      parts: { country: "au", operator: "nsw", stream: "ev" },
+      domain: "ev-charging",
+      name: "Transport for NSW — EV charging locations",
+      // [west, south, east, north]
+      coverage: [140.9, -37.6, 153.7, -28],
+      static: {
+        cron: "0 5 * * *",
+        // The CSV filename is date-stamped; resolveUrl re-resolves it each run.
+        resolveUrl: resolveNswUrl,
+        fetch: {
+          type: "http",
+          url: "https://opendata.transport.nsw.gov.au/data/dataset/be1c4de4-4517-4bd0-8a09-2965ddfc7179/resource/7bbb6461-e52d-4fe7-ace4-a15c30198de0/download/ev_20251216.csv",
+          timeoutMs: 30_000,
+        },
+        parse: parseAuNsw,
+        // Feed today is ~1,958 sites.
+        minRowCount: 300,
+      },
+    },
+    {
+      parts: { country: "au", operator: "qld", stream: "ev" },
+      domain: "ev-charging",
+      name: "Department of Transport and Main Roads (Queensland) — EV charging locations",
+      coverage: [138, -29, 154, -9],
+      static: {
+        cron: "0 5 * * *",
+        fetch: { type: "http", url: AU_QLD_CSV_URL, timeoutMs: 30_000 },
+        parse: parseAuQld,
+        // Small hand-curated register — ~17 sites today.
+        minRowCount: 5,
+      },
+    },
+    {
+      parts: { country: "au", operator: "vic", stream: "ev" },
+      domain: "ev-charging",
+      name: "State of Victoria (DEECA) — Destination Charger Program sites",
+      coverage: [140.9, -39.2, 150, -33.9],
+      static: {
+        cron: "0 5 * * *",
+        fetch: {
+          type: "http",
+          url: "https://opendata.maps.vic.gov.au/geoserver/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=open-data-platform:dcav_site&outputFormat=application/json",
+          timeoutMs: 30_000,
+        },
+        parse: parseAuVic,
+        // Registry today is ~152 sites.
+        minRowCount: 50,
+      },
+    },
+    {
+      parts: { country: "be", operator: "flanders" },
+      domain: "ev-charging",
+      name: "Vlaanderen — Flemish public EV charging",
+      // [west, south, east, north]
+      coverage: [2.5, 50.6, 5.95, 51.55],
+      static: {
+        cron: "0 4 * * *",
+        fetch: { type: "http", url: BE_FLANDERS_URL, timeoutMs: 60_000 },
+        parse: parseBeFlanders,
+        // ~86,944 per-connector rows grouped into stations today.
+        minRowCount: 1000,
+      },
+    },
+    {
+      parts: { country: "hk", operator: "epd" },
+      domain: "ev-charging",
+      name: "EPD — Hong Kong public EV chargers",
+      // [west, south, east, north]
+      coverage: [113.8, 22.15, 114.5, 22.6],
+      static: {
+        cron: "0 4 * * *",
+        fetch: { type: "http", url: HK_EPD_URL, timeoutMs: 45_000 },
+        parse: parseHkEpd,
+        // Feed today is ~973 car-park records territory-wide.
+        minRowCount: 200,
+      },
+    },
+    {
+      parts: { country: "fi", operator: "digitraffic" },
+      domain: "ev-charging",
+      name: "Fintraffic Digitraffic — Finnish national EV charging (AFIR)",
+      // [west, south, east, north]
+      coverage: [19, 59, 32, 70.5],
+      static: {
+        cron: "0 4 * * *",
+        fetch: { type: "http", url: FI_DIGITRAFFIC_LOCATIONS_URL, timeoutMs: 60_000 },
+        parse: parseFiDigitraffic,
+        // Feed today is ~3024 locations nationwide.
+        minRowCount: 500,
+      },
+    },
+    {
+      parts: { country: "lt", operator: "vialietuva" },
+      domain: "ev-charging",
+      name: "Via Lietuva — Lithuanian national EV charging",
+      // [west, south, east, north]
+      coverage: [20.9, 53.8, 26.9, 56.5],
+      static: {
+        cron: "0 4 * * *",
+        fetch: {
+          type: "http",
+          url: LT_VIALIETUVA_LOCATIONS_URL,
+          timeoutMs: 60_000,
+          // The Cloudflare-fronted host rejects requests with no User-Agent.
+          headers: { "User-Agent": "OpenMapX/1.0" },
+        },
+        parse: parseLtVialietuva,
+        // Feed today is ~2984 locations nationwide.
+        minRowCount: 500,
       },
     },
     {

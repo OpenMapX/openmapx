@@ -66,6 +66,61 @@
       "dataSent": "Keine Abfrageparameter – der vollständige ESB-ecars-CSV-Datensatz wird serverseitig täglich in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
       "dataReceived": "Ladestationsdatensätze mit Standort, Grafschaft, Steckertypen und Anzahl je Typ, Nennleistung, Öffnungszeiten und Freitext-Preisen"
     },
+    "cy-cynap": {
+      "purpose": "CYNAP-Register öffentlicher Ladepunkte für Zypern, veröffentlicht vom Department of Electrical and Mechanical Services (EMS)",
+      "dataSent": "Keine Abfrageparameter – der vollständige CYNAP-DATEX-II-Datensatz wird serverseitig täglich in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
+      "dataReceived": "Ladepunktdatensätze mit Standort, Betreiber/Eigentümer, Status, Steckertypen und -anzahl, Nennleistung und Öffnungszeiten"
+    },
+    "lu-chargy": {
+      "purpose": "Öffentliches Ladenetz Chargy für Luxemburg",
+      "dataSent": "Keine Abfrageparameter – der vollständige Chargy-KML-Datensatz wird serverseitig täglich in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
+      "dataReceived": "Ladestationsdatensätze mit Standort, Adresse, Steckerleistungen und einem stationsweiten Verfügbar/Nicht-verfügbar-Rollup-Status"
+    },
+    "nz-evroam": {
+      "purpose": "Öffentliches EVRoam-Ladenetz für Neuseeland, veröffentlicht von Waka Kotahi NZ Transport Agency",
+      "dataSent": "Keine Abfrageparameter – der vollständige ArcGIS-FeatureServer-Datensatz wird serverseitig täglich in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
+      "dataReceived": "Ladestationsdatensätze mit Standort, Betreiber/Eigentümer, Öffnungszeiten, Steckertypen (Typ 1/Typ 2/CCS/CHAdeMO) mit Leistungswerten und Anzahl, Betriebsstatus sowie ob das Laden kostenlos oder kostenpflichtig ist"
+    },
+    "es-dgt": {
+      "purpose": "Amtliches spanisches nationales Ladepunktregister (DGT National Access Point) mit öffentlicher Ladeinfrastruktur in Spanien",
+      "dataSent": "Keine Abfrageparameter – der vollständige nationale DATEX-II-Datensatz wird serverseitig täglich in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
+      "dataReceived": "Ladestandort-Datensätze mit Standort, Adresse, Betreiber, Steckertypen, Nennleistung, Stromart und letztem Aktualisierungszeitpunkt"
+    },
+    "au-nsw-ev": {
+      "purpose": "Amtliches Register von Transport for NSW zu öffentlichen EV-Ladestandorten in New South Wales",
+      "dataSent": "Keine Abfrageparameter – der vollständige NSW-CSV-Datensatz wird serverseitig täglich in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
+      "dataReceived": "Ladestationsdatensätze mit Standort, Betreiber, Gemeindegebiet, Postleitzahl, Ladetyp (AC/DC), Nennleistung, Steckeranzahl und Betriebs-/Planungsstatus"
+    },
+    "au-qld-ev": {
+      "purpose": "Register des Department of Transport and Main Roads (Queensland) zu öffentlichen EV-Ladestandorten",
+      "dataSent": "Keine Abfrageparameter – der vollständige Queensland-CSV-Datensatz wird serverseitig täglich in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
+      "dataReceived": "Ladestationsdatensätze mit Standort, Adresse und Betreiber; keine Steckerdaten"
+    },
+    "au-vic-ev": {
+      "purpose": "Register der viktorianischen Regierung (DEECA) zum Destination-Charger-Programm für öffentliche EV-Ladestandorte",
+      "dataSent": "Keine Abfrageparameter – der vollständige WFS-GeoJSON-Datensatz wird serverseitig täglich in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
+      "dataReceived": "Ladestationsdatensätze mit Standort, Adresse, Region, Betreiber/Trägerorganisation, Steckertypen und -anzahl sowie Betriebs-/Planungsstatus"
+    },
+    "be-flanders": {
+      "purpose": "Flämisches Register öffentlicher Ladepunkte (Laadpunten), veröffentlicht vom Departement Mobiliteit en Openbare Werken",
+      "dataSent": "Keine Abfrageparameter mit Nutzerdaten – der vollständige WFS-Datensatz wird serverseitig täglich in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
+      "dataReceived": "Ladedatensätze mit Standort, Betreiber, Steckertyp(en), Nennleistung, Stromart (AC/DC) und Adresse; keine Live-Status- oder Preisdaten"
+    },
+    "hk-epd": {
+      "purpose": "Amtlicher Datensatz der Hongkonger EPD zu öffentlichen Elektrofahrzeug-Ladestationen an Parkplätzen in ganz Hongkong",
+      "dataSent": "Keine Abfrageparameter – der vollständige territoriumsweite JSON-Datensatz wird serverseitig täglich in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
+      "dataReceived": "Ladestationsdatensätze mit Standort, Betreiber, Steckertypen und Anzahl je Typ, Öffnungszeiten sowie Aktiv-/Inaktiv-Status"
+    },
+    "fi-digitraffic": {
+      "purpose": "Finnischer nationaler Ladedatensatz (Fintraffic / Digitraffic AFIR Charging Network API) mit öffentlich zugänglicher Ladeinfrastruktur in Finnland",
+      "dataSent": "Keine Abfrageparameter – der vollständige nationale Standortfeed und der zugehörige strukturierte Tarif-Feed werden serverseitig täglich in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
+      "dataReceived": "Ladestationsdatensätze mit Standort, Betreiber, Steckertypen, Nennleistung, EVSE-IDs, Öffnungszeiten und strukturierten Tarifen je Anschluss (Energie-/Zeit-/Parkpreis, Währung, MwSt.)"
+    },
+    "lt-vialietuva": {
+      "purpose": "Litauischer nationaler Ladedatensatz (Via Lietuva OCPI) mit öffentlich zugänglicher Ladeinfrastruktur in Litauen, einschließlich strukturierter Tarife",
+      "dataSent": "Keine Abfrageparameter – die vollständigen nationalen OCPI-Standort- und Tarif-Feeds werden serverseitig täglich in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
+      "dataReceived": "Ladestationsdatensätze mit Standort, Betreiber, Steckertypen, Nennleistung und strukturierten Tarifen je Anschluss (Energie-/Sitzungspreis, Währung, MwSt.)"
+    },
     "opendatasoft": {
       "purpose": "Opendatasoft (Opendatasoft SAS, Frankreich) ist die API-Plattform, die den französischen nationalen IRVE-Ladedatensatz hostet und bereitstellt; Anfragen nach französischen Ladepunkten werden von dieser Plattform beantwortet",
       "dataSent": "Der Begrenzungsrahmen des Kartenausschnitts (als in_bbox(point_geo, Nord, West, Süd, Ost)-Filter mit Seitennummerierung) erreicht die Opendatasoft-Plattform serverseitig; es werden keine Nutzeridentität, kein Konto und kein API-Schlüssel gesendet",

@@ -1,0 +1,132 @@
+{
+  "type": "FeatureCollection",
+  "properties": {
+    "exceededTransferLimit": true
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "id": 676593,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          174.912617279991,
+          -36.9648860419307
+        ]
+      },
+      "properties": {
+        "OBJECTID": 676593,
+        "name": "Ormiston Town Centre",
+        "operator": "Todd Property Ormiston Town Centre Limited",
+        "owner": "Todd Property Ormiston Town Centre Limited",
+        "address": "240 Ormiston road, Flat Bush, Auckland, 2012, New Zealand",
+        "is24Hours": "True",
+        "carParkCount": 14,
+        "hasCarparkCost": "False",
+        "maxTimeLimit": "Unlimited",
+        "hasTouristAttraction": "False",
+        "latitude": -36.9648860428412,
+        "longitude": 174.912617279983,
+        "currentType": "AC",
+        "dateFirstOperational": 1616630400000,
+        "numberOfConnectors": 14,
+        "connectorsList": "{AC, 32 kW, Type 2 Socketed, Status: Operative, Count:9},{AC, 32 kW, Type 1 Tethered, Status: Operative, Count:4},{AC, 25 kW, Type 2 Socketed, Status: Operative, Count:1}",
+        "hasChargingCost": "False",
+        "GlobalID": "02f61e5a-2f07-4f82-b988-cbc8ac601663"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 676594,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          175.308059065611,
+          -37.7781574789651
+        ]
+      },
+      "properties": {
+        "OBJECTID": 676594,
+        "name": "Waikato Innovation Park",
+        "operator": "Hikotron",
+        "owner": "Hikotron",
+        "address": "Waikato Innovation Park, 1 Melody Lane, Hamilton East, Hamilton 3216",
+        "is24Hours": "True",
+        "carParkCount": 4,
+        "hasCarparkCost": "False",
+        "maxTimeLimit": "No Limit",
+        "hasTouristAttraction": "False",
+        "latitude": -37.7781574798876,
+        "longitude": 175.30805906559,
+        "currentType": "AC",
+        "dateFirstOperational": null,
+        "numberOfConnectors": 4,
+        "connectorsList": "{AC, 7 kW, Type 2 Socketed, Status: Operative, Count:4}",
+        "hasChargingCost": "True",
+        "GlobalID": "4674473b-336d-47e2-b185-0a147ceb880b"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 676600,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          174.837125400006,
+          -41.1488378190603
+        ]
+      },
+      "properties": {
+        "OBJECTID": 676600,
+        "name": "Moore Wilson's - Porirua",
+        "operator": "Thundergrid Ltd",
+        "owner": "Thundergrid Ltd",
+        "address": "65 Kenepuru Drive, Porirua 5022",
+        "is24Hours": "True",
+        "carParkCount": 1,
+        "hasCarparkCost": "True",
+        "maxTimeLimit": "None",
+        "hasTouristAttraction": "False",
+        "latitude": -41.14883782,
+        "longitude": 174.8371254,
+        "currentType": "DC",
+        "dateFirstOperational": 1610841600000,
+        "numberOfConnectors": 2,
+        "connectorsList": "{DC, 25 kW, Type 2 CCS, Status: Operative, Count:1},{DC, 25 kW, CHAdeMO, Status: Operative, Count:1}",
+        "hasChargingCost": "True",
+        "GlobalID": "bcb52dcc-d78e-472f-8fe9-28a98a4b350c"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 676610,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          174.901361597491,
+          -36.9631358539274
+        ]
+      },
+      "properties": {
+        "OBJECTID": 676610,
+        "name": "bp charge Flat Bush",
+        "operator": "BP",
+        "owner": "bp charge",
+        "address": "300 Ormiston Road, Flat Bush, Auckland",
+        "is24Hours": "True",
+        "carParkCount": 4,
+        "hasCarparkCost": "False",
+        "maxTimeLimit": "Unlimited",
+        "hasTouristAttraction": "False",
+        "latitude": -36.9631358548379,
+        "longitude": 174.901361597483,
+        "currentType": "DC",
+        "dateFirstOperational": 1690416000000,
+        "numberOfConnectors": 4,
+        "connectorsList": "{DC, 150 kW, Type 2 CCS, Status: Operative, Count:3},{DC, 150 kW, CHAdeMO, Status: Operative, Count:1}",
+        "hasChargingCost": "True",
+        "GlobalID": "9bbadae8-1277-42ff-a070-765036201f4e"
+      }
+    }
+  ]
+}

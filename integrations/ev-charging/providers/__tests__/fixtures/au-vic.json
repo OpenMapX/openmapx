@@ -1,0 +1,143 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "dcav_site.1",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [145.226061, -36.44026]
+      },
+      "geometry_name": "geom",
+      "properties": {
+        "location": "Tatura",
+        "region": "Hume",
+        "lead_organisation": "Tatura Carwash",
+        "latitude": -36.44025958,
+        "estimated_project_completion": null,
+        "address": "104 Hogan Street, TATURA VIC 3614",
+        "plug_type": "1 x CCS2, 1 x CHAdeMO",
+        "longitude": 145.22606112,
+        "chargers": "1 x 25kW Charger",
+        "dcav_site": "NO",
+        "company": "Tatura Carwash",
+        "number_of_chargers": 1
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "dcav_site.5",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [146.267948, -37.831915]
+      },
+      "geometry_name": "geom",
+      "properties": {
+        "location": "Moe",
+        "region": "Gippsland",
+        "lead_organisation": null,
+        "latitude": -37.831915,
+        "estimated_project_completion": null,
+        "address": "1 Moe-Glengarry Rd, MOE VIC 3825",
+        "plug_type": "2 x CHAdeMO and 4 x CCS2/SAE",
+        "longitude": 146.267948,
+        "chargers": "1 x 350kW Ultra Rapid Chargers, 2 x 50kW Fast Chargers",
+        "dcav_site": "YES",
+        "company": "Chargefox",
+        "number_of_chargers": 6
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "dcav_site.9",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [145.089391, -38.170477]
+      },
+      "geometry_name": "geom",
+      "properties": {
+        "location": "Glen Waverley",
+        "region": "Metro South East",
+        "lead_organisation": "City of Monash",
+        "latitude": -38.170477,
+        "estimated_project_completion": "",
+        "address": "Kingsway, GLEN WAVERLEY VIC 3150",
+        "plug_type": "2 x Type 2",
+        "longitude": 145.089391,
+        "chargers": "1 x 22kW Charger",
+        "dcav_site": "NO",
+        "company": null,
+        "number_of_chargers": 2
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "dcav_site.12",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [148.185025, -37.762772]
+      },
+      "geometry_name": "geom",
+      "properties": {
+        "location": "Queenscliff",
+        "region": "Barwon South West",
+        "lead_organisation": "Borough of Queenscliffe",
+        "latitude": -37.762772,
+        "estimated_project_completion": "10/10/2022",
+        "address": "Symonds St, QUEENSCLIFF VIC 3225",
+        "plug_type": "2 x CCS2",
+        "longitude": 148.185025,
+        "chargers": "2 x 50kW Fast Chargers",
+        "dcav_site": "NO",
+        "company": "Borough of Queenscliffe",
+        "number_of_chargers": 2
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "dcav_site.14",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [144.181681, -38.409717]
+      },
+      "geometry_name": "geom",
+      "properties": {
+        "location": "Anglesea",
+        "region": "Barwon South West",
+        "lead_organisation": "Surf Coast Shire Council",
+        "latitude": -38.409717,
+        "estimated_project_completion": " July 2025",
+        "address": "Great Ocean Rd, ANGLESEA VIC 3230",
+        "plug_type": "",
+        "longitude": 144.181681,
+        "chargers": "1 x 50kW Fast Charger",
+        "dcav_site": "NO",
+        "company": "Surf Coast Shire Council",
+        "number_of_chargers": 1
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "dcav_site.99",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [143.5, -37.1]
+      },
+      "geometry_name": "geom",
+      "properties": {
+        "location": "Ballarat Future Site",
+        "region": "Grampians",
+        "lead_organisation": "Ballarat City Council",
+        "latitude": -37.1,
+        "estimated_project_completion": "December 2030",
+        "address": "1 Sturt St, BALLARAT VIC 3350",
+        "plug_type": "2 x CCS2",
+        "longitude": 143.5,
+        "chargers": "2 x 150kW Fast Chargers",
+        "dcav_site": "NO",
+        "company": null,
+        "number_of_chargers": 2
+      }
+    }
+  ]
+}

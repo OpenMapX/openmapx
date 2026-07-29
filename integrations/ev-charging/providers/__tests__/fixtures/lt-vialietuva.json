@@ -1,0 +1,159 @@
+{
+  "locations": [
+    {
+      "country_code": "LT",
+      "party_id": "STR",
+      "id": 1512,
+      "name": "Jovarų g. 2, Kaunas",
+      "address": "Jovarų g. 2, Kaunas",
+      "city": "Kaunas",
+      "country": "LTU",
+      "coordinates": {
+        "latitude": "54.9100323",
+        "longitude": "23.8418710"
+      },
+      "evses": [
+        {
+          "uid": 44769,
+          "status": "AVAILABLE",
+          "connectors": [
+            {
+              "id": 682278,
+              "standard": "IEC_62196_T2",
+              "power_type": "AC_1_PHASE",
+              "max_electric_power": 22000,
+              "tariff_ids": ["719"]
+            }
+          ]
+        }
+      ],
+      "operator": { "name": "Stuart Energy, UAB", "website": "www.stuart.energy/" },
+      "last_updated": "2026-07-29T08:07:10"
+    },
+    {
+      "country_code": "LT",
+      "party_id": "008",
+      "id": 3015,
+      "name": "Valkininkai, Vilnius g.",
+      "address": "Vilniaus g. 2",
+      "city": "Valkininkai",
+      "country": "LTU",
+      "coordinates": {
+        "latitude": "54.3649480",
+        "longitude": "24.8371240"
+      },
+      "evses": [
+        {
+          "uid": 21414,
+          "status": "AVAILABLE",
+          "connectors": [
+            {
+              "id": 656843,
+              "standard": "IEC_62196_T2_COMBO",
+              "power_type": "DC",
+              "max_electric_power": 240000,
+              "tariff_ids": ["6df44eb493d7309c07bf035cbb9e10a7"]
+            }
+          ]
+        }
+      ],
+      "operator": { "name": "Eleport, UAB", "website": "www.eleport.com/lt/" },
+      "last_updated": "2026-07-02T10:30:52"
+    },
+    {
+      "country_code": "LT",
+      "party_id": "ETR",
+      "id": 1269,
+      "name": "PLTZARDBU1_EDLT-106",
+      "address": "D. Bukonto gatvė 1",
+      "city": "Zarasai",
+      "country": "LTU",
+      "coordinates": {
+        "latitude": "55.7306550",
+        "longitude": "26.2437860"
+      },
+      "evses": [
+        {
+          "uid": 9305,
+          "status": "AVAILABLE",
+          "connectors": [
+            {
+              "id": 654594,
+              "standard": "CHADEMO",
+              "power_type": "DC",
+              "max_electric_power": 100000,
+              "tariff_ids": ["9c1215dd98b25616260fb0bc2ddcf85d"]
+            }
+          ]
+        },
+        {
+          "uid": 19627,
+          "status": "AVAILABLE",
+          "connectors": [
+            {
+              "id": 655019,
+              "standard": "IEC_62196_T2_COMBO",
+              "power_type": "DC",
+              "max_electric_power": 150000,
+              "tariff_ids": ["9c1215dd98b25616260fb0bc2ddcf85d"]
+            }
+          ]
+        }
+      ],
+      "operator": {
+        "name": "Elektrum Lietuva, UAB",
+        "website": "www.elektrum.lt/lt/elektrum-drive"
+      },
+      "last_updated": "2026-07-28T23:35:29"
+    }
+  ],
+  "tariffs": [
+    {
+      "country_code": "LT",
+      "party_id": "STR",
+      "id": "719",
+      "currency": "EUR",
+      "tariff_alt_text": null,
+      "elements": [
+        {
+          "price_components": [
+            { "price": "0.3000", "type": "FLAT", "step_size": 1, "vat": null },
+            { "price": "0.3900", "type": "ENERGY", "step_size": 1, "vat": null }
+          ]
+        }
+      ],
+      "tax_included": "YES",
+      "last_updated": "2026-07-29 05:07:23"
+    },
+    {
+      "country_code": "LT",
+      "party_id": "008",
+      "id": "6df44eb493d7309c07bf035cbb9e10a7",
+      "currency": "EUR",
+      "tariff_alt_text": null,
+      "elements": [
+        {
+          "price_components": [{ "price": "0.2800", "type": "ENERGY", "step_size": 1, "vat": null }]
+        }
+      ],
+      "tax_included": null,
+      "last_updated": "2026-07-01 06:56:57"
+    },
+    {
+      "country_code": "LT",
+      "party_id": "ETR",
+      "id": "9c1215dd98b25616260fb0bc2ddcf85d",
+      "currency": "EUR",
+      "tariff_alt_text": [{ "language": "en", "text": "0.44 EUR/kWh" }],
+      "elements": [
+        {
+          "price_components": [
+            { "price": "0.4400", "type": "ENERGY", "step_size": 1, "vat": "21.0000" }
+          ]
+        }
+      ],
+      "tax_included": null,
+      "last_updated": "2026-07-28 21:30:02"
+    }
+  ]
+}

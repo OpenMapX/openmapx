@@ -1,0 +1,151 @@
+<?xml version='1.0' encoding='utf-8'?>
+<d2LogicalModel xmlns="http://datex2.eu/schema/3/common" xmlns:ei="http://datex2.eu/schema/3/energyInfrastructure">
+  <payload>
+    <publicationTime>2026-07-28T23:31:03.990751+03:00</publicationTime>
+    <publicationCreator>
+      <country>CY</country>
+      <nationalIdentifier>Department of Electrical and Mechanical Services (EMS)</nationalIdentifier>
+    </publicationCreator>
+    <ei:energyInfrastructureTable>
+      <ei:energyInfrastructureTablePublication>
+        <publicationTime>2026-07-28T23:31:03.990751+03:00</publicationTime>
+        <ei:chargingPoints>
+          <ei:chargingPoint>
+            <chargingPointIdentification>Petrolina GSZ Station (150kW)</chargingPointIdentification>
+            <ei:chargingPointOwner>Alpitronic Right CHAdeMo</ei:chargingPointOwner>
+            <ei:chargingPointOwnerLegalName>Alpitronic Right CHAdeMo</ei:chargingPointOwnerLegalName>
+            <chargingPointStatus>
+              <value>operational</value>
+              <lang>en</lang>
+            </chargingPointStatus>
+            <ei:chargingPointOperator>Petrolina (Holdings) Public Ltd.</ei:chargingPointOperator>
+            <ei:chargingPointOperatorLegalName>Petrolina (Holdings) Public Ltd.</ei:chargingPointOperatorLegalName>
+            <numberOfConnectors>2</numberOfConnectors>
+            <location>
+              <pointByCoordinates>
+                <pointCoordinates>
+                  <latitude>34.92514226471998</latitude>
+                  <longitude>33.601899147034</longitude>
+                </pointCoordinates>
+              </pointByCoordinates>
+            </location>
+            <ei:maximumPower>300</ei:maximumPower>
+            <ei:connectorPower>300</ei:connectorPower>
+            <ei:creationDate>2023-07-05</ei:creationDate>
+            <chargingMode>fastCharging</chargingMode>
+            <connectorTypes>
+              <connectorType>type2</connectorType>
+              <connectorType>comboType2</connectorType>
+            </connectorTypes>
+            <chargingPointAddress>
+              <value>Georgiou Christodoulidi Avenue, 6043, Larnaca</value>
+              <lang>el</lang>
+            </chargingPointAddress>
+            <ei:contactInformation>
+              <contact>
+                <contactType>Technical Support</contactType>
+                <phoneNumber>+357 70071071</phoneNumber>
+              </contact>
+              <contact>
+                <contactType>email</contactType>
+                <emailAddress>support@pcharge.com.cy</emailAddress>
+              </contact>
+            </ei:contactInformation>
+            <ei:operatingTime>
+              <value>24h</value>
+              <lang>en</lang>
+            </ei:operatingTime>
+            <ei:timeZone>UTC+02:00</ei:timeZone>
+            <ei:powerType>dc</ei:powerType>
+          </ei:chargingPoint>
+          <ei:chargingPoint>
+            <chargingPointIdentification>OneTower 2301 (22kW)</chargingPointIdentification>
+            <ei:chargingPointOwner>D.A One Property Management Ltd.</ei:chargingPointOwner>
+            <ei:chargingPointOwnerLegalName>D.A One Property Management Ltd.</ei:chargingPointOwnerLegalName>
+            <chargingPointStatus>
+              <value>unavailable</value>
+              <lang>en</lang>
+            </chargingPointStatus>
+            <ei:chargingPointOperator>Petrolina (Holdings) Public Ltd.</ei:chargingPointOperator>
+            <ei:chargingPointOperatorLegalName>Petrolina (Holdings) Public Ltd.</ei:chargingPointOperatorLegalName>
+            <numberOfConnectors>1</numberOfConnectors>
+            <location>
+              <pointByCoordinates>
+                <pointCoordinates>
+                  <latitude>34.687509725511994</latitude>
+                  <longitude>33.064895896694</longitude>
+                </pointCoordinates>
+              </pointByCoordinates>
+            </location>
+            <ei:maximumPower>22</ei:maximumPower>
+            <ei:connectorPower>22</ei:connectorPower>
+            <ei:creationDate>2023-07-11</ei:creationDate>
+            <chargingMode>normalCharging</chargingMode>
+            <connectorTypes>
+              <connectorType>type2</connectorType>
+            </connectorTypes>
+            <chargingPointAddress>
+              <value>28 October Avenue 355, 3105, Limassol</value>
+              <lang>el</lang>
+            </chargingPointAddress>
+            <ei:contactInformation>
+              <contact>
+                <contactType>Technical Support</contactType>
+                <phoneNumber>+357 70071071</phoneNumber>
+              </contact>
+              <contact>
+                <contactType>email</contactType>
+                <emailAddress>elias@maximumpower.com.cy</emailAddress>
+              </contact>
+            </ei:contactInformation>
+            <ei:timeZone>UTC+02:00</ei:timeZone>
+            <ei:powerType>ac</ei:powerType>
+          </ei:chargingPoint>
+          <ei:chargingPoint>
+            <chargingPointIdentification>OneTower 2901 (22kW)</chargingPointIdentification>
+            <ei:chargingPointOwner>D.A One Property Management Ltd.</ei:chargingPointOwner>
+            <ei:chargingPointOwnerLegalName>D.A One Property Management Ltd.</ei:chargingPointOwnerLegalName>
+            <chargingPointStatus>
+              <value>unavailable</value>
+              <lang>en</lang>
+            </chargingPointStatus>
+            <ei:chargingPointOperator></ei:chargingPointOperator>
+            <ei:chargingPointOperatorLegalName></ei:chargingPointOperatorLegalName>
+            <numberOfConnectors>1</numberOfConnectors>
+            <location>
+              <pointByCoordinates>
+                <pointCoordinates>
+                  <latitude>34.687706798987</latitude>
+                  <longitude>33.064890850556</longitude>
+                </pointCoordinates>
+              </pointByCoordinates>
+            </location>
+            <ei:maximumPower>22</ei:maximumPower>
+            <ei:connectorPower>22</ei:connectorPower>
+            <ei:creationDate>2023-07-11</ei:creationDate>
+            <chargingMode>normalCharging</chargingMode>
+            <connectorTypes>
+              <connectorType>type2</connectorType>
+            </connectorTypes>
+            <chargingPointAddress>
+              <value>28 October Avenue 355, 3105, Limassol</value>
+              <lang>el</lang>
+            </chargingPointAddress>
+            <ei:contactInformation>
+              <contact>
+                <contactType>Technical Support</contactType>
+                <phoneNumber>+357 70071071</phoneNumber>
+              </contact>
+              <contact>
+                <contactType>email</contactType>
+                <emailAddress>elias@maximumpower.com.cy</emailAddress>
+              </contact>
+            </ei:contactInformation>
+            <ei:timeZone>UTC+02:00</ei:timeZone>
+            <ei:powerType>ac</ei:powerType>
+          </ei:chargingPoint>
+        </ei:chargingPoints>
+      </ei:energyInfrastructureTablePublication>
+    </ei:energyInfrastructureTable>
+  </payload>
+</d2LogicalModel>

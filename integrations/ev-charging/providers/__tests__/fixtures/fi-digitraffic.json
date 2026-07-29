@@ -1,0 +1,210 @@
+{
+  "locations": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [24.9384, 60.1699] },
+        "properties": {
+          "id": "FI-TEST-0001",
+          "name": "Helsinki Test Station",
+          "operator": {
+            "details": { "name": "Testi Oy", "website": "https://testi.example/" }
+          },
+          "address": {
+            "street": "Testikatu 1",
+            "city": "Helsinki",
+            "postalCode": "00100",
+            "countryCode": "FIN"
+          },
+          "openingTimes": { "twentyFourSeven": true, "regularHours": [] },
+          "modifiedAt": "2026-07-20T12:00:00.000Z",
+          "evses": [
+            {
+              "id": "FI*TST*E00001*01",
+              "connectors": [
+                {
+                  "standard": "IEC_62196_T2_COMBO",
+                  "powerType": "DC",
+                  "maxElectricPower": 150000,
+                  "tariffIds": ["TARIFF-DC-001"]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [24.6559, 60.2055] },
+        "properties": {
+          "id": "FI-TEST-0002",
+          "name": "Espoo Test Station",
+          "operator": {
+            "details": { "name": "Wattery Oy", "website": "https://wattery.example/" }
+          },
+          "address": {
+            "street": "Koekatu 5",
+            "city": "Espoo",
+            "postalCode": "02100",
+            "countryCode": "FIN"
+          },
+          "openingTimes": { "twentyFourSeven": false, "regularHours": [] },
+          "modifiedAt": "2026-07-19T08:30:00.000Z",
+          "evses": [
+            {
+              "id": "FI*TST*E00002*01",
+              "connectors": [
+                {
+                  "standard": "IEC_62196_T2",
+                  "powerType": "AC_3_PHASE",
+                  "maxElectricPower": 22000,
+                  "tariffIds": ["TARIFF-AC-002"]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [22.2666, 60.4518] },
+        "properties": {
+          "id": "FI-TEST-0003",
+          "name": "Turku Test Station",
+          "operator": {
+            "details": { "name": "Testi Oy", "website": "https://testi.example/" }
+          },
+          "address": {
+            "street": "Koivukatu 2",
+            "city": "Turku",
+            "postalCode": "20100",
+            "countryCode": "FIN"
+          },
+          "modifiedAt": "2026-07-18T10:15:00.000Z",
+          "evses": [
+            {
+              "id": "FI*TST*E00003*01",
+              "connectors": [
+                {
+                  "standard": "CHADEMO",
+                  "powerType": "DC",
+                  "maxElectricPower": 50000,
+                  "tariffIds": ["TARIFF-DC-001"]
+                }
+              ]
+            },
+            {
+              "id": "FI*TST*E00003*02",
+              "connectors": [
+                {
+                  "standard": "CHADEMO",
+                  "powerType": "DC",
+                  "maxElectricPower": 50000,
+                  "tariffIds": ["TARIFF-DC-001"]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [23.761, 61.4978] },
+        "properties": {
+          "id": "FI-TEST-0004",
+          "name": "Tampere Test Station",
+          "operator": {
+            "details": { "name": "Helen" }
+          },
+          "address": {
+            "street": "Pihakatu 3",
+            "city": "Tampere",
+            "postalCode": "33100",
+            "countryCode": "FIN"
+          },
+          "modifiedAt": "2026-07-17T09:00:00.000Z",
+          "evses": [
+            {
+              "id": "FI*TST*E00004*01",
+              "connectors": [
+                {
+                  "standard": "DOMESTIC_F",
+                  "powerType": "AC_1_PHASE",
+                  "maxElectricPower": 3700,
+                  "tariffIds": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [25.4651, 65.0121] },
+        "properties": {
+          "id": "FI-TEST-0005",
+          "name": "Oulu Test Station",
+          "operator": {
+            "details": { "name": "Wattery Oy" }
+          },
+          "address": {
+            "street": "Napakatu 9",
+            "city": "Oulu",
+            "postalCode": "90100",
+            "countryCode": "FIN"
+          },
+          "modifiedAt": "2026-07-16T14:45:00.000Z",
+          "evses": [
+            {
+              "id": "FI*TST*E00005*01",
+              "connectors": [
+                {
+                  "standard": "IEC_62196_T3C",
+                  "powerType": "AC_3_PHASE",
+                  "maxElectricPower": 11000,
+                  "tariffIds": ["TARIFF-MISSING"]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "tariffs": [
+    {
+      "id": "TARIFF-DC-001",
+      "currency": "EUR",
+      "type": "AD_HOC_PAYMENT",
+      "tariffAltUrl": "https://testi.example/tariffs/dc-001",
+      "elements": [
+        {
+          "priceComponents": [{ "type": "ENERGY", "price": 0.55, "vat": 25.5, "stepSize": 1 }]
+        },
+        {
+          "priceComponents": [
+            { "type": "PARKING_TIME", "price": 0.1, "vat": 25.5, "stepSize": 60 }
+          ],
+          "restrictions": { "minDuration": 2700, "maxDuration": 20700 }
+        }
+      ],
+      "lastUpdated": "2026-07-15T09:00:00Z"
+    },
+    {
+      "id": "TARIFF-AC-002",
+      "currency": "EUR",
+      "type": "REGULAR",
+      "elements": [
+        {
+          "priceComponents": [
+            { "type": "FLAT", "price": 0, "vat": 25.5, "stepSize": 1 },
+            { "type": "ENERGY", "price": 0.35, "vat": 25.5, "stepSize": 1 },
+            { "type": "TIME", "price": 0.02, "vat": 25.5, "stepSize": 60 }
+          ]
+        }
+      ],
+      "lastUpdated": "2026-07-10T11:00:00Z"
+    }
+  ]
+}

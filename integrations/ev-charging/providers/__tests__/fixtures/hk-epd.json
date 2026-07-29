@@ -1,0 +1,94 @@
+{
+  "lastUpdateDate": "2026-07-29T13:13:27.103+0800",
+  "data": [
+    {
+      "id": 11188,
+      "carParkId": "PIS-00145",
+      "carParkEName": "THE SOUTHSIDE",
+      "carParkCName": "THE SOUTHSIDE",
+      "carParkEAddress": "11 Heung Yip Road, Wong Chuk Hang, Hong Kong",
+      "location": { "lat": 22.24704557740975, "lng": 114.1669600525531 },
+      "openingHoursEn": "24-hour",
+      "chargerTotalByCombinations": [
+        { "chargerTypeID": 5, "chargingStandardID": 31, "sizeOfCharger": 3 },
+        { "chargerTypeID": 5, "chargingStandardID": 31, "sizeOfCharger": 10 },
+        { "chargerTypeID": 5, "chargingStandardID": 28, "sizeOfCharger": 10 },
+        { "chargerTypeID": 6, "chargingStandardID": 22, "sizeOfCharger": 234 }
+      ],
+      "isEnable": false,
+      "chargerOperatorAll": "Tesla;MTR Corporation Limited;特斯拉;香港鐵路有限公司"
+    },
+    {
+      "id": 94,
+      "carParkId": "222",
+      "carParkEName": "Star Ferry Car Park",
+      "carParkCName": "天星停車場",
+      "carParkEAddress": "9 Edinburgh Place, Central, Hong Kong",
+      "location": { "lat": 22.28275461, "lng": 114.16043975 },
+      "openingHoursEn": "24-hour",
+      "chargerTotalByCombinations": [
+        { "chargerTypeID": 6, "chargingStandardID": 22, "sizeOfCharger": 35 }
+      ],
+      "isEnable": true,
+      "chargerOperatorAll": "EPD (Operated by EV Power);環保署 (由 EV Power 營運)"
+    },
+    {
+      "id": 12190,
+      "carParkId": "EPD_0458",
+      "carParkEName": "San Shing Ave Parking",
+      "carParkCName": "上水新成路停車場",
+      "carParkEAddress": "4A San Shing Ave (Opposite to Kwong Sing Café)",
+      "location": { "lat": 22.506453942687, "lng": 114.12744644941 },
+      "openingHoursEn": "24-hour",
+      "chargerTotalByCombinations": [
+        { "chargerTypeID": 5, "chargingStandardID": 31, "sizeOfCharger": 4 }
+      ],
+      "isEnable": false,
+      "chargerOperatorAll": "GCSS;全港充"
+    },
+    {
+      "id": 10456,
+      "carParkId": "TDC14P4235",
+      "carParkEName": "Long Ping Car Park B",
+      "carParkCName": "朗屏B停車場",
+      "carParkEAddress": "Long Ping Commercial Centre, 1 Long Ping Road, Yuen Long, New Territories",
+      "location": { "lat": 22.450374, "lng": 114.023061 },
+      "openingHoursEn": "24-hour",
+      "chargerTotalByCombinations": [
+        { "chargerTypeID": 6, "chargingStandardID": 22, "sizeOfCharger": 20 }
+      ],
+      "isEnable": true,
+      "chargerOperatorAll": "Hong Kong EV Power Limited;香港電動能源有限公司"
+    },
+    {
+      "id": 5131,
+      "carParkId": "5058",
+      "carParkEName": "Kwun Tong Garden Estate (Lotus Tower)",
+      "carParkCName": "觀塘花園大廈 (玉蓮臺)",
+      "carParkEAddress": "NGAU TAU KOK ROAD, KWUN TONG",
+      "location": { "lat": 22.31598415910049, "lng": 114.220059299249 },
+      "openingHoursEn": "24-hour",
+      "chargerTotalByCombinations": [
+        { "chargerTypeID": 7, "chargingStandardID": 19, "sizeOfCharger": 1 }
+      ],
+      "isEnable": false,
+      "chargerOperatorAll": "The Hong Kong Housing Society;香港房屋協會"
+    },
+    {
+      "id": 64,
+      "carParkId": "9977",
+      "carParkEName": "Tseung Kwan O Sports Ground",
+      "carParkCName": "將軍澳運動場",
+      "carParkEAddress": "109 Po Hong Road, Tseung Kwan O",
+      "location": { "lat": 22.31163189522134, "lng": 114.2626271633938 },
+      "openingHoursEn": "24-hour",
+      "chargerTotalByCombinations": [
+        { "chargerTypeID": 6, "chargingStandardID": 22, "sizeOfCharger": 3 },
+        { "chargerTypeID": 22, "chargingStandardID": 31, "sizeOfCharger": 1 },
+        { "chargerTypeID": 22, "chargingStandardID": 16, "sizeOfCharger": 1 }
+      ],
+      "isEnable": true,
+      "chargerOperatorAll": "EPD (Operated by EV Power);環保署 (由 EV Power 營運)"
+    }
+  ]
+}

@@ -496,6 +496,9 @@ importers:
       '@openmapx/poi-source-registry':
         specifier: workspace:^
         version: link:../../packages/poi-source-registry
+      fast-xml-parser:
+        specifier: ^5.8.0
+        version: 5.10.1
 
   integrations/flights:
     dependencies:

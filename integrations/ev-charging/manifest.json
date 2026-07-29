@@ -122,6 +122,61 @@
       "url": "https://cdn.esb.ie/media-staging/docs/default-source/ecars/its-data-ecars-sites/its-data-ecars-sites-roi-ni.csv"
     },
     {
+      "name": "CYNAP (CY)",
+      "type": "http",
+      "url": "https://fixcyprus.cy/gnosis/open/api/nap/datasets/electric_vehicle_chargers/"
+    },
+    {
+      "name": "Chargy (LU)",
+      "type": "http",
+      "url": "https://data.public.lu/fr/datasets/r/22f9d77a-5138-4b02-b315-15f306b77034"
+    },
+    {
+      "name": "EVRoam (NZ)",
+      "type": "http",
+      "url": "https://services.arcgis.com/CXBb7LAjgIIdcsPt/arcgis/rest/services/EV_Roam_charging_stations/FeatureServer/0/query?where=1=1&outFields=OBJECTID&f=geojson&resultRecordCount=1"
+    },
+    {
+      "name": "DGT NAP (ES)",
+      "type": "http",
+      "url": "https://infocar.dgt.es/datex2/v3/miterd/EnergyInfrastructureTablePublication/electrolineras.xml"
+    },
+    {
+      "name": "Transport for NSW EV charging (AU-NSW)",
+      "type": "http",
+      "url": "https://opendata.transport.nsw.gov.au/data/api/3/action/package_show?id=ev-charging-locations"
+    },
+    {
+      "name": "TMR Queensland EV charging (AU-QLD)",
+      "type": "http",
+      "url": "https://www.tmr.qld.gov.au/-/media/aboutus/corpinfo/Open%20data/findachargingev/csl_ev.csv"
+    },
+    {
+      "name": "Victoria DEECA EV charging (AU-VIC)",
+      "type": "http",
+      "url": "https://opendata.maps.vic.gov.au/geoserver/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=open-data-platform:dcav_site&outputFormat=application/json&count=1"
+    },
+    {
+      "name": "Vlaanderen Laadpunten (BE)",
+      "type": "http",
+      "url": "https://geoserver.gis.cloud.mow.vlaanderen.be/geoserver/beleid/wfs?service=WFS&version=2.0.0&request=GetFeature&typeName=laadpunten_public&outputFormat=application/json&srsName=EPSG:4326&count=1&startIndex=0"
+    },
+    {
+      "name": "EPD EV Chargers (HK)",
+      "type": "http",
+      "url": "https://ev-charger.epd.gov.hk/resource/ev_charger_avail/evca_ver_1_0.json"
+    },
+    {
+      "name": "Fintraffic Digitraffic AFIR (FI)",
+      "type": "http",
+      "url": "https://afir.digitraffic.fi/api/charging-network/v1/locations/all"
+    },
+    {
+      "name": "Via Lietuva (LT)",
+      "type": "http",
+      "url": "https://ev.vialietuva.lt/en/data-provision"
+    },
+    {
       "name": "SFOE (CH)",
       "type": "http",
       "url": "https://data.geo.admin.ch/ch.bfe.ladestellen-elektromobilitaet/status/oicp/ch.bfe.ladestellen-elektromobilitaet.json"
@@ -228,6 +283,182 @@
       "commercialUse": "yes",
       "providerCountry": "IE",
       "providerPrivacyUrl": "https://esb.ie/data-protection",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "cy-cynap",
+      "name": "CYNAP — Cyprus public EV chargers",
+      "url": "https://www.traffic4cyprus.org.cy/dataset/electricvehiclecharges",
+      "apiHosts": ["fixcyprus.cy"],
+      "license": "CC-BY-4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Department of Electrical and Mechanical Services (EMS), Cyprus",
+      "commercialUse": "yes",
+      "providerCountry": "CY",
+      "providerPrivacyUrl": "https://www.traffic4cyprus.org.cy/pages/privacy-policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "lu-chargy",
+      "name": "Chargy — Luxembourg public charging network",
+      "url": "https://data.public.lu/en/datasets/bornes-de-chargement-publiques-pour-voitures-electriques/",
+      "apiHosts": ["data.public.lu", "my.chargy.lu"],
+      "license": "CC0 1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "attribution": "Chargy / data.public.lu",
+      "commercialUse": "yes",
+      "providerCountry": "LU",
+      "providerPrivacyUrl": "https://data.public.lu/en/terms/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "nz-evroam",
+      "name": "EVRoam — New Zealand charging network (Waka Kotahi)",
+      "url": "https://opendata-nzta.opendata.arcgis.com/datasets/NZTA::ev-roam-charging-stations",
+      "apiHosts": ["services.arcgis.com"],
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Waka Kotahi NZ Transport Agency",
+      "commercialUse": "yes",
+      "providerCountry": "NZ",
+      "providerPrivacyUrl": "https://www.nzta.govt.nz/privacy/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "es-dgt",
+      "name": "DGT — Spanish national EV charging (NAP)",
+      "url": "https://nap.dgt.es/en/dataset/puntos-de-recarga-electrica-para-vehiculos",
+      "apiHosts": ["infocar.dgt.es"],
+      "license": "CC BY",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "DGT – Dirección General de Tráfico",
+      "commercialUse": "yes",
+      "providerCountry": "ES",
+      "providerPrivacyUrl": "https://sede.dgt.gob.es/es/proteccion-datos/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "au-nsw-ev",
+      "name": "Transport for NSW — EV charging locations",
+      "url": "https://opendata.transport.nsw.gov.au/data/dataset/ev-charging-locations",
+      "apiHosts": ["opendata.transport.nsw.gov.au"],
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Transport for NSW",
+      "commercialUse": "yes",
+      "providerCountry": "AU",
+      "providerPrivacyUrl": "https://www.nsw.gov.au/privacy-statement",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "au-qld-ev",
+      "name": "Department of Transport and Main Roads (Queensland) — EV charging locations",
+      "url": "https://www.data.qld.gov.au/dataset/find-a-charging-station-electric-vehicle",
+      "apiHosts": ["tmr.qld.gov.au"],
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Department of Transport and Main Roads (Queensland)",
+      "commercialUse": "yes",
+      "providerCountry": "AU",
+      "providerPrivacyUrl": "https://www.qld.gov.au/legal/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "au-vic-ev",
+      "name": "State of Victoria (DEECA) — Destination Charger Program sites",
+      "url": "https://discover.data.vic.gov.au/dataset/government-funded-public-ev-chargers",
+      "apiHosts": ["opendata.maps.vic.gov.au"],
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "State of Victoria (DEECA)",
+      "commercialUse": "yes",
+      "providerCountry": "AU",
+      "providerPrivacyUrl": "https://www.vic.gov.au/privacy-vicgovau",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "be-flanders",
+      "name": "Vlaanderen — Flemish public EV charging (Laadpunten)",
+      "url": "https://www.vlaanderen.be/datavindplaats",
+      "apiHosts": ["geoserver.gis.cloud.mow.vlaanderen.be"],
+      "license": "Modellicentie Gratis Hergebruik (Flemish Model License for Free Reuse)",
+      "licenseUrl": "https://overheid.vlaanderen.be/sites/default/files/documenten/ict-egov/licenties/hergebruik/modellicentie_gratis_hergebruik_v1_0.html",
+      "attribution": "Departement Mobiliteit en Openbare Werken",
+      "commercialUse": "yes",
+      "providerCountry": "BE",
+      "providerPrivacyUrl": "https://www.vlaanderen.be/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "hk-epd",
+      "name": "EPD — Hong Kong public EV chargers",
+      "url": "https://data.gov.hk/en-data/dataset/hk-epd-evcpateam-evc-1",
+      "apiHosts": ["ev-charger.epd.gov.hk"],
+      "license": "data.gov.hk Terms and Conditions (free commercial + non-commercial reuse and redistribution with attribution)",
+      "licenseUrl": "https://data.gov.hk/en/terms-and-conditions",
+      "attribution": "Environmental Protection Department (EPD) / DATA.GOV.HK",
+      "commercialUse": "yes",
+      "providerCountry": "HK",
+      "providerPrivacyUrl": "https://data.gov.hk/en/privacy-policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "fi-digitraffic",
+      "name": "Fintraffic Digitraffic — Finnish national EV charging network (AFIR)",
+      "url": "https://www.digitraffic.fi/en/road-traffic/afir/",
+      "apiHosts": ["afir.digitraffic.fi"],
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Source: Fintraffic / digitraffic.fi, license CC 4.0 BY",
+      "commercialUse": "yes",
+      "providerCountry": "FI",
+      "providerPrivacyUrl": "https://www.digitraffic.fi/en/privacy-policy/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "lt-vialietuva",
+      "name": "Via Lietuva — Lithuanian national EV charging",
+      "url": "https://ev.vialietuva.lt/en/data-provision",
+      "apiHosts": ["ev.vialietuva.lt"],
+      "license": "CC BY 4.0 and ODC-BY",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Via Lietuva",
+      "commercialUse": "yes",
+      "providerCountry": "LT",
+      "providerPrivacyUrl": "https://ev.vialietuva.lt/en/data-provision",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
