@@ -6,7 +6,10 @@ vi.mock("../../src/db/index.js", () => ({
   sql: { unsafe: mocks.unsafe },
 }));
 
-import { rebuildOvertureLinksUnlocked } from "../../src/jobs/overture/rebuild-links.js";
+import {
+  getOvertureConflationState,
+  rebuildOvertureLinksUnlocked,
+} from "../../src/jobs/overture/rebuild-links.js";
 
 const OPTIONS = {
   region: "europe/germany/berlin",
@@ -125,6 +128,28 @@ beforeEach(() => {
 });
 
 describe("rebuildOvertureLinks", () => {
+  it("normalizes PostgreSQL timestamp strings at the state boundary", async () => {
+    state = makeState({
+      started_at: "2026-07-28T00:00:00.000Z",
+      attempt_started_at: "2026-07-28T00:01:00.000Z",
+      phase_started_at: "2026-07-28T00:02:00.000Z",
+      completed_at: "2026-07-28T00:03:00.000Z",
+      updated_at: "2026-07-28T00:04:00.000Z",
+    });
+
+    const result = await getOvertureConflationState();
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        startedAt: new Date("2026-07-28T00:00:00.000Z"),
+        attemptStartedAt: new Date("2026-07-28T00:01:00.000Z"),
+        phaseStartedAt: new Date("2026-07-28T00:02:00.000Z"),
+        completedAt: new Date("2026-07-28T00:03:00.000Z"),
+        updatedAt: new Date("2026-07-28T00:04:00.000Z"),
+      }),
+    );
+  });
+
   it("completes all durable phases without re-ingesting Places", async () => {
     const deps = dependencies();
     const result = await rebuildOvertureLinksUnlocked(OPTIONS, deps as never);

@@ -126,11 +126,11 @@ interface StateRow {
   score_cursor_id: string | null;
   phase_durations_ms: Record<string, number> | null;
   last_error: string | null;
-  started_at: Date | null;
-  attempt_started_at: Date | null;
-  phase_started_at: Date | null;
-  completed_at: Date | null;
-  updated_at: Date;
+  started_at: Date | string | null;
+  attempt_started_at: Date | string | null;
+  phase_started_at: Date | string | null;
+  completed_at: Date | string | null;
+  updated_at: Date | string;
 }
 
 const STATE_COLUMNS = `release, region, place_count::TEXT, status, phase, attempt_count,
@@ -143,6 +143,17 @@ const STATE_COLUMNS = `release, region, place_count::TEXT, status, phase, attemp
 
 function numeric(value: string | null): number | null {
   return value === null ? null : Number(value);
+}
+
+function timestamp(value: Date | string, column: string): Date;
+function timestamp(value: Date | string | null, column: string): Date | null;
+function timestamp(value: Date | string | null, column: string): Date | null {
+  if (value === null) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Invalid ${column} timestamp in Overture conflation state`);
+  }
+  return parsed;
 }
 
 function mapState(row: StateRow): ConflationState {
@@ -167,11 +178,11 @@ function mapState(row: StateRow): ConflationState {
     scoreCursorId: numeric(row.score_cursor_id),
     phaseDurationsMs: row.phase_durations_ms ?? {},
     lastError: row.last_error,
-    startedAt: row.started_at,
-    attemptStartedAt: row.attempt_started_at,
-    phaseStartedAt: row.phase_started_at,
-    completedAt: row.completed_at,
-    updatedAt: row.updated_at,
+    startedAt: timestamp(row.started_at, "started_at"),
+    attemptStartedAt: timestamp(row.attempt_started_at, "attempt_started_at"),
+    phaseStartedAt: timestamp(row.phase_started_at, "phase_started_at"),
+    completedAt: timestamp(row.completed_at, "completed_at"),
+    updatedAt: timestamp(row.updated_at, "updated_at"),
   };
 }
 
