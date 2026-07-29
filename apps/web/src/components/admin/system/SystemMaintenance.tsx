@@ -70,6 +70,19 @@ interface JobStatus {
   error: string | null;
 }
 
+export function buildSystemJobRequestInit(body?: Record<string, unknown>): RequestInit {
+  return {
+    method: "POST",
+    credentials: "include",
+    ...(body === undefined
+      ? {}
+      : {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+  };
+}
+
 function digest(value: string | null): string {
   if (!value) return "—";
   return value.replace(/^sha256:/, "").slice(0, 12);
@@ -137,12 +150,10 @@ export function SystemMaintenance() {
       body?: Record<string, unknown>;
       label: string;
     }) => {
-      const response = await fetch(`${apiUrl}/api/admin/system/${path}`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: body ? JSON.stringify(body) : undefined,
-      });
+      const response = await fetch(
+        `${apiUrl}/api/admin/system/${path}`,
+        buildSystemJobRequestInit(body),
+      );
       const result = (await response.json().catch(() => ({}))) as {
         jobId?: string;
         error?: string;
@@ -227,7 +238,8 @@ export function SystemMaintenance() {
             <Button
               variant="contained"
               startIcon={<UpdateIcon />}
-              disabled={active || !status?.deployment.maintenanceReady}
+              disabled={active || !status?.deployment.maintenanceReady || updateCount === 0}
+              title={updateCount === 0 ? "All core images are up to date" : undefined}
               onClick={() => setDialogOpen(true)}
             >
               Update OpenMapX
@@ -365,7 +377,7 @@ export function SystemMaintenance() {
             variant="contained"
             color="warning"
             startIcon={<UpdateIcon />}
-            disabled={confirmation !== CONFIRMATION || queueJob.isPending}
+            disabled={confirmation !== CONFIRMATION || queueJob.isPending || updateCount === 0}
             onClick={() => {
               queueJob.mutate({
                 path: "updates/apply",
