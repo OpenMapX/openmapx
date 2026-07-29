@@ -60,6 +60,31 @@ interface ProbeResult {
   detail: string;
 }
 
+export function probeFailureDetail(stderr: string, exitCode: number): string {
+  const lines = stderr
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !/^Run 'docker run --help' for more information\.?$/.test(line));
+  return lines.at(-1) ?? `exit ${exitCode}`;
+}
+
+export function composeNetworkName(configText: string): string | null {
+  try {
+    const config = JSON.parse(configText) as {
+      name?: unknown;
+      networks?: Record<string, { name?: unknown } | null>;
+    };
+    const explicitName = config.networks?.openmapx?.name;
+    if (typeof explicitName === "string" && explicitName.trim()) return explicitName.trim();
+    if (typeof config.name === "string" && config.name.trim()) {
+      return `${config.name.trim()}_openmapx`;
+    }
+  } catch {
+    // Fall back to the conventional reference-deployment network below.
+  }
+  return null;
+}
+
 /**
  * Probe image: a small, pinned curl container. curl's ENTRYPOINT is `curl`, so
  * everything after the image name is curl flags. `-f` turns non-2xx responses
@@ -87,12 +112,7 @@ async function runDeepProbe(serviceId: string, network: string): Promise<ProbeRe
   const result = await dockerRun(buildProbeArgs(network, url));
 
   if (result.exitCode !== 0) {
-    const stderr =
-      result.stderr
-        .split("\n")
-        .filter((line) => line.trim())
-        .slice(-1)[0] ?? "";
-    return { status: "fail", detail: stderr.trim() || `exit ${result.exitCode}` };
+    return { status: "fail", detail: probeFailureDetail(result.stderr, result.exitCode) };
   }
   if (probe.expect && !result.stdout.toLowerCase().includes(probe.expect.toLowerCase())) {
     return { status: "fail", detail: `response missing "${probe.expect}"` };
@@ -101,20 +121,13 @@ async function runDeepProbe(serviceId: string, network: string): Promise<ProbeRe
 }
 
 async function detectComposeNetwork(): Promise<string> {
-  // docker-compose names networks `<project>_<name>`. Our compose declares one
-  // network called `openmapx`, so the project prefix is the only variable.
-  const result = await dockerCompose(["config", "--services"]);
+  // Read the network name from this checkout's rendered config. `compose ls`
+  // lists every project on the host and its first row may belong to an
+  // unrelated deployment (for example the docs stack).
+  const result = await dockerCompose(["config", "--format", "json"]);
   if (result.exitCode === 0) {
-    const inspect = await dockerCompose(["ls", "--format", "json"]);
-    if (inspect.exitCode === 0 && inspect.stdout.trim()) {
-      try {
-        const rows = JSON.parse(inspect.stdout) as Array<{ Name?: string }>;
-        const project = rows.find((r) => r.Name)?.Name;
-        if (project) return `${project}_openmapx`;
-      } catch {
-        // fall through
-      }
-    }
+    const name = composeNetworkName(result.stdout);
+    if (name) return name;
   }
   return "docker_openmapx";
 }

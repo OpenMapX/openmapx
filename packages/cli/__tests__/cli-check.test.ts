@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildProbeArgs, DEEP_PROBES, PROBE_IMAGE } from "../src/commands/check";
+import {
+  buildProbeArgs,
+  composeNetworkName,
+  DEEP_PROBES,
+  PROBE_IMAGE,
+  probeFailureDetail,
+} from "../src/commands/check";
 
 describe("buildProbeArgs", () => {
   it("builds args for a standalone `docker run` curl container on the compose network", () => {
@@ -31,6 +37,41 @@ describe("buildProbeArgs", () => {
     const args = buildProbeArgs("docker_openmapx", url);
     expect(args).toContain("--rm");
     expect(args[args.length - 1]).toBe(url);
+  });
+});
+
+describe("composeNetworkName", () => {
+  it("uses the explicit network name from this checkout's compose config", () => {
+    expect(
+      composeNetworkName(
+        JSON.stringify({
+          name: "docker",
+          networks: { openmapx: { name: "production_openmapx" } },
+        }),
+      ),
+    ).toBe("production_openmapx");
+  });
+
+  it("falls back to the project-derived network name", () => {
+    expect(composeNetworkName(JSON.stringify({ name: "docker", networks: {} }))).toBe(
+      "docker_openmapx",
+    );
+    expect(composeNetworkName("not json")).toBeNull();
+  });
+});
+
+describe("probeFailureDetail", () => {
+  it("keeps the actionable Docker error instead of the generic help footer", () => {
+    expect(
+      probeFailureDetail(
+        "docker: Error response from daemon: network deploy_openmapx not found.\n\nRun 'docker run --help' for more information",
+        125,
+      ),
+    ).toBe("docker: Error response from daemon: network deploy_openmapx not found.");
+  });
+
+  it("falls back to the exit code when stderr is empty", () => {
+    expect(probeFailureDetail("", 125)).toBe("exit 125");
   });
 });
 
