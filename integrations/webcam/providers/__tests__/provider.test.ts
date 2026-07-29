@@ -15,36 +15,44 @@ vi.mock("../osm.js", () => ({
   mapOsmToDetail: vi.fn(),
 }));
 
-vi.mock("../caltrans.js", () => ({
+vi.mock("../us-ca-caltrans.js", () => ({
   searchCaltrans: vi.fn(),
   getCaltransDetail: vi.fn(),
   mapCaltransToResult: vi.fn(),
   mapCaltransToDetail: vi.fn(),
 }));
 
-vi.mock("../tfl.js", () => ({
+vi.mock("../gb-eng-tfl.js", () => ({
   searchTfl: vi.fn(),
   getTflDetail: vi.fn(),
   mapTflToResult: vi.fn(),
   mapTflToDetail: vi.fn(),
 }));
 
-vi.mock("../nps.js", () => ({
+vi.mock("../us-nps.js", () => ({
   searchNps: vi.fn(),
   getNpsDetail: vi.fn(),
   mapNpsToResult: vi.fn(),
   mapNpsToDetail: vi.fn(),
 }));
 
-vi.mock("../dot/index.js", () => ({
-  searchDot: vi.fn(),
-  getDotDetail: vi.fn(),
-  mapDotToResult: vi.fn(),
-  mapDotToDetail: vi.fn(),
-  getDotSourceIds: vi.fn(() => [
-    { id: "dot-ny", label: "New York" },
-    { id: "dot-or", label: "Oregon" },
+vi.mock("../us-state-sources.js", () => ({
+  searchUsStateSources: vi.fn(),
+  getUsStateSourceDetail: vi.fn(),
+  mapUsStateSourceToResult: vi.fn(),
+  mapUsStateSourceToDetail: vi.fn(),
+  getUsStateSourceIds: vi.fn(() => [
+    { id: "us-ny-511", label: "New York" },
+    { id: "us-or-tripcheck", label: "Oregon" },
   ]),
+}));
+
+vi.mock("../camera-sources.js", () => ({
+  searchCameraSources: vi.fn(),
+  getCameraSourceDetail: vi.fn(),
+  mapCameraSourceToResult: vi.fn(),
+  mapCameraSourceToDetail: vi.fn(),
+  getCameraSourceIds: vi.fn(() => [{ id: "fi-digitraffic-webcam", label: "Finland Digitraffic" }]),
 }));
 
 vi.mock("../dedup.js", () => ({
@@ -52,22 +60,35 @@ vi.mock("../dedup.js", () => ({
 }));
 
 import {
+  getCameraSourceDetail,
+  mapCameraSourceToDetail,
+  mapCameraSourceToResult,
+  searchCameraSources,
+} from "../camera-sources.js";
+import { deduplicateByCoordinates } from "../dedup.js";
+import { getTflDetail, mapTflToDetail, mapTflToResult, searchTfl } from "../gb-eng-tfl.js";
+import { getOsmWebcamNode, mapOsmToDetail, mapOsmToResult, searchOsmWebcams } from "../osm.js";
+import { setManifestDataSources, webcamProvider } from "../provider.js";
+import {
   getCaltransDetail,
   mapCaltransToDetail,
   mapCaltransToResult,
   searchCaltrans,
-} from "../caltrans.js";
-import { deduplicateByCoordinates } from "../dedup.js";
-import { getDotDetail, mapDotToDetail, mapDotToResult, searchDot } from "../dot/index.js";
-import { getNpsDetail, mapNpsToDetail, mapNpsToResult, searchNps } from "../nps.js";
-import { getOsmWebcamNode, mapOsmToDetail, mapOsmToResult, searchOsmWebcams } from "../osm.js";
-import { setManifestDataSources, webcamProvider } from "../provider.js";
-import { getTflDetail, mapTflToDetail, mapTflToResult, searchTfl } from "../tfl.js";
+} from "../us-ca-caltrans.js";
+import { getNpsDetail, mapNpsToDetail, mapNpsToResult, searchNps } from "../us-nps.js";
+import {
+  getUsStateSourceDetail,
+  mapUsStateSourceToDetail,
+  mapUsStateSourceToResult,
+  searchUsStateSources,
+} from "../us-state-sources.js";
 import { getWindyDetail, mapWindyToDetail, mapWindyToResult, searchWindy } from "../windy.js";
 
 // Mirror the manifest dataSources the host loads at runtime so the provider's
 // attribution lookup has something to map `source` prefixes against.
 beforeEach(() => {
+  vi.mocked(searchCameraSources).mockResolvedValue([]);
+  vi.mocked(getCameraSourceDetail).mockResolvedValue(null);
   setManifestDataSources([
     {
       sourceId: "windy",
@@ -86,7 +107,7 @@ beforeEach(() => {
       providerPrivacyUrl: "https://osmfoundation.org/wiki/Privacy_Policy",
     },
     {
-      sourceId: "caltrans",
+      sourceId: "us-ca-caltrans",
       name: "Caltrans",
       url: "https://dot.ca.gov/",
       license: "test",
@@ -94,7 +115,7 @@ beforeEach(() => {
       providerPrivacyUrl: "https://example.com/privacy",
     },
     {
-      sourceId: "tfl",
+      sourceId: "gb-eng-tfl",
       name: "TfL",
       url: "https://tfl.gov.uk/",
       license: "test",
@@ -102,7 +123,7 @@ beforeEach(() => {
       providerPrivacyUrl: "https://example.com/privacy",
     },
     {
-      sourceId: "nps",
+      sourceId: "us-nps",
       name: "NPS",
       url: "https://www.nps.gov/",
       license: "test",
@@ -110,7 +131,7 @@ beforeEach(() => {
       providerPrivacyUrl: "https://example.com/privacy",
     },
     {
-      sourceId: "dot-ny",
+      sourceId: "us-ny-511",
       name: "DOT NY",
       url: "https://example.com",
       license: "test",
@@ -155,29 +176,36 @@ describe("webcamProvider meta", () => {
 });
 
 describe("webcamProvider.search", () => {
-  it("calls all 6 sources in parallel and combines results", async () => {
+  it("calls all source groups in parallel and combines results", async () => {
     const windyRaw = [{ id: "w1" }];
     const osmRaw = [{ id: "o1" }];
     const caltransRaw = [{ id: "c1" }];
     const tflRaw = [{ id: "t1" }];
     const npsRaw = [{ id: "n1" }];
-    const dotRaw = [{ id: "d1" }];
+    const usStateRaw = [{ id: "d1" }];
+    const cameraSourceRaw = [{ id: "i1" }];
 
     vi.mocked(searchWindy).mockResolvedValue(windyRaw as never);
     vi.mocked(searchOsmWebcams).mockResolvedValue(osmRaw as never);
     vi.mocked(searchCaltrans).mockResolvedValue(caltransRaw as never);
     vi.mocked(searchTfl).mockResolvedValue(tflRaw as never);
     vi.mocked(searchNps).mockResolvedValue(npsRaw as never);
-    vi.mocked(searchDot).mockResolvedValue(dotRaw as never);
+    vi.mocked(searchUsStateSources).mockResolvedValue(usStateRaw as never);
+    vi.mocked(searchCameraSources).mockResolvedValue(cameraSourceRaw as never);
 
     vi.mocked(mapWindyToResult).mockReturnValue(makeResult("windy:1", "windy", "landscape"));
     vi.mocked(mapOsmToResult).mockReturnValue(makeResult("osm-webcam:1", "osm", "other"));
     vi.mocked(mapCaltransToResult).mockReturnValue(
-      makeResult("caltrans:7:1", "caltrans", "traffic"),
+      makeResult("us-ca-caltrans:7:1", "us-ca-caltrans", "traffic"),
     );
-    vi.mocked(mapTflToResult).mockReturnValue(makeResult("tfl:1", "tfl", "traffic"));
-    vi.mocked(mapNpsToResult).mockReturnValue(makeResult("nps:1", "nps", "landscape"));
-    vi.mocked(mapDotToResult).mockReturnValue(makeResult("dot-ny:1", "dot-ny", "traffic"));
+    vi.mocked(mapTflToResult).mockReturnValue(makeResult("gb-eng-tfl:1", "gb-eng-tfl", "traffic"));
+    vi.mocked(mapNpsToResult).mockReturnValue(makeResult("us-nps:1", "us-nps", "landscape"));
+    vi.mocked(mapUsStateSourceToResult).mockReturnValue(
+      makeResult("us-ny-511:1", "us-ny-511", "traffic"),
+    );
+    vi.mocked(mapCameraSourceToResult).mockReturnValue(
+      makeResult("fi-digitraffic-webcam:1", "fi-digitraffic-webcam", "traffic"),
+    );
 
     const envelope = await webcamProvider.search(makeBbox());
     const results = envelope.data;
@@ -187,8 +215,9 @@ describe("webcamProvider.search", () => {
     expect(searchCaltrans).toHaveBeenCalledOnce();
     expect(searchTfl).toHaveBeenCalledOnce();
     expect(searchNps).toHaveBeenCalledOnce();
-    expect(searchDot).toHaveBeenCalledOnce();
-    expect(results).toHaveLength(6);
+    expect(searchUsStateSources).toHaveBeenCalledOnce();
+    expect(searchCameraSources).toHaveBeenCalledOnce();
+    expect(results).toHaveLength(7);
     expect(envelope.attributions.length).toBeGreaterThan(0);
     expect(envelope.attributions[0].sourceId).toBe("windy");
     expect(envelope.freshness.fetchedAt).toBeTruthy();
@@ -200,7 +229,7 @@ describe("webcamProvider.search", () => {
     vi.mocked(searchCaltrans).mockResolvedValue([]);
     vi.mocked(searchTfl).mockResolvedValue([]);
     vi.mocked(searchNps).mockResolvedValue([]);
-    vi.mocked(searchDot).mockResolvedValue([]);
+    vi.mocked(searchUsStateSources).mockResolvedValue([]);
 
     vi.mocked(mapWindyToResult).mockReturnValue(makeResult("windy:1", "windy", "landscape"));
     vi.mocked(mapOsmToResult).mockReturnValue(makeResult("osm-webcam:1", "osm", "other"));
@@ -218,12 +247,12 @@ describe("webcamProvider.search", () => {
     vi.mocked(searchCaltrans).mockResolvedValue([{ id: "c1" }] as never);
     vi.mocked(searchTfl).mockResolvedValue([{ id: "t1" }] as never);
     vi.mocked(searchNps).mockRejectedValue(new Error("NPS down"));
-    vi.mocked(searchDot).mockRejectedValue(new Error("DOT down"));
+    vi.mocked(searchUsStateSources).mockRejectedValue(new Error("DOT down"));
 
     vi.mocked(mapCaltransToResult).mockReturnValue(
-      makeResult("caltrans:7:1", "caltrans", "traffic"),
+      makeResult("us-ca-caltrans:7:1", "us-ca-caltrans", "traffic"),
     );
-    vi.mocked(mapTflToResult).mockReturnValue(makeResult("tfl:1", "tfl", "traffic"));
+    vi.mocked(mapTflToResult).mockReturnValue(makeResult("gb-eng-tfl:1", "gb-eng-tfl", "traffic"));
 
     const results = (await webcamProvider.search(makeBbox())).data;
     expect(results).toHaveLength(2);
@@ -235,7 +264,8 @@ describe("webcamProvider.search", () => {
     vi.mocked(searchCaltrans).mockRejectedValue(new Error("down"));
     vi.mocked(searchTfl).mockRejectedValue(new Error("down"));
     vi.mocked(searchNps).mockRejectedValue(new Error("down"));
-    vi.mocked(searchDot).mockRejectedValue(new Error("down"));
+    vi.mocked(searchUsStateSources).mockRejectedValue(new Error("down"));
+    vi.mocked(searchCameraSources).mockRejectedValue(new Error("down"));
     vi.mocked(deduplicateByCoordinates).mockReturnValue([]);
 
     const results = (await webcamProvider.search(makeBbox())).data;
@@ -248,11 +278,11 @@ describe("webcamProvider.search", () => {
     vi.mocked(searchCaltrans).mockResolvedValue([]);
     vi.mocked(searchTfl).mockResolvedValue([]);
     vi.mocked(searchNps).mockResolvedValue([]);
-    vi.mocked(searchDot).mockResolvedValue([]);
+    vi.mocked(searchUsStateSources).mockResolvedValue([]);
 
     const items = [
       makeResult("a", "windy", "landscape"),
-      makeResult("b", "caltrans", "traffic"),
+      makeResult("b", "us-ca-caltrans", "traffic"),
       makeResult("c", "windy", "city"),
     ];
     vi.mocked(deduplicateByCoordinates).mockReturnValue(items);
@@ -302,10 +332,10 @@ describe("webcamProvider.getDetail", () => {
   });
 
   it("caltrans prefix calls getCaltransDetail with district and index", async () => {
-    const raw = { id: "caltrans:7:42" };
+    const raw = { id: "us-ca-caltrans:7:42" };
     const detail = {
-      id: "caltrans:7:42",
-      sources: ["caltrans"],
+      id: "us-ca-caltrans:7:42",
+      sources: ["us-ca-caltrans"],
       name: "Test",
       coordinates: [-118, 34] as [number, number],
       sections: [],
@@ -313,16 +343,16 @@ describe("webcamProvider.getDetail", () => {
     vi.mocked(getCaltransDetail).mockResolvedValue(raw as never);
     vi.mocked(mapCaltransToDetail).mockReturnValue(detail);
 
-    const result = (await webcamProvider.getDetail("caltrans:7:42")).data;
+    const result = (await webcamProvider.getDetail("us-ca-caltrans:7:42")).data;
     expect(getCaltransDetail).toHaveBeenCalledWith("7", "42");
     expect(result).toBe(detail);
   });
 
   it("tfl prefix calls getTflDetail", async () => {
-    const raw = { id: "tfl:JamCams_00001" };
+    const raw = { id: "gb-eng-tfl:JamCams_00001" };
     const detail = {
-      id: "tfl:JamCams_00001",
-      sources: ["tfl"],
+      id: "gb-eng-tfl:JamCams_00001",
+      sources: ["gb-eng-tfl"],
       name: "TfL",
       coordinates: [-0.1, 51.5] as [number, number],
       sections: [],
@@ -330,16 +360,16 @@ describe("webcamProvider.getDetail", () => {
     vi.mocked(getTflDetail).mockResolvedValue(raw as never);
     vi.mocked(mapTflToDetail).mockReturnValue(detail);
 
-    const result = (await webcamProvider.getDetail("tfl:JamCams_00001")).data;
+    const result = (await webcamProvider.getDetail("gb-eng-tfl:JamCams_00001")).data;
     expect(getTflDetail).toHaveBeenCalledWith("JamCams_00001");
     expect(result).toBe(detail);
   });
 
   it("nps prefix calls getNpsDetail", async () => {
-    const raw = { id: "nps:ABC-123" };
+    const raw = { id: "us-nps:ABC-123" };
     const detail = {
-      id: "nps:ABC-123",
-      sources: ["nps"],
+      id: "us-nps:ABC-123",
+      sources: ["us-nps"],
       name: "Yellowstone",
       coordinates: [-110, 44] as [number, number],
       sections: [],
@@ -347,25 +377,42 @@ describe("webcamProvider.getDetail", () => {
     vi.mocked(getNpsDetail).mockResolvedValue(raw as never);
     vi.mocked(mapNpsToDetail).mockReturnValue(detail);
 
-    const result = (await webcamProvider.getDetail("nps:ABC-123")).data;
+    const result = (await webcamProvider.getDetail("us-nps:ABC-123")).data;
     expect(getNpsDetail).toHaveBeenCalledWith("ABC-123");
     expect(result).toBe(detail);
   });
 
-  it("dot- prefix calls getDotDetail", async () => {
-    const raw = { id: "dot-ny:Skyline-123" };
+  it("US state source prefix calls getUsStateSourceDetail", async () => {
+    const raw = { id: "us-ny-511:Skyline-123" };
     const detail = {
-      id: "dot-ny:Skyline-123",
-      sources: ["dot-ny"],
+      id: "us-ny-511:Skyline-123",
+      sources: ["us-ny-511"],
       name: "I-87 at Exit 5",
       coordinates: [-73.8, 41.0] as [number, number],
       sections: [],
     };
-    vi.mocked(getDotDetail).mockResolvedValue(raw as never);
-    vi.mocked(mapDotToDetail).mockReturnValue(detail);
+    vi.mocked(getUsStateSourceDetail).mockResolvedValue(raw as never);
+    vi.mocked(mapUsStateSourceToDetail).mockReturnValue(detail);
 
-    const result = (await webcamProvider.getDetail("dot-ny:Skyline-123")).data;
-    expect(getDotDetail).toHaveBeenCalledWith("dot-ny:Skyline-123");
+    const result = (await webcamProvider.getDetail("us-ny-511:Skyline-123")).data;
+    expect(getUsStateSourceDetail).toHaveBeenCalledWith("us-ny-511:Skyline-123");
+    expect(result).toBe(detail);
+  });
+
+  it("registered camera-source prefix dispatches to its adapter", async () => {
+    const raw = { id: "fi-digitraffic-webcam:C01503" };
+    const detail = {
+      id: "fi-digitraffic-webcam:C01503",
+      sources: ["fi-digitraffic-webcam"],
+      name: "Inkoo",
+      coordinates: [24, 60] as [number, number],
+      sections: [],
+    };
+    vi.mocked(getCameraSourceDetail).mockResolvedValue(raw as never);
+    vi.mocked(mapCameraSourceToDetail).mockReturnValue(detail);
+
+    const result = (await webcamProvider.getDetail("fi-digitraffic-webcam:C01503")).data;
+    expect(getCameraSourceDetail).toHaveBeenCalledWith("fi-digitraffic-webcam:C01503");
     expect(result).toBe(detail);
   });
 

@@ -52,75 +52,120 @@
       "dataSent": "Bounding box coordinates via Overpass API",
       "dataReceived": "OSM nodes with webcam URL, name, operator, direction"
     },
-    "caltrans": {
+    "us-ca-caltrans": {
       "purpose": "California highway traffic cameras (Caltrans CCTV)",
       "dataSent": "No user data (fetches district datasets, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with location, name, still image URL, route/direction"
     },
-    "tfl": {
+    "gb-eng-tfl": {
       "purpose": "London traffic cameras (TfL JamCams)",
       "dataSent": "No user data for catalog fetch; browser loads TfL video media directly when the video clip is displayed",
       "dataReceived": "Traffic cameras with name, coordinates, still image URL, video URL"
     },
-    "nps": {
+    "us-nps": {
       "purpose": "US National Park webcams (NPS)",
       "dataSent": "No user data (fetches entire webcam catalog with pagination, filtered server-side to bounding box)",
       "dataReceived": "Webcams with title, coordinates, image URL, streaming status, related park name/state, tags"
     },
-    "dot-ny": {
+    "us-ny-511": {
       "purpose": "New York State traffic cameras (511NY)",
       "dataSent": "No user data for catalog fetch; browser loads 511NY HLS media directly when the live stream is opened",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, HLS video stream URL, roadway name, direction of travel"
     },
-    "dot-or": {
+    "us-or-tripcheck": {
       "purpose": "Oregon highway traffic cameras (ODOT TripCheck)",
       "dataSent": "No user data (fetches entire camera inventory, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with title, coordinates, still image URL, route name"
     },
-    "dot-ga": {
+    "us-ga-511": {
       "purpose": "Georgia traffic cameras (511GA)",
       "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
     },
-    "dot-fl": {
+    "us-fl-511": {
       "purpose": "Florida traffic cameras (FL511)",
       "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
     },
-    "dot-az": {
+    "us-az-511": {
       "purpose": "Arizona traffic cameras (AZ511)",
       "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
     },
-    "dot-id": {
+    "us-id-511": {
       "purpose": "Idaho traffic cameras (Idaho 511)",
       "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
     },
-    "dot-ut": {
+    "us-ut-511": {
       "purpose": "Utah traffic cameras (Utah 511)",
       "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
     },
-    "dot-la": {
+    "us-la-511": {
       "purpose": "Louisiana traffic cameras (511LA)",
       "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
     },
-    "dot-pa": {
+    "us-pa-511": {
       "purpose": "Pennsylvania traffic cameras (511PA)",
       "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
     },
-    "dot-sc": {
+    "us-sc-511": {
       "purpose": "South Carolina traffic cameras (511SC)",
       "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
     },
-    "dot-ma": {
+    "us-ma-511": {
       "purpose": "Massachusetts traffic cameras (Mass511)",
       "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
+    },
+    "fi-digitraffic-webcam": {
+      "purpose": "Finland road-weather cameras (Digitraffic)",
+      "dataSent": "No user data; the server fetches active stations and proxies the selected still image",
+      "dataReceived": "Camera stations with coordinates, image identifier and update time"
+    },
+    "se-trafikverket": {
+      "purpose": "Sweden traffic cameras (Trafikverket)",
+      "dataSent": "Operator API key in a server-side XML request",
+      "dataReceived": "Camera names, coordinates, image URLs, road and direction"
+    },
+    "no-npra": {
+      "purpose": "Norway road cameras (NPRA DATEX)",
+      "dataSent": "Operator DATEX credentials in a server-side HTTP Basic request",
+      "dataReceived": "CCTV site metadata, coordinates, image URLs, road and direction"
+    },
+    "is-road-administration": {
+      "purpose": "Iceland road cameras (Road and Coastal Administration)",
+      "dataSent": "No user data; the full public catalog is fetched server-side and filtered to the map area",
+      "dataReceived": "Camera names, coordinates, road description and still-image URL"
+    },
+    "es-dgt-webcam": {
+      "purpose": "Spain state-road traffic cameras (DGT DATEX II)",
+      "dataSent": "No user data; the public DATEX catalog and displayed still images are fetched through the server",
+      "dataReceived": "Camera identifiers, coordinates, road/destination and image URL"
+    },
+    "ca-ontario": {
+      "purpose": "Ontario traffic cameras (Ontario 511)",
+      "dataSent": "No user data; the public camera catalog and displayed still images are fetched through the server",
+      "dataReceived": "Camera names, coordinates, roadway, direction and snapshot URL"
+    },
+    "hk-transport": {
+      "purpose": "Hong Kong traffic snapshot cameras",
+      "dataSent": "No user data; the public camera-location catalog and displayed still images are fetched through the server",
+      "dataReceived": "Camera identifiers, coordinates, district, description and snapshot URL"
+    },
+    "au-nsw-webcam": {
+      "purpose": "New South Wales live traffic cameras",
+      "dataSent": "Operator API key in a server-side request",
+      "dataReceived": "Camera GeoJSON with name, coordinates, road, suburb and image URL"
+    },
+    "tw-tdx-webcam": {
+      "purpose": "Taiwan road traffic cameras (TDX)",
+      "dataSent": "Operator OAuth credentials are exchanged server-side; an external live stream is loaded only after user consent",
+      "dataReceived": "CCTV identifiers, coordinates, road/direction and image or stream URL"
     }
   }
 }

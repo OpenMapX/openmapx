@@ -11,33 +11,33 @@ import {
   type Translatable,
   token,
 } from "@openmapx/integration-framework/strings";
-import { withCache } from "../../cache.js";
-import type { RawWebcam } from "../types.js";
-import { az, fl, ga, id as idaho, la, ma, pa, sc, ut } from "./ibi511.js";
-import { ny } from "./ny.js";
-import { or } from "./or.js";
-import { bboxOverlaps, filterByBbox, type StateDotConfig } from "./types.js";
+import { withCache } from "../cache.js";
+import type { RawWebcam } from "./types.js";
+import { az, fl, ga, id as idaho, la, ma, pa, sc, ut } from "./us-ibi511.js";
+import { ny } from "./us-ny-511.js";
+import { or } from "./us-or-tripcheck.js";
+import { bboxOverlaps, filterByBbox, type UsStateCameraSource } from "./us-state-source.js";
 
 let log: Logger | null = null;
 
-export function setDotLogger(logger: Logger): void {
+export function setUsStateSourceLogger(logger: Logger): void {
   log = logger;
 }
 
 /**
- * Registry of all state DOT camera adapters.
- * To add a new state, create a config file and add it here.
+ * Registry of US state camera sources.
+ * To add a state, create a country-prefixed source file and register it here.
  */
-const ALL_STATES: StateDotConfig[] = [ny, or, ga, fl, az, idaho, ut, la, pa, sc, ma];
+const ALL_STATES: UsStateCameraSource[] = [ny, or, ga, fl, az, idaho, ut, la, pa, sc, ma];
 
-function getEnabledStates(): StateDotConfig[] {
+function getEnabledStates(): UsStateCameraSource[] {
   return ALL_STATES.filter((s) => {
     if (!s.requiresApiKey) return true;
     return s.apiKeyEnvVar ? !!process.env[s.apiKeyEnvVar] : false;
   });
 }
 
-export function mapDotToResult(raw: RawWebcam): DataSourceResult {
+export function mapUsStateSourceToResult(raw: RawWebcam): DataSourceResult {
   const direction = raw.direction ?? raw.location?.region;
   return {
     id: raw.id,
@@ -49,7 +49,7 @@ export function mapDotToResult(raw: RawWebcam): DataSourceResult {
   };
 }
 
-export async function searchDot(bbox: BoundingBox): Promise<RawWebcam[]> {
+export async function searchUsStateSources(bbox: BoundingBox): Promise<RawWebcam[]> {
   const enabled = getEnabledStates();
   const overlapping = enabled.filter((s) => bboxOverlaps(bbox, s.bbox));
   if (overlapping.length === 0) return [];
@@ -74,7 +74,7 @@ export async function searchDot(bbox: BoundingBox): Promise<RawWebcam[]> {
   return filterByBbox(allCams, bbox);
 }
 
-export async function getDotDetail(itemId: string): Promise<RawWebcam | null> {
+export async function getUsStateSourceDetail(itemId: string): Promise<RawWebcam | null> {
   const prefix = itemId.split(":")[0];
   const state = getEnabledStates().find((s) => s.sourceId === prefix);
   if (!state) return null;
@@ -83,7 +83,7 @@ export async function getDotDetail(itemId: string): Promise<RawWebcam | null> {
   return allCams.find((r) => r.id === itemId) ?? null;
 }
 
-export function mapDotToDetail(raw: RawWebcam): DataSourceDetail {
+export function mapUsStateSourceToDetail(raw: RawWebcam): DataSourceDetail {
   const sections: DataSourceDetailSection[] = [];
 
   if (raw.thumbnailUrl) {
@@ -129,7 +129,7 @@ export function mapDotToDetail(raw: RawWebcam): DataSourceDetail {
   };
 }
 
-/** Returns list of all registered state DOT source IDs (for filter options). */
-export function getDotSourceIds(): { id: string; label: string }[] {
+/** Returns all enabled US state source IDs for the source filter. */
+export function getUsStateSourceIds(): { id: string; label: string }[] {
   return getEnabledStates().map((s) => ({ id: s.sourceId, label: s.stateName }));
 }

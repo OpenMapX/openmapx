@@ -40,7 +40,7 @@
           "notes": "Free tier returns only low-resolution images, image URLs expire after 10 minutes, and the listing offset is capped (~1000)."
         }
       },
-      "nps-api-key": {
+      "us-nps-api-key": {
         "type": "string",
         "title": "NPS API Key",
         "description": "Get a free key at https://developer.nps.gov/signup/",
@@ -57,10 +57,88 @@
           "notes": "Self-service form on nps.gov; the key arrives by email (developer portal is developer.nps.gov). Delivery is usually near-instant."
         }
       },
-      "dot-ga-api-key": {
+      "se-trafikverket-api-key": {
+        "type": "string",
+        "title": "Trafikverket API Key",
+        "description": "Free account key for Sweden's Trafikverket traffic-information API.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://data.trafikverket.se/oauth2/Account/register",
+          "urlLabel": "Register for Trafikverket API access",
+          "steps": [
+            "Create an account and verify the email address.",
+            "Accept the API licence and create an API key.",
+            "Paste the key used as the XML request authentication key."
+          ],
+          "cost": "Free",
+          "notes": "The Camera object is available through the Trafikverket traffic-information API."
+        }
+      },
+      "no-npra-username": {
+        "type": "string",
+        "title": "NPRA DATEX Username",
+        "description": "Username issued for the Norwegian Public Roads Administration DATEX node.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://dataut.vegvesen.no/dataservice/webkamera-oppdateringer-api",
+          "urlLabel": "Request NPRA DATEX access",
+          "steps": [
+            "Order access to the NPRA DATEX node.",
+            "Save the issued username and password here.",
+            "The CCTV site-table request uses HTTP Basic authentication."
+          ],
+          "cost": "Free",
+          "notes": "Credentials are required even though the underlying data is openly licensed."
+        }
+      },
+      "no-npra-password": {
+        "type": "string",
+        "title": "NPRA DATEX Password",
+        "x-openmapx-secret": true
+      },
+      "au-nsw-webcam-api-key": {
+        "type": "string",
+        "title": "Transport for NSW API Key",
+        "description": "Free API key for the Live Traffic NSW camera GeoJSON feed.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://opendata.transport.nsw.gov.au/dataset/live-traffic-cameras",
+          "urlLabel": "Register for NSW open-data API access",
+          "steps": [
+            "Create a Transport for NSW Open Data account.",
+            "Subscribe to the Live Traffic API product and create an API key.",
+            "Paste the x-api-key value here."
+          ],
+          "cost": "Free",
+          "notes": "The documented camera feed is https://api.transport.nsw.gov.au/v1/live/cameras."
+        }
+      },
+      "tw-tdx-webcam-client-id": {
+        "type": "string",
+        "title": "Taiwan TDX Client ID",
+        "description": "OAuth client ID for Taiwan's Transport Data eXchange.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://tdx.transportdata.tw/",
+          "urlLabel": "Register for TDX",
+          "steps": [
+            "Create a TDX member account.",
+            "Create an application and copy its Client ID and Client Secret.",
+            "Save both values; OpenMapX exchanges them for a short-lived bearer token."
+          ],
+          "cost": "Free",
+          "notes": "CCTV image URLs require an authenticated TDX membership."
+        }
+      },
+      "tw-tdx-webcam-client-secret": {
+        "type": "string",
+        "title": "Taiwan TDX Client Secret",
+        "x-openmapx-secret": true
+      },
+      "us-ga-511-api-key": {
         "type": "string",
         "title": "Georgia 511 API Key",
-        "description": "Register at https://511ga.org/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_DOT_GA_API_KEY instead; saving it here alone will not reach the consumer.",
+        "description": "Register at https://511ga.org/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_GA_511_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://511ga.org/developers/doc",
@@ -75,10 +153,10 @@
           "notes": "Georgia 511 runs the IBI Group / Castle Rock 511 platform. Self-service. Rate limit: 10 calls per 60 seconds."
         }
       },
-      "dot-fl-api-key": {
+      "us-fl-511-api-key": {
         "type": "string",
         "title": "Florida 511 API Key",
-        "description": "Register at https://fl511.com/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_DOT_FL_API_KEY instead; saving it here alone will not reach the consumer.",
+        "description": "Register at https://fl511.com/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_FL_511_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://fl511.com",
@@ -97,10 +175,10 @@
           }
         }
       },
-      "dot-az-api-key": {
+      "us-az-511-api-key": {
         "type": "string",
         "title": "Arizona 511 API Key",
-        "description": "Register at https://az511.com/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_DOT_AZ_API_KEY instead; saving it here alone will not reach the consumer.",
+        "description": "Register at https://az511.com/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_AZ_511_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://az511.com/developers/doc",
@@ -115,10 +193,10 @@
           "notes": "Arizona 511 runs the IBI Group / Castle Rock 511 platform. Self-service. Rate limit: 10 calls per 60 seconds."
         }
       },
-      "dot-id-api-key": {
+      "us-id-511-api-key": {
         "type": "string",
         "title": "Idaho 511 API Key",
-        "description": "Register at https://511.idaho.gov/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_DOT_ID_API_KEY instead; saving it here alone will not reach the consumer.",
+        "description": "Register at https://511.idaho.gov/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_ID_511_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://511.idaho.gov/developers/doc",
@@ -133,10 +211,10 @@
           "notes": "Idaho 511 runs the IBI Group / Castle Rock 511 platform. Self-service. Rate limit: 10 calls per 60 seconds."
         }
       },
-      "dot-ut-api-key": {
+      "us-ut-511-api-key": {
         "type": "string",
         "title": "Utah 511 API Key",
-        "description": "Register at https://prod-ut.ibi511.com/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_DOT_UT_API_KEY instead; saving it here alone will not reach the consumer.",
+        "description": "Register at https://prod-ut.ibi511.com/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_UT_511_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://udottraffic.utah.gov/developers/doc",
@@ -150,10 +228,10 @@
           "notes": "UDOT Traffic 511 runs the IBI Group / Castle Rock platform. Self-service; an account is required first. Rate limit: 10 calls per 60 seconds."
         }
       },
-      "dot-la-api-key": {
+      "us-la-511-api-key": {
         "type": "string",
         "title": "Louisiana 511 API Key",
-        "description": "Register at https://511la.org/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_DOT_LA_API_KEY instead; saving it here alone will not reach the consumer.",
+        "description": "Register at https://511la.org/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_LA_511_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://www.511la.org/developers/doc",
@@ -168,10 +246,10 @@
           "notes": "Louisiana 511 runs the IBI Group / Castle Rock 511 platform. Self-service; an account is required first. Rate limit: 10 calls per 60 seconds."
         }
       },
-      "dot-pa-api-key": {
+      "us-pa-511-api-key": {
         "type": "string",
         "title": "Pennsylvania 511 API Key",
-        "description": "Register at https://www.511pa.com/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_DOT_PA_API_KEY instead; saving it here alone will not reach the consumer.",
+        "description": "Register at https://www.511pa.com/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_PA_511_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://www.pa.gov/agencies/penndot/programs-and-doing-business/online-services/developer-resources-documentation-api",
@@ -191,10 +269,10 @@
           }
         }
       },
-      "dot-sc-api-key": {
+      "us-sc-511-api-key": {
         "type": "string",
         "title": "South Carolina 511 API Key",
-        "description": "Register at https://511sc.org/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_DOT_SC_API_KEY instead; saving it here alone will not reach the consumer.",
+        "description": "Register at https://511sc.org/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_SC_511_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://511sc.org/developers/doc",
@@ -209,10 +287,10 @@
           "notes": "South Carolina 511 runs the IBI Group / Castle Rock 511 platform. Self-service; an account is required first. Rate limit ~10 calls per 60 seconds."
         }
       },
-      "dot-ma-api-key": {
+      "us-ma-511-api-key": {
         "type": "string",
         "title": "Massachusetts 511 API Key",
-        "description": "Register at https://www.mass511.com/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_DOT_MA_API_KEY instead; saving it here alone will not reach the consumer.",
+        "description": "Register at https://www.mass511.com/my511/register. Read by the data-manager POI-ingest process from the environment, NOT from this vault — set INTEGRATION_WEBCAM_US_MA_511_API_KEY instead; saving it here alone will not reach the consumer.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
           "url": "https://www.mass511.com/developers/doc",
@@ -248,8 +326,57 @@
     {
       "name": "NPS Webcams",
       "type": "http",
-      "urlTemplate": "https://developer.nps.gov/api/v1/webcams?limit=1&api_key=${nps-api-key}",
-      "requiredConfigKeys": ["nps-api-key"]
+      "urlTemplate": "https://developer.nps.gov/api/v1/webcams?limit=1&api_key=${us-nps-api-key}",
+      "requiredConfigKeys": ["us-nps-api-key"]
+    },
+    {
+      "name": "Finland Digitraffic Weathercams",
+      "type": "http",
+      "url": "https://tie.digitraffic.fi/api/weathercam/v1/stations"
+    },
+    {
+      "name": "Sweden Trafikverket Cameras",
+      "type": "ping",
+      "url": "https://api.trafikinfo.trafikverket.se/v2/data.json",
+      "requiredConfigKeys": ["se-trafikverket-api-key"]
+    },
+    {
+      "name": "Norway NPRA DATEX CCTV",
+      "type": "ping",
+      "url": "https://datex-server-get-v3-1.atlas.vegvesen.no/datexapi/GetCCTVSiteTable/pullsnapshotdata",
+      "requiredConfigKeys": ["no-npra-username", "no-npra-password"]
+    },
+    {
+      "name": "Iceland Road Cameras",
+      "type": "http",
+      "url": "https://gagnaveita.vegagerdin.is/api/vefmyndavelar2014_1"
+    },
+    {
+      "name": "Spain DGT Cameras",
+      "type": "http",
+      "url": "https://nap.dgt.es/datex2/v3/dgt/DevicePublication/camaras_datex2_v37.xml"
+    },
+    {
+      "name": "Ontario 511 Cameras",
+      "type": "http",
+      "url": "https://511on.ca/api/v2/get/cameras?format=json"
+    },
+    {
+      "name": "Hong Kong Traffic Cameras",
+      "type": "http",
+      "url": "https://static.data.gov.hk/td/traffic-snapshot-images/code/Traffic_Camera_Locations_En.csv"
+    },
+    {
+      "name": "Live Traffic NSW Cameras",
+      "type": "ping",
+      "url": "https://api.transport.nsw.gov.au/v1/live/cameras",
+      "requiredConfigKeys": ["au-nsw-webcam-api-key"]
+    },
+    {
+      "name": "Taiwan TDX CCTV",
+      "type": "ping",
+      "url": "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token",
+      "requiredConfigKeys": ["tw-tdx-webcam-client-id", "tw-tdx-webcam-client-secret"]
     },
     {
       "name": "Caltrans CCTV",
@@ -274,56 +401,56 @@
     {
       "name": "511GA",
       "type": "http",
-      "urlTemplate": "https://511ga.org/api/v2/get/cameras?key=${dot-ga-api-key}&format=json",
-      "requiredConfigKeys": ["dot-ga-api-key"]
+      "urlTemplate": "https://511ga.org/api/v2/get/cameras?key=${us-ga-511-api-key}&format=json",
+      "requiredConfigKeys": ["us-ga-511-api-key"]
     },
     {
       "name": "FL511",
       "type": "http",
-      "urlTemplate": "https://fl511.com/api/v2/get/cameras?key=${dot-fl-api-key}&format=json",
-      "requiredConfigKeys": ["dot-fl-api-key"]
+      "urlTemplate": "https://fl511.com/api/v2/get/cameras?key=${us-fl-511-api-key}&format=json",
+      "requiredConfigKeys": ["us-fl-511-api-key"]
     },
     {
       "name": "AZ511",
       "type": "http",
-      "urlTemplate": "https://az511.com/api/v2/get/cameras?key=${dot-az-api-key}&format=json",
-      "requiredConfigKeys": ["dot-az-api-key"]
+      "urlTemplate": "https://az511.com/api/v2/get/cameras?key=${us-az-511-api-key}&format=json",
+      "requiredConfigKeys": ["us-az-511-api-key"]
     },
     {
       "name": "Idaho 511",
       "type": "http",
-      "urlTemplate": "https://511.idaho.gov/api/v2/get/cameras?key=${dot-id-api-key}&format=json",
-      "requiredConfigKeys": ["dot-id-api-key"]
+      "urlTemplate": "https://511.idaho.gov/api/v2/get/cameras?key=${us-id-511-api-key}&format=json",
+      "requiredConfigKeys": ["us-id-511-api-key"]
     },
     {
       "name": "Utah 511",
       "type": "http",
-      "urlTemplate": "https://prod-ut.ibi511.com/api/v2/get/cameras?key=${dot-ut-api-key}&format=json",
-      "requiredConfigKeys": ["dot-ut-api-key"]
+      "urlTemplate": "https://prod-ut.ibi511.com/api/v2/get/cameras?key=${us-ut-511-api-key}&format=json",
+      "requiredConfigKeys": ["us-ut-511-api-key"]
     },
     {
       "name": "511LA",
       "type": "http",
-      "urlTemplate": "https://511la.org/api/v2/get/cameras?key=${dot-la-api-key}&format=json",
-      "requiredConfigKeys": ["dot-la-api-key"]
+      "urlTemplate": "https://511la.org/api/v2/get/cameras?key=${us-la-511-api-key}&format=json",
+      "requiredConfigKeys": ["us-la-511-api-key"]
     },
     {
       "name": "511PA",
       "type": "http",
-      "urlTemplate": "https://www.511pa.com/api/v2/get/cameras?key=${dot-pa-api-key}&format=json",
-      "requiredConfigKeys": ["dot-pa-api-key"]
+      "urlTemplate": "https://www.511pa.com/api/v2/get/cameras?key=${us-pa-511-api-key}&format=json",
+      "requiredConfigKeys": ["us-pa-511-api-key"]
     },
     {
       "name": "511SC",
       "type": "http",
-      "urlTemplate": "https://511sc.org/api/v2/get/cameras?key=${dot-sc-api-key}&format=json",
-      "requiredConfigKeys": ["dot-sc-api-key"]
+      "urlTemplate": "https://511sc.org/api/v2/get/cameras?key=${us-sc-511-api-key}&format=json",
+      "requiredConfigKeys": ["us-sc-511-api-key"]
     },
     {
       "name": "Mass511",
       "type": "http",
-      "urlTemplate": "https://www.mass511.com/api/v2/get/cameras?key=${dot-ma-api-key}&format=json",
-      "requiredConfigKeys": ["dot-ma-api-key"]
+      "urlTemplate": "https://www.mass511.com/api/v2/get/cameras?key=${us-ma-511-api-key}&format=json",
+      "requiredConfigKeys": ["us-ma-511-api-key"]
     },
     {
       "name": "OpenStreetMap Overpass",
@@ -365,7 +492,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "caltrans",
+      "sourceId": "us-ca-caltrans",
       "name": "Caltrans CCTV",
       "url": "https://cwwp2.dot.ca.gov/",
       "license": "Public domain",
@@ -379,7 +506,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "tfl",
+      "sourceId": "gb-eng-tfl",
       "name": "Transport for London",
       "url": "https://tfl.gov.uk/",
       "license": "Proprietary (OGL v2 with TfL amendments)",
@@ -394,7 +521,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "nps",
+      "sourceId": "us-nps",
       "name": "National Park Service Webcams",
       "url": "https://www.nps.gov/subjects/watchingwildlife/webcams.htm",
       "license": "Public domain (US federal government)",
@@ -408,7 +535,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "dot-ny",
+      "sourceId": "us-ny-511",
       "name": "NYSDOT 511NY",
       "url": "https://511ny.org/",
       "license": "Public data",
@@ -422,7 +549,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "dot-or",
+      "sourceId": "us-or-tripcheck",
       "name": "Oregon DOT TripCheck",
       "url": "https://tripcheck.com/",
       "license": "Government data",
@@ -436,7 +563,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "dot-ga",
+      "sourceId": "us-ga-511",
       "name": "Georgia DOT 511",
       "url": "https://511ga.org/",
       "license": "Proprietary (state DOT terms)",
@@ -450,7 +577,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "dot-fl",
+      "sourceId": "us-fl-511",
       "name": "Florida DOT 511",
       "url": "https://fl511.com/",
       "license": "Proprietary (state DOT terms, personal use only)",
@@ -464,7 +591,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "dot-az",
+      "sourceId": "us-az-511",
       "name": "Arizona DOT 511",
       "url": "https://az511.com/",
       "license": "Proprietary (state DOT terms)",
@@ -478,7 +605,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "dot-id",
+      "sourceId": "us-id-511",
       "name": "Idaho DOT 511",
       "url": "https://511.idaho.gov/",
       "license": "Proprietary (state DOT terms, not for resale)",
@@ -492,7 +619,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "dot-ut",
+      "sourceId": "us-ut-511",
       "name": "Utah DOT 511",
       "url": "https://prod-ut.ibi511.com/",
       "license": "Proprietary (state DOT terms)",
@@ -506,7 +633,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "dot-la",
+      "sourceId": "us-la-511",
       "name": "Louisiana DOT 511",
       "url": "https://511la.org/",
       "license": "Proprietary (state DOT terms)",
@@ -520,7 +647,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "dot-pa",
+      "sourceId": "us-pa-511",
       "name": "Pennsylvania DOT 511",
       "url": "https://www.511pa.com/",
       "license": "Proprietary (state DOT terms, no commercial use)",
@@ -534,7 +661,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "dot-sc",
+      "sourceId": "us-sc-511",
       "name": "South Carolina DOT 511",
       "url": "https://511sc.org/",
       "license": "Proprietary (state DOT terms)",
@@ -548,7 +675,7 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "dot-ma",
+      "sourceId": "us-ma-511",
       "name": "Massachusetts DOT 511",
       "url": "https://www.mass511.com/",
       "license": "Proprietary (state DOT terms)",
@@ -557,6 +684,150 @@
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.mass.gov/privacypolicy",
       "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "fi-digitraffic-webcam",
+      "name": "Digitraffic Weather Cameras",
+      "url": "https://www.digitraffic.fi/en/road-traffic/",
+      "apiHosts": ["tie.digitraffic.fi", "weathercam.digitraffic.fi"],
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://www.digitraffic.fi/en/terms-of-service/",
+      "attribution": "Contains data from Digitraffic / Fintraffic, licensed under CC BY 4.0",
+      "commercialUse": "yes",
+      "providerCountry": "FI",
+      "providerPrivacyUrl": "https://www.fintraffic.fi/en/privacy-policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "se-trafikverket",
+      "name": "Trafikverket Traffic Cameras",
+      "url": "https://www.trafikverket.se/e-tjanster/trafikverkets-oppna-api-for-trafikinformation/",
+      "apiHosts": ["api.trafikinfo.trafikverket.se"],
+      "license": "CC0 1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "attribution": "Trafikverket Open Data",
+      "commercialUse": "yes",
+      "providerCountry": "SE",
+      "providerPrivacyUrl": "https://www.trafikverket.se/om-oss/om-webbplatsen/personuppgifter/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "no-npra",
+      "name": "Norwegian Public Roads Administration CCTV",
+      "url": "https://dataut.vegvesen.no/dataservice/webkamera-oppdateringer-api",
+      "apiHosts": ["datex-server-get-v3-1.atlas.vegvesen.no", "kamera.atlas.vegvesen.no"],
+      "license": "Norwegian Licence for Open Government Data (NLOD) 2.0",
+      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
+      "attribution": "Norwegian Public Roads Administration",
+      "commercialUse": "yes",
+      "providerCountry": "NO",
+      "providerPrivacyUrl": "https://www.vegvesen.no/en/about-us/privacy/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "is-road-administration",
+      "name": "Iceland Road Administration Web Cameras",
+      "url": "https://www.vegagerdin.is/vegagerdin/gagnasafn/vefthjonustur/vefmyndavelar",
+      "apiHosts": ["gagnaveita.vegagerdin.is", "vegagerdin.is"],
+      "license": "Icelandic Road and Coastal Administration terms (free reuse with attribution)",
+      "licenseUrl": "https://www.vegagerdin.is/vegagerdin/gagnasafn/vefthjonustur/terms-and-conditions",
+      "attribution": "Icelandic Road and Coastal Administration",
+      "commercialUse": "yes",
+      "providerCountry": "IS",
+      "providerPrivacyUrl": "https://www.vegagerdin.is/vegagerdin/personuvernd",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "es-dgt-webcam",
+      "name": "DGT DATEX II Traffic Cameras",
+      "url": "https://nap.dgt.es/es/dataset/camaras-dgt-datex2-v3-7",
+      "apiHosts": ["etraffic.dgt.es"],
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Dirección General de Tráfico (DGT)",
+      "commercialUse": "yes",
+      "providerCountry": "ES",
+      "providerPrivacyUrl": "https://www.dgt.es/politica-privacidad/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "ca-ontario",
+      "name": "Ontario 511 Traffic Cameras",
+      "url": "https://511on.ca/developers/resources",
+      "apiHosts": ["511on.ca"],
+      "license": "Ontario Open Government Licence",
+      "licenseUrl": "https://www.ontario.ca/page/open-government-licence-ontario",
+      "attribution": "Ontario 511 / Ministry of Transportation",
+      "commercialUse": "yes",
+      "providerCountry": "CA",
+      "providerPrivacyUrl": "https://511on.ca/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "hk-transport",
+      "name": "Hong Kong Traffic Snapshot Images",
+      "url": "https://data.gov.hk/en-data/dataset/hk-td-tis_2-traffic-snapshot-images",
+      "apiHosts": ["static.data.gov.hk", "tdcctv.data.one.gov.hk"],
+      "license": "Hong Kong Government Information Public Licence",
+      "licenseUrl": "https://data.gov.hk/en/terms-and-conditions",
+      "attribution": "Hong Kong Transport Department",
+      "commercialUse": "yes",
+      "providerCountry": "HK",
+      "providerPrivacyUrl": "https://www.gov.hk/en/about/helpdesk/privacy.htm",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "au-nsw-webcam",
+      "name": "Live Traffic NSW Cameras",
+      "url": "https://opendata.transport.nsw.gov.au/dataset/live-traffic-cameras",
+      "apiHosts": ["api.transport.nsw.gov.au", "webcams.transport.nsw.gov.au"],
+      "license": "Creative Commons Attribution 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Transport for NSW",
+      "commercialUse": "yes",
+      "providerCountry": "AU",
+      "providerPrivacyUrl": "https://www.transport.nsw.gov.au/about-us/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "tw-tdx-webcam",
+      "name": "Taiwan Transport Data eXchange CCTV",
+      "url": "https://tdx.transportdata.tw/api-service/swagger/basic/7f07d940-91a4-495d-9465-1c9df89d709c",
+      "apiHosts": ["tdx.transportdata.tw", "freeway.gov.tw"],
+      "license": "Government Open Data License, Version 1.0",
+      "licenseUrl": "https://data.gov.tw/en/license",
+      "attribution": "Ministry of Transportation and Communications, Taiwan",
+      "commercialUse": "yes",
+      "providerCountry": "TW",
+      "providerPrivacyUrl": "https://tdx.transportdata.tw/terms",
+      "endUserExposure": "mixed",
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false

@@ -29,6 +29,15 @@ describe("image-proxy isAllowedHost (SSRF allowlist)", () => {
     "live.staticflickr.com",
     "api.entur.io",
     "tile.openstreetmap.org",
+    "weathercam.digitraffic.fi",
+    "api.trafikinfo.trafikverket.se",
+    "kamera.atlas.vegvesen.no",
+    "www.vegagerdin.is",
+    "etraffic.dgt.es",
+    "511on.ca",
+    "tdcctv.data.one.gov.hk",
+    "webcams.transport.nsw.gov.au",
+    "cctvn01.freeway.gov.tw",
   ])("allows exact allowlisted host %s", (host) => {
     expect(isAllowedHost(host)).toBe(true);
   });

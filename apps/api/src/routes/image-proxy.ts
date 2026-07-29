@@ -65,6 +65,15 @@ const ALLOWED_HOSTS = [
   "ibi511.com", // shared ibi511 host (Utah uses prod-ut.ibi511.com)
   "511la.org", // Louisiana 511
   "511pa.com", // Pennsylvania 511 (covers www.511pa.com)
+  "weathercam.digitraffic.fi", // Finland Digitraffic weather cameras
+  "api.trafikinfo.trafikverket.se", // Sweden Trafikverket camera stills
+  "kamera.atlas.vegvesen.no", // Norway NPRA camera stills
+  "vegagerdin.is", // Iceland Road Administration camera stills
+  "etraffic.dgt.es", // Spain DGT camera stills
+  "511on.ca", // Ontario 511 camera stills
+  "tdcctv.data.one.gov.hk", // Hong Kong Transport Department camera stills
+  "webcams.transport.nsw.gov.au", // Live Traffic NSW camera stills
+  "freeway.gov.tw", // Taiwan freeway camera stills
 ];
 
 /**

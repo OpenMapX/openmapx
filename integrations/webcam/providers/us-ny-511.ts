@@ -1,6 +1,6 @@
 import { fetchJson } from "@openmapx/core";
-import type { RawWebcam } from "../types.js";
-import type { StateDotConfig } from "./types.js";
+import type { RawWebcam } from "./types.js";
+import type { UsStateCameraSource } from "./us-state-source.js";
 
 interface Ny511Camera {
   Latitude: number;
@@ -15,10 +15,10 @@ interface Ny511Camera {
   Blocked: boolean;
 }
 
-export const ny: StateDotConfig = {
+export const ny: UsStateCameraSource = {
   stateCode: "ny",
   stateName: "New York",
-  sourceId: "dot-ny",
+  sourceId: "us-ny-511",
   bbox: { south: 40.4, west: -79.8, north: 45.1, east: -71.8 },
   requiresApiKey: false,
 
@@ -34,10 +34,10 @@ export const ny: StateDotConfig = {
       if (!cam.Latitude || !cam.Longitude) continue;
 
       results.push({
-        id: `dot-ny:${cam.ID}`,
+        id: `us-ny-511:${cam.ID}`,
         name: cam.Name,
         coordinates: [cam.Longitude, cam.Latitude],
-        source: "dot-ny",
+        source: "us-ny-511",
         variant: "traffic",
         thumbnailUrl: cam.Url,
         streamUrl: cam.VideoUrl ?? undefined,

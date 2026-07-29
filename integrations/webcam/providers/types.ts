@@ -105,6 +105,7 @@ export interface RawWebcam {
   lastUpdated?: string;
   viewCount?: number;
   direction?: string;
+  road?: string;
   categories?: string[];
   location?: { city?: string; region?: string; country?: string };
 }

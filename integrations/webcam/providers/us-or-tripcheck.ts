@@ -1,6 +1,6 @@
 import { fetchJson } from "@openmapx/core";
-import type { RawWebcam } from "../types.js";
-import type { StateDotConfig } from "./types.js";
+import type { RawWebcam } from "./types.js";
+import type { UsStateCameraSource } from "./us-state-source.js";
 
 interface TripCheckFeature {
   attributes: {
@@ -23,10 +23,10 @@ interface TripCheckResponse {
 
 const IMAGE_BASE = "https://tripcheck.com/RoadCams/cams/";
 
-export const or: StateDotConfig = {
+export const or: UsStateCameraSource = {
   stateCode: "or",
   stateName: "Oregon",
-  sourceId: "dot-or",
+  sourceId: "us-or-tripcheck",
   bbox: { south: 41.9, west: -124.7, north: 46.3, east: -116.5 },
   requiresApiKey: false,
 
@@ -44,10 +44,10 @@ export const or: StateDotConfig = {
       if (!a.latitude || !a.longitude) continue;
 
       results.push({
-        id: `dot-or:${a.cameraId}`,
+        id: `us-or-tripcheck:${a.cameraId}`,
         name: a.title,
         coordinates: [a.longitude, a.latitude],
-        source: "dot-or",
+        source: "us-or-tripcheck",
         variant: "traffic",
         thumbnailUrl: `${IMAGE_BASE}${a.filename}`,
         direction: a.route?.trim() || undefined,

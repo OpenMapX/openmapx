@@ -1,20 +1,20 @@
 import type { BoundingBox } from "@openmapx/core";
-import type { RawWebcam } from "../types.js";
+import type { RawWebcam } from "./types.js";
 
 /**
- * Defines a single state DOT camera data source.
- * Implement this interface to add a new state.
+ * Defines one US state camera source.
+ * Implement this interface to add another state feed.
  */
-export interface StateDotConfig {
+export interface UsStateCameraSource {
   /** Short lowercase state code, e.g. "ny", "or" */
   readonly stateCode: string;
   /** Human-readable label, e.g. "New York" */
   readonly stateName: string;
-  /** Source ID used in manifest dataSources, e.g. "dot-ny" */
+  /** Source ID used in manifest dataSources, e.g. "us-ny-511" */
   readonly sourceId: string;
   /** Rough bounding box for the state (used for fast bbox overlap check) */
   readonly bbox: { south: number; west: number; north: number; east: number };
-  /** Whether this adapter needs an API key */
+  /** Whether this source needs an API key */
   readonly requiresApiKey: boolean;
   /** Env var name for the API key, if required */
   readonly apiKeyEnvVar?: string;

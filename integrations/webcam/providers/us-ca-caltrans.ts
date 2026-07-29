@@ -61,10 +61,10 @@ async function fetchDistrict(districtId: number): Promise<RawWebcam[]> {
     if (Number.isNaN(lat) || Number.isNaN(lng)) continue;
 
     results.push({
-      id: `caltrans:${c.location.district}:${c.index}`,
+      id: `us-ca-caltrans:${c.location.district}:${c.index}`,
       name: c.location.locationName || `Caltrans D${c.location.district} #${c.index}`,
       coordinates: [lng, lat],
-      source: "caltrans",
+      source: "us-ca-caltrans",
       variant: "traffic",
       thumbnailUrl: c.imageData?.static?.currentImageURL,
       streamUrl: c.imageData?.streamingVideoURL,
@@ -102,7 +102,9 @@ export async function searchCaltrans(bbox: BoundingBox): Promise<RawWebcam[]> {
   if (overlapping.length === 0) return [];
 
   const districtResults = await Promise.allSettled(
-    overlapping.map((d) => withCache(`webcam:caltrans:d${d.id}`, 3600, () => fetchDistrict(d.id))),
+    overlapping.map((d) =>
+      withCache(`webcam:us-ca-caltrans:d${d.id}`, 3600, () => fetchDistrict(d.id)),
+    ),
   );
 
   const allResults: RawWebcam[] = [];
@@ -122,8 +124,8 @@ export async function getCaltransDetail(
   const dId = Number.parseInt(districtId, 10);
   if (Number.isNaN(dId)) return null;
 
-  const results = await withCache(`webcam:caltrans:d${dId}`, 3600, () => fetchDistrict(dId));
-  const targetId = `caltrans:${districtId}:${index}`;
+  const results = await withCache(`webcam:us-ca-caltrans:d${dId}`, 3600, () => fetchDistrict(dId));
+  const targetId = `us-ca-caltrans:${districtId}:${index}`;
   return results.find((r) => r.id === targetId) ?? null;
 }
 
@@ -156,7 +158,7 @@ export function mapCaltransToDetail(raw: RawWebcam): DataSourceDetail {
 
   return {
     id: raw.id,
-    sources: ["caltrans"],
+    sources: ["us-ca-caltrans"],
     name: raw.name,
     coordinates: raw.coordinates,
     sections,

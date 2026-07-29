@@ -1,11 +1,11 @@
 import { isI18nToken } from "@openmapx/integration-framework/strings";
 import { describe, expect, it } from "vitest";
-import { mapCaltransToDetail, mapCaltransToResult } from "../caltrans.js";
-import { mapDotToDetail, mapDotToResult } from "../dot/index.js";
-import { mapNpsToDetail } from "../nps.js";
+import { mapTflToDetail, mapTflToResult } from "../gb-eng-tfl.js";
 import { mapOsmToDetail, mapOsmToResult } from "../osm.js";
-import { mapTflToDetail, mapTflToResult } from "../tfl.js";
 import type { RawWebcam } from "../types.js";
+import { mapCaltransToDetail, mapCaltransToResult } from "../us-ca-caltrans.js";
+import { mapNpsToDetail } from "../us-nps.js";
+import { mapUsStateSourceToDetail, mapUsStateSourceToResult } from "../us-state-sources.js";
 import { mapWindyToDetail } from "../windy.js";
 
 function makeRaw(overrides: Partial<RawWebcam> = {}): RawWebcam {
@@ -47,14 +47,14 @@ function assertSectionsAreTokens(sections: { title: unknown; rows?: unknown[][] 
 }
 
 describe("webcam mappers emit I18nToken for section titles and row labels", () => {
-  it("caltrans", () => {
-    const raw = makeRaw({ source: "caltrans" });
+  it("us-ca-caltrans", () => {
+    const raw = makeRaw({ source: "us-ca-caltrans" });
     assertSectionsAreTokens(mapCaltransToDetail(raw).sections);
     expect(isI18nToken(mapCaltransToResult(raw).summary)).toBe(true);
   });
 
-  it("nps", () => {
-    const raw = makeRaw({ source: "nps" });
+  it("us-nps", () => {
+    const raw = makeRaw({ source: "us-nps" });
     assertSectionsAreTokens(mapNpsToDetail(raw).sections);
   });
 
@@ -69,8 +69,8 @@ describe("webcam mappers emit I18nToken for section titles and row labels", () =
     expect(isI18nToken(mapOsmToResult(raw).summary)).toBe(true);
   });
 
-  it("tfl", () => {
-    const raw = makeRaw({ source: "tfl" });
+  it("gb-eng-tfl", () => {
+    const raw = makeRaw({ source: "gb-eng-tfl" });
     assertSectionsAreTokens(mapTflToDetail(raw).sections);
     expect(isI18nToken(mapTflToResult(raw).summary)).toBe(true);
   });
@@ -80,11 +80,11 @@ describe("webcam mappers emit I18nToken for section titles and row labels", () =
     assertSectionsAreTokens(mapWindyToDetail(raw).sections);
   });
 
-  it("dot", () => {
-    const raw = makeRaw({ source: "dot-ny" });
-    assertSectionsAreTokens(mapDotToDetail(raw).sections);
-    // dot summary is a passthrough string (raw.direction), no token needed.
-    const summary = mapDotToResult(raw).summary;
+  it("US state source", () => {
+    const raw = makeRaw({ source: "us-ny-511" });
+    assertSectionsAreTokens(mapUsStateSourceToDetail(raw).sections);
+    // The summary may be a passthrough string from raw.direction.
+    const summary = mapUsStateSourceToResult(raw).summary;
     expect(typeof summary === "string" || isI18nToken(summary)).toBe(true);
   });
 });

@@ -13,23 +13,30 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
 import {
+  getCameraSourceDetail,
+  getCameraSourceIds,
+  mapCameraSourceToDetail,
+  mapCameraSourceToResult,
+  searchCameraSources,
+} from "./camera-sources.js";
+import { deduplicateByCoordinates } from "./dedup.js";
+import { getTflDetail, mapTflToDetail, mapTflToResult, searchTfl } from "./gb-eng-tfl.js";
+import { getOsmWebcamNode, mapOsmToDetail, mapOsmToResult, searchOsmWebcams } from "./osm.js";
+import type { RawWebcam } from "./types.js";
+import {
   getCaltransDetail,
   mapCaltransToDetail,
   mapCaltransToResult,
   searchCaltrans,
-} from "./caltrans.js";
-import { deduplicateByCoordinates } from "./dedup.js";
+} from "./us-ca-caltrans.js";
+import { getNpsDetail, mapNpsToDetail, mapNpsToResult, searchNps } from "./us-nps.js";
 import {
-  getDotDetail,
-  getDotSourceIds,
-  mapDotToDetail,
-  mapDotToResult,
-  searchDot,
-} from "./dot/index.js";
-import { getNpsDetail, mapNpsToDetail, mapNpsToResult, searchNps } from "./nps.js";
-import { getOsmWebcamNode, mapOsmToDetail, mapOsmToResult, searchOsmWebcams } from "./osm.js";
-import { getTflDetail, mapTflToDetail, mapTflToResult, searchTfl } from "./tfl.js";
-import type { RawWebcam } from "./types.js";
+  getUsStateSourceDetail,
+  getUsStateSourceIds,
+  mapUsStateSourceToDetail,
+  mapUsStateSourceToResult,
+  searchUsStateSources,
+} from "./us-state-sources.js";
 import { getWindyDetail, mapWindyToDetail, mapWindyToResult, searchWindy } from "./windy.js";
 
 // Manifest-driven attribution. Populated by `setManifestDataSources` during
@@ -64,10 +71,11 @@ function buildSourceFilterOptions(): { id: string; label: string }[] {
   return [
     { id: "windy", label: "Windy" },
     { id: "osm", label: "OpenStreetMap" },
-    { id: "caltrans", label: "Caltrans" },
-    { id: "tfl", label: "TfL London" },
-    { id: "nps", label: "US National Parks" },
-    ...getDotSourceIds(),
+    { id: "us-ca-caltrans", label: "Caltrans" },
+    { id: "gb-eng-tfl", label: "TfL London" },
+    { id: "us-nps", label: "US National Parks" },
+    ...getUsStateSourceIds(),
+    ...getCameraSourceIds(),
   ];
 }
 
@@ -116,15 +124,23 @@ class WebcamProvider implements MobilityDataSourceProvider {
     bbox: BoundingBox,
     filters?: Record<string, unknown>,
   ): Promise<MobilityResult<DataSourceResult[]>> {
-    const [windyResult, osmResult, caltransResult, tflResult, npsResult, dotResult] =
-      await Promise.allSettled([
-        searchWindy(bbox),
-        searchOsmWebcams(bbox),
-        searchCaltrans(bbox),
-        searchTfl(bbox),
-        searchNps(bbox),
-        searchDot(bbox),
-      ]);
+    const [
+      windyResult,
+      osmResult,
+      caltransResult,
+      tflResult,
+      npsResult,
+      usStateResult,
+      cameraSourceResult,
+    ] = await Promise.allSettled([
+      searchWindy(bbox),
+      searchOsmWebcams(bbox),
+      searchCaltrans(bbox),
+      searchTfl(bbox),
+      searchNps(bbox),
+      searchUsStateSources(bbox),
+      searchCameraSources(bbox),
+    ]);
 
     const mapAndCollect = (
       result: PromiseSettledResult<RawWebcam[]>,
@@ -137,7 +153,8 @@ class WebcamProvider implements MobilityDataSourceProvider {
       ...mapAndCollect(caltransResult, mapCaltransToResult),
       ...mapAndCollect(tflResult, mapTflToResult),
       ...mapAndCollect(npsResult, mapNpsToResult),
-      ...mapAndCollect(dotResult, mapDotToResult),
+      ...mapAndCollect(usStateResult, mapUsStateSourceToResult),
+      ...mapAndCollect(cameraSourceResult, mapCameraSourceToResult),
       ...mapAndCollect(osmResult, mapOsmToResult),
     ];
 
@@ -180,8 +197,8 @@ class WebcamProvider implements MobilityDataSourceProvider {
       return raw ? await mapOsmToDetail(raw) : null;
     }
 
-    if (itemId.startsWith("caltrans:")) {
-      const rest = itemId.slice("caltrans:".length);
+    if (itemId.startsWith("us-ca-caltrans:")) {
+      const rest = itemId.slice("us-ca-caltrans:".length);
       const colonIdx = rest.indexOf(":");
       if (colonIdx < 0) return null;
       const districtId = rest.slice(0, colonIdx);
@@ -190,24 +207,25 @@ class WebcamProvider implements MobilityDataSourceProvider {
       return raw ? mapCaltransToDetail(raw) : null;
     }
 
-    if (itemId.startsWith("tfl:")) {
-      const cameraId = itemId.slice("tfl:".length);
+    if (itemId.startsWith("gb-eng-tfl:")) {
+      const cameraId = itemId.slice("gb-eng-tfl:".length);
       const raw = await getTflDetail(cameraId);
       return raw ? mapTflToDetail(raw) : null;
     }
 
-    if (itemId.startsWith("nps:")) {
-      const webcamId = itemId.slice("nps:".length);
+    if (itemId.startsWith("us-nps:")) {
+      const webcamId = itemId.slice("us-nps:".length);
       const raw = await getNpsDetail(webcamId);
       return raw ? mapNpsToDetail(raw) : null;
     }
 
-    if (itemId.startsWith("dot-")) {
-      const raw = await getDotDetail(itemId);
-      return raw ? mapDotToDetail(raw) : null;
+    if (getUsStateSourceIds().some((source) => itemId.startsWith(`${source.id}:`))) {
+      const stateRaw = await getUsStateSourceDetail(itemId);
+      return stateRaw ? mapUsStateSourceToDetail(stateRaw) : null;
     }
 
-    return null;
+    const sourceRaw = await getCameraSourceDetail(itemId);
+    return sourceRaw ? mapCameraSourceToDetail(sourceRaw) : null;
   }
 }
 

@@ -66,10 +66,10 @@ function mapNpsToRaw(cam: NpsWebcam): RawWebcam | null {
   }
 
   return {
-    id: `nps:${cam.id}`,
+    id: `us-nps:${cam.id}`,
     name: cam.title,
     coordinates: [cam.longitude, cam.latitude],
-    source: "nps",
+    source: "us-nps",
     variant: "landscape",
     thumbnailUrl,
     detailUrl: cam.url,
@@ -127,7 +127,7 @@ export function mapNpsToResult(raw: RawWebcam): DataSourceResult {
 }
 
 export async function searchNps(bbox: BoundingBox): Promise<RawWebcam[]> {
-  const allCams = await withCache("webcam:nps:all", 3600, fetchAllNps);
+  const allCams = await withCache("webcam:us-nps:all", 3600, fetchAllNps);
 
   return allCams.filter((r) => {
     const [lng, lat] = r.coordinates;
@@ -136,8 +136,8 @@ export async function searchNps(bbox: BoundingBox): Promise<RawWebcam[]> {
 }
 
 export async function getNpsDetail(webcamId: string): Promise<RawWebcam | null> {
-  const allCams = await withCache("webcam:nps:all", 3600, fetchAllNps);
-  const targetId = `nps:${webcamId}`;
+  const allCams = await withCache("webcam:us-nps:all", 3600, fetchAllNps);
+  const targetId = `us-nps:${webcamId}`;
   return allCams.find((r) => r.id === targetId) ?? null;
 }
 
@@ -171,7 +171,7 @@ export function mapNpsToDetail(raw: RawWebcam): DataSourceDetail {
 
   return {
     id: raw.id,
-    sources: ["nps"],
+    sources: ["us-nps"],
     name: raw.name,
     coordinates: raw.coordinates,
     sections,

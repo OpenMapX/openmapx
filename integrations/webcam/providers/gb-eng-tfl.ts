@@ -24,10 +24,10 @@ function mapTflToRaw(cam: TflJamCam): RawWebcam | null {
   if (getTflProp(cam, "available") === "false") return null;
 
   return {
-    id: `tfl:${cam.id}`,
+    id: `gb-eng-tfl:${cam.id}`,
     name: cam.commonName,
     coordinates: [cam.lon, cam.lat],
-    source: "tfl",
+    source: "gb-eng-tfl",
     variant: "traffic",
     thumbnailUrl: getTflProp(cam, "imageUrl"),
     streamUrl: getTflProp(cam, "videoUrl"),
@@ -56,7 +56,7 @@ export function mapTflToResult(raw: RawWebcam): DataSourceResult {
 }
 
 export async function searchTfl(bbox: BoundingBox): Promise<RawWebcam[]> {
-  const allCams = await withCache("webcam:tfl:all", 3600, fetchAllJamCams);
+  const allCams = await withCache("webcam:gb-eng-tfl:all", 3600, fetchAllJamCams);
 
   return allCams.filter((r) => {
     const [lng, lat] = r.coordinates;
@@ -65,8 +65,8 @@ export async function searchTfl(bbox: BoundingBox): Promise<RawWebcam[]> {
 }
 
 export async function getTflDetail(cameraId: string): Promise<RawWebcam | null> {
-  const allCams = await withCache("webcam:tfl:all", 3600, fetchAllJamCams);
-  const targetId = `tfl:${cameraId}`;
+  const allCams = await withCache("webcam:gb-eng-tfl:all", 3600, fetchAllJamCams);
+  const targetId = `gb-eng-tfl:${cameraId}`;
   return allCams.find((r) => r.id === targetId) ?? null;
 }
 
@@ -106,7 +106,7 @@ export function mapTflToDetail(raw: RawWebcam): DataSourceDetail {
 
   return {
     id: raw.id,
-    sources: ["tfl"],
+    sources: ["gb-eng-tfl"],
     name: raw.name,
     coordinates: raw.coordinates,
     sections,

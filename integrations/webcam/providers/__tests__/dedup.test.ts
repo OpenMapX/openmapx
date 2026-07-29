@@ -72,7 +72,7 @@ describe("deduplicateByCoordinates", () => {
       makeResult({ id: "windy:1", coordinates: [13.377, 52.52], source: "windy" }),
       makeResult({ id: "osm-webcam:1", coordinates: [13.37704, 52.52003], source: "osm" }),
       makeResult({ id: "windy:2", coordinates: [13.4, 52.55], source: "windy" }),
-      makeResult({ id: "tfl:1", coordinates: [-0.1, 51.5], source: "tfl" }),
+      makeResult({ id: "gb-eng-tfl:1", coordinates: [-0.1, 51.5], source: "gb-eng-tfl" }),
     ];
     const deduped = deduplicateByCoordinates(results);
     expect(deduped).toHaveLength(3);

@@ -1660,6 +1660,9 @@ importers:
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../../packages/place-ids
+      fast-xml-parser:
+        specifier: ^5.8.0
+        version: 5.10.1
 
   packages/cli:
     dependencies:

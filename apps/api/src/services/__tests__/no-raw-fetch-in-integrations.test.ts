@@ -60,6 +60,8 @@ const RAW_FETCH_ALLOWLIST: Record<string, string> = {
     "isOtpAvailable() reachability probe: reads only res.ok, never the body",
   "integrations/webcam/providers/osm.ts":
     "checkUrlReachable() HEAD probe: reads only res.ok, never the body",
+  "integrations/webcam/providers/traffic-camera.ts":
+    "Hong Kong uses UTF-16 CSV and Spain/Norway use XML, so raw response bodies are parsed with bounded requests",
 };
 
 // Matches a bare, unqualified `fetch(` call — NOT `fetchJson(`,
