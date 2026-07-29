@@ -98,6 +98,7 @@ COPY packages/mobility-formats/ packages/mobility-formats/
 COPY packages/poi-source-registry/ packages/poi-source-registry/
 COPY packages/transitous-core/ packages/transitous-core/
 COPY packages/core/ packages/core/
+COPY packages/mobility-core/ packages/mobility-core/
 COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
 COPY services/data-manager/ services/data-manager/
 
