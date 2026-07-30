@@ -43,6 +43,8 @@ function makeState(overrides: Record<string, unknown> = {}): Record<string, unkn
     attempt_started_at: null,
     phase_started_at: null,
     completed_at: null,
+    workspace_cleaned_at: null,
+    release_files_pruned_at: null,
     updated_at: new Date("2026-07-28T00:00:00Z"),
     ...overrides,
   };
@@ -64,6 +66,7 @@ function dependencies() {
     validateFusedQuality: vi.fn(async () => ({ applicableCases: 1, cases: [] })),
     publish: vi.fn(async () => ({ linked: 7 })),
     cleanup: vi.fn(async () => undefined),
+    preflight: vi.fn(async () => undefined),
   };
 }
 
@@ -72,9 +75,12 @@ beforeEach(() => {
   mocks.unsafe.mockReset();
   mocks.unsafe.mockImplementation(async (query: string, params: unknown[] = []) => {
     if (query.includes("RETURNING release, region, place_count")) {
+      const restart = params[2] === true;
       state = {
         ...state,
         status: "running",
+        phase: restart ? "extract" : state.phase,
+        source_fingerprint: restart ? null : state.source_fingerprint,
         attempt_count: Number(state.attempt_count) + 1,
         phase_started_at: new Date(),
         updated_at: new Date(),
@@ -118,6 +124,8 @@ beforeEach(() => {
         linked_count: String(params[0]),
         staged_link_count: String(params[0]),
       };
+    } else if (query.includes("workspace_cleaned_at = COALESCE")) {
+      state = { ...state, workspace_cleaned_at: new Date() };
     } else if (query.includes("SET") && query.includes("status = 'failed'")) {
       state = { ...state, status: "failed", last_error: params[0] };
     } else if (query.includes("status = 'waiting_for_osm'")) {
@@ -174,6 +182,7 @@ describe("rebuildOvertureLinks", () => {
     expect(deps.validateFusedQuality).toHaveBeenCalled();
     expect(deps.publish).toHaveBeenCalled();
     expect(deps.cleanup).toHaveBeenCalled();
+    expect(deps.preflight).toHaveBeenCalledWith("overture_places");
   });
 
   it("resumes scoring from its durable keyset cursor without extracting again", async () => {
@@ -217,12 +226,65 @@ describe("rebuildOvertureLinks", () => {
     expect(deps.publish).not.toHaveBeenCalled();
   });
 
+  it("records a failed capacity preflight without starting extraction", async () => {
+    const deps = dependencies();
+    deps.preflight.mockRejectedValueOnce(new Error("insufficient PostGIS capacity"));
+
+    await expect(rebuildOvertureLinksUnlocked(OPTIONS, deps as never)).resolves.toEqual({
+      status: "failed",
+      linked: 0,
+      phase: "extract",
+      error: "insufficient PostGIS capacity",
+    });
+    expect(deps.extract).not.toHaveBeenCalled();
+    expect(state).toEqual(
+      expect.objectContaining({
+        status: "failed",
+        last_error: "insufficient PostGIS capacity",
+      }),
+    );
+  });
+
   it("does not run a completed release unless explicitly restarted", async () => {
     state = makeState({ status: "completed", phase: "complete", linked_count: "7" });
     const deps = dependencies();
     const result = await rebuildOvertureLinksUnlocked(OPTIONS, deps as never);
     expect(result).toEqual({ status: "already_completed", linked: 7 });
     expect(deps.extract).not.toHaveBeenCalled();
+    expect(deps.cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not repeat cleanup after durable workspace finalization", async () => {
+    state = makeState({
+      status: "completed",
+      phase: "complete",
+      linked_count: "7",
+      workspace_cleaned_at: new Date("2026-07-28T01:00:00Z"),
+    });
+    const deps = dependencies();
+    await expect(rebuildOvertureLinksUnlocked(OPTIONS, deps as never)).resolves.toEqual({
+      status: "already_completed",
+      linked: 7,
+    });
+    expect(deps.cleanup).not.toHaveBeenCalled();
+    expect(deps.preflight).not.toHaveBeenCalled();
+  });
+
+  it("automatically rebuilds a completed release when the OSM fingerprint changes", async () => {
+    state = makeState({
+      status: "completed",
+      phase: "complete",
+      linked_count: "7",
+      source_fingerprint: "older-pbf",
+    });
+    const deps = dependencies();
+    deps.fingerprint.mockReturnValue("newer-pbf");
+
+    const result = await rebuildOvertureLinksUnlocked(OPTIONS, deps as never);
+
+    expect(result).toEqual(expect.objectContaining({ status: "completed", linked: 7 }));
+    expect(deps.extract).toHaveBeenCalledTimes(1);
+    expect(mocks.unsafe).toHaveBeenCalledWith(expect.stringContaining("TRUNCATE TABLE"));
   });
 
   it("moves a claimed attempt to waiting_for_osm when the PBF is absent", async () => {

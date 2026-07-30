@@ -50,7 +50,27 @@ export function assertValidOvertureSchema(name: string): void {
  *     sidesteps the conversion and is adequate for equality/grouping blocking.
  *   - geom is GEOMETRY(POINT,4326) (not geography) for lower-cost bbox/&& ops.
  */
-export function buildSchemaDDL(schema: string): string {
+export interface BuildOvertureSchemaOptions {
+  /** Bulk ingest maintains these more cheaply when they are built after load. */
+  deferPlacesIndexes?: boolean;
+}
+
+export function buildPlacesIndexesDDL(schema: string): string {
+  assertValidOvertureSchema(schema);
+  return `
+    CREATE INDEX idx_overture_geom ON "${schema}".places USING GIST (geom);
+    CREATE INDEX idx_overture_h3   ON "${schema}".places (h3_r8);
+    CREATE INDEX idx_overture_basic_category ON "${schema}".places (basic_category);
+    CREATE INDEX idx_overture_taxonomy_primary ON "${schema}".places (taxonomy_primary);
+    CREATE INDEX idx_overture_taxonomy_hierarchy
+      ON "${schema}".places USING GIN (taxonomy_hierarchy);
+    CREATE INDEX idx_overture_taxonomy_alternates
+      ON "${schema}".places USING GIN (taxonomy_alternates);
+  `;
+}
+
+export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptions = {}): string {
+  assertValidOvertureSchema(schema);
   return (
     `
     CREATE EXTENSION IF NOT EXISTS postgis;
@@ -80,15 +100,6 @@ export function buildSchemaDDL(schema: string): string {
       release           TEXT NOT NULL,
       imported_at       TIMESTAMPTZ DEFAULT NOW()
     );
-
-    CREATE INDEX idx_overture_geom ON "${schema}".places USING GIST (geom);
-    CREATE INDEX idx_overture_h3   ON "${schema}".places (h3_r8);
-    CREATE INDEX idx_overture_basic_category ON "${schema}".places (basic_category);
-    CREATE INDEX idx_overture_taxonomy_primary ON "${schema}".places (taxonomy_primary);
-    CREATE INDEX idx_overture_taxonomy_hierarchy
-      ON "${schema}".places USING GIN (taxonomy_hierarchy);
-    CREATE INDEX idx_overture_taxonomy_alternates
-      ON "${schema}".places USING GIN (taxonomy_alternates);
 
     CREATE TABLE "${schema}".poi_conflation_link (
       osm_type          TEXT NOT NULL,
@@ -179,9 +190,12 @@ export function buildSchemaDDL(schema: string): string {
       attempt_started_at TIMESTAMPTZ,
       phase_started_at  TIMESTAMPTZ,
       completed_at      TIMESTAMPTZ,
+      workspace_cleaned_at TIMESTAMPTZ,
+      release_files_pruned_at TIMESTAMPTZ,
       updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   ` +
+    (options.deferPlacesIndexes ? "" : buildPlacesIndexesDDL(schema)) +
     buildOsmPoisTableDDL(schema) +
     buildEmbeddingCacheDDL(schema)
   );

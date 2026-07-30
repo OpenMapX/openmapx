@@ -26,7 +26,11 @@ interface OvertureStatus {
   placeCount?: number;
   status?: string;
   phase?: string;
+  emittedCount?: number | null;
+  extractedCount?: number | null;
   processedCount?: number | null;
+  componentCount?: number | null;
+  assignmentCursor?: number | null;
   linkedCount?: number | null;
   attemptCount?: number;
   lastError?: string | null;
@@ -35,6 +39,54 @@ interface OvertureStatus {
 }
 
 type Operation = "overture-sync" | "overture-conflate";
+
+export function overtureProgress(status: OvertureStatus | undefined): {
+  value: number | null;
+  label: string;
+} | null {
+  if (status?.status !== "running") return null;
+  if (
+    status.phase === "score" &&
+    status.extractedCount &&
+    status.processedCount !== null &&
+    status.processedCount !== undefined
+  ) {
+    return {
+      value: Math.min(100, (status.processedCount / status.extractedCount) * 100),
+      label: `${status.processedCount.toLocaleString()} of ${status.extractedCount.toLocaleString()} OSM POIs scored`,
+    };
+  }
+  if (
+    status.phase === "assign" &&
+    status.componentCount &&
+    status.assignmentCursor !== null &&
+    status.assignmentCursor !== undefined
+  ) {
+    return {
+      value: Math.min(100, (status.assignmentCursor / status.componentCount) * 100),
+      label: `${status.assignmentCursor.toLocaleString()} of ${status.componentCount.toLocaleString()} components assigned`,
+    };
+  }
+  const label =
+    status.phase === "extract"
+      ? `${status.emittedCount?.toLocaleString() ?? "0"} OSM geometries streamed`
+      : status.phase === "publish"
+        ? "Validating and publishing links"
+        : "Preparing Overture conflation";
+  return { value: null, label };
+}
+
+export function canResumeOvertureLinks(
+  status: OvertureStatus | undefined,
+  region: string,
+  operationPending: boolean,
+): boolean {
+  return (
+    region.trim().length > 0 &&
+    !operationPending &&
+    (status?.status !== "running" || status.stalled === true)
+  );
+}
 
 export function OvertureMaintenance({ apiUrl }: { apiUrl: string }) {
   const showToast = useAdminToast();
@@ -83,10 +135,7 @@ export function OvertureMaintenance({ apiUrl }: { apiUrl: string }) {
   });
 
   const status = statusQuery.data;
-  const progress =
-    status?.placeCount && status.processedCount !== null && status.processedCount !== undefined
-      ? Math.min(100, (status.processedCount / status.placeCount) * 100)
-      : null;
+  const progress = overtureProgress(status);
   const visiblePhase =
     status?.status === "completed" && status.phase === "complete" ? undefined : status?.phase;
 
@@ -136,6 +185,13 @@ export function OvertureMaintenance({ apiUrl }: { apiUrl: string }) {
           {status.lastError}
         </Alert>
       )}
+      {status?.stalled && (
+        <Alert severity="warning" sx={{ mt: 1.5 }}>
+          The worker heartbeat is stale
+          {status.heartbeatAgeMs ? ` (${Math.floor(status.heartbeatAgeMs / 60_000)} minutes)` : ""}.
+          The expired lease can be reclaimed safely with Resume links.
+        </Alert>
+      )}
 
       {status?.ok && (
         <Stack direction="row" sx={{ gap: 3, flexWrap: "wrap", mt: 1.5 }}>
@@ -157,12 +213,14 @@ export function OvertureMaintenance({ apiUrl }: { apiUrl: string }) {
           ))}
         </Stack>
       )}
-      {progress !== null && status?.status === "running" && (
+      {progress && (
         <Box sx={{ mt: 1.5 }}>
-          <LinearProgress variant="determinate" value={progress} />
+          <LinearProgress
+            variant={progress.value === null ? "indeterminate" : "determinate"}
+            value={progress.value ?? undefined}
+          />
           <Typography variant="caption" sx={{ color: "text.secondary" }}>
-            {status.processedCount?.toLocaleString()} of {status.placeCount?.toLocaleString()}{" "}
-            places
+            {progress.label}
           </Typography>
         </Box>
       )}
@@ -189,7 +247,7 @@ export function OvertureMaintenance({ apiUrl }: { apiUrl: string }) {
         <Button
           variant="outlined"
           startIcon={<MergeIcon />}
-          disabled={!region.trim() || operation.isPending || status?.status === "running"}
+          disabled={!canResumeOvertureLinks(status, region, operation.isPending)}
           onClick={() => setConfirmOperation("overture-conflate")}
         >
           Resume links

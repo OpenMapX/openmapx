@@ -2,6 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { sql } from "../../db/index.js";
 import { osmPbfName } from "../download-osm.js";
+import { assertOverturePostgresCapacity, estimateOvertureConflationBytes } from "./capacity.js";
 import {
   assignOvertureCandidates,
   cleanupOvertureConflationWorkspace,
@@ -48,6 +49,8 @@ export interface ConflationState {
   attemptStartedAt: Date | null;
   phaseStartedAt: Date | null;
   completedAt: Date | null;
+  workspaceCleanedAt: Date | null;
+  releaseFilesPrunedAt: Date | null;
   updatedAt: Date;
 }
 
@@ -87,11 +90,15 @@ interface RebuildDependencies {
   validateFusedQuality: typeof validateFusedOvertureQuality;
   publish: typeof publishOvertureLinks;
   cleanup: typeof cleanupOvertureConflationWorkspace;
+  preflight: (schema: string) => Promise<void>;
 }
 
 export function fingerprintOsmSnapshot(path: string): string {
   const stat = statSync(path);
-  return `${stat.size}:${Math.trunc(stat.mtimeMs)}`;
+  // Atomic downloads can legitimately preserve size and modification time.
+  // Device/inode identity makes replacement detection robust without hashing
+  // a multi-gigabyte country PBF on every 15-minute retry.
+  return `${stat.dev}:${stat.ino}:${stat.size}:${Math.trunc(stat.mtimeMs)}`;
 }
 
 const defaultDependencies: RebuildDependencies = {
@@ -103,6 +110,12 @@ const defaultDependencies: RebuildDependencies = {
   validateFusedQuality: validateFusedOvertureQuality,
   publish: publishOvertureLinks,
   cleanup: cleanupOvertureConflationWorkspace,
+  preflight: (schema) =>
+    assertOverturePostgresCapacity({
+      schema,
+      stage: "PostGIS conflation workspace",
+      workingBytes: estimateOvertureConflationBytes,
+    }),
 };
 
 interface StateRow {
@@ -130,6 +143,8 @@ interface StateRow {
   attempt_started_at: Date | string | null;
   phase_started_at: Date | string | null;
   completed_at: Date | string | null;
+  workspace_cleaned_at: Date | string | null;
+  release_files_pruned_at: Date | string | null;
   updated_at: Date | string;
 }
 
@@ -139,7 +154,8 @@ const STATE_COLUMNS = `release, region, place_count::TEXT, status, phase, attemp
   assignment_cursor::TEXT, staged_link_count::TEXT, linked_count::TEXT,
   score_cursor_h3, score_cursor_type, score_cursor_id::TEXT,
   phase_durations_ms, last_error, started_at, attempt_started_at,
-  phase_started_at, completed_at, updated_at`;
+  phase_started_at, completed_at, workspace_cleaned_at,
+  release_files_pruned_at, updated_at`;
 
 function numeric(value: string | null): number | null {
   return value === null ? null : Number(value);
@@ -182,6 +198,8 @@ function mapState(row: StateRow): ConflationState {
     attemptStartedAt: timestamp(row.attempt_started_at, "attempt_started_at"),
     phaseStartedAt: timestamp(row.phase_started_at, "phase_started_at"),
     completedAt: timestamp(row.completed_at, "completed_at"),
+    workspaceCleanedAt: timestamp(row.workspace_cleaned_at, "workspace_cleaned_at"),
+    releaseFilesPrunedAt: timestamp(row.release_files_pruned_at, "release_files_pruned_at"),
     updatedAt: timestamp(row.updated_at, "updated_at"),
   };
 }
@@ -198,8 +216,12 @@ export async function getOvertureConflationState(
       [],
     );
     return rows[0] ? mapState(rows[0]) : null;
-  } catch {
-    return null;
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    // A missing schema/table is the only expected "not installed" state.
+    // Operational database failures must remain visible to callers.
+    if (code === "3F000" || code === "42P01") return null;
+    throw error;
   }
 }
 
@@ -242,6 +264,20 @@ async function stateAfterTransition(schema: string): Promise<ConflationState> {
   return state;
 }
 
+async function finalizeWorkspace(
+  schema: string,
+  attemptCount: number,
+  cleanup: RebuildDependencies["cleanup"],
+): Promise<void> {
+  await cleanup(schema);
+  await sql.unsafe(
+    `UPDATE "${schema}".conflation_state
+     SET workspace_cleaned_at = COALESCE(workspace_cleaned_at, NOW()), updated_at = NOW()
+     WHERE singleton = 1 AND status = 'completed' AND attempt_count = $1`,
+    [attemptCount],
+  );
+}
+
 /**
  * Rebuilds OSM↔Overture links as a durable state machine. Extraction, scoring,
  * component assignment, and publication are independent retry boundaries.
@@ -271,11 +307,28 @@ export async function rebuildOvertureLinksUnlocked(
         `${current.region}@${current.release}`,
     );
   }
-  if (current.status === "completed" && !opts.force) {
+  const pbfPath = join(opts.dataDir, "osm", osmPbfName(opts.region));
+  const pbfExists = dependencies.fileExists(pbfPath);
+  const sourceFingerprint = pbfExists ? dependencies.fingerprint(pbfPath) : null;
+  const sourceChanged =
+    sourceFingerprint !== null &&
+    current.sourceFingerprint !== null &&
+    current.sourceFingerprint !== sourceFingerprint;
+  const restart = opts.force === true || sourceChanged;
+
+  if (current.status === "completed" && !restart) {
+    if (current.workspaceCleanedAt === null) {
+      try {
+        await finalizeWorkspace(schema, current.attemptCount, dependencies.cleanup);
+      } catch (cleanupError) {
+        opts.onProgress?.(
+          `Conflation is complete; retry workspace cleanup remains deferred: ${(cleanupError as Error).message}`,
+        );
+      }
+    }
     return { status: "already_completed", linked: current.linkedCount ?? 0 };
   }
 
-  const pbfPath = join(opts.dataDir, "osm", osmPbfName(opts.region));
   const claimed = await sql.unsafe<StateRow[]>(
     `UPDATE "${schema}".conflation_state
      SET status = 'running', attempt_count = attempt_count + 1,
@@ -292,6 +345,9 @@ export async function rebuildOvertureLinksUnlocked(
          score_cursor_type = CASE WHEN $3::BOOLEAN THEN NULL ELSE score_cursor_type END,
          score_cursor_id = CASE WHEN $3::BOOLEAN THEN NULL ELSE score_cursor_id END,
          phase_durations_ms = CASE WHEN $3::BOOLEAN THEN '{}'::JSONB ELSE phase_durations_ms END,
+         workspace_cleaned_at = CASE WHEN $3::BOOLEAN THEN NULL ELSE workspace_cleaned_at END,
+         release_files_pruned_at =
+           CASE WHEN $3::BOOLEAN THEN NULL ELSE release_files_pruned_at END,
          last_error = NULL,
          started_at = CASE WHEN $3::BOOLEAN OR started_at IS NULL THEN NOW() ELSE started_at END,
          attempt_started_at = NOW(), phase_started_at = NOW(), completed_at = NULL,
@@ -300,7 +356,7 @@ export async function rebuildOvertureLinksUnlocked(
        AND ($3::BOOLEAN OR status <> 'completed')
        AND (status <> 'running' OR updated_at < NOW() - INTERVAL '30 minutes')
      RETURNING ${STATE_COLUMNS}`,
-    [release, opts.region, opts.force === true],
+    [release, opts.region, restart],
   );
   let state = claimed[0] ? mapState(claimed[0]) : null;
   if (!state) {
@@ -311,7 +367,7 @@ export async function rebuildOvertureLinksUnlocked(
     return { status: "already_running", linked: latest?.linkedCount ?? 0 };
   }
 
-  if (!dependencies.fileExists(pbfPath)) {
+  if (!pbfExists) {
     await sql.unsafe(
       `UPDATE "${schema}".conflation_state
        SET status = 'waiting_for_osm', last_error = $1, updated_at = NOW()
@@ -322,15 +378,8 @@ export async function rebuildOvertureLinksUnlocked(
     return { status: "waiting_for_osm", linked: current.linkedCount ?? 0, pbfPath };
   }
 
-  const sourceFingerprint = dependencies.fingerprint(pbfPath);
-  if (opts.force || (state.sourceFingerprint && state.sourceFingerprint !== sourceFingerprint)) {
-    opts.onProgress?.(
-      opts.force
-        ? "Explicit restart requested; discarding durable conflation workspace..."
-        : "OSM snapshot changed; restarting conflation from extraction...",
-    );
-    await resetForNewSource(schema, state.attemptCount, sourceFingerprint);
-    state = await stateAfterTransition(schema);
+  if (sourceFingerprint === null) {
+    throw new Error(`OSM PBF disappeared before conflation at ${pbfPath}`);
   }
   const attemptCount = state.attemptCount;
   const leaseHeartbeat = setInterval(() => {
@@ -354,6 +403,17 @@ export async function rebuildOvertureLinksUnlocked(
   };
 
   try {
+    await dependencies.preflight(schema);
+    if (restart) {
+      opts.onProgress?.(
+        opts.force === true
+          ? "Explicit restart requested; discarding durable conflation workspace..."
+          : "OSM snapshot changed; restarting conflation from extraction...",
+      );
+      await resetForNewSource(schema, state.attemptCount, sourceFingerprint);
+      state = await stateAfterTransition(schema);
+    }
+
     if (state.phase === "extract") {
       opts.onProgress?.(
         `Conflation attempt ${state.attemptCount}, phase extract: streaming the OSM snapshot...`,
@@ -483,6 +543,9 @@ export async function rebuildOvertureLinksUnlocked(
     }
 
     if (state.phase === "publish") {
+      if (dependencies.fingerprint(pbfPath) !== sourceFingerprint) {
+        throw new Error("OSM PBF changed before link publication; retrying from the new snapshot");
+      }
       opts.onProgress?.(
         `Conflation attempt ${state.attemptCount}, phase publish: atomically activating links...`,
       );
@@ -497,7 +560,7 @@ export async function rebuildOvertureLinksUnlocked(
       );
       state = await stateAfterTransition(schema);
       try {
-        await dependencies.cleanup(schema);
+        await finalizeWorkspace(schema, state.attemptCount, dependencies.cleanup);
       } catch (cleanupError) {
         opts.onProgress?.(
           `Conflation completed; retry workspace cleanup deferred: ${(cleanupError as Error).message}`,

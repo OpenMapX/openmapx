@@ -236,6 +236,10 @@ describe("Overture cron gating", () => {
       throw new Error("STAC unavailable");
     });
     const syncOvertureRelease = vi.fn();
+    const finalizeOvertureReleaseFiles = vi.fn(async () => ({
+      retained: ["2026-07-22.0"],
+      removed: [],
+    }));
     const rebuildOvertureLinks = vi.fn(async () => ({
       status: "completed" as const,
       linked: 23,
@@ -261,6 +265,7 @@ describe("Overture cron gating", () => {
       getInstalledOvertureRelease: async () => "2026-07-22.0",
       syncOvertureRelease,
       rebuildOvertureLinks,
+      finalizeOvertureReleaseFiles,
     });
 
     await handles.runOvertureConflationRetryNow();
@@ -269,6 +274,9 @@ describe("Overture cron gating", () => {
     );
     expect(discoverOvertureRelease).not.toHaveBeenCalled();
     expect(syncOvertureRelease).not.toHaveBeenCalled();
+    expect(finalizeOvertureReleaseFiles).toHaveBeenCalledWith(
+      expect.objectContaining({ activeRelease: "2026-07-22.0" }),
+    );
     handles.stop();
   });
 

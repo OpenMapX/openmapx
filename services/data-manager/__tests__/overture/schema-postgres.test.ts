@@ -1,10 +1,10 @@
-// Requires Docker. CI opts out of testcontainers through the same convention
-// as the POI-ingest end-to-end suite.
+// Requires Docker. It is part of CI and can be explicitly disabled only for a
+// local environment without a container runtime.
 import { describe, expect, it } from "vitest";
 import { buildSchemaDDL } from "../../src/jobs/overture/schema.js";
 import { startPostgis } from "../poi-ingest/_testcontainer.js";
 
-const skipE2e = process.env.CI === "true" || process.env.SKIP_TESTCONTAINERS === "1";
+const skipE2e = process.env.SKIP_TESTCONTAINERS === "1";
 
 describe.skipIf(skipE2e)("Overture schema in PostGIS", () => {
   it("creates the scalable conflation tables and enforces one release-local state row", async () => {

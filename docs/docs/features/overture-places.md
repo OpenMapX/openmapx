@@ -12,8 +12,12 @@ than enrich OSM records: a place present only in Overture is returned as its own
 search result and opens as a complete place card with a stable GERS identifier.
 
 The integration is optional. Without it, category search continues to use OSM
-through Overpass. With it enabled, OpenMapX queries both sources, matches records
-that describe the same real-world place, and keeps unmatched Overture records as
+through Overpass. Activating it has two layers: enable the data lifecycle with
+`OVERTURE_ENABLED=true`, then enable `poi-overture` for search and
+`knowledge-overture` for place-card enrichment in **Admin → Integrations**.
+These runtime integrations are independent, so an operator may enable either or
+both. With both enabled, OpenMapX queries both sources, matches records that
+describe the same real-world place, and keeps unmatched Overture records as
 coverage gap-fill.
 
 ## Imported fields
@@ -69,11 +73,14 @@ release starts with a durable `pending` link state. The rebuild records
 `extract`, `score`, `assign`, `publish`, and `complete` phases, keyset and
 component cursors, source fingerprint, heartbeats, attempt counts, separate
 emitted-geometry and unique-POI counts, and per-phase durations in PostGIS. A
-failed or interrupted attempt leaves the Places release active and is retried
-every six hours by default. A retry resumes its saved phase: completed OSM
+failed or interrupted attempt leaves the Places release active. Recovery is
+attempted once at data-manager startup and every 15 minutes thereafter. A retry resumes its saved phase: completed OSM
 extraction is not repeated, scoring continues after its last committed keyset
 cursor, and assignment continues after its last completed graph component. If
-the local PBF fingerprint changes, the state safely restarts from extraction.
+the local PBF fingerprint changes—even after a previously completed run—the
+state safely restarts from extraction. Across Overture releases, an unchanged
+OSM table and its fingerprint are moved into the new release in constant time,
+so only Overture-dependent scoring and assignment repeat.
 
 The rebuild is designed for country-scale inputs. OSM GeoJSON sequences are
 parsed directly into fixed-size Postgres batches and published with an atomic
@@ -87,7 +94,11 @@ country-wide scored graph as one object. The completely assigned next-link
 snapshot is durable and replaces the live link table in one transaction, so a
 failed attempt can never expose a partial link set. A PostgreSQL advisory lock
 serializes schema swaps, OSM snapshot publication, and link rebuilding across
-data-manager processes.
+data-manager processes. Temporary filtered PBFs are removed after extraction.
+Capacity checks measure the host `/data` filesystem before a pull and the
+PostgreSQL container's actual data filesystem before staging or conflation.
+Each reserves estimated working space plus a safety margin and fails with an
+actionable byte estimate instead of filling either filesystem.
 
 The staged Places snapshot is checked against release-pinned, human-reviewed
 category cases before activation. After link assignment, the final fused
@@ -98,7 +109,10 @@ including known upstream category mistakes and duplicates.
 
 After a complete ingest, fused quality check, and link publication, OpenMapX
 retains the active local release snapshot and one predecessor by default. Older
-release directories are pruned; incomplete refreshes never trigger pruning.
+release directories are pruned whether publication completed in the original
+sync or an independent retry; incomplete refreshes never trigger pruning.
+Durable finalization markers prevent completed retries from repeatedly
+truncating work tables or rescanning release directories.
 
 Run the complete workflow manually with:
 

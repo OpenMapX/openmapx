@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { redactConnectionString } from "../../src/jobs/overture/duckdb.js";
+import {
+  duckDbScriptProcessOptions,
+  duckDbSqlLiteral,
+  redactConnectionString,
+} from "../../src/jobs/overture/duckdb.js";
 
 describe("redactConnectionString", () => {
   it("redacts the password in a postgresql:// connection string", () => {
@@ -34,5 +38,25 @@ describe("redactConnectionString", () => {
     expect(redactConnectionString("postgres://postgis:5432/openmapx")).toBe(
       "postgres://postgis:5432/openmapx",
     );
+  });
+});
+
+describe("duckDbSqlLiteral", () => {
+  it("escapes credentials and paths containing apostrophes", () => {
+    expect(duckDbSqlLiteral("postgres://user:p'ass@db/openmapx")).toBe(
+      "'postgres://user:p''ass@db/openmapx'",
+    );
+  });
+});
+
+describe("DuckDB secret transport", () => {
+  it("sends SQL via stdin and removes DATABASE_URL from the inherited child environment", () => {
+    const options = duckDbScriptProcessOptions("ATTACH 'secret' AS pg", {
+      PATH: "/bin",
+      DATABASE_URL: "postgresql://user:secret@db/openmapx",
+    });
+    expect(options.input).toBe("ATTACH 'secret' AS pg");
+    expect(options.extendEnv).toBe(false);
+    expect(options.env).toEqual({ PATH: "/bin" });
   });
 });

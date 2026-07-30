@@ -679,13 +679,26 @@ export function registerDataCommands(program: Command): void {
           );
           process.exit(1);
         }
+        if (result.status === "already_running") {
+          log.warn(
+            result.message ??
+              "Overture conflation is still running under another worker; no work was claimed",
+          );
+          return;
+        }
         const linked = result.linked ?? 0;
-        log.ok(
-          `Overture conflation complete: ${linked} link${linked === 1 ? "" : "s"} written` +
-            (result.extracted !== undefined && result.candidates !== undefined
-              ? ` from ${result.extracted} OSM POIs and ${result.candidates} accepted edges`
-              : ""),
-        );
+        if (result.status === "already_completed") {
+          log.ok(
+            `Overture conflation was already complete: ${linked} link${linked === 1 ? "" : "s"} active`,
+          );
+        } else {
+          log.ok(
+            `Overture conflation complete: ${linked} link${linked === 1 ? "" : "s"} written` +
+              (result.extracted !== undefined && result.candidates !== undefined
+                ? ` from ${result.extracted} OSM POIs and ${result.candidates} accepted edges`
+                : ""),
+          );
+        }
       } catch (err) {
         log.err(`overture-conflate failed: ${(err as Error).message}`);
         dataManagerHint();

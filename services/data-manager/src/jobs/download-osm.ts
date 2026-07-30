@@ -3,7 +3,11 @@ import { createReadStream, mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { execa } from "execa";
 import type { DatasetMetadata, StateStore } from "../state.js";
-import { curlAtomic } from "./atomic-download.js";
+import {
+  type CurlAtomicOptions,
+  type CurlAtomicResult,
+  curlAtomicWithResult,
+} from "./atomic-download.js";
 
 export function resolveOsmUrl(region: string): string {
   if (!region) throw new Error("region is required");
@@ -80,6 +84,14 @@ export interface DownloadOsmOptions {
    * callers should leave it enabled.
    */
   verifyChecksum?: boolean;
+  /** Serializes only publication of a validated temp snapshot. */
+  withPublishLock?: CurlAtomicOptions["withPublishLock"];
+  /** Test seam for the staged downloader. */
+  downloadImpl?: (
+    url: string,
+    targetPath: string,
+    options: CurlAtomicOptions,
+  ) => Promise<CurlAtomicResult>;
 }
 
 export interface DownloadOsmResult {
@@ -96,23 +108,39 @@ export async function downloadOsm(opts: DownloadOsmOptions): Promise<DownloadOsm
   mkdirSync(targetDir, { recursive: true });
   const targetPath = join(targetDir, fileName);
 
-  await curlAtomic(url, targetPath, { onProgress: opts.onProgress });
+  let md5: string | undefined;
+  const expected =
+    opts.verifyChecksum === false ? null : await fetchExpectedMd5(resolveOsmMd5Url(url));
+  const download = opts.downloadImpl ?? curlAtomicWithResult;
+  const result = await download(url, targetPath, {
+    onProgress: opts.onProgress,
+    withPublishLock: opts.withPublishLock,
+    beforePublish: async (tempPath) => {
+      if (expected) {
+        const actual = await computeMd5(tempPath);
+        if (actual !== expected) {
+          throw new Error(
+            `OSM PBF checksum mismatch for ${opts.region}: expected ${expected}, got ${actual}. The download is corrupt — re-run to retry.`,
+          );
+        }
+        md5 = actual;
+      }
+    },
+  });
+
+  // A 304 has no temp file to validate, so retain the previous behavior of
+  // verifying the already-published target against the current sidecar.
+  if (!result.published && expected) {
+    const actual = await computeMd5(targetPath);
+    if (actual !== expected) {
+      throw new Error(
+        `OSM PBF checksum mismatch for ${opts.region}: expected ${expected}, got ${actual}. The download is corrupt — re-run to retry.`,
+      );
+    }
+    md5 = actual;
+  }
 
   const sizeBytes = statSync(targetPath).size;
-
-  let md5: string | undefined;
-  if (opts.verifyChecksum !== false) {
-    const expected = await fetchExpectedMd5(resolveOsmMd5Url(url));
-    if (expected) {
-      const actual = await computeMd5(targetPath);
-      if (actual !== expected) {
-        throw new Error(
-          `OSM PBF checksum mismatch for ${opts.region}: expected ${expected}, got ${actual}. The download is corrupt — re-run to retry.`,
-        );
-      }
-      md5 = actual;
-    }
-  }
 
   const meta: DatasetMetadata = {
     type: "osm-pbf",

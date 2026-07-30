@@ -3,11 +3,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  compareOvertureReleases,
   overtureReleaseRetentionFromEnv,
   pruneOvertureReleases,
 } from "../../src/jobs/overture/retention.js";
 
 describe("Overture release retention", () => {
+  it("orders multi-digit revisions numerically", () => {
+    expect(compareOvertureReleases("2026-07-22.10", "2026-07-22.9")).toBeGreaterThan(0);
+    expect(compareOvertureReleases("2026-08-01.0", "2026-07-22.99")).toBeGreaterThan(0);
+  });
+
   it("keeps the active release and one predecessor without touching work directories", () => {
     const dataDir = mkdtempSync(join(tmpdir(), "openmapx-overture-retention-"));
     const root = join(dataDir, "overture");

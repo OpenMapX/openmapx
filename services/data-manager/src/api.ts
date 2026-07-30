@@ -450,6 +450,12 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         store,
         onProgress: (bytes, totalBytes) =>
           stream.writeLine({ event: "progress", bytes, totalBytes }),
+        // Network transfer and checksum verification stay outside the lock;
+        // only the final atomic rename can race Overture fingerprinting.
+        withPublishLock: (publish) =>
+          withOvertureOperationLock(async () => {
+            publish();
+          }),
       });
       stream.writeLine({ event: "done", ok: true, ...result });
     } catch (err) {
@@ -642,7 +648,9 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
               ? result.error
               : result.status === "waiting_for_osm"
                 ? `OSM PBF not found at ${result.pbfPath}`
-                : undefined,
+                : result.status === "already_running"
+                  ? "Another worker still owns the active conflation lease"
+                  : undefined,
           ...result,
         });
       } catch (err) {

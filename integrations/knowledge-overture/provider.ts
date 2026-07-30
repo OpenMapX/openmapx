@@ -74,8 +74,7 @@ function parseOsmRef(ref: string): { type: string; id: bigint } | null {
  * Resolve a GERS id for the given place.
  *
  * Phase 1 — link-first: query poi_conflation_link using the OSM ref from
- * context.ids.osm. The table is empty until plan 03, so this always falls
- * through for now (expected).
+ * context.ids.osm.
  *
  * Phase 2 — spatial+name: find candidates within 150 m of the place
  * coordinates and filter with Overture's own taxonomy hierarchy; pick the one whose name
@@ -84,7 +83,7 @@ function parseOsmRef(ref: string): { type: string; id: bigint } | null {
  * context.ids may be undefined (the neighborhoods call site passes a partial
  * Place with no ids) — falls through to the spatial path without throwing.
  */
-async function resolveGers(
+export async function resolveGers(
   database: DatabaseClient,
   osmTags: Record<string, string>,
   context: KnowledgeContext | undefined,
@@ -131,7 +130,17 @@ async function resolveGers(
     sql = `
       SELECT gers_id, name
       FROM overture_places.places
-      WHERE ST_DWithin(geom::geography, ST_MakePoint($1, $2)::geography, 150)
+      WHERE geom && ST_Envelope(
+        ST_Buffer(
+          ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+          150
+        )::geometry
+      )
+        AND ST_DWithin(
+          geom::geography,
+          ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+          150
+        )
         AND (
           basic_category = ANY($3::TEXT[])
           OR taxonomy_primary = ANY($3::TEXT[])
@@ -139,7 +148,7 @@ async function resolveGers(
           OR taxonomy_alternates && $3::TEXT[]
         )
         AND (operating_status IS NULL OR operating_status <> 'permanently_closed')
-      ORDER BY geom <-> ST_MakePoint($1, $2)::geometry
+      ORDER BY geom <-> ST_SetSRID(ST_MakePoint($1, $2), 4326)
       LIMIT 5
     `;
     params = [lng, lat, concepts];
@@ -147,9 +156,19 @@ async function resolveGers(
     sql = `
       SELECT gers_id, name
       FROM overture_places.places
-      WHERE ST_DWithin(geom::geography, ST_MakePoint($1, $2)::geography, 150)
+      WHERE geom && ST_Envelope(
+        ST_Buffer(
+          ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+          150
+        )::geometry
+      )
+        AND ST_DWithin(
+          geom::geography,
+          ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+          150
+        )
         AND (operating_status IS NULL OR operating_status <> 'permanently_closed')
-      ORDER BY geom <-> ST_MakePoint($1, $2)::geometry
+      ORDER BY geom <-> ST_SetSRID(ST_MakePoint($1, $2), 4326)
       LIMIT 5
     `;
     params = [lng, lat];

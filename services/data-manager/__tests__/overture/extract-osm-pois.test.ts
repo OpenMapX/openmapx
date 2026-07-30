@@ -1,5 +1,9 @@
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  cleanupFilteredOsmPbf,
   deduplicateOsmPoiRecords,
   featureToOsmPoiRecord,
   OSMIUM_EXPORT_STREAM_OPTIONS,
@@ -42,6 +46,15 @@ describe("OSM POI batch deduplication", () => {
 describe("OSM POI export streaming", () => {
   it("disables Execa buffering for country-scale GeoJSON output", () => {
     expect(OSMIUM_EXPORT_STREAM_OPTIONS).toMatchObject({ stdout: "pipe", buffer: false });
+  });
+
+  it("removes the country-scale filtered PBF after export", () => {
+    const dir = mkdtempSync(join(tmpdir(), "openmapx-filtered-pbf-"));
+    const path = join(dir, "region-pois.osm.pbf");
+    writeFileSync(path, "temporary");
+    cleanupFilteredOsmPbf(path);
+    expect(existsSync(path)).toBe(false);
+    rmSync(dir, { recursive: true, force: true });
   });
 });
 

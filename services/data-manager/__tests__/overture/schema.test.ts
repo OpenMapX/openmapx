@@ -70,10 +70,19 @@ describe("current Overture taxonomy schema", () => {
     expect(ddl).toContain('CREATE TABLE "overture_places".conflation_state');
     expect(ddl).toContain("phase             TEXT NOT NULL DEFAULT 'extract'");
     expect(ddl).toContain("phase_durations_ms JSONB NOT NULL");
+    expect(ddl).toContain("workspace_cleaned_at TIMESTAMPTZ");
+    expect(ddl).toContain("release_files_pruned_at TIMESTAMPTZ");
     expect(ddl).toContain("'waiting_for_osm'");
     expect(ddl).toContain("h3_r8     TEXT NOT NULL");
     expect(ddl).not.toContain("confidence DOUBLE PRECISION NOT NULL");
     expect(ddl).not.toContain("openmapx_category");
     expect(ddl).not.toContain("opening_hours");
+  });
+
+  it("can defer Places indexes until after a bulk ingest", () => {
+    const ddl = buildSchemaDDL("overture_places", { deferPlacesIndexes: true });
+    expect(ddl).toContain('CREATE TABLE "overture_places".places');
+    expect(ddl).not.toContain("idx_overture_geom");
+    expect(ddl).not.toContain("idx_overture_taxonomy_hierarchy");
   });
 });

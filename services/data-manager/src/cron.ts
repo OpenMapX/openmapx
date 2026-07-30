@@ -13,6 +13,11 @@ import type { FastifyBaseLogger } from "fastify";
 import { db } from "./db/index.js";
 import { discoverLatestOvertureRelease } from "./jobs/overture/pull.js";
 import { rebuildOvertureLinks } from "./jobs/overture/rebuild-links.js";
+import {
+  compareOvertureReleases,
+  finalizeOvertureReleaseFiles,
+  overtureReleaseRetentionFromEnv,
+} from "./jobs/overture/retention.js";
 import { syncOvertureRegion } from "./jobs/overture/sync.js";
 import {
   type BakePredictedDeps,
@@ -164,9 +169,9 @@ export interface CronSetupOptions {
   runStalenessCheck?: () => Promise<void>;
   /** Test seam: pre-built GitHub sink. Overrides env-var lookup. */
   githubIssueSink?: GithubIssueSink | null;
-  /** Region used by the monthly Overture sync. A Geofabrik path; defaults to OPENMAPX_REGION or "europe/germany/berlin". */
+  /** Region used by the Overture release sync. A Geofabrik path; defaults to OPENMAPX_REGION or "europe/germany/berlin". */
   overtureRegion?: string;
-  /** Override the Overture monthly cron schedule (e.g. for tests). */
+  /** Override the Overture release-check schedule (e.g. for tests). */
   overtureCronExpression?: string;
   /** Retry schedule for the independently durable OSM↔Overture link rebuild. */
   overtureConflationRetryCronExpression?: string;
@@ -185,6 +190,8 @@ export interface CronSetupOptions {
   rebuildOvertureLinks?: typeof rebuildOvertureLinks;
   /** Test seam: persist successful Overture release state. */
   writeOvertureFeedState?: typeof writeFeedState;
+  /** Test seam: finalize successful release-file retention after any completion path. */
+  finalizeOvertureReleaseFiles?: typeof finalizeOvertureReleaseFiles;
   /** Override the traffic-extract guard cron schedule (e.g. for tests). */
   trafficExtractCronExpression?: string;
   /**
@@ -312,7 +319,7 @@ export interface CronHandles {
   runFeedProxyReloadNow: () => Promise<void>;
   /** Test seam: directly invoke the staleness-alert handler. */
   runStalenessCheckNow: () => Promise<void>;
-  /** Test seam: directly invoke the Overture monthly sync handler. */
+  /** Test seam: directly invoke the Overture release sync handler. */
   runOvertureNow: () => Promise<void>;
   /** Test seam: retry link rebuilding without release discovery or Places ingest. */
   runOvertureConflationRetryNow: () => Promise<void>;
@@ -807,13 +814,13 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     options.overtureEnabled ?? (process.env.OVERTURE_ENABLED || "").trim().toLowerCase() === "true";
 
   const overtureExpr = overtureEnabled
-    ? pickCronExpression(options.overtureCronExpression, "OVERTURE_SYNC_CRON", "0 5 1 * *")
+    ? pickCronExpression(options.overtureCronExpression, "OVERTURE_SYNC_CRON", "0 5 * * 2")
     : null;
   const overtureConflationRetryExpr = overtureEnabled
     ? pickCronExpression(
         options.overtureConflationRetryCronExpression,
         "OVERTURE_CONFLATION_RETRY_CRON",
-        "15 */6 * * *",
+        "*/15 * * * *",
       )
     : null;
 
@@ -822,6 +829,8 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       options.overtureRegion ?? (process.env.OPENMAPX_REGION || "europe/germany/berlin");
     const readInstalledRelease = options.getInstalledOvertureRelease ?? getInstalledOvertureRelease;
     const rebuildLinks = options.rebuildOvertureLinks ?? rebuildOvertureLinks;
+    const finalizeReleaseFiles =
+      options.finalizeOvertureReleaseFiles ?? finalizeOvertureReleaseFiles;
     try {
       const release = await readInstalledRelease();
       if (!release) {
@@ -843,6 +852,14 @@ export function setupCron(options: CronSetupOptions): CronHandles {
           err: result.error,
         });
       } else {
+        if (result.status === "completed" || result.status === "already_completed") {
+          await finalizeReleaseFiles({
+            dataDir: options.dataDir,
+            activeRelease: release,
+            retain: overtureReleaseRetentionFromEnv(process.env.OVERTURE_RELEASE_RETENTION),
+            onProgress: (msg) => log.info(msg),
+          });
+        }
         log.info("overture-conflation: retry check complete", {
           region,
           release,
@@ -873,7 +890,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         await runOvertureConflationRetry();
         return;
       }
-      if (installedRelease && installedRelease.localeCompare(release) > 0) {
+      if (installedRelease && compareOvertureReleases(installedRelease, release) > 0) {
         log.warn("overture-cron: installed release is newer than upstream catalog", {
           region,
           installedRelease,
@@ -908,7 +925,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   } else if (!overtureExpr) {
     log.info("overture-cron: disabled by cron expression sentinel");
   } else {
-    overtureCron = new Cron(overtureExpr, { name: "overture-monthly-sync", protect: true }, () =>
+    overtureCron = new Cron(overtureExpr, { name: "overture-release-sync", protect: true }, () =>
       runOvertureSync().catch((err) => {
         log.error("overture-cron: unexpected rejection", { err: (err as Error).message });
       }),

@@ -20,7 +20,7 @@ function dependencies(rebuildStatus: "completed" | "waiting_for_osm" | "failed" 
         calls.push("ingest");
       }),
       withOperationLock: vi.fn(<T>(operation: () => Promise<T>) => operation()),
-      pruneReleases: vi.fn(() => {
+      finalizeReleaseFiles: vi.fn(async () => {
         calls.push("prune");
         return { retained: [OPTIONS.release], removed: [] };
       }),
@@ -79,7 +79,7 @@ describe("syncOvertureRegion", () => {
     const deps = dependencies("waiting_for_osm");
     const result = await syncOvertureRegion(OPTIONS, deps.value as never);
     expect(deps.calls).toEqual(["pull", "ingest", "rebuild"]);
-    expect(deps.value.pruneReleases).not.toHaveBeenCalled();
+    expect(deps.value.finalizeReleaseFiles).not.toHaveBeenCalled();
     expect(result.conflation).toBe("waiting_for_osm");
   });
 
@@ -87,7 +87,7 @@ describe("syncOvertureRegion", () => {
     const deps = dependencies("failed");
     const result = await syncOvertureRegion(OPTIONS, deps.value as never);
     expect(deps.calls).toEqual(["pull", "ingest", "rebuild"]);
-    expect(deps.value.pruneReleases).not.toHaveBeenCalled();
+    expect(deps.value.finalizeReleaseFiles).not.toHaveBeenCalled();
     expect(result).toEqual(
       expect.objectContaining({
         release: OPTIONS.release,

@@ -2,6 +2,7 @@ import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { execa } from "execa";
 import { resolveOsmPolyUrl } from "../download-osm.js";
+import { assertOvertureDiskCapacity, estimateOverturePullBytes, freeBytesAt } from "./capacity.js";
 import { runDuckDb } from "./duckdb.js";
 import {
   assertValidOvertureRelease,
@@ -138,6 +139,11 @@ export async function pullOverture(opts: PullOvertureOptions): Promise<string> {
   const slug = regionSlug(opts.region);
   const outDir = join(opts.dataDir, "overture", release);
   mkdirSync(outDir, { recursive: true });
+  assertOvertureDiskCapacity({
+    stage: "regional snapshot pull",
+    workingBytes: estimateOverturePullBytes(opts.dataDir, slug),
+    freeBytes: freeBytesAt(opts.dataDir),
+  });
   const outPath = join(outDir, `${slug}.parquet`);
   const partialPath = join(outDir, `${slug}.${process.pid}.${Date.now()}.partial.parquet`);
   const contractPath = pullContractPath(opts.dataDir, release, opts.region);

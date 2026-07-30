@@ -1,11 +1,13 @@
+import { statSync } from "node:fs";
 import { join } from "node:path";
 import { assertSupportedOvertureContributors } from "@openmapx/core/utils/overtureSource";
 import { latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";
-import { runDuckDb } from "./duckdb.js";
+import { assertOverturePostgresCapacity, estimateOvertureIngestBytes } from "./capacity.js";
+import { duckDbSqlLiteral, runDuckDbScript } from "./duckdb.js";
 import { validateOvertureQuality } from "./eval/quality-gate.js";
 import { regionSlug, resolveOvertureRelease } from "./pull.js";
-import { assertValidOvertureSchema, buildSchemaDDL } from "./schema.js";
+import { assertValidOvertureSchema, buildPlacesIndexesDDL, buildSchemaDDL } from "./schema.js";
 import { readOverturePullContract } from "./stac.js";
 
 /**
@@ -72,6 +74,46 @@ export async function validateOvertureContributors(schema: string): Promise<stri
   return datasets;
 }
 
+/**
+ * Atomically activates a fully validated Places schema. When a live schema is
+ * present, its release-independent OSM snapshot is moved into the staging
+ * schema and its extraction fingerprint is carried forward. This is an O(1)
+ * catalog operation; no country-scale OSM table copy is performed.
+ */
+export async function activateOvertureStagingSchema(
+  schema: string,
+  stagingSchema: string,
+): Promise<void> {
+  assertValidOvertureSchema(schema);
+  assertValidOvertureSchema(stagingSchema);
+  const [existingOsmSnapshot] = await sql.unsafe<{ exists: boolean }[]>(
+    `SELECT to_regclass($1) IS NOT NULL AS exists`,
+    [`${schema}.osm_pois`],
+  );
+  await sql.begin(async (tx) => {
+    if (existingOsmSnapshot?.exists) {
+      // `rebuildOvertureLinks` verifies this fingerprint against the current
+      // on-disk PBF before reuse and restarts extraction if it changed.
+      await tx.unsafe(`DROP TABLE "${stagingSchema}".osm_pois CASCADE`);
+      await tx.unsafe(`ALTER TABLE "${schema}".osm_pois SET SCHEMA "${stagingSchema}"`);
+      await tx.unsafe(
+        `UPDATE "${stagingSchema}".conflation_state AS target
+         SET phase = 'score', source_fingerprint = source.source_fingerprint,
+             emitted_count = source.emitted_count, extracted_count = source.extracted_count,
+             processed_count = 0, candidate_count = 0,
+             score_cursor_h3 = NULL, score_cursor_type = '', score_cursor_id = 0
+         FROM "${schema}".conflation_state AS source
+         WHERE target.singleton = 1 AND source.singleton = 1
+           AND source.region = target.region
+           AND source.source_fingerprint IS NOT NULL
+           AND source.extracted_count IS NOT NULL`,
+      );
+    }
+    await tx.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+    await tx.unsafe(`ALTER SCHEMA "${stagingSchema}" RENAME TO "${schema}"`);
+  });
+}
+
 export async function ingestOverture(opts: IngestOvertureOptions): Promise<void> {
   const release = await resolveOvertureRelease(opts.release);
   const slug = regionSlug(opts.region);
@@ -85,16 +127,23 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
   opts.onProgress?.("Verifying Overture STAC pull contract...");
   const pullContract = readOverturePullContract(opts.dataDir, release, opts.region);
 
+  await assertOverturePostgresCapacity({
+    schema,
+    stage: "PostGIS staging ingest",
+    workingBytes: (activeSchemaBytes) =>
+      estimateOvertureIngestBytes(statSync(parquetPath).size, activeSchemaBytes),
+  });
+
   const databaseUrl =
     process.env.DATABASE_URL ?? "postgresql://postgres:postgres@postgis:5432/openmapx";
 
   opts.onProgress?.("Creating staging schema...");
-  await sql.unsafe(buildSchemaDDL(stagingSchema));
+  await sql.unsafe(buildSchemaDDL(stagingSchema, { deferPlacesIndexes: true }));
 
   const duckSql = [
     "INSTALL postgres; LOAD postgres;",
     "INSTALL spatial; LOAD spatial;",
-    `ATTACH '${databaseUrl}' AS pg (TYPE postgres);`,
+    `ATTACH ${duckDbSqlLiteral(databaseUrl)} AS pg (TYPE postgres);`,
     `INSERT INTO pg."${stagingSchema}".places`,
     `  (gers_id, name, names, basic_category, taxonomy_primary, taxonomy_hierarchy,`,
     `   taxonomy_alternates, geom, h3_r8,`,
@@ -125,12 +174,12 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
     `  confidence,`,
     `  operating_status,`,
     `  to_json(sources) AS sources,`,
-    `  '${release}'::TEXT AS release`,
-    `FROM read_parquet('${parquetPath}');`,
+    `  ${duckDbSqlLiteral(release)}::TEXT AS release`,
+    `FROM read_parquet(${duckDbSqlLiteral(parquetPath)});`,
   ].join("\n");
 
   opts.onProgress?.("Running DuckDB → PostGIS ingest...");
-  await runDuckDb(["-c", duckSql], { stdio: "inherit" });
+  await runDuckDbScript(duckSql);
 
   opts.onProgress?.("Stamping geometry SRID 4326...");
   await sql.unsafe(
@@ -141,6 +190,10 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
   opts.onProgress?.("Backfilling h3_r8...");
   await backfillDerivedColumns(stagingSchema);
   await sql.unsafe(`ALTER TABLE "${stagingSchema}".places ALTER COLUMN h3_r8 SET NOT NULL`);
+
+  opts.onProgress?.("Building Overture Places indexes after bulk load...");
+  await sql.unsafe(buildPlacesIndexesDDL(stagingSchema));
+  await sql.unsafe(`ANALYZE "${stagingSchema}".places`);
 
   opts.onProgress?.("Validating contributor attribution coverage...");
   const contributors = await validateOvertureContributors(stagingSchema);
@@ -168,14 +221,8 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
     [release, opts.region, count],
   );
 
-  // Indexes (geom GIST + h3 + Overture taxonomy) are created by
-  // buildSchemaDDL; the geom GIST is rebuilt automatically by the SRID ALTER.
-
   opts.onProgress?.("Atomic swap staging → live...");
-  await sql.begin(async (tx) => {
-    await tx.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-    await tx.unsafe(`ALTER SCHEMA "${stagingSchema}" RENAME TO "${schema}"`);
-  });
+  await activateOvertureStagingSchema(schema, stagingSchema);
 
   opts.onProgress?.("Ingest complete.");
 }

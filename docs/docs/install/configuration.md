@@ -286,14 +286,16 @@ for what each class covers.
 
 ## Overture Maps POIs
 
-Schedules and switches for the monthly regional Overture Maps Places refresh.
+Schedules and switches for the regional Overture Maps Places refresh.
 
 | Variable           | Description                                                                                  | Required / Default        |
 | ------------------ | ------------------------------------------------------------------------------------------- | ------------------------- |
 | `OVERTURE_ENABLED`  | Set to `true` to discover and atomically import newer Overture Places releases for `OPENMAPX_REGION`. | Optional. Default unset |
-| `OVERTURE_SYNC_CRON`| Cron schedule for checking and refreshing the regional snapshot. | Optional. Default `0 5 1 * *` (monthly) |
-| `OVERTURE_CONFLATION_RETRY_CRON` | Retry an incomplete OSM↔Overture link rebuild without downloading or importing Places again. | Optional. Default `15 */6 * * *` (every six hours) |
+| `OVERTURE_SYNC_CRON`| Cron schedule for checking and refreshing the regional snapshot. | Optional. Default `0 5 * * 2` (weekly, Tuesday 05:00 UTC) |
+| `OVERTURE_CONFLATION_RETRY_CRON` | Retry an incomplete OSM↔Overture link rebuild without downloading or importing Places again. Recovery also runs once at startup. | Optional. Default `*/15 * * * *` |
 | `OVERTURE_RELEASE_RETENTION` | Number of completed local release snapshots to retain, including the active release. Applied only after fused quality validation and link publication. | Optional. Default `2`; range 1–12 |
+| `OVERTURE_DISK_RESERVE_BYTES` | Free-space safety reserve kept beyond estimated pull/ingest working space. | Optional. Default `5368709120` (5 GiB) |
+| `OVERTURE_FIRST_PULL_ESTIMATE_BYTES` | Working-space estimate for the first regional pull when no earlier snapshot exists. Later pulls use prior local snapshot sizes. | Optional. Default `2147483648` (2 GiB) |
 
 The job uses Overture's official STAC catalog, skips an installed release,
 resolves exact spatially relevant Places assets, validates a local release
@@ -302,6 +304,11 @@ schema into service. OSM↔GERS link rebuilding has a separate durable state and
 retry schedule with resumable extraction, scoring, assignment, and publication
 phases: a missing PBF or failed rebuild does not roll back a valid Places
 release. See [Overture Places](../features/overture-places.md).
+
+After the first successful ingest, enable `poi-overture` in **Admin →
+Integrations** to return Overture search results and `knowledge-overture` to
+enrich matched OSM place cards. `OVERTURE_ENABLED` maintains the data but does
+not silently enable either runtime integration.
 
 ## Natural-language search
 

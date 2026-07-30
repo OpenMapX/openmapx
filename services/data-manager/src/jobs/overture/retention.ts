@@ -1,5 +1,7 @@
 import { existsSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { sql } from "../../db/index.js";
+import { assertValidOvertureSchema } from "./schema.js";
 import { assertValidOvertureRelease } from "./stac.js";
 
 export interface PruneOvertureReleasesOptions {
@@ -17,10 +19,13 @@ export interface PruneOvertureReleasesResult {
 
 const RELEASE_DIRECTORY = /^\d{4}-\d{2}-\d{2}\.\d+$/;
 
-function compareReleasesNewestFirst(left: string, right: string): number {
+/** Numeric YYYY-MM-DD.N ordering; positive means `left` is newer. */
+export function compareOvertureReleases(left: string, right: string): number {
+  assertValidOvertureRelease(left);
+  assertValidOvertureRelease(right);
   const [leftDate = "", leftRevision = "0"] = left.split(".");
   const [rightDate = "", rightRevision = "0"] = right.split(".");
-  return rightDate.localeCompare(leftDate) || Number(rightRevision) - Number(leftRevision);
+  return leftDate.localeCompare(rightDate) || Number(leftRevision) - Number(rightRevision);
 }
 
 export function overtureReleaseRetentionFromEnv(value: string | undefined): number {
@@ -51,17 +56,17 @@ export function pruneOvertureReleases(
   const releases = readdirSync(root, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && RELEASE_DIRECTORY.test(entry.name))
     .map((entry) => entry.name)
-    .sort(compareReleasesNewestFirst);
+    .sort((left, right) => compareOvertureReleases(right, left));
 
   // A manually pinned older active release must never delete a newer pulled
   // snapshot whose ingest may merely be awaiting operator attention. Retention
   // applies to the active release and its predecessors; newer directories stay
   // protected until one of them becomes active.
   const newer = releases.filter(
-    (release) => compareReleasesNewestFirst(release, opts.activeRelease) < 0,
+    (release) => compareOvertureReleases(release, opts.activeRelease) > 0,
   );
   const predecessors = releases.filter(
-    (release) => compareReleasesNewestFirst(release, opts.activeRelease) > 0,
+    (release) => compareOvertureReleases(release, opts.activeRelease) < 0,
   );
   const retained = [...newer, opts.activeRelease, ...predecessors.slice(0, retain - 1)];
   const keep = new Set(retained);
@@ -78,4 +83,39 @@ export function pruneOvertureReleases(
     opts.onProgress?.(`Pruned superseded Overture snapshot ${release}.`);
   }
   return { retained, removed };
+}
+
+/**
+ * Runs release-file retention once per completed conflation state. The durable
+ * marker is written only after filesystem pruning succeeds, so a crash remains
+ * safely retryable without rescanning on every steady-state retry tick.
+ */
+export async function finalizeOvertureReleaseFiles(
+  opts: PruneOvertureReleasesOptions & { schema?: string },
+): Promise<PruneOvertureReleasesResult | null> {
+  const schema = opts.schema ?? "overture_places";
+  assertValidOvertureSchema(schema);
+  assertValidOvertureRelease(opts.activeRelease);
+  const [state] = await sql.unsafe<{ release_files_pruned_at: Date | string | null }[]>(
+    `SELECT release_files_pruned_at
+     FROM "${schema}".conflation_state
+     WHERE singleton = 1 AND release = $1 AND status = 'completed'`,
+    [opts.activeRelease],
+  );
+  if (!state) {
+    throw new Error(
+      `Cannot finalize Overture retention before ${opts.activeRelease} conflation completes`,
+    );
+  }
+  if (state.release_files_pruned_at !== null) return null;
+
+  const result = pruneOvertureReleases(opts);
+  await sql.unsafe(
+    `UPDATE "${schema}".conflation_state
+     SET release_files_pruned_at = COALESCE(release_files_pruned_at, NOW()),
+         updated_at = NOW()
+     WHERE singleton = 1 AND release = $1 AND status = 'completed'`,
+    [opts.activeRelease],
+  );
+  return result;
 }

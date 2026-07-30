@@ -8,6 +8,17 @@ export interface CurlAtomicOptions {
    * bytes. Used to stream progress back to the client.
    */
   onProgress?: (bytesDownloaded: number, totalBytes?: number) => void;
+  /** Validate the completed sibling temp file before it can replace the target. */
+  beforePublish?: (tempPath: string) => Promise<void>;
+  /**
+   * Optional narrow critical section around the final rename. The callback
+   * must invoke `publish` exactly once before resolving.
+   */
+  withPublishLock?: (publish: () => void) => Promise<void>;
+}
+
+export interface CurlAtomicResult {
+  published: boolean;
 }
 
 /**
@@ -20,11 +31,11 @@ export interface CurlAtomicOptions {
  * upstream servers (e.g. Geofabrik) can short-circuit unchanged downloads
  * with 304. On 304, the existing file is left in place and we return early.
  */
-export async function curlAtomic(
+export async function curlAtomicWithResult(
   url: string,
   targetPath: string,
   opts: CurlAtomicOptions = {},
-): Promise<void> {
+): Promise<CurlAtomicResult> {
   const rand = Math.random().toString(36).slice(2, 10);
   const tmpPath = `${targetPath}.tmp.${rand}`;
 
@@ -82,7 +93,7 @@ export async function curlAtomic(
         const size = statSync(targetPath).size;
         opts.onProgress(size, size);
       }
-      return;
+      return { published: false };
     }
     // One final update so the client sees 100%.
     if (opts.onProgress) {
@@ -92,7 +103,22 @@ export async function curlAtomic(
         // best effort
       }
     }
-    renameSync(tmpPath, targetPath);
+    await opts.beforePublish?.(tmpPath);
+    let published = false;
+    const publish = (): void => {
+      if (published) throw new Error("Atomic download publish callback invoked more than once");
+      renameSync(tmpPath, targetPath);
+      published = true;
+    };
+    if (opts.withPublishLock) {
+      await opts.withPublishLock(publish);
+      if (!published) {
+        throw new Error("Atomic download publish lock resolved without publishing the temp file");
+      }
+    } else {
+      publish();
+    }
+    return { published: true };
   } catch (err) {
     if (poll) clearInterval(poll);
     if (existsSync(tmpPath)) {
@@ -104,4 +130,13 @@ export async function curlAtomic(
     }
     throw err;
   }
+}
+
+/** Backward-compatible convenience for callers that do not need publish status. */
+export async function curlAtomic(
+  url: string,
+  targetPath: string,
+  opts: CurlAtomicOptions = {},
+): Promise<void> {
+  await curlAtomicWithResult(url, targetPath, opts);
 }

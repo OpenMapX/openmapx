@@ -3,9 +3,9 @@ import { withOvertureOperationLock } from "./operation-lock.js";
 import { assertValidRegion, pullOverture, resolveOvertureRelease } from "./pull.js";
 import { type RebuildOvertureLinksResult, rebuildOvertureLinksUnlocked } from "./rebuild-links.js";
 import {
+  finalizeOvertureReleaseFiles,
   overtureReleaseRetentionFromEnv,
   type PruneOvertureReleasesResult,
-  pruneOvertureReleases,
 } from "./retention.js";
 
 export interface SyncOvertureRegionOptions {
@@ -29,7 +29,7 @@ interface SyncOvertureDependencies {
   ingest: typeof ingestOverture;
   rebuildLinks: typeof rebuildOvertureLinksUnlocked;
   withOperationLock: typeof withOvertureOperationLock;
-  pruneReleases: typeof pruneOvertureReleases;
+  finalizeReleaseFiles: typeof finalizeOvertureReleaseFiles;
 }
 
 const defaultDependencies: SyncOvertureDependencies = {
@@ -37,7 +37,7 @@ const defaultDependencies: SyncOvertureDependencies = {
   ingest: ingestOverture,
   rebuildLinks: rebuildOvertureLinksUnlocked,
   withOperationLock: withOvertureOperationLock,
-  pruneReleases: pruneOvertureReleases,
+  finalizeReleaseFiles: finalizeOvertureReleaseFiles,
 };
 
 /**
@@ -96,11 +96,17 @@ async function syncOvertureRegionUnlocked(
   opts.onProgress?.(
     `Regional Overture refresh complete; conflation ${result.status} (${result.linked} links).`,
   );
-  const retention = dependencies.pruneReleases({
+  const retention = await dependencies.finalizeReleaseFiles({
     dataDir: opts.dataDir,
     activeRelease: release,
     retain: overtureReleaseRetentionFromEnv(process.env.OVERTURE_RELEASE_RETENTION),
     onProgress: opts.onProgress,
   });
-  return { release, path, conflation: result.status, linked: result.linked, retention };
+  return {
+    release,
+    path,
+    conflation: result.status,
+    linked: result.linked,
+    ...(retention ? { retention } : {}),
+  };
 }

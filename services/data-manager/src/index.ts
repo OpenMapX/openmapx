@@ -179,6 +179,11 @@ app
     // are logged internally), and a slow first-time extract build shouldn't
     // block the rest of startup.
     void cronHandles.runTrafficExtractStartupNow();
+    if ((process.env.OVERTURE_ENABLED || "").trim().toLowerCase() === "true") {
+      // Recover an expired conflation lease immediately after a restart rather
+      // than waiting for the next retry tick. The handler contains/logs errors.
+      void cronHandles.runOvertureConflationRetryNow();
+    }
 
     // Discover POI sources from each integration's poi-sources.{js,ts} file
     // BEFORE setupPoiIngestCron — the scheduler reads the registry snapshot
