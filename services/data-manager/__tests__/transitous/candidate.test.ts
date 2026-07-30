@@ -9,6 +9,7 @@ import {
   verifyCandidateManifest,
 } from "../../src/jobs/transitous/candidate.js";
 import { resolveOperationsProfile } from "../../src/jobs/transitous/operations-profile.js";
+import { TRANSIT_SOURCE_MANIFEST_FILENAME } from "../../src/jobs/transitous/source-manifest.js";
 
 let tmp: string | undefined;
 
@@ -66,6 +67,7 @@ describe("candidate manifest", () => {
     );
     writeFileSync(join(tmp, "license.json"), "[]\n");
     writeFileSync(join(tmp, "demo.gtfs.zip"), "GTFS");
+    writeFileSync(join(tmp, TRANSIT_SOURCE_MANIFEST_FILENAME), '{"version":1,"sources":[]}\n');
     const proxy = join(tmp, CANDIDATE_PROXY_DIRNAME);
     mkdirSync(join(proxy, "conf"), { recursive: true });
     writeFileSync(join(proxy, "conf", "default.conf"), "server { listen 80; }\n");

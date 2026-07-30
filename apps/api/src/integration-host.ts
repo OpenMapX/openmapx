@@ -55,7 +55,6 @@ import {
 } from "./services/attribution";
 import type { ManifestDataSource } from "./services/attribution/types";
 import { loadAllBindingsByIntegration } from "./services/capability-bindings";
-import { searchCatalog } from "./services/gtfs/catalog";
 import { gtfsManager } from "./services/gtfs/index";
 import * as gtfsQueries from "./services/gtfs/queries";
 import {
@@ -70,6 +69,7 @@ import {
 } from "./services/provider-health/registry";
 import { getSecret, isSecretsConfigured } from "./services/secrets";
 import { getServiceRegistry, resolveRequiresForIntegration } from "./services/service-registry";
+import { searchTransitCatalog } from "./services/transit-catalog/index";
 import { getEmailDisclosure } from "./utils/email";
 
 function canonicalizeExisting(p: string): string {
@@ -127,7 +127,7 @@ function buildSwissGtfsDeps() {
       // Always consult the catalog — the Swiss feed id encodes the timetable year
       // (e.g. `opentransportdata-swiss:ch:timetable-2026-gtfs2020`), so the latest
       // entry's slug changes when the year rolls over and must trigger a re-import.
-      const swissFeed = (await searchCatalog(undefined, "ch")).find(
+      const swissFeed = (await searchTransitCatalog(undefined, "ch")).find(
         (feed) => feed.source === "opentransportdata-swiss",
       );
       if (!swissFeed) return existing ?? null;

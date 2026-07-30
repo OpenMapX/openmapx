@@ -155,21 +155,21 @@ function applyFeedsOverlayToCatalog(
       `transitous-pipeline: failed to read feeds overlay at ${overlayPath}: ${(error as Error).message}`,
     );
   }
-  if (!overlay || (overlay.patches.length === 0 && overlay.additions.length === 0)) return 0;
+  if (!overlay || (overlay.patches.length === 0 && overlay.sources.length === 0)) return 0;
   logger.info(
-    `transitous-pipeline: applying ${overlay.patches.length} feeds-overlay patch(es) and ${overlay.additions.length} addition(s) from ${overlayPath}`,
+    `transitous-pipeline: applying ${overlay.patches.length} feeds-overlay patch(es) and ${overlay.sources.length} source(s) from ${overlayPath}`,
   );
 
   const regionsToPatch = new Set([
-    ...overlay.patches.map((entry) => entry.region),
-    ...overlay.additions.map((entry) => entry.region),
+    ...overlay.patches.map((entry) => entry.sourceId.split(":")[1]).filter(Boolean),
+    ...overlay.sources.map((entry) => entry.region),
   ]);
   const feedFiles: FeedFile[] = [];
   const feedPaths = new Map<string, string>();
   for (const region of regionsToPatch) {
     const feedPath = join(catalogDir, "feeds", `${region}.json`);
     if (!existsSync(feedPath)) {
-      if (overlay.additions.some((entry) => entry.region === region)) {
+      if (overlay.sources.some((entry) => entry.region === region)) {
         feedFiles.push({ region, sources: [] });
         feedPaths.set(region, feedPath);
       } else {
@@ -202,8 +202,8 @@ function applyFeedsOverlayToCatalog(
   }
   for (const unmatched of result.unmatched) {
     logger.warn(
-      `transitous-pipeline: feeds-overlay patch (region=${unmatched.region}, name=${unmatched.name}) had no matching source — silently no-oped`,
+      `transitous-pipeline: feeds-overlay patch for ${unmatched.sourceId} had no matching source`,
     );
   }
-  return overlay.patches.length + overlay.additions.length;
+  return overlay.patches.length + overlay.sources.length;
 }

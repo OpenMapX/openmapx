@@ -218,9 +218,13 @@ async function upsertFeedState(args: UpsertArgs): Promise<void> {
  * upstream-published source name (lowercased) so it lines up with how the
  * alert emitter logs and titles GitHub Issues.
  */
-export function feedKeyForSource(feed: { country: string }, sourceName: string): FeedStateKey {
+export function feedKeyForSource(
+  feed: { country: string },
+  sourceName: string,
+  sourceRegion?: string,
+): FeedStateKey {
   return {
-    region: feed.country.toLowerCase(),
+    region: (sourceRegion ?? feed.country).toLowerCase(),
     name: sourceName.toLowerCase(),
   };
 }
@@ -237,5 +241,21 @@ export function feedKeyForFailure(failure: { country: string; id: string }): Fee
 }
 
 export function feedKeysForEntry(entry: FeedFileEntry): FeedStateKey[] {
-  return entry.activeScheduleSources.map((source) => feedKeyForSource(entry, source.name));
+  return entry.activeScheduleSources.map((source) =>
+    feedKeyForSource(entry, source.name, source.region),
+  );
+}
+
+/** Advance import evidence only after the corresponding source manifest is live. */
+export async function recordPromotedSource(source: {
+  region: string;
+  name: string;
+}): Promise<void> {
+  await withTimeout(
+    upsertFeedState({
+      region: source.region.toLowerCase(),
+      name: source.name.toLowerCase(),
+      values: { lastImportedAt: new Date(), status: "active" },
+    }),
+  );
 }

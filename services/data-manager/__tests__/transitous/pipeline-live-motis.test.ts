@@ -530,9 +530,9 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
       feedsOverlayPath,
       `${JSON.stringify(
         {
-          schemaVersion: 2,
+          version: 3,
+          sources: [],
           patches: [],
-          additions: [],
           quarantine: [],
         },
         null,

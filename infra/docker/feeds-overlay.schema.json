@@ -1,36 +1,65 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["schemaVersion", "patches", "additions", "quarantine"],
+  "required": ["version", "sources", "patches", "quarantine"],
   "properties": {
-    "schemaVersion": { "const": 2 },
+    "version": { "const": 3 },
     "comment": { "type": "string" },
+    "sources": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["region", "name", "spec", "type", "url"],
+            "properties": {
+              "region": { "type": "string", "pattern": "^[a-z]{2}(?:-[a-z0-9]+)?$" },
+              "name": { "type": "string", "minLength": 1 },
+              "spec": { "const": "gbfs" },
+              "type": { "const": "url" },
+              "url": { "type": "string", "format": "uri" },
+              "sourceId": { "type": "string", "minLength": 1 },
+              "license": { "type": "string", "minLength": 1 }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["region", "name", "spec", "type", "url", "origin", "license"],
+            "properties": {
+              "region": { "type": "string", "pattern": "^[a-z]{2}(?:-[a-z0-9]+)?$" },
+              "name": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9.-]*$" },
+              "spec": { "const": "gtfs" },
+              "type": { "const": "http" },
+              "url": { "type": "string", "format": "uri" },
+              "origin": { "const": "operator" },
+              "license": {
+                "type": "object",
+                "required": ["attribution"],
+                "properties": {
+                  "spdxIdentifier": { "type": "string", "minLength": 1 },
+                  "url": { "type": "string", "format": "uri" },
+                  "attribution": { "type": "string", "minLength": 1 },
+                  "publisher": { "type": "string", "minLength": 1 },
+                  "publisherUrl": { "type": "string", "format": "uri" }
+                },
+                "anyOf": [{ "required": ["spdxIdentifier"] }, { "required": ["url"] }],
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
     "patches": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["region", "name", "patch"],
+        "required": ["sourceId", "skip"],
         "properties": {
-          "region": { "type": "string", "pattern": "^[a-z]{2}(?:-[a-z0-9]+)?$" },
-          "name": { "type": "string", "minLength": 1 },
-          "patch": { "type": "object" }
-        },
-        "additionalProperties": false
-      }
-    },
-    "additions": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["region", "name", "spec", "type", "url"],
-        "properties": {
-          "region": { "type": "string", "pattern": "^[a-z]{2}(?:-[a-z0-9]+)?$" },
-          "name": { "type": "string", "minLength": 1 },
-          "spec": { "const": "gbfs" },
-          "type": { "const": "url" },
-          "url": { "type": "string", "format": "uri" },
           "sourceId": { "type": "string", "minLength": 1 },
-          "license": { "type": "string", "minLength": 1 }
+          "skip": { "type": "boolean" }
         },
         "additionalProperties": false
       }

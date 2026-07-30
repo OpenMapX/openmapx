@@ -9,6 +9,7 @@ import {
 import { run as motisHealthRun } from "../../src/jobs/transitous/motis-health.js";
 import { probeHttp } from "../../src/jobs/transitous/motis-probe.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
+import { TRANSIT_SOURCE_MANIFEST_FILENAME } from "../../src/jobs/transitous/source-manifest.js";
 import { StateStore } from "../../src/state.js";
 
 let tmp: string | undefined;
@@ -47,6 +48,10 @@ function makeStagingDir(): string {
   );
   writeFileSync(join(stagingDir, "demo.gtfs.zip"), "gtfs");
   writeFileSync(join(stagingDir, "license.json"), "{}\n");
+  writeFileSync(
+    join(stagingDir, TRANSIT_SOURCE_MANIFEST_FILENAME),
+    '{"version":1,"generatedAt":"2026-05-01T00:00:00Z","sources":[]}\n',
+  );
   const proxy = join(stagingDir, CANDIDATE_PROXY_DIRNAME);
   mkdirSync(join(proxy, "conf"), { recursive: true });
   writeFileSync(join(proxy, "conf", "default.conf"), "server {}\n");

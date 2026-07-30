@@ -75,7 +75,7 @@ interface FastifyJsonResponse {
 }
 
 async function proxyToDataManager(
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "DELETE",
   path: string,
   body?: unknown,
 ): Promise<FastifyJsonResponse> {
@@ -128,6 +128,46 @@ function readLockSummary(): LockSummary {
 
 export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
   // -------- READ endpoints (direct DB) --------
+
+  app.get<{
+    Querystring: {
+      search?: string;
+      lifecycle?: string;
+      origin?: string;
+      limit?: string;
+      offset?: string;
+    };
+  }>("/data-manager/transit/sources", async (req, reply) => {
+    const auth = await authenticateDataManager(req);
+    if (auth.kind === "denied") {
+      return reply.code(401).send({ error: "Authentication required" });
+    }
+    const params = new URLSearchParams();
+    for (const key of ["search", "lifecycle", "origin", "limit", "offset"] as const) {
+      const value = req.query[key];
+      if (value) params.set(key, value);
+    }
+    const query = params.toString();
+    const result = await proxyToDataManager("GET", `/transit/sources${query ? `?${query}` : ""}`);
+    return reply.code(result.status).send(result.body);
+  });
+
+  app.get<{ Querystring: { search?: string; country?: string } }>(
+    "/data-manager/transit/catalog",
+    async (req, reply) => {
+      const auth = await authenticateDataManager(req);
+      if (auth.kind === "denied") {
+        return reply.code(401).send({ error: "Authentication required" });
+      }
+      try {
+        const { searchTransitCatalog } = await import("../services/transit-catalog/index.js");
+        const sources = await searchTransitCatalog(req.query.search, req.query.country);
+        return { sources, total: sources.length };
+      } catch (error) {
+        return reply.code(502).send({ error: (error as Error).message });
+      }
+    },
+  );
 
   app.get("/data-manager/transit/state", async (req, reply) => {
     const auth = await authenticateDataManager(req);
@@ -312,6 +352,94 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
   });
 
   // -------- MUTATION endpoints (proxied) --------
+
+  app.post<{
+    Body: {
+      region: string;
+      name: string;
+      url: string;
+      license: Record<string, unknown>;
+      idempotencyKey?: string;
+    };
+  }>("/data-manager/transit/sources", async (req, reply) => {
+    const auth = await authenticateDataManager(req);
+    if (auth.kind === "denied") {
+      return reply.code(401).send({ error: "Authentication required" });
+    }
+    const triggeredBy = auth.kind === "session" ? `user:${auth.userId}` : "service-token";
+    const result = await proxyToDataManager("POST", "/transit/sources", {
+      ...req.body,
+      triggeredBy,
+    });
+    if (result.status === 202) {
+      const body = result.body as { sourceId?: string; jobId?: string };
+      await writeAuditLog({
+        actorId: auth.kind === "session" ? auth.userId : null,
+        targetId: body.sourceId ?? null,
+        targetType: "transit-source",
+        action: "transit.source.add",
+        details: { jobId: body.jobId ?? null },
+        request: req,
+      });
+    }
+    return reply.code(result.status).send(result.body);
+  });
+
+  app.delete<{
+    Params: { sourceId: string };
+    Body?: { idempotencyKey?: string };
+  }>("/data-manager/transit/sources/:sourceId", async (req, reply) => {
+    const auth = await authenticateDataManager(req);
+    if (auth.kind === "denied") {
+      return reply.code(401).send({ error: "Authentication required" });
+    }
+    const triggeredBy = auth.kind === "session" ? `user:${auth.userId}` : "service-token";
+    const result = await proxyToDataManager(
+      "DELETE",
+      `/transit/sources/${encodeURIComponent(req.params.sourceId)}`,
+      { ...req.body, triggeredBy },
+    );
+    if (result.status === 202) {
+      const body = result.body as { jobId?: string };
+      await writeAuditLog({
+        actorId: auth.kind === "session" ? auth.userId : null,
+        targetId: req.params.sourceId,
+        targetType: "transit-source",
+        action: "transit.source.remove",
+        details: { jobId: body.jobId ?? null },
+        request: req,
+      });
+    }
+    return reply.code(result.status).send(result.body);
+  });
+
+  app.post<{
+    Params: { sourceId: string };
+    Body?: { idempotencyKey?: string };
+  }>("/data-manager/transit/sources/:sourceId/enable", async (req, reply) => {
+    const auth = await authenticateDataManager(req);
+    if (auth.kind === "denied") {
+      return reply.code(401).send({ error: "Authentication required" });
+    }
+    const triggeredBy = auth.kind === "session" ? `user:${auth.userId}` : "service-token";
+    const result = await proxyToDataManager(
+      "POST",
+      `/transit/sources/${encodeURIComponent(req.params.sourceId)}/enable`,
+      { ...req.body, triggeredBy },
+    );
+    if (result.status === 202) {
+      const body = result.body as { jobId?: string };
+      await writeAuditLog({
+        actorId: auth.kind === "session" ? auth.userId : null,
+        targetId: req.params.sourceId,
+        targetType: "transit-source",
+        action: "transit.source.enable",
+        details: { jobId: body.jobId ?? null },
+        request: req,
+      });
+    }
+    return reply.code(result.status).send(result.body);
+  });
 
   app.post<{ Body?: { idempotencyKey?: string; countries?: string[] } }>(
     "/data-manager/transit/sync",

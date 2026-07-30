@@ -14,6 +14,7 @@ export type StageName =
   | "preflight"
   | "compile-gbfs"
   | "fetch"
+  | "fetch-operator"
   | "validate"
   | "gen-motis-config"
   | "assemble-staging"
@@ -67,8 +68,14 @@ export interface FeedFileEntry {
   path: string;
   url: string;
   activeScheduleSources: Array<{
+    /** Canonical artifact stem, e.g. `de_DELFI`. */
     id: string;
+    /** Lifecycle identity, stable within the pinned catalog/overlay. */
+    sourceId: string;
+    region: string;
     name: string;
+    format: "gtfs" | "netex";
+    origin: "catalog" | "operator";
     originUrl?: string;
     license?: Record<string, unknown>;
   }>;
@@ -93,6 +100,7 @@ export interface JobState {
   /** Mtime snapshot taken before fetch so partial-success bookkeeping works. */
   preFetchMtimes?: Map<string, number>;
   fetchFailures?: FeedDownloadFailure[];
+  operatorMetadataDir?: string;
   /** Set of `<id>` (lowercased) the catalog expects to see on disk. */
   expectedFeedIds?: Set<string>;
   /** Datasets reported to the caller — populated by gc on success / fetch on partial. */

@@ -265,7 +265,11 @@ function activeScheduleSources(
     return [
       {
         id: sourceIdForFailure(country, source.name, fallback),
+        sourceId: source["openmapx-source-id"] ?? `catalog:${feedId}:${source.name ?? fallback}`,
+        region: feedId,
         name: source.name ?? fallback,
+        format: resolveSourceSpec(source, atlasSpecIndex) === "netex" ? "netex" : "gtfs",
+        origin: source["openmapx-origin"] === "operator" ? "operator" : "catalog",
         originUrl: source["url-override"] ?? source.url ?? atlas?.originUrl,
         license: source.license ?? atlas?.license,
       },
@@ -304,7 +308,16 @@ export function listTransitousFeedFiles(catalogDir: string): FeedFileEntry[] {
       } catch (error) {
         return {
           ...entry,
-          activeScheduleSources: [{ id, name: id }],
+          activeScheduleSources: [
+            {
+              id,
+              sourceId: `catalog:${id}:${id}`,
+              region: id,
+              name: id,
+              format: "gtfs",
+              origin: "catalog",
+            },
+          ],
           parseFailure: {
             id,
             country,

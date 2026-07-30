@@ -1,5 +1,4 @@
-import { existsSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync } from "node:fs";
 import {
   type MirrorArchive,
   mirrorArchives,
@@ -9,9 +8,6 @@ import { curlAtomic } from "../atomic-download.js";
 import type { FeedDownloadFailure } from "../download-gtfs.js";
 import { feedKeyForSource, recordFetchOutcome } from "./feed-state-writer.js";
 import type { StageFn, StageResult, StageStatus } from "./types.js";
-
-// Transitous publishes each cleaned feed as `<region>_<name>.<spec>.zip`.
-const ARCHIVE_SPECS = ["gtfs", "netex"] as const;
 
 /**
  * Mirror-mode replacement for the `fetch` stage. Instead of running fetch.py
@@ -25,10 +21,9 @@ const ARCHIVE_SPECS = ["gtfs", "netex"] as const;
  * concurrent, gtfs→netex probe) — deterministic and incremental (curlAtomic
  * sends If-Modified-Since for archives already on disk), unlike a recursive wget
  * that has to parse the multi-thousand-entry autoindex and silently fetched
- * nothing. `feed_state` is then recorded from on-disk presence (NOT the download
- * result) so a stale archive that survives a transient upstream 404 still counts
- * — same crash-resume robustness as build mode — keeping the admin feed tables +
- * staleness cron consistent across modes.
+ * nothing. `feed_state` records this attempt's result. A missing desired source
+ * is fatal even when an older archive remains in the cache, so a transient
+ * failure cannot silently alter the promoted source set.
  */
 export const run: StageFn = async (ctx): Promise<StageResult> => {
   const startedAt = ctx.now();
@@ -49,17 +44,28 @@ export const run: StageFn = async (ctx): Promise<StageResult> => {
     // core helper. We re-derive per-source outcome from disk below, so the
     // returned counts are advisory here.
     const archives: MirrorArchive[] = selectedFeedFiles.flatMap((feed) =>
-      feed.activeScheduleSources.map((source) => ({ region: feed.id, name: source.name })),
+      feed.activeScheduleSources
+        .filter((source) => source.origin === "catalog")
+        .map((source) => ({ region: feed.id, name: source.name })),
     );
-    await mirrorArchives({ archives, baseUrl, destDir: gtfsDir, download, logger: ctx.logger });
+    const mirrorResult = await mirrorArchives({
+      archives,
+      baseUrl,
+      destDir: gtfsDir,
+      download,
+      logger: ctx.logger,
+    });
+    const missing = new Set(
+      mirrorResult.missing.map((entry) => `${entry.region}\u0000${entry.name}`),
+    );
 
     const failures: FeedDownloadFailure[] = [];
     for (const feed of selectedFeedFiles) {
-      for (const source of feed.activeScheduleSources) {
-        const present = ARCHIVE_SPECS.some((spec) =>
-          existsSync(join(gtfsDir, `${feed.id}_${source.name}.${spec}.zip`)),
-        );
-        const key = feedKeyForSource(feed, source.name);
+      for (const source of feed.activeScheduleSources.filter(
+        (candidate) => candidate.origin === "catalog",
+      )) {
+        const present = !missing.has(`${feed.id}\u0000${source.name}`);
+        const key = feedKeyForSource(feed, source.name, source.region);
         try {
           await recordFetchOutcome({ region: key.region, name: key.name, ok: present });
         } catch (err) {
@@ -77,12 +83,14 @@ export const run: StageFn = async (ctx): Promise<StageResult> => {
         }
       }
     }
-    ctx.state.fetchFailures = failures;
+    ctx.state.fetchFailures = [...(ctx.state.fetchFailures ?? []), ...failures];
 
     const selectedCount = ctx.state.selectedCount ?? 0;
     const fetchedCount = Math.max(0, selectedCount - failures.length);
-    let status: StageStatus = "ok";
-    if (failures.length > 0) status = fetchedCount === 0 ? "error" : "partial";
+    // Acquisition is completed as one transaction by fetch-operator. Keep
+    // going so it can collect operator failures too, then fail once with the
+    // complete desired-source evidence.
+    const status: StageStatus = failures.length > 0 ? "partial" : "ok";
 
     return {
       stage: "mirror",

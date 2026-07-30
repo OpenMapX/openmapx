@@ -43,6 +43,7 @@ function manifest(expectsGbfs = true): MotisCandidateManifest {
       proxyConfig: artifact,
       proxyVars: artifact,
       datasets: [artifact],
+      sourceManifest: artifact,
     },
   };
 }

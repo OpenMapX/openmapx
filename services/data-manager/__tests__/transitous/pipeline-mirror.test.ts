@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -57,15 +57,18 @@ describe("stagesFor", () => {
       "motis-import": "critical",
       "motis-health": "critical",
       promote: "critical",
-      fetch: "advisory",
+      fetch: "critical",
       gc: "advisory",
     });
   });
 
-  it("selects the mirror pipeline (build with fetch -> mirror) for source=mirror", () => {
-    expect(stagesFor("mirror").map((s) => s.name)).toEqual(
-      BUILD.map((n) => (n === "fetch" ? "mirror" : n)),
-    );
+  it("selects mirror followed by operator acquisition for source=mirror", () => {
+    expect(stagesFor("mirror").map((s) => s.name)).toEqual([
+      ...BUILD.slice(0, 4),
+      "mirror",
+      "fetch-operator",
+      ...BUILD.slice(5),
+    ]);
   });
 });
 
@@ -105,8 +108,7 @@ describe("mirror-mode pipeline", () => {
       now: () => "2026-06-27T00:00:00.000Z",
     });
 
-    // Stop after `mirror` to avoid the docker/import tail (covered elsewhere).
-    const { results } = await runTransitousPipeline(ctx, { stopAt: "mirror" });
+    const { results } = await runTransitousPipeline(ctx, { stopAt: "fetch-operator" });
 
     expect(results.map((r) => r.stage)).toEqual([
       "prepare",
@@ -114,12 +116,86 @@ describe("mirror-mode pipeline", () => {
       "preflight",
       "compile-gbfs",
       "mirror",
+      "fetch-operator",
     ]);
     expect(results.find((r) => r.stage === "mirror")?.status).toBe("ok");
+    expect(results.find((r) => r.stage === "fetch-operator")?.status).toBe("skipped");
     // Direct per-file download against the published artifact base, NOT a
     // recursive autoindex crawl.
     expect(downloadUrls).toContain("https://api.transitous.org/gtfs/de_BVG.gtfs.zip");
     expect(existsSync(join(fx.gtfsDir, "de_BVG.gtfs.zip"))).toBe(true);
+  });
+
+  it("unifies mirrored catalog and pinned-fetcher operator artifacts", async () => {
+    const fx = setupCatalog([{ name: "BVG" }]);
+    const overlayPath = join(fx.dataDir, "feeds-overlay.json");
+    writeFileSync(
+      overlayPath,
+      JSON.stringify({
+        version: 3,
+        sources: [
+          {
+            spec: "gtfs",
+            type: "http",
+            region: "de",
+            name: "operator-feed",
+            url: "https://operator.example/feed.zip",
+            origin: "operator",
+            license: {
+              spdxIdentifier: "CC-BY-4.0",
+              attribution: "Operator authority",
+            },
+          },
+        ],
+        patches: [],
+        quarantine: [],
+      }),
+    );
+    const fetchMetadata: string[] = [];
+    const ctx = buildJobContext({
+      dataDir: fx.dataDir,
+      store: new StateStore(fx.dataDir),
+      countries: ["de"],
+      source: "mirror",
+      feedsOverlayPath: overlayPath,
+      runner: async (command, args) => {
+        if (command === "python3" && args[0] === "./src/fetch.py") {
+          fetchMetadata.push(args[1] ?? "");
+          writeFileSync(join(fx.gtfsDir, "de_operator-feed.gtfs.zip"), "OPERATOR");
+        }
+      },
+      artifactDownloader: async (url, dest) => {
+        expect(url).toContain("de_BVG.gtfs.zip");
+        mkdirSync(dirname(dest), { recursive: true });
+        writeFileSync(dest, "CATALOG");
+      },
+      now: () => "2026-06-27T00:00:00.000Z",
+    });
+
+    const { results } = await runTransitousPipeline(ctx, { stopAt: "fetch-operator" });
+    expect(results.find((result) => result.stage === "fetch-operator")?.status).toBe("ok");
+    expect(fetchMetadata).toHaveLength(1);
+    expect(fetchMetadata[0]).toMatch(/^\//);
+    expect(fetchMetadata[0]).toContain("operator-metadata");
+    const metadata = JSON.parse(readFileSync(fetchMetadata[0] as string, "utf-8")) as {
+      maintainers: unknown[];
+      sources: Array<{ type: string; license: Record<string, unknown> }>;
+    };
+    expect(metadata.maintainers).toHaveLength(1);
+    expect(metadata.sources[0]).toMatchObject({
+      type: "http",
+      license: {
+        "spdx-identifier": "CC-BY-4.0",
+        "attribution-text": "Operator authority",
+      },
+    });
+    const manifest = JSON.parse(
+      readFileSync(join(fx.gtfsDir, "transit-source-manifest.json"), "utf-8"),
+    ) as { sources: Array<{ sourceId: string }> };
+    expect(manifest.sources.map((source) => source.sourceId).sort()).toEqual([
+      "catalog:de:BVG",
+      "operator:de:operator-feed",
+    ]);
   });
 
   it("falls back from gtfs to netex when the gtfs archive 404s", async () => {
@@ -149,7 +225,7 @@ describe("mirror-mode pipeline", () => {
     expect(existsSync(join(fx.gtfsDir, "de_NX.netex.zip"))).toBe(true);
   });
 
-  it("reports mirror status 'error' when no archive can be fetched", async () => {
+  it("records mirror failures, then blocks at the unified acquisition gate", async () => {
     const fx = setupCatalog([{ name: "BVG" }]);
     const ctx = buildJobContext({
       dataDir: fx.dataDir,
@@ -164,9 +240,14 @@ describe("mirror-mode pipeline", () => {
       now: () => "2026-06-27T00:00:00.000Z",
     });
 
-    // The empty-import guard is at assemble-staging (see assemble-staging tests),
-    // not here — mirror just reports the failed acquisition.
-    const { results } = await runTransitousPipeline(ctx, { stopAt: "mirror" });
-    expect(results.find((r) => r.stage === "mirror")?.status).toBe("error");
+    const completed: string[] = [];
+    ctx.onStageComplete = async (result) => {
+      completed.push(`${result.stage}:${result.status}`);
+    };
+    await expect(runTransitousPipeline(ctx, { stopAt: "fetch-operator" })).rejects.toThrow(
+      /Failed to acquire 1 desired transit source/,
+    );
+    expect(completed).toContain("mirror:partial");
+    expect(completed).toContain("fetch-operator:error");
   });
 });

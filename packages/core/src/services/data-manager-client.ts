@@ -30,6 +30,40 @@ export interface GtfsDownloadResult {
   failures: GtfsDownloadFailure[];
 }
 
+export type TransitSourceLifecycle =
+  | "active"
+  | "add-pending"
+  | "update-pending"
+  | "removal-pending"
+  | "disabled"
+  | "failed"
+  | "stale";
+
+export interface TransitSourceRow {
+  id: string;
+  region: string;
+  name: string;
+  format: "gtfs" | "netex";
+  origin: "catalog" | "operator";
+  originUrl?: string;
+  license: Record<string, unknown>;
+  requested: boolean;
+  active: boolean;
+  activeEpoch?: string;
+  artifact?: { path: string; sha256: string; sizeBytes: number; retrievedAt: string };
+  lastFetchedAt?: string;
+  lastImportedAt?: string;
+  validationStatus?: string;
+  validationMessage?: string;
+  lifecycle: TransitSourceLifecycle;
+}
+
+export interface TransitSourceMutationResult {
+  jobId: string;
+  sourceId: string;
+  status: "started";
+}
+
 export class DataManagerClient {
   private baseUrl: string;
   private fetchImpl: typeof globalThis.fetch;
@@ -168,6 +202,95 @@ export class DataManagerClient {
       throw new Error(parsed.error ?? `delete /datasets/gtfs/${slug} failed: HTTP ${res.status}`);
     }
     return { ok: parsed.ok ?? true, removed: parsed.removed ?? [] };
+  }
+
+  async transitSources(
+    query: {
+      search?: string;
+      lifecycle?: TransitSourceLifecycle;
+      origin?: "catalog" | "operator";
+      limit?: number;
+      offset?: number;
+    } = {},
+  ): Promise<{ sources: TransitSourceRow[]; total: number; limit: number; offset: number }> {
+    const params = new URLSearchParams();
+    if (query.search) params.set("search", query.search);
+    if (query.lifecycle) params.set("lifecycle", query.lifecycle);
+    if (query.origin) params.set("origin", query.origin);
+    if (query.limit !== undefined) params.set("limit", String(query.limit));
+    if (query.offset !== undefined) params.set("offset", String(query.offset));
+    const suffix = params.size > 0 ? `?${params}` : "";
+    const res = await this.fetchImpl(`${this.baseUrl}/transit/sources${suffix}`, this.authed());
+    if (!res.ok) throw new Error(`transit/sources failed: HTTP ${res.status}`);
+    return (await res.json()) as {
+      sources: TransitSourceRow[];
+      total: number;
+      limit: number;
+      offset: number;
+    };
+  }
+
+  async addTransitSource(input: {
+    region: string;
+    name: string;
+    url: string;
+    license: {
+      spdxIdentifier?: string;
+      url?: string;
+      attribution: string;
+      publisher?: string;
+      publisherUrl?: string;
+    };
+    idempotencyKey?: string;
+  }): Promise<TransitSourceMutationResult> {
+    return this.transitSourceMutation("/transit/sources", "POST", input);
+  }
+
+  async removeTransitSource(
+    sourceId: string,
+    idempotencyKey?: string,
+  ): Promise<TransitSourceMutationResult> {
+    return this.transitSourceMutation(
+      `/transit/sources/${encodeURIComponent(sourceId)}`,
+      "DELETE",
+      { idempotencyKey },
+    );
+  }
+
+  async enableTransitSource(
+    sourceId: string,
+    idempotencyKey?: string,
+  ): Promise<TransitSourceMutationResult> {
+    return this.transitSourceMutation(
+      `/transit/sources/${encodeURIComponent(sourceId)}/enable`,
+      "POST",
+      { idempotencyKey },
+    );
+  }
+
+  private async transitSourceMutation(
+    path: string,
+    method: "POST" | "DELETE",
+    body: unknown,
+  ): Promise<TransitSourceMutationResult> {
+    const res = await this.fetchImpl(
+      `${this.baseUrl}${path}`,
+      this.authed({
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
+    const parsed = (await res.json()) as TransitSourceMutationResult & {
+      error?: string;
+      reason?: string;
+    };
+    if (!res.ok) {
+      throw new Error(
+        parsed.error ?? parsed.reason ?? `${method} ${path} failed: HTTP ${res.status}`,
+      );
+    }
+    return parsed;
   }
 
   async downloadStyle(): Promise<{ ok: boolean }> {

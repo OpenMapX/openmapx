@@ -8,6 +8,7 @@ import {
 } from "../../src/jobs/transitous/candidate.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import { rollbackProxyTransaction, run } from "../../src/jobs/transitous/proxy-transaction.js";
+import { TRANSIT_SOURCE_MANIFEST_FILENAME } from "../../src/jobs/transitous/source-manifest.js";
 import { StateStore } from "../../src/state.js";
 
 let tmp: string | undefined;
@@ -23,6 +24,10 @@ function setup(candidateVars: Record<string, unknown>, currentVars: Record<strin
   writeFileSync(join(staging, "config.yml"), "timetable:\n  datasets:\n    demo: {}\n");
   writeFileSync(join(staging, "license.json"), "{}\n");
   writeFileSync(join(staging, "demo.gtfs.zip"), "gtfs");
+  writeFileSync(
+    join(staging, TRANSIT_SOURCE_MANIFEST_FILENAME),
+    '{"version":1,"generatedAt":"2026-01-01T00:00:00Z","sources":[]}\n',
+  );
   writeFileSync(join(staging, CANDIDATE_PROXY_DIRNAME, "conf", "default.conf"), "candidate\n");
   writeFileSync(
     join(staging, CANDIDATE_PROXY_DIRNAME, "feed-proxy-vars.json"),

@@ -1,6 +1,11 @@
 import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { type MotisCandidateManifest, verifyCandidateManifest } from "./candidate.js";
+import {
+  CANDIDATE_MANIFEST_FILENAME,
+  type MotisCandidateManifest,
+  verifyCandidateManifest,
+} from "./candidate.js";
+import { recordPromotedSource } from "./feed-state-writer.js";
 import { runFunctionalProbes, verifyCapabilitySnapshot } from "./functional-probes.js";
 import { IMPORT_MARKER_FILE } from "./internal.js";
 import { PRIMARY_CONTAINER, STAGING_CONTAINER } from "./motis-containers.js";
@@ -13,6 +18,7 @@ import {
   flipMotisSlotAliases,
   type MotisSlot,
 } from "./slot-state.js";
+import { readTransitSourceManifest, TRANSIT_SOURCE_MANIFEST_FILENAME } from "./source-manifest.js";
 import type { JobContext, StageFn, StageResult } from "./types.js";
 
 const PRIMARY_URL = process.env.MOTIS_URL ?? "http://localhost:8081";
@@ -345,6 +351,16 @@ export const run: StageFn = async (ctx) => {
     }
 
     const manifest = verifyCandidateManifest(stagingDir);
+    const liveManifestPath = join(currentDir, CANDIDATE_MANIFEST_FILENAME);
+    if (existsSync(liveManifestPath)) {
+      const liveManifest = verifyCandidateManifest(currentDir);
+      if (liveManifest.epoch === manifest.epoch) {
+        throw new Error(`Candidate epoch ${manifest.epoch} duplicates the active dataset epoch`);
+      }
+    }
+    const sourceManifest = readTransitSourceManifest(
+      join(stagingDir, TRANSIT_SOURCE_MANIFEST_FILENAME),
+    );
     verifyCapabilitySnapshot(stagingDir, manifest);
     const smokeStart = Date.now();
     const smokeReport = await runFunctionalProbes(
@@ -366,7 +382,19 @@ export const run: StageFn = async (ctx) => {
     }
 
     if (ctx.slotLayout) {
-      return await promoteTwoSlot(ctx, manifest, startedAt, start, smokeTestDurationMs);
+      const result = await promoteTwoSlot(ctx, manifest, startedAt, start, smokeTestDurationMs);
+      if (result.status === "ok") {
+        for (const source of sourceManifest.sources) {
+          try {
+            await recordPromotedSource(source);
+          } catch (error) {
+            ctx.logger.warn(
+              `transitous-promote: feed_state import timestamp failed for ${source.sourceId}: ${(error as Error).message}`,
+            );
+          }
+        }
+      }
+      return result;
     }
 
     // Clear the leftover previous from the last cycle (we only keep one cycle
@@ -559,6 +587,16 @@ export const run: StageFn = async (ctx) => {
       previousDir,
       rollback: false,
     };
+
+    for (const source of sourceManifest.sources) {
+      try {
+        await recordPromotedSource(source);
+      } catch (error) {
+        ctx.logger.warn(
+          `transitous-promote: feed_state import timestamp failed for ${source.sourceId}: ${(error as Error).message}`,
+        );
+      }
+    }
 
     return {
       stage: "promote",

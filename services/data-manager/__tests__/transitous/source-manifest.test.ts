@@ -5,8 +5,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { resolveOperationsProfile } from "../../src/jobs/transitous/operations-profile.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import {
-  finalizeSovereignSourceManifest,
-  writeSovereignSourceManifest,
+  finalizeTransitSourceManifest,
+  readTransitSourceManifest,
+  writeTransitSourceManifest,
 } from "../../src/jobs/transitous/source-manifest.js";
 import { StateStore } from "../../src/state.js";
 
@@ -17,9 +18,9 @@ afterEach(() => {
   tmp = undefined;
 });
 
-describe("sovereign acquisition manifest", () => {
-  it("redacts credential values and hashes the acquired local artifact", () => {
-    tmp = mkdtempSync(join(tmpdir(), "openmapx-sovereign-manifest-"));
+describe("transit acquisition manifest", () => {
+  it("is produced for every profile, redacts URL values, and hashes each desired artifact", () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-transit-manifest-"));
     mkdirSync(join(tmp, "gtfs"), { recursive: true });
     const ctx = buildJobContext({
       dataDir: tmp,
@@ -43,7 +44,11 @@ describe("sovereign acquisition manifest", () => {
         activeScheduleSources: [
           {
             id: "de_bvg",
+            sourceId: "operator:de:BVG",
+            region: "de",
             name: "BVG",
+            format: "gtfs",
+            origin: "operator",
             originUrl: "https://operator.example/gtfs?api_key=secret",
             license: { "spdx-identifier": "CC-BY-4.0" },
           },
@@ -51,18 +56,46 @@ describe("sovereign acquisition manifest", () => {
       },
     ];
 
-    const manifestPath = writeSovereignSourceManifest(ctx);
-    expect(manifestPath).not.toBeNull();
+    const manifestPath = writeTransitSourceManifest(ctx);
     writeFileSync(join(ctx.outDir, "de_bvg.gtfs.zip"), "pinned feed bytes");
-    finalizeSovereignSourceManifest(ctx);
+    finalizeTransitSourceManifest(ctx);
 
     const text = readFileSync(manifestPath as string, "utf-8");
     expect(text).not.toContain("secret");
     const manifest = JSON.parse(text) as {
-      sources: Array<{ originUrl: string; localArtifact?: { sha256: string; sizeBytes: number } }>;
+      sources: Array<{ originUrl: string; artifact: { sha256: string; sizeBytes: number } }>;
     };
     expect(manifest.sources[0]?.originUrl).toContain("api_key=%5Bredacted%5D");
-    expect(manifest.sources[0]?.localArtifact?.sha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(manifest.sources[0]?.localArtifact?.sizeBytes).toBe(17);
+    expect(manifest.sources[0]?.artifact.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(manifest.sources[0]?.artifact.sizeBytes).toBe(17);
+    expect(readTransitSourceManifest(manifestPath).profileEvidence?.profile).toBe(
+      "regional-sovereign",
+    );
+  });
+
+  it("fails completeness when any desired source artifact is absent", () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-transit-manifest-"));
+    mkdirSync(join(tmp, "gtfs"), { recursive: true });
+    const ctx = buildJobContext({ dataDir: tmp, store: new StateStore(tmp) });
+    ctx.state.selectedFeedFiles = [
+      {
+        id: "de",
+        country: "de",
+        path: "feeds/de.json",
+        url: "catalog",
+        activeScheduleSources: [
+          {
+            id: "de_vbb",
+            sourceId: "catalog:de:vbb",
+            region: "de",
+            name: "vbb",
+            format: "gtfs",
+            origin: "catalog",
+          },
+        ],
+      },
+    ];
+    writeTransitSourceManifest(ctx);
+    expect(() => finalizeTransitSourceManifest(ctx)).toThrow(/has no acquired artifact/);
   });
 });

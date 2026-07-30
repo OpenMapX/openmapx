@@ -1,14 +1,14 @@
 import { InvalidFeedSlugError, isValidFeedSlug, normalizeFeedSlug } from "@openmapx/core";
 import type { FastifyInstance } from "fastify";
-import { searchCatalog } from "../services/gtfs/catalog";
 import { gtfsManager } from "../services/gtfs/index";
+import { searchTransitCatalog } from "../services/transit-catalog/index";
 import { requireAdmin } from "../utils/require-admin";
 
 export async function gtfsRoute(app: FastifyInstance): Promise<void> {
   // List available feeds from catalogs
   app.get("/gtfs/catalog", async (request) => {
     const { query, country } = request.query as { query?: string; country?: string };
-    const feeds = await searchCatalog(query, country);
+    const feeds = await searchTransitCatalog(query, country);
     return { feeds, count: feeds.length };
   });
 
@@ -33,7 +33,7 @@ export async function gtfsRoute(app: FastifyInstance): Promise<void> {
 
     // Import from catalog by ID
     if (body.catalogId) {
-      const catalog = await searchCatalog();
+      const catalog = await searchTransitCatalog();
       const feed = catalog.find((f) => f.id === body.catalogId);
       if (!feed) {
         return reply.status(404).send({ error: `Catalog feed "${body.catalogId}" not found` });

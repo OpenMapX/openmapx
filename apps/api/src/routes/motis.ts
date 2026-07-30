@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { searchCatalog } from "../services/gtfs/catalog";
 import { motisManager } from "../services/motis/manager";
+import { searchTransitCatalog } from "../services/transit-catalog/index";
 import { requireAdmin } from "../utils/require-admin";
 
 export async function motisRoute(server: FastifyInstance): Promise<void> {
@@ -38,7 +38,7 @@ export async function motisRoute(server: FastifyInstance): Promise<void> {
 
     if (body.catalogId) {
       // Look up from GTFS catalog
-      const feeds = await searchCatalog();
+      const feeds = await searchTransitCatalog();
       const catalogFeed = feeds.find((f) => f.id === body.catalogId);
       if (!catalogFeed) {
         return reply.status(404).send({ error: `Catalog feed "${body.catalogId}" not found` });

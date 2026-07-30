@@ -8,6 +8,7 @@ import {
 } from "../../src/jobs/transitous/candidate.js";
 import { run as motisImportRun } from "../../src/jobs/transitous/motis-import.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
+import { TRANSIT_SOURCE_MANIFEST_FILENAME } from "../../src/jobs/transitous/source-manifest.js";
 import { StateStore } from "../../src/state.js";
 
 let tmp: string | undefined;
@@ -28,6 +29,10 @@ function primeCandidate(stagingDir: string): void {
   writeFileSync(join(stagingDir, "config.yml"), "timetable:\n  datasets:\n    demo: {}\n");
   writeFileSync(join(stagingDir, "demo.gtfs.zip"), "gtfs");
   writeFileSync(join(stagingDir, "license.json"), "{}\n");
+  writeFileSync(
+    join(stagingDir, TRANSIT_SOURCE_MANIFEST_FILENAME),
+    '{"version":1,"generatedAt":"2026-05-01T00:00:00Z","sources":[]}\n',
+  );
   writeFileSync(join(stagingDir, CANDIDATE_PROXY_DIRNAME, "conf", "default.conf"), "server {}\n");
   writeFileSync(join(stagingDir, CANDIDATE_PROXY_DIRNAME, "feed-proxy-vars.json"), "{}\n");
   createCandidateManifest(stagingDir, "test-epoch", "2026-05-01T00:00:00.000Z");

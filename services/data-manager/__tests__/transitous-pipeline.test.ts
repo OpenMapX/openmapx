@@ -256,7 +256,7 @@ describe("runTransitousPipeline (integration)", () => {
     expect(state.datasets.map((dataset) => dataset.id)).toEqual(["de_bvg"]);
   });
 
-  it("reports malformed Transitous feed files as isolated failures without aborting other feeds", async () => {
+  it("records malformed feed evidence but blocks promotion of the reduced source set", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-transitous-parse-failure-"));
     const dataDir = tmp;
     const catalogDir = join(dataDir, ".transitous-catalog");
@@ -279,13 +279,14 @@ describe("runTransitousPipeline (integration)", () => {
       },
       now: () => "2026-04-20T12:00:00.000Z",
     });
-    await runTransitousPipeline(ctx);
+    await expect(runTransitousPipeline(ctx)).rejects.toThrow(/Fetched 1\/2 feed source/);
     const result = toDownloadGtfsResult(ctx, []);
 
     expect(result.requestedCount).toBe(2);
     expect(result.selectedCount).toBe(2);
     expect(result.skippedCount).toBe(0);
-    expect(result.downloaded.map((dataset) => dataset.id)).toEqual(["us_mbta"]);
+    expect(result.downloaded).toEqual([]);
+    expect(readFileSync(join(dataDir, "gtfs", "us_mbta.gtfs.zip"), "utf-8")).toBe("MBTA");
     expect(result.failures).toEqual([
       {
         id: "de",
@@ -340,7 +341,7 @@ describe("runTransitousPipeline (integration)", () => {
       runner,
       now: () => "2026-04-20T12:00:00.000Z",
     });
-    await runTransitousPipeline(ctx);
+    await expect(runTransitousPipeline(ctx)).rejects.toThrow(/Fetched 0\/1 feed source/);
     const result = toDownloadGtfsResult(ctx, []);
 
     expect(result.downloaded).toEqual([]);
@@ -476,7 +477,7 @@ describe("runTransitousPipeline (integration)", () => {
       },
       now: () => "2026-04-20T12:00:00.000Z",
     });
-    await runTransitousPipeline(ctx);
+    await expect(runTransitousPipeline(ctx)).rejects.toThrow(/Fetched 1\/3 feed source/);
     const result = toDownloadGtfsResult(ctx, []);
 
     expect(result.selectedCount).toBe(3);

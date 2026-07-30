@@ -1,4 +1,5 @@
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -14,12 +15,18 @@ import {
   CANDIDATE_PROXY_DIRNAME,
   createCandidateManifest,
 } from "../../src/jobs/transitous/candidate.js";
+import { recordPromotedSource } from "../../src/jobs/transitous/feed-state-writer.js";
 import { IMPORT_MARKER_FILE } from "../../src/jobs/transitous/internal.js";
 import { probeHttp } from "../../src/jobs/transitous/motis-probe.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import { run as promoteRun } from "../../src/jobs/transitous/promote.js";
 import { aliasSlot, ensureMotisSlotLayout } from "../../src/jobs/transitous/slot-state.js";
+import { TRANSIT_SOURCE_MANIFEST_FILENAME } from "../../src/jobs/transitous/source-manifest.js";
 import { StateStore } from "../../src/state.js";
+
+vi.mock("../../src/jobs/transitous/feed-state-writer.js", () => ({
+  recordPromotedSource: vi.fn(async () => {}),
+}));
 
 let tmp: string | undefined;
 let originalFetch: typeof fetch;
@@ -29,6 +36,7 @@ beforeEach(() => {
   originalFetch = globalThis.fetch;
   // Probe HTTP goes through the mocked global fetch (prod uses node:http).
   probeHttp.get = (url) => fetch(url);
+  vi.mocked(recordPromotedSource).mockClear();
 });
 
 afterEach(() => {
@@ -108,6 +116,30 @@ function setupFixture(opts: FixtureOptions): {
     );
     writeFileSync(join(stagingDir, "demo.gtfs.zip"), "gtfs");
     writeFileSync(join(stagingDir, "license.json"), "{}\n");
+    writeFileSync(
+      join(stagingDir, TRANSIT_SOURCE_MANIFEST_FILENAME),
+      `${JSON.stringify({
+        version: 1,
+        generatedAt: "2026-05-01T00:00:00.000Z",
+        sources: [
+          {
+            sourceId: "catalog:de:demo",
+            region: "de",
+            name: "demo",
+            format: "gtfs",
+            origin: "catalog",
+            license: {},
+            transformations: ["transitous-cleaning"],
+            artifact: {
+              relativePath: "demo.gtfs.zip",
+              sha256: "0".repeat(64),
+              sizeBytes: 4,
+              modifiedAt: "2026-05-01T00:00:00.000Z",
+            },
+          },
+        ],
+      })}\n`,
+    );
     const proxy = join(stagingDir, CANDIDATE_PROXY_DIRNAME);
     mkdirSync(join(proxy, "conf"), { recursive: true });
     writeFileSync(join(proxy, "conf", "default.conf"), "server {}\n");
@@ -184,6 +216,7 @@ describe("promote stage", () => {
       }),
     );
     expect(result.status).toBe("error");
+    expect(recordPromotedSource).not.toHaveBeenCalled();
     expect(result.message).toMatch(/staging probe "health" failed/);
     // Filesystem unchanged.
     expect(existsSync(fx.stagingDir)).toBe(true);
@@ -208,6 +241,9 @@ describe("promote stage", () => {
     });
     const result = await promoteRun(ctx);
     expect(result.status).toBe("ok");
+    expect(recordPromotedSource).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceId: "catalog:de:demo" }),
+    );
 
     // After the swap: staging dir is empty (recreated), current has the new
     // sentinels, previous holds the old sentinel.
@@ -227,6 +263,22 @@ describe("promote stage", () => {
     const artifacts = result.artifacts as { rollback?: boolean; previousDir?: string };
     expect(artifacts.rollback).toBe(false);
     expect(artifacts.previousDir).toBe(fx.previousDir);
+  });
+
+  it("rejects a candidate whose epoch duplicates the active dataset", async () => {
+    const fx = setupFixture({ staging: true });
+    cpSync(fx.stagingDir, fx.currentDir, { recursive: true });
+    const result = await promoteRun(
+      makeCtx({
+        dataDir: fx.dataDir,
+        runner: async () => {
+          throw new Error("duplicate epoch must fail before container mutation");
+        },
+      }),
+    );
+    expect(result.status).toBe("error");
+    expect(result.message).toMatch(/duplicates the active dataset epoch/);
+    expect(recordPromotedSource).not.toHaveBeenCalled();
   });
 
   it("waits for the primary /health to load, not just /map/initial, before smoke-testing", async () => {

@@ -14,7 +14,7 @@ import {
 } from "@openmapx/transitous-core";
 import { GTFS_ARCHIVE_RE } from "./internal.js";
 import type { MotisOperationsPolicy } from "./operations-profile.js";
-import { SOVEREIGN_SOURCE_MANIFEST_FILENAME } from "./source-manifest.js";
+import { TRANSIT_SOURCE_MANIFEST_FILENAME } from "./source-manifest.js";
 
 export const CANDIDATE_MANIFEST_FILENAME = "motis-candidate-manifest.json";
 export const CAPABILITY_SNAPSHOT_FILENAME = "mobility-capabilities.json";
@@ -55,7 +55,7 @@ export interface MotisCandidateManifest {
     proxyVars: CandidateArtifactHash;
     datasets: CandidateArtifactHash[];
     sourceIndex?: CandidateArtifactHash;
-    sovereignSources?: CandidateArtifactHash;
+    sourceManifest: CandidateArtifactHash;
   };
 }
 
@@ -135,7 +135,10 @@ export function createCandidateManifest(
     .map((entry) => sha256File(join(stagingDir, entry), stagingDir));
   if (datasets.length === 0) throw new Error("Candidate contains no timetable datasets");
   const sourceIndexPath = join(stagingDir, "gbfs-source-index.json");
-  const sovereignSourcesPath = join(stagingDir, SOVEREIGN_SOURCE_MANIFEST_FILENAME);
+  const sourceManifestPath = join(stagingDir, TRANSIT_SOURCE_MANIFEST_FILENAME);
+  if (!existsSync(sourceManifestPath)) {
+    throw new Error(`Required candidate artifact missing: ${sourceManifestPath}`);
+  }
   const manifest: MotisCandidateManifest = {
     schemaVersion: 1,
     epoch,
@@ -152,9 +155,7 @@ export function createCandidateManifest(
       ...(existsSync(sourceIndexPath)
         ? { sourceIndex: sha256File(sourceIndexPath, stagingDir) }
         : {}),
-      ...(existsSync(sovereignSourcesPath)
-        ? { sovereignSources: sha256File(sovereignSourcesPath, stagingDir) }
-        : {}),
+      sourceManifest: sha256File(sourceManifestPath, stagingDir),
     },
   };
   const output = join(stagingDir, CANDIDATE_MANIFEST_FILENAME);
@@ -167,7 +168,12 @@ export function createCandidateManifest(
 export function readCandidateManifest(stagingDir: string): MotisCandidateManifest {
   const path = join(stagingDir, CANDIDATE_MANIFEST_FILENAME);
   const manifest = JSON.parse(readFileSync(path, "utf-8")) as MotisCandidateManifest;
-  if (manifest.schemaVersion !== 1 || !manifest.epoch || !manifest.artifacts) {
+  if (
+    manifest.schemaVersion !== 1 ||
+    !manifest.epoch ||
+    !manifest.artifacts ||
+    !manifest.artifacts.sourceManifest
+  ) {
     throw new Error(`Unsupported or malformed candidate manifest at ${path}`);
   }
   return manifest;
@@ -182,7 +188,7 @@ export function verifyCandidateManifest(stagingDir: string): MotisCandidateManif
     manifest.artifacts.proxyVars,
     ...manifest.artifacts.datasets,
     ...(manifest.artifacts.sourceIndex ? [manifest.artifacts.sourceIndex] : []),
-    ...(manifest.artifacts.sovereignSources ? [manifest.artifacts.sovereignSources] : []),
+    manifest.artifacts.sourceManifest,
   ];
   for (const expected of artifacts) {
     const current = sha256File(join(stagingDir, expected.path), stagingDir);

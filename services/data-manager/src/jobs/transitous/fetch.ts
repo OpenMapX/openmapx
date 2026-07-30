@@ -2,15 +2,15 @@ import { statSync } from "node:fs";
 import type { FeedDownloadFailure } from "../download-gtfs.js";
 import { feedKeyForFailure, feedKeyForSource, recordFetchOutcome } from "./feed-state-writer.js";
 import { runFetchPipeline, scanGtfsArchives } from "./internal.js";
-import { finalizeSovereignSourceManifest } from "./source-manifest.js";
+import { finalizeTransitSourceManifest } from "./source-manifest.js";
 import type { FeedFileEntry, JobContext, StageFn, StageResult, StageStatus } from "./types.js";
 
 /**
  * Run Transitous's `src/fetch.py` for every selected feed file. Captures
- * per-feed failures and snapshots pre-fetch mtimes so partial-success
+ * per-feed failures and snapshots pre-fetch mtimes so failure
  * bookkeeping can identify which archives were freshly written. The status
- * is `"ok"` if all fetches succeeded, `"partial"` if some did and some
- * failed, and `"error"` if every fetch failed.
+ * is `"ok"` only if every desired source succeeded. Any missing desired
+ * source makes the candidate incomplete and therefore returns `"error"`.
  */
 export const run: StageFn = async (ctx) => {
   const startedAt = ctx.now();
@@ -46,22 +46,20 @@ export const run: StageFn = async (ctx) => {
     );
     const failures: FeedDownloadFailure[] = [...parseFailures, ...fetchFailures];
     ctx.state.fetchFailures = failures;
-    finalizeSovereignSourceManifest(ctx);
 
     // Persist per-feed fetch outcomes so the staleness-alert cron (G2) sees
     // which feeds successfully refreshed and which failed. Best-effort: a DB
     // outage here is logged at warn level and otherwise non-fatal.
     await persistFetchOutcomes(selectedFeedFiles, failures, ctx);
 
+    if (failures.length === 0) finalizeTransitSourceManifest(ctx);
+
     // A feed file with N active schedule sources may surface 1..N failures
     // attributable to specific sources. We treat the stage as fully failed
     // when every selected source failed, partial when only some did.
     const selectedCount = ctx.state.selectedCount ?? 0;
     const fetchedCount = Math.max(0, selectedCount - failures.length);
-    let status: StageStatus = "ok";
-    if (failures.length > 0) {
-      status = fetchedCount === 0 ? "error" : "partial";
-    }
+    const status: StageStatus = failures.length > 0 ? "error" : "ok";
 
     const finishedAt = ctx.now();
     return {
@@ -114,7 +112,7 @@ async function persistFetchOutcomes(
   );
   for (const feed of selectedFeedFiles) {
     for (const source of feed.activeScheduleSources) {
-      const key = feedKeyForSource(feed, source.name);
+      const key = feedKeyForSource(feed, source.name, source.region);
       const fingerprint = `${key.region}::${key.name}`;
       const ok = !failedKeys.has(fingerprint);
       try {

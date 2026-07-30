@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { feedState } from "@openmapx/db-schema";
 import { parseTransitSource } from "@openmapx/transitous-core";
 import { execa } from "execa";
 import type { FastifyInstance, FastifyReply } from "fastify";
+import { db } from "./db/index.js";
 import { convertPbfToBz2, convertPbfToBz2ForRegion } from "./jobs/convert-overpass.js";
 import { downloadGtfs, type FeedDescriptor } from "./jobs/download-gtfs.js";
 import { downloadOsm } from "./jobs/download-osm.js";
@@ -39,6 +41,16 @@ import type { SingleFlightController } from "./jobs/transitous/single-flight.js"
 import { asJobLogger, jobChildLogger } from "./logger.js";
 import { StateStore } from "./state.js";
 import {
+  listPinnedTransitCatalog,
+  listTransitSources,
+  prepareAddTransitSource,
+  prepareEnableTransitSource,
+  prepareRemoveTransitSource,
+  resolveTransitOverlayPath,
+  TransitSourceError,
+  type TransitSourceLifecycle,
+} from "./transit-sources.js";
+import {
   readTransitousLock,
   readTransitousLockProposal,
   type TransitousLock,
@@ -56,6 +68,8 @@ export interface ApiOptions {
    */
   singleFlight?: SingleFlightController;
   operationsPolicy?: MotisOperationsPolicy;
+  /** Test seam invoked after reservation; production launches the real pipeline. */
+  launchTransitSync?: (args: { jobId: string; countries: string[]; trigger: string }) => void;
 }
 
 const startedAt = Date.now();
@@ -130,6 +144,94 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   const operationsPolicy =
     opts.operationsPolicy ??
     resolveOperationsProfileFromEnv(process.env, { allowEmptyRegional: true });
+  const catalogDir = join(dataDir, ".transitous-catalog");
+  const overlayPath = resolveTransitOverlayPath(dataDir);
+
+  function launchReservedTransitSync(jobId: string, countries: string[], trigger: string): void {
+    if (opts.launchTransitSync) {
+      opts.launchTransitSync({ jobId, countries, trigger });
+      return;
+    }
+    const jobLog = asJobLogger(jobChildLogger({ job: "transitous-sync", jobId, trigger }));
+    const persistingHook = makePersistingOnStageComplete(jobId, jobLog);
+    void (async () => {
+      try {
+        const ctx = buildJobContext({
+          dataDir,
+          store,
+          countries,
+          repoRoot,
+          source: parseTransitSource(),
+          operationsPolicy: { ...operationsPolicy, countries },
+          jobId,
+          logger: jobLog,
+          onStageComplete: persistingHook,
+          feedsOverlayPath: overlayPath,
+        });
+        const result = await runTransitousPipeline(ctx);
+        await finalizeJobRow(jobId, result.finalStatus);
+        app.log.info({ jobId, finalStatus: result.finalStatus }, "transitous-api: sync finished");
+      } catch (err) {
+        app.log.error({ jobId, err }, "transitous-api: sync threw");
+        try {
+          await finalizeJobRow(jobId, "error");
+        } catch {
+          // The row remains visible as running if Postgres itself is unavailable.
+        }
+      } finally {
+        singleFlight.markSyncFinished();
+      }
+    })();
+  }
+
+  async function reserveSourceMutation(options: {
+    triggeredBy: string;
+    idempotencyKey?: string;
+    sourceId: string;
+    action: "add" | "remove" | "enable";
+    persist: () => void;
+  }): Promise<
+    { ok: true; jobId: string } | { ok: false; status: number; body: Record<string, unknown> }
+  > {
+    const start = await singleFlight.tryStartSync({
+      trigger: "api",
+      triggeredBy: options.triggeredBy,
+      idempotencyKey: options.idempotencyKey,
+      kind: "transitous-sync",
+      metadata: {
+        source: "source-mutation",
+        action: options.action,
+        sourceId: options.sourceId,
+        countries: operationsPolicy.countries,
+      },
+    });
+    if (!start.ok) {
+      return {
+        ok: false,
+        status: 409,
+        body: {
+          ok: false,
+          reason: start.reason,
+          existingJobId: start.existingJobId,
+        },
+      };
+    }
+    try {
+      // The synchronous single-flight reservation and visible job row exist
+      // before the atomic desired-state rename.
+      options.persist();
+    } catch (error) {
+      await finalizeJobRow(start.jobId, "error");
+      singleFlight.markSyncFinished();
+      return {
+        ok: false,
+        status: 500,
+        body: { ok: false, error: (error as Error).message, jobId: start.jobId },
+      };
+    }
+    launchReservedTransitSync(start.jobId, operationsPolicy.countries, `source-${options.action}`);
+    return { ok: true, jobId: start.jobId };
+  }
 
   app.get("/status", async () => ({
     ok: true,
@@ -140,6 +242,149 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   app.get("/datasets", async () => ({ datasets: store.getAll() }));
 
   app.get("/transit/profile", async () => ({ policy: publicOperationsPolicy(operationsPolicy) }));
+
+  app.get<{
+    Querystring: {
+      search?: string;
+      lifecycle?: TransitSourceLifecycle;
+      origin?: "catalog" | "operator";
+      limit?: string;
+      offset?: string;
+    };
+  }>("/transit/sources", async (req, reply) => {
+    try {
+      const feedStates = await db.select().from(feedState);
+      return listTransitSources({
+        dataDir,
+        catalogDir,
+        overlayPath,
+        feedStates,
+        query: {
+          search: req.query.search,
+          lifecycle: req.query.lifecycle,
+          origin: req.query.origin,
+          limit: Number(req.query.limit ?? 100),
+          offset: Number(req.query.offset ?? 0),
+        },
+      });
+    } catch (error) {
+      const status = error instanceof TransitSourceError ? error.statusCode : 500;
+      return reply.code(status).send({ ok: false, error: (error as Error).message });
+    }
+  });
+
+  app.get("/transit/catalog", async (_req, reply) => {
+    try {
+      return { sources: listPinnedTransitCatalog(catalogDir) };
+    } catch (error) {
+      const status = error instanceof TransitSourceError ? error.statusCode : 500;
+      return reply.code(status).send({ ok: false, error: (error as Error).message });
+    }
+  });
+
+  app.post<{
+    Body: {
+      region: string;
+      name: string;
+      url: string;
+      license: {
+        spdxIdentifier?: string;
+        url?: string;
+        attribution: string;
+        publisher?: string;
+        publisherUrl?: string;
+      };
+      idempotencyKey?: string;
+      triggeredBy?: string;
+    };
+  }>("/transit/sources", async (req, reply) => {
+    let mutation: ReturnType<typeof prepareAddTransitSource>;
+    try {
+      mutation = prepareAddTransitSource({
+        catalogDir,
+        overlayPath,
+        source: {
+          spec: "gtfs",
+          type: "http",
+          region: req.body.region,
+          name: req.body.name,
+          url: req.body.url,
+          origin: "operator",
+          license: req.body.license,
+        },
+      });
+    } catch (error) {
+      const status = error instanceof TransitSourceError ? error.statusCode : 400;
+      return reply.code(status).send({ ok: false, error: (error as Error).message });
+    }
+    const result = await reserveSourceMutation({
+      triggeredBy: req.body.triggeredBy ?? "api",
+      idempotencyKey: req.body.idempotencyKey,
+      sourceId: mutation.sourceId,
+      action: "add",
+      persist: mutation.persist,
+    });
+    if (!result.ok) return reply.code(result.status).send(result.body);
+    return reply
+      .code(202)
+      .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
+  });
+
+  app.delete<{
+    Params: { sourceId: string };
+    Body?: { idempotencyKey?: string; triggeredBy?: string };
+  }>("/transit/sources/:sourceId", async (req, reply) => {
+    let mutation: ReturnType<typeof prepareRemoveTransitSource>;
+    try {
+      mutation = prepareRemoveTransitSource({
+        catalogDir,
+        overlayPath,
+        sourceId: req.params.sourceId,
+      });
+    } catch (error) {
+      const status = error instanceof TransitSourceError ? error.statusCode : 400;
+      return reply.code(status).send({ ok: false, error: (error as Error).message });
+    }
+    const result = await reserveSourceMutation({
+      triggeredBy: req.body?.triggeredBy ?? "api",
+      idempotencyKey: req.body?.idempotencyKey,
+      sourceId: mutation.sourceId,
+      action: "remove",
+      persist: mutation.persist,
+    });
+    if (!result.ok) return reply.code(result.status).send(result.body);
+    return reply
+      .code(202)
+      .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
+  });
+
+  app.post<{
+    Params: { sourceId: string };
+    Body?: { idempotencyKey?: string; triggeredBy?: string };
+  }>("/transit/sources/:sourceId/enable", async (req, reply) => {
+    let mutation: ReturnType<typeof prepareEnableTransitSource>;
+    try {
+      mutation = prepareEnableTransitSource({
+        catalogDir,
+        overlayPath,
+        sourceId: req.params.sourceId,
+      });
+    } catch (error) {
+      const status = error instanceof TransitSourceError ? error.statusCode : 400;
+      return reply.code(status).send({ ok: false, error: (error as Error).message });
+    }
+    const result = await reserveSourceMutation({
+      triggeredBy: req.body?.triggeredBy ?? "api",
+      idempotencyKey: req.body?.idempotencyKey,
+      sourceId: mutation.sourceId,
+      action: "enable",
+      persist: mutation.persist,
+    });
+    if (!result.ok) return reply.code(result.status).send(result.body);
+    return reply
+      .code(202)
+      .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
+  });
 
   app.post<{
     Body?: {
@@ -560,39 +805,8 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       });
     }
 
-    // Kick off the pipeline async — the route returns 202 immediately.
     const jobId = start.jobId;
-    const jobLog = asJobLogger(jobChildLogger({ job: "transitous-sync", jobId, trigger: "api" }));
-    const persistingHook = makePersistingOnStageComplete(jobId, jobLog);
-
-    void (async () => {
-      try {
-        const ctx = buildJobContext({
-          dataDir,
-          store,
-          countries,
-          repoRoot,
-          source: parseTransitSource(),
-          operationsPolicy: { ...operationsPolicy, countries },
-          jobId,
-          logger: jobLog,
-          onStageComplete: persistingHook,
-        });
-        const result = await runTransitousPipeline(ctx);
-        await finalizeJobRow(jobId, result.finalStatus);
-        app.log.info({ jobId, finalStatus: result.finalStatus }, "transitous-api: sync finished");
-      } catch (err) {
-        app.log.error({ jobId, err }, "transitous-api: sync threw");
-        try {
-          await finalizeJobRow(jobId, "error");
-        } catch {
-          // Swallow — the row will look stuck at "running" until the next
-          // restart-time janitor pass.
-        }
-      } finally {
-        singleFlight.markSyncFinished();
-      }
-    })();
+    launchReservedTransitSync(jobId, countries, "api");
 
     reply.code(202);
     return { ok: true, jobId, status: "started" };

@@ -196,7 +196,7 @@ describe("runTransitousPipeline orchestrator", () => {
     expect(elapsedMs).toBeLessThan(60_000);
   });
 
-  it("aggregates final status as partial when a soft-stop stage returns partial", async () => {
+  it("rejects a build candidate when even one desired source fetch fails", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-pipeline-partial-"));
     const dataDir = tmp;
     const catalogDir = join(dataDir, ".transitous-catalog");
@@ -223,10 +223,8 @@ describe("runTransitousPipeline orchestrator", () => {
       now: () => "2026-05-01T00:00:00.000Z",
     });
 
-    const { results, finalStatus } = await runTransitousPipeline(ctx, { stopAt: "fetch" });
-
-    const byStage = Object.fromEntries(results.map((r) => [r.stage, r]));
-    expect(byStage.fetch?.status).toBe("partial");
-    expect(finalStatus).toBe("partial");
+    await expect(runTransitousPipeline(ctx, { stopAt: "fetch" })).rejects.toThrow(
+      /Fetched 1\/2 feed source/,
+    );
   });
 });

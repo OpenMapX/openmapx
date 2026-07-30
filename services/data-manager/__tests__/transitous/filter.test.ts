@@ -144,7 +144,16 @@ describe("filter stage", () => {
     const deFeedPath = join(catalogDir, "feeds", "de.json");
     writeFileSync(
       deFeedPath,
-      JSON.stringify({ sources: [{ name: "BVG", url: "https://old.example/bvg.zip" }] }, null, 2),
+      JSON.stringify(
+        {
+          sources: [
+            { name: "BVG", url: "https://old.example/bvg.zip" },
+            { name: "VBB", url: "https://old.example/vbb.zip" },
+          ],
+        },
+        null,
+        2,
+      ),
     );
 
     const overlayPath = join(tmp, "feeds-overlay.json");
@@ -152,13 +161,15 @@ describe("filter stage", () => {
       overlayPath,
       JSON.stringify(
         {
+          version: 3,
+          sources: [],
           patches: [
             {
-              region: "de",
-              name: "BVG",
-              patch: { url: "https://new.example/bvg.zip" },
+              sourceId: "catalog:de:BVG",
+              skip: true,
             },
           ],
+          quarantine: [],
         },
         null,
         2,
@@ -189,7 +200,10 @@ describe("filter stage", () => {
     const updated = JSON.parse(readFileSync(deFeedPath, "utf-8")) as {
       sources: Array<Record<string, unknown>>;
     };
-    expect(updated.sources[0]?.url).toBe("https://new.example/bvg.zip");
+    expect(updated.sources[0]).toMatchObject({
+      url: "https://old.example/bvg.zip",
+      skip: true,
+    });
     expect(infos.some((m) => m.includes("applying 1 feeds-overlay patch"))).toBe(true);
   });
 });

@@ -15,6 +15,8 @@ export interface TransitousFeedSource {
   "transitland-atlas-id"?: string;
   "mdb-id"?: string | number;
   license?: Record<string, unknown>;
+  "openmapx-source-id"?: string;
+  "openmapx-origin"?: "operator";
 }
 
 export interface TransitousFeedFile {

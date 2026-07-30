@@ -1,202 +1,181 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   applyFeedOverlay,
   type FeedFile,
+  parseFeedOverlay,
   readFeedOverlay,
+  writeFeedOverlayAtomic,
 } from "../src/jobs/transitous-feeds-overlay.js";
 
 let tmp: string | undefined;
 
 afterEach(() => {
-  if (tmp) {
-    rmSync(tmp, { recursive: true, force: true });
-    tmp = undefined;
-  }
+  if (tmp) rmSync(tmp, { recursive: true, force: true });
+  tmp = undefined;
 });
 
-describe("readFeedOverlay", () => {
+function validOverlay() {
+  return {
+    version: 3 as const,
+    sources: [
+      {
+        spec: "gtfs" as const,
+        type: "http" as const,
+        region: "de",
+        name: "operator-feed",
+        url: "https://operator.example/feed.zip",
+        origin: "operator" as const,
+        license: {
+          spdxIdentifier: "CC-BY-4.0",
+          attribution: "Example transport authority",
+        },
+      },
+    ],
+    patches: [{ sourceId: "catalog:de:vbb", skip: true }],
+    quarantine: [],
+  };
+}
+
+describe("version 3 feed overlay", () => {
   it("returns null when the overlay file is missing", () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-overlay-"));
-    const path = join(tmp, "missing.json");
-    expect(readFeedOverlay(path)).toBeNull();
+    expect(readFeedOverlay(join(tmp, "missing.json"))).toBeNull();
   });
 
-  it("parses a valid overlay fixture", () => {
-    tmp = mkdtempSync(join(tmpdir(), "openmapx-overlay-"));
-    const path = join(tmp, "feeds-overlay.json");
-    writeFileSync(
-      path,
-      JSON.stringify({
-        comment: "test fixture",
-        patches: [
-          {
-            region: "de",
-            name: "mobidata-bw",
-            patch: { url: "https://example.test/feed.zip", "api-key": "secret" },
-          },
-        ],
-      }),
+  it("strictly rejects a version 2 overlay", () => {
+    expect(() => parseFeedOverlay({ schemaVersion: 2, additions: [], patches: [] })).toThrow(
+      /unsupported version/,
     );
-    const overlay = readFeedOverlay(path);
-    expect(overlay).not.toBeNull();
-    expect(overlay?.patches).toHaveLength(1);
-    expect(overlay?.patches[0]).toMatchObject({
-      region: "de",
-      name: "mobidata-bw",
-      patch: { url: "https://example.test/feed.zip", "api-key": "secret" },
-    });
   });
 
-  it("treats a missing `patches` array as an empty list", () => {
-    tmp = mkdtempSync(join(tmpdir(), "openmapx-overlay-"));
-    const path = join(tmp, "feeds-overlay.json");
-    writeFileSync(path, JSON.stringify({ comment: "no patches yet" }));
-    const overlay = readFeedOverlay(path);
-    expect(overlay).toEqual({ schemaVersion: 2, patches: [], additions: [], quarantine: [] });
+  it.each([
+    ["unsafe name", { name: "not_safe" }, /name must match/],
+    ["embedded credentials", { url: "https://user:secret@example.test/feed.zip" }, /credentials/],
+    ["missing license identity", { license: { attribution: "Authority" } }, /requires/],
+  ])("rejects %s", (_label, patch, expected) => {
+    const overlay = validOverlay();
+    Object.assign(overlay.sources[0], patch);
+    expect(() => parseFeedOverlay(overlay)).toThrow(expected);
   });
 
-  it("throws when patches is not an array", () => {
-    tmp = mkdtempSync(join(tmpdir(), "openmapx-overlay-"));
-    const path = join(tmp, "feeds-overlay.json");
-    writeFileSync(path, JSON.stringify({ patches: "oops" }));
-    expect(() => readFeedOverlay(path)).toThrow(/non-array/);
+  it("rejects duplicate normalized identities, names, and URLs", () => {
+    const overlay = validOverlay();
+    overlay.sources.push({ ...overlay.sources[0] });
+    expect(() => parseFeedOverlay(overlay)).toThrow(/duplicate sourceId/);
   });
 
-  it("throws on a patch entry missing required fields", () => {
+  it("writes a validated overlay atomically without leaving temporary files", () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-overlay-"));
     const path = join(tmp, "feeds-overlay.json");
-    writeFileSync(
-      path,
-      JSON.stringify({
-        patches: [{ region: "de", patch: { url: "https://example.test" } }],
-      }),
-    );
-    expect(() => readFeedOverlay(path)).toThrow(/missing string "name"/);
+    writeFeedOverlayAtomic(path, validOverlay());
+    expect(readFeedOverlay(path)).toEqual(parseFeedOverlay(validOverlay()));
+    expect(readdirSync(tmp)).toEqual(["feeds-overlay.json"]);
+    expect(readFileSync(path, "utf-8")).not.toContain("secret");
+  });
+
+  it("does not replace the existing file when validation fails", () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-overlay-"));
+    const path = join(tmp, "feeds-overlay.json");
+    writeFileSync(path, "unchanged\n");
+    expect(() =>
+      writeFeedOverlayAtomic(path, { ...validOverlay(), version: 2 } as never),
+    ).toThrow();
+    expect(readFileSync(path, "utf-8")).toBe("unchanged\n");
+    expect(existsSync(path)).toBe(true);
+  });
+
+  it("cleans up its temporary file when the atomic rename fails", () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-overlay-"));
+    const path = join(tmp, "feeds-overlay.json");
+    mkdirSync(path);
+    expect(() => writeFeedOverlayAtomic(path, validOverlay())).toThrow();
+    expect(readdirSync(tmp)).toEqual(["feeds-overlay.json"]);
   });
 });
 
 describe("applyFeedOverlay", () => {
-  it("patches a feed source's URL when name matches", () => {
+  it("adds an operator source and disables a catalog source by canonical identity", () => {
     const feeds: FeedFile[] = [
       {
         region: "de",
-        sources: [
-          { name: "mobidata-bw", url: "https://upstream.example/old.zip" },
-          { name: "other", url: "https://upstream.example/other.zip" },
-        ],
+        sources: [{ name: "vbb", spec: "gtfs", type: "http", url: "https://vbb.example/feed.zip" }],
       },
     ];
-    const result = applyFeedOverlay(feeds, {
-      schemaVersion: 2,
-      additions: [],
-      quarantine: [],
-      patches: [
-        {
-          region: "de",
-          name: "mobidata-bw",
-          patch: { url: "https://override.example/new.zip", "api-key": "k1" },
+    const result = applyFeedOverlay(feeds, parseFeedOverlay(validOverlay()));
+    expect(result).toMatchObject({ applied: 1, added: 1, quarantined: 0, unmatched: [] });
+    expect(feeds[0]?.sources).toEqual([
+      expect.objectContaining({
+        name: "operator-feed",
+        "openmapx-origin": "operator",
+        "openmapx-source-id": "operator:de:operator-feed",
+        license: {
+          "spdx-identifier": "CC-BY-4.0",
+          "attribution-text": "Example transport authority",
         },
-      ],
-    });
-    expect(result.applied).toBe(1);
-    expect(result.unmatched).toHaveLength(0);
-    expect(feeds[0].sources?.[0]).toMatchObject({
-      name: "mobidata-bw",
-      url: "https://override.example/new.zip",
-      "api-key": "k1",
-    });
-    // Unrelated sources untouched.
-    expect(feeds[0].sources?.[1]).toMatchObject({
-      name: "other",
-      url: "https://upstream.example/other.zip",
-    });
+      }),
+      expect.objectContaining({ name: "vbb", skip: true }),
+    ]);
   });
 
-  it("reports patches with no matching region or name as unmatched no-ops", () => {
-    const feeds: FeedFile[] = [
-      {
-        region: "de",
-        sources: [{ name: "vbb", url: "https://upstream.example/vbb.zip" }],
-      },
-    ];
-    const result = applyFeedOverlay(feeds, {
-      schemaVersion: 2,
-      additions: [],
-      quarantine: [],
-      patches: [
-        // Region missing entirely.
-        { region: "fr", name: "sncf", patch: { url: "https://override.example" } },
-        // Region matches, name does not.
-        { region: "de", name: "missing-source", patch: { url: "https://override.example" } },
-      ],
-    });
-    expect(result.applied).toBe(0);
-    expect(result.unmatched).toHaveLength(2);
-    expect(feeds[0].sources?.[0]).toMatchObject({
-      name: "vbb",
-      url: "https://upstream.example/vbb.zip",
-    });
-  });
-
-  it("applies the same patch to every source with the matching name", () => {
+  it.each([
+    [
+      "identity",
+      { name: "other", url: "https://other.example/feed.zip" },
+      "operator:de:operator-feed",
+    ],
+    ["name", { name: "operator-feed", url: "https://other.example/feed.zip" }, undefined],
+    ["URL", { name: "other", url: "https://operator.example/feed.zip" }, undefined],
+  ])("rejects a pinned-catalog %s collision", (_label, catalog, sourceId) => {
     const feeds: FeedFile[] = [
       {
         region: "de",
         sources: [
-          { name: "duplicate", url: "https://a.example" },
-          { name: "duplicate", url: "https://b.example" },
+          {
+            ...catalog,
+            ...(sourceId ? { "openmapx-source-id": sourceId } : {}),
+          },
         ],
       },
     ];
-    const result = applyFeedOverlay(feeds, {
-      schemaVersion: 2,
-      additions: [],
-      quarantine: [],
-      patches: [{ region: "de", name: "duplicate", patch: { "api-key": "shared" } }],
-    });
-    expect(result.applied).toBe(2);
-    expect(feeds[0].sources?.[0]).toMatchObject({ "api-key": "shared" });
-    expect(feeds[0].sources?.[1]).toMatchObject({ "api-key": "shared" });
+    expect(() => applyFeedOverlay(feeds, parseFeedOverlay(validOverlay()))).toThrow(/collides/);
   });
 
-  it("adds GBFS sources before patches and excludes quarantined IDs", () => {
+  it("preserves GBFS quarantine semantics", () => {
     const feeds: FeedFile[] = [{ region: "de", sources: [] }];
-    const result = applyFeedOverlay(feeds, {
-      schemaVersion: 2,
-      additions: [
+    const overlay = parseFeedOverlay({
+      version: 3,
+      sources: [
         {
-          region: "de",
-          name: "added",
           spec: "gbfs",
           type: "url",
+          region: "de",
+          name: "bikes",
           url: "https://example.test/gbfs.json",
-          sourceId: "one",
-        },
-        {
-          region: "de",
-          name: "blocked",
-          spec: "gbfs",
-          type: "url",
-          url: "https://blocked.test/gbfs.json",
-          sourceId: "two",
+          sourceId: "gbfs:de:bikes",
         },
       ],
-      patches: [{ region: "de", name: "added", patch: { license: "ODbL" } }],
+      patches: [],
       quarantine: [
         {
-          sourceId: "two",
+          sourceId: "gbfs:de:bikes",
           reason: "invalid",
           firstSeen: "2026-01-01T00:00:00Z",
           lastChecked: "2026-01-02T00:00:00Z",
         },
       ],
     });
-    expect(result).toMatchObject({ added: 1, applied: 1, quarantined: 1 });
-    expect(feeds[0].sources).toEqual([
-      expect.objectContaining({ name: "added", spec: "gbfs", license: "ODbL" }),
-    ]);
+    expect(applyFeedOverlay(feeds, overlay)).toMatchObject({ added: 0, quarantined: 1 });
+    expect(feeds[0]?.sources).toEqual([]);
   });
 });

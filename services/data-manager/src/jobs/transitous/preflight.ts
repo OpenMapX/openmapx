@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, renameSync, statfsSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { MotisOperationsPolicy } from "./operations-profile.js";
-import { writeSovereignSourceManifest } from "./source-manifest.js";
+import { writeTransitSourceManifest } from "./source-manifest.js";
 import type { StageFn, StageResult } from "./types.js";
 
 const GIB = 1024 ** 3;
@@ -239,6 +239,6 @@ export const run: StageFn = async (ctx) => {
   const temporary = `${statusPath}.tmp-${process.pid}`;
   writeFileSync(temporary, `${JSON.stringify({ checkedAt: ctx.now(), ...result }, null, 2)}\n`);
   renameSync(temporary, statusPath);
-  if (result.ok) writeSovereignSourceManifest(ctx);
+  if (result.ok) writeTransitSourceManifest(ctx);
   return finish(result.ok ? "ok" : "error", result);
 };

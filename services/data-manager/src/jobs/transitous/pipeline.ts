@@ -6,6 +6,7 @@ import type { DownloadGtfsResult, FeedDownloadFailure } from "../download-gtfs.j
 import * as assembleStagingStage from "./assemble-staging.js";
 import * as compileGbfsStage from "./compile-gbfs.js";
 import * as fetchStage from "./fetch.js";
+import * as fetchOperatorStage from "./fetch-operator.js";
 import * as filterStage from "./filter.js";
 import * as gcStage from "./gc.js";
 import * as genAttributionStage from "./gen-attribution.js";
@@ -47,21 +48,17 @@ const BUILD_STAGES: ReadonlyArray<StageEntry> = [
   { name: "filter", run: filterStage.run, criticality: "critical" },
   { name: "preflight", run: preflightStage.run, criticality: "critical" },
   { name: "compile-gbfs", run: compileGbfsStage.run, criticality: "critical" },
-  // Acquisition may report individual failures while preserving known-good
-  // archives from the previous run. Assembly remains the authoritative empty
-  // or incomplete candidate boundary.
-  { name: "fetch", run: fetchStage.run, criticality: "advisory" },
+  // A missing desired schedule source is fatal. Cached archives remain on disk
+  // for retry efficiency but are never used to turn this attempt into a
+  // reduced or ambiguously partial candidate.
+  { name: "fetch", run: fetchStage.run, criticality: "critical" },
   { name: "validate", run: validateStage.run, criticality: "critical" },
   // Generate the one final runtime config and attribution before assembly.
   // The exact candidate imported and probed is therefore the tuple promoted.
   { name: "gen-full-config", run: genFullConfigStage.run, criticality: "critical" },
   { name: "gen-attribution", run: genAttributionStage.run, criticality: "critical" },
-  // critical: assemble-staging returns "error" when it would stage 0 feeds.
-  // That's the real empty-import guard — halt before the container import +
-  // promote so a total acquisition failure can't swap an empty timetable over
-  // the live one. (fetch/mirror can legitimately "error" while a stale archive
-  // from a prior run is preserved on disk; that archive still gets assembled,
-  // so the guard belongs here, on the staged count — not on the fetch result.)
+  // Assembly independently verifies that the complete, hashed source manifest
+  // and its referenced datasets enter the exact candidate that is imported.
   { name: "assemble-staging", run: assembleStagingStage.run, criticality: "critical" },
   { name: "stage-proxy", run: proxyTransactionStage.run, criticality: "critical" },
   { name: "motis-import", run: motisImportStage.run, criticality: "critical" },
@@ -78,10 +75,13 @@ const BUILD_STAGES: ReadonlyArray<StageEntry> = [
  * catalog clone, so the result matches build mode (incl. RT routed through our
  * own feed-proxy) — only the slow/fragile fetch step is skipped.
  */
-const MIRROR_STAGES: ReadonlyArray<StageEntry> = BUILD_STAGES.map((stage) =>
+const MIRROR_STAGES: ReadonlyArray<StageEntry> = BUILD_STAGES.flatMap((stage) =>
   stage.name === "fetch"
-    ? { name: "mirror", run: mirrorStage.run, criticality: stage.criticality }
-    : stage,
+    ? [
+        { name: "mirror", run: mirrorStage.run, criticality: "critical" },
+        { name: "fetch-operator", run: fetchOperatorStage.run, criticality: "critical" },
+      ]
+    : [stage],
 );
 
 export function stagesFor(source: TransitSource): ReadonlyArray<StageEntry> {

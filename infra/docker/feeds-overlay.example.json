@@ -1,8 +1,8 @@
 {
   "$schema": "./feeds-overlay.schema.json",
-  "schemaVersion": 2,
-  "comment": "Copy to data/overrides/feeds-overlay.json. Keep credentials out of this file; additions are GBFS discovery feeds only.",
+  "version": 3,
+  "comment": "Copy to data/overrides/feeds-overlay.json. Keep credentials out; use secret references for authenticated sources.",
+  "sources": [],
   "patches": [],
-  "additions": [],
   "quarantine": []
 }

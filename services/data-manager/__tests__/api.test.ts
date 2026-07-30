@@ -1,11 +1,25 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Fastify from "fastify";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { registerApi } from "../src/api.js";
+import type { SingleFlightController } from "../src/jobs/transitous/single-flight.js";
 
 describe("data-manager API", () => {
+  function sourceCatalog(dataDir: string): void {
+    const feedsDir = join(dataDir, ".transitous-catalog", "feeds");
+    const gitDir = join(dataDir, ".transitous-catalog", ".git");
+    mkdirSync(feedsDir, { recursive: true });
+    mkdirSync(gitDir, { recursive: true });
+    writeFileSync(
+      join(feedsDir, "de.json"),
+      JSON.stringify({
+        sources: [{ name: "catalog-feed", url: "https://catalog.example/feed.zip" }],
+      }),
+    );
+  }
+
   it("GET /datasets returns empty list when no state", async () => {
     const app = Fastify();
     registerApi(app, { dataDir: "/tmp/openmapx-dm-test-empty" });
@@ -65,6 +79,77 @@ describe("data-manager API", () => {
       ],
     });
 
+    await app.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  it("returns 409 without changing the overlay when single-flight is occupied", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-source-conflict-"));
+    sourceCatalog(dataDir);
+    const overlayPath = join(dataDir, "overrides", "feeds-overlay.json");
+    const singleFlight: SingleFlightController = {
+      tryStartSync: vi.fn(async () => ({
+        ok: false as const,
+        reason: "in-flight" as const,
+        existingJobId: "running-job",
+      })),
+      markSyncFinished: vi.fn(),
+      getInflight: () => ({ jobId: "running-job", startedAt: new Date() }),
+    };
+    const app = Fastify();
+    registerApi(app, { dataDir, singleFlight, launchTransitSync: vi.fn() });
+    const res = await app.inject({
+      method: "POST",
+      url: "/transit/sources",
+      payload: {
+        region: "de",
+        name: "operator-feed",
+        url: "https://operator.example/feed.zip",
+        license: { spdxIdentifier: "CC-BY-4.0", attribution: "Operator" },
+      },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(existsSync(overlayPath)).toBe(false);
+    await app.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  it("returns a reserved visible job before launching an accepted source mutation", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-source-accepted-"));
+    sourceCatalog(dataDir);
+    const events: string[] = [];
+    const singleFlight: SingleFlightController = {
+      tryStartSync: vi.fn(async () => {
+        events.push("job-inserted");
+        return { ok: true as const, jobId: "job-visible" };
+      }),
+      markSyncFinished: vi.fn(),
+      getInflight: () => ({ jobId: "job-visible", startedAt: new Date() }),
+    };
+    const launchTransitSync = vi.fn(() => events.push("pipeline-launched"));
+    const app = Fastify();
+    registerApi(app, { dataDir, singleFlight, launchTransitSync });
+    const res = await app.inject({
+      method: "POST",
+      url: "/transit/sources",
+      payload: {
+        region: "de",
+        name: "operator-feed",
+        url: "https://operator.example/feed.zip",
+        license: { spdxIdentifier: "CC-BY-4.0", attribution: "Operator" },
+      },
+    });
+    expect(res.statusCode).toBe(202);
+    expect(res.json()).toEqual({
+      jobId: "job-visible",
+      sourceId: "operator:de:operator-feed",
+      status: "started",
+    });
+    expect(events).toEqual(["job-inserted", "pipeline-launched"]);
+    const overlay = JSON.parse(
+      readFileSync(join(dataDir, "overrides", "feeds-overlay.json"), "utf-8"),
+    ) as { version: number };
+    expect(overlay.version).toBe(3);
     await app.close();
     rmSync(dataDir, { recursive: true, force: true });
   });
