@@ -49,6 +49,7 @@ import {
   getDepartures,
   getRoute,
   getRouteStops,
+  getRoutesForStop,
   getRoutesInBbox,
   getStopPlatforms,
   getStops,
@@ -828,6 +829,16 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
         ]),
       );
       expect(orderedStops).toHaveLength(4);
+
+      // Calendar-independent routes-for-stop via the tiny zoom-11 bbox probe:
+      // the pattern serving Hauptbahnhof must be discoverable from the stop
+      // itself, with the same epoch-bound pattern identity.
+      const routesAtHbf = await getRoutesForStop(
+        motisLocalInstance,
+        hbfPlatform?.id ?? "",
+        firstCandidate.epoch,
+      );
+      expect(routesAtHbf.map((route) => route.id)).toContain(firstPattern?.id);
 
       // Build and import a second candidate, then corrupt one hashed artifact
       // before promotion. The promotion must fail closed without changing the

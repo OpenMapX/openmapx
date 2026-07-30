@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { buildJobContext, runTransitousPipeline } from "../../src/jobs/transitous/pipeline.js";
 import type { StageName, StageResult } from "../../src/jobs/transitous/types.js";
 import { StateStore } from "../../src/state.js";
+import { writeFixtureGtfsArchive } from "../helpers/gtfs-fixture.js";
 
 let tmp: string | undefined;
 
@@ -57,7 +58,7 @@ describe("runTransitousPipeline orchestrator", () => {
       countries: ["de"],
       runner: async (command, args) => {
         if (command === "python3" && args[0] === "./src/fetch.py") {
-          writeFileSync(join(gtfsDir, "de_bvg.gtfs.zip"), "BVG");
+          writeFixtureGtfsArchive(join(gtfsDir, "de_bvg.gtfs.zip"));
         } else if (
           command === "python3" &&
           args[0] === "./src/generate-motis-config.py" &&
@@ -171,9 +172,9 @@ describe("runTransitousPipeline orchestrator", () => {
       runner: async (command, args) => {
         if (command === "python3" && args[0] === "./src/fetch.py") {
           mkdirSync(gtfsDir, { recursive: true });
-          writeFileSync(join(gtfsDir, "de_bvg.gtfs.zip"), "BVG");
-          writeFileSync(join(gtfsDir, "de_delfi.gtfs.zip"), "DELFI");
-          writeFileSync(join(gtfsDir, "ch_sbb.gtfs.zip"), "SBB");
+          writeFixtureGtfsArchive(join(gtfsDir, "de_bvg.gtfs.zip"));
+          writeFixtureGtfsArchive(join(gtfsDir, "de_delfi.gtfs.zip"));
+          writeFixtureGtfsArchive(join(gtfsDir, "ch_sbb.gtfs.zip"));
         } else if (command === "python3" && args[0] === "./src/generate-attribution.py") {
           writeFileSync(join(catalogDir, "out", "license.json"), "[]");
         }
@@ -216,7 +217,7 @@ describe("runTransitousPipeline orchestrator", () => {
         if (command === "python3" && args[0] === "./src/fetch.py") {
           // Partial fetch: write A, then error attributable to B.
           mkdirSync(gtfsDir, { recursive: true });
-          writeFileSync(join(gtfsDir, "de_a.gtfs.zip"), "A");
+          writeFixtureGtfsArchive(join(gtfsDir, "de_a.gtfs.zip"));
           throw new Error("Error: Could not fetch de-B: HTTP 500");
         }
       },

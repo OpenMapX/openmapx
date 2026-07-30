@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildJobContext, runTransitousPipeline } from "../src/jobs/transitous/index.js";
 import { StateStore } from "../src/state.js";
+import { writeFixtureGtfsArchive } from "./helpers/gtfs-fixture.js";
 
 let tmp: string | undefined;
 
@@ -55,7 +56,7 @@ describe("runTransitousPipeline (integration)", () => {
       JSON.stringify({ sources: [{ name: "MBTA" }] }, null, 2),
     );
     writeFileSync(join(catalogDir, "src", "garbage-collect.py"), "#!/usr/bin/env python3\n");
-    writeFileSync(join(gtfsDir, "us_old.gtfs.zip"), "STALE");
+    writeFixtureGtfsArchive(join(gtfsDir, "us_old.gtfs.zip"));
 
     const apiKeysPath = join(tmp, "api-keys.json");
     writeFileSync(apiKeysPath, JSON.stringify({ "de/BVG": "secret-key" }, null, 2));
@@ -77,8 +78,8 @@ describe("runTransitousPipeline (integration)", () => {
           sources: Array<Record<string, unknown>>;
         };
         fetchSawApiKey = feed.sources[0]?.["api-key"] === "secret-key";
-        writeFileSync(join(gtfsDir, "de_bvg.gtfs.zip"), "BVG");
-        writeFileSync(join(gtfsDir, "de_vbb.gtfs.zip"), "VBB");
+        writeFixtureGtfsArchive(join(gtfsDir, "de_bvg.gtfs.zip"));
+        writeFixtureGtfsArchive(join(gtfsDir, "de_vbb.gtfs.zip"));
         return;
       }
     };
@@ -106,9 +107,9 @@ describe("runTransitousPipeline (integration)", () => {
     expect(updatedFeed.sources[0]?.["api-key"]).toBeUndefined();
     expect(updatedFeed.sources[0]?.skip).toBe(true);
 
-    expect(() => readFileSync(join(gtfsDir, "us_old.gtfs.zip"), "utf-8")).toThrow();
-    expect(readFileSync(join(gtfsDir, "de_bvg.gtfs.zip"), "utf-8")).toBe("BVG");
-    expect(readFileSync(join(gtfsDir, "de_vbb.gtfs.zip"), "utf-8")).toBe("VBB");
+    expect(existsSync(join(gtfsDir, "us_old.gtfs.zip"))).toBe(false);
+    expect(existsSync(join(gtfsDir, "de_bvg.gtfs.zip"))).toBe(true);
+    expect(existsSync(join(gtfsDir, "de_vbb.gtfs.zip"))).toBe(true);
 
     const state = JSON.parse(readFileSync(join(dataDir, ".data-manager-state.json"), "utf-8")) as {
       datasets: Array<{ id: string }>;
@@ -149,7 +150,7 @@ describe("runTransitousPipeline (integration)", () => {
       }
 
       if (command === "python3" && args[0] === "./src/fetch.py") {
-        writeFileSync(join(dataDir, "gtfs", "de_demo.gtfs.zip"), "DEMO");
+        writeFixtureGtfsArchive(join(dataDir, "gtfs", "de_demo.gtfs.zip"));
       }
     };
 
@@ -189,7 +190,7 @@ describe("runTransitousPipeline (integration)", () => {
       store: new StateStore(dataDir),
       runner: async (command, args) => {
         if (command === "python3" && args[0] === "./src/fetch.py" && args[1] === "feeds/no.json") {
-          writeFileSync(join(dataDir, "gtfs", "no_entur.netex.zip"), "NETEX");
+          writeFixtureGtfsArchive(join(dataDir, "gtfs", "no_entur.netex.zip"));
         }
       },
       now: () => "2026-04-20T12:00:00.000Z",
@@ -200,7 +201,7 @@ describe("runTransitousPipeline (integration)", () => {
     expect(ctx.state.skippedCount).toBe(0);
     expect(ctx.state.fetchFailures ?? []).toEqual([]);
     expect(ctx.state.downloaded?.map((dataset) => dataset.id)).toEqual(["no_entur"]);
-    expect(readFileSync(join(dataDir, "gtfs", "no_entur.netex.zip"), "utf-8")).toBe("NETEX");
+    expect(existsSync(join(dataDir, "gtfs", "no_entur.netex.zip"))).toBe(true);
   });
 
   it("preserves existing GTFS data when the country filter matches no Transitous feed files", async () => {
@@ -263,7 +264,7 @@ describe("runTransitousPipeline (integration)", () => {
       store: new StateStore(dataDir),
       runner: async (command, args) => {
         if (command === "python3" && args[0] === "./src/fetch.py" && args[1] === "feeds/us.json") {
-          writeFileSync(join(dataDir, "gtfs", "us_mbta.gtfs.zip"), "MBTA");
+          writeFixtureGtfsArchive(join(dataDir, "gtfs", "us_mbta.gtfs.zip"));
         }
       },
       now: () => "2026-04-20T12:00:00.000Z",
@@ -273,7 +274,7 @@ describe("runTransitousPipeline (integration)", () => {
     expect(ctx.state.selectedCount).toBe(2);
     expect(ctx.state.skippedCount).toBe(0);
     expect(ctx.state.downloaded ?? []).toEqual([]);
-    expect(readFileSync(join(dataDir, "gtfs", "us_mbta.gtfs.zip"), "utf-8")).toBe("MBTA");
+    expect(existsSync(join(dataDir, "gtfs", "us_mbta.gtfs.zip"))).toBe(true);
     expect(ctx.state.fetchFailures).toEqual([
       {
         id: "de",
@@ -408,8 +409,8 @@ describe("runTransitousPipeline (integration)", () => {
       store: new StateStore(dataDir),
       runner: async (command, args) => {
         if (command === "python3" && args[0] === "./src/fetch.py" && args[1] === "feeds/de.json") {
-          writeFileSync(join(dataDir, "gtfs", "de_transitgtfs.gtfs.zip"), "GTFS");
-          writeFileSync(join(dataDir, "gtfs", "de_httpgtfs.gtfs.zip"), "HTTP");
+          writeFixtureGtfsArchive(join(dataDir, "gtfs", "de_transitgtfs.gtfs.zip"));
+          writeFixtureGtfsArchive(join(dataDir, "gtfs", "de_httpgtfs.gtfs.zip"));
         }
       },
       now: () => "2026-04-20T12:00:00.000Z",

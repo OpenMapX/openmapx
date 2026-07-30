@@ -33,8 +33,13 @@ export const run: StageFn = async (ctx) => {
         perFeed.push({ id: archive.id, ok: false, reason: "archive is empty" });
         continue;
       }
-      const memberOk = await hasZipMember(archive.path, "feed_info.txt");
-      if (!memberOk) {
+      const memberCheck = await checkZipMember(archive.path, "feed_info.txt");
+      if (memberCheck === "unreadable") {
+        invalid.push({ id: archive.id, reason: "archive is not a readable zip" });
+        perFeed.push({ id: archive.id, ok: false, reason: "archive is not a readable zip" });
+        continue;
+      }
+      if (memberCheck === "absent") {
         // feed_info.txt is optional per the GTFS spec, so its absence is a
         // warning, not a validation failure: an operator feed without it must
         // not block promotion or trip the staleness alerts.
@@ -120,14 +125,19 @@ async function persistValidateOutcomes(
   }
 }
 
-async function hasZipMember(archivePath: string, member: string): Promise<boolean> {
+type ZipMemberCheck = "present" | "absent" | "unreadable" | "unavailable";
+
+async function checkZipMember(archivePath: string, member: string): Promise<ZipMemberCheck> {
   try {
     // `unzip -Z1 <archive>` lists members one per line. Faster than `-l` and
-    // doesn't print the size column. Tolerate missing `unzip` by treating the
-    // check as a soft pass — the orchestrator already recorded fetch success.
+    // doesn't print the size column.
     const { stdout } = await execa("unzip", ["-Z1", archivePath], { stdio: "pipe" });
-    return stdout.split(/\r?\n/).some((line) => line.trim() === member);
-  } catch {
-    return true;
+    return stdout.split(/\r?\n/).some((line) => line.trim() === member) ? "present" : "absent";
+  } catch (error) {
+    // A non-zero unzip exit means the tool ran but could not read the archive
+    // — a corrupt zip must fail validation. Every other failure (unzip not
+    // installed, spawn error) is an environment gap and stays a soft pass.
+    const exitCode = (error as { exitCode?: unknown }).exitCode;
+    return typeof exitCode === "number" && exitCode !== 0 ? "unreadable" : "unavailable";
   }
 }

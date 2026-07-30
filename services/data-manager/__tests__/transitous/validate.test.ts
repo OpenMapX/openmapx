@@ -78,6 +78,27 @@ describe("validate stage", () => {
     expect(warnings).toEqual([{ id: "de_vbb", reason: "missing feed_info.txt" }]);
   });
 
+  it("marks a corrupt non-empty archive as invalid", async () => {
+    if (!unzipAvailable) return;
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-validate-corrupt-"));
+    const gtfsDir = join(tmp, "gtfs");
+    mkdirSync(gtfsDir, { recursive: true });
+    writeFileSync(join(gtfsDir, "de_corrupt.gtfs.zip"), "this is not a zip archive");
+
+    const ctx = buildJobContext({
+      dataDir: tmp,
+      store: new StateStore(tmp),
+      runner: async () => {},
+      now: () => "2026-05-01T00:00:00.000Z",
+    });
+    ctx.state.gtfsDir = gtfsDir;
+
+    const result = await validateRun(ctx);
+    expect(result.status).toBe("error");
+    const invalid = result.artifacts?.invalid as Array<{ id: string; reason: string }>;
+    expect(invalid).toEqual([{ id: "de_corrupt", reason: "archive is not a readable zip" }]);
+  });
+
   it("marks zero-byte archives as invalid", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-validate-empty-"));
     const gtfsDir = join(tmp, "gtfs");
