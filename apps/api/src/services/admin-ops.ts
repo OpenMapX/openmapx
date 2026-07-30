@@ -1,6 +1,6 @@
 import { execFile as execFileCb } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -378,113 +378,6 @@ export async function getBuildStatuses(): Promise<BuildStatus[]> {
       }
     }),
   );
-}
-
-// Lightweight directory listing of the GTFS archives MOTIS reads at startup.
-// Files appear here once `pnpm openmapx data download gtfs ...` (or the
-// data-manager Transitous pipeline directly) has dropped them in /data/gtfs/.
-// Distinct from the Postgres-imported feeds tracked by gtfsManager — the
-// admin UI surfaces both lists together so an operator can see at a glance
-// which feeds live in MOTIS, in Postgres, or in both.
-
-export interface MotisGtfsArchive {
-  /** Filename minus `.gtfs.zip` / `.netex.zip`. Stable id for matching against Postgres slugs. */
-  id: string;
-  filename: string;
-  sizeBytes: number;
-  modifiedAt: string;
-  format: "gtfs" | "netex";
-  /** Upstream HTTP URL the archive was fetched from, looked up in the Transitous catalog. */
-  originUrl?: string;
-}
-
-const GTFS_ARCHIVE_RE = /^([^.][^/]*?)\.(gtfs|netex)\.zip$/i;
-
-interface TransitousCatalogSource {
-  name?: string;
-  type?: string;
-  url?: string;
-  spec?: string;
-}
-
-interface TransitousCatalogFile {
-  sources?: TransitousCatalogSource[];
-}
-
-// `de_DELFI` -> upstream HTTP url. Matches the archive id format produced by
-// the Transitous pipeline (`<region>_<source-name>`); we lowercase keys so a
-// case-mismatched archive on disk still resolves.
-function buildTransitousOriginIndex(): Map<string, string> {
-  const index = new Map<string, string>();
-  const feedsDir = join(DATA_DIR, ".transitous-catalog", "feeds");
-  if (!existsSync(feedsDir)) return index;
-  let entries: string[];
-  try {
-    entries = readdirSync(feedsDir);
-  } catch {
-    return index;
-  }
-  for (const file of entries) {
-    if (!file.endsWith(".json")) continue;
-    const region = file
-      .replace(/\.json$/, "")
-      .split("-")[0]
-      ?.toLowerCase();
-    if (!region) continue;
-    let data: TransitousCatalogFile;
-    try {
-      data = JSON.parse(readFileSync(join(feedsDir, file), "utf-8")) as TransitousCatalogFile;
-    } catch {
-      continue;
-    }
-    for (const source of data.sources ?? []) {
-      if (source.type && source.type !== "http" && source.type !== "transitland-atlas") continue;
-      // Skip GTFS-RT / GBFS / NeTEx — only the static GTFS schedule zip is what
-      // ends up in /data/gtfs/ as `<region>_<name>.gtfs.zip`. Many feeds list
-      // both the schedule and a realtime feed under the same `name`, and a
-      // last-write-wins index would otherwise map the archive to the RT URL.
-      const spec = (source.spec ?? "gtfs").toLowerCase();
-      if (spec !== "gtfs") continue;
-      if (!source.name || !source.url) continue;
-      const archiveId = `${region}_${source.name}`.toLowerCase();
-      index.set(archiveId, source.url);
-    }
-  }
-  return index;
-}
-
-export async function getMotisGtfsArchives(): Promise<MotisGtfsArchive[]> {
-  const gtfsDir = join(DATA_DIR, "gtfs");
-  if (!existsSync(gtfsDir)) return [];
-  const originIndex = buildTransitousOriginIndex();
-  try {
-    const entries = await readdir(gtfsDir);
-    const archives: MotisGtfsArchive[] = [];
-    for (const name of entries) {
-      const match = GTFS_ARCHIVE_RE.exec(name);
-      if (!match) continue;
-      const id = match[1];
-      const format = match[2].toLowerCase() as "gtfs" | "netex";
-      if (!id) continue;
-      try {
-        const stat = statSync(join(gtfsDir, name));
-        archives.push({
-          id,
-          filename: name,
-          sizeBytes: stat.size,
-          modifiedAt: stat.mtime.toISOString(),
-          format,
-          originUrl: originIndex.get(id.toLowerCase()),
-        });
-      } catch {
-        // Skip a missing/unreadable entry rather than failing the whole list.
-      }
-    }
-    archives.sort((a, b) => a.id.localeCompare(b.id));
-    return archives;
-  } catch {
-    return [];
-  }
 }
 
 export interface MotisTransitousStatus {

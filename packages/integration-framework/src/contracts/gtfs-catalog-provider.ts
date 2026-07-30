@@ -1,10 +1,10 @@
 import type { BBox } from "@openmapx/core";
 
 /**
- * Catalog entry for a GTFS feed surfaced by a `gtfs-catalog` provider. The
- * `apps/api/src/services/gtfs` importer consumes these to download + ingest
- * each schedule feed; richer fields (`mdbId`, `latestDatasetUrl`, …) are
- * provider-specific and optional.
+ * Catalog entry surfaced by a `gtfs-catalog` discovery provider. Operators can
+ * inspect these entries and add suitable schedule URLs through the
+ * transactional data-manager source lifecycle. Richer fields (`mdbId`,
+ * `latestDatasetUrl`, …) are provider-specific and optional.
  */
 export interface GtfsCatalogFeed {
   id: string;

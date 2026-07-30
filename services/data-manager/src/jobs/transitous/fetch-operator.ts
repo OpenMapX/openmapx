@@ -1,10 +1,9 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { FeedDownloadFailure } from "../download-gtfs.js";
 import { feedKeyForFailure, feedKeyForSource, recordFetchOutcome } from "./feed-state-writer.js";
 import { runFetchPipeline } from "./internal.js";
 import { finalizeTransitSourceManifest } from "./source-manifest.js";
-import type { FeedFileEntry, StageFn } from "./types.js";
+import type { FeedDownloadFailure, FeedFileEntry, StageFn } from "./types.js";
 
 function materializeOperatorMetadata(ctx: Parameters<StageFn>[0]): FeedFileEntry[] {
   const directory = join(ctx.downloadsDir, "operator-metadata", ctx.jobId);

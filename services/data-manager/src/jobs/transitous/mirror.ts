@@ -5,9 +5,8 @@ import {
   TRANSITOUS_ARTIFACT_BASE_URL,
 } from "@openmapx/transitous-core";
 import { curlAtomic } from "../atomic-download.js";
-import type { FeedDownloadFailure } from "../download-gtfs.js";
 import { feedKeyForSource, recordFetchOutcome } from "./feed-state-writer.js";
-import type { StageFn, StageResult, StageStatus } from "./types.js";
+import type { FeedDownloadFailure, StageFn, StageResult, StageStatus } from "./types.js";
 
 /**
  * Mirror-mode replacement for the `fetch` stage. Instead of running fetch.py

@@ -1,5 +1,4 @@
-import { randomUUID } from "node:crypto";
-import { existsSync, readdirSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { feedState } from "@openmapx/db-schema";
 import { parseTransitSource } from "@openmapx/transitous-core";
@@ -7,7 +6,6 @@ import { execa } from "execa";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { db } from "./db/index.js";
 import { convertPbfToBz2, convertPbfToBz2ForRegion } from "./jobs/convert-overpass.js";
-import { downloadGtfs, type FeedDescriptor } from "./jobs/download-gtfs.js";
 import { downloadOsm } from "./jobs/download-osm.js";
 import { downloadStyle } from "./jobs/download-style.js";
 import { applyHardlinkPlan, type HardlinkEntry } from "./jobs/link.js";
@@ -23,11 +21,7 @@ import {
   lockFromCandidate,
   resolveCatalogBumpCandidate,
 } from "./jobs/transitous/catalog-bump.js";
-import {
-  buildJobContext,
-  runTransitousPipeline,
-  toDownloadGtfsResult,
-} from "./jobs/transitous/index.js";
+import { buildJobContext, runTransitousPipeline } from "./jobs/transitous/index.js";
 import { PRIMARY_CONTAINER } from "./jobs/transitous/motis-containers.js";
 import {
   type MotisOperationsPolicy,
@@ -449,126 +443,9 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     }
   });
 
-  app.post<{
-    Body: { feeds?: FeedDescriptor[]; countries?: string[]; source?: "transitous" };
-  }>("/download/gtfs", async (req, reply) => {
-    const { feeds, source } = req.body;
-    const countries = req.body.countries ?? operationsPolicy.countries;
-    if (Array.isArray(feeds) && feeds.length === 0 && source !== "transitous") {
-      throw new Error("download/gtfs: either `feeds` or `source: 'transitous'` is required");
-    }
-
-    // Long-running GTFS refreshes can exceed default client header/body
-    // timeouts. Stream keepalive whitespace while the import is running.
-    reply.hijack();
-    reply.raw.writeHead(200, {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-cache",
-      "X-Accel-Buffering": "no",
-    });
-
-    const keepalive = setInterval(() => {
-      try {
-        reply.raw.write(" \n");
-      } catch {
-        // Ignore broken pipe errors if the client disconnected.
-      }
-    }, 10_000);
-
-    const useTransitousPipeline = source === "transitous" || feeds === undefined;
-    try {
-      let result: Awaited<ReturnType<typeof downloadGtfs>>;
-      if (useTransitousPipeline) {
-        const gtfsJobId = randomUUID();
-        const ctx = buildJobContext({
-          dataDir,
-          store,
-          countries,
-          repoRoot: process.env.OPENMAPX_ROOT_DIR,
-          source: parseTransitSource(),
-          operationsPolicy: { ...operationsPolicy, countries },
-          jobId: gtfsJobId,
-          logger: asJobLogger(
-            jobChildLogger({
-              job: "transitous-sync",
-              jobId: gtfsJobId,
-              trigger: "download-gtfs",
-            }),
-          ),
-        });
-        await runTransitousPipeline(ctx);
-        result = toDownloadGtfsResult(ctx, []);
-      } else {
-        result = await downloadGtfs({
-          feeds,
-          countries,
-          dataDir,
-          store,
-        });
-      }
-      reply.raw.end(
-        JSON.stringify({
-          ok: result.failures.length === 0,
-          count: result.downloaded.length,
-          usedTransitousPipeline: useTransitousPipeline,
-          requestedCount: result.requestedCount,
-          selectedCount: result.selectedCount,
-          skippedCount: result.skippedCount,
-          failedCount: result.failures.length,
-          partialSuccess: result.partialSuccess,
-          failures: result.failures,
-        }),
-      );
-    } catch (err) {
-      reply.raw.end(
-        JSON.stringify({
-          ok: false,
-          count: 0,
-          usedTransitousPipeline: useTransitousPipeline,
-          requestedCount: 0,
-          selectedCount: 0,
-          skippedCount: 0,
-          failedCount: 0,
-          partialSuccess: false,
-          failures: [],
-          error: (err as Error).message,
-        }),
-      );
-    } finally {
-      clearInterval(keepalive);
-    }
-  });
-
   app.post("/download/style", async () => {
     await downloadStyle({ dataDir, store });
     return { ok: true };
-  });
-
-  app.delete<{ Params: { slug: string } }>("/datasets/gtfs/:slug", async (req, reply) => {
-    const slug = req.params.slug.trim();
-    if (!slug || slug.includes("/") || slug.includes("..")) {
-      reply.code(400);
-      return { ok: false, error: "invalid slug" };
-    }
-    const gtfsDir = join(dataDir, "gtfs");
-    if (!existsSync(gtfsDir)) {
-      reply.code(404);
-      return { ok: false, error: "gtfs dir does not exist" };
-    }
-    // Match `<slug>.gtfs.zip`, `<slug>.netex.zip`, or bare `<slug>.zip`.
-    const removed: string[] = [];
-    for (const name of readdirSync(gtfsDir)) {
-      if (name === `${slug}.gtfs.zip` || name === `${slug}.netex.zip` || name === `${slug}.zip`) {
-        rmSync(join(gtfsDir, name), { force: true });
-        removed.push(name);
-      }
-    }
-    if (removed.length === 0) {
-      reply.code(404);
-      return { ok: false, error: `no GTFS feed matched slug "${slug}"` };
-    }
-    store.remove("gtfs", slug);
-    return { ok: true, removed };
   });
 
   app.post<{ Body: { plan: HardlinkEntry[]; prune?: boolean } }>("/link", async (req) => {

@@ -77,13 +77,13 @@ describe("shouldRefineLegGeometry", () => {
     expect(shouldRefineLegGeometry(l)).toBe(true);
   });
 
-  it("defaults to refining when the stop count is unreported (e.g. GTFS-local)", () => {
+  it("defaults to refining when a provider does not report the stop count", () => {
     const coords = Array.from({ length: 20 }, (_, i) => [13.3 + i * 0.001, 52.5]) as [
       number,
       number,
     ][];
     const l = leg({
-      tripId: "g-berlin:trip-2",
+      tripId: "ms:trip-2",
       _intermediateStopCount: undefined,
       geometry: { type: "LineString", coordinates: coords },
     });

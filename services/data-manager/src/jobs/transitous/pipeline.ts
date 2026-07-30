@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { asJobLogger, jobChildLogger } from "../../logger.js";
 import type { StateStore } from "../../state.js";
-import type { DownloadGtfsResult, FeedDownloadFailure } from "../download-gtfs.js";
 import * as assembleStagingStage from "./assemble-staging.js";
 import * as compileGbfsStage from "./compile-gbfs.js";
 import * as fetchStage from "./fetch.js";
@@ -279,26 +278,5 @@ export function buildJobContext(opts: BuildJobContextOptions): JobContext {
     feedsOverlayPath: opts.feedsOverlayPath,
     useProposedLock: opts.useProposedLock,
     state: {},
-  };
-}
-
-/**
- * Materialise the legacy `DownloadGtfsResult` shape from a completed pipeline
- * run so existing callers (data-manager `/download/gtfs` route, CLI helpers)
- * stay backward-compatible with the response payload they emit.
- */
-export function toDownloadGtfsResult(ctx: JobContext, _results: StageResult[]): DownloadGtfsResult {
-  const requestedCount = ctx.state.requestedCount ?? 0;
-  const selectedCount = ctx.state.selectedCount ?? 0;
-  const skippedCount = ctx.state.skippedCount ?? 0;
-  const downloaded = ctx.state.downloaded ?? [];
-  const failures = (ctx.state.fetchFailures ?? []) as FeedDownloadFailure[];
-  return {
-    requestedCount,
-    selectedCount,
-    skippedCount,
-    downloaded,
-    failures,
-    partialSuccess: ctx.state.partialSuccess === true,
   };
 }

@@ -15,11 +15,9 @@ const state: MdbState = {
 };
 
 /**
- * Returns the MDB-sourced subset of the global GTFS catalog. Called by
- * `apps/api/src/services/gtfs/catalog.ts` alongside the Swiss + Transitous
- * fetchers. Returns `[]` when the integration is disabled, the refresh
- * token is unset, or the upstream is unreachable — the catalog merge
- * tolerates this silently.
+ * Returns the MDB-sourced subset of the global GTFS discovery catalog.
+ * Returns `[]` when the integration is disabled, the refresh token is unset,
+ * or the upstream is unreachable.
  *
  * Includes GTFS schedule feeds by default. GTFS-RT and GBFS feeds are
  * surfaced when their respective config toggles are on (default: on).
@@ -68,11 +66,8 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
   state.includeRtFeeds = ctx.config.includeRtFeeds !== false;
   state.includeGbfsFeeds = ctx.config.includeGbfsFeeds !== false;
 
-  // Register a no-op provider under the `gtfs-catalog` domain so the
-  // integration appears under the right domain in the admin UI and its
-  // dataSources (CC0 attribution) propagate via the standard scan. The
-  // actual catalog fetch is consumed by services/gtfs/catalog.ts via the
-  // exported `getMdbCatalogFeeds` helper.
+  // Register discovery through the generic catalog contract so the admin can
+  // offer these URLs as operator-source candidates without owning schedules.
   const provider: GtfsCatalogProvider = {
     id: "transit-mobility-database",
     listFeeds: getMdbCatalogFeeds,

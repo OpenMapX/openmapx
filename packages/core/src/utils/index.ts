@@ -56,12 +56,6 @@ export {
   downsampleLTTB,
 } from "./elevation";
 export { ConfigurationError } from "./errors";
-export {
-  assertValidFeedSlug,
-  InvalidFeedSlugError,
-  isValidFeedSlug,
-  normalizeFeedSlug,
-} from "./feed-slug";
 export { DEFAULT_FETCH_TIMEOUT_MS, type FetchJsonOptions, fetchJson } from "./fetchJson";
 export {
   type FetchWithRedirectsOptions,

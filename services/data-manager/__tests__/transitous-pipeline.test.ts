@@ -2,11 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  buildJobContext,
-  runTransitousPipeline,
-  toDownloadGtfsResult,
-} from "../src/jobs/transitous/index.js";
+import { buildJobContext, runTransitousPipeline } from "../src/jobs/transitous/index.js";
 import { StateStore } from "../src/state.js";
 
 let tmp: string | undefined;
@@ -20,9 +16,8 @@ afterEach(() => {
 
 /**
  * These integration tests pin the behavior of the staged Transitous pipeline
- * end-to-end. They were originally written against the monolithic
- * `downloadGtfsViaTransitous` helper; preserving them here keeps E2's
- * decomposition behavior-equivalent for the non-stub stages.
+ * end-to-end, including selection counts, acquired artifacts, and structured
+ * per-source failures retained in the pipeline job state.
  */
 describe("runTransitousPipeline (integration)", () => {
   it("runs the Transitous fetch pipeline, applies API keys, and prunes stale country data", async () => {
@@ -97,13 +92,11 @@ describe("runTransitousPipeline (integration)", () => {
       now: () => "2026-04-20T12:00:00.000Z",
     });
     await runTransitousPipeline(ctx);
-    const result = toDownloadGtfsResult(ctx, []);
-
-    expect(result.requestedCount).toBe(3);
-    expect(result.selectedCount).toBe(2);
-    expect(result.skippedCount).toBe(1);
-    expect(result.failures).toEqual([]);
-    expect(result.downloaded.map((dataset) => dataset.id)).toEqual(["de_bvg", "de_vbb"]);
+    expect(ctx.state.requestedCount).toBe(3);
+    expect(ctx.state.selectedCount).toBe(2);
+    expect(ctx.state.skippedCount).toBe(1);
+    expect(ctx.state.fetchFailures ?? []).toEqual([]);
+    expect(ctx.state.downloaded?.map((dataset) => dataset.id)).toEqual(["de_bvg", "de_vbb"]);
 
     expect(fetchSawApiKey).toBe(true);
 
@@ -169,9 +162,7 @@ describe("runTransitousPipeline (integration)", () => {
       now: () => "2026-04-20T12:00:00.000Z",
     });
     await runTransitousPipeline(ctx);
-    const result = toDownloadGtfsResult(ctx, []);
-
-    expect(result.downloaded.map((dataset) => dataset.id)).toEqual(["de_demo"]);
+    expect(ctx.state.downloaded?.map((dataset) => dataset.id)).toEqual(["de_demo"]);
     expect(existsSync(join(dataDir, "gtfs", "de_demo.gtfs.zip"))).toBe(true);
   });
 
@@ -204,13 +195,11 @@ describe("runTransitousPipeline (integration)", () => {
       now: () => "2026-04-20T12:00:00.000Z",
     });
     await runTransitousPipeline(ctx);
-    const result = toDownloadGtfsResult(ctx, []);
-
-    expect(result.requestedCount).toBe(1);
-    expect(result.selectedCount).toBe(1);
-    expect(result.skippedCount).toBe(0);
-    expect(result.failures).toEqual([]);
-    expect(result.downloaded.map((dataset) => dataset.id)).toEqual(["no_entur"]);
+    expect(ctx.state.requestedCount).toBe(1);
+    expect(ctx.state.selectedCount).toBe(1);
+    expect(ctx.state.skippedCount).toBe(0);
+    expect(ctx.state.fetchFailures ?? []).toEqual([]);
+    expect(ctx.state.downloaded?.map((dataset) => dataset.id)).toEqual(["no_entur"]);
     expect(readFileSync(join(dataDir, "gtfs", "no_entur.netex.zip"), "utf-8")).toBe("NETEX");
   });
 
@@ -280,14 +269,12 @@ describe("runTransitousPipeline (integration)", () => {
       now: () => "2026-04-20T12:00:00.000Z",
     });
     await expect(runTransitousPipeline(ctx)).rejects.toThrow(/Fetched 1\/2 feed source/);
-    const result = toDownloadGtfsResult(ctx, []);
-
-    expect(result.requestedCount).toBe(2);
-    expect(result.selectedCount).toBe(2);
-    expect(result.skippedCount).toBe(0);
-    expect(result.downloaded).toEqual([]);
+    expect(ctx.state.requestedCount).toBe(2);
+    expect(ctx.state.selectedCount).toBe(2);
+    expect(ctx.state.skippedCount).toBe(0);
+    expect(ctx.state.downloaded ?? []).toEqual([]);
     expect(readFileSync(join(dataDir, "gtfs", "us_mbta.gtfs.zip"), "utf-8")).toBe("MBTA");
-    expect(result.failures).toEqual([
+    expect(ctx.state.fetchFailures).toEqual([
       {
         id: "de",
         country: "de",
@@ -342,10 +329,8 @@ describe("runTransitousPipeline (integration)", () => {
       now: () => "2026-04-20T12:00:00.000Z",
     });
     await expect(runTransitousPipeline(ctx)).rejects.toThrow(/Fetched 0\/1 feed source/);
-    const result = toDownloadGtfsResult(ctx, []);
-
-    expect(result.downloaded).toEqual([]);
-    expect(result.failures).toEqual([
+    expect(ctx.state.downloaded ?? []).toEqual([]);
+    expect(ctx.state.fetchFailures).toEqual([
       {
         id: "de_bvg",
         country: "de",
@@ -430,13 +415,11 @@ describe("runTransitousPipeline (integration)", () => {
       now: () => "2026-04-20T12:00:00.000Z",
     });
     await runTransitousPipeline(ctx);
-    const result = toDownloadGtfsResult(ctx, []);
-
-    expect(result.requestedCount).toBe(2);
-    expect(result.selectedCount).toBe(2);
-    expect(result.skippedCount).toBe(0);
-    expect(result.failures).toEqual([]);
-    expect(result.downloaded.map((dataset) => dataset.id)).toEqual([
+    expect(ctx.state.requestedCount).toBe(2);
+    expect(ctx.state.selectedCount).toBe(2);
+    expect(ctx.state.skippedCount).toBe(0);
+    expect(ctx.state.fetchFailures ?? []).toEqual([]);
+    expect(ctx.state.downloaded?.map((dataset) => dataset.id)).toEqual([
       "de_httpgtfs",
       "de_transitgtfs",
     ]);
@@ -478,11 +461,9 @@ describe("runTransitousPipeline (integration)", () => {
       now: () => "2026-04-20T12:00:00.000Z",
     });
     await expect(runTransitousPipeline(ctx)).rejects.toThrow(/Fetched 1\/3 feed source/);
-    const result = toDownloadGtfsResult(ctx, []);
-
-    expect(result.selectedCount).toBe(3);
-    expect(result.downloaded).toEqual([]);
-    expect(result.failures).toEqual([
+    expect(ctx.state.selectedCount).toBe(3);
+    expect(ctx.state.downloaded ?? []).toEqual([]);
+    expect(ctx.state.fetchFailures).toEqual([
       {
         id: "de_a",
         country: "de",

@@ -32,7 +32,7 @@ export type ArchiveDownloader = (url: string, dest: string) => Promise<void>;
 // probe gtfs then netex per source.
 const ARCHIVE_SPECS = ["gtfs", "netex"] as const;
 
-/** Default max concurrent archive downloads — matches data-manager's downloadGtfs. */
+/** Default max concurrent archive downloads for the transactional acquisition stage. */
 const DEFAULT_MIRROR_CONCURRENCY = 5;
 
 // Source `spec` values that are not schedule data (no `.gtfs/.netex.zip`

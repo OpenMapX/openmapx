@@ -21,8 +21,7 @@ import {
   type TransitousFeedSource,
 } from "@openmapx/transitous-core";
 import { execa } from "execa";
-import type { FeedDownloadFailure } from "../download-gtfs.js";
-import type { CommandRunner, FeedFileEntry, JobLogger } from "./types.js";
+import type { CommandRunner, FeedDownloadFailure, FeedFileEntry, JobLogger } from "./types.js";
 
 export type { PruneUnresolvableSourcesOptions, TransitousFeedFile, TransitousFeedSource };
 // Shared Transitous helpers now live in @openmapx/transitous-core; re-export the

@@ -1,10 +1,16 @@
 import type { TransitSource } from "@openmapx/transitous-core";
 import type { DatasetMetadata, StateStore } from "../../state.js";
-import type { FeedDownloadFailure } from "../download-gtfs.js";
 import type { MotisOperationsPolicy } from "./operations-profile.js";
 import type { MotisSlotLayout } from "./slot-state.js";
 
 export type { TransitSource };
+
+export interface FeedDownloadFailure {
+  id: string;
+  country: string;
+  url: string;
+  message: string;
+}
 
 export type StageStatus = "ok" | "skipped" | "error" | "partial";
 
@@ -58,9 +64,8 @@ export interface JobLogger {
 
 /**
  * Per-feed entry surfaced by the filter stage and consumed by fetch / gc.
- * Mirrors the shape the legacy monolithic pipeline produced internally
- * (sans the parseFailure marker, which is materialised as a FeedDownloadFailure
- * in the filter stage's artifacts so downstream stages can treat it uniformly).
+ * The parseFailure marker is materialised as a FeedDownloadFailure in the
+ * filter stage's artifacts so downstream stages can treat it uniformly.
  */
 export interface FeedFileEntry {
   id: string;

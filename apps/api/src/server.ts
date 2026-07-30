@@ -34,14 +34,12 @@ import { attributionRoute } from "./routes/attribution";
 import { capabilitiesRoute } from "./routes/capabilities";
 import { dataManagerRoute } from "./routes/data-manager";
 import { elevationRoute } from "./routes/elevation";
-import { gtfsRoute } from "./routes/gtfs";
 import { imageProxyRoute } from "./routes/image-proxy";
 import { internalMetricsRoute } from "./routes/internal-metrics";
 import { internalPoiSourcesRoute } from "./routes/internal-poi-sources";
 import { isochroneRoute } from "./routes/isochrone";
 import { legalConfigRoute } from "./routes/legal-config";
 import { maptilerRoute } from "./routes/maptiler";
-import { motisRoute } from "./routes/motis";
 import { neighborhoodsRoute } from "./routes/neighborhoods";
 import { placesRoute } from "./routes/places";
 import { reviewsKeypairRoute } from "./routes/reviews-keypair";
@@ -79,10 +77,8 @@ import {
   handleExtensionInstallJob,
   handleExtensionRemoveJob,
 } from "./services/extension-installer";
-import { gtfsManager } from "./services/gtfs/index";
 import { pruneOldRecords } from "./services/health-history";
 import { jobRunner } from "./services/job-runner";
-import { motisManager } from "./services/motis/manager";
 import { initServiceRegistry } from "./services/service-registry";
 import { handleSystemDiagnosticsJob, handleSystemUpdateJob } from "./services/system-maintenance";
 import { envInt, envString } from "./utils/env";
@@ -273,9 +269,7 @@ await server.register(trafficRoute, { prefix: "/api" });
 await server.register(tilesRoute, { prefix: "/api" });
 await server.register(streetLevelRoute, { prefix: "/api" });
 await server.register(maptilerRoute, { prefix: "/api" });
-await server.register(gtfsRoute, { prefix: "/api" });
 await server.register(isochroneRoute, { prefix: "/api" });
-await server.register(motisRoute, { prefix: "/api" });
 await server.register(imageProxyRoute, { prefix: "/api" });
 await server.register(internalMetricsRoute, { prefix: "/api" });
 await server.register(internalPoiSourcesRoute, { prefix: "/api" });
@@ -304,21 +298,6 @@ server.get("/api/me", async (request, reply) => {
   }
   return reply.send(session);
 });
-
-// GTFS manager
-// Initialize local GTFS feed manager (non-blocking — server starts
-// even if database is unavailable)
-gtfsManager.initialize().catch((err) => {
-  server.log.warn(err, "GTFS manager initialization failed");
-});
-
-// Self-hosted MOTIS
-// Initialize MOTIS feed manager (synchronous — reads state from disk)
-try {
-  motisManager.initialize();
-} catch (err) {
-  server.log.warn(err, "MOTIS manager initialization failed");
-}
 
 // Service registry — load service manifests from services/ directory
 // Must run before initIntegrations so requires: blocks can be resolved

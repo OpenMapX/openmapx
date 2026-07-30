@@ -159,9 +159,9 @@ export interface TripRefreshRequest {
 export type { VehicleJourney };
 
 /**
- * Static timetable entry for a stop. Both `transit-entur` and
- * `transit-gtfs-local` resolve `getStopTimetable(stopId, date)` to a
- * `Departure[]` so the canonical shape is reused here.
+ * Static timetable entry for a stop. Providers resolve
+ * `getStopTimetable(stopId, date)` to a `Departure[]`, so the canonical shape
+ * is reused here.
  */
 export type TimetableEntry = Departure;
 
@@ -235,9 +235,8 @@ export interface TransitProvider {
   /**
    * Optional per-instance attribution. Returned alongside the manifest-level
    * `dataSources[0]` attribution. Useful when one integration fronts many
-   * distinct feeds or runtime instances each carrying its own license:
-   * `transit-gtfs-local` (one row per imported GTFS feed),
-   * `transit-dynamic-registry` (one row per `transport-apis` instance), etc.
+   * distinct feeds or runtime instances each carrying its own license, such as
+   * `transit-dynamic-registry` (one row per `transport-apis` instance).
    *
    * Keys MUST match what consumers look up: `TransitStop.provider`,
    * `VehicleJourney.provider`, `ServiceAlert.providers[]`.

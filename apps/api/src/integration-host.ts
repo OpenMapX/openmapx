@@ -55,8 +55,6 @@ import {
 } from "./services/attribution";
 import type { ManifestDataSource } from "./services/attribution/types";
 import { loadAllBindingsByIntegration } from "./services/capability-bindings";
-import { gtfsManager } from "./services/gtfs/index";
-import * as gtfsQueries from "./services/gtfs/queries";
 import {
   executeAllIntegrationHealthChecks,
   getCachedIntegrationHealthSnapshot,
@@ -102,20 +100,6 @@ let _fastify: FastifyInstance<any, any, any, any> | null = null;
 let _integrationDirs: NormalizedIntegrationDirectory[] = [];
 
 const liveStore = createLiveStoreClient();
-
-function buildGtfsDeps() {
-  return {
-    manager: gtfsManager,
-    queries: gtfsQueries,
-  };
-}
-
-function injectRuntimeConfig(config: Record<string, unknown>): Record<string, unknown> {
-  return {
-    ...config,
-    gtfsDeps: buildGtfsDeps(),
-  };
-}
 
 function normalizeIntegrationDirs(
   dirs: IntegrationDirectoryInput[],
@@ -663,7 +647,7 @@ export async function initIntegrations(
       }
     }
 
-    const config = injectRuntimeConfig(await resolveConfig(manifest, directory));
+    const config = await resolveConfig(manifest, directory);
     warnInvalidConfig(manifest, config, id, (msg) => fastify.log.warn(msg));
 
     const log = createLogger(id, fastify);
@@ -1078,7 +1062,7 @@ async function doReloadIntegrations(): Promise<ReloadResult> {
       }
     }
 
-    const config = injectRuntimeConfig(await resolveConfig(manifest, directory));
+    const config = await resolveConfig(manifest, directory);
     const log = createLogger(id, _fastify);
     const http = createHttpClient(log);
     const cache = createCacheClient(id);

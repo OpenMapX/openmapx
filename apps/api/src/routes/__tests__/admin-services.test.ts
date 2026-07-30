@@ -87,11 +87,6 @@ vi.mock("../../services/admin-cli.js", () => ({
   assertValidBackupName: (...args: unknown[]) => mockAssertValidBackupName(...args),
 }));
 
-// GTFS manager
-vi.mock("../../services/gtfs/index.js", () => ({
-  gtfsManager: { getFeeds: vi.fn().mockReturnValue([]) },
-}));
-
 // Rate limiter — no-op the preHandler
 vi.mock("../../utils/rate-limit.js", () => ({
   serviceActionLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },

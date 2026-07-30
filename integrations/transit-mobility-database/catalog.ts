@@ -1,12 +1,8 @@
 import type { MdbFeed } from "./types.js";
 
 /**
- * Catalog-feed shape we contribute to `apps/api/src/services/gtfs/catalog.ts`.
- *
- * Structurally compatible with the existing `CatalogFeed` interface — the
- * additional MDB-only fields are optional and consumed only when
- * `source === "mobilitydb"`. The host module owns the canonical type; we
- * just shape data to match.
+ * Catalog-feed shape contributed through the integration framework's generic
+ * GTFS discovery contract. The additional MDB-only fields are optional.
  */
 export interface MdbCatalogFeed {
   id: string;
@@ -32,9 +28,7 @@ export interface MdbCatalogFeed {
 /**
  * Best-effort SPDX guess from a license URL. The MDB schema only exposes
  * `license_url`; we want a short label for the importer to persist into
- * `gtfs_feeds.license`. Returns undefined when the URL doesn't match a
- * pattern we recognise — the import gate then treats the feed as
- * "license unknown".
+ * Returns undefined when the URL doesn't match a pattern we recognise.
  */
 function inferSpdxFromLicenseUrl(licenseUrl: string | undefined): string | undefined {
   if (!licenseUrl) return undefined;

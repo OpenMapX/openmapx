@@ -68,8 +68,6 @@ export const API_ENDPOINTS = {
   transitAlerts: "/api/integrations/transit/alerts",
   transitVehicles: "/api/integrations/transit/vehicles",
   transitVehicleJourney: "/api/integrations/transit/vehicles/:id",
-  motisStatus: "/api/motis/status",
-  motisFeeds: "/api/motis/feeds",
   dataSources: "/api/integrations/data-source",
   dataSourceSearch: "/api/integrations/data-source", // used as `${base}/${sourceId}/search`
   dataSourceDetail: "/api/integrations/data-source", // used as `${base}/${sourceId}/detail/${itemId}`

@@ -92,16 +92,6 @@ vi.mock("./services/secrets.js", () => ({
   getSecret: vi.fn().mockReturnValue(undefined),
 }));
 
-vi.mock("./services/gtfs/catalog.js", () => ({
-  searchCatalog: vi.fn().mockResolvedValue([]),
-}));
-
-vi.mock("./services/gtfs/index.js", () => ({
-  gtfsManager: { list: vi.fn().mockReturnValue([]) },
-}));
-
-vi.mock("./services/gtfs/queries.js", () => ({}));
-
 vi.mock("./utils/require-auth.js", () => ({
   requireAuth: vi.fn().mockImplementation(async () => {
     const { httpError } = await import("@openmapx/integration-framework");

@@ -1,9 +1,15 @@
 import { statSync } from "node:fs";
-import type { FeedDownloadFailure } from "../download-gtfs.js";
 import { feedKeyForFailure, feedKeyForSource, recordFetchOutcome } from "./feed-state-writer.js";
 import { runFetchPipeline, scanGtfsArchives } from "./internal.js";
 import { finalizeTransitSourceManifest } from "./source-manifest.js";
-import type { FeedFileEntry, JobContext, StageFn, StageResult, StageStatus } from "./types.js";
+import type {
+  FeedDownloadFailure,
+  FeedFileEntry,
+  JobContext,
+  StageFn,
+  StageResult,
+  StageStatus,
+} from "./types.js";
 
 /**
  * Run Transitous's `src/fetch.py` for every selected feed file. Captures

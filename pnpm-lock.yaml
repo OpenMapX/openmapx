@@ -1421,18 +1421,6 @@ importers:
         specifier: workspace:^
         version: link:../../packages/mobility-core
 
-  integrations/transit-gtfs-local:
-    dependencies:
-      '@openmapx/core':
-        specifier: workspace:^
-        version: link:../../packages/core
-      '@openmapx/integration-framework':
-        specifier: workspace:^
-        version: link:../../packages/integration-framework
-      '@openmapx/mobility-core':
-        specifier: workspace:^
-        version: link:../../packages/mobility-core
-
   integrations/transit-hafas:
     dependencies:
       '@openmapx/core':
