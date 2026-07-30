@@ -10,7 +10,7 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/OpenMapX/openmapx/badge)](https://scorecard.dev/viewer/?uri=github.com/OpenMapX/openmapx)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D24-43853d?logo=node.js&logoColor=white)](https://nodejs.org)
 [![pnpm](https://img.shields.io/badge/pnpm-11-f69220?logo=pnpm&logoColor=white)](https://pnpm.io)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![Fastify](https://img.shields.io/badge/Fastify-5-000?logo=fastify&logoColor=white)](https://fastify.dev)
 [![MapLibre](https://img.shields.io/badge/MapLibre-GL%20JS%205-396cb2?logo=maplibre&logoColor=white)](https://maplibre.org)
@@ -27,14 +27,14 @@ OpenMapX is a complete mapping platform you run on your own infrastructure: sear
 
 ## Highlights
 
-- **Complete mapping platform** — geocoding, routing, public transit, live vehicles, street-level imagery, POI search, knowledge enrichment, reviews, weather, dozens of overlays
+- **Complete mapping platform** — geocoding, traffic-aware and EV routing, public-transit planning and navigation, live vehicles, street-level imagery, POI search, knowledge enrichment, reviews, crowd reports, weather, and dozens of overlays
 - **Two-layer plugin system** — *services* (containers: Valhalla, Nominatim, MOTIS, …) and *integrations* (app features: providers, overlays, data sources, tools). Both support community plugins from any Git URL
-- **85+ built-in integrations** across roughly a dozen domains and **20+ built-in services** rendered into a generated `docker-compose.yml`
-- **Self-host everything** — no service is mandatory and every external dependency can be replaced by a self-hosted alternative
+- **95 built-in integrations** and **23 built-in services** rendered into a generated `docker-compose.yml`
+- **Self-host the provider stack** — routing, geocoding, transit, tiles, search, and data pipelines have local/open implementations; the lightweight app, database, cache, proxy, and data-manager form the required core
 - **Open data** — OpenStreetMap, GTFS via Transitous, Wikidata, Wikipedia, Mapillary, NASA, NOAA, ECCC, DWD, MeteoAlarm, OpenAQ, USGS, NPS, and more
 - **Privacy-first** — no third-party analytics; most upstream calls are proxied through your API server, and unavoidable direct browser asset loads are explicitly documented
 - **First-class admin UI** — service catalog, integration config, capability bindings, audit log, users, jobs, compose preview, data workflows
-- **Modern stack** — Next.js 16, Fastify 5, MapLibre GL JS 5, MUI 7, PostgreSQL + PostGIS, Valkey (Redis), Drizzle ORM, Better Auth, TypeScript end-to-end
+- **Modern stack** — Next.js 16, Fastify 5, MapLibre GL JS 5, MUI 9, PostgreSQL + PostGIS, Valkey (Redis), Drizzle ORM, Better Auth, TypeScript 6 end-to-end
 
 ## Two plugin systems
 
@@ -63,7 +63,7 @@ graph TD
     Traefik --> Martin["martin :3000<br/>PostGIS vector tiles"]
 
     subgraph "API Server"
-        IntHost["Integration Host<br/>85+ built-in + community"]
+        IntHost["Integration Host<br/>95 built-in + community"]
         Orchestrators["Domain orchestrators<br/>(geocoding, routing, transit, ...)"]
         SvcRegistry["Service Registry"]
         Bindings["Capability Bindings"]
@@ -120,9 +120,10 @@ The `openmapx` CLI is the operator's command-line front end for the entire self-
 pnpm openmapx services enable|disable|list|start|stop|restart|build|status|logs
 pnpm openmapx compose render|up|down
 pnpm openmapx data download|link|status
-pnpm openmapx repos list|add|refresh|remove          # community service repositories
-pnpm openmapx integrations list|install|validate|build|package
-pnpm openmapx users list|create|promote
+pnpm openmapx ext browse|list|install|update|remove # community extension bundles
+pnpm openmapx integrations list|install|validate|build|package|remove
+pnpm openmapx users list|promote|demote|verify
+pnpm openmapx backup create|list|restore|delete
 pnpm openmapx check                                  # environment + manifest validation
 ```
 
@@ -146,7 +147,7 @@ See the [Admin panel](https://docs.openmapx.org/administration/admin-panel/) doc
 
 | Layer | Tech |
 |---|---|
-| Frontend | Next.js 16, React 19, MapLibre GL JS 5, MUI 7, Tailwind 4, Zustand, TanStack Query, next-intl, Framer Motion, Serwist |
+| Frontend | Next.js 16, React 19, MapLibre GL JS 5, MUI 9, Tailwind 4, Zustand, TanStack Query, next-intl, Serwist |
 | API | Fastify 5, Drizzle ORM, Better Auth (email/password, OAuth OSM/Mapillary, passkeys, 2FA, admin role) |
 | Data | PostgreSQL 18 + PostGIS 3.6, Valkey 8 (Redis-compatible), Elasticsearch (Pelias backend) |
 | Routing & transit | Valhalla, OSRM, MOTIS, OpenTripPlanner |

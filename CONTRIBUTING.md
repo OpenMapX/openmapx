@@ -69,7 +69,8 @@ Git hooks enforce a two-stage local gate:
   workspace when staged files lie outside `apps/`, `packages/`,
   `integrations/`, or `services/data-manager/`), and the audit gates:
   `check-legal-tables`, `check-legal-updated`, `check-data-flows`,
-  `check-license-metadata`, and `check-toolchain-pins`. No Docker required.
+  `check-license-metadata`, `check-toolchain-pins`, `check-feed-ids`,
+  `check-credential-keys`, and `check-dockerfile-sync`. No Docker required.
   A small in-package commit takes seconds; one touching root config or a
   widely-depended-on package pays a full type check.
 - **pre-push** — full workspace type check (`pnpm check-types`) as the

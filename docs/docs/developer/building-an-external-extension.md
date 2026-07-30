@@ -136,16 +136,12 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
 
     const cacheKey = `conditions:observations:${bbox}`;
     const rows = await ctx.cache.withCache(cacheKey, 30, async () => {
-      // ctx.db is present because we declared requires: [{ service: "conditions-ingest" }]
-      const db = ctx.getRequiredService("conditions-ingest");
-      return db.query(
-        `SELECT id, source_id, observed_at, ST_AsGeoJSON(geometry) AS geom, payload
-           FROM conditions.observations
-          WHERE ST_Intersects(geometry, ST_MakeEnvelope($1::float, $2::float, $3::float, $4::float, 4326))
-          ORDER BY observed_at DESC
-          LIMIT 500`,
-        bbox.split(",").map(Number),
-      );
+      const service = ctx.getRequiredService("conditions-ingest");
+      if (!service) throw new Error("conditions-ingest is unavailable");
+      return ctx.http.get(`${service.url}/observations`, {
+        params: { bbox },
+        timeoutMs: 5_000,
+      });
     });
 
     reply.send({ observations: rows });
@@ -160,8 +156,8 @@ Key points:
   `GET /api/integrations/conditions/observations`.
 - **`ctx.cache.withCache(key, ttl, fn)`** reads through on a miss and stores the
   result for `ttl` seconds.
-- **`ctx.getRequiredService(slug)`** resolves a declared service dependency;
-  throw if it returns `undefined` and the dependency was not declared optional.
+- **`ctx.getRequiredService(slug)`** returns a declared service's internal URL
+  and state; handle `null` for an optional or unavailable dependency.
 
 ### Test it with the SDK mock
 
@@ -409,18 +405,22 @@ The integration must declare that it requires the companion service. Add a
 }
 ```
 
-At load time the host resolves this and makes the service reachable through
-`ctx.getRequiredService("conditions-ingest")`. If the service is not installed or
+At load time the host resolves this and makes the service descriptor reachable
+through `ctx.getRequiredService("conditions-ingest")` (`serviceId`, internal
+base `url`, and enabled state). If the service is not installed or
 not healthy, the host refuses to load the integration (unless the entry is
 `"optional": true`).
 
-### The shared schema as the handoff
+### Choose an explicit handoff contract
 
-The companion service owns and migrates the `conditions` schema; the integration
-queries it read-only. This is the only contract between the two — no IPC, no
-internal HTTP, no shared code at runtime. The integration can evolve its read
-queries independently of the service's write side, as long as both agree on the
-table shapes.
+The companion service owns and migrates the `conditions` schema. It can expose
+an internal HTTP API and the integration can call the descriptor's `url` through
+`ctx.http`; this keeps the service's database private and is the preferred
+community-extension boundary. A trusted integration that also declares the
+platform PostGIS requirement may instead use `ctx.db` and read the owned schema,
+but `getRequiredService()` itself is only service discovery — it is not a SQL
+client. Whichever contract you choose, version and document it alongside the
+bundle so the pinned service and integration evolve together.
 
 ### Bundle it as an extension
 

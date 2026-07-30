@@ -1,17 +1,17 @@
 ---
 title: Directions & navigation
-description: Door-to-door routing for driving, cycling, and walking, with route options, turn-by-turn navigation, elevation, and a flights deep-link.
+description: Traffic-aware road routing, EV charge planning, cycling and walking directions, turn-by-turn navigation, elevation, and flights deep-links.
 sidebar_position: 3
 ---
 
 # Directions & navigation
 
 Directions answer the most common map question: how do I get from here to there?
-OpenMapX computes door-to-door routes for driving, cycling, and walking,
+OpenMapX computes door-to-door routes for driving, motorcycle, cycling, and walking,
 draws them on the map, and — for road travel — walks you through every turn with
 in-browser turn-by-turn navigation. Public-transit journeys are planned by a
 separate engine and have [their own page](./public-transit.md); this page covers
-the three ground-routing modes plus the flights deep-link.
+the ground-routing modes, EV planning, and the flights deep-link.
 
 Like everything else in OpenMapX, the routing here runs on infrastructure you
 control. The map app talks only to your own API server, which proxies a routing
@@ -37,6 +37,9 @@ unless you point an engine at a third-party host.
   leave the route, and a keep-screen-on option.
 - **Hand off long-distance trips to a flight search** — the flying mode
   deep-links to an external flight engine with your trip pre-filled.
+- **Plan an EV trip** with a real vehicle or custom battery specification,
+  charging stops, state-of-charge targets, network preferences, energy use,
+  charge time, and defensible price estimates.
 
 ## How routing works
 
@@ -71,7 +74,7 @@ The split between the two engines is deliberate:
   still falls back to Valhalla when OSRM is absent or unavailable.
 
 Because providers are selected by capability rather than hard-wired, a
-deployment that runs only Valhalla still serves all three modes; adding OSRM
+deployment that runs only Valhalla still serves every routed ground mode; adding OSRM
 simply gives driving a faster path. You choose which engines run by enabling the
 corresponding services — see the [Valhalla and OSRM engine
 guides](#configuration) below.
@@ -135,6 +138,30 @@ point on the map, and the profile auto-expands for non-driving routes where the
 climb is significant. Elevation requires Valhalla (OSRM does not provide it) and
 follows your metric/imperial unit setting.
 
+## EV route and charge planning
+
+EV is a driving submode. Choose a vehicle from the bundled Open EV Data catalog
+(searchable by make) or enter a custom battery size, consumption, AC/DC charge
+limits, taper point, and connector set. Then set starting charge, target charge
+at stops, minimum arrival reserve, preferred or excluded charging networks, and
+an optional home-energy price and currency.
+
+The planner first computes the road route, searches compatible chargers along
+its corridor, evaluates detours with a route matrix, and reroutes through the
+selected stops. It accounts for elevation and temperature, the vehicle's charge
+curve and connector limits, station power, network preferences, and live
+availability when it is useful for a near-term trip. The result separates drive
+and charge time and shows distance, estimated energy, arrival charge, and cost
+only where the source data supports a meaningful price. Warnings explain missing
+availability or tariff data, tight reserves, and cases where no compatible or
+allowed network can make the trip. Selecting a charge stop opens its charger
+place card.
+
+EV planning currently supports one origin and one destination; arbitrary user
+waypoints are not accepted because the planner owns the charging stops. It
+requires Valhalla routing plus enabled EV-charging data sources. Live occupancy
+and tariffs depend on the feeds available in the trip region.
+
 ## Turn-by-turn navigation
 
 Once you have a driving, cycling, or walking route, you can start turn-by-turn
@@ -154,6 +181,15 @@ sleep while you drive. If you leave the route, OpenMapX **reroutes
 automatically** from your current position; when a reroute can't be computed it
 surfaces a brief notice rather than failing silently. A recenter control snaps the
 camera back to follow mode after you pan away to look ahead.
+
+A navigation menu keeps route overview, satellite view, contextual overlays,
+directions, settings, and search-along-route within reach. Voice selection,
+north-up/follow behavior, avoidance preferences, and screen wake-lock controls
+are adjustable without abandoning the route. For a driving or motorcycle trip,
+road conditions and self-hosted traffic flow switch on contextually; a manual
+layer choice is respected and restored when the trip ends. Incidents ahead can
+produce approach alerts, including confirmation/negation prompts for compatible
+[crowd reports](./crowd-reports.md).
 
 Under the hood, the engine's per-step maneuvers, lane data, and speed limits are
 normalized into a single shape regardless of which engine produced them, so the
@@ -191,7 +227,7 @@ usually all it takes. Routing engines are backend **services**; enable and run
 them with the `openmapx` CLI:
 
 ```bash
-pnpm openmapx services enable valhalla        # planet-capable, all three modes
+pnpm openmapx services enable valhalla        # planet-capable, all ground modes
 pnpm openmapx services enable osrm            # fast region-only driving (optional)
 pnpm openmapx services start --preset routing # bring up the routing stack
 ```
@@ -225,3 +261,4 @@ toggles, region builds, memory needs), see the
   and tram.
 - **[Map layers](./map-layers.md)** — traffic, satellite, and other overlays you
   can switch on while planning a route.
+- **[Crowd reports](./crowd-reports.md)** — report or verify live conditions.

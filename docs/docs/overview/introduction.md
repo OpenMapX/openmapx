@@ -9,30 +9,35 @@ sidebar_position: 1
 
 OpenMapX is a fully self-hostable mapping platform, assembled from
 open-source services and open data. It gives you a
-modern map application — place search, directions, public-transit routing, map
-layers, and street-level imagery — that runs entirely on infrastructure you
-control.
+modern map application — place and voice search, traffic-aware and EV
+directions, public-transit planning and navigation, map layers, crowd reports,
+and street-level imagery — that runs on infrastructure you control.
 
-Nothing is mandatory and nothing is locked in: every backend engine is a
-plugin, every user-facing feature is a plugin, and the whole Docker deployment
-is generated from those plugins' manifests. You decide which pieces to run.
+The lightweight application, proxy, database, cache, and data-manager form the
+core deployment. Heavy or provider-specific engines are not locked in: routing,
+geocoding, transit, tiles, and most user-facing features are plugins, and the
+whole Docker deployment is generated from their manifests. You decide which
+optional engines and data sources to run.
 
 ## What you get
 
 - **A complete mapping app** — geocoding and autocomplete, turn-by-turn
-  directions, public-transit journey planning, points of interest, map
-  overlays, weather, reviews, and place enrichment.
+  directions and EV charge planning, public-transit journey planning and live
+  navigation, points of interest, map overlays, crowd reports, weather,
+  reviews, and place enrichment.
 - **A pluggable backend** — each daemon (the routing engine, the geocoder, the
   transit engine, the tile server, …) is described by a manifest and runs as a
   container.
-- **A pluggable feature set** — built-in *integrations* span roughly a dozen
-  domains. Community extensions — integrations, services, or bundles of both —
+- **A pluggable feature set** — 95 built-in *integrations* span search,
+  routing, transit, live mobility, places, overlays, weather, and more.
+  Community extensions — integrations, services, or bundles of both —
   install from one unified **Extensions** store.
 - **Open data throughout** — OpenStreetMap, GTFS (via Transitous), Wikidata,
   Wikipedia, Mapillary, and a long list of public agency feeds.
-- **Privacy by default** — no third-party analytics, and every upstream API
-  call is proxied through your own server, so providers see your server's IP
-  rather than your users'.
+- **Privacy by default** — no third-party analytics, and provider API and image
+  requests are normally proxied through your server. Explicit link-outs and
+  browser capabilities such as Web Speech follow the browser/provider privacy
+  model and are called out in the relevant feature documentation.
 - **A modern stack** — Next.js, Fastify, MapLibre GL JS, MUI, PostgreSQL +
   PostGIS, Valkey (Redis-compatible), Drizzle ORM, and TypeScript end to end.
 
@@ -59,10 +64,3 @@ against the running services.
   integrations fit together.
 - **[Getting started](../install/getting-started.md)** — running the stack with
   Docker Compose.
-
-:::note[Project status]
-
-OpenMapX is under active development, and so is this documentation — it can run
-slightly ahead of or behind the current code.
-
-:::

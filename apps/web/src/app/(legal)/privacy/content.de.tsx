@@ -60,7 +60,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 28. Juli 2026
+        Zuletzt aktualisiert: 30. Juli 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -541,15 +541,11 @@ export default function PrivacyContentDe({
         <ul>
           <li>
             <Typography>
-              <strong>Direkte Browser-Verbindungen zu US-Anbietern:</strong> Der
-              MapillaryJS-Stra&szlig;enansicht-Viewer (Meta Platforms, Inc.) wird erst geladen,
-              nachdem Sie einen In-App-Hinweis best&auml;tigt haben. Anschlie&szlig;end stellt er
-              eine direkte Verbindung von Ihrem Browser her, wodurch Ihre IP-Adresse,
-              Browser-/Ger&auml;te-Anfragedaten, die ausgew&auml;hlte Bild-ID und die betrachteten
-              Koordinaten &uuml;bermittelt werden. Einige Webcam-Video- oder Player-Anbieter
-              k&ouml;nnen Ihre IP-Adresse ebenfalls erhalten, wenn Sie &quot;Medien laden&quot;
-              anklicken oder Live-Medien anderweitig &ouml;ffnen. Meta ist unter dem EU-U.S. Data
-              Privacy Framework (DPF) zertifiziert.
+              <strong>Direkte Browser-Verbindungen zu Medienanbietern:</strong> Einige Webcam-Video-
+              oder Player-Anbieter k&ouml;nnen Ihre IP-Adresse und Browser-/Ger&auml;te-Anfragedaten
+              erhalten, wenn Sie &quot;Medien laden&quot; anklicken oder Live-Medien anderweitig
+              &ouml;ffnen. Abdeckung, Metadaten und Bilddateien der Stra&szlig;enansicht werden
+              &uuml;ber unseren API-Proxy geleitet.
             </Typography>
           </li>
           <li>

@@ -60,7 +60,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: July 28, 2026
+        Last updated: July 30, 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -501,13 +501,10 @@ export default function PrivacyContent({
         <ul>
           <li>
             <Typography>
-              <strong>Direct browser connections to US providers:</strong> The MapillaryJS
-              street-level imagery viewer (Meta Platforms, Inc.) is loaded only after you confirm an
-              in-app notice. It then connects directly from your browser, exposing your IP address,
-              browser/device request metadata, selected image ID, and viewed coordinates. Some
-              webcam video/player providers may also receive your IP address when you click
-              &quot;Load media&quot; or otherwise open the live media. Meta is certified under the
-              EU-U.S. Data Privacy Framework (DPF).
+              <strong>Direct browser connections to media providers:</strong> Some webcam video or
+              player providers may receive your IP address and browser/device request metadata when
+              you click &quot;Load media&quot; or otherwise open live media. Street-level imagery
+              coverage, metadata, and image assets are routed through our API proxy.
             </Typography>
           </li>
           <li>

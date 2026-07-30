@@ -52,6 +52,23 @@ openmapx-ext package ./integrations/my-weather --out my-weather.tar.gz
 
 Bundles the backend (`index.ts`) and any declared frontend components, then creates a `.tar.gz` artifact suitable for installation via the OpenMapX admin panel.
 
+### bundle
+
+Create an `extension.json` that pins integration artifacts and companion
+service repositories into one installable extension:
+
+```sh
+openmapx-ext bundle \
+  --id my-extension --name "My extension" --version 1.0.0 --platform 1.0 \
+  --service "https://github.com/example/service,v1.0.0,my-service" \
+  --integration "https://example.com/my-integration.tar.gz,<sha256>,my-integration" \
+  --out extension.json
+```
+
+`--service` and `--integration` are repeatable. Their values are respectively
+`repository,ref,serviceId` and `artifactUrl,sha256,integrationId`. Optional
+bundle metadata includes `--description`, `--license`, and `--homepage`.
+
 ## Authoring types
 
 Integration authoring types (the `IntegrationContext` API, manifest schema, etc.) come from [`@openmapx/extension-sdk`](https://www.npmjs.com/package/@openmapx/extension-sdk).

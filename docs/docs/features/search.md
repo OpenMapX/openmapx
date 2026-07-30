@@ -39,6 +39,19 @@ straight there; a broader, name-only query opens a results panel scoped to what
 you can currently see on the map. Coordinates and Plus Codes are detected client
 side and resolved without a round trip to a geocoder at all.
 
+### Voice search
+
+On browsers that expose the Web Speech API, a microphone button lets you speak
+the same queries you can type. OpenMapX asks for microphone permission, uses a
+region-qualified locale, places interim recognition text in the search box, and
+submits the final transcript through the normal search path. The button is
+hidden when speech recognition is unsupported, and permission or recognition
+errors stay visible in the search UI.
+
+Speech recognition is a browser capability, not an OpenMapX backend provider.
+Depending on the browser and operating system, audio may be processed by the
+browser vendor's speech service; consult that browser's privacy documentation.
+
 ### Category and POI search
 
 Beyond named places, you can search by *category* — "restaurants," "pharmacies,"

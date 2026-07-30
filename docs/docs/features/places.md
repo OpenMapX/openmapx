@@ -57,9 +57,19 @@ Overview is a stack of detail rows, each self-hiding when it has nothing to show
 - **Weather**, **Sunrise & sunset**, and (on the coast) **Tides** and **Marine
   weather** — expandable readouts for the place's exact location.
 
-Restaurants surface a menu and food-delivery hand-off, and hotels surface a
-price-and-booking row and a dedicated **Prices** tab; both rows stay hidden for
-places they don't apply to. Below the rows, the Overview tab also folds in
+Restaurants can surface a menu link and a food-delivery hand-off. The delivery
+picker supports Uber Eats, Wolt, Lieferando, DoorDash, Deliveroo, Just Eat,
+Glovo, foodpanda, Grubhub, iFood, Rappi, PedidosYa, Swiggy, Zomato, and Talabat.
+It resolves an exact Uber Eats store only when the match is safe; otherwise it
+opens a provider search for the restaurant and location rather than claiming a
+confirmed menu. Ordering, availability, prices, and tracking remain external.
+
+Hotels surface comparison links for Booking.com, Expedia, Hotels.com, Agoda,
+and Trip.com, plus a dedicated **Prices** tab. A configured LiteAPI key can add
+a live lowest-nightly-rate result; without it the feature remains a deep-link
+comparison. Affiliate IDs/wrappers are optional, and booking happens externally.
+Both restaurant and hotel rows stay hidden for places they don't apply to. Below
+the rows, the Overview tab also folds in
 specialized sections when the place warrants them — a **transit** section for a
 place with linked stops (feeding into [public transit](./public-transit.md)),
 data-source detail (such as EV-charging connectors, see
@@ -149,6 +159,11 @@ want; the place panel adapts to whatever is running. A few providers need
 credentials — Flickr an API key, Mapillary an access token — which live in the
 integration's config alongside its enabled toggle. The knowledge and Commons
 providers call public APIs and need no key.
+
+Food-delivery and hotel link-outs have their own integration settings. Operators
+can select providers, add affiliate wrappers/IDs, and configure LiteAPI for live
+hotel rates. A link-out exposes the chosen search to the external site only
+after the user opens it; it is not a proxied provider API call.
 
 Because results are merged rather than ranked into a single winner, enabling more
 sources generally means richer cards: Wikipedia plus Wikidata plus several photo

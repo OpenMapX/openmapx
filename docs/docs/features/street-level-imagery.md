@@ -30,7 +30,8 @@ layer, colour-coded per provider, and the viewer moves between them seamlessly.
 - **An immersive viewer** — click any covered point and a full-screen viewer
   opens over the map. You can pan and look around, follow the clickable arrows
   to move down the street, and read the reverse-geocoded address, capture date
-  and licence of the current photo.
+  and licence of the current photo. A small synchronized map keeps the current
+  image and nearby coverage in view while you move.
 - **Photos on place panels** — companion integrations surface nearby
   street-level photos directly in a place's detail panel, alongside the rest of
   the [place information](./places.md). This is independent of the coverage
@@ -128,11 +129,11 @@ simply yield fewer arrows — the interaction is identical.
 
 ## Privacy
 
-Coverage tiles and image metadata are proxied through the OpenMapX API. The
-imagery itself is loaded directly from the provider, so the first time you open
-the viewer for a given provider you are asked to confirm. Until you do, no
-request reaches that provider — including via an arrow that would cross into it.
-Each provider is confirmed separately.
+Coverage tiles, image metadata, and panorama image assets are proxied through
+the OpenMapX API. Providers marked `server-only` therefore open without a
+notice: the provider sees the server, not the viewer's IP. If a future or custom
+provider exposes browser-loaded assets, OpenMapX shows a per-provider notice
+before loading it and also gates arrows that would cross into that provider.
 
 Attribution for every visible provider is shown on the map, as their licences
 require.

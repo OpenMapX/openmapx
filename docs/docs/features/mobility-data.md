@@ -108,13 +108,13 @@ fallback for the location-only sources.
 
 | Category          | What it shows                                  | Origins (representative)                                                                 |
 | ----------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| **EV charging**   | Charging stations, status, connectors          | OpenChargeMap (global), AFDC/NREL (US/CA), NOBIL (Nordics), Bundesnetzagentur (DE), France IRVE, SFOE (CH), OpenStreetMap |
+| **EV charging**   | Charging stations, status, connectors          | OpenChargeMap, AFDC/NREL, Bundesnetzagentur, France IRVE, NOBIL, SFOE, NDW/DOT-NL, EVRoam NZ, E-Control AT, and national feeds across Europe, Asia, and Australia; OpenStreetMap fallback |
 | **Fuel**          | Gas stations + live prices                     | Tankerkönig (DE), E-Control (AT), Prix Carburants (FR), Minetur (ES), OpenStreetMap      |
 | **Parking**       | Parking + Park & Ride, live occupancy          | ParkAPI / ParkenDD, MobiData BW, DB BahnPark, Autobahn GmbH, plus many city and regional open-data portals, OpenStreetMap |
 | **Bike sharing**  | Docks + free-floating bikes, availability      | GBFS feeds via the MobilityData catalog, CityBikes, Nextbike, Donkey Republic, Deutsche Bahn, Entur (NO) |
-| **Car sharing**   | Car-sharing stations + vehicles                | GBFS catalog, Entur (NO), Cambio, plus German municipal open-data portals                |
+| **Car sharing**   | Car-sharing stations + vehicles                | GBFS catalog, Entur, Cambio, Communauto, CoopStroom, Dégage, and German municipal portals |
 | **E-scooters**    | Free-floating scooters + operator zones        | GBFS catalog, Entur (NO), NRW.Mobidrom (Voi, Lime), Felyx                                |
-| **Webcams**       | Traffic + scenic cameras, still or live video  | Windy Webcams, Caltrans, Transport for London, US National Park Service, several US state DOT 511 sites, OpenStreetMap |
+| **Webcams**       | Traffic + scenic cameras, still or live video  | Windy, OpenStreetMap, Caltrans, TfL, NPS, many US 511 feeds, Finland/Sweden/Norway/Iceland/Spain, Ontario, Hong Kong, NSW, and Taiwan |
 
 A few notes on origins:
 
@@ -150,6 +150,12 @@ require credentials, declared per integration:
 - **Parking** can use credentials for DB BahnPark, Transport for NSW, and the
   Newcastle UTMC feed.
 - **Webcams** can use a Windy key plus per-state US DOT 511 keys.
+
+EV coverage also includes open registries for Ireland, Cyprus, Luxembourg,
+Spain, Italy, Belgium, Hong Kong, Finland, Lithuania, the Netherlands, Slovenia,
+South Korea, Poland, Singapore, Taiwan, and several Australian states. The
+integration manifest is the authoritative per-source license and configuration
+inventory.
 
 Where a source has no key, it's simply skipped and the others still answer. Keys
 set on an integration follow the usual config cascade — admin panel or `.env`.

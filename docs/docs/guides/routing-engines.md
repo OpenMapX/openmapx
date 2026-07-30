@@ -6,11 +6,11 @@ sidebar_position: 1
 
 # Self-hosting routing engines
 
-OpenMapX computes driving, cycling, and walking directions by delegating the
+OpenMapX computes driving, motorcycle, cycling, and walking directions by delegating the
 path-finding to a routing **engine**. Two engines ship in the box, and you can
 run either or both as backend services on your own host:
 
-- **Valhalla** — the general-purpose engine. It routes for all three ground
+- **Valhalla** — the general-purpose engine. It routes for all four ground
   modes, scales to a planet extract, and is the only one that produces elevation
   profiles, honors departure/arrival times, and does map matching.
 - **OSRM** — a region-scoped, driving-only engine optimized for speed.
@@ -28,7 +28,7 @@ picks between them by capability rather than hard-wiring either one:
 
 | | Valhalla | OSRM |
 | --- | --- | --- |
-| Modes | driving, cycling, walking | driving only |
+| Modes | driving, motorcycle, cycling, walking | driving only |
 | Scale | region or **planet** | **region only** |
 | Speed | fast | fastest |
 | Elevation profiles | yes (SRTM) | no |
@@ -38,8 +38,8 @@ picks between them by capability rather than hard-wiring either one:
 
 A useful way to think about it:
 
-- **Run Valhalla if you run anything.** It serves all three modes on its own, so
-  a Valhalla-only deployment is complete. It is also your only option for
+- **Run Valhalla if you run anything.** It serves driving, motorcycle, cycling,
+  and walking on its own, so a Valhalla-only deployment is complete. It is also your only option for
   worldwide coverage — OSRM can't load a planet graph.
 - **Add OSRM when driving volume matters and you're region-scoped.** Where a
   regional OSRM build exists, the orchestrator routes car requests through it for
@@ -62,7 +62,7 @@ Routing engines are backend services, managed with the `openmapx` CLI. Add the
 engine(s) you want to your selection — Valhalla, OSRM, or both:
 
 ```bash
-pnpm openmapx services enable valhalla        # planet-capable, all three modes
+pnpm openmapx services enable valhalla        # planet-capable, all ground modes
 pnpm openmapx services enable osrm            # fast region-only driving (optional)
 ```
 

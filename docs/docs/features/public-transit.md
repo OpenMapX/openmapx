@@ -10,7 +10,8 @@ OpenMapX plans public-transit journeys the way a rider thinks about them:
 "how do I get from here to there, leaving now, by bus and train?" It answers
 with door-to-door itineraries — walking to the stop, the transit legs in
 between, the transfers, and the walk at the far end — alongside live departure
-boards, route preferences, and real-time vehicle positions on the map.
+boards, route preferences, real-time vehicle positions, and guided transit
+navigation.
 
 The transit feature spans three things you can see in the app:
 
@@ -22,6 +23,8 @@ The transit feature spans three things you can see in the app:
   alerts.
 - **Live vehicles** — moving trains, trams, and buses on the map, drawn from
   real-time feeds.
+- **Transit navigation** — walking guidance to and between stops, live ride
+  progress, transfer risk, alerts, and a get-off reminder.
 
 Under the hood, all of this is served by a **transit orchestrator** that queries
 many providers and merges their results. The rest of this page explains how that
@@ -36,6 +39,13 @@ legs — walk, ride, transfer, ride, walk — with per-leg duration, the line an
 its color, the boarding and alighting stops, and the geometry drawn on the map.
 The panel shows several alternatives so you can trade a faster trip against fewer
 transfers or less walking.
+
+Cards preserve operational details rather than flattening them away: line
+branding and vehicle identity, destination/headsign, platform and indoor level,
+scheduled versus real-time times, occupancy, bike and wheelchair information,
+service alerts, skipped stops, and cancellations appear when the provider sends
+them. Tight transfers are flagged with interchange guidance so an attractive
+headline duration does not hide a risky connection.
 
 Trip planning is anchored on a **departure time** (leave now, or at a chosen
 time) or an **arrival time** (be there by). The planner can also weave in a
@@ -90,6 +100,28 @@ real-time feeds that publish them: MOTIS surfaces the active trips for the
 visible area, and regional sources add their own live positions where they're
 configured (Germany's DB real-time feed, for example). See
 [map layers](./map-layers.md) for turning the overlay on.
+
+## Transit navigation
+
+Start navigation from an itinerary to turn the plan into a live sequence of
+walk, wait, ride, transfer, and arrival phases. Walking legs use turn-by-turn
+instructions. At a stop, the app shows live boarding departures; aboard a
+vehicle it follows the trip stop by stop, refreshes the itinerary, shows the
+vehicle around you on a radar-style map, and surfaces platform changes,
+cancellations, occupancy, and service alerts as they arrive.
+
+The ride sheet can be swiped through upcoming stops and keeps scheduled and
+real-time values distinct. Transfer cards show the next line, platform, walking
+handoff, and connection risk; when a connection becomes endangered the app can
+offer alternatives. Indoor level guidance is retained where station data
+contains it. Voice cues, a keep-screen-on setting, and an optional get-off alarm
+(including a background notification where the browser permits it) help when
+the map is not in hand. The arrival summary closes the trip cleanly.
+
+While planning or navigating transit, the live-vehicle and transit-line overlays
+turn on automatically if available. Manually enabling or disabling either layer
+is respected, and an automatically enabled layer returns to its earlier state
+when the transit context ends.
 
 ## How the orchestrator works
 

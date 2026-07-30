@@ -1,36 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# OpenMapX web application
 
-## Getting Started
+This workspace contains the OpenMapX map UI. It is a Next.js 16 App Router
+application built with React 19, MapLibre GL JS 5, MUI 9, Tailwind 4, Zustand,
+TanStack Query, next-intl, and Serwist. It is designed to run with `apps/api`;
+browser-facing provider requests normally go through that API.
 
-First, run the development server:
+## Develop
+
+Run setup from the repository root:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env.local
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+To run only this app, use `pnpm --filter web dev`. The web app defaults to
+`NEXT_PUBLIC_API_URL=http://localhost:3001`; see `.env.example` for map style,
+tile, traffic, and legal-page settings. MapTiler credentials are configured in
+the API environment, not exposed to browser JavaScript.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Useful paths
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `src/app/` — App Router pages, layouts, admin surfaces, and legal pages
+- `src/components/map/` — MapLibre map shell, layers, viewers, and controls
+- `src/components/navigation/` — ground and transit navigation UI
+- `src/components/panels/` — directions, places, saved places, and detail panels
+- `src/lib/` — environment parsing, map helpers, navigation logic, and caches
+- `src/sw.ts` — Serwist service worker
+- `public/` — static and generated runtime assets
 
-## Learn More
+Built-in integration frontends are imported from the repository-level
+`integrations/` workspace. Shared state, API hooks, and domain types live in
+`@openmapx/core`; translations live in `@openmapx/i18n`.
 
-To learn more about Next.js, take a look at the following resources:
+## Check and build
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+pnpm lint
+pnpm check-types
+pnpm test --project web
+pnpm --filter web build
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The production build uses Next.js standalone output and then builds the service
+worker and copies static assets into the standalone tree. Start that output with
+`pnpm --filter web start`.
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See the root `README.md`, `CONTRIBUTING.md`, and `docs/docs/developer/` for the
+full architecture and contribution conventions.

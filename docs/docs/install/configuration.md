@@ -121,8 +121,8 @@ runtime changes reach both server and client components without a rebuild.
 
 ## Street-level imagery
 
-Mapillary tokens for street-level imagery. One stays server-side; the viewer
-token ships in the browser bundle.
+Mapillary uses a server-side access token. Coverage, metadata, and panorama
+assets are proxied, so the token is never shipped in the browser bundle.
 
 | Variable                  | Description                                                                                                                                 | Required / Default        |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------- |

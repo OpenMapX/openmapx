@@ -96,8 +96,20 @@ structured validity times (including recurring schedule windows in the source's
 local timezone). Overlapping markers are automatically grouped into a single scrollable
 popup (ordered most-severe first) so all incidents at the same spot stay reachable, and
 linear events (such as segment closures) render as line segments directly on the map.
+Where a feed provides measured speed, an incident popup also estimates the delay
+in minutes; otherwise it preserves the source's declared level of service rather
+than inventing a speed.
 These overlays complement the dedicated [public transit](./public-transit.md) and
 [directions](./directions.md) features rather than replacing them.
+
+### Context-aware layers
+
+Useful layers follow the task without becoming permanent preferences. Opening a
+driving or motorcycle route enables **Road conditions** and **Traffic flow**;
+planning or navigating a transit trip enables **Transit lines** and **Live
+transit**. Only layers available on the deployment are touched. A layer that was
+already on stays on afterward, a manual toggle made during the trip is respected,
+and layers enabled only by the context switch back off when it ends.
 
 ### Environment & weather
 
@@ -133,7 +145,7 @@ a glance.
 | **Winter sports**    | Ski areas, pistes, and lifts                          | OpenSnowMap                  |
 | **Nautical**         | Sea marks, depths, tides, and water levels            | OpenSeaMap and marine agencies |
 | **Satellite imagery**| A true-color satellite overlay (distinct from the satellite base) | NASA GIBS / MODIS |
-| **3D buildings**     | Extruded building footprints                          | OpenMapTiles building data   |
+| **3D buildings**     | Extruded building footprints from the active vector style | OpenMapTiles-compatible building layers |
 
 ### Map tools
 
@@ -158,5 +170,7 @@ provider) is part of your service selection.
   routing, which uses some of the same backends as the transit overlays.
 - [Street-level imagery](./street-level-imagery.md) — the immersive ground-level
   view, which can't be on at the same time as some overlays.
+- [Crowd reports](./crowd-reports.md) — submit and verify conditions shown by
+  the road-conditions overlay.
 - [Weather](./weather.md) and [mobility data](./mobility-data.md) — related
   data-driven features.

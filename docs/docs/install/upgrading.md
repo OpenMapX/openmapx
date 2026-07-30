@@ -166,7 +166,7 @@ pnpm openmapx services logs app-api --tail 100
 
 A successful upgrade logs `Database migrations applied`. If a migration fails,
 the error is logged there. If you created an optional
-[pre-upgrade backup](#1-back-up-first), restore it before attempting a rollback.
+[pre-upgrade backup](#1-optional-create-a-backup), restore it before attempting a rollback.
 
 :::caution[Migrations move forward only]
 Drizzle migrations are forward-only — there is no automatic down-migration. Once a

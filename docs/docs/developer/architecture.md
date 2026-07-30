@@ -29,7 +29,7 @@ required.
 ```
 openmapx/
 ├── apps/
-│   ├── web/                  Next.js 16 frontend (MapLibre GL JS, MUI 7)
+│   ├── web/                  Next.js 16 frontend (MapLibre GL JS, MUI 9)
 │   └── api/                  Fastify 5 BFF + integration host + admin API
 ├── packages/                 shared libraries (see below)
 ├── integrations/             built-in application features (manifest.json each)
@@ -49,7 +49,7 @@ service tree under `services/.community/` are populated at runtime from Git URLs
 
 | App | Stack | Responsibility |
 | --- | --- | --- |
-| `apps/web` | Next.js 16 · MapLibre GL JS 5 · MUI 7 · Tailwind 4 · Zustand · TanStack Query · next-intl | The user-facing map UI. Every component is `"use client"` because MUI's Emotion runtime is client-only, and the MapLibre instance is shared through React context rather than a store, so the map's mutable GL state is never serialized. |
+| `apps/web` | Next.js 16 · React 19 · MapLibre GL JS 5 · MUI 9 · Tailwind 4 · Zustand · TanStack Query · next-intl | The user-facing App Router UI. Layouts and request boundaries use Next.js normally; the interactive map, panels, and navigation shell are client components. The MapLibre instance is shared through React context rather than serialized into application state. |
 | `apps/api` | Fastify 5 | The backend-for-frontend (BFF) gateway. It is *also* the integration host: it discovers, validates, configures, and runs every integration, resolves their service requirements, gates the admin API, and runs background jobs. |
 
 The two never talk to backend engines directly through the browser. The web app
@@ -72,10 +72,14 @@ up without a separate build step.
 | `@openmapx/mobility-formats-tomp` | The TOMP-API (OpenAPI-generated) client, split out so its codegen dependencies don't bleed into every bundle that touches the other formats. |
 | `@openmapx/mobility-core` | The canonical mobility model — one entity type per domain, plus `Attribution`, `Freshness`, `MobilityResult<T>`, the TTL/dedup policy constants, and the GBFS client. |
 | `@openmapx/db-schema` | Drizzle ORM table definitions shared between `apps/api` and `services/data-manager` (job tables, feed state, provider health). |
-| `@openmapx/cli` | The `openmapx` operator command line — `services`, `compose`, `data`, `ext`, `backup`, `check`. |
+| `@openmapx/cli` | The `openmapx` operator command line — services, compose, data/POI ingest, integrations/extensions, users, backups, cache, Transitous, and diagnostic checks. |
 | `@openmapx/i18n` | Locale JSON for `en` and `de`, plus a `check-translations` gate that fails CI when locales drift. Consumed by `apps/web` (next-intl) and `apps/api` (integration string lookups). |
 | `@openmapx/poi-source-registry` | A mutable in-process store of declared POI sources. Loaded independently by both `apps/api` (reader) and `services/data-manager` (ingest), so the same integration code drives both. |
 | `@openmapx/presets` | OSM preset matching and category chips, built on iD's tagging schema. |
+| `@openmapx/ev-charge-planner` | Pure EV trip planning: vehicle energy models, charge curves, corridor candidates, matrix scoring, network/availability/tariff policy, and itinerary estimates. |
+| `@openmapx/extension-cli`, `@openmapx/extension-sdk` | Standalone community-extension authoring tools and the stable public types/runtime helpers an external bundle may import. |
+| `@openmapx/openconditions-contrib-client` | Browser-side device enrollment, canonical claim validation/signing, reporting tokens, and signed votes for crowd reports. |
+| `@openmapx/transitous-core` | Shared Transitous catalog normalization and feed-selection logic used by the CLI, API, and data pipeline. |
 | `@openmapx/place-ids`, `@openmapx/mangrove-client`, `@openmapx/mangrove-react`, `@openmapx/command-palette`, `@openmapx/noaa-coops-data`, `@openmapx/ourairports-data`, `@openmapx/hardlinks`, `@openmapx/motis-feed-proxy-config`, `@openmapx/hey-api-client-fetch` | Focused utilities — stable place identifiers, Mangrove review signing, the search palette, bundled open datasets (tide stations, airports), the local hardlink applier, the MOTIS feed-proxy nginx config renderer, and a pinned `@hey-api/client-fetch` shim. |
 
 ## Runtime topology
