@@ -32,6 +32,7 @@ import {
   searchByName,
 } from "@integrations/transit-motis/adapter";
 import type { MotisInstance } from "@integrations/transit-motis/instances";
+import { decodeMotisLineReference } from "@integrations/transit-motis/route-pattern-id";
 import {
   geocode,
   stops as motisStops,
@@ -318,12 +319,14 @@ describe("getDepartures", () => {
       error: undefined,
     } as never);
 
-    const result = await getDepartures(testInstance, "test:de:12345", 60);
+    const result = await getDepartures(testInstance, "test:de:12345", 60, {
+      datasetEpoch: "epoch-1",
+    });
 
     expect(result).toHaveLength(1);
     const dep = result[0];
     expect(dep.tripId).toBe("test:trip:1");
-    expect(dep.route.id).toBe("test:route:1");
+    expect(decodeMotisLineReference(dep.route.id)).toEqual({ e: "epoch-1", r: "route:1", v: 1 });
     expect(dep.route.shortName).toBe("S1");
     expect(dep.route.longName).toBe("S-Bahn 1");
     expect(dep.route.mode).toBe("rail");
@@ -585,7 +588,18 @@ describe("planTrip", () => {
       error: undefined,
     } as never);
 
-    const result = await planTrip(testInstance, 52.5, 13.4, 52.52, 13.42, "2026-03-21", "10:00:00");
+    const result = await planTrip(
+      testInstance,
+      52.5,
+      13.4,
+      52.52,
+      13.42,
+      "2026-03-21",
+      "10:00:00",
+      undefined,
+      undefined,
+      { datasetEpoch: "epoch-1" },
+    );
 
     expect(result).not.toBeNull();
     if (!result) throw new Error("result was null");
@@ -608,7 +622,11 @@ describe("planTrip", () => {
     expect(tramLeg.route).toBeDefined();
     expect(tramLeg.route?.shortName).toBe("M1");
     expect(tramLeg.tripId).toBe("test:trip:tram1");
-    expect(tramLeg.routeId).toBe("test:route:tram1");
+    expect(decodeMotisLineReference(tramLeg.routeId ?? "")).toEqual({
+      e: "epoch-1",
+      r: "route:tram1",
+      v: 1,
+    });
     expect(tramLeg.from.stopId).toBe("test:de:stop1");
     expect(tramLeg.to.stopId).toBe("test:de:stop2");
     expect(tramLeg._intermediateStopCount).toBe(1);

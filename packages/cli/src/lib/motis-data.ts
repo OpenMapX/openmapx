@@ -134,7 +134,6 @@ async function downloadArchive(
 function clearPreparedMotisInputs(motisDir: string): void {
   mkdirSync(motisDir, { recursive: true });
   for (const name of readdirSync(motisDir)) {
-    if (name === "openmapx-feeds.json") continue;
     if (
       name === "scripts" ||
       name === MOTIS_CONFIG_FILENAME ||

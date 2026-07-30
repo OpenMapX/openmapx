@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { services } from "@openmapx/core/server";
 import type { Command } from "commander";
 import kleur from "kleur";
@@ -23,7 +23,6 @@ import { renderComposeForRepo } from "./compose";
 
 const { DataManagerClient } = services;
 type DatasetMetadata = services.DatasetMetadata;
-type GtfsDownloadResult = services.GtfsDownloadResult;
 
 const DEFAULT_DM_URL = process.env.DATA_MANAGER_URL ?? "http://localhost:4000";
 
@@ -47,11 +46,6 @@ function formatDuration(ms: number): string {
 interface ProgressRenderer {
   update: (bytes: number, total: number | undefined, startedAtMs: number) => void;
   done: () => void;
-}
-
-interface GtfsDownloadOptions {
-  countries?: string;
-  feedsFile?: string;
 }
 
 /**
@@ -204,10 +198,10 @@ async function runOsmDownload(
   return resolvedRegion.value;
 }
 
-async function runGtfsDownload(
+async function runTransitSync(
   client: services.DataManagerClient,
-  options: GtfsDownloadOptions,
-): Promise<GtfsDownloadResult> {
+  options: { countries?: string },
+): Promise<string> {
   const resolvedCountries = resolveTransitousCountries(options.countries);
   if (resolvedCountries.sourceEnv) {
     log.dim(
@@ -215,46 +209,12 @@ async function runGtfsDownload(
     );
   }
 
-  const countries = resolvedCountries.values;
-  let result: GtfsDownloadResult;
-
-  if (options.feedsFile) {
-    const feeds = JSON.parse(readFileSync(options.feedsFile, "utf-8")) as Array<{
-      id: string;
-      country: string;
-      url: string;
-    }>;
-    result = await client.downloadGtfs({ feeds, countries });
-  } else {
-    log.dim(
-      "no --feeds-file; running the full Transitous GTFS fetch pipeline (pass --feeds-file to bypass it)",
-    );
-    result = await client.downloadGtfs({ source: "transitous", countries });
-  }
-
-  const src = result.usedTransitousPipeline ? " using Transitous pipeline" : "";
-  if (result.failedCount > 0) {
-    const failedIds = result.failures
-      .slice(0, 3)
-      .map((failure) => failure.id)
-      .join(", ");
-    const tail = result.failures.length > 3 ? `, +${result.failures.length - 3} more` : "";
-    log.warn(
-      `GTFS download completed with ${result.failedCount} failure${result.failedCount === 1 ? "" : "s"}${failedIds ? ` (${failedIds}${tail})` : ""}`,
-    );
-  }
-
-  const skipNote =
-    result.skippedCount > 0
-      ? `, skipped ${result.skippedCount} feed${result.skippedCount === 1 ? "" : "s"} by country filter`
-      : "";
-
-  if (result.count === 0 && result.failedCount > 0) {
-    throw new Error(`Downloaded 0 GTFS feeds${src}${skipNote}`);
-  }
-
-  log.ok(`Downloaded ${result.count} GTFS feeds${src}${skipNote}`);
-  return result;
+  const result = await client.syncTransit({
+    countries: resolvedCountries.values,
+    triggeredBy: "openmapx-cli",
+  });
+  log.ok(`Transit sync started: jobId=${result.jobId}`);
+  return result.jobId;
 }
 
 async function runStyleDownload(client: services.DataManagerClient): Promise<void> {
@@ -280,39 +240,32 @@ export function registerDataCommands(program: Command): void {
 
   data
     .command("download <kind> [region]")
-    .description("Download source data (osm <region> | gtfs | style)")
+    .description("Download source data (osm <region> | style) or start a transactional GTFS sync")
     .option(
       "--countries <list>",
       `Comma-separated GTFS country codes (gtfs only; default: $${TRANSITOUS_COUNTRIES_ENV})`,
     )
-    .option("--feeds-file <path>", "Path to feeds JSON file (gtfs only)")
-    .action(
-      async (
-        kind: string,
-        region: string | undefined,
-        options: { countries?: string; feedsFile?: string },
-      ) => {
-        const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
-        try {
-          if (kind === "osm") {
-            await runOsmDownload(client, region);
-          } else if (kind === "gtfs") {
-            await runGtfsDownload(client, options);
-          } else if (kind === "style") {
-            await runStyleDownload(client);
-          } else {
-            log.err(`Unknown kind: ${kind} (use osm | gtfs | style)`);
-            process.exit(1);
-          }
-        } catch (err) {
-          log.err(`download failed: ${(err as Error).message}`);
-          if (!(err as Error).message.startsWith("region required")) {
-            dataManagerHint();
-          }
+    .action(async (kind: string, region: string | undefined, options: { countries?: string }) => {
+      const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
+      try {
+        if (kind === "osm") {
+          await runOsmDownload(client, region);
+        } else if (kind === "gtfs") {
+          await runTransitSync(client, options);
+        } else if (kind === "style") {
+          await runStyleDownload(client);
+        } else {
+          log.err(`Unknown kind: ${kind} (use osm | gtfs | style)`);
           process.exit(1);
         }
-      },
-    );
+      } catch (err) {
+        log.err(`download failed: ${(err as Error).message}`);
+        if (!(err as Error).message.startsWith("region required")) {
+          dataManagerHint();
+        }
+        process.exit(1);
+      }
+    });
 
   data
     .command("build <kind> [region]")
@@ -348,21 +301,14 @@ export function registerDataCommands(program: Command): void {
       "--countries <list>",
       `Comma-separated GTFS country codes (default: $${TRANSITOUS_COUNTRIES_ENV})`,
     )
-    .option("--feeds-file <path>", "Path to feeds JSON file for GTFS download")
     .option("--fail-fast", "Stop build-all after the first build failure")
     .action(
-      async (
-        region: string | undefined,
-        options: { countries?: string; feedsFile?: string; failFast?: boolean },
-      ) => {
+      async (region: string | undefined, options: { countries?: string; failFast?: boolean }) => {
         const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
         let resolvedRegion: string;
         try {
           resolvedRegion = await runOsmDownload(client, region);
-          await runGtfsDownload(client, {
-            countries: options.countries,
-            feedsFile: options.feedsFile,
-          });
+          await runTransitSync(client, { countries: options.countries });
           await runStyleDownload(client);
         } catch (err) {
           log.err(`update failed: ${(err as Error).message}`);
@@ -451,48 +397,125 @@ export function registerDataCommands(program: Command): void {
     });
 
   data
-    .command("add-feed <url> [slug]")
-    .description("Download a single GTFS feed by URL (slug defaults to the basename of the URL)")
-    .action(async (url: string, slug: string | undefined) => {
-      const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
-      const id = (slug ?? url.split("/").pop() ?? "").replace(/\.zip$/i, "").trim();
-      if (!id) {
-        log.err("Could not derive a slug from the URL — pass an explicit [slug] argument");
-        process.exit(1);
-      }
+    .command("sync")
+    .description("Start a transactional transit-source sync")
+    .option(
+      "--countries <list>",
+      `Comma-separated country codes (default: $${TRANSITOUS_COUNTRIES_ENV})`,
+    )
+    .action(async (options: { countries?: string }) => {
       try {
-        const result = await client.downloadGtfs({
-          feeds: [{ id, country: "_user", url }],
-          countries: [],
-        });
-        if (result.failedCount > 0) {
-          const fail = result.failures[0];
-          throw new Error(fail?.message ?? "download failed");
-        }
-        log.ok(`Added GTFS feed ${id}`);
+        await runTransitSync(new DataManagerClient({ baseUrl: DEFAULT_DM_URL }), options);
       } catch (err) {
-        log.err(`add-feed failed: ${(err as Error).message}`);
+        log.err(`sync failed: ${(err as Error).message}`);
         dataManagerHint();
         process.exit(1);
       }
     });
 
-  data
-    .command("remove-feed <slug>")
-    .description("Remove a single GTFS feed by slug (the *.gtfs.zip / *.netex.zip basename)")
-    .action(async (slug: string) => {
-      const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
+  const source = data.command("source").description("Manage desired transit source state");
+
+  source
+    .command("list")
+    .description("List requested and active transit sources")
+    .action(async () => {
       try {
-        const result = await client.removeGtfsFeed(slug);
-        if (result.removed.length === 0) {
-          log.info(`No GTFS feed matched slug "${slug}"`);
-          return;
-        }
-        log.ok(
-          `Removed GTFS feed${result.removed.length === 1 ? "" : "s"}: ${result.removed.join(", ")}`,
+        const result = await new DataManagerClient({ baseUrl: DEFAULT_DM_URL }).transitSources({
+          limit: 500,
+        });
+        console.log(
+          table(
+            [
+              { key: "id", header: "Source" },
+              { key: "origin", header: "Origin" },
+              { key: "region", header: "Region" },
+              { key: "state", header: "State" },
+            ],
+            result.sources.map((entry) => ({
+              id: entry.id,
+              origin: entry.origin,
+              region: entry.region,
+              state: `${entry.requested ? "requested" : "disabled"}/${entry.active ? "active" : "inactive"} (${entry.lifecycle})`,
+            })),
+          ),
         );
       } catch (err) {
-        log.err(`remove-feed failed: ${(err as Error).message}`);
+        log.err(`source list failed: ${(err as Error).message}`);
+        dataManagerHint();
+        process.exit(1);
+      }
+    });
+
+  source
+    .command("add <url>")
+    .description("Add an operator source and start a transactional sync")
+    .requiredOption("--name <name>", "Safe display name")
+    .requiredOption("--region <region>", "Source region (for example de-be)")
+    .requiredOption("--attribution <text>", "Required attribution text")
+    .option("--license-spdx <id>", "SPDX license identifier")
+    .option("--license-url <url>", "License URL")
+    .action(
+      async (
+        url: string,
+        options: {
+          name: string;
+          region: string;
+          attribution: string;
+          licenseSpdx?: string;
+          licenseUrl?: string;
+        },
+      ) => {
+        if (!options.licenseSpdx && !options.licenseUrl) {
+          log.err("source add requires --license-spdx or --license-url");
+          process.exit(1);
+        }
+        try {
+          const result = await new DataManagerClient({ baseUrl: DEFAULT_DM_URL }).addTransitSource({
+            url,
+            name: options.name,
+            region: options.region,
+            license: {
+              attribution: options.attribution,
+              ...(options.licenseSpdx ? { spdxIdentifier: options.licenseSpdx } : {}),
+              ...(options.licenseUrl ? { url: options.licenseUrl } : {}),
+            },
+          });
+          log.ok(`Source ${result.sourceId} queued: jobId=${result.jobId}`);
+        } catch (err) {
+          log.err(`source add failed: ${(err as Error).message}`);
+          dataManagerHint();
+          process.exit(1);
+        }
+      },
+    );
+
+  source
+    .command("remove <sourceId>")
+    .description("Disable a desired source and start a transactional sync")
+    .action(async (sourceId: string) => {
+      try {
+        const result = await new DataManagerClient({ baseUrl: DEFAULT_DM_URL }).removeTransitSource(
+          sourceId,
+        );
+        log.ok(`Source ${result.sourceId} removal queued: jobId=${result.jobId}`);
+      } catch (err) {
+        log.err(`source remove failed: ${(err as Error).message}`);
+        dataManagerHint();
+        process.exit(1);
+      }
+    });
+
+  source
+    .command("enable <sourceId>")
+    .description("Enable a catalog source and start a transactional sync")
+    .action(async (sourceId: string) => {
+      try {
+        const result = await new DataManagerClient({ baseUrl: DEFAULT_DM_URL }).enableTransitSource(
+          sourceId,
+        );
+        log.ok(`Source ${result.sourceId} enable queued: jobId=${result.jobId}`);
+      } catch (err) {
+        log.err(`source enable failed: ${(err as Error).message}`);
         dataManagerHint();
         process.exit(1);
       }
@@ -737,7 +760,7 @@ export function registerDataCommands(program: Command): void {
             `Dropped ${result.droppedCount} stale key${result.droppedCount === 1 ? "" : "s"} no longer required by the current Transitous catalog`,
           );
         }
-        log.dim("Fill in missing values, then run: openmapx data download gtfs");
+        log.dim("Fill in missing values, then run: openmapx data sync");
       } catch (err) {
         log.err(`generate-api-keys failed: ${(err as Error).message}`);
         process.exit(1);

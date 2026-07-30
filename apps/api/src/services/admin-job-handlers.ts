@@ -7,7 +7,6 @@ import { getServiceRegistry } from "./service-registry";
 
 type DataOperation =
   | "download-osm"
-  | "download-gtfs"
   | "download-style"
   | "update"
   | "convert-overpass"
@@ -112,7 +111,6 @@ export async function handleDataOperationJob(ctx: JobContext): Promise<Record<st
     operation?: DataOperation;
     region?: string;
     countries?: string;
-    feedsFile?: string;
     failFast?: boolean;
     target?: string;
     repoUrl?: string;
@@ -134,20 +132,6 @@ export async function handleDataOperationJob(ctx: JobContext): Promise<Record<st
       }
       break;
     }
-    case "download-gtfs": {
-      args.push("download", "gtfs");
-      const countries = nonEmptyString(payload.countries);
-      const feedsFile = nonEmptyString(payload.feedsFile);
-      if (countries) {
-        assertCountries(countries);
-        args.push("--countries", countries);
-      }
-      if (feedsFile) {
-        const safe = assertInsideRepo(feedsFile, "feedsFile");
-        args.push("--feeds-file", safe);
-      }
-      break;
-    }
     case "download-style": {
       args.push("download", "style");
       break;
@@ -156,7 +140,6 @@ export async function handleDataOperationJob(ctx: JobContext): Promise<Record<st
       args.push("update");
       const region = nonEmptyString(payload.region);
       const countries = nonEmptyString(payload.countries);
-      const feedsFile = nonEmptyString(payload.feedsFile);
       if (region) {
         assertRegion(region);
         args.push(region);
@@ -164,10 +147,6 @@ export async function handleDataOperationJob(ctx: JobContext): Promise<Record<st
       if (countries) {
         assertCountries(countries);
         args.push("--countries", countries);
-      }
-      if (feedsFile) {
-        const safe = assertInsideRepo(feedsFile, "feedsFile");
-        args.push("--feeds-file", safe);
       }
       if (payload.failFast === true) args.push("--fail-fast");
       break;

@@ -29,8 +29,6 @@ export {
 export {
   DataManagerClient,
   type DataManagerClientOptions,
-  type GtfsDownloadFailure,
-  type GtfsDownloadResult,
 } from "./data-manager-client";
 export {
   type ExtensionComponentRef,

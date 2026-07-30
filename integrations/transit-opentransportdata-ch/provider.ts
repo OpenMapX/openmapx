@@ -182,69 +182,6 @@ interface SwissGtfsTripUpdate {
   };
 }
 
-interface SwissGtfsRepresentativeTrip {
-  agency_name: string | null;
-  route_color: string | null;
-  route_id: string;
-  route_long_name: string;
-  route_short_name: string;
-  route_text_color: string | null;
-  route_type: number;
-  shape_id: string | null;
-  trip_headsign: string | null;
-  trip_id: string;
-}
-
-interface SwissGtfsTripStop {
-  original_stop_id: string | null;
-  parent_station: string | null;
-  platform_code: string | null;
-  stop_id: string;
-  stop_lat: number;
-  stop_lon: number;
-  stop_name: string;
-  stop_sequence: number;
-}
-
-interface SwissGtfsShapePoint {
-  shape_pt_lat: number;
-  shape_pt_lon: number;
-  shape_pt_sequence: number;
-}
-
-interface SwissGtfsDeps {
-  ensureSwissOfficialFeed?: () => Promise<{
-    countryCode?: string;
-    schemaName: string;
-    source?: string;
-    status: string;
-  } | null>;
-  manager: {
-    initialized: boolean;
-    getFeeds(): Array<{
-      countryCode?: string;
-      schemaName: string;
-      source?: string;
-      status: string;
-    }>;
-  };
-  queries: {
-    findRepresentativeTrip(
-      schema: string,
-      options: {
-        routeShortName: string;
-        headsign?: string;
-        operatorName?: string;
-        stopRefs?: string[];
-        stopNames?: string[];
-      },
-    ): Promise<SwissGtfsRepresentativeTrip | null>;
-    getShapePoints(schema: string, shapeId: string): Promise<SwissGtfsShapePoint[]>;
-    getTripStops(schema: string, tripId: string): Promise<SwissGtfsTripStop[]>;
-    routeTypeToMode(routeType: number): string;
-  };
-}
-
 interface SwissFormationStopPoint {
   designationOfficial?: string;
   uic?: string;
@@ -315,7 +252,6 @@ interface SwissFormationJourneyResponse {
 const SWISS_OBSERVED_ROUTE_TTL_MS = 24 * 60 * 60 * 1000;
 const SWISS_OBSERVED_ROUTE_TTL_SECONDS = 24 * 60 * 60;
 const observedRoutes = new Map<string, SwissObservedRouteEntry>();
-let swissGtfsDeps: SwissGtfsDeps | null = null;
 const SWISS_FORMATION_EVU_BY_ORGANISATION_NUMBER: Record<string, string> = {
   "11": "SBBP",
   "29": "MBC",
@@ -384,6 +320,16 @@ function uniqueStrings(values: Array<string | undefined>): string[] {
     result.push(normalized);
   }
   return result;
+}
+
+function collectSwissStopRefs(rawRef: string, datasets: SwissStopDatasets): string[] {
+  const identity = resolveSwissStopIdentity(rawRef, datasets);
+  return uniqueStrings([
+    rawRef,
+    identity.didok,
+    identity.servicePointSloid,
+    identity.stopPointSloid,
+  ]);
 }
 
 function normalizeSwissLookupKey(value: string | undefined): string | null {
@@ -936,162 +882,6 @@ async function getObservedRoute(routeId: string): Promise<SwissObservedRouteEntr
   }
 }
 
-async function activeSwissGtfsSchemaName(): Promise<string | null> {
-  if (!swissGtfsDeps?.manager.initialized) return null;
-  const activeFeed = swissGtfsDeps.manager
-    .getFeeds()
-    .find(
-      (feed) =>
-        feed.status === "active" &&
-        feed.source === "opentransportdata-swiss" &&
-        feed.countryCode?.toLowerCase() === "ch",
-    );
-  return activeFeed?.schemaName ?? null;
-}
-
-async function ensureSwissStaticFeed(): Promise<string | null> {
-  if (!swissGtfsDeps) return null;
-  if (swissGtfsDeps.ensureSwissOfficialFeed) {
-    try {
-      await swissGtfsDeps.ensureSwissOfficialFeed();
-    } catch (error) {
-      getSwissTransitConfig().log?.warn?.("Swiss GTFS static feed ensure failed", error);
-    }
-  }
-  return activeSwissGtfsSchemaName();
-}
-
-function staticGtfsMode(routeType: number, fallback: TransportMode): TransportMode {
-  const raw = swissGtfsDeps?.queries.routeTypeToMode(routeType);
-  return mapSwissMode(raw) ?? fallback;
-}
-
-function collectSwissStaticStopRefs(
-  rawRef: string | undefined,
-  datasets: SwissStopDatasets,
-): string[] {
-  if (!rawRef) return [];
-  const identity = resolveSwissStopIdentity(rawRef, datasets);
-  return uniqueStrings([
-    rawRef,
-    identity.didok,
-    identity.servicePointSloid,
-    identity.stopPointSloid,
-  ]);
-}
-
-function buildTransitStopFromSwissGtfsStop(
-  row: SwissGtfsTripStop,
-  datasets: SwissStopDatasets,
-  mode: TransportMode,
-): SwissRouteStop {
-  const rawRef = row.original_stop_id || row.stop_id;
-  const identity = resolveSwissStopIdentity(rawRef, datasets);
-  const canonicalRawRef = identity.stopPointSloid ?? identity.didok ?? rawRef;
-  const ids = buildStopIds(canonicalRawRef, {
-    didok: identity.didok,
-    servicePointSloid: identity.servicePointSloid,
-  });
-  return {
-    id: providerId(canonicalRawRef),
-    ...(ids.primaryScheme ? { primaryScheme: ids.primaryScheme } : {}),
-    ...(ids.ids ? { ids: ids.ids } : {}),
-    lat: row.stop_lat,
-    lng: row.stop_lon,
-    modes: [mode],
-    name: row.stop_name || canonicalRawRef,
-    parentStationId:
-      identity.servicePointSloid && canonicalRawRef !== identity.servicePointSloid
-        ? providerId(identity.servicePointSloid)
-        : undefined,
-    platformCode: row.platform_code ?? platformCodeFromRef(rawRef),
-    provider: PROVIDER,
-    sequence: row.stop_sequence,
-  };
-}
-
-async function resolveSwissStaticRoutePattern(
-  routeId: string,
-  hintStopId?: string,
-): Promise<{ route: TransitRoute; stops: SwissRouteStop[] } | null> {
-  const observed = await getObservedRoute(routeId);
-  const route = observed?.route;
-  if (!route?.shortName) return null;
-
-  const schema = await ensureSwissStaticFeed();
-  if (!schema || !swissGtfsDeps) return null;
-
-  const datasets = await loadSwissStopDatasets();
-  const stopRefs = new Set<string>();
-  const stopNames = new Set<string>();
-
-  for (const stop of observed?.stops ?? []) {
-    for (const ref of collectSwissStaticStopRefs(stripProviderPrefix(stop.id), datasets)) {
-      stopRefs.add(ref);
-    }
-    if (stop.name) stopNames.add(stop.name.toLowerCase());
-  }
-
-  for (const stopCandidate of uniqueStrings([hintStopId, ...(observed?.hintStopIds ?? [])])) {
-    const rawRef = stripProviderPrefix(stopCandidate);
-    for (const ref of collectSwissStaticStopRefs(rawRef, datasets)) {
-      stopRefs.add(ref);
-    }
-    const { servicePoint, stopPoint } = findServicePoint(rawRef, datasets);
-    if (servicePoint?.name) stopNames.add(servicePoint.name.toLowerCase());
-    if (stopPoint?.designationOfficial) stopNames.add(stopPoint.designationOfficial.toLowerCase());
-  }
-
-  const representative = await swissGtfsDeps.queries.findRepresentativeTrip(schema, {
-    routeShortName: route.shortName,
-    headsign: route.longName,
-    operatorName: route.operatorName,
-    stopRefs: [...stopRefs],
-    stopNames: [...stopNames],
-  });
-  if (!representative) return null;
-
-  const [stopRows, shapeRows] = await Promise.all([
-    swissGtfsDeps.queries.getTripStops(schema, representative.trip_id),
-    representative.shape_id
-      ? swissGtfsDeps.queries.getShapePoints(schema, representative.shape_id)
-      : Promise.resolve([]),
-  ]);
-  if (!stopRows.length) return null;
-
-  const mode = staticGtfsMode(representative.route_type, route.mode);
-  const staticRoute = mergeTransitRoute(route, {
-    id: route.id,
-    shortName: route.shortName || representative.route_short_name,
-    longName:
-      representative.trip_headsign ||
-      representative.route_long_name ||
-      route.longName ||
-      route.shortName,
-    mode,
-    operatorName:
-      route.operatorName || representative.agency_name || "OpenTransportData Switzerland",
-    ...(representative.route_color ? { color: representative.route_color } : {}),
-    ...(representative.route_text_color ? { textColor: representative.route_text_color } : {}),
-    ...(shapeRows.length > 1
-      ? {
-          geometry: {
-            type: "LineString" as const,
-            coordinates: shapeRows.map((point) => [point.shape_pt_lon, point.shape_pt_lat]),
-          },
-        }
-      : {}),
-  });
-  const stops = stopRows.map((row) => buildTransitStopFromSwissGtfsStop(row, datasets, mode));
-  await rememberObservedRoute(staticRoute, {
-    hintStopId,
-    operatorRefs: observed?.operatorRefs,
-    stops,
-    tripId: representative.trip_id,
-  });
-  return { route: staticRoute, stops };
-}
-
 function buildTransitStopFromServicePoint(
   servicePoint: SwissServicePoint,
   rawRef = servicePoint.didok ?? servicePoint.servicePointSloid,
@@ -1423,7 +1213,7 @@ async function resolveSwissOccupancyForecast(
   const datasets = options.stopId ? await loadSwissStopDatasets().catch(() => null) : null;
   const stopRefs = new Set<string>(
     options.stopId && datasets
-      ? collectSwissStaticStopRefs(stripProviderPrefix(options.stopId), datasets)
+      ? collectSwissStopRefs(stripProviderPrefix(options.stopId), datasets)
       : [],
   );
   const stopName = normalizeText(options.stopName);
@@ -2892,10 +2682,6 @@ export function setOpenTransportDataChConfig(config: SwissTransitConfig): void {
   setSwissTransitConfig(config);
 }
 
-export function setSwissGtfsDeps(deps: SwissGtfsDeps | null): void {
-  swissGtfsDeps = deps;
-}
-
 export async function isOpenTransportDataChAvailable(): Promise<boolean> {
   return probeSwissOjp();
 }
@@ -3090,8 +2876,6 @@ export async function getRoutesForStop(stopId: string): Promise<TransitRoute[]> 
 }
 
 export async function getRoute(routeId: string): Promise<TransitRoute | null> {
-  const staticRoute = await resolveSwissStaticRoutePattern(routeId).catch(() => null);
-  if (staticRoute?.route) return staticRoute.route;
   return (await getObservedRoute(routeId))?.route ?? null;
 }
 
@@ -3099,9 +2883,6 @@ export async function getRouteStops(
   routeId: string,
   hintStopId?: string,
 ): Promise<Array<TransitStop & { sequence: number }>> {
-  const staticRoute = await resolveSwissStaticRoutePattern(routeId, hintStopId).catch(() => null);
-  if (staticRoute?.stops.length) return staticRoute.stops;
-
   const observed = await getObservedRoute(routeId);
   if (observed?.stops?.length) return observed.stops;
 
@@ -3145,10 +2926,6 @@ export async function getRouteStops(
         hintStopId: stopCandidate,
         operatorRefs: collectServiceOperatorRefs(matching.service),
       });
-      const resolvedStatic = await resolveSwissStaticRoutePattern(routeId, stopCandidate).catch(
-        () => null,
-      );
-      if (resolvedStatic?.stops.length) return resolvedStatic.stops;
     }
 
     const departure = buildDepartureFromStopEvent(matching, "departure", matchedRoute);

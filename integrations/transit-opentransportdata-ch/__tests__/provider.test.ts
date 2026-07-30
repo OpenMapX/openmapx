@@ -672,7 +672,6 @@ afterEach(() => {
 async function loadProvider() {
   vi.resetModules();
   const provider = await import("../provider.js");
-  provider.setSwissGtfsDeps(null);
   provider.setOpenTransportDataChConfig({
     apiKey: "test-key",
     formationEndpoint: FORMATION_ENDPOINT,
@@ -990,114 +989,6 @@ describe("transit-opentransportdata-ch provider", () => {
       expect.objectContaining({
         id: "otdch:ch:1:sloid:7100:3:4",
         name: "Thun",
-        platformCode: "3",
-        sequence: 3,
-      }),
-    ]);
-  });
-
-  it("prefers Swiss GTFS static route patterns and geometry when the official feed is available", async () => {
-    const provider = await loadProvider();
-    provider.setSwissGtfsDeps({
-      ensureSwissOfficialFeed: vi.fn().mockResolvedValue({
-        countryCode: "ch",
-        schemaName: "gtfs_ch",
-        source: "opentransportdata-swiss",
-        status: "active",
-      }),
-      manager: {
-        initialized: true,
-        getFeeds: () => [
-          {
-            countryCode: "ch",
-            schemaName: "gtfs_ch",
-            source: "opentransportdata-swiss",
-            status: "active",
-          },
-        ],
-      },
-      queries: {
-        findRepresentativeTrip: vi.fn().mockResolvedValue({
-          agency_name: "Swiss Federal Railways SBB",
-          route_color: "FF0000",
-          route_id: "91-ic6",
-          route_long_name: "",
-          route_short_name: "IC6",
-          route_text_color: "FFFFFF",
-          route_type: 2,
-          shape_id: "shape-1",
-          trip_headsign: "Thun",
-          trip_id: "gtfs-trip-ic6",
-        }),
-        getShapePoints: vi.fn().mockResolvedValue([
-          { shape_pt_lat: 46.949, shape_pt_lon: 7.4393, shape_pt_sequence: 1 },
-          { shape_pt_lat: 46.85, shape_pt_lon: 7.5, shape_pt_sequence: 2 },
-          { shape_pt_lat: 46.758, shape_pt_lon: 7.629, shape_pt_sequence: 3 },
-        ]),
-        getTripStops: vi.fn().mockResolvedValue([
-          {
-            original_stop_id: "ch:1:sloid:7000:5:10",
-            parent_station: null,
-            platform_code: "10",
-            stop_id: "8507000",
-            stop_lat: 46.949,
-            stop_lon: 7.4393,
-            stop_name: "Bern",
-            stop_sequence: 1,
-          },
-          {
-            original_stop_id: "ch:1:sloid:7050:0:1",
-            parent_station: null,
-            platform_code: null,
-            stop_id: "8507050",
-            stop_lat: 46.9,
-            stop_lon: 7.53,
-            stop_name: "Münsingen",
-            stop_sequence: 2,
-          },
-          {
-            original_stop_id: "ch:1:sloid:7100:3:4",
-            parent_station: null,
-            platform_code: "3",
-            stop_id: "8507100",
-            stop_lat: 46.758,
-            stop_lon: 7.629,
-            stop_name: "Thun",
-            stop_sequence: 3,
-          },
-        ]),
-        routeTypeToMode: vi.fn().mockReturnValue("rail"),
-      },
-    });
-
-    await provider.getRoutesForStop("otdch:8507000");
-
-    expect(await provider.getRoute("otdch:ojp:91006:H")).toEqual(
-      expect.objectContaining({
-        color: "FF0000",
-        geometry: {
-          type: "LineString",
-          coordinates: [
-            [7.4393, 46.949],
-            [7.5, 46.85],
-            [7.629, 46.758],
-          ],
-        },
-        textColor: "FFFFFF",
-      }),
-    );
-    expect(await provider.getRouteStops("otdch:ojp:91006:H")).toEqual([
-      expect.objectContaining({
-        id: "otdch:ch:1:sloid:7000:5:10",
-        platformCode: "10",
-        sequence: 1,
-      }),
-      expect.objectContaining({
-        id: "otdch:ch:1:sloid:7050:0:1",
-        sequence: 2,
-      }),
-      expect.objectContaining({
-        id: "otdch:ch:1:sloid:7100:3:4",
         platformCode: "3",
         sequence: 3,
       }),

@@ -19,7 +19,6 @@ import {
   validateServiceSelectionForWrite,
 } from "../services/admin-cli";
 import { isDockerAvailable } from "../services/admin-ops";
-import { gtfsManager } from "../services/gtfs/index";
 import { jobRunner } from "../services/job-runner";
 import { isSecretsConfigured } from "../services/secrets";
 import { resolveServiceConfigWithSources } from "../services/service-config-resolver";
@@ -38,7 +37,6 @@ import { getSecretFields, validateConfigBody } from "../utils/validate-config-bo
 const { getProvidedCapabilityNames, serviceConfigEnvPrefix } = coreServices;
 const DATA_JOB_OPERATIONS = new Set([
   "download-osm",
-  "download-gtfs",
   "download-style",
   "update",
   "convert-overpass",
@@ -518,23 +516,19 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     return { statuses: ps, checkedAt: new Date().toISOString() };
   });
 
-  // GET /admin/services/data — data inventory (OSM, builds, GTFS)
+  // GET /admin/services/data — data inventory (OSM, builds, MOTIS health)
   app.get("/admin/services/data", async () => {
-    const { getOsmPbfInfo, getBuildStatuses, getMotisTransitousStatus, getMotisGtfsArchives } =
-      await import("../services/admin-ops");
-    const [osmInfo, buildStatuses, gtfsFeeds, motisTransitous, motisGtfsArchives] =
-      await Promise.all([
-        getOsmPbfInfo(),
-        getBuildStatuses(),
-        Promise.resolve(gtfsManager.getFeeds()),
-        Promise.resolve(getMotisTransitousStatus()),
-        getMotisGtfsArchives(),
-      ]);
+    const { getOsmPbfInfo, getBuildStatuses, getMotisTransitousStatus } = await import(
+      "../services/admin-ops"
+    );
+    const [osmInfo, buildStatuses, motisTransitous] = await Promise.all([
+      getOsmPbfInfo(),
+      getBuildStatuses(),
+      Promise.resolve(getMotisTransitousStatus()),
+    ]);
     return {
       osm: osmInfo,
       builds: buildStatuses,
-      gtfsFeeds,
-      motisGtfsArchives,
       motisTransitous,
       fetchedAt: new Date().toISOString(),
     };
@@ -545,7 +539,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     Body: {
       operation?:
         | "download-osm"
-        | "download-gtfs"
         | "download-style"
         | "update"
         | "convert-overpass"
@@ -556,7 +549,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         | "overture-conflate";
       region?: string;
       countries?: string;
-      feedsFile?: string;
       failFast?: boolean;
       target?: string;
       repoUrl?: string;
@@ -581,7 +573,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         operation,
         region: req.body?.region,
         countries: req.body?.countries,
-        feedsFile: req.body?.feedsFile,
         failFast: req.body?.failFast === true,
         target: req.body?.target,
         repoUrl: req.body?.repoUrl,

@@ -23,10 +23,6 @@ export function setup(ctx: IntegrationContext): void {
     siriSxUnplannedEndpoint: ctx.config.siriSxUnplannedEndpoint as string | undefined,
     userAgent: ctx.config.userAgent as string | undefined,
   });
-  swiss.setSwissGtfsDeps(
-    (ctx.config.swissGtfsDeps as Parameters<typeof swiss.setSwissGtfsDeps>[0] | undefined) ?? null,
-  );
-
   ctx.registerHealthCheck(async () => {
     const hasKey = Boolean((ctx.config.apiKey as string | undefined)?.trim());
     if (!hasKey) {

@@ -69,7 +69,6 @@ import {
 } from "./services/provider-health/registry";
 import { getSecret, isSecretsConfigured } from "./services/secrets";
 import { getServiceRegistry, resolveRequiresForIntegration } from "./services/service-registry";
-import { searchTransitCatalog } from "./services/transit-catalog/index";
 import { getEmailDisclosure } from "./utils/email";
 
 function canonicalizeExisting(p: string): string {
@@ -111,50 +110,10 @@ function buildGtfsDeps() {
   };
 }
 
-function buildSwissGtfsDeps() {
-  return {
-    ...buildGtfsDeps(),
-    async ensureSwissOfficialFeed() {
-      if (!gtfsManager.initialized) return null;
-
-      const existing = gtfsManager
-        .getFeeds()
-        .find(
-          (feed) =>
-            feed.countryCode.toLowerCase() === "ch" && feed.source === "opentransportdata-swiss",
-        );
-
-      // Always consult the catalog — the Swiss feed id encodes the timetable year
-      // (e.g. `opentransportdata-swiss:ch:timetable-2026-gtfs2020`), so the latest
-      // entry's slug changes when the year rolls over and must trigger a re-import.
-      const swissFeed = (await searchTransitCatalog(undefined, "ch")).find(
-        (feed) => feed.source === "opentransportdata-swiss",
-      );
-      if (!swissFeed) return existing ?? null;
-
-      const slug = swissFeed.id.replace(/[^a-z0-9]+/gi, "_").toLowerCase();
-
-      if (existing && existing.slug === slug) {
-        if (existing.status === "active" || gtfsManager.isImporting(existing.slug)) {
-          return existing;
-        }
-      }
-
-      if (gtfsManager.isImporting(slug)) {
-        return gtfsManager.getFeeds().find((feed) => feed.slug === slug) ?? existing ?? null;
-      }
-
-      await gtfsManager.startImport(swissFeed, slug);
-      return gtfsManager.getFeeds().find((feed) => feed.slug === slug) ?? existing ?? null;
-    },
-  };
-}
-
 function injectRuntimeConfig(config: Record<string, unknown>): Record<string, unknown> {
   return {
     ...config,
     gtfsDeps: buildGtfsDeps(),
-    swissGtfsDeps: buildSwissGtfsDeps(),
   };
 }
 

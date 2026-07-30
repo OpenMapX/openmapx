@@ -2,8 +2,6 @@
 
 import BuildIcon from "@mui/icons-material/Build";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import DeleteIcon from "@mui/icons-material/Delete";
-import FileDownloadIcon from "@mui/icons-material/FileDownload";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import StorageIcon from "@mui/icons-material/Storage";
@@ -18,37 +16,24 @@ import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
-import FormControl from "@mui/material/FormControl";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Grid from "@mui/material/Grid";
 import IconButton from "@mui/material/IconButton";
-import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
-import Select from "@mui/material/Select";
-import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
-import Table from "@mui/material/Table";
-import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
-import TableContainer from "@mui/material/TableContainer";
-import TableHead from "@mui/material/TableHead";
-import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { formatBytes } from "@/lib/storageFormat";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
-import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { useAdminToast } from "../shared/AdminToast";
-import { TableEmptyState } from "../shared/TableEmptyState";
-import { TableSearchField, TableToolbar } from "../shared/TableToolbar";
-import { useClientPagination, useTextFilter } from "../shared/tableHooks";
 import { OvertureMaintenance } from "./OvertureMaintenance";
+import { TransitSourcesSection } from "./TransitSourcesSection";
 
 interface OsmInfo {
   found: boolean;
@@ -62,34 +47,6 @@ interface BuildStatus {
   target: string;
   built: boolean;
   builtAt?: string;
-}
-
-interface GtfsFeed {
-  slug: string;
-  name: string;
-  url: string;
-  /** Upstream HTTP URL when `url` is a `local:` pseudo-URL — null for direct URL imports. */
-  originUrl?: string | null;
-  source?: string;
-  status: string;
-  importedAt?: string;
-  /** Live importer stage label (e.g. "importing stop_times") while status is `downloading`/`importing`. */
-  currentStage?: string | null;
-  errorMessage?: string | null;
-  /** ISO `YYYY-MM-DD` — last calendar date the feed schedules service for. */
-  serviceEndDate?: string | null;
-  rowCounts?: { stops?: number; routes?: number; trips?: number };
-}
-
-interface MotisGtfsArchive {
-  /** Filename minus .gtfs.zip / .netex.zip — matches against Postgres slugs case-insensitively. */
-  id: string;
-  filename: string;
-  sizeBytes: number;
-  modifiedAt: string;
-  format: "gtfs" | "netex";
-  /** Upstream HTTP URL the archive was fetched from, derived from the Transitous catalog. */
-  originUrl?: string;
 }
 
 interface MotisTransitousStatus {
@@ -146,8 +103,6 @@ interface MotisTransitousStatus {
 interface DataResponse {
   osm: OsmInfo;
   builds: BuildStatus[];
-  gtfsFeeds: GtfsFeed[];
-  motisGtfsArchives?: MotisGtfsArchive[];
   motisTransitous: MotisTransitousStatus;
   fetchedAt: string;
 }
@@ -180,40 +135,6 @@ function formatDate(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function renderExpiryCell(serviceEndDate: string | null | undefined): ReactNode {
-  if (!serviceEndDate) return "—";
-  // The service end date is a UTC calendar day; compare against today's UTC
-  // calendar day so a feed valid through "today" doesn't show as expired
-  // depending on the operator's timezone offset.
-  const today = new Date();
-  const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
-  const [y, m, d] = serviceEndDate.split("-").map(Number);
-  if (!y || !m || !d) return "—";
-  const endUtc = Date.UTC(y, m - 1, d);
-  const daysUntil = Math.round((endUtc - todayUtc) / 86_400_000);
-  const formatted = new Date(endUtc).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-  let color: "default" | "success" | "warning" | "error" = "default";
-  let label = formatted;
-  if (daysUntil < 0) {
-    color = "error";
-    label = `${formatted} · expired ${-daysUntil}d ago`;
-  } else if (daysUntil < 7) {
-    color = "error";
-    label = `${formatted} · ${daysUntil}d`;
-  } else if (daysUntil < 30) {
-    color = "warning";
-    label = `${formatted} · ${daysUntil}d`;
-  } else {
-    color = "success";
-    label = `${formatted} · ${daysUntil}d`;
-  }
-  return <Chip size="small" color={color} variant="outlined" label={label} />;
 }
 
 const BUILD_LABELS: Record<string, string> = {
@@ -272,11 +193,8 @@ function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
   const queryClient = useQueryClient();
 
   const [osmRegion, setOsmRegion] = useState("");
-  const [gtfsCountries, setGtfsCountries] = useState("");
-  const [gtfsFeedsFile, setGtfsFeedsFile] = useState("");
   const [updateRegion, setUpdateRegion] = useState("");
   const [updateCountries, setUpdateCountries] = useState("");
-  const [updateFeedsFile, setUpdateFeedsFile] = useState("");
   const [updateFailFast, setUpdateFailFast] = useState(false);
   const [overpassRegion, setOverpassRegion] = useState("");
   const [cleanTarget, setCleanTarget] = useState("all");
@@ -380,41 +298,6 @@ function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
 
         <Grid size={{ xs: 12, md: 6 }}>
           <OperationCard
-            title="Download GTFS"
-            description="Runs: openmapx data download gtfs [--countries] [--feeds-file]"
-          >
-            <TextField
-              size="small"
-              label="Countries"
-              placeholder="de,at,ch"
-              value={gtfsCountries}
-              onChange={(e) => setGtfsCountries(e.target.value)}
-            />
-            <TextField
-              size="small"
-              label="Feeds file"
-              placeholder="/path/to/feeds.json"
-              value={gtfsFeedsFile}
-              onChange={(e) => setGtfsFeedsFile(e.target.value)}
-            />
-            <Button
-              variant="contained"
-              onClick={() =>
-                runOperation.mutate({
-                  operation: "download-gtfs",
-                  countries: gtfsCountries,
-                  feedsFile: gtfsFeedsFile,
-                })
-              }
-              disabled={runOperation.isPending}
-            >
-              Queue GTFS Download
-            </Button>
-          </OperationCard>
-        </Grid>
-
-        <Grid size={{ xs: 12, md: 6 }}>
-          <OperationCard
             title="Download Style Assets"
             description="Runs: openmapx data download style"
           >
@@ -447,13 +330,6 @@ function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
               value={updateCountries}
               onChange={(e) => setUpdateCountries(e.target.value)}
             />
-            <TextField
-              size="small"
-              label="Feeds file"
-              placeholder="/path/to/feeds.json"
-              value={updateFeedsFile}
-              onChange={(e) => setUpdateFeedsFile(e.target.value)}
-            />
             <FormControlLabel
               control={
                 <Switch
@@ -470,7 +346,6 @@ function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
                   operation: "update",
                   region: updateRegion,
                   countries: updateCountries,
-                  feedsFile: updateFeedsFile,
                   failFast: updateFailFast,
                 })
               }
@@ -818,511 +693,6 @@ function BuildsSection({ builds }: { builds: BuildStatus[] }) {
   );
 }
 
-// One row per logical feed. A feed counts as the "same" feed across stores
-// when its slug (Postgres) matches the MOTIS archive id case-insensitively
-// — that's how the GTFS importer normalises names anyway.
-interface UnifiedGtfsRow {
-  /** Display key: feed slug if imported, otherwise the MOTIS archive id. */
-  key: string;
-  postgres?: GtfsFeed;
-  motis?: MotisGtfsArchive;
-}
-
-function buildUnifiedRows(feeds: GtfsFeed[], archives: MotisGtfsArchive[]): UnifiedGtfsRow[] {
-  const byKey = new Map<string, UnifiedGtfsRow>();
-  for (const feed of feeds) {
-    const key = feed.slug.toLowerCase();
-    byKey.set(key, { key: feed.slug, postgres: feed });
-  }
-  for (const archive of archives) {
-    const key = archive.id.toLowerCase();
-    const existing = byKey.get(key);
-    if (existing) {
-      existing.motis = archive;
-    } else {
-      byKey.set(key, { key: archive.id, motis: archive });
-    }
-  }
-  return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
-}
-
-/** Effective status of a unified row (Postgres status, else MOTIS-only). */
-function gtfsRowStatus(row: UnifiedGtfsRow): string {
-  return row.postgres?.status ?? (row.motis ? "motis-only" : "—");
-}
-
-/** Concatenated searchable text for a unified row (name, slug, origin URLs). */
-function gtfsRowSearchText(row: UnifiedGtfsRow): string {
-  return [
-    row.postgres?.name,
-    row.postgres?.slug,
-    row.postgres?.originUrl,
-    row.motis?.id,
-    row.motis?.originUrl,
-    row.key,
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
-
-function GtfsSection({
-  feeds,
-  motisArchives,
-  apiUrl,
-}: {
-  feeds: GtfsFeed[];
-  motisArchives: MotisGtfsArchive[];
-  apiUrl: string;
-}) {
-  const queryClient = useQueryClient();
-  const [toast, setToast] = useState<string | null>(null);
-  const [importOpen, setImportOpen] = useState(false);
-  const [importUrl, setImportUrl] = useState("");
-  const [importSlug, setImportSlug] = useState("");
-  const [importName, setImportName] = useState("");
-
-  const removeMutation = useMutation({
-    mutationFn: async (slug: string) => {
-      const res = await fetch(`${apiUrl}/api/gtfs/feeds/${encodeURIComponent(slug)}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to remove feed");
-    },
-    onSuccess: (_, slug) => {
-      setToast(`Feed "${slug}" removed.`);
-      void queryClient.invalidateQueries({ queryKey: ["admin-services-data"] });
-    },
-    onError: () => setToast("Failed to remove feed."),
-  });
-
-  const importMutation = useMutation({
-    mutationFn: async (input: {
-      url?: string;
-      motisArchiveId?: string;
-      slug?: string;
-      name?: string;
-    }) => {
-      const res = await fetch(`${apiUrl}/api/gtfs/feeds`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: input.url?.trim() || undefined,
-          motisArchiveId: input.motisArchiveId,
-          slug: input.slug?.trim() || undefined,
-          name: input.name?.trim() || undefined,
-        }),
-      });
-      const body = (await res.json().catch(() => ({}))) as {
-        slug?: string;
-        error?: string;
-      };
-      if (!res.ok) throw new Error(body.error ?? `Import failed (HTTP ${res.status})`);
-      return body.slug;
-    },
-    onSuccess: (slug) => {
-      setToast(`Import started for "${slug}". Watch the table for progress.`);
-      setImportOpen(false);
-      setImportUrl("");
-      setImportSlug("");
-      setImportName("");
-      void queryClient.invalidateQueries({ queryKey: ["admin-services-data"] });
-    },
-    onError: (err) => setToast((err as Error).message),
-  });
-
-  // MOTIS-only rows (no Postgres counterpart) — used by the bulk-import action.
-  const motisOnlyArchives = motisArchives.filter(
-    (archive) => !feeds.some((feed) => feed.slug.toLowerCase() === archive.id.toLowerCase()),
-  );
-
-  const bulkPromoteRunning = importMutation.isPending;
-  const bulkPromote = () => {
-    // Fire imports sequentially so the importer's per-feed mutex
-    // (`isImporting`) doesn't reject parallel attempts on the same slug
-    // and the data-manager's CPU/disk doesn't get hammered by 5 concurrent
-    // unzips. The mutation queue is a tiny finite-state loop — each `mutate`
-    // call hands off to the API, returns immediately, and the next iteration
-    // waits via `await` on the same promise the React mutation observes.
-    void (async () => {
-      for (const archive of motisOnlyArchives) {
-        try {
-          await importMutation.mutateAsync({ motisArchiveId: archive.id });
-        } catch (err) {
-          // Single failure shouldn't abort the rest of the batch — they're
-          // independent feeds. The mutation's onError already toasts.
-          console.error(`[gtfs] bulk import failed for ${archive.id}:`, err);
-        }
-      }
-    })();
-  };
-
-  const allRows = useMemo(() => buildUnifiedRows(feeds, motisArchives), [feeds, motisArchives]);
-  const [storeFilter, setStoreFilter] = useState<"all" | "postgres" | "motis">("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const statusOptions = useMemo(() => [...new Set(allRows.map(gtfsRowStatus))].sort(), [allRows]);
-  const { query, setQuery, filtered: searched } = useTextFilter(allRows, gtfsRowSearchText);
-  const filtered = useMemo(
-    () =>
-      searched.filter((row) => {
-        if (storeFilter === "postgres" && !row.postgres) return false;
-        if (storeFilter === "motis" && !row.motis) return false;
-        if (statusFilter !== "all" && gtfsRowStatus(row) !== statusFilter) return false;
-        return true;
-      }),
-    [searched, storeFilter, statusFilter],
-  );
-  const { paged, paginationProps } = useClientPagination(filtered);
-
-  return (
-    <Paper variant="outlined" sx={{ p: 2.5 }}>
-      <Stack
-        direction="row"
-        spacing={1}
-        sx={{
-          alignItems: "center",
-          mb: 2,
-        }}
-      >
-        <FileDownloadIcon color="primary" />
-        <Typography
-          variant="h6"
-          sx={{
-            fontWeight: 600,
-          }}
-        >
-          GTFS Feeds
-        </Typography>
-        <Box sx={{ flex: 1 }} />
-        {motisOnlyArchives.length > 0 && (
-          <Tooltip
-            title={
-              "Promote every MOTIS-only feed into Postgres in one go. Imports run sequentially; each one is the same `motisArchiveId` flow as the per-row button."
-            }
-          >
-            <span>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={bulkPromoteRunning}
-                onClick={bulkPromote}
-              >
-                Import all {motisOnlyArchives.length} to Postgres
-              </Button>
-            </span>
-          </Tooltip>
-        )}
-        <Button variant="contained" size="small" onClick={() => setImportOpen(true)}>
-          Import feed
-        </Button>
-      </Stack>
-      <Dialog open={importOpen} onClose={() => setImportOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Import GTFS feed</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 0.5 }}>
-            <Typography
-              variant="body2"
-              sx={{
-                color: "text.secondary",
-              }}
-            >
-              Paste the URL of a GTFS .zip. The importer will stream the archive, parse the CSVs,
-              and load them into a dedicated `gtfs_&lt;slug&gt;` Postgres schema. Slug is
-              auto-derived from the URL filename if you leave it blank.
-            </Typography>
-            <TextField
-              label="GTFS zip URL"
-              placeholder="https://example.com/feed.gtfs.zip"
-              fullWidth
-              size="small"
-              value={importUrl}
-              onChange={(e) => setImportUrl(e.target.value)}
-              autoFocus
-            />
-            <TextField
-              label="Slug (optional)"
-              placeholder="vbb"
-              helperText="Used as the Postgres schema name (gtfs_<slug>) and the gtfs-local provider prefix (g-<slug>:). Lowercase letters, digits, hyphens, underscores."
-              fullWidth
-              size="small"
-              value={importSlug}
-              onChange={(e) => setImportSlug(e.target.value)}
-            />
-            <TextField
-              label="Display name (optional)"
-              placeholder="VBB Berlin-Brandenburg"
-              fullWidth
-              size="small"
-              value={importName}
-              onChange={(e) => setImportName(e.target.value)}
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setImportOpen(false)} disabled={importMutation.isPending}>
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            disabled={!importUrl.trim() || importMutation.isPending}
-            onClick={() =>
-              importMutation.mutate({
-                url: importUrl,
-                slug: importSlug,
-                name: importName,
-              })
-            }
-          >
-            {importMutation.isPending ? "Starting…" : "Start import"}
-          </Button>
-        </DialogActions>
-      </Dialog>
-      {(() => {
-        if (allRows.length === 0) {
-          return (
-            <Alert severity="info" variant="outlined">
-              No GTFS feeds yet. Either run{" "}
-              <Box component="code" sx={{ fontFamily: "monospace" }}>
-                pnpm openmapx data download gtfs --countries de
-              </Box>{" "}
-              to populate MOTIS, or click <strong>Import feed</strong> to load a single feed into
-              Postgres for SQL-based stop search.
-            </Alert>
-          );
-        }
-        return (
-          <>
-            <Typography
-              variant="caption"
-              sx={{
-                color: "text.secondary",
-                display: "block",
-                mb: 1,
-              }}
-            >
-              <strong>MOTIS</strong> = raw GTFS zip on disk consumed by the MOTIS engine at startup
-              (transit routing). <strong>Postgres</strong> = imported into a dedicated schema for
-              SQL-based stop/route lookups (place panel, transit-gtfs-local provider). The same
-              upstream feed can live in either or both.
-            </Typography>
-            <Box sx={{ mb: 2 }}>
-              <TableToolbar>
-                <TableSearchField
-                  value={query}
-                  onChange={setQuery}
-                  placeholder="Search feeds by name, slug, or URL…"
-                />
-                <FormControl size="small" sx={{ minWidth: 150 }}>
-                  <Select
-                    value={storeFilter}
-                    onChange={(e) => setStoreFilter(e.target.value as typeof storeFilter)}
-                  >
-                    <MenuItem value="all">All stores</MenuItem>
-                    <MenuItem value="postgres">In Postgres</MenuItem>
-                    <MenuItem value="motis">In MOTIS</MenuItem>
-                  </Select>
-                </FormControl>
-                <FormControl size="small" sx={{ minWidth: 150 }}>
-                  <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                    <MenuItem value="all">All statuses</MenuItem>
-                    {statusOptions.map((s) => (
-                      <MenuItem key={s} value={s}>
-                        {s}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </TableToolbar>
-            </Box>
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Feed</TableCell>
-                    <TableCell>Stores</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Stops</TableCell>
-                    <TableCell>Routes</TableCell>
-                    <TableCell>Expires</TableCell>
-                    <TableCell>Updated</TableCell>
-                    <TableCell align="right" />
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {paged.length === 0 ? (
-                    <TableEmptyState colSpan={8} message="No feeds match your search or filters." />
-                  ) : (
-                    paged.map((row) => {
-                      const pg = row.postgres;
-                      const motis = row.motis;
-                      const displayName = pg?.name ?? motis?.id ?? row.key;
-                      const updatedIso = pg?.importedAt ?? motis?.modifiedAt;
-                      // Prefer the Postgres-recorded origin (it survives MOTIS-side cleanup) and
-                      // fall back to the catalog-derived MOTIS archive URL when the feed only
-                      // exists on disk.
-                      const originUrl = pg?.originUrl ?? motis?.originUrl ?? null;
-                      const status = pg?.status ?? (motis ? "motis-only" : "—");
-                      const statusColor: "success" | "warning" | "default" | "info" =
-                        status === "active"
-                          ? "success"
-                          : status === "importing" || status === "downloading"
-                            ? "warning"
-                            : status === "motis-only"
-                              ? "info"
-                              : "default";
-                      return (
-                        <TableRow key={row.key} hover>
-                          <TableCell>
-                            <Stack spacing={0.25}>
-                              <Typography variant="body2">{displayName}</Typography>
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  color: "text.secondary",
-                                  fontFamily: "monospace",
-                                }}
-                              >
-                                {pg ? `g-${pg.slug}` : row.key}
-                                {motis ? ` · ${formatBytes(motis.sizeBytes)}` : ""}
-                              </Typography>
-                              {originUrl && (
-                                <Tooltip title={originUrl}>
-                                  <Typography
-                                    variant="caption"
-                                    sx={{
-                                      color: "text.secondary",
-                                      maxWidth: 280,
-                                      overflow: "hidden",
-                                      textOverflow: "ellipsis",
-                                      whiteSpace: "nowrap",
-                                    }}
-                                  >
-                                    origin:{" "}
-                                    <Box
-                                      component="a"
-                                      href={originUrl}
-                                      target="_blank"
-                                      rel="noreferrer noopener"
-                                      sx={{ color: "inherit", textDecoration: "underline" }}
-                                    >
-                                      {originUrl}
-                                    </Box>
-                                  </Typography>
-                                </Tooltip>
-                              )}
-                            </Stack>
-                          </TableCell>
-                          <TableCell>
-                            <Stack direction="row" spacing={0.5}>
-                              {motis && <Chip label="MOTIS" size="small" variant="outlined" />}
-                              {pg && (
-                                <Chip
-                                  label="Postgres"
-                                  size="small"
-                                  color="primary"
-                                  variant="outlined"
-                                />
-                              )}
-                            </Stack>
-                          </TableCell>
-                          <TableCell>
-                            <Stack spacing={0.25}>
-                              <Chip label={status} size="small" color={statusColor} />
-                              {pg?.currentStage &&
-                                (status === "importing" || status === "downloading") && (
-                                  <Typography
-                                    variant="caption"
-                                    sx={{
-                                      color: "text.secondary",
-                                      pl: 0.25,
-                                    }}
-                                  >
-                                    {pg.currentStage}
-                                  </Typography>
-                                )}
-                              {pg?.errorMessage && status === "failed" && (
-                                <Tooltip title={pg.errorMessage}>
-                                  <Typography
-                                    variant="caption"
-                                    color="error"
-                                    sx={{
-                                      pl: 0.25,
-                                      maxWidth: 200,
-                                      overflow: "hidden",
-                                      textOverflow: "ellipsis",
-                                      whiteSpace: "nowrap",
-                                      cursor: "help",
-                                    }}
-                                  >
-                                    {pg.errorMessage}
-                                  </Typography>
-                                </Tooltip>
-                              )}
-                            </Stack>
-                          </TableCell>
-                          <TableCell>{pg?.rowCounts?.stops?.toLocaleString() ?? "—"}</TableCell>
-                          <TableCell>{pg?.rowCounts?.routes?.toLocaleString() ?? "—"}</TableCell>
-                          <TableCell>{renderExpiryCell(pg?.serviceEndDate)}</TableCell>
-                          <TableCell>{updatedIso ? formatDate(updatedIso) : "—"}</TableCell>
-                          <TableCell align="right">
-                            <Stack
-                              direction="row"
-                              spacing={0.5}
-                              sx={{
-                                justifyContent: "flex-end",
-                              }}
-                            >
-                              {!pg && motis && (
-                                <Tooltip title="Promote this MOTIS-fetched archive into Postgres (no re-download — apps/api reads the local zip directly)">
-                                  <span>
-                                    <Button
-                                      size="small"
-                                      disabled={importMutation.isPending}
-                                      onClick={() =>
-                                        importMutation.mutate({ motisArchiveId: motis.id })
-                                      }
-                                    >
-                                      Import to Postgres
-                                    </Button>
-                                  </span>
-                                </Tooltip>
-                              )}
-                              {pg && (
-                                <Tooltip title="Remove from Postgres (the MOTIS zip on disk is untouched)">
-                                  <IconButton
-                                    size="small"
-                                    color="error"
-                                    onClick={() => removeMutation.mutate(pg.slug)}
-                                    disabled={removeMutation.isPending}
-                                  >
-                                    <DeleteIcon fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                              )}
-                            </Stack>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-            <AdminTablePagination {...paginationProps} />
-          </>
-        );
-      })()}
-      <Snackbar
-        open={!!toast}
-        autoHideDuration={4000}
-        onClose={() => setToast(null)}
-        message={toast}
-      />
-    </Paper>
-  );
-}
-
 function motisProxyModeColor(
   mode: MotisTransitousStatus["feedProxyMode"],
 ): "default" | "success" | "warning" | "error" {
@@ -1355,7 +725,7 @@ function MotisTransitousSection({ status }: { status: MotisTransitousStatus }) {
       </Stack>
       {!status.configFound ? (
         <Alert severity="warning">
-          No MOTIS config found yet. Queue GTFS/OSM operations and build MOTIS data.
+          No MOTIS config found yet. Sync transit sources and build MOTIS data.
         </Alert>
       ) : (
         <Stack spacing={1.5}>
@@ -1549,16 +919,7 @@ export function DataWorkflowsPage() {
     queryKey: ["admin-services-data"],
     queryFn: () =>
       fetch(`${apiUrl}/api/admin/services/data`, { credentials: "include" }).then((r) => r.json()),
-    // Tighten the refetch cadence to 3s whenever a GTFS import is mid-flight
-    // so the live `currentStage` progress label updates in close to real time.
-    // Falls back to the lazy 30s interval otherwise.
-    refetchInterval: (query) => {
-      const latest = query.state.data;
-      const inFlight = latest?.gtfsFeeds.some(
-        (f) => f.status === "downloading" || f.status === "importing",
-      );
-      return inFlight ? 3_000 : 30_000;
-    },
+    refetchInterval: 30_000,
   });
 
   if (isLoading) {
@@ -1584,7 +945,7 @@ export function DataWorkflowsPage() {
       <Box sx={{ mb: 3 }}>
         <AdminPageHeader
           title="Data workflows"
-          subtitle="Manage OSM data, GTFS feeds, builds, and long-running data jobs"
+          subtitle="Manage OSM data, transit sources, builds, and long-running data jobs"
           actions={
             <>
               <Tooltip title="Refresh">
@@ -1603,11 +964,7 @@ export function DataWorkflowsPage() {
         <DataOperationsSection apiUrl={apiUrl} />
         <OsmSection osm={data.osm} />
         <OvertureMaintenance apiUrl={apiUrl} />
-        <GtfsSection
-          feeds={data.gtfsFeeds}
-          motisArchives={data.motisGtfsArchives ?? []}
-          apiUrl={apiUrl}
-        />
+        <TransitSourcesSection apiUrl={apiUrl} />
         <MotisTransitousSection status={data.motisTransitous} />
         <SharedMobilityPolicySection apiUrl={apiUrl} />
         <BuildsSection builds={data.builds} />
