@@ -212,7 +212,7 @@ export {
 export { formatStreetLevelRef, parseStreetLevelRef } from "./streetLevelRef";
 export type { TideExtremaOptions, TideExtreme, TideSample } from "./tideExtrema";
 export { despikeSeries, findTideExtrema } from "./tideExtrema";
-export { timeZoneAt } from "./timezone";
+export { localDateInZone, timeZoneAt, zonedWallClockToInstant } from "./timezone";
 export {
   contactDomain,
   USER_AGENT,

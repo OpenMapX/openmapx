@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
-import { timeZoneAt } from "@openmapx/core";
+import { timeZoneAt, zonedWallClockToInstant } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { activeClosuresForBbox } from "./closures.js";
-import { zonedWallClockToInstant } from "./timezone.js";
 
 /**
  * Resolve the travel instant for closure-time evaluation: the chosen

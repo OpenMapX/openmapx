@@ -20,6 +20,7 @@ import {
   transitousInstance,
 } from "./instances.js";
 import { getRentalFormFactors, primeRentalFormFactors } from "./rentals-capability.js";
+import { decodeMotisLineReference, decodeMotisRoutePatternId } from "./route-pattern-id.js";
 
 let cachedLocalReachable = false;
 let cachedLocalReachableAt = 0;
@@ -60,6 +61,8 @@ interface MaybeStopShape {
   id?: unknown;
   stopId?: unknown;
   tripId?: unknown;
+  routeId?: unknown;
+  route?: unknown;
   legs?: unknown;
   itineraries?: unknown;
   stops?: unknown;
@@ -110,15 +113,30 @@ export function extractFeedTags(data: unknown, feedTagsByLength: string[]): stri
     }
     if (typeof node !== "object") return;
     const obj = node as MaybeStopShape & Record<string, unknown>;
-    const candidateIds = [obj.id, obj.stopId, obj.tripId];
+    const candidateIds = [obj.id, obj.stopId, obj.tripId, obj.routeId];
     for (const candidate of candidateIds) {
       if (typeof candidate !== "string") continue;
+      const pattern = decodeMotisRoutePatternId(candidate);
+      if (pattern) {
+        for (const routeId of pattern.r) {
+          const tag = feedTagFromId(routeId, feedTagsByLength);
+          if (tag) tags.add(tag);
+        }
+        continue;
+      }
+      const line = decodeMotisLineReference(candidate);
+      if (line) {
+        const tag = feedTagFromId(line.r, feedTagsByLength);
+        if (tag) tags.add(tag);
+        continue;
+      }
       const tag = feedTagFromId(candidate, feedTagsByLength);
       if (tag) tags.add(tag);
     }
     if (Array.isArray(obj.legs)) visit(obj.legs);
     if (Array.isArray(obj.itineraries)) visit(obj.itineraries);
     if (Array.isArray(obj.stops)) visit(obj.stops);
+    if (obj.route) visit(obj.route);
     if (obj.from) visit(obj.from);
     if (obj.to) visit(obj.to);
     if (Array.isArray(obj.intermediateStops)) visit(obj.intermediateStops);
@@ -295,6 +313,12 @@ export function setupLocal(ctx: IntegrationContext): void {
   // tags against it; without an index they fall back to ATTRIBUTION_LOCAL.
   const attributionIndex = ctx.attributionIndex;
   const activeCapabilities = readActiveMotisCapabilities();
+  const requireActiveEpoch = (): string => {
+    if (!activeCapabilities?.epoch) {
+      throw new Error("active MOTIS dataset epoch unavailable");
+    }
+    return activeCapabilities.epoch;
+  };
 
   const wrapLocal = <T>(data: T) => wrapLocalWithFeedAttribution(data, attributionIndex, false);
   const wrapLocalRT = <T>(data: T) => wrapLocalWithFeedAttribution(data, attributionIndex, true);
@@ -312,15 +336,15 @@ export function setupLocal(ctx: IntegrationContext): void {
       stops: {
         lookup: true,
         nearby: true,
-        bbox: false,
+        bbox: true,
         search: true,
         infrastructure: false,
-        platforms: false,
-        timetable: false,
+        platforms: true,
+        timetable: true,
       },
       departures: true,
       arrivals: true,
-      routes: { lookup: false, forStop: false, stops: false, geometry: false },
+      routes: { lookup: true, forStop: true, stops: true, geometry: true },
       planning: true,
       planningFeatures: {
         maxTransfers: true,
@@ -359,7 +383,9 @@ export function setupLocal(ctx: IntegrationContext): void {
             if (!(await isMotisReachableCached())) {
               throw new Error("local MOTIS unavailable");
             }
-            return wrapLocal(await motis.getRoutesInBbox(motisLocalInstance, bbox, zoom));
+            return wrapLocal(
+              await motis.getRoutesInBbox(motisLocalInstance, bbox, requireActiveEpoch(), zoom),
+            );
           },
         }
       : {}),
@@ -378,6 +404,10 @@ export function setupLocal(ctx: IntegrationContext): void {
       return wrapTransitous(
         await motis.getStops(transitousInstance, [lng - deg, lat - deg, lng + deg, lat + deg]),
       );
+    },
+    async getStopsInBbox(bbox) {
+      if (!(await isMotisReachableCached())) throw new Error("local MOTIS unavailable");
+      return wrapLocal(await motis.getStops(motisLocalInstance, bbox));
     },
     async getStop(id) {
       const localId = withPrefix(id, "ms:");
@@ -402,6 +432,57 @@ export function setupLocal(ctx: IntegrationContext): void {
       }
       requireHostedFallback();
       return wrapTransitousRT(await motis.getDepartures(transitousInstance, cloudId, min));
+    },
+    async getStopPlatforms(id) {
+      if (!(await isMotisReachableCached())) throw new Error("local MOTIS unavailable");
+      return wrapLocal(await motis.getStopPlatforms(motisLocalInstance, withPrefix(id, "ms:")));
+    },
+    async getStopTimetable(id, date) {
+      if (!(await isMotisReachableCached())) throw new Error("local MOTIS unavailable");
+      return wrapLocal(
+        await motis.getStopTimetable(
+          motisLocalInstance,
+          withPrefix(id, "ms:"),
+          date,
+          requireActiveEpoch(),
+        ),
+      );
+    },
+    async getRoute(routeId) {
+      if (!(await isMotisReachableCached())) throw new Error("local MOTIS unavailable");
+      return wrapLocal(await motis.getRoute(motisLocalInstance, routeId, requireActiveEpoch()));
+    },
+    async getRoutesForStop(stopId) {
+      if (!(await isMotisReachableCached())) throw new Error("local MOTIS unavailable");
+      return wrapLocal(
+        await motis.getRoutesForStop(
+          motisLocalInstance,
+          withPrefix(stopId, "ms:"),
+          requireActiveEpoch(),
+        ),
+      );
+    },
+    async getRouteStops(routeId, hintStopId) {
+      if (!(await isMotisReachableCached())) throw new Error("local MOTIS unavailable");
+      return wrapLocal(
+        await motis.getRouteStops(
+          motisLocalInstance,
+          routeId,
+          requireActiveEpoch(),
+          hintStopId ? withPrefix(hintStopId, "ms:") : undefined,
+        ),
+      );
+    },
+    async getLegGeometry(tripId, fromStopId, toStopId) {
+      if (!(await isMotisReachableCached())) throw new Error("local MOTIS unavailable");
+      return wrapLocal(
+        await motis.getLegGeometry(
+          motisLocalInstance,
+          withPrefix(tripId, "ms:"),
+          fromStopId ? withPrefix(fromStopId, "ms:") : undefined,
+          toStopId ? withPrefix(toStopId, "ms:") : undefined,
+        ),
+      );
     },
     async getArrivals(id, min) {
       const localId = withPrefix(id, "ms:");

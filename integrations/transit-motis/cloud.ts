@@ -85,10 +85,6 @@ export function setupCloud(ctx: IntegrationContext): void {
         return getRentalFormFactors(transitousInstance);
       },
     },
-    // Hosted fallback for viewports the local instance cannot serve.
-    async getRoutesInBbox(bbox, zoom) {
-      return wrapTransitous(await motis.getRoutesInBbox(transitousInstance, bbox, zoom));
-    },
     async planTrip(params) {
       const arriveBy = params.arrivalTime != null;
       const dateTime = params.arrivalTime ?? params.departureTime ?? new Date().toISOString();

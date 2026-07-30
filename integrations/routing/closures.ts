@@ -1,11 +1,10 @@
 import type { BBox } from "@openmapx/core";
-import { haversineDistance } from "@openmapx/core";
+import { haversineDistance, localDateInZone, zonedWallClockToInstant } from "@openmapx/core";
 import type {
   IntegrationContext,
   RoadConditionSchedule,
   RoadConditionsProvider,
 } from "@openmapx/integration-framework";
-import { localDateInZone, zonedWallClockToInstant } from "./timezone.js";
 
 export type LngLat = [number, number];
 

@@ -11,6 +11,8 @@ import type {
   FareProduct as MotisFareProduct,
   Place,
   Rental,
+  RouteInfo,
+  RoutePolyline,
   StopTime,
 } from "@motis-project/motis-client";
 import {
@@ -23,9 +25,10 @@ import {
   trips as motisTrips,
   oneToAll,
   plan,
+  routeDetails,
   stoptimes,
 } from "@motis-project/motis-client";
-import { type BBox, decodePolyline } from "@openmapx/core";
+import { type BBox, decodePolyline, zonedWallClockToInstant } from "@openmapx/core";
 import { mapMotisAlert } from "@openmapx/mobility-core/motis-alerts";
 import type {
   Departure,
@@ -49,6 +52,13 @@ import type {
 } from "@openmapx/mobility-core/transit";
 import type { MotisInstance } from "./instances.js";
 import { motisLegMode, motisMode, uniqueModes } from "./mode-map.js";
+import {
+  decodeMotisLineReference,
+  encodeMotisLineReference,
+  encodeMotisRoutePatternId,
+  validateMotisLineReferenceEpoch,
+  validateMotisRoutePatternEpoch,
+} from "./route-pattern-id.js";
 import { tripSegmentsToVehicles } from "./vehicle-radar.js";
 
 /** Strip the instance prefix from a prefixed stop/trip ID. */
@@ -64,9 +74,22 @@ export function normalizeStop(instance: MotisInstance, place: Place): TransitSto
     lat: place.lat ?? 0,
     lng: place.lon ?? 0,
     modes: uniqueModes(place.modes ?? []),
+    platformCode: place.track ?? place.scheduledTrack ?? undefined,
     parentStationId: place.parentId ? `${instance.prefix}${place.parentId}` : undefined,
     provider: instance.provider,
   };
+}
+
+async function resolveRawStop(instance: MotisInstance, stopId: string): Promise<Place | null> {
+  try {
+    const { data } = await stoptimes({
+      client: instance.client,
+      query: { stopId: rawId(instance, stopId), n: 0, window: 0 },
+    });
+    return data?.place ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Fetch stops within a bounding box. */
@@ -135,9 +158,73 @@ export async function getReachable(
  * overlay. `zoom` controls MOTIS's server-side filtering (low zoom = only
  * long-distance routes).
  */
+type RouteMapResponse = {
+  routes: RouteInfo[];
+  polylines: RoutePolyline[];
+  stops: Place[];
+  zoomFiltered: boolean;
+};
+
+function coordinatesEqual(a: [number, number], b: [number, number]): boolean {
+  return a[0] === b[0] && a[1] === b[1];
+}
+
+function orderedRouteLines(
+  route: RouteInfo,
+  responseRouteIndex: number,
+  polylines: RoutePolyline[],
+): [number, number][][] {
+  const lines: [number, number][][] = [];
+  for (const segment of route.segments) {
+    const polyline = polylines[segment.polyline];
+    if (!polyline?.routeIndexes.includes(responseRouteIndex) || !polyline.polyline?.points)
+      continue;
+    const decoded = decodePolyline(polyline.polyline.points, polyline.polyline.precision ?? 6);
+    if (decoded.length < 2) continue;
+    const previous = lines[lines.length - 1];
+    if (previous && coordinatesEqual(previous[previous.length - 1], decoded[0])) {
+      previous.push(...decoded.slice(1));
+    } else {
+      lines.push(decoded);
+    }
+  }
+  return lines;
+}
+
+export function mapMotisRoute(
+  response: RouteMapResponse,
+  responseRouteIndex: number,
+  activeEpoch: string,
+  includeGeometry = true,
+): TransitRoute | null {
+  const route = response.routes[responseRouteIndex];
+  if (!route) return null;
+  const sourceRouteIds = route.transitRoutes.map((candidate) => candidate.id);
+  const info = route.transitRoutes[0];
+  const lines = includeGeometry
+    ? orderedRouteLines(route, responseRouteIndex, response.polylines)
+    : [];
+  return {
+    id: encodeMotisRoutePatternId(activeEpoch, route.routeIdx, sourceRouteIds),
+    shortName: info?.shortName ?? "",
+    longName: info?.longName ?? "",
+    mode: motisMode(route.mode),
+    color: info?.color ? info.color.replace(/^#/, "") : undefined,
+    textColor: info?.textColor ? info.textColor.replace(/^#/, "") : undefined,
+    operatorName: "",
+    geometry:
+      lines.length === 1
+        ? { type: "LineString", coordinates: lines[0] }
+        : lines.length > 1
+          ? { type: "MultiLineString", coordinates: lines }
+          : undefined,
+  };
+}
+
 export async function getRoutesInBbox(
   instance: MotisInstance,
   bbox: BBox,
+  activeEpoch: string,
   zoom = 12,
 ): Promise<TransitRoute[]> {
   const [west, south, east, north] = bbox;
@@ -148,33 +235,9 @@ export async function getRoutesInBbox(
     });
     if (!data?.routes?.length) return [];
 
-    // Group segment polylines by the route indexes that traverse them.
-    const geomByIdx = new Map<number, [number, number][][]>();
-    for (const pl of data.polylines ?? []) {
-      if (!pl.polyline?.points) continue;
-      const decoded = decodePolyline(pl.polyline.points, pl.polyline.precision ?? 6);
-      if (decoded.length < 2) continue;
-      for (const idx of pl.routeIndexes ?? []) {
-        const arr = geomByIdx.get(idx) ?? [];
-        arr.push(decoded);
-        geomByIdx.set(idx, arr);
-      }
-    }
-
-    return data.routes.map((r): TransitRoute => {
-      const info = r.transitRoutes?.[0];
-      const lines = geomByIdx.get(r.routeIdx);
-      return {
-        id: info?.id ? `${instance.prefix}${info.id}` : `${instance.prefix}route-${r.routeIdx}`,
-        shortName: info?.shortName ?? "",
-        longName: info?.longName ?? "",
-        mode: motisMode(r.mode),
-        color: info?.color ? info.color.replace(/^#/, "") : undefined,
-        textColor: info?.textColor ? info.textColor.replace(/^#/, "") : undefined,
-        operatorName: "",
-        geometry: lines?.length ? { type: "MultiLineString", coordinates: lines } : undefined,
-      };
-    });
+    return data.routes
+      .map((_, routeIndex) => mapMotisRoute(data, routeIndex, activeEpoch))
+      .filter((route): route is TransitRoute => route !== null);
   } catch {
     return [];
   }
@@ -185,16 +248,39 @@ export async function getStopById(
   instance: MotisInstance,
   stopId: string,
 ): Promise<TransitStop | null> {
-  const id = rawId(instance, stopId);
+  const place = await resolveRawStop(instance, stopId);
+  return place ? normalizeStop(instance, place) : null;
+}
+
+/** Enumerate actual platform/track child places for a stop area. */
+export async function getStopPlatforms(
+  instance: MotisInstance,
+  stopId: string,
+): Promise<TransitStop[]> {
+  const requested = await resolveRawStop(instance, stopId);
+  if (!requested?.stopId) return [];
+  const rootId = requested.parentId ?? requested.stopId;
+  const radiusDegrees = 150 / 111_320;
   try {
-    const { data } = await stoptimes({
+    const { data } = await motisStops({
       client: instance.client,
-      query: { stopId: id, n: 0, window: 0 },
+      query: {
+        min: `${requested.lat - radiusDegrees},${requested.lon - radiusDegrees}`,
+        max: `${requested.lat + radiusDegrees},${requested.lon + radiusDegrees}`,
+      },
     });
-    if (!data?.place) return null;
-    return normalizeStop(instance, data.place);
+    if (!Array.isArray(data)) return [];
+    const byId = new Map<string, TransitStop>();
+    for (const place of data) {
+      if (!place.stopId || place.parentId !== rootId) continue;
+      byId.set(place.stopId, normalizeStop(instance, place));
+    }
+    if (requested.parentId === rootId && !byId.has(requested.stopId)) {
+      byId.set(requested.stopId, normalizeStop(instance, requested));
+    }
+    return [...byId.values()];
   } catch {
-    return null;
+    return [];
   }
 }
 
@@ -267,7 +353,10 @@ export function normalizeStoptime(
   return {
     tripId: st.tripId ? `${instance.prefix}${st.tripId}` : "",
     route: {
-      id: `${instance.prefix}${st.routeId ?? ""}`,
+      id:
+        st.routeId && provenance?.datasetEpoch
+          ? encodeMotisLineReference(provenance.datasetEpoch, st.routeId)
+          : "",
       shortName: st.displayName ?? st.routeShortName ?? st.tripShortName ?? "",
       longName: st.routeLongName ?? "",
       mode: motisMode(st.mode),
@@ -289,6 +378,92 @@ export function normalizeStoptime(
       observedAt: new Date().toISOString(),
     },
   };
+}
+
+function departureInstant(st: StopTime): number | null {
+  const value = st.place.departure ?? st.place.scheduledDeparture;
+  if (!value) return null;
+  const instant = new Date(value).getTime();
+  return Number.isFinite(instant) ? instant : null;
+}
+
+function nextCalendarDate(date: string): string | null {
+  const match = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const instant = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  if (
+    instant.getUTCFullYear() !== Number(match[1]) ||
+    instant.getUTCMonth() + 1 !== Number(match[2]) ||
+    instant.getUTCDate() !== Number(match[3])
+  ) {
+    return null;
+  }
+  instant.setUTCDate(instant.getUTCDate() + 1);
+  return instant.toISOString().slice(0, 10);
+}
+
+/**
+ * Departures whose absolute instants fall within the stop-local civil day
+ * `[midnight(D), midnight(D+1))`. DST days may therefore span 23 or 25 hours.
+ */
+export async function getStopTimetable(
+  instance: MotisInstance,
+  stopId: string,
+  date: string,
+  activeEpoch: string,
+): Promise<Departure[]> {
+  const place = await resolveRawStop(instance, stopId);
+  const nextDate = nextCalendarDate(date);
+  if (!place?.tz || !nextDate) return [];
+  const start = zonedWallClockToInstant(place.tz, `${date}T00:00`);
+  const end = zonedWallClockToInstant(place.tz, `${nextDate}T00:00`);
+  if (!start || !end || end.getTime() <= start.getTime()) return [];
+
+  const accepted: Departure[] = [];
+  const seen = new Set<string>();
+  let pageCursor: string | undefined;
+  try {
+    while (accepted.length < 300) {
+      const { data } = await stoptimes({
+        client: instance.client,
+        query: {
+          stopId: rawId(instance, stopId),
+          time: start.toISOString(),
+          direction: "LATER",
+          n: 200,
+          ...(pageCursor ? { pageCursor } : {}),
+        },
+      });
+      if (!data?.stopTimes?.length) break;
+      let outsideInterval = false;
+      for (const stopTime of data.stopTimes) {
+        const instant = departureInstant(stopTime);
+        if (instant === null || instant < start.getTime()) continue;
+        if (instant >= end.getTime()) {
+          outsideInterval = true;
+          break;
+        }
+        const key = [
+          stopTime.tripId,
+          stopTime.routeId,
+          stopTime.place.stopId,
+          stopTime.place.scheduledDeparture ?? stopTime.place.departure,
+        ].join("\u0000");
+        if (seen.has(key)) continue;
+        seen.add(key);
+        accepted.push(
+          normalizeStoptime(instance, stopTime, "departure", { datasetEpoch: activeEpoch }),
+        );
+        if (accepted.length === 300) break;
+      }
+      if (outsideInterval || accepted.length === 300 || !data.nextPageCursor) break;
+      if (data.nextPageCursor === pageCursor) break;
+      pageCursor = data.nextPageCursor;
+    }
+    return accepted;
+  } catch {
+    return [];
+  }
 }
 
 /** Fetch departures for a stop. */
@@ -343,29 +518,129 @@ export async function getArrivals(
   }
 }
 
-/**
- * Derive unique routes serving a stop from a 12-hour departure window.
- * MOTIS has no dedicated routes-for-stop endpoint.
- */
+function stopMatchesRequested(place: Place | undefined, requestedIds: Set<string>): boolean {
+  return (
+    !!place &&
+    ((!!place.stopId && requestedIds.has(place.stopId)) ||
+      (!!place.parentId && requestedIds.has(place.parentId)))
+  );
+}
+
+/** Discover every compiled route pattern incident to a stop via a zoom-11 map query. */
 export async function getRoutesForStop(
   instance: MotisInstance,
   stopId: string,
+  activeEpoch: string,
 ): Promise<TransitRoute[]> {
-  const departures = await getDepartures(instance, stopId, 720);
-  const seen = new Map<string, TransitRoute>();
-  for (const dep of departures) {
-    const routeId = dep.route.id;
-    if (seen.has(routeId)) continue;
-    seen.set(routeId, {
-      id: routeId,
-      shortName: dep.route.shortName,
-      longName: dep.route.longName,
-      mode: dep.route.mode,
-      color: dep.route.color,
-      operatorName: "",
+  const requested = await resolveRawStop(instance, stopId);
+  if (!requested?.stopId) return [];
+  const requestedIds = new Set(
+    [requested.stopId, requested.parentId].filter((id): id is string => typeof id === "string"),
+  );
+  const delta = 0.000_01;
+  try {
+    const { data } = await motisRoutesApi({
+      client: instance.client,
+      query: {
+        min: `${requested.lat - delta},${requested.lon - delta}`,
+        max: `${requested.lat + delta},${requested.lon + delta}`,
+        zoom: 11,
+      },
     });
+    if (!data?.routes?.length) return [];
+    if (data.zoomFiltered !== false) {
+      throw new Error("MOTIS zoom-11 route response was unexpectedly filtered");
+    }
+    const matches: TransitRoute[] = [];
+    data.routes.forEach((route, responseRouteIndex) => {
+      const incident = route.segments.some(
+        (segment) =>
+          stopMatchesRequested(data.stops[segment.from], requestedIds) ||
+          stopMatchesRequested(data.stops[segment.to], requestedIds),
+      );
+      if (!incident) return;
+      const mapped = mapMotisRoute(data, responseRouteIndex, activeEpoch, false);
+      if (mapped) matches.push(mapped);
+    });
+    return matches;
+  } catch (error) {
+    console.error("MOTIS routes-for-stop failed", error);
+    return [];
   }
-  return Array.from(seen.values());
+}
+
+async function fetchRouteDetails(
+  instance: MotisInstance,
+  routeIdx: number,
+): Promise<RouteMapResponse | null> {
+  try {
+    const { data } = await routeDetails({
+      client: instance.client,
+      query: { routeIdx },
+    });
+    if (!data?.routes?.length || data.zoomFiltered !== false) {
+      throw new Error("invalid MOTIS route-details response");
+    }
+    return data;
+  } catch (error) {
+    console.error("MOTIS route-details failed", { routeIdx, error });
+    return null;
+  }
+}
+
+export async function getRoute(
+  instance: MotisInstance,
+  routeId: string,
+  activeEpoch: string,
+): Promise<TransitRoute | null> {
+  const decoded = validateMotisRoutePatternEpoch(routeId, activeEpoch);
+  if (!decoded) return null;
+  const response = await fetchRouteDetails(instance, decoded.i);
+  if (!response) return null;
+  const responseIndex = response.routes.findIndex((route) => route.routeIdx === decoded.i);
+  if (responseIndex < 0) {
+    console.error("MOTIS route-details omitted requested pattern", { routeIdx: decoded.i });
+    return null;
+  }
+  return mapMotisRoute(response, responseIndex, activeEpoch);
+}
+
+function orderedRouteStops(
+  instance: MotisInstance,
+  route: RouteInfo,
+  stops: Place[],
+): TransitStop[] {
+  const indexes: number[] = [];
+  for (const segment of route.segments) {
+    if (indexes[indexes.length - 1] !== segment.from) indexes.push(segment.from);
+    if (indexes[indexes.length - 1] !== segment.to) indexes.push(segment.to);
+  }
+  return indexes.flatMap((index) => (stops[index] ? [normalizeStop(instance, stops[index])] : []));
+}
+
+export async function getRouteStops(
+  instance: MotisInstance,
+  routeId: string,
+  activeEpoch: string,
+  hintStopId?: string,
+): Promise<TransitStop[]> {
+  let pattern = validateMotisRoutePatternEpoch(routeId, activeEpoch);
+  if (!pattern) {
+    const line = validateMotisLineReferenceEpoch(routeId, activeEpoch);
+    if (!line || !hintStopId) return [];
+    const matchingPatterns = (await getRoutesForStop(instance, hintStopId, activeEpoch)).filter(
+      (route) =>
+        decodeMotisLineReference(route.id)?.r === line.r ||
+        validateMotisRoutePatternEpoch(route.id, activeEpoch)?.r.includes(line.r),
+    );
+    if (matchingPatterns.length !== 1) return [];
+    pattern = validateMotisRoutePatternEpoch(matchingPatterns[0].id, activeEpoch);
+  }
+  if (!pattern) return [];
+  const response = await fetchRouteDetails(instance, pattern.i);
+  if (!response) return [];
+  const route = response.routes.find((candidate) => candidate.routeIdx === pattern.i);
+  return route ? orderedRouteStops(instance, route, response.stops) : [];
 }
 
 /** Map a MOTIS FareProduct to our FareProduct. */
@@ -460,10 +735,15 @@ function mapFlex(leg: Leg): TransitFlexInfo | null {
  * board/alight `Place.alerts` — into a deduped list. MOTIS attaches the same
  * alert to the leg and its endpoint places, so we key by id and keep the first.
  */
-function mapLegAlerts(instance: MotisInstance, leg: Leg): ServiceAlert[] | undefined {
+function mapLegAlerts(
+  instance: MotisInstance,
+  leg: Leg,
+  datasetEpoch?: string,
+): ServiceAlert[] | undefined {
   const idPrefix = `${instance.prefix}alert:`;
   const providers = [instance.provider === "ms" ? "transit-motis-local" : "transitous"];
-  const routeId = leg.routeId ? `${instance.prefix}${leg.routeId}` : undefined;
+  const routeId =
+    leg.routeId && datasetEpoch ? encodeMotisLineReference(datasetEpoch, leg.routeId) : undefined;
   const byId = new Map<string, ServiceAlert>();
   const add = (alerts: Leg["alerts"], affectedStopId?: string) => {
     (alerts ?? []).forEach((alert, index) => {
@@ -484,7 +764,7 @@ function mapLegAlerts(instance: MotisInstance, leg: Leg): ServiceAlert[] | undef
 }
 
 /** Map a single MOTIS Leg to our TripLeg. */
-function mapLeg(instance: MotisInstance, leg: Leg): TripLeg {
+function mapLeg(instance: MotisInstance, leg: Leg, datasetEpoch?: string): TripLeg {
   // Rental legs report mode `RENTAL`; motisLegMode refines car-like form factors
   // to driving so the UI shows a car (not bike) glyph.
   const mode = motisLegMode(leg);
@@ -594,7 +874,10 @@ function mapLeg(instance: MotisInstance, leg: Leg): TripLeg {
     ascentMeters: leg.steps?.reduce((sum, step) => sum + (step.elevationUp ?? 0), 0),
     descentMeters: leg.steps?.reduce((sum, step) => sum + (step.elevationDown ?? 0), 0),
     tripId: isTransit && leg.tripId ? `${instance.prefix}${leg.tripId}` : undefined,
-    routeId: isTransit && leg.routeId ? `${instance.prefix}${leg.routeId}` : undefined,
+    routeId:
+      isTransit && leg.routeId && datasetEpoch
+        ? encodeMotisLineReference(datasetEpoch, leg.routeId)
+        : undefined,
     rental: leg.rental ? mapRental(leg.rental) : undefined,
     flex: mapFlex(leg) ?? undefined,
     alternatives: leg.alternatives?.length
@@ -605,13 +888,17 @@ function mapLeg(instance: MotisInstance, leg: Leg): TripLeg {
       : undefined,
     fareTransferIndex: leg.fareTransferIndex,
     effectiveFareLegIndex: leg.effectiveFareLegIndex,
-    alerts: mapLegAlerts(instance, leg),
+    alerts: mapLegAlerts(instance, leg, datasetEpoch),
   };
 }
 
 /** Map a single MOTIS Itinerary to our TripItinerary. */
-function mapItinerary(instance: MotisInstance, it: Itinerary): TripItinerary {
-  const legs = it.legs.map((leg) => mapLeg(instance, leg));
+function mapItinerary(
+  instance: MotisInstance,
+  it: Itinerary,
+  datasetEpoch?: string,
+): TripItinerary {
+  const legs = it.legs.map((leg) => mapLeg(instance, leg, datasetEpoch));
 
   const startTime = legs[0]?.startTime ?? "";
   const endTime = legs[legs.length - 1]?.endTime ?? "";
@@ -678,7 +965,7 @@ export async function refreshTrip(
       },
     });
     if (!data) return null;
-    const mapped = mapItinerary(instance, data);
+    const mapped = mapItinerary(instance, data, opts?.datasetEpoch);
     mapped.datasetEpoch = opts?.datasetEpoch;
     mapped.refreshedAt = new Date().toISOString();
     return mapped;
@@ -814,7 +1101,7 @@ export async function planTrip(
     // only when the caller explicitly requested directModes — MOTIS otherwise
     // always computes a WALK direct trip we don't want cluttering transit results.
     const normalizeItinerary = (it: Itinerary): TripItinerary => {
-      const mapped = mapItinerary(instance, it);
+      const mapped = mapItinerary(instance, it, opts?.datasetEpoch);
       mapped.datasetEpoch = opts?.datasetEpoch;
       const invalidRequirements: string[] = [];
       if (opts?.wheelchair && mapped.legs.some((leg) => leg.wheelchairAccessible === false)) {
@@ -967,19 +1254,97 @@ export async function getStopTransfers(
   }
 }
 
-/** Fetch full trip details by trip ID. */
-export async function getTrip(
-  instance: MotisInstance,
-  tripId: string,
-): Promise<VehicleJourney | null> {
+async function fetchTripLegs(instance: MotisInstance, tripId: string): Promise<Leg[] | null> {
   const id = rawId(instance, tripId);
   try {
     const { data } = await motisTrip({
       client: instance.client,
       query: { tripId: id },
     });
-    if (!data?.legs) return null;
-    const legs = data.legs;
+    return data?.legs ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function legPlaces(leg: Leg): Place[] {
+  return [leg.from, ...(leg.intermediateStops ?? []), leg.to];
+}
+
+function nearestCoordinateIndex(
+  coordinates: [number, number][],
+  place: Place | undefined,
+): number | undefined {
+  if (!place) return undefined;
+  let nearest = 0;
+  let distance = Number.POSITIVE_INFINITY;
+  coordinates.forEach(([lng, lat], index) => {
+    const candidate = (lng - place.lon) ** 2 + (lat - place.lat) ** 2;
+    if (candidate < distance) {
+      distance = candidate;
+      nearest = index;
+    }
+  });
+  return nearest;
+}
+
+/** Fetch exact MOTIS geometry for the requested transit portion of a trip. */
+export async function getLegGeometry(
+  instance: MotisInstance,
+  tripId: string,
+  fromStopId?: string,
+  toStopId?: string,
+): Promise<GeoJSONLineString | null> {
+  const legs = await fetchTripLegs(instance, tripId);
+  if (!legs?.length) return null;
+  const rawFrom = fromStopId ? rawId(instance, fromStopId) : undefined;
+  const rawTo = toStopId ? rawId(instance, toStopId) : undefined;
+  const transitLegs = legs.filter((leg) => !!leg.routeId);
+  let startLeg = rawFrom
+    ? transitLegs.findIndex((leg) => legPlaces(leg).some((place) => place.stopId === rawFrom))
+    : 0;
+  if (startLeg < 0) startLeg = 0;
+  const endLeg = rawTo
+    ? transitLegs.findLastIndex((leg) => legPlaces(leg).some((place) => place.stopId === rawTo))
+    : transitLegs.length - 1;
+  if (endLeg < startLeg) return null;
+
+  const coordinates: [number, number][] = [];
+  for (const leg of transitLegs.slice(startLeg, endLeg + 1)) {
+    if (!leg.legGeometry?.points) return null;
+    const decoded = decodePolyline(leg.legGeometry.points, leg.legGeometry.precision ?? 6);
+    if (decoded.length < 2) return null;
+    if (coordinates.length > 0) {
+      if (!coordinatesEqual(coordinates[coordinates.length - 1], decoded[0])) return null;
+      coordinates.push(...decoded.slice(1));
+    } else {
+      coordinates.push(...decoded);
+    }
+  }
+  if (coordinates.length < 2) return null;
+
+  const selectedLegs = transitLegs.slice(startLeg, endLeg + 1);
+  const fromPlace = rawFrom
+    ? selectedLegs.flatMap(legPlaces).find((place) => place.stopId === rawFrom)
+    : undefined;
+  const toPlace = rawTo
+    ? selectedLegs.flatMap(legPlaces).find((place) => place.stopId === rawTo)
+    : undefined;
+  const fromIndex = nearestCoordinateIndex(coordinates, fromPlace) ?? 0;
+  const toIndex = nearestCoordinateIndex(coordinates, toPlace) ?? coordinates.length - 1;
+  if (toIndex <= fromIndex) return null;
+  return { type: "LineString", coordinates: coordinates.slice(fromIndex, toIndex + 1) };
+}
+
+/** Fetch full trip details by trip ID. */
+export async function getTrip(
+  instance: MotisInstance,
+  tripId: string,
+): Promise<VehicleJourney | null> {
+  const id = rawId(instance, tripId);
+  const legs = await fetchTripLegs(instance, tripId);
+  if (!legs) return null;
+  try {
     const journeyStops: VehicleJourneyStop[] = [];
     for (let i = 0; i < legs.length; i++) {
       const leg = legs[i];

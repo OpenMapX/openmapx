@@ -4,6 +4,7 @@ import type { TransitStop, TripItinerary } from "@openmapx/mobility-core/transit
 import { describe, expect, it } from "vitest";
 import { attribution } from "../attributions.js";
 import { __testing, annotateLegsWithAttribution, extractFeedTags } from "../local.js";
+import { encodeMotisRoutePatternId } from "../route-pattern-id.js";
 
 // Mirror the manifest dataSources the host loads at runtime so the local
 // fallback attribution has data to read.
@@ -158,6 +159,13 @@ describe("transit-motis feed attribution", () => {
     };
     const tags = extractFeedTags(tripPlan, FEED_TAGS_BY_LENGTH).sort();
     expect(tags).toEqual(["ch_SBB", "de_DELFI"]);
+  });
+
+  it("extractFeedTags decodes every source route from an opaque route-pattern ID", () => {
+    const route = {
+      id: encodeMotisRoutePatternId("epoch", 17, ["de_DELFI_route", "ch_SBB_route"]),
+    };
+    expect(extractFeedTags(route, FEED_TAGS_BY_LENGTH).sort()).toEqual(["ch_SBB", "de_DELFI"]);
   });
 
   it("returns an empty tag list for shapes without recognisable ids", () => {

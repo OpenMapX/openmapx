@@ -63,9 +63,18 @@ describe("transit-motis provider contract", () => {
   it("local provider (transit-motis-local) satisfies its declared capabilities", () => {
     const localCapabilities: TransitCapabilities = {
       ...allFalse,
-      stops: { ...allFalse.stops, lookup: true, nearby: true, search: true },
+      stops: {
+        ...allFalse.stops,
+        lookup: true,
+        nearby: true,
+        bbox: true,
+        search: true,
+        platforms: true,
+        timetable: true,
+      },
       departures: true,
       arrivals: true,
+      routes: { lookup: true, forStop: true, stops: true, geometry: true },
       planning: true,
       vehicleJourney: true,
     };
@@ -79,9 +88,16 @@ describe("transit-motis provider contract", () => {
       capabilities: localCapabilities,
       getStop: noop,
       getStopsNearby: noop,
+      getStopsInBbox: noop,
       searchStopsByName: noop,
+      getStopPlatforms: noop,
+      getStopTimetable: noop,
       getDepartures: noop,
       getArrivals: noop,
+      getRoute: noop,
+      getRoutesForStop: noop,
+      getRouteStops: noop,
+      getLegGeometry: noop,
       planTrip: noop,
       getVehicleJourney: noop,
     };
