@@ -73,7 +73,7 @@ export interface FeedFileEntry {
   path: string;
   url: string;
   activeScheduleSources: Array<{
-    /** Canonical artifact stem, e.g. `de_DELFI`. */
+    /** Normalized source identifier used for failure accounting, e.g. `de_delfi`. */
     id: string;
     /** Lifecycle identity, stable within the pinned catalog/overlay. */
     sourceId: string;

@@ -10,6 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+import { scanGtfsArchives } from "./internal.js";
 import type { JobContext } from "./types.js";
 
 export const TRANSIT_SOURCE_MANIFEST_FILENAME = "transit-source-manifest.json";
@@ -121,12 +122,24 @@ export function finalizeTransitSourceManifest(ctx: JobContext): string {
   if (manifest.version !== 1 || !Array.isArray(manifest.sources)) {
     throw new Error(`Malformed transit source manifest at ${path}`);
   }
+  const archives = scanGtfsArchives(ctx.outDir);
   for (const source of manifest.sources) {
-    const artifact = [
-      join(ctx.outDir, `${source.region}_${source.name}.${source.format}.zip`),
-      join(ctx.outDir, `${source.region}_${source.name}.gtfs.zip`),
-      join(ctx.outDir, `${source.region}_${source.name}.netex.zip`),
-    ].find(existsSync);
+    const artifactStem = `${source.region}_${source.name}`.toLowerCase();
+    const matches = archives.filter((archive) => archive.id.toLowerCase() === artifactStem);
+    const preferredFormats = [source.format, source.format === "gtfs" ? "netex" : "gtfs"];
+    let artifact: string | undefined;
+    for (const format of preferredFormats) {
+      const formatMatches = matches.filter((archive) => archive.path.endsWith(`.${format}.zip`));
+      if (formatMatches.length > 1) {
+        throw new Error(
+          `Desired transit source ${source.sourceId} has ambiguous ${format} artifacts`,
+        );
+      }
+      if (formatMatches[0]) {
+        artifact = formatMatches[0].path;
+        break;
+      }
+    }
     if (!artifact) {
       throw new Error(`Desired transit source ${source.sourceId} has no acquired artifact`);
     }

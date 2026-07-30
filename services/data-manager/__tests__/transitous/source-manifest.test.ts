@@ -63,9 +63,13 @@ describe("transit acquisition manifest", () => {
     const text = readFileSync(manifestPath as string, "utf-8");
     expect(text).not.toContain("secret");
     const manifest = JSON.parse(text) as {
-      sources: Array<{ originUrl: string; artifact: { sha256: string; sizeBytes: number } }>;
+      sources: Array<{
+        originUrl: string;
+        artifact: { relativePath: string; sha256: string; sizeBytes: number };
+      }>;
     };
     expect(manifest.sources[0]?.originUrl).toContain("api_key=%5Bredacted%5D");
+    expect(manifest.sources[0]?.artifact.relativePath).toBe("de_bvg.gtfs.zip");
     expect(manifest.sources[0]?.artifact.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(manifest.sources[0]?.artifact.sizeBytes).toBe(17);
     expect(readTransitSourceManifest(manifestPath).profileEvidence?.profile).toBe(
