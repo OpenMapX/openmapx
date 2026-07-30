@@ -160,7 +160,7 @@ command line overrides the env value for that invocation.
 | `PELIAS_REGION`                   | Per-service Pelias build region.                                                                                      | Optional. Commented           |
 | `TILESERVER_REGION`              | Per-service TileServer GL build region.                                                                               | Optional. Commented           |
 | `OVERPASS_REGION`                 | Per-service Overpass build region.                                                                                    | Optional. Commented           |
-| `TRANSITOUS_COUNTRIES`            | Country filter (e.g. `de,at,ch`) for `data download gtfs` and MOTIS Transitous config generation.                    | Optional. Commented           |
+| `TRANSITOUS_COUNTRIES`            | Country filter (e.g. `de,at,ch`) for `data sync` and MOTIS Transitous config generation.                             | Optional. Commented           |
 | `INTEGRATION_GEOCODING_PROVIDER`  | Comma-separated geocoding fallback chain, tried left to right. Valid names: `maptiler`, `photon`, `nominatim`, `pelias`, `motis`, `transitous`, `entur`, `db-ris`. | Optional. Default `maptiler`  |
 | `PHOTON_REGION`                   | Runtime download region for the self-hosted Photon index.                                                            | Default `planet`              |
 

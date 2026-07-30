@@ -175,32 +175,37 @@ from the CLI, run `pnpm openmapx compose render`.
 ## Data inventory
 
 `/admin/services/data` is the inventory and control surface for the open data the
-stack runs on. It pulls together what's on disk and in the database:
+stack runs on. It pulls together the active engine data and the operational
+metadata tracked by the data-manager:
 
 - **OSM planet data** — whether an OSM extract is present, its filename, region,
   size, and download date.
 - **Service build inventory** — a read-only grid showing which engines have
   populated their data directories (Valhalla, OSRM, OTP, MOTIS, Pelias, the tile
   server, and so on) and when they were built.
-- **GTFS feeds** — one row per logical transit feed, showing where it lives:
-  **MOTIS** (a raw GTFS archive on disk that the MOTIS engine reads at startup)
-  and/or **Postgres** (imported into a dedicated schema for SQL-based stop and
-  route lookups). Each row carries import status, stop and route counts, an
-  origin link, and an **Expires** chip computed from the feed's latest scheduled
-  service date — red within a week, amber within a month — so you can spot a feed
-  about to lapse. You can import a feed by URL, promote a MOTIS-only archive into
-  Postgres (no re-download), or remove an imported feed.
-- **MOTIS Transitous parity** — a quick read on the MOTIS configuration: how many
-  schedule, realtime, and GBFS feeds it carries, and whether the feed proxy is
-  self-hosted, pointed at the Transitous cloud, or a mix.
+- **Transit sources** — one lifecycle row per catalog or operator source. The
+  row shows its origin, desired and active state, archive format/size,
+  validation result, last fetch and promotion times, and available actions.
+  Desired and active state can differ while a job is running or after a failed
+  candidate: the prior healthy MOTIS dataset stays live until the complete
+  candidate passes validation and promotion.
+
+Catalog sources can be disabled and later re-enabled. An operator source is
+defined by a region, a safe display name, its HTTPS URL, attribution text, and
+either an SPDX license identifier or license URL. Adding, disabling, enabling,
+or manually syncing a source queues an asynchronous job; the row links to the
+activity log and disables conflicting actions while that job is active.
+
+MOTIS is the only compiled static-schedule runtime. Postgres stores the
+data-manager's source, job, validation, manifest, and promotion metadata; it
+does not contain imported GTFS schedules.
 
 A **Data Operations** panel queues the same data jobs the CLI runs — downloading
-OSM, GTFS, and style assets, the full update pipeline, the Overpass conversion,
-hardlink sync, cleanup, and the Transitous API-key template. Each queues a
-background job whose log you can follow in the activity view. The destructive
-cleanup operation asks for confirmation first. The full data workflow — what gets
-downloaded, built, and linked, and the one-command refresh — is documented in
-[Preparing data](../install/preparing-data.md).
+OSM and style assets, transactional transit sync, the full update pipeline, the
+Overpass conversion, hardlink sync, cleanup, and the Transitous API-key
+template. Each queues a background job whose log you can follow in the activity
+view. The destructive cleanup operation asks for confirmation first. The full
+data workflow is documented in [Preparing data](../install/preparing-data.md).
 
 ## Related admin surfaces
 

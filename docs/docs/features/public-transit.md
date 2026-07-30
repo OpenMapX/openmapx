@@ -154,9 +154,9 @@ The priority tiers look like this:
 
 | Priority | Providers | Role |
 | :---: | --- | --- |
-| 1 | Self-hosted MOTIS (`transit-motis-local`) | Primary backbone — planet-scale planning, stops, departures. |
+| 1 | Self-hosted MOTIS (`transit-motis-local`) | Primary backbone and the only compiled static-schedule runtime — planning, stops, timetables, routes, and departures. |
 | 1–3 | Regional / agency providers (Entur, MBTA, TfL, iRail, opentransportdata.ch, DB HAFAS/vendo, DB RIS routing, …) | National operators with quirks or live data MOTIS doesn't model, each scoped to its country/city. |
-| 5 | Dynamic registry, self-hosted GTFS feeds | A community-curated catalog of agency APIs, plus per-feed access to feeds you imported yourself. |
+| 5 | Dynamic registry | A community-curated catalog of agency APIs. |
 | 7 | MOTIS via Transitous (`transit-motis-transitous`) | Always-on soft fallback — covers local-MOTIS restarts and cold starts. |
 | 9 | Transitland | Global catalog for areas beyond MOTIS coverage. |
 | 10 | Overpass (OSM) | OSM-derived stops only; opt-in fallback, off by default. |
@@ -177,18 +177,25 @@ exists) are suppressed.
 
 ### Where the timetable data comes from
 
-MOTIS routes on GTFS feeds, and those feeds reach it one of two ways:
+MOTIS is the only component that compiles and serves static schedules. The
+data-manager builds its requested source set from the pinned
+[Transitous](https://github.com/public-transport/transitous) catalog plus any
+operator sources, acquires and validates the archives, imports them into an
+inactive MOTIS slot, runs functional probes, and then promotes the complete
+candidate. Postgres stores source, job, validation, and promotion metadata—not
+GTFS schedules.
 
-- **Self-hosted, via Transitous.** OpenMapX's data pipeline resolves a feed list
-  from the community-curated [Transitous](https://github.com/public-transport/transitous)
-  catalog, downloads the GTFS archives, and stages them for MOTIS to import. A
-  daily sync keeps them fresh, with an atomic swap so a bad feed never takes down
-  the running engine. See [Preparing data](../install/preparing-data.md) for the
-  download-and-build workflow and [How it works](../overview/how-it-works.md) for
-  the data-manager that owns it.
-- **Your own feeds.** Point the pipeline at private operator URLs or a pinned
-  subset, or import a feed directly into the database for the self-hosted GTFS
-  provider. Either way it joins the chain without code changes.
+Catalog sources can be disabled and re-enabled. An operator source must provide
+a region, safe name, URL, attribution, and an SPDX license identifier or license
+URL. These changes are asynchronous, so the requested set can differ from the
+active set. A failed candidate never replaces the prior live dataset. See
+[Preparing data](../install/preparing-data.md) for the lifecycle and
+[How it works](../overview/how-it-works.md) for the data-manager that owns it.
+
+Stop timetables use the stop's local civil day. Route-pattern IDs are tied to
+the active dataset epoch and must not be persisted as durable external IDs.
+Route details currently depend on the experimental MOTIS
+`/api/experimental/map/route-details` endpoint in the pinned MOTIS release.
 
 Real-time data (GTFS-RT, plus agency-specific live APIs) is layered on top of the
 schedules by the real-time providers, scoped to the regions they cover.
@@ -219,8 +226,7 @@ Enable it, build its prepared data for your region, and link it into the stack:
 ```bash
 pnpm openmapx services enable motis
 pnpm openmapx data download osm europe/germany
-pnpm openmapx data download gtfs --countries de,at,ch
-pnpm openmapx services build motis --region europe/germany
+pnpm openmapx data sync --countries de,at,ch
 pnpm openmapx services start motis
 ```
 

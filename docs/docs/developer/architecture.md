@@ -117,7 +117,7 @@ graph TD
     end
 
     subgraph Infra["Always-on core"]
-      PG[("postgis")]
+      PG[("postgis<br/>application + operational metadata<br/>no GTFS schedules")]
       Cache[("redis / valkey")]
       DM["data-manager"]
     end
@@ -125,7 +125,7 @@ graph TD
     API --> PG
     API --> Cache
     Jobs -.->|start/stop/restart| Engines
-    DM -.->|hardlinked OSM · GTFS · styles| Engines
+    DM -.->|OSM · styles · promoted MOTIS datasets| Engines
 ```
 
 **The reverse proxy.** [Traefik](https://traefik.io/) terminates TLS and is the
@@ -142,7 +142,9 @@ lowest priority so that more specific prefixes — `/api`, `/tiles`, `/martin`,
 `traefik`, `well-known`, `app-api`, `app-web`, `postgis`, `redis`, and
 `data-manager`. Everything heavy (routing engines, geocoders, transit engines,
 the Overpass server, tile servers) is opt-in: you add it to the *selection* and
-re-render. PostGIS is the system of record; Redis (Valkey) is the cache.
+re-render. PostGIS is the system of record for application data and operational
+pipeline metadata; it does not store GTFS schedules. Redis (Valkey) is the
+cache.
 
 **`app-api` as integration host.** This is the architectural center. The Fastify
 process is one container, but it wears several hats at once:
@@ -164,11 +166,15 @@ client IP — while the loopback admin short-circuit deliberately reads the raw
 socket address, so a forged `X-Forwarded-For` can't bypass it.
 
 **The data plane behind the engines.** The `data-manager` service owns the
-`/data` tree. It downloads OSM extracts, GTFS feeds (via the Transitous
-pipeline), and map styles, then *hardlinks* them into each consumer's directory
-so several engines share one multi-gigabyte file at zero disk cost. The compose
-renderer plans those links from each service's `consumes:`/`produces:`
-declarations; `data-manager` applies the plan. See
+`/data` tree. It downloads OSM extracts and map styles, and runs the
+transactional Transitous/operator-source pipeline that imports candidate static
+schedules into an inactive MOTIS slot. MOTIS is the only compiled static
+schedule runtime. The data-manager promotes a complete candidate only after its
+functional probes pass, so requested and active source state may differ and a
+failed job preserves the prior live dataset. Shared artifacts are *hardlinked*
+into consumer directories so several engines can use one multi-gigabyte file at
+zero disk cost. The compose renderer plans those links from each service's
+`consumes:`/`produces:` declarations; `data-manager` applies the plan. See
 [Managing services](../install/managing-services.md) for the operator workflow.
 
 ## The capability model
@@ -303,7 +309,7 @@ bytes. `parseGtfsRealtime(bytes)` returns a typed feed message;
 `parseSiri(xml)` decodes the envelope and a `siri-transit` companion normalizes
 it toward the canonical model. No network, no caching, no policy — pure
 `bytes → typed rows`, which makes this layer trivially testable and reusable by
-both request-path providers and the off-request GTFS importer. TOMP lives in the
+request-path providers and off-request validation pipelines. TOMP lives in the
 sibling `mobility-formats-tomp` package only because its OpenAPI codegen pulls in
 heavy dependencies that shouldn't ride along with the lean parsers.
 

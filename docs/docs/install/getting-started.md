@@ -188,7 +188,7 @@ If you're running a transit engine, also pull GTFS feeds (via the
 community-curated Transitous catalog), filtered to the countries you want:
 
 ```bash
-pnpm openmapx data download gtfs --countries de,at,ch
+pnpm openmapx data sync --countries de,at,ch
 ```
 
 Inspect what's been downloaded at any time:

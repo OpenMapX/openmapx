@@ -123,7 +123,7 @@ OpenMapX names regions with Geofabrik's paths (`europe/germany`,
 feed list the same way instead of pulling the worldwide catalog:
 
 ```bash
-pnpm openmapx data download gtfs --countries de,at,ch
+pnpm openmapx data sync --countries de,at,ch
 ```
 
 See [Preparing data](../install/preparing-data.md) for the full region and feed

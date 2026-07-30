@@ -113,14 +113,17 @@ hardlinks, authenticated feeds — lives in
 
 | Command | Description |
 | --- | --- |
-| `data download <kind> [region]` | Download source data. `kind` is `osm` (takes `[region]`), `gtfs`, or `style`. GTFS flags: `--countries <list>`, `--feeds-file <path>`. |
+| `data download <kind> [region]` | Download source data. `kind` is `osm` (takes `[region]`), `style`, or `gtfs`. The `gtfs` spelling starts the same transactional sync as `data sync`; its only feed flag is `--countries <list>`. |
 | `data build <kind> [region]` | Build prepared artifacts (alias for `services build`). `kind` is `motis`, `osrm`, `otp`, `pelias`, or `tiles`. |
 | `data convert <kind> [region]` | Derive a secondary format from a download. `kind` is `overpass` (OSM PBF → bzip2). |
-| `data update [region]` | Run the full refresh: download OSM + GTFS + style, build all artifacts, render, link. Flags: `--countries <list>`, `--feeds-file <path>`, `--fail-fast`. |
+| `data update [region]` | Run the full refresh: download OSM, transactionally sync transit sources, download styles, build artifacts, render, and link. Flags: `--countries <list>`, `--fail-fast`. |
+| `data sync` | Queue a transactional transit-source sync. Flag: `--countries <list>`. The command returns a job id; promotion changes the active set only after the candidate passes. |
+| `data source list` | List requested and active transit sources together with origin, region, and lifecycle state. |
+| `data source add <url>` | Add an operator source and queue a sync. Required: `--name`, `--region`, `--attribution`, plus `--license-spdx` or `--license-url`. |
+| `data source remove <sourceId>` | Disable a desired source and queue a sync. Catalog sources remain known and can be re-enabled. |
+| `data source enable <sourceId>` | Re-enable a disabled catalog source and queue a sync. |
 | `data link` | Re-render the hardlink plan from the current selection, then apply and prune it. |
 | `data status` | Show the data-manager's tracked dataset inventory. Flag: `--offline` scans `infra/docker/data` directly. |
-| `data add-feed <url> [slug]` | Download a single GTFS feed by URL (slug defaults to the URL basename). |
-| `data remove-feed <slug>` | Remove a single GTFS feed by slug. |
 | `data clean <target>` | Remove local data for one type alias (e.g. `osm`, `gtfs`, `style`, `osrm-graph`) or `all`. |
 | `data generate-api-keys` | Generate the Transitous API-key template for feeds that require keys. Flags: `--repo-url <url>`, `--output <path>`. |
 | `data overture-sync [region]` | Run the release-pinned regional refresh: pull and atomic ingest, then start the independently retryable OSM↔GERS link rebuild. |
@@ -271,7 +274,7 @@ GTFS catalog that the data-manager consumes, recorded in
 | `transitous bump` | Fetch the catalog, summarize the feed changes, and update the lockfile. Flags: `--yes` (skip the confirmation prompt), `--branch <name>` (default `main`). |
 
 `transitous bump` reads from a catalog clone the data-manager maintains, so run a
-GTFS download once (`pnpm openmapx data download gtfs`) before the first bump.
+transit sync once (`pnpm openmapx data sync`) before the first bump.
 After bumping, restart the data-manager to pick up the new ref, or wait for the
 next scheduled sync.
 

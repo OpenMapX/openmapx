@@ -23,12 +23,12 @@ The data-manager is a small built-in service that owns the shared data tree at
 `infra/docker/data/` (mounted as `/data` inside the container). It does three
 things:
 
-- **Downloads** source data — OSM extracts from Geofabrik, GTFS feeds via the
-  Transitous catalog, and map styles, fonts, and sprites — over the network,
-  always with atomic downloads so a partial transfer never replaces a good file.
-- **Tracks** what it has fetched in a small state file
-  (`/data/.data-manager-state.json`): the type, id, region, size, and download
-  time of every dataset.
+- **Downloads** source data — OSM extracts from Geofabrik, transactional transit
+  sources from Transitous or operator URLs, and map styles, fonts, and sprites —
+  over the network. Partial transfers never replace good files.
+- **Tracks** ordinary downloaded artifacts in its state file and transit source,
+  job, validation, manifest, and promotion metadata in Postgres. Postgres does
+  not contain GTFS schedule rows.
 - **Hardlinks** files into place so that every consumer service sees its own copy
   of the input data while the bytes live on disk exactly once.
 
@@ -92,48 +92,57 @@ foundational dataset: routing engines, the tile builder, and the geocoders all
 read from it. Use `planet` for the full world (a large, slow download — plan disk
 accordingly).
 
-### GTFS transit feeds
+### Transit schedule sources
+
+MOTIS is the only compiled static-schedule runtime. A sync builds the complete
+requested source set in an inactive MOTIS slot, validates it, probes its static
+capabilities, and promotes it atomically. The requested and active source sets
+can therefore differ while a job runs or when a candidate fails; failure keeps
+the previous live dataset untouched.
 
 ```bash
-# Default: resolve the feed list from the community Transitous catalog
-pnpm openmapx data download gtfs --countries de,at,ch
+# Sync the pinned catalog subset for these countries
+pnpm openmapx data sync --countries de,at,ch
 
-# Or supply your own list of feeds
-pnpm openmapx data download gtfs --feeds-file ./feeds.json
+# Inspect requested, active, and lifecycle state
+pnpm openmapx data source list
 ```
 
-With no `--feeds-file`, the data-manager resolves the feed list from the
-community-curated [Transitous](https://github.com/public-transport/transitous)
-catalog at request time and filters it by `--countries` (a comma-separated list
-of country codes; defaults to `$TRANSITOUS_COUNTRIES`). New feeds that Transitous
-adds upstream are picked up on the next run automatically. Downloaded feeds land
-in `data/gtfs/` as `.zip` archives, ready for the transit engine.
-
-To use your own sources — private operator URLs, a pinned subset, or feeds
-Transitous doesn't include — pass `--feeds-file`. The file is a JSON array of
-`{ id, country, url }` entries:
-
-```json
-[
-  { "id": "delfi-de", "country": "de", "url": "https://download.gtfs.de/germany/free/latest.zip" }
-]
-```
-
-To add or remove a single feed without touching the rest of the catalog:
+The catalog is the pinned community-curated
+[Transitous](https://github.com/public-transport/transitous) source. A catalog
+entry can be disabled and later re-enabled:
 
 ```bash
-pnpm openmapx data add-feed https://example.org/agency-gtfs.zip
-pnpm openmapx data remove-feed agency-gtfs
+pnpm openmapx data source remove catalog:de:vbb
+pnpm openmapx data source enable catalog:de:vbb
 ```
+
+Add a private or one-off operator source by declaring all provenance fields. The
+name must be a safe display name and the license must be identified by SPDX id
+or URL:
+
+```bash
+pnpm openmapx data source add https://example.org/agency-gtfs.zip \
+  --name "Example Transit" \
+  --region de-be \
+  --attribution "Example Transit" \
+  --license-spdx CC-BY-4.0
+```
+
+Add, remove, enable, and sync commands queue asynchronous jobs. Use the returned
+job id in the admin activity view. The source list shows when desired and active
+state differ. Backing up before a routine update is optional because promotion
+retains the prior healthy MOTIS slot for automatic rollback; use the separate
+backup workflow when your operating policy requires an independent copy.
 
 :::note[Authenticated Transitous feeds]
 Some Transitous sources require API keys. Generate a key template, fill in the
-values you have, then download:
+values you have, then sync:
 
 ```bash
 pnpm openmapx data generate-api-keys
 # edit services/motis/tools/transitous/api-keys.json
-pnpm openmapx data download gtfs
+pnpm openmapx data sync
 ```
 
 Existing values are preserved on regeneration; keys no longer required by the
@@ -186,7 +195,7 @@ The build kinds that prepare artifacts are:
 | ---- | ------ | ------ |
 | `osrm` | OSRM | Routing graph (`data/osrm-graph/`) — region scale only |
 | `otp` | OTP | Transit graph (`data/otp-graph/`) — region scale only |
-| `motis` | MOTIS | Prepared transit data (`data/motis/`) from OSM + GTFS |
+| `motis` | MOTIS | Prepared inputs for the MOTIS slot lifecycle |
 | `pelias` | Pelias | Geocoding index (Elasticsearch + supporting data) |
 | `tiles` | TileServer GL | MBTiles archive (`data/tile-mbtiles/`) from the OSM extract |
 
@@ -255,7 +264,7 @@ pnpm openmapx data status --offline
 The default view lists each dataset's type, id, size, and download time as recorded
 by the data-manager. The `--offline` scan walks the data directory on disk instead —
 useful before the stack is up, or to see exactly what's on the filesystem (OSM PBFs,
-GTFS feeds, and per-directory usage).
+transit artifacts, and per-directory usage).
 
 ## A full refresh in one command
 
@@ -266,8 +275,9 @@ download, build, render, link — in order:
 pnpm openmapx data update europe/germany
 ```
 
-This downloads the OSM extract, GTFS feeds, and styles; builds every buildable
-engine's artifacts; re-renders the compose plan; and applies the hardlinks. It's
+This downloads the OSM extract, transactionally syncs transit sources, downloads
+styles, builds every buildable engine's artifacts, re-renders the compose plan,
+and applies the hardlinks. It's
 the convenient front door once you know which region you want; the individual
 commands above are there for when you want to refresh just one piece.
 

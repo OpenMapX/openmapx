@@ -74,38 +74,30 @@ pnpm openmapx services start --preset transit   # motis, motis-feed-proxy, otp
 
 ### 2. Get the source data
 
-MOTIS reads an OSM extract (for the walking and cycling legs between stops) and
-the GTFS feeds it routes on. Download both for your region:
+MOTIS reads an OSM extract for walking/cycling access and a compiled schedule
+dataset. Download OSM, then ask the transactional source lifecycle to build and
+promote the schedule dataset:
 
 ```bash
 # OSM extract — Geofabrik path naming, or `planet` for the whole world
 pnpm openmapx data download osm europe/germany
 
-# GTFS feeds, resolved from the Transitous catalog and filtered by country
-pnpm openmapx data download gtfs --countries de,at,ch
+# Catalog feeds plus enabled operator sources, imported into an inactive slot
+pnpm openmapx data sync --countries de,at,ch
 ```
 
 The OSM step is optional for MOTIS but recommended — without it, MOTIS still
 plans transit but can't draw street-level walking legs to and from stops. The
-GTFS step is covered in more detail under [Adding feeds](#adding-gtfs-feeds)
-below; for now, `--countries` filters the community
-[Transitous](https://github.com/public-transport/transitous) catalog to the
-countries you name. Downloaded feeds land in `data/gtfs/` as `.zip` archives.
-
-:::note[Mirror mode downloads feeds for you]
-`data download gtfs` fetches each feed from its origin (the `build`-mode path).
-In the default **`mirror`** mode the next step (`services build motis`) downloads
-Transitous's already-cleaned archives itself, so you can skip this command — run
-it only for `build` mode or to pull a feed from its origin. See
-[`mirror` vs `build`](#where-the-data-comes-from-mirror-vs-build).
-:::
+source lifecycle is covered under [Adding feeds](#adding-gtfs-feeds). MOTIS is
+the only compiled static-schedule runtime; Postgres records operational source,
+job, validation, and promotion metadata, not schedule rows.
 
 ### 3. Build the prepared data
 
-MOTIS's build step doesn't compile MOTIS — it assembles the exact input
-directory the container imports on startup. It stages the OSM PBF and GTFS feeds,
-runs the Transitous toolchain to generate the engine's `config.yml` and an
-attribution `license.json`, and renders the feed-proxy configuration:
+`data sync` performs the normal build safely: it assembles config, attribution,
+and source archives, imports them into an inactive slot, validates the static
+contract, and promotes only after the candidate passes. The lower-level service
+build remains useful when preparing an initial offline dataset:
 
 ```bash
 pnpm openmapx services build motis --region europe/germany
@@ -113,23 +105,10 @@ pnpm openmapx services build motis --region europe/germany
 pnpm openmapx data build motis europe/germany
 ```
 
-`--region` selects which downloaded OSM extract to build against; with
-`MOTIS_REGION` (or the general `OPENMAPX_REGION`) set in `infra/docker/.env` you
-can omit it. The prepared directory is written to **`data/motis/live`** — the
-plain bind mount the running container reads from.
-
-:::caution[Stop the engine before rebuilding]
-The build stages files into the directory a running container reads. Stop MOTIS
-first so it never sees a half-swapped state:
-
-```bash
-pnpm openmapx services stop motis
-pnpm openmapx services build motis --region europe/germany
-pnpm openmapx services start motis
-```
-
-Builds skip their work when the input is unchanged, so re-running is cheap.
-:::
+`--region` selects the downloaded OSM extract; with `MOTIS_REGION` (or
+`OPENMAPX_REGION`) set in `infra/docker/.env` you can omit it. Do not use a
+manual stop/build/start sequence for feed changes on an operating deployment;
+the transactional sync is what preserves the prior live dataset on failure.
 
 ### 4. Render, link, and start
 
@@ -158,54 +137,56 @@ the files it writes back stay owned by the host operator. It listens on
 
 ### Adding GTFS feeds
 
-There are two ways feeds reach MOTIS.
+The desired source set combines the pinned Transitous catalog with operator
+sources. Inspect desired and active state together:
 
-**From the Transitous catalog (the default).** `data download gtfs` resolves the
-feed list from the community-curated catalog at request time and filters it by
-`--countries`. New feeds that Transitous adds upstream are picked up on the next
-run. Some catalog sources need API keys; generate a template, fill in the values
-you have, then download:
+```bash
+pnpm openmapx data source list
+```
+
+Catalog entries can be disabled and re-enabled. Both changes queue a complete
+candidate sync rather than mutating the live engine in place:
+
+```bash
+pnpm openmapx data source remove catalog:de:vbb
+pnpm openmapx data source enable catalog:de:vbb
+```
+
+Some catalog sources need API keys; generate a template, fill in the values you
+have, then sync:
 
 ```bash
 pnpm openmapx data generate-api-keys
 # edit services/motis/tools/transitous/api-keys.json
-pnpm openmapx data download gtfs --countries de
+pnpm openmapx data sync --countries de
 ```
 
-**Your own feeds.** To pull in a private operator URL or a one-off feed the
-catalog doesn't carry, add it directly. The slug defaults to the basename of the
-URL:
+To add a private operator URL or a feed the catalog does not carry, declare its
+region, safe name, attribution, and license:
 
 ```bash
-pnpm openmapx data add-feed https://example.org/agency-gtfs.zip
-pnpm openmapx data remove-feed agency-gtfs
+pnpm openmapx data source add https://example.org/agency-gtfs.zip \
+  --name "Example Transit" \
+  --region de-be \
+  --attribution "Example Transit" \
+  --license-spdx CC-BY-4.0
 ```
 
-You can also supply an entire pinned feed list instead of the catalog with
-`--feeds-file ./feeds.json` (a JSON array of `{ id, country, url }` entries — see
-[Preparing data](../install/preparing-data.md#gtfs-transit-feeds)).
-
-Either way, a feed change means re-staging and re-importing. Rebuild the prepared
-data and restart:
-
-```bash
-pnpm openmapx data download gtfs --countries de   # or add-feed / remove-feed
-pnpm openmapx services stop motis
-pnpm openmapx services build motis --region europe/germany
-pnpm openmapx services start motis
-```
+Every mutation returns a job id. Desired state changes immediately, while active
+state changes only after the complete inactive-slot build and probes pass. A
+failure retains the prior active sources and live dataset.
 
 ### Keeping feeds fresh: the staging pipeline
 
 You don't have to rebuild MOTIS by hand to stay current. OpenMapX's data-manager
-runs a daily **Transitous pipeline** that re-fetches feeds, builds them against a
-**separate staging MOTIS instance** (`motis-staging`, a sibling container reading
-`data/motis/staging`), validates the result with smoke queries, and only then
-**atomically swaps** the fresh data into the live engine and restarts it. If a
+runs a daily **Transitous pipeline** that re-fetches feeds, imports them in the
+inactive MOTIS slot with the staging container, validates the result with
+functional queries, and only then promotes the candidate and recreates the
+query-facing service. If a
 feed turns up corrupt or an upstream is down, the partial run is abandoned and
 your running engine is never touched.
 
-`motis-staging` is opt-in — it only needs to exist while a sync runs, and the
+`motis-staging` is opt-in — it only needs to run while a sync executes, and the
 primary `motis` container is the only one that ever serves application traffic.
 Enable it alongside MOTIS when you want the automated refresh:
 
@@ -214,8 +195,8 @@ pnpm openmapx services enable motis-staging
 ```
 
 The pipeline, its lockfile-pinned Transitous ref, and the cron schedule live in
-the data-manager service; for everyday operation, just leaving `motis-staging`
-enabled gives you a hands-off daily update with a built-in rollback.
+the data-manager service; leaving `motis-staging` enabled gives you a hands-off
+daily update with retained-slot rollback.
 
 #### Where the data comes from: `mirror` vs `build`
 
@@ -242,6 +223,12 @@ top-level `gbfs.proxy` that MOTIS uses for every discovered GBFS sub-resource.
 The admin status reports hosted, mixed, and self-hosted modes from both values,
 so operators can verify that no hidden hosted dependency remains. Switch modes
 by setting `TRANSIT_SOURCE` and recreating the data-manager service.
+
+`MOTIS_ROUTE_SHAPES=missing` is an optional generated-config override for feeds
+that omit route shapes. It computes geometry from OSM only for those routes and
+is off by default because it adds import time, index size, and RAM use. Validate
+the measured cost in the inactive slot before enabling it; `all` is more
+expensive.
 
 A few specifics worth knowing as an operator:
 
@@ -274,10 +261,11 @@ A few specifics worth knowing as an operator:
   failures are log-only — and because the canary correctly refuses to promote a
   bad candidate, a persistent failure can silently freeze the live dataset at its
   last good build until someone reads the logs.
-- **Rollback.** Promote is an atomic directory rename — the fresh build is staged
-  in `data/motis/staging`, swapped over `data/motis/live`, and the old live data
-  is parked at `data/motis/live.previous`. If the primary doesn't come back
-  healthy after the restart, the swap is reverted automatically from that copy.
+- **Rollback.** Promotion selects the validated inactive A/B slot. If the
+  query-facing service fails its post-activation probes, the previous healthy
+  slot is selected again without a reimport. A separate backup before update is
+  optional; use one when required by local retention or disaster-recovery
+  policy.
 
 ## Self-hosting OpenTripPlanner
 
@@ -291,7 +279,7 @@ every feed change is a full rebuild rather than a restart.
 pnpm openmapx services enable otp
 
 pnpm openmapx data download osm europe/germany     # required for OTP
-pnpm openmapx data download gtfs --countries de
+pnpm openmapx data sync --countries de
 ```
 
 OSM is **mandatory** for OTP — it builds the street network the transit graph is
@@ -339,7 +327,7 @@ queries.
 After any feed or OSM change, OTP needs the full cycle again:
 
 ```bash
-pnpm openmapx data download gtfs --countries de
+pnpm openmapx data sync --countries de
 pnpm openmapx services build otp --region europe/germany
 pnpm openmapx services start otp
 ```
@@ -406,6 +394,12 @@ curl -s 'http://localhost:8081/api/v1/geocode?text=Berlin+Hbf' | jq '.[0].name'
 # A single plan — exercises the routing engine end to end (adjust coordinates to your region)
 curl -s 'http://localhost:8081/api/v1/plan?fromPlace=52.525,13.369&toPlace=48.140,11.558' | jq '.itineraries | length'
 ```
+
+Static stop timetables use the stop's local civil day rather than UTC-day
+boundaries. Route-pattern IDs are bound to the active dataset epoch, so do not
+persist them across promotions. Pattern details and geometry rely on MOTIS's
+experimental `/api/experimental/map/route-details` endpoint; OpenMapX pins the
+MOTIS release and tests that response contract before promotion.
 
 For OTP, the equivalent query-level probe is a plan against the REST v1 endpoint:
 

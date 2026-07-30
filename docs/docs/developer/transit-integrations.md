@@ -7,8 +7,8 @@ sidebar_position: 7
 # Transit integrations
 
 A **transit integration** contributes a provider to OpenMapX's public-transit
-chain: a national operator's API, a self-hosted engine, a single GTFS feed, or a
-real-time vehicle feed. This page is the contract-level guide to writing one. It
+chain: a national operator's API, a self-hosted engine, or a real-time vehicle
+feed. This page is the contract-level guide to writing one. It
 assumes you have read the [integration system](./integration-system.md)
 reference — the manifest, the `IntegrationContext`, and the loader lifecycle all
 apply here unchanged — and covers the two contracts unique to transit:
@@ -175,6 +175,19 @@ getAlertsForBbox?(bbox): Promise<MobilityResult<ServiceAlert[]>>;
 getFacilities?(stopId): Promise<MobilityResult<Facility[]>>;
 ```
 
+Calendar arguments such as the `date` passed to `getStopTimetable` represent the
+stop's **local civil day**. Do not reinterpret the date as a UTC midnight range;
+the provider must query the upstream using the stop/region timezone and return
+that complete local service day.
+
+Provider IDs are opaque. In particular, MOTIS route-pattern IDs encode the
+active dataset epoch so an ID from one promotion is rejected after the next.
+They are request-routing handles, not durable external identifiers: reacquire a
+pattern from `getRoutesForStop` or `getRoutesInBbox` after a dataset change.
+MOTIS pattern details and geometry use the experimental
+`/api/experimental/map/route-details` endpoint of the repository-pinned MOTIS
+version, so a pin upgrade must rerun the adapter contract and promotion canaries.
+
 The canonical model types — `TransitStop`, `Departure`, `TransitRoute`,
 `TripPlan`, `VehiclePosition`, `ServiceAlert`, and friends — come from
 `@openmapx/mobility-core/transit`. Map your upstream's response into these shapes;
@@ -189,9 +202,9 @@ bbox route geometry or isochrone-style reachability incrementally.
 
 ### Per-feed attribution
 
-When one integration fronts many feeds, each with its own license — a registry
-wrapping dozens of agency APIs, or the local GTFS provider with one row per
-imported feed — implement `getFeedAttribution()`:
+When one integration fronts many feeds, each with its own license — for example
+a registry wrapping dozens of agency APIs or the MOTIS dataset assembled from
+many declared sources — implement `getFeedAttribution()`:
 
 ```ts
 getFeedAttribution?(): Promise<Record<string, ProviderAttribution>>;
