@@ -316,6 +316,32 @@ describe("MOTIS stops, platforms, and civil-day timetable", () => {
     expect(await getStopTimetable(instance, "ms:root", "2026-10-25", "epoch")).toHaveLength(1);
   });
 
+  it("resolves the stop timezone from coordinates when MOTIS omits optional Place.tz", async () => {
+    const event = {
+      place: { ...stop("root", 13.369, 52.525), departure: "2026-07-30T06:00:00.000Z" },
+      mode: "RAIL" as const,
+      realTime: false,
+      headsign: "Ostbahnhof",
+      tripFrom: stop("a", 13.332, 52.507),
+      tripTo: stop("b", 13.435, 52.51),
+      agencyId: "a",
+      agencyName: "",
+      agencyUrl: "",
+      routeId: "de_demo_s1",
+      directionId: "0",
+      tripId: "fallback-tz",
+      routeShortName: "S1",
+      routeLongName: "",
+      tripShortName: "",
+      displayName: "S1",
+    };
+    mocks.stoptimes
+      .mockResolvedValueOnce({ data: { place: stop("root", 13.369, 52.525) } })
+      .mockResolvedValueOnce({ data: { stopTimes: [event], nextPageCursor: "" } });
+    expect(await getStopTimetable(instance, "ms:root", "2026-07-30", "epoch")).toHaveLength(1);
+    expect(mocks.stoptimes.mock.calls[1][0].query.time).toBe("2026-07-29T22:00:00.000Z");
+  });
+
   it("caps a civil-day timetable at 300 accepted events", async () => {
     const events = Array.from({ length: 400 }, (_, index) => {
       const departure = new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString();

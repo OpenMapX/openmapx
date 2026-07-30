@@ -14,12 +14,14 @@
  *
  * Gating semantics:
  *   - Default (`OPENMAPX_E9_LIVE_MOTIS` unset): the whole suite is skipped
- *     silently. The default `pnpm test` invocation never spins up Docker.
+ *     so the default `pnpm test` invocation never spins up Docker. The pinned
+ *     image canary remains a required weekly and manual release workflow.
  *   - `OPENMAPX_E9_LIVE_MOTIS=true` + Docker daemon reachable + the
  *     `ghcr.io/motis-project/motis:2.10.2` image already cached locally:
  *     the suite runs. If the image is missing we additionally `it.skip(...)`
- *     the actual probes with a clear log so CI can surface the missing
- *     prerequisite without failing.
+ *     the actual probes with a clear log so a local run surfaces the missing
+ *     prerequisite. The required workflow pre-pulls both images, so a missing
+ *     image there is a hard failure rather than a skip.
  *
  * Container lifecycle is owned by the test: each run starts with both containers
  * forcibly down, brings them up via a compose file generated into the test's tmp
@@ -43,9 +45,22 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  getDepartures,
+  getRoute,
+  getRouteStops,
+  getRoutesInBbox,
+  getStopPlatforms,
+  getStops,
+  getStopTimetable,
+} from "@integrations/transit-motis/adapter";
+import { motisLocalInstance, setMotisLocalUrl } from "@integrations/transit-motis/instances";
 import { execa } from "execa";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { readCandidateManifest } from "../../src/jobs/transitous/candidate.js";
 import { buildJobContext, runTransitousPipeline } from "../../src/jobs/transitous/pipeline.js";
+import { run as runPromote } from "../../src/jobs/transitous/promote.js";
+import { TRANSIT_SOURCE_MANIFEST_FILENAME } from "../../src/jobs/transitous/source-manifest.js";
 import type { CommandRunner, StageName } from "../../src/jobs/transitous/types.js";
 import { StateStore } from "../../src/state.js";
 import { buildTinyGtfsFeeds } from "./fixtures/build-tiny-gtfs.js";
@@ -67,12 +82,11 @@ const PRIMARY_SERVICE = "motis";
 const PRIMARY_PORT = 8081;
 const FEED_PROXY_SERVICE = "motis-feed-proxy";
 const GBFS_FIXTURE_SERVICE = "gbfs-fixture";
-// Generous wall-clock ceiling for the whole pipeline. It performs TWO MOTIS
-// imports + boots on a cold-cache runner — the staging import (motis-import) and
-// the primary's re-import on promote's `docker restart motis` — so a tight
-// budget would flake on a correct-but-slow run. This is a sanity cap against a
-// pathological hang, not a perf SLA.
-const PIPELINE_BUDGET_MS = 4 * 60_000;
+// Generous wall-clock ceiling for the whole lifecycle scenario. It performs a
+// successful promotion, imports a deliberately rejected candidate, and then
+// performs a second successful promotion, so a tight budget would flake on a
+// correct-but-slow cold-cache runner. This is a sanity cap, not a perf SLA.
+const LIVE_SCENARIO_BUDGET_MS = 12 * 60_000;
 // Both containers pin `container_name` (motis / motis-staging) to mirror the
 // generated production compose so the pipeline's bare-name `docker restart`
 // resolves. This suite must therefore not run concurrently with itself — the
@@ -330,6 +344,18 @@ async function probeOk(url: string, deadlineMs: number): Promise<boolean> {
     await new Promise((r) => setTimeout(r, 1_000));
   }
   return false;
+}
+
+function civilDate(timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((candidate) => candidate.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
 /**
@@ -596,7 +622,7 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
   }, 60_000);
 
   it(
-    "runs all 14 stages, atomically swaps staging → live, and the primary serves the promoted data",
+    "imports, queries, rejects a bad candidate, promotes a new epoch, and rejects stale IDs",
     async (testCtx) => {
       if (!daemonAvailable || !imageAvailable) {
         // beforeAll already logged the reason. Use vitest's `testCtx.skip()`
@@ -607,6 +633,8 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
       if (!dataDir || !stagingDataDir || !motisDataDir || !composeFile || !gbfsFixtureDir || !tmp) {
         throw new Error("test setup did not complete");
       }
+      const fixtureDataDir = dataDir;
+      const fixtureRepoRoot = tmp;
 
       const runner: CommandRunner = async (command, args, opts) => {
         if (command === "git") {
@@ -620,42 +648,52 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
         await execa(command, args, { cwd: opts.cwd, stdio: opts.stdio ?? "pipe" });
       };
 
-      const ctx = buildJobContext({
-        dataDir,
-        repoRoot: tmp,
-        store: new StateStore(dataDir),
-        countries: ["de", "ch", "at"],
-        feedsOverlayPath: join(dataDir, "feeds-overlay.json"),
-        runner,
-        now: () => new Date().toISOString(),
-      });
+      const makeContext = () =>
+        buildJobContext({
+          dataDir: fixtureDataDir,
+          repoRoot: fixtureRepoRoot,
+          store: new StateStore(fixtureDataDir),
+          countries: ["de", "ch", "at"],
+          feedsOverlayPath: join(fixtureDataDir, "feeds-overlay.json"),
+          runner,
+          now: () => new Date().toISOString(),
+        });
+      const runFixturePipeline = async (
+        ctx: ReturnType<typeof makeContext>,
+        options?: Parameters<typeof runTransitousPipeline>[1],
+      ) => {
+        const nativeFetch = globalThis.fetch;
+        const oldCatalogEnabled = process.env.MOTIS_GBFS_CATALOG_ENABLED;
+        const oldMaxAdditions = process.env.MOTIS_GBFS_CATALOG_MAX_ADDITIONS;
+        process.env.MOTIS_GBFS_CATALOG_ENABLED = "true";
+        process.env.MOTIS_GBFS_CATALOG_MAX_ADDITIONS = "5";
+        globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+          const url = String(input);
+          if (url.includes("raw.githubusercontent.com/MobilityData/gbfs/")) {
+            return new Response(gbfsRegistryCsv, { headers: { "content-type": "text/csv" } });
+          }
+          if (url.startsWith(`http://${GBFS_FIXTURE_SERVICE}/`)) {
+            const filename = new URL(url).pathname.slice(1);
+            return new Response(readFileSync(join(gbfsFixtureDir as string, filename)), {
+              headers: { "content-type": "application/json" },
+            });
+          }
+          return nativeFetch(input, init);
+        }) as typeof fetch;
+        try {
+          return await runTransitousPipeline(ctx, options);
+        } finally {
+          globalThis.fetch = nativeFetch;
+          if (oldCatalogEnabled === undefined) delete process.env.MOTIS_GBFS_CATALOG_ENABLED;
+          else process.env.MOTIS_GBFS_CATALOG_ENABLED = oldCatalogEnabled;
+          if (oldMaxAdditions === undefined) delete process.env.MOTIS_GBFS_CATALOG_MAX_ADDITIONS;
+          else process.env.MOTIS_GBFS_CATALOG_MAX_ADDITIONS = oldMaxAdditions;
+        }
+      };
 
       const started = Date.now();
-      const nativeFetch = globalThis.fetch;
-      process.env.MOTIS_GBFS_CATALOG_ENABLED = "true";
-      process.env.MOTIS_GBFS_CATALOG_MAX_ADDITIONS = "5";
-      globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-        const url = String(input);
-        if (url.includes("raw.githubusercontent.com/MobilityData/gbfs/")) {
-          return new Response(gbfsRegistryCsv, { headers: { "content-type": "text/csv" } });
-        }
-        if (url.startsWith(`http://${GBFS_FIXTURE_SERVICE}/`)) {
-          const filename = new URL(url).pathname.slice(1);
-          return new Response(readFileSync(join(gbfsFixtureDir as string, filename)), {
-            headers: { "content-type": "application/json" },
-          });
-        }
-        return nativeFetch(input, init);
-      }) as typeof fetch;
-      let results: Awaited<ReturnType<typeof runTransitousPipeline>>["results"];
-      try {
-        ({ results } = await runTransitousPipeline(ctx));
-      } finally {
-        globalThis.fetch = nativeFetch;
-        delete process.env.MOTIS_GBFS_CATALOG_ENABLED;
-        delete process.env.MOTIS_GBFS_CATALOG_MAX_ADDITIONS;
-      }
-      const elapsed = Date.now() - started;
+      const firstCtx = makeContext();
+      const { results } = await runFixturePipeline(firstCtx);
 
       expect(results.map((r) => r.stage)).toEqual(ORDERED_STAGES);
       const byStage = Object.fromEntries(results.map((r) => [r.stage, r]));
@@ -687,6 +725,28 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
       ).toBe(true);
       expect(existsSync(stagingDataDir)).toBe(true);
 
+      // The immutable active source manifest contains every tiny GTFS source
+      // that was selected, acquired, imported, and promoted with this epoch.
+      const firstCandidate = readCandidateManifest(motisDataDir);
+      expect(firstCandidate.epoch).toBe(firstCtx.jobId);
+      const liveSourceManifestPath = join(motisDataDir, TRANSIT_SOURCE_MANIFEST_FILENAME);
+      const firstSourceManifestText = readFileSync(liveSourceManifestPath, "utf-8");
+      const firstSourceManifest = JSON.parse(firstSourceManifestText) as {
+        version: number;
+        sources: Array<{ sourceId: string; artifact: { sizeBytes: number; sha256: string } }>;
+      };
+      expect(firstSourceManifest.version).toBe(1);
+      expect(firstSourceManifest.sources.map((source) => source.sourceId)).toEqual([
+        "catalog:at:demo",
+        "catalog:ch:demo",
+        "catalog:de:demo",
+      ]);
+      expect(
+        firstSourceManifest.sources.every(
+          (source) => source.artifact.sizeBytes > 0 && source.artifact.sha256.length === 64,
+        ),
+      ).toBe(true);
+
       // The real production goal: the PRIMARY (8081) serves the promoted data.
       // promote already polled it healthy before returning ok, so this confirms
       // the swapped-in dataset is what the live container is serving.
@@ -696,6 +756,112 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
         const diag = await failureDiagnostics("primary serves promoted data", PRIMARY_SERVICE);
         expect(primaryServes, diag).toBe(true);
       }
+
+      // Exercise the product adapter against the live pinned server, not a
+      // mocked response: stop/departure lookup, platform normalization,
+      // civil-day timetable, map/routes, and experimental route-details.
+      setMotisLocalUrl(`http://127.0.0.1:${PRIMARY_PORT}`);
+      const berlinStops = await getStops(motisLocalInstance, [13.3, 52.49, 13.46, 52.54]);
+      expect(berlinStops.length).toBeGreaterThanOrEqual(4);
+      const hbfPlatform = berlinStops.find(
+        (stop) => stop.name === "Berlin Hauptbahnhof" && stop.platformCode === "1",
+      );
+      expect(hbfPlatform, JSON.stringify(berlinStops, null, 2)).toMatchObject({
+        platformCode: "1",
+      });
+      expect(hbfPlatform?.parentStationId).toBeTruthy();
+      const platforms = await getStopPlatforms(motisLocalInstance, hbfPlatform?.id ?? "");
+      expect(platforms).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: hbfPlatform?.id, platformCode: "1" }),
+        ]),
+      );
+      const departures = await getDepartures(motisLocalInstance, hbfPlatform?.id ?? "", 24 * 60, {
+        datasetEpoch: firstCandidate.epoch,
+      });
+      expect(departures.length).toBeGreaterThan(0);
+      expect(departures[0]?.platform ?? departures[0]?.scheduledPlatform).toBe("1");
+      const timetable = await getStopTimetable(
+        motisLocalInstance,
+        hbfPlatform?.id ?? "",
+        civilDate("Europe/Berlin"),
+        firstCandidate.epoch,
+      );
+      const timetableDiagnostic =
+        timetable.length === 0 && hbfPlatform
+          ? await fetch(
+              `http://127.0.0.1:${PRIMARY_PORT}/api/v1/stoptimes?stopId=${encodeURIComponent(hbfPlatform.id.slice(3))}&n=0&window=0`,
+            ).then((response) => response.text())
+          : "";
+      expect(timetable.length, timetableDiagnostic).toBeGreaterThan(0);
+      expect(
+        timetable.every((entry) => entry.provenance?.datasetEpoch === firstCandidate.epoch),
+      ).toBe(true);
+
+      const firstRoutes = await getRoutesInBbox(
+        motisLocalInstance,
+        [13.3, 52.49, 13.46, 52.54],
+        firstCandidate.epoch,
+        11,
+      );
+      expect(firstRoutes.length).toBeGreaterThan(0);
+      const firstPattern = firstRoutes.find((route) => route.shortName === "S1") ?? firstRoutes[0];
+      expect(firstPattern?.id).toMatch(/^ms:rp:/);
+      expect(firstPattern?.geometry).toBeDefined();
+      const routeDetail = await getRoute(
+        motisLocalInstance,
+        firstPattern?.id ?? "",
+        firstCandidate.epoch,
+      );
+      expect(routeDetail?.geometry).toBeDefined();
+      const orderedStops = await getRouteStops(
+        motisLocalInstance,
+        firstPattern?.id ?? "",
+        firstCandidate.epoch,
+      );
+      expect(orderedStops.map((stop) => stop.name)).toEqual(
+        expect.arrayContaining([
+          "Berlin Zoologischer Garten",
+          "Berlin Hauptbahnhof",
+          "Berlin Alexanderplatz",
+          "Berlin Ostbahnhof",
+        ]),
+      );
+      expect(orderedStops).toHaveLength(4);
+
+      // Build and import a second candidate, then corrupt one hashed artifact
+      // before promotion. The promotion must fail closed without changing the
+      // live epoch or immutable source manifest.
+      const failedCtx = makeContext();
+      const failedBuild = await runFixturePipeline(failedCtx, { stopAt: "motis-health" });
+      expect(failedBuild.results.at(-1)).toMatchObject({ stage: "motis-health", status: "ok" });
+      const failedCandidate = readCandidateManifest(stagingDataDir);
+      expect(failedCandidate.epoch).toBe(failedCtx.jobId);
+      expect(failedCandidate.epoch).not.toBe(firstCandidate.epoch);
+      const stagedSourceManifestPath = join(stagingDataDir, TRANSIT_SOURCE_MANIFEST_FILENAME);
+      writeFileSync(
+        stagedSourceManifestPath,
+        `${readFileSync(stagedSourceManifestPath, "utf-8")} `,
+      );
+      const failedPromotion = await runPromote(failedCtx);
+      expect(failedPromotion.status).toBe("error");
+      expect(failedPromotion.message).toMatch(/Candidate artifact hash mismatch/);
+      expect(readCandidateManifest(motisDataDir).epoch).toBe(firstCandidate.epoch);
+      expect(readFileSync(liveSourceManifestPath, "utf-8")).toBe(firstSourceManifestText);
+      expect(await probeOk(primaryUrl, Date.now() + 10_000)).toBe(true);
+
+      // A later healthy candidate is promoted with a fresh epoch. IDs minted
+      // from the first epoch are rejected before route-details is queried.
+      const secondCtx = makeContext();
+      const secondRun = await runFixturePipeline(secondCtx);
+      expect(secondRun.results.find((result) => result.stage === "promote")?.status).toBe("ok");
+      const secondCandidate = readCandidateManifest(motisDataDir);
+      expect(secondCandidate.epoch).toBe(secondCtx.jobId);
+      expect(secondCandidate.epoch).not.toBe(firstCandidate.epoch);
+      expect(
+        await getRoute(motisLocalInstance, firstPattern?.id ?? "", secondCandidate.epoch),
+      ).toBeNull();
+      expect(readFileSync(liveSourceManifestPath, "utf-8")).toContain("catalog:de:demo");
 
       const rentalsResponse = await fetch(
         `http://127.0.0.1:${PRIMARY_PORT}/api/v1/rentals?min=52.51,13.35&max=52.54,13.40&withProviders=true&withStations=true&withVehicles=true&withZones=true`,
@@ -718,11 +884,12 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
         "rt.triptix.tech",
       );
 
-      // Sanity cap only — see PIPELINE_BUDGET_MS. Two real MOTIS imports+boots,
-      // so we don't assert a tight wall-clock; just guard against a hang.
-      console.error(`E9 pipeline elapsed: ${elapsed}ms`);
-      expect(elapsed).toBeLessThan(PIPELINE_BUDGET_MS);
+      // Sanity cap only — see LIVE_SCENARIO_BUDGET_MS. Multiple real MOTIS
+      // imports and boots run here, so only guard against a pathological hang.
+      const elapsed = Date.now() - started;
+      console.error(`E9 live MOTIS lifecycle elapsed: ${elapsed}ms`);
+      expect(elapsed).toBeLessThan(LIVE_SCENARIO_BUDGET_MS);
     },
-    PIPELINE_BUDGET_MS + 30_000,
+    LIVE_SCENARIO_BUDGET_MS + 30_000,
   );
 });

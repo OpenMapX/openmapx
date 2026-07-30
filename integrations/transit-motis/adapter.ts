@@ -28,7 +28,7 @@ import {
   routeDetails,
   stoptimes,
 } from "@motis-project/motis-client";
-import { type BBox, decodePolyline, zonedWallClockToInstant } from "@openmapx/core";
+import { type BBox, decodePolyline, timeZoneAt, zonedWallClockToInstant } from "@openmapx/core";
 import { mapMotisAlert } from "@openmapx/mobility-core/motis-alerts";
 import type {
   Departure,
@@ -414,9 +414,11 @@ export async function getStopTimetable(
 ): Promise<Departure[]> {
   const place = await resolveRawStop(instance, stopId);
   const nextDate = nextCalendarDate(date);
-  if (!place?.tz || !nextDate) return [];
-  const start = zonedWallClockToInstant(place.tz, `${date}T00:00`);
-  const end = zonedWallClockToInstant(place.tz, `${nextDate}T00:00`);
+  if (!place || !nextDate) return [];
+  const timeZone = place.tz ?? timeZoneAt(place.lat, place.lon);
+  if (!timeZone) return [];
+  const start = zonedWallClockToInstant(timeZone, `${date}T00:00`);
+  const end = zonedWallClockToInstant(timeZone, `${nextDate}T00:00`);
   if (!start || !end || end.getTime() <= start.getTime()) return [];
 
   const accepted: Departure[] = [];

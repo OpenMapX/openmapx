@@ -1,5 +1,6 @@
-stop_id,stop_name,stop_lat,stop_lon,location_type
-de_demo_hbf,Berlin Hauptbahnhof,52.525,13.369,0
-de_demo_alex,Berlin Alexanderplatz,52.521,13.413,0
-de_demo_zoo,Berlin Zoologischer Garten,52.507,13.332,0
-de_demo_ost,Berlin Ostbahnhof,52.510,13.435,0
+stop_id,stop_name,stop_lat,stop_lon,location_type,parent_station,platform_code
+de_demo_hbf,Berlin Hauptbahnhof,52.525,13.369,1,,
+de_demo_hbf_1,Berlin Hauptbahnhof Platform 1,52.525,13.369,0,de_demo_hbf,1
+de_demo_alex,Berlin Alexanderplatz,52.521,13.413,0,,2
+de_demo_zoo,Berlin Zoologischer Garten,52.507,13.332,0,,3
+de_demo_ost,Berlin Ostbahnhof,52.510,13.435,0,,4

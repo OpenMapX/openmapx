@@ -77,6 +77,21 @@ Recovery drill:
 
 Mutable tags such as `latest` are prohibited. MOTIS currently uses the repository-wide pinned release.
 
+The real-container lifecycle canary is a required MOTIS-upgrade and release
+gate. With Docker running and the pinned MOTIS and nginx images available, run
+it from the repository root exactly as follows:
+
+```bash
+OPENMAPX_E9_LIVE_MOTIS=true pnpm exec vitest run pipeline-live-motis
+```
+
+The same command runs weekly and on demand in
+`.github/workflows/e9-live-motis.yml`, which pre-pulls the images so a missing
+image fails the workflow. The canary imports deterministic GTFS fixtures,
+queries stops, departures, route details, geometry, platforms, and a local
+civil-day timetable, verifies epoch rollover and stale-ID rejection, and proves
+a failed candidate preserves the active epoch and source manifest.
+
 ## Static-query semantics and optional shapes
 
 Stop timetables use the stop's local civil day, not a UTC day. Route-pattern IDs
