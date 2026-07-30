@@ -229,39 +229,47 @@ export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
 
   return (
     <Paper variant="outlined" sx={{ p: 2.5 }}>
-      <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 2 }}>
-        <StorageIcon color="primary" />
-        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-          Transit sources
-        </Typography>
+      <Stack
+        direction={{ xs: "column", md: "row" }}
+        spacing={1}
+        sx={{ alignItems: { xs: "stretch", md: "center" }, mb: 2 }}
+      >
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+          <StorageIcon color="primary" />
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            Transit sources
+          </Typography>
+        </Stack>
         <Box sx={{ flex: 1 }} />
-        <Button component={Link} href="/admin/activity" variant="outlined" size="small">
-          Activity
-        </Button>
-        <Tooltip title={disabledReason} disableHoverListener={!actionsDisabled}>
-          <span>
-            <Button
-              variant="outlined"
-              size="small"
-              disabled={actionsDisabled}
-              onClick={() => syncMutation.mutate()}
-            >
-              Sync sources
-            </Button>
-          </span>
-        </Tooltip>
-        <Tooltip title={disabledReason} disableHoverListener={!actionsDisabled}>
-          <span>
-            <Button
-              variant="contained"
-              size="small"
-              disabled={actionsDisabled}
-              onClick={() => setDialogOpen(true)}
-            >
-              Add source
-            </Button>
-          </span>
-        </Tooltip>
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+          <Button component={Link} href="/admin/activity" variant="outlined" size="small">
+            Activity
+          </Button>
+          <Tooltip title={disabledReason} disableHoverListener={!actionsDisabled}>
+            <span>
+              <Button
+                variant="outlined"
+                size="small"
+                disabled={actionsDisabled}
+                onClick={() => syncMutation.mutate()}
+              >
+                Sync sources
+              </Button>
+            </span>
+          </Tooltip>
+          <Tooltip title={disabledReason} disableHoverListener={!actionsDisabled}>
+            <span>
+              <Button
+                variant="contained"
+                size="small"
+                disabled={actionsDisabled}
+                onClick={() => setDialogOpen(true)}
+              >
+                Add source
+              </Button>
+            </span>
+          </Tooltip>
+        </Stack>
       </Stack>
       {(syncJob || lastJobId) && (
         <Alert
@@ -382,8 +390,8 @@ export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
           />
         </TableToolbar>
       </Box>
-      <TableContainer>
-        <Table size="small">
+      <TableContainer sx={{ overflowX: "auto" }}>
+        <Table size="small" sx={{ minWidth: 960 }}>
           <TableHead>
             <TableRow>
               <TableCell>Source</TableCell>
