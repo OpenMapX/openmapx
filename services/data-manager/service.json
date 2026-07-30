@@ -104,7 +104,11 @@
       "interval": "30s",
       "timeout": "5s",
       "retries": 3
-    }
+    },
+    "dependsOn": [
+      { "service": "postgis", "condition": "service_healthy" },
+      { "service": "redis", "condition": "service_healthy" }
+    ]
   },
   "provides": ["osm-data", "gtfs-data", "tile-asset-data"],
   "produces": [

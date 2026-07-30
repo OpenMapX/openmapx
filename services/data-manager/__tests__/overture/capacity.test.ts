@@ -67,4 +67,22 @@ describe("Overture capacity preflight", () => {
     ) as { container?: { containerName?: string } };
     expect(manifest.container?.containerName).toBe(POSTGIS_CONTAINER);
   });
+
+  it("waits for PostGIS and Redis health before startup recovery runs", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const repoRoot = resolve(here, "..", "..", "..", "..");
+    const manifest = JSON.parse(
+      readFileSync(join(repoRoot, "services", "data-manager", "service.json"), "utf8"),
+    ) as {
+      container?: {
+        dependsOn?: Array<{ service: string; condition: string }>;
+      };
+    };
+    expect(manifest.container?.dependsOn).toEqual(
+      expect.arrayContaining([
+        { service: "postgis", condition: "service_healthy" },
+        { service: "redis", condition: "service_healthy" },
+      ]),
+    );
+  });
 });
