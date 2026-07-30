@@ -227,7 +227,10 @@ export function parseFeedOverlay(value: unknown, path = "<memory>"): FeedOverlay
       source.spec === "gtfs"
         ? operatorSourceId(source.region, source.name)
         : (source.sourceId ?? `gbfs:${source.region}:${source.name}`);
-    const name = `${source.spec}:${source.region}:${source.name.toLowerCase()}`;
+    // Keyed without the spec, matching applyFeedOverlay's collision key: a
+    // gbfs+gtfs pair sharing region/name must fail here (API boundary), not
+    // later inside the pipeline's filter stage.
+    const name = `${source.region}:${source.name.toLowerCase()}`;
     if (identities.has(sourceId))
       throw new Error(`Feeds overlay has duplicate sourceId ${sourceId}`);
     if (names.has(name)) throw new Error(`Feeds overlay has duplicate source name ${name}`);

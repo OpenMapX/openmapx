@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   CANDIDATE_MANIFEST_FILENAME,
   type MotisCandidateManifest,
+  readCandidateManifest,
   verifyCandidateManifest,
 } from "./candidate.js";
 import { recordPromotedSource } from "./feed-state-writer.js";
@@ -353,7 +354,11 @@ export const run: StageFn = async (ctx) => {
     const manifest = verifyCandidateManifest(stagingDir);
     const liveManifestPath = join(currentDir, CANDIDATE_MANIFEST_FILENAME);
     if (existsSync(liveManifestPath)) {
-      const liveManifest = verifyCandidateManifest(currentDir);
+      // Read (not hash-verify) the live manifest: live artifacts are
+      // hardlinks into out/, which the next run rewrites in place, so
+      // re-hashing the live dir would fail exactly when a source set
+      // legitimately changed. Only the epoch matters here.
+      const liveManifest = readCandidateManifest(currentDir);
       if (liveManifest.epoch === manifest.epoch) {
         throw new Error(`Candidate epoch ${manifest.epoch} duplicates the active dataset epoch`);
       }

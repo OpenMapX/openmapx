@@ -45,7 +45,7 @@ async function makeZip(target: string, members: Record<string, string>): Promise
 }
 
 describe("validate stage", () => {
-  it("marks archives without feed_info.txt as invalid when unzip is available", async () => {
+  it("treats a missing feed_info.txt as a warning, not a validation failure", async () => {
     if (!unzipAvailable) {
       // On CI hosts without unzip the validate stage soft-passes — we test
       // that branch in a separate case below.
@@ -69,11 +69,13 @@ describe("validate stage", () => {
     ctx.state.gtfsDir = gtfsDir;
 
     const result = await validateRun(ctx);
-    // Mixed valid+invalid → partial.
-    expect(result.status).toBe("partial");
-    expect(result.artifacts?.validated).toBe(1);
-    const invalid = result.artifacts?.invalid as Array<{ id: string; reason: string }>;
-    expect(invalid).toEqual([{ id: "de_vbb", reason: "missing feed_info.txt" }]);
+    // feed_info.txt is optional per the GTFS spec: the archive stays valid
+    // and promotion is not blocked, but the warning is surfaced as evidence.
+    expect(result.status).toBe("ok");
+    expect(result.artifacts?.validated).toBe(2);
+    expect(result.artifacts?.invalid).toEqual([]);
+    const warnings = result.artifacts?.warnings as Array<{ id: string; reason: string }>;
+    expect(warnings).toEqual([{ id: "de_vbb", reason: "missing feed_info.txt" }]);
   });
 
   it("marks zero-byte archives as invalid", async () => {

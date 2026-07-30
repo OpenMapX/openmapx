@@ -2,13 +2,19 @@ import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { CANDIDATE_MANIFEST_FILENAME, readCandidateManifest } from "./jobs/transitous/candidate.js";
 import {
+  buildTransitlandAtlasSpecIndex,
+  countryOfRegion,
+  scheduleSourcesForFeed,
+  type TransitousFeedFile,
+} from "./jobs/transitous/internal.js";
+import {
   readTransitSourceManifest,
+  safeOriginUrl,
   TRANSIT_SOURCE_MANIFEST_FILENAME,
   type TransitSourceManifestRecord,
 } from "./jobs/transitous/source-manifest.js";
 import {
   applyFeedOverlay,
-  catalogSourceId,
   type FeedFile,
   type FeedOverlay,
   type FeedOverlayGtfsSource,
@@ -111,9 +117,11 @@ function emptyOverlay(): FeedOverlay {
 }
 
 export function resolveTransitOverlayPath(dataDir: string, explicit?: string): string {
+  // `||`, not `??`: compose renders unset vars as empty strings, and an empty
+  // overlay path would make every mutation fail and every list read nothing.
   return (
-    explicit ??
-    process.env.TRANSITOUS_FEEDS_OVERLAY_PATH ??
+    explicit ||
+    process.env.TRANSITOUS_FEEDS_OVERLAY_PATH ||
     join(dataDir, "overrides", "feeds-overlay.json")
   );
 }
@@ -134,55 +142,55 @@ function rawCatalog(catalogDir: string): FeedFile[] {
       const value = JSON.parse(readFileSync(join(feedsDir, fileName), "utf-8")) as {
         sources?: CatalogSourceRecord[];
       };
-      return { region, sources: value.sources ?? [] };
+      return {
+        region,
+        // A crashed pipeline can leave overlay-injected sources in the
+        // catalog clone; the overlay is re-applied in memory below, so
+        // leftovers must not be double-counted as pinned catalog entries.
+        sources: (value.sources ?? []).filter((source) => !source["openmapx-source-id"]),
+      };
     });
 }
 
-function desiredSources(catalogDir: string, overlay: FeedOverlay): DesiredSource[] {
+/**
+ * Desired schedule sources derived through the same overlay application and
+ * atlas-aware resolution the pipeline itself uses, so desired and active
+ * (manifest) rows are directly comparable. `countries` scopes catalog rows to
+ * the deployment's configured pipeline scope; operator rows stay visible even
+ * out of scope so a stale entry can still be removed.
+ */
+function desiredSources(
+  catalogDir: string,
+  overlay: FeedOverlay,
+  countries?: string[],
+): DesiredSource[] {
   const feeds = rawCatalog(catalogDir);
-  const patches = new Map(overlay.patches.map((patch) => [patch.sourceId, patch.skip]));
-  const sources: DesiredSource[] = feeds.flatMap((feed) =>
-    (feed.sources ?? []).flatMap((raw) => {
-      const source = raw as CatalogSourceRecord;
-      const format = (source.spec ?? "gtfs").toLowerCase();
-      if (format !== "gtfs" && format !== "netex") return [];
-      if (!source.name) return [];
-      const id = catalogSourceId(feed.region, source.name);
+  applyFeedOverlay(feeds, overlay);
+  const atlasSpecIndex = buildTransitlandAtlasSpecIndex(catalogDir);
+  const scope = (countries ?? []).map((country) => country.toLowerCase());
+  const sources: DesiredSource[] = feeds.flatMap((feed) => {
+    const country = countryOfRegion(feed.region);
+    return scheduleSourcesForFeed(
+      feed.region,
+      country,
+      feed as TransitousFeedFile,
+      atlasSpecIndex,
+    ).flatMap((entry) => {
+      if (scope.length > 0 && entry.origin === "catalog" && !scope.includes(country)) return [];
       return [
         {
-          id,
-          region: feed.region,
-          name: source.name,
-          format,
-          origin: "catalog" as const,
-          originUrl: source["url-override"] ?? source.url,
-          license: structuredClone(source.license ?? {}),
-          requested: !(patches.get(id) ?? source.skip ?? false),
+          id: entry.sourceId,
+          region: entry.region,
+          name: entry.name,
+          format: entry.format,
+          origin: entry.origin,
+          originUrl: entry.originUrl,
+          license: structuredClone(entry.license ?? {}),
+          requested: entry.requested,
         },
       ];
-    }),
-  );
-  for (const source of overlay.sources) {
-    if (source.spec !== "gtfs") continue;
-    sources.push({
-      id: operatorSourceId(source.region, source.name),
-      region: source.region,
-      name: source.name,
-      format: "gtfs",
-      origin: "operator",
-      originUrl: source.url,
-      license: {
-        ...(source.license.spdxIdentifier
-          ? { "spdx-identifier": source.license.spdxIdentifier }
-          : {}),
-        ...(source.license.url ? { url: source.license.url } : {}),
-        "attribution-text": source.license.attribution,
-        ...(source.license.publisher ? { publisher: source.license.publisher } : {}),
-        ...(source.license.publisherUrl ? { "publisher-url": source.license.publisherUrl } : {}),
-      },
-      requested: true,
     });
-  }
+  });
   return sources.sort((a, b) => a.id.localeCompare(b.id));
 }
 
@@ -202,17 +210,32 @@ function activeEvidence(dataDir: string): {
   };
 }
 
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, entry]) => entry !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`);
+    return `{${entries.join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
 function equivalentDesiredActive(
   desired: DesiredSource,
   active: TransitSourceManifestRecord,
 ): boolean {
+  // Format is derived from the acquired artifact on the active side (a mirror
+  // netex fallback), so it is not part of the desired/active identity. The
+  // manifest URL is credential-sanitized; sanitize the desired URL the same
+  // way before comparing.
   return (
     desired.region === active.region &&
     desired.name === active.name &&
-    desired.format === active.format &&
     desired.origin === active.origin &&
-    JSON.stringify(desired.license) === JSON.stringify(active.license) &&
-    (desired.originUrl ?? "") === (active.originUrl ?? "")
+    stableStringify(desired.license ?? {}) === stableStringify(active.license ?? {}) &&
+    (safeOriginUrl(desired.originUrl) ?? "") === (active.originUrl ?? "")
   );
 }
 
@@ -220,10 +243,15 @@ export function listTransitSources(options: {
   dataDir: string;
   catalogDir: string;
   overlayPath: string;
+  countries?: string[];
   feedStates?: TransitFeedStateEvidence[];
   query?: TransitSourceListQuery;
 }): TransitSourceListResult {
-  const desired = desiredSources(options.catalogDir, readOverlay(options.overlayPath));
+  const desired = desiredSources(
+    options.catalogDir,
+    readOverlay(options.overlayPath),
+    options.countries,
+  );
   const active = activeEvidence(options.dataDir);
   const byId = new Map<string, DesiredSource | undefined>(
     desired.map((source) => [source.id, source]),
@@ -319,7 +347,18 @@ export function prepareAddTransitSource(options: {
   catalogDir: string;
   overlayPath: string;
   source: FeedOverlayGtfsSource;
+  countries?: string[];
 }): { sourceId: string; persist: () => void } {
+  if (options.countries?.length) {
+    const scope = options.countries.map((country) => country.toLowerCase());
+    const country = countryOfRegion(options.source.region);
+    if (!scope.includes(country)) {
+      throw new TransitSourceError(
+        `Region ${options.source.region} is outside the configured country scope ` +
+          `(${scope.join(", ")}); the pipeline would never import this source`,
+      );
+    }
+  }
   const current = readOverlay(options.overlayPath);
   const candidate = parseFeedOverlay({
     ...current,
@@ -334,6 +373,7 @@ export function prepareRemoveTransitSource(options: {
   catalogDir: string;
   overlayPath: string;
   sourceId: string;
+  countries?: string[];
 }): { sourceId: string; persist: () => void } {
   const current = readOverlay(options.overlayPath);
   let candidate: FeedOverlay;
@@ -347,10 +387,15 @@ export function prepareRemoveTransitSource(options: {
     }
     candidate = { ...current, sources };
   } else if (options.sourceId.startsWith("catalog:")) {
-    const known = desiredSources(options.catalogDir, current).some(
+    const known = desiredSources(options.catalogDir, current, options.countries).some(
       (source) => source.origin === "catalog" && source.id === options.sourceId,
     );
-    if (!known) throw new TransitSourceError(`Catalog source ${options.sourceId} not found`, 404);
+    if (!known) {
+      throw new TransitSourceError(
+        `Catalog source ${options.sourceId} not found in the configured scope`,
+        404,
+      );
+    }
     candidate = {
       ...current,
       patches: [
@@ -372,15 +417,21 @@ export function prepareEnableTransitSource(options: {
   catalogDir: string;
   overlayPath: string;
   sourceId: string;
+  countries?: string[];
 }): { sourceId: string; persist: () => void } {
   if (!options.sourceId.startsWith("catalog:")) {
     throw new TransitSourceError("Only pinned catalog sources can be re-enabled");
   }
   const current = readOverlay(options.overlayPath);
-  const known = desiredSources(options.catalogDir, current).some(
+  const known = desiredSources(options.catalogDir, current, options.countries).some(
     (source) => source.origin === "catalog" && source.id === options.sourceId,
   );
-  if (!known) throw new TransitSourceError(`Catalog source ${options.sourceId} not found`, 404);
+  if (!known) {
+    throw new TransitSourceError(
+      `Catalog source ${options.sourceId} not found in the configured scope`,
+      404,
+    );
+  }
   const candidate = parseFeedOverlay({
     ...current,
     patches: [
@@ -394,7 +445,10 @@ export function prepareEnableTransitSource(options: {
   };
 }
 
-export function listPinnedTransitCatalog(catalogDir: string): Array<{
+export function listPinnedTransitCatalog(
+  catalogDir: string,
+  countries?: string[],
+): Array<{
   id: string;
   region: string;
   name: string;
@@ -402,7 +456,7 @@ export function listPinnedTransitCatalog(catalogDir: string): Array<{
   originUrl?: string;
   license: Record<string, unknown>;
 }> {
-  return desiredSources(catalogDir, emptyOverlay()).map(
+  return desiredSources(catalogDir, emptyOverlay(), countries).map(
     ({ requested: _requested, origin: _origin, ...source }) => source,
   );
 }

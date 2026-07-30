@@ -1,12 +1,15 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { feedKeyForFailure, feedKeyForSource, recordFetchOutcome } from "./feed-state-writer.js";
+import { feedKeyForSource, recordFetchOutcome } from "./feed-state-writer.js";
 import { runFetchPipeline } from "./internal.js";
 import { finalizeTransitSourceManifest } from "./source-manifest.js";
 import type { FeedDownloadFailure, FeedFileEntry, StageFn } from "./types.js";
 
 function materializeOperatorMetadata(ctx: Parameters<StageFn>[0]): FeedFileEntry[] {
-  const directory = join(ctx.downloadsDir, "operator-metadata", ctx.jobId);
+  // One fixed directory reused per run — a per-job directory would accumulate
+  // forever in the download cache.
+  const directory = join(ctx.downloadsDir, "operator-metadata");
+  rmSync(directory, { recursive: true, force: true });
   mkdirSync(directory, { recursive: true });
   ctx.state.operatorMetadataDir = directory;
   return (ctx.state.selectedFeedFiles ?? []).flatMap((feed) => {
@@ -40,19 +43,17 @@ async function persistOutcomes(
   failures: FeedDownloadFailure[],
   ctx: Parameters<StageFn>[0],
 ): Promise<void> {
-  const failed = new Set(
-    failures.map((failure) => {
-      const key = feedKeyForFailure(failure);
-      return `${key.region}::${key.name}`;
-    }),
-  );
+  // Match failures on the synthesized source id — the (region, name) natural
+  // key diverges from it for subdivision regions and sanitized names, which
+  // would record a failed source as fetched.
+  const failed = new Set(failures.map((failure) => failure.id.toLowerCase()));
   for (const feed of feeds) {
     for (const source of feed.activeScheduleSources) {
       const key = feedKeyForSource(feed, source.name, source.region);
       try {
         await recordFetchOutcome({
           ...key,
-          ok: !failed.has(`${key.region}::${key.name}`),
+          ok: !failed.has(source.id.toLowerCase()),
         });
       } catch (error) {
         ctx.logger.warn(

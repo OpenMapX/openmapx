@@ -19,10 +19,12 @@ vi.mock("@motis-project/motis-client", async (importOriginal) => ({
 }));
 
 import {
+  getDepartures,
   getLegGeometry,
   getRoute,
   getRouteStops,
   getRoutesForStop,
+  getRoutesInBbox,
   getStopPlatforms,
   getStopTimetable,
   mapMotisRoute,
@@ -426,5 +428,154 @@ describe("MOTIS trip geometry", () => {
       },
     });
     expect(await getLegGeometry(instance, "ms:trip")).toBeNull();
+  });
+
+  it("returns null instead of the whole trip when the from stop is unresolvable", async () => {
+    mocks.trip.mockResolvedValue({
+      data: {
+        legs: [
+          {
+            mode: "BUS",
+            routeId: "route",
+            from: stop("a", 1, 1),
+            to: stop("c", 3, 3),
+            intermediateStops: [stop("b", 2, 2)],
+            legGeometry: {
+              points: encodePolyline(
+                [
+                  [1, 1],
+                  [2, 2],
+                  [3, 3],
+                ],
+                6,
+              ),
+              precision: 6,
+            },
+          },
+        ],
+      },
+    });
+    expect(await getLegGeometry(instance, "ms:trip", "ms:does-not-exist", "ms:c")).toBeNull();
+  });
+});
+
+describe("MOTIS adapter regression guards", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const timetableEvent = (tripId: string, place: Record<string, unknown>) => ({
+    place,
+    mode: "BUS" as const,
+    realTime: false,
+    headsign: "Town",
+    tripFrom: stop("a", 8, 47),
+    tripTo: stop("b", 8, 48),
+    agencyId: "a",
+    agencyName: "",
+    agencyUrl: "",
+    routeId: "de_feed_route",
+    directionId: "0",
+    tripId,
+    routeShortName: "1",
+    routeLongName: "",
+    tripShortName: "",
+    displayName: "1",
+  });
+
+  it("caps timetable pagination when pages carry only undated events", async () => {
+    let calls = 0;
+    mocks.stoptimes.mockImplementation(() => {
+      calls++;
+      if (calls === 1) {
+        return Promise.resolve({ data: { place: { ...stop("root", 8, 47), tz: "UTC" } } });
+      }
+      return Promise.resolve({
+        data: {
+          // Arrival-only events: no departure instants, so nothing is
+          // accepted and the interval check never trips.
+          stopTimes: [
+            timetableEvent(`t-${calls}`, {
+              ...stop("root", 8, 47),
+              arrival: "2026-01-01T10:00:00.000Z",
+            }),
+          ],
+          nextPageCursor: `cursor-${calls}`,
+        },
+      });
+    });
+    expect(await getStopTimetable(instance, "ms:root", "2026-01-01", "epoch")).toEqual([]);
+    expect(mocks.stoptimes.mock.calls.length).toBeLessThanOrEqual(11);
+  });
+
+  it("keeps a realtime-delayed departure on its scheduled civil day", async () => {
+    mocks.stoptimes
+      .mockResolvedValueOnce({ data: { place: { ...stop("root", 8, 47), tz: "UTC" } } })
+      .mockResolvedValueOnce({
+        data: {
+          stopTimes: [
+            timetableEvent("delayed", {
+              ...stop("root", 8, 47),
+              scheduledDeparture: "2026-01-01T23:50:00.000Z",
+              departure: "2026-01-02T00:10:00.000Z",
+            }),
+          ],
+          nextPageCursor: "",
+        },
+      });
+    const departures = await getStopTimetable(instance, "ms:root", "2026-01-01", "epoch");
+    expect(departures).toHaveLength(1);
+    expect(departures[0].tripId).toBe("ms:delayed");
+  });
+
+  it("drops only the unencodable pattern from a bbox response, not the whole overlay", async () => {
+    const oversizedRouteIds = Array.from(
+      { length: 200 },
+      (_, index) => `de_very-long-feed-tag_route-${index}-${"x".repeat(24)}`,
+    );
+    mocks.routes.mockResolvedValue({
+      data: {
+        routes: [
+          {
+            ...route(0, [{ from: 0, to: 1, polyline: 0 }]),
+            transitRoutes: oversizedRouteIds.map((id) => ({ id, shortName: "X", longName: "" })),
+          },
+          route(1, [{ from: 0, to: 1, polyline: 0 }]),
+        ],
+        polylines: [
+          line(
+            [
+              [1, 1],
+              [2, 2],
+            ],
+            [0, 1],
+          ),
+        ],
+        stops: [stop("a", 1, 1), stop("b", 2, 2)],
+        zoomFiltered: false,
+      },
+    });
+    const mapped = await getRoutesInBbox(instance, [1, 1, 2, 2], "epoch");
+    expect(mapped).toHaveLength(1);
+    expect(mapped[0].shortName).toBe("1");
+  });
+
+  it("encodes a provider-scoped sentinel line reference when no epoch is available", async () => {
+    mocks.stoptimes.mockResolvedValue({
+      data: {
+        place: { ...stop("root", 8, 47), tz: "UTC" },
+        stopTimes: [
+          timetableEvent("t1", {
+            ...stop("root", 8, 47),
+            departure: "2026-01-01T10:00:00.000Z",
+            scheduledDeparture: "2026-01-01T10:00:00.000Z",
+          }),
+        ],
+      },
+    });
+    const departures = await getDepartures(instance, "ms:root", 60);
+    expect(departures).toHaveLength(1);
+    expect(decodeMotisLineReference(departures[0].route.id)).toMatchObject({
+      e: "ms-unversioned",
+      r: "de_feed_route",
+    });
   });
 });

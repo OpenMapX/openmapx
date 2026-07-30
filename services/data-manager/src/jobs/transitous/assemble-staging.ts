@@ -11,7 +11,7 @@ import {
 import { join } from "node:path";
 import { CANDIDATE_PROXY_DIRNAME, createCandidateManifest } from "./candidate.js";
 import { GTFS_ARCHIVE_RE } from "./internal.js";
-import { TRANSIT_SOURCE_MANIFEST_FILENAME } from "./source-manifest.js";
+import { readTransitSourceManifest, TRANSIT_SOURCE_MANIFEST_FILENAME } from "./source-manifest.js";
 import type { StageFn, StageResult } from "./types.js";
 
 /**
@@ -183,6 +183,25 @@ export const run: StageFn = async (ctx) => {
             : "") +
           (osm ? `; osm ${osmSource}` : ""),
         { stagingDir, linkedFeeds: 0, missingFeeds, osm: osm ?? null, osmSource },
+      );
+    }
+
+    // Completeness gate: every source the transit source manifest advertises
+    // must actually be part of the candidate. Otherwise a config generated
+    // with --skip-missing-files could promote a live manifest claiming
+    // sources the timetable does not contain.
+    const advertised = readTransitSourceManifest(
+      join(stagingDir, TRANSIT_SOURCE_MANIFEST_FILENAME),
+    );
+    const missingAdvertised = advertised.sources
+      .map((source) => source.artifact.relativePath)
+      .filter((relativePath) => !existsSync(join(stagingDir, relativePath)));
+    if (missingAdvertised.length > 0) {
+      return finish(
+        "error",
+        `source manifest advertises ${missingAdvertised.length} artifact(s) absent from the ` +
+          `candidate: ${missingAdvertised.join(", ")}`,
+        { stagingDir, missingAdvertised },
       );
     }
 

@@ -195,7 +195,13 @@ export function sourceIdForFailure(
   return `${country}_${base || fallback.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
 }
 
-function buildTransitlandAtlasSpecIndex(catalogDir: string): Map<string, AtlasSourceMetadata> {
+export function countryOfRegion(region: string): string {
+  return region.split(/[.-]/)[0]?.toLowerCase() ?? region.toLowerCase();
+}
+
+export function buildTransitlandAtlasSpecIndex(
+  catalogDir: string,
+): Map<string, AtlasSourceMetadata> {
   const index = new Map<string, AtlasSourceMetadata>();
   const atlasFeedsDir = join(catalogDir, "transitland-atlas", "feeds");
   if (!existsSync(atlasFeedsDir)) return index;
@@ -249,14 +255,24 @@ function isSupportedScheduleSource(
   return spec === "gtfs" || spec === "netex";
 }
 
-function activeScheduleSources(
+export type ScheduleSourceEntry = FeedFileEntry["activeScheduleSources"][number] & {
+  requested: boolean;
+};
+
+/**
+ * Single derivation for a feed file's schedule sources, shared between the
+ * pipeline (active/selected inputs) and the source lifecycle API (desired
+ * rows). Deriving both sides from one code path is what keeps desired and
+ * active state comparable.
+ */
+export function scheduleSourcesForFeed(
   feedId: string,
   country: string,
   feed: TransitousFeedFile,
   atlasSpecIndex: Map<string, AtlasSourceMetadata>,
-): FeedFileEntry["activeScheduleSources"] {
+): ScheduleSourceEntry[] {
   return (feed.sources ?? []).flatMap((source, index) => {
-    if (source.skip || !isSupportedScheduleSource(source, atlasSpecIndex)) return [];
+    if (!isSupportedScheduleSource(source, atlasSpecIndex)) return [];
     const fallback = `${feedId}_${index + 1}`;
     const atlas = source["transitland-atlas-id"]
       ? atlasSpecIndex.get(source["transitland-atlas-id"])
@@ -267,13 +283,29 @@ function activeScheduleSources(
         sourceId: source["openmapx-source-id"] ?? `catalog:${feedId}:${source.name ?? fallback}`,
         region: feedId,
         name: source.name ?? fallback,
-        format: resolveSourceSpec(source, atlasSpecIndex) === "netex" ? "netex" : "gtfs",
-        origin: source["openmapx-origin"] === "operator" ? "operator" : "catalog",
+        format:
+          resolveSourceSpec(source, atlasSpecIndex) === "netex"
+            ? ("netex" as const)
+            : ("gtfs" as const),
+        origin:
+          source["openmapx-origin"] === "operator" ? ("operator" as const) : ("catalog" as const),
         originUrl: source["url-override"] ?? source.url ?? atlas?.originUrl,
         license: source.license ?? atlas?.license,
+        requested: source.skip !== true,
       },
     ];
   });
+}
+
+function activeScheduleSources(
+  feedId: string,
+  country: string,
+  feed: TransitousFeedFile,
+  atlasSpecIndex: Map<string, AtlasSourceMetadata>,
+): FeedFileEntry["activeScheduleSources"] {
+  return scheduleSourcesForFeed(feedId, country, feed, atlasSpecIndex)
+    .filter((entry) => entry.requested)
+    .map(({ requested: _requested, ...entry }) => entry);
 }
 
 export function listTransitousFeedFiles(catalogDir: string): FeedFileEntry[] {

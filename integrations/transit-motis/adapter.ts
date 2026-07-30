@@ -169,21 +169,20 @@ function coordinatesEqual(a: [number, number], b: [number, number]): boolean {
   return a[0] === b[0] && a[1] === b[1];
 }
 
-function orderedRouteLines(
-  route: RouteInfo,
-  responseRouteIndex: number,
-  polylines: RoutePolyline[],
-): [number, number][][] {
+function orderedRouteLines(route: RouteInfo, polylines: RoutePolyline[]): [number, number][][] {
   const lines: [number, number][][] = [];
   for (const segment of route.segments) {
     const polyline = polylines[segment.polyline];
-    if (!polyline?.routeIndexes.includes(responseRouteIndex) || !polyline.polyline?.points)
-      continue;
+    if (!polyline?.polyline?.points) continue;
     const decoded = decodePolyline(polyline.polyline.points, polyline.polyline.precision ?? 6);
     if (decoded.length < 2) continue;
     const previous = lines[lines.length - 1];
-    if (previous && coordinatesEqual(previous[previous.length - 1], decoded[0])) {
+    const previousEnd = previous?.[previous.length - 1];
+    if (previousEnd && coordinatesEqual(previousEnd, decoded[0])) {
       previous.push(...decoded.slice(1));
+    } else if (previousEnd && coordinatesEqual(previousEnd, decoded[decoded.length - 1])) {
+      // Shared polylines may be stored in the opposite traversal direction.
+      previous.push(...decoded.slice(0, -1).reverse());
     } else {
       lines.push(decoded);
     }
@@ -201,9 +200,7 @@ export function mapMotisRoute(
   if (!route) return null;
   const sourceRouteIds = route.transitRoutes.map((candidate) => candidate.id);
   const info = route.transitRoutes[0];
-  const lines = includeGeometry
-    ? orderedRouteLines(route, responseRouteIndex, response.polylines)
-    : [];
+  const lines = includeGeometry ? orderedRouteLines(route, response.polylines) : [];
   return {
     id: encodeMotisRoutePatternId(activeEpoch, route.routeIdx, sourceRouteIds),
     shortName: info?.shortName ?? "",
@@ -236,7 +233,15 @@ export async function getRoutesInBbox(
     if (!data?.routes?.length) return [];
 
     return data.routes
-      .map((_, routeIndex) => mapMotisRoute(data, routeIndex, activeEpoch))
+      .map((_, routeIndex) => {
+        // One oversized or malformed pattern must not blank the whole overlay.
+        try {
+          return mapMotisRoute(data, routeIndex, activeEpoch);
+        } catch (error) {
+          console.error("MOTIS bbox route mapping failed", { routeIndex, error });
+          return null;
+        }
+      })
       .filter((route): route is TransitRoute => route !== null);
   } catch {
     return [];
@@ -260,13 +265,14 @@ export async function getStopPlatforms(
   const requested = await resolveRawStop(instance, stopId);
   if (!requested?.stopId) return [];
   const rootId = requested.parentId ?? requested.stopId;
-  const radiusDegrees = 150 / 111_320;
+  const latDelta = 150 / 111_320;
+  const lonDelta = latDelta / Math.max(Math.cos((requested.lat * Math.PI) / 180), 0.01);
   try {
     const { data } = await motisStops({
       client: instance.client,
       query: {
-        min: `${requested.lat - radiusDegrees},${requested.lon - radiusDegrees}`,
-        max: `${requested.lat + radiusDegrees},${requested.lon + radiusDegrees}`,
+        min: `${requested.lat - latDelta},${requested.lon - lonDelta}`,
+        max: `${requested.lat + latDelta},${requested.lon + lonDelta}`,
       },
     });
     if (!Array.isArray(data)) return [];
@@ -353,10 +359,16 @@ export function normalizeStoptime(
   return {
     tripId: st.tripId ? `${instance.prefix}${st.tripId}` : "",
     route: {
-      id:
-        st.routeId && provenance?.datasetEpoch
-          ? encodeMotisLineReference(provenance.datasetEpoch, st.routeId)
-          : "",
+      // Without a dataset epoch (hosted Transitous, missing capability
+      // snapshot) a provider-scoped sentinel keeps the reference typed and
+      // non-empty; it can never match a real epoch, so resolution paths
+      // still reject it cleanly.
+      id: st.routeId
+        ? encodeMotisLineReference(
+            provenance?.datasetEpoch || `${instance.provider}-unversioned`,
+            st.routeId,
+          )
+        : "",
       shortName: st.displayName ?? st.routeShortName ?? st.tripShortName ?? "",
       longName: st.routeLongName ?? "",
       mode: motisMode(st.mode),
@@ -381,7 +393,9 @@ export function normalizeStoptime(
 }
 
 function departureInstant(st: StopTime): number | null {
-  const value = st.place.departure ?? st.place.scheduledDeparture;
+  // Civil-day membership is a static-schedule contract: a delayed 23:55
+  // departure must stay on its scheduled day, not drift into the next one.
+  const value = st.place.scheduledDeparture ?? st.place.departure;
   if (!value) return null;
   const instant = new Date(value).getTime();
   return Number.isFinite(instant) ? instant : null;
@@ -424,8 +438,14 @@ export async function getStopTimetable(
   const accepted: Departure[] = [];
   const seen = new Set<string>();
   let pageCursor: string | undefined;
+  // Hard page cap: a page full of undated (e.g. arrival-only) events neither
+  // advances `accepted` nor trips the interval check, so without a cap the
+  // cursor loop would keep requesting pages indefinitely.
+  const maxPages = 10;
+  let pages = 0;
   try {
-    while (accepted.length < 300) {
+    while (accepted.length < 300 && pages < maxPages) {
+      pages++;
       const { data } = await stoptimes({
         client: instance.client,
         query: {
@@ -539,7 +559,10 @@ export async function getRoutesForStop(
   const requestedIds = new Set(
     [requested.stopId, requested.parentId].filter((id): id is string => typeof id === "string"),
   );
-  const delta = 0.000_01;
+  // ~100m: wide enough that shape-derived segment bboxes snapped a few meters
+  // off the stop still overlap; the stop-id/parent match below is the actual
+  // false-positive guard, so the extra width costs nothing.
+  const delta = 0.001;
   try {
     const { data } = await motisRoutesApi({
       client: instance.client,
@@ -566,8 +589,11 @@ export async function getRoutesForStop(
     });
     return matches;
   } catch (error) {
+    // Rethrow so callers can distinguish "no incident pattern" (empty array)
+    // from a failed lookup — the orchestrator only applies its departures
+    // fallback to failures, not to legitimate empty answers.
     console.error("MOTIS routes-for-stop failed", error);
-    return [];
+    throw error;
   }
 }
 
@@ -1302,10 +1328,10 @@ export async function getLegGeometry(
   const rawFrom = fromStopId ? rawId(instance, fromStopId) : undefined;
   const rawTo = toStopId ? rawId(instance, toStopId) : undefined;
   const transitLegs = legs.filter((leg) => !!leg.routeId);
-  let startLeg = rawFrom
+  const startLeg = rawFrom
     ? transitLegs.findIndex((leg) => legPlaces(leg).some((place) => place.stopId === rawFrom))
     : 0;
-  if (startLeg < 0) startLeg = 0;
+  if (startLeg < 0) return null;
   const endLeg = rawTo
     ? transitLegs.findLastIndex((leg) => legPlaces(leg).some((place) => place.stopId === rawTo))
     : transitLegs.length - 1;
@@ -1345,7 +1371,7 @@ export async function getTrip(
 ): Promise<VehicleJourney | null> {
   const id = rawId(instance, tripId);
   const legs = await fetchTripLegs(instance, tripId);
-  if (!legs) return null;
+  if (!legs?.length) return null;
   try {
     const journeyStops: VehicleJourneyStop[] = [];
     for (let i = 0; i < legs.length; i++) {

@@ -9,7 +9,7 @@ type WallClockParts = {
   second: number;
 };
 
-const WALL_CLOCK_PATTERN = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}):(\d{2})(?::(\d{2}))?$/;
+const WALL_CLOCK_PATTERN = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/;
 
 function partsAt(timeZone: string, instantMs: number): WallClockParts {
   const parts = new Intl.DateTimeFormat("en-CA", {

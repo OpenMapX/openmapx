@@ -3,7 +3,7 @@ import type { BBox } from "@openmapx/core";
 export interface TransitCatalogFeed {
   id: string;
   name: string;
-  source: "transitous" | "mobilitydb" | "manual" | "opentransportdata-swiss";
+  source: "transitous" | "mobilitydb" | "manual";
   countryCode: string;
   url: string;
   license?: string;

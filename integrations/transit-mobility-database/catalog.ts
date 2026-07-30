@@ -27,7 +27,7 @@ export interface MdbCatalogFeed {
 
 /**
  * Best-effort SPDX guess from a license URL. The MDB schema only exposes
- * `license_url`; we want a short label for the importer to persist into
+ * `license_url`; we want a short label for callers to display and persist.
  * Returns undefined when the URL doesn't match a pattern we recognise.
  */
 function inferSpdxFromLicenseUrl(licenseUrl: string | undefined): string | undefined {

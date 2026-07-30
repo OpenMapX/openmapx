@@ -7,8 +7,8 @@ import type { TripLeg } from "@openmapx/mobility-core/transit";
  * Only stop-connected ("coarse") inline geometry benefits from refinement:
  * providers like DB Vendo or Entur return a path that merely joins the leg's
  * stops and expose a separate polyline endpoint to fetch the true shape. MOTIS
- * already embeds the full track polyline in the plan and does not implement
- * leg-geometry lookup, so refining a MOTIS leg is a guaranteed 404 — skip it.
+ * already embeds the full track polyline in the plan (and also serves
+ * leg-geometry lookups), so a detailed MOTIS leg needs no refinement.
  *
  * An already-detailed polyline is detected by comparing the vertex count to a
  * pure stop-connected path (from + intermediate stops + to). When the backend

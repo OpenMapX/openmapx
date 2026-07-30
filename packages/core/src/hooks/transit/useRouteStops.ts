@@ -8,9 +8,14 @@ export function useRouteStops(
   routeId: string | null,
   hintStopId?: string | null,
 ): MobilityEnvelopeQueryResult<RouteStop[]> {
-  // Routes with dedicated stop endpoints (mb:, tfl:) don't need a hint stop.
-  // All other providers derive stops from a departure's trip detail, requiring a hint.
-  const needsHint = routeId !== null && !routeId.startsWith("mb:") && !routeId.startsWith("tfl:");
+  // Routes with dedicated stop endpoints (mb:, tfl:, MOTIS ms:rp: patterns)
+  // don't need a hint stop. All other providers derive stops from a
+  // departure's trip detail, requiring a hint.
+  const needsHint =
+    routeId !== null &&
+    !routeId.startsWith("mb:") &&
+    !routeId.startsWith("tfl:") &&
+    !routeId.startsWith("ms:rp:");
   const query = useQuery({
     queryKey: ["route-stops", routeId, hintStopId ?? null],
     queryFn: () => {

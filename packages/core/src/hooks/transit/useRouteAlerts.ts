@@ -13,7 +13,7 @@ export function useRouteAlerts(
       apiClient.get<MobilityEnvelope<ServiceAlert[]>>(
         `/api/integrations/transit/routes/${encodeURIComponent(routeId as string)}/alerts`,
       ),
-    enabled: routeId !== null,
+    enabled: routeId !== null && routeId !== "",
     staleTime: 60_000,
   });
   return wrapMobilityEnvelope(query);

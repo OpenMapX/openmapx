@@ -69,7 +69,13 @@ export const run: StageFn = async (ctx) => {
 
     const expectedFeedIds = new Set(
       selectedFeedFiles.flatMap((feed) =>
-        feed.activeScheduleSources.map((source) => source.id.toLowerCase()),
+        feed.activeScheduleSources.flatMap((source) => [
+          source.id.toLowerCase(),
+          // The on-disk artifact id (`<region>_<name>`, dots and subdivision
+          // regions preserved) — without it the gc pruner deletes freshly
+          // fetched archives whose names the sanitized id cannot match.
+          `${source.region}_${source.name}`.toLowerCase(),
+        ]),
       ),
     );
 

@@ -41,6 +41,7 @@ import {
   prepareEnableTransitSource,
   prepareRemoveTransitSource,
   resolveTransitOverlayPath,
+  type TransitFeedStateEvidence,
   TransitSourceError,
   type TransitSourceLifecycle,
 } from "./transit-sources.js";
@@ -246,19 +247,31 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       offset?: string;
     };
   }>("/transit/sources", async (req, reply) => {
+    const parseCount = (raw: string | undefined, fallback: number): number => {
+      const value = Number(raw ?? fallback);
+      return Number.isFinite(value) ? value : fallback;
+    };
     try {
-      const feedStates = await db.select().from(feedState);
+      // Desired and active evidence live on local disk; a Postgres outage
+      // only degrades the fetch/import/validation columns.
+      let feedStates: TransitFeedStateEvidence[] | undefined;
+      try {
+        feedStates = await db.select().from(feedState);
+      } catch (error) {
+        req.log.warn({ err: error }, "transit-sources: feed_state unavailable, listing without it");
+      }
       return listTransitSources({
         dataDir,
         catalogDir,
         overlayPath,
+        countries: operationsPolicy.countries,
         feedStates,
         query: {
           search: req.query.search,
           lifecycle: req.query.lifecycle,
           origin: req.query.origin,
-          limit: Number(req.query.limit ?? 100),
-          offset: Number(req.query.offset ?? 0),
+          limit: parseCount(req.query.limit, 100),
+          offset: parseCount(req.query.offset, 0),
         },
       });
     } catch (error) {
@@ -269,7 +282,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
 
   app.get("/transit/catalog", async (_req, reply) => {
     try {
-      return { sources: listPinnedTransitCatalog(catalogDir) };
+      return { sources: listPinnedTransitCatalog(catalogDir, operationsPolicy.countries) };
     } catch (error) {
       const status = error instanceof TransitSourceError ? error.statusCode : 500;
       return reply.code(status).send({ ok: false, error: (error as Error).message });
@@ -297,6 +310,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       mutation = prepareAddTransitSource({
         catalogDir,
         overlayPath,
+        countries: operationsPolicy.countries,
         source: {
           spec: "gtfs",
           type: "http",
@@ -333,6 +347,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       mutation = prepareRemoveTransitSource({
         catalogDir,
         overlayPath,
+        countries: operationsPolicy.countries,
         sourceId: req.params.sourceId,
       });
     } catch (error) {
@@ -361,6 +376,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       mutation = prepareEnableTransitSource({
         catalogDir,
         overlayPath,
+        countries: operationsPolicy.countries,
         sourceId: req.params.sourceId,
       });
     } catch (error) {

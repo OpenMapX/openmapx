@@ -17,6 +17,7 @@ export const run: StageFn = async (ctx) => {
     const gtfsDir = ctx.state.gtfsDir ?? ctx.outDir;
     const archives = scanGtfsArchives(gtfsDir);
     const invalid: Array<{ id: string; reason: string }> = [];
+    const warnings: Array<{ id: string; reason: string }> = [];
     let validated = 0;
     const perFeed: Array<{ id: string; ok: boolean; reason?: string }> = [];
 
@@ -34,12 +35,12 @@ export const run: StageFn = async (ctx) => {
       }
       const memberOk = await hasZipMember(archive.path, "feed_info.txt");
       if (!memberOk) {
-        // feed_info.txt is optional per the GTFS spec but Transitous-published
-        // archives always include it. Treat its absence as a soft warning by
-        // marking the archive invalid; the fetch artifact already recorded
-        // success so the data is still on disk for inspection.
-        invalid.push({ id: archive.id, reason: "missing feed_info.txt" });
-        perFeed.push({ id: archive.id, ok: false, reason: "missing feed_info.txt" });
+        // feed_info.txt is optional per the GTFS spec, so its absence is a
+        // warning, not a validation failure: an operator feed without it must
+        // not block promotion or trip the staleness alerts.
+        warnings.push({ id: archive.id, reason: "missing feed_info.txt" });
+        perFeed.push({ id: archive.id, ok: true, reason: "missing feed_info.txt" });
+        validated++;
         continue;
       }
       validated++;
@@ -52,10 +53,10 @@ export const run: StageFn = async (ctx) => {
     // pipeline stage status.
     await persistValidateOutcomes(perFeed, ctx);
 
-    let status: StageStatus = "ok";
-    if (invalid.length > 0) {
-      status = validated > 0 ? "partial" : "error";
-    }
+    // A schedule archive that cannot be imported is a completeness failure:
+    // the desired source set would silently shrink, so this is never
+    // "partial" — it hard-stops the pipeline before config generation.
+    const status: StageStatus = invalid.length > 0 ? "error" : "ok";
 
     return {
       stage: "validate",
@@ -65,11 +66,12 @@ export const run: StageFn = async (ctx) => {
       durationMs: Date.now() - start,
       message:
         invalid.length === 0
-          ? `Validated ${validated} archive(s)`
+          ? `Validated ${validated} archive(s)${warnings.length > 0 ? `; ${warnings.length} warning(s)` : ""}`
           : `Validated ${validated} / ${archives.length} archive(s); ${invalid.length} invalid`,
       artifacts: {
         validated,
         invalid,
+        warnings,
       },
     } satisfies StageResult;
   } catch (error) {

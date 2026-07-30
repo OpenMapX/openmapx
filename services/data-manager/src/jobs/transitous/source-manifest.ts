@@ -46,7 +46,7 @@ type DraftSource = Omit<TransitSourceManifestRecord, "artifact"> & {
 };
 type DraftManifest = Omit<TransitSourceManifest, "sources"> & { sources: DraftSource[] };
 
-function safeOriginUrl(raw: string | undefined): string | undefined {
+export function safeOriginUrl(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
   const url = new URL(raw);
   url.username = "";
@@ -130,6 +130,10 @@ export function finalizeTransitSourceManifest(ctx: JobContext): string {
     if (!artifact) {
       throw new Error(`Desired transit source ${source.sourceId} has no acquired artifact`);
     }
+    // The acquired artifact is authoritative for the format: a mirror
+    // gtfs-to-netex fallback must not be recorded as a gtfs artifact.
+    if (artifact.endsWith(".netex.zip")) source.format = "netex";
+    else if (artifact.endsWith(".gtfs.zip")) source.format = "gtfs";
     const bytes = readFileSync(artifact);
     const stats = statSync(artifact);
     source.artifact = {

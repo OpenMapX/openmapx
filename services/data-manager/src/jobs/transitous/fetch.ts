@@ -1,5 +1,5 @@
 import { statSync } from "node:fs";
-import { feedKeyForFailure, feedKeyForSource, recordFetchOutcome } from "./feed-state-writer.js";
+import { feedKeyForSource, recordFetchOutcome } from "./feed-state-writer.js";
 import { runFetchPipeline, scanGtfsArchives } from "./internal.js";
 import { finalizeTransitSourceManifest } from "./source-manifest.js";
 import type {
@@ -110,17 +110,15 @@ async function persistFetchOutcomes(
   failures: FeedDownloadFailure[],
   ctx: JobContext,
 ): Promise<void> {
-  const failedKeys = new Set(
-    failures.map((failure) => {
-      const key = feedKeyForFailure(failure);
-      return `${key.region}::${key.name}`;
-    }),
-  );
+  // Match failures on the synthesized source id — the (region, name) natural
+  // key diverges from it for subdivision regions and sanitized names, which
+  // would record a failed source as fetched.
+  const failedIds = new Set(failures.map((failure) => failure.id.toLowerCase()));
   for (const feed of selectedFeedFiles) {
     for (const source of feed.activeScheduleSources) {
       const key = feedKeyForSource(feed, source.name, source.region);
       const fingerprint = `${key.region}::${key.name}`;
-      const ok = !failedKeys.has(fingerprint);
+      const ok = !failedIds.has(source.id.toLowerCase());
       try {
         await recordFetchOutcome({ region: key.region, name: key.name, ok });
       } catch (err) {

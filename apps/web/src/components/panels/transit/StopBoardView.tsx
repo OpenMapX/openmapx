@@ -25,7 +25,9 @@ interface StopBoardViewProps {
 }
 
 function toMergedDeparture(departure: Departure): MergedDeparture {
-  const provider = departure.route.id.split(":")[0] || "entur";
+  // Prefer the explicit provenance instance: opaque route ids (e.g. MOTIS
+  // ms:ln references) carry a codec prefix, not the originating provider.
+  const provider = departure.provenance?.instance ?? (departure.route.id.split(":")[0] || "entur");
   return {
     ...departure,
     providers: [provider],
