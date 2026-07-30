@@ -97,6 +97,44 @@ function isImportShaped(dir: string): boolean {
   }
 }
 
+/**
+ * Reject a candidate that reuses the active dataset epoch.
+ *
+ * In two-slot mode, slot-state is the authoritative activation record. Its
+ * epoch is intentionally absent during the one-time directory-to-slot
+ * bootstrap, before this data-manager has promoted anything. Do not inspect
+ * the pre-bootstrap live manifest in that case: it was not created under the
+ * current manifest contract and is not activation authority for the A/B
+ * layout. The first successful promotion records the epoch in slot-state, so
+ * every subsequent two-slot promotion retains the duplicate guard.
+ *
+ * The rename-based fallback has no slot-state, so it keeps the strict current
+ * manifest check.
+ */
+function assertCandidateEpochIsNew(
+  ctx: JobContext,
+  currentDir: string,
+  candidateEpoch: string,
+): void {
+  if (ctx.slotLayout) {
+    if (ctx.slotLayout.record.datasetEpoch === candidateEpoch) {
+      throw new Error(`Candidate epoch ${candidateEpoch} duplicates the active dataset epoch`);
+    }
+    return;
+  }
+
+  const liveManifestPath = join(currentDir, CANDIDATE_MANIFEST_FILENAME);
+  if (!existsSync(liveManifestPath)) return;
+  // Read (not hash-verify) the live manifest: live artifacts are hardlinks
+  // into out/, which the next run rewrites in place, so re-hashing the live
+  // dir would fail exactly when a source set legitimately changed. Only the
+  // epoch matters here.
+  const liveManifest = readCandidateManifest(currentDir);
+  if (liveManifest.epoch === candidateEpoch) {
+    throw new Error(`Candidate epoch ${candidateEpoch} duplicates the active dataset epoch`);
+  }
+}
+
 async function waitForPrimaryHealthy(deadline: number): Promise<string | null> {
   // Gate on /api/v1/health, NOT /map/initial. MOTIS binds its HTTP server (so
   // /map/initial answers 200) as soon as it starts, but /health returns HTTP 400
@@ -352,17 +390,7 @@ export const run: StageFn = async (ctx) => {
     }
 
     const manifest = verifyCandidateManifest(stagingDir);
-    const liveManifestPath = join(currentDir, CANDIDATE_MANIFEST_FILENAME);
-    if (existsSync(liveManifestPath)) {
-      // Read (not hash-verify) the live manifest: live artifacts are
-      // hardlinks into out/, which the next run rewrites in place, so
-      // re-hashing the live dir would fail exactly when a source set
-      // legitimately changed. Only the epoch matters here.
-      const liveManifest = readCandidateManifest(currentDir);
-      if (liveManifest.epoch === manifest.epoch) {
-        throw new Error(`Candidate epoch ${manifest.epoch} duplicates the active dataset epoch`);
-      }
-    }
+    assertCandidateEpochIsNew(ctx, currentDir, manifest.epoch);
     const sourceManifest = readTransitSourceManifest(
       join(stagingDir, TRANSIT_SOURCE_MANIFEST_FILENAME),
     );

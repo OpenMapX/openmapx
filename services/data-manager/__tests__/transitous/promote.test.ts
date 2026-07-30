@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  CANDIDATE_MANIFEST_FILENAME,
   CANDIDATE_PROXY_DIRNAME,
   createCandidateManifest,
 } from "../../src/jobs/transitous/candidate.js";
@@ -279,6 +280,59 @@ describe("promote stage", () => {
     expect(result.status).toBe("error");
     expect(result.message).toMatch(/duplicates the active dataset epoch/);
     expect(recordPromotedSource).not.toHaveBeenCalled();
+  });
+
+  it("bootstraps two-slot promotion without parsing pre-contract live metadata", async () => {
+    const fx = setupFixture({ staging: true, current: true });
+    writeFileSync(
+      join(fx.currentDir, CANDIDATE_MANIFEST_FILENAME),
+      `${JSON.stringify({
+        schemaVersion: 1,
+        epoch: "pre-slot-epoch",
+        artifacts: {
+          config: {},
+          datasets: [],
+          license: {},
+          proxyConfig: {},
+          proxyVars: {},
+        },
+      })}\n`,
+    );
+    globalThis.fetch = vi.fn(async (input: unknown) => {
+      const url = typeof input === "string" ? input : (input as Request | URL).toString();
+      return jsonResponse(successfulBody(url));
+    }) as unknown as typeof fetch;
+
+    const ctx = makeCtx({ dataDir: fx.dataDir, runner: async () => {} });
+    ctx.slotLayout = ensureMotisSlotLayout(fx.dataDir);
+    expect(ctx.slotLayout.record.datasetEpoch).toBeUndefined();
+
+    const result = await promoteRun(ctx);
+
+    expect(result.status).toBe("ok");
+    expect(ctx.slotLayout.record.datasetEpoch).toBe("test-epoch");
+    expect(aliasSlot(ctx.slotLayout, "live")).toBe("B");
+    expect(aliasSlot(ctx.slotLayout, "staging")).toBe("A");
+  });
+
+  it("rejects a duplicate epoch from authoritative two-slot state", async () => {
+    const fx = setupFixture({ staging: true, current: true });
+    writeFileSync(join(fx.currentDir, CANDIDATE_MANIFEST_FILENAME), "not current-contract json\n");
+    const ctx = makeCtx({
+      dataDir: fx.dataDir,
+      runner: async () => {
+        throw new Error("duplicate epoch must fail before container mutation");
+      },
+    });
+    ctx.slotLayout = ensureMotisSlotLayout(fx.dataDir);
+    ctx.slotLayout.record.datasetEpoch = "test-epoch";
+
+    const result = await promoteRun(ctx);
+
+    expect(result.status).toBe("error");
+    expect(result.message).toMatch(/duplicates the active dataset epoch/);
+    expect(aliasSlot(ctx.slotLayout, "live")).toBe("A");
+    expect(aliasSlot(ctx.slotLayout, "staging")).toBe("B");
   });
 
   it("waits for the primary /health to load, not just /map/initial, before smoke-testing", async () => {
