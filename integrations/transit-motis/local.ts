@@ -250,6 +250,21 @@ function resolveDateTime(departureTime?: string): { date: string; time: string }
   };
 }
 
+export function resolveLocalMotisUrl(
+  serviceUrl: unknown,
+  configuredEndpoint: unknown,
+  environmentUrl: unknown,
+): string {
+  return (
+    [serviceUrl, configuredEndpoint, environmentUrl]
+      .find(
+        (candidate): candidate is string =>
+          typeof candidate === "string" && candidate.trim().length > 0,
+      )
+      ?.trim() ?? "http://localhost:8081"
+  );
+}
+
 async function planWithInstance(
   instance: MotisInstance,
   params: TripPlanRequest,
@@ -311,12 +326,9 @@ export function setupLocal(ctx: IntegrationContext): void {
   // and live-transit-motis honour, so a single deployment-wide
   // `MOTIS_URL=…` reaches every consumer of the local instance.
   const resolved = ctx.getRequiredService("motis");
-  const motisUrl =
-    resolved?.url ??
-    (ctx.config.endpoint as string | undefined) ??
-    process.env.MOTIS_URL ??
-    "http://localhost:8081";
+  const motisUrl = resolveLocalMotisUrl(resolved?.url, ctx.config.endpoint, process.env.MOTIS_URL);
   setMotisLocalUrl(motisUrl);
+  ctx.log.info(`[transit-motis] configured local MOTIS endpoint: ${motisUrl}`);
   cachedLocalReachable = false;
   cachedLocalReachableAt = 0;
   // Warm the live rental-capability probe so the access options reflect reality
