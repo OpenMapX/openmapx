@@ -5,6 +5,17 @@ on:
     # Weekly on Mondays at 04:17 UTC. Off-hours so a slow Docker pull
     # doesn't compete with the regular CI run.
     - cron: "17 4 * * 1"
+  # A MOTIS pin bump MUST run the live canary: the route-details endpoint the
+  # transit UI depends on is experimental upstream. `check-toolchain-pins`
+  # forces every pin location to match MOTIS_VERSION in transitous-core's
+  # constants.ts, so that single file is a reliable bump detector.
+  push:
+    branches: [main]
+    paths:
+      - packages/transitous-core/src/constants.ts
+  pull_request:
+    paths:
+      - packages/transitous-core/src/constants.ts
   workflow_dispatch:
 
 concurrency:
