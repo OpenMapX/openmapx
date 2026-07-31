@@ -7,6 +7,7 @@ import type {
 import type { RouteStep } from "../types/routing";
 import { haversineDistance } from "../utils/coordinates";
 import type { RoadAlert } from "./alerts";
+import { angularDifference, bearingBetween, routeBearingAt } from "./bearing";
 import { snapToRoute } from "./snap";
 
 /** A road-condition event projected onto the active route as an approach alert. */
@@ -58,30 +59,6 @@ interface RouteCandidate {
   coord: LngLat;
   alongMeters: number;
   routeBearing: number;
-}
-
-const toRad = (degrees: number): number => (degrees * Math.PI) / 180;
-
-/** Initial great-circle bearing a→b, degrees clockwise from north. */
-function bearingBetween(a: LngLat, b: LngLat): number {
-  const deltaLng = toRad(b[0] - a[0]);
-  const y = Math.sin(deltaLng) * Math.cos(toRad(b[1]));
-  const x =
-    Math.cos(toRad(a[1])) * Math.sin(toRad(b[1])) -
-    Math.sin(toRad(a[1])) * Math.cos(toRad(b[1])) * Math.cos(deltaLng);
-  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
-}
-
-function angularDifference(a: number, b: number): number {
-  const difference = Math.abs(a - b) % 360;
-  return difference > 180 ? 360 - difference : difference;
-}
-
-function routeBearingAt(route: LngLat[], segmentIndex: number): number {
-  const index = Math.max(0, Math.min(segmentIndex, route.length - 2));
-  const start = route[index];
-  const end = route[index + 1];
-  return start && end ? bearingBetween(start, end) : 0;
 }
 
 /** Every [lon,lat] position in a GeoJSON geometry (incl. GeometryCollection). */

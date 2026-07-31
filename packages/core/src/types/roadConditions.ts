@@ -153,3 +153,29 @@ export interface RoadFlowSegment {
 export interface RoadFlowQuery {
   minLos?: string;
 }
+
+/**
+ * A stretch of one route where traffic is worse (or better) than free flow,
+ * expressed as metres along the polyline that was submitted. The client slices
+ * that polyline by these offsets, so the painted band lands exactly on the
+ * drawn line rather than on the road segment's own geometry.
+ */
+export interface RouteFlowSpan {
+  startMeters: number;
+  endMeters: number;
+  los: RoadFlowSegment["los"];
+  speedRatio?: number;
+  confidence: RoadFlowSegment["confidence"];
+  currentSpeedKph?: number;
+  freeFlowSpeedKph?: number;
+}
+
+/** One route submitted for flow matching. `id` is echoed back on the response. */
+export interface RouteFlowInput {
+  id: string;
+  geometry: [number, number][];
+}
+
+export interface RouteFlowResponse {
+  routes: Array<{ id: string; spans: RouteFlowSpan[] }>;
+}

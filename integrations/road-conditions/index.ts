@@ -1,6 +1,7 @@
 import type { BBox } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { eventsToFeatureCollection } from "./eventsToGeojson.js";
+import { flowSpansForRoutes, parseRouteFlowBody } from "./flowAlongRoute.js";
 import { flowToFeatureCollection } from "./flowToGeojson.js";
 import { aggregateRoadConditions, aggregateRoadFlow } from "./orchestrator.js";
 import type { RoadConditionSeverity, RoadConditionType } from "./types.js";
@@ -112,6 +113,28 @@ export function setup(ctx: IntegrationContext): void {
       ctx.log.error("road-conditions flow aggregation failed", err);
       reply.header("Cache-Control", "no-cache");
       reply.send({ type: "FeatureCollection", features: [] });
+    }
+  });
+
+  // POST /flow-along-route { routes: [{ id, geometry }] }
+  // Live speed/congestion matched onto each submitted route polyline and
+  // returned as along-route metre spans, so the client can paint the route
+  // itself instead of the road segments beside it. POST because a long route's
+  // geometry is far past any URL length limit.
+  ctx.registerRoute("POST", "/flow-along-route", async (req, reply) => {
+    const routes = parseRouteFlowBody(req.body);
+    if (!routes) {
+      reply.status(400).send({ error: "routes required: [{ id, geometry: [[lng,lat], …] }]" });
+      return;
+    }
+    try {
+      const result = await flowSpansForRoutes(ctx, routes);
+      reply.header("Cache-Control", "no-store");
+      reply.send(result);
+    } catch (err) {
+      ctx.log.error("road-conditions route flow failed", err);
+      reply.header("Cache-Control", "no-cache");
+      reply.send({ routes: routes.map((r) => ({ id: r.id, spans: [] })) });
     }
   });
 }

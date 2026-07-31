@@ -125,6 +125,9 @@ export type {
   RoadFlowQuery,
   RoadFlowSegment,
   RoadState,
+  RouteFlowInput,
+  RouteFlowResponse,
+  RouteFlowSpan,
 } from "./roadConditions";
 export type {
   DirectionsResult,

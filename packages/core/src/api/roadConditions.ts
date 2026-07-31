@@ -3,6 +3,9 @@ import type {
   RoadConditionEvent,
   RoadConditionSeverity,
   RoadConditionType,
+  RouteFlowInput,
+  RouteFlowResponse,
+  RouteFlowSpan,
 } from "../types/roadConditions";
 import { apiClient } from "./client";
 import { API_ENDPOINTS } from "./endpoints";
@@ -81,5 +84,26 @@ export async function fetchRoadConditions(
       .filter((e): e is RoadConditionEvent => e !== null);
   } catch {
     return [];
+  }
+}
+
+/**
+ * Live flow along each route, keyed by the id the caller submitted. Returns an
+ * empty map on any failure: congestion is decoration on a route that has to
+ * keep drawing without it.
+ */
+export async function fetchRouteFlow(
+  routes: RouteFlowInput[],
+): Promise<Record<string, RouteFlowSpan[]>> {
+  if (routes.length === 0) return {};
+  try {
+    const result = await apiClient.post<RouteFlowResponse>(API_ENDPOINTS.roadConditionsFlowRoute, {
+      routes,
+    });
+    const out: Record<string, RouteFlowSpan[]> = {};
+    for (const entry of result.routes ?? []) out[entry.id] = entry.spans ?? [];
+    return out;
+  } catch {
+    return {};
   }
 }

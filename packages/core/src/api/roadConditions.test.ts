@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "./client";
-import { fetchRoadConditions } from "./roadConditions";
+import { fetchRoadConditions, fetchRouteFlow } from "./roadConditions";
 
 describe("fetchRoadConditions", () => {
   beforeEach(() => vi.restoreAllMocks());
@@ -125,5 +125,52 @@ describe("fetchRoadConditions", () => {
     vi.spyOn(apiClient, "get").mockRejectedValue(new Error("network"));
     const out = await fetchRoadConditions([0, 0, 1, 1]);
     expect(out).toEqual([]);
+  });
+});
+
+describe("fetchRouteFlow", () => {
+  it("keys the spans by the submitted route id", async () => {
+    const post = vi.spyOn(apiClient, "post").mockResolvedValue({
+      routes: [
+        {
+          id: "r0",
+          spans: [{ startMeters: 10, endMeters: 90, los: "queuing", confidence: "measured" }],
+        },
+      ],
+    });
+    const result = await fetchRouteFlow([
+      {
+        id: "r0",
+        geometry: [
+          [8, 50],
+          [8, 50.01],
+        ],
+      },
+    ]);
+    expect(result.r0[0].los).toBe("queuing");
+    post.mockRestore();
+  });
+
+  it("returns an empty map on any failure — traffic must never break the route", async () => {
+    const post = vi.spyOn(apiClient, "post").mockRejectedValue(new Error("boom"));
+    expect(
+      await fetchRouteFlow([
+        {
+          id: "r0",
+          geometry: [
+            [8, 50],
+            [8, 50.01],
+          ],
+        },
+      ]),
+    ).toEqual({});
+    post.mockRestore();
+  });
+
+  it("skips the request entirely when there is nothing to ask about", async () => {
+    const post = vi.spyOn(apiClient, "post");
+    expect(await fetchRouteFlow([])).toEqual({});
+    expect(post).not.toHaveBeenCalled();
+    post.mockRestore();
   });
 });

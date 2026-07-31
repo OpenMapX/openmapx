@@ -17,6 +17,7 @@ export { type AlertBBox, fetchRoadAlerts, type RawRoadAlert } from "./roadAlerts
 export {
   type FetchRoadConditionsOptions,
   fetchRoadConditions,
+  fetchRouteFlow,
 } from "./roadConditions";
 export { fetchRouteMatchWindow, type RouteMatchWindow } from "./routeAttributes";
 export { fetchSpeedLimit } from "./speedLimit";

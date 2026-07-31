@@ -1,3 +1,4 @@
+export type { RouteFlowInput, RouteFlowResponse, RouteFlowSpan } from "@openmapx/core";
 export type {
   RoadConditionAttribution,
   RoadConditionEvent,

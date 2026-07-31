@@ -7,6 +7,7 @@ export {
   selectActiveAlert,
   shouldWarnCamera,
 } from "./alerts";
+export { angularDifference, bearingBetween, routeBearingAt } from "./bearing";
 export { type CoastOptions, type CoastResult, coastState } from "./coast";
 export {
   cumulativeDistances,
@@ -16,6 +17,12 @@ export {
   stepDeadReckon,
 } from "./deadReckon";
 export { eta } from "./eta";
+export {
+  flowSeverityRank,
+  type ProjectFlowOptions,
+  projectFlowToRoute,
+  routeFingerprint,
+} from "./flowProjection";
 export { formatIncidentAnnouncement } from "./incidentAnnounce";
 export {
   type IncidentAlert,

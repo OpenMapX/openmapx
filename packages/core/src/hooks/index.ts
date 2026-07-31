@@ -92,6 +92,7 @@ export { useResolvedHotelProviders } from "./useResolvedHotelProviders";
 export { useRestaurantLinks } from "./useRestaurantLinks";
 export { useRestaurantMenu } from "./useRestaurantMenu";
 export { useReverseGeocoding } from "./useReverseGeocoding";
+export { routeFlowQueryKey, useRouteFlow } from "./useRouteFlow";
 export { useRouteInGermany } from "./useRouteInGermany";
 export {
   useCreateList,
