@@ -86,6 +86,7 @@ export function DirectionsPanelContent() {
   const { snapTo } = useMobileSheet();
   const expandOnBackgroundTap = useExpandOnBackgroundTap();
   const {
+    isOpen,
     waypoints,
     origin,
     originLabel,
@@ -161,6 +162,27 @@ export function DirectionsPanelContent() {
   const [transitPageDirection, setTransitPageDirection] = useState<"previous" | "next">("next");
   const [focusedField, setFocusedField] = useState<number | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
+
+  const myLocationLabel = t("myLocation");
+  useEffect(() => {
+    if (!isOpen || typeof navigator === "undefined" || !navigator.geolocation) return;
+
+    let active = true;
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        if (!active || !useDirectionsStore.getState().isOpen) return;
+        const location: LngLat = [position.coords.longitude, position.coords.latitude];
+        useMapStore.getState().setUserLocation(location);
+        setOrigin(location, myLocationLabel);
+      },
+      () => {},
+      { maximumAge: 0 },
+    );
+
+    return () => {
+      active = false;
+    };
+  }, [isOpen, myLocationLabel, setOrigin]);
 
   const handleShare = async () => {
     const result = await shareCurrentUrl();

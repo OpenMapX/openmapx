@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createQueryWrapper, fireEvent, render, screen, waitFor } from "@/test";
 
 vi.mock("next-intl", async () =>
@@ -68,6 +68,8 @@ beforeEach(() => {
   });
 });
 
+afterEach(() => vi.unstubAllGlobals());
+
 function seedOriginDestination() {
   act(() => {
     useDirectionsStore.getState().setWaypoint(0, [13.3, 52.5], "Berlin");
@@ -78,6 +80,31 @@ function seedOriginDestination() {
 const renderPanel = () => render(<DirectionsPanelContent />, { wrapper: createQueryWrapper() });
 
 describe("DirectionsPanelContent", () => {
+  it("requests a fresh location when opened and fills the origin", () => {
+    let succeed: ((position: GeolocationPosition) => void) | undefined;
+    const getCurrentPosition = vi.fn((...args: unknown[]) => {
+      succeed = args[0] as (position: GeolocationPosition) => void;
+    });
+    vi.stubGlobal("navigator", { geolocation: { getCurrentPosition } });
+    act(() => useDirectionsStore.getState().open());
+
+    renderPanel();
+
+    expect(getCurrentPosition).toHaveBeenCalled();
+    expect(getCurrentPosition.mock.calls.at(-1)?.[2]).toEqual({ maximumAge: 0 });
+
+    act(() => {
+      succeed?.({
+        coords: { longitude: 13.405, latitude: 52.52 },
+        timestamp: Date.now(),
+      } as GeolocationPosition);
+    });
+
+    expect(useDirectionsStore.getState().origin).toEqual([13.405, 52.52]);
+    expect(useDirectionsStore.getState().originLabel).toBe("directions.myLocation");
+    expect(useMapStore.getState().userLocation).toEqual([13.405, 52.52]);
+  });
+
   it("mounts with empty waypoints: placeholders + empty-state prompt", () => {
     renderPanel();
     screen.getByPlaceholderText("directions.chooseOrigin");
