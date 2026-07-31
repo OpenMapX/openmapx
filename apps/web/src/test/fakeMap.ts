@@ -105,14 +105,28 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       state.sources.delete(id);
     },
     getLayer: (id: string) => state.layers.get(id),
-    addLayer: (layer: { id: string } & Record<string, unknown>) => {
-      state.layers.set(layer.id, layer);
+    addLayer: (layer: { id: string } & Record<string, unknown>, beforeId?: string) => {
+      if (beforeId === undefined || !state.layers.has(beforeId)) {
+        state.layers.set(layer.id, layer);
+        return;
+      }
+      const entries = [...state.layers.entries()].filter(([id]) => id !== layer.id);
+      const at = entries.findIndex(([id]) => id === beforeId);
+      entries.splice(at, 0, [layer.id, layer]);
+      state.layers = new Map(entries);
     },
     removeLayer: (id: string) => {
       state.layers.delete(id);
     },
     moveLayer: (layerId: string, beforeId?: string) => {
       state.movedLayers.push({ layerId, beforeId });
+      const existing = state.layers.get(layerId);
+      if (!existing) return;
+      const entries = [...state.layers.entries()].filter(([id]) => id !== layerId);
+      const at = beforeId === undefined ? -1 : entries.findIndex(([id]) => id === beforeId);
+      if (at === -1) entries.push([layerId, existing]);
+      else entries.splice(at, 0, [layerId, existing]);
+      state.layers = new Map(entries);
     },
     setPaintProperty: (layerId: string, name: string, value: unknown) => {
       const m = state.paint.get(layerId) ?? {};

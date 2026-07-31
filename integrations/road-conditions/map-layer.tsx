@@ -5,8 +5,7 @@ import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
-import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { buildStackedPopupCard, type PopupCardSpec } from "@/components/map/overlay/popupCard";
 import { useOverlayLayerVisible } from "@/components/map/overlay/useOverlayStoreState";
 import { useEnv } from "@/lib/EnvProvider";
@@ -286,7 +285,6 @@ export function RoadConditionsLayer() {
   // crediting this integration's own manifest registered nothing at all.
   useIntegrationDomainAttribution(CREDIT_DOMAIN, layerVisible);
   useOverlayExclusion(OVERLAY_ID, layerVisible);
-  useLayerReanchor([LINE_LAYER, MARKER_LAYER], layerVisible);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   // Keep the latest formatters/translator in refs so the imperative popup click
   // handler (bound once per effect) always uses the current prefs + locale.
@@ -365,6 +363,8 @@ export function RoadConditionsLayer() {
         } catch {
           // In-flight render — ignore.
         }
+        unregisterLayerSlot(MARKER_LAYER);
+        unregisterLayerSlot(LINE_LAYER);
         popupRef.current?.remove();
         return;
       }
@@ -385,9 +385,9 @@ export function RoadConditionsLayer() {
             data: { type: "FeatureCollection", features: [] },
           });
         }
-        const before = getFirstSymbolLayerId(map);
         if (!map.getLayer(LINE_LAYER)) {
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: LINE_LAYER,
               type: "line",
@@ -406,11 +406,13 @@ export function RoadConditionsLayer() {
                 ],
               },
             },
-            before,
+            "conditions-lines",
+            0,
           );
         }
         if (!map.getLayer(MARKER_LAYER)) {
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: MARKER_LAYER,
               type: "symbol",
@@ -429,7 +431,8 @@ export function RoadConditionsLayer() {
                 "icon-opacity": ["case", ["get", "future"], 0.55, 1],
               },
             },
-            before,
+            "overlay-markers",
+            0,
           );
           INTERACTIVE_LAYER_IDS.add(MARKER_LAYER);
         }

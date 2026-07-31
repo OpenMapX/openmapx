@@ -6,7 +6,9 @@ import type maplibregl from "maplibre-gl";
 import { useEffect, useMemo } from "react";
 import { attributionsForProviders } from "@/lib/attributionForProviders";
 import { useMap } from "@/lib/MapContext";
+import { ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
 import { useMapAttributions } from "@/lib/useMapAttributions";
+import { addLayerInSlot } from "./layerStack";
 import { buildNavRouteLine, splitNavRoute } from "./navRouteSplit";
 
 type GeoJSONSource = maplibregl.GeoJSONSource;
@@ -14,15 +16,11 @@ type GeoJSONSource = maplibregl.GeoJSONSource;
 const SOURCE = "nav-route-source";
 const TRAVELED = "nav-route-traveled";
 export const NAV_ROUTE_REMAINING_LAYER_ID = "nav-route-remaining";
-export const NAV_ROUTE_REMAINING_WIDTH = 8;
+export const NAV_ROUTE_REMAINING_WIDTH = ROUTE_WIDTHS.nav.line;
 const REMAINING_CASING = "nav-route-remaining-casing";
 
 const ALT_SOURCE = "nav-route-alts-source";
 const ALT = "nav-route-alts";
-
-const REMAINING_COLOR = "#1a73e8";
-const TRAVELED_COLOR = "#9aa0a6";
-const ALT_COLOR = "#80868b";
 
 export function NavigationRouteLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
@@ -46,8 +44,8 @@ export function NavigationRouteLayer() {
   // doesn't re-walk the whole geometry every time the user moves.
   const navLine = useMemo(() => (route ? buildNavRouteLine(route.geometry) : null), [route]);
 
-  // Create sources + layers once per style. The alternates layer is added first
-  // so it sits beneath the active route.
+  // Create sources + layers once per style. Each layer's slot (not creation
+  // order) puts the alternates beneath the active route.
   useEffect(() => {
     void styleVersion;
     const map = mapRef.current;
@@ -58,42 +56,70 @@ export function NavigationRouteLayer() {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
     });
-    map.addLayer({
-      id: ALT,
-      type: "line",
-      source: ALT_SOURCE,
-      layout: { "line-cap": "round", "line-join": "round" },
-      paint: { "line-color": ALT_COLOR, "line-width": 6, "line-opacity": 0.55 },
-    });
+    addLayerInSlot(
+      map,
+      {
+        id: ALT,
+        type: "line",
+        source: ALT_SOURCE,
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": ROUTE_COLORS.navAlt,
+          "line-width": ROUTE_WIDTHS.nav.altLine,
+          "line-opacity": 0.55,
+        },
+      },
+      "route-alt",
+      1,
+    );
 
     map.addSource(SOURCE, {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
     });
-    map.addLayer({
-      id: REMAINING_CASING,
-      type: "line",
-      source: SOURCE,
-      filter: ["==", ["get", "kind"], "remaining"],
-      layout: { "line-cap": "round", "line-join": "round" },
-      paint: { "line-color": "#ffffff", "line-width": 11 },
-    });
-    map.addLayer({
-      id: TRAVELED,
-      type: "line",
-      source: SOURCE,
-      filter: ["==", ["get", "kind"], "traveled"],
-      layout: { "line-cap": "round", "line-join": "round" },
-      paint: { "line-color": TRAVELED_COLOR, "line-width": 7, "line-opacity": 0.7 },
-    });
-    map.addLayer({
-      id: NAV_ROUTE_REMAINING_LAYER_ID,
-      type: "line",
-      source: SOURCE,
-      filter: ["==", ["get", "kind"], "remaining"],
-      layout: { "line-cap": "round", "line-join": "round" },
-      paint: { "line-color": REMAINING_COLOR, "line-width": NAV_ROUTE_REMAINING_WIDTH },
-    });
+    addLayerInSlot(
+      map,
+      {
+        id: REMAINING_CASING,
+        type: "line",
+        source: SOURCE,
+        filter: ["==", ["get", "kind"], "remaining"],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": ROUTE_COLORS.casing, "line-width": ROUTE_WIDTHS.nav.casing },
+      },
+      "route-active",
+      0,
+    );
+    addLayerInSlot(
+      map,
+      {
+        id: TRAVELED,
+        type: "line",
+        source: SOURCE,
+        filter: ["==", ["get", "kind"], "traveled"],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": ROUTE_COLORS.traveled,
+          "line-width": ROUTE_WIDTHS.nav.traveled,
+          "line-opacity": 0.7,
+        },
+      },
+      "route-active",
+      1,
+    );
+    addLayerInSlot(
+      map,
+      {
+        id: NAV_ROUTE_REMAINING_LAYER_ID,
+        type: "line",
+        source: SOURCE,
+        filter: ["==", ["get", "kind"], "remaining"],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": ROUTE_COLORS.active, "line-width": NAV_ROUTE_REMAINING_WIDTH },
+      },
+      "route-active",
+      2,
+    );
   }, [mapRef, mapReady, styleVersion]);
 
   // Update the active route's split geometry as the user moves.

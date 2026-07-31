@@ -18,8 +18,9 @@ import { attributionsForProviders } from "@/lib/attributionForProviders";
 import { buildEvDirectionsRequest } from "@/lib/buildEvDirectionsRequest";
 import { useMap } from "@/lib/MapContext";
 import { EV_CHARGING_SOURCE_ID, openChargerPlace } from "@/lib/openChargerPlace";
-import { PRIMARY_BLUE_HEX } from "@/lib/theme";
+import { ROUTE_ALT_OPACITY, ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
 import { useMapAttributions } from "@/lib/useMapAttributions";
+import { addLayerInSlot } from "./layerStack";
 import { upsertGeoJsonSource } from "./layerStyleUtils";
 
 type GeoJSONSource = maplibregl.GeoJSONSource;
@@ -195,41 +196,69 @@ export function RouteLayer() {
         data: { type: "FeatureCollection", features: [] },
       });
 
-      map.addLayer({
-        id: LAYER_ALT_CASING,
-        type: "line",
-        source: SOURCE_ID,
-        filter: ["==", ["get", "type"], "alt"],
-        layout: { "line-join": "round", "line-cap": "round" },
-        paint: { "line-color": "#ffffff", "line-width": 7, "line-opacity": 0.6 },
-      });
+      addLayerInSlot(
+        map,
+        {
+          id: LAYER_ALT_CASING,
+          type: "line",
+          source: SOURCE_ID,
+          filter: ["==", ["get", "type"], "alt"],
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": ROUTE_COLORS.casing,
+            "line-width": ROUTE_WIDTHS.planning.altCasing,
+            "line-opacity": 0.6,
+          },
+        },
+        "route-alt",
+        0,
+      );
 
-      map.addLayer({
-        id: LAYER_ALT_LINE,
-        type: "line",
-        source: SOURCE_ID,
-        filter: ["==", ["get", "type"], "alt"],
-        layout: { "line-join": "round", "line-cap": "round" },
-        paint: { "line-color": "#93C5FD", "line-width": 5, "line-opacity": 0.75 },
-      });
+      addLayerInSlot(
+        map,
+        {
+          id: LAYER_ALT_LINE,
+          type: "line",
+          source: SOURCE_ID,
+          filter: ["==", ["get", "type"], "alt"],
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": ROUTE_COLORS.alt,
+            "line-width": ROUTE_WIDTHS.planning.altLine,
+            "line-opacity": ROUTE_ALT_OPACITY,
+          },
+        },
+        "route-alt",
+        1,
+      );
 
-      map.addLayer({
-        id: LAYER_ACTIVE_CASING,
-        type: "line",
-        source: SOURCE_ID,
-        filter: ["==", ["get", "type"], "active"],
-        layout: { "line-join": "round", "line-cap": "round" },
-        paint: { "line-color": "#ffffff", "line-width": 10 },
-      });
+      addLayerInSlot(
+        map,
+        {
+          id: LAYER_ACTIVE_CASING,
+          type: "line",
+          source: SOURCE_ID,
+          filter: ["==", ["get", "type"], "active"],
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: { "line-color": ROUTE_COLORS.casing, "line-width": ROUTE_WIDTHS.planning.casing },
+        },
+        "route-active",
+        0,
+      );
 
-      map.addLayer({
-        id: LAYER_ACTIVE_LINE,
-        type: "line",
-        source: SOURCE_ID,
-        filter: ["==", ["get", "type"], "active"],
-        layout: { "line-join": "round", "line-cap": "round" },
-        paint: { "line-color": PRIMARY_BLUE_HEX, "line-width": 7 },
-      });
+      addLayerInSlot(
+        map,
+        {
+          id: LAYER_ACTIVE_LINE,
+          type: "line",
+          source: SOURCE_ID,
+          filter: ["==", ["get", "type"], "active"],
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: { "line-color": ROUTE_COLORS.active, "line-width": ROUTE_WIDTHS.planning.line },
+        },
+        "route-active",
+        1,
+      );
 
       map.on("click", LAYER_ALT_LINE, onClick);
     };
@@ -381,25 +410,30 @@ export function RouteLayer() {
       upsertGeoJsonSource(map, EV_STOPS_SOURCE_ID, geojson);
 
       if (!map.getLayer(EV_STOPS_LAYER_ID)) {
-        map.addLayer({
-          id: EV_STOPS_LAYER_ID,
-          type: "circle",
-          source: EV_STOPS_SOURCE_ID,
-          paint: {
-            "circle-radius": 7,
-            "circle-color": [
-              "match",
-              ["get", "availState"],
-              "available",
-              "#2E7D32",
-              "busy",
-              "#F9A825",
-              UNKNOWN_AVAILABILITY_COLOR,
-            ],
-            "circle-stroke-color": "#ffffff",
-            "circle-stroke-width": 1.5,
+        addLayerInSlot(
+          map,
+          {
+            id: EV_STOPS_LAYER_ID,
+            type: "circle",
+            source: EV_STOPS_SOURCE_ID,
+            paint: {
+              "circle-radius": 7,
+              "circle-color": [
+                "match",
+                ["get", "availState"],
+                "available",
+                "#2E7D32",
+                "busy",
+                "#F9A825",
+                UNKNOWN_AVAILABILITY_COLOR,
+              ],
+              "circle-stroke-color": "#ffffff",
+              "circle-stroke-width": 1.5,
+            },
           },
-        });
+          "route-markers",
+          0,
+        );
       }
     };
 

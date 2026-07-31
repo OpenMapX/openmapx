@@ -18,6 +18,7 @@ import { DataSourceLayer } from "@/components/map/layers/DataSourceLayer";
 import { FlightArcLayer } from "@/components/map/layers/FlightArcLayer";
 import { GlobeProjection } from "@/components/map/layers/GlobeProjection";
 import { ImportedGeometryLayer } from "@/components/map/layers/ImportedGeometryLayer";
+import { MapLayerStack } from "@/components/map/layers/MapLayerStack";
 import { NavigationRouteLayer } from "@/components/map/layers/NavigationRouteLayer";
 import { NavTrafficSignalsLayer } from "@/components/map/layers/NavTrafficSignalsLayer";
 import { PlaceBoundaryLayer } from "@/components/map/layers/PlaceBoundaryLayer";
@@ -134,6 +135,7 @@ export default function HomePage() {
           <CyclingBaseLayer />
           {/* Core layers (not integration-managed) */}
           <PlaceBoundaryLayer />
+          <MapLayerStack />
           <RouteLayer />
           <NavigationRouteLayer />
           <NavTrafficSignalsLayer />

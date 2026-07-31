@@ -5,12 +5,13 @@ import type { MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { addLayerInSlot } from "@/components/map/layers/layerStack";
 import { useStyleSyncedLayer } from "@/components/map/layers/useStyleSyncedLayer";
 import { buildPopupCard, type PopupCardSpec } from "@/components/map/overlay/popupCard";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import { flowColorExpression } from "@/lib/trafficFlowExpression";
 import { useIntegrationDomainAttribution } from "@/lib/useIntegrationAttribution";
 import { useTrafficFlowStore } from "./store";
 
@@ -28,38 +29,7 @@ const LAYER_MIN_ZOOM = 6;
  * stationary/blocked → dark red, heavy → orange, free_flow/unknown → green (so
  * a base segment still reads green, but a declared jam reads red).
  */
-const COLOR_EXPR: maplibregl.ExpressionSpecification = [
-  "case",
-  ["==", ["get", "speed_ratio"], null],
-  [
-    "match",
-    ["get", "los"],
-    "queuing",
-    "#e8112d",
-    "stationary",
-    "#7e0023",
-    "blocked",
-    "#7e0023",
-    "heavy",
-    "#ff8c00",
-    "#2ecc40",
-  ],
-  [
-    "interpolate",
-    ["linear"],
-    ["get", "speed_ratio"],
-    0.0,
-    "#7e0023",
-    0.25,
-    "#e8112d",
-    0.5,
-    "#ff8c00",
-    0.75,
-    "#ffd500",
-    1.0,
-    "#2ecc40",
-  ],
-];
+const COLOR_EXPR = flowColorExpression("speed_ratio", "los");
 
 /**
  * Confidence → opacity: measured brightest, typical faintest. The floor (0.6 for
@@ -181,7 +151,6 @@ export function TrafficFlowLayer() {
   const showFlow = useTrafficFlowStore((s) => s.panelOpen && s.layerVisible);
   useIntegrationDomainAttribution("road-conditions", showFlow);
   useOverlayExclusion("traffic-flow", showFlow);
-  useLayerReanchor([CASING, COLOR], showFlow);
 
   const martinBase = env.martinBaseUrl;
 
@@ -203,10 +172,10 @@ export function TrafficFlowLayer() {
     visible: showFlow,
     sourceId: SRC,
     layerId: CASING,
-    moveBeforeFirstSymbol: true,
     addSource,
-    addLayer: (m, beforeLayerId) => {
-      m.addLayer(
+    addLayer: (m) => {
+      addLayerInSlot(
+        m,
         {
           id: CASING,
           type: "line",
@@ -223,7 +192,8 @@ export function TrafficFlowLayer() {
             "line-gap-width": 0,
           },
         },
-        beforeLayerId,
+        "traffic-flow",
+        0,
       );
     },
     deps: [mapReady, styleVersion, mapRef, showFlow, martinBase],
@@ -234,10 +204,10 @@ export function TrafficFlowLayer() {
     visible: showFlow,
     sourceId: SRC,
     layerId: COLOR,
-    moveBeforeFirstSymbol: true,
     addSource,
-    addLayer: (m, beforeLayerId) => {
-      m.addLayer(
+    addLayer: (m) => {
+      addLayerInSlot(
+        m,
         {
           id: COLOR,
           type: "line",
@@ -252,7 +222,8 @@ export function TrafficFlowLayer() {
             "line-offset": OFFSET_EXPR,
           },
         },
-        beforeLayerId,
+        "traffic-flow",
+        1,
       );
     },
     deps: [mapReady, styleVersion, mapRef, showFlow, martinBase],

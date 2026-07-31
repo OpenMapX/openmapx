@@ -208,6 +208,12 @@ export type { TideExtremaOptions, TideExtreme, TideSample } from "./tideExtrema"
 export { despikeSeries, findTideExtrema } from "./tideExtrema";
 export { localDateInZone, timeZoneAt, zonedWallClockToInstant } from "./timezone";
 export {
+  FLOW_FALLBACK_COLOR,
+  FLOW_LOS_COLORS,
+  FLOW_RATIO_STOPS,
+  flowColorFor,
+} from "./trafficFlowColors";
+export {
   contactDomain,
   USER_AGENT,
   USER_AGENT_ADMIN,
