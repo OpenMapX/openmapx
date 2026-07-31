@@ -7,7 +7,10 @@ interface ServiceStatus {
   id: string;
   name: string;
   category: string;
-  url: string;
+  // Operator-only fields: the API returns these to admins and withholds them
+  // from anonymous callers, because interpolated health-check URLs and probe
+  // errors disclose credentials and internal hostnames.
+  url?: string;
   status: "up" | "down" | "unconfigured";
   responseTime?: number;
   error?: string;
@@ -70,7 +73,7 @@ export default function StatusDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${apiUrl}/api/status`);
+      const res = await fetch(`${apiUrl}/api/status`, { credentials: "include" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setData(await res.json());
     } catch (err) {
@@ -203,12 +206,14 @@ export default function StatusDashboard() {
                           </span>
                         )}
                       </div>
-                      <div
-                        className="text-xs text-gray-500 dark:text-neutral-400 font-mono truncate mt-0.5"
-                        title={s.url}
-                      >
-                        {s.url}
-                      </div>
+                      {s.url && (
+                        <div
+                          className="text-xs text-gray-500 dark:text-neutral-400 font-mono truncate mt-0.5"
+                          title={s.url}
+                        >
+                          {s.url}
+                        </div>
+                      )}
                       {s.error && (
                         <div className="text-xs text-red-500 dark:text-red-400 mt-0.5">
                           {s.error}

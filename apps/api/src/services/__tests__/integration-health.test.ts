@@ -32,13 +32,14 @@ import {
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../");
 
-function makeIntegration(hc: unknown): LoadedIntegration {
+function makeIntegration(hc: unknown, configSchema?: Record<string, unknown>): LoadedIntegration {
   return {
     id: "test-integration",
     manifest: {
       name: "Test Integration",
       domains: ["Other"] as [string, ...string[]],
       healthCheck: hc,
+      configSchema,
     },
     config: {},
     directory: "",
@@ -193,6 +194,130 @@ describe("integration-health placeholder substitution", () => {
         headers: expect.objectContaining({ "X-Api-Key": "secret-token-123" }),
       }),
     );
+  });
+});
+
+describe("integration-health secret redaction", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("redacts a secret in an unrecognized query parameter", async () => {
+    const integration = makeIntegration(
+      {
+        type: "http",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional string (manifest template syntax, not JS interpolation)
+        urlTemplate: "https://api.example.com/data?lat=0&appid=${apiKey}",
+      },
+      {
+        properties: {
+          apiKey: { type: "string", "x-openmapx-secret": true },
+        },
+      },
+    );
+    integration.config = { apiKey: "super-secret-value-123" };
+
+    const results = await executeIntegrationHealthCheck(integration);
+
+    expect(results[0]?.url).toBe("https://api.example.com/data?lat=0&appid=***");
+    expect(results[0]?.url).not.toContain("super-secret-value-123");
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://api.example.com/data?lat=0&appid=super-secret-value-123",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("redacts a secret in a path segment", async () => {
+    const integration = makeIntegration(
+      {
+        type: "http",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional string (manifest template syntax, not JS interpolation)
+        urlTemplate: "https://firms.example.com/api/area/csv/${firmsApiKey}/VIIRS/0,0,1,1/1",
+      },
+      {
+        properties: {
+          firmsApiKey: { type: "string", "x-openmapx-secret": true },
+        },
+      },
+    );
+    integration.config = { firmsApiKey: "firms-secret-value-123" };
+
+    const results = await executeIntegrationHealthCheck(integration);
+
+    expect(results[0]?.url).toContain("/api/area/csv/***/VIIRS");
+    expect(results[0]?.url).not.toContain("firms-secret-value-123");
+  });
+
+  it("preserves masking for a recognized query parameter", async () => {
+    const integration = makeIntegration(
+      {
+        type: "http",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional string (manifest template syntax, not JS interpolation)
+        urlTemplate: "https://api.example.com/status?api_key=${apiKey}",
+      },
+      {
+        properties: {
+          apiKey: { type: "string", "x-openmapx-secret": true },
+        },
+      },
+    );
+    integration.config = { apiKey: "super-secret-value-123" };
+
+    const results = await executeIntegrationHealthCheck(integration);
+
+    expect(results[0]?.url).toBe("https://api.example.com/status?api_key=***");
+  });
+
+  it("leaves non-secret config values untouched", async () => {
+    const integration = makeIntegration(
+      {
+        type: "http",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional string (manifest template syntax, not JS interpolation)
+        urlTemplate: "${endpoint}/health",
+      },
+      {
+        properties: {
+          endpoint: { type: "string" },
+        },
+      },
+    );
+    integration.config = { endpoint: "https://otp.example.com" };
+
+    const results = await executeIntegrationHealthCheck(integration);
+
+    expect(results[0]?.url).toBe("https://otp.example.com/health");
+  });
+
+  it("redacts secrets from error strings", async () => {
+    const secret = "super-secret-value-123";
+    const exposedLeadingFragment = secret.slice(0, 10);
+    const prefix = "connect failed ".padEnd(110, ".");
+    const integration = makeIntegration(
+      {
+        type: "http",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional string (manifest template syntax, not JS interpolation)
+        urlTemplate: "https://api.example.com/data?lat=0&appid=${apiKey}",
+      },
+      {
+        properties: {
+          apiKey: { type: "string", "x-openmapx-secret": true },
+        },
+      },
+    );
+    integration.config = { apiKey: secret };
+    fetchSpy.mockRejectedValue(new Error(`${prefix}${secret}`));
+
+    const results = await executeIntegrationHealthCheck(integration);
+
+    expect(results[0]?.status).toBe("down");
+    expect(results[0]?.error).not.toContain(secret);
+    expect(results[0]?.error).not.toContain(exposedLeadingFragment);
   });
 });
 

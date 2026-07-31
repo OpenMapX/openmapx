@@ -2,6 +2,7 @@ import { createConnection } from "node:net";
 import type { FastifyPluginAsync } from "fastify";
 import { sql } from "../db/index.js";
 import { redis } from "../redis.js";
+import { tryAdminSession } from "../utils/require-admin.js";
 
 const TIMEOUT = 5_000;
 
@@ -13,6 +14,25 @@ interface ServiceStatus {
   status: "up" | "down" | "unconfigured";
   responseTime?: number;
   error?: string;
+}
+
+/**
+ * The subset of a status entry that is safe for an unauthenticated caller.
+ * `url` and `error` are withheld: interpolated health-check URLs can carry
+ * third-party credentials, and both fields disclose internal hostnames, ports
+ * and database/queue coordinates. Per-service up/down is already public via
+ * `/api/capabilities`, so keeping it here adds no new disclosure.
+ */
+type PublicServiceStatus = Omit<ServiceStatus, "url" | "error">;
+
+function toPublicStatus(service: ServiceStatus): PublicServiceStatus {
+  return {
+    id: service.id,
+    name: service.name,
+    category: service.category,
+    status: service.status,
+    responseTime: service.responseTime,
+  };
 }
 
 function env(name: string): string | undefined {
@@ -193,7 +213,7 @@ async function checkSmtp(): Promise<ServiceStatus> {
 }
 
 export const statusRoute: FastifyPluginAsync = async (fastify) => {
-  fastify.get("/status", async () => {
+  fastify.get("/status", async (request) => {
     // Platform checks (always present, not integration-managed)
     const platformResults = await Promise.all([
       checkPostgres(),
@@ -218,9 +238,21 @@ export const statusRoute: FastifyPluginAsync = async (fastify) => {
       (result) => !multiCheckIntegrationIds.has(result.id),
     );
 
+    const services: ServiceStatus[] = [...platformResults, ...visibleIntegrationResults];
+
+    // Resolving the session touches the database. This endpoint has to keep
+    // answering when the database is the thing that is down, so a failed
+    // lookup degrades to the public view instead of a 500.
+    let adminSession: Awaited<ReturnType<typeof tryAdminSession>> = null;
+    try {
+      adminSession = await tryAdminSession(request);
+    } catch {
+      adminSession = null;
+    }
+
     return {
       timestamp: new Date().toISOString(),
-      services: [...platformResults, ...visibleIntegrationResults],
+      services: adminSession ? services : services.map(toPublicStatus),
     };
   });
 };

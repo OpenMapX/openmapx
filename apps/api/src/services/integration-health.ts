@@ -2,6 +2,7 @@ import { createConnection } from "node:net";
 import { USER_AGENT, validatePublicUrl } from "@openmapx/core";
 import { type LoadedIntegration, toIntegrationMeta } from "@openmapx/integration-framework";
 import { impersonatingFetch } from "@openmapx/integration-framework/impersonate";
+import { getSecretFields } from "../utils/validate-config-body";
 import { recordHealthResult } from "./health-history";
 import { serviceUrl } from "./service-registry";
 
@@ -39,17 +40,18 @@ export interface ServiceStatus {
   error?: string;
 }
 
-function errMsg(err: unknown): string {
+function errMsg(err: unknown, redact?: (text: string) => string): string {
   if (err instanceof Error) {
     if (err.name === "TimeoutError" || err.message.includes("timed out")) return "Timeout";
     const cause = err.cause as Record<string, string> | undefined;
     if (cause?.code === "ECONNREFUSED") return "Connection refused";
     if (cause?.code === "ENOTFOUND") return "DNS lookup failed";
     if (cause?.code === "ECONNRESET") return "Connection reset";
-    const msg = err.message;
+    const msg = redact ? redact(err.message) : err.message;
     return msg.length > 120 ? `${msg.slice(0, 120)}…` : msg;
   }
-  return String(err).slice(0, 120);
+  const msg = String(err);
+  return (redact ? redact(msg) : msg).slice(0, 120);
 }
 
 function resolveConfigValue(integration: LoadedIntegration, key: string): string | undefined {
@@ -57,6 +59,38 @@ function resolveConfigValue(integration: LoadedIntegration, key: string): string
   if (v == null) return undefined;
   const s = typeof v === "string" ? v : String(v);
   return s.length > 0 ? s : undefined;
+}
+
+// A credential shorter than this cannot be matched safely: blanking a two- or
+// three-character string would corrupt unrelated parts of the URL, and no real
+// API key is that short.
+const MIN_REDACTABLE_SECRET_LENGTH = 4;
+
+/**
+ * Build a redactor that blanks every resolved secret VALUE wherever it occurs
+ * in a string — query value, path segment, or URL userinfo alike. Matching on
+ * the value rather than on a parameter name is what makes this robust: a
+ * manifest can put its credential anywhere (`?appid=<key>`,
+ * `/api/area/csv/<key>/...`), and a name allowlist can only ever cover the
+ * shapes someone remembered to add.
+ *
+ * Secrets are the `configSchema` fields marked `x-openmapx-secret: true`;
+ * `getSecretFields` is the same reader the admin credential endpoints use.
+ */
+function secretRedactor(integration: LoadedIntegration): (text: string) => string {
+  const values: string[] = [];
+  for (const field of getSecretFields(integration.manifest.configSchema)) {
+    const value = resolveConfigValue(integration, field.key);
+    if (value && value.length >= MIN_REDACTABLE_SECRET_LENGTH) values.push(value);
+  }
+  if (values.length === 0) return (text) => text;
+  // Longest first, so an overlapping shorter secret cannot leave a tail behind.
+  values.sort((a, b) => b.length - a.length);
+  return (text) => {
+    let out = text;
+    for (const value of values) out = out.split(value).join("***");
+    return out;
+  };
 }
 
 async function executeSingleHealthCheck(
@@ -82,6 +116,7 @@ async function executeSingleHealthCheck(
   const name = hc.name
     ? `${toIntegrationMeta(integration).name} — ${hc.name}`
     : toIntegrationMeta(integration).name;
+  const redactSecrets = secretRedactor(integration);
 
   // Skip the probe when any required config key is unresolved (no value from
   // defaults / DB / vault / env). The cascade is populated at integration
@@ -112,10 +147,10 @@ async function executeSingleHealthCheck(
         id,
         name,
         category,
-        url: isUnconfigured && result.error ? result.error : (hc.url ?? ""),
+        url: isUnconfigured && result.error ? redactSecrets(result.error) : (hc.url ?? ""),
         status: result.status,
         responseTime: result.responseTime ?? Date.now() - start,
-        error: isUnconfigured ? undefined : result.error,
+        error: isUnconfigured || !result.error ? undefined : redactSecrets(result.error),
       };
     } catch (err) {
       return {
@@ -125,7 +160,7 @@ async function executeSingleHealthCheck(
         url: hc.url ?? "",
         status: "down",
         responseTime: Date.now() - start,
-        error: errMsg(err),
+        error: errMsg(err, redactSecrets),
       };
     }
   }
@@ -155,7 +190,7 @@ async function executeSingleHealthCheck(
       url: `${host}:${port}`,
       status: result.ok ? "up" : "down",
       responseTime: result.ms,
-      error: result.error,
+      error: result.error ? redactSecrets(result.error) : undefined,
     };
   }
 
@@ -209,10 +244,12 @@ async function executeSingleHealthCheck(
     return null;
   }
 
-  // Mask sensitive data in display URL (preserve param name, mask value)
-  const displayUrl = checkUrl.replace(
-    /([?&](api_?key|key|apikey|app_key|token|access_token))=[^&]+/gi,
-    "$1=***",
+  // Mask sensitive data in the display URL. The name-based pass keeps a
+  // recognizable `key=***` shape for the common query-parameter form; the
+  // value-based pass catches every other placement (path segment, userinfo,
+  // unrecognized parameter name).
+  const displayUrl = redactSecrets(
+    checkUrl.replace(/([?&](api_?key|key|apikey|app_key|token|access_token))=[^&]+/gi, "$1=***"),
   );
 
   // Interpolate `${configKey}` and `${service:id}` placeholders in headers
@@ -303,7 +340,7 @@ async function executeSingleHealthCheck(
       url: displayUrl,
       status: "down",
       responseTime: Date.now() - start,
-      error: errMsg(err),
+      error: errMsg(err, redactSecrets),
     };
   }
 }
