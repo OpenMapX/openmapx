@@ -68,6 +68,48 @@ describe("fetchRoadConditions", () => {
     expect(out.find((e) => e.id === "d:2")?.delaySeconds).toBeUndefined();
   });
 
+  it("sends horizonDays only when set", async () => {
+    const spy = vi.spyOn(apiClient, "get").mockResolvedValue({ features: [] } as never);
+
+    await fetchRoadConditions([0, 0, 1, 1], { horizonDays: 7 });
+    expect(spy).toHaveBeenLastCalledWith(
+      "/api/integrations/road-conditions/events",
+      expect.objectContaining({ horizonDays: "7" }),
+    );
+
+    // `0` means "active now" — a falsy value that must still be sent.
+    await fetchRoadConditions([0, 0, 1, 1], { horizonDays: 0 });
+    expect(spy).toHaveBeenLastCalledWith(
+      "/api/integrations/road-conditions/events",
+      expect.objectContaining({ horizonDays: "0" }),
+    );
+
+    await fetchRoadConditions([0, 0, 1, 1]);
+    expect(spy).toHaveBeenLastCalledWith(
+      "/api/integrations/road-conditions/events",
+      expect.not.objectContaining({ horizonDays: expect.anything() }),
+    );
+  });
+
+  it("parses the planned/forecast flags off the feature", async () => {
+    vi.spyOn(apiClient, "get").mockResolvedValue({
+      features: [
+        {
+          geometry: { type: "Point", coordinates: [5, 52] },
+          properties: { id: "f:1", isForecast: true, isPlanned: true },
+        },
+        {
+          geometry: { type: "Point", coordinates: [5, 52] },
+          properties: { id: "f:2", isForecast: null, isPlanned: null },
+        },
+      ],
+    } as never);
+    const out = await fetchRoadConditions([0, 0, 1, 1]);
+    expect(out.find((e) => e.id === "f:1")).toMatchObject({ isForecast: true, isPlanned: true });
+    expect(out.find((e) => e.id === "f:2")?.isForecast).toBeUndefined();
+    expect(out.find((e) => e.id === "f:2")?.isPlanned).toBeUndefined();
+  });
+
   it("drops features without an id or geometry", async () => {
     vi.spyOn(apiClient, "get").mockResolvedValue({
       features: [

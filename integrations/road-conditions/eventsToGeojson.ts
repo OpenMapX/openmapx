@@ -50,6 +50,10 @@ export function eventsToFeatureCollection(
         evidenceState: e.evidenceState ?? null,
         routingEligible: e.routingEligible ?? null,
         confidenceScore: e.confidenceScore ?? null,
+        // Planned-works labeling — the overlay dims/dashes works that have not
+        // started yet, and shows their start date in the popup.
+        isForecast: e.isForecast ?? null,
+        isPlanned: e.isPlanned ?? null,
       },
     })),
   };

@@ -107,11 +107,29 @@ export interface RoadConditionEvent {
   evidenceState?: string;
   /** Aggregate confidence score for a crowd event (0..1); undefined for feeds. */
   confidenceScore?: number;
+  /**
+   * The source announced this condition before it takes effect (e.g. Autobahn's
+   * `future` flag). Usually agrees with a `validFrom` in the future, but sources
+   * set it independently of how precise their dates are, so the overlay treats
+   * it as a second signal rather than deriving "upcoming" from dates alone.
+   */
+  isForecast?: boolean;
+  /**
+   * Scheduled work rather than an unplanned incident. Orthogonal to timing — a
+   * roadworks site in effect right now is `isPlanned` with a past `validFrom`.
+   */
+  isPlanned?: boolean;
 }
 
 export interface RoadConditionsQuery {
   types?: RoadConditionType[];
   minSeverity?: RoadConditionSeverity;
+  /**
+   * Keep only conditions in effect within the next `n` days (`0` = active now).
+   * Undefined means no temporal filter. Routing must keep it undefined: it
+   * evaluates validity at the chosen travel time and needs future closures.
+   */
+  horizonDays?: number;
 }
 
 export interface RoadFlowSegment {

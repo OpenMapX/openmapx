@@ -334,6 +334,13 @@
     "toggleOverlay": "Verkehrsstörungen umschalten",
     "filterByType": "Typ",
     "severity": "Schwere",
+    "timeHorizon": "Zeitraum",
+    "horizon": {
+      "active": "Aktiv",
+      "week": "Nächste 7 Tage",
+      "all": "Alle"
+    },
+    "startsAt": "Beginnt {date}",
     "reset": "Zurücksetzen",
     "all": "Alle",
     "sev": {

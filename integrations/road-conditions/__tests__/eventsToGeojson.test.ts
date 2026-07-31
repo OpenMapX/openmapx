@@ -22,4 +22,12 @@ describe("eventsToFeatureCollection", () => {
     const fc = eventsToFeatureCollection([base]);
     expect(fc.features[0]?.properties.delaySeconds).toBeNull();
   });
+
+  it("round-trips the planned/forecast flags, emitting null when unset", () => {
+    const fc = eventsToFeatureCollection([{ ...base, isForecast: true, isPlanned: true }, base]);
+    expect(fc.features[0]?.properties.isForecast).toBe(true);
+    expect(fc.features[0]?.properties.isPlanned).toBe(true);
+    expect(fc.features[1]?.properties.isForecast).toBeNull();
+    expect(fc.features[1]?.properties.isPlanned).toBeNull();
+  });
 });

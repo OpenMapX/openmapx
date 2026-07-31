@@ -8,7 +8,7 @@ import Typography from "@mui/material/Typography";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { SEVERITY_COLORS, TYPE_GLYPHS } from "./markers";
-import { type MinSeverity, useRoadConditionsStore } from "./store";
+import { type Horizon, type MinSeverity, useRoadConditionsStore } from "./store";
 
 /**
  * Types offered as filter chips — also the glyph legend, so the same row both
@@ -36,6 +36,9 @@ const SEVERITY_STEPS: { value: MinSeverity; color?: string }[] = [
   { value: "critical", color: SEVERITY_COLORS.critical },
 ];
 
+/** Time-horizon steps, narrowest first — the default is the first. */
+const HORIZON_STEPS: Horizon[] = ["active", "week", "all"];
+
 // Forward `className` so MUI's Chip can tag the svg with `.MuiChip-icon`
 // (it clones the icon element and injects the class) — otherwise the icon
 // styling, including the left-margin below, never applies.
@@ -53,11 +56,13 @@ export function RoadConditionsLegend() {
   const layerVisible = useRoadConditionsStore((s) => s.layerVisible);
   const types = useRoadConditionsStore((s) => s.types);
   const minSeverity = useRoadConditionsStore((s) => s.minSeverity);
+  const horizon = useRoadConditionsStore((s) => s.horizon);
   const setLayerVisible = useRoadConditionsStore((s) => s.setLayerVisible);
   const toggleType = useRoadConditionsStore((s) => s.toggleType);
   const setMinSeverity = useRoadConditionsStore((s) => s.setMinSeverity);
+  const setHorizon = useRoadConditionsStore((s) => s.setHorizon);
   const resetFilters = useRoadConditionsStore((s) => s.resetFilters);
-  const filtersActive = types.length > 0 || minSeverity !== "all";
+  const filtersActive = types.length > 0 || minSeverity !== "all" || horizon !== "active";
 
   return (
     <OverlayLegend
@@ -139,6 +144,29 @@ export function RoadConditionsLegend() {
           />
           {t("sev.unknown")}
         </Typography>
+      </Box>
+
+      <Box sx={{ mt: 0.75 }}>
+        <Typography sx={{ fontSize: 10.5, color: "text.secondary", mb: 0.4 }}>
+          {t("timeHorizon")}
+        </Typography>
+        <ToggleButtonGroup
+          value={horizon}
+          exclusive
+          onChange={(_, val: Horizon | null) => val && setHorizon(val)}
+          size="small"
+          sx={{ height: 26 }}
+        >
+          {HORIZON_STEPS.map((step) => (
+            <ToggleButton
+              key={step}
+              value={step}
+              sx={{ fontSize: 10.5, px: 1, py: 0, textTransform: "none", minWidth: 0 }}
+            >
+              {t(`horizon.${step}`)}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
       </Box>
 
       {filtersActive ? (

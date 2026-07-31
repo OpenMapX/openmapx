@@ -334,6 +334,13 @@
     "toggleOverlay": "Toggle traffic incidents",
     "filterByType": "Type",
     "severity": "Severity",
+    "timeHorizon": "Time",
+    "horizon": {
+      "active": "Active",
+      "week": "Next 7 days",
+      "all": "All"
+    },
+    "startsAt": "Starts {date}",
     "reset": "Reset",
     "all": "All",
     "sev": {

@@ -10,6 +10,12 @@ import { API_ENDPOINTS } from "./endpoints";
 export interface FetchRoadConditionsOptions {
   types?: RoadConditionType[];
   minSeverity?: RoadConditionSeverity;
+  /**
+   * Keep only conditions in effect within the next `n` days (`0` = active now).
+   * Omit for no temporal filter — navigation relies on that, since it evaluates
+   * validity at the chosen travel time and must still see future closures.
+   */
+  horizonDays?: number;
 }
 
 interface RoadConditionFeature {
@@ -45,6 +51,8 @@ function featureToEvent(feature: RoadConditionFeature): RoadConditionEvent | nul
     validTo: (p.validTo as string | null) ?? null,
     dataUpdatedAt: str(p.dataUpdatedAt),
     attribution: (p.attribution as RoadConditionEvent["attribution"]) ?? undefined,
+    ...(typeof p.isForecast === "boolean" ? { isForecast: p.isForecast } : {}),
+    ...(typeof p.isPlanned === "boolean" ? { isPlanned: p.isPlanned } : {}),
   };
 }
 
@@ -62,6 +70,8 @@ export async function fetchRoadConditions(
     const params: Record<string, string> = { bbox: bbox.join(",") };
     if (opts?.types && opts.types.length > 0) params.types = opts.types.join(",");
     if (opts?.minSeverity) params.minSeverity = opts.minSeverity;
+    // `0` is a meaningful horizon ("active now"), so test for presence.
+    if (opts?.horizonDays != null) params.horizonDays = String(opts.horizonDays);
     const fc = await apiClient.get<RoadConditionFeatureCollection>(
       API_ENDPOINTS.roadConditions,
       params,

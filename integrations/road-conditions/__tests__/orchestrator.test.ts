@@ -27,6 +27,11 @@ function provider(
   return { id, getEvents };
 }
 
+/** Distinct points so the cross-provider dedupe doesn't collapse the fixtures. */
+function pt(lon: number): RoadConditionEvent["geometry"] {
+  return { type: "Point", coordinates: [lon, 52.5] };
+}
+
 function seg(over: Partial<RoadFlowSegment> & Pick<RoadFlowSegment, "id">): RoadFlowSegment {
   return {
     geometry: {
@@ -155,6 +160,52 @@ describe("aggregateRoadConditions", () => {
     const out = await aggregateRoadConditions(ctx, BBOX);
     expect(called).toBe(false);
     expect(out).toEqual([]);
+  });
+
+  it("post-filters events outside the horizon, for providers that ignore the option", async () => {
+    const inDays = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString();
+    // This provider deliberately ignores `opts` — the guarantee has to hold
+    // regardless of whether a provider pushed the filter down.
+    const ctx = ctxWith([
+      provider("ignores-opts", async () => [
+        ev({ id: "now", validFrom: inDays(-1), geometry: pt(13.4) }),
+        ev({ id: "soon", validFrom: inDays(2), geometry: pt(13.401) }),
+        ev({ id: "later", validFrom: inDays(10), geometry: pt(13.402) }),
+      ]),
+    ]);
+
+    const week = await aggregateRoadConditions(ctx, BBOX, { horizonDays: 7 });
+    expect(week.map((e) => e.id).sort()).toEqual(["now", "soon"]);
+
+    const activeOnly = await aggregateRoadConditions(ctx, BBOX, { horizonDays: 0 });
+    expect(activeOnly.map((e) => e.id)).toEqual(["now"]);
+
+    const unfiltered = await aggregateRoadConditions(ctx, BBOX);
+    expect(unfiltered.map((e) => e.id).sort()).toEqual(["later", "now", "soon"]);
+  });
+
+  it("keeps events with a missing or unparseable validFrom at any horizon", async () => {
+    const ctx = ctxWith([
+      provider("p", async () => [
+        ev({ id: "no-start", geometry: pt(13.4) }),
+        ev({ id: "null-start", validFrom: null, geometry: pt(13.401) }),
+        ev({ id: "junk-start", validFrom: "not a date", geometry: pt(13.402) }),
+      ]),
+    ]);
+    const out = await aggregateRoadConditions(ctx, BBOX, { horizonDays: 0 });
+    expect(out.map((e) => e.id).sort()).toEqual(["junk-start", "no-start", "null-start"]);
+  });
+
+  it("forwards horizonDays to providers that do accept it", async () => {
+    let seen: number | undefined | "unset" = "unset";
+    const ctx = ctxWith([
+      provider("p", async (_bbox, opts) => {
+        seen = opts?.horizonDays;
+        return [];
+      }),
+    ]);
+    await aggregateRoadConditions(ctx, BBOX, { horizonDays: 7 });
+    expect(seen).toBe(7);
   });
 });
 

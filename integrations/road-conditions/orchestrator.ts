@@ -30,6 +30,19 @@ function coversBbox(coverage: RoadConditionsProvider["coverage"], bbox: BBox): b
 }
 
 /**
+ * Whether an event is in effect within `horizonDays` days from `now`. An event
+ * with no parseable start has no announced beginning, so it counts as already
+ * in effect and is never filtered out — the same rule the OpenConditions SQL
+ * read applies to a NULL `valid_from`.
+ */
+function withinHorizon(e: RoadConditionEvent, horizonDays: number, now: number): boolean {
+  if (!e.validFrom) return true;
+  const from = Date.parse(e.validFrom);
+  if (Number.isNaN(from)) return true;
+  return from <= now + horizonDays * 86_400_000;
+}
+
+/**
  * Fans the query out to every enabled provider in parallel, tolerating
  * individual failures (`Promise.allSettled`), stamps each event with the
  * producing integration id, drops events whose `source` the operator's data-use
@@ -57,7 +70,14 @@ export async function aggregateRoadConditions(
   const disallowed = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
   const allowed = disallowed.size > 0 ? merged.filter((e) => !disallowed.has(e.source)) : merged;
 
-  return dedupeRoadConditionEvents(allowed);
+  const deduped = dedupeRoadConditionEvents(allowed);
+
+  // Providers that can push the horizon into their own query already have (see
+  // the OpenConditions provider); applying it again here is what guarantees the
+  // semantics for third-party providers that ignore `opts` entirely.
+  if (opts?.horizonDays == null) return deduped;
+  const now = Date.now();
+  return deduped.filter((e) => withinHorizon(e, opts.horizonDays!, now));
 }
 
 /**

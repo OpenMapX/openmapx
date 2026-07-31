@@ -19,7 +19,7 @@ import { isUnconfirmedCrowd } from "./evidence";
 import { markerImageData, markerImageId, parseMarkerImageId, representativePoint } from "./markers";
 // The named import also runs the module side-effect that registers the
 // "road-conditions" overlay store (shared by the layer selector + legend).
-import { useRoadConditionsStore } from "./store";
+import { horizonDaysParam, useRoadConditionsStore } from "./store";
 
 type GeoJsonData = Parameters<GeoJSONSource["setData"]>[0];
 
@@ -63,6 +63,9 @@ const POPUP_SPEC: PopupCardSpec = {
     // free-text description — many feeds don't put it in the text). Pre-formatted
     // into `validity` at click time.
     { field: "validity", labelKey: "panel.validity", variant: "row" },
+    // "Starts ⟨date⟩", set at click time for conditions that haven't begun —
+    // without it a widened horizon reads the same as what's in effect now.
+    { field: "startsAt", variant: "row" },
     // Pre-formatted "+X min" delay (Verlustzeit); set at click time when >= 60 s.
     { field: "delayText", labelKey: "panel.delay", variant: "row" },
     { field: "description", labelKey: "panel.description", variant: "block" },
@@ -153,6 +156,14 @@ interface RawFeature {
   properties?: Record<string, unknown> | null;
 }
 
+/** Whether a raw feature describes a condition that has not started yet. */
+function isFutureCondition(p: Record<string, unknown>): boolean {
+  if (p.isForecast === true) return true;
+  if (typeof p.validFrom !== "string") return false;
+  const from = Date.parse(p.validFrom);
+  return !Number.isNaN(from) && from > Date.now();
+}
+
 /**
  * Build the marker + line source data from the raw /events FeatureCollection:
  * exactly ONE marker per incident (placed at a representative point with the
@@ -169,6 +180,10 @@ function buildSources(features: RawFeature[]): { markers: GeoJsonData; lines: Ge
     const geom = f.geometry ?? null;
     const type = String(p.type ?? "other");
     const severity = String(p.severity ?? "unknown");
+    // Announced but not yet in effect. The upstream `isForecast` flag and a
+    // future `validFrom` are independent signals — sources set the flag while
+    // publishing vague or missing dates — so either one marks the feature.
+    const future = isFutureCondition(p);
 
     // Marker placement points. A MultiPoint from these feeds carries only the
     // endpoints of a linear event ("zwischen X und Y") with NO road path between
@@ -207,6 +222,9 @@ function buildSources(features: RawFeature[]): { markers: GeoJsonData; lines: Ge
           originKind: typeof p.originKind === "string" ? p.originKind : null,
           evidenceState: typeof p.evidenceState === "string" ? p.evidenceState : null,
         }),
+        // Drives the dimmed icon / dashed line for not-yet-started works, so a
+        // widened horizon stays visually distinct from what's in effect now.
+        future,
       };
       if (p.roadState) props.roadState = String(p.roadState);
       // Raw ISO validity bounds + recurring schedule — formatted into a human
@@ -243,7 +261,7 @@ function buildSources(features: RawFeature[]): { markers: GeoJsonData; lines: Ge
     // MultiPoint — there's no road path in the data, and the endpoint markers
     // above convey the extent without misrepresenting the road.
     if (geom && (geom.type === "LineString" || geom.type === "MultiLineString")) {
-      lineFeatures.push({ type: "Feature", geometry: geom, properties: { severity } });
+      lineFeatures.push({ type: "Feature", geometry: geom, properties: { severity, future } });
     }
   }
 
@@ -286,6 +304,7 @@ export function RoadConditionsLayer() {
   // server-side across every provider, not as client-side hiding.
   const filterTypes = useRoadConditionsStore((s) => s.types);
   const minSeverity = useRoadConditionsStore((s) => s.minSeverity);
+  const horizon = useRoadConditionsStore((s) => s.horizon);
 
   const fetchData = useCallback(async () => {
     const map = mapRef.current;
@@ -297,6 +316,8 @@ export function RoadConditionsLayer() {
     });
     if (filterTypes.length > 0) params.set("types", filterTypes.join(","));
     if (minSeverity !== "all") params.set("minSeverity", minSeverity);
+    const horizonDays = horizonDaysParam(horizon);
+    if (horizonDays !== undefined) params.set("horizonDays", horizonDays);
     const url = `${base}/api/integrations/road-conditions/events?${params.toString()}`;
     try {
       const res = await fetch(url, { credentials: "include" });
@@ -308,7 +329,7 @@ export function RoadConditionsLayer() {
     } catch {
       // Silent fetch failure — overlay stays as-is.
     }
-  }, [apiUrl, mapRef, filterTypes, minSeverity, minZoom]);
+  }, [apiUrl, mapRef, filterTypes, minSeverity, horizon, minZoom]);
 
   // Bake a disc+glyph marker image on demand for each (type, severity) the
   // symbol layer requests. Synchronous canvas render → no flicker, no warnings.
@@ -376,7 +397,13 @@ export function RoadConditionsLayer() {
               paint: {
                 "line-color": SEVERITY_LINE_COLOR,
                 "line-width": ["interpolate", ["linear"], ["zoom"], 5, 3, 12, 6, 16, 9],
-                "line-opacity": 0.7,
+                "line-opacity": ["case", ["get", "future"], 0.45, 0.7],
+                "line-dasharray": [
+                  "case",
+                  ["get", "future"],
+                  ["literal", [2, 1.5]],
+                  ["literal", [1]],
+                ],
               },
             },
             before,
@@ -397,6 +424,9 @@ export function RoadConditionsLayer() {
                 // Higher sort-key is drawn last (on top), so key by severity rank
                 // — the worst condition's disc sits on top where markers overlap.
                 "symbol-sort-key": ["get", "_sev"],
+              },
+              paint: {
+                "icon-opacity": ["case", ["get", "future"], 0.55, 1],
               },
             },
             before,
@@ -466,6 +496,12 @@ export function RoadConditionsLayer() {
           dtfRef.current.dateTime,
           dtfRef.current.date,
         );
+        const startsAt =
+          p.future === true && typeof p.validFrom === "string"
+            ? tRef.current("startsAt", {
+                date: dtfRef.current.dateTime(p.validFrom),
+              })
+            : undefined;
         const delaySeconds = Number(p.delaySeconds);
         const delayText =
           Number.isFinite(delaySeconds) && delaySeconds >= 60
@@ -474,6 +510,7 @@ export function RoadConditionsLayer() {
         entries.push({
           ...p,
           ...(validity ? { validity } : {}),
+          ...(startsAt ? { startsAt } : {}),
           ...(delayText ? { delayText } : {}),
         });
       }

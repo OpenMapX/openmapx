@@ -37,8 +37,20 @@ function bboxKey(bbox: BBox): string {
   return bbox.map((n) => n.toFixed(4)).join(",");
 }
 
+/**
+ * `?horizonDays=7` → "in effect within a week"; `0` → "active now". Anything
+ * that isn't a non-negative integer reads as absent (no temporal filter), never
+ * as `0` — a typo must not silently hide every upcoming closure.
+ */
+function parseHorizonDays(raw: string | undefined): number | undefined {
+  if (raw == null || raw.trim() === "") return undefined;
+  if (!/^\d+$/.test(raw.trim())) return undefined;
+  const n = Number.parseInt(raw, 10);
+  return Number.isSafeInteger(n) ? n : undefined;
+}
+
 export function setup(ctx: IntegrationContext): void {
-  // GET /events?bbox=west,south,east,north[&types=&minSeverity=]
+  // GET /events?bbox=west,south,east,north[&types=&minSeverity=&horizonDays=]
   // Aggregates every enabled road-conditions provider into one GeoJSON
   // FeatureCollection — consumed by both the map overlay and navigation.
   ctx.registerRoute("GET", "/events", async (req, reply) => {
@@ -53,14 +65,16 @@ export function setup(ctx: IntegrationContext): void {
       .map((t) => t.trim())
       .filter(Boolean) as RoadConditionType[];
     const minSeverity = (req.query.minSeverity || undefined) as RoadConditionSeverity | undefined;
+    const horizonDays = parseHorizonDays(req.query.horizonDays);
 
-    const key = `conditions:query:roads:${bboxKey(bbox)}:${types.join("+")}:${minSeverity ?? ""}`;
+    const key = `conditions:query:roads:${bboxKey(bbox)}:${types.join("+")}:${minSeverity ?? ""}:${horizonDays ?? ""}`;
 
     try {
       const fc = await ctx.cache.withCache(key, 90, async () => {
         const events = await aggregateRoadConditions(ctx, bbox, {
           types: types.length > 0 ? types : undefined,
           minSeverity,
+          horizonDays,
         });
         return eventsToFeatureCollection(events);
       });
