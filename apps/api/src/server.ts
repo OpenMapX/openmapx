@@ -7,7 +7,6 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import { registry } from "@integrations/transit-dynamic-registry/registry";
 import { listIdSchemeViews, registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
-import { fromNodeHeaders } from "better-auth/node";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import Fastify from "fastify";
 import { auth } from "./auth";
@@ -40,6 +39,7 @@ import { internalPoiSourcesRoute } from "./routes/internal-poi-sources";
 import { isochroneRoute } from "./routes/isochrone";
 import { legalConfigRoute } from "./routes/legal-config";
 import { maptilerRoute } from "./routes/maptiler";
+import { meRoute } from "./routes/me";
 import { neighborhoodsRoute } from "./routes/neighborhoods";
 import { placesRoute } from "./routes/places";
 import { reviewsKeypairRoute } from "./routes/reviews-keypair";
@@ -276,6 +276,7 @@ await server.register(internalPoiSourcesRoute, { prefix: "/api" });
 await server.register(winterSportsRoute, { prefix: "/api" });
 await server.register(reviewsKeypairRoute, { prefix: "/api" });
 await server.register(savedRoute, { prefix: "/api" });
+await server.register(meRoute, { prefix: "/api" });
 await server.register(statusRoute, { prefix: "/api" });
 await server.register(adminRoute, { prefix: "/api" });
 await server.register(adminServicesRoute, { prefix: "/api" });
@@ -287,18 +288,6 @@ await server.register(adminSystemRoute, { prefix: "/api" });
 await server.register(attributionRoute, { prefix: "/api" });
 await registerCapabilityBindingRoutes(server);
 await registerAdminComposeRoutes(server);
-
-// Session endpoint
-server.get("/api/me", async (request, reply) => {
-  reply.header("Cache-Control", "no-store");
-  const session = await auth.api.getSession({
-    headers: fromNodeHeaders(request.headers),
-  });
-  if (!session) {
-    return reply.status(401).send({ error: "Unauthorized" });
-  }
-  return reply.send(session);
-});
 
 // Service registry — load service manifests from services/ directory
 // Must run before initIntegrations so requires: blocks can be resolved
