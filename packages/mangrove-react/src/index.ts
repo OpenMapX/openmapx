@@ -26,6 +26,7 @@ export {
   type AddPassphraseWrapInput,
   type AddWebAuthnWrapInput,
   type AddWrapInput,
+  MANGROVE_KEYPAIR_QUERY_KEY,
   type SetupInput,
   type SetupPassphraseAndWebAuthnInput,
   type SetupPassphraseInput,

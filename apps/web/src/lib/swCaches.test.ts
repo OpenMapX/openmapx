@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isStalePrecacheName, offlineFallback, refreshPinnedStyleAssets } from "./swCaches";
+import {
+  isCredentialedApiPath,
+  isStalePrecacheName,
+  offlineFallback,
+  refreshPinnedStyleAssets,
+} from "./swCaches";
 
 const current = { appShell: "app-shell-NEW", style: "style-assets-NEW" };
 
@@ -144,5 +149,35 @@ describe("refreshPinnedStyleAssets", () => {
       }),
     );
     expect(seen).toEqual([{ url: "https://x/styles/openmapx-streets.json", etag: 'W/"abc"' }]);
+  });
+});
+
+describe("isCredentialedApiPath", () => {
+  it("matches credentialed paths", () => {
+    const paths: string[] = [
+      "/api/auth/get-session",
+      "/api/auth/sign-out",
+      "/api/me",
+      "/api/reviews/keypair",
+      "/api/reviews/keypair/wraps",
+      "/api/admin/audit",
+      "/api/saved/lists",
+    ];
+    for (const pathname of paths) expect(isCredentialedApiPath(pathname)).toBe(true);
+  });
+
+  it("does not match cacheable paths", () => {
+    const paths: string[] = [
+      "/api/places/123",
+      "/api/places/search",
+      "/api/integrations/geocoding/geocode",
+      "/api/maptiler/tiles.json",
+      "/api/integrations/reviews/reviews",
+      "/styles/openmapx-streets.json",
+      "/tiles/14/8/5.pbf",
+      "/",
+      "/api/mentions",
+    ];
+    for (const pathname of paths) expect(isCredentialedApiPath(pathname)).toBe(false);
   });
 });

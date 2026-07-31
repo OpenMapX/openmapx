@@ -187,6 +187,12 @@ export const reviewsKeypairRoute: FastifyPluginAsync = async (fastify) => {
   // Every keypair route is per-user; authenticate once here so no handler can
   // forget the check.
   fastify.addHook("preHandler", requireAuthHook);
+  // Responses carry per-user key material — the cleartext private JWK in
+  // unencrypted mode. Keep them out of every HTTP cache and proxy.
+  fastify.addHook("onSend", async (_request, reply, payload) => {
+    reply.header("Cache-Control", "no-store");
+    return payload;
+  });
 
   /** GET — current envelope state. */
   fastify.get("/reviews/keypair", async (request, reply) => {

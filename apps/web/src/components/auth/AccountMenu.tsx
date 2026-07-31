@@ -13,7 +13,8 @@ import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 import type { User } from "@openmapx/core";
 import { authClient, getInitials, proxyImageUrl } from "@openmapx/core";
-import { useKeypairStore } from "@openmapx/mangrove-react";
+import { MANGROVE_KEYPAIR_QUERY_KEY, useKeypairStore } from "@openmapx/mangrove-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 
@@ -28,15 +29,18 @@ export function AccountMenu({ anchorEl, onClose, user, onOpenSettings }: Account
   const open = Boolean(anchorEl);
   const t = useTranslations("account");
   const router = useRouter();
+  const queryClient = useQueryClient();
   const isAdmin = user.role === "admin";
 
   const handleSignOut = async () => {
     onClose();
-    // Wipe the in-memory Mangrove keypair before tearing down the session so
-    // the private JWK isn't reachable from any module after sign-out. The
-    // server is the source of truth for the encrypted envelope — we only
-    // hold decrypted material while a session is live.
+    // Wipe the in-memory Mangrove keypair and its query-cached envelope before
+    // tearing down the session so the private JWK isn't reachable through
+    // application state afterwards. The server is the source of truth for the
+    // encrypted envelope — we only hold decrypted material while a session is
+    // live.
     useKeypairStore.getState().clear();
+    queryClient.removeQueries({ queryKey: MANGROVE_KEYPAIR_QUERY_KEY });
     await authClient.signOut();
   };
 

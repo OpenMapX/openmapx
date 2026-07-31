@@ -290,6 +290,7 @@ await registerAdminComposeRoutes(server);
 
 // Session endpoint
 server.get("/api/me", async (request, reply) => {
+  reply.header("Cache-Control", "no-store");
   const session = await auth.api.getSession({
     headers: fromNodeHeaders(request.headers),
   });

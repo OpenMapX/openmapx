@@ -91,3 +91,30 @@ export async function refreshPinnedStyleAssets(deps: RefreshPinnedStylesDeps): P
   }
   return replaced;
 }
+
+/**
+ * API paths whose GET responses are scoped to the signed-in user: the auth
+ * surface, the session endpoint, the admin panel, saved places, and the
+ * Mangrove keypair envelope (which carries the cleartext private JWK for
+ * accounts in unencrypted mode). None of these may be written to Cache
+ * Storage.
+ *
+ * Entries ending in `/` are prefixes; the others match the exact path or any
+ * sub-path below it.
+ */
+const CREDENTIALED_API_PATHS = [
+  "/api/auth/",
+  "/api/admin/",
+  "/api/saved/",
+  "/api/me",
+  "/api/reviews/keypair",
+] as const;
+
+/** True for request paths that must bypass every runtime cache. */
+export function isCredentialedApiPath(pathname: string): boolean {
+  return CREDENTIALED_API_PATHS.some((entry) =>
+    entry.endsWith("/")
+      ? pathname.startsWith(entry)
+      : pathname === entry || pathname.startsWith(`${entry}/`),
+  );
+}

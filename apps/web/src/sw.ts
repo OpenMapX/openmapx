@@ -22,7 +22,12 @@ import {
   StaleWhileRevalidate,
   type Strategy,
 } from "serwist";
-import { isStalePrecacheName, offlineFallback, refreshPinnedStyleAssets } from "./lib/swCaches";
+import {
+  isCredentialedApiPath,
+  isStalePrecacheName,
+  offlineFallback,
+  refreshPinnedStyleAssets,
+} from "./lib/swCaches";
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -198,9 +203,19 @@ const serwist = new Serwist({
   // See https://github.com/GoogleChrome/workbox/issues/3134.
   navigationPreload: false,
   runtimeCaching: [
-    // Auth — never cache. Always go to network. Failures must surface to UI.
+    // Credentialed API responses — never cached, always straight to network so
+    // failures surface to the UI. The keypair envelope carries the cleartext
+    // private JWK in unencrypted mode; sign-in state, the admin surface and
+    // saved places are per-user too. Serwist ignores `Cache-Control: no-store`
+    // (its default cacheWillUpdate accepts any 200), and `...defaultCache`
+    // below ends in a same-origin `/api/` NetworkFirst rule plus a
+    // cross-origin one — so the only way to keep these off disk is to match
+    // them first. The router returns the FIRST matching route, so this entry
+    // must stay at the top of the list. A function matcher rather than a
+    // RegExp: RegExp routes only match cross-origin URLs from index 0, and
+    // NEXT_PUBLIC_API_URL is a different origin in local dev.
     {
-      matcher: /\/api\/auth\//,
+      matcher: ({ url }: { url: URL }) => isCredentialedApiPath(url.pathname),
       handler: ({ request }: { request: Request }) => fetch(request),
     },
 

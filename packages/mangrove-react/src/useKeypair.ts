@@ -45,6 +45,13 @@ import type { EnvelopeState, KeypairEnvelopeEncrypted, KeypairWrap, WrapMeta } f
 
 // ── envelope state query ────────────────────────────────────────────────
 
+/**
+ * Query-key root for the server-side keypair envelope. Exported so hosts can
+ * evict the envelope from the query cache when the session ends — the response
+ * contains the cleartext private JWK for unencrypted accounts.
+ */
+export const MANGROVE_KEYPAIR_QUERY_KEY = ["mangroveKeypairState"] as const;
+
 export function useKeypairState(): {
   data: EnvelopeState | null;
   isLoading: boolean;
@@ -55,7 +62,7 @@ export function useKeypairState(): {
   const userId = currentUser?.id ?? null;
 
   const q = useQuery({
-    queryKey: ["mangroveKeypairState", userId],
+    queryKey: [...MANGROVE_KEYPAIR_QUERY_KEY, userId],
     enabled: !!userId,
     // In unencrypted mode the GET response contains the private JWK, so we
     // want to pull it over the wire as rarely as possible. Every mutation
@@ -284,7 +291,7 @@ export function useSetupKeypair() {
       setKeypair(kp, pem, true, serialized.privateJwk);
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["mangroveKeypairState"] });
+      await qc.invalidateQueries({ queryKey: MANGROVE_KEYPAIR_QUERY_KEY });
     },
   });
 }
@@ -449,7 +456,7 @@ export function useAddWrap() {
       });
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["mangroveKeypairState"] });
+      await qc.invalidateQueries({ queryKey: MANGROVE_KEYPAIR_QUERY_KEY });
     },
   });
 }
@@ -500,7 +507,7 @@ export function useRemoveWrap() {
       await transport.updateKeypairWraps({ passphraseCiphertext, recipientsCiphertext, wraps });
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["mangroveKeypairState"] });
+      await qc.invalidateQueries({ queryKey: MANGROVE_KEYPAIR_QUERY_KEY });
     },
   });
 }
@@ -543,7 +550,7 @@ export function useChangePassphrase() {
       });
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["mangroveKeypairState"] });
+      await qc.invalidateQueries({ queryKey: MANGROVE_KEYPAIR_QUERY_KEY });
     },
   });
 }
@@ -560,7 +567,7 @@ export function useRegenerateMangroveKeypair() {
     },
     onSuccess: async () => {
       clear();
-      await qc.invalidateQueries({ queryKey: ["mangroveKeypairState"] });
+      await qc.invalidateQueries({ queryKey: MANGROVE_KEYPAIR_QUERY_KEY });
     },
   });
 }
@@ -587,7 +594,7 @@ export function useRefreshKeypair() {
   return useMutation({
     mutationFn: async (): Promise<void> => {
       clear();
-      await qc.invalidateQueries({ queryKey: ["mangroveKeypairState"] });
+      await qc.invalidateQueries({ queryKey: MANGROVE_KEYPAIR_QUERY_KEY });
     },
   });
 }
