@@ -22,6 +22,14 @@
    * bar over map imagery is much harder to read at 10px. */
   --omx-footer-bg: #f2f2f2;
   --omx-footer-text: #1f1f1f;
+  /* Traffic-delay text tones. The traffic overlay's map hexes cannot be reused
+   * as text — #ffd500 is 1.42:1 on white, far under the 4.5:1 AA floor. These
+   * are the minimal hue-preserving darkenings that clear it: 4.51, 4.53, 4.62
+   * and 10.99 respectively. */
+  --omx-traffic-light: #8c7500;
+  --omx-traffic-moderate: #b26200;
+  --omx-traffic-heavy: #e8112d;
+  --omx-traffic-severe: #7e0023;
   --omx-safe-top: env(safe-area-inset-top, 0px);
   --omx-safe-bottom: env(safe-area-inset-bottom, 0px);
   --omx-safe-left: env(safe-area-inset-left, 0px);
@@ -44,6 +52,12 @@
   --omx-overlay-text: #E8EAED;
   --omx-footer-bg: #2D2D2D;
   --omx-footer-text: #E8EAED;
+  /* Lifted for the #2D2D2D overlay surface: 9.69, 5.90, 4.52 and 4.52. The two
+   * darkest map hexes are unusable here — #7e0023 is 1.71:1 on this background. */
+  --omx-traffic-light: #ffd500;
+  --omx-traffic-moderate: #ff8c00;
+  --omx-traffic-heavy: #f46376;
+  --omx-traffic-severe: #ff5584;
 }
 
 @media (prefers-reduced-motion: no-preference) {

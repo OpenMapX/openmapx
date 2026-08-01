@@ -512,6 +512,8 @@
     "bikeHillsStronglyAvoid": "Strongly avoid steep routes",
     "fastestRoute": "Fastest route",
     "co2Estimate": "≈ {co2} (est.)",
+    "trafficDelay": "+{delay} traffic",
+    "trafficDelayNormally": "normally {baseline}",
     "from": "from",
     "to": "to",
     "origin": "Origin",

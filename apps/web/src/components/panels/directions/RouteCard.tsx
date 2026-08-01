@@ -10,6 +10,7 @@ import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import type { Route } from "@openmapx/core";
 import {
+  bandForDelayRatio,
   estimateDrivingCo2Grams,
   formatDistance,
   formatDuration,
@@ -19,10 +20,13 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import { formatCo2Emission } from "@/lib/formatCo2";
 import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
-import { BRAND } from "@/lib/theme";
+import { BRAND, TRAFFIC_TEXT_COLOR } from "@/lib/theme";
 import { requestHeadingPermission } from "@/lib/useHeading";
 
 const GROUND_MODES = new Set<Route["mode"]>(["driving", "walking", "cycling", "motorcycle"]);
+
+/** Absolute floor for showing a traffic delay, in seconds. */
+const MIN_TRAFFIC_DELAY_SECONDS = 300;
 
 export function RouteCard({
   route,
@@ -78,6 +82,19 @@ export function RouteCard({
       <DirectionsBikeIcon sx={{ fontSize: 22, color: active ? BRAND : "text.disabled" }} />
     );
 
+  // Only worth surfacing when it clears both an absolute floor and a relative
+  // one: a 90-second delta on a two-hour drive tells the user nothing, and a
+  // large ratio on a very short hop is mostly snapping noise.
+  const trafficDelay = (() => {
+    const baseline = route.baselineDuration;
+    if (baseline === undefined || baseline <= 0) return null;
+    const delaySeconds = route.duration - baseline;
+    if (delaySeconds < MIN_TRAFFIC_DELAY_SECONDS) return null;
+    const band = bandForDelayRatio(delaySeconds / baseline);
+    if (!band) return null;
+    return { band, delaySeconds, baseline };
+  })();
+
   return (
     <Box
       onClick={onSelect}
@@ -120,6 +137,21 @@ export function RouteCard({
             {formatDuration(route.duration)}
           </Typography>
         </Box>
+        {trafficDelay && (
+          <Typography
+            variant="caption"
+            data-testid="traffic-delay"
+            sx={{
+              color: TRAFFIC_TEXT_COLOR[trafficDelay.band],
+              display: "block",
+              fontWeight: 600,
+            }}
+          >
+            {t("trafficDelay", { delay: formatDuration(trafficDelay.delaySeconds) })}
+            {" · "}
+            {t("trafficDelayNormally", { baseline: formatDuration(trafficDelay.baseline) })}
+          </Typography>
+        )}
         <Typography
           variant="caption"
           sx={{
