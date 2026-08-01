@@ -6,6 +6,7 @@ interface VitestExpectation {
   toBe(expected: unknown): void;
   toBeCloseTo(expected: number, numDigits?: number): void;
   toBeGreaterThan(expected: number): void;
+  toBeGreaterThanOrEqual(expected: number): void;
   toBeLessThan(expected: number): void;
   toBeDefined(): void;
   toBeUndefined(): void;
@@ -51,5 +52,8 @@ declare module "vitest" {
     stubGlobal(name: string, value: unknown): void;
     unstubAllGlobals(): void;
     clearAllMocks(): void;
+    useFakeTimers(): void;
+    useRealTimers(): void;
+    advanceTimersByTimeAsync(ms: number): Promise<void>;
   };
 }

@@ -1535,6 +1535,8 @@
     "voiceTest": "Play test",
     "voiceTestSample": "In 300 meters, turn right.",
     "avoidClosures": "Avoid closures and incidents",
+    "fasterRoutes": "Offer faster routes",
+    "fasterRoutesHint": "While driving, check for a quicker way around traffic and offer to switch.",
     "avoidMotorways": "Avoid motorways",
     "avoidTolls": "Avoid tolls",
     "avoidFerries": "Avoid ferries",

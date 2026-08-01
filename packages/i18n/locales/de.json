@@ -1535,6 +1535,8 @@
     "voiceTest": "Test abspielen",
     "voiceTestSample": "In 300 Metern rechts abbiegen.",
     "avoidClosures": "Sperrungen und Vorfälle vermeiden",
+    "fasterRoutes": "Schnellere Routen anbieten",
+    "fasterRoutesHint": "Sucht während der Fahrt nach einem schnelleren Weg um den Verkehr herum und bietet den Wechsel an.",
     "avoidMotorways": "Autobahnen vermeiden",
     "avoidTolls": "Maut vermeiden",
     "avoidFerries": "Fähren vermeiden",

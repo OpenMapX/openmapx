@@ -1,0 +1,123 @@
+"use client";
+
+import {
+  evaluateFasterRoute,
+  FASTER_ROUTE_DEFAULTS,
+  fetchDirections,
+  remainingWaypoints,
+  useNavigationStore,
+  useSettingsStore,
+} from "@openmapx/core";
+import { useLocale } from "next-intl";
+import { useEffect, useRef } from "react";
+import { useNavRecordingStore } from "./navRecordingStore";
+
+/** How often to ask whether a better route exists. */
+const CHECK_INTERVAL_MS = 300_000;
+
+/** Quiet period after an offer is answered. */
+const SUPPRESS_MS = 600_000;
+
+/**
+ * Periodically re-plans from the driver's current position and offers a
+ * materially faster route when traffic has made one available.
+ */
+export function useFasterRoute(): void {
+  const locale = useLocale();
+  const route = useNavigationStore((s) => s.route);
+  const enabled = useSettingsStore((s) => s.fasterRoutes);
+  const suppressedUntilRef = useRef(0);
+
+  // Re-arm the quiet period whenever an offer is answered, either way.
+  const pending = useNavigationStore((s) => s.fasterRoute);
+  const hadPendingRef = useRef(false);
+  useEffect(() => {
+    if (hadPendingRef.current && !pending) suppressedUntilRef.current = Date.now() + SUPPRESS_MS;
+    hadPendingRef.current = pending !== null;
+  }, [pending]);
+
+  // A position change invalidates an offer computed from the old route.
+  const offRoute = useNavigationStore((s) => s.offRoute);
+  useEffect(() => {
+    if (offRoute && useNavigationStore.getState().fasterRoute) {
+      useNavigationStore.getState().dismissFasterRoute();
+    }
+  }, [offRoute]);
+
+  useEffect(() => {
+    if (!enabled || !route || route.geometry.length < 2) return;
+
+    let cancelled = false;
+
+    const check = () => {
+      const s = useNavigationStore.getState();
+      if (s.status !== "navigating" || s.kind !== "ground" || s.mode !== "driving") return;
+      if (s.offRoute || s.coasting || s.weakGps || s.fasterRoute) return;
+      if (!s.route || !s.progress) return;
+      if (useNavRecordingStore.getState().replaying) return;
+      if (Date.now() < suppressedUntilRef.current) return;
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+
+      const active = s.route;
+      const { progress } = s;
+      const remainingSeconds = (progress.etaEpochMs - Date.now()) / 1000;
+      if (remainingSeconds <= 0) return;
+
+      try {
+        const waypoints = remainingWaypoints(
+          active.geometry,
+          s.destinationWaypoints,
+          progress.snapped,
+          progress.alongMeters,
+        );
+
+        void fetchDirections({
+          waypoints,
+          mode: "driving",
+          lang: locale,
+          avoidClosures: useSettingsStore.getState().avoidIncidents,
+        })
+          .then((res) => {
+            if (cancelled) return;
+            const now = useNavigationStore.getState();
+            // The answer belongs to the route and setting state used to request it.
+            if (
+              now.route !== active ||
+              now.status !== "navigating" ||
+              now.mode !== "driving" ||
+              !useSettingsStore.getState().fasterRoutes
+            ) {
+              return;
+            }
+            if (now.offRoute || now.coasting || now.weakGps || now.fasterRoute) return;
+            const candidates = res.routes ?? [];
+            const { faster } = evaluateFasterRoute(
+              active,
+              progress.alongMeters,
+              remainingSeconds,
+              candidates,
+              { ...FASTER_ROUTE_DEFAULTS, speedMps: progress.speedMps },
+            );
+            if (!faster) return;
+            useNavigationStore.getState().proposeFasterRoute({
+              route: faster.route,
+              alternatives: candidates.filter((r) => r !== faster.route),
+              savedSeconds: faster.savedSeconds,
+              proposedAtMs: Date.now(),
+            });
+          })
+          .catch(() => {
+            // Offline, timeout, HTTP error, or malformed data: skip this cycle.
+          });
+      } catch {
+        // Building the request must not be able to break navigation either.
+      }
+    };
+
+    const timer = setInterval(check, CHECK_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [route, enabled, locale]);
+}

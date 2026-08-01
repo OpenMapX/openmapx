@@ -25,6 +25,7 @@ import { haptics } from "../haptics";
 import { useWatchPosition } from "../useWatchPosition";
 import { useNavRecordingStore } from "./navRecordingStore";
 import { useNavSimStore } from "./navSimStore";
+import { useFasterRoute } from "./useFasterRoute";
 import { useNavIncidents } from "./useNavIncidents";
 import { useNavigationVoice } from "./useNavigationVoice";
 import { useNavRecorder } from "./useNavRecorder";
@@ -242,6 +243,7 @@ export function useNavigationEngine(): void {
   // navigation session doesn't inherit the previous one's spoken-cue keys.
   const activeRoute = useNavigationStore((s) => s.route);
   const { incidents, ready } = useNavIncidents();
+  useFasterRoute();
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset is keyed on route identity, not tickRef.
   useEffect(() => {
     tickRef.current = freshTick();

@@ -13,6 +13,7 @@ const SPEED_CAMERA_ALERTS_STORAGE_KEY = "openmapx:speedCameraAlerts";
 const AI_SEARCH_STORAGE_KEY = "openmapx:aiSearch";
 const INCIDENT_ALERTS_STORAGE_KEY = "openmapx:incidentAlerts";
 const AVOID_INCIDENTS_STORAGE_KEY = "openmapx:avoidIncidents";
+const FASTER_ROUTES_STORAGE_KEY = "openmapx:nav:fasterRoutes";
 const VOICE_NAME_STORAGE_KEY = "openmapx:voiceName";
 const MAP_NORTH_UP_STORAGE_KEY = "openmapx:mapNorthUp";
 const EV_VEHICLE_ID_STORAGE_KEY = "openmapx:evVehicleId";
@@ -86,6 +87,13 @@ function readAvoidIncidents(): boolean {
   // Defaults ON: steering around reported closures is the safer behavior, and
   // the toggle lives in the directions panel's Options for easy opt-out.
   const v = getStorage().getString(AVOID_INCIDENTS_STORAGE_KEY);
+  return v === null ? true : v === "true";
+}
+
+// Defaults ON: the driver can still decline an offer, but a stopped driver
+// should not have to opt in before a quicker way around traffic is found.
+function readFasterRoutes(): boolean {
+  const v = getStorage().getString(FASTER_ROUTES_STORAGE_KEY);
   return v === null ? true : v === "true";
 }
 
@@ -202,6 +210,9 @@ interface SettingsState {
   /** Avoid closures/incidents when routing (off by default; Phase-2 routing). */
   avoidIncidents: boolean;
   setAvoidIncidents: (v: boolean) => void;
+  /** Offer a quicker route when live traffic changes during driving. */
+  fasterRoutes: boolean;
+  setFasterRoutes: (v: boolean) => void;
   /** Chosen navigation-voice name (SpeechSynthesisVoice.name); null = locale default. */
   voiceName: string | null;
   setVoiceName: (v: string | null) => void;
@@ -285,6 +296,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     getStorage().setString(AVOID_INCIDENTS_STORAGE_KEY, String(avoidIncidents));
     set({ avoidIncidents });
   },
+  fasterRoutes: readFasterRoutes(),
+  setFasterRoutes: (fasterRoutes) => {
+    getStorage().setString(FASTER_ROUTES_STORAGE_KEY, String(fasterRoutes));
+    set({ fasterRoutes });
+  },
   voiceName: readVoiceName(),
   setVoiceName: (voiceName) => {
     getStorage().setString(VOICE_NAME_STORAGE_KEY, voiceName ?? "");
@@ -360,6 +376,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       aiSearchEnabled: readAiSearch(),
       incidentAlerts: readIncidentAlerts(),
       avoidIncidents: readAvoidIncidents(),
+      fasterRoutes: readFasterRoutes(),
       voiceName: readVoiceName(),
       mapNorthUp: readMapNorthUp(),
       evVehicleId: readEvVehicleId(),
