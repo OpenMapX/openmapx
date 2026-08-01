@@ -18,6 +18,13 @@ export {
 } from "./deadReckon";
 export { eta } from "./eta";
 export {
+  evaluateFasterRoute,
+  FASTER_ROUTE_DEFAULTS,
+  type FasterRouteCandidate,
+  type FasterRouteEvaluation,
+  type FasterRouteOptions,
+} from "./fasterRoute";
+export {
   flowSeverityRank,
   type ProjectFlowOptions,
   projectFlowToRoute,

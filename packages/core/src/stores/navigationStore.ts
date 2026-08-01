@@ -46,6 +46,17 @@ export interface TransitReplanOptions {
   deutschlandticketOnly?: boolean;
 }
 
+/**
+ * A faster route found mid-trip and awaiting the driver's answer. Alternatives
+ * come from the same re-plan so accepting can replace the stale origin plan.
+ */
+export interface FasterRouteProposal {
+  route: Route;
+  alternatives: Route[];
+  savedSeconds: number;
+  proposedAtMs: number;
+}
+
 interface NavigationState {
   status: NavStatus;
   kind: NavKind;
@@ -72,6 +83,8 @@ interface NavigationState {
    * failures re-trigger the toast.
    */
   rerouteFailedNonce: number;
+  /** Pending faster-route offer, or null when there is nothing to answer. */
+  fasterRoute: FasterRouteProposal | null;
   cameraMode: CameraMode;
   currentSpeedLimit: number | null;
   /**
@@ -127,7 +140,11 @@ interface NavigationState {
   setCoasting: (v: boolean) => void;
   signalRerouteFailed: () => void;
   beginReroute: () => void;
-  applyReroute: (route: Route, provider?: string) => void;
+  applyReroute: (route: Route, provider?: string, alternatives?: Route[]) => void;
+  proposeFasterRoute: (proposal: FasterRouteProposal) => void;
+  /** Switch to the pending proposal and adopt its fresh alternatives. */
+  acceptFasterRoute: () => void;
+  dismissFasterRoute: () => void;
   setCameraMode: (m: CameraMode) => void;
   toggleVoice: () => void;
   toggleKeepScreenOn: () => void;
@@ -156,6 +173,7 @@ const INITIAL = {
   weakGps: false,
   coasting: false,
   rerouteFailedNonce: 0,
+  fasterRoute: null as FasterRouteProposal | null,
   cameraMode: "follow" as CameraMode,
   currentSpeedLimit: null,
   liveSpeedLimits: null as (number | null)[] | null,
@@ -194,6 +212,7 @@ export const useNavigationStore = create<NavigationState>((set) => ({
         progress: null,
         offRoute: false,
         liveSpeedLimits: null,
+        fasterRoute: null,
       };
     }),
   addStop: (route, waypoints) =>
@@ -234,7 +253,7 @@ export const useNavigationStore = create<NavigationState>((set) => ({
   // Clear progress: it belongs to the OLD route. Leaving the previous route's
   // (larger) alongMeters in place would mislead every progress consumer for one
   // render against the new, often shorter, geometry until the next fix arrives.
-  applyReroute: (route, provider) =>
+  applyReroute: (route, provider, alternatives) =>
     set((s) => ({
       status: "navigating",
       route,
@@ -242,7 +261,26 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       progress: null,
       liveSpeedLimits: null,
       routeProvider: provider ?? s.routeProvider,
+      fasterRoute: null,
+      ...(alternatives && { routes: [route, ...alternatives], activeRouteIndex: 0 }),
     })),
+  proposeFasterRoute: (fasterRoute) => set({ fasterRoute }),
+  acceptFasterRoute: () =>
+    set((s) => {
+      const proposal = s.fasterRoute;
+      if (!proposal) return {};
+      return {
+        status: "navigating" as const,
+        route: proposal.route,
+        routes: [proposal.route, ...proposal.alternatives],
+        activeRouteIndex: 0,
+        offRoute: false,
+        progress: null,
+        liveSpeedLimits: null,
+        fasterRoute: null,
+      };
+    }),
+  dismissFasterRoute: () => set({ fasterRoute: null }),
   setCameraMode: (cameraMode) => set({ cameraMode }),
   toggleVoice: () =>
     set((s) => {
