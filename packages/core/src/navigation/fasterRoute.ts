@@ -53,8 +53,26 @@ function remainingGeometry(geometry: LngLat[], alongMeters: number): LngLat[] {
 }
 
 /**
- * Find the first candidate vertex outside the current corridor. The distance
+ * Corridor progress a candidate may gain over its own travelled distance before
+ * it counts as skipping part of the route rather than following it. Comfortably
+ * above the metre-scale noise of two independently sampled shapes, far below any
+ * detour worth switching for.
+ */
+const SKIP_TOLERANCE_METERS = 250;
+
+/**
+ * Find the first candidate vertex that leaves the current corridor. The distance
  * is measured along the candidate, which starts at the driver's position.
+ *
+ * Two ways to leave it. The obvious one is lateral: the vertex is simply
+ * somewhere else. The subtle one is a shortcut that stays close — where the
+ * route doubles back, or loops onto a service road running beside the one it
+ * left — whose vertices all project onto the corridor while skipping a chunk of
+ * it. That shows up as corridor progress outrunning the candidate's own
+ * distance, and is reported at the PREVIOUS vertex because the branch lies
+ * between the two. Without it such a candidate reads as "same corridor", and
+ * its duration is silently adopted as the baseline every other candidate is
+ * judged against — suppressing the very offer it should have been.
  */
 function divergenceAlong(
   candidate: LngLat[],
@@ -64,8 +82,9 @@ function divergenceAlong(
   if (candidate.length < 2 || corridor.length < 2) return null;
   const cum = cumulativeDistances(candidate);
   for (let i = 0; i < candidate.length; i++) {
-    const { deviationMeters } = snapToRoute(corridor, candidate[i]);
+    const { deviationMeters, alongMeters } = snapToRoute(corridor, candidate[i]);
     if (deviationMeters > toleranceMeters) return cum[i];
+    if (alongMeters - cum[i] > SKIP_TOLERANCE_METERS) return i > 0 ? cum[i - 1] : 0;
   }
   return null;
 }

@@ -137,3 +137,66 @@ describe("evaluateFasterRoute", () => {
     expect(r.refreshedRemainingSeconds).toBe(1400);
   });
 });
+
+describe("evaluateFasterRoute — shortcuts that hug the corridor", () => {
+  // A route that overshoots to 12 km, doubles back to 6 km, then runs to 20 km.
+  // Every point of it lies on the same straight line, which is exactly what a
+  // missed-turn reroute or a service-road loop looks like: a candidate cutting
+  // it out is nowhere more than a few metres off the corridor laterally.
+  const doublesBack = routeOf(
+    [
+      [0, 0],
+      [lon(12_000), 0],
+      [lon(6_000), 0],
+      [lon(20_000), 0],
+    ],
+    3600,
+  );
+
+  /** Straight through, skipping the doubling-back. */
+  const shortcut = (duration: number) =>
+    routeOf(
+      [
+        [0, 0],
+        [lon(4_000), 0],
+        [lon(8_000), 0],
+        [lon(20_000), 0],
+      ],
+      duration,
+    );
+
+  it("does not mistake a shortcut for the corridor it skips", () => {
+    const r = evaluateFasterRoute(doublesBack, 0, 3600, [shortcut(2400)], opts(30));
+    // Adopting 2400 as a "fresh baseline" would be the real damage: it lowers
+    // the bar every other candidate is measured against.
+    expect(r.refreshedRemainingSeconds).toBeNull();
+  });
+
+  it("offers the shortcut, branching where the skip begins", () => {
+    const r = evaluateFasterRoute(doublesBack, 0, 3600, [shortcut(2400)], opts(30));
+    expect(r.faster).not.toBeNull();
+    expect(r.faster?.savedSeconds).toBe(1200);
+    // The corridor turns back at 12 km, so that is the true branch. The skip is
+    // only visible at the 20 km vertex — the first whose corridor projection
+    // jumps — so the branch is reported at the 8 km vertex before it. Under-
+    // stating it is the safe direction: it can only make the lead-time gate
+    // stricter, never propose a turn the driver has already passed.
+    expect(r.faster?.divergenceMeters).toBeCloseTo(8_000, -2);
+    expect(r.faster?.divergenceMeters ?? 0).toBeLessThan(12_000);
+  });
+
+  it("still treats a genuinely coincident candidate as the same corridor", () => {
+    const identical = routeOf(
+      [
+        [0, 0],
+        [lon(12_000), 0],
+        [lon(6_000), 0],
+        [lon(20_000), 0],
+      ],
+      3400,
+    );
+    const r = evaluateFasterRoute(doublesBack, 0, 3600, [identical], opts(30));
+    expect(r.refreshedRemainingSeconds).toBe(3400);
+    expect(r.faster).toBeNull();
+  });
+});

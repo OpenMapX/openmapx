@@ -43,18 +43,23 @@ export function FasterRouteBanner() {
     if (voiceEnabled) speak(t("fasterRouteAnnounce", { saving: savedText }));
   }, [proposal, voiceEnabled, speak, t, savedText]);
 
+  // Count down against a fixed deadline rather than decrementing per tick, and
+  // accept from the interval body rather than from inside a state updater.
+  // Updater functions must be pure — React invokes them more than once in
+  // development — and a wall-clock deadline also survives the interval being
+  // throttled while the tab is backgrounded, where decrementing would stall.
   useEffect(() => {
     if (!proposal) return;
-    setRemaining(AUTO_ACCEPT_SECONDS);
+    const deadline = proposal.proposedAtMs + AUTO_ACCEPT_SECONDS * 1000;
+    const secondsLeft = () => Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    setRemaining(secondsLeft());
     const tick = setInterval(() => {
-      setRemaining((s) => {
-        if (s <= 1) {
-          clearInterval(tick);
-          accept();
-          return 0;
-        }
-        return s - 1;
-      });
+      const left = secondsLeft();
+      setRemaining(left);
+      if (left <= 0) {
+        clearInterval(tick);
+        accept();
+      }
     }, 1000);
     return () => clearInterval(tick);
   }, [proposal, accept]);

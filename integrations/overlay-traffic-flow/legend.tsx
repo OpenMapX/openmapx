@@ -65,7 +65,7 @@ export function TrafficFlowLegend() {
                   width: 9,
                   height: 9,
                   borderRadius: "2px",
-                  bgcolor: "#2ecc40",
+                  bgcolor: TRAFFIC_BAND_COLORS.freeFlow,
                   opacity: step.opacity,
                 }}
               />
