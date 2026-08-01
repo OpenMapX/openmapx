@@ -71,20 +71,13 @@ describe("BuildingExtrusionLayer", () => {
     expect(layer?.source).not.toBe("unrelated");
   });
 
-  it("re-anchors after idle when the overlay is restored before its layer exists", () => {
+  it("inserts the layer already below the first symbol layer, not via a later move", () => {
     useBuildingsStore.setState({ layerVisible: true });
     render(<BuildingExtrusionLayer />);
 
-    expect(fake.state.layers.has(LAYER_ID)).toBe(true);
+    const ids = [...fake.state.layers.keys()];
+    expect(ids.indexOf(LAYER_ID)).toBeLessThan(ids.indexOf(SYMBOL_LAYER_ID));
     expect(fake.state.movedLayers).toEqual([]);
-
-    act(() => {
-      fake.emit("idle");
-    });
-    expect(fake.state.movedLayers).toContainEqual({
-      layerId: LAYER_ID,
-      beforeId: SYMBOL_LAYER_ID,
-    });
   });
 
   it("restores its layer after a style reload and toggles original building visibility", () => {

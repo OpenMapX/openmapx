@@ -3,6 +3,7 @@
 import { PANEL, useSavedListPlaces, useSavedPlacesStore, useSidebarStore } from "@openmapx/core";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
+import { addLayerInSlot, unregisterLayerSlot } from "./layerStack";
 import { removeLayerAndSource, upsertGeoJsonSource } from "./layerStyleUtils";
 
 const SOURCE_ID = "saved-places-source";
@@ -36,21 +37,27 @@ export function SavedPlacesLayer() {
     const created = !map.getSource(SOURCE_ID);
     upsertGeoJsonSource(map, SOURCE_ID, geojson);
     if (created) {
-      map.addLayer({
-        id: LAYER_ID,
-        type: "circle",
-        source: SOURCE_ID,
-        paint: {
-          "circle-radius": 8,
-          "circle-color": "#E53935",
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#fff",
+      addLayerInSlot(
+        map,
+        {
+          id: LAYER_ID,
+          type: "circle",
+          source: SOURCE_ID,
+          paint: {
+            "circle-radius": 8,
+            "circle-color": "#E53935",
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#fff",
+          },
         },
-      });
+        "route-markers",
+        5,
+      );
     }
 
     return () => {
       removeLayerAndSource(map, LAYER_ID, SOURCE_ID);
+      unregisterLayerSlot(LAYER_ID);
     };
   }, [mapRef, mapReady, styleVersion, places]);
 
@@ -60,6 +67,7 @@ export function SavedPlacesLayer() {
     const map = mapRef.current;
     if (!map) return;
     removeLayerAndSource(map, LAYER_ID, SOURCE_ID);
+    unregisterLayerSlot(LAYER_ID);
   }, [mapRef, isPanelOpen, selectedListId]);
 
   return null;

@@ -16,8 +16,7 @@ import type {
 } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
@@ -335,7 +334,6 @@ export function LiveTransitLayer() {
   const selectVehicle = useLiveTransitStore((s) => s.selectVehicle);
 
   useOverlayExclusion("live-transit", layerVisible);
-  useLayerReanchor([RING_LAYER, ICON_LAYER, LABEL_LAYER], layerVisible);
 
   // Trip ids of the itinerary the user is currently following, so the vehicle
   // they are riding (and the ones they are heading for) get a highlight ring.
@@ -576,6 +574,9 @@ export function LiveTransitLayer() {
       } catch {
         // race during style swaps
       }
+      unregisterLayerSlot(LABEL_LAYER);
+      unregisterLayerSlot(ICON_LAYER);
+      unregisterLayerSlot(RING_LAYER);
       cancelAnimation();
       popupRef.current?.remove();
       popupVehicleIdRef.current = null;
@@ -605,11 +606,10 @@ export function LiveTransitLayer() {
       promoteId: "id",
     });
 
-    const beforeLayer = getFirstSymbolLayerId(map);
-
     // On-route highlight ring, drawn beneath the vehicle icons. Its filter is
     // kept in sync with the active itinerary's trip ids by a dedicated effect.
-    map.addLayer(
+    addLayerInSlot(
+      map,
       {
         id: RING_LAYER,
         type: "circle",
@@ -622,10 +622,12 @@ export function LiveTransitLayer() {
           "circle-stroke-width": 3,
         },
       },
-      beforeLayer,
+      "overlay-points",
+      14,
     );
 
-    map.addLayer(
+    addLayerInSlot(
+      map,
       {
         id: ICON_LAYER,
         type: "symbol",
@@ -649,29 +651,35 @@ export function LiveTransitLayer() {
           ] as maplibregl.ExpressionSpecification,
         },
       },
-      beforeLayer,
+      "overlay-markers",
+      9,
     );
 
-    map.addLayer({
-      id: LABEL_LAYER,
-      type: "symbol",
-      source: SOURCE_ID,
-      minzoom: 9,
-      layout: {
-        "text-field": ["get", "displayLabel"],
-        "text-size": 11,
-        "text-offset": [0, 1.8],
-        "text-anchor": "top",
-        "text-optional": true,
-        "text-allow-overlap": true,
-        "text-ignore-placement": true,
+    addLayerInSlot(
+      map,
+      {
+        id: LABEL_LAYER,
+        type: "symbol",
+        source: SOURCE_ID,
+        minzoom: 9,
+        layout: {
+          "text-field": ["get", "displayLabel"],
+          "text-size": 11,
+          "text-offset": [0, 1.8],
+          "text-anchor": "top",
+          "text-optional": true,
+          "text-allow-overlap": true,
+          "text-ignore-placement": true,
+        },
+        paint: {
+          "text-color": "#1f2937",
+          "text-halo-color": "#ffffff",
+          "text-halo-width": 1.5,
+        },
       },
-      paint: {
-        "text-color": "#1f2937",
-        "text-halo-color": "#ffffff",
-        "text-halo-width": 1.5,
-      },
-    });
+      "overlay-markers",
+      10,
+    );
 
     const handleMouseEnter = () => {
       map.getCanvas().style.cursor = "pointer";
@@ -708,6 +716,9 @@ export function LiveTransitLayer() {
       } catch {
         // race during style swaps
       }
+      unregisterLayerSlot(LABEL_LAYER);
+      unregisterLayerSlot(ICON_LAYER);
+      unregisterLayerSlot(RING_LAYER);
       sourceFeaturesRef.current = new Map();
       layerInitRef.current = false;
     };

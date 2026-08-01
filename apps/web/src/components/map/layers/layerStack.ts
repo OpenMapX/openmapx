@@ -73,8 +73,27 @@ function rankOf(slot: MapLayerSlot, order: number): number {
   return MAP_LAYER_SLOTS.indexOf(slot) * 1000 + order;
 }
 
-function firstSymbolLayerId(styleLayers: readonly StackLayer[]): string | undefined {
-  return styleLayers.find((layer) => layer.type === "symbol")?.id;
+/**
+ * The base style's own first symbol layer (labels, shields) — the anchor
+ * everything below `basemap-symbols` inserts before. Registered layers are
+ * excluded from the search: several overlay-markers layers are themselves
+ * `type: "symbol"` (e.g. POI labels), and once one lands earlier in the style
+ * than the true base layer, treating it as the anchor would fold the stack
+ * back on itself instead of resolving to the real boundary.
+ *
+ * Returns `undefined` when every `type: "symbol"` layer in the style is
+ * itself registered — a transient state mid-load, or a base style that ships
+ * no label layer at all. Callers then treat "top of stack" as the anchor, so
+ * a below-labels layer briefly lands above everything until the next
+ * `styledata`/`idle` pass re-runs `anchorMapLayers` and repairs it. Don't read
+ * the very first `resolveBeforeId` call in a create-effect as authoritative.
+ */
+function firstSymbolLayerId(
+  styleLayers: readonly StackLayer[],
+  registrations: readonly LayerRegistration[],
+): string | undefined {
+  const registeredIds = new Set(registrations.map((r) => r.id));
+  return styleLayers.find((layer) => layer.type === "symbol" && !registeredIds.has(layer.id))?.id;
 }
 
 /**
@@ -96,7 +115,7 @@ export function resolveBeforeId(
     if (registration && rankOf(registration.slot, registration.order) > rank) return layer.id;
   }
   return MAP_LAYER_SLOTS.indexOf(slot) < SYMBOL_SLOT_INDEX
-    ? firstSymbolLayerId(styleLayers)
+    ? firstSymbolLayerId(styleLayers, registrations)
     : undefined;
 }
 
@@ -115,7 +134,7 @@ export function planAnchorMoves(
     .sort((a, b) => rankOf(a.slot, a.order) - rankOf(b.slot, b.order));
   if (present.length === 0) return [];
 
-  const symbolId = firstSymbolLayerId(styleLayers);
+  const symbolId = firstSymbolLayerId(styleLayers, registrations);
   const indexOf = (id: string) => styleLayers.findIndex((layer) => layer.id === id);
   const symbolIndex = symbolId === undefined ? Number.POSITIVE_INFINITY : indexOf(symbolId);
 

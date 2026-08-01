@@ -3,6 +3,7 @@
 import type { AlongRoutePoi, CategoryPlace } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import { useEffect } from "react";
+import { addLayerInSlot } from "@/components/map/layers/layerStack";
 import { useMap } from "@/lib/MapContext";
 import { createMarkerSvg } from "@/lib/markerSvg";
 import { BRAND_HEX } from "@/lib/theme";
@@ -45,23 +46,33 @@ export function RouteSearchResultsLayer({
     const map = mapRef.current;
     if (!map || !mapReady || map.getSource(SOURCE)) return;
     map.addSource(SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-    map.addLayer({
-      id: LAYER,
-      type: "symbol",
-      source: SOURCE,
-      layout: {
-        "icon-image": ["get", "imageId"],
-        "icon-size": 0.55,
-        "icon-allow-overlap": true,
-        "icon-anchor": "bottom",
-        "text-field": ["get", "label"],
-        "text-size": 11,
-        "text-offset": [0, 0.5],
-        "text-anchor": "top",
-        "text-optional": true,
+    // Appended with no `beforeId` before this migration, so it already sat
+    // above everything (including base labels) — `route-markers` keeps that
+    // depth: these are the user's active "along the route" search results,
+    // the same "current task on the map" reasoning as the route's own
+    // waypoint pins.
+    addLayerInSlot(
+      map,
+      {
+        id: LAYER,
+        type: "symbol",
+        source: SOURCE,
+        layout: {
+          "icon-image": ["get", "imageId"],
+          "icon-size": 0.55,
+          "icon-allow-overlap": true,
+          "icon-anchor": "bottom",
+          "text-field": ["get", "label"],
+          "text-size": 11,
+          "text-offset": [0, 0.5],
+          "text-anchor": "top",
+          "text-optional": true,
+        },
+        paint: { "text-color": "#202124", "text-halo-color": "#ffffff", "text-halo-width": 1.4 },
       },
-      paint: { "text-color": "#202124", "text-halo-color": "#ffffff", "text-halo-width": 1.4 },
-    });
+      "route-markers",
+      22,
+    );
   }, [mapRef, mapReady, styleVersion]);
 
   useEffect(() => {

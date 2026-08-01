@@ -4,8 +4,7 @@ import { escapeHtml, useDebouncedCallback, useOverlayExclusion } from "@openmapx
 import type { GeoJSONSource, MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
-import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
@@ -117,17 +116,6 @@ export function WinterSportsLayer() {
   const setLoading = useWinterSportsStore((s) => s.setLoading);
   const selectFeature = useWinterSportsStore((s) => s.selectFeature);
   useOverlayExclusion("winter-sports", layerVisible);
-  useLayerReanchor(
-    [
-      RASTER_LAYER_ID,
-      AREA_LAYER_ID,
-      PISTE_LAYER_ID,
-      PISTE_HIGHLIGHT_LAYER_ID,
-      LIFT_LAYER_ID,
-      LIFT_HIGHLIGHT_LAYER_ID,
-    ],
-    layerVisible,
-  );
   const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);
 
@@ -233,6 +221,12 @@ export function WinterSportsLayer() {
         } catch {
           // In-flight tiles
         }
+        unregisterLayerSlot(RASTER_LAYER_ID);
+        unregisterLayerSlot(AREA_LAYER_ID);
+        unregisterLayerSlot(PISTE_LAYER_ID);
+        unregisterLayerSlot(PISTE_HIGHLIGHT_LAYER_ID);
+        unregisterLayerSlot(LIFT_LAYER_ID);
+        unregisterLayerSlot(LIFT_HIGHLIGHT_LAYER_ID);
         popupRef.current?.remove();
         fetchedRef.current = false;
         return;
@@ -254,7 +248,8 @@ export function WinterSportsLayer() {
       }
 
       if (!map.getLayer(RASTER_LAYER_ID)) {
-        map.addLayer(
+        addLayerInSlot(
+          map,
           {
             id: RASTER_LAYER_ID,
             type: "raster",
@@ -264,7 +259,8 @@ export function WinterSportsLayer() {
               "raster-fade-duration": 200,
             },
           },
-          getFirstSymbolLayerId(map),
+          "raster-overlays",
+          2,
         );
       }
 
@@ -276,11 +272,10 @@ export function WinterSportsLayer() {
         });
       }
 
-      const beforeId = getFirstSymbolLayerId(map);
-
       // Ski area fill
       if (!map.getLayer(AREA_LAYER_ID)) {
-        map.addLayer(
+        addLayerInSlot(
+          map,
           {
             id: AREA_LAYER_ID,
             type: "fill",
@@ -292,13 +287,15 @@ export function WinterSportsLayer() {
               "fill-outline-color": "rgba(100,130,200,0.4)",
             },
           },
-          beforeId,
+          "area-overlays",
+          2,
         );
       }
 
       // Invisible piste lines (wide hit area)
       if (!map.getLayer(PISTE_LAYER_ID)) {
-        map.addLayer(
+        addLayerInSlot(
+          map,
           {
             id: PISTE_LAYER_ID,
             type: "line",
@@ -311,13 +308,15 @@ export function WinterSportsLayer() {
               "line-opacity": 0,
             },
           },
-          beforeId,
+          "overlay-lines",
+          6,
         );
       }
 
       // Piste highlight
       if (!map.getLayer(PISTE_HIGHLIGHT_LAYER_ID)) {
-        map.addLayer(
+        addLayerInSlot(
+          map,
           {
             id: PISTE_HIGHLIGHT_LAYER_ID,
             type: "line",
@@ -334,13 +333,15 @@ export function WinterSportsLayer() {
               "line-join": "round",
             },
           },
-          beforeId,
+          "overlay-lines",
+          7,
         );
       }
 
       // Invisible lift lines (wide hit area)
       if (!map.getLayer(LIFT_LAYER_ID)) {
-        map.addLayer(
+        addLayerInSlot(
+          map,
           {
             id: LIFT_LAYER_ID,
             type: "line",
@@ -353,13 +354,15 @@ export function WinterSportsLayer() {
               "line-opacity": 0,
             },
           },
-          beforeId,
+          "overlay-lines",
+          8,
         );
       }
 
       // Lift highlight
       if (!map.getLayer(LIFT_HIGHLIGHT_LAYER_ID)) {
-        map.addLayer(
+        addLayerInSlot(
+          map,
           {
             id: LIFT_HIGHLIGHT_LAYER_ID,
             type: "line",
@@ -376,7 +379,8 @@ export function WinterSportsLayer() {
               "line-join": "round",
             },
           },
-          beforeId,
+          "overlay-lines",
+          9,
         );
       }
 

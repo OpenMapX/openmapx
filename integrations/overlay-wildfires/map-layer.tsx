@@ -5,8 +5,7 @@ import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
-import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
@@ -89,7 +88,6 @@ export function WildfireLayer() {
   const setLoading = useWildfireStore((s) => s.setLoading);
   const setLastUpdated = useWildfireStore((s) => s.setLastUpdated);
   useOverlayExclusion("wildfires", layerVisible);
-  useLayerReanchor([CIRCLE_LAYER_ID, HEATMAP_LAYER_ID], layerVisible);
   const t = useTranslations("wildfires");
   const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);
@@ -134,6 +132,8 @@ export function WildfireLayer() {
         } catch {
           // In-flight tiles
         }
+        unregisterLayerSlot(HEATMAP_LAYER_ID);
+        unregisterLayerSlot(CIRCLE_LAYER_ID);
         popupRef.current?.remove();
         fetchedRef.current = false;
         return;
@@ -147,10 +147,9 @@ export function WildfireLayer() {
           });
         }
 
-        const beforeLayer = getFirstSymbolLayerId(map);
-
         if (!map.getLayer(CIRCLE_LAYER_ID)) {
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: CIRCLE_LAYER_ID,
               type: "circle",
@@ -163,7 +162,8 @@ export function WildfireLayer() {
                 "circle-stroke-width": 0.8,
               },
             },
-            beforeLayer,
+            "overlay-points",
+            4,
           );
         }
 
@@ -197,8 +197,8 @@ export function WildfireLayer() {
 
     try {
       if (showHeatmap && !map.getLayer(HEATMAP_LAYER_ID)) {
-        const beforeLayer = getFirstSymbolLayerId(map);
-        map.addLayer(
+        addLayerInSlot(
+          map,
           {
             id: HEATMAP_LAYER_ID,
             type: "heatmap",
@@ -259,10 +259,12 @@ export function WildfireLayer() {
               ] as maplibregl.ExpressionSpecification,
             },
           },
-          beforeLayer,
+          "area-overlays",
+          4,
         );
       } else if (!showHeatmap && map.getLayer(HEATMAP_LAYER_ID)) {
         map.removeLayer(HEATMAP_LAYER_ID);
+        unregisterLayerSlot(HEATMAP_LAYER_ID);
       }
     } catch {
       // Layer or source may not be ready

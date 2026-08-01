@@ -9,8 +9,7 @@ import {
 } from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
-import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
@@ -95,7 +94,6 @@ export function AirportsOverlay() {
   const setLoading = useAirportsOverlayStore((s) => s.setLoading);
   const setLastUpdated = useAirportsOverlayStore((s) => s.setLastUpdated);
   useOverlayExclusion("ourairports", layerVisible);
-  useLayerReanchor([CIRCLE_LAYER_ID, LABEL_LAYER_ID], layerVisible);
   const fetchedKeyRef = useRef<string | null>(null);
 
   const fetchAirports = useCallback(async () => {
@@ -154,6 +152,8 @@ export function AirportsOverlay() {
         } catch {
           // tiles in flight
         }
+        unregisterLayerSlot(LABEL_LAYER_ID);
+        unregisterLayerSlot(CIRCLE_LAYER_ID);
         fetchedKeyRef.current = null;
         return;
       }
@@ -165,9 +165,9 @@ export function AirportsOverlay() {
             data: { type: "FeatureCollection", features: [] },
           });
         }
-        const beforeLayer = getFirstSymbolLayerId(map);
         if (!map.getLayer(CIRCLE_LAYER_ID)) {
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: CIRCLE_LAYER_ID,
               type: "circle",
@@ -181,11 +181,13 @@ export function AirportsOverlay() {
                 "circle-stroke-width": 1.2,
               },
             },
-            beforeLayer,
+            "overlay-points",
+            6,
           );
         }
         if (!map.getLayer(LABEL_LAYER_ID)) {
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: LABEL_LAYER_ID,
               type: "symbol",
@@ -213,7 +215,8 @@ export function AirportsOverlay() {
                 "text-halo-width": 1.5,
               },
             },
-            beforeLayer,
+            "overlay-markers",
+            8,
           );
         }
       } catch {

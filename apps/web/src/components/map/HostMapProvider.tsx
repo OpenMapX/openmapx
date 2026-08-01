@@ -4,7 +4,7 @@ import { type HostMapApi, HostMapContext } from "@openmapx/integration-framework
 import { useMemo } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
-import { getFirstSymbolLayerId, moveLayerBeforeFirstSymbol } from "./layers/layerStyleUtils";
+import { getFirstSymbolLayerId } from "./layers/layerStyleUtils";
 
 /**
  * Bridges the app-internal MapContext to the curated `HostMapApi` that community
@@ -26,8 +26,18 @@ export function HostMapProvider({ children }: { children: React.ReactNode }) {
         return m ? getFirstSymbolLayerId(m) : undefined;
       },
       anchorBelowLabels: (layerId: string) => {
+        // Inlined rather than calling into the (now-deleted) declared-slot
+        // machinery: community overlays reached via this SDK surface aren't
+        // registered in the host's slot registry, so they still need the
+        // literal "move below the first symbol layer" behaviour.
         const m = mapRef.current;
-        if (m) moveLayerBeforeFirstSymbol(m, layerId);
+        if (!m?.getLayer(layerId)) return;
+        const beforeLayerId = getFirstSymbolLayerId(m);
+        if (beforeLayerId) {
+          m.moveLayer(layerId, beforeLayerId);
+          return;
+        }
+        m.moveLayer(layerId);
       },
       setLayerInteractive: (layerId: string, interactive: boolean) => {
         if (interactive) INTERACTIVE_LAYER_IDS.add(layerId);

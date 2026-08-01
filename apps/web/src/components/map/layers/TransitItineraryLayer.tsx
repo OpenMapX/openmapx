@@ -13,6 +13,7 @@ import type { ExpressionSpecification } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
 import { useMap } from "@/lib/MapContext";
 import { PRIMARY_BLUE_HEX } from "@/lib/theme";
+import { addLayerInSlot, unregisterLayerSlot } from "./layerStack";
 import { shouldRefineLegGeometry } from "./legGeometryRefine";
 
 // Non-transit "street" legs (walk plus intermodal bike/car access) render as
@@ -97,6 +98,9 @@ export function TransitItineraryLayer() {
       if (map.getLayer(WALK_LAYER_ID)) map.removeLayer(WALK_LAYER_ID);
       if (map.getSource(POINTS_SOURCE_ID)) map.removeSource(POINTS_SOURCE_ID);
       if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      unregisterLayerSlot(POINTS_LAYER_ID);
+      unregisterLayerSlot(TRANSIT_LAYER_ID);
+      unregisterLayerSlot(WALK_LAYER_ID);
     };
 
     const isTransit = mode === "transit";
@@ -157,33 +161,43 @@ export function TransitItineraryLayer() {
     });
 
     // Street legs (walk/bike/car) — dashed, colored per mode
-    map.addLayer({
-      id: WALK_LAYER_ID,
-      type: "line",
-      source: SOURCE_ID,
-      filter: ["==", ["get", "isStreet"], true],
-      paint: {
-        "line-color": ["get", "color"],
-        "line-width": 4,
-        "line-dasharray": [2, 2],
-        "line-opacity": lineOpacity,
+    addLayerInSlot(
+      map,
+      {
+        id: WALK_LAYER_ID,
+        type: "line",
+        source: SOURCE_ID,
+        filter: ["==", ["get", "isStreet"], true],
+        paint: {
+          "line-color": ["get", "color"],
+          "line-width": 4,
+          "line-dasharray": [2, 2],
+          "line-opacity": lineOpacity,
+        },
+        layout: { "line-cap": "round", "line-join": "round" },
       },
-      layout: { "line-cap": "round", "line-join": "round" },
-    });
+      "overlay-lines",
+      17,
+    );
 
     // Transit legs — solid colored
-    map.addLayer({
-      id: TRANSIT_LAYER_ID,
-      type: "line",
-      source: SOURCE_ID,
-      filter: ["==", ["get", "isStreet"], false],
-      paint: {
-        "line-color": ["get", "color"],
-        "line-width": 5,
-        "line-opacity": lineOpacity,
+    addLayerInSlot(
+      map,
+      {
+        id: TRANSIT_LAYER_ID,
+        type: "line",
+        source: SOURCE_ID,
+        filter: ["==", ["get", "isStreet"], false],
+        paint: {
+          "line-color": ["get", "color"],
+          "line-width": 5,
+          "line-opacity": lineOpacity,
+        },
+        layout: { "line-cap": "round", "line-join": "round" },
       },
-      layout: { "line-cap": "round", "line-join": "round" },
-    });
+      "overlay-lines",
+      18,
+    );
 
     // Transfer points
     map.addSource(POINTS_SOURCE_ID, {
@@ -191,17 +205,22 @@ export function TransitItineraryLayer() {
       data: { type: "FeatureCollection", features: pointFeatures },
     });
 
-    map.addLayer({
-      id: POINTS_LAYER_ID,
-      type: "circle",
-      source: POINTS_SOURCE_ID,
-      paint: {
-        "circle-radius": 6,
-        "circle-color": "#fff",
-        "circle-stroke-width": 2.5,
-        "circle-stroke-color": "#333",
+    addLayerInSlot(
+      map,
+      {
+        id: POINTS_LAYER_ID,
+        type: "circle",
+        source: POINTS_SOURCE_ID,
+        paint: {
+          "circle-radius": 6,
+          "circle-color": "#fff",
+          "circle-stroke-width": 2.5,
+          "circle-stroke-color": "#333",
+        },
       },
-    });
+      "overlay-points",
+      20,
+    );
 
     // Fit bounds only when the itinerary set or selected index changes, not on
     // every legGeometries update. Comparing the list reference catches new

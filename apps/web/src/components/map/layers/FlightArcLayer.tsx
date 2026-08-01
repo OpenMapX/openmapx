@@ -5,6 +5,7 @@ import type maplibregl from "maplibre-gl";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
 import { PRIMARY_BLUE_HEX } from "@/lib/theme";
+import { addLayerInSlot } from "./layerStack";
 
 type GeoJSONSource = maplibregl.GeoJSONSource;
 
@@ -42,50 +43,65 @@ export function FlightArcLayer() {
 
       map.addSource(SOURCE_ID, { type: "geojson", data: EMPTY });
 
-      map.addLayer({
-        id: LAYER_LINE,
-        type: "line",
-        source: SOURCE_ID,
-        filter: ["==", ["get", "kind"], "line"],
-        layout: { "line-join": "round", "line-cap": "round" },
-        paint: {
-          "line-color": PRIMARY_BLUE_HEX,
-          "line-width": 3,
-          "line-dasharray": [2, 1.5],
+      addLayerInSlot(
+        map,
+        {
+          id: LAYER_LINE,
+          type: "line",
+          source: SOURCE_ID,
+          filter: ["==", ["get", "kind"], "line"],
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": PRIMARY_BLUE_HEX,
+            "line-width": 3,
+            "line-dasharray": [2, 1.5],
+          },
         },
-      });
+        "overlay-lines",
+        19,
+      );
 
-      map.addLayer({
-        id: LAYER_POINTS,
-        type: "circle",
-        source: SOURCE_ID,
-        filter: ["==", ["get", "kind"], "point"],
-        paint: {
-          "circle-radius": 5,
-          "circle-color": "#ffffff",
-          "circle-stroke-color": PRIMARY_BLUE_HEX,
-          "circle-stroke-width": 2.5,
+      addLayerInSlot(
+        map,
+        {
+          id: LAYER_POINTS,
+          type: "circle",
+          source: SOURCE_ID,
+          filter: ["==", ["get", "kind"], "point"],
+          paint: {
+            "circle-radius": 5,
+            "circle-color": "#ffffff",
+            "circle-stroke-color": PRIMARY_BLUE_HEX,
+            "circle-stroke-width": 2.5,
+          },
         },
-      });
+        "overlay-points",
+        22,
+      );
 
-      map.addLayer({
-        id: LAYER_LABELS,
-        type: "symbol",
-        source: SOURCE_ID,
-        filter: ["==", ["get", "kind"], "point"],
-        layout: {
-          "text-field": ["get", "label"],
-          "text-size": 12,
-          "text-offset": [0, -1.2],
-          "text-anchor": "bottom",
-          "text-allow-overlap": true,
+      addLayerInSlot(
+        map,
+        {
+          id: LAYER_LABELS,
+          type: "symbol",
+          source: SOURCE_ID,
+          filter: ["==", ["get", "kind"], "point"],
+          layout: {
+            "text-field": ["get", "label"],
+            "text-size": 12,
+            "text-offset": [0, -1.2],
+            "text-anchor": "bottom",
+            "text-allow-overlap": true,
+          },
+          paint: {
+            "text-color": PRIMARY_BLUE_HEX,
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 1.5,
+          },
         },
-        paint: {
-          "text-color": PRIMARY_BLUE_HEX,
-          "text-halo-color": "#ffffff",
-          "text-halo-width": 1.5,
-        },
-      });
+        "overlay-markers",
+        14,
+      );
     };
 
     // Re-add after a style/theme swap (which wipes all sources): `styledata`

@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { addLayerInSlot } from "@/components/map/layers/layerStack";
 import { useStyleSyncedLayer } from "@/components/map/layers/useStyleSyncedLayer";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
@@ -20,14 +20,12 @@ export function TrafficLayer() {
   const minZoom = useOverlayMinZoom("traffic");
   const showTraffic = useTrafficStore((s) => s.panelOpen && s.layerVisible);
   useIntegrationAttribution("overlay-traffic-tomtom", showTraffic);
-  useLayerReanchor(TRAFFIC_LAYER_ID, showTraffic);
 
   useStyleSyncedLayer({
     map,
     visible: showTraffic,
     sourceId: TRAFFIC_SOURCE_ID,
     layerId: TRAFFIC_LAYER_ID,
-    moveBeforeFirstSymbol: true,
     addSource: (m) => {
       m.addSource(TRAFFIC_SOURCE_ID, {
         type: "raster",
@@ -35,8 +33,9 @@ export function TrafficLayer() {
         tileSize: 256,
       });
     },
-    addLayer: (m, beforeLayerId) => {
-      m.addLayer(
+    addLayer: (m) => {
+      addLayerInSlot(
+        m,
         {
           id: TRAFFIC_LAYER_ID,
           type: "raster",
@@ -47,7 +46,8 @@ export function TrafficLayer() {
             "raster-fade-duration": 200,
           },
         },
-        beforeLayerId,
+        "raster-overlays",
+        22,
       );
     },
     deps: [mapReady, styleVersion, mapRef, showTraffic, env.trafficTileUrlTemplate, minZoom],

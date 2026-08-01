@@ -1,7 +1,7 @@
 "use client";
 
 import { useOverlayExclusion } from "@openmapx/core";
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { addLayerInSlot } from "@/components/map/layers/layerStack";
 import { useStyleSyncedLayer } from "@/components/map/layers/useStyleSyncedLayer";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
@@ -18,7 +18,6 @@ export function HikingTrailsLayer() {
   const layerVisible = useHikingStore((s) => s.layerVisible);
   useIntegrationAttribution("overlay-hiking", layerVisible);
   useOverlayExclusion("hiking", layerVisible);
-  useLayerReanchor(RASTER_LAYER_ID, layerVisible);
 
   useStyleSyncedLayer({
     map,
@@ -33,8 +32,9 @@ export function HikingTrailsLayer() {
         maxzoom: 18,
       });
     },
-    addLayer: (m, beforeLayerId) => {
-      m.addLayer(
+    addLayer: (m) => {
+      addLayerInSlot(
+        m,
         {
           id: RASTER_LAYER_ID,
           type: "raster",
@@ -44,7 +44,8 @@ export function HikingTrailsLayer() {
             "raster-fade-duration": 200,
           },
         },
-        beforeLayerId,
+        "raster-overlays",
+        1,
       );
     },
     deps: [mapReady, styleVersion, mapRef, layerVisible, env.apiUrl],

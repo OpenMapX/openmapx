@@ -2,6 +2,7 @@ import { IntegrationRegistry } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { layerRegistrations } from "@/components/map/layers/layerStack";
 import { act, createFakeMap, type FakeMap, render } from "@/test";
 import manifest from "../manifest.json";
 import { useAirportsOverlayStore } from "../store";
@@ -67,6 +68,16 @@ describe("AirportsOverlay zoom gate", () => {
     expect(String(fetchMock.mock.calls[0][0])).toContain(
       "/api/integrations/overlay-ourairports/airports",
     );
+  });
+
+  it("registers the circle layer in the overlay-points slot", () => {
+    render(<AirportsOverlay />, { wrapper });
+
+    expect(layerRegistrations()).toContainEqual({
+      id: CIRCLE_LAYER_ID,
+      slot: "overlay-points",
+      order: 6,
+    });
   });
 
   it("skips fetching below minZoom but keeps the layer clamped to it", () => {

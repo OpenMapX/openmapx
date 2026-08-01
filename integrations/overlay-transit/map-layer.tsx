@@ -6,13 +6,11 @@ import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import type { TransitRoute } from "@openmapx/mobility-core/transit";
 import type { GeoJSONSource } from "maplibre-gl";
 import { useEffect, useState } from "react";
+import { addLayerInSlot } from "@/components/map/layers/layerStack";
 import {
   findVectorLineReference,
-  getFirstSymbolLayerId,
-  moveLayerBeforeFirstSymbol,
   setLayerVisibility,
 } from "@/components/map/layers/layerStyleUtils";
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useMap } from "@/lib/MapContext";
 import { PRIMARY_BLUE_HEX } from "@/lib/theme";
 import { useMapAttributions } from "@/lib/useMapAttributions";
@@ -42,7 +40,6 @@ const EMPTY_FC: GeoJSON.FeatureCollection = { type: "FeatureCollection", feature
 export function TransitLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const showTransit = useTransitStore((s) => s.panelOpen && s.layerVisible);
-  useLayerReanchor(TRANSIT_LAYER_ID, showTransit);
 
   // Runtime publisher credit carried by the MOTIS routes envelope. The manifest
   // declares no static dataSources (the operated network comes from whatever
@@ -66,8 +63,8 @@ export function TransitLayer() {
       if (showTransit && !map.getLayer(TRANSIT_LAYER_ID)) {
         const reference = findVectorLineReference(map, TRANSIT_LAYER_HINTS);
         if (reference) {
-          const beforeLayerId = getFirstSymbolLayerId(map);
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: TRANSIT_LAYER_ID,
               type: "line",
@@ -98,13 +95,10 @@ export function TransitLayer() {
                 "line-join": "round",
               },
             },
-            beforeLayerId,
+            "overlay-lines",
+            4,
           );
         }
-      }
-
-      if (showTransit) {
-        moveLayerBeforeFirstSymbol(map, TRANSIT_LAYER_ID);
       }
 
       setLayerVisibility(map, TRANSIT_LAYER_ID, showTransit);
@@ -133,7 +127,8 @@ export function TransitLayer() {
     const ensureLayer = () => {
       if (!map.isStyleLoaded() || map.getSource(MOTIS_SOURCE_ID)) return;
       map.addSource(MOTIS_SOURCE_ID, { type: "geojson", data: EMPTY_FC });
-      map.addLayer(
+      addLayerInSlot(
+        map,
         {
           id: MOTIS_LINE_ID,
           type: "line",
@@ -145,7 +140,8 @@ export function TransitLayer() {
           },
           layout: { "line-cap": "round", "line-join": "round" },
         },
-        getFirstSymbolLayerId(map),
+        "overlay-lines",
+        5,
       );
     };
 

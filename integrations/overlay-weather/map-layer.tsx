@@ -7,8 +7,7 @@ import {
   type WeatherSubLayer,
 } from "@openmapx/core";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
@@ -47,7 +46,6 @@ export function WeatherLayer() {
   const setRadarUnavailable = useWeatherStore((s) => s.setRadarUnavailable);
 
   useOverlayExclusion("weather", layerVisible);
-  useLayerReanchor([OWM_LAYER_ID, `${RADAR_LAYER_PREFIX}0`], layerVisible);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const radarRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -132,6 +130,7 @@ export function WeatherLayer() {
           } catch {
             // ignore
           }
+          unregisterLayerSlot(layerId);
         }
         return;
       }
@@ -141,7 +140,6 @@ export function WeatherLayer() {
         return;
       }
 
-      const beforeId = getFirstSymbolLayerId(map);
       // During playback, bias the window forward to preload upcoming frames
       const preloadAhead = radarPlaying ? 2 : 0;
       const halfWindow = Math.floor(WINDOW_SIZE / 2);
@@ -164,7 +162,8 @@ export function WeatherLayer() {
         }
 
         if (!map.getLayer(layerId)) {
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: layerId,
               type: "raster",
@@ -173,7 +172,8 @@ export function WeatherLayer() {
                 "raster-opacity": i === radarFrameIndex ? 0.7 : 0,
               },
             },
-            beforeId,
+            "raster-overlays",
+            20,
           );
         } else {
           map.setPaintProperty(layerId, "raster-opacity", i === radarFrameIndex ? 0.7 : 0);
@@ -191,6 +191,7 @@ export function WeatherLayer() {
         } catch {
           // ignore
         }
+        unregisterLayerSlot(layerId);
       }
     };
 
@@ -223,6 +224,7 @@ export function WeatherLayer() {
         } catch {
           // ignore
         }
+        unregisterLayerSlot(OWM_LAYER_ID);
         return;
       }
 
@@ -241,6 +243,7 @@ export function WeatherLayer() {
         } catch {
           // ignore
         }
+        unregisterLayerSlot(OWM_LAYER_ID);
       }
 
       map.addSource(OWM_SOURCE_ID, {
@@ -249,14 +252,16 @@ export function WeatherLayer() {
         tileSize: 256,
       });
 
-      map.addLayer(
+      addLayerInSlot(
+        map,
         {
           id: OWM_LAYER_ID,
           type: "raster",
           source: OWM_SOURCE_ID,
           paint: { "raster-opacity": 0.5 },
         },
-        getFirstSymbolLayerId(map),
+        "raster-overlays",
+        21,
       );
     };
 

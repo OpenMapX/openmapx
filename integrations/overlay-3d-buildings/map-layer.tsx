@@ -3,8 +3,8 @@
 import { useOverlayExclusion } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
-import { getFirstSymbolLayerId, setLayerVisibility } from "@/components/map/layers/layerStyleUtils";
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { addLayerInSlot } from "@/components/map/layers/layerStack";
+import { setLayerVisibility } from "@/components/map/layers/layerStyleUtils";
 import { useMap } from "@/lib/MapContext";
 import {
   EXTRUSION_BASE,
@@ -49,7 +49,6 @@ export function BuildingExtrusionLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const layerVisible = useBuildingsStore((s) => s.layerVisible);
   useOverlayExclusion("3d-buildings", layerVisible);
-  useLayerReanchor(LAYER_ID, layerVisible);
 
   const prevVisibleRef = useRef(false);
   const cameraBeforeEnableRef = useRef<CameraState | null>(null);
@@ -78,7 +77,8 @@ export function BuildingExtrusionLayer() {
         });
 
         if (!map.getLayer(LAYER_ID)) {
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: LAYER_ID,
               type: "fill-extrusion",
@@ -94,7 +94,8 @@ export function BuildingExtrusionLayer() {
                 "fill-extrusion-vertical-gradient": true,
               },
             },
-            getFirstSymbolLayerId(map),
+            "area-overlays",
+            5,
           );
         }
 

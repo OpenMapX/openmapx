@@ -5,8 +5,7 @@ import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
-import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
@@ -107,7 +106,6 @@ export function NaturalEventLayer() {
   const setLastUpdated = useNaturalEventStore((s) => s.setLastUpdated);
 
   useOverlayExclusion("natural-events", layerVisible);
-  useLayerReanchor(CIRCLE_LAYER_ID, layerVisible);
 
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const fetchedRef = useRef(false);
@@ -163,6 +161,7 @@ export function NaturalEventLayer() {
         } catch {
           // ignore
         }
+        unregisterLayerSlot(CIRCLE_LAYER_ID);
         popupRef.current?.remove();
         fetchedRef.current = false;
         setEventCount(0);
@@ -182,7 +181,8 @@ export function NaturalEventLayer() {
       }
 
       if (!map.getLayer(CIRCLE_LAYER_ID)) {
-        map.addLayer(
+        addLayerInSlot(
+          map,
           {
             id: CIRCLE_LAYER_ID,
             type: "circle",
@@ -197,7 +197,8 @@ export function NaturalEventLayer() {
               "circle-stroke-opacity": 0.9,
             },
           },
-          getFirstSymbolLayerId(map),
+          "overlay-points",
+          5,
         );
       }
 

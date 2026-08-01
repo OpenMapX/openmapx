@@ -4,6 +4,7 @@ import type { LngLat } from "@openmapx/core";
 import { useIsochrone, useReachableStops } from "@openmapx/core";
 import type { MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
+import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
 import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
@@ -97,68 +98,96 @@ export function TravelTimeLayer() {
       map.addSource(REACH_SOURCE, { type: "geojson", data: emptyFC });
       map.addSource(ORIGIN_SOURCE, { type: "geojson", data: emptyFC });
 
-      map.addLayer({
-        id: FILL_LAYER,
-        type: "fill",
-        source: SOURCE_ID,
-        paint: {
-          "fill-color": ["get", "color"],
-          "fill-opacity": ["get", "opacity"],
+      // `route-markers`, not an overlay band: the isochrone is the user's
+      // active in-progress query — origin + contours drawn above the base
+      // labels, exactly like the route's own waypoint pins.
+      addLayerInSlot(
+        map,
+        {
+          id: FILL_LAYER,
+          type: "fill",
+          source: SOURCE_ID,
+          paint: {
+            "fill-color": ["get", "color"],
+            "fill-opacity": ["get", "opacity"],
+          },
         },
-      });
+        "route-markers",
+        17,
+      );
 
-      map.addLayer({
-        id: OUTLINE_LAYER,
-        type: "line",
-        source: SOURCE_ID,
-        paint: {
-          "line-color": ["get", "color"],
-          "line-width": 2,
-          "line-opacity": 0.6,
+      addLayerInSlot(
+        map,
+        {
+          id: OUTLINE_LAYER,
+          type: "line",
+          source: SOURCE_ID,
+          paint: {
+            "line-color": ["get", "color"],
+            "line-width": 2,
+            "line-opacity": 0.6,
+          },
         },
-      });
+        "route-markers",
+        18,
+      );
 
       // Transit reachability: one dot per reachable stop, graduated by time band.
-      map.addLayer({
-        id: REACH_LAYER,
-        type: "circle",
-        source: REACH_SOURCE,
-        paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 3, 13, 5, 16, 7],
-          "circle-color": ["get", "color"],
-          "circle-opacity": ["get", "opacity"],
-          "circle-stroke-color": "#FFFFFF",
-          "circle-stroke-width": 0.5,
-          "circle-stroke-opacity": ["get", "opacity"],
+      addLayerInSlot(
+        map,
+        {
+          id: REACH_LAYER,
+          type: "circle",
+          source: REACH_SOURCE,
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 3, 13, 5, 16, 7],
+            "circle-color": ["get", "color"],
+            "circle-opacity": ["get", "opacity"],
+            "circle-stroke-color": "#FFFFFF",
+            "circle-stroke-width": 0.5,
+            "circle-stroke-opacity": ["get", "opacity"],
+          },
         },
-      });
+        "route-markers",
+        19,
+      );
 
       // Pulsing ring
-      map.addLayer({
-        id: ORIGIN_PULSE_LAYER,
-        type: "circle",
-        source: ORIGIN_SOURCE,
-        paint: {
-          "circle-radius": 14,
-          "circle-color": "transparent",
-          "circle-stroke-color": ["get", "color"],
-          "circle-stroke-width": 2,
-          "circle-stroke-opacity": 0.3,
+      addLayerInSlot(
+        map,
+        {
+          id: ORIGIN_PULSE_LAYER,
+          type: "circle",
+          source: ORIGIN_SOURCE,
+          paint: {
+            "circle-radius": 14,
+            "circle-color": "transparent",
+            "circle-stroke-color": ["get", "color"],
+            "circle-stroke-width": 2,
+            "circle-stroke-opacity": 0.3,
+          },
         },
-      });
+        "route-markers",
+        20,
+      );
 
       // Origin dot
-      map.addLayer({
-        id: ORIGIN_LAYER,
-        type: "circle",
-        source: ORIGIN_SOURCE,
-        paint: {
-          "circle-radius": 7,
-          "circle-color": ["get", "color"],
-          "circle-stroke-color": "#FFFFFF",
-          "circle-stroke-width": 2,
+      addLayerInSlot(
+        map,
+        {
+          id: ORIGIN_LAYER,
+          type: "circle",
+          source: ORIGIN_SOURCE,
+          paint: {
+            "circle-radius": 7,
+            "circle-color": ["get", "color"],
+            "circle-stroke-color": "#FFFFFF",
+            "circle-stroke-width": 2,
+          },
         },
-      });
+        "route-markers",
+        21,
+      );
     };
 
     if (map.isStyleLoaded()) {
@@ -171,6 +200,7 @@ export function TravelTimeLayer() {
       if (!map.getStyle()) return;
       for (const id of [ORIGIN_LAYER, ORIGIN_PULSE_LAYER, REACH_LAYER, OUTLINE_LAYER, FILL_LAYER]) {
         if (map.getLayer(id)) map.removeLayer(id);
+        unregisterLayerSlot(id);
       }
       if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
       if (map.getSource(REACH_SOURCE)) map.removeSource(REACH_SOURCE);

@@ -10,8 +10,7 @@ import {
 import type maplibregl from "maplibre-gl";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
-import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
@@ -39,18 +38,6 @@ const HARBOR_LABEL_LAYER = "openmapx-nautical-harbor-labels";
 const STATION_SOURCE = "openmapx-nautical-station-source";
 const STATION_CIRCLE_LAYER = "openmapx-nautical-station-circles";
 const STATION_LABEL_LAYER = "openmapx-nautical-station-labels";
-
-const ALL_NAUTICAL_LAYER_IDS = [
-  DEPTH_RELIEF_LAYER,
-  DEPTH_CONTOUR_LAYER,
-  NOAA_LAYER,
-  KARTVERKET_LAYER,
-  SEAMARK_LAYER,
-  HARBOR_ICON_LAYER,
-  HARBOR_LABEL_LAYER,
-  STATION_CIRCLE_LAYER,
-  STATION_LABEL_LAYER,
-] as const;
 
 /** Station marker palette — keyed by primary-type rank assigned by the backend. */
 const STATION_COLOR_BY_RANK = [
@@ -273,7 +260,6 @@ export function NauticalLayer() {
   const setLoading = useNauticalStore((s) => s.setLoading);
 
   useOverlayExclusion("nautical", layerVisible);
-  useLayerReanchor(ALL_NAUTICAL_LAYER_IDS, layerVisible);
 
   const harborsFetchKeyRef = useRef<string | null>(null);
   const stationsFetchKeyRef = useRef<string | null>(null);
@@ -348,7 +334,6 @@ export function NauticalLayer() {
         map.once("idle", sync);
         return;
       }
-      const before = getFirstSymbolLayerId(map);
 
       // ---- Depth shaded relief (lowest layer) ----
       if (layerVisible && showDepth) {
@@ -362,7 +347,8 @@ export function NauticalLayer() {
           });
         }
         if (!map.getLayer(DEPTH_RELIEF_LAYER)) {
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: DEPTH_RELIEF_LAYER,
               type: "raster",
@@ -370,12 +356,14 @@ export function NauticalLayer() {
               maxzoom: 8,
               paint: { "raster-opacity": 0.55, "raster-fade-duration": 200 },
             },
-            before,
+            "raster-overlays",
+            10,
           );
         }
       } else {
         if (map.getLayer(DEPTH_RELIEF_LAYER)) map.removeLayer(DEPTH_RELIEF_LAYER);
         if (map.getSource(DEPTH_RELIEF_SOURCE)) map.removeSource(DEPTH_RELIEF_SOURCE);
+        unregisterLayerSlot(DEPTH_RELIEF_LAYER);
       }
 
       // ---- Depth contour lines (zoom 7+) ----
@@ -389,7 +377,8 @@ export function NauticalLayer() {
           });
         }
         if (!map.getLayer(DEPTH_CONTOUR_LAYER)) {
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: DEPTH_CONTOUR_LAYER,
               type: "raster",
@@ -397,12 +386,14 @@ export function NauticalLayer() {
               minzoom: 6,
               paint: { "raster-opacity": 0.9, "raster-fade-duration": 200 },
             },
-            before,
+            "raster-overlays",
+            11,
           );
         }
       } else {
         if (map.getLayer(DEPTH_CONTOUR_LAYER)) map.removeLayer(DEPTH_CONTOUR_LAYER);
         if (map.getSource(DEPTH_CONTOUR_SOURCE)) map.removeSource(DEPTH_CONTOUR_SOURCE);
+        unregisterLayerSlot(DEPTH_CONTOUR_LAYER);
       }
 
       // ---- Charts: multi-provider raster (US: NOAA, Norway+Svalbard: Kartverket)
@@ -420,19 +411,22 @@ export function NauticalLayer() {
           });
         }
         if (!map.getLayer(NOAA_LAYER)) {
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: NOAA_LAYER,
               type: "raster",
               source: NOAA_SOURCE,
               paint: { "raster-opacity": 0.9, "raster-fade-duration": 200 },
             },
-            before,
+            "raster-overlays",
+            12,
           );
         }
       } else {
         if (map.getLayer(NOAA_LAYER)) map.removeLayer(NOAA_LAYER);
         if (map.getSource(NOAA_SOURCE)) map.removeSource(NOAA_SOURCE);
+        unregisterLayerSlot(NOAA_LAYER);
       }
 
       const wantKartverket = layerVisible && showNoaaCharts && bboxIntersectsNorwayWaters(map);
@@ -447,19 +441,22 @@ export function NauticalLayer() {
           });
         }
         if (!map.getLayer(KARTVERKET_LAYER)) {
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: KARTVERKET_LAYER,
               type: "raster",
               source: KARTVERKET_SOURCE,
               paint: { "raster-opacity": 0.9, "raster-fade-duration": 200 },
             },
-            before,
+            "raster-overlays",
+            13,
           );
         }
       } else {
         if (map.getLayer(KARTVERKET_LAYER)) map.removeLayer(KARTVERKET_LAYER);
         if (map.getSource(KARTVERKET_SOURCE)) map.removeSource(KARTVERKET_SOURCE);
+        unregisterLayerSlot(KARTVERKET_LAYER);
       }
 
       // ---- Seamarks (always on top of bathymetry/chart raster) ----
@@ -473,19 +470,22 @@ export function NauticalLayer() {
           });
         }
         if (!map.getLayer(SEAMARK_LAYER)) {
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: SEAMARK_LAYER,
               type: "raster",
               source: SEAMARK_SOURCE,
               paint: { "raster-opacity": 0.95, "raster-fade-duration": 200 },
             },
-            before,
+            "raster-overlays",
+            14,
           );
         }
       } else {
         if (map.getLayer(SEAMARK_LAYER)) map.removeLayer(SEAMARK_LAYER);
         if (map.getSource(SEAMARK_SOURCE)) map.removeSource(SEAMARK_SOURCE);
+        unregisterLayerSlot(SEAMARK_LAYER);
       }
 
       // ---- Harbor markers (top layer) ----
@@ -504,45 +504,57 @@ export function NauticalLayer() {
           void loadHarborImage(map, t);
         }
         if (!map.getLayer(HARBOR_ICON_LAYER)) {
-          map.addLayer({
-            id: HARBOR_ICON_LAYER,
-            type: "symbol",
-            source: HARBOR_SOURCE,
-            minzoom: 6,
-            layout: {
-              "icon-image": HARBOR_ICON_IMAGE_EXPR,
-              "icon-size": HARBOR_ICON_SIZE_EXPR,
-              "icon-allow-overlap": true,
-              "icon-ignore-placement": false,
+          addLayerInSlot(
+            map,
+            {
+              id: HARBOR_ICON_LAYER,
+              type: "symbol",
+              source: HARBOR_SOURCE,
+              minzoom: 6,
+              layout: {
+                "icon-image": HARBOR_ICON_IMAGE_EXPR,
+                "icon-size": HARBOR_ICON_SIZE_EXPR,
+                "icon-allow-overlap": true,
+                "icon-ignore-placement": false,
+              },
             },
-          });
+            "overlay-markers",
+            5,
+          );
         }
         if (!map.getLayer(HARBOR_LABEL_LAYER)) {
-          map.addLayer({
-            id: HARBOR_LABEL_LAYER,
-            type: "symbol",
-            source: HARBOR_SOURCE,
-            minzoom: 11,
-            layout: {
-              "text-field": ["get", "name"],
-              "text-font": ["Noto Sans Bold"],
-              "text-size": 11,
-              "text-anchor": "top",
-              "text-offset": [0, 1.2],
-              "text-allow-overlap": false,
-              "text-optional": true,
+          addLayerInSlot(
+            map,
+            {
+              id: HARBOR_LABEL_LAYER,
+              type: "symbol",
+              source: HARBOR_SOURCE,
+              minzoom: 11,
+              layout: {
+                "text-field": ["get", "name"],
+                "text-font": ["Noto Sans Bold"],
+                "text-size": 11,
+                "text-anchor": "top",
+                "text-offset": [0, 1.2],
+                "text-allow-overlap": false,
+                "text-optional": true,
+              },
+              paint: {
+                "text-color": "#0f172a",
+                "text-halo-color": "#ffffff",
+                "text-halo-width": 1.5,
+              },
             },
-            paint: {
-              "text-color": "#0f172a",
-              "text-halo-color": "#ffffff",
-              "text-halo-width": 1.5,
-            },
-          });
+            "overlay-markers",
+            6,
+          );
         }
       } else {
         if (map.getLayer(HARBOR_LABEL_LAYER)) map.removeLayer(HARBOR_LABEL_LAYER);
         if (map.getLayer(HARBOR_ICON_LAYER)) map.removeLayer(HARBOR_ICON_LAYER);
         if (map.getSource(HARBOR_SOURCE)) map.removeSource(HARBOR_SOURCE);
+        unregisterLayerSlot(HARBOR_LABEL_LAYER);
+        unregisterLayerSlot(HARBOR_ICON_LAYER);
         harborsFetchKeyRef.current = null;
       }
 
@@ -555,46 +567,58 @@ export function NauticalLayer() {
           });
         }
         if (!map.getLayer(STATION_CIRCLE_LAYER)) {
-          map.addLayer({
-            id: STATION_CIRCLE_LAYER,
-            type: "circle",
-            source: STATION_SOURCE,
-            minzoom: 6,
-            paint: {
-              "circle-radius": STATION_RADIUS_EXPR,
-              "circle-color": STATION_COLOR_BY_RANK,
-              "circle-opacity": 0.9,
-              "circle-stroke-color": "#ffffff",
-              "circle-stroke-width": 1.5,
+          addLayerInSlot(
+            map,
+            {
+              id: STATION_CIRCLE_LAYER,
+              type: "circle",
+              source: STATION_SOURCE,
+              minzoom: 6,
+              paint: {
+                "circle-radius": STATION_RADIUS_EXPR,
+                "circle-color": STATION_COLOR_BY_RANK,
+                "circle-opacity": 0.9,
+                "circle-stroke-color": "#ffffff",
+                "circle-stroke-width": 1.5,
+              },
             },
-          });
+            "overlay-points",
+            8,
+          );
         }
         if (!map.getLayer(STATION_LABEL_LAYER)) {
-          map.addLayer({
-            id: STATION_LABEL_LAYER,
-            type: "symbol",
-            source: STATION_SOURCE,
-            minzoom: 10,
-            layout: {
-              "text-field": ["get", "name"],
-              "text-font": ["Noto Sans Bold"],
-              "text-size": 11,
-              "text-anchor": "top",
-              "text-offset": [0, 0.8],
-              "text-allow-overlap": false,
-              "text-optional": true,
+          addLayerInSlot(
+            map,
+            {
+              id: STATION_LABEL_LAYER,
+              type: "symbol",
+              source: STATION_SOURCE,
+              minzoom: 10,
+              layout: {
+                "text-field": ["get", "name"],
+                "text-font": ["Noto Sans Bold"],
+                "text-size": 11,
+                "text-anchor": "top",
+                "text-offset": [0, 0.8],
+                "text-allow-overlap": false,
+                "text-optional": true,
+              },
+              paint: {
+                "text-color": "#0f172a",
+                "text-halo-color": "#ffffff",
+                "text-halo-width": 1.5,
+              },
             },
-            paint: {
-              "text-color": "#0f172a",
-              "text-halo-color": "#ffffff",
-              "text-halo-width": 1.5,
-            },
-          });
+            "overlay-markers",
+            7,
+          );
         }
       } else {
         if (map.getLayer(STATION_LABEL_LAYER)) map.removeLayer(STATION_LABEL_LAYER);
         if (map.getLayer(STATION_CIRCLE_LAYER)) map.removeLayer(STATION_CIRCLE_LAYER);
         if (map.getSource(STATION_SOURCE)) map.removeSource(STATION_SOURCE);
+        unregisterLayerSlot(STATION_LABEL_LAYER);
+        unregisterLayerSlot(STATION_CIRCLE_LAYER);
         stationsFetchKeyRef.current = null;
       }
     };
@@ -669,6 +693,7 @@ export function NauticalLayer() {
       } else if (!inUs && hasNoaa) {
         map.removeLayer(NOAA_LAYER);
         if (map.getSource(NOAA_SOURCE)) map.removeSource(NOAA_SOURCE);
+        unregisterLayerSlot(NOAA_LAYER);
       }
       // Kartverket (Norway + Svalbard)
       const inNo = bboxIntersectsNorwayWaters(map);
@@ -678,6 +703,7 @@ export function NauticalLayer() {
       } else if (!inNo && hasKartverket) {
         map.removeLayer(KARTVERKET_LAYER);
         if (map.getSource(KARTVERKET_SOURCE)) map.removeSource(KARTVERKET_SOURCE);
+        unregisterLayerSlot(KARTVERKET_LAYER);
       }
     };
     map.on("moveend", reevaluate);

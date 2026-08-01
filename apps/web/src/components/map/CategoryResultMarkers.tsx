@@ -19,6 +19,7 @@ import { usePinMarker } from "@/hooks/usePinMarker";
 import { useMap } from "@/lib/MapContext";
 import { createMarkerSvg } from "@/lib/markerSvg";
 import { useExploreReachResults } from "@/lib/useExploreReachResults";
+import { addLayerInSlot, unregisterLayerSlot } from "./layers/layerStack";
 import { upsertGeoJsonSource } from "./layers/layerStyleUtils";
 
 const SOURCE_ID = "category-results-source";
@@ -157,12 +158,16 @@ export function CategoryResultMarkers() {
       if (map.getLayer(LABEL_LAYER_ID)) map.removeLayer(LABEL_LAYER_ID);
       if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
       if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      unregisterLayerSlot(LABEL_LAYER_ID);
+      unregisterLayerSlot(LAYER_ID);
     };
 
     const removeTransitLayers = () => {
       if (map.getLayer(TRANSIT_LABEL_LAYER_ID)) map.removeLayer(TRANSIT_LABEL_LAYER_ID);
       if (map.getLayer(TRANSIT_LAYER_ID)) map.removeLayer(TRANSIT_LAYER_ID);
       if (map.getSource(TRANSIT_SOURCE_ID)) map.removeSource(TRANSIT_SOURCE_ID);
+      unregisterLayerSlot(TRANSIT_LABEL_LAYER_ID);
+      unregisterLayerSlot(TRANSIT_LAYER_ID);
     };
 
     const sync = () => {
@@ -196,35 +201,45 @@ export function CategoryResultMarkers() {
         void Promise.all(uniqueModes.map((m) => loadTransitMarkerImage(map, m))).then(() => {
           if (!map.getSource(TRANSIT_SOURCE_ID)) return;
           if (!map.getLayer(TRANSIT_LAYER_ID)) {
-            map.addLayer({
-              id: TRANSIT_LAYER_ID,
-              type: "symbol",
-              source: TRANSIT_SOURCE_ID,
-              layout: {
-                "icon-image": ["get", "imageId"],
-                "icon-allow-overlap": true,
-                "icon-ignore-placement": true,
+            addLayerInSlot(
+              map,
+              {
+                id: TRANSIT_LAYER_ID,
+                type: "symbol",
+                source: TRANSIT_SOURCE_ID,
+                layout: {
+                  "icon-image": ["get", "imageId"],
+                  "icon-allow-overlap": true,
+                  "icon-ignore-placement": true,
+                },
               },
-            });
+              "route-markers",
+              8,
+            );
           }
           if (!map.getLayer(TRANSIT_LABEL_LAYER_ID)) {
-            map.addLayer({
-              id: TRANSIT_LABEL_LAYER_ID,
-              type: "symbol",
-              source: TRANSIT_SOURCE_ID,
-              layout: {
-                "text-field": ["get", "name"],
-                "text-size": 11,
-                "text-offset": [0, 2.0],
-                "text-anchor": "top",
-                "text-max-width": 8,
+            addLayerInSlot(
+              map,
+              {
+                id: TRANSIT_LABEL_LAYER_ID,
+                type: "symbol",
+                source: TRANSIT_SOURCE_ID,
+                layout: {
+                  "text-field": ["get", "name"],
+                  "text-size": 11,
+                  "text-offset": [0, 2.0],
+                  "text-anchor": "top",
+                  "text-max-width": 8,
+                },
+                paint: {
+                  "text-color": "#333333",
+                  "text-halo-color": "#FFFFFF",
+                  "text-halo-width": 1.5,
+                },
               },
-              paint: {
-                "text-color": "#333333",
-                "text-halo-color": "#FFFFFF",
-                "text-halo-width": 1.5,
-              },
-            });
+              "route-markers",
+              9,
+            );
           }
         });
         return;
@@ -250,35 +265,45 @@ export function CategoryResultMarkers() {
       void loadMarkerImage(map, imageId, iconPath).then(() => {
         if (!map.getSource(SOURCE_ID)) return;
         if (!map.getLayer(LAYER_ID)) {
-          map.addLayer({
-            id: LAYER_ID,
-            type: "symbol",
-            source: SOURCE_ID,
-            layout: {
-              "icon-image": ["get", "imageId"],
-              "icon-allow-overlap": true,
-              "icon-ignore-placement": true,
+          addLayerInSlot(
+            map,
+            {
+              id: LAYER_ID,
+              type: "symbol",
+              source: SOURCE_ID,
+              layout: {
+                "icon-image": ["get", "imageId"],
+                "icon-allow-overlap": true,
+                "icon-ignore-placement": true,
+              },
             },
-          });
+            "route-markers",
+            6,
+          );
         }
         if (!map.getLayer(LABEL_LAYER_ID)) {
-          map.addLayer({
-            id: LABEL_LAYER_ID,
-            type: "symbol",
-            source: SOURCE_ID,
-            layout: {
-              "text-field": ["get", "name"],
-              "text-size": 11,
-              "text-offset": [0, 2.0],
-              "text-anchor": "top",
-              "text-max-width": 8,
+          addLayerInSlot(
+            map,
+            {
+              id: LABEL_LAYER_ID,
+              type: "symbol",
+              source: SOURCE_ID,
+              layout: {
+                "text-field": ["get", "name"],
+                "text-size": 11,
+                "text-offset": [0, 2.0],
+                "text-anchor": "top",
+                "text-max-width": 8,
+              },
+              paint: {
+                "text-color": "#333333",
+                "text-halo-color": "#FFFFFF",
+                "text-halo-width": 1.5,
+              },
             },
-            paint: {
-              "text-color": "#333333",
-              "text-halo-color": "#FFFFFF",
-              "text-halo-width": 1.5,
-            },
-          });
+            "route-markers",
+            7,
+          );
         }
       });
     };
@@ -315,6 +340,10 @@ export function CategoryResultMarkers() {
       } catch {
         // Map may already be destroyed
       }
+      unregisterLayerSlot(LABEL_LAYER_ID);
+      unregisterLayerSlot(LAYER_ID);
+      unregisterLayerSlot(TRANSIT_LABEL_LAYER_ID);
+      unregisterLayerSlot(TRANSIT_LAYER_ID);
     };
   }, [mapRef]);
 

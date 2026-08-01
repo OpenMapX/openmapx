@@ -4,8 +4,7 @@ import { escapeHtml, sanitizeUrl, useDebouncedCallback, useOverlayExclusion } fr
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
-import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
@@ -94,7 +93,6 @@ export function AirQualityLayer() {
   const setLoading = useAirQualityStore((s) => s.setLoading);
   useIntegrationAttribution("overlay-air-quality", layerVisible);
   useOverlayExclusion("air-quality", layerVisible);
-  useLayerReanchor(AQ_LAYER_ID, layerVisible);
   const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);
 
@@ -137,6 +135,7 @@ export function AirQualityLayer() {
         } catch {
           // Source may still be in-flight
         }
+        unregisterLayerSlot(AQ_LAYER_ID);
         popupRef.current?.remove();
         fetchedRef.current = false;
         return;
@@ -161,7 +160,8 @@ export function AirQualityLayer() {
           colorExpr.push(AQI_COLORS[i][0], AQI_COLORS[i][1]);
         }
 
-        map.addLayer(
+        addLayerInSlot(
+          map,
           {
             id: AQ_LAYER_ID,
             type: "circle",
@@ -176,7 +176,8 @@ export function AirQualityLayer() {
               "circle-stroke-opacity": 0.5,
             },
           },
-          getFirstSymbolLayerId(map),
+          "overlay-points",
+          0,
         );
       }
 

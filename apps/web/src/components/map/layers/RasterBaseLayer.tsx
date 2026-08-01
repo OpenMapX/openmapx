@@ -7,7 +7,8 @@ import type { LayerSpecification } from "maplibre-gl";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
 import { useMapAttributions } from "@/lib/useMapAttributions";
-import { getFirstSymbolLayerId, setLayerVisibility } from "./layerStyleUtils";
+import { addLayerInSlot } from "./layerStack";
+import { setLayerVisibility } from "./layerStyleUtils";
 
 type RasterPaint = Extract<LayerSpecification, { type: "raster" }>["paint"];
 
@@ -69,15 +70,16 @@ export function RasterBaseLayer({
       }
 
       if (shouldShow && !map.getLayer(layerId)) {
-        const beforeLayerId = getFirstSymbolLayerId(map);
-        map.addLayer(
+        addLayerInSlot(
+          map,
           {
             id: layerId,
             type: "raster",
             source: sourceId,
             paint: paint ?? {},
           },
-          beforeLayerId,
+          "base-raster",
+          0,
         );
       }
 

@@ -5,8 +5,7 @@ import type { MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
-import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
@@ -86,7 +85,6 @@ export function WeatherAlertLayer() {
 
   useIntegrationAttribution("overlay-weather-alerts", layerVisible);
   useOverlayExclusion("weather-alerts", layerVisible);
-  useLayerReanchor(ALL_LAYER_IDS, layerVisible);
 
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const fetchedRef = useRef(false);
@@ -132,6 +130,9 @@ export function WeatherAlertLayer() {
         } catch {
           // ignore
         }
+        unregisterLayerSlot(FILL_LAYER_ID);
+        unregisterLayerSlot(LINE_LAYER_ID);
+        unregisterLayerSlot(CIRCLE_LAYER_ID);
         popupRef.current?.remove();
         fetchedRef.current = false;
         setAlertCount(0);
@@ -150,10 +151,9 @@ export function WeatherAlertLayer() {
         });
       }
 
-      const beforeId = getFirstSymbolLayerId(map);
-
       if (!map.getLayer(FILL_LAYER_ID)) {
-        map.addLayer(
+        addLayerInSlot(
+          map,
           {
             id: FILL_LAYER_ID,
             type: "fill",
@@ -164,12 +164,14 @@ export function WeatherAlertLayer() {
               "fill-opacity": 0.25,
             },
           },
-          beforeId,
+          "area-overlays",
+          1,
         );
       }
 
       if (!map.getLayer(LINE_LAYER_ID)) {
-        map.addLayer(
+        addLayerInSlot(
+          map,
           {
             id: LINE_LAYER_ID,
             type: "line",
@@ -181,12 +183,14 @@ export function WeatherAlertLayer() {
               "line-opacity": 0.7,
             },
           },
-          beforeId,
+          "overlay-lines",
+          10,
         );
       }
 
       if (!map.getLayer(CIRCLE_LAYER_ID)) {
-        map.addLayer(
+        addLayerInSlot(
+          map,
           {
             id: CIRCLE_LAYER_ID,
             type: "circle",
@@ -200,7 +204,8 @@ export function WeatherAlertLayer() {
               "circle-stroke-width": 1.5,
             },
           },
-          beforeId,
+          "overlay-points",
+          24,
         );
       }
 

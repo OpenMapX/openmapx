@@ -10,23 +10,10 @@ import {
   CYCLING_POI_SOURCE_LAYER,
   CYCLING_SOURCE_LAYER,
 } from "@/components/map/layers/cyclingConfig";
-import {
-  getFirstSymbolLayerId,
-  moveLayerBeforeFirstSymbol,
-  setLayerVisibility,
-} from "@/components/map/layers/layerStyleUtils";
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { addLayerInSlot } from "@/components/map/layers/layerStack";
+import { setLayerVisibility } from "@/components/map/layers/layerStyleUtils";
 import { useMap } from "@/lib/MapContext";
 import { useCyclingStore } from "./store";
-
-const REANCHOR_IDS = [
-  CYCLING_LAYER_IDS.tracks,
-  CYCLING_LAYER_IDS.lanes,
-  CYCLING_LAYER_IDS.designated,
-  CYCLING_LAYER_IDS.permitted,
-  CYCLING_LAYER_IDS.parking,
-  CYCLING_LAYER_IDS.shops,
-] as const;
 
 function findTransportationSource(map: maplibregl.Map): string | null {
   const layers = map.getStyle()?.layers;
@@ -62,7 +49,6 @@ export function CyclingLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const layerVisible = useCyclingStore((s) => s.layerVisible);
   useOverlayExclusion("cycling", layerVisible);
-  useLayerReanchor(REANCHOR_IDS, layerVisible);
   const directionsMode = useDirectionsStore((s) => s.mode);
   const directionsOpen = useDirectionsStore((s) => s.isOpen);
   const prevModeRef = useRef(directionsMode);
@@ -106,8 +92,8 @@ export function CyclingLayer() {
       if (layerVisible && transportSource) {
         // Dedicated cycleways (tracks)
         if (!map.getLayer(CYCLING_LAYER_IDS.tracks)) {
-          const beforeId = getFirstSymbolLayerId(map);
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: CYCLING_LAYER_IDS.tracks,
               type: "line",
@@ -139,14 +125,15 @@ export function CyclingLayer() {
                 "line-join": "round",
               },
             },
-            beforeId,
+            "overlay-lines",
+            0,
           );
         }
 
         // Roads with bike lanes (bicycle=designated)
         if (!map.getLayer(CYCLING_LAYER_IDS.lanes)) {
-          const beforeId = getFirstSymbolLayerId(map);
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: CYCLING_LAYER_IDS.lanes,
               type: "line",
@@ -173,14 +160,15 @@ export function CyclingLayer() {
                 "line-join": "round",
               },
             },
-            beforeId,
+            "overlay-lines",
+            1,
           );
         }
 
         // Bicycle-designated roads
         if (!map.getLayer(CYCLING_LAYER_IDS.designated)) {
-          const beforeId = getFirstSymbolLayerId(map);
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: CYCLING_LAYER_IDS.designated,
               type: "line",
@@ -206,14 +194,15 @@ export function CyclingLayer() {
                 "line-join": "round",
               },
             },
-            beforeId,
+            "overlay-lines",
+            2,
           );
         }
 
         // Bicycle-permitted paths
         if (!map.getLayer(CYCLING_LAYER_IDS.permitted)) {
-          const beforeId = getFirstSymbolLayerId(map);
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: CYCLING_LAYER_IDS.permitted,
               type: "line",
@@ -237,7 +226,8 @@ export function CyclingLayer() {
                 "line-join": "round",
               },
             },
-            beforeId,
+            "overlay-lines",
+            3,
           );
         }
       }
@@ -245,8 +235,8 @@ export function CyclingLayer() {
       if (layerVisible && poiSource) {
         // Bike parking
         if (!map.getLayer(CYCLING_LAYER_IDS.parking)) {
-          const beforeId = getFirstSymbolLayerId(map);
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: CYCLING_LAYER_IDS.parking,
               type: "circle",
@@ -262,14 +252,15 @@ export function CyclingLayer() {
                 "circle-stroke-color": "#ffffff",
               },
             },
-            beforeId,
+            "overlay-points",
+            9,
           );
         }
 
         // Bike shops + repair stations + rental
         if (!map.getLayer(CYCLING_LAYER_IDS.shops)) {
-          const beforeId = getFirstSymbolLayerId(map);
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: CYCLING_LAYER_IDS.shops,
               type: "circle",
@@ -299,14 +290,15 @@ export function CyclingLayer() {
                 "circle-stroke-color": "#ffffff",
               },
             },
-            beforeId,
+            "overlay-points",
+            10,
           );
         }
 
         // POI labels
         if (!map.getLayer(CYCLING_LAYER_IDS.labels)) {
-          const beforeId = getFirstSymbolLayerId(map);
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: CYCLING_LAYER_IDS.labels,
               type: "symbol",
@@ -335,15 +327,9 @@ export function CyclingLayer() {
                 "text-halo-width": 1.5,
               },
             },
-            beforeId,
+            "overlay-markers",
+            2,
           );
-        }
-      }
-
-      // Move all layers before first symbol so they stay below labels
-      if (layerVisible) {
-        for (const layerId of Object.values(CYCLING_LAYER_IDS)) {
-          moveLayerBeforeFirstSymbol(map, layerId);
         }
       }
     };

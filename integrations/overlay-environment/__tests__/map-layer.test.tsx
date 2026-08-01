@@ -2,6 +2,7 @@ import { IntegrationRegistry } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { layerRegistrations } from "@/components/map/layers/layerStack";
 import { act, createFakeMap, type FakeMap, render } from "@/test";
 import manifest from "../manifest.json";
 import { useEnvironmentStore } from "../store";
@@ -84,6 +85,16 @@ describe("EnvironmentLayer zoom gate", () => {
     expect(String(fetchMock.mock.calls[0][0])).toContain(
       "/api/integrations/overlay-environment/stations",
     );
+  });
+
+  it("registers the circle layer in the overlay-points slot", () => {
+    render(<EnvironmentLayer />, { wrapper });
+
+    expect(layerRegistrations()).toContainEqual({
+      id: ENV_LAYER_ID,
+      slot: "overlay-points",
+      order: 1,
+    });
   });
 
   it("skips fetching below minZoom but keeps the layer clamped to it", () => {

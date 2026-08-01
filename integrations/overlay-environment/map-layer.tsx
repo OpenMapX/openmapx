@@ -4,8 +4,7 @@ import { escapeHtml, useDebouncedCallback, useOverlayExclusion } from "@openmapx
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
-import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
@@ -154,7 +153,6 @@ export function EnvironmentLayer() {
   const setStationCount = useEnvironmentStore((s) => s.setStationCount);
 
   useOverlayExclusion("environment", layerVisible);
-  useLayerReanchor(ENV_LAYER_ID, layerVisible);
 
   const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);
@@ -214,6 +212,8 @@ export function EnvironmentLayer() {
         } catch {
           // ignore
         }
+        unregisterLayerSlot(ENV_LABEL_LAYER_ID);
+        unregisterLayerSlot(ENV_LAYER_ID);
         popupRef.current?.remove();
         fetchedRef.current = false;
         setStationCount(0);
@@ -235,7 +235,8 @@ export function EnvironmentLayer() {
       const colorExpr = buildColorExpr(scale);
 
       if (!map.getLayer(ENV_LAYER_ID)) {
-        map.addLayer(
+        addLayerInSlot(
+          map,
           {
             id: ENV_LAYER_ID,
             type: "circle",
@@ -250,7 +251,8 @@ export function EnvironmentLayer() {
               "circle-stroke-opacity": 0.8,
             },
           },
-          getFirstSymbolLayerId(map),
+          "overlay-points",
+          1,
         );
       } else {
         map.setPaintProperty(
@@ -261,22 +263,27 @@ export function EnvironmentLayer() {
       }
 
       if (!map.getLayer(ENV_LABEL_LAYER_ID)) {
-        map.addLayer({
-          id: ENV_LABEL_LAYER_ID,
-          type: "symbol",
-          source: ENV_SOURCE_ID,
-          minzoom: 10,
-          layout: {
-            "text-field": ["get", "label"],
-            "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
-            "text-size": ["interpolate", ["linear"], ["zoom"], 10, 10, 14, 13],
-            "text-allow-overlap": true,
-            "text-ignore-placement": true,
+        addLayerInSlot(
+          map,
+          {
+            id: ENV_LABEL_LAYER_ID,
+            type: "symbol",
+            source: ENV_SOURCE_ID,
+            minzoom: 10,
+            layout: {
+              "text-field": ["get", "label"],
+              "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+              "text-size": ["interpolate", ["linear"], ["zoom"], 10, 10, 14, 13],
+              "text-allow-overlap": true,
+              "text-ignore-placement": true,
+            },
+            paint: {
+              "text-color": "#ffffff",
+            },
           },
-          paint: {
-            "text-color": "#ffffff",
-          },
-        });
+          "overlay-markers",
+          3,
+        );
       }
 
       if (!fetchedRef.current) {

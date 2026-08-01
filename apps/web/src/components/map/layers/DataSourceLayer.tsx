@@ -43,8 +43,8 @@ import {
   contextSortKeyExpression,
 } from "./dataSourceContextStyle";
 import { pickHoveredDataSourceItemId } from "./dataSourceHover";
-import { getFirstSymbolLayerId, upsertGeoJsonSource } from "./layerStyleUtils";
-import { useLayerReanchor } from "./useLayerReanchor";
+import { addLayerInSlot, unregisterLayerSlot } from "./layerStack";
+import { upsertGeoJsonSource } from "./layerStyleUtils";
 
 function sourceId(dsId: string) {
   return `ds-${dsId}`;
@@ -189,6 +189,10 @@ function removeLayers(map: maplibregl.Map, dsId: string) {
   } catch {
     // Source may already be torn down
   }
+  unregisterLayerSlot(mapContextOutline);
+  unregisterLayerSlot(mapContextFill);
+  unregisterLayerSlot(labels);
+  unregisterLayerSlot(markers);
 }
 
 export function DataSourceLayer() {
@@ -206,11 +210,6 @@ export function DataSourceLayer() {
   const hoveredItemId = useDataSourceStore((s) => s.hoveredItemId);
   const setHoveredItemId = useDataSourceStore((s) => s.setHoveredItemId);
   const [inspectedContext, setInspectedContext] = useState<Record<string, unknown> | null>(null);
-  const reanchorIds = useMemo(
-    () => (activeSource ? [markersLayerId(activeSource)] : []),
-    [activeSource],
-  );
-  useLayerReanchor(reanchorIds, activeSource !== null);
 
   // Register this source's layers in the shared interactive-layer registry so
   // MapStylePoiClickHandler (and MapClickHandler) know to defer to our own handlers.
@@ -457,14 +456,14 @@ export function DataSourceLayer() {
 
       upsertGeoJsonSource(map, sid, geojson);
 
-      const beforeLayer = getFirstSymbolLayerId(map);
       const mapContextData = mapContext?.geojson;
       if (mapContextData && mapContextData.features.length > 0) {
         upsertGeoJsonSource(map, mapContextSid, mapContextData);
 
         if (!map.getLayer(mapContextFillLid)) {
           const isDark = document.documentElement.classList.contains("dark");
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: mapContextFillLid,
               type: "fill",
@@ -477,13 +476,15 @@ export function DataSourceLayer() {
                 "fill-opacity": contextFillOpacityExpression,
               },
             },
-            beforeLayer,
+            "area-overlays",
+            6,
           );
         }
 
         if (!map.getLayer(mapContextOutlineLid)) {
           const isDark = document.documentElement.classList.contains("dark");
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: mapContextOutlineLid,
               type: "line",
@@ -494,13 +495,16 @@ export function DataSourceLayer() {
                 "line-opacity": 0.85,
               },
             },
-            beforeLayer,
+            "overlay-lines",
+            12,
           );
         }
       } else {
         if (map.getLayer(mapContextOutlineLid)) map.removeLayer(mapContextOutlineLid);
         if (map.getLayer(mapContextFillLid)) map.removeLayer(mapContextFillLid);
         if (map.getSource(mapContextSid)) map.removeSource(mapContextSid);
+        unregisterLayerSlot(mapContextOutlineLid);
+        unregisterLayerSlot(mapContextFillLid);
       }
 
       if (useIconMarkers && imageId) {
@@ -513,16 +517,21 @@ export function DataSourceLayer() {
         );
 
         if (!map.getLayer(markersLid)) {
-          map.addLayer({
-            id: markersLid,
-            type: "symbol",
-            source: sid,
-            layout: {
-              "icon-image": ["literal", imageId],
-              "icon-allow-overlap": true,
-              "icon-ignore-placement": true,
+          addLayerInSlot(
+            map,
+            {
+              id: markersLid,
+              type: "symbol",
+              source: sid,
+              layout: {
+                "icon-image": ["literal", imageId],
+                "icon-allow-overlap": true,
+                "icon-ignore-placement": true,
+              },
             },
-          });
+            "overlay-markers",
+            11,
+          );
         }
 
         const labelsLid = labelsLayerId(activeSource);
@@ -531,36 +540,41 @@ export function DataSourceLayer() {
           const nameZoom = Math.max(11, activeMeta.minZoom + 2);
           const summaryZoom = nameZoom + 2;
 
-          map.addLayer({
-            id: labelsLid,
-            type: "symbol",
-            source: sid,
-            minzoom: nameZoom,
-            layout: {
-              "text-field": [
-                "step",
-                ["zoom"],
-                ["get", "name"],
-                summaryZoom,
-                [
-                  "case",
-                  ["!=", ["get", "summary"], ""],
-                  ["concat", ["get", "name"], "\n", ["get", "summary"]],
+          addLayerInSlot(
+            map,
+            {
+              id: labelsLid,
+              type: "symbol",
+              source: sid,
+              minzoom: nameZoom,
+              layout: {
+                "text-field": [
+                  "step",
+                  ["zoom"],
                   ["get", "name"],
-                ],
-              ] as unknown as maplibregl.ExpressionSpecification,
-              "text-size": 11,
-              "text-offset": [0, 2.0] as [number, number],
-              "text-anchor": "top",
-              "text-max-width": 8,
-              "text-optional": true,
+                  summaryZoom,
+                  [
+                    "case",
+                    ["!=", ["get", "summary"], ""],
+                    ["concat", ["get", "name"], "\n", ["get", "summary"]],
+                    ["get", "name"],
+                  ],
+                ] as unknown as maplibregl.ExpressionSpecification,
+                "text-size": 11,
+                "text-offset": [0, 2.0] as [number, number],
+                "text-anchor": "top",
+                "text-max-width": 8,
+                "text-optional": true,
+              },
+              paint: {
+                "text-color": "#333333",
+                "text-halo-color": "#FFFFFF",
+                "text-halo-width": 1.5,
+              },
             },
-            paint: {
-              "text-color": "#333333",
-              "text-halo-color": "#FFFFFF",
-              "text-halo-width": 1.5,
-            },
-          });
+            "overlay-markers",
+            12,
+          );
         }
       } else {
         // Circle marker mode (default, e.g. EV charging)
@@ -576,7 +590,8 @@ export function DataSourceLayer() {
             variantColorExpr,
           ];
 
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: markersLid,
               type: "circle",
@@ -600,7 +615,8 @@ export function DataSourceLayer() {
                 ],
               },
             },
-            beforeLayer,
+            "overlay-points",
+            15,
           );
         }
       }

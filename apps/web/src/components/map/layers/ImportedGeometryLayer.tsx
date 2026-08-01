@@ -4,6 +4,7 @@ import type { ImportedGeometry } from "@openmapx/core";
 import { geoJsonBBox, useImportedGeometryStore } from "@openmapx/core";
 import { useEffect, useRef } from "react";
 import { useMap } from "@/lib/MapContext";
+import { addLayerInSlot, unregisterLayerSlot } from "./layerStack";
 import { removeLayerAndSource, upsertGeoJsonSource } from "./layerStyleUtils";
 
 const SOURCE = "imported-geometry-source";
@@ -32,6 +33,9 @@ export function ImportedGeometryLayer() {
 
     if (!imported) {
       removeLayerAndSource(map, [POINT, LINE, FILL], SOURCE);
+      unregisterLayerSlot(POINT);
+      unregisterLayerSlot(LINE);
+      unregisterLayerSlot(FILL);
       fittedRef.current = null;
       return;
     }
@@ -43,37 +47,52 @@ export function ImportedGeometryLayer() {
       }
       upsertGeoJsonSource(map, SOURCE, imported.geojson);
       if (!map.getLayer(FILL)) {
-        map.addLayer({
-          id: FILL,
-          type: "fill",
-          source: SOURCE,
-          filter: ["==", "$type", "Polygon"],
-          paint: { "fill-color": COLOR, "fill-opacity": 0.12 },
-        });
+        addLayerInSlot(
+          map,
+          {
+            id: FILL,
+            type: "fill",
+            source: SOURCE,
+            filter: ["==", "$type", "Polygon"],
+            paint: { "fill-color": COLOR, "fill-opacity": 0.12 },
+          },
+          "area-overlays",
+          11,
+        );
       }
       if (!map.getLayer(LINE)) {
-        map.addLayer({
-          id: LINE,
-          type: "line",
-          source: SOURCE,
-          filter: ["in", "$type", "LineString", "Polygon"],
-          layout: { "line-join": "round", "line-cap": "round" },
-          paint: { "line-color": COLOR, "line-width": 3, "line-opacity": 0.9 },
-        });
+        addLayerInSlot(
+          map,
+          {
+            id: LINE,
+            type: "line",
+            source: SOURCE,
+            filter: ["in", "$type", "LineString", "Polygon"],
+            layout: { "line-join": "round", "line-cap": "round" },
+            paint: { "line-color": COLOR, "line-width": 3, "line-opacity": 0.9 },
+          },
+          "overlay-lines",
+          15,
+        );
       }
       if (!map.getLayer(POINT)) {
-        map.addLayer({
-          id: POINT,
-          type: "circle",
-          source: SOURCE,
-          filter: ["==", "$type", "Point"],
-          paint: {
-            "circle-radius": 5,
-            "circle-color": COLOR,
-            "circle-stroke-color": "#ffffff",
-            "circle-stroke-width": 2,
+        addLayerInSlot(
+          map,
+          {
+            id: POINT,
+            type: "circle",
+            source: SOURCE,
+            filter: ["==", "$type", "Point"],
+            paint: {
+              "circle-radius": 5,
+              "circle-color": COLOR,
+              "circle-stroke-color": "#ffffff",
+              "circle-stroke-width": 2,
+            },
           },
-        });
+          "overlay-points",
+          16,
+        );
       }
       // Fit only the first time we show this file — not on later style reloads.
       if (fittedRef.current !== imported) {

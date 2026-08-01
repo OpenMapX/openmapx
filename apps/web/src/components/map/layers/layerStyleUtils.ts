@@ -84,13 +84,3 @@ export function setLayerVisibility(map: maplibregl.Map, layerId: string, visible
   if (!map.getLayer(layerId)) return;
   map.setLayoutProperty(layerId, "visibility", visible ? "visible" : "none");
 }
-
-export function moveLayerBeforeFirstSymbol(map: maplibregl.Map, layerId: string): void {
-  if (!map.getLayer(layerId)) return;
-  const beforeLayerId = getFirstSymbolLayerId(map);
-  if (beforeLayerId) {
-    map.moveLayer(layerId, beforeLayerId);
-    return;
-  }
-  map.moveLayer(layerId);
-}

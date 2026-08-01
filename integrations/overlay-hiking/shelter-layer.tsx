@@ -5,7 +5,7 @@ import type { GeoJSONSource, MapMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { useHikingStore } from "./store";
@@ -36,7 +36,6 @@ export function MountainShelterLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
   const layerVisible = useHikingStore((s) => s.layerVisible);
-  useLayerReanchor([CIRCLE_LAYER_ID, LABEL_LAYER_ID], layerVisible);
   const t = useTranslations("hiking");
   const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);
@@ -81,6 +80,8 @@ export function MountainShelterLayer() {
         } catch {
           // In-flight tiles
         }
+        unregisterLayerSlot(LABEL_LAYER_ID);
+        unregisterLayerSlot(CIRCLE_LAYER_ID);
         popupRef.current?.remove();
         fetchedRef.current = false;
         return;
@@ -98,55 +99,65 @@ export function MountainShelterLayer() {
         }
 
         if (!map.getLayer(CIRCLE_LAYER_ID)) {
-          map.addLayer({
-            id: CIRCLE_LAYER_ID,
-            type: "circle",
-            source: SOURCE_ID,
-            minzoom: MIN_ZOOM,
-            paint: {
-              "circle-color": [
-                "match",
-                ["get", "type"],
-                "refuge",
-                SHELTER_COLORS.refuge,
-                "cabane",
-                SHELTER_COLORS.cabane,
-                "gite",
-                SHELTER_COLORS.gite,
-                "pt_eau",
-                SHELTER_COLORS.pt_eau,
-                "pt_passage",
-                SHELTER_COLORS.pt_passage,
-                "#795548",
-              ],
-              "circle-radius": ["interpolate", ["linear"], ["zoom"], MIN_ZOOM, 4, 16, 8],
-              "circle-stroke-color": "#ffffff",
-              "circle-stroke-width": 1.5,
-              "circle-opacity": 0.9,
+          addLayerInSlot(
+            map,
+            {
+              id: CIRCLE_LAYER_ID,
+              type: "circle",
+              source: SOURCE_ID,
+              minzoom: MIN_ZOOM,
+              paint: {
+                "circle-color": [
+                  "match",
+                  ["get", "type"],
+                  "refuge",
+                  SHELTER_COLORS.refuge,
+                  "cabane",
+                  SHELTER_COLORS.cabane,
+                  "gite",
+                  SHELTER_COLORS.gite,
+                  "pt_eau",
+                  SHELTER_COLORS.pt_eau,
+                  "pt_passage",
+                  SHELTER_COLORS.pt_passage,
+                  "#795548",
+                ],
+                "circle-radius": ["interpolate", ["linear"], ["zoom"], MIN_ZOOM, 4, 16, 8],
+                "circle-stroke-color": "#ffffff",
+                "circle-stroke-width": 1.5,
+                "circle-opacity": 0.9,
+              },
             },
-          });
+            "overlay-points",
+            7,
+          );
         }
 
         if (!map.getLayer(LABEL_LAYER_ID)) {
-          map.addLayer({
-            id: LABEL_LAYER_ID,
-            type: "symbol",
-            source: SOURCE_ID,
-            minzoom: 12,
-            layout: {
-              "text-field": ["get", "name"],
-              "text-size": 11,
-              "text-offset": [0, 1.3],
-              "text-anchor": "top",
-              "text-optional": true,
-              "text-max-width": 8,
+          addLayerInSlot(
+            map,
+            {
+              id: LABEL_LAYER_ID,
+              type: "symbol",
+              source: SOURCE_ID,
+              minzoom: 12,
+              layout: {
+                "text-field": ["get", "name"],
+                "text-size": 11,
+                "text-offset": [0, 1.3],
+                "text-anchor": "top",
+                "text-optional": true,
+                "text-max-width": 8,
+              },
+              paint: {
+                "text-color": "#333333",
+                "text-halo-color": "#ffffff",
+                "text-halo-width": 1.5,
+              },
             },
-            paint: {
-              "text-color": "#333333",
-              "text-halo-color": "#ffffff",
-              "text-halo-width": 1.5,
-            },
-          });
+            "overlay-markers",
+            4,
+          );
         }
 
         // Source exists — trigger initial fetch

@@ -5,7 +5,7 @@ import { usePlaceDetails, usePlaceStore } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { useMap } from "@/lib/MapContext";
-import { getFirstSymbolLayerId } from "./layerStyleUtils";
+import { addLayerInSlot } from "./layerStack";
 
 type GeoJSONSource = maplibregl.GeoJSONSource;
 
@@ -84,18 +84,19 @@ export function PlaceBoundaryLayer() {
       if (map.getSource(SOURCE_ID)) return;
       map.addSource(SOURCE_ID, { type: "geojson", data: EMPTY });
 
-      // Insert below the first symbol layer so place labels stay legible.
-      const beforeId = getFirstSymbolLayerId(map);
-      map.addLayer(
+      addLayerInSlot(
+        map,
         {
           id: LAYER_FILL,
           type: "fill",
           source: SOURCE_ID,
           paint: { "fill-color": BOUNDARY_COLOR, "fill-opacity": 0.05 },
         },
-        beforeId,
+        "area-overlays",
+        7,
       );
-      map.addLayer(
+      addLayerInSlot(
+        map,
         {
           id: LAYER_LINE,
           type: "line",
@@ -108,7 +109,8 @@ export function PlaceBoundaryLayer() {
             "line-dasharray": [1.5, 2],
           },
         },
-        beforeId,
+        "area-overlays",
+        8,
       );
     };
 

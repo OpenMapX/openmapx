@@ -5,8 +5,7 @@ import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
-import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
@@ -145,7 +144,6 @@ export function EarthquakeLayer() {
   const setLoading = useEarthquakeStore((s) => s.setLoading);
   const setLastUpdated = useEarthquakeStore((s) => s.setLastUpdated);
   useOverlayExclusion("earthquakes", layerVisible);
-  useLayerReanchor([CIRCLE_LAYER_ID, PULSE_LAYER_ID, HEATMAP_LAYER_ID], layerVisible);
   const t = useTranslations("earthquakes");
   const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);
@@ -192,6 +190,9 @@ export function EarthquakeLayer() {
         } catch {
           // In-flight tiles
         }
+        unregisterLayerSlot(HEATMAP_LAYER_ID);
+        unregisterLayerSlot(CIRCLE_LAYER_ID);
+        unregisterLayerSlot(PULSE_LAYER_ID);
         popupRef.current?.remove();
         fetchedRef.current = false;
         if (pulseAnimRef.current !== null) {
@@ -209,11 +210,10 @@ export function EarthquakeLayer() {
           });
         }
 
-        const beforeLayer = getFirstSymbolLayerId(map);
-
         // Circle layer
         if (!map.getLayer(CIRCLE_LAYER_ID)) {
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: CIRCLE_LAYER_ID,
               type: "circle",
@@ -226,13 +226,15 @@ export function EarthquakeLayer() {
                 "circle-stroke-width": 1.5,
               },
             },
-            beforeLayer,
+            "overlay-points",
+            2,
           );
         }
 
         // Pulse layer for events < 1 hour old
         if (!map.getLayer(PULSE_LAYER_ID)) {
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: PULSE_LAYER_ID,
               type: "circle",
@@ -247,7 +249,8 @@ export function EarthquakeLayer() {
                 "circle-stroke-opacity": 0,
               },
             },
-            beforeLayer,
+            "overlay-points",
+            3,
           );
           startPulseAnimation(map);
         }
@@ -329,8 +332,8 @@ export function EarthquakeLayer() {
 
     try {
       if (showHeatmap && !map.getLayer(HEATMAP_LAYER_ID)) {
-        const beforeLayer = getFirstSymbolLayerId(map);
-        map.addLayer(
+        addLayerInSlot(
+          map,
           {
             id: HEATMAP_LAYER_ID,
             type: "heatmap",
@@ -391,10 +394,12 @@ export function EarthquakeLayer() {
               ] as maplibregl.ExpressionSpecification,
             },
           },
-          beforeLayer,
+          "area-overlays",
+          3,
         );
       } else if (!showHeatmap && map.getLayer(HEATMAP_LAYER_ID)) {
         map.removeLayer(HEATMAP_LAYER_ID);
+        unregisterLayerSlot(HEATMAP_LAYER_ID);
       }
     } catch {
       // Layer or source may not be ready

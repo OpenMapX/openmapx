@@ -3,8 +3,7 @@
 import { useOverlayExclusion } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
-import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
@@ -31,7 +30,6 @@ export function SatelliteLayer() {
   const setCapabilities = useSatelliteStore((s) => s.setCapabilities);
 
   useOverlayExclusion("satellite", layerVisible);
-  useLayerReanchor(LAYER_ID, layerVisible);
 
   const prevKeyRef = useRef("");
   const fetchedRef = useRef(false);
@@ -95,6 +93,7 @@ export function SatelliteLayer() {
       } catch {
         // ignore
       }
+      unregisterLayerSlot(LAYER_ID);
       prevKeyRef.current = "";
       return;
     }
@@ -136,6 +135,7 @@ export function SatelliteLayer() {
           } catch {
             // ignore
           }
+          unregisterLayerSlot(LAYER_ID);
         }
       }
 
@@ -149,14 +149,16 @@ export function SatelliteLayer() {
       }
 
       if (!map.getLayer(LAYER_ID)) {
-        map.addLayer(
+        addLayerInSlot(
+          map,
           {
             id: LAYER_ID,
             type: "raster",
             source: SOURCE_ID,
             paint: { "raster-opacity": opacity, "raster-fade-duration": 0 },
           },
-          getFirstSymbolLayerId(map),
+          "raster-overlays",
+          0,
         );
         map.triggerRepaint();
       }

@@ -4,6 +4,7 @@ import { routeColor, usePlaceStore, useRouteLive, useTransitRoute } from "@openm
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
 import { PRIMARY_BLUE_HEX } from "@/lib/theme";
+import { addLayerInSlot, unregisterLayerSlot } from "./layerStack";
 
 const SOURCE_ID = "vehicle-live-source";
 const LAYER_ID = "vehicle-live-layer";
@@ -22,6 +23,7 @@ export function VehicleLiveLayer() {
     const cleanup = () => {
       if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
       if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      unregisterLayerSlot(LAYER_ID);
     };
 
     if (!activeRouteId || !liveData?.vehicles.length) {
@@ -48,18 +50,23 @@ export function VehicleLiveLayer() {
     map.addSource(SOURCE_ID, { type: "geojson", data: geojson });
 
     // Vehicle dot
-    map.addLayer({
-      id: LAYER_ID,
-      type: "circle",
-      source: SOURCE_ID,
-      paint: {
-        "circle-radius": 10,
-        "circle-color": lineColor,
-        "circle-stroke-width": 2.5,
-        "circle-stroke-color": "#fff",
-        "circle-opacity": 0.95,
+    addLayerInSlot(
+      map,
+      {
+        id: LAYER_ID,
+        type: "circle",
+        source: SOURCE_ID,
+        paint: {
+          "circle-radius": 10,
+          "circle-color": lineColor,
+          "circle-stroke-width": 2.5,
+          "circle-stroke-color": "#fff",
+          "circle-opacity": 0.95,
+        },
       },
-    });
+      "overlay-points",
+      21,
+    );
 
     return cleanup;
   }, [mapRef, mapReady, styleVersion, activeRouteId, liveData, route]);

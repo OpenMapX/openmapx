@@ -4,6 +4,7 @@ import { routeColor, usePlaceStore, useRouteStops, useTransitRoute } from "@open
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
 import { PRIMARY_BLUE_HEX } from "@/lib/theme";
+import { addLayerInSlot, unregisterLayerSlot } from "./layerStack";
 
 const SOURCE_ID = "transit-route-detail-source";
 const LINE_LAYER_ID = "transit-route-detail-line";
@@ -28,6 +29,9 @@ export function TransitRouteLayer() {
       if (map.getLayer(LINE_LAYER_ID)) map.removeLayer(LINE_LAYER_ID);
       if (map.getSource(STOPS_SOURCE_ID)) map.removeSource(STOPS_SOURCE_ID);
       if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      unregisterLayerSlot(CURRENT_STOP_LAYER_ID);
+      unregisterLayerSlot(STOPS_LAYER_ID);
+      unregisterLayerSlot(LINE_LAYER_ID);
     };
 
     if (!activeRouteId || !stops?.length) {
@@ -71,17 +75,22 @@ export function TransitRouteLayer() {
       },
     });
 
-    map.addLayer({
-      id: LINE_LAYER_ID,
-      type: "line",
-      source: SOURCE_ID,
-      paint: {
-        "line-color": lineColor,
-        "line-width": 4,
-        "line-opacity": 0.8,
+    addLayerInSlot(
+      map,
+      {
+        id: LINE_LAYER_ID,
+        type: "line",
+        source: SOURCE_ID,
+        paint: {
+          "line-color": lineColor,
+          "line-width": 4,
+          "line-opacity": 0.8,
+        },
+        layout: { "line-cap": "round", "line-join": "round" },
       },
-      layout: { "line-cap": "round", "line-join": "round" },
-    });
+      "overlay-lines",
+      16,
+    );
 
     const stopsGeoJson = {
       type: "FeatureCollection" as const,
@@ -94,31 +103,41 @@ export function TransitRouteLayer() {
 
     map.addSource(STOPS_SOURCE_ID, { type: "geojson", data: stopsGeoJson });
 
-    map.addLayer({
-      id: STOPS_LAYER_ID,
-      type: "circle",
-      source: STOPS_SOURCE_ID,
-      filter: ["!=", ["get", "isCurrent"], true],
-      paint: {
-        "circle-radius": 5,
-        "circle-color": "#fff",
-        "circle-stroke-width": 2.5,
-        "circle-stroke-color": lineColor,
+    addLayerInSlot(
+      map,
+      {
+        id: STOPS_LAYER_ID,
+        type: "circle",
+        source: STOPS_SOURCE_ID,
+        filter: ["!=", ["get", "isCurrent"], true],
+        paint: {
+          "circle-radius": 5,
+          "circle-color": "#fff",
+          "circle-stroke-width": 2.5,
+          "circle-stroke-color": lineColor,
+        },
       },
-    });
+      "overlay-points",
+      18,
+    );
 
-    map.addLayer({
-      id: CURRENT_STOP_LAYER_ID,
-      type: "circle",
-      source: STOPS_SOURCE_ID,
-      filter: ["==", ["get", "isCurrent"], true],
-      paint: {
-        "circle-radius": 8,
-        "circle-color": lineColor,
-        "circle-stroke-width": 3,
-        "circle-stroke-color": "#fff",
+    addLayerInSlot(
+      map,
+      {
+        id: CURRENT_STOP_LAYER_ID,
+        type: "circle",
+        source: STOPS_SOURCE_ID,
+        filter: ["==", ["get", "isCurrent"], true],
+        paint: {
+          "circle-radius": 8,
+          "circle-color": lineColor,
+          "circle-stroke-width": 3,
+          "circle-stroke-color": "#fff",
+        },
       },
-    });
+      "overlay-points",
+      19,
+    );
 
     if (lineCoords.length >= 2) {
       const lngs = lineCoords.map((c) => c[0]);

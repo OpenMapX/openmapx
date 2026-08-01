@@ -7,6 +7,7 @@ import { lineString, polygon as turfPolygon } from "@turf/helpers";
 import { length } from "@turf/length";
 import type { MapMouseEvent } from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
+import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
 import { useMeasurementStore } from "./store";
@@ -207,109 +208,148 @@ export function MeasurementLayer() {
       map.addSource(SOURCE_ID, { type: "geojson", data: emptyFC });
       map.addSource(RUBBERBAND_SOURCE, { type: "geojson", data: emptyFC });
 
+      // `route-markers`, not an overlay band: the ruler is the user's active
+      // in-progress edit, drawn above the base labels exactly like the route's
+      // own waypoint pins, so vertices and distance labels stay legible over
+      // any road/place text underneath.
       // Polygon fill
-      map.addLayer({
-        id: POLYGON_FILL_LAYER,
-        type: "fill",
-        source: SOURCE_ID,
-        filter: ["==", "$type", "Polygon"],
-        paint: { "fill-color": PRIMARY_BLUE, "fill-opacity": 0.1 },
-      });
+      addLayerInSlot(
+        map,
+        {
+          id: POLYGON_FILL_LAYER,
+          type: "fill",
+          source: SOURCE_ID,
+          filter: ["==", "$type", "Polygon"],
+          paint: { "fill-color": PRIMARY_BLUE, "fill-opacity": 0.1 },
+        },
+        "route-markers",
+        10,
+      );
 
       // Line casing (white outline for contrast)
-      map.addLayer({
-        id: LINE_CASING_LAYER,
-        type: "line",
-        source: SOURCE_ID,
-        filter: ["==", "$type", "LineString"],
-        paint: { "line-color": "#FFFFFF", "line-width": 6, "line-opacity": 1 },
-        layout: { "line-cap": "round", "line-join": "round" },
-      });
+      addLayerInSlot(
+        map,
+        {
+          id: LINE_CASING_LAYER,
+          type: "line",
+          source: SOURCE_ID,
+          filter: ["==", "$type", "LineString"],
+          paint: { "line-color": "#FFFFFF", "line-width": 6, "line-opacity": 1 },
+          layout: { "line-cap": "round", "line-join": "round" },
+        },
+        "route-markers",
+        11,
+      );
 
       // Line
-      map.addLayer({
-        id: LINE_LAYER,
-        type: "line",
-        source: SOURCE_ID,
-        filter: ["==", "$type", "LineString"],
-        paint: { "line-color": PRIMARY_BLUE, "line-width": 3 },
-        layout: { "line-cap": "round", "line-join": "round" },
-      });
+      addLayerInSlot(
+        map,
+        {
+          id: LINE_LAYER,
+          type: "line",
+          source: SOURCE_ID,
+          filter: ["==", "$type", "LineString"],
+          paint: { "line-color": PRIMARY_BLUE, "line-width": 3 },
+          layout: { "line-cap": "round", "line-join": "round" },
+        },
+        "route-markers",
+        12,
+      );
 
       // Polygon outline (on top of line)
-      map.addLayer({
-        id: POLYGON_OUTLINE_LAYER,
-        type: "line",
-        source: SOURCE_ID,
-        filter: ["==", "$type", "Polygon"],
-        paint: { "line-color": PRIMARY_BLUE, "line-width": 3 },
-        layout: { "line-cap": "round", "line-join": "round" },
-      });
+      addLayerInSlot(
+        map,
+        {
+          id: POLYGON_OUTLINE_LAYER,
+          type: "line",
+          source: SOURCE_ID,
+          filter: ["==", "$type", "Polygon"],
+          paint: { "line-color": PRIMARY_BLUE, "line-width": 3 },
+          layout: { "line-cap": "round", "line-join": "round" },
+        },
+        "route-markers",
+        13,
+      );
 
       // Rubber band
-      map.addLayer({
-        id: RUBBERBAND_LAYER,
-        type: "line",
-        source: RUBBERBAND_SOURCE,
-        paint: {
-          "line-color": PRIMARY_BLUE,
-          "line-width": 2,
-          "line-dasharray": [4, 4],
-          "line-opacity": 0.6,
+      addLayerInSlot(
+        map,
+        {
+          id: RUBBERBAND_LAYER,
+          type: "line",
+          source: RUBBERBAND_SOURCE,
+          paint: {
+            "line-color": PRIMARY_BLUE,
+            "line-width": 2,
+            "line-dasharray": [4, 4],
+            "line-opacity": 0.6,
+          },
+          layout: { "line-cap": "round" },
         },
-        layout: { "line-cap": "round" },
-      });
+        "route-markers",
+        14,
+      );
 
       // Vertices
-      map.addLayer({
-        id: VERTICES_LAYER,
-        type: "circle",
-        source: SOURCE_ID,
-        filter: ["==", "$type", "Point"],
-        paint: {
-          "circle-radius": [
-            "case",
-            ["==", ["get", "type"], "segment"],
-            0,
-            ["==", ["get", "type"], "total"],
-            0,
-            ["==", ["get", "type"], "area"],
-            0,
-            ["==", ["get", "isFirst"], true],
-            6,
-            5,
-          ],
-          "circle-color": "#FFFFFF",
-          "circle-stroke-color": PRIMARY_BLUE,
-          "circle-stroke-width": 2,
+      addLayerInSlot(
+        map,
+        {
+          id: VERTICES_LAYER,
+          type: "circle",
+          source: SOURCE_ID,
+          filter: ["==", "$type", "Point"],
+          paint: {
+            "circle-radius": [
+              "case",
+              ["==", ["get", "type"], "segment"],
+              0,
+              ["==", ["get", "type"], "total"],
+              0,
+              ["==", ["get", "type"], "area"],
+              0,
+              ["==", ["get", "isFirst"], true],
+              6,
+              5,
+            ],
+            "circle-color": "#FFFFFF",
+            "circle-stroke-color": PRIMARY_BLUE,
+            "circle-stroke-width": 2,
+          },
         },
-      });
+        "route-markers",
+        15,
+      );
 
       // Labels
-      map.addLayer({
-        id: LABELS_LAYER,
-        type: "symbol",
-        source: SOURCE_ID,
-        filter: ["has", "label"],
-        layout: {
-          "text-field": ["get", "label"],
-          "text-size": [
-            "case",
-            ["any", ["==", ["get", "type"], "total"], ["==", ["get", "type"], "area"]],
-            14,
-            12,
-          ],
-          "text-font": ["Noto Sans Bold"],
-          "text-offset": [0, -1.2],
-          "text-allow-overlap": true,
-          "text-ignore-placement": true,
+      addLayerInSlot(
+        map,
+        {
+          id: LABELS_LAYER,
+          type: "symbol",
+          source: SOURCE_ID,
+          filter: ["has", "label"],
+          layout: {
+            "text-field": ["get", "label"],
+            "text-size": [
+              "case",
+              ["any", ["==", ["get", "type"], "total"], ["==", ["get", "type"], "area"]],
+              14,
+              12,
+            ],
+            "text-font": ["Noto Sans Bold"],
+            "text-offset": [0, -1.2],
+            "text-allow-overlap": true,
+            "text-ignore-placement": true,
+          },
+          paint: {
+            "text-color": PRIMARY_BLUE,
+            "text-halo-color": "#FFFFFF",
+            "text-halo-width": 2,
+          },
         },
-        paint: {
-          "text-color": PRIMARY_BLUE,
-          "text-halo-color": "#FFFFFF",
-          "text-halo-width": 2,
-        },
-      });
+        "route-markers",
+        16,
+      );
     };
 
     if (map.isStyleLoaded()) {
@@ -330,6 +370,7 @@ export function MeasurementLayer() {
         POLYGON_FILL_LAYER,
       ]) {
         if (map.getLayer(id)) map.removeLayer(id);
+        unregisterLayerSlot(id);
       }
       if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
       if (map.getSource(RUBBERBAND_SOURCE)) map.removeSource(RUBBERBAND_SOURCE);

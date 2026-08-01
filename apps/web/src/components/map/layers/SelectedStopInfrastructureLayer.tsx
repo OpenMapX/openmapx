@@ -9,6 +9,7 @@ import type {
 import type { Map as MaplibreMap } from "maplibre-gl";
 import { useEffect, useMemo, useRef } from "react";
 import { useMap } from "@/lib/MapContext";
+import { addLayerInSlot, unregisterLayerSlot } from "./layerStack";
 
 const STOP_AREA_SOURCE_ID = "selected-stop-area-source";
 const STOP_AREA_FILL_LAYER_ID = "selected-stop-area-fill";
@@ -200,6 +201,13 @@ export function SelectedStopInfrastructureLayer() {
       removeSourceIfPresent(map, PARKING_SOURCE_ID);
       removeSourceIfPresent(map, FARE_ZONE_SOURCE_ID);
       removeSourceIfPresent(map, STOP_AREA_SOURCE_ID);
+      unregisterLayerSlot(PLATFORM_LABEL_LAYER_ID);
+      unregisterLayerSlot(PLATFORM_LAYER_ID);
+      unregisterLayerSlot(PARKING_LAYER_ID);
+      unregisterLayerSlot(FARE_ZONE_OUTLINE_LAYER_ID);
+      unregisterLayerSlot(FARE_ZONE_FILL_LAYER_ID);
+      unregisterLayerSlot(STOP_AREA_OUTLINE_LAYER_ID);
+      unregisterLayerSlot(STOP_AREA_FILL_LAYER_ID);
     };
 
     const hasVisuals =
@@ -217,99 +225,150 @@ export function SelectedStopInfrastructureLayer() {
 
     map.addSource(STOP_AREA_SOURCE_ID, { type: "geojson", data: stopAreaData });
     if (stopAreaData.features.length > 0) {
-      map.addLayer({
-        id: STOP_AREA_FILL_LAYER_ID,
-        type: "fill",
-        source: STOP_AREA_SOURCE_ID,
-        paint: {
-          "fill-color": "#0F9D58",
-          "fill-opacity": 0.12,
+      addLayerInSlot(
+        map,
+        {
+          id: STOP_AREA_FILL_LAYER_ID,
+          type: "fill",
+          source: STOP_AREA_SOURCE_ID,
+          paint: {
+            "fill-color": "#0F9D58",
+            "fill-opacity": 0.12,
+          },
         },
-      });
-      map.addLayer({
-        id: STOP_AREA_OUTLINE_LAYER_ID,
-        type: "line",
-        source: STOP_AREA_SOURCE_ID,
-        paint: {
-          "line-color": "#0F9D58",
-          "line-width": 2.5,
-          "line-opacity": 0.9,
+        "area-overlays",
+        9,
+      );
+      addLayerInSlot(
+        map,
+        {
+          id: STOP_AREA_OUTLINE_LAYER_ID,
+          type: "line",
+          source: STOP_AREA_SOURCE_ID,
+          paint: {
+            "line-color": "#0F9D58",
+            "line-width": 2.5,
+            "line-opacity": 0.9,
+          },
         },
-      });
+        "overlay-lines",
+        13,
+      );
     }
 
     map.addSource(FARE_ZONE_SOURCE_ID, { type: "geojson", data: fareZoneData });
     if (fareZoneData.features.length > 0) {
-      map.addLayer({
-        id: FARE_ZONE_FILL_LAYER_ID,
-        type: "fill",
-        source: FARE_ZONE_SOURCE_ID,
-        paint: {
-          "fill-color": "#D97706",
-          "fill-opacity": 0.1,
+      addLayerInSlot(
+        map,
+        {
+          id: FARE_ZONE_FILL_LAYER_ID,
+          type: "fill",
+          source: FARE_ZONE_SOURCE_ID,
+          paint: {
+            "fill-color": "#D97706",
+            "fill-opacity": 0.1,
+          },
         },
-      });
-      map.addLayer({
-        id: FARE_ZONE_OUTLINE_LAYER_ID,
-        type: "line",
-        source: FARE_ZONE_SOURCE_ID,
-        paint: {
-          "line-color": "#D97706",
-          "line-width": 2,
-          "line-opacity": 0.85,
-          "line-dasharray": [2, 1],
+        "area-overlays",
+        10,
+      );
+      addLayerInSlot(
+        map,
+        {
+          id: FARE_ZONE_OUTLINE_LAYER_ID,
+          type: "line",
+          source: FARE_ZONE_SOURCE_ID,
+          paint: {
+            "line-color": "#D97706",
+            "line-width": 2,
+            "line-opacity": 0.85,
+            "line-dasharray": [2, 1],
+          },
         },
-      });
+        "overlay-lines",
+        14,
+      );
     }
 
     map.addSource(PLATFORM_SOURCE_ID, { type: "geojson", data: platformData });
     if (platformData.features.length > 0) {
-      map.addLayer({
-        id: PLATFORM_LAYER_ID,
-        type: "circle",
-        source: PLATFORM_SOURCE_ID,
-        paint: {
-          "circle-radius": ["case", ["boolean", ["get", "isFocused"], false], 7, 4.5],
-          "circle-color": ["case", ["boolean", ["get", "isFocused"], false], "#D97706", "#0F9D58"],
-          "circle-stroke-width": ["case", ["boolean", ["get", "isFocused"], false], 3, 2],
-          "circle-stroke-color": "#FFFFFF",
+      addLayerInSlot(
+        map,
+        {
+          id: PLATFORM_LAYER_ID,
+          type: "circle",
+          source: PLATFORM_SOURCE_ID,
+          paint: {
+            "circle-radius": ["case", ["boolean", ["get", "isFocused"], false], 7, 4.5],
+            "circle-color": [
+              "case",
+              ["boolean", ["get", "isFocused"], false],
+              "#D97706",
+              "#0F9D58",
+            ],
+            "circle-stroke-width": ["case", ["boolean", ["get", "isFocused"], false], 3, 2],
+            "circle-stroke-color": "#FFFFFF",
+          },
         },
-      });
+        "overlay-points",
+        17,
+      );
 
-      map.addLayer({
-        id: PLATFORM_LABEL_LAYER_ID,
-        type: "symbol",
-        source: PLATFORM_SOURCE_ID,
-        minzoom: 15.5,
-        filter: ["!=", ["get", "label"], ""],
-        layout: {
-          "text-field": ["get", "label"],
-          "text-size": 11,
-          "text-offset": [0, 1.1],
-          "text-anchor": "top",
-          "text-font": ["Noto Sans Regular"],
+      addLayerInSlot(
+        map,
+        {
+          id: PLATFORM_LABEL_LAYER_ID,
+          type: "symbol",
+          source: PLATFORM_SOURCE_ID,
+          minzoom: 15.5,
+          filter: ["!=", ["get", "label"], ""],
+          layout: {
+            "text-field": ["get", "label"],
+            "text-size": 11,
+            "text-offset": [0, 1.1],
+            "text-anchor": "top",
+            "text-font": ["Noto Sans Regular"],
+          },
+          paint: {
+            "text-color": "#14532D",
+            "text-halo-color": "#FFFFFF",
+            "text-halo-width": 1.5,
+          },
         },
-        paint: {
-          "text-color": "#14532D",
-          "text-halo-color": "#FFFFFF",
-          "text-halo-width": 1.5,
-        },
-      });
+        "overlay-markers",
+        13,
+      );
     }
 
     map.addSource(PARKING_SOURCE_ID, { type: "geojson", data: parkingData });
     if (parkingData.features.length > 0) {
-      map.addLayer({
-        id: PARKING_LAYER_ID,
-        type: "circle",
-        source: PARKING_SOURCE_ID,
-        paint: {
-          "circle-radius": ["case", ["boolean", ["get", "isFocused"], false], 8, 5.5],
-          "circle-color": ["case", ["boolean", ["get", "isFocused"], false], "#D97706", "#2563EB"],
-          "circle-stroke-width": ["case", ["boolean", ["get", "isFocused"], false], 3, 2],
-          "circle-stroke-color": "#FFFFFF",
+      // Not in the original slot survey (a gap, not a deliberate omission).
+      // `overlay-markers`, not `overlay-points`: today's last-added-wins order
+      // puts these circles above `PLATFORM_LABEL_LAYER_ID`, and `overlay-points`
+      // sits structurally below `overlay-markers` regardless of the order value
+      // within it — so matching that band, ordered just above the platform
+      // labels, is what actually preserves the current depth.
+      addLayerInSlot(
+        map,
+        {
+          id: PARKING_LAYER_ID,
+          type: "circle",
+          source: PARKING_SOURCE_ID,
+          paint: {
+            "circle-radius": ["case", ["boolean", ["get", "isFocused"], false], 8, 5.5],
+            "circle-color": [
+              "case",
+              ["boolean", ["get", "isFocused"], false],
+              "#D97706",
+              "#2563EB",
+            ],
+            "circle-stroke-width": ["case", ["boolean", ["get", "isFocused"], false], 3, 2],
+            "circle-stroke-color": "#FFFFFF",
+          },
         },
-      });
+        "overlay-markers",
+        14,
+      );
     }
 
     return cleanup;

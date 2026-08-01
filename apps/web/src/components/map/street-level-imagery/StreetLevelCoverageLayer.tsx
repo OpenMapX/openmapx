@@ -3,9 +3,8 @@
 import type { StreetLevelCapabilities } from "@openmapx/core";
 import { useOverlayExclusion, useStreetLevelStore } from "@openmapx/core";
 import type { FilterSpecification, MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
-import { useEffect, useMemo } from "react";
-import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
-import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { useEffect } from "react";
+import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { useIntegrationDomainAttribution } from "@/lib/useIntegrationAttribution";
@@ -74,15 +73,6 @@ export function StreetLevelCoverageLayer() {
   // and CC-BY-SA / Licence Ouverte imagery must be credited when displayed.
   useIntegrationDomainAttribution("street-level-imagery", layerVisible);
 
-  // `providers` is a fresh array identity until the query resolves, and
-  // flatMap allocates a new one every render — both feed effect dependency
-  // arrays below, so memoise or the map effects thrash on every render.
-  const allLayerIds = useMemo(
-    () => providers.flatMap((provider) => Object.values(coverageLayerIds(provider.id))),
-    [providers],
-  );
-  useLayerReanchor(allLayerIds, layerVisible);
-
   useEffect(() => {
     void styleVersion;
     const map = mapRef.current;
@@ -107,6 +97,9 @@ export function StreetLevelCoverageLayer() {
           } catch {
             // Tiles may still be in-flight when the source is torn down
           }
+          for (const layerId of Object.values(coverageLayerIds(provider.id))) {
+            unregisterLayerSlot(layerId);
+          }
         }
         return;
       }
@@ -115,8 +108,6 @@ export function StreetLevelCoverageLayer() {
         map.once("idle", syncLayers);
         return;
       }
-
-      const beforeLayerId = getFirstSymbolLayerId(map);
 
       for (const provider of providers) {
         const coverage = provider.coverage;
@@ -135,7 +126,8 @@ export function StreetLevelCoverageLayer() {
         }
 
         if (coverage.layers.grid && !map.getLayer(ids.grid)) {
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: ids.grid,
               type: "circle",
@@ -148,12 +140,14 @@ export function StreetLevelCoverageLayer() {
                 "circle-opacity": 0.5,
               },
             },
-            beforeLayerId,
+            "overlay-points",
+            11,
           );
         }
 
         if (!map.getLayer(ids.sequences)) {
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: ids.sequences,
               type: "line",
@@ -166,12 +160,14 @@ export function StreetLevelCoverageLayer() {
                 "line-opacity": 0.85,
               },
             },
-            beforeLayerId,
+            "overlay-lines",
+            11,
           );
         }
 
         if (!map.getLayer(ids.pictures)) {
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: ids.pictures,
               type: "circle",
@@ -185,12 +181,14 @@ export function StreetLevelCoverageLayer() {
                 "circle-stroke-width": 1,
               },
             },
-            beforeLayerId,
+            "overlay-points",
+            12,
           );
         }
 
         if (!map.getLayer(ids.picturesPano)) {
-          map.addLayer(
+          addLayerInSlot(
+            map,
             {
               id: ids.picturesPano,
               type: "circle",
@@ -204,7 +202,8 @@ export function StreetLevelCoverageLayer() {
                 "circle-stroke-width": 2,
               },
             },
-            beforeLayerId,
+            "overlay-points",
+            13,
           );
         }
       }
