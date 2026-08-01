@@ -120,8 +120,10 @@ export function RouteTrafficLayer() {
           layout: { "line-join": "round", "line-cap": "butt" },
           paint: { "line-color": color, "line-opacity": ROUTE_ALT_OPACITY, "line-width": altWidth },
         },
+        // Above every alternate line, planning's and navigation's alike: the
+        // band paints the alternate's own congestion onto it.
         "route-alt",
-        2,
+        3,
       );
       addLayerInSlot(
         map,

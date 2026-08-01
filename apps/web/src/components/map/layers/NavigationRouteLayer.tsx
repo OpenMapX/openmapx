@@ -45,7 +45,10 @@ export function NavigationRouteLayer() {
   const navLine = useMemo(() => (route ? buildNavRouteLine(route.geometry) : null), [route]);
 
   // Create sources + layers once per style. Each layer's slot (not creation
-  // order) puts the alternates beneath the active route.
+  // order) puts the alternates beneath the active route. The order values
+  // deliberately sit above the ones `RouteLayer` uses in the same two slots:
+  // equal values would tie, and a tie is resolved by whichever component
+  // registered first — the very race the slot registry exists to remove.
   useEffect(() => {
     void styleVersion;
     const map = mapRef.current;
@@ -70,7 +73,7 @@ export function NavigationRouteLayer() {
         },
       },
       "route-alt",
-      1,
+      2,
     );
 
     map.addSource(SOURCE, {
@@ -88,7 +91,7 @@ export function NavigationRouteLayer() {
         paint: { "line-color": ROUTE_COLORS.casing, "line-width": ROUTE_WIDTHS.nav.casing },
       },
       "route-active",
-      0,
+      2,
     );
     addLayerInSlot(
       map,
@@ -105,7 +108,7 @@ export function NavigationRouteLayer() {
         },
       },
       "route-active",
-      1,
+      3,
     );
     addLayerInSlot(
       map,
@@ -118,7 +121,7 @@ export function NavigationRouteLayer() {
         paint: { "line-color": ROUTE_COLORS.active, "line-width": NAV_ROUTE_REMAINING_WIDTH },
       },
       "route-active",
-      2,
+      4,
     );
   }, [mapRef, mapReady, styleVersion]);
 

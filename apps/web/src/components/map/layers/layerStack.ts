@@ -139,10 +139,17 @@ export function planAnchorMoves(
   const symbolIndex = symbolId === undefined ? Number.POSITIVE_INFINITY : indexOf(symbolId);
 
   const ordered = present.every((r, i) => i === 0 || indexOf(present[i - 1].id) < indexOf(r.id));
-  const straddled = present.every((r) => {
-    const belowLabels = MAP_LAYER_SLOTS.indexOf(r.slot) < SYMBOL_SLOT_INDEX;
-    return belowLabels ? indexOf(r.id) < symbolIndex : indexOf(r.id) > symbolIndex;
-  });
+  // With no base-style symbol layer to straddle, `symbolIndex` is +Infinity and
+  // no above-labels layer can ever be past it — so the check could never be
+  // satisfied, every call would return a non-empty plan, and `MapLayerStack`'s
+  // idle handler would move layers, re-render and re-run forever. Nothing left
+  // to straddle means nothing to repair.
+  const straddled =
+    symbolId === undefined ||
+    present.every((r) => {
+      const belowLabels = MAP_LAYER_SLOTS.indexOf(r.slot) < SYMBOL_SLOT_INDEX;
+      return belowLabels ? indexOf(r.id) < symbolIndex : indexOf(r.id) > symbolIndex;
+    });
   if (ordered && straddled) return [];
 
   const moves: Array<{ id: string; beforeId: string | undefined }> = [];

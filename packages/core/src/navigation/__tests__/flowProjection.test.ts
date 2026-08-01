@@ -154,21 +154,24 @@ describe("projectFlowToRoute", () => {
 
   it("lets the worse level win where two spans overlap", () => {
     const route = northRoute(2000);
+    // The standstill is listed first on purpose: with the worse segment last,
+    // a naive last-one-wins overlap resolution would pass this test without
+    // ever ranking the two.
     const spans = projectFlowToRoute(
       [
-        segment(
-          [
-            [8, 50 + 400 * M],
-            [8, 50 + 900 * M],
-          ],
-          { id: "a", los: "heavy" },
-        ),
         segment(
           [
             [8, 50 + 600 * M],
             [8, 50 + 700 * M],
           ],
           { id: "b", los: "stationary" },
+        ),
+        segment(
+          [
+            [8, 50 + 400 * M],
+            [8, 50 + 900 * M],
+          ],
+          { id: "a", los: "heavy" },
         ),
       ],
       route,
@@ -307,6 +310,66 @@ describe("projectFlowToRoute", () => {
     );
     const spans = projectFlowToRoute([hairpin], route, { directionToleranceDegrees: 100 });
     expect(spans).toHaveLength(1);
+  });
+
+  it("matches the pass of a doubling-back route the segment actually sits on", () => {
+    // Northbound for 2 km, a wide excursion east, then southbound ~21 m to the
+    // east of the outbound leg — close enough that both carriageways fall
+    // inside the corridor box built around the segment, while everything
+    // between them lies far outside it. The two are 2 km apart along the route
+    // despite being metres apart on the ground, so a matcher that stitched the
+    // two nearby stretches together would put the jam at an along-route
+    // distance the driver never reaches at that point.
+    const east = 0.0003;
+    const route: [number, number][] = [];
+    for (let i = 0; i <= 20; i++) route.push([8, 50 + 100 * i * M]);
+    for (let i = 1; i <= 10; i++) route.push([8 + 0.002 * i, 50 + 2000 * M]);
+    for (let i = 10; i >= 1; i--) route.push([8 + east + 0.002 * i, 50 + 2000 * M]);
+    for (let i = 20; i >= 0; i--) route.push([8 + east, 50 + 100 * i * M]);
+
+    const spans = projectFlowToRoute(
+      [
+        segment([
+          [8, 50 + 500 * M],
+          [8, 50 + 1000 * M],
+          [8, 50 + 1500 * M],
+        ]),
+      ],
+      route,
+    );
+    expect(spans).toHaveLength(1);
+    expect(spans[0].startMeters).toBeGreaterThan(450);
+    expect(spans[0].endMeters).toBeLessThan(1550);
+  });
+
+  it("stays fast on a long route with a busy corridor", () => {
+    // Matching used to rescan the whole polyline once per sample, which is
+    // quadratic in the route: this shape took ~50 s of uninterruptible work on
+    // the API's shared event loop, and the endpoint accepts routes four times
+    // this size. It now runs in a fraction of a second. The bound is a
+    // tripwire for that scan coming back — generous enough for a loaded CI
+    // machine, orders of magnitude under the unindexed cost.
+    const points = 5000;
+    const meters = 500_000;
+    const route: [number, number][] = Array.from(
+      { length: points },
+      (_, i) => [8, 50 + meters * (i / (points - 1)) * M] as [number, number],
+    );
+    const segments = Array.from({ length: 150 }, (_, s) =>
+      segment(
+        Array.from({ length: 30 }, (_, i) => {
+          const start = (meters * s) / 150;
+          return [8, 50 + (start + (i * meters) / 150 / 60) * M] as [number, number];
+        }),
+        { id: `s${s}` },
+      ),
+    );
+
+    const started = performance.now();
+    const spans = projectFlowToRoute(segments, route);
+    const elapsed = performance.now() - started;
+    expect(spans.length).toBeGreaterThan(100);
+    expect(elapsed).toBeLessThan(2500);
   });
 
   it("does not let a straight chord across a route detour claim the whole loop", () => {

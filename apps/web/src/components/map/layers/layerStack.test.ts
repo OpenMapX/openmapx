@@ -1,8 +1,12 @@
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createFakeMap } from "@/test";
 import {
   anchorMapLayers,
   type LayerRegistration,
+  layerRegistrations,
+  MAP_LAYER_SLOTS,
   planAnchorMoves,
   registerLayerSlot,
   resolveBeforeId,
@@ -113,6 +117,75 @@ describe("planAnchorMoves", () => {
       else applied.splice(target, 0, layer);
     }
     expect(planAnchorMoves(applied, registrations)).toEqual([]);
+  });
+});
+
+/** Walk up from the working directory to the workspace root the scan needs. */
+function repoRootFrom(start: string): string {
+  for (let dir = start; ; dir = dirname(dir)) {
+    if (existsSync(join(dir, "pnpm-workspace.yaml"))) return dir;
+    if (dirname(dir) === dir) throw new Error(`no workspace root above ${start}`);
+  }
+}
+
+/**
+ * Every layer in the app, read out of the source rather than out of the
+ * registry: a layer registers itself when its component mounts, so no running
+ * snapshot of the registry ever holds the whole stack — the one thing a
+ * duplicate check has to see all of.
+ */
+function declaredSlots(): Array<{ id: string; slot: LayerRegistration["slot"]; order: number }> {
+  const repoRoot = repoRootFrom(process.cwd());
+  const pattern = new RegExp(`"(${MAP_LAYER_SLOTS.join("|")})"\\s*,\\s*(\\d+)\\s*,?\\s*\\)`, "g");
+  const found: Array<{ id: string; slot: LayerRegistration["slot"]; order: number }> = [];
+
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === "node_modules" || entry.name === "dist") continue;
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(path);
+        continue;
+      }
+      if (!/\.tsx?$/.test(entry.name) || /\.test\.tsx?$/.test(entry.name)) continue;
+      if (entry.name === "layerStack.ts") continue;
+      const source = readFileSync(path, "utf8");
+      for (const match of source.matchAll(pattern)) {
+        const line = source.slice(0, match.index).split("\n").length;
+        found.push({
+          id: `${path.slice(repoRoot.length)}:${line}`,
+          slot: match[1] as LayerRegistration["slot"],
+          order: Number(match[2]),
+        });
+      }
+    }
+  };
+  walk(join(repoRoot, "apps/web/src"));
+  walk(join(repoRoot, "integrations"));
+  return found;
+}
+
+describe("slot assignments", () => {
+  it("gives every layer its own (slot, order)", () => {
+    const declarations = declaredSlots();
+    // Guards the scan itself: a formatting change that stopped the pattern
+    // matching would otherwise turn this into a test of nothing.
+    expect(declarations.length).toBeGreaterThan(100);
+
+    try {
+      for (const { id, slot, order } of declarations) registerLayerSlot(id, slot, order);
+      const byRank = new Map<string, string[]>();
+      for (const registration of layerRegistrations()) {
+        const rank = `${registration.slot} ${registration.order}`;
+        byRank.set(rank, [...(byRank.get(rank) ?? []), registration.id]);
+      }
+      // A tie is resolved by registration order, which is mount order — the
+      // race the slot registry exists to remove.
+      const shared = [...byRank].filter(([, ids]) => ids.length > 1);
+      expect(shared).toEqual([]);
+    } finally {
+      for (const { id } of declarations) unregisterLayerSlot(id);
+    }
   });
 });
 

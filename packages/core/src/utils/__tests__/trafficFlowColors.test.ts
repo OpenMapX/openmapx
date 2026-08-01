@@ -9,6 +9,11 @@ describe("flowColorFor", () => {
 
   it("interpolates between ramp stops", () => {
     expect(flowColorFor("heavy", 0.5)).toBe("#ff8c00");
+    // 0.5 is itself a declared stop, so it exercises no blending at all. 0.6
+    // sits 40% of the way from #ff8c00 to #ffd500 — the green channel is the
+    // only one that moves, 0x8c + (0xd5 - 0x8c) * 0.4 = 0xa9 — which is what
+    // keeps the route's bands and the road overlay agreeing off-stop too.
+    expect(flowColorFor("heavy", 0.6)).toBe("#ffa900");
   });
 
   it("falls back to the declared level when no ratio was measured", () => {

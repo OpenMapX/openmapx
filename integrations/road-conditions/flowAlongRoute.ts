@@ -21,6 +21,29 @@ const MAX_POINTS_PER_ROUTE = 20_000;
 const MAX_CHUNKS_PER_ROUTE = 500;
 
 /**
+ * The route's chunk boundaries as inclusive `[start, end]` vertex ranges. The
+ * chunk count caps the provider fan-out during validation and the ranges
+ * become the corridor boxes below; deriving both from one walk is what keeps
+ * the cap counting the chunks that are actually produced.
+ */
+function routeChunkRanges(
+  geometry: [number, number][],
+  chunkMeters: number,
+): Array<[number, number]> {
+  if (geometry.length < 2) return [];
+  const cumulative = cumulativeDistances(geometry);
+  const ranges: Array<[number, number]> = [];
+  let start = 0;
+  while (start < geometry.length - 1) {
+    let end = start;
+    while (end < geometry.length - 1 && cumulative[end] - cumulative[start] < chunkMeters) end++;
+    ranges.push([start, end]);
+    start = end;
+  }
+  return ranges;
+}
+
+/**
  * Padded bounding boxes covering the route in chunks. A single box around a long
  * route would pull in every segment for a whole region; chunking keeps each
  * provider query close to the road actually being driven.
@@ -30,13 +53,8 @@ export function routeCorridorBboxes(
   chunkMeters = CHUNK_METERS,
   padMeters = PAD_METERS,
 ): BBox[] {
-  if (geometry.length < 2) return [];
-  const cumulative = cumulativeDistances(geometry);
   const boxes: BBox[] = [];
-  let start = 0;
-  while (start < geometry.length - 1) {
-    let end = start;
-    while (end < geometry.length - 1 && cumulative[end] - cumulative[start] < chunkMeters) end++;
+  for (const [start, end] of routeChunkRanges(geometry, chunkMeters)) {
     let west = Number.POSITIVE_INFINITY;
     let south = Number.POSITIVE_INFINITY;
     let east = Number.NEGATIVE_INFINITY;
@@ -57,7 +75,6 @@ export function routeCorridorBboxes(
     );
     const lngPad = padMeters / (111_320 * cosLat);
     boxes.push([west - lngPad, south - latPad, east + lngPad, north + latPad]);
-    start = end;
   }
   return boxes;
 }
@@ -68,26 +85,6 @@ function isCoordinate(value: unknown): value is [number, number] {
   if (typeof lng !== "number" || typeof lat !== "number") return false;
   if (!Number.isFinite(lng) || !Number.isFinite(lat)) return false;
   return lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90;
-}
-
-/**
- * How many corridor chunks `routeCorridorBboxes` would produce for this
- * route, without allocating any of the boxes themselves — used purely to
- * reject an oversized route during validation, before its geometry is used
- * for anything that costs a provider fan-out.
- */
-function countRouteChunks(geometry: [number, number][], chunkMeters = CHUNK_METERS): number {
-  if (geometry.length < 2) return 0;
-  const cumulative = cumulativeDistances(geometry);
-  let count = 0;
-  let start = 0;
-  while (start < geometry.length - 1) {
-    let end = start;
-    while (end < geometry.length - 1 && cumulative[end] - cumulative[start] < chunkMeters) end++;
-    count++;
-    start = end;
-  }
-  return count;
 }
 
 /** Validate the request body, rejecting rather than silently clamping. */
@@ -104,7 +101,9 @@ export function parseRouteFlowBody(body: unknown): RouteFlowInput[] | null {
     if (geometry.length > MAX_POINTS_PER_ROUTE) return null;
     if (!geometry.every(isCoordinate)) return null;
     const typedGeometry = geometry as [number, number][];
-    if (countRouteChunks(typedGeometry) > MAX_CHUNKS_PER_ROUTE) return null;
+    // Counted before the geometry reaches anything that costs a provider
+    // fan-out, so an oversized route is rejected rather than served.
+    if (routeChunkRanges(typedGeometry, CHUNK_METERS).length > MAX_CHUNKS_PER_ROUTE) return null;
     out.push({ id, geometry: typedGeometry });
   }
   return out;

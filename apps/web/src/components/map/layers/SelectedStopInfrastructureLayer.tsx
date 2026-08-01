@@ -328,6 +328,13 @@ export function SelectedStopInfrastructureLayer() {
             "text-offset": [0, 1.1],
             "text-anchor": "top",
             "text-font": ["Noto Sans Regular"],
+            // These labels sit below the basemap's own symbols, and MapLibre
+            // places symbols top-down, so a street or POI label would win the
+            // collision and suppress "Gleis 3" entirely — at 15.5+, exactly
+            // where basemap labels are densest. Two platform labels crowding
+            // each other still reads; the platform's number vanishing while
+            // the user is looking for it does not.
+            "text-allow-overlap": true,
           },
           paint: {
             "text-color": "#14532D",
