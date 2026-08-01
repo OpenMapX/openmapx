@@ -16,6 +16,8 @@ export const ROUTE_COLORS = {
   alt: "#93C5FD",
   navAlt: "#80868b",
   traveled: "#9aa0a6",
+  /** Pending faster-route offer, distinct from the active and alternate lines. */
+  proposed: "#207E23",
 } as const;
 
 /** Alternates recede, and their bands recede with them. */

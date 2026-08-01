@@ -52,8 +52,9 @@ declare module "vitest" {
     stubGlobal(name: string, value: unknown): void;
     unstubAllGlobals(): void;
     clearAllMocks(): void;
-    useFakeTimers(): void;
+    useFakeTimers(options?: { shouldAdvanceTime?: boolean }): void;
     useRealTimers(): void;
+    advanceTimersByTime(ms: number): void;
     advanceTimersByTimeAsync(ms: number): Promise<void>;
   };
 }

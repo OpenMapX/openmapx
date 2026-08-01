@@ -31,6 +31,7 @@ import { useNavigationEngine } from "@/lib/navigation/useNavigationEngine";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { AlertWidget } from "./AlertWidget";
 import { ArrivalCard } from "./ArrivalCard";
+import { FasterRouteBanner } from "./FasterRouteBanner";
 import { ManeuverBanner } from "./ManeuverBanner";
 import { NavBottomBar } from "./NavBottomBar";
 import { NavDirectionsDialog } from "./NavDirectionsDialog";
@@ -242,6 +243,7 @@ export function NavigationView() {
                 </Typography>
               </Box>
             )}
+            <FasterRouteBanner />
             {(coasting || weakGps || awaitingFix) && (
               <Box
                 role="status"

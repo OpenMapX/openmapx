@@ -21,6 +21,7 @@ const REMAINING_CASING = "nav-route-remaining-casing";
 
 const ALT_SOURCE = "nav-route-alts-source";
 const ALT = "nav-route-alts";
+const PROPOSED = "nav-route-proposed";
 
 export function NavigationRouteLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
@@ -28,6 +29,7 @@ export function NavigationRouteLayer() {
   const route = useNavigationStore((s) => s.route);
   const routes = useNavigationStore((s) => s.routes);
   const activeRouteIndex = useNavigationStore((s) => s.activeRouteIndex);
+  const fasterRoute = useNavigationStore((s) => s.fasterRoute);
   const progress = useNavigationStore((s) => s.progress);
   const routeProvider = useNavigationStore((s) => s.routeProvider);
 
@@ -65,6 +67,7 @@ export function NavigationRouteLayer() {
         id: ALT,
         type: "line",
         source: ALT_SOURCE,
+        filter: ["!=", ["get", "kind"], "proposed"],
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": ROUTE_COLORS.navAlt,
@@ -74,6 +77,23 @@ export function NavigationRouteLayer() {
       },
       "route-alt",
       2,
+    );
+    addLayerInSlot(
+      map,
+      {
+        id: PROPOSED,
+        type: "line",
+        source: ALT_SOURCE,
+        filter: ["==", ["get", "kind"], "proposed"],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": ROUTE_COLORS.proposed,
+          "line-width": ROUTE_WIDTHS.nav.altLine,
+          "line-dasharray": [2, 1],
+        },
+      },
+      "route-alt",
+      4,
     );
 
     map.addSource(SOURCE, {
@@ -153,7 +173,7 @@ export function NavigationRouteLayer() {
     if (raw?.type !== "geojson") return;
     const source = raw as GeoJSONSource;
 
-    const features =
+    const altFeatures =
       status === "idle"
         ? []
         : routes
@@ -161,11 +181,28 @@ export function NavigationRouteLayer() {
             .filter(({ r, i }) => i !== activeRouteIndex && r.geometry.length >= 2)
             .map(({ r, i }) => ({
               type: "Feature" as const,
-              properties: { routeIndex: i },
+              properties: { routeIndex: i, kind: "alt" },
               geometry: { type: "LineString" as const, coordinates: r.geometry },
             }));
-    source.setData({ type: "FeatureCollection", features });
-  }, [mapRef, status, routes, activeRouteIndex]);
+    const proposedFeature =
+      status !== "idle" && fasterRoute && fasterRoute.route.geometry.length >= 2
+        ? [
+            {
+              type: "Feature" as const,
+              properties: { kind: "proposed" },
+              geometry: {
+                type: "LineString" as const,
+                coordinates: fasterRoute.route.geometry,
+              },
+            },
+          ]
+        : [];
+
+    source.setData({
+      type: "FeatureCollection",
+      features: [...altFeatures, ...proposedFeature],
+    });
+  }, [mapRef, status, routes, activeRouteIndex, fasterRoute]);
 
   // Tap an alternative to switch to it; show a pointer cursor over one.
   useEffect(() => {
