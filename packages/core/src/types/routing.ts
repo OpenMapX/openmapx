@@ -92,6 +92,14 @@ export interface RouteLeg {
 export interface Route {
   distance: number;
   duration: number;
+  /**
+   * Trip duration in seconds with live traffic excluded — the same path recosted
+   * against freeflow/constrained/predicted speeds only. Present only when the
+   * engine returned a recosting for a motorised route; `undefined` otherwise.
+   * Compare against `duration` (which does include live traffic) to get the
+   * delay attributable to current conditions.
+   */
+  baselineDuration?: number;
   geometry: LngLat[];
   legs: RouteLeg[];
   steps: RouteStep[];

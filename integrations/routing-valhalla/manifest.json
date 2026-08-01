@@ -42,6 +42,12 @@
           "cost": "Free tier: 200,000 credits/month, no credit card.",
           "notes": "Only needed for the hosted Stadia Maps default; self-hosted Valhalla needs no key. Stadia's free tier is non-commercial / evaluation use only."
         }
+      },
+      "bidirectional-alternates": {
+        "type": "boolean",
+        "default": true,
+        "title": "Traffic-aware alternates",
+        "description": "Ask Valhalla for bidirectional route search on immediate driving trips so alternate routes are returned below the 500 km time-dependent threshold, and request a traffic-free duration for comparison. Turn off to restore single-route behaviour without a redeploy. Also settable via INTEGRATION_ROUTING_VALHALLA_BIDIRECTIONAL_ALTERNATES."
       }
     }
   },

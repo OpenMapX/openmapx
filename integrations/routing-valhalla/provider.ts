@@ -35,6 +35,18 @@ export function setValhallaApiKey(key: string | undefined): void {
   VALHALLA_API_KEY = key;
 }
 
+/**
+ * Master switch for the traffic-aware request additions. Defaults on; the
+ * operator can turn it off from the admin panel if bidirectional route choice
+ * regresses somewhere, without needing a deploy.
+ */
+let VALHALLA_BIDIRECTIONAL_ALTERNATES = true;
+
+/** Enable or disable the traffic-aware request additions (called from setup()). */
+export function setValhallaBidirectionalAlternates(enabled: boolean): void {
+  VALHALLA_BIDIRECTIONAL_ALTERNATES = enabled;
+}
+
 /** Build a Valhalla endpoint URL, appending `api_key` when configured. */
 function endpoint(path: string): string {
   const url = `${VALHALLA_URL}${path}`;
@@ -116,7 +128,11 @@ interface ValhallaLocation {
 }
 
 interface ValhallaTrip {
-  summary: { length: number; time: number };
+  /**
+   * `time_<name>` keys are emitted per requested recosting. We request one named
+   * `baseline`; Valhalla sends `null` when a leg could not be recosted.
+   */
+  summary: { length: number; time: number; time_baseline?: number | null };
   legs: ValhallaLeg[];
   locations?: ValhallaLocation[];
 }
@@ -340,7 +356,7 @@ function transformLeg(leg: ValhallaLeg): RouteLeg {
   };
 }
 
-function transformTrip(trip: ValhallaTrip, mode: TravelMode): Route {
+export function transformTrip(trip: ValhallaTrip, mode: TravelMode): Route {
   const legs = trip.legs.map(transformLeg);
 
   const allCoords = legs.flatMap((leg) => leg.geometry);
@@ -359,6 +375,9 @@ function transformTrip(trip: ValhallaTrip, mode: TravelMode): Route {
   return {
     distance: trip.summary.length * 1000, // km -> metres
     duration: trip.summary.time,
+    ...(typeof trip.summary.time_baseline === "number" && {
+      baselineDuration: trip.summary.time_baseline,
+    }),
     geometry: allCoords,
     legs,
     steps,
@@ -476,6 +495,60 @@ export function buildCostingOptions(
   return costingOptions;
 }
 
+/** Speed sources for the comparison recosting: everything except live traffic. */
+const BASELINE_SPEED_TYPES = ["freeflow", "constrained", "predicted"];
+
+/**
+ * Extra request fields that make live traffic actually influence route choice.
+ *
+ * `prioritize_bidirectional` is the important one. Valhalla picks
+ * `timedep_forward` whenever the origin carries a `date_time` and the trip is
+ * shorter than `max_timedep_distance` (500 km by default), and that algorithm
+ * has no alternates implementation — so every ordinary trip silently came back
+ * with a single route. Bidirectional A* has alternates and is itself time-aware
+ * (its forward tree advances `seconds_from_now`, so the live-traffic fade still
+ * applies); only its reverse tree is approximate, which `reverse_time_tracking`
+ * softens by giving it an estimated start time.
+ *
+ * The bidirectional switch is limited to two-waypoint depart-now requests:
+ * `arriveBy` uses `timedep_reverse`, which ignores the flag entirely, an
+ * explicit `departAt` is better served by the exact time-dependent algorithm,
+ * and with more waypoints there are no alternates to gain so there is no reason
+ * to accept the reverse-tree approximation.
+ *
+ * `recostings` re-runs the chosen path without live speeds, which costs no extra
+ * round trip and yields the traffic-free duration route cards compare against.
+ */
+export function buildTrafficRequestExtras(
+  options: RoutingOptions,
+  costing: string,
+  costingOptions: Record<string, unknown>,
+  waypointCount: number,
+  enabled: boolean,
+): Record<string, unknown> {
+  if (!enabled || !options.useLiveTraffic) return {};
+
+  const extras: Record<string, unknown> = {
+    recostings: [
+      {
+        costing,
+        name: "baseline",
+        costing_options: {
+          [costing]: { ...costingOptions, speed_types: BASELINE_SPEED_TYPES },
+        },
+      },
+    ],
+  };
+
+  const departNow = !options.departAt && !options.arriveBy;
+  if (departNow && waypointCount === 2) {
+    extras.prioritize_bidirectional = true;
+    extras.reverse_time_tracking = "heuristic";
+  }
+
+  return extras;
+}
+
 type ValhallaExclusions = {
   exclude_locations?: Array<{ lon: number; lat: number }>;
   exclude_polygons?: Array<Array<[number, number]>>;
@@ -530,6 +603,13 @@ export const valhallaService: RoutingProvider = {
       date_time: buildDateTime(options),
       elevation_interval: ELEVATION_INTERVAL,
       ...buildExclusions(options),
+      ...buildTrafficRequestExtras(
+        options,
+        COSTING_MAP[mode],
+        costingOptions,
+        waypoints.length,
+        VALHALLA_BIDIRECTIONAL_ALTERNATES,
+      ),
     };
 
     // Valhalla only supports alternates with exactly 2 waypoints

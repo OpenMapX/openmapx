@@ -3,8 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildCostingOptions,
   buildExclusions,
+  buildTrafficRequestExtras,
+  setValhallaBidirectionalAlternates,
   TRACE_ATTRIBUTE_FILTER,
   transformTraceEdge,
+  transformTrip,
   valhallaLanes,
   valhallaManeuverType,
   valhallaService,
@@ -376,5 +379,214 @@ describe("valhallaService.getRoute exclusion body params", () => {
   it("requests turn-lane data for optimized routes", async () => {
     await valhallaService.optimizeRoute(WPS, "driving", {});
     expect(capturedBody.turn_lanes).toBe(true);
+  });
+});
+
+describe("transformTrip baseline duration", () => {
+  const trip = (summary: Record<string, unknown>) => ({
+    summary: { length: 10, time: 600, ...summary },
+    legs: [
+      {
+        shape: "_p~iF~ps|U",
+        summary: { length: 10, time: 600 },
+        maneuvers: [
+          {
+            type: 1,
+            instruction: "Drive north.",
+            length: 10,
+            time: 600,
+            begin_shape_index: 0,
+            end_shape_index: 1,
+          },
+        ],
+      },
+    ],
+  });
+
+  it("maps time_baseline onto baselineDuration", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: minimal trip fixture
+    const route = transformTrip(trip({ time_baseline: 520 }) as any, "driving");
+    expect(route.baselineDuration).toBe(520);
+    expect(route.duration).toBe(600);
+  });
+
+  it("treats a null time_baseline as absent", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: minimal trip fixture
+    const route = transformTrip(trip({ time_baseline: null }) as any, "driving");
+    expect(route.baselineDuration).toBeUndefined();
+  });
+
+  it("omits baselineDuration when the engine sent no recosting", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: minimal trip fixture
+    const route = transformTrip(trip({}) as any, "driving");
+    expect(route.baselineDuration).toBeUndefined();
+  });
+});
+
+describe("buildTrafficRequestExtras", () => {
+  const live = { useLiveTraffic: true } as RoutingOptions;
+  const costingOptions = { maneuver_penalty: 10 };
+
+  it("sends nothing at all when the feature flag is off", () => {
+    expect(buildTrafficRequestExtras(live, "auto", costingOptions, 2, false)).toEqual({});
+  });
+
+  it("sends nothing for a non-live-traffic mode", () => {
+    expect(
+      buildTrafficRequestExtras({} as RoutingOptions, "pedestrian", costingOptions, 2, true),
+    ).toEqual({});
+  });
+
+  it("sends all three fields for a depart-now two-waypoint motorised request", () => {
+    const extras = buildTrafficRequestExtras(live, "auto", costingOptions, 2, true);
+    expect(extras.prioritize_bidirectional).toBe(true);
+    expect(extras.reverse_time_tracking).toBe("heuristic");
+    expect(extras.recostings).toBeDefined();
+  });
+
+  it("omits the bidirectional fields when departAt pins the departure", () => {
+    const extras = buildTrafficRequestExtras(
+      { ...live, departAt: "2026-08-01T09:00" } as RoutingOptions,
+      "auto",
+      costingOptions,
+      2,
+      true,
+    );
+    expect(extras.prioritize_bidirectional).toBeUndefined();
+    expect(extras.reverse_time_tracking).toBeUndefined();
+    expect(extras.recostings).toBeDefined();
+  });
+
+  it("omits the bidirectional fields for arriveBy", () => {
+    const extras = buildTrafficRequestExtras(
+      { ...live, arriveBy: "2026-08-01T09:00" } as RoutingOptions,
+      "auto",
+      costingOptions,
+      2,
+      true,
+    );
+    expect(extras.prioritize_bidirectional).toBeUndefined();
+  });
+
+  it("omits the bidirectional fields when there are more than two waypoints", () => {
+    const extras = buildTrafficRequestExtras(live, "auto", costingOptions, 3, true);
+    expect(extras.prioritize_bidirectional).toBeUndefined();
+    expect(extras.recostings).toBeDefined();
+  });
+
+  it("recosts against everything except live speeds, preserving other options", () => {
+    const extras = buildTrafficRequestExtras(
+      live,
+      "auto",
+      { maneuver_penalty: 10, use_tolls: 0 },
+      2,
+      true,
+    );
+    expect(extras.recostings).toEqual([
+      {
+        costing: "auto",
+        name: "baseline",
+        costing_options: {
+          auto: {
+            maneuver_penalty: 10,
+            use_tolls: 0,
+            speed_types: ["freeflow", "constrained", "predicted"],
+          },
+        },
+      },
+    ]);
+  });
+});
+
+describe("getRoute request body", () => {
+  const okResponse = {
+    trip: {
+      summary: { length: 1, time: 60 },
+      legs: [
+        {
+          shape: "_p~iF~ps|U",
+          summary: { length: 1, time: 60 },
+          maneuvers: [
+            {
+              type: 1,
+              instruction: "Drive north.",
+              length: 1,
+              time: 60,
+              begin_shape_index: 0,
+              end_shape_index: 1,
+            },
+          ],
+        },
+      ],
+    },
+  };
+
+  const capture = () => {
+    const spy = vi.fn(
+      async () =>
+        new Response(JSON.stringify(okResponse), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", spy);
+    return spy;
+  };
+
+  const bodyOf = (spy: ReturnType<typeof capture>) =>
+    JSON.parse((spy.mock.calls[0]?.[1] as RequestInit).body as string);
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    setValhallaBidirectionalAlternates(true);
+  });
+
+  it("includes the traffic extras for a depart-now driving route", async () => {
+    const spy = capture();
+    await valhallaService.getRoute(
+      [
+        [6.08, 50.77],
+        [6.68, 51.51],
+      ],
+      "driving",
+      { useLiveTraffic: true },
+    );
+    const body = bodyOf(spy);
+    expect(body.prioritize_bidirectional).toBe(true);
+    expect(body.reverse_time_tracking).toBe("heuristic");
+    expect(body.recostings).toHaveLength(1);
+    expect(body.alternates).toBe(3);
+  });
+
+  it("sends a body without any of the new keys when the flag is off", async () => {
+    setValhallaBidirectionalAlternates(false);
+    const spy = capture();
+    await valhallaService.getRoute(
+      [
+        [6.08, 50.77],
+        [6.68, 51.51],
+      ],
+      "driving",
+      { useLiveTraffic: true },
+    );
+    const body = bodyOf(spy);
+    expect(body).not.toHaveProperty("prioritize_bidirectional");
+    expect(body).not.toHaveProperty("reverse_time_tracking");
+    expect(body).not.toHaveProperty("recostings");
+  });
+
+  it("does not add the new keys for walking", async () => {
+    const spy = capture();
+    await valhallaService.getRoute(
+      [
+        [6.08, 50.77],
+        [6.09, 50.78],
+      ],
+      "walking",
+      {},
+    );
+    const body = bodyOf(spy);
+    expect(body).not.toHaveProperty("prioritize_bidirectional");
+    expect(body).not.toHaveProperty("recostings");
   });
 });
