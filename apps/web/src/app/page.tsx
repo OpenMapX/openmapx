@@ -24,6 +24,7 @@ import { NavTrafficSignalsLayer } from "@/components/map/layers/NavTrafficSignal
 import { PlaceBoundaryLayer } from "@/components/map/layers/PlaceBoundaryLayer";
 import { RasterBaseLayer } from "@/components/map/layers/RasterBaseLayer";
 import { RouteLayer } from "@/components/map/layers/RouteLayer";
+import { RouteTrafficLayer } from "@/components/map/layers/RouteTrafficLayer";
 import { SavedPlacesLayer } from "@/components/map/layers/SavedPlacesLayer";
 import { SelectedStopInfrastructureLayer } from "@/components/map/layers/SelectedStopInfrastructureLayer";
 import { TransitItineraryLayer } from "@/components/map/layers/TransitItineraryLayer";
@@ -138,6 +139,7 @@ export default function HomePage() {
           <MapLayerStack />
           <RouteLayer />
           <NavigationRouteLayer />
+          <RouteTrafficLayer />
           <NavTrafficSignalsLayer />
           <NavigationView />
           <TransitNavigationView />

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { markerImageId, parseMarkerImageId, representativePoint } from "../markers.js";
+import {
+  markerImageId,
+  markerPoints,
+  parseMarkerImageId,
+  representativePoint,
+} from "../markers.js";
 
 describe("representativePoint", () => {
   it("returns the point itself for Point geometry", () => {
@@ -96,6 +101,39 @@ describe("representativePoint", () => {
       geometries: [],
     } as unknown as { type: string; coordinates: unknown });
     expect(p).toBeNull();
+  });
+});
+
+describe("markerPoints", () => {
+  it("places one marker at each real MultiPoint endpoint, not their centroid", () => {
+    // Two affected points kilometres apart on a curving road — the centroid
+    // `representativePoint` returns for the same geometry can land off the
+    // road entirely, which is exactly why marker placement must not use it
+    // for a MultiPoint.
+    expect(
+      markerPoints({
+        type: "MultiPoint",
+        coordinates: [
+          [12.0, 49.0],
+          [12.2, 49.2],
+        ],
+      }),
+    ).toEqual([
+      [12.0, 49.0],
+      [12.2, 49.2],
+    ]);
+  });
+
+  it("falls back to representativePoint for a single-point empty MultiPoint", () => {
+    expect(markerPoints({ type: "MultiPoint", coordinates: [] })).toEqual([]);
+  });
+
+  it("returns the single representative point for non-MultiPoint geometry", () => {
+    expect(markerPoints({ type: "Point", coordinates: [7.1, 50.7] })).toEqual([[7.1, 50.7]]);
+  });
+
+  it("returns an empty array for null/unknown geometry", () => {
+    expect(markerPoints(null)).toEqual([]);
   });
 });
 

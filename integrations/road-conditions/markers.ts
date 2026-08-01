@@ -142,7 +142,10 @@ function midpointOfLine(coords: number[][]): LngLat | null {
  * GeometryCollection) the first member geometry that yields a point.
  */
 export function representativePoint(
-  geometry: { type: string; coordinates: unknown } | null | undefined,
+  // `coordinates` is optional so a real GeoJSON `Geometry` union type-checks
+  // here too — its `GeometryCollection` member has no `coordinates` of its
+  // own, only nested `geometries`, which the branch below reads separately.
+  geometry: { type: string; coordinates?: unknown } | null | undefined,
 ): LngLat | null {
   if (!geometry) return null;
   const { type, coordinates } = geometry;
@@ -193,4 +196,30 @@ export function representativePoint(
     return null;
   }
   return null;
+}
+
+/**
+ * Marker placement point(s) for one incident: every real endpoint for a
+ * MultiPoint, otherwise the single {@link representativePoint}. A MultiPoint
+ * from these feeds carries only the endpoints of a linear event ("zwischen X
+ * und Y") with NO road path between them — often the two ends of a motorway
+ * closure kilometres apart. A marker at each real endpoint reads honestly;
+ * `representativePoint`'s centroid for the same geometry is a straight-line
+ * average that can land on a curving road's shoulder or off the road
+ * entirely, which is why callers that place actual markers must use this
+ * instead of calling `representativePoint` directly for a MultiPoint. Shared
+ * so every consumer that draws these markers agrees on where an event is.
+ */
+export function markerPoints(
+  geometry: { type: string; coordinates?: unknown } | null | undefined,
+): LngLat[] {
+  if (
+    geometry?.type === "MultiPoint" &&
+    Array.isArray(geometry.coordinates) &&
+    geometry.coordinates.length > 0
+  ) {
+    return geometry.coordinates as LngLat[];
+  }
+  const rep = representativePoint(geometry);
+  return rep ? [rep] : [];
 }

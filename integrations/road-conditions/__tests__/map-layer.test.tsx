@@ -14,6 +14,21 @@ vi.mock("@/lib/EnvProvider", () => ({
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
+// RoadConditionsLayer now mounts RouteConditionsLayer as a child. That layer
+// calls useDrawnDirectionsRoutes, which reaches into TanStack Query hooks this
+// suite has no QueryClientProvider for — mock it out with an empty route so it
+// stays inert here; its own behavior is covered by route-layer.test.tsx.
+vi.mock("@/lib/useDrawnDirectionsRoutes", () => ({
+  useDrawnDirectionsRoutes: () => ({
+    routes: [],
+    activeRouteIndex: 0,
+    mode: "driving",
+    isEvMode: false,
+    evStops: [],
+    navigating: false,
+  }),
+}));
+
 vi.mock("maplibre-gl", () => ({
   default: {
     Popup: class FakePopup {

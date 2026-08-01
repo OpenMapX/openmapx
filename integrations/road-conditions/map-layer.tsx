@@ -15,7 +15,8 @@ import { useOverlayMinZoom } from "@/lib/overlayZoomGate";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { useIntegrationDomainAttribution } from "@/lib/useIntegrationAttribution";
 import { isUnconfirmedCrowd } from "./evidence";
-import { markerImageData, markerImageId, parseMarkerImageId, representativePoint } from "./markers";
+import { markerImageData, markerImageId, markerPoints, parseMarkerImageId } from "./markers";
+import { RouteConditionsLayer } from "./route-layer";
 // The named import also runs the module side-effect that registers the
 // "road-conditions" overlay store (shared by the layer selector + legend).
 import { horizonDaysParam, useRoadConditionsStore } from "./store";
@@ -184,24 +185,9 @@ function buildSources(features: RawFeature[]): { markers: GeoJsonData; lines: Ge
     // publishing vague or missing dates — so either one marks the feature.
     const future = isFutureCondition(p);
 
-    // Marker placement points. A MultiPoint from these feeds carries only the
-    // endpoints of a linear event ("zwischen X und Y") with NO road path between
-    // them — often the two ends of a motorway closure kilometres apart. Drop a
-    // marker at each real endpoint rather than a lone centroid plus a straight
-    // chord: the chord cuts across a road that curves between the points, which
-    // misrepresents the closure. Two honest points read better. All other
-    // geometries → one representative point.
-    let points: [number, number][] = [];
-    if (
-      geom?.type === "MultiPoint" &&
-      Array.isArray(geom.coordinates) &&
-      geom.coordinates.length > 0
-    ) {
-      points = geom.coordinates as [number, number][];
-    } else {
-      const rep = representativePoint(geom);
-      if (rep) points = [rep];
-    }
+    // Marker placement points — see `markerPoints` for why a MultiPoint gets
+    // one marker per real endpoint rather than a centroid.
+    const points = markerPoints(geom);
 
     if (points.length > 0) {
       const props: Record<string, unknown> = {
@@ -566,7 +552,9 @@ export function RoadConditionsLayer() {
     };
   }, []);
 
-  return null;
+  // The area overlay stops at its min zoom; this covers the route at the zooms
+  // below it, where a whole trip is on screen.
+  return <RouteConditionsLayer />;
 }
 
 export default RoadConditionsLayer;

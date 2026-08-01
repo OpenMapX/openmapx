@@ -1,24 +1,16 @@
 "use client";
 
 import type { LngLat } from "@openmapx/core";
-import {
-  useDataSources,
-  useDirections,
-  useDirectionsStore,
-  useEvDirections,
-  useNavigationStore,
-  useSettingsStore,
-} from "@openmapx/core";
+import { useDataSources, useDirectionsStore } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type maplibregl from "maplibre-gl";
 import type { MapMouseEvent } from "maplibre-gl";
-import { useLocale } from "next-intl";
 import { useEffect, useMemo } from "react";
 import { attributionsForProviders } from "@/lib/attributionForProviders";
-import { buildEvDirectionsRequest } from "@/lib/buildEvDirectionsRequest";
 import { useMap } from "@/lib/MapContext";
 import { EV_CHARGING_SOURCE_ID, openChargerPlace } from "@/lib/openChargerPlace";
 import { ROUTE_ALT_OPACITY, ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
+import { useDrawnDirectionsRoutes } from "@/lib/useDrawnDirectionsRoutes";
 import { useMapAttributions } from "@/lib/useMapAttributions";
 import { addLayerInSlot } from "./layerStack";
 import { upsertGeoJsonSource } from "./layerStyleUtils";
@@ -42,120 +34,9 @@ const EV_STOPS_LAYER_ID = "ev-stops-layer";
 
 export function RouteLayer() {
   const { mapRef, mapReady, styleVersion, fitBounds } = useMap();
-  const locale = useLocale();
-  const {
-    waypoints,
-    mode,
-    isEvMode,
-    evSocStartPct,
-    evSocArrivalMinPct,
-    evForceNonExclusive,
-    activeRouteIndex,
-    setActiveRouteIndex,
-    avoidHighways,
-    avoidTolls,
-    avoidFerries,
-  } = useDirectionsStore();
-  const units = useSettingsStore((s) => s.units);
-  const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
-  const evVehicleId = useSettingsStore((s) => s.evVehicleId);
-  const evCustomVehicle = useSettingsStore((s) => s.evCustomVehicle);
-  const evSocTargetPct = useSettingsStore((s) => s.evSocTargetPct);
-  const evPreferredNetworks = useSettingsStore((s) => s.evPreferredNetworks);
-  const evAvoidedNetworks = useSettingsStore((s) => s.evAvoidedNetworks);
-  const evExclusiveNetworks = useSettingsStore((s) => s.evExclusiveNetworks);
-  const evPreferCheaper = useSettingsStore((s) => s.evPreferCheaper);
-  const evHomePricePerKwh = useSettingsStore((s) => s.evHomePricePerKwh);
-  const evHomeCurrency = useSettingsStore((s) => s.evHomeCurrency);
-  // Once turn-by-turn navigation starts, NavigationRouteLayer owns the on-map
-  // route (traveled/remaining split, live reroutes). Keep the directions preview
-  // dark so a reroute doesn't leave the original planned line stranded on the
-  // map — and so this layer's fitBounds never fights the navigation camera.
-  const navigating = useNavigationStore((s) => s.status) !== "idle";
-
-  const routeWaypoints = useMemo(
-    () =>
-      waypoints.reduce<LngLat[]>((acc, wp) => {
-        if (wp.coords) acc.push(wp.coords);
-        return acc;
-      }, []),
-    [waypoints],
-  );
-  const allFilled = routeWaypoints.length === waypoints.length && waypoints.length >= 2;
-
-  const { data } = useDirections({
-    // Transit uses the transit-plan endpoint and flights deep-link out — neither
-    // routes through the ground engines, so skip the directions query for both.
-    // EV mode routes through `useEvDirections` below instead. Skip it while
-    // navigating too: the nav layer draws the live route.
-    waypoints:
-      navigating || isEvMode || mode === "transit" || mode === "flying"
-        ? []
-        : allFilled
-          ? routeWaypoints
-          : [],
-    mode,
-    avoidHighways,
-    avoidTolls,
-    avoidFerries,
-    avoidClosures: avoidIncidents,
-    units,
-    lang: locale,
-  });
-
-  // Independent EV-plan query — built with the exact same request the plan
-  // card (DirectionsPanelContent) sends, so this hits the same query-cache
-  // entry instead of firing a second network request.
-  const evRequest = useMemo(
-    () =>
-      buildEvDirectionsRequest({
-        isEvMode,
-        waypoints: routeWaypoints,
-        allWaypointsFilled: allFilled,
-        vehicleId: evVehicleId,
-        customVehicle: evCustomVehicle,
-        socStartPct: evSocStartPct,
-        socArrivalMinPct: evSocArrivalMinPct,
-        socTargetPct: evSocTargetPct,
-        avoidHighways,
-        avoidTolls,
-        avoidFerries,
-        avoidClosures: avoidIncidents,
-        preferredNetworks: evPreferredNetworks,
-        avoidedNetworks: evAvoidedNetworks,
-        exclusiveNetworks: evExclusiveNetworks,
-        forceNonExclusive: evForceNonExclusive,
-        preferCheaper: evPreferCheaper,
-        homePricePerKwh: evHomePricePerKwh,
-        homeCurrency: evHomeCurrency,
-        units,
-        lang: locale,
-      }),
-    [
-      isEvMode,
-      routeWaypoints,
-      allFilled,
-      evVehicleId,
-      evCustomVehicle,
-      evSocStartPct,
-      evSocArrivalMinPct,
-      evSocTargetPct,
-      avoidHighways,
-      avoidTolls,
-      avoidFerries,
-      avoidIncidents,
-      evPreferredNetworks,
-      evAvoidedNetworks,
-      evExclusiveNetworks,
-      evForceNonExclusive,
-      evPreferCheaper,
-      evHomePricePerKwh,
-      evHomeCurrency,
-      units,
-      locale,
-    ],
-  );
-  const { data: evData } = useEvDirections(navigating ? null : evRequest);
+  const { waypoints, setActiveRouteIndex } = useDirectionsStore();
+  const { routes, activeRouteIndex, provider, mode, isEvMode, evStops, navigating } =
+    useDrawnDirectionsRoutes();
   // Charge-stop pins open the place card with the same category the data-source
   // layer applies, so the card looks identical however the charger was reached.
   const { data: dataSourcesData } = useDataSources();
@@ -164,17 +45,13 @@ export function RouteLayer() {
     [dataSourcesData],
   );
 
-  // The result actually drawn on the map: the EV plan (route + inserted
-  // charge-stop legs) in EV mode, the plain route otherwise.
-  const activeResult = isEvMode ? evData : data;
-
   // Credit the routing engine that served the drawn route, on the map's
   // attribution control — so the credit persists when the directions panel is
   // closed (the panel shows the same credit while open).
   const registry = useIntegrationRegistry();
   const routeAttributions = useMemo(
-    () => (navigating ? [] : attributionsForProviders(registry, [activeResult?.provider])),
-    [registry, activeResult?.provider, navigating],
+    () => (navigating ? [] : attributionsForProviders(registry, [provider])),
+    [registry, provider, navigating],
   );
   useMapAttributions("route", routeAttributions);
 
@@ -307,12 +184,12 @@ export function RouteLayer() {
       return;
     }
 
-    if (!activeResult || activeResult.routes.length === 0) {
+    if (routes.length === 0) {
       source.setData({ type: "FeatureCollection", features: [] });
       return;
     }
 
-    const features = activeResult.routes.map((route, i) => ({
+    const features = routes.map((route, i) => ({
       type: "Feature" as const,
       properties: {
         type: i === activeRouteIndex ? "active" : "alt",
@@ -328,7 +205,7 @@ export function RouteLayer() {
 
     (source as GeoJSONSource).setData({ type: "FeatureCollection", features });
 
-    const activeGeom = activeResult.routes[activeRouteIndex]?.geometry;
+    const activeGeom = routes[activeRouteIndex]?.geometry;
     if (activeGeom && activeGeom.length >= 2) {
       let minLng = activeGeom[0][0];
       let maxLng = activeGeom[0][0];
@@ -343,8 +220,8 @@ export function RouteLayer() {
       // EV charge-stop coordinates are inserted waypoints, so they should
       // already lie on `activeGeom` — widen the box anyway in case a stop
       // sits just off the drawn line (rounding/matching slack).
-      if (isEvMode && evData) {
-        for (const stop of evData.stops) {
+      if (isEvMode) {
+        for (const stop of evStops) {
           const [lng, lat] = stop.station.coordinates;
           if (lng < minLng) minLng = lng;
           if (lng > maxLng) maxLng = lng;
@@ -360,7 +237,7 @@ export function RouteLayer() {
         80,
       );
     }
-  }, [activeResult, activeRouteIndex, mode, isEvMode, evData, mapRef, fitBounds, navigating]);
+  }, [routes, activeRouteIndex, mode, isEvMode, evStops, mapRef, fitBounds, navigating]);
 
   // EV charge-stop pins: circle markers in the same style DataSourceLayer
   // uses for EV charging (green = available, amber = busy, grey = unknown).
@@ -369,7 +246,7 @@ export function RouteLayer() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    const stops = isEvMode && evData ? evData.stops : [];
+    const stops = isEvMode ? evStops : [];
 
     const removeEvLayers = () => {
       try {
@@ -471,7 +348,7 @@ export function RouteLayer() {
       map.off("mouseleave", EV_STOPS_LAYER_ID, onStopLeave);
       map.off("styledata", sync);
     };
-  }, [isEvMode, evData, mapReady, styleVersion, mapRef, evSourceMeta]);
+  }, [isEvMode, evStops, mapReady, styleVersion, mapRef, evSourceMeta]);
 
   // Clear routes when all waypoints are empty (panel closed)
   useEffect(() => {
