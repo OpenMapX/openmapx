@@ -1,3 +1,5 @@
+import { TRAFFIC_BAND_COLORS } from "./trafficSeverity";
+
 /**
  * The one traffic ramp. The flow overlay paints roads with it and the route's
  * congestion bands paint the route with it, so a jam cannot be one colour on
@@ -8,23 +10,23 @@
  * defaulting to green, so a DATEX-declared jam still reads as a jam.
  */
 export const FLOW_RATIO_STOPS: ReadonlyArray<readonly [number, string]> = [
-  [0, "#7e0023"],
-  [0.25, "#e8112d"],
-  [0.5, "#ff8c00"],
-  [0.75, "#ffd500"],
-  [1, "#2ecc40"],
+  [0, TRAFFIC_BAND_COLORS.severe],
+  [0.25, TRAFFIC_BAND_COLORS.heavy],
+  [0.5, TRAFFIC_BAND_COLORS.moderate],
+  [0.75, TRAFFIC_BAND_COLORS.light],
+  [1, TRAFFIC_BAND_COLORS.freeFlow],
 ];
 
 export const FLOW_LOS_COLORS: Readonly<Record<string, string>> = {
-  queuing: "#e8112d",
-  stationary: "#7e0023",
-  blocked: "#7e0023",
-  heavy: "#ff8c00",
-  free_flow: "#2ecc40",
-  unknown: "#2ecc40",
+  queuing: TRAFFIC_BAND_COLORS.heavy,
+  stationary: TRAFFIC_BAND_COLORS.severe,
+  blocked: TRAFFIC_BAND_COLORS.severe,
+  heavy: TRAFFIC_BAND_COLORS.moderate,
+  free_flow: TRAFFIC_BAND_COLORS.freeFlow,
+  unknown: TRAFFIC_BAND_COLORS.freeFlow,
 };
 
-export const FLOW_FALLBACK_COLOR = "#2ecc40";
+export const FLOW_FALLBACK_COLOR = TRAFFIC_BAND_COLORS.freeFlow;
 
 function lerpHex(from: string, to: string, t: number): string {
   const channel = (hex: string, at: number) => Number.parseInt(hex.slice(at, at + 2), 16);

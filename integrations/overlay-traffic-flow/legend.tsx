@@ -2,18 +2,15 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
+import { TRAFFIC_BAND_COLORS, type TrafficBand } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { useTrafficFlowStore } from "./store";
 
-/** The five C5 color-gradient stops (green→dark-red), paired with the band's translation key. */
-const BANDS: { color: string; key: string }[] = [
-  { color: "#2ecc40", key: "freeFlow" },
-  { color: "#ffd500", key: "light" },
-  { color: "#ff8c00", key: "moderate" },
-  { color: "#e8112d", key: "heavy" },
-  { color: "#7e0023", key: "severe" },
-];
+/** The five colour-gradient stops (green→dark-red); the key is also the i18n key. */
+export const BANDS: { color: string; key: TrafficBand }[] = (
+  ["freeFlow", "light", "moderate", "heavy", "severe"] as const
+).map((key) => ({ key, color: TRAFFIC_BAND_COLORS[key] }));
 
 /** The three confidence tiers driving `line-opacity`, faintest last. */
 const CONFIDENCE_STEPS: { key: string; opacity: number }[] = [

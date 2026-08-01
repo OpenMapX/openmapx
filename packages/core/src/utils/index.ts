@@ -214,6 +214,12 @@ export {
   flowColorFor,
 } from "./trafficFlowColors";
 export {
+  bandForDelayRatio,
+  type DelayBand,
+  TRAFFIC_BAND_COLORS,
+  type TrafficBand,
+} from "./trafficSeverity";
+export {
   contactDomain,
   USER_AGENT,
   USER_AGENT_ADMIN,
