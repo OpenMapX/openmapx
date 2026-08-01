@@ -394,8 +394,8 @@ export function EarthquakeLayer() {
               ] as maplibregl.ExpressionSpecification,
             },
           },
-          "area-overlays",
-          3,
+          "overlay-heat",
+          1,
         );
       } else if (!showHeatmap && map.getLayer(HEATMAP_LAYER_ID)) {
         map.removeLayer(HEATMAP_LAYER_ID);

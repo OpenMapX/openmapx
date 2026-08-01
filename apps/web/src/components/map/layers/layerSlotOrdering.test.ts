@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { createFakeMap } from "@/test";
 import { anchorMapLayers, registerLayerSlot, unregisterLayerSlot } from "./layerStack";
 
@@ -94,5 +94,49 @@ describe("overlay bands", () => {
     for (const id of ["omx-transit-line", "route-active-line", "omx-road-conditions-markers"]) {
       unregisterLayerSlot(id);
     }
+  });
+});
+
+describe("heatmaps over their own points", () => {
+  afterEach(() => {
+    for (const id of ["omx-wildfires-heat", "omx-wildfires-circle", "omx-live-transit-icon"]) {
+      unregisterLayerSlot(id);
+    }
+  });
+
+  it("keeps a heatmap above the circles drawn from the same features", () => {
+    const { map, state } = createFakeMap({ styleLoaded: true });
+    map.addLayer({ id: "omx-wildfires-heat", type: "heatmap" } as never);
+    map.addLayer({ id: "omx-wildfires-circle", type: "circle" } as never);
+    map.addLayer({ id: "place-labels", type: "symbol" } as never);
+
+    registerLayerSlot("omx-wildfires-heat", "overlay-heat", 0);
+    registerLayerSlot("omx-wildfires-circle", "overlay-points", 4);
+    anchorMapLayers(map);
+
+    // The circles sit exactly on the heat maxima, so underneath they would hide
+    // the density peak and leave only the cool halo visible.
+    expect([...state.layers.keys()]).toEqual([
+      "omx-wildfires-circle",
+      "omx-wildfires-heat",
+      "place-labels",
+    ]);
+  });
+
+  it("still keeps a heatmap below overlay markers", () => {
+    const { map, state } = createFakeMap({ styleLoaded: true });
+    map.addLayer({ id: "omx-live-transit-icon", type: "symbol" } as never);
+    map.addLayer({ id: "omx-wildfires-heat", type: "heatmap" } as never);
+    map.addLayer({ id: "place-labels", type: "symbol" } as never);
+
+    registerLayerSlot("omx-wildfires-heat", "overlay-heat", 0);
+    registerLayerSlot("omx-live-transit-icon", "overlay-markers", 9);
+    anchorMapLayers(map);
+
+    expect([...state.layers.keys()]).toEqual([
+      "omx-wildfires-heat",
+      "omx-live-transit-icon",
+      "place-labels",
+    ]);
   });
 });

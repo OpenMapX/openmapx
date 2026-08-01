@@ -25,6 +25,12 @@ export const MAP_LAYER_SLOTS = [
   "route-congestion",
   "conditions-lines",
   "overlay-points",
+  // Above the points, not below them with the other area fills: a heatmap
+  // renders the same features its circle layer does, and those circles sit
+  // exactly on the heat maxima. Underneath, an opaque marker covers the hot
+  // core and leaves only the cool outer halo showing — the density peak, which
+  // is the whole point of a heatmap, becomes the one part you cannot see.
+  "overlay-heat",
   "overlay-markers",
   "basemap-symbols",
   "route-markers",

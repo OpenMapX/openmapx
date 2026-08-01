@@ -259,8 +259,8 @@ export function WildfireLayer() {
               ] as maplibregl.ExpressionSpecification,
             },
           },
-          "area-overlays",
-          4,
+          "overlay-heat",
+          0,
         );
       } else if (!showHeatmap && map.getLayer(HEATMAP_LAYER_ID)) {
         map.removeLayer(HEATMAP_LAYER_ID);
