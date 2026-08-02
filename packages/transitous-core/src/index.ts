@@ -17,6 +17,7 @@ export {
   type TransitSource,
 } from "./constants.js";
 export type { TransitousFeedFile, TransitousFeedSource } from "./feed-source.js";
+export { isSafeFeedSourceName } from "./feed-source.js";
 export {
   type CompiledGbfsAddition,
   type CompileGbfsCatalogInput,

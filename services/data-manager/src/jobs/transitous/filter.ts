@@ -42,7 +42,7 @@ export const run: StageFn = async (ctx) => {
       logger: ctx.logger,
     });
 
-    const allFeedFiles = listTransitousFeedFiles(catalogDir);
+    const allFeedFiles = listTransitousFeedFiles(catalogDir, (message) => ctx.logger.warn(message));
     const requestedCount = sumActiveGtfsSources(allFeedFiles);
     const countries = ctx.countries;
     const countryMatchedFeedFiles =

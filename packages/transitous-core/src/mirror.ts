@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import type { TransitousFeedFile } from "./feed-source.js";
+import { dirname, join, resolve } from "node:path";
+import { isSafeFeedSourceName, type TransitousFeedFile } from "./feed-source.js";
 import type { TransitousLogger } from "./runner.js";
 
 /**
@@ -62,6 +62,7 @@ export function listMirrorArchives(
   for (const file of readdirSync(feedsDir)) {
     if (!file.endsWith(".json")) continue;
     const region = file.slice(0, -".json".length);
+    if (!isSafeFeedSourceName(region)) continue;
     if (wanted.length > 0 && !wanted.includes(countryOf(region))) continue;
     let parsed: TransitousFeedFile;
     try {
@@ -71,6 +72,7 @@ export function listMirrorArchives(
     }
     for (const source of parsed.sources ?? []) {
       if (!source.name || source.skip) continue;
+      if (!isSafeFeedSourceName(source.name)) continue;
       if (source.spec && NON_SCHEDULE_SPECS.has(source.spec.toLowerCase())) continue;
       archives.push({ region, name: source.name });
     }
@@ -96,13 +98,24 @@ export async function mirrorArchives(opts: {
 }): Promise<{ fetched: number; missing: MirrorArchive[] }> {
   const base = opts.baseUrl.endsWith("/") ? opts.baseUrl : `${opts.baseUrl}/`;
   const concurrency = Math.max(1, opts.concurrency ?? DEFAULT_MIRROR_CONCURRENCY);
+  const destRoot = resolve(opts.destDir);
 
   const fetchOne = async (archive: MirrorArchive): Promise<boolean> => {
     for (const spec of ARCHIVE_SPECS) {
       const name = `${archive.region}_${archive.name}.${spec}.zip`;
+      // The archive name is derived from third-party catalog data and is used
+      // as both a URL suffix and a file path, so the resolved target must stay
+      // a direct child of the destination directory.
+      const target = resolve(destRoot, name);
+      if (dirname(target) !== destRoot) {
+        opts.logger.warn(
+          `transitous-mirror: refusing archive name outside ${opts.destDir}: ${name}`,
+        );
+        return false;
+      }
       try {
-        await opts.download(`${base}${name}`, join(opts.destDir, name));
-        if (existsSync(join(opts.destDir, name))) return true;
+        await opts.download(`${base}${name}`, target);
+        if (existsSync(target)) return true;
       } catch {
         // No archive for this spec (404) — try the next, else count missing.
       }

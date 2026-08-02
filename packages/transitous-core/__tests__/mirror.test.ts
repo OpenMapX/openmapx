@@ -65,6 +65,61 @@ describe("listMirrorArchives", () => {
     expect(listMirrorArchives(catalog, ["de"])).toEqual([{ region: "de", name: "Good" }]);
   });
 
+  it("keeps the pinned catalog's real schedule source names", () => {
+    const catalog = catalogWithFeeds({
+      "de.json": {
+        sources: [
+          { name: "DELFI" },
+          { name: "VBB" },
+          { name: "VBN" },
+          { name: "AVV-Aachen" },
+          { name: "amarillo-bw" },
+          { name: "pollo" },
+          { name: "esel.ac" },
+        ],
+      },
+      "at.json": {
+        sources: [
+          { name: "PTA-Styria-Flex-2026" },
+          { name: "Linz-AG-2026" },
+          { name: "Railway-Current-Reference-Data-2026" },
+          { name: "WienMobil-Rad" },
+        ],
+      },
+    });
+    expect(listMirrorArchives(catalog)).toEqual(
+      expect.arrayContaining([
+        { region: "de", name: "DELFI" },
+        { region: "de", name: "VBB" },
+        { region: "de", name: "VBN" },
+        { region: "de", name: "AVV-Aachen" },
+        { region: "de", name: "amarillo-bw" },
+        { region: "de", name: "pollo" },
+        { region: "de", name: "esel.ac" },
+        { region: "at", name: "PTA-Styria-Flex-2026" },
+        { region: "at", name: "Linz-AG-2026" },
+        { region: "at", name: "Railway-Current-Reference-Data-2026" },
+        { region: "at", name: "WienMobil-Rad" },
+      ]),
+    );
+  });
+
+  it("skips unsafe source names while keeping safe siblings", () => {
+    const catalog = catalogWithFeeds({
+      "de.json": {
+        sources: [
+          { name: "Good" },
+          { name: "../../../evil" },
+          { name: "a/b" },
+          { name: ".hidden" },
+          { name: ".." },
+          { name: "Has Space" },
+        ],
+      },
+    });
+    expect(listMirrorArchives(catalog)).toEqual([{ region: "de", name: "Good" }]);
+  });
+
   it("returns every region when no countries are given", () => {
     const catalog = catalogWithFeeds({
       "de.json": { sources: [{ name: "DELFI" }] },
@@ -90,18 +145,43 @@ describe("mirrorArchives", () => {
   it("downloads each archive directly by URL (gtfs hit)", async () => {
     const dest = destDir();
     const urls: string[] = [];
+    const destinations: string[] = [];
     const result = await mirrorArchives({
       archives,
       baseUrl: "https://api.transitous.org/gtfs/",
       destDir: dest,
       download: async (url, d) => {
         urls.push(url);
+        destinations.push(d);
         writeFileSync(d, "data");
       },
       logger,
     });
     expect(urls).toEqual(["https://api.transitous.org/gtfs/de_DELFI.gtfs.zip"]);
+    expect(destinations).toEqual([join(dest, "de_DELFI.gtfs.zip")]);
     expect(result).toEqual({ fetched: 1, missing: [] });
+  });
+
+  it("refuses traversal-shaped archive names before downloading", async () => {
+    const dest = destDir();
+    const warnings: string[] = [];
+    const downloads: string[] = [];
+    const archive = { region: "de", name: "../../../evil" };
+    const result = await mirrorArchives({
+      archives: [archive],
+      baseUrl: "https://api.transitous.org/gtfs/",
+      destDir: dest,
+      download: async (url) => {
+        downloads.push(url);
+      },
+      logger: { info() {}, warn: (message) => warnings.push(message), error() {} },
+    });
+
+    expect(downloads).toEqual([]);
+    expect(result).toEqual({ fetched: 0, missing: [archive] });
+    expect(warnings.some((warning) => warning.includes("refusing archive name outside"))).toBe(
+      true,
+    );
   });
 
   it("downloads concurrently, bounded by `concurrency`", async () => {

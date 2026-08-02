@@ -9,6 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname } from "node:path";
+import { isSafeFeedSourceName } from "@openmapx/transitous-core";
 
 export interface FeedOverlayPatch {
   sourceId: string;
@@ -123,7 +124,7 @@ function validateHttpUrl(value: unknown, label: string): string {
 
 function validateSafeName(value: unknown, label: string): string {
   const name = nonEmptyString(value, `${label} is missing string "name"`);
-  if (!/^[A-Za-z0-9][A-Za-z0-9.-]*$/.test(name)) {
+  if (!isSafeFeedSourceName(name)) {
     throw new Error(`${label} name must match [A-Za-z0-9][A-Za-z0-9.-]*`);
   }
   return name;

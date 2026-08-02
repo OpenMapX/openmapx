@@ -11,6 +11,7 @@ import {
 import { join } from "node:path";
 import {
   DEFAULT_TRANSITOUS_REPO_URL,
+  isSafeFeedSourceName,
   type PruneUnresolvableSourcesOptions,
   pruneUnresolvableSources,
   resetCatalog,
@@ -270,9 +271,22 @@ export function scheduleSourcesForFeed(
   country: string,
   feed: TransitousFeedFile,
   atlasSpecIndex: Map<string, AtlasSourceMetadata>,
+  onUnsafeName?: (message: string) => void,
 ): ScheduleSourceEntry[] {
+  if (!isSafeFeedSourceName(feedId)) {
+    onUnsafeName?.(
+      `transitous: skipping feed file "${feedId}" — region is not a safe archive-name component`,
+    );
+    return [];
+  }
   return (feed.sources ?? []).flatMap((source, index) => {
     if (!isSupportedScheduleSource(source, atlasSpecIndex)) return [];
+    if (source.name !== undefined && !isSafeFeedSourceName(source.name)) {
+      onUnsafeName?.(
+        `transitous: skipping source "${source.name}" in ${feedId} — name is not a safe archive-name component`,
+      );
+      return [];
+    }
     const fallback = `${feedId}_${index + 1}`;
     const atlas = source["transitland-atlas-id"]
       ? atlasSpecIndex.get(source["transitland-atlas-id"])
@@ -302,13 +316,17 @@ function activeScheduleSources(
   country: string,
   feed: TransitousFeedFile,
   atlasSpecIndex: Map<string, AtlasSourceMetadata>,
+  onUnsafeName?: (message: string) => void,
 ): FeedFileEntry["activeScheduleSources"] {
-  return scheduleSourcesForFeed(feedId, country, feed, atlasSpecIndex)
+  return scheduleSourcesForFeed(feedId, country, feed, atlasSpecIndex, onUnsafeName)
     .filter((entry) => entry.requested)
     .map(({ requested: _requested, ...entry }) => entry);
 }
 
-export function listTransitousFeedFiles(catalogDir: string): FeedFileEntry[] {
+export function listTransitousFeedFiles(
+  catalogDir: string,
+  onUnsafeName?: (message: string) => void,
+): FeedFileEntry[] {
   const feedsDir = join(catalogDir, "feeds");
   if (!existsSync(feedsDir)) {
     throw new Error(`Transitous catalog missing feeds directory: ${feedsDir}`);
@@ -334,7 +352,13 @@ export function listTransitousFeedFiles(catalogDir: string): FeedFileEntry[] {
         const feed = JSON.parse(readFileSync(filePath, "utf-8")) as TransitousFeedFile;
         return {
           ...entry,
-          activeScheduleSources: activeScheduleSources(id, country, feed, atlasSpecIndex),
+          activeScheduleSources: activeScheduleSources(
+            id,
+            country,
+            feed,
+            atlasSpecIndex,
+            onUnsafeName,
+          ),
         };
       } catch (error) {
         return {

@@ -2,7 +2,10 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { pruneUnresolvableSources } from "../../src/jobs/transitous/internal.js";
+import {
+  pruneUnresolvableSources,
+  scheduleSourcesForFeed,
+} from "../../src/jobs/transitous/internal.js";
 import type { CommandRunner, JobLogger } from "../../src/jobs/transitous/types.js";
 
 let tmp: string | undefined;
@@ -57,6 +60,76 @@ function silentLogger(): JobLogger & { warnings: string[] } {
     warnings,
   };
 }
+
+describe("scheduleSourcesForFeed", () => {
+  it("keeps real schedule source names unchanged", () => {
+    const names = ["DELFI", "VBB", "AVV-Aachen", "amarillo-bw", "esel.ac", "PTA-Styria-Flex-2026"];
+    const sources = scheduleSourcesForFeed(
+      "de",
+      "de",
+      { sources: names.map((name) => ({ name })) },
+      new Map(),
+    );
+
+    expect(sources.map((source) => ({ region: source.region, name: source.name }))).toEqual(
+      names.map((name) => ({ region: "de", name })),
+    );
+  });
+
+  it("skips unsafe source names and reports each one", () => {
+    const warnings: string[] = [];
+    const sources = scheduleSourcesForFeed(
+      "de",
+      "de",
+      {
+        sources: [{ name: "../../../evil" }, { name: "a/b" }, { name: ".." }, { name: ".hidden" }],
+      },
+      new Map(),
+      (message) => warnings.push(message),
+    );
+
+    expect(sources).toEqual([]);
+    expect(warnings).toHaveLength(4);
+    expect(warnings.every((warning) => warning.includes("not a safe archive-name component"))).toBe(
+      true,
+    );
+  });
+
+  it("synthesizes a fallback name for a nameless source", () => {
+    const sources = scheduleSourcesForFeed("de", "de", { sources: [{}] }, new Map());
+
+    expect(sources[0]?.name).toBe("de_1");
+  });
+
+  it("drops an unsafe region and reports it once", () => {
+    const warnings: string[] = [];
+    const sources = scheduleSourcesForFeed(
+      "../de",
+      "de",
+      { sources: [{ name: "Good" }] },
+      new Map(),
+      (message) => warnings.push(message),
+    );
+
+    expect(sources).toEqual([]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("region is not a safe archive-name component");
+  });
+
+  it("continues to exclude GBFS sources", () => {
+    const warnings: string[] = [];
+    const sources = scheduleSourcesForFeed(
+      "de",
+      "de",
+      { sources: [{ name: "Bikes", spec: "gbfs" }] },
+      new Map(),
+      (message) => warnings.push(message),
+    );
+
+    expect(sources).toEqual([]);
+    expect(warnings).toEqual([]);
+  });
+});
 
 describe("pruneUnresolvableSources", () => {
   it("runs the resolution check once and skips nothing when everything resolves", async () => {

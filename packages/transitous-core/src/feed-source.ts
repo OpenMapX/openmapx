@@ -22,3 +22,11 @@ export interface TransitousFeedSource {
 export interface TransitousFeedFile {
   sources?: TransitousFeedSource[];
 }
+
+/**
+ * The shape a feed source `name` must have before it can be interpolated into
+ * an archive filename (`<region>_<name>.<spec>.zip`) and its download URL.
+ */
+export function isSafeFeedSourceName(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9.-]*$/.test(value);
+}

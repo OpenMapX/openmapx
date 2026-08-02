@@ -126,6 +126,34 @@ describe("mirror-mode pipeline", () => {
     expect(existsSync(join(fx.gtfsDir, "de_BVG.gtfs.zip"))).toBe(true);
   });
 
+  it("skips hostile catalog names before mirror downloads", async () => {
+    const fx = setupCatalog([{ name: "BVG" }, { name: "../../../evil" }]);
+    const downloadUrls: string[] = [];
+    const downloadTargets: string[] = [];
+    const ctx = buildJobContext({
+      dataDir: fx.dataDir,
+      store: new StateStore(fx.dataDir),
+      countries: ["de"],
+      source: "mirror",
+      runner: async () => {},
+      artifactDownloader: async (url, dest) => {
+        downloadUrls.push(url);
+        downloadTargets.push(dest);
+        mkdirSync(dirname(dest), { recursive: true });
+        writeFileSync(dest, "BVG");
+      },
+      now: () => "2026-06-27T00:00:00.000Z",
+    });
+
+    const { results } = await runTransitousPipeline(ctx, { stopAt: "fetch-operator" });
+
+    expect(downloadUrls).toContain("https://api.transitous.org/gtfs/de_BVG.gtfs.zip");
+    expect(downloadUrls.some((url) => url.includes("evil"))).toBe(false);
+    expect(downloadTargets.some((target) => target.includes("evil"))).toBe(false);
+    expect(existsSync(join(fx.gtfsDir, "de_BVG.gtfs.zip"))).toBe(true);
+    expect(results.find((result) => result.stage === "mirror")?.status).toBe("ok");
+  });
+
   it("unifies mirrored catalog and pinned-fetcher operator artifacts", async () => {
     const fx = setupCatalog([{ name: "BVG" }]);
     const overlayPath = join(fx.dataDir, "feeds-overlay.json");
