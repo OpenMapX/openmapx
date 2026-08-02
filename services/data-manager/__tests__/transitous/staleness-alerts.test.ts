@@ -42,10 +42,12 @@ function buildLogger(): AlertLogger & {
   infoCalls: Array<[string, Record<string, unknown> | undefined]>;
   warnCalls: Array<[string, Record<string, unknown> | undefined]>;
   errorCalls: Array<[string, Record<string, unknown> | undefined]>;
+  debugCalls: Array<[string, Record<string, unknown> | undefined]>;
 } {
   const infoCalls: Array<[string, Record<string, unknown> | undefined]> = [];
   const warnCalls: Array<[string, Record<string, unknown> | undefined]> = [];
   const errorCalls: Array<[string, Record<string, unknown> | undefined]> = [];
+  const debugCalls: Array<[string, Record<string, unknown> | undefined]> = [];
   return {
     info: (msg, extra) => {
       infoCalls.push([msg, extra]);
@@ -56,9 +58,13 @@ function buildLogger(): AlertLogger & {
     error: (msg, extra) => {
       errorCalls.push([msg, extra]);
     },
+    debug: (msg, extra) => {
+      debugCalls.push([msg, extra]);
+    },
     infoCalls,
     warnCalls,
     errorCalls,
+    debugCalls,
   };
 }
 
@@ -343,5 +349,141 @@ describe("emitPipelineFailureAlert", () => {
       log,
     });
     expect(log.errorCalls).toHaveLength(1);
+  });
+
+  it("does not publish a credential-bearing URL into the issue body", async () => {
+    const log = buildLogger();
+    const created: Array<{ title: string; body: string }> = [];
+    const sink: GithubIssueSink = {
+      findOpenIssueByTitle: async () => null,
+      createIssue: async (title, body) => {
+        created.push({ title, body });
+        return "https://github.com/foo/bar/issues/10";
+      },
+    };
+    await emitPipelineFailureAlert({
+      alert: {
+        trigger: "cron",
+        jobId: "job-4",
+        reason:
+          "Command failed with exit code 8: curl 'https://feeds.example.org/gtfs.zip?api-key=FAKEKEY123'",
+      },
+      log,
+      githubIssue: sink,
+    });
+    expect(created).toHaveLength(1);
+    const body = created[0]?.body ?? "";
+    expect(body).not.toContain("FAKEKEY123");
+    expect(body).not.toContain("api-key=");
+    expect(body).toContain("feeds.example.org");
+  });
+
+  it("does not publish git userinfo credentials into the issue body", async () => {
+    const log = buildLogger();
+    const created: Array<{ title: string; body: string }> = [];
+    const sink: GithubIssueSink = {
+      findOpenIssueByTitle: async () => null,
+      createIssue: async (title, body) => {
+        created.push({ title, body });
+        return "https://github.com/foo/bar/issues/11";
+      },
+    };
+    await emitPipelineFailureAlert({
+      alert: {
+        trigger: "auto-bump",
+        jobId: "job-5",
+        reason:
+          "Command failed with exit code 128: git clone https://oauth2:FAKETOKEN@github.com/acme/catalog.git",
+      },
+      log,
+      githubIssue: sink,
+    });
+    expect(created).toHaveLength(1);
+    const body = created[0]?.body ?? "";
+    expect(body).not.toContain("FAKETOKEN");
+    expect(body).toContain("github.com");
+  });
+
+  it("scrubs the reason on the structured log line too", async () => {
+    const log = buildLogger();
+    await emitPipelineFailureAlert({
+      alert: {
+        trigger: "cron",
+        jobId: "job-6",
+        reason: "curl https://feeds.example.org/x.zip?token=FAKELOGTOKEN",
+      },
+      log,
+    });
+    const [, extra] = log.errorCalls[0] as [string, Record<string, unknown>];
+    expect(extra.reason).not.toContain("FAKELOGTOKEN");
+  });
+
+  it("keeps the unscrubbed reason available at debug level", async () => {
+    const log = buildLogger();
+    await emitPipelineFailureAlert({
+      alert: {
+        trigger: "cron",
+        jobId: "job-7",
+        reason: "curl https://feeds.example.org/x.zip?token=FAKEDEBUGTOKEN",
+      },
+      log,
+    });
+    expect(log.debugCalls).toHaveLength(1);
+    const [, debugExtra] = log.debugCalls[0] as [string, Record<string, unknown>];
+    const [, errorExtra] = log.errorCalls[0] as [string, Record<string, unknown>];
+    expect(debugExtra.reason).toContain("FAKEDEBUGTOKEN");
+    expect(errorExtra.reason).not.toContain("FAKEDEBUGTOKEN");
+  });
+
+  it("leaves a reason with no credentials byte-identical", async () => {
+    const log = buildLogger();
+    const created: Array<{ title: string; body: string }> = [];
+    const sink: GithubIssueSink = {
+      findOpenIssueByTitle: async () => null,
+      createIssue: async (title, body) => {
+        created.push({ title, body });
+        return "https://github.com/foo/bar/issues/12";
+      },
+    };
+    await emitPipelineFailureAlert({
+      alert: {
+        trigger: "cron",
+        jobId: "job-8",
+        reason: "motis-health probe returned zero rentals",
+      },
+      log,
+      githubIssue: sink,
+    });
+    expect(created[0]?.body).toContain("motis-health probe returned zero rentals");
+  });
+
+  it("scrubs validationMessage in the per-feed issue body", async () => {
+    const log = buildLogger();
+    const created: Array<{ title: string; body: string }> = [];
+    const sink: GithubIssueSink = {
+      findOpenIssueByTitle: async () => null,
+      createIssue: async (title, body) => {
+        created.push({ title, body });
+        return "https://github.com/foo/bar/issues/13";
+      },
+    };
+    await emitFeedAlerts({
+      alerts: [
+        {
+          region: "de",
+          name: "vbb",
+          kind: "consecutive-failures",
+          threshold: { consecutiveFailures: 3 },
+          detail: {
+            consecutiveFailures: 3,
+            validationMessage: "fetch failed: https://feeds.example.org/x.zip?token=FAKEFEEDTOKEN",
+          },
+        },
+      ],
+      log,
+      githubIssue: sink,
+    });
+    expect(created).toHaveLength(1);
+    expect(created[0]?.body).not.toContain("FAKEFEEDTOKEN");
   });
 });

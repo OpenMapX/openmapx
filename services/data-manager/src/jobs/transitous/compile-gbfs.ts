@@ -16,6 +16,7 @@ import {
   parseMobilityDataGbfsCsv,
 } from "@openmapx/transitous-core";
 import { readGbfsCatalogLock } from "../../gbfs-catalog-lock.js";
+import { scrubSecrets } from "../../utils/scrub-secrets.js";
 import { readFeedOverlay } from "../transitous-feeds-overlay.js";
 import type { StageFn, StageResult } from "./types.js";
 
@@ -100,21 +101,6 @@ async function fetchJson(url: string, timeoutMs: number): Promise<unknown> {
   } finally {
     clearTimeout(timer);
   }
-}
-
-function scrubErrorMessage(message: string): string {
-  return message.replace(/https?:\/\/[^\s"']+/g, (raw) => {
-    try {
-      const parsed = new URL(raw);
-      parsed.username = "";
-      parsed.password = "";
-      parsed.search = "";
-      parsed.hash = "";
-      return parsed.toString();
-    } catch {
-      return "[url]";
-    }
-  });
 }
 
 function classifyValidationError(error: unknown): ValidationResult["errorClass"] {
@@ -208,7 +194,7 @@ export async function validateGbfsAddition(
       ok: false,
       checkedAt,
       errorClass: classifyValidationError(error),
-      reason: scrubErrorMessage(error instanceof Error ? error.message : String(error)),
+      reason: scrubSecrets(error instanceof Error ? error.message : String(error)),
     };
   }
 }

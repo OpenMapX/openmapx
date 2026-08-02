@@ -1,5 +1,6 @@
 import { feedState } from "@openmapx/db-schema";
 import { db as defaultDb } from "../../db/index.js";
+import { scrubSecrets, scrubSecretsOptional } from "../../utils/scrub-secrets.js";
 
 /**
  * Per-feed staleness + consecutive-failure alerting.
@@ -34,6 +35,8 @@ export interface AlertLogger {
   info: (msg: string, extra?: Record<string, unknown>) => void;
   warn: (msg: string, extra?: Record<string, unknown>) => void;
   error: (msg: string, extra?: Record<string, unknown>) => void;
+  /** Optional. Receives unscrubbed diagnostics; off unless LOG_LEVEL=debug. */
+  debug?: (msg: string, extra?: Record<string, unknown>) => void;
 }
 
 export interface GithubIssueSink {
@@ -163,17 +166,21 @@ export async function detectStaleFeeds(opts: DetectStaleFeedsOptions = {}): Prom
  */
 export async function emitFeedAlerts(opts: EmitFeedAlertsOptions): Promise<void> {
   for (const alert of opts.alerts) {
+    const detail = {
+      ...alert.detail,
+      validationMessage: scrubSecretsOptional(alert.detail.validationMessage),
+    };
     const base = {
       region: alert.region,
       name: alert.name,
       kind: alert.kind,
-      ...alert.detail,
+      ...detail,
     };
     opts.log.warn("transit feed alert", base);
 
     if (!opts.githubIssue) continue;
     const title = githubIssueTitle(alert);
-    const body = githubIssueBody(alert);
+    const body = githubIssueBody({ ...alert, detail });
     try {
       if (opts.githubIssue.findOpenIssueByTitle) {
         const existing = await opts.githubIssue.findOpenIssueByTitle(title);
@@ -215,7 +222,9 @@ export interface PipelineFailureAlert {
 /**
  * Emit a pipeline-level failure alert. Always logs at error level; when a
  * GitHub sink is configured, opens (or reuses) a single issue per `trigger`
- * so a run that fails every night doesn't spam a new issue each time.
+ * so a run that fails every night doesn't spam a new issue each time. The
+ * reason is scrubbed before it reaches any sink; the original is available
+ * only at debug level in the data-manager's own container log.
  */
 export async function emitPipelineFailureAlert(opts: {
   alert: PipelineFailureAlert;
@@ -223,13 +232,20 @@ export async function emitPipelineFailureAlert(opts: {
   githubIssue?: GithubIssueSink;
 }): Promise<void> {
   const { alert, log, githubIssue } = opts;
+  const reason = scrubSecrets(alert.reason);
   const base = {
     trigger: alert.trigger,
     jobId: alert.jobId,
     failedStage: alert.failedStage,
-    reason: alert.reason,
+    reason,
   };
   log.error("transit pipeline failure", base);
+  if (reason !== alert.reason) {
+    log.debug?.("transit pipeline failure: unscrubbed reason", {
+      jobId: alert.jobId,
+      reason: alert.reason,
+    });
+  }
 
   if (!githubIssue) return;
   const title = `Transit pipeline failed: ${alert.trigger}`;
@@ -239,7 +255,7 @@ export async function emitPipelineFailureAlert(opts: {
     `- trigger: \`${alert.trigger}\``,
     `- jobId: \`${alert.jobId}\``,
     ...(alert.failedStage ? [`- failedStage: \`${alert.failedStage}\``] : []),
-    `- reason: \`${alert.reason}\``,
+    `- reason: \`${reason}\``,
   ].join("\n");
   try {
     if (githubIssue.findOpenIssueByTitle) {
