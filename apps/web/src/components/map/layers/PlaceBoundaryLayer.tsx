@@ -2,12 +2,10 @@
 
 import type { AreaGeometry, BBox } from "@openmapx/core";
 import { usePlaceDetails, usePlaceStore } from "@openmapx/core";
-import type maplibregl from "maplibre-gl";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useMap } from "@/lib/MapContext";
-import { addLayerInSlot } from "./layerStack";
-
-type GeoJSONSource = maplibregl.GeoJSONSource;
+import type { MapLayerGroup, SlottedLayer } from "./mapLayerGroup";
+import { useMapLayerGroup } from "./useMapLayerGroup";
 
 const SOURCE_ID = "place-boundary-source";
 const LAYER_FILL = "place-boundary-fill";
@@ -16,7 +14,7 @@ const LAYER_LINE = "place-boundary-line";
 // Muted red for the administrative boundary outline.
 const BOUNDARY_COLOR = "#A52714";
 
-const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
+const EMPTY = { type: "FeatureCollection" as const, features: [] };
 
 /** Derive a [west, south, east, north] extent from a Polygon/MultiPolygon. */
 function bboxFromGeometry(geometry: AreaGeometry): BBox {
@@ -46,7 +44,7 @@ function bboxFromGeometry(geometry: AreaGeometry): BBox {
  * key the place panel uses, so React Query dedupes it to a single request.
  */
 export function PlaceBoundaryLayer() {
-  const { mapRef, mapReady, styleVersion, fitBounds, flyTo } = useMap();
+  const { fitBounds, flyTo } = useMap();
   const selectedPlace = usePlaceStore((s) => s.selectedPlace);
 
   // SearchBar suppresses its fixed-zoom fly for area results (`type: "region"`,
@@ -70,33 +68,29 @@ export function PlaceBoundaryLayer() {
   const boundingBox = data?.boundingBox ?? null;
   const lastFittedId = useRef<string | null>(null);
 
-  // Add source + layers (once per style load).
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
+  const boundaryFeatures = useMemo(
+    () =>
+      boundary
+        ? {
+            type: "FeatureCollection" as const,
+            features: [{ type: "Feature" as const, properties: {}, geometry: boundary }],
+          }
+        : EMPTY,
+    [boundary],
+  );
 
-    const setup = () => {
-      if (!map.isStyleLoaded()) {
-        map.once("idle", setup);
-        return;
-      }
-      if (map.getSource(SOURCE_ID)) return;
-      map.addSource(SOURCE_ID, { type: "geojson", data: EMPTY });
-
-      addLayerInSlot(
-        map,
+  const group = useMemo<MapLayerGroup>(
+    () => ({
+      sources: { [SOURCE_ID]: { type: "geojson", data: boundaryFeatures } },
+      layers: [
         {
           id: LAYER_FILL,
           type: "fill",
           source: SOURCE_ID,
           paint: { "fill-color": BOUNDARY_COLOR, "fill-opacity": 0.05 },
+          slot: "area-overlays",
+          order: 7,
         },
-        "area-overlays",
-        7,
-      );
-      addLayerInSlot(
-        map,
         {
           id: LAYER_LINE,
           type: "line",
@@ -108,32 +102,19 @@ export function PlaceBoundaryLayer() {
             "line-opacity": 0.9,
             "line-dasharray": [1.5, 2],
           },
+          slot: "area-overlays",
+          order: 8,
         },
-        "area-overlays",
-        8,
-      );
-    };
+      ] satisfies SlottedLayer[],
+    }),
+    [boundaryFeatures],
+  );
+  useMapLayerGroup(group);
 
-    // Re-add after a style/theme swap (which wipes all sources): `styledata`
-    // re-fires on each style load and the in-setup `once("idle")` covers the
-    // mid-load case, whereas `once("load")` fires only once — so the boundary
-    // would vanish on a theme change.
-    setup();
-    map.on("styledata", setup);
-    return () => {
-      map.off("styledata", setup);
-    };
-  }, [mapRef, mapReady, styleVersion]);
-
-  // Sync the boundary geometry into the source whenever the selection changes.
+  // Camera behaviour is independent of drawing. Keep the once-per-selection
+  // guard so a render or style rebuild cannot fight subsequent user panning.
   useEffect(() => {
-    const map = mapRef.current;
-    const raw = map?.getSource(SOURCE_ID);
-    if (raw?.type !== "geojson") return;
-    const source = raw as GeoJSONSource;
-
     if (!boundary) {
-      source.setData(EMPTY);
       // Area selection whose admin boundary couldn't be fetched: SearchBar
       // skipped its fly, so move the camera here once so the search still lands.
       if (data && isAreaSelection && selectedCoords && placeDetailsId) {
@@ -145,12 +126,6 @@ export function PlaceBoundaryLayer() {
       return;
     }
 
-    source.setData({
-      type: "FeatureCollection",
-      features: [{ type: "Feature", properties: {}, geometry: boundary }],
-    });
-
-    // Fit to the area once per selection (don't fight subsequent user panning).
     const fitId = placeDetailsId;
     if (fitId && lastFittedId.current !== fitId) {
       lastFittedId.current = fitId;
@@ -170,7 +145,6 @@ export function PlaceBoundaryLayer() {
     data,
     isAreaSelection,
     selectedCoords,
-    mapRef,
     fitBounds,
     flyTo,
   ]);

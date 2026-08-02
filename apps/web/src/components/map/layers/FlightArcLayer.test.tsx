@@ -1,6 +1,6 @@
 import { useDirectionsStore, useFlightStore } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, createFakeMap, type FakeMap, render } from "@/test";
+import { act, createFakeMap, expectStyleSwapIsLossless, type FakeMap, render } from "@/test";
 
 let fake: FakeMap;
 const fitBounds = vi.fn();
@@ -17,7 +17,9 @@ vi.mock("@/lib/MapContext", () => ({
 import { FlightArcLayer } from "./FlightArcLayer";
 
 beforeEach(() => {
-  fake = createFakeMap();
+  fake = createFakeMap({
+    baseLayers: [{ id: "place-labels", type: "symbol" }],
+  });
   fitBounds.mockClear();
   useFlightStore.setState({ from: null, to: null });
   useDirectionsStore.setState({ mode: "driving" });
@@ -72,5 +74,19 @@ describe("FlightArcLayer", () => {
     const data = fake.state.sources.get("flight-arc-source")?.data as { features: unknown[] };
     expect(data.features).toEqual([]);
     expect(fitBounds).not.toHaveBeenCalled();
+  });
+
+  it("keeps the arc across a style change", () => {
+    act(() => {
+      useFlightStore.setState({
+        from: { iata: "BER", name: "Berlin", coordinates: [13.5, 52.36] },
+        to: { iata: "JFK", name: "New York", coordinates: [-73.78, 40.64] },
+      });
+      useDirectionsStore.setState({ mode: "flying" });
+    });
+    render(<FlightArcLayer />);
+    const before = fake.state.sources.get("flight-arc-source")?.data as { features: unknown[] };
+    expect(before.features.length).toBeGreaterThan(0);
+    expectStyleSwapIsLossless(fake);
   });
 });

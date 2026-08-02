@@ -1,8 +1,11 @@
 import { render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createFakeMap } from "@/test";
+import { createFakeMap, expectStyleSwapIsLossless } from "@/test";
 
-const fake = createFakeMap({ styleLoaded: true });
+const fake = createFakeMap({
+  styleLoaded: true,
+  baseLayers: [{ id: "place-labels", type: "symbol" }],
+});
 
 const drawn = {
   routes: [
@@ -170,5 +173,12 @@ describe("RouteTrafficLayer", () => {
       expect(Object.keys(route).sort()).toEqual(["geometry", "id"]);
       expect("alongMeters" in route).toBe(false);
     }
+  });
+
+  it("keeps the congestion bands across a style change", () => {
+    render(<RouteTrafficLayer />);
+    const before = fake.state.sources.get("route-traffic-source")?.data as { features: unknown[] };
+    expect(before.features.length).toBeGreaterThan(0);
+    expectStyleSwapIsLossless(fake);
   });
 });

@@ -115,6 +115,16 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     },
     getLayer: (id: string) => state.layers.get(id),
     addLayer: (layer: { id: string } & Record<string, unknown>, beforeId?: string) => {
+      state.paint.delete(layer.id);
+      state.layout.delete(layer.id);
+      state.filters.delete(layer.id);
+      if (layer.paint && typeof layer.paint === "object") {
+        state.paint.set(layer.id, layer.paint as Record<string, unknown>);
+      }
+      if (layer.layout && typeof layer.layout === "object") {
+        state.layout.set(layer.id, layer.layout as Record<string, unknown>);
+      }
+      if (layer.filter !== undefined) state.filters.set(layer.id, layer.filter);
       if (beforeId === undefined || !state.layers.has(beforeId)) {
         state.layers.set(layer.id, layer);
         return;
@@ -126,6 +136,9 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     },
     removeLayer: (id: string) => {
       state.layers.delete(id);
+      state.paint.delete(id);
+      state.layout.delete(id);
+      state.filters.delete(id);
     },
     moveLayer: (layerId: string, beforeId?: string) => {
       state.movedLayers.push({ layerId, beforeId });
