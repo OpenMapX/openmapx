@@ -1,5 +1,6 @@
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { assertValidSecretKey } from "@openmapx/core/services/secret-key";
 
 /** Directory (under infra/docker) holding the rendered per-service secret files. */
 export const GENERATED_SECRETS_DIR = ".generated-secrets";
@@ -35,6 +36,10 @@ export function regenerateServiceSecretFiles(
     const dir = join(root, serviceId);
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     for (const [key, value] of Object.entries(secrets)) {
+      // Last line of defence: keys reaching here come from the vault, which can
+      // still hold a row stored under an older manifest. A key must never be
+      // able to escape this service's directory.
+      assertValidSecretKey(key);
       const file = join(dir, key);
       writeFileSync(file, value, { mode: 0o444 });
       chmodSync(file, 0o444);

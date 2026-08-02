@@ -48,6 +48,13 @@ describe("regenerateServiceSecretFiles", () => {
     expect(readFileSync(file("ingest", "NY_511_API_KEY"), "utf8")).toBe("new");
   });
 
+  it("throws on a traversal-shaped key instead of writing outside the service directory", () => {
+    expect(() =>
+      regenerateServiceSecretFiles(infraDir, new Map([["ingest", { "../../escaped": "x" }]])),
+    ).toThrow(/Invalid credential key/);
+    expect(existsSync(join(infraDir, "escaped"))).toBe(false);
+  });
+
   it("writes secret files world-readable (0444) so a non-root container user can read the Compose-mounted secret", () => {
     regenerateServiceSecretFiles(infraDir, new Map([["ingest", { NY_511_API_KEY: "abc" }]]));
     expect(statSync(file("ingest", "NY_511_API_KEY")).mode & 0o777).toBe(0o444);

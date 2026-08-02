@@ -58,6 +58,7 @@ export {
   checkManifestSandbox,
   isComposeVarReference,
 } from "./sandbox-policy";
+export { assertValidSecretKey, isValidSecretKey, SECRET_KEY_RE } from "./secret-key";
 export { computeServiceSecurityRating, type ServiceSecurityRating } from "./security-rating";
 export {
   buildAppApiServiceEnv,

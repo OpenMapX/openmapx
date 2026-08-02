@@ -31,6 +31,10 @@ export function createRepoVitestAliases(repoRoot: string) {
       replacement: resolve(repoRoot, "packages/core/src/feed-id.ts"),
     },
     {
+      find: /^@openmapx\/core\/services\/secret-key$/,
+      replacement: resolve(repoRoot, "packages/core/src/services/secret-key.ts"),
+    },
+    {
       find: /^@openmapx\/core$/,
       replacement: resolve(repoRoot, "packages/core/src/index.ts"),
     },

@@ -31,6 +31,82 @@ describe("service manifest ownsSchema field", () => {
   });
 });
 
+describe("service manifest secret field names", () => {
+  it("accepts a normal secret key", () => {
+    const result = validateServiceManifest(
+      {
+        ...minimalManifest,
+        configSchema: {
+          properties: {
+            NY_511_API_KEY: { type: "string", "x-openmapx-secret": true },
+          },
+        },
+      },
+      { firstParty: false },
+    );
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it("rejects a traversal-shaped secret key", () => {
+    const result = validateServiceManifest(
+      {
+        ...minimalManifest,
+        configSchema: {
+          properties: {
+            "../../evil": { type: "string", "x-openmapx-secret": true },
+          },
+        },
+      },
+      { firstParty: false },
+    );
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("secret field name"))).toBe(true);
+  });
+
+  it("rejects a secret key containing a slash", () => {
+    const result = validateServiceManifest(
+      {
+        ...minimalManifest,
+        configSchema: {
+          properties: {
+            "a/b": { type: "string", "x-openmapx-secret": true },
+          },
+        },
+      },
+      { firstParty: false },
+    );
+    expect(result.valid).toBe(false);
+  });
+
+  it("ignores non-secret fields", () => {
+    const result = validateServiceManifest(
+      {
+        ...minimalManifest,
+        configSchema: { properties: { "weird.key": { type: "string" } } },
+      },
+      { firstParty: false },
+    );
+    expect(result.valid).toBe(true);
+  });
+
+  it("accepts the un-wrapped configSchema form", () => {
+    const result = validateServiceManifest(
+      {
+        ...minimalManifest,
+        configSchema: { NY_511_API_KEY: { type: "string", "x-openmapx-secret": true } },
+      },
+      { firstParty: false },
+    );
+    expect(result.valid).toBe(true);
+  });
+
+  it("validates a manifest without configSchema for backward compatibility", () => {
+    const result = validateServiceManifest({ ...minimalManifest }, { firstParty: false });
+    expect(result.valid).toBe(true);
+  });
+});
+
 describe("service manifest gpu field", () => {
   it("accepts an optional container.gpu reservation", () => {
     const manifest = serviceManifestSchema.parse({

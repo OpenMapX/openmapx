@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
+import { isValidSecretKey } from "@openmapx/core/services/secret-key";
 import {
   getSharedMobilityOperationsState,
   type SharedMobilityCategory,
@@ -419,6 +420,10 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         reply.status(400);
         return { error: "Secret vault not configured — set OPENMAPX_SECRETS_KEY" };
       }
+      if (!isValidSecretKey(req.params.key)) {
+        reply.status(400);
+        return { error: "Invalid credential key" };
+      }
       const field = getSecretFields(svc.manifest.configSchema).find(
         (f) => f.key === req.params.key,
       );
@@ -453,6 +458,25 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       if (!svc) {
         reply.status(404);
         return { error: "Service not found" };
+      }
+      if (!isValidSecretKey(req.params.key)) {
+        reply.status(400);
+        return { error: "Invalid credential key" };
+      }
+      // Mirror the PUT handler's declared-field check. A stored key can
+      // legitimately outlive its declaration (the service's manifest changed
+      // after the operator set it) and such rows still render into the secret
+      // files, so removal must stay possible for anything actually held in the
+      // vault — but not for a key that is neither declared nor stored.
+      const declared = getSecretFields(svc.manifest.configSchema).some(
+        (f) => f.key === req.params.key,
+      );
+      if (!declared) {
+        const stored = await listServiceSecrets(svc.manifest.id);
+        if (!stored.some((s) => s.key === req.params.key)) {
+          reply.status(400);
+          return { error: `"${req.params.key}" is not a declared secret field of this service` };
+        }
       }
       const adminSession = getAdminSession(req);
       await deleteServiceSecret(svc.manifest.id, req.params.key);

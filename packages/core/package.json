@@ -26,6 +26,10 @@
       "types": "./src/feed-id.ts",
       "default": "./src/feed-id.ts"
     },
+    "./services/secret-key": {
+      "types": "./src/services/secret-key.ts",
+      "default": "./src/services/secret-key.ts"
+    },
     "./utils/poiConflation": {
       "types": "./src/utils/poiConflation.ts",
       "default": "./src/utils/poiConflation.ts"

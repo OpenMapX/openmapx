@@ -1,6 +1,7 @@
 import z from "zod/v4";
 import { type CapabilityWarning, collectCapabilityWarnings } from "./capabilities";
 import { checkManifestSandbox, isComposeVarReference } from "./sandbox-policy";
+import { isValidSecretKey, SECRET_KEY_RE } from "./secret-key";
 import type { ManifestProvenance, ServiceManifest } from "./types";
 
 const IMAGE_REGEX = /^[a-z0-9]([a-z0-9._\-/])*$/;
@@ -372,6 +373,25 @@ export function validateServiceManifest(
   const m = result.data as ServiceManifest;
   const errors: string[] = [];
   errors.push(...checkManifestSandbox(m, provenance));
+
+  // A secret field's key name becomes a filename under the generated-secrets
+  // directory, a Docker secret target and a `<KEY>_FILE` env name at render
+  // time. Manifests can be third-party, so a path-shaped or otherwise unsafe
+  // key must never load — rejecting here keeps every downstream consumer from
+  // having to re-derive the rule.
+  const configProps = m.configSchema
+    ? ((m.configSchema.properties ?? m.configSchema) as Record<string, unknown>)
+    : {};
+  for (const [key, def] of Object.entries(configProps)) {
+    if (key === "type" || key === "properties") continue;
+    if (!def || typeof def !== "object") continue;
+    if ((def as Record<string, unknown>)["x-openmapx-secret"] !== true) continue;
+    if (!isValidSecretKey(key)) {
+      errors.push(
+        `configSchema: secret field name "${key}" must match ${SECRET_KEY_RE} (1-64 characters of letters, digits, "_" or "-")`,
+      );
+    }
+  }
 
   // A service can ship multiple `produces` entries for the same `type` only
   // when each carries a distinct `instance` id. Same (type, instance) pair

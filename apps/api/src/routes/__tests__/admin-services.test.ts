@@ -440,6 +440,17 @@ describe("service credentials", () => {
     expect(mockSetServiceSecret).not.toHaveBeenCalled();
   });
 
+  it("PUT rejects a percent-encoded traversal key", async () => {
+    const res = await app.inject({
+      method: "PUT",
+      url: "/admin/services/openconditions-ingest/credentials/..%2F..%2Fescaped",
+      payload: { value: "x" },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(mockSetServiceSecret).not.toHaveBeenCalled();
+  });
+
   it("PUT rejects when the secret vault is not configured", async () => {
     mockIsSecretsConfigured.mockReturnValue(false);
 
@@ -469,5 +480,41 @@ describe("service credentials", () => {
     expect(mockWriteAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: "service.credential.delete" }),
     );
+  });
+
+  it("DELETE rejects a percent-encoded traversal key", async () => {
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/admin/services/openconditions-ingest/credentials/..%2F..%2Fescaped",
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(mockDeleteServiceSecret).not.toHaveBeenCalled();
+  });
+
+  it("DELETE rejects a key that is neither declared nor stored", async () => {
+    mockListServiceSecrets.mockResolvedValue([]);
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/admin/services/openconditions-ingest/credentials/RATE_LIMIT_MAX",
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(mockDeleteServiceSecret).not.toHaveBeenCalled();
+  });
+
+  it("DELETE still removes a stored key the manifest no longer declares", async () => {
+    mockListServiceSecrets.mockResolvedValue([
+      { key: "LEGACY_KEY", updatedAt: new Date(), updatedBy: "u1" },
+    ]);
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/admin/services/openconditions-ingest/credentials/LEGACY_KEY",
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(mockDeleteServiceSecret).toHaveBeenCalledWith("openconditions-ingest", "LEGACY_KEY");
   });
 });
