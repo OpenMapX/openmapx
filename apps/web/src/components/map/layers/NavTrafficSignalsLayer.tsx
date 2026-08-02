@@ -6,6 +6,7 @@ import { useMap } from "@/lib/MapContext";
 import { useNavTrafficSignals } from "@/lib/navigation/useNavTrafficSignals";
 import { loadTrafficLightImage, TRAFFIC_LIGHT_IMAGE_ID } from "@/lib/trafficLightMarker";
 import { addLayerInSlot } from "./layerStack";
+import { useStyleSyncedSetup } from "./useStyleSyncedSetup";
 
 type GeoJSONSource = maplibregl.GeoJSONSource;
 
@@ -14,17 +15,12 @@ export const NAV_TRAFFIC_SIGNALS_LAYER_ID = "nav-traffic-signals";
 const LAYER = NAV_TRAFFIC_SIGNALS_LAYER_ID;
 
 export function NavTrafficSignalsLayer() {
-  const { mapRef, mapReady, styleVersion } = useMap();
+  const { mapRef } = useMap();
   const signals = useNavTrafficSignals();
 
-  // Create source + symbol layer once per style.
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
+  // Create source + symbol layer once per style, self-healing across a swap.
+  const styleEpoch = useStyleSyncedSetup(SOURCE, (map) => {
     loadTrafficLightImage(map);
-    if (map.getSource(SOURCE)) return;
-
     map.addSource(SOURCE, {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
@@ -45,13 +41,13 @@ export function NavTrafficSignalsLayer() {
       "nav-top",
       0,
     );
-  }, [mapRef, mapReady, styleVersion]);
+  });
 
-  // Push signal points into the source. `styleVersion` is a required dep, not
+  // Push signal points into the source. `styleEpoch` is a required dep, not
   // redundant work: a full style swap (basemap / theme / satellite) wipes the
-  // source, so the icons must be re-pushed once the create-effect re-adds it.
+  // source, so the icons must be re-pushed once it is re-added empty.
   useEffect(() => {
-    void styleVersion;
+    void styleEpoch;
     const map = mapRef.current;
     if (!map) return;
     const raw = map.getSource(SOURCE);
@@ -65,7 +61,7 @@ export function NavTrafficSignalsLayer() {
         geometry: { type: "Point", coordinates: coord },
       })),
     });
-  }, [mapRef, signals, styleVersion]);
+  }, [mapRef, signals, styleEpoch]);
 
   return null;
 }

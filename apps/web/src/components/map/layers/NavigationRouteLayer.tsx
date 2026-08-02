@@ -10,6 +10,7 @@ import { ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
 import { useMapAttributions } from "@/lib/useMapAttributions";
 import { addLayerInSlot } from "./layerStack";
 import { buildNavRouteLine, splitNavRoute } from "./navRouteSplit";
+import { useStyleSyncedSetup } from "./useStyleSyncedSetup";
 
 type GeoJSONSource = maplibregl.GeoJSONSource;
 
@@ -24,7 +25,7 @@ const ALT = "nav-route-alts";
 const PROPOSED = "nav-route-proposed";
 
 export function NavigationRouteLayer() {
-  const { mapRef, mapReady, styleVersion } = useMap();
+  const { mapRef } = useMap();
   const status = useNavigationStore((s) => s.status);
   const route = useNavigationStore((s) => s.route);
   const routes = useNavigationStore((s) => s.routes);
@@ -51,12 +52,7 @@ export function NavigationRouteLayer() {
   // deliberately sit above the ones `RouteLayer` uses in the same two slots:
   // equal values would tie, and a tie is resolved by whichever component
   // registered first — the very race the slot registry exists to remove.
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-    if (map.getSource(SOURCE)) return;
-
+  const styleEpoch = useStyleSyncedSetup(SOURCE, (map) => {
     map.addSource(ALT_SOURCE, {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
@@ -143,10 +139,13 @@ export function NavigationRouteLayer() {
       "route-active",
       4,
     );
-  }, [mapRef, mapReady, styleVersion]);
+  });
 
   // Update the active route's split geometry as the user moves.
   useEffect(() => {
+    // A style swap re-adds this source empty, so the geometry has to be pushed
+    // again — the epoch is the signal that happened.
+    void styleEpoch;
     const map = mapRef.current;
     const raw = map?.getSource(SOURCE);
     if (raw?.type !== "geojson") return;
@@ -163,11 +162,12 @@ export function NavigationRouteLayer() {
       navLine ?? undefined,
     );
     source.setData({ type: "FeatureCollection", features });
-  }, [mapRef, status, route, navLine, progress?.alongMeters]);
+  }, [mapRef, status, route, navLine, progress?.alongMeters, styleEpoch]);
 
   // Draw the (dimmed) alternative routes, each tagged with its index so a tap
   // can switch to it.
   useEffect(() => {
+    void styleEpoch;
     const map = mapRef.current;
     const raw = map?.getSource(ALT_SOURCE);
     if (raw?.type !== "geojson") return;
@@ -202,7 +202,7 @@ export function NavigationRouteLayer() {
       type: "FeatureCollection",
       features: [...altFeatures, ...proposedFeature],
     });
-  }, [mapRef, status, routes, activeRouteIndex, fasterRoute]);
+  }, [mapRef, status, routes, activeRouteIndex, fasterRoute, styleEpoch]);
 
   // Tap an alternative to switch to it; show a pointer cursor over one.
   useEffect(() => {

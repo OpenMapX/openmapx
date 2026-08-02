@@ -105,6 +105,15 @@ export function MapCanvas() {
           if (!destroyed) notifyMapReady();
         });
       }
+
+      // Every later style load — a dark/light swap, a basemap switch — bumps the
+      // counter layers rebuild on. Registering it once here rather than per swap
+      // is what makes that unconditional: a `once` attached after `setStyle` is
+      // called can miss a style that resolves from cache, and the counter then
+      // never moves for the rest of the session.
+      map.on("style.load", () => {
+        if (!destroyed) notifyStyleReload();
+      });
     };
 
     // If geolocation permission is already granted, initialize the map centered
@@ -142,7 +151,17 @@ export function MapCanvas() {
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [env, mapRef, notifyMapReady, setBearing, setCenter, setPitch, setUserLocation, setZoom]);
+  }, [
+    env,
+    mapRef,
+    notifyMapReady,
+    notifyStyleReload,
+    setBearing,
+    setCenter,
+    setPitch,
+    setUserLocation,
+    setZoom,
+  ]);
 
   // Swap map tile style when dark/light mode changes
   const initialStyleRef = useRef(mapStyle);
@@ -159,13 +178,14 @@ export function MapCanvas() {
         : loadMaptilerStyle(mapStyle, env);
     loadStyle
       .then((s) => {
+        // The persistent `style.load` listener registered at map creation bumps
+        // styleVersion once the new style lands.
         map.setStyle(s as maplibregl.StyleSpecification);
-        map.once("style.load", () => notifyStyleReload());
       })
       .catch((err) => {
         console.error("Failed to swap map style", err);
       });
-  }, [env, mapStyle, variant, mapRef, mapReady, notifyStyleReload]);
+  }, [env, mapStyle, variant, mapRef, mapReady]);
 
   // Update map label language when locale changes
   useEffect(() => {
