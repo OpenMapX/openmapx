@@ -179,7 +179,7 @@ export function planAnchorMoves(
       crossedSymbol = true;
       beforeId = symbolId;
     }
-    moves.push({ id: registration.id, beforeId: beforeId ?? (belowLabels ? symbolId : undefined) });
+    moves.push({ id: registration.id, beforeId });
     beforeId = registration.id;
   }
   return moves;

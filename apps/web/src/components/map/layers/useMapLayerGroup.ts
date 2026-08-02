@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { useCallback, useEffect, useId, useRef } from "react";
 import { useMap } from "@/lib/MapContext";
+import { clearGroupError, reportGroupError } from "@/lib/map/mapLayerDiagnostics";
 import { clearDesired, recordDesired } from "./desiredStack";
-import { applyGroup, emptyApplied, type MapLayerGroup } from "./mapLayerGroup";
+import { type AppliedGroup, applyGroup, emptyApplied, type MapLayerGroup } from "./mapLayerGroup";
 
 /**
  * Draw a group of sources and layers, and keep drawing it across style changes.
@@ -29,45 +30,66 @@ export function useMapLayerGroup(group: MapLayerGroup | null): void {
   groupRef.current = group;
   const appliedRef = useRef(emptyApplied());
 
+  // One bad descriptor must not take the map down with it. Without this, a spec
+  // naming a source the group does not declare throws out of a React effect,
+  // which unmounts the whole tree — every other layer included — rather than
+  // leaving one layer blank.
+  const apply = useCallback(
+    (from: AppliedGroup) => {
+      const map = mapRef.current;
+      if (!map) return;
+      try {
+        appliedRef.current = applyGroup(map, groupRef.current, from);
+      } catch (error) {
+        // Keep the previous applied state: it still describes what is on the
+        // map, so the next pass reconciles from something true rather than from
+        // a half-applied guess.
+        reportGroupError(key, error);
+        return;
+      }
+      clearGroupError(key);
+      recordDesired(key, {
+        sourceIds: appliedRef.current.sourceIds,
+        layerIds: appliedRef.current.layerIds,
+      });
+    },
+    [key, mapRef],
+  );
+
   // No dependency array: the descriptor can change on any render, and a pass over
   // an unchanged one is a few map lookups and reference comparisons.
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-    appliedRef.current = applyGroup(map, groupRef.current, appliedRef.current);
-    recordDesired(key, {
-      sourceIds: appliedRef.current.sourceIds,
-      layerIds: appliedRef.current.layerIds,
-    });
+    if (!mapReady) return;
+    apply(appliedRef.current);
   });
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    const rebuild = () => {
-      // Everything this group put on the map is gone, so nothing is "already
-      // applied" — a full recreate from the latest descriptor is the only correct
-      // starting point.
-      appliedRef.current = applyGroup(map, groupRef.current, emptyApplied());
-      recordDesired(key, {
-        sourceIds: appliedRef.current.sourceIds,
-        layerIds: appliedRef.current.layerIds,
-      });
-    };
+    // Everything this group put on the map is gone, so nothing is "already
+    // applied" — a full recreate from the latest descriptor is the only correct
+    // starting point.
+    const rebuild = () => apply(emptyApplied());
 
     map.on("style.load", rebuild);
     return () => {
       map.off("style.load", rebuild);
     };
-  }, [key, mapRef, mapReady]);
+  }, [apply, mapRef, mapReady]);
 
   useEffect(() => {
     return () => {
+      // Deregister first, and unconditionally. `MapCanvas` nulls the shared ref
+      // in its own cleanup, and it is a sibling of the layers rather than their
+      // parent — so when the tree comes down it can run first and leave every
+      // layer unmounting with no map. Skipping this on that path would strand
+      // the entry, and the next map instance would report it as wrongly missing.
+      clearDesired(key);
+      clearGroupError(key);
       const map = mapRef.current;
       if (!map) return;
       appliedRef.current = applyGroup(map, null, appliedRef.current);
-      clearDesired(key);
     };
   }, [key, mapRef]);
 }

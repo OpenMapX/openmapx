@@ -3,6 +3,7 @@
 
 export * from "@testing-library/react";
 export { default as userEvent } from "@testing-library/user-event";
+export { type CapturedConsoleErrors, captureConsoleErrors } from "./consoleErrors";
 export {
   type CreateFakeMapOptions,
   createFakeMap,

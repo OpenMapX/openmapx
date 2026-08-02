@@ -47,8 +47,10 @@ export function MapLayerStack() {
       const now = performance.now();
       if (now - last < 2000) return;
       last = now;
-      const missing = findMissingLayers(map);
-      if (missing.length > 0) reportMissingLayers(missing);
+      // Reported unconditionally, empty list included: that is what clears the
+      // dedup set when a layer comes back, so a second disappearance is not
+      // swallowed as already-reported.
+      reportMissingLayers(findMissingLayers(map));
     };
 
     map.on("idle", check);
