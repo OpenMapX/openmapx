@@ -456,9 +456,6 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       return { error: "a predicted bake is already running" };
     }
     bakeInFlight = true;
-    // Fire-and-forget: a real bake runs for hours (production measured 06:00 to
-    // 10:18), so holding the request open would only guarantee a client or
-    // proxy timeout. The result lands in the log the cron already writes to.
     void opts
       .bakePredicted()
       .then((result) => {
