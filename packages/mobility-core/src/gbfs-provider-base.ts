@@ -6,6 +6,7 @@
 import type { BoundingBox, LngLat } from "@openmapx/core";
 import { bboxContains } from "@openmapx/core";
 import { cacheGet, cacheSet, TTL } from "./cache.js";
+import { isEnturGbfsUrl } from "./entur-mobility.js";
 import {
   filterCatalogByBbox,
   loadCatalog,
@@ -56,7 +57,6 @@ const EXCLUDED_GBFS_PREFIXES = [
 // Redis cache key prefix and TTL for per-system station/vehicle data
 const SYSTEM_CACHE_PREFIX = "cache:gbfs:system:";
 const SYSTEM_CACHE_TTL = TTL.sharedMobility.stations; // 120s
-const ENTUR_GBFS_HOST = "api.entur.io/mobility/v2/gbfs/";
 const ENTUR_CLIENT_NAME = "openmapx-server";
 const SWISS_SHARED_MOBILITY_SYSTEM_ID = "sharedmobility.ch";
 const SWISS_SHARED_MOBILITY_DISCOVERY_URL = "https://sharedmobility.ch/gbfs.json";
@@ -490,7 +490,7 @@ async function fetchSystemData(
 }
 
 function getGbfsDiscoveryHeaders(autoDiscoveryUrl: string): Record<string, string> | undefined {
-  if (autoDiscoveryUrl.includes(ENTUR_GBFS_HOST)) {
+  if (isEnturGbfsUrl(autoDiscoveryUrl)) {
     return { "ET-Client-Name": ENTUR_CLIENT_NAME };
   }
   return undefined;

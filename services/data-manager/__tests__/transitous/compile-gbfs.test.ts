@@ -3,15 +3,22 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
+
+import { lookup as dnsLookup } from "node:dns/promises";
 import { run, validateGbfsAddition } from "../../src/jobs/transitous/compile-gbfs.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import { StateStore } from "../../src/state.js";
 
 const originalFetch = globalThis.fetch;
 const originalEnabled = process.env.MOTIS_GBFS_CATALOG_ENABLED;
+const lookupMock = dnsLookup as unknown as ReturnType<typeof vi.fn>;
+const PUBLIC = [{ address: "93.184.216.34", family: 4 }];
 let tmp: string | undefined;
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  lookupMock.mockReset();
   if (originalEnabled === undefined) delete process.env.MOTIS_GBFS_CATALOG_ENABLED;
   else process.env.MOTIS_GBFS_CATALOG_ENABLED = originalEnabled;
   if (tmp) rmSync(tmp, { recursive: true, force: true });
@@ -34,6 +41,7 @@ function json(value: unknown): Response {
 
 describe("bounded GBFS candidate validation", () => {
   it("accepts v2 station inventory and resolves required subresources", async () => {
+    lookupMock.mockResolvedValue(PUBLIC);
     globalThis.fetch = vi.fn(async (input: unknown) => {
       const url = String(input);
       if (url.endsWith("gbfs.json")) {
@@ -58,6 +66,7 @@ describe("bounded GBFS candidate validation", () => {
   });
 
   it("accepts v3 vehicle inventory and rejects a discovery with no inventory", async () => {
+    lookupMock.mockResolvedValue(PUBLIC);
     globalThis.fetch = vi.fn(async (input: unknown) => {
       const url = String(input);
       return url.endsWith("gbfs.json")
@@ -75,6 +84,7 @@ describe("bounded GBFS candidate validation", () => {
     globalThis.fetch = vi.fn(async () =>
       json({ version: "2.3", data: { en: { feeds: [] } } }),
     ) as typeof fetch;
+    lookupMock.mockResolvedValue(PUBLIC);
     expect(await validateGbfsAddition(ADDITION, 1000, "now")).toMatchObject({
       ok: false,
       reason: expect.stringContaining("neither"),
@@ -82,14 +92,24 @@ describe("bounded GBFS candidate validation", () => {
   });
 
   it("reports malformed JSON and timeouts without throwing across providers", async () => {
+    lookupMock.mockResolvedValue(PUBLIC);
     globalThis.fetch = vi.fn(async () => new Response("not-json")) as typeof fetch;
     expect(await validateGbfsAddition(ADDITION, 1000, "now")).toMatchObject({ ok: false });
+  });
+
+  it("fails a candidate whose discovery host resolves to a private address", async () => {
+    lookupMock.mockResolvedValue([{ address: "127.0.0.1", family: 4 }]);
+    globalThis.fetch = vi.fn();
+    const result = await validateGbfsAddition(ADDITION, 1000, "2026-07-30T00:00:00Z");
+    expect(result.ok).toBe(false);
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it.each([
     "build",
     "mirror",
   ] as const)("injects the same pinned, verified additions in %s mode", async (source) => {
+    lookupMock.mockResolvedValue(PUBLIC);
     tmp = mkdtempSync(join(tmpdir(), "openmapx-compile-gbfs-"));
     const catalog = join(tmp, "data", ".transitous-catalog");
     mkdirSync(join(tmp, "infra", "docker"), { recursive: true });

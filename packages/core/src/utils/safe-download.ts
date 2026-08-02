@@ -2,8 +2,14 @@ import { lookup as dnsLookup } from "node:dns/promises";
 import { createWriteStream } from "node:fs";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { type FetchWithRedirectsOptions, fetchWithRedirects } from "./fetchWithRedirects";
-import { validatePublicUrl } from "./validate-url";
+import {
+  type FetchWithRedirectsOptions,
+  fetchWithRedirects,
+  hostMatchesAllowlist,
+} from "./fetchWithRedirects";
+import { assertHttpProtocol, validatePublicUrl } from "./validate-url";
+
+export { hostMatchesAllowlist } from "./fetchWithRedirects";
 
 export interface SafeDownloadOptions {
   /** Absolute path of the file to write. */
@@ -195,6 +201,17 @@ export interface SafeFetchJsonOptions {
   maxRedirects?: number;
   /** Extra headers (e.g. `User-Agent`) to send on the first request. */
   headers?: Record<string, string>;
+  /**
+   * Hostnames (exact or "*.suffix") permitted to resolve to a private address.
+   * Defaults to `privateFeedHostAllowlist()` when omitted.
+   */
+  allowPrivateHosts?: string[];
+  /**
+   * Restrict redirect targets to these hosts. Pass this whenever the request
+   * carries a credential header — otherwise a 302 from an otherwise-trusted
+   * host hands the credential to whatever host the Location names.
+   */
+  allowedRedirectHosts?: string[];
 }
 
 /**
@@ -212,6 +229,51 @@ async function assertPublicHostOrThrow(hostname: string): Promise<void> {
 }
 
 /**
+ * Hostnames an operator has explicitly declared safe to fetch even though they
+ * resolve to a private address. Self-hosters legitimately run feed mirrors on a
+ * LAN or CGNAT address; a hard public-IP requirement would break them, so the
+ * bypass is opt-in and per host rather than global.
+ *
+ * Format: comma-separated exact hostnames or "*.suffix" wildcards.
+ */
+export function privateFeedHostAllowlist(): string[] {
+  const raw = process.env.OPENMAPX_ALLOW_PRIVATE_FEED_HOSTS;
+  if (!raw || raw.trim() === "") return [];
+  return raw
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry.length > 0);
+}
+
+function isDeclaredPrivateHost(hostname: string, allowPrivateHosts: string[]): boolean {
+  const lower = hostname.toLowerCase();
+  return allowPrivateHosts.some((allowed) => hostMatchesAllowlist(lower, allowed));
+}
+
+/**
+ * Gate a fetch target: always HTTP(S), and public unless the operator declared
+ * this specific host as an allowed private target.
+ */
+async function assertFetchTargetAllowed(url: string, allowPrivateHosts: string[]): Promise<void> {
+  const parsed = assertHttpProtocol(url);
+  if (isDeclaredPrivateHost(parsed.hostname, allowPrivateHosts)) return;
+  validatePublicUrl(url);
+  await assertPublicHostOrThrow(parsed.hostname);
+}
+
+/**
+ * Public form of the fetch-target gate, for callers that issue their own
+ * request (streaming a large body, custom headers) but still need the URL
+ * checked first. Same rule as `safeFetchJson`.
+ */
+export async function assertFeedUrlAllowed(
+  url: string,
+  allowPrivateHosts: string[] = privateFeedHostAllowlist(),
+): Promise<void> {
+  await assertFetchTargetAllowed(url, allowPrivateHosts);
+}
+
+/**
  * Fetch and JSON-parse a URL with the same SSRF protection as `safeDownload`:
  * textual public-URL validation, DNS resolution of the initial and final host
  * (rejecting private/link-local/reserved addresses), per-redirect re-validation
@@ -226,17 +288,23 @@ export async function safeFetchJson<T = unknown>(
   const maxBytes = opts.maxBytes ?? 5 * 1024 * 1024;
   const timeoutMs = opts.timeoutMs ?? 15_000;
   const maxRedirects = opts.maxRedirects ?? 5;
+  const allowPrivateHosts = opts.allowPrivateHosts ?? privateFeedHostAllowlist();
 
-  validatePublicUrl(url);
+  await assertFetchTargetAllowed(url, allowPrivateHosts);
   const { hostname } = new URL(url);
-  await assertPublicHostOrThrow(hostname);
 
   const response = await fetchWithRedirects(url, {
     headers: opts.headers,
     maxRedirects,
     timeoutMs,
+    allowedRedirectHosts: opts.allowedRedirectHosts,
     validateRedirectUrl: (nextUrl) => {
-      validatePublicUrl(nextUrl.toString());
+      const next = nextUrl.hostname;
+      if (!isDeclaredPrivateHost(next, allowPrivateHosts)) {
+        validatePublicUrl(nextUrl.toString());
+      } else {
+        assertHttpProtocol(nextUrl.toString());
+      }
       return true;
     },
   });
@@ -253,7 +321,7 @@ export async function safeFetchJson<T = unknown>(
   const finalUrl = response.url || url;
   const finalHostname = new URL(finalUrl).hostname;
   if (finalHostname !== hostname) {
-    await assertPublicHostOrThrow(finalHostname);
+    await assertFetchTargetAllowed(finalUrl, allowPrivateHosts);
   }
 
   const contentLengthHeader = response.headers.get("content-length");

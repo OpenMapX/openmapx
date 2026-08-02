@@ -28,7 +28,11 @@ vi.mock("../src/gbfs-catalog.js", () => ({
   }),
 }));
 
-import { buildEnturGeofencingMapContext, enrichEnturMobilityItems } from "../src/entur-mobility.js";
+import {
+  buildEnturGeofencingMapContext,
+  enrichEnturMobilityItems,
+  isEnturGbfsUrl,
+} from "../src/entur-mobility.js";
 import { filterCatalogByBbox, loadCatalog } from "../src/gbfs-catalog.js";
 
 afterEach(() => {
@@ -69,6 +73,24 @@ const VOI_OSLO_CATALOG_ENTRY = {
   url: "https://example.com/voi-oslo",
   autoDiscoveryUrl: "https://api.entur.io/mobility/v2/gbfs/v3/voi-oslo/gbfs",
 };
+
+describe("isEnturGbfsUrl", () => {
+  it("accepts the real Entur GBFS host", () => {
+    expect(isEnturGbfsUrl("https://api.entur.io/mobility/v2/gbfs/v3/voioslo/gbfs")).toBe(true);
+  });
+
+  it("rejects a lookalike host carrying the path as a prefix", () => {
+    expect(isEnturGbfsUrl("https://evil.example/api.entur.io/mobility/v2/gbfs/x")).toBe(false);
+  });
+
+  it("rejects a suffixed lookalike domain", () => {
+    expect(isEnturGbfsUrl("https://api.entur.io.evil.example/mobility/v2/gbfs/x")).toBe(false);
+  });
+
+  it("rejects a malformed URL", () => {
+    expect(isEnturGbfsUrl("not a url")).toBe(false);
+  });
+});
 
 describe("buildEnturGeofencingMapContext", () => {
   it("clips returned geometry to the requested bbox", async () => {

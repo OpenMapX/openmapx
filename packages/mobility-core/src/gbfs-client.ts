@@ -5,6 +5,11 @@
 
 import { USER_AGENT } from "@openmapx/core";
 import {
+  hostMatchesAllowlist,
+  privateFeedHostAllowlist,
+  safeFetchJson,
+} from "@openmapx/core/utils/safe-download";
+import {
   type GbfsDiscoveryDocument,
   type GbfsV23FreeBikeStatus,
   type GbfsV23StationInformation,
@@ -37,6 +42,16 @@ const BASE_HEADERS: Record<string, string> = {
   Accept: "application/json",
 };
 
+/**
+ * Per-document ceiling for a single GBFS feed. The largest real feeds seen in
+ * the catalog (nationwide vehicle_status documents) are a few megabytes, so
+ * this leaves roughly an order of magnitude of headroom while still bounding
+ * what one hostile or broken operator can make this process allocate.
+ * Exceeding it drops that one feed with a warning; it never truncates a
+ * document.
+ */
+const MAX_FEED_BYTES = 32 * 1024 * 1024;
+
 type RawStationStatus =
   | GbfsV23StationStatus["data"]["stations"][number]
   | GbfsV30StationStatus["data"]["stations"][number];
@@ -50,17 +65,64 @@ type GbfsVehicleStatusDocument = GbfsV23FreeBikeStatus | GbfsV30VehicleStatus;
 type GbfsSystemVehicleTypes = GbfsV23VehicleTypes | GbfsV30VehicleTypes;
 type GbfsSystemPricingPlanDocument = GbfsV23SystemPricingPlans | GbfsV30SystemPricingPlans;
 
-async function fetchJson<T>(url: string, extraHeaders?: Record<string, string>): Promise<T | null> {
+/** Strip credentials and query strings out of a URL before it reaches a log. */
+function scrubUrlsInMessage(message: string): string {
+  return message.replace(/https?:\/\/[^\s"']+/g, (raw) => {
+    try {
+      const parsed = new URL(raw);
+      parsed.username = "";
+      parsed.password = "";
+      parsed.search = "";
+      parsed.hash = "";
+      return parsed.toString();
+    } catch {
+      return "[url]";
+    }
+  });
+}
+
+async function fetchFeedJson<T>(
+  url: string,
+  headers: Record<string, string> | undefined,
+  allowedRedirectHosts: string[] | undefined,
+): Promise<T | null> {
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    const headers = extraHeaders ? { ...BASE_HEADERS, ...extraHeaders } : BASE_HEADERS;
-    const res = await fetch(url, { headers, signal: controller.signal });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    return (await res.json()) as T;
+    return await safeFetchJson<T>(url, {
+      headers: headers ? { ...BASE_HEADERS, ...headers } : BASE_HEADERS,
+      timeoutMs: FETCH_TIMEOUT_MS,
+      maxBytes: MAX_FEED_BYTES,
+      allowPrivateHosts: privateFeedHostAllowlist(),
+      allowedRedirectHosts,
+    });
+  } catch (err) {
+    console.warn(
+      `[gbfs] skipped feed: ${scrubUrlsInMessage(err instanceof Error ? err.message : String(err))}`,
+    );
+    return null;
+  }
+}
+
+/**
+ * A GBFS discovery document names its own sub-feed URLs, so those hosts are
+ * chosen by the remote operator, not by us. Resolve each one against the
+ * discovery URL (GBFS requires absolute URLs but some feeds ship relative
+ * paths) and decide separately whether it is inside the credential scope.
+ */
+function absolutizeFeedUrl(feedUrl: string | null, discoveryUrl: string): string | null {
+  if (!feedUrl) return null;
+  try {
+    return new URL(feedUrl, discoveryUrl).toString();
   } catch {
     return null;
+  }
+}
+
+function inCredentialScope(url: string, scope: string[]): boolean {
+  try {
+    const { hostname } = new URL(url);
+    return scope.some((allowed) => hostMatchesAllowlist(hostname.toLowerCase(), allowed));
+  } catch {
+    return false;
   }
 }
 
@@ -92,35 +154,80 @@ export interface GbfsSystemData {
 
 /**
  * Fetches all relevant GBFS feeds for a system given its auto-discovery URL.
- * Pass `extraHeaders` (e.g. `{ Authorization: "Bearer …" }`) for authenticated feeds.
+ * Pass `extraHeaders` (e.g. `{ Authorization: "Bearer …" }`) for authenticated
+ * feeds. Headers are only sent to hosts inside the credential scope.
  */
+export interface FetchGbfsSystemOptions {
+  /**
+   * Hostnames (exact or "*.suffix") allowed to receive `extraHeaders`. When
+   * omitted, the scope is the discovery document's own hostname. When set, it
+   * is authoritative for the discovery request too — a caller whose credential
+   * must never leave a known set of hosts declares that set here.
+   */
+  credentialHosts?: string[];
+}
+
 export async function fetchGbfsSystem(
   autoDiscoveryUrl: string,
   extraHeaders?: Record<string, string>,
+  options?: FetchGbfsSystemOptions,
 ): Promise<GbfsSystemData | null> {
-  const discovery = await fetchJson<GbfsDiscoveryDocument>(autoDiscoveryUrl, extraHeaders);
+  const declaredScope = options?.credentialHosts;
+  let discoveryHost = "";
+  try {
+    discoveryHost = new URL(autoDiscoveryUrl).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  const credentialScope = declaredScope ?? [discoveryHost];
+  const redirectScope = extraHeaders ? credentialScope : undefined;
+
+  const discoveryHeaders =
+    !extraHeaders || inCredentialScope(autoDiscoveryUrl, credentialScope)
+      ? extraHeaders
+      : undefined;
+
+  const discovery = await fetchFeedJson<GbfsDiscoveryDocument>(
+    autoDiscoveryUrl,
+    discoveryHeaders,
+    redirectScope,
+  );
   if (!discovery?.data) return null;
 
-  const systemInfoUrl = resolveGbfsFeedUrl(discovery, "system_information");
-  const stationInfoUrl = resolveGbfsFeedUrl(discovery, "station_information");
-  const stationStatusUrl = resolveGbfsFeedUrl(discovery, "station_status");
-  const vehicleStatusUrl = resolveGbfsVehicleStatusFeedUrl(discovery);
-  const vehicleTypesUrl = resolveGbfsFeedUrl(discovery, "vehicle_types");
-  const pricingPlansUrl = resolveGbfsFeedUrl(discovery, "system_pricing_plans");
+  const feedUrl = (name: string) =>
+    absolutizeFeedUrl(resolveGbfsFeedUrl(discovery, name), autoDiscoveryUrl);
+
+  const systemInfoUrl = feedUrl("system_information");
+  const stationInfoUrl = feedUrl("station_information");
+  const stationStatusUrl = feedUrl("station_status");
+  const vehicleStatusUrl = absolutizeFeedUrl(
+    resolveGbfsVehicleStatusFeedUrl(discovery),
+    autoDiscoveryUrl,
+  );
+  const vehicleTypesUrl = feedUrl("vehicle_types");
+  const pricingPlansUrl = feedUrl("system_pricing_plans");
+
+  const subFeed = <T>(url: string | null): Promise<T | null> | null => {
+    if (!url) return null;
+    const headers =
+      extraHeaders && inCredentialScope(url, credentialScope) ? extraHeaders : undefined;
+    if (extraHeaders && !headers) {
+      console.warn(
+        "[gbfs] discovery document pointed a sub-feed off the credential scope; fetching it unauthenticated",
+      );
+    }
+    return fetchFeedJson<T>(url, headers, headers ? redirectScope : undefined);
+  };
 
   // Fetch all feeds in parallel
   const [sysInfoRes, stInfoRes, stStatusRes, vStatusRes, vTypesRes, pricingRes] = await Promise.all(
     [
-      systemInfoUrl ? fetchJson<GbfsSystemInformation>(systemInfoUrl, extraHeaders) : null,
-      stationInfoUrl ? fetchJson<GbfsStationInformation>(stationInfoUrl, extraHeaders) : null,
-      stationStatusUrl ? fetchJson<GbfsSystemStationStatus>(stationStatusUrl, extraHeaders) : null,
-      vehicleStatusUrl
-        ? fetchJson<GbfsVehicleStatusDocument>(vehicleStatusUrl, extraHeaders)
-        : null,
-      vehicleTypesUrl ? fetchJson<GbfsSystemVehicleTypes>(vehicleTypesUrl, extraHeaders) : null,
-      pricingPlansUrl
-        ? fetchJson<GbfsSystemPricingPlanDocument>(pricingPlansUrl, extraHeaders)
-        : null,
+      subFeed<GbfsSystemInformation>(systemInfoUrl),
+      subFeed<GbfsStationInformation>(stationInfoUrl),
+      subFeed<GbfsSystemStationStatus>(stationStatusUrl),
+      subFeed<GbfsVehicleStatusDocument>(vehicleStatusUrl),
+      subFeed<GbfsSystemVehicleTypes>(vehicleTypesUrl),
+      subFeed<GbfsSystemPricingPlanDocument>(pricingPlansUrl),
     ],
   );
 

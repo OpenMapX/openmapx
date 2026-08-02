@@ -36,6 +36,13 @@ const SOURCE = "de-nw-mobidrom-scooter";
 const FETCH_TIMEOUT_MS = 8_000;
 const FEED_CACHE_MS = 2 * 60 * 1000; // 2 min (feed updates every 5 min)
 
+/**
+ * Hosts allowed to receive the operator bearer token. The manifest and the
+ * per-system discovery documents are remote content, so without this the
+ * token would follow whatever host they name.
+ */
+const CREDENTIAL_HOSTS = ["www.mobilitaetsdaten.nrw", "*.mobilitaetsdaten.nrw"];
+
 // NRW bounding box for fast pre-filter (full federal state)
 const COVERAGE_BBOX: BoundingBox = { south: 50.32, west: 5.87, north: 52.53, east: 9.46 };
 
@@ -184,7 +191,9 @@ async function loadAllFeeds(): Promise<FeedCache> {
       entries.map(async (entry) => {
         const gbfsUrl = pickV3Url(entry);
         if (!gbfsUrl) return null;
-        const system = await fetchGbfsSystem(gbfsUrl, authHeaders);
+        const system = await fetchGbfsSystem(gbfsUrl, authHeaders, {
+          credentialHosts: CREDENTIAL_HOSTS,
+        });
         if (!system) return null;
         return { entry, system };
       }),

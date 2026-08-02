@@ -56,7 +56,12 @@ export {
   downsampleLTTB,
 } from "./elevation";
 export { ConfigurationError } from "./errors";
-export { DEFAULT_FETCH_TIMEOUT_MS, type FetchJsonOptions, fetchJson } from "./fetchJson";
+export {
+  DEFAULT_FETCH_JSON_MAX_BYTES,
+  DEFAULT_FETCH_TIMEOUT_MS,
+  type FetchJsonOptions,
+  fetchJson,
+} from "./fetchJson";
 export {
   type FetchWithRedirectsOptions,
   fetchWithRedirects,
@@ -227,7 +232,7 @@ export {
   USER_AGENT_TRANSIT,
   userAgent,
 } from "./userAgent";
-export { isPublicUrl, validatePublicUrl } from "./validate-url";
+export { assertHttpProtocol, isPublicUrl, validatePublicUrl } from "./validate-url";
 export {
   type WeatherCodeInfo,
   weatherCodeToDescription,

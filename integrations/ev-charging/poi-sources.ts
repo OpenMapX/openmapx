@@ -44,9 +44,27 @@ import { parseSiNap, SI_NAP_URL } from "./providers/si-nap-parser.js";
 // parsers treat their buffer), so gunzip here at the wiring boundary before
 // handing off to them.
 const parseNlDotnlGzipped: PoiStaticParseFn = (buffer, ctx) =>
-  parseNlDotnl(gunzipSync(buffer), ctx);
+  parseNlDotnl(gunzipBounded(buffer), ctx);
 const parseNlDotnlLiveGzipped: typeof parseNlDotnlLive = (buffer, ctx) =>
-  parseNlDotnlLive(gunzipSync(buffer), ctx);
+  parseNlDotnlLive(gunzipBounded(buffer), ctx);
+
+/**
+ * Ceiling for an inflated feed body. The DOT-NL locations feed is tens of
+ * megabytes decompressed, so this leaves generous headroom while stopping a
+ * decompression bomb from exhausting the process.
+ */
+const MAX_INFLATED_BYTES = 512 * 1024 * 1024;
+
+function gunzipBounded(buffer: Buffer): Buffer {
+  try {
+    return gunzipSync(buffer, { maxOutputLength: MAX_INFLATED_BYTES });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ERR_BUFFER_TOO_LARGE") {
+      throw new Error(`Inflated feed exceeds max ${MAX_INFLATED_BYTES} bytes`);
+    }
+    throw err;
+  }
+}
 
 export function declarePoiSources(): PoiSource[] {
   return [

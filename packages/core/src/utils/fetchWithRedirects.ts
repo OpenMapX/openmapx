@@ -29,7 +29,12 @@ function withTimeoutSignal(
   return AbortSignal.any([signal, timeoutSignal]);
 }
 
-function hostMatches(hostname: string, allowedHost: string): boolean {
+/**
+ * Match a hostname against an allowlist entry: either an exact hostname or a
+ * wildcard suffix in the form "*.example.com". Exported so callers that gate
+ * credential forwarding use exactly the same rule as redirect gating.
+ */
+export function hostMatchesAllowlist(hostname: string, allowedHost: string): boolean {
   if (allowedHost.startsWith("*.")) {
     const suffix = allowedHost.slice(1);
     return hostname.endsWith(suffix) && hostname.length > suffix.length;
@@ -48,7 +53,9 @@ function assertRedirectAllowed(
 
   if (
     options.allowedRedirectHosts?.length &&
-    !options.allowedRedirectHosts.some((allowedHost) => hostMatches(nextUrl.hostname, allowedHost))
+    !options.allowedRedirectHosts.some((allowedHost) =>
+      hostMatchesAllowlist(nextUrl.hostname, allowedHost),
+    )
   ) {
     throw new Error(`Redirect target not allowed: ${nextUrl.hostname}`);
   }

@@ -14,6 +14,24 @@ export const NL_DOTNL_LOCATIONS_URL =
 
 const TARIFFS_FETCH_TIMEOUT_MS = 30_000;
 
+/**
+ * Ceiling for an inflated tariffs feed. The normal feed is far smaller than
+ * this, while the limit prevents a hostile gzip response from exhausting the
+ * process before its JSON can be parsed.
+ */
+const MAX_INFLATED_BYTES = 512 * 1024 * 1024;
+
+function gunzipBounded(buffer: Buffer): Buffer {
+  try {
+    return gunzipSync(buffer, { maxOutputLength: MAX_INFLATED_BYTES });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ERR_BUFFER_TOO_LARGE") {
+      throw new Error(`Inflated feed exceeds max ${MAX_INFLATED_BYTES} bytes`);
+    }
+    throw err;
+  }
+}
+
 interface OcpiCoordinates {
   latitude?: string;
   longitude?: string;
@@ -144,7 +162,7 @@ async function fetchTariffMap(log: PoiSourceLogger): Promise<Map<string, EvCharg
     const compressed = Buffer.from(await res.arrayBuffer());
     // The tariffs feed is a bare gzip body — no Content-Encoding header, so
     // fetch()/undici won't auto-decompress it (see the scout report).
-    const decompressed = gunzipSync(compressed);
+    const decompressed = gunzipBounded(compressed);
     const parsed = JSON.parse(decompressed.toString("utf-8")) as unknown;
     return buildTariffMap(parsed);
   } catch (err) {

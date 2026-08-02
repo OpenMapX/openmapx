@@ -12,27 +12,33 @@ import { strFromU8, unzipSync } from "fflate";
 
 const SERVICE_POINTS_PAGE =
   "https://data.opentransportdata.swiss/en/dataset/service-points-actual-date";
-const TRAFFIC_POINTS_PAGE =
-  "https://data.opentransportdata.swiss/en/dataset/traffic-points-actual-date";
+const TRAFFIC_POINTS_PAGE = "https://data.opentransportdata.swiss/en/dataset/traffic-point-v2";
+const STOP_POINT_PAGE = "https://data.opentransportdata.swiss/en/dataset/stop-point-v2";
+const PLATFORM_PAGE = "https://data.opentransportdata.swiss/en/dataset/platform-v2";
+const REFERENCE_POINT_PAGE = "https://data.opentransportdata.swiss/en/dataset/reference-point-v2";
+const CONTACT_POINT_PAGE = "https://data.opentransportdata.swiss/en/dataset/contact-point-v2";
+const TOILET_PAGE = "https://data.opentransportdata.swiss/en/dataset/toilet-v2";
+const PARKING_LOT_PAGE = "https://data.opentransportdata.swiss/en/dataset/parking-lot-v2";
+const RELATION_PAGE = "https://data.opentransportdata.swiss/en/dataset/relation-v2";
 
 const SERVICE_POINTS_FALLBACK_URL =
-  "https://data.opentransportdata.swiss/dataset/c8ed76a6-2960-4529-af6e-069a72c47268/resource/54f30b2e-3b05-4ae3-8975-93ff2ba45f87/download/actual-date-swiss-service-point-2026-04-22.csv.zip";
+  "https://data.opentransportdata.swiss/dataset/c8ed76a6-2960-4529-af6e-069a72c47268/resource/e2d5dcf4-42b2-4f2c-a4cf-044681ad0088/download/actual-date-swiss-service-point-2026-06-30.csv.zip";
 const TRAFFIC_POINTS_FALLBACK_URL =
-  "https://data.opentransportdata.swiss/dataset/01fc0483-7aa6-4960-a4e1-26215c1cf7af/resource/f20fb29f-90ca-4263-aa92-a1921c17bbe6/download/actual-date-world-traffic-point-2026-04-22.csv.zip";
-const STOP_POINT_URL =
-  "https://data.opentransportdata.swiss/dataset/e73d185a-e445-450f-9800-f485c7721a37/resource/8311830f-0b30-424f-befe-9854f4719b40/download/actual-date-stop-point.csv";
-const PLATFORM_URL =
-  "https://data.opentransportdata.swiss/dataset/8e5931a6-b4aa-456a-9be4-498f28168861/resource/aaefb3e8-c23a-42b2-92d3-0d41b38210ad/download/actual-date-platform.csv";
-const REFERENCE_POINT_URL =
-  "https://data.opentransportdata.swiss/dataset/11e86379-d543-40cc-9d58-11fc805946c1/resource/76fd696f-8603-4be4-baf8-972fc43a8e70/download/actual-date-reference-point.csv";
-const CONTACT_POINT_URL =
-  "https://data.opentransportdata.swiss/dataset/4deb3709-fda7-42b1-ba0a-b8d303330382/resource/c71b9011-0872-484e-b01b-50b0558410a6/download/actual-date-contact-point.csv";
-const TOILET_URL =
-  "https://data.opentransportdata.swiss/dataset/bc740b09-42ba-425b-9986-490d8938135c/resource/09029eb9-199b-4ff0-a735-e80bade07a4f/download/actual-date-toilet.csv";
-const PARKING_LOT_URL =
-  "https://data.opentransportdata.swiss/dataset/917db6c8-e240-4846-855f-fcc02856600e/resource/40a95587-7f29-4ffb-9dae-baa75f6e49f0/download/actual-date-parking-lot.csv";
-const RELATION_URL =
-  "https://data.opentransportdata.swiss/dataset/fbc9efa2-eeb1-4d17-b94d-8b49e699149d/resource/bcd63c5a-a20a-4953-b439-82767b4de5b1/download/actual-date-relation.csv";
+  "https://data.opentransportdata.swiss/dataset/b06d90be-91c6-440e-ab97-09f579d2fad0/resource/db4f3dd4-1d44-4e4e-9b21-2b43f0b2ea0d/download/actual-date-world-traffic-point.csv";
+const STOP_POINT_FALLBACK_URL =
+  "https://data.opentransportdata.swiss/dataset/e73d185a-e445-450f-9800-f485c7721a37/resource/c36afccb-9e93-41f2-a698-5c96c67ba6df/download/actual-date-stop-point.csv";
+const PLATFORM_FALLBACK_URL =
+  "https://data.opentransportdata.swiss/dataset/8e5931a6-b4aa-456a-9be4-498f28168861/resource/9e46026e-26ca-4ac9-b6b2-02aa3867b80a/download/actual-date-platform.csv";
+const REFERENCE_POINT_FALLBACK_URL =
+  "https://data.opentransportdata.swiss/dataset/11e86379-d543-40cc-9d58-11fc805946c1/resource/e4adc9a6-1205-4dc4-bd37-1a8716e4c040/download/actual-date-reference-point.csv";
+const CONTACT_POINT_FALLBACK_URL =
+  "https://data.opentransportdata.swiss/dataset/4deb3709-fda7-42b1-ba0a-b8d303330382/resource/b180660c-e2d8-477f-883b-ac0190723316/download/actual-date-contact-point.csv";
+const TOILET_FALLBACK_URL =
+  "https://data.opentransportdata.swiss/dataset/bc740b09-42ba-425b-9986-490d8938135c/resource/979d63af-8ae5-4dd7-8c38-e6bfce463fd9/download/actual-date-toilet.csv";
+const PARKING_LOT_FALLBACK_URL =
+  "https://data.opentransportdata.swiss/dataset/917db6c8-e240-4846-855f-fcc02856600e/resource/51fd8fb8-e978-45ea-b41f-1f60f22a2fa3/download/actual-date-parking-lot.csv";
+const RELATION_FALLBACK_URL =
+  "https://data.opentransportdata.swiss/dataset/fbc9efa2-eeb1-4d17-b94d-8b49e699149d/resource/628a823c-ba5d-4f7b-886b-144d28a34ca2/download/actual-date-relation.csv";
 const GO_REALTIME_URL =
   "https://data.opentransportdata.swiss/dataset/27aba9bd-59ed-4d7c-bc71-a3813d1d1799/resource/83b8b8d0-e345-453b-857e-1192d48c4c64/download/go-realtime.csv";
 const GO_SIRI_SX_URL =
@@ -43,8 +49,19 @@ const OCCUPANCY_FORECAST_JSON_PERMALINK =
 const REFRESH_MS = 12 * 60 * 60 * 1000;
 const DOWNLOAD_URL_REFRESH_MS = 24 * 60 * 60 * 1000;
 const OCCUPANCY_FORECAST_REFRESH_MS = 6 * 60 * 60 * 1000;
-const SWISS_REDIRECT_HOSTS = ["opentransportdata.swiss", "*.opentransportdata.swiss"];
+const SWISS_REDIRECT_HOSTS = [
+  "opentransportdata.swiss",
+  "*.opentransportdata.swiss",
+  "83025b28472d6aa2bf5ae59f3724aa78.eu.r2.cloudflarestorage.com",
+];
 const execFileAsync = promisify(execFile);
+
+/**
+ * Cap for the first inflated member of a Swiss ZIP dataset. The archive's
+ * declared size can be understated by a crafted file, but extracting only one
+ * member prevents the ordinary multi-member memory blowup.
+ */
+const MAX_MEMBER_BYTES = 256 * 1024 * 1024;
 
 export interface SwissServicePoint {
   abbreviation?: string;
@@ -349,8 +366,18 @@ async function ensureSwissOccupancyZipPath(): Promise<string | null> {
 }
 
 function unzipFirstCsv(buffer: ArrayBuffer): string {
-  const files = unzipSync(new Uint8Array(buffer));
-  const firstFile = Object.values(files)[0];
+  let picked: string | undefined;
+  const files = unzipSync(new Uint8Array(buffer), {
+    filter: (file) => {
+      if (picked) return false;
+      if (file.originalSize > MAX_MEMBER_BYTES) {
+        throw new Error(`ZIP member ${file.name} exceeds max ${MAX_MEMBER_BYTES} bytes`);
+      }
+      picked = file.name;
+      return true;
+    },
+  });
+  const firstFile = picked ? files[picked] : undefined;
   if (!firstFile) throw new Error("Swiss ZIP dataset was empty");
   return strFromU8(firstFile).replace(/^\uFEFF/, "");
 }
@@ -359,7 +386,8 @@ async function resolveLatestDownloadUrl(
   cacheKey: string,
   pageUrl: string,
   fallbackUrl: string,
-  extension: ".csv.zip" | ".json",
+  extension: ".csv.zip" | ".csv" | ".json",
+  preferredName?: string,
 ): Promise<string> {
   const cached = latestDownloadUrlCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
@@ -374,8 +402,14 @@ async function resolveLatestDownloadUrl(
           typeof href === "string" && href.toLowerCase().includes(extension),
       )
       .sort((left, right) => {
-        const leftScore = left.includes("/download/") ? 1 : 0;
-        const rightScore = right.includes("/download/") ? 1 : 0;
+        const leftLower = left.toLowerCase();
+        const rightLower = right.toLowerCase();
+        const leftScore =
+          (leftLower.includes("/download/") ? 1 : 0) +
+          (preferredName && leftLower.includes(preferredName.toLowerCase()) ? 2 : 0);
+        const rightScore =
+          (rightLower.includes("/download/") ? 1 : 0) +
+          (preferredName && rightLower.includes(preferredName.toLowerCase()) ? 2 : 0);
         return rightScore - leftScore;
       });
     const href = matches[0];
@@ -397,11 +431,6 @@ async function resolveLatestDownloadUrl(
   return fallbackUrl;
 }
 
-async function fetchSemicolonCsv(url: string): Promise<SwissFlatCsvRecord[]> {
-  const text = await fetchText(url);
-  return parseCsvRecords(text, { delimiter: ";" });
-}
-
 async function fetchZipCsv(
   pageKey: string,
   pageUrl: string,
@@ -410,6 +439,26 @@ async function fetchZipCsv(
   const downloadUrl = await resolveLatestDownloadUrl(pageKey, pageUrl, fallbackUrl, ".csv.zip");
   const zipped = await fetchArrayBuffer(downloadUrl);
   return parseCsvRecords(unzipFirstCsv(zipped), { delimiter: ";" });
+}
+
+async function fetchSemicolonCsv(url: string): Promise<SwissFlatCsvRecord[]> {
+  const text = await fetchText(url);
+  return parseCsvRecords(text, { delimiter: ";" });
+}
+
+async function fetchCsv(
+  pageKey: string,
+  pageUrl: string,
+  fallbackUrl: string,
+): Promise<SwissFlatCsvRecord[]> {
+  const downloadUrl = await resolveLatestDownloadUrl(
+    pageKey,
+    pageUrl,
+    fallbackUrl,
+    ".csv",
+    "actual-date",
+  );
+  return parseCsvRecords(await fetchText(downloadUrl), { delimiter: ";" });
 }
 
 function buildServicePoints(records: SwissFlatCsvRecord[]): {
@@ -541,14 +590,14 @@ export async function loadSwissStopDatasets(): Promise<SwissStopDatasets> {
     relationRecords,
   ] = await Promise.all([
     fetchZipCsv("service-points", SERVICE_POINTS_PAGE, SERVICE_POINTS_FALLBACK_URL),
-    fetchZipCsv("traffic-points", TRAFFIC_POINTS_PAGE, TRAFFIC_POINTS_FALLBACK_URL),
-    fetchSemicolonCsv(STOP_POINT_URL),
-    fetchSemicolonCsv(PLATFORM_URL),
-    fetchSemicolonCsv(REFERENCE_POINT_URL),
-    fetchSemicolonCsv(CONTACT_POINT_URL),
-    fetchSemicolonCsv(TOILET_URL),
-    fetchSemicolonCsv(PARKING_LOT_URL),
-    fetchSemicolonCsv(RELATION_URL),
+    fetchCsv("traffic-points", TRAFFIC_POINTS_PAGE, TRAFFIC_POINTS_FALLBACK_URL),
+    fetchCsv("stop-points", STOP_POINT_PAGE, STOP_POINT_FALLBACK_URL),
+    fetchCsv("platforms", PLATFORM_PAGE, PLATFORM_FALLBACK_URL),
+    fetchCsv("reference-points", REFERENCE_POINT_PAGE, REFERENCE_POINT_FALLBACK_URL),
+    fetchCsv("contact-points", CONTACT_POINT_PAGE, CONTACT_POINT_FALLBACK_URL),
+    fetchCsv("toilets", TOILET_PAGE, TOILET_FALLBACK_URL),
+    fetchCsv("parking-lots", PARKING_LOT_PAGE, PARKING_LOT_FALLBACK_URL),
+    fetchCsv("relations", RELATION_PAGE, RELATION_FALLBACK_URL),
   ]);
 
   const { servicePoints, servicePointsBySloid, didokToServicePointSloid } =

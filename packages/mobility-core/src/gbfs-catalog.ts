@@ -11,6 +11,7 @@ import {
 } from "@openmapx/mobility-formats";
 import { MOBILITYDATA_GBFS_CATALOG_URL } from "@openmapx/transitous-core";
 import { TTL, withCache } from "./cache.js";
+import { isEnturGbfsUrl } from "./entur-mobility.js";
 import { fetchGbfsSystem, type GbfsSystemData } from "./gbfs-client.js";
 import type { GbfsCatalogEntry, VehicleFormFactor } from "./types/shared-mobility.js";
 
@@ -347,7 +348,7 @@ async function probeSystemInner(entry: GbfsCatalogEntry): Promise<GbfsSystemProb
 }
 
 function getGbfsDiscoveryHeaders(entry: GbfsCatalogEntry): Record<string, string> | undefined {
-  if (entry.autoDiscoveryUrl.includes("api.entur.io/mobility/v2/gbfs/")) {
+  if (isEnturGbfsUrl(entry.autoDiscoveryUrl)) {
     return { "ET-Client-Name": ENTUR_CLIENT_NAME };
   }
   return undefined;

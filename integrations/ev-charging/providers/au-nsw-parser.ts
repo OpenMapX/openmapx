@@ -1,4 +1,5 @@
 import { fetchWithRedirects, USER_AGENT } from "@openmapx/core";
+import { hostMatchesAllowlist } from "@openmapx/core/utils/safe-download";
 import type { EvChargingConnector } from "@openmapx/mobility-core/ev-charging";
 import type { PoiRow, PoiSourceLogger, PoiStaticParseFn } from "@openmapx/poi-source-registry";
 import { parseDelimited, rowsToObjects } from "./csv.js";
@@ -46,7 +47,19 @@ export async function resolveNswUrl(log: PoiSourceLogger): Promise<string> {
     const data = (await response.json()) as CkanPackageShowResponse;
     const resources = data.result?.resources ?? [];
     const csv = resources.find((resource) => resource.format?.toUpperCase() === "CSV");
-    if (csv?.url) return csv.url;
+    if (csv?.url) {
+      try {
+        const resolved = new URL(csv.url);
+        if (
+          (resolved.protocol === "https:" || resolved.protocol === "http:") &&
+          hostMatchesAllowlist(resolved.hostname, "opendata.transport.nsw.gov.au")
+        ) {
+          return resolved.toString();
+        }
+      } catch {
+        // Fall through to the known-good snapshot URL below.
+      }
+    }
     log.warn("au-nsw-parser: package_show contained no CSV resource — using fallback URL");
   } catch (err) {
     log.warn(`au-nsw-parser: package_show failed (${(err as Error).message}) — using fallback URL`);

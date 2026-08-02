@@ -26,6 +26,27 @@ describe("fetchJson", () => {
     expect(data).toEqual({ ok: true, n: 42 });
   });
 
+  it("rejects a response whose declared length exceeds maxBytes before parsing", async () => {
+    const json = vi.fn(async () => ({ ok: true }));
+    mockFetch(
+      () =>
+        ({
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-length": "100" }),
+          body: new Response("{}").body,
+          json,
+        }) as unknown as Response,
+    );
+    await expect(fetchJson("https://x.test/data", { maxBytes: 10 })).rejects.toThrow(/too large/i);
+    expect(json).not.toHaveBeenCalled();
+  });
+
+  it("rejects a streamed response that exceeds maxBytes", async () => {
+    mockFetch(() => new Response("x".repeat(100)));
+    await expect(fetchJson("https://x.test/data", { maxBytes: 10 })).rejects.toThrow(/too large/i);
+  });
+
   it("sends the shared User-Agent and merges extra headers", async () => {
     const fn = mockFetch(() => jsonResponse({}));
     await fetchJson("https://x.test/data", { headers: { "Accept-Language": "de" } });

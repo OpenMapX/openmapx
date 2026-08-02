@@ -34,6 +34,10 @@
       "types": "./src/utils/poiConflation.ts",
       "default": "./src/utils/poiConflation.ts"
     },
+    "./utils/safe-download": {
+      "types": "./src/utils/safe-download.ts",
+      "default": "./src/utils/safe-download.ts"
+    },
     "./utils/geo-server": {
       "types": "./src/utils/geo-server.ts",
       "default": "./src/utils/geo-server.ts"

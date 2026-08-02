@@ -8,6 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { privateFeedHostAllowlist, safeFetchJson } from "@openmapx/core/utils/safe-download";
 import {
   type CompiledGbfsAddition,
   compileGbfsCatalog,
@@ -47,6 +48,13 @@ function floatEnv(name: string, fallback: number): number {
   return Number.isFinite(value) && value >= 0 && value <= 1 ? value : fallback;
 }
 
+/**
+ * Ceiling for one GBFS document during candidate validation. Real feeds are a
+ * few megabytes at most; the cap bounds what a hostile candidate can make the
+ * daemon allocate, and a breach fails the candidate rather than truncating it.
+ */
+const MAX_GBFS_DOCUMENT_BYTES = 32 * 1024 * 1024;
+
 function readExistingSources(catalogDir: string): ExistingGbfsSource[] {
   const feedsDir = join(catalogDir, "feeds");
   if (!existsSync(feedsDir)) return [];
@@ -82,25 +90,12 @@ function readExistingSources(catalogDir: string): ExistingGbfsSource[] {
 }
 
 async function fetchJson(url: string, timeoutMs: number): Promise<unknown> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: { "User-Agent": "openmapx-gbfs-validator" },
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    if (
-      new URL(response.url || url).protocol !== "https:" &&
-      new URL(response.url || url).protocol !== "http:"
-    ) {
-      throw new Error("redirected to unsupported protocol");
-    }
-    return await response.json();
-  } finally {
-    clearTimeout(timer);
-  }
+  return safeFetchJson<unknown>(url, {
+    timeoutMs,
+    maxBytes: MAX_GBFS_DOCUMENT_BYTES,
+    allowPrivateHosts: privateFeedHostAllowlist(),
+    headers: { "User-Agent": "openmapx-gbfs-validator" },
+  });
 }
 
 function classifyValidationError(error: unknown): ValidationResult["errorClass"] {
@@ -165,7 +160,19 @@ export async function validateGbfsAddition(
 ): Promise<ValidationResult> {
   try {
     const { version, feeds } = discoveryFeeds(await fetchJson(addition.url, timeoutMs));
-    const byName = new Map(feeds.map((feed) => [feed.name, feed.url]));
+    // Sub-feed URLs come out of the remote discovery document, so resolve each
+    // one against the document's own URL: GBFS mandates absolute URLs but real
+    // feeds ship relative paths, and resolving makes the target explicit before
+    // it is fetched.
+    const byName = new Map(
+      feeds.flatMap((feed) => {
+        try {
+          return [[feed.name, new URL(feed.url, addition.url).toString()] as const];
+        } catch {
+          return [];
+        }
+      }),
+    );
     const stationPair = byName.get("station_information") && byName.get("station_status");
     const vehicle = byName.get("vehicle_status") ?? byName.get("free_bike_status");
     if (!stationPair && !vehicle)

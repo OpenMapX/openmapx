@@ -142,4 +142,23 @@ describe("safeFetchJson", () => {
       /too large/i,
     );
   });
+
+  it("allows a declared private feed host", async () => {
+    stubFetchSequence(
+      makeResponse({
+        status: 200,
+        headers: { "content-type": "application/json" },
+        bodyText: JSON.stringify({ ok: true }),
+      }),
+    );
+    await expect(
+      safeFetchJson("https://mirror.lan/x.json", { allowPrivateHosts: ["mirror.lan"] }),
+    ).resolves.toEqual({ ok: true });
+  });
+
+  it("never allows a non-HTTP scheme through the private-host escape hatch", async () => {
+    await expect(safeFetchJson("file:///etc/passwd", { allowPrivateHosts: ["*"] })).rejects.toThrow(
+      /HTTP\(S\)/,
+    );
+  });
 });

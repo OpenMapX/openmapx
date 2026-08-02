@@ -3,9 +3,25 @@ import { USER_AGENT } from "./userAgent";
 /** Default HTTP timeout for upstream JSON APIs. */
 export const DEFAULT_FETCH_TIMEOUT_MS = 10_000;
 
+/** Default ceiling for a buffered JSON response. Well above any feed this repo consumes. */
+export const DEFAULT_FETCH_JSON_MAX_BYTES = 128 * 1024 * 1024;
+
+function configuredMaxBytes(): number {
+  const raw = globalThis.process?.env?.OPENMAPX_FETCH_JSON_MAX_BYTES;
+  const parsed = raw ? Number(raw) : Number.NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_FETCH_JSON_MAX_BYTES;
+}
+
 export interface FetchJsonOptions {
   /** Abort the request after this many milliseconds. Defaults to {@link DEFAULT_FETCH_TIMEOUT_MS}. */
   timeoutMs?: number;
+  /**
+   * Ceiling for the buffered response body in bytes. Defaults to
+   * {@link DEFAULT_FETCH_JSON_MAX_BYTES}, overridable per deployment with
+   * `OPENMAPX_FETCH_JSON_MAX_BYTES`. The request fails loudly on breach — a
+   * truncated JSON document would parse into silently wrong data.
+   */
+  maxBytes?: number;
   /** Extra request headers, merged on top of the `User-Agent`. */
   headers?: Record<string, string>;
   /** Upstream name baked into thrown error messages, e.g. `"Open-Meteo HTTP 503"`. */
@@ -60,7 +76,31 @@ async function request<T>(url: string, options: FetchJsonOptions): Promise<T> {
           : `${label} HTTP ${res.status}`,
       );
     }
-    return (await res.json()) as T;
+    const maxBytes = options.maxBytes ?? configuredMaxBytes();
+    const declared = Number(res.headers?.get?.("content-length"));
+    if (Number.isFinite(declared) && declared > maxBytes) {
+      throw new Error(`${label} response too large (declared ${declared} > ${maxBytes} bytes)`);
+    }
+    if (!res.body) return (await res.json()) as T;
+
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        throw new Error(`${label} response too large (exceeded ${maxBytes} bytes)`);
+      }
+      chunks.push(value);
+    }
+    const decoder = new TextDecoder();
+    let text = "";
+    for (const chunk of chunks) text += decoder.decode(chunk, { stream: true });
+    text += decoder.decode();
+    return JSON.parse(text) as T;
   } finally {
     clearTimeout(timer);
   }

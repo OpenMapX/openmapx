@@ -1,3 +1,4 @@
+import { assertFeedUrlAllowed, privateFeedHostAllowlist } from "@openmapx/core/utils/safe-download";
 import type {
   BundledPoiSpec,
   LivePoiSpec,
@@ -8,6 +9,40 @@ import type {
 import type { PoiIngestKind, PoiIngestStageResult, PoiJobContext } from "../types.js";
 
 type FetchableSpec = StaticPoiSpec | LivePoiSpec | BundledPoiSpec;
+
+/**
+ * Ceiling for one POI feed download. National registries are the largest thing
+ * that flows through here (tens of megabytes), so this leaves several times
+ * the headroom while bounding what one feed can make the daemon allocate.
+ * Raise it for a specific source with `fetch.maxBytes` rather than globally.
+ */
+const DEFAULT_MAX_FETCH_BYTES = 256 * 1024 * 1024;
+
+async function readBounded(response: Response, maxBytes: number, url: string): Promise<Buffer> {
+  if (!response.body) {
+    // Test doubles and some runtimes hand back a bodyless Response; fall back
+    // to the buffered read, still bounded by the check above.
+    const fallback = Buffer.from(await response.arrayBuffer());
+    if (fallback.byteLength > maxBytes) {
+      throw new Error(`fetch ${url} exceeded max ${maxBytes} bytes`);
+    }
+    return fallback;
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new Error(`fetch ${url} exceeded max ${maxBytes} bytes`);
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
+}
 
 /**
  * Pick the spec for the given pipeline kind. Throws (synchronously) for
@@ -40,7 +75,14 @@ function nowIso(ctx: PoiJobContext): string {
 async function resolveUrl(spec: FetchableSpec, ctx: PoiJobContext): Promise<string> {
   if (spec.resolveUrl) {
     const dynamic = await spec.resolveUrl(ctx.logger);
-    if (dynamic) return dynamic;
+    if (dynamic) {
+      // A dynamic URL is scraped from a remote page or read out of a remote
+      // API response, so the target host is chosen by third-party content.
+      // Static `fetch.url` values are constants in this repository and are
+      // deliberately left alone.
+      await assertFeedUrlAllowed(dynamic, privateFeedHostAllowlist());
+      return dynamic;
+    }
   }
   const url = (spec.fetch as PoiFetchSpec).url;
   if (!url) {
@@ -93,8 +135,14 @@ export async function run(ctx: PoiJobContext): Promise<PoiIngestStageResult> {
       throw new Error(`fetch ${url} failed: HTTP ${response.status} ${response.statusText}`);
     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const maxBytes = fetchSpec.maxBytes ?? DEFAULT_MAX_FETCH_BYTES;
+    const declaredLength = Number(response.headers.get("content-length"));
+    if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+      throw new Error(
+        `fetch ${url} refused: declared Content-Length ${declaredLength} exceeds max ${maxBytes} bytes`,
+      );
+    }
+    const buffer = await readBounded(response, maxBytes, url);
     ctx.state.fetched = buffer;
 
     const finishedAt = nowIso(ctx);

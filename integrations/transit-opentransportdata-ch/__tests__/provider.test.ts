@@ -4,24 +4,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const SERVICE_POINTS_PAGE =
   "https://data.opentransportdata.swiss/en/dataset/service-points-actual-date";
-const TRAFFIC_POINTS_PAGE =
-  "https://data.opentransportdata.swiss/en/dataset/traffic-points-actual-date";
+const TRAFFIC_POINTS_PAGE = "https://data.opentransportdata.swiss/en/dataset/traffic-point-v2";
+const STOP_POINT_PAGE = "https://data.opentransportdata.swiss/en/dataset/stop-point-v2";
+const PLATFORM_PAGE = "https://data.opentransportdata.swiss/en/dataset/platform-v2";
+const REFERENCE_POINT_PAGE = "https://data.opentransportdata.swiss/en/dataset/reference-point-v2";
+const CONTACT_POINT_PAGE = "https://data.opentransportdata.swiss/en/dataset/contact-point-v2";
+const TOILET_PAGE = "https://data.opentransportdata.swiss/en/dataset/toilet-v2";
+const PARKING_LOT_PAGE = "https://data.opentransportdata.swiss/en/dataset/parking-lot-v2";
+const RELATION_PAGE = "https://data.opentransportdata.swiss/en/dataset/relation-v2";
 const SERVICE_POINTS_ZIP = "https://files.test/service-points.csv.zip";
-const TRAFFIC_POINTS_ZIP = "https://files.test/traffic-points.csv.zip";
-const STOP_POINT_URL =
-  "https://data.opentransportdata.swiss/dataset/e73d185a-e445-450f-9800-f485c7721a37/resource/8311830f-0b30-424f-befe-9854f4719b40/download/actual-date-stop-point.csv";
-const PLATFORM_URL =
-  "https://data.opentransportdata.swiss/dataset/8e5931a6-b4aa-456a-9be4-498f28168861/resource/aaefb3e8-c23a-42b2-92d3-0d41b38210ad/download/actual-date-platform.csv";
-const REFERENCE_POINT_URL =
-  "https://data.opentransportdata.swiss/dataset/11e86379-d543-40cc-9d58-11fc805946c1/resource/76fd696f-8603-4be4-baf8-972fc43a8e70/download/actual-date-reference-point.csv";
-const CONTACT_POINT_URL =
-  "https://data.opentransportdata.swiss/dataset/4deb3709-fda7-42b1-ba0a-b8d303330382/resource/c71b9011-0872-484e-b01b-50b0558410a6/download/actual-date-contact-point.csv";
-const TOILET_URL =
-  "https://data.opentransportdata.swiss/dataset/bc740b09-42ba-425b-9986-490d8938135c/resource/09029eb9-199b-4ff0-a735-e80bade07a4f/download/actual-date-toilet.csv";
-const PARKING_LOT_URL =
-  "https://data.opentransportdata.swiss/dataset/917db6c8-e240-4846-855f-fcc02856600e/resource/40a95587-7f29-4ffb-9dae-baa75f6e49f0/download/actual-date-parking-lot.csv";
-const RELATION_URL =
-  "https://data.opentransportdata.swiss/dataset/fbc9efa2-eeb1-4d17-b94d-8b49e699149d/resource/bcd63c5a-a20a-4953-b439-82767b4de5b1/download/actual-date-relation.csv";
+const TRAFFIC_POINTS_CSV_URL = "https://files.test/traffic-points.csv";
+const STOP_POINT_CSV_URL = "https://files.test/stop-point.csv";
+const PLATFORM_CSV_URL = "https://files.test/platform.csv";
+const REFERENCE_POINT_CSV_URL = "https://files.test/reference-point.csv";
+const CONTACT_POINT_CSV_URL = "https://files.test/contact-point.csv";
+const TOILET_CSV_URL = "https://files.test/toilet.csv";
+const PARKING_LOT_CSV_URL = "https://files.test/parking-lot.csv";
+const RELATION_CSV_URL = "https://files.test/relation.csv";
 const GO_REALTIME_URL =
   "https://data.opentransportdata.swiss/dataset/27aba9bd-59ed-4d7c-bc71-a3813d1d1799/resource/83b8b8d0-e345-453b-857e-1192d48c4c64/download/go-realtime.csv";
 const GO_SIRI_SX_URL =
@@ -549,25 +548,42 @@ beforeEach(() => {
       return new Response(`<a href="${SERVICE_POINTS_ZIP}">download</a>`, { status: 200 });
     }
     if (url === TRAFFIC_POINTS_PAGE) {
-      return new Response(`<a href="${TRAFFIC_POINTS_ZIP}">download</a>`, { status: 200 });
+      return new Response(`<a href="${TRAFFIC_POINTS_CSV_URL}">download</a>`, { status: 200 });
+    }
+    if (url === STOP_POINT_PAGE) {
+      return new Response(`<a href="${STOP_POINT_CSV_URL}">download</a>`, { status: 200 });
+    }
+    if (url === PLATFORM_PAGE) {
+      return new Response(`<a href="${PLATFORM_CSV_URL}">download</a>`, { status: 200 });
+    }
+    if (url === REFERENCE_POINT_PAGE) {
+      return new Response(`<a href="${REFERENCE_POINT_CSV_URL}">download</a>`, { status: 200 });
+    }
+    if (url === CONTACT_POINT_PAGE) {
+      return new Response(`<a href="${CONTACT_POINT_CSV_URL}">download</a>`, { status: 200 });
+    }
+    if (url === TOILET_PAGE) {
+      return new Response(`<a href="${TOILET_CSV_URL}">download</a>`, { status: 200 });
+    }
+    if (url === PARKING_LOT_PAGE) {
+      return new Response(`<a href="${PARKING_LOT_CSV_URL}">download</a>`, { status: 200 });
+    }
+    if (url === RELATION_PAGE) {
+      return new Response(`<a href="${RELATION_CSV_URL}">download</a>`, { status: 200 });
     }
     if (url === SERVICE_POINTS_ZIP) {
       return new Response(zipSync({ "service-points.csv": strToU8(SERVICE_POINTS_CSV) }), {
         status: 200,
       });
     }
-    if (url === TRAFFIC_POINTS_ZIP) {
-      return new Response(zipSync({ "traffic-points.csv": strToU8(TRAFFIC_POINTS_CSV) }), {
-        status: 200,
-      });
-    }
-    if (url === STOP_POINT_URL) return new Response(STOP_POINT_CSV, { status: 200 });
-    if (url === PLATFORM_URL) return new Response(PLATFORM_CSV, { status: 200 });
-    if (url === REFERENCE_POINT_URL) return new Response(REFERENCE_POINT_CSV, { status: 200 });
-    if (url === CONTACT_POINT_URL) return new Response(CONTACT_POINT_CSV, { status: 200 });
-    if (url === TOILET_URL) return new Response(TOILET_CSV, { status: 200 });
-    if (url === PARKING_LOT_URL) return new Response(PARKING_LOT_CSV, { status: 200 });
-    if (url === RELATION_URL) return new Response(RELATION_CSV, { status: 200 });
+    if (url === TRAFFIC_POINTS_CSV_URL) return new Response(TRAFFIC_POINTS_CSV, { status: 200 });
+    if (url === STOP_POINT_CSV_URL) return new Response(STOP_POINT_CSV, { status: 200 });
+    if (url === PLATFORM_CSV_URL) return new Response(PLATFORM_CSV, { status: 200 });
+    if (url === REFERENCE_POINT_CSV_URL) return new Response(REFERENCE_POINT_CSV, { status: 200 });
+    if (url === CONTACT_POINT_CSV_URL) return new Response(CONTACT_POINT_CSV, { status: 200 });
+    if (url === TOILET_CSV_URL) return new Response(TOILET_CSV, { status: 200 });
+    if (url === PARKING_LOT_CSV_URL) return new Response(PARKING_LOT_CSV, { status: 200 });
+    if (url === RELATION_CSV_URL) return new Response(RELATION_CSV, { status: 200 });
     if (url === GO_REALTIME_URL) return new Response(GO_REALTIME_CSV, { status: 200 });
     if (url === GO_SIRI_SX_URL) return new Response(GO_SIRI_SX_CSV, { status: 200 });
     if (url === OCCUPANCY_FORECAST_JSON_PERMALINK) {

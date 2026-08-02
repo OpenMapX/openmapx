@@ -1,8 +1,10 @@
 /**
- * Validates that a URL is a public HTTP(S) URL (not targeting internal/private addresses).
- * Used to prevent SSRF attacks when fetching user-supplied or externally-sourced URLs.
+ * Parse a URL and reject anything that is not plain HTTP(S). Split out from
+ * `validatePublicUrl` so callers that deliberately allow a private host (an
+ * operator-declared internal feed mirror) still cannot be steered onto a
+ * non-HTTP scheme.
  */
-export function validatePublicUrl(url: string): void {
+export function assertHttpProtocol(url: string): URL {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -12,6 +14,15 @@ export function validatePublicUrl(url: string): void {
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
     throw new Error("Only HTTP(S) URLs are allowed");
   }
+  return parsed;
+}
+
+/**
+ * Validates that a URL is a public HTTP(S) URL (not targeting internal/private addresses).
+ * Used to prevent SSRF attacks when fetching user-supplied or externally-sourced URLs.
+ */
+export function validatePublicUrl(url: string): void {
+  const parsed = assertHttpProtocol(url);
   const rawHostname = parsed.hostname;
   // Strip square brackets from IPv6 addresses (e.g. "[::1]" → "::1")
   const hostname =

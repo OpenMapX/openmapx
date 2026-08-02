@@ -247,6 +247,25 @@ describe("pipeline (static)", () => {
     expect(result.stages[0]?.stage).toBe("fetch");
     expect(sqlRec.beginCount).toBe(0);
   });
+
+  it("returns a fetch-stage error when a response exceeds its byte cap", async () => {
+    const sqlRec = makeFakeSql();
+    const source = staticSource();
+    if (!source.static) throw new Error("static source missing");
+    source.static.fetch.maxBytes = 10;
+    const ctx = buildPoiJobContext({
+      source,
+      kind: "static",
+      sql: sqlRec.sql,
+      redis: null,
+      fetch: makeFetch("x".repeat(100)),
+    });
+    const result = await runStaticIngest(ctx);
+    expect(result.status).toBe("error");
+    expect(result.stages[0]?.stage).toBe("fetch");
+    expect(result.stages[0]?.status).toBe("error");
+    expect(result.stages[0]?.message).toMatch(/exceeded max/);
+  });
 });
 
 describe("pipeline (live)", () => {

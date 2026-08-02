@@ -53,6 +53,14 @@ interface WalloniaGroup {
   updates: (string | undefined)[];
 }
 
+/**
+ * Cap for a single inflated ZIP member. `originalSize` comes from the
+ * archive's own central directory, so a crafted archive can understate it;
+ * this bounds the ordinary runaway case and, more importantly, the filter
+ * means only the one CSV we need is inflated instead of every member.
+ */
+const MAX_MEMBER_BYTES = 256 * 1024 * 1024;
+
 /** Parses the decompressed `;`-delimited CSV text into grouped station rows. */
 export function parseWalloniaRows(text: string): PoiRow[] {
   const rows = rowsToObjects(parseDelimited(text.replace(/^﻿/, ""), ";"), 0);
@@ -111,8 +119,18 @@ export function parseWalloniaRows(text: string): PoiRow[] {
 }
 
 export const parseBeWallonia: PoiStaticParseFn = (buffer) => {
-  const files = unzipSync(new Uint8Array(buffer));
-  const csvName = Object.keys(files).find((name) => name.toLowerCase().endsWith(".csv"));
-  if (!csvName) return [];
-  return parseWalloniaRows(Buffer.from(files[csvName]).toString("utf8"));
+  let picked: string | undefined;
+  const files = unzipSync(new Uint8Array(buffer), {
+    filter: (file) => {
+      if (picked) return false;
+      if (!file.name.toLowerCase().endsWith(".csv")) return false;
+      if (file.originalSize > MAX_MEMBER_BYTES) {
+        throw new Error(`ZIP member ${file.name} exceeds max ${MAX_MEMBER_BYTES} bytes`);
+      }
+      picked = file.name;
+      return true;
+    },
+  });
+  if (!picked) return [];
+  return parseWalloniaRows(Buffer.from(files[picked]).toString("utf8"));
 };

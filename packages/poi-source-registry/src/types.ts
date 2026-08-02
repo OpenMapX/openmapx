@@ -36,6 +36,8 @@ export interface PoiHttpFetchSpec {
   type: "http";
   url?: string;
   timeoutMs?: number;
+  /** Ceiling for the downloaded body in bytes. Defaults to the pipeline's own limit. */
+  maxBytes?: number;
   encoding?: BufferEncoding | "windows-1252";
   headers?: Record<string, string>;
   /**

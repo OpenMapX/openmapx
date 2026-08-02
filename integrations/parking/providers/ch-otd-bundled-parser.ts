@@ -1,4 +1,5 @@
 import { fetchWithRedirects, USER_AGENT } from "@openmapx/core";
+import { hostMatchesAllowlist } from "@openmapx/core/utils/safe-download";
 import { token } from "@openmapx/integration-framework/strings";
 import type { I18nTokenLike, ParkingType } from "@openmapx/mobility-core/parking";
 import type {
@@ -25,8 +26,12 @@ import type {
 
 const DATASET_PAGE_URL = "https://data.opentransportdata.swiss/en/dataset/bike-and-car-parking";
 const FALLBACK_DOWNLOAD_URL =
-  "https://data.opentransportdata.swiss/dataset/379e6847-47c0-4dcc-8d8a-f7a6a8bd809a/resource/c7bb80f4-18b1-446a-83eb-aaf4fba87944/download/bike-and-car-parking.json";
-const SWISS_REDIRECT_HOSTS = ["opentransportdata.swiss", "*.opentransportdata.swiss"];
+  "https://data.opentransportdata.swiss/dataset/379e6847-47c0-4dcc-8d8a-f7a6a8bd809a/resource/4d05c390-b87c-42fe-9b3f-8767dd2dedd8/download/bike-and-car-parking.json";
+const SWISS_REDIRECT_HOSTS = [
+  "opentransportdata.swiss",
+  "*.opentransportdata.swiss",
+  "83025b28472d6aa2bf5ae59f3724aa78.eu.r2.cloudflarestorage.com",
+];
 
 interface SwissParkingCapacity {
   categoryType?: string;
@@ -115,7 +120,17 @@ export async function resolveChOtdDownloadUrl(log: PoiSourceLogger): Promise<str
         return rightScore - leftScore;
       })[0];
     if (href) {
-      return new URL(href, DATASET_PAGE_URL).toString();
+      const resolved = new URL(href, DATASET_PAGE_URL);
+      // An absolute href on the scraped page would otherwise replace the base
+      // entirely, letting page content pick the download host.
+      const allowed = trustedSwissRedirectHosts(DATASET_PAGE_URL);
+      if (
+        (resolved.protocol === "https:" || resolved.protocol === "http:") &&
+        allowed.some((host) => hostMatchesAllowlist(resolved.hostname, host))
+      ) {
+        return resolved.toString();
+      }
+      log.warn("opentransportdata-ch: scraped download URL host is not trusted — using fallback");
     }
     log.warn("opentransportdata-ch: dataset page contained no JSON URL — using fallback");
   } catch (err) {
