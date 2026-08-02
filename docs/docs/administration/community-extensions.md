@@ -51,6 +51,10 @@ The default catalog source is the curated **verified** one. Anything you add
 under **Sources**, or install by raw URL, is surfaced as **community** and
 requires you to acknowledge the risk.
 
+Verified and community services receive the same container sandbox. Verification
+is a listing and identity check, not an integrity guarantee about the manifest,
+moving image tag, or bytes that will run tomorrow.
+
 ## Browsing and installing
 
 Open **Extensions** in the admin panel. It has three tabs:
@@ -110,18 +114,21 @@ gitignored and bind-mounted, so installs survive container restarts.
 
 ### The service sandbox
 
-Community service manifests are constrained by the validator: `quality` must be
-`community` (or `community-verified`), and such a manifest may **not** use
-`@`-prefixed bind mounts (no Docker socket, no cross-service file sharing),
-`networkMode: "host"`, `privileged: true`, host device pass-through, or any
-escape-class Linux capability (`SYS_ADMIN`, `SYS_PTRACE`, `NET_ADMIN`, and
-similar) — only a safe capability subset (`NET_BIND_SERVICE`, `CHOWN`,
-`SETUID`/`SETGID`, …) is allowed. Plain relative-path bind mounts under the
-service's own directory are fine. `community-verified` is held to the exact same
-rules. A community Git URL must also be `https://` on a short allowlist of public
-hosts (`github.com`, `gitlab.com`, `codeberg.org`, `bitbucket.org`,
-`git.sr.ht`) — defense-in-depth so an admin can't coerce a clone of a `file://`,
-`ssh://`, or intranet URL into the service tree.
+The sandbox is derived from provenance, not the manifest's `quality` label:
+manifests loaded from `services/.community/` are third-party whether they say
+`community` or `community-verified`. They may **not** use `@`-prefixed bind
+mounts (no Docker socket or cross-service file sharing), `networkMode: "host"`,
+`privileged: true`, host device pass-through, escape-class Linux capabilities
+(`SYS_ADMIN`, `SYS_PTRACE`, `NET_ADMIN`, and similar), deployment `envFile`, or
+Compose-variable bind paths. Named volumes must be namespaced as
+`openmapx-<serviceId>-<suffix>`, and network aliases may not collide with another
+service id or alias. Relative bind paths are canonicalized at render time and
+must remain within the service snapshot. Operator configuration belongs in
+`configSchema`; secret fields are delivered as `/run/secrets/<KEY>` with
+`<KEY>_FILE` set. A community Git URL must also be `https://` on a short
+allowlist of public hosts (`github.com`, `gitlab.com`, `codeberg.org`,
+`bitbucket.org`, `git.sr.ht`) — defense-in-depth so an admin can't coerce a clone
+of a `file://`, `ssh://`, or intranet URL into the service tree.
 
 ### Service security rating
 

@@ -1,12 +1,13 @@
-import { COMMUNITY_SAFE_CAPS } from "./manifest-schema";
+import { COMMUNITY_SAFE_CAPS, isComposeVarReference } from "./sandbox-policy";
 import type { ServiceManifest } from "./types";
 
 // A deterministic, informational security rating for a *service* manifest,
 // modeled on Home Assistant's add-on rating but adapted to OpenMapX: community
 // services already pass a hard capability *sandbox* at validation (docker-socket,
-// host networking, privileged, devices, `@`-special binds are rejected outright),
-// so this score grades within the allowed envelope and flags anything that can
-// only run as a built-in service. Integrations get no rating — they run
+// host networking, privileged, devices, unsafe capabilities, `@`-special binds,
+// env_file, Compose-variable bind paths, and unnamespaced volumes are rejected
+// outright), so this score grades within the allowed envelope and flags anything
+// that can only run as a built-in service. Integrations get no rating — they run
 // in-process with full access and instead carry an explicit disclosure.
 
 export interface ServiceSecurityRating {
@@ -18,6 +19,8 @@ export interface ServiceSecurityRating {
   hostPorts: number;
   /** Number of credential fields the operator must supply. */
   secretCount: number;
+  /** Distinct deployment environment variables referenced by the manifest. */
+  deploymentVariables: string[];
   /** Human-readable score breakdown (each line is a + / - contribution). */
   factors: string[];
 }
@@ -43,6 +46,26 @@ function countSecretFields(configSchema: Record<string, unknown> | undefined): n
   return n;
 }
 
+const COMPOSE_VARIABLE_REGEX =
+  /\$(?:\{([A-Za-z_][A-Za-z0-9_]*)(?:(?::[-+?]|[-+?])[^{}]*)?\}|([A-Za-z_][A-Za-z0-9_]*))/g;
+
+function collectDeploymentVariables(value: unknown, names: Set<string>): void {
+  if (typeof value === "string") {
+    for (const match of value.matchAll(COMPOSE_VARIABLE_REGEX)) {
+      const name = match[1] ?? match[2];
+      if (name) names.add(name);
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectDeploymentVariables(item, names);
+    return;
+  }
+  if (value && typeof value === "object") {
+    for (const item of Object.values(value)) collectDeploymentVariables(item, names);
+  }
+}
+
 export function computeServiceSecurityRating(manifest: ServiceManifest): ServiceSecurityRating {
   const c = manifest.container;
   const factors: string[] = [];
@@ -50,15 +73,24 @@ export function computeServiceSecurityRating(manifest: ServiceManifest): Service
 
   const hostPorts = manifest.exposure?.hostPorts?.length ?? 0;
   const secretCount = countSecretFields(manifest.configSchema);
+  const deploymentVariableNames = new Set<string>();
+  collectDeploymentVariables(manifest, deploymentVariableNames);
+  const deploymentVariables = [...deploymentVariableNames].sort();
 
   const elevatedCaps = (c.capAdd ?? []).filter((cap) => !COMMUNITY_SAFE_CAPS.has(cap));
   const usesSpecialBind = (manifest.bindMounts ?? []).some((b) => b.source.startsWith("@"));
+  const usesComposeVarBind = (manifest.bindMounts ?? []).some(
+    (b) => isComposeVarReference(b.source) || isComposeVarReference(b.target),
+  );
+  const usesEnvFile = (c.envFile?.length ?? 0) > 0;
   const requiresBuiltIn =
     Boolean(c.privileged) ||
     c.networkMode === "host" ||
     (c.devices?.length ?? 0) > 0 ||
     elevatedCaps.length > 0 ||
-    usesSpecialBind;
+    usesSpecialBind ||
+    usesEnvFile ||
+    usesComposeVarBind;
 
   if (manifest.exposure?.proxy?.authRequired) {
     score += 1;
@@ -86,10 +118,21 @@ export function computeServiceSecurityRating(manifest: ServiceManifest): Service
     if ((c.devices?.length ?? 0) > 0) reasons.push("device passthrough");
     if (elevatedCaps.length > 0) reasons.push(`elevated caps (${elevatedCaps.join(", ")})`);
     if (usesSpecialBind) reasons.push("host bind mounts");
-    factors.push(`-2 uses elevated privileges (built-in only): ${reasons.join(", ")}`);
+    if (usesEnvFile) reasons.push("deployment env_file");
+    if (usesComposeVarBind) reasons.push("Compose-variable bind paths");
+    factors.push(
+      `-2 uses elevated or first-party-only resources (built-in only): ${reasons.join(", ")}`,
+    );
+  }
+
+  if (deploymentVariables.length > 0) {
+    score -= 2;
+    factors.push(
+      `-2 reads ${deploymentVariables.length} deployment environment variable(s): ${deploymentVariables.join(", ")}`,
+    );
   }
 
   score = Math.max(MIN_SCORE, Math.min(MAX_SCORE, score));
 
-  return { score, requiresBuiltIn, hostPorts, secretCount, factors };
+  return { score, requiresBuiltIn, hostPorts, secretCount, deploymentVariables, factors };
 }

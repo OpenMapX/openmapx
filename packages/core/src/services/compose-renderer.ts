@@ -1,7 +1,8 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { dump as yamlDump, load as yamlLoad } from "js-yaml";
 import { detectConsumesCycle } from "./resolver";
+import { assertRenderSandbox } from "./sandbox-policy";
 import type {
   HardlinkEntry,
   LoadedService,
@@ -171,6 +172,12 @@ export interface RenderContext {
    */
   existsSync?: (path: string) => boolean;
   /**
+   * Optional canonical-path check used by third-party bind-mount containment.
+   * Defaults to `node:fs`'s `realpathSync`; tests can inject a fake alongside
+   * `existsSync` when they need a virtual filesystem.
+   */
+  realpathSync?: (path: string) => string;
+  /**
    * Per-render advisory sink. The renderer appends one entry per skipped
    * optional bind mount (host source missing). When omitted, advisories are
    * still emitted on the `RenderResult.warnings` field.
@@ -270,7 +277,8 @@ function resolveBindSource(
         `bindMount source "${bm.source}" on service "${service.manifest.id}": service "${slug}" not found in registry`,
       );
     }
-    if (target.manifest.quality !== "built-in") {
+    // Provenance first: a manifest's own `quality` string is not a trust signal.
+    if (!target.isBuiltIn) {
       throw new Error(
         `bindMount source "${bm.source}" on service "${service.manifest.id}": @service:<slug> is only allowed to reference built-in services (target "${slug}" is "${target.manifest.quality}")`,
       );
@@ -438,6 +446,11 @@ export function renderServiceSnippet(
   service: LoadedService,
   ctx: RenderContext,
 ): ComposeServiceSnippet {
+  assertRenderSandbox(service, ctx.allServices ?? [service], {
+    existsSync: ctx.existsSync ?? existsSync,
+    realpathSync: ctx.realpathSync ?? realpathSync,
+  });
+
   const m = service.manifest;
   const c = m.container;
   const snippet: ComposeServiceSnippet = {

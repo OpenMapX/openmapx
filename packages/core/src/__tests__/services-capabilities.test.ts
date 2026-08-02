@@ -107,8 +107,12 @@ describe("validateServiceManifest — capability warnings", () => {
     container: { image: "owner/image", tag: "latest", expose: [80] },
   };
 
+  // A community-tier fixture — validate it the way the registry validates a
+  // manifest discovered in a cloned repo.
+  const validateCommunity = (raw: unknown) => validateServiceManifest(raw, { firstParty: false });
+
   it("attaches warnings to the validation result without making it invalid", () => {
-    const result = validateServiceManifest({
+    const result = validateCommunity({
       ...baseManifest,
       provides: ["myroutingthing"],
     });
@@ -119,7 +123,7 @@ describe("validateServiceManifest — capability warnings", () => {
   });
 
   it("omits warnings entirely when everything is well-known or namespaced", () => {
-    const result = validateServiceManifest({
+    const result = validateCommunity({
       ...baseManifest,
       provides: ["routing-engine", "vendor/extra-thing"],
     });
@@ -128,7 +132,7 @@ describe("validateServiceManifest — capability warnings", () => {
   });
 
   it("accepts the structured `provides` form with metadata", () => {
-    const result = validateServiceManifest({
+    const result = validateCommunity({
       ...baseManifest,
       provides: [
         {
@@ -142,7 +146,7 @@ describe("validateServiceManifest — capability warnings", () => {
   });
 
   it("warns on the structured form when the capability is unrecognised", () => {
-    const result = validateServiceManifest({
+    const result = validateCommunity({
       ...baseManifest,
       provides: [{ capability: "weird-thing", metadata: { foo: "bar" } }],
     });
@@ -152,7 +156,7 @@ describe("validateServiceManifest — capability warnings", () => {
   });
 
   it("accepts a mix of bare strings and structured entries on the same service", () => {
-    const result = validateServiceManifest({
+    const result = validateCommunity({
       ...baseManifest,
       provides: ["routing-engine", { capability: "tile-server", metadata: { region: "europe" } }],
     });

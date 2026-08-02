@@ -64,6 +64,51 @@ describe("computeServiceSecurityRating", () => {
     expect(r.secretCount).toBe(1);
   });
 
+  // biome-ignore-start lint/suspicious/noTemplateCurlyInString: these are literal Docker Compose references under test
+  it("reports distinct deployment variables found across manifest string values", () => {
+    const r = computeServiceSecurityRating(
+      svc({
+        description: "${DESCRIPTION}",
+        container: {
+          image: "ghcr.io/x/y",
+          tag: "${IMAGE_TAG:-latest}",
+          environment: {
+            PASSWORD: "${POSTGRES_PASSWORD:?required}",
+            REGION: "$REGION",
+            DUPLICATE: "${POSTGRES_PASSWORD}",
+          },
+          memory: "${MEMORY:-4g}",
+        },
+      }),
+    );
+    expect(r.deploymentVariables).toEqual([
+      "DESCRIPTION",
+      "IMAGE_TAG",
+      "MEMORY",
+      "POSTGRES_PASSWORD",
+      "REGION",
+    ]);
+    expect(r.factors).toContain(
+      "-2 reads 5 deployment environment variable(s): DESCRIPTION, IMAGE_TAG, MEMORY, POSTGRES_PASSWORD, REGION",
+    );
+  });
+
+  it("marks env files and Compose-variable bind paths as first-party-only", () => {
+    expect(
+      computeServiceSecurityRating(
+        svc({ container: { image: "ghcr.io/x/y", tag: "1", envFile: [".env"] } }),
+      ).requiresBuiltIn,
+    ).toBe(true);
+    expect(
+      computeServiceSecurityRating(
+        svc({
+          bindMounts: [{ source: "$HOST_PATH", target: "${CONTAINER_PATH}" }],
+        }),
+      ).requiresBuiltIn,
+    ).toBe(true);
+  });
+  // biome-ignore-end lint/suspicious/noTemplateCurlyInString: these are literal Docker Compose references under test
+
   it("never returns a score outside 1..8", () => {
     const r = computeServiceSecurityRating(
       svc({

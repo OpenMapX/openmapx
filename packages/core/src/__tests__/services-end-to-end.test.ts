@@ -1,7 +1,7 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { renderCompose, ServiceRegistry } from "../services";
+import { renderCompose, ServiceRegistry, validateServiceManifest } from "../services";
 
 const repoRoot = join(__dirname, "..", "..", "..", "..");
 const manifestsPresent = existsSync(join(repoRoot, "services", "postgis", "service.json"));
@@ -204,6 +204,35 @@ describe.skipIf(!manifestsPresent)(
         "pelias-placeholder:\n        condition: service_started",
       );
       expect(result.composeYaml).toContain("pelias-pip:\n        condition: service_started");
+    });
+
+    describe("first-party manifest provenance", () => {
+      const builtInManifestPaths = readdirSync(join(repoRoot, "services"), {
+        withFileTypes: true,
+      })
+        .filter((e) => e.isDirectory() && !e.name.startsWith(".") && !e.name.startsWith("_"))
+        .map((e) => join(repoRoot, "services", e.name, "service.json"))
+        .filter((p) => existsSync(p));
+
+      it("finds every shipped service manifest", () => {
+        expect(builtInManifestPaths.length).toBeGreaterThanOrEqual(20);
+      });
+
+      it("validates every shipped manifest under first-party provenance", () => {
+        for (const path of builtInManifestPaths) {
+          const raw: unknown = JSON.parse(readFileSync(path, "utf-8"));
+          const result = validateServiceManifest(raw, { firstParty: true });
+          expect(result.valid, `${path}: ${result.errors.join("; ")}`).toBe(true);
+        }
+      });
+
+      it("rejects every shipped manifest when it arrives without first-party provenance", () => {
+        for (const path of builtInManifestPaths) {
+          const raw: unknown = JSON.parse(readFileSync(path, "utf-8"));
+          const result = validateServiceManifest(raw, { firstParty: false });
+          expect(result.valid, `${path} was accepted as a community manifest`).toBe(false);
+        }
+      });
     });
   },
 );

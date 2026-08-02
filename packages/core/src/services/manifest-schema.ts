@@ -1,6 +1,7 @@
 import z from "zod/v4";
 import { type CapabilityWarning, collectCapabilityWarnings } from "./capabilities";
-import type { ServiceManifest } from "./types";
+import { checkManifestSandbox, isComposeVarReference } from "./sandbox-policy";
+import type { ManifestProvenance, ServiceManifest } from "./types";
 
 const IMAGE_REGEX = /^[a-z0-9]([a-z0-9._\-/])*$/;
 const TAG_REGEX = /^[a-zA-Z0-9._-]+$/;
@@ -11,9 +12,10 @@ const VOLUME_NAME_REGEX = /^openmapx-[a-z0-9-]+$/;
 const ABSOLUTE_PATH_REGEX = /^\/[^\s]+$/;
 const PATH_PREFIX_REGEX = /^\/[a-zA-Z0-9._\-/]*$/;
 
-// Built-in services may request a bind mount from one of these special host
-// sources. Community services are rejected by post-parse validation and cannot
-// use them. Keep this list tight — each entry is a security boundary.
+// Services loaded from the first-party services/ tree may request a bind mount
+// from one of these special host sources. Manifests from cloned community repos
+// are rejected by post-parse validation and cannot use them. Keep this list
+// tight — each entry is a security boundary.
 export const SPECIAL_BIND_SOURCES = new Set<string>(["@docker-socket"]);
 
 // `@service:<slug>:<rel-path>` is a parameterized special source: built-in
@@ -61,25 +63,6 @@ const ALLOWED_CAPS = new Set([
   "SYS_CHROOT",
   "SYS_PTRACE",
   "SYS_TIME",
-]);
-
-// Capabilities that community and community-verified services may request.
-// Excludes all capabilities that can trivially escape a container or affect
-// the host kernel/devices: SYS_ADMIN, SYS_PTRACE, SYS_TIME, SYS_CHROOT,
-// NET_ADMIN, MKNOD, DAC_READ_SEARCH, IPC_LOCK, AUDIT_WRITE.
-// SYS_ADMIN must never appear here — it is a well-known container-escape primitive.
-export const COMMUNITY_SAFE_CAPS = new Set([
-  "CHOWN",
-  "DAC_OVERRIDE",
-  "FOWNER",
-  "FSETID",
-  "KILL",
-  "NET_BIND_SERVICE",
-  "NET_RAW",
-  "SETFCAP",
-  "SETGID",
-  "SETPCAP",
-  "SETUID",
 ]);
 
 function pathHasParentEscape(path: string): boolean {
@@ -175,8 +158,6 @@ const producesSchema = z.object({
 // the manifest. The `:?…` error-on-unset form is allowed to contain spaces
 // inside the braces so operators get a readable message instead of a cryptic
 // compose error.
-const COMPOSE_VAR_SOURCE_REGEX = /^\$(\{[^{}]+\}|[A-Za-z_][A-Za-z0-9_]*)/;
-
 const bindMountSchema = z
   .object({
     source: z
@@ -195,7 +176,7 @@ const bindMountSchema = z
           if (!path || path.startsWith("/")) return false;
           return !pathHasParentEscape(path);
         }
-        if (COMPOSE_VAR_SOURCE_REGEX.test(s)) {
+        if (isComposeVarReference(s)) {
           // Compose-variable pass-through — rendered verbatim, no '..'/traversal
           // analysis possible because the path is resolved at stack-up time.
           return !pathHasParentEscape(s);
@@ -213,7 +194,7 @@ const bindMountSchema = z
         // Compose-variable reference at the start → pass-through. Even so we
         // forbid `..` anywhere in the string so a malicious default can't
         // traverse out of the container root.
-        if (COMPOSE_VAR_SOURCE_REGEX.test(p)) return !pathHasParentEscape(p);
+        if (isComposeVarReference(p)) return !pathHasParentEscape(p);
         if (!ABSOLUTE_PATH_REGEX.test(p)) return false;
         return !pathHasParentEscape(p);
       }, "must be absolute or a Compose-variable reference, and must not contain '..'"),
@@ -233,7 +214,7 @@ const bindMountSchema = z
     optional: z.boolean().optional(),
   })
   .refine(
-    (bm) => !(bm.optional && COMPOSE_VAR_SOURCE_REGEX.test(bm.source)),
+    (bm) => !(bm.optional && isComposeVarReference(bm.source)),
     "optional: true is not supported with Compose-variable sources — the host path is unknown until stack-up time",
   );
 
@@ -377,7 +358,10 @@ export interface ManifestValidationResult {
   warnings?: CapabilityWarning[];
 }
 
-export function validateServiceManifest(raw: unknown): ManifestValidationResult {
+export function validateServiceManifest(
+  raw: unknown,
+  provenance: ManifestProvenance,
+): ManifestValidationResult {
   const result = serviceManifestSchema.safeParse(raw);
   if (!result.success) {
     return {
@@ -387,41 +371,7 @@ export function validateServiceManifest(raw: unknown): ManifestValidationResult 
   }
   const m = result.data as ServiceManifest;
   const errors: string[] = [];
-
-  if (m.quality !== "built-in" && m.container.networkMode === "host") {
-    errors.push("container.networkMode: 'host' is not allowed for community services");
-  }
-  if (m.quality !== "built-in" && m.container.privileged) {
-    errors.push("container.privileged is not allowed for community services");
-  }
-  if (m.quality !== "built-in") {
-    for (const cap of m.container.capAdd ?? []) {
-      if (!COMMUNITY_SAFE_CAPS.has(cap)) {
-        errors.push(`container.capAdd: '${cap}' is not allowed for community services`);
-      }
-    }
-    if (m.container.devices?.length) {
-      errors.push("container.devices are not allowed for community services");
-    }
-  }
-  if (m.exposure?.proxy?.enabled && !m.container.expose?.length) {
-    errors.push(
-      "exposure.proxy.enabled requires container.expose to declare at least one port for the proxy to route to",
-    );
-  }
-  // Community and community-verified services may bind-mount their OWN config
-  // files (relative paths under the service directory, already constrained by
-  // the bindMount source regex). They CANNOT use `@`-prefixed special sources
-  // (docker socket, etc.) — those grant host-level access and are built-in only.
-  if (m.quality !== "built-in") {
-    for (const bm of m.bindMounts ?? []) {
-      if (bm.source.startsWith("@")) {
-        errors.push(
-          `bindMounts: special source "${bm.source}" is only allowed for built-in services`,
-        );
-      }
-    }
-  }
+  errors.push(...checkManifestSandbox(m, provenance));
 
   // A service can ship multiple `produces` entries for the same `type` only
   // when each carries a distinct `instance` id. Same (type, instance) pair

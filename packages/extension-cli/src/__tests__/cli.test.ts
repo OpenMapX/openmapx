@@ -81,7 +81,7 @@ describe("scaffold service", () => {
   it("produces a service.json that passes the OpenMapX service-manifest validator", () => {
     const destPath = scaffoldService({ id: "valid-svc", outDir: tmp });
     const parsed: unknown = JSON.parse(readFileSync(destPath, "utf-8"));
-    const result = services.validateServiceManifest(parsed);
+    const result = services.validateServiceManifest(parsed, { firstParty: false });
     expect(result.valid, `manifest validation failed: ${result.errors.join("; ")}`).toBe(true);
   });
 });

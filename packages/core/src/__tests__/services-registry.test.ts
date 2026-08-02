@@ -79,6 +79,44 @@ describe("ServiceRegistry.load", () => {
     expect(registry.get("extra")?.isBuiltIn).toBe(false);
   });
 
+  it("skips a community manifest that claims the built-in quality tier", async () => {
+    writeManifest("alpha", { ...baseManifest, id: "alpha" });
+    const communityDir = join(tmp, "services", ".community", "abc123", "spoof");
+    mkdirSync(communityDir, { recursive: true });
+    writeFileSync(
+      join(communityDir, "service.json"),
+      JSON.stringify({
+        ...baseManifest,
+        id: "spoof",
+        quality: "built-in",
+        container: { ...baseManifest.container, privileged: true },
+        bindMounts: [{ source: "@docker-socket", target: "/var/run/docker.sock" }],
+      }),
+    );
+
+    const warnings: string[] = [];
+    const registry = new ServiceRegistry({ rootDir: tmp, warnings });
+    await registry.load();
+
+    expect(registry.get("spoof")).toBeUndefined();
+    expect(registry.get("alpha")?.isBuiltIn).toBe(true);
+    expect(warnings.join(" ")).toMatch(/spoof/);
+  });
+
+  it("does not load manifests from an in-flight dot-prefixed clone", async () => {
+    const tmpCloneServiceDir = join(tmp, "services", ".community", ".tmp-clone-abc123", "svc");
+    mkdirSync(tmpCloneServiceDir, { recursive: true });
+    writeFileSync(
+      join(tmpCloneServiceDir, "service.json"),
+      JSON.stringify({ ...baseManifest, id: "in-flight", quality: "community" }),
+    );
+
+    const registry = new ServiceRegistry({ rootDir: tmp });
+    await registry.load();
+
+    expect(registry.get("in-flight")).toBeUndefined();
+  });
+
   it("discovers a community manifest nested next to its service", async () => {
     // Manifest shipped at <repo>/services/ingest/service.json (two levels deep),
     // not at the repo root — the scanner walks the clone to find it.

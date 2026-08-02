@@ -14,26 +14,31 @@ const validMinimal = {
   provides: ["routing-engine"],
 };
 
+const validateFirstParty = (raw: unknown) => validateServiceManifest(raw, { firstParty: true });
+const validateExternal = (raw: unknown) => validateServiceManifest(raw, { firstParty: false });
+const validateWithProvenance = (raw: unknown, firstParty: boolean) =>
+  validateServiceManifest(raw, { firstParty });
+
 describe("validateServiceManifest", () => {
   it("accepts a minimal valid manifest", () => {
-    const result = validateServiceManifest(validMinimal);
+    const result = validateFirstParty(validMinimal);
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);
   });
 
   it("rejects manifest missing id", () => {
-    const result = validateServiceManifest({ ...validMinimal, id: undefined });
+    const result = validateFirstParty({ ...validMinimal, id: undefined });
     expect(result.valid).toBe(false);
     expect(result.errors.join(" ")).toMatch(/id/);
   });
 
   it("accepts a containerName (including a single-char Docker name)", () => {
-    const multi = validateServiceManifest({
+    const multi = validateFirstParty({
       ...validMinimal,
       container: { ...validMinimal.container, containerName: "motis-staging" },
     });
     expect(multi.valid).toBe(true);
-    const single = validateServiceManifest({
+    const single = validateFirstParty({
       ...validMinimal,
       container: { ...validMinimal.container, containerName: "m" },
     });
@@ -41,7 +46,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("rejects a containerName with illegal characters", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       container: { ...validMinimal.container, containerName: "bad/name" },
     });
@@ -50,7 +55,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("rejects image containing a colon (tag must be separate)", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       container: { ...validMinimal.container, image: "valhalla:latest" },
     });
@@ -59,7 +64,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("rejects image with uppercase characters", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       container: { ...validMinimal.container, image: "Valhalla/Server" },
     });
@@ -67,7 +72,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("rejects volume name without openmapx- prefix", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       volumes: [{ name: "valhalla-tiles", mountAt: "/data" }],
     });
@@ -76,7 +81,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("accepts volume with openmapx- prefix", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       volumes: [{ name: "openmapx-valhalla-tiles", mountAt: "/data" }],
     });
@@ -84,7 +89,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("rejects mountAt with parent traversal", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       consumes: [{ type: "osm-pbf", mountAt: "/foo/../etc", required: true }],
     });
@@ -93,7 +98,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("rejects mountAt that is not absolute", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       consumes: [{ type: "osm-pbf", mountAt: "data", required: true }],
     });
@@ -101,7 +106,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("accepts a consumes targetFilename for fixed input-name contracts", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       consumes: [
         {
@@ -116,7 +121,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("rejects consumes targetFilename when it contains a path", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       consumes: [
         {
@@ -132,7 +137,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("rejects unknown capAdd entries (must be uppercase Linux capability)", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       container: { ...validMinimal.container, capAdd: ["random-thing"] },
     });
@@ -140,7 +145,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("accepts well-known capAdd entries", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       container: { ...validMinimal.container, capAdd: ["NET_ADMIN", "SYS_PTRACE"] },
     });
@@ -148,7 +153,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("rejects networkMode: host for community service", () => {
-    const result = validateServiceManifest({
+    const result = validateExternal({
       ...validMinimal,
       quality: "community",
       container: { ...validMinimal.container, networkMode: "host" },
@@ -158,7 +163,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("accepts networkMode: host for built-in service", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       quality: "built-in",
       container: { ...validMinimal.container, networkMode: "host" },
@@ -167,7 +172,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("rejects exposure.proxy.pathPrefix without leading slash", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       exposure: { proxy: { enabled: true, pathPrefix: "valhalla" } },
     });
@@ -175,7 +180,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("accepts bindMounts with a relative source for built-in services", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       bindMounts: [{ source: "config/valhalla.json", target: "/etc/valhalla.json" }],
     });
@@ -183,7 +188,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("accepts @docker-socket as a bindMount source for built-in services", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       bindMounts: [{ source: "@docker-socket", target: "/var/run/docker.sock" }],
     });
@@ -191,7 +196,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("rejects bindMounts with an absolute source path", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       bindMounts: [{ source: "/etc/passwd", target: "/mnt/passwd" }],
     });
@@ -200,7 +205,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("rejects bindMounts with parent traversal in source", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       bindMounts: [{ source: "../etc/passwd", target: "/mnt/passwd" }],
     });
@@ -208,7 +213,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("rejects unknown @-prefixed special bindMount sources", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       bindMounts: [{ source: "@not-a-real-source", target: "/foo" }],
     });
@@ -217,7 +222,7 @@ describe("validateServiceManifest", () => {
 
   // biome-ignore-start lint/suspicious/noTemplateCurlyInString: strings are literal compose-substitution syntax, not JS template placeholders
   it("accepts a ${VAR}-reference bindMount source + target (host-path pass-through)", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       bindMounts: [
         {
@@ -231,7 +236,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("rejects a ${VAR}-reference bindMount source that contains a `..` path component", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       bindMounts: [
         { source: "${OPENMAPX_HOST_DIR:-/tmp/../escape}", target: "/var/run/docker.sock" },
@@ -242,7 +247,7 @@ describe("validateServiceManifest", () => {
   // biome-ignore-end lint/suspicious/noTemplateCurlyInString: strings are literal compose-substitution syntax, not JS template placeholders
 
   it("accepts relative-path bindMounts for community services (ship own configs)", () => {
-    const result = validateServiceManifest({
+    const result = validateExternal({
       ...validMinimal,
       quality: "community",
       bindMounts: [{ source: "config/file.json", target: "/etc/file.json" }],
@@ -251,7 +256,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("accepts relative-path bindMounts for community-verified services", () => {
-    const result = validateServiceManifest({
+    const result = validateExternal({
       ...validMinimal,
       quality: "community-verified",
       bindMounts: [{ source: "config/settings.yml", target: "/app/settings.yml" }],
@@ -260,7 +265,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("rejects @docker-socket bindMount source for community services", () => {
-    const result = validateServiceManifest({
+    const result = validateExternal({
       ...validMinimal,
       quality: "community",
       bindMounts: [{ source: "@docker-socket", target: "/var/run/docker.sock" }],
@@ -270,7 +275,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("rejects @docker-socket bindMount source for community-verified services", () => {
-    const result = validateServiceManifest({
+    const result = validateExternal({
       ...validMinimal,
       quality: "community-verified",
       bindMounts: [{ source: "@docker-socket", target: "/var/run/docker.sock" }],
@@ -279,7 +284,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("accepts @service:<slug>:<path> bindMount source for built-in services", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       bindMounts: [{ source: "@service:pelias:config/pelias.json", target: "/code/pelias.json" }],
     });
@@ -287,7 +292,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("rejects @service:<slug>:<path> with parent traversal in path", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       bindMounts: [{ source: "@service:pelias:../etc/passwd", target: "/etc/passwd" }],
     });
@@ -295,7 +300,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("rejects @service:<slug>:<path> with absolute path part", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       bindMounts: [{ source: "@service:pelias:/etc/passwd", target: "/etc/passwd" }],
     });
@@ -303,7 +308,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("rejects @service:<slug>:<path> for community services", () => {
-    const result = validateServiceManifest({
+    const result = validateExternal({
       ...validMinimal,
       quality: "community",
       bindMounts: [{ source: "@service:pelias:config/pelias.json", target: "/code/pelias.json" }],
@@ -312,7 +317,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("accepts bindMounts marked optional with an @infra: source", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       bindMounts: [
         {
@@ -328,7 +333,7 @@ describe("validateServiceManifest", () => {
 
   // biome-ignore-start lint/suspicious/noTemplateCurlyInString: strings are literal compose-substitution syntax, not JS template placeholders
   it("rejects optional: true on a ${VAR}-prefixed bindMount source (host path unknown at render time)", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       bindMounts: [
         {
@@ -344,7 +349,7 @@ describe("validateServiceManifest", () => {
   // biome-ignore-end lint/suspicious/noTemplateCurlyInString: strings are literal compose-substitution syntax, not JS template placeholders
 
   it("accepts exposure.proxy.additionalRoutes with path or pathPrefix", () => {
-    const r1 = validateServiceManifest({
+    const r1 = validateFirstParty({
       ...validMinimal,
       exposure: {
         proxy: {
@@ -356,7 +361,7 @@ describe("validateServiceManifest", () => {
     });
     expect(r1.valid).toBe(true);
 
-    const r2 = validateServiceManifest({
+    const r2 = validateFirstParty({
       ...validMinimal,
       exposure: {
         proxy: {
@@ -370,7 +375,7 @@ describe("validateServiceManifest", () => {
   });
 
   it("rejects exposure.proxy.additionalRoutes with both path and pathPrefix", () => {
-    const result = validateServiceManifest({
+    const result = validateFirstParty({
       ...validMinimal,
       exposure: {
         proxy: {
@@ -385,7 +390,7 @@ describe("validateServiceManifest", () => {
 
   describe("community / community-verified capability and device gating", () => {
     it("rejects community service with SYS_ADMIN in capAdd", () => {
-      const result = validateServiceManifest({
+      const result = validateExternal({
         ...validMinimal,
         quality: "community",
         container: { ...validMinimal.container, capAdd: ["SYS_ADMIN"] },
@@ -396,7 +401,7 @@ describe("validateServiceManifest", () => {
     });
 
     it("accepts community service with NET_BIND_SERVICE in capAdd", () => {
-      const result = validateServiceManifest({
+      const result = validateExternal({
         ...validMinimal,
         quality: "community",
         container: { ...validMinimal.container, capAdd: ["NET_BIND_SERVICE"] },
@@ -405,7 +410,7 @@ describe("validateServiceManifest", () => {
     });
 
     it("rejects community service with devices declared", () => {
-      const result = validateServiceManifest({
+      const result = validateExternal({
         ...validMinimal,
         quality: "community",
         container: { ...validMinimal.container, devices: ["/dev/mem"] },
@@ -415,7 +420,7 @@ describe("validateServiceManifest", () => {
     });
 
     it("rejects community-verified service with privileged: true", () => {
-      const result = validateServiceManifest({
+      const result = validateExternal({
         ...validMinimal,
         quality: "community-verified",
         container: { ...validMinimal.container, privileged: true },
@@ -424,7 +429,7 @@ describe("validateServiceManifest", () => {
     });
 
     it("rejects community-verified service with SYS_ADMIN in capAdd", () => {
-      const result = validateServiceManifest({
+      const result = validateExternal({
         ...validMinimal,
         quality: "community-verified",
         container: { ...validMinimal.container, capAdd: ["SYS_ADMIN"] },
@@ -434,7 +439,7 @@ describe("validateServiceManifest", () => {
     });
 
     it("rejects community-verified service with devices declared", () => {
-      const result = validateServiceManifest({
+      const result = validateExternal({
         ...validMinimal,
         quality: "community-verified",
         container: { ...validMinimal.container, devices: ["/dev/mem"] },
@@ -444,7 +449,7 @@ describe("validateServiceManifest", () => {
     });
 
     it("accepts community-verified service with NET_BIND_SERVICE in capAdd", () => {
-      const result = validateServiceManifest({
+      const result = validateExternal({
         ...validMinimal,
         quality: "community-verified",
         container: { ...validMinimal.container, capAdd: ["NET_BIND_SERVICE"] },
@@ -453,7 +458,7 @@ describe("validateServiceManifest", () => {
     });
 
     it("accepts built-in service with privileged, SYS_ADMIN capAdd, and devices", () => {
-      const result = validateServiceManifest({
+      const result = validateFirstParty({
         ...validMinimal,
         quality: "built-in",
         container: {
@@ -469,7 +474,7 @@ describe("validateServiceManifest", () => {
 
   describe("produces / consumes instance ids", () => {
     it("accepts valid instance ids on produces and consumes", () => {
-      const result = validateServiceManifest({
+      const result = validateFirstParty({
         ...validMinimal,
         produces: [
           { type: "osm-pbf", instance: "europe", sourceDir: "data/osm/europe" },
@@ -483,7 +488,7 @@ describe("validateServiceManifest", () => {
     });
 
     it("rejects an instance id that doesn't match the slug regex", () => {
-      const result = validateServiceManifest({
+      const result = validateFirstParty({
         ...validMinimal,
         produces: [{ type: "osm-pbf", instance: "Europe!", sourceDir: "data/osm/europe" }],
       });
@@ -492,7 +497,7 @@ describe("validateServiceManifest", () => {
     });
 
     it("rejects duplicate (type, instance) on produces", () => {
-      const result = validateServiceManifest({
+      const result = validateFirstParty({
         ...validMinimal,
         produces: [
           { type: "osm-pbf", instance: "europe", sourceDir: "data/osm/eu1" },
@@ -504,7 +509,7 @@ describe("validateServiceManifest", () => {
     });
 
     it("rejects two default-instance produces entries for the same type", () => {
-      const result = validateServiceManifest({
+      const result = validateFirstParty({
         ...validMinimal,
         produces: [
           { type: "osm-pbf", sourceDir: "data/osm/a" },
@@ -516,7 +521,7 @@ describe("validateServiceManifest", () => {
     });
 
     it("allows the same type with one default and one instanced entry on the same producer", () => {
-      const result = validateServiceManifest({
+      const result = validateFirstParty({
         ...validMinimal,
         produces: [
           { type: "osm-pbf", sourceDir: "data/osm/global" },
@@ -524,6 +529,181 @@ describe("validateServiceManifest", () => {
         ],
       });
       expect(result.valid).toBe(true);
+    });
+  });
+
+  describe("privileged fields are authorized by provenance, not by tier labels", () => {
+    const cases = [
+      { name: "first-party built-in", firstParty: true, quality: "built-in", allowed: true },
+      {
+        name: "first-party community-verified",
+        firstParty: true,
+        quality: "community-verified",
+        allowed: false,
+      },
+      { name: "first-party community", firstParty: true, quality: "community", allowed: false },
+      {
+        name: "external built-in",
+        firstParty: false,
+        quality: "built-in",
+        allowed: false,
+      },
+      {
+        name: "external community-verified",
+        firstParty: false,
+        quality: "community-verified",
+        allowed: false,
+      },
+      { name: "external community", firstParty: false, quality: "community", allowed: false },
+    ] as const;
+    const privilegedFields = [
+      {
+        name: "privileged",
+        container: { privileged: true },
+        bindMounts: undefined,
+        error: /privileged/,
+      },
+      {
+        name: "host networking",
+        container: { networkMode: "host" as const },
+        bindMounts: undefined,
+        error: /networkMode/,
+      },
+      {
+        name: "SYS_ADMIN",
+        container: { capAdd: ["SYS_ADMIN"] },
+        bindMounts: undefined,
+        error: /SYS_ADMIN/,
+      },
+      {
+        name: "devices",
+        container: { devices: ["/dev/mem"] },
+        bindMounts: undefined,
+        error: /devices/,
+      },
+      {
+        name: "docker socket",
+        container: {},
+        bindMounts: [{ source: "@docker-socket", target: "/var/run/docker.sock" }],
+        error: /@docker-socket/,
+      },
+    ] as const;
+
+    for (const field of privilegedFields) {
+      it(`${field.name}: allows only first-party built-in`, () => {
+        for (const candidate of cases) {
+          const result = validateWithProvenance(
+            {
+              ...validMinimal,
+              quality: candidate.quality,
+              container: { ...validMinimal.container, ...field.container },
+              ...(field.bindMounts ? { bindMounts: field.bindMounts } : {}),
+            },
+            candidate.firstParty,
+          );
+          expect(result.valid, `${candidate.name} / ${field.name}`).toBe(candidate.allowed);
+          if (
+            !candidate.allowed &&
+            candidate.firstParty === false &&
+            candidate.quality !== "built-in"
+          ) {
+            expect(result.errors.join(" "), `${candidate.name} / ${field.name}`).toMatch(
+              field.error,
+            );
+          }
+        }
+
+        const verified = validateExternal({
+          ...validMinimal,
+          quality: "community-verified",
+          container: { ...validMinimal.container, ...field.container },
+          ...(field.bindMounts ? { bindMounts: field.bindMounts } : {}),
+        });
+        const community = validateExternal({
+          ...validMinimal,
+          quality: "community",
+          container: { ...validMinimal.container, ...field.container },
+          ...(field.bindMounts ? { bindMounts: field.bindMounts } : {}),
+        });
+        expect(verified.errors).toEqual(community.errors);
+      });
+    }
+  });
+
+  describe("provenance gates the container sandbox", () => {
+    it("rejects a non-first-party manifest that claims the built-in tier", () => {
+      const result = validateExternal(validMinimal);
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(" ")).toMatch(/quality/);
+      expect(result.errors.join(" ")).toMatch(/reserved for services shipped/);
+    });
+
+    it("rejects a self-declared built-in manifest asking for a privileged container", () => {
+      const manifest = {
+        ...validMinimal,
+        container: { ...validMinimal.container, privileged: true },
+      };
+      const result = validateExternal(manifest);
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(" ")).toMatch(/privileged/);
+    });
+
+    it("rejects a self-declared built-in manifest asking for host networking", () => {
+      const manifest = {
+        ...validMinimal,
+        container: { ...validMinimal.container, networkMode: "host" },
+      };
+      const result = validateExternal(manifest);
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(" ")).toMatch(/networkMode/);
+    });
+
+    it("rejects a self-declared built-in manifest asking for an escape capability", () => {
+      const manifest = {
+        ...validMinimal,
+        container: { ...validMinimal.container, capAdd: ["SYS_ADMIN"] },
+      };
+      const result = validateExternal(manifest);
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(" ")).toMatch(/SYS_ADMIN/);
+    });
+
+    it("rejects a self-declared built-in manifest asking for device passthrough", () => {
+      const manifest = {
+        ...validMinimal,
+        container: { ...validMinimal.container, devices: ["/dev/mem"] },
+      };
+      const result = validateExternal(manifest);
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(" ")).toMatch(/devices/);
+    });
+
+    it("rejects a self-declared built-in manifest mounting the docker socket", () => {
+      const manifest = {
+        ...validMinimal,
+        bindMounts: [{ source: "@docker-socket", target: "/var/run/docker.sock" }],
+      };
+      const result = validateExternal(manifest);
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(" ")).toMatch(/@docker-socket/);
+    });
+
+    it("still accepts an honest community manifest without elevated privileges", () => {
+      const manifest = { ...validMinimal, quality: "community" };
+      const result = validateExternal(manifest);
+      expect(result.valid).toBe(true);
+      expect(result.errors).toEqual([]);
+    });
+
+    it("rejects a first-party manifest that does not declare the built-in tier", () => {
+      const manifest = {
+        ...validMinimal,
+        quality: "community",
+        container: { ...validMinimal.container, privileged: true },
+      };
+      const result = validateFirstParty(manifest);
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(" ")).toMatch(/quality/);
     });
   });
 });

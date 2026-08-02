@@ -290,6 +290,19 @@ export interface ServiceManifest {
   ui?: ServiceUI;
 }
 
+/**
+ * Where a service manifest came from. This is the platform's authorization
+ * signal for host-level container privileges, and it is derived by the caller
+ * from the manifest's location on disk — never from anything the manifest says
+ * about itself. `firstParty` is true only for manifests shipped in the
+ * monorepo's `services/` tree; manifests discovered under `services/.community/`
+ * (cloned extension repos) are always false, whatever their source catalog
+ * trust tier is.
+ */
+export interface ManifestProvenance {
+  firstParty: boolean;
+}
+
 export interface LoadedService {
   manifest: ServiceManifest;
   directory: string;

@@ -11,19 +11,21 @@ const minimalManifest = {
 
 describe("service manifest ownsSchema field", () => {
   it("accepts a valid ownsSchema identifier", () => {
-    const result = validateServiceManifest({ ...minimalManifest, ownsSchema: "conditions" });
+    const manifest = { ...minimalManifest, ownsSchema: "conditions" };
+    const result = validateServiceManifest(manifest, { firstParty: false });
     expect(result.valid).toBe(true);
     expect(result.errors).toHaveLength(0);
   });
 
   it("rejects an ownsSchema with uppercase letters or spaces", () => {
-    const result = validateServiceManifest({ ...minimalManifest, ownsSchema: "Bad Name" });
+    const manifest = { ...minimalManifest, ownsSchema: "Bad Name" };
+    const result = validateServiceManifest(manifest, { firstParty: false });
     expect(result.valid).toBe(false);
     expect(result.errors.some((e) => e.includes("Postgres identifier"))).toBe(true);
   });
 
   it("validates a manifest without ownsSchema (backward compatibility)", () => {
-    const result = validateServiceManifest({ ...minimalManifest });
+    const result = validateServiceManifest({ ...minimalManifest }, { firstParty: false });
     expect(result.valid).toBe(true);
     expect(result.errors).toHaveLength(0);
   });

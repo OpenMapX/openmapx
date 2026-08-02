@@ -52,6 +52,12 @@ export {
   type ResolverContext,
   resolveRequirement,
 } from "./resolver";
+export {
+  assertRenderSandbox,
+  COMMUNITY_SAFE_CAPS,
+  checkManifestSandbox,
+  isComposeVarReference,
+} from "./sandbox-policy";
 export { computeServiceSecurityRating, type ServiceSecurityRating } from "./security-rating";
 export {
   buildAppApiServiceEnv,

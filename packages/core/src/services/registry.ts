@@ -45,6 +45,10 @@ export class ServiceRegistry {
   private scanCommunityDir(dir: string, warnings: string[]): void {
     for (const repoEntry of readdirSync(dir, { withFileTypes: true })) {
       if (!repoEntry.isDirectory()) continue;
+      // Registered clones are named by URL hash; a dot-prefixed entry is an
+      // in-flight `.tmp-clone-*` that has not been validated or moved into
+      // place yet.
+      if (repoEntry.name.startsWith(".")) continue;
       // A community repo may place its service.json next to the service (e.g.
       // services/ingest/service.json), not only at the repo root, so walk the
       // clone with the shared bounded finder rather than a fixed one level.
@@ -66,7 +70,7 @@ export class ServiceRegistry {
       return;
     }
 
-    const validation = validateServiceManifest(raw);
+    const validation = validateServiceManifest(raw, { firstParty: isBuiltIn });
     if (!validation.valid) {
       warnings.push(`Invalid manifest ${manifestPath}: ${validation.errors.join("; ")}`);
       return;

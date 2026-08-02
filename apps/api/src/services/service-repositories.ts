@@ -110,7 +110,9 @@ function readPreviewsFromClone(target: string): RepoManifestPreview[] {
       continue;
     }
 
-    const validation = validateServiceManifest(raw);
+    // Everything this function sees is a cloned third-party repo destined for
+    // services/.community/, so it never carries first-party provenance.
+    const validation = validateServiceManifest(raw, { firstParty: false });
     if (!validation.valid) {
       out.push(buildErrorPreview(slug, validation.errors));
       continue;
