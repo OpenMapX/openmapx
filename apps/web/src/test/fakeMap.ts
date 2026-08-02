@@ -45,6 +45,12 @@ export interface FakeMap {
 
 export interface CreateFakeMapOptions {
   styleLoaded?: boolean;
+  /**
+   * The base style's own layers. Restored by `setStyle`, which drops everything
+   * else — the app's sources and layers do not survive a style change. Defaults
+   * to none so existing tests that assert an exact layer list are unaffected.
+   */
+  baseLayers?: Array<{ id: string; type: string }>;
   /** Initial `getZoom()` value (default 10). */
   zoom?: number;
   /** Initial camera pitch and pitch constraint. */
@@ -69,6 +75,9 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     light: null,
     handlers: new Map(),
   };
+
+  const baseLayers = options.baseLayers ?? [];
+  for (const layer of baseLayers) state.layers.set(layer.id, { ...layer });
 
   const on = (event: string, ...rest: unknown[]) => {
     // MapLibre overloads: on(type, handler) and on(type, layerId, handler).
@@ -157,6 +166,25 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       layers: [...state.layers.values()],
       sources: Object.fromEntries(state.sources),
     }),
+    /**
+     * A style change is a rebuild, not a repaint: MapLibre's `setStyle` drops
+     * every source, layer and image the app added, keeping only the incoming
+     * style's own layers. `style.load` then fires synchronously, inside this
+     * call — that is the diff path MapLibre takes for a style object, and a
+     * listener attached after `setStyle` returns misses it entirely. `styledata`
+     * follows. Modelling both facts is the point of this method.
+     */
+    setStyle: (_style?: unknown) => {
+      state.layers.clear();
+      state.sources.clear();
+      state.images.clear();
+      state.paint.clear();
+      state.layout.clear();
+      state.filters.clear();
+      for (const layer of baseLayers) state.layers.set(layer.id, { ...layer });
+      api.emit("style.load");
+      api.emit("styledata");
+    },
     queryRenderedFeatures: () => [],
     querySourceFeatures: () => [],
     project: (lngLat: unknown) => ({ x: 0, y: 0, lngLat }),

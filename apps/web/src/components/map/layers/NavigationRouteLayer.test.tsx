@@ -1,8 +1,11 @@
 import { act, render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { createFakeMap } from "@/test";
+import { createFakeMap, expectStyleSwapIsLossless } from "@/test";
 
-const fake = createFakeMap({ styleLoaded: true });
+const fake = createFakeMap({
+  styleLoaded: true,
+  baseLayers: [{ id: "place-labels", type: "symbol" }],
+});
 
 const route = {
   geometry: [
@@ -44,16 +47,6 @@ import { NavigationRouteLayer } from "./NavigationRouteLayer";
 const REMAINING = "nav-route-remaining";
 const SOURCE = "nav-route-source";
 
-/** Wipe every source and layer the way MapLibre's `setStyle` does. */
-function swapStyle() {
-  fake.state.layers.clear();
-  fake.state.sources.clear();
-  fake.state.layers.set("place-labels", { id: "place-labels", type: "symbol" });
-  act(() => {
-    fake.emit("styledata");
-  });
-}
-
 function featureCount(): number {
   const data = fake.state.sources.get(SOURCE)?.data as { features?: unknown[] } | undefined;
   return data?.features?.length ?? 0;
@@ -68,7 +61,9 @@ describe("NavigationRouteLayer across a style change", () => {
 
   it("rebuilds its layers after a theme swap without waiting for a new styleVersion", () => {
     render(<NavigationRouteLayer />);
-    swapStyle();
+    act(() => {
+      fake.map.setStyle({} as never);
+    });
     // A dark-mode swap calls setStyle, which drops every source and layer. The
     // styleVersion counter is driven by a one-shot listener that can be missed,
     // so recovery has to come from the map's own styledata event.
@@ -77,9 +72,16 @@ describe("NavigationRouteLayer across a style change", () => {
 
   it("re-pushes the route geometry after a theme swap, not just the empty layers", () => {
     render(<NavigationRouteLayer />);
-    swapStyle();
+    act(() => {
+      fake.map.setStyle({} as never);
+    });
     // Recreating the source leaves it empty; without a re-push the driver sees
     // no route line until something else happens to change the geometry.
     expect(featureCount()).toBeGreaterThan(0);
+  });
+
+  it("loses nothing at all across a style change", () => {
+    render(<NavigationRouteLayer />);
+    expectStyleSwapIsLossless(fake);
   });
 });

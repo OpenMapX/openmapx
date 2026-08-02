@@ -104,9 +104,14 @@ function firstSymbolLayerId(
 
 /**
  * The id the given slot's layer must be inserted before, so that it lands in
- * canonical order: the first registered layer ranked strictly above it, or the
- * base style's first symbol layer when nothing registered sits above and the
- * slot belongs under the labels. `undefined` means "top of the stack".
+ * canonical order: whichever comes first in style order — the first registered
+ * layer ranked strictly above it, or (for a slot under the labels) the base
+ * style's first symbol layer. `undefined` means "top of the stack".
+ *
+ * The anchor has to compete inside the walk rather than act as a fallback after
+ * it. As a fallback, a below-labels layer added while some above-labels layer
+ * was already registered would anchor to that layer instead — and land above the
+ * labels, because that is where the above-labels layer sits.
  */
 export function resolveBeforeId(
   styleLayers: readonly StackLayer[],
@@ -116,13 +121,14 @@ export function resolveBeforeId(
 ): string | undefined {
   const rank = rankOf(slot, order);
   const byId = new Map(registrations.map((r) => [r.id, r]));
+  const belowLabels = MAP_LAYER_SLOTS.indexOf(slot) < SYMBOL_SLOT_INDEX;
+  const symbolId = belowLabels ? firstSymbolLayerId(styleLayers, registrations) : undefined;
   for (const layer of styleLayers) {
+    if (layer.id === symbolId) return symbolId;
     const registration = byId.get(layer.id);
     if (registration && rankOf(registration.slot, registration.order) > rank) return layer.id;
   }
-  return MAP_LAYER_SLOTS.indexOf(slot) < SYMBOL_SLOT_INDEX
-    ? firstSymbolLayerId(styleLayers, registrations)
-    : undefined;
+  return undefined;
 }
 
 /**
@@ -160,9 +166,18 @@ export function planAnchorMoves(
 
   const moves: Array<{ id: string; beforeId: string | undefined }> = [];
   let beforeId: string | undefined;
+  let crossedSymbol = false;
   for (let i = present.length - 1; i >= 0; i--) {
     const registration = present[i];
     const belowLabels = MAP_LAYER_SLOTS.indexOf(registration.slot) < SYMBOL_SLOT_INDEX;
+    // The walk runs top rank first. The first below-labels layer it reaches must
+    // anchor to the symbol layer, not to the above-labels layer before it —
+    // otherwise every layer under it inherits that anchor and the whole
+    // below-labels band is stranded above the labels, which no later pass undoes.
+    if (belowLabels && !crossedSymbol) {
+      crossedSymbol = true;
+      beforeId = symbolId;
+    }
     moves.push({ id: registration.id, beforeId: beforeId ?? (belowLabels ? symbolId : undefined) });
     beforeId = registration.id;
   }

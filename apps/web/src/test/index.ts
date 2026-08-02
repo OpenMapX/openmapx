@@ -15,3 +15,4 @@ export {
   createTestQueryClient,
   renderHookWithQuery,
 } from "./query";
+export { expectStyleSwapIsLossless, type StackSnapshot, snapshotStack } from "./styleSwap";
