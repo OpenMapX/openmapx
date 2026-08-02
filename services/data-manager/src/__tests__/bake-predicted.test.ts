@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type BakePredictedDeps,
   bakePredicted,
@@ -92,6 +92,7 @@ describe("bakePredicted", () => {
       csvDir,
       containerCsvDir: "/custom_files/predicted-csv",
       container: "docker-valhalla-1",
+      getCoveredWayIds: async () => new Set([3001]),
       fetchProfiles: async () => profiles,
       loadWaysToEdges: async () => waysToEdges,
       runDocker,
@@ -112,6 +113,21 @@ describe("bakePredicted", () => {
       ...overrides,
     };
   }
+
+  const profileFor = (wayId: string, dir: "f" | "b" = "f"): ProfileSegment => ({
+    way_id: wayId,
+    dir,
+    free_flow_kph: 100,
+    constrained_kph: 90,
+    hourly: flatHourly(80),
+  });
+
+  const edgeAt = (index: number, forward = true): WayEdge => ({
+    forward,
+    level: 0,
+    tile: 3196,
+    index,
+  });
 
   it("writes one CSV per tile at its tileSuffix path with the forward-matching row only", async () => {
     const result = await bakePredicted(makeDeps());
@@ -192,12 +208,15 @@ describe("bakePredicted", () => {
     }
   });
 
-  it("runs the rebuild chain in order after the bake: bake -> ensureTrafficExtract(force) [restarts once] -> refreshWaysToEdges", async () => {
+  it("refreshes the way-to-edge map BEFORE reading it, then bakes and rebuilds the extract", async () => {
     await bakePredicted(makeDeps());
 
-    expect(ensureExtractCalls).toEqual([{ force: true }]);
+    // Exactly one refresh, and it must precede the bake. Reading a map written
+    // by an earlier, unrelated job is what made a production bake emit 33 of
+    // 2,787 rows.
     expect(refreshWaysCalls).toHaveLength(1);
     expect([...refreshWaysCalls[0]].sort()).toEqual([3001]);
+    expect(ensureExtractCalls).toEqual([{ force: true }]);
 
     // Valhalla must restart exactly once — from ensureTrafficExtract's own
     // internal restart. bakePredicted must NOT issue a second restart.
@@ -207,13 +226,29 @@ describe("bakePredicted", () => {
     const bakeIndex = callOrder.indexOf("docker:exec");
     const ensureIndex = callOrder.indexOf("ensureTrafficExtract");
     const restartIndex = callOrder.indexOf("docker:restart");
-    const refreshIndex = callOrder.indexOf("refreshWaysToEdges");
 
-    expect(bakeIndex).toBeGreaterThanOrEqual(0);
-    // bake -> ensureTrafficExtract -> its restart -> refreshWaysToEdges
+    const refreshIndex = callOrder.indexOf("refreshWaysToEdges");
+    expect(refreshIndex).toBe(0);
+    expect(refreshIndex).toBeLessThan(bakeIndex);
     expect(bakeIndex).toBeLessThan(ensureIndex);
     expect(ensureIndex).toBeLessThan(restartIndex);
-    expect(restartIndex).toBeLessThan(refreshIndex);
+  });
+
+  it("aborts before any docker call when the pre-bake map refresh fails", async () => {
+    await expect(
+      bakePredicted(
+        makeDeps({
+          refreshWaysToEdges: async () => {
+            throw new Error("valhalla_ways_to_edges exited 1");
+          },
+        }),
+      ),
+    ).rejects.toThrow(/valhalla_ways_to_edges exited 1/);
+
+    // Never fall back to the map on disk: proceeding on a stale map is the
+    // failure this whole change exists to prevent.
+    expect(dockerCalls).toHaveLength(0);
+    expect(ensureExtractCalls).toHaveLength(0);
   });
 
   it("throws when valhalla_add_predicted_traffic exits non-zero and skips the rebuild chain", async () => {
@@ -232,6 +267,104 @@ describe("bakePredicted", () => {
     ).rejects.toThrow(/valhalla_add_predicted_traffic exited 1/);
 
     expect(ensureExtractCalls).toHaveLength(0);
-    expect(refreshWaysCalls).toHaveLength(0);
+    // The refresh moved to the front of the bake, so it has already run.
+    expect(refreshWaysCalls).toHaveLength(1);
+  });
+
+  it("reports matched and matchRatePct over map-resolvable profiles", async () => {
+    // Three profiles: two resolve, one is for a way outside the graph.
+    const waysToEdges = new Map<number, WayEdge[]>([
+      [1, [edgeAt(10)]],
+      [2, [edgeAt(11)]],
+    ]);
+    const result = await bakePredicted(
+      makeDeps({
+        fetchProfiles: async () => [profileFor("1"), profileFor("2"), profileFor("999")],
+        loadWaysToEdges: async () => waysToEdges,
+      }),
+    );
+
+    expect(result.segments).toBe(3);
+    expect(result.resolvable).toBe(2);
+    expect(result.matched).toBe(2);
+    // 999 is not in the map, so it is not counted against the rate.
+    expect(result.matchRatePct).toBe(100);
+  });
+
+  it("warns when the rate falls below fifty percent", async () => {
+    // Four resolvable ways; only one has an edge in the profile's direction.
+    const waysToEdges = new Map<number, WayEdge[]>([
+      [1, [edgeAt(10, true)]],
+      [2, [edgeAt(11, false)]],
+      [3, [edgeAt(12, false)]],
+      [4, [edgeAt(13, false)]],
+    ]);
+    const warn = vi.fn();
+    await bakePredicted(
+      makeDeps({
+        fetchProfiles: async () => [
+          profileFor("1"),
+          profileFor("2"),
+          profileFor("3"),
+          profileFor("4"),
+        ],
+        loadWaysToEdges: async () => waysToEdges,
+        logger: { info: () => {}, warn },
+      }),
+    );
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][1]).toMatchObject({ resolvable: 4, matched: 1, matchRatePct: 25 });
+  });
+
+  it("does not warn at a healthy rate", async () => {
+    const warn = vi.fn();
+    await bakePredicted(makeDeps({ logger: { info: () => {}, warn } }));
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("warns when the map covers too little of the feed, which matchRatePct cannot see", async () => {
+    // The shape of the 2026-07-27 incident: a wide feed, a map holding almost
+    // none of it, and every way it does hold matching perfectly. matchRatePct
+    // reads 100 here — only coverageRatePct moves.
+    const profiles = Array.from({ length: 100 }, (_, i) => profileFor(String(i + 1)));
+    const waysToEdges = new Map<number, WayEdge[]>([
+      [1, [edgeAt(10)]],
+      [2, [edgeAt(11)]],
+    ]);
+    const warn = vi.fn();
+    const result = await bakePredicted(
+      makeDeps({
+        fetchProfiles: async () => profiles,
+        loadWaysToEdges: async () => waysToEdges,
+        logger: { info: () => {}, warn },
+      }),
+    );
+
+    expect(result.matchRatePct).toBe(100);
+    expect(result.coverageRatePct).toBe(2);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain("covers too little");
+  });
+
+  it("skips the bake tool and the extract rebuild when nothing matched, but keeps the refresh", async () => {
+    const warn = vi.fn();
+    const result = await bakePredicted(
+      makeDeps({
+        fetchProfiles: async () => [profileFor("999")],
+        loadWaysToEdges: async () => new Map<number, WayEdge[]>(),
+        logger: { info: () => {}, warn },
+      }),
+    );
+
+    expect(dockerCalls).toHaveLength(0);
+    expect(ensureExtractCalls).toHaveLength(0);
+    // The refresh must still have run — it is the only thing that can recover a
+    // stale map, so skipping it would make a zero-row bake permanent.
+    expect(refreshWaysCalls).toHaveLength(1);
+    expect(result.rows).toBe(0);
+    expect(result.tiles).toBe(0);
+    expect(result.built).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 });
