@@ -1,7 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mangroveGetReviews } from "../client.js";
 import { mangroveProvider } from "../provider.js";
-import type { MangroveWireReview } from "../types.js";
+import type { MangroveWirePayload, MangroveWireReview } from "../types.js";
+
+vi.mock("@openmapx/mangrove-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@openmapx/mangrove-client")>();
+  return {
+    ...actual,
+    verifyMangroveReview: vi.fn(async ({ jwt, kid }: { jwt: string; kid?: string }) => {
+      const [, encodedPayload] = jwt.split(".");
+      if (!encodedPayload) return { ok: false as const, reason: "malformed-jwt" as const };
+      return {
+        ok: true as const,
+        kid: kid ?? "",
+        payload: JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")),
+      };
+    }),
+  };
+});
 
 vi.mock("../client.js", () => ({
   mangroveGetReviews: vi.fn(),
@@ -11,6 +27,10 @@ vi.mock("../client.js", () => ({
 
 const KID = "-----BEGIN PUBLIC KEY-----test-----END PUBLIC KEY-----";
 const OTHER_KID = "-----BEGIN PUBLIC KEY-----other-----END PUBLIC KEY-----";
+
+function fixtureJwt(payload: MangroveWirePayload): string {
+  return `test.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.test`;
+}
 
 function wireReview(input: {
   signature?: string;
@@ -26,23 +46,25 @@ function wireReview(input: {
   images?: { src: string; label?: string }[];
   license?: string;
 }): MangroveWireReview {
+  const payload: MangroveWirePayload = {
+    sub: input.sub,
+    iat: input.iat ?? 1_775_485_449,
+    rating: input.rating ?? 25,
+    opinion: input.opinion ?? "Fries, fries, fries.",
+    action: input.action,
+    images: input.images,
+    metadata: {
+      nickname: input.nickname ?? "Schreini",
+      osm_id: input.osmId,
+      license: input.license,
+    },
+  };
+
   return {
     signature: input.signature ?? "sig",
-    jwt: "jwt",
+    jwt: fixtureJwt(payload),
     kid: input.kid ?? KID,
-    payload: {
-      sub: input.sub,
-      iat: input.iat ?? 1_775_485_449,
-      rating: input.rating ?? 25,
-      opinion: input.opinion ?? "Fries, fries, fries.",
-      action: input.action,
-      images: input.images,
-      metadata: {
-        nickname: input.nickname ?? "Schreini",
-        osm_id: input.osmId,
-        license: input.license,
-      },
-    },
+    payload,
     original_sub: input.originalSub,
   };
 }

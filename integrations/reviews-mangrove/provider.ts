@@ -12,11 +12,78 @@ import {
   parseMangroveGeoUri,
   REVIEW_MATCH_MAX_DISTANCE_METERS,
   REVIEW_NAMELESS_MATCH_MAX_DISTANCE_METERS,
+  verifyMangroveReview,
 } from "@openmapx/mangrove-client";
 import { mangroveGetReviews, mangroveSubmit, mangroveUploadImage } from "./client.js";
 import type { MangroveWirePayload, MangroveWireReview } from "./types.js";
 
 const MARESI_PREFIX = "urn:maresi:";
+
+/**
+ * Mangrove records are self-authenticating, so only records whose signatures
+ * and author keys verify are allowed into the review projection.
+ */
+const verificationStats = {
+  checked: 0,
+  verified: 0,
+  failed: 0,
+  reasons: {} as Record<string, number>,
+};
+
+/** Cumulative verification counters, readable by tests and operators. */
+export function getMangroveVerificationStats(): {
+  checked: number;
+  verified: number;
+  failed: number;
+  reasons: Record<string, number>;
+} {
+  return { ...verificationStats, reasons: { ...verificationStats.reasons } };
+}
+
+export function resetMangroveVerificationStats(): void {
+  verificationStats.checked = 0;
+  verificationStats.verified = 0;
+  verificationStats.failed = 0;
+  verificationStats.reasons = {};
+}
+
+async function verifyWireReviews(wires: MangroveWireReview[]): Promise<MangroveWireReview[]> {
+  const kept: MangroveWireReview[] = [];
+  const failures: { signature: string; reason: string }[] = [];
+
+  for (const wire of wires) {
+    const result = await verifyMangroveReview({
+      jwt: wire.jwt,
+      signature: wire.signature,
+      kid: wire.kid,
+    });
+    verificationStats.checked += 1;
+    if (result.ok) {
+      verificationStats.verified += 1;
+      // The signed body is the only trustworthy copy; the sibling `payload`
+      // and `kid` fields are whatever the server chose to send. `original_sub`
+      // is server-derived and not signed, so it is carried through as-is.
+      kept.push({
+        ...wire,
+        kid: result.kid,
+        payload: result.payload as unknown as MangroveWirePayload,
+      });
+      continue;
+    }
+    verificationStats.failed += 1;
+    verificationStats.reasons[result.reason] = (verificationStats.reasons[result.reason] ?? 0) + 1;
+    failures.push({ signature: wire.signature.slice(0, 12), reason: result.reason });
+  }
+
+  if (failures.length > 0) {
+    console.warn(
+      `[reviews-mangrove] signature verification failed for ${failures.length}/${wires.length} records`,
+      { samples: failures.slice(0, 3) },
+    );
+  }
+
+  return kept;
+}
 
 function toReview(subject: ReviewSubject, wire: MangroveWireReview): Review {
   const payload = wire.payload;
@@ -173,7 +240,7 @@ function collapseDuplicateEffectiveReviews(reviews: Review[]): Review[] {
  * record per original-id. Per Mangrove spec:
  *  - `edit` replaces the original's displayable fields (rating, opinion, images, …).
  *  - `delete` removes the target from display entirely.
- *  - edit/delete MUST be signed by the same keypair as the original.
+ *  - edit/delete MUST be signed by the same verified keypair as the original.
  *
  * Mangrove's geo-sub response with `latest_edits_only` (default true) returns
  * the latest edit record instead of the original. We fetch original records
@@ -289,7 +356,8 @@ export const mangroveProvider: ReviewProvider = {
       seen.add(r.signature);
       return true;
     });
-    const mapped = reviews
+    const verified = await verifyWireReviews(reviews);
+    const mapped = verified
       .filter((r) => isWireReviewWithinSubject(r, subject))
       .map((r) => toReview(subject, r));
     return collapseDuplicateEffectiveReviews(applyMutations(mapped));

@@ -39,3 +39,11 @@ export {
   REVIEW_MATCH_MAX_DISTANCE_METERS,
   REVIEW_NAMELESS_MATCH_MAX_DISTANCE_METERS,
 } from "./subject";
+export type {
+  MangroveVerifiedReview,
+  MangroveVerifyFailure,
+  MangroveVerifyFailureReason,
+  MangroveVerifyInput,
+  MangroveVerifyResult,
+} from "./verify";
+export { verifyMangroveReview } from "./verify";
