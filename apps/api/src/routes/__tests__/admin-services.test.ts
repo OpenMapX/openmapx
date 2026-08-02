@@ -99,8 +99,10 @@ vi.mock("../../utils/rate-limit.js", () => ({
 }));
 
 // Resolve service config (service config GET uses this)
+const mockResolveServiceConfigWithSources = vi.fn().mockResolvedValue({});
 vi.mock("../../services/service-config-resolver.js", () => ({
-  resolveServiceConfigWithSources: vi.fn().mockResolvedValue({}),
+  resolveServiceConfigWithSources: (...args: unknown[]) =>
+    mockResolveServiceConfigWithSources(...args),
 }));
 
 // @openmapx/core/server — getProvidedCapabilityNames + serviceConfigEnvPrefix
@@ -363,6 +365,29 @@ describe("service credentials", () => {
     mockSetServiceSecret.mockReset().mockResolvedValue(undefined);
     mockDeleteServiceSecret.mockReset().mockResolvedValue(undefined);
     mockJobRunnerEnqueue.mockReset().mockResolvedValue("job-123");
+    mockResolveServiceConfigWithSources.mockReset().mockResolvedValue({});
+  });
+
+  describe("GET /admin/services/:id/config", () => {
+    it("masks declared secrets while preserving the response shape", async () => {
+      mockResolveServiceConfigWithSources.mockResolvedValueOnce({
+        NY_511_API_KEY: { value: "placeholder-not-a-real-value", source: "env" },
+        RATE_LIMIT_MAX: { value: 120, source: "default" },
+      });
+
+      const res = await app.inject({
+        method: "GET",
+        url: "/admin/services/openconditions-ingest/config",
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.resolvedConfig.NY_511_API_KEY).toEqual({ value: "***", source: "env" });
+      expect(body.resolvedConfig.RATE_LIMIT_MAX.value).toBe(120);
+      expect(res.payload).not.toContain("placeholder-not-a-real-value");
+      expect(body.schema).toEqual(SECRET_SERVICE.manifest.configSchema);
+      expect(body.envPrefix).toBe("SERVICE_ID");
+    });
   });
 
   it("GET lists declared secret fields with vault/missing status + setup guide", async () => {

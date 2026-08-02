@@ -290,6 +290,47 @@ describe("GET /admin/integrations/:id", () => {
     expect(body.credentialStatus).toBeDefined();
   });
 
+  it("masks declared secrets while preserving their source", async () => {
+    mockGetSecretFields.mockReturnValue([{ key: "clientId", title: "Client ID" }]);
+    mockResolveConfigWithSources.mockResolvedValueOnce({
+      clientId: { value: "placeholder-not-a-real-value", source: "vault" },
+      timeout: { value: 30, source: "default" },
+    });
+
+    try {
+      const res = await app.inject({
+        method: "GET",
+        url: "/admin/integrations/geocoding-maptiler",
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.resolvedConfig.clientId).toEqual({ value: "***", source: "vault" });
+      expect(body.resolvedConfig.timeout.value).toBe(30);
+    } finally {
+      mockGetSecretFields.mockReturnValue([]);
+    }
+  });
+
+  it("does not include a declared secret's raw value in the response payload", async () => {
+    mockGetSecretFields.mockReturnValue([{ key: "clientId", title: "Client ID" }]);
+    mockResolveConfigWithSources.mockResolvedValueOnce({
+      clientId: { value: "placeholder-not-a-real-value", source: "vault" },
+    });
+
+    try {
+      const res = await app.inject({
+        method: "GET",
+        url: "/admin/integrations/geocoding-maptiler",
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.payload).not.toContain("placeholder-not-a-real-value");
+    } finally {
+      mockGetSecretFields.mockReturnValue([]);
+    }
+  });
+
   it("returns 404 for unknown integration id", async () => {
     mockGetIntegration.mockReturnValueOnce(null);
 

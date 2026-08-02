@@ -33,12 +33,11 @@ import {
 } from "../services/secrets";
 import { writeAuditLog } from "../utils/audit-log";
 import { dockerComposePs, type PsEntry } from "../utils/docker-compose";
+import { maskSecretConfigRecord, maskSecretConfigValues } from "../utils/mask-config.js";
 import { healthCheckSweepLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { resolveActors } from "../utils/resolve-actor";
 import { getSecretFields, validateConfigBody } from "../utils/validate-config-body";
-
-const SENSITIVE_KEY_RE = /key|secret|token|password|credential|api_?key/i;
 
 function getIntegrationDisplayName(integration: {
   id: string;
@@ -47,20 +46,6 @@ function getIntegrationDisplayName(integration: {
 }): string {
   const en = integration.strings.en as Record<string, unknown> | undefined;
   return (en?.name as string) ?? integration.manifest.name ?? integration.id;
-}
-
-function maskSensitiveConfig(
-  resolvedConfig: Record<string, { value: unknown; source: string }>,
-): Record<string, { value: unknown; source: string }> {
-  const masked: Record<string, { value: unknown; source: string }> = {};
-  for (const [key, entry] of Object.entries(resolvedConfig)) {
-    if (SENSITIVE_KEY_RE.test(key) && entry.source !== "default") {
-      masked[key] = { value: "***", source: entry.source };
-    } else {
-      masked[key] = entry;
-    }
-  }
-  return masked;
 }
 
 // `getSecretFields` lives next to `validateConfigBody` so the two stay in
@@ -402,7 +387,7 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
       computeCredentialStatus(integration),
     ]);
 
-    const resolvedConfig = maskSensitiveConfig(resolvedRaw);
+    const resolvedConfig = maskSecretConfigValues(resolvedRaw, integration.manifest.configSchema);
 
     const dependencyStatus = (integration.manifest.dependencies ?? []).map((depId) => {
       const dep = getIntegration(depId);
@@ -891,11 +876,11 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
     const configs = await db.select().from(integrationConfig);
     const exported = configs.map((c) => {
       const raw = (c.config ?? {}) as Record<string, unknown>;
-      const masked: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(raw)) {
-        masked[key] = SENSITIVE_KEY_RE.test(key) ? "***" : value;
-      }
-      return { integrationId: c.integrationId, config: masked };
+      const integration = getIntegration(c.integrationId);
+      return {
+        integrationId: c.integrationId,
+        config: maskSecretConfigRecord(raw, integration?.manifest.configSchema),
+      };
     });
 
     await writeAuditLog({

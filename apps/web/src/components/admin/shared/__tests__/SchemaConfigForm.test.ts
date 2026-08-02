@@ -51,6 +51,24 @@ describe("extractConfigFields", () => {
       default: [{ id: "keyword", type: "keyword" }],
     });
   });
+
+  it("a declared secret never reaches the save diff (masked sentinel cannot round-trip)", () => {
+    const fields = extractConfigFields({
+      properties: {
+        CLIENT_ID: { type: "string", "x-openmapx-secret": true },
+        region: { type: "string" },
+      },
+    });
+    const values = Object.fromEntries(
+      fields.map((field) => [field.key, field.key === "region" ? "eu" : "***"]),
+    );
+    const changedKeys = fields.map((field) => field.key);
+    const diff = buildConfigDiff(fields, values, changedKeys);
+
+    expect(Object.keys(values)).not.toContain("CLIENT_ID");
+    expect(Object.keys(diff)).not.toContain("CLIENT_ID");
+    expect(diff).toEqual({ region: "eu" });
+  });
 });
 
 describe("buildConfigDiff", () => {

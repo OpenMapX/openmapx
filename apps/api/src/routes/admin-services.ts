@@ -31,6 +31,7 @@ import {
 } from "../services/service-secrets";
 import { writeAuditLog } from "../utils/audit-log";
 import { dockerComposeLogs, dockerComposePs } from "../utils/docker-compose";
+import { maskSecretConfigValues } from "../utils/mask-config.js";
 import { serviceActionLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { getSecretFields, validateConfigBody } from "../utils/validate-config-body";
@@ -299,10 +300,16 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       reply.status(404);
       return { error: "Service not found" };
     }
-    const resolvedConfig = await resolveServiceConfigWithSources({
-      id: svc.manifest.id,
-      configSchema: svc.manifest.configSchema,
-    });
+    // Reduce declared-secret fields to the "***" configured sentinel so a
+    // credential never reaches the Config tab, mirroring the integration
+    // detail route.
+    const resolvedConfig = maskSecretConfigValues(
+      await resolveServiceConfigWithSources({
+        id: svc.manifest.id,
+        configSchema: svc.manifest.configSchema,
+      }),
+      svc.manifest.configSchema,
+    );
     return {
       schema: svc.manifest.configSchema ?? null,
       resolvedConfig,
