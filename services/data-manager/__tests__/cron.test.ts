@@ -591,6 +591,44 @@ describe("setupCron", () => {
       }
     });
 
+    it("refreshes the way-to-edge map on the guard run even when no rebuild was needed", async () => {
+      const refreshWaysToEdges = vi.fn().mockResolvedValue({ wayCount: 1, edgeCount: 2 });
+      const handles = setupCron(
+        baseOptions({
+          openConditionsUrl: "http://openconditions-ingest:8080",
+          isTrafficExtractStale: vi.fn().mockResolvedValue(false),
+          ensureTrafficExtract: vi.fn().mockResolvedValue({ built: false }),
+          getCoveredWayIds: vi.fn().mockResolvedValue(new Set([123])),
+          refreshWaysToEdges,
+        }),
+      );
+
+      await handles.runTrafficExtractGuardNow();
+
+      // The map's key set tracks the OpenConditions feed, which grows without
+      // the graph changing. Gating this on a rebuild let it run months stale.
+      expect(refreshWaysToEdges).toHaveBeenCalledWith(new Set([123]), expect.anything());
+      handles.stop();
+    });
+
+    it("still refreshes the map when the staleness check itself throws", async () => {
+      const refreshWaysToEdges = vi.fn().mockResolvedValue({ wayCount: 1, edgeCount: 2 });
+      const handles = setupCron(
+        baseOptions({
+          openConditionsUrl: "http://openconditions-ingest:8080",
+          isTrafficExtractStale: vi.fn().mockRejectedValue(new Error("docker gone")),
+          ensureTrafficExtract: vi.fn().mockResolvedValue({ built: false }),
+          getCoveredWayIds: vi.fn().mockResolvedValue(new Set([123])),
+          refreshWaysToEdges,
+        }),
+      );
+
+      await handles.runTrafficExtractGuardNow();
+
+      expect(refreshWaysToEdges).toHaveBeenCalledTimes(1);
+      handles.stop();
+    });
+
     it("does not bootstrap the map on startup when it already exists", async () => {
       const prev = process.env.DATA_DIR;
       process.env.DATA_DIR = dataDir;

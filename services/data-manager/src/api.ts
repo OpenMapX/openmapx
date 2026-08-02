@@ -15,6 +15,7 @@ import { withOvertureOperationLock } from "./jobs/overture/operation-lock.js";
 import { assertValidRegion, pullOverture } from "./jobs/overture/pull.js";
 import { getOvertureConflationState, rebuildOvertureLinks } from "./jobs/overture/rebuild-links.js";
 import { syncOvertureRegion } from "./jobs/overture/sync.js";
+import type { BakePredictedResult } from "./jobs/traffic/bake-predicted.js";
 import {
   CatalogBumpError,
   candidateMatchesLock,
@@ -65,6 +66,12 @@ export interface ApiOptions {
   operationsPolicy?: MotisOperationsPolicy;
   /** Test seam invoked after reservation; production launches the real pipeline. */
   launchTransitSync?: (args: { jobId: string; countries: string[]; trigger: string }) => void;
+  /**
+   * Runs the predicted-traffic bake. Wired in `index.ts` only when
+   * `OPENCONDITIONS_URL` is configured, so the route can answer 501 rather than
+   * pretending to work on a deployment without OpenConditions.
+   */
+  bakePredicted?: () => Promise<BakePredictedResult>;
 }
 
 const startedAt = Date.now();
@@ -433,6 +440,38 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   app.post("/datasets/reload", async () => {
     const result = store.reload();
     return { ok: true, ...result };
+  });
+
+  // Single-flight: the bake shells out to a slow tile-rewriting tool and
+  // restarts Valhalla, so two concurrent runs would fight over the same tiles.
+  let bakeInFlight = false;
+
+  app.post("/traffic/predicted/bake", async (_req, reply) => {
+    if (!opts.bakePredicted) {
+      reply.code(501);
+      return { error: "predicted bake not configured" };
+    }
+    if (bakeInFlight) {
+      reply.code(409);
+      return { error: "a predicted bake is already running" };
+    }
+    bakeInFlight = true;
+    // Fire-and-forget: a real bake runs for hours (production measured 06:00 to
+    // 10:18), so holding the request open would only guarantee a client or
+    // proxy timeout. The result lands in the log the cron already writes to.
+    void opts
+      .bakePredicted()
+      .then((result) => {
+        app.log.info({ ...result }, "traffic-predicted: manual bake complete");
+      })
+      .catch((err: unknown) => {
+        app.log.error({ err: (err as Error).message }, "traffic-predicted: manual bake failed");
+      })
+      .finally(() => {
+        bakeInFlight = false;
+      });
+    reply.code(202);
+    return { accepted: true };
   });
 
   app.post<{ Body: { region: string } }>("/download/osm", async (req, reply) => {

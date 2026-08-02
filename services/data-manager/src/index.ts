@@ -18,6 +18,7 @@ import {
 import { type PoiSchedulerHandles, setupPoiIngestCron } from "./jobs/poi-ingest/scheduler.js";
 import { createPoiSingleFlight } from "./jobs/poi-ingest/single-flight.js";
 import { reconcileOrphanedJobs } from "./jobs/reconcile.js";
+import { bakePredicted } from "./jobs/traffic/bake-predicted.js";
 import { fetchCoveredWayIds } from "./jobs/traffic/covered-ways.js";
 import { resolveOperationsProfileFromEnv } from "./jobs/transitous/operations-profile.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
@@ -44,7 +45,29 @@ const integrationsRootDir =
 const singleFlight = getSingleFlightController();
 const operationsPolicy = resolveOperationsProfileFromEnv();
 
-registerApi(app, { dataDir, repoRoot, singleFlight, operationsPolicy });
+// Read here rather than inside the post-listen startup block: registerApi must
+// run before app.listen(), and the bake route needs to know whether
+// OpenConditions is configured at registration time.
+const openConditionsUrl = process.env.OPENCONDITIONS_URL?.trim() ?? "";
+
+registerApi(app, {
+  dataDir,
+  repoRoot,
+  singleFlight,
+  operationsPolicy,
+  ...(openConditionsUrl && {
+    bakePredicted: () =>
+      bakePredicted({
+        openConditionsUrl,
+        // bakePredicted's logger takes (msg, extra); app.log is Pino and takes
+        // (obj, msg). Same adapter shape as asCronLogger in cron.ts.
+        logger: {
+          info: (msg, extra) => (extra ? app.log.info(extra, msg) : app.log.info(msg)),
+          warn: (msg, extra) => (extra ? app.log.warn(extra, msg) : app.log.warn(msg)),
+        },
+      }),
+  }),
+});
 
 // E6.1c — Validate the age private-key file early so operators get a clear
 // error at startup rather than a confusing "encrypted feed skipped" log
@@ -157,7 +180,6 @@ app
     // OpenConditions speed feed the writer consumes, so it's only wired when
     // OpenConditions is configured; otherwise the refresh (and the whole
     // live-traffic chain) stays disabled.
-    const openConditionsUrl = process.env.OPENCONDITIONS_URL?.trim() ?? "";
     cronHandles = setupCron({
       dataDir,
       repoRoot,

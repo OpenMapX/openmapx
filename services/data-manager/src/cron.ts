@@ -957,9 +957,8 @@ export function setupCron(options: CronSetupOptions): CronHandles {
 
   const refreshWaysToEdges = options.refreshWaysToEdges ?? refreshWaysToEdgesDefault;
 
-  // The way_id → GraphId map only changes when the graph rebuilds (a rebuild
-  // renumbers GraphIds), so it's refreshed alongside the traffic-extract
-  // rebuild rather than on its own schedule.
+  // The way_id → GraphId map is refreshed from the current OpenConditions key
+  // set so both traffic writers see ways added since the last graph rebuild.
   const runWaysToEdgesRefresh = async (): Promise<void> => {
     if (!options.getCoveredWayIds) {
       log.info("ways-to-edges: refresh skipped (no covered-way-id source configured)");
@@ -997,22 +996,29 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   const runTrafficExtractGuard = async (): Promise<void> => {
     try {
       const stale = await checkExtractStale({ logger: log });
-      if (!stale) {
+      if (stale) {
+        // A stale extract doesn't fail soft — Valhalla throws mid-request when
+        // the traffic tile's directed_edge_count disagrees with the graph
+        // tile, so rebuild eagerly rather than wait for a request to surface
+        // it. `force` skips the redundant presence check: we already know the
+        // file exists, just that it's outdated.
+        log.info("traffic-extract: graph tiles newer than traffic.tar, rebuilding");
+        const result = await ensureExtract({ logger: log, force: true });
+        log.info("traffic-extract: guard rebuild complete", { built: result.built });
+      } else {
         log.info("traffic-extract: guard check found no rebuild needed");
-        return;
       }
-      // A stale extract doesn't fail soft — Valhalla throws mid-request when
-      // the traffic tile's directed_edge_count disagrees with the graph
-      // tile, so rebuild eagerly rather than wait for a request to surface
-      // it. `force` skips the redundant presence check: we already know the
-      // file exists, just that it's outdated.
-      log.info("traffic-extract: graph tiles newer than traffic.tar, rebuilding");
-      const result = await ensureExtract({ logger: log, force: true });
-      log.info("traffic-extract: guard rebuild complete", { built: result.built });
-      if (result.built) await runWaysToEdgesRefresh();
     } catch (err) {
       log.error("traffic-extract: guard check failed", { err: (err as Error).message });
     }
+
+    // Unconditional, and outside the try above so an extract failure can't skip
+    // it. The map's key set tracks the OpenConditions feed rather than the
+    // graph, and the feed grows as sources are added; gating this on a rebuild
+    // left it months stale while the live-speed writer silently covered a
+    // shrinking share of the feed. runWaysToEdgesRefresh contains its own
+    // error handling.
+    await runWaysToEdgesRefresh();
   };
 
   const trafficExtractExpr = pickCronExpression(
