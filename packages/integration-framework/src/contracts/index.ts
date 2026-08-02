@@ -2,7 +2,7 @@ export {
   assertProviderSatisfiesContract,
   assertRealtimeProviderContract,
   assertTransitProviderContract,
-} from "./assert-contract.js";
+} from "./assert-contract";
 export type {
   AutocompleteResult,
   GeocodingProvider,
@@ -72,6 +72,7 @@ export type {
   RoadFlowSegment,
   RoadState,
 } from "./road-conditions-provider.js";
+export { RoutingProviderError } from "./routing-provider";
 export type {
   DirectionsResult,
   IsochroneContour,
@@ -97,7 +98,10 @@ export type {
   TravelMode,
   Waypoint,
 } from "./routing-provider.js";
-export { RoutingProviderError } from "./routing-provider.js";
+export {
+  isPlausibleNlSearch,
+  NL_CONFIDENCE_FLOOR,
+} from "./search-nlp-provider";
 export type {
   AiCloudProcessor,
   NlpProvider,
@@ -106,10 +110,6 @@ export type {
   SearchIntent,
   SpatialConstraint,
   TimeConstraint,
-} from "./search-nlp-provider.js";
-export {
-  isPlausibleNlSearch,
-  NL_CONFIDENCE_FLOOR,
 } from "./search-nlp-provider.js";
 export type {
   StreetLevelCapabilities,

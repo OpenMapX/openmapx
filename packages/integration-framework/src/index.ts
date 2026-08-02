@@ -143,7 +143,14 @@ export type {
   WeatherProvider,
   WeatherResponse,
 } from "./contracts/index.js";
-export { RoutingProviderError } from "./contracts/index.js";
+// Straight to the leaf, and without the `.js` the type-only re-export above it
+// carries. The type export is erased before anything resolves it, so it can name
+// a file that was never emitted; a value export is resolved for real, and this
+// package is source-only (`main: ./src/index.ts`) — no `.js` exists. Going
+// through `./contracts/index` would also pull every contract module into the
+// browser bundle for one error class. `tsc` accepts either form, so only the
+// build catches this.
+export { RoutingProviderError } from "./contracts/routing-provider";
 export { isPlausibleNlSearch, NL_CONFIDENCE_FLOOR } from "./contracts/search-nlp-provider";
 export { integrationEnvVarName } from "./env-var";
 export type { IntegrationEvent } from "./events";
