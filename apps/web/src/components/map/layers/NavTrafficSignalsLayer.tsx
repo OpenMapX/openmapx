@@ -1,67 +1,55 @@
 "use client";
 
-import type maplibregl from "maplibre-gl";
-import { useEffect } from "react";
-import { useMap } from "@/lib/MapContext";
+import { useMemo } from "react";
 import { useNavTrafficSignals } from "@/lib/navigation/useNavTrafficSignals";
 import { loadTrafficLightImage, TRAFFIC_LIGHT_IMAGE_ID } from "@/lib/trafficLightMarker";
-import { addLayerInSlot } from "./layerStack";
-import { useStyleSyncedSetup } from "./useStyleSyncedSetup";
-
-type GeoJSONSource = maplibregl.GeoJSONSource;
+import type { MapLayerGroup, SlottedLayer } from "./mapLayerGroup";
+import { useMapLayerGroup } from "./useMapLayerGroup";
 
 const SOURCE = "nav-traffic-signals-source";
 export const NAV_TRAFFIC_SIGNALS_LAYER_ID = "nav-traffic-signals";
-const LAYER = NAV_TRAFFIC_SIGNALS_LAYER_ID;
 
 export function NavTrafficSignalsLayer() {
-  const { mapRef } = useMap();
   const signals = useNavTrafficSignals();
 
-  // Create source + symbol layer once per style, self-healing across a swap.
-  const styleEpoch = useStyleSyncedSetup(SOURCE, (map) => {
-    loadTrafficLightImage(map);
-    map.addSource(SOURCE, {
-      type: "geojson",
-      data: { type: "FeatureCollection", features: [] },
-    });
-    addLayerInSlot(
-      map,
-      {
-        id: LAYER,
-        type: "symbol",
-        source: SOURCE,
-        layout: {
-          "icon-image": TRAFFIC_LIGHT_IMAGE_ID,
-          "icon-size": 0.8,
-          "icon-allow-overlap": true,
-          "icon-anchor": "center",
-        },
-      },
-      "nav-top",
-      0,
-    );
-  });
-
-  // Push signal points into the source. `styleEpoch` is a required dep, not
-  // redundant work: a full style swap (basemap / theme / satellite) wipes the
-  // source, so the icons must be re-pushed once it is re-added empty.
-  useEffect(() => {
-    void styleEpoch;
-    const map = mapRef.current;
-    if (!map) return;
-    const raw = map.getSource(SOURCE);
-    if (raw?.type !== "geojson") return;
-    const source = raw as GeoJSONSource;
-    source.setData({
-      type: "FeatureCollection",
+  const data = useMemo(
+    () => ({
+      type: "FeatureCollection" as const,
       features: signals.map((coord) => ({
-        type: "Feature",
+        type: "Feature" as const,
         properties: {},
-        geometry: { type: "Point", coordinates: coord },
+        geometry: { type: "Point" as const, coordinates: coord },
       })),
-    });
-  }, [mapRef, signals, styleEpoch]);
+    }),
+    [signals],
+  );
+
+  const group = useMemo<MapLayerGroup>(
+    () => ({
+      // Registering the icon is asynchronous, so it cannot be part of the
+      // descriptor's data — a style change drops it along with everything else
+      // and it lands a tick later, briefly rendering nothing.
+      images: { [TRAFFIC_LIGHT_IMAGE_ID]: loadTrafficLightImage },
+      sources: { [SOURCE]: { type: "geojson", data } },
+      layers: [
+        {
+          id: NAV_TRAFFIC_SIGNALS_LAYER_ID,
+          type: "symbol",
+          source: SOURCE,
+          layout: {
+            "icon-image": TRAFFIC_LIGHT_IMAGE_ID,
+            "icon-size": 0.8,
+            "icon-allow-overlap": true,
+            "icon-anchor": "center",
+          },
+          slot: "nav-top",
+          order: 0,
+        },
+      ] satisfies SlottedLayer[],
+    }),
+    [data],
+  );
+  useMapLayerGroup(group);
 
   return null;
 }

@@ -84,4 +84,12 @@ describe("NavigationRouteLayer across a style change", () => {
     render(<NavigationRouteLayer />);
     expectStyleSwapIsLossless(fake);
   });
+
+  it("keeps the alternates and the active route across two consecutive style changes", () => {
+    render(<NavigationRouteLayer />);
+    act(() => {
+      fake.map.setStyle({} as never);
+    });
+    expectStyleSwapIsLossless(fake);
+  });
 });
