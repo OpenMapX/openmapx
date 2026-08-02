@@ -89,9 +89,12 @@ admin panel after the stack is up. For the full reference, see
 [Configuration](./configuration.md).
 
 :::tip[Tile provider]
-The default `NEXT_PUBLIC_STYLE_PROVIDER=maptiler` renders maps from MapTiler
-Cloud and needs a `MAPTILER_KEY`. You can leave the key unset for now and add it
-from the admin UI later, or self-host tiles with the `tileserver` service.
+The default `NEXT_PUBLIC_STYLE_PROVIDER=openmapx` renders the bundled OpenMapX
+house style. Without self-hosted tile URLs, vector tiles and glyphs use the
+MapTiler Cloud fallback, which requires a `MAPTILER_KEY`. You can manage that
+key from the admin UI, or enable the `tileserver` service and set
+`NEXT_PUBLIC_TILES_URL` and `NEXT_PUBLIC_MAP_STYLE_URL` for a fully self-hosted
+basemap.
 :::
 
 ## 3. Enable a minimal set of services

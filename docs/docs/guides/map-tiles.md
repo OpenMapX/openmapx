@@ -7,18 +7,18 @@ sidebar_position: 5
 # Self-hosting map tiles
 
 The base map — the roads, water, land use, and labels drawn underneath
-everything else — has to come from somewhere. Out of the box OpenMapX renders it
-from MapTiler Cloud, which is the fastest way to get a good-looking map and needs
-nothing more than an API key. But the whole point of OpenMapX is to be able to
-run on your own infrastructure and open data, and the base map is no exception.
-This guide covers the self-hosted path: building vector tiles from an
-OpenStreetMap extract, serving them, and switching the web app over.
+everything else — uses the bundled OpenMapX style by default. When no
+self-hosted tile URLs are configured, that style gets its vector tiles and
+glyphs from the MapTiler Cloud fallback through the API. OpenMapX can also run
+the entire base-map stack on your own infrastructure and open data. This guide
+covers that path: building vector tiles from an OpenStreetMap extract, serving
+them, and switching the web app over.
 
 Two services do the work, and they have different jobs:
 
 - **TileServer GL** serves the **base map** — prebuilt OpenMapTiles vector tiles,
   plus the styles, fonts, and sprites needed to draw them. This is the one you
-  enable to replace MapTiler Cloud.
+  enable to replace the MapTiler fallback.
 - **Martin** serves **dynamic vector tiles straight from PostGIS**, generated on
   the fly from database tables. It's a separate, optional piece for data that
   lives in your database rather than in a prebuilt tile archive.
@@ -70,8 +70,8 @@ locally: vector sources are repointed at the local MBTiles
 sibling sprite files. After this step nothing in the styles references the
 network at render time.
 
-You only need this if you're self-hosting tiles. If you stay on MapTiler Cloud,
-skip it. See [Preparing data](../install/preparing-data.md#map-styles-fonts-and-sprites)
+You only need this if you're self-hosting tiles. If you rely on the MapTiler
+fallback, skip it. See [Preparing data](../install/preparing-data.md#map-styles-fonts-and-sprites)
 for where these files land.
 
 ### Step 2 — build the vector tiles for your region

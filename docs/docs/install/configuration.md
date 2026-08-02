@@ -109,12 +109,17 @@ Tile-source selection and keys. The `NEXT_PUBLIC_*` values (except
 `NEXT_PUBLIC_API_URL`) are read per-request via the web app's `EnvProvider`, so
 runtime changes reach both server and client components without a rebuild.
 
+The default map style is the bundled OpenMapX style. If self-hosted tile URLs
+are not configured, its vector tiles and glyphs use the MapTiler fallback
+through the API routes. Set `NEXT_PUBLIC_TILES_URL` and
+`NEXT_PUBLIC_MAP_STYLE_URL` to run the base map fully on your own tile stack.
+
 | Variable                                  | Description                                                                                                                 | Required / Default        |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| `NEXT_PUBLIC_STYLE_PROVIDER`              | Tile source. `maptiler` uses MapTiler Cloud (needs a key); `openmapx` uses the self-hosted tile stack (needs the tiles profile). | Default `maptiler`        |
-| `MAPTILER_KEY`                            | MapTiler Cloud API key. Also settable in `/admin/settings → Map`. Leave commented to manage from the admin UI; uncomment to lock a value (env wins). | Optional. Commented       |
-| `NEXT_PUBLIC_MAP_STYLE_URL`               | Base URL of the self-hosted `tileserver-gl`; the web app appends `/styles/<style>/style.json`. With the built-in Traefik route this is `${DOMAIN}/tiles`. | Optional. Commented       |
-| `NEXT_PUBLIC_TILES_URL`                   | Self-hosted tile JSON URL.                                                                                                 | Optional. Commented       |
+| `NEXT_PUBLIC_STYLE_PROVIDER`              | Selects the base style. `openmapx` (default) loads the bundled OpenMapX style. `maptiler` loads the MapTiler-compatible style loader, using the self-hosted style when `NEXT_PUBLIC_MAP_STYLE_URL` is set and MapTiler Cloud otherwise. | Default `openmapx`        |
+| `MAPTILER_KEY`                            | MapTiler Cloud API key for the hosted style/tile fallback and MapTiler layers. Also settable in `/admin/settings → Map`. Leave commented to manage from the admin UI; uncomment to lock a value (env wins). | Optional. Commented       |
+| `NEXT_PUBLIC_MAP_STYLE_URL`               | Base URL of the self-hosted `tileserver-gl`. With `maptiler`, the web app appends `/styles/<style>/style.json`; with `openmapx`, it uses `/fonts` for glyphs. With the built-in Traefik route this is `${DOMAIN}/tiles`. | Optional. Commented       |
+| `NEXT_PUBLIC_TILES_URL`                   | Self-hosted TileJSON URL used as the vector source by the OpenMapX style. If omitted, the style uses the MapTiler fallback. | Optional. Commented       |
 | `NEXT_PUBLIC_TRAFFIC_TILE_URL_TEMPLATE`   | Override URL template for the traffic raster layer.                                                                       | Optional. Commented       |
 | `NEXT_PUBLIC_CYCLOSM_TILE_URL_TEMPLATE`   | Override URL template for the CyclOSM layer.                                                                              | Optional. Commented       |
 | `NEXT_PUBLIC_TERRAIN_TILE_URL_TEMPLATE`   | Override URL template for the terrain layer.                                                                              | Optional. Commented       |

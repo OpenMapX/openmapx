@@ -70,7 +70,7 @@ transparently reaches out to a public one instead:
 | Driving routes | `router.project-osrm.org` | OSRM |
 | Multi-modal routing | Stadia Maps Valhalla (`api.stadiamaps.com`) | Valhalla |
 | Transit | Transitous / MOTIS cloud (`api.transitous.org`) | MOTIS |
-| Map tiles | MapTiler Cloud | TileServer GL |
+| Map tiles | MapTiler Cloud fallback | TileServer GL |
 
 A common lean deployment self-hosts nothing in this table: the [search](../features/search.md),
 [directions](../features/directions.md), and [public-transit](../features/public-transit.md)
@@ -183,8 +183,8 @@ right-sized box, but never for runtime, where swapping wrecks query latency.
 Self-hosted tiles are convenient to overlook as a cost, but they aren't free:
 TileServer GL needs an ~80 GB planet MBTiles archive plus its own build, and the
 style/font/sprite download is a few more steps in your pipeline. If you're
-running lean, point the web app at a hosted tile provider (MapTiler Cloud is the
-default) and skip TileServer GL and Martin entirely — along with the
+running lean, keep the hosted MapTiler fallback and skip TileServer GL and
+Martin entirely — along with the
 `openmapx data download style` step and the MBTiles build.
 
 Self-host tiles when you need full control over styling or want zero external
