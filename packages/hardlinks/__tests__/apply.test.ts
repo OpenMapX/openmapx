@@ -174,6 +174,71 @@ describe("applyHardlinkPlan", () => {
     ).toThrow(/escapes the data root/);
   });
 
+  it("rejects a targetFilename containing a path separator", () => {
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "source.pbf"), "pbf");
+
+    expect(() =>
+      applyHardlinkPlan(
+        [
+          {
+            source: "src",
+            target: "tgt",
+            consumerService: "svc",
+            dataType: "data",
+            targetFilename: "../../escaped.pbf",
+          },
+        ],
+        { rootDir: root },
+      ),
+    ).toThrow(/must be a plain name/);
+    expect(existsSync(join(root, "..", "escaped.pbf"))).toBe(false);
+  });
+
+  it("rejects a dataType containing a path separator", () => {
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "source.pbf"), "pbf");
+
+    expect(() =>
+      applyHardlinkPlan(
+        [{ source: "src", target: "tgt", consumerService: "svc", dataType: "a/../../evil" }],
+        { rootDir: root },
+      ),
+    ).toThrow(/must be a plain name/);
+  });
+
+  it("rejects a consumerService containing a path separator", () => {
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "source.pbf"), "pbf");
+
+    expect(() =>
+      applyHardlinkPlan(
+        [{ source: "src", target: "tgt", consumerService: "../evil", dataType: "data" }],
+        { rootDir: root },
+      ),
+    ).toThrow(/must be a plain name/);
+  });
+
+  it("rejects an instance containing a path separator", () => {
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "source.pbf"), "pbf");
+
+    expect(() =>
+      applyHardlinkPlan(
+        [
+          {
+            source: "src",
+            target: "tgt",
+            consumerService: "svc",
+            dataType: "data",
+            instance: "../evil",
+          },
+        ],
+        { rootDir: root },
+      ),
+    ).toThrow(/must be a plain name/);
+  });
+
   it("prunes previously-linked paths when the producer source disappears", () => {
     mkdirSync(join(root, "src"), { recursive: true });
     writeFileSync(join(root, "src", "a.txt"), "A");
@@ -205,6 +270,24 @@ describe("applyHardlinkPlan", () => {
 
     expect(existsSync(join(root, "tgt", "a.txt"))).toBe(true);
     expect(second.pruned).toBe(0);
+  });
+
+  it("ignores sentinel entries that escape the target directory", () => {
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "a.txt"), "A");
+
+    const plan = [{ source: "src", target: "tgt", consumerService: "svc", dataType: "data" }];
+    applyHardlinkPlan(plan, { rootDir: root });
+
+    writeFileSync(
+      join(root, DEFAULT_SENTINEL_DIR, "svc-data.json"),
+      JSON.stringify({ linkedPaths: ["../outside.txt", "a.txt"] }),
+    );
+    writeFileSync(join(root, "outside.txt"), "outside");
+    rmSync(join(root, "src", "a.txt"));
+
+    expect(() => applyHardlinkPlan(plan, { rootDir: root })).not.toThrow();
+    expect(existsSync(join(root, "outside.txt"))).toBe(true);
   });
 
   it("records instance in the sentinel filename", () => {
@@ -248,5 +331,26 @@ describe("applyHardlinkPlan", () => {
 
     expect(result.linked).toBe(1);
     expect(existsSync(join(root, "valhalla", "osm-input", "germany.pbf"))).toBe(true);
+  });
+
+  it("still applies a renderer-shaped plan unchanged", () => {
+    mkdirSync(join(root, "osm"), { recursive: true });
+    writeFileSync(join(root, "osm", "germany.osm.pbf"), "pbf");
+
+    const result = applyHardlinkPlan(
+      [
+        {
+          source: "data/osm",
+          target: "data/nominatim/osm-pbf",
+          consumerService: "nominatim",
+          dataType: "osm-pbf",
+          targetFilename: "data.osm.pbf",
+        },
+      ],
+      { rootDir: root },
+    );
+
+    expect(result.linked).toBe(1);
+    expect(existsSync(join(root, "nominatim", "osm-pbf", "data.osm.pbf"))).toBe(true);
   });
 });

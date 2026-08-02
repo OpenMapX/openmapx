@@ -82,6 +82,49 @@ const startedAt = Date.now();
 // (e.g. "main", "release/2026-06", "feature/x-y").
 const SAFE_GIT_REF = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 
+const LINK_ENTRY_SCHEMA = {
+  type: "object",
+  required: ["source", "target", "consumerService", "dataType"],
+  additionalProperties: false,
+  properties: {
+    source: { type: "string", minLength: 1, maxLength: 1024 },
+    target: { type: "string", minLength: 1, maxLength: 1024 },
+    consumerService: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+    dataType: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+    instance: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+    targetFilename: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+  },
+} as const;
+
+const LINK_BODY_SCHEMA = {
+  type: "object",
+  required: ["plan"],
+  additionalProperties: false,
+  properties: {
+    plan: { type: "array", maxItems: 2000, items: LINK_ENTRY_SCHEMA },
+    prune: { type: "boolean" },
+  },
+} as const;
+
+const LINK_BODY_KEYS = ["plan", "prune"] as const;
+const LINK_ENTRY_KEYS = [
+  "source",
+  "target",
+  "consumerService",
+  "dataType",
+  "instance",
+  "targetFilename",
+] as const;
+
+function hasUnexpectedKeys(value: unknown, allowed: readonly string[]): boolean {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).some((key) => !allowed.includes(key))
+  );
+}
+
 function isSafeGitRef(ref: string): boolean {
   return (
     SAFE_GIT_REF.test(ref) &&
@@ -506,11 +549,31 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     return { ok: true };
   });
 
-  app.post<{ Body: { plan: HardlinkEntry[]; prune?: boolean } }>("/link", async (req) => {
-    const { plan, prune } = req.body;
-    const result = await applyHardlinkPlan(plan, { rootDir: dataDir, prune });
-    return { ok: true, ...result };
-  });
+  app.post<{ Body: { plan: HardlinkEntry[]; prune?: boolean } }>(
+    "/link",
+    {
+      schema: { body: LINK_BODY_SCHEMA },
+      // Fastify's default Ajv removes additional properties before schema
+      // validation, so reject them here while the original body is intact.
+      preValidation: async (req, reply) => {
+        const body = req.body as { plan?: unknown };
+        if (hasUnexpectedKeys(body, LINK_BODY_KEYS)) {
+          return reply.code(400).send({ error: "unexpected property in link request" });
+        }
+        if (
+          Array.isArray(body?.plan) &&
+          body.plan.some((entry) => hasUnexpectedKeys(entry, LINK_ENTRY_KEYS))
+        ) {
+          return reply.code(400).send({ error: "unexpected property in link plan entry" });
+        }
+      },
+    },
+    async (req) => {
+      const { plan, prune } = req.body;
+      const result = await applyHardlinkPlan(plan, { rootDir: dataDir, prune });
+      return { ok: true, ...result };
+    },
+  );
 
   app.post<{ Body: { sourcePbf?: string; targetBz2?: string; region?: string } }>(
     "/convert/overpass",

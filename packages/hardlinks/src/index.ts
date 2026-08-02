@@ -102,6 +102,27 @@ function assertWithinRoot(label: string, pathAbs: string, rootDir: string): void
   }
 }
 
+// Fields that become a single filesystem name must stay a single name. A
+// separator or a `..` here would let a plan entry address a path the
+// directory-level containment check never sees.
+const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+function assertSafeName(label: string, value: string): void {
+  if (!SAFE_NAME.test(value) || value === "." || value === "..") {
+    throw new Error(`hardlink ${label} "${value}" must be a plain name without path separators`);
+  }
+}
+
+// Relative paths replayed out of a sentinel manifest are bookkeeping we wrote
+// ourselves, but the file lives on disk and is parsed back untrusted. Only
+// forward-descending POSIX paths are usable as prune targets.
+function isSafeRelPath(relPath: string): boolean {
+  if (!relPath || isAbsolute(relPath) || relPath.includes("\\")) return false;
+  return relPath
+    .split("/")
+    .every((segment) => segment !== "" && segment !== "." && segment !== "..");
+}
+
 /**
  * Reject plans where the producer source and consumer target are the same
  * directory, one contains the other, or they otherwise share an ancestor/
@@ -140,9 +161,14 @@ interface Sentinel {
 }
 
 function sentinelPathFor(rootDir: string, sentinelDir: string, entry: HardlinkEntry): string {
+  assertSafeName("consumerService", entry.consumerService);
+  assertSafeName("dataType", entry.dataType);
+  if (entry.instance !== undefined) assertSafeName("instance", entry.instance);
   const suffix = entry.instance ? `-${entry.instance}` : "";
   const name = `${entry.consumerService}-${entry.dataType}${suffix}.json`;
-  return join(rootDir, sentinelDir, name);
+  const path = join(rootDir, sentinelDir, name);
+  assertWithinRoot("sentinel", path, rootDir);
+  return path;
 }
 
 function readSentinel(sentinelPath: string): Sentinel | null {
@@ -152,7 +178,7 @@ function readSentinel(sentinelPath: string): Sentinel | null {
     if (!raw || typeof raw !== "object") return null;
     const obj = raw as Record<string, unknown>;
     const linkedPaths = Array.isArray(obj.linkedPaths)
-      ? obj.linkedPaths.filter((x): x is string => typeof x === "string")
+      ? obj.linkedPaths.filter((x): x is string => typeof x === "string" && isSafeRelPath(x))
       : [];
     const targetFilename = typeof obj.targetFilename === "string" ? obj.targetFilename : undefined;
     return { linkedPaths, targetFilename };
@@ -170,7 +196,13 @@ function removeSentinel(sentinelPath: string): void {
   if (existsSync(sentinelPath)) rmSync(sentinelPath, { force: true });
 }
 
-function linkFileAt(srcPath: string, tgtPath: string): { linked: number; skipped: number } {
+function linkFileAt(
+  srcPath: string,
+  tgtPath: string,
+  rootAbs: string,
+): { linked: number; skipped: number } {
+  assertWithinRoot("source file", srcPath, rootAbs);
+  assertWithinRoot("target file", tgtPath, rootAbs);
   if (existsSync(tgtPath)) {
     const srcStat = statSync(srcPath);
     const tgtStat = statSync(tgtPath);
@@ -198,9 +230,14 @@ function collectSourceFiles(sourceDir: string, relBase = ""): string[] {
   return out;
 }
 
+function isWithinDir(parent: string, child: string): boolean {
+  const rel = relative(parent, child);
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
 function pruneEmptyDirs(dir: string, stopAt: string): void {
   let current = dir;
-  while (current !== stopAt && current.startsWith(stopAt)) {
+  while (current !== stopAt && isWithinDir(stopAt, current)) {
     if (!existsSync(current)) {
       current = dirname(current);
       continue;
@@ -219,6 +256,7 @@ function pruneEmptyDirs(dir: string, stopAt: string): void {
  * that we never linked are left alone.
  */
 function linkTreeWithSentinel(
+  rootAbs: string,
   sourceDir: string,
   targetDir: string,
   sentinelPath: string,
@@ -241,7 +279,7 @@ function linkTreeWithSentinel(
   for (const relPath of sourcePaths) {
     const srcPath = join(sourceDir, ...relPath.split("/"));
     const tgtPath = join(targetDir, ...relPath.split("/"));
-    const r = linkFileAt(srcPath, tgtPath);
+    const r = linkFileAt(srcPath, tgtPath, rootAbs);
     result.linked += r.linked;
     result.skipped += r.skipped;
   }
@@ -252,6 +290,7 @@ function linkTreeWithSentinel(
     for (const relPath of previouslyLinked) {
       if (sourceSet.has(relPath)) continue;
       const tgtPath = join(targetDir, ...relPath.split("/"));
+      assertWithinRoot("prune target", tgtPath, rootAbs);
       if (existsSync(tgtPath)) {
         rmSync(tgtPath, { force: true });
         result.pruned += 1;
@@ -268,6 +307,7 @@ function linkTreeWithSentinel(
 }
 
 function linkSingleFileWithSentinel(
+  rootAbs: string,
   sourceDir: string,
   targetDir: string,
   targetFilename: string,
@@ -292,7 +332,7 @@ function linkSingleFileWithSentinel(
   mkdirSync(targetDir, { recursive: true });
 
   const tgtPath = join(targetDir, targetFilename);
-  const r = linkFileAt(join(sourceDir, file.name), tgtPath);
+  const r = linkFileAt(join(sourceDir, file.name), tgtPath, rootAbs);
   result.linked += r.linked;
   result.skipped += r.skipped;
 
@@ -303,6 +343,7 @@ function linkSingleFileWithSentinel(
     for (const relPath of old?.linkedPaths ?? []) {
       if (relPath === targetFilename) continue;
       const prev = join(targetDir, ...relPath.split("/"));
+      assertWithinRoot("prune target", prev, rootAbs);
       if (existsSync(prev)) {
         rmSync(prev, { force: true });
         result.pruned += 1;
@@ -350,6 +391,9 @@ export function applyHardlinkPlan(
     assertWithinRoot("source", source, rootAbs);
     assertWithinRoot("target", target, rootAbs);
     assertSourceTargetDisjoint(source, target);
+    if (entry.targetFilename !== undefined) {
+      assertSafeName("targetFilename", entry.targetFilename);
+    }
 
     const sentinelPath = sentinelPathFor(rootAbs, sentinelDir, entry);
 
@@ -360,6 +404,7 @@ export function applyHardlinkPlan(
         const old = readSentinel(sentinelPath);
         for (const relPath of old?.linkedPaths ?? []) {
           const tgtPath = join(target, ...relPath.split("/"));
+          assertWithinRoot("prune target", tgtPath, rootAbs);
           if (existsSync(tgtPath)) {
             rmSync(tgtPath, { force: true });
             result.pruned += 1;
@@ -377,8 +422,15 @@ export function applyHardlinkPlan(
     }
 
     const r = entry.targetFilename
-      ? linkSingleFileWithSentinel(source, target, entry.targetFilename, sentinelPath, prune)
-      : linkTreeWithSentinel(source, target, sentinelPath, prune);
+      ? linkSingleFileWithSentinel(
+          rootAbs,
+          source,
+          target,
+          entry.targetFilename,
+          sentinelPath,
+          prune,
+        )
+      : linkTreeWithSentinel(rootAbs, source, target, sentinelPath, prune);
     result.linked += r.linked;
     result.skipped += r.skipped;
     result.pruned += r.pruned;

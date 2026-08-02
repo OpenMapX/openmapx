@@ -153,4 +153,96 @@ describe("data-manager API", () => {
     await app.close();
     rmSync(dataDir, { recursive: true, force: true });
   });
+
+  it("POST /link rejects a plan entry with a traversing targetFilename", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-link-"));
+    const app = Fastify();
+    registerApi(app, { dataDir });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/link",
+      payload: {
+        plan: [
+          {
+            source: "src",
+            target: "tgt",
+            consumerService: "svc",
+            dataType: "osm-pbf",
+            targetFilename: "../evil",
+          },
+        ],
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    await app.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  it("POST /link rejects a plan entry with a traversing dataType", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-link-"));
+    const app = Fastify();
+    registerApi(app, { dataDir });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/link",
+      payload: {
+        plan: [
+          {
+            source: "src",
+            target: "tgt",
+            consumerService: "svc",
+            dataType: "../evil",
+          },
+        ],
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    await app.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  it("POST /link rejects a body without a plan array", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-link-"));
+    const app = Fastify();
+    registerApi(app, { dataDir });
+
+    const res = await app.inject({ method: "POST", url: "/link", payload: {} });
+
+    expect(res.statusCode).toBe(400);
+    await app.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  it("POST /link rejects unknown top-level properties", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-link-"));
+    const app = Fastify();
+    registerApi(app, { dataDir });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/link",
+      payload: { plan: [], rootDir: "/etc" },
+    });
+
+    expect(res.statusCode).toBe(400);
+    await app.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  it("POST /link accepts a well-formed empty plan", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-link-"));
+    const app = Fastify();
+    registerApi(app, { dataDir });
+
+    const res = await app.inject({ method: "POST", url: "/link", payload: { plan: [] } });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).ok).toBe(true);
+    await app.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  });
 });
