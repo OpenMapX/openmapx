@@ -1,5 +1,6 @@
 import type { BBox } from "@openmapx/core";
 import { fetchRegistryEntries } from "./fetcher";
+import { TRANSPORT_APIS_COMMIT } from "./pin";
 import type { ProtocolType, RegistryEntry } from "./registry-types";
 
 /** Hand-crafted provider equivalents — suppress these dynamic entries */
@@ -39,7 +40,7 @@ class RegistryManager {
     this.index(all);
     this._initialized = true;
     console.log(
-      `[transit-registry] Loaded ${this.entries.length} dynamic providers (${all.length} total, ${all.length - this.entries.length} suppressed/unsupported)`,
+      `[transit-registry] Loaded ${this.entries.length} dynamic providers (${all.length} total, ${all.length - this.entries.length} suppressed/unsupported, transport-apis @ ${TRANSPORT_APIS_COMMIT.slice(0, 12)})`,
     );
   }
 

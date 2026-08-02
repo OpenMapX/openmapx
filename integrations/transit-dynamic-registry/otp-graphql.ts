@@ -9,6 +9,7 @@ import type {
 } from "@openmapx/mobility-core/transit";
 import type { ProtocolAdapter } from "./adapter-types";
 import type { RegistryEntry } from "./registry-types";
+import { registryEndpointIsUsable } from "./validate-endpoint";
 
 const TIMEOUT_MS = 8_000;
 const ENTUR_CLIENT_NAME = "openmapx-server";
@@ -200,7 +201,10 @@ function secondsToIso(serviceDay: number, seconds: number): string {
 }
 
 function getEndpoint(entry: RegistryEntry): string {
-  return (entry.options.endpoint as string) ?? "";
+  const endpoint = (entry.options.endpoint as string) ?? "";
+  // The catalog is third-party; refuse anything the fetcher's gate would have
+  // dropped. Every caller already treats "" as "provider unavailable".
+  return registryEndpointIsUsable(entry.options) ? endpoint : "";
 }
 
 function getHeaders(entry: RegistryEntry): Record<string, string> {

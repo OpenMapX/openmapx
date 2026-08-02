@@ -17,6 +17,7 @@ import { createRedisStore } from "cached-hafas-client/stores/redis.js";
 import { createClient } from "hafas-client";
 import type { ProtocolAdapter } from "./adapter-types";
 import type { RegistryEntry } from "./registry-types";
+import { registryEndpointIsUsable } from "./validate-endpoint";
 
 const TIMEOUT_MS = 8_000;
 
@@ -95,7 +96,9 @@ function buildProfile(entry: RegistryEntry): Record<string, any> {
   // biome-ignore lint/suspicious/noExplicitAny: external config object
   const profile: Record<string, any> = {};
 
-  if (opts.endpoint) profile.endpoint = opts.endpoint;
+  // Same third-party-catalog gate the fetcher applies; an unset endpoint makes
+  // hafas-client fail fast rather than talk to an unvetted host.
+  if (opts.endpoint && registryEndpointIsUsable(opts)) profile.endpoint = opts.endpoint;
   if (opts.auth) profile.auth = opts.auth;
   if (opts.client) profile.client = opts.client;
   if (opts.ver) profile.ver = opts.ver;

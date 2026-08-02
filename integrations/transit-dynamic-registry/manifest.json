@@ -41,12 +41,12 @@
     {
       "name": "JSDelivr Registry",
       "type": "http",
-      "url": "https://data.jsdelivr.com/v1/packages/gh/public-transport/transport-apis@HEAD"
+      "url": "https://data.jsdelivr.com/v1/packages/gh/public-transport/transport-apis@58aec5b1b7c876f133c9d1336739d0f61211b74e"
     },
     {
       "name": "GitHub Registry",
       "type": "http",
-      "url": "https://api.github.com/repos/public-transport/transport-apis/git/trees/v1?recursive=1"
+      "url": "https://api.github.com/repos/public-transport/transport-apis/git/trees/58aec5b1b7c876f133c9d1336739d0f61211b74e?recursive=1"
     }
   ],
   "dataSources": [

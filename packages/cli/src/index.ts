@@ -10,6 +10,7 @@ import { registerIntegrationsCommands } from "./commands/integrations";
 import { registerPoiIngestCommands } from "./commands/poi-ingest";
 import { registerServicesCommands } from "./commands/services";
 import { registerTransitousCommands } from "./commands/transitous-bump";
+import { registerTransportApisPinCommands } from "./commands/transport-apis-pin";
 import { registerUsersCommands } from "./commands/users";
 import { loadInfraEnv } from "./lib/infra-env";
 
@@ -37,6 +38,7 @@ registerBackupCommands(program);
 registerUsersCommands(program);
 registerCheckCommand(program);
 registerCacheCommands(program);
+registerTransportApisPinCommands(program);
 registerTransitousCommands(program);
 
 await program.parseAsync(process.argv);

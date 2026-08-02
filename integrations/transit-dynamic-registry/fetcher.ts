@@ -1,17 +1,16 @@
 import { type BBox, fetchJson } from "@openmapx/core";
 import type { CacheClient } from "@openmapx/integration-framework";
 import { COUNTRY_BBOXES } from "./country-bboxes";
+import {
+  TRANSPORT_APIS_COMMIT,
+  TRANSPORT_APIS_GITHUB_TREE_URL,
+  TRANSPORT_APIS_JSDELIVR_CDN_BASE,
+  TRANSPORT_APIS_JSDELIVR_PKG_URL,
+  TRANSPORT_APIS_RAW_BASE,
+} from "./pin";
 import type { CoverageTier, ProtocolType, RegistryEntry } from "./registry-types";
+import { registryEndpointRejection } from "./validate-endpoint";
 
-// JSDelivr CDN — mirrors GitHub without API rate limits
-// @HEAD resolves to the repo's default branch (no releases/tags needed)
-const JSDELIVR_PKG_URL =
-  "https://data.jsdelivr.com/v1/packages/gh/public-transport/transport-apis@HEAD";
-const JSDELIVR_CDN_BASE = "https://cdn.jsdelivr.net/gh/public-transport/transport-apis@HEAD";
-// GitHub API fallback
-const GITHUB_TREE_URL =
-  "https://api.github.com/repos/public-transport/transport-apis/git/trees/v1?recursive=1";
-const RAW_BASE = "https://raw.githubusercontent.com/public-transport/transport-apis/v1";
 const REGISTRY_CACHE_KEY = "transit:registry";
 const REGISTRY_CACHE_TTL = 172800; // 48 hours
 const MAX_CONCURRENT = 10;
@@ -134,9 +133,30 @@ function parseCoverageTier(
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: external JSON
-function parseEntry(path: string, json: any): RegistryEntry | null {
-  const protocol = parseProtocol(json.type ?? {});
+export function parseEntry(path: string, json: any): RegistryEntry | null {
+  if (!json || typeof json !== "object" || Array.isArray(json)) return null;
+
+  const type = json.type;
+  const protocol = parseProtocol(
+    type && typeof type === "object" && !Array.isArray(type) ? type : {},
+  );
   if (!protocol) return null;
+
+  const rawOptions = json.options;
+  if (
+    rawOptions !== undefined &&
+    rawOptions !== null &&
+    (typeof rawOptions !== "object" || Array.isArray(rawOptions))
+  ) {
+    console.warn(`[transit-registry] Dropping ${path}: options rejected (not-an-object)`);
+    return null;
+  }
+  const options = (rawOptions ?? {}) as Record<string, unknown>;
+  const rejection = registryEndpointRejection(options);
+  if (rejection) {
+    console.warn(`[transit-registry] Dropping ${path}: endpoint rejected (${rejection})`);
+    return null;
+  }
 
   const id = idFromPath(path);
   const slug = slugFromPath(path);
@@ -171,7 +191,7 @@ function parseEntry(path: string, json: any): RegistryEntry | null {
     protocol,
     supportedLanguages: json.supportedLanguages ?? [],
     timezone: json.timezone,
-    options: json.options ?? {},
+    options,
     coverage: { bbox, tiers },
     attribution: json.attribution
       ? {
@@ -232,11 +252,11 @@ function collectDataPaths(
   return [...new Set(paths)];
 }
 
-/** Fetch file listing via JSDelivr @HEAD (no auth, no rate limits). */
+/** Fetch file listing via jsDelivr (no auth, no rate limits). */
 async function fetchPathsFromJsdelivr(): Promise<string[]> {
-  const json = await fetchJson<JsDelivrFile>(JSDELIVR_PKG_URL, {
+  const json = await fetchJson<JsDelivrFile>(TRANSPORT_APIS_JSDELIVR_PKG_URL, {
     timeoutMs: 15_000,
-    headers: githubAuthHeaders(JSDELIVR_PKG_URL),
+    headers: githubAuthHeaders(TRANSPORT_APIS_JSDELIVR_PKG_URL),
     errorMessage: ({ status }) => `JSDelivr listing: ${status}`,
   });
   return collectDataPaths(json);
@@ -244,9 +264,9 @@ async function fetchPathsFromJsdelivr(): Promise<string[]> {
 
 /** Fetch file listing via GitHub Tree API (requires GITHUB_TOKEN for reliable access). */
 async function fetchPathsFromGithub(): Promise<string[]> {
-  const tree = await fetchJson<{ tree: GitTreeEntry[] }>(GITHUB_TREE_URL, {
+  const tree = await fetchJson<{ tree: GitTreeEntry[] }>(TRANSPORT_APIS_GITHUB_TREE_URL, {
     timeoutMs: 15_000,
-    headers: githubAuthHeaders(GITHUB_TREE_URL),
+    headers: githubAuthHeaders(TRANSPORT_APIS_GITHUB_TREE_URL),
     errorMessage: ({ status }) => `GitHub tree: ${status}`,
   });
   return tree.tree
@@ -281,11 +301,13 @@ async function fetchInBatchesFrom(paths: string[], baseUrl: string): Promise<Reg
 export async function fetchRegistryEntries(): Promise<RegistryEntry[]> {
   let entries: RegistryEntry[] | null = null;
 
-  // 1. Primary: JSDelivr CDN (@HEAD — no auth, no rate limits, no GitHub API calls)
+  // 1. Primary: jsDelivr CDN (no auth, no rate limits, no GitHub API calls)
   try {
     const paths = await fetchPathsFromJsdelivr();
-    entries = await fetchInBatchesFrom(paths, JSDELIVR_CDN_BASE);
-    console.log(`[transit-registry] ${entries.length} entries loaded (JSDelivr)`);
+    entries = await fetchInBatchesFrom(paths, TRANSPORT_APIS_JSDELIVR_CDN_BASE);
+    console.log(
+      `[transit-registry] ${entries.length} entries loaded (JSDelivr @ ${TRANSPORT_APIS_COMMIT.slice(0, 12)})`,
+    );
   } catch (err) {
     console.warn("[transit-registry] JSDelivr unavailable, trying GitHub API:", err);
   }
@@ -294,8 +316,10 @@ export async function fetchRegistryEntries(): Promise<RegistryEntry[]> {
   if (!entries) {
     try {
       const paths = await fetchPathsFromGithub();
-      entries = await fetchInBatchesFrom(paths, RAW_BASE);
-      console.log(`[transit-registry] ${entries.length} entries loaded (GitHub API)`);
+      entries = await fetchInBatchesFrom(paths, TRANSPORT_APIS_RAW_BASE);
+      console.log(
+        `[transit-registry] ${entries.length} entries loaded (GitHub API @ ${TRANSPORT_APIS_COMMIT.slice(0, 12)})`,
+      );
     } catch (err) {
       console.warn("[transit-registry] GitHub API unavailable, trying cache:", err);
     }

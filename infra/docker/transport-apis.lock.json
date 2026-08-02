@@ -1,0 +1,11 @@
+{
+  "$schema": "./transport-apis.lock.schema.json",
+  "schemaVersion": 1,
+  "source": "public-transport-transport-apis",
+  "ref": "v1",
+  "commit": "58aec5b1b7c876f133c9d1336739d0f61211b74e",
+  "entryCount": 85,
+  "lockedAt": "2026-08-02T22:14:09.534Z",
+  "lockedBy": "dev@fwcr.de",
+  "comment": "Pinned commit of public-transport/transport-apis consumed by integrations/transit-dynamic-registry. Bump via `pnpm openmapx transit-registry bump`."
+}

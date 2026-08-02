@@ -70,6 +70,50 @@ if (!gbfsLock.url?.includes(`/${MOBILITYDATA_GBFS_CATALOG_COMMIT}/systems.csv`))
   errors.push("infra/docker/gbfs-catalog.lock.json: URL is not pinned to the catalog commit");
 }
 
+// transport-apis catalog: pin.ts is the single source of truth; the lockfile
+// and the manifest health checks must name the same immutable commit.
+const registryPinSource = read("integrations/transit-dynamic-registry/pin.ts");
+const registryCommit = registryPinSource.match(/TRANSPORT_APIS_COMMIT\s*=\s*"([0-9a-f]{40})"/)?.[1];
+const registryRef = registryPinSource.match(/TRANSPORT_APIS_REF\s*=\s*"([^"]+)"/)?.[1];
+const registryLockedAt = registryPinSource.match(/TRANSPORT_APIS_LOCKED_AT\s*=\s*"([^"]+)"/)?.[1];
+if (!registryCommit) {
+  errors.push(
+    "integrations/transit-dynamic-registry/pin.ts: TRANSPORT_APIS_COMMIT is not a 40-hex commit SHA",
+  );
+} else {
+  const registryLock = JSON.parse(read("infra/docker/transport-apis.lock.json")) as {
+    commit?: string;
+    ref?: string;
+    lockedAt?: string;
+  };
+  if (registryLock.commit !== registryCommit) {
+    errors.push(
+      `infra/docker/transport-apis.lock.json: commit "${registryLock.commit}" != TRANSPORT_APIS_COMMIT "${registryCommit}"`,
+    );
+  }
+  if (registryLock.ref !== registryRef) {
+    errors.push(
+      `infra/docker/transport-apis.lock.json: ref "${registryLock.ref}" != TRANSPORT_APIS_REF "${registryRef}"`,
+    );
+  }
+  if (registryLock.lockedAt !== registryLockedAt) {
+    errors.push(
+      `infra/docker/transport-apis.lock.json: lockedAt "${registryLock.lockedAt}" != TRANSPORT_APIS_LOCKED_AT "${registryLockedAt}"`,
+    );
+  }
+  const manifest = read("integrations/transit-dynamic-registry/manifest.json");
+  if (!manifest.includes(`transport-apis@${registryCommit}`)) {
+    errors.push(
+      "integrations/transit-dynamic-registry/manifest.json: JSDelivr health check is not pinned to TRANSPORT_APIS_COMMIT",
+    );
+  }
+  if (!manifest.includes(`git/trees/${registryCommit}?recursive=1`)) {
+    errors.push(
+      "integrations/transit-dynamic-registry/manifest.json: GitHub health check is not pinned to TRANSPORT_APIS_COMMIT",
+    );
+  }
+}
+
 if (errors.length > 0) {
   console.error(
     `✗ Toolchain pins out of sync with @openmapx/transitous-core:\n${errors.map((e) => `  - ${e}`).join("\n")}\n` +
@@ -78,5 +122,5 @@ if (errors.length > 0) {
   process.exit(1);
 }
 console.log(
-  `✓ Toolchain pins consistent — MOTIS ${MOTIS_VERSION}, gtfsclean ${GTFSCLEAN_COMMIT.slice(0, 10)}.`,
+  `✓ Toolchain pins consistent — MOTIS ${MOTIS_VERSION}, gtfsclean ${GTFSCLEAN_COMMIT.slice(0, 10)}, transport-apis ${registryCommit?.slice(0, 10)}.`,
 );
