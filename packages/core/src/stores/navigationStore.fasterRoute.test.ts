@@ -79,6 +79,38 @@ describe("faster-route proposal", () => {
     useNavigationStore.getState().dismissFasterRoute();
     expect(useNavigationStore.getState().fasterRoute).toBeNull();
     expect(useNavigationStore.getState().route).toBe(original);
+    expect(useNavigationStore.getState().fasterRouteSuppressed).toBe(true);
+  });
+
+  it("captures a manual route choice and its routing constraints", () => {
+    useNavigationStore.getState().stopNavigation();
+    useNavigationStore.getState().startGroundNavigation(
+      altA,
+      "driving",
+      [
+        [0, 0],
+        [0.01, 0],
+      ],
+      [original],
+      "routing-valhalla",
+      {
+        routeIntent: "userSelected",
+        routeOptions: {
+          avoidHighways: true,
+          avoidTolls: true,
+          avoidFerries: true,
+          avoidClosures: true,
+        },
+      },
+    );
+    const s = useNavigationStore.getState();
+    expect(s.routeSelectionIntent).toBe("userSelected");
+    expect(s.routeOptions).toEqual({
+      avoidHighways: true,
+      avoidTolls: true,
+      avoidFerries: true,
+      avoidClosures: true,
+    });
   });
 
   it("selecting another route clears a pending proposal", () => {
@@ -90,6 +122,7 @@ describe("faster-route proposal", () => {
     });
     useNavigationStore.getState().selectRoute(1);
     expect(useNavigationStore.getState().fasterRoute).toBeNull();
+    expect(useNavigationStore.getState().routeSelectionIntent).toBe("userSelected");
   });
 
   it("stopping navigation clears a pending proposal", () => {
@@ -101,6 +134,14 @@ describe("faster-route proposal", () => {
     });
     useNavigationStore.getState().stopNavigation();
     expect(useNavigationStore.getState().fasterRoute).toBeNull();
+  });
+
+  it("clears trip suppression when a system reroute replaces the route", () => {
+    useNavigationStore.getState().dismissFasterRoute();
+    expect(useNavigationStore.getState().fasterRouteSuppressed).toBe(true);
+    useNavigationStore.getState().applyReroute(faster, "routing-valhalla");
+    expect(useNavigationStore.getState().fasterRouteSuppressed).toBe(false);
+    expect(useNavigationStore.getState().routeSelectionIntent).toBe("automatic");
   });
 });
 

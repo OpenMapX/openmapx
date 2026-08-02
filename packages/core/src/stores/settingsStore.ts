@@ -14,6 +14,7 @@ const AI_SEARCH_STORAGE_KEY = "openmapx:aiSearch";
 const INCIDENT_ALERTS_STORAGE_KEY = "openmapx:incidentAlerts";
 const AVOID_INCIDENTS_STORAGE_KEY = "openmapx:avoidIncidents";
 const FASTER_ROUTES_STORAGE_KEY = "openmapx:nav:fasterRoutes";
+const AUTO_SWITCH_FASTER_ROUTES_STORAGE_KEY = "openmapx:nav:autoSwitchFasterRoutes";
 const VOICE_NAME_STORAGE_KEY = "openmapx:voiceName";
 const MAP_NORTH_UP_STORAGE_KEY = "openmapx:mapNorthUp";
 const EV_VEHICLE_ID_STORAGE_KEY = "openmapx:evVehicleId";
@@ -95,6 +96,13 @@ function readAvoidIncidents(): boolean {
 function readFasterRoutes(): boolean {
   const v = getStorage().getString(FASTER_ROUTES_STORAGE_KEY);
   return v === null ? true : v === "true";
+}
+
+// Defaults OFF: an automatic route switch is more surprising than an offer,
+// especially when a driver deliberately picked a slower alternative.
+function readAutoSwitchFasterRoutes(): boolean {
+  const v = getStorage().getString(AUTO_SWITCH_FASTER_ROUTES_STORAGE_KEY);
+  return v === "true";
 }
 
 /** Chosen TTS voice by SpeechSynthesisVoice.name; null follows the locale default. */
@@ -213,6 +221,9 @@ interface SettingsState {
   /** Offer a quicker route when live traffic changes during driving. */
   fasterRoutes: boolean;
   setFasterRoutes: (v: boolean) => void;
+  /** Allow unattended faster-route offers to switch the active route. */
+  autoSwitchFasterRoutes: boolean;
+  setAutoSwitchFasterRoutes: (v: boolean) => void;
   /** Chosen navigation-voice name (SpeechSynthesisVoice.name); null = locale default. */
   voiceName: string | null;
   setVoiceName: (v: string | null) => void;
@@ -301,6 +312,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     getStorage().setString(FASTER_ROUTES_STORAGE_KEY, String(fasterRoutes));
     set({ fasterRoutes });
   },
+  autoSwitchFasterRoutes: readAutoSwitchFasterRoutes(),
+  setAutoSwitchFasterRoutes: (autoSwitchFasterRoutes) => {
+    getStorage().setString(AUTO_SWITCH_FASTER_ROUTES_STORAGE_KEY, String(autoSwitchFasterRoutes));
+    set({ autoSwitchFasterRoutes });
+  },
   voiceName: readVoiceName(),
   setVoiceName: (voiceName) => {
     getStorage().setString(VOICE_NAME_STORAGE_KEY, voiceName ?? "");
@@ -377,6 +393,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       incidentAlerts: readIncidentAlerts(),
       avoidIncidents: readAvoidIncidents(),
       fasterRoutes: readFasterRoutes(),
+      autoSwitchFasterRoutes: readAutoSwitchFasterRoutes(),
       voiceName: readVoiceName(),
       mapNorthUp: readMapNorthUp(),
       evVehicleId: readEvVehicleId(),

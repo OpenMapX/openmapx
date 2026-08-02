@@ -22,7 +22,13 @@ export { useLayerStore } from "./layerStore";
 export { useMapClickStore } from "./mapClickStore";
 export { useMapStore } from "./mapStore";
 export { useMenuStore } from "./menuStore";
-export type { NavKind, TransitReplanOptions } from "./navigationStore";
+export type {
+  NavigationRouteOptions,
+  NavigationStartOptions,
+  NavKind,
+  RouteSelectionIntent,
+  TransitReplanOptions,
+} from "./navigationStore";
 export { useNavigationStore } from "./navigationStore";
 export { useNlpSearchStore } from "./nlpSearchStore";
 export type { OpeningHoursFilter } from "./openingHoursStore";

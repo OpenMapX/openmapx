@@ -1,4 +1,4 @@
-import { useNavigationStore } from "@openmapx/core";
+import { useNavigationStore, useSettingsStore } from "@openmapx/core";
 import { en } from "@openmapx/i18n";
 import { act, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
@@ -41,6 +41,7 @@ const propose = () =>
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   speak.mockReset();
+  useSettingsStore.setState({ fasterRoutes: true, autoSwitchFasterRoutes: false });
   useNavigationStore.getState().stopNavigation();
   useNavigationStore.getState().startGroundNavigation(routeOf("via A46"), "driving", [
     [0, 0],
@@ -79,6 +80,7 @@ describe("FasterRouteBanner", () => {
   });
 
   it("auto-accepts after ten seconds", () => {
+    useSettingsStore.setState({ autoSwitchFasterRoutes: true });
     propose();
     renderBanner();
     act(() => {
@@ -86,6 +88,28 @@ describe("FasterRouteBanner", () => {
     });
     expect(useNavigationStore.getState().route?.summary).toBe("via A61");
     expect(useNavigationStore.getState().fasterRoute).toBeNull();
+  });
+
+  it("does not auto-accept when automatic switching is off", () => {
+    propose();
+    renderBanner();
+    act(() => {
+      vi.advanceTimersByTime(15_000);
+    });
+    expect(useNavigationStore.getState().route?.summary).toBe("via A46");
+    expect(useNavigationStore.getState().fasterRoute).not.toBeNull();
+  });
+
+  it("never auto-accepts a manually selected route", () => {
+    useSettingsStore.setState({ autoSwitchFasterRoutes: true });
+    useNavigationStore.setState({ routeSelectionIntent: "userSelected" });
+    propose();
+    renderBanner();
+    act(() => {
+      vi.advanceTimersByTime(15_000);
+    });
+    expect(useNavigationStore.getState().route?.summary).toBe("via A46");
+    expect(useNavigationStore.getState().fasterRoute).not.toBeNull();
   });
 
   it("dismissing cancels the auto-accept", () => {
@@ -107,5 +131,6 @@ describe("FasterRouteBanner", () => {
       screen.getByTestId("faster-route-accept").click();
     });
     expect(useNavigationStore.getState().route?.summary).toBe("via A61");
+    expect(useNavigationStore.getState().routeSelectionIntent).toBe("userSelected");
   });
 });

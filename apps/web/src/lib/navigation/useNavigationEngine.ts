@@ -106,7 +106,7 @@ export function useNavigationEngine(): void {
   const onFix = useCallback(
     (fix: FixInput) => {
       const store = useNavigationStore.getState();
-      const { status, route, mode, destinationWaypoints, voiceEnabled } = store;
+      const { status, route, mode, destinationWaypoints, routeOptions, voiceEnabled } = store;
       if ((status !== "navigating" && status !== "rerouting") || !route) return;
 
       // Capture the raw fix stream for the recorder (no-op unless recording).
@@ -193,7 +193,7 @@ export function useNavigationEngine(): void {
           waypoints,
           mode,
           lang: locale,
-          avoidClosures: useSettingsStore.getState().avoidIncidents,
+          ...routeOptions,
         })
           .then((res) => {
             // Bail out if navigation ended (stopped or arrived) while the
@@ -302,7 +302,7 @@ export function useNavigationEngine(): void {
     );
     if (!fire || reroutingRef.current || Date.now() < rerouteCooldownUntilRef.current) return;
     const store = useNavigationStore.getState();
-    const { route, mode, destinationWaypoints, progress } = store;
+    const { route, mode, destinationWaypoints, progress, routeOptions } = store;
     if (!route || !progress) return;
     reroutingRef.current = true;
     haptics.warn();
@@ -314,7 +314,7 @@ export function useNavigationEngine(): void {
       from,
       progress.alongMeters,
     );
-    fetchDirections({ waypoints, mode, lang: locale, avoidClosures: true })
+    fetchDirections({ waypoints, mode, lang: locale, ...routeOptions, avoidClosures: true })
       .then((res) => {
         const st = useNavigationStore.getState().status;
         if (st === "idle" || st === "arrived") return;

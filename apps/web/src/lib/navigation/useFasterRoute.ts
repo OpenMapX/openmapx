@@ -9,14 +9,11 @@ import {
   useSettingsStore,
 } from "@openmapx/core";
 import { useLocale } from "next-intl";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useNavRecordingStore } from "./navRecordingStore";
 
 /** How often to ask whether a better route exists. */
 const CHECK_INTERVAL_MS = 300_000;
-
-/** Quiet period after an offer is answered. */
-const SUPPRESS_MS = 600_000;
 
 /**
  * Periodically re-plans from the driver's current position and offers a
@@ -26,21 +23,21 @@ export function useFasterRoute(): void {
   const locale = useLocale();
   const route = useNavigationStore((s) => s.route);
   const enabled = useSettingsStore((s) => s.fasterRoutes);
-  const suppressedUntilRef = useRef(0);
 
-  // Re-arm the quiet period whenever an offer is answered, either way.
-  const pending = useNavigationStore((s) => s.fasterRoute);
-  const hadPendingRef = useRef(false);
   useEffect(() => {
-    if (hadPendingRef.current && !pending) suppressedUntilRef.current = Date.now() + SUPPRESS_MS;
-    hadPendingRef.current = pending !== null;
-  }, [pending]);
+    if (!enabled && useNavigationStore.getState().fasterRoute) {
+      // Turning offers off also withdraws an offer already on screen, but it
+      // does not mark the trip as dismissed: re-enabling the setting should
+      // resume normal polling.
+      useNavigationStore.getState().clearFasterRoute();
+    }
+  }, [enabled]);
 
   // A position change invalidates an offer computed from the old route.
   const offRoute = useNavigationStore((s) => s.offRoute);
   useEffect(() => {
     if (offRoute && useNavigationStore.getState().fasterRoute) {
-      useNavigationStore.getState().dismissFasterRoute();
+      useNavigationStore.getState().clearFasterRoute();
     }
   }, [offRoute]);
 
@@ -53,9 +50,9 @@ export function useFasterRoute(): void {
       const s = useNavigationStore.getState();
       if (s.status !== "navigating" || s.kind !== "ground" || s.mode !== "driving") return;
       if (s.offRoute || s.coasting || s.weakGps || s.fasterRoute) return;
+      if (s.fasterRouteSuppressed) return;
       if (!s.route || !s.progress) return;
       if (useNavRecordingStore.getState().replaying) return;
-      if (Date.now() < suppressedUntilRef.current) return;
       if (typeof navigator !== "undefined" && navigator.onLine === false) return;
 
       const active = s.route;
@@ -75,7 +72,7 @@ export function useFasterRoute(): void {
           waypoints,
           mode: "driving",
           lang: locale,
-          avoidClosures: useSettingsStore.getState().avoidIncidents,
+          ...s.routeOptions,
         })
           .then((res) => {
             if (cancelled) return;

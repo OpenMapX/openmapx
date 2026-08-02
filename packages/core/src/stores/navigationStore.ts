@@ -24,6 +24,30 @@ function readBoolPref(key: string, fallback: boolean): boolean {
  */
 export type NavKind = "ground" | "transit";
 
+/** Whether the active ground route was chosen by the router or by the driver. */
+export type RouteSelectionIntent = "automatic" | "userSelected";
+
+/** Route constraints that must survive every mid-trip directions request. */
+export interface NavigationRouteOptions {
+  avoidHighways: boolean;
+  avoidTolls: boolean;
+  avoidFerries: boolean;
+  avoidClosures: boolean;
+}
+
+/** Optional context captured when a ground navigation session starts. */
+export interface NavigationStartOptions {
+  routeIntent?: RouteSelectionIntent;
+  routeOptions?: Partial<NavigationRouteOptions>;
+}
+
+const DEFAULT_ROUTE_OPTIONS: NavigationRouteOptions = {
+  avoidHighways: false,
+  avoidTolls: false,
+  avoidFerries: false,
+  avoidClosures: false,
+};
+
 /**
  * Resolved MOTIS transit options captured when transit navigation starts, so an
  * on-trip replan reuses the user's original choices (preferred modes,
@@ -64,6 +88,10 @@ interface NavigationState {
   route: Route | null;
   /** Active route plus its alternatives, so the user can switch mid-trip. */
   routes: Route[];
+  /** Whether the active route is still the driver's explicit choice. */
+  routeSelectionIntent: RouteSelectionIntent;
+  /** Original route constraints reused by live reroutes and faster-route checks. */
+  routeOptions: NavigationRouteOptions;
   /** Integration id of the routing provider that produced the active route, for map attribution. */
   routeProvider: string | null;
   activeRouteIndex: number;
@@ -85,6 +113,8 @@ interface NavigationState {
   rerouteFailedNonce: number;
   /** Pending faster-route offer, or null when there is nothing to answer. */
   fasterRoute: FasterRouteProposal | null;
+  /** User declined faster-route suggestions for the remainder of this trip. */
+  fasterRouteSuppressed: boolean;
   cameraMode: CameraMode;
   currentSpeedLimit: number | null;
   /**
@@ -111,6 +141,7 @@ interface NavigationState {
     waypoints: LngLat[],
     alternatives?: Route[],
     provider?: string,
+    options?: NavigationStartOptions,
   ) => void;
   /** Switch the followed route to one of `routes` (an alternative shown on the map). */
   selectRoute: (index: number) => void;
@@ -143,8 +174,10 @@ interface NavigationState {
   applyReroute: (route: Route, provider?: string, alternatives?: Route[]) => void;
   proposeFasterRoute: (proposal: FasterRouteProposal) => void;
   /** Switch to the pending proposal and adopt its fresh alternatives. */
-  acceptFasterRoute: () => void;
+  acceptFasterRoute: (routeIntent?: RouteSelectionIntent) => void;
   dismissFasterRoute: () => void;
+  /** Withdraw an offer for system reasons without suppressing future offers. */
+  clearFasterRoute: () => void;
   setCameraMode: (m: CameraMode) => void;
   toggleVoice: () => void;
   toggleKeepScreenOn: () => void;
@@ -165,6 +198,8 @@ const INITIAL = {
   mode: "driving" as TravelMode,
   route: null as Route | null,
   routes: [] as Route[],
+  routeSelectionIntent: "automatic" as RouteSelectionIntent,
+  routeOptions: DEFAULT_ROUTE_OPTIONS,
   routeProvider: null as string | null,
   activeRouteIndex: 0,
   destinationWaypoints: [] as LngLat[],
@@ -174,6 +209,7 @@ const INITIAL = {
   coasting: false,
   rerouteFailedNonce: 0,
   fasterRoute: null as FasterRouteProposal | null,
+  fasterRouteSuppressed: false,
   cameraMode: "follow" as CameraMode,
   currentSpeedLimit: null,
   liveSpeedLimits: null as (number | null)[] | null,
@@ -188,7 +224,7 @@ export const useNavigationStore = create<NavigationState>((set) => ({
   voiceEnabled: readBoolPref(VOICE_STORAGE_KEY, true),
   keepScreenOn: readBoolPref(KEEP_SCREEN_ON_STORAGE_KEY, true),
 
-  startGroundNavigation: (route, mode, waypoints, alternatives = [], provider) =>
+  startGroundNavigation: (route, mode, waypoints, alternatives = [], provider, options) =>
     set({
       ...INITIAL,
       status: "navigating",
@@ -196,6 +232,8 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       mode,
       route,
       routes: [route, ...alternatives],
+      routeSelectionIntent: options?.routeIntent ?? "automatic",
+      routeOptions: { ...DEFAULT_ROUTE_OPTIONS, ...options?.routeOptions },
       routeProvider: provider ?? null,
       activeRouteIndex: 0,
       destinationWaypoints: waypoints,
@@ -209,10 +247,12 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       return {
         route: next,
         activeRouteIndex: index,
+        routeSelectionIntent: "userSelected",
         progress: null,
         offRoute: false,
         liveSpeedLimits: null,
         fasterRoute: null,
+        fasterRouteSuppressed: false,
       };
     }),
   addStop: (route, waypoints) =>
@@ -225,6 +265,8 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       progress: null,
       offRoute: false,
       liveSpeedLimits: null,
+      routeSelectionIntent: "userSelected",
+      fasterRouteSuppressed: false,
     }),
   startTransitNavigation: (itinerary, replanOptions) =>
     set({
@@ -261,11 +303,13 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       progress: null,
       liveSpeedLimits: null,
       routeProvider: provider ?? s.routeProvider,
+      routeSelectionIntent: "automatic",
       fasterRoute: null,
+      fasterRouteSuppressed: false,
       ...(alternatives && { routes: [route, ...alternatives], activeRouteIndex: 0 }),
     })),
   proposeFasterRoute: (fasterRoute) => set({ fasterRoute }),
-  acceptFasterRoute: () =>
+  acceptFasterRoute: (routeIntent) =>
     set((s) => {
       const proposal = s.fasterRoute;
       if (!proposal) return {};
@@ -274,13 +318,16 @@ export const useNavigationStore = create<NavigationState>((set) => ({
         route: proposal.route,
         routes: [proposal.route, ...proposal.alternatives],
         activeRouteIndex: 0,
+        routeSelectionIntent: routeIntent ?? s.routeSelectionIntent,
         offRoute: false,
         progress: null,
         liveSpeedLimits: null,
         fasterRoute: null,
+        fasterRouteSuppressed: false,
       };
     }),
-  dismissFasterRoute: () => set({ fasterRoute: null }),
+  dismissFasterRoute: () => set({ fasterRoute: null, fasterRouteSuppressed: true }),
+  clearFasterRoute: () => set({ fasterRoute: null }),
   setCameraMode: (cameraMode) => set({ cameraMode }),
   toggleVoice: () =>
     set((s) => {

@@ -4,7 +4,7 @@ import AltRouteIcon from "@mui/icons-material/AltRoute";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
-import { formatDuration, useNavigationStore } from "@openmapx/core";
+import { formatDuration, useNavigationStore, useSettingsStore } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { haptics } from "@/lib/haptics";
@@ -14,21 +14,25 @@ import { useNavigationVoice } from "@/lib/navigation/useNavigationVoice";
 const AUTO_ACCEPT_SECONDS = 10;
 
 /**
- * Offers a faster route found mid-drive and takes it unless the driver
- * declines. Auto-accepting is the default because the driver this exists for is
- * the one who cannot safely reach for the screen; declining is one tap and buys
- * ten minutes of quiet.
+ * Offers a faster route found mid-drive. Automatic switching is only available
+ * for a router-selected route when the driver has explicitly enabled it;
+ * manually selected routes always wait for a deliberate answer.
  */
 export function FasterRouteBanner() {
   const t = useTranslations("navigation");
   const locale = useLocale();
   const speak = useNavigationVoice(locale);
   const proposal = useNavigationStore((s) => s.fasterRoute);
+  const routeSelectionIntent = useNavigationStore((s) => s.routeSelectionIntent);
   const voiceEnabled = useNavigationStore((s) => s.voiceEnabled);
   const accept = useNavigationStore((s) => s.acceptFasterRoute);
   const dismiss = useNavigationStore((s) => s.dismissFasterRoute);
+  const fasterRoutesEnabled = useSettingsStore((s) => s.fasterRoutes);
+  const autoSwitchSetting = useSettingsStore((s) => s.autoSwitchFasterRoutes);
   const [remaining, setRemaining] = useState(AUTO_ACCEPT_SECONDS);
   const announcedRef = useRef<number | null>(null);
+  const autoSwitch =
+    fasterRoutesEnabled && autoSwitchSetting && routeSelectionIntent === "automatic";
 
   const savedText = proposal ? formatDuration(proposal.savedSeconds) : "";
 
@@ -49,7 +53,7 @@ export function FasterRouteBanner() {
   // development — and a wall-clock deadline also survives the interval being
   // throttled while the tab is backgrounded, where decrementing would stall.
   useEffect(() => {
-    if (!proposal) return;
+    if (!proposal || !autoSwitch) return;
     const deadline = proposal.proposedAtMs + AUTO_ACCEPT_SECONDS * 1000;
     const secondsLeft = () => Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
     setRemaining(secondsLeft());
@@ -58,13 +62,13 @@ export function FasterRouteBanner() {
       setRemaining(left);
       if (left <= 0) {
         clearInterval(tick);
-        accept();
+        accept("automatic");
       }
     }, 1000);
     return () => clearInterval(tick);
-  }, [proposal, accept]);
+  }, [proposal, autoSwitch, accept]);
 
-  if (!proposal) return null;
+  if (!proposal || !fasterRoutesEnabled) return null;
 
   return (
     <Box
@@ -92,13 +96,18 @@ export function FasterRouteBanner() {
           {proposal.route.summary
             ? `${t("fasterRouteVia", { road: proposal.route.summary })} · `
             : ""}
-          {t("fasterRouteCountdown", { seconds: remaining })}
+          {autoSwitch ? t("fasterRouteCountdown", { seconds: remaining }) : t("fasterRouteManual")}
         </Typography>
       </Box>
-      <Button data-testid="faster-route-dismiss" size="small" onClick={dismiss}>
+      <Button data-testid="faster-route-dismiss" size="small" variant="contained" onClick={dismiss}>
         {t("fasterRouteDismiss")}
       </Button>
-      <Button data-testid="faster-route-accept" size="small" variant="contained" onClick={accept}>
+      <Button
+        data-testid="faster-route-accept"
+        size="small"
+        variant="outlined"
+        onClick={() => accept("userSelected")}
+      >
         {t("fasterRouteAccept")}
       </Button>
     </Box>

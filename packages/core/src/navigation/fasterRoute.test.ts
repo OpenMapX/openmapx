@@ -90,9 +90,10 @@ describe("evaluateFasterRoute", () => {
     expect(r.faster).not.toBeNull();
   });
 
-  it("prefers a same-corridor candidate's duration as the baseline", () => {
-    // Caller says 4500 s remain, but the fresh corridor read is 3800 s. The
-    // divergent candidate at 3600 s then saves only 200 s, under the floor.
+  it("compares divergent candidates with the active route ETA", () => {
+    // A fresh same-corridor answer must not make the active route look like the
+    // fastest newly fetched candidate. The active route still has 4500 s left,
+    // so the divergent candidate saves 900 s and qualifies.
     const r = evaluateFasterRoute(
       current,
       5_000,
@@ -101,7 +102,7 @@ describe("evaluateFasterRoute", () => {
       opts(30),
     );
     expect(r.refreshedRemainingSeconds).toBe(3800);
-    expect(r.faster).toBeNull();
+    expect(r.faster?.savedSeconds).toBe(900);
   });
 
   it("picks the fastest of several divergent candidates", () => {

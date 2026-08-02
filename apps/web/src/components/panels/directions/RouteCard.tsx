@@ -16,6 +16,7 @@ import {
   formatDuration,
   useDirectionsStore,
   useNavigationStore,
+  useSettingsStore,
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { formatCo2Emission } from "@/lib/formatCo2";
@@ -55,6 +56,10 @@ export function RouteCard({
   const locale = useLocale();
   const startGroundNavigation = useNavigationStore((s) => s.startGroundNavigation);
   const waypoints = useDirectionsStore((s) => s.waypoints);
+  const avoidHighways = useDirectionsStore((s) => s.avoidHighways);
+  const avoidTolls = useDirectionsStore((s) => s.avoidTolls);
+  const avoidFerries = useDirectionsStore((s) => s.avoidFerries);
+  const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
 
   const handleStart = async () => {
     const coords = waypoints.map((w) => w.coords).filter((c): c is [number, number] => c !== null);
@@ -63,7 +68,15 @@ export function RouteCard({
     // await hands control back to the event loop.
     primeSpeechSynthesis();
     await requestHeadingPermission();
-    startGroundNavigation(route, route.mode, coords, alternatives, provider);
+    startGroundNavigation(route, route.mode, coords, alternatives, provider, {
+      routeIntent: index === 0 ? "automatic" : "userSelected",
+      routeOptions: {
+        avoidHighways: route.mode === "driving" && avoidHighways,
+        avoidTolls: route.mode === "driving" && avoidTolls,
+        avoidFerries,
+        avoidClosures: avoidIncidents,
+      },
+    });
   };
 
   const dist =

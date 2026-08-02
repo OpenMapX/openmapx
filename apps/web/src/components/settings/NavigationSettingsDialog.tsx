@@ -58,6 +58,8 @@ export function NavigationSettingsDialog({
   const setAvoidIncidents = useSettingsStore((s) => s.setAvoidIncidents);
   const fasterRoutes = useSettingsStore((s) => s.fasterRoutes);
   const setFasterRoutes = useSettingsStore((s) => s.setFasterRoutes);
+  const autoSwitchFasterRoutes = useSettingsStore((s) => s.autoSwitchFasterRoutes);
+  const setAutoSwitchFasterRoutes = useSettingsStore((s) => s.setAutoSwitchFasterRoutes);
   const mapNorthUp = useSettingsStore((s) => s.mapNorthUp);
   const setMapNorthUp = useSettingsStore((s) => s.setMapNorthUp);
 
@@ -152,6 +154,10 @@ export function NavigationSettingsDialog({
             <SwitchControl checked={fasterRoutes} onChange={setFasterRoutes} />
           </SettingRow>
           {hint(tn("fasterRoutesHint"))}
+          <SettingRow label={tn("autoSwitchFasterRoutes")}>
+            <SwitchControl checked={autoSwitchFasterRoutes} onChange={setAutoSwitchFasterRoutes} />
+          </SettingRow>
+          {hint(tn("autoSwitchFasterRoutesHint"))}
           <SettingRow label={tn("avoidMotorways")}>
             <SwitchControl checked={avoidHighways} onChange={setAvoidHighways} />
           </SettingRow>

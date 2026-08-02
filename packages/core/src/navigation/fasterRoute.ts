@@ -24,7 +24,7 @@ export interface FasterRouteCandidate {
 }
 
 export interface FasterRouteEvaluation {
-  /** Fresh remaining-seconds for the corridor already being driven, when one matched. */
+  /** Fresh duration for the corridor already being driven, when one matched. */
   refreshedRemainingSeconds: number | null;
   /** Best qualifying divergent candidate, or null. */
   faster: FasterRouteCandidate | null;
@@ -92,9 +92,10 @@ function divergenceAlong(
 /**
  * Decide whether a freshly planned candidate is worth switching to.
  *
- * A same-corridor candidate supplies a fresh baseline for the route already
- * being driven. Divergent candidates are compared with that baseline, or with
- * the ETA currently shown when no corridor match was returned.
+ * A same-corridor candidate is reported as a fresh corridor reading, but
+ * divergent candidates are always compared with the active route's current
+ * ETA. The route the driver is actually following is the baseline, even when
+ * the router returns a faster candidate in the same response.
  */
 export function evaluateFasterRoute(
   current: Route,
@@ -120,7 +121,7 @@ export function evaluateFasterRoute(
     divergent.push({ route, savedSeconds: 0, divergenceMeters: divergence });
   }
 
-  const baseline = refreshedRemainingSeconds ?? remainingSeconds;
+  const baseline = remainingSeconds;
   const leadMeters = Math.max(MIN_LEAD_METERS, opts.speedMps * opts.minLeadSeconds);
 
   let best: FasterRouteCandidate | null = null;

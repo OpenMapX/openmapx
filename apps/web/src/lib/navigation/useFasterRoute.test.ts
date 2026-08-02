@@ -30,10 +30,24 @@ const routeOf = (duration: number, lat: number) => ({
 
 const start = (mode: "driving" | "walking" = "driving") => {
   useNavigationStore.getState().stopNavigation();
-  useNavigationStore.getState().startGroundNavigation(routeOf(3600, 0), mode, [
-    [0, 0],
-    [0.18, 0],
-  ]);
+  useNavigationStore.getState().startGroundNavigation(
+    routeOf(3600, 0),
+    mode,
+    [
+      [0, 0],
+      [0.18, 0],
+    ],
+    [],
+    undefined,
+    {
+      routeOptions: {
+        avoidHighways: true,
+        avoidTolls: true,
+        avoidFerries: true,
+        avoidClosures: true,
+      },
+    },
+  );
   useNavigationStore.getState().applyProgress({
     snapped: [0.045, 0],
     alongMeters: 5_000,
@@ -67,6 +81,14 @@ describe("useFasterRoute", () => {
     expect(fetchDirections).not.toHaveBeenCalled();
     await act(async () => vi.advanceTimersByTimeAsync(2_000));
     expect(fetchDirections).toHaveBeenCalledTimes(1);
+    expect(fetchDirections).toHaveBeenCalledWith(
+      expect.objectContaining({
+        avoidHighways: true,
+        avoidTolls: true,
+        avoidFerries: true,
+        avoidClosures: true,
+      }),
+    );
   });
 
   it("does not check when the setting is off", async () => {
@@ -74,6 +96,18 @@ describe("useFasterRoute", () => {
     renderHook(() => useFasterRoute());
     await act(async () => vi.advanceTimersByTimeAsync(310_000));
     expect(fetchDirections).not.toHaveBeenCalled();
+  });
+
+  it("withdraws a pending offer when the setting is turned off", () => {
+    useNavigationStore.getState().proposeFasterRoute({
+      route: routeOf(2700, 0),
+      alternatives: [],
+      savedSeconds: 900,
+      proposedAtMs: Date.now(),
+    });
+    renderHook(() => useFasterRoute());
+    act(() => useSettingsStore.setState({ fasterRoutes: false }));
+    expect(useNavigationStore.getState().fasterRoute).toBeNull();
   });
 
   it("does not check when walking", async () => {
@@ -138,7 +172,7 @@ describe("useFasterRoute", () => {
     expect(useNavigationStore.getState().fasterRoute).toBeNull();
   });
 
-  it("suppresses the next poll for ten minutes after dismissal", async () => {
+  it("suppresses faster-route polling for the rest of the trip after dismissal", async () => {
     renderHook(() => useFasterRoute());
     act(() => {
       useNavigationStore.getState().proposeFasterRoute({
@@ -151,9 +185,21 @@ describe("useFasterRoute", () => {
     act(() => {
       useNavigationStore.getState().dismissFasterRoute();
     });
-    await act(async () => vi.advanceTimersByTimeAsync(599_000));
+    await act(async () => vi.advanceTimersByTimeAsync(1_800_000));
     expect(fetchDirections).not.toHaveBeenCalled();
-    await act(async () => vi.advanceTimersByTimeAsync(2_000));
+    act(() => {
+      useNavigationStore.getState().applyReroute(routeOf(3600, 0.5));
+      useNavigationStore.getState().applyProgress({
+        snapped: [0.045, 0.5],
+        alongMeters: 5_000,
+        deviationMeters: 0,
+        segmentIndex: 0,
+        etaEpochMs: Date.now() + 4_500_000,
+        bearing: 90,
+        speedMps: 30,
+      } as never);
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(300_001));
     expect(fetchDirections).toHaveBeenCalledTimes(1);
   });
 
