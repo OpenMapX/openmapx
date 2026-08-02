@@ -93,9 +93,11 @@ export type {
   RouteStep,
   RoutingOptions,
   RoutingProvider,
+  RoutingProviderErrorCode,
   TravelMode,
   Waypoint,
 } from "./routing-provider.js";
+export { RoutingProviderError } from "./routing-provider.js";
 export type {
   AiCloudProcessor,
   NlpProvider,

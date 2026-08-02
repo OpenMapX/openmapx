@@ -5,6 +5,7 @@ import {
   getMetrics,
   initMetrics,
   recordProviderCall,
+  recordRoutingRequest,
   recordTransitDecision,
   resetMetricsForTests,
 } from "../index.js";
@@ -93,6 +94,32 @@ describe("metrics service", () => {
     expect(text).toContain('reason="refresh_fallback"');
     expect(text).not.toContain("token");
     expect(text).not.toContain("latitude");
+  });
+
+  it("records routing latency, route counts, and traffic baseline coverage", async () => {
+    recordRoutingRequest({
+      providerId: "routing-valhalla",
+      mode: "driving",
+      operation: "directions",
+      outcome: "ok",
+      liveTraffic: true,
+      closureAvoidance: false,
+      latencyMs: 125,
+      routeCount: 3,
+      alternateCount: 2,
+      trafficDelaySeconds: 180,
+      baselineAvailable: true,
+    });
+    const text = await getMetrics().renderPrometheus();
+    expect(text).toContain("routing_requests_total");
+    expect(text).toContain("routing_request_duration_ms");
+    expect(text).toContain("routing_route_count");
+    expect(text).toContain("routing_alternate_count");
+    expect(text).toContain("routing_traffic_delay_seconds");
+    expect(text).toContain("routing_baseline_available_total");
+    expect(text).toContain('operation="directions"');
+    expect(text).toContain('live_traffic="true"');
+    expect(text).toContain('status="present"');
   });
 });
 

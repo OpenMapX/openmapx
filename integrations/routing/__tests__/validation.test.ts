@@ -47,8 +47,8 @@ describe("parseDateTime", () => {
 
   it("preserves wall-clock from offset inputs (does not convert to UTC)", () => {
     // We treat the supplied wall-clock as local time at the route origin per
-    // Valhalla's contract, so a `+02:00` offset is ignored — the stripped
-    // wall-clock prefix is what reaches the engine.
+    // The routing API contract treats the supplied wall-clock prefix as local
+    // time at the route origin, so an offset is intentionally ignored.
     expect(parseDateTime("2026-05-04T08:30:00+02:00", "departAt")).toBe("2026-05-04T08:30");
   });
 

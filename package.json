@@ -22,6 +22,7 @@
     "check-legal-tables": "pnpm -C packages/cli exec tsx ../../scripts/check-legal-tables.ts",
     "check-legal-updated": "pnpm -C packages/cli exec tsx ../../scripts/check-legal-updated.ts",
     "check-legal-urls": "pnpm -C packages/cli exec tsx ../../scripts/check-legal-urls.ts",
+    "check-routing-canaries": "pnpm -C packages/cli exec tsx ../../scripts/check-routing-canaries.ts",
     "check-license-metadata": "pnpm -C packages/cli exec tsx ../../scripts/check-license-metadata.ts",
     "check-toolchain-pins": "pnpm -C packages/cli exec tsx ../../scripts/check-toolchain-pins.ts",
     "gen-ev-vehicles": "pnpm -C packages/cli exec tsx ../../scripts/ev-vehicles/generate.ts",

@@ -28,10 +28,10 @@ export function parseTravelMode(value: string | undefined): TravelMode {
 }
 
 /**
- * Validate and normalise an ISO-8601 date-time query param to Valhalla's
+ * Validate and normalise an ISO-8601 date-time query param to the routing API's
  * `YYYY-MM-DDTHH:mm` wall-clock format. Accepts inputs with optional seconds,
- * milliseconds, and timezone (which are stripped — we treat the supplied
- * wall-clock as local time at the route origin, per Valhalla's contract).
+ * milliseconds, and timezone (which are stripped — the API treats the
+ * supplied wall-clock as local time at the route origin).
  *
  * Throws if the input doesn't begin with a valid date-time prefix or names a
  * non-existent calendar date (e.g. Feb 31).

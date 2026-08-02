@@ -13,8 +13,15 @@ export interface FetchJsonOptions {
   /**
    * Build the message thrown on a non-2xx response. Overrides `label`. Lets a
    * caller preserve a bespoke diagnostic string (status text, URL, path, …).
+   * `body` is truncated to keep upstream diagnostics useful without allowing a
+   * large or unexpected response to flood logs.
    */
-  errorMessage?: (info: { status: number; statusText: string; url: string }) => string;
+  errorMessage?: (info: {
+    status: number;
+    statusText: string;
+    url: string;
+    body?: string;
+  }) => string;
   /**
    * `User-Agent` to send. Defaults to the shared {@link USER_AGENT}. Pass `null`
    * to omit the header entirely (preserves the behaviour of callers that never
@@ -45,9 +52,11 @@ async function request<T>(url: string, options: FetchJsonOptions): Promise<T> {
       headers: { ...(userAgent ? { "User-Agent": userAgent } : {}), ...headers },
     });
     if (!res.ok) {
+      const body =
+        typeof res.text === "function" ? (await res.text()).trim().slice(0, 1_024) : undefined;
       throw new Error(
         errorMessage
-          ? errorMessage({ status: res.status, statusText: res.statusText, url })
+          ? errorMessage({ status: res.status, statusText: res.statusText, url, body })
           : `${label} HTTP ${res.status}`,
       );
     }

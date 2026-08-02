@@ -49,12 +49,26 @@ describe("fetchJson", () => {
   });
 
   it("uses a custom errorMessage builder on a non-2xx response", async () => {
-    mockFetch(() => new Response("{}", { status: 404, statusText: "Not Found" }));
+    mockFetch(
+      () => new Response('{"message":"missing"}', { status: 404, statusText: "Not Found" }),
+    );
     await expect(
       fetchJson("https://x.test/data", {
-        errorMessage: ({ status, statusText }) => `RIS failed: ${status} ${statusText}`,
+        errorMessage: ({ status, statusText, body }) =>
+          `RIS failed: ${status} ${statusText}: ${body}`,
       }),
-    ).rejects.toThrow("RIS failed: 404 Not Found");
+    ).rejects.toThrow('RIS failed: 404 Not Found: {"message":"missing"}');
+  });
+
+  it("keeps custom errors working with minimal response doubles", async () => {
+    mockFetch(
+      () => ({ ok: false, status: 503, statusText: "Service Unavailable" }) as unknown as Response,
+    );
+    await expect(
+      fetchJson("https://x.test/data", {
+        errorMessage: ({ status, body }) => `upstream ${status}${body ? `: ${body}` : ""}`,
+      }),
+    ).rejects.toThrow("upstream 503");
   });
 
   it("returns null on a non-2xx response when nullOnError is set", async () => {

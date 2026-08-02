@@ -278,6 +278,14 @@ Swap `costing` to `bicycle` or `pedestrian` to confirm the non-driving modes,
 and hit `/isochrone` or `/height` the same way if you rely on travel-time
 polygons or elevation profiles.
 
+For the routing API's alternate-route behavior, OpenMapX asks Valhalla for up to
+two alternatives (three routes total including the primary). This is a maximum,
+not a promise: Valhalla filters alternatives by their cost and overlap with the
+primary, so a valid request can return only one route. Run
+`pnpm check-routing-canaries` from the application host to verify the public
+directions endpoint without depending on a historical route count or assuming
+that a live duration must exceed its baseline.
+
 **OSRM.** OSRM takes coordinates inline as semicolon-separated `lng,lat` pairs.
 A healthy instance returns `"code": "Ok"` with a distance and duration:
 

@@ -115,9 +115,10 @@ describe("activeClosuresForBbox", () => {
     expect(result.points[result.points.length - 1]).toEqual([0.1, 51.1045]);
   });
 
-  it("caps total exclusion points below Valhalla's exclude-locations limit and warns", async () => {
-    // A ~3.3 km LineString densifies to ~74 points (> the 45-point cap). Valhalla
-    // rejects > 50 exclude_locations with HTTP 400, so the result must be trimmed.
+  it("keeps all sampled points for the provider boundary to constrain", async () => {
+    // A ~3.3 km LineString densifies to ~74 points. Engine-specific request
+    // budgets are enforced by the selected routing adapter, not this generic
+    // closure collector.
     const coords = [
       [0.1, 51.1],
       [0.1, 51.13],
@@ -135,11 +136,10 @@ describe("activeClosuresForBbox", () => {
     ]);
     const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
     const result = await activeClosuresForBbox(ctx, TEST_BBOX);
-    expect(result.points.length).toBeGreaterThan(1);
-    expect(result.points.length).toBeLessThanOrEqual(45);
-    // Subsampling keeps geographic spread, including the first vertex.
+    expect(result.points.length).toBeGreaterThan(45);
     expect(result.points[0]).toEqual([0.1, 51.1]);
-    expect(ctx.log.warn).toHaveBeenCalled();
+    expect(result.points.at(-1)).toEqual([0.1, 51.13]);
+    expect(ctx.log.warn).not.toHaveBeenCalled();
   });
 
   it("converts a Polygon geometry closure to polygons", async () => {

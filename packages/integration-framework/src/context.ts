@@ -215,6 +215,24 @@ export interface MetricsRecorder {
     },
     value?: number,
   ): void;
+  /**
+   * Record the end-to-end result of a routing request. The host implementation
+   * keeps these labels bounded to provider/mode/operation and uses the values
+   * for route-count, latency, and traffic-baseline observability.
+   */
+  recordRoutingRequest?(metrics: {
+    providerId: string;
+    mode: string;
+    operation: "directions" | "optimize";
+    outcome: "ok" | "error";
+    liveTraffic: boolean;
+    closureAvoidance: boolean;
+    latencyMs: number;
+    routeCount?: number;
+    alternateCount?: number;
+    trafficDelaySeconds?: number;
+    baselineAvailable: boolean;
+  }): void;
 }
 
 /**

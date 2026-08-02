@@ -14,6 +14,7 @@ function fakeCtx(overrides: Record<string, unknown> = {}) {
   };
   const valhalla = {
     id: "valhalla",
+    supportsExclusions: true,
     // getRoute returns a DirectionsResult (routes[] + activeRouteIndex), NOT a bare Route.
     getRoute: vi
       .fn()

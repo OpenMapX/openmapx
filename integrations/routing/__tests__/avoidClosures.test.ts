@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, RoutingProviderError } from "@openmapx/integration-framework";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index";
 import type { DirectionsResult, RoutingProvider, TravelMode } from "../types.js";
@@ -23,8 +23,8 @@ function makeLogStub() {
   };
 }
 
-function makeDirectionsResult(): DirectionsResult {
-  return { waypoints: [], routes: [], activeRouteIndex: 0 };
+function makeDirectionsResult(routes: DirectionsResult["routes"] = []): DirectionsResult {
+  return { waypoints: [], routes, activeRouteIndex: 0 };
 }
 
 type Handler = (req: { query: Record<string, string> }, reply: MockReply) => Promise<void>;
@@ -65,8 +65,11 @@ function makeCtx(
     integrationId: string;
     providerId: string;
     getRoute: ReturnType<typeof vi.fn>;
+    priority?: number;
+    supportsExclusions?: boolean;
   }[],
   closurePoints: [number, number][] = [],
+  metricsRecorder?: IntegrationContext["metricsRecorder"],
 ): { getDirectionsHandler: () => Handler } {
   const handlers = new Map<string, Handler>();
 
@@ -94,6 +97,8 @@ function makeCtx(
                 {
                   id: rp.providerId,
                   supportedModes: ["driving", "walking", "cycling"] as TravelMode[],
+                  priority: rp.priority,
+                  supportsExclusions: rp.supportsExclusions,
                   getRoute: rp.getRoute,
                 },
               ],
@@ -126,6 +131,7 @@ function makeCtx(
     }),
     cache: makeCacheStub(),
     log: makeLogStub(),
+    ...(metricsRecorder ? { metricsRecorder } : {}),
   } as unknown as IntegrationContext;
 
   setup(ctx);
@@ -146,15 +152,26 @@ const WAYPOINTS: [number, number][] = [
 ];
 
 describe("/directions handler — avoidClosures=true with active closures", () => {
-  it("filters provider chain to valhalla only and forwards excludeLocations to getRoute", async () => {
+  it("filters the chain to exclusion-capable providers and forwards geometry", async () => {
     const closurePoint: [number, number] = [0.15, 51.15];
     const osrmSpy = vi.fn(async () => makeDirectionsResult());
     const valhallaSpy = vi.fn(async () => makeDirectionsResult());
 
     const { getDirectionsHandler } = makeCtx(
       [
-        { integrationId: "routing-osrm", providerId: "osrm", getRoute: osrmSpy },
-        { integrationId: "routing-valhalla", providerId: "valhalla", getRoute: valhallaSpy },
+        {
+          integrationId: "routing-fallback",
+          providerId: "engine-a",
+          priority: 20,
+          getRoute: osrmSpy,
+        },
+        {
+          integrationId: "routing-closure-aware",
+          providerId: "engine-b",
+          priority: 10,
+          supportsExclusions: true,
+          getRoute: valhallaSpy,
+        },
       ],
       [closurePoint],
     );
@@ -165,12 +182,12 @@ describe("/directions handler — avoidClosures=true with active closures", () =
       reply,
     );
 
-    // Valhalla is the only provider that honours excludeLocations/excludePolygons.
+    // Only the provider that declares exclusion support is eligible.
     expect(valhallaSpy).toHaveBeenCalledTimes(1);
-    // OSRM was filtered out — it would silently route through closures.
+    // The fallback was filtered out — it would silently route through closures.
     expect(osrmSpy).not.toHaveBeenCalled();
 
-    // The options forwarded to valhalla must carry the closure geometry.
+    // The options forwarded to the capable provider carry the closure geometry.
     const call = valhallaSpy.mock.calls.at(0);
     expect(call).toBeDefined();
     const opts = call?.[2];
@@ -178,6 +195,87 @@ describe("/directions handler — avoidClosures=true with active closures", () =
       excludeLocations: [closurePoint],
       excludePolygons: [],
     });
+  });
+
+  it("maps a provider capability failure to 503 without naming an engine", async () => {
+    const providerSpy = vi.fn(async () => {
+      throw new RoutingProviderError(
+        "unsupported-exclusions",
+        "provider cannot represent this exclusion geometry",
+      );
+    });
+    const { getDirectionsHandler } = makeCtx(
+      [
+        {
+          integrationId: "routing-closure-aware",
+          providerId: "engine-b",
+          supportsExclusions: true,
+          getRoute: providerSpy,
+        },
+      ],
+      [[0.15, 51.15]],
+    );
+
+    const reply = makeMockReply();
+    await getDirectionsHandler()(
+      { query: { waypoints: WAYPOINTS_QUERY, avoidClosures: "true" } },
+      reply,
+    );
+
+    expect(reply._code).toBe(503);
+    expect(reply._body).toEqual({ error: "Closure avoidance unavailable for this route" });
+  });
+});
+
+describe("/directions handler — routing metrics", () => {
+  it("records provider latency and route-level alternate/baseline values", async () => {
+    const metricsRecorder = {
+      recordProviderCall: vi.fn(),
+      recordRoutingRequest: vi.fn(),
+    };
+    const valhallaSpy = vi.fn(async () =>
+      makeDirectionsResult([
+        { duration: 600, baselineDuration: 500 } as DirectionsResult["routes"][number],
+        { duration: 700, baselineDuration: 650 } as DirectionsResult["routes"][number],
+        { duration: 800, baselineDuration: 750 } as DirectionsResult["routes"][number],
+      ]),
+    );
+    const { getDirectionsHandler } = makeCtx(
+      [
+        {
+          integrationId: "routing-preferred",
+          providerId: "engine-b",
+          priority: 10,
+          supportsExclusions: true,
+          getRoute: valhallaSpy,
+        },
+      ],
+      [],
+      metricsRecorder,
+    );
+
+    const reply = makeMockReply();
+    await getDirectionsHandler()({ query: { waypoints: WAYPOINTS_QUERY } }, reply);
+
+    expect(metricsRecorder.recordProviderCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerId: "routing-preferred",
+        method: "getRoute",
+        outcome: "ok",
+      }),
+      expect.any(Number),
+    );
+    expect(metricsRecorder.recordRoutingRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerId: "routing-preferred",
+        operation: "directions",
+        outcome: "ok",
+        routeCount: 3,
+        alternateCount: 2,
+        trafficDelaySeconds: 100,
+        baselineAvailable: true,
+      }),
+    );
   });
 });
 
@@ -187,16 +285,27 @@ describe("/directions handler — avoidClosures absent or false", () => {
     const valhallaSpy = vi.fn(async () => makeDirectionsResult());
 
     const { getDirectionsHandler } = makeCtx([
-      { integrationId: "routing-osrm", providerId: "osrm", getRoute: osrmSpy },
-      { integrationId: "routing-valhalla", providerId: "valhalla", getRoute: valhallaSpy },
+      {
+        integrationId: "routing-fallback",
+        providerId: "engine-a",
+        priority: 20,
+        getRoute: osrmSpy,
+      },
+      {
+        integrationId: "routing-preferred",
+        providerId: "engine-b",
+        priority: 10,
+        supportsExclusions: true,
+        getRoute: valhallaSpy,
+      },
     ]);
 
     const reply = makeMockReply();
     // avoidClosures is absent — same code path as avoidClosures=false.
     await getDirectionsHandler()({ query: { waypoints: WAYPOINTS_QUERY } }, reply);
 
-    // Driving preference puts valhalla first; it succeeds so OSRM is not
-    // tried — but the chain itself was not restricted.
+    // Adapter priority puts the preferred engine first; it succeeds so the
+    // fallback is not tried — but the chain itself was not restricted.
     expect(valhallaSpy).toHaveBeenCalledTimes(1);
     const opts = valhallaSpy.mock.calls.at(0)?.[2];
     expect(opts).not.toHaveProperty("excludeLocations");
@@ -211,8 +320,19 @@ describe("/directions handler — avoidClosures=true but zero closures returned"
 
     // No closures registered in road-conditions — activeClosuresForBbox yields empty.
     const { getDirectionsHandler } = makeCtx([
-      { integrationId: "routing-osrm", providerId: "osrm", getRoute: osrmSpy },
-      { integrationId: "routing-valhalla", providerId: "valhalla", getRoute: valhallaSpy },
+      {
+        integrationId: "routing-fallback",
+        providerId: "engine-a",
+        priority: 20,
+        getRoute: osrmSpy,
+      },
+      {
+        integrationId: "routing-preferred",
+        providerId: "engine-b",
+        priority: 10,
+        supportsExclusions: true,
+        getRoute: valhallaSpy,
+      },
     ]);
 
     const reply = makeMockReply();

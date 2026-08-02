@@ -7,16 +7,20 @@ function makeProvider(
   modes: TravelMode[],
   opts: {
     id?: string;
+    priority?: number;
     failing?: boolean;
     supportsMatch?: boolean;
     supportsTimeAware?: boolean;
     supportsOptimize?: boolean;
+    supportsExclusions?: boolean;
   } = {},
 ): RoutingProvider {
   const provider: RoutingProvider = {
     id: opts.id ?? "test-provider",
     supportedModes: modes,
+    priority: opts.priority,
     supportsTimeAware: opts.supportsTimeAware,
+    supportsExclusions: opts.supportsExclusions,
     getRoute: vi.fn(async () => {
       if (opts.failing) throw new Error("upstream down");
       return {
@@ -73,15 +77,18 @@ describe("routing orchestrator getRoutingProviders", () => {
     expect(list.map((p) => p.integrationId)).toEqual(["routing-osrm", "routing-valhalla"]);
   });
 
-  it("prefers Valhalla over OSRM for driving even when OSRM registers first", () => {
-    const osrm = makeProvider(["driving"], { id: "osrm" });
-    const val = makeProvider(["walking", "cycling", "driving"], { id: "valhalla" });
+  it("uses adapter priority for driving even when the lower-priority engine registers first", () => {
+    const osrm = makeProvider(["driving"], { id: "engine-a", priority: 20 });
+    const val = makeProvider(["walking", "cycling", "driving"], {
+      id: "engine-b",
+      priority: 10,
+    });
     const ctx = makeCtx([
       { id: "routing-osrm", provider: osrm },
       { id: "routing-valhalla", provider: val },
     ]);
     const orch = createRoutingOrchestrator(ctx);
-    // Driving prefers Valhalla (richer voice/lane data); OSRM stays as fallback.
+    // The generic orchestrator sees only adapter-declared priority.
     expect(orch.getRoutingProviders("driving").map((p) => p.integrationId)).toEqual([
       "routing-valhalla",
       "routing-osrm",

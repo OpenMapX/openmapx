@@ -4,7 +4,7 @@ import {
   overpassQuerySafe,
   type TravelMode,
 } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, RoutingProviderError } from "@openmapx/integration-framework";
 import {
   applyClosureExclusions,
   hashKey,
@@ -13,6 +13,7 @@ import {
 } from "./closure-exclusions.js";
 import { runEvPlan } from "./ev-plan.js";
 import { createRoutingOrchestrator } from "./orchestrator.js";
+import type { DirectionsResult } from "./types.js";
 import { parseDateTime, parseTravelMode } from "./validation.js";
 
 /** A raw (un-projected) approach alert from OSM, returned by /navigation/alerts. */
@@ -32,13 +33,69 @@ interface RawRoadAlert {
 const MAX_ALERT_BBOX_DEG2 = 0.6;
 
 /**
- * Motorised costings (car/motorcycle) fold live "current" speeds into
- * Valhalla's `speed_types` so ETAs reflect congestion; foot/bike ignore it.
- * This is the route-handler-layer default the `useLiveTraffic` contract in
- * `RoutingOptions` expects callers to supply.
+ * Motorised modes request live speed observations so providers that support
+ * them can reflect congestion; foot/bike ignore it. This is the
+ * route-handler-layer default the `useLiveTraffic` contract expects callers
+ * to supply.
  */
 function isMotorisedMode(mode: TravelMode): boolean {
   return mode === "driving" || mode === "motorcycle";
+}
+
+function routeMetricValues(result: DirectionsResult): {
+  routeCount: number;
+  alternateCount: number;
+  trafficDelaySeconds?: number;
+  baselineAvailable: boolean;
+} {
+  const activeRoute = result.routes[result.activeRouteIndex] ?? result.routes[0];
+  const baseline = activeRoute?.baselineDuration;
+  const baselineAvailable =
+    typeof baseline === "number" && Number.isFinite(baseline) && baseline >= 0;
+  const trafficDelaySeconds =
+    baselineAvailable &&
+    activeRoute &&
+    Number.isFinite(activeRoute.duration) &&
+    Number.isFinite(baseline)
+      ? activeRoute.duration - baseline
+      : undefined;
+
+  return {
+    routeCount: result.routes.length,
+    alternateCount: Math.max(0, result.routes.length - 1),
+    ...(trafficDelaySeconds !== undefined ? { trafficDelaySeconds } : {}),
+    baselineAvailable,
+  };
+}
+
+function recordRoutingRequest(
+  ctx: IntegrationContext,
+  args: {
+    providerId: string;
+    mode: TravelMode;
+    operation: "directions" | "optimize";
+    outcome: "ok" | "error";
+    liveTraffic: boolean;
+    closureAvoidance: boolean;
+    startedAt: number;
+    result?: DirectionsResult;
+  },
+): void {
+  const values = args.result ? routeMetricValues(args.result) : { baselineAvailable: false };
+  ctx.metricsRecorder?.recordRoutingRequest?.({
+    providerId: args.providerId,
+    mode: args.mode,
+    operation: args.operation,
+    outcome: args.outcome,
+    liveTraffic: args.liveTraffic,
+    closureAvoidance: args.closureAvoidance,
+    latencyMs: performance.now() - args.startedAt,
+    ...values,
+  });
+}
+
+function isUnsupportedExclusionsError(error: unknown): boolean {
+  return error instanceof RoutingProviderError && error.code === "unsupported-exclusions";
 }
 
 /** Parse an OSM `maxspeed` tag to km/h, or undefined when not a plain number. */
@@ -204,7 +261,7 @@ function parseVehicleSpec(v: unknown): EvVehicleSpec | undefined {
 
 /**
  * Cache TTL (seconds), tuned for turn-by-turn-grade freshness. Live traffic is
- * re-baked into Valhalla every ~2 min, so any answer that rides current
+ * refreshed regularly by providers, so any answer that rides current
  * conditions — an immediate ("now") trip, or one departing within the
  * live-traffic horizon — must stay fresh: a short TTL keeps the ETA within
  * roughly one traffic cycle instead of serving a pre-jam number for minutes.
@@ -250,7 +307,7 @@ export function cacheTtlSeconds(travelInstant: Date | undefined): number {
 /**
  * Upper bound on `/match` trace size. A typical hour-long drive recorded at
  * 1Hz is ~3.6k points; 10k gives generous headroom while preventing a single
- * caller from queueing a multi-megabyte payload through Valhalla.
+ * caller from queueing a multi-megabyte payload through a routing provider.
  */
 const MAX_MATCH_TRACE_POINTS = 10_000;
 
@@ -259,6 +316,7 @@ export function setup(ctx: IntegrationContext): void {
     createRoutingOrchestrator(ctx);
 
   ctx.registerRoute("GET", "/directions", async (req, reply) => {
+    const requestStartedAt = performance.now();
     const {
       waypoints: waypointsParam,
       originLng,
@@ -363,15 +421,24 @@ export function setup(ctx: IntegrationContext): void {
 
     const requireTimeAware = Boolean(departAt || arriveBy);
 
-    // When exclusions are present, restrict to Valhalla — OSRM ignores
-    // excludeLocations/excludePolygons and would silently return a route through
-    // the closed segment.
+    // When exclusions are present, only use providers that explicitly honour
+    // the generic exclusion contract. Falling back to an engine that ignores
+    // these fields would silently return a route through the closed segment.
     let resolvedChain = getRoutingProviders(travelMode, { requireTimeAware });
     if (hasExclusions) {
-      resolvedChain = resolvedChain.filter((e) => e.provider.id === "valhalla");
+      resolvedChain = resolvedChain.filter((e) => e.provider.supportsExclusions === true);
     }
 
     if (resolvedChain.length === 0) {
+      recordRoutingRequest(ctx, {
+        providerId: "none",
+        mode: travelMode,
+        operation: "directions",
+        outcome: "error",
+        liveTraffic: isMotorisedMode(travelMode),
+        closureAvoidance: wantClosureAvoidance,
+        startedAt: requestStartedAt,
+      });
       const detail = requireTimeAware
         ? `No time-aware routing provider available for mode: ${travelMode}`
         : `No routing provider available for mode: ${travelMode}`;
@@ -399,11 +466,24 @@ export function setup(ctx: IntegrationContext): void {
         async () => {
           let lastErr: unknown;
           for (const resolved of resolvedChain) {
+            const providerStartedAt = performance.now();
             try {
               const r = await resolved.provider.getRoute(waypoints, travelMode, routingOpts);
+              ctx.metricsRecorder?.recordProviderCall(
+                {
+                  providerId: resolved.integrationId,
+                  method: "getRoute",
+                  outcome: r.routes.length > 0 ? "ok" : "empty",
+                },
+                performance.now() - providerStartedAt,
+              );
               r.provider = resolved.integrationId;
               return r;
             } catch (err) {
+              ctx.metricsRecorder?.recordProviderCall(
+                { providerId: resolved.integrationId, method: "getRoute", outcome: "error" },
+                performance.now() - providerStartedAt,
+              );
               lastErr = err;
               ctx.log.warn(
                 `routing provider ${resolved.integrationId} failed; trying next`,
@@ -418,14 +498,38 @@ export function setup(ctx: IntegrationContext): void {
         "Cache-Control",
         `public, max-age=${ttl}, stale-while-revalidate=${STALE_WHILE_REVALIDATE_SECONDS}`,
       );
+      recordRoutingRequest(ctx, {
+        providerId: result.provider ?? "unknown",
+        mode: travelMode,
+        operation: "directions",
+        outcome: "ok",
+        liveTraffic: isMotorisedMode(travelMode),
+        closureAvoidance: wantClosureAvoidance,
+        startedAt: requestStartedAt,
+        result,
+      });
       reply.send(result);
     } catch (err) {
+      recordRoutingRequest(ctx, {
+        providerId: "none",
+        mode: travelMode,
+        operation: "directions",
+        outcome: "error",
+        liveTraffic: isMotorisedMode(travelMode),
+        closureAvoidance: wantClosureAvoidance,
+        startedAt: requestStartedAt,
+      });
       ctx.log.error("All routing providers failed", err as Error);
-      reply.status(502).send({ error: "Routing unavailable" });
+      reply.status(isUnsupportedExclusionsError(err) ? 503 : 502).send({
+        error: isUnsupportedExclusionsError(err)
+          ? "Closure avoidance unavailable for this route"
+          : "Routing unavailable",
+      });
     }
   });
 
   ctx.registerRoute("GET", "/directions/optimize", async (req, reply) => {
+    const requestStartedAt = performance.now();
     const {
       waypoints: waypointsParam,
       originLng,
@@ -533,13 +637,21 @@ export function setup(ctx: IntegrationContext): void {
 
     const resolved = getOptimizeProvider(travelMode, { requireTimeAware });
 
-    // When exclusions are present, restrict to Valhalla — OSRM ignores
-    // excludeLocations/excludePolygons and would silently return a route through
-    // the closed segment.
+    // When exclusions are present, only use a provider that explicitly honours
+    // the generic exclusion contract.
     const effectiveResolved =
-      hasExclusions && resolved?.provider.id !== "valhalla" ? null : resolved;
+      hasExclusions && resolved?.provider.supportsExclusions !== true ? null : resolved;
     const optimizeFn = effectiveResolved?.provider.optimizeRoute;
     if (!effectiveResolved || !optimizeFn) {
+      recordRoutingRequest(ctx, {
+        providerId: "none",
+        mode: travelMode,
+        operation: "optimize",
+        outcome: "error",
+        liveTraffic: isMotorisedMode(travelMode),
+        closureAvoidance: wantClosureAvoidance,
+        startedAt: requestStartedAt,
+      });
       const detail = requireTimeAware
         ? `No time-aware optimize provider available for mode: ${travelMode}`
         : `No optimize provider available for mode: ${travelMode}`;
@@ -565,7 +677,29 @@ export function setup(ctx: IntegrationContext): void {
         hashKey("cache:directions:optimize", keyParams),
         ttl,
         async () => {
-          const r = await optimizeFn(waypoints, travelMode, routingOpts);
+          const providerStartedAt = performance.now();
+          let r: DirectionsResult;
+          try {
+            r = await optimizeFn(waypoints, travelMode, routingOpts);
+            ctx.metricsRecorder?.recordProviderCall(
+              {
+                providerId: effectiveResolved.integrationId,
+                method: "optimizeRoute",
+                outcome: r.routes.length > 0 ? "ok" : "empty",
+              },
+              performance.now() - providerStartedAt,
+            );
+          } catch (err) {
+            ctx.metricsRecorder?.recordProviderCall(
+              {
+                providerId: effectiveResolved.integrationId,
+                method: "optimizeRoute",
+                outcome: "error",
+              },
+              performance.now() - providerStartedAt,
+            );
+            throw err;
+          }
           r.provider = effectiveResolved.integrationId;
           return r;
         },
@@ -574,17 +708,39 @@ export function setup(ctx: IntegrationContext): void {
         "Cache-Control",
         `public, max-age=${ttl}, stale-while-revalidate=${STALE_WHILE_REVALIDATE_SECONDS}`,
       );
+      recordRoutingRequest(ctx, {
+        providerId: result.provider ?? "unknown",
+        mode: travelMode,
+        operation: "optimize",
+        outcome: "ok",
+        liveTraffic: isMotorisedMode(travelMode),
+        closureAvoidance: wantClosureAvoidance,
+        startedAt: requestStartedAt,
+        result,
+      });
       reply.send(result);
-    } catch {
-      reply.status(502).send({ error: "Route optimization unavailable" });
+    } catch (err) {
+      recordRoutingRequest(ctx, {
+        providerId: effectiveResolved.integrationId,
+        mode: travelMode,
+        operation: "optimize",
+        outcome: "error",
+        liveTraffic: isMotorisedMode(travelMode),
+        closureAvoidance: wantClosureAvoidance,
+        startedAt: requestStartedAt,
+      });
+      reply.status(isUnsupportedExclusionsError(err) ? 503 : 502).send({
+        error: isUnsupportedExclusionsError(err)
+          ? "Closure avoidance unavailable for this route"
+          : "Route optimization unavailable",
+      });
     }
   });
 
   /**
    * POST /match — snap a recorded GPS trace to the road network and return
-   * per-edge attributes (OSM way ids, surface, speed, names). Backed by
-   * Valhalla's `trace_attributes` (Meili HMM map matcher). Not cached: traces
-   * are unique per request.
+   * per-edge attributes (OSM way ids, surface, speed, names). Not cached:
+   * traces are unique per request.
    *
    * Body shape:
    *   {
@@ -713,9 +869,9 @@ export function setup(ctx: IntegrationContext): void {
 
   /**
    * POST /directions/ev — a driving route with EV charging stops inserted
-   * (@openmapx/ev-charge-planner), planned against the base Valhalla route,
-   * a corridor charger search (ev-charging data-source), and Valhalla's
-   * `sources_to_targets` matrix. Not cached at the HTTP layer beyond
+   * (@openmapx/ev-charge-planner), planned against the selected routing
+   * provider, a corridor charger search (ev-charging data-source), and its
+   * optional time/distance matrix. Not cached at the HTTP layer beyond
    * `runEvPlan`'s own short-TTL cache (live availability can shift the plan).
    *
    * Body shape:

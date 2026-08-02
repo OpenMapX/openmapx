@@ -8,13 +8,19 @@ import {
 } from "@opentelemetry/sdk-metrics";
 
 /**
- * OpenTelemetry metrics for the transit provider chain.
+ * OpenTelemetry metrics for the transit and routing provider chains.
  *
  * Two instruments:
  *   - `transit_provider_calls_total` (counter): one increment per provider
  *     call, labelled with provider id, orchestrator method, and outcome.
  *   - `transit_provider_call_duration_ms` (histogram): the per-call latency
  *     in milliseconds, same labels.
+ *   - `routing_requests_total` / `routing_request_duration_ms`: end-to-end
+ *     directions and optimize request outcomes and latency.
+ *   - `routing_route_count` / `routing_alternate_count`: returned route
+ *     counts, split by traffic mode and operation.
+ *   - `routing_traffic_delay_seconds` and `routing_baseline_available_total`:
+ *     live-vs-baseline recosting coverage and delta.
  *
  * The exporter is the Prometheus text format, served at `/api/internal/metrics`
  * by Fastify. The endpoint is intended to be reachable only from inside the
@@ -58,6 +64,12 @@ export interface MetricsHandle {
   providerCallCounter: Counter;
   providerCallLatency: Histogram;
   transitDecisionCounter: Counter;
+  routingRequestCounter: Counter;
+  routingRequestLatency: Histogram;
+  routingRouteCount: Histogram;
+  routingAlternateCount: Histogram;
+  routingTrafficDelay: Histogram;
+  routingBaselineCounter: Counter;
   /** Render the current metric state as Prometheus text format. */
   renderPrometheus(): Promise<string>;
   /** Shut the meter provider down (idempotent). */
@@ -89,6 +101,26 @@ export function initMetrics(): MetricsHandle {
   const transitDecisionCounter = meter.createCounter("transit_provider_decisions_total", {
     description: "Bounded transit orchestration decisions and avoided calls",
   });
+  const routingRequestCounter = meter.createCounter("routing_requests_total", {
+    description: "End-to-end routing requests by operation, provider, and outcome",
+  });
+  const routingRequestLatency = meter.createHistogram("routing_request_duration_ms", {
+    description: "End-to-end routing request duration in milliseconds",
+    unit: "ms",
+  });
+  const routingRouteCount = meter.createHistogram("routing_route_count", {
+    description: "Number of routes returned by a routing request",
+  });
+  const routingAlternateCount = meter.createHistogram("routing_alternate_count", {
+    description: "Number of alternate routes returned by a routing request",
+  });
+  const routingTrafficDelay = meter.createHistogram("routing_traffic_delay_seconds", {
+    description: "Live route duration minus its recosted baseline duration",
+    unit: "s",
+  });
+  const routingBaselineCounter = meter.createCounter("routing_baseline_available_total", {
+    description: "Routing requests whose active route had a finite baseline duration",
+  });
 
   const serializer = new PrometheusSerializer();
 
@@ -113,6 +145,12 @@ export function initMetrics(): MetricsHandle {
     providerCallCounter,
     providerCallLatency,
     transitDecisionCounter,
+    routingRequestCounter,
+    routingRequestLatency,
+    routingRouteCount,
+    routingAlternateCount,
+    routingTrafficDelay,
+    routingBaselineCounter,
     renderPrometheus,
     close,
   };
@@ -180,6 +218,55 @@ export function recordTransitDecision(labels: TransitDecisionLabels, value = 1):
     role: labels.role,
     reason: labels.reason,
   });
+}
+
+export interface RoutingRequestMetrics {
+  providerId: string;
+  mode: string;
+  operation: "directions" | "optimize";
+  outcome: "ok" | "error";
+  liveTraffic: boolean;
+  closureAvoidance: boolean;
+  latencyMs: number;
+  routeCount?: number;
+  alternateCount?: number;
+  trafficDelaySeconds?: number;
+  baselineAvailable: boolean;
+}
+
+function toRoutingPromLabels(metrics: RoutingRequestMetrics): Record<string, string> {
+  return {
+    provider_id: metrics.providerId,
+    mode: metrics.mode,
+    operation: metrics.operation,
+    outcome: metrics.outcome,
+    live_traffic: String(metrics.liveTraffic),
+    closure_avoidance: String(metrics.closureAvoidance),
+  };
+}
+
+/** Record a bounded, secret-free routing request summary for Prometheus. */
+export function recordRoutingRequest(metrics: RoutingRequestMetrics): void {
+  const handle = getMetrics();
+  const labels = toRoutingPromLabels(metrics);
+  handle.routingRequestCounter.add(1, labels);
+  handle.routingRequestLatency.record(Math.max(0, metrics.latencyMs), labels);
+  handle.routingBaselineCounter.add(1, {
+    provider_id: metrics.providerId,
+    mode: metrics.mode,
+    operation: metrics.operation,
+    status: metrics.baselineAvailable ? "present" : "missing",
+  });
+
+  if (metrics.routeCount !== undefined) {
+    handle.routingRouteCount.record(Math.max(0, metrics.routeCount), labels);
+  }
+  if (metrics.alternateCount !== undefined) {
+    handle.routingAlternateCount.record(Math.max(0, metrics.alternateCount), labels);
+  }
+  if (metrics.trafficDelaySeconds !== undefined) {
+    handle.routingTrafficDelay.record(metrics.trafficDelaySeconds, labels);
+  }
 }
 
 /** Test-only reset. Production code never calls this. */

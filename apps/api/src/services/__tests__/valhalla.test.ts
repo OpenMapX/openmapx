@@ -344,7 +344,7 @@ describe("valhallaService", () => {
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
       expect(body.elevation_interval).toBe(30);
-      expect(body.alternates).toBe(3);
+      expect(body.alternates).toBe(2);
     });
 
     it("defaults date_time to type 0 (current departure) when no time given", async () => {

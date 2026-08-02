@@ -17,6 +17,10 @@
     }
   },
   "service_limits": {
+    "max_alternates": 2,
+    "max_timedep_distance": 500000.0,
+    "max_exclude_locations": 50,
+    "max_exclude_polygons_length": 10000,
     "auto": {
       "max_distance": 5000000.0,
       "max_locations": 20
@@ -53,6 +57,11 @@
     }
   },
   "thor": {
+    "bidirectional_astar": {
+      "threshold_delta": 420.0,
+      "alternative_cost_extend": 1.2,
+      "alternative_iterations_delta": 100000
+    },
     "logging": {
       "type": "",
       "long_request": 110.0

@@ -52,7 +52,7 @@ function makeMockReply(): MockReply {
 }
 
 /**
- * Build a minimal IntegrationContext that exposes a Valhalla-like routing
+ * Build a minimal IntegrationContext that exposes a routing
  * provider with both getRoute and optimizeRoute, optionally with active road
  * closures. Returns handles to both the /directions and /directions/optimize
  * handlers registered by setup().
@@ -63,6 +63,8 @@ function makeCtx(
     providerId: string;
     getRoute: ReturnType<typeof vi.fn>;
     optimizeRoute?: ReturnType<typeof vi.fn>;
+    priority?: number;
+    supportsExclusions?: boolean;
   }[],
   closurePoints: [number, number][] = [],
 ): { getDirectionsHandler: () => Handler; getOptimizeHandler: () => Handler } {
@@ -92,6 +94,8 @@ function makeCtx(
                 {
                   id: rp.providerId,
                   supportedModes: ["driving", "walking", "cycling"] as TravelMode[],
+                  priority: rp.priority,
+                  supportsExclusions: rp.supportsExclusions,
                   getRoute: rp.getRoute,
                   ...(rp.optimizeRoute ? { optimizeRoute: rp.optimizeRoute } : {}),
                 },
@@ -151,15 +155,17 @@ const WAYPOINTS: [number, number][] = [
 ];
 
 describe("/directions/optimize handler — avoidClosures=true with active closures", () => {
-  it("forces Valhalla and forwards excludeLocations/excludePolygons to optimizeRoute", async () => {
+  it("selects an exclusion-capable provider and forwards geometry to optimizeRoute", async () => {
     const closurePoint: [number, number] = [0.15, 51.15];
     const optimizeSpy = vi.fn(async () => makeDirectionsResult());
 
     const { getOptimizeHandler } = makeCtx(
       [
         {
-          integrationId: "routing-valhalla",
-          providerId: "valhalla",
+          integrationId: "routing-closure-aware",
+          providerId: "engine-b",
+          priority: 10,
+          supportsExclusions: true,
           getRoute: vi.fn(async () => makeDirectionsResult()),
           optimizeRoute: optimizeSpy,
         },
@@ -181,15 +187,15 @@ describe("/directions/optimize handler — avoidClosures=true with active closur
     });
   });
 
-  it("returns 503 when avoidClosures=true but only a non-Valhalla optimizer is available", async () => {
+  it("returns 503 when avoidClosures=true but no optimizer supports exclusions", async () => {
     const closurePoint: [number, number] = [0.15, 51.15];
     const osrmOptimizeSpy = vi.fn(async () => makeDirectionsResult());
 
     const { getOptimizeHandler } = makeCtx(
       [
         {
-          integrationId: "routing-osrm",
-          providerId: "osrm",
+          integrationId: "routing-fallback",
+          providerId: "engine-a",
           getRoute: vi.fn(async () => makeDirectionsResult()),
           optimizeRoute: osrmOptimizeSpy,
         },
@@ -214,8 +220,10 @@ describe("/directions/optimize handler — avoidClosures absent or false", () =>
 
     const { getOptimizeHandler } = makeCtx([
       {
-        integrationId: "routing-valhalla",
-        providerId: "valhalla",
+        integrationId: "routing-preferred",
+        providerId: "engine-b",
+        priority: 10,
+        supportsExclusions: true,
         getRoute: vi.fn(async () => makeDirectionsResult()),
         optimizeRoute: optimizeSpy,
       },
@@ -238,8 +246,10 @@ describe("/directions/optimize handler — avoidClosures=true but zero closures 
     // No closures registered — activeClosuresForBbox yields empty.
     const { getOptimizeHandler } = makeCtx([
       {
-        integrationId: "routing-valhalla",
-        providerId: "valhalla",
+        integrationId: "routing-preferred",
+        providerId: "engine-b",
+        priority: 10,
+        supportsExclusions: true,
         getRoute: vi.fn(async () => makeDirectionsResult()),
         optimizeRoute: optimizeSpy,
       },

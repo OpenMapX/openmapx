@@ -273,6 +273,7 @@ function transformRoute(r: OsrmRoute, mode: TravelMode): Route {
 
 export const osrmService: RoutingProvider = {
   id: "osrm",
+  priority: 20,
   supportedModes: ["driving"] as TravelMode[],
 
   async getRoute(

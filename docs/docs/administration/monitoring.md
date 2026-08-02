@@ -120,9 +120,9 @@ status and expiry, and the recent and in-flight jobs — is covered in
 
 ## Metrics
 
-The transit provider chain is instrumented with **OpenTelemetry** and exported in
-**Prometheus** text format. Alongside each provider-health write, the orchestrator
-bumps two instruments:
+The transit and routing provider chains are instrumented with **OpenTelemetry**
+and exported in **Prometheus** text format. Alongside each provider-health write,
+the orchestrator bumps two transit instruments:
 
 - `transit_provider_calls_total` — a counter, one increment per provider call.
 - `transit_provider_call_duration_ms` — a histogram of per-call latency.
@@ -132,6 +132,24 @@ and `outcome` — a closed set of `ok`, `empty` (succeeded but returned nothing)
 `error`, and `skipped` (the call was pre-empted by a health cooldown, a capability
 mismatch, or a bounding-box miss). No label carries user input, so the series
 cardinality is bounded by your provider catalogue.
+
+Routing requests add a second set of instruments:
+
+- `routing_requests_total` and `routing_request_duration_ms` — request count and
+  end-to-end latency, labelled by provider, mode, operation, outcome, live-traffic
+  use, and closure avoidance.
+- `routing_route_count` and `routing_alternate_count` — the number of routes the
+  selected provider returned, and the number beyond the primary route.
+- `routing_traffic_delay_seconds` — the signed live-duration minus baseline-duration
+  delta. Negative values mean the live route was faster than its baseline.
+- `routing_baseline_available_total` — whether the provider returned a usable
+  baseline duration for comparison.
+
+For a deployment-level smoke test, run `pnpm check-routing-canaries`. It checks
+stable endpoint pairs and only asserts route availability, usable durations, and
+the minimum route count; it deliberately does not require a live route to be
+slower than its baseline or require every graph to produce the same number of
+alternatives. Set `ROUTING_BASE_URL` to probe a non-public deployment.
 
 Scrape them at:
 

@@ -380,10 +380,25 @@ describe("valhallaService.getRoute exclusion body params", () => {
     await valhallaService.optimizeRoute(WPS, "driving", {});
     expect(capturedBody.turn_lanes).toBe(true);
   });
+
+  it("forwards sanitized closure exclusions to optimized routes", async () => {
+    const ring: [number, number][] = [
+      [5, 52],
+      [5.1, 52],
+      [5.1, 52.1],
+      [5, 52],
+    ];
+    await valhallaService.optimizeRoute(WPS, "driving", {
+      excludeLocations: [[5.1, 52.1]],
+      excludePolygons: [ring],
+    });
+    expect(capturedBody.exclude_locations).toEqual([{ lon: 5.1, lat: 52.1 }]);
+    expect(capturedBody.exclude_polygons).toEqual([ring]);
+  });
 });
 
 describe("transformTrip baseline duration", () => {
-  const trip = (summary: Record<string, unknown>) => ({
+  const trip = (summary: Partial<Parameters<typeof transformTrip>[0]["summary"]> = {}) => ({
     summary: { length: 10, time: 600, ...summary },
     legs: [
       {
@@ -404,22 +419,26 @@ describe("transformTrip baseline duration", () => {
   });
 
   it("maps time_baseline onto baselineDuration", () => {
-    // biome-ignore lint/suspicious/noExplicitAny: minimal trip fixture
-    const route = transformTrip(trip({ time_baseline: 520 }) as any, "driving");
+    const route = transformTrip(trip({ time_baseline: 520 }), "driving");
     expect(route.baselineDuration).toBe(520);
     expect(route.duration).toBe(600);
   });
 
   it("treats a null time_baseline as absent", () => {
-    // biome-ignore lint/suspicious/noExplicitAny: minimal trip fixture
-    const route = transformTrip(trip({ time_baseline: null }) as any, "driving");
+    const route = transformTrip(trip({ time_baseline: null }), "driving");
     expect(route.baselineDuration).toBeUndefined();
   });
 
   it("omits baselineDuration when the engine sent no recosting", () => {
-    // biome-ignore lint/suspicious/noExplicitAny: minimal trip fixture
-    const route = transformTrip(trip({}) as any, "driving");
+    const route = transformTrip(trip(), "driving");
     expect(route.baselineDuration).toBeUndefined();
+  });
+
+  it("ignores non-finite or negative baseline values", () => {
+    expect(
+      transformTrip(trip({ time_baseline: Number.NaN }), "driving").baselineDuration,
+    ).toBeUndefined();
+    expect(transformTrip(trip({ time_baseline: -1 }), "driving").baselineDuration).toBeUndefined();
   });
 });
 
@@ -555,7 +574,30 @@ describe("getRoute request body", () => {
     expect(body.prioritize_bidirectional).toBe(true);
     expect(body.reverse_time_tracking).toBe("heuristic");
     expect(body.recostings).toHaveLength(1);
-    expect(body.alternates).toBe(3);
+    // The running Valhalla service caps this at two alternates, i.e. three
+    // routes including the primary. Request the service-limit-aligned value
+    // rather than relying on server-side clamping.
+    expect(body.alternates).toBe(2);
+  });
+
+  it("preserves Valhalla's diagnostic response body on an upstream error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () => new Response('{"error":"Exceeded max avoid locations: 50"}', { status: 400 }),
+      ),
+    );
+
+    await expect(
+      valhallaService.getRoute(
+        [
+          [6.08, 50.77],
+          [6.68, 51.51],
+        ],
+        "driving",
+        {},
+      ),
+    ).rejects.toThrow('Valhalla error 400: {"error":"Exceeded max avoid locations: 50"}');
   });
 
   it("sends a body without any of the new keys when the flag is off", async () => {

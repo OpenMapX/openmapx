@@ -119,6 +119,12 @@ The directions panel exposes the tuning knobs that map onto the routing API:
 - **Alternatives** — returned automatically for a straight two-point trip (no
   intermediate stops). Each alternative is a selectable card; the chosen one is
   highlighted on the map.
+- **Traffic-aware alternatives** — driving and motorcycle alternatives use the
+  engine's live-traffic request when one is available. The result is graph- and
+  request-dependent: the engine may return only the primary route when no
+  distinct alternative satisfies its cost and safety filters. Baseline durations
+  are shown for comparison when supplied; a baseline can legitimately be slower
+  than the live route.
 - **Stops and optimization** — add intermediate waypoints, and ask the engine to
   reorder them into the shortest trip while keeping the first and last fixed.
 

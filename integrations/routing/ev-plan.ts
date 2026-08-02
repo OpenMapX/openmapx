@@ -1,8 +1,10 @@
 import {
   bboxAroundPoint,
+  type DirectionsResult,
   type EvVehicleSpec,
   matchesAnyOperator,
   normalizeOperator,
+  type RoutingOptions,
 } from "@openmapx/core";
 import { getVehiclePreset, planCharges, routeEnergyKwh } from "@openmapx/ev-charge-planner";
 import type { IntegrationContext } from "@openmapx/integration-framework";
@@ -38,11 +40,24 @@ export interface EvPlanArgs {
   lang?: string;
 }
 
-/** A single `getRoutingProviders` resolution: the routing provider + its owning integration id. */
+interface EvRoutingProvider {
+  supportsExclusions?: boolean;
+  getRoute(
+    waypoints: [number, number][],
+    mode: "driving",
+    options?: RoutingOptions,
+  ): Promise<DirectionsResult>;
+  getMatrix?(
+    sources: [number, number][],
+    targets: [number, number][],
+    opts?: { mode?: "driving" },
+  ): Promise<({ seconds: number; km: number } | null)[][]>;
+}
+
+/** A single `getRoutingProviders` resolution: provider + its owning integration id. */
 export interface ResolvedRoutingProvider {
   integrationId: string;
-  // biome-ignore lint/suspicious/noExplicitAny: mirrors the routing orchestrator's ResolvedProvider without importing its RoutingProvider type here (getRoute/getMatrix are duck-typed against the real provider shape).
-  provider: any;
+  provider: EvRoutingProvider;
 }
 
 /**
@@ -62,7 +77,7 @@ function findStationSource(ctx: IntegrationContext) {
 }
 
 /**
- * Orchestrate an EV charge-plan: base Valhalla route → `planCharges` (with
+ * Orchestrate an EV charge-plan: base route → `planCharges` (with
  * corridor-charger + matrix callbacks) → re-route through the chosen stops →
  * assemble the response the `POST /directions/ev` route sends back.
  */
@@ -78,12 +93,6 @@ export async function runEvPlan(
   if (!vehicle) throw Object.assign(new Error("unknown or missing vehicle"), { status: 400 });
 
   const requireTimeAware = Boolean(args.departAt);
-  const chain = getRoutingProviders("driving", { requireTimeAware }).filter(
-    (e) => e.provider.id === "valhalla" || e.integrationId === "valhalla",
-  );
-  const valhalla = chain[0]?.provider;
-  if (!valhalla) throw Object.assign(new Error("no Valhalla provider"), { status: 503 });
-
   const closureAt = resolveTravelInstant(args.waypoints, args.departAt, undefined);
   const { exclusions, hasExclusions, exclusionsHash } = await applyClosureExclusions(
     ctx,
@@ -91,6 +100,18 @@ export async function runEvPlan(
     Boolean(args.avoidClosures),
     closureAt,
   );
+  const resolved = getRoutingProviders("driving", { requireTimeAware }).find(
+    (entry) => !hasExclusions || entry.provider.supportsExclusions === true,
+  );
+  const routingProvider = resolved?.provider;
+  if (!routingProvider) {
+    throw Object.assign(
+      new Error(
+        hasExclusions ? "no routing provider supports closure exclusions" : "no routing provider",
+      ),
+      { status: 503 },
+    );
+  }
   // Built once and threaded into BOTH getRoute calls below by reference (D7):
   // the base route and the re-route through the chosen stops must honour the
   // same avoid flags + closure exclusions, or the re-route could silently
@@ -115,7 +136,7 @@ export async function runEvPlan(
   const ttl = 300;
   return ctx.cache.withCache(evPlanCacheKey(args, vehicle, exclusionsHash), ttl, async () => {
     // getRoute returns a DirectionsResult; the planner needs the active Route.
-    const baseDirections = await valhalla.getRoute(args.waypoints, "driving", routingOpts);
+    const baseDirections = await routingProvider.getRoute(args.waypoints, "driving", routingOpts);
     const baseRoute =
       baseDirections.routes[baseDirections.activeRouteIndex] ?? baseDirections.routes[0];
     if (!baseRoute) throw Object.assign(new Error("no base route"), { status: 502 });
@@ -163,9 +184,9 @@ export async function runEvPlan(
           return stations.filter((s) => !s.sources?.some((src) => disallowed.has(src)));
         },
         async requestMatrix(sources, targets) {
-          if (typeof valhalla.getMatrix === "function") {
+          if (typeof routingProvider.getMatrix === "function") {
             try {
-              return await valhalla.getMatrix(sources, targets, { mode: "driving" });
+              return await routingProvider.getMatrix(sources, targets, { mode: "driving" });
             } catch (e) {
               ctx.log.warn("[ev] matrix failed; using great-circle", e as Error);
             }
@@ -193,7 +214,7 @@ export async function runEvPlan(
         ...plan.stops.map((s) => s.coordinates),
         args.waypoints[args.waypoints.length - 1],
       ];
-      const rerouted = await valhalla.getRoute(wps, "driving", routingOpts);
+      const rerouted = await routingProvider.getRoute(wps, "driving", routingOpts);
       finalRoute = rerouted.routes[rerouted.activeRouteIndex] ?? rerouted.routes[0];
     }
 
@@ -231,7 +252,7 @@ export async function runEvPlan(
       routes: [finalRoute],
       activeRouteIndex: 0,
       waypoints: args.waypoints,
-      provider: "valhalla",
+      provider: resolved.integrationId,
       stops: plan.stops.map((s) => ({
         station: { id: s.station.id, name: s.station.name, coordinates: s.station.coordinates },
         connector: s.connector,

@@ -165,13 +165,14 @@ export interface RoutingOptions {
   lang?: string;
   /**
    * Wall-clock departure time as `YYYY-MM-DDTHH:mm`. Mutually exclusive with `arriveBy`.
-   * Used by Valhalla `date_time.type=1` to honour time-conditional access tags
-   * (school zones, time-restricted lanes, ferries) and predicted-speed lookups.
+   * Providers that support time-aware routing map this generic value to their
+   * engine-specific time model.
    */
   departAt?: string;
   /**
    * Wall-clock arrival time as `YYYY-MM-DDTHH:mm`. Mutually exclusive with `departAt`.
-   * Used by Valhalla `date_time.type=2`.
+   * Providers that support time-aware routing map this generic value to their
+   * engine-specific time model.
    */
   arriveBy?: string;
   /** Points the router must not pass through, e.g. closure centroids. */
@@ -179,11 +180,10 @@ export interface RoutingOptions {
   /** Polygon rings the router must not enter, e.g. road-closure boundaries. */
   excludePolygons?: LngLat[][];
   /**
-   * Include live ("current") speed observations in Valhalla's `speed_types`
-   * costing, on top of `freeflow`/`constrained`/`predicted`. Callers should
-   * default this on for motorised costings (auto/motorcycle/bus) and off for
-   * bike/pedestrian; that policy lives at the apps/api route-handler layer,
-   * not here.
+   * Request live speed observations, when the selected provider supports them,
+   * in addition to its normal historical/predicted speed model. Callers should
+   * default this on for motorised modes and off for bike/pedestrian; the policy
+   * lives at the route-handler layer, not here.
    */
   useLiveTraffic?: boolean;
 }

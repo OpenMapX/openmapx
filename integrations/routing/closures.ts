@@ -1,13 +1,10 @@
-import type { BBox } from "@openmapx/core";
+import type { BBox, LngLat } from "@openmapx/core";
 import { haversineDistance, localDateInZone, zonedWallClockToInstant } from "@openmapx/core";
 import type {
   IntegrationContext,
   RoadConditionSchedule,
   RoadConditionsProvider,
 } from "@openmapx/integration-framework";
-
-export type LngLat = [number, number];
-
 export interface ClosureExclusions {
   points: LngLat[];
   polygons: LngLat[][];
@@ -19,38 +16,16 @@ const CRITICAL_SEVERITY = "critical";
 
 /**
  * Maximum spacing (metres) between consecutive exclusion points on a densified
- * closure line. Keeps the gap small enough that Valhalla blocks the full segment
- * rather than routing through the space between sparse vertices.
+ * closure line. Keeps point-based exclusion geometry representative of the
+ * whole closed segment rather than only its source vertices.
  */
 const MAX_EXCLUSION_SPACING_M = 45;
 
 /**
  * Hard cap on exclusion points emitted per single closure geometry. Prevents a
- * single very-long LineString from flooding the Valhalla request body.
+ * single very-long LineString from producing unbounded generic route options.
  */
 const MAX_EXCLUSION_POINTS_PER_CLOSURE = 300;
-
-/**
- * Hard cap on the TOTAL number of exclusion points across all closures in one
- * request. Valhalla rejects more than 50 `exclude_locations` outright
- * (HTTP 400, "Exceeded max avoid locations: 50"), which would fail the whole
- * route — so we stay safely below that ceiling and subsample if needed. 45
- * still blocks a closure densely enough to force a detour (verified against the
- * A565 Bonn-Nord bridge closure).
- */
-const MAX_TOTAL_EXCLUSION_POINTS = 45;
-
-/**
- * Evenly subsample `points` down to at most `max`, preserving geographic spread
- * (and the first vertex). Returns the input unchanged when already within `max`.
- */
-function subsampleEvenly(points: LngLat[], max: number): LngLat[] {
-  if (points.length <= max) return points;
-  const stride = points.length / max;
-  const out: LngLat[] = [];
-  for (let i = 0; i < max; i++) out.push(points[Math.floor(i * stride)] as LngLat);
-  return out;
-}
 
 function isClosure(type: string, severity: string): boolean {
   // The severity branch is defensive: some providers may not filter by `types`
@@ -61,7 +36,7 @@ function isClosure(type: string, severity: string): boolean {
 
 /**
  * Whether a crowd-origin event must be withheld from routing. A user-reported
- * closure becomes a Valhalla exclusion ONLY once it is `routingEligible` (an
+ * closure becomes a route exclusion ONLY once it is `routingEligible` (an
  * external resolution corroborated it — peer votes never do). This mirrors the
  * OpenConditions export gate (`eventsToExclusions`) exactly.
  *
@@ -331,7 +306,8 @@ function geometryToExclusions(
 
 /**
  * Collect active road closures from all registered road-conditions providers
- * and convert them into Valhalla-compatible exclusion geometry.
+ * and convert them into generic route-exclusion geometry. Provider adapters
+ * own any engine-specific conversion, validation, and request-size limits.
  *
  * The routing integration depends only on the `road-conditions` capability
  * contract — never on `@openconditions/*` packages or the conditions.observations
@@ -389,14 +365,6 @@ export async function activeClosuresForBbox(
       if (!event.geometry) continue;
       geometryToExclusions(event.geometry, points, polygons, ctx);
     }
-  }
-
-  if (points.length > MAX_TOTAL_EXCLUSION_POINTS) {
-    const trimmed = subsampleEvenly(points, MAX_TOTAL_EXCLUSION_POINTS);
-    ctx.log.warn(
-      `[routing/closures] ${points.length} exclusion points exceed Valhalla's exclude_locations limit; subsampled to ${trimmed.length}`,
-    );
-    return { points: trimmed, polygons };
   }
 
   return { points, polygons };

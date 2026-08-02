@@ -19,6 +19,10 @@ import type {
   RoutingOptions,
   RoutingProvider,
 } from "@openmapx/integration-routing/types";
+import {
+  sanitizeValhallaExclusions,
+  type LngLat as ValhallaLngLat,
+} from "./valhalla-exclusions.js";
 
 // Populated by setup(ctx): service-registry URL → ctx.config.endpoint
 // (INTEGRATION_ROUTING_VALHALLA_ENDPOINT) → hardcoded fallback.
@@ -68,6 +72,13 @@ const COSTING_MAP: Record<string, string> = {
 const MANEUVER_PENALTY_SECONDS = 10;
 
 const ELEVATION_INTERVAL = 30; // metres between elevation samples
+/** Valhalla's production service limit is two alternates (three routes total). */
+const REQUESTED_ALTERNATES = 2;
+
+function valhallaErrorMessage(prefix: string) {
+  return ({ status, body }: { status: number; body?: string }) =>
+    `${prefix} ${status}${body ? `: ${body.replace(/\s+/g, " ").slice(0, 512)}` : ""}`;
+}
 
 /**
  * Current Valhalla releases encode lane directions and validity as bitmasks.
@@ -371,13 +382,16 @@ export function transformTrip(trip: ValhallaTrip, mode: TravelMode): Route {
   // Concatenate elevation arrays from all legs (if present)
   const hasElevation = trip.legs.some((leg) => leg.elevation && leg.elevation.length > 0);
   const elevation = hasElevation ? trip.legs.flatMap((leg) => leg.elevation ?? []) : undefined;
+  const baselineDuration = trip.summary.time_baseline;
 
   return {
     distance: trip.summary.length * 1000, // km -> metres
     duration: trip.summary.time,
-    ...(typeof trip.summary.time_baseline === "number" && {
-      baselineDuration: trip.summary.time_baseline,
-    }),
+    ...(typeof baselineDuration === "number" &&
+      Number.isFinite(baselineDuration) &&
+      baselineDuration >= 0 && {
+        baselineDuration,
+      }),
     geometry: allCoords,
     legs,
     steps,
@@ -560,12 +574,16 @@ type ValhallaExclusions = {
  * engine receives a clean request without no-op empty arrays.
  */
 export function buildExclusions(options: RoutingOptions): ValhallaExclusions {
+  const sanitized = sanitizeValhallaExclusions({
+    points: options.excludeLocations as ValhallaLngLat[] | undefined,
+    polygons: options.excludePolygons as ValhallaLngLat[][] | undefined,
+  });
   const result: ValhallaExclusions = {};
-  if (options.excludeLocations?.length) {
-    result.exclude_locations = options.excludeLocations.map(([lon, lat]) => ({ lon, lat }));
+  if (sanitized.points.length) {
+    result.exclude_locations = sanitized.points.map(([lon, lat]) => ({ lon, lat }));
   }
-  if (options.excludePolygons?.length) {
-    result.exclude_polygons = options.excludePolygons;
+  if (sanitized.polygons.length) {
+    result.exclude_polygons = sanitized.polygons;
   }
   return result;
 }
@@ -579,8 +597,10 @@ interface ValhallaMatrixResponse {
 
 export const valhallaService: RoutingProvider = {
   id: "valhalla",
+  priority: 10,
   supportedModes: ["walking", "cycling", "driving", "motorcycle"] as TravelMode[],
   supportsTimeAware: true,
+  supportsExclusions: true,
 
   async getRoute(
     waypoints: [number, number][],
@@ -614,14 +634,14 @@ export const valhallaService: RoutingProvider = {
 
     // Valhalla only supports alternates with exactly 2 waypoints
     if (waypoints.length === 2) {
-      body.alternates = 3;
+      body.alternates = REQUESTED_ALTERNATES;
     }
 
     const data = await fetchJson<ValhallaResponse>(endpoint("/route"), {
       timeoutMs: 15_000,
       userAgent: null,
       headers: { "Content-Type": "application/json" },
-      errorMessage: ({ status }) => `Valhalla error ${status}`,
+      errorMessage: valhallaErrorMessage("Valhalla error"),
       init: { method: "POST", body: JSON.stringify(body) },
     });
     const travelMode = mode as TravelMode;
@@ -664,13 +684,14 @@ export const valhallaService: RoutingProvider = {
       turn_lanes: true,
       date_time: buildDateTime(options),
       elevation_interval: ELEVATION_INTERVAL,
+      ...buildExclusions(options),
     };
 
     const data = await fetchJson<ValhallaResponse>(endpoint("/optimized_route"), {
       timeoutMs: 15_000,
       userAgent: null,
       headers: { "Content-Type": "application/json" },
-      errorMessage: ({ status }) => `Valhalla optimized_route error ${status}`,
+      errorMessage: valhallaErrorMessage("Valhalla optimized_route error"),
       init: { method: "POST", body: JSON.stringify(body) },
     });
     const travelMode = mode as TravelMode;
@@ -724,7 +745,7 @@ export const valhallaService: RoutingProvider = {
       timeoutMs: 15_000,
       userAgent: null,
       headers: { "Content-Type": "application/json" },
-      errorMessage: ({ status }) => `Valhalla trace_attributes error ${status}`,
+      errorMessage: valhallaErrorMessage("Valhalla trace_attributes error"),
       init: { method: "POST", body: JSON.stringify(body) },
     });
 
@@ -759,7 +780,7 @@ export const valhallaService: RoutingProvider = {
       timeoutMs: 15_000,
       userAgent: null,
       headers: { "Content-Type": "application/json" },
-      errorMessage: ({ status }) => `Valhalla sources_to_targets error ${status}`,
+      errorMessage: valhallaErrorMessage("Valhalla sources_to_targets error"),
       init: { method: "POST", body: JSON.stringify(body) },
     });
 
