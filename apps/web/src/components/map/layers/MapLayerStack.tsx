@@ -3,6 +3,8 @@
 import { useLayerStore } from "@openmapx/core";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
+import { reportMissingLayers } from "@/lib/map/mapLayerDiagnostics";
+import { findMissingLayers } from "./desiredStack";
 import { anchorMapLayers } from "./layerStack";
 
 /**
@@ -32,6 +34,28 @@ export function MapLayerStack() {
       map.off("idle", anchor);
     };
   }, [mapRef, mapReady, styleVersion, activeLayer]);
+
+  // A layer that should be drawing and is not looks exactly like a layer with
+  // nothing to draw. `idle` is the cheapest moment to tell them apart: the style
+  // has settled, so anything still absent is absent for a reason.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    let last = 0;
+    const check = () => {
+      const now = performance.now();
+      if (now - last < 2000) return;
+      last = now;
+      const missing = findMissingLayers(map);
+      if (missing.length > 0) reportMissingLayers(missing);
+    };
+
+    map.on("idle", check);
+    return () => {
+      map.off("idle", check);
+    };
+  }, [mapRef, mapReady]);
 
   return null;
 }

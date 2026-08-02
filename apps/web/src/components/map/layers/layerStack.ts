@@ -75,7 +75,8 @@ export function layerRegistrations(): LayerRegistration[] {
   return [...registry.values()];
 }
 
-function rankOf(slot: MapLayerSlot, order: number): number {
+/** Sort key for a slot+order pair; lower renders below. */
+export function layerRank(slot: MapLayerSlot, order = 0): number {
   return MAP_LAYER_SLOTS.indexOf(slot) * 1000 + order;
 }
 
@@ -119,14 +120,14 @@ export function resolveBeforeId(
   slot: MapLayerSlot,
   order = 0,
 ): string | undefined {
-  const rank = rankOf(slot, order);
+  const rank = layerRank(slot, order);
   const byId = new Map(registrations.map((r) => [r.id, r]));
   const belowLabels = MAP_LAYER_SLOTS.indexOf(slot) < SYMBOL_SLOT_INDEX;
   const symbolId = belowLabels ? firstSymbolLayerId(styleLayers, registrations) : undefined;
   for (const layer of styleLayers) {
     if (layer.id === symbolId) return symbolId;
     const registration = byId.get(layer.id);
-    if (registration && rankOf(registration.slot, registration.order) > rank) return layer.id;
+    if (registration && layerRank(registration.slot, registration.order) > rank) return layer.id;
   }
   return undefined;
 }
@@ -143,7 +144,7 @@ export function planAnchorMoves(
 ): Array<{ id: string; beforeId: string | undefined }> {
   const present = registrations
     .filter((r) => styleLayers.some((layer) => layer.id === r.id))
-    .sort((a, b) => rankOf(a.slot, a.order) - rankOf(b.slot, b.order));
+    .sort((a, b) => layerRank(a.slot, a.order) - layerRank(b.slot, b.order));
   if (present.length === 0) return [];
 
   const symbolId = firstSymbolLayerId(styleLayers, registrations);
