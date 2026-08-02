@@ -246,11 +246,14 @@ export async function bakePredicted(deps: BakePredictedDeps): Promise<BakePredic
 
   // Re-derive the way->edge map BEFORE reading it. The copy on disk is written
   // by whichever job last needed one, and is only rewritten on a graph rebuild
-  // or a cold boot, so it can be arbitrarily stale: on 2026-07-27 this bake
-  // read a map whose key set predated the German feed expansion and matched 32
-  // of the 2,569 profile ways the graph actually carries. Deriving it here also
-  // makes "way present in the map" mean "way present in the graph", which the
-  // match-rate check downstream depends on.
+  // or a cold boot, so it can be arbitrarily stale. On 2026-07-27 this bake read
+  // one that resolved 33 rows where the same matching against a current map
+  // resolves 2,776 — roughly 1% — while the profile feed was already full.
+  // (What that map actually was is not recoverable; it was overwritten hours
+  // later. The defect is reading a shared artifact this job does not control,
+  // not any particular thing that was in it.) Deriving it here also makes "way
+  // present in the map" mean "way present in the graph", which the match-rate
+  // check downstream depends on.
   //
   // A failure here is fatal by design. Falling back to the map on disk is the
   // exact behaviour that produced the incident.

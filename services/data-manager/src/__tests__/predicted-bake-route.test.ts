@@ -1,23 +1,26 @@
 import Fastify from "fastify";
 import { describe, expect, it, vi } from "vitest";
 import { registerApi } from "../api.js";
+import type { BakePredictedResult } from "../jobs/traffic/bake-predicted.js";
 
-const RESULT = {
+// Typed rather than inferred so a field added to BakePredictedResult fails here
+// instead of silently leaving the fixture a shape production never returns.
+const RESULT: BakePredictedResult = {
   segments: 12613,
   rows: 2787,
   tiles: 11,
   resolvable: 2569,
   matched: 2569,
   matchRatePct: 100,
+  coverageRatePct: 20,
   built: true,
   wayCount: 6838,
   edgeCount: 9001,
 };
 
-const appWith = (bakePredicted: () => Promise<typeof RESULT>) => {
+const appWith = (bakePredicted: () => Promise<BakePredictedResult>) => {
   const app = Fastify();
-  // biome-ignore lint/suspicious/noExplicitAny: partial ApiOptions for the test
-  registerApi(app, { bakePredicted } as any);
+  registerApi(app, { bakePredicted });
   return app;
 };
 
@@ -65,8 +68,7 @@ describe("POST /traffic/predicted/bake", () => {
       .fn()
       .mockRejectedValueOnce(new Error("docker exploded"))
       .mockResolvedValueOnce(RESULT);
-    // biome-ignore lint/suspicious/noExplicitAny: partial ApiOptions for the test
-    const app = appWith(bake as any);
+    const app = appWith(bake);
 
     const first = await app.inject({ method: "POST", url: "/traffic/predicted/bake" });
     expect(first.statusCode).toBe(202);
