@@ -73,3 +73,52 @@ describe("map layers declare a slot", () => {
     expect(offenders.map((f) => path.relative(process.cwd(), f))).toEqual([]);
   });
 });
+
+/**
+ * Creating a source and filling it must be one operation. When they are two, a
+ * style change recreates the source empty and whatever pushes the data never
+ * re-runs — the layer then renders nothing, with no error and no failing test.
+ * `useMapLayerGroup` takes the data as part of the descriptor, so the split
+ * cannot occur; a raw `addSource` or `setData` is how a layer reaches around it.
+ *
+ * Scoped to `apps/web/src`. The `integrations/*` overlays are a separate
+ * migration: they already create and fill in one pass, so they are not at risk,
+ * and listing all twenty here would say nothing.
+ *
+ * The allowlist is the not-yet-migrated set. It only ever shrinks — deleting the
+ * last entry is what finishes this work.
+ */
+const UNMIGRATED = new Set([
+  // The primitive and the helper it replaces.
+  "mapLayerGroup.ts",
+  "layerStyleUtils.ts",
+  // Standalone `new maplibregl.Map(...)` instances for offline region select and
+  // preview — no shared stack, nothing to race.
+  "AreaPickerMap.tsx",
+  "OfflineMapView.tsx",
+  // Awaiting the follow-up migration.
+  "RasterBaseLayer.tsx",
+  "RouteSearchResultsLayer.tsx",
+  "SelectedStopInfrastructureLayer.tsx",
+  "StreetLevelCoverageLayer.tsx",
+  "TransitItineraryLayer.tsx",
+  "TransitRouteLayer.tsx",
+  "VehicleLiveLayer.tsx",
+]);
+
+describe("map layers keep their data with their sources", () => {
+  // `src/test/` is the harness, not app code — the fake map implements these
+  // methods rather than calling them.
+  const files = sourceFiles(WEB_SRC_DIR).filter(
+    (file) => !file.includes(`${path.sep}src${path.sep}test${path.sep}`),
+  );
+
+  it("has no direct addSource or setData call in a migrated file", () => {
+    const offenders = files.filter((file) => {
+      if (UNMIGRATED.has(path.basename(file))) return false;
+      const text = fs.readFileSync(file, "utf8");
+      return /\.addSource\s*\(/.test(text) || /\.setData\s*\(/.test(text);
+    });
+    expect(offenders.map((f) => path.relative(process.cwd(), f))).toEqual([]);
+  });
+});
