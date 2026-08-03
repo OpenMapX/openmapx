@@ -101,6 +101,7 @@ describe("navigationStore offline state", () => {
     expect(state.route).not.toBeNull();
     expect(state.progress).toBe(progress);
     expect(state.status).toBe("navigating");
+    expect(state.rerouteUnavailable).toBe(true);
     expect(state.liveDataUnavailable).toBe(true);
   });
 
@@ -148,6 +149,7 @@ describe("navigationStore offline state", () => {
     expect(state.progress?.alongMeters).toBe(0);
     expect(state.fasterRoute).toBeNull();
     expect(state.connectivity).toBe("offline");
+    expect(state.rerouteUnavailable).toBe(true);
     expect(state.liveDataUnavailable).toBe(true);
   });
 

@@ -342,7 +342,13 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       ...(alternatives && { routes: [route, ...alternatives], activeRouteIndex: 0 }),
     })),
   setConnectivity: (connectivity) =>
-    set({ connectivity, ...(connectivity === "offline" && { liveDataUnavailable: true }) }),
+    set({
+      connectivity,
+      ...(connectivity === "offline" && {
+        rerouteUnavailable: true,
+        liveDataUnavailable: true,
+      }),
+    }),
   setRerouteUnavailable: (rerouteUnavailable) => set({ rerouteUnavailable }),
   setLiveDataUnavailable: (liveDataUnavailable) => set({ liveDataUnavailable }),
   requestRerouteRetry: () => set((s) => ({ rerouteRetryNonce: s.rerouteRetryNonce + 1 })),
@@ -383,6 +389,7 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       progress: restored.progress,
       navigationStartedAtMs: restored.startedAtMs,
       connectivity: "offline",
+      rerouteUnavailable: true,
       liveDataUnavailable: true,
     });
   },
