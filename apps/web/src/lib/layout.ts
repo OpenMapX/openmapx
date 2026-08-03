@@ -27,3 +27,19 @@ export function isPanelShiftActive(state: {
 }): boolean {
   return state.sidebarOpen && !state.sidebarCollapsed && !state.navigating;
 }
+
+/**
+ * Whether the layer selector is actually covered by a panel rather than merely
+ * sharing the map with an expanded sidebar. Desktop sidebars occupy a stable
+ * left rail, so the selector can remain available beside them. Mobile sheets
+ * only need the legacy avoidance rule while a selected place is open in the
+ * sidebar; a detail panel always covers the selector on either viewport.
+ */
+export function shouldHideLayerSelector(state: {
+  desktop: boolean;
+  detailOpen: boolean;
+  sidebarOpen: boolean;
+  selectedPlace: boolean;
+}): boolean {
+  return state.detailOpen || (!state.desktop && state.sidebarOpen && state.selectedPlace);
+}

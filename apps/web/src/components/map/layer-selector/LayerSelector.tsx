@@ -10,16 +10,12 @@ import { useTheme } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import {
-  useCategorySearchStore,
-  useLayerStore,
-  usePlaceStore,
-  useSidebarStore,
-} from "@openmapx/core";
+import { useLayerStore, useNavigationStore, usePlaceStore, useSidebarStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { FocusEvent, MouseEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { LAYER_SELECTOR_OPEN_EVENT } from "@/components/command-palette/constants";
+import { isPanelShiftActive, PANEL_WIDTH, shouldHideLayerSelector } from "@/lib/layout";
 import { DesktopMorePanel } from "./DesktopMorePanel";
 import { DesktopQuickSelector } from "./DesktopQuickSelector";
 import { BASE_LAYER_OPTIONS } from "./layerSelectorConfig";
@@ -34,14 +30,24 @@ export function LayerSelector() {
   const desktopAnchorRef = useRef<HTMLDivElement | null>(null);
   const closeTimerRef = useRef<number | undefined>(undefined);
   const activeSidebarId = useSidebarStore((s) => s.activeSidebarId);
+  const activeDetailId = useSidebarStore((s) => s.activeDetailId);
   const collapsed = useSidebarStore((s) => s.collapsed);
   const hasSidePanel = !collapsed && activeSidebarId !== null;
   const selectedPlace = usePlaceStore((s) => s.selectedPlace);
-  const activeCategory = useCategorySearchStore((s) => s.activeCategory);
+  const navigating = useNavigationStore((s) => s.status !== "idle");
   const activeLayer = useLayerStore((s) => s.activeLayer);
 
-  const hiddenByFloatingCard =
-    (activeCategory !== null && selectedPlace !== null) || (hasSidePanel && selectedPlace !== null);
+  const panelShiftActive = isPanelShiftActive({
+    sidebarOpen: activeSidebarId !== null,
+    sidebarCollapsed: collapsed,
+    navigating,
+  });
+  const hiddenByFloatingCard = shouldHideLayerSelector({
+    desktop: desktopDock,
+    detailOpen: activeDetailId !== null,
+    sidebarOpen: hasSidePanel,
+    selectedPlace: selectedPlace !== null,
+  });
 
   const activeBaseOption =
     BASE_LAYER_OPTIONS.find((option) => option.id === activeLayer) ?? BASE_LAYER_OPTIONS[0];
@@ -137,7 +143,7 @@ export function LayerSelector() {
         sx={{
           position: "absolute",
           bottom: 26,
-          left: { xs: 12, sm: hasSidePanel ? 412 : 12 },
+          left: { xs: 12, sm: panelShiftActive ? PANEL_WIDTH + 12 : 12 },
           transition: "left 0.25s ease, opacity 0.18s ease",
           zIndex: 10,
           ...(hiddenByFloatingCard

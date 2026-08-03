@@ -2,21 +2,30 @@
 
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LAYER_SELECTOR_OPEN_EVENT } from "@/components/command-palette/constants";
+
+const mockState = {
+  desktopDock: true,
+  selectedPlace: null as object | null,
+  sidebar: {
+    activeSidebarId: null as string | null,
+    activeDetailId: null as string | null,
+    collapsed: true,
+  },
+};
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (k: string) => k,
 }));
 vi.mock("@mui/material/useMediaQuery", () => ({
-  default: () => true,
+  default: () => mockState.desktopDock,
 }));
 vi.mock("@openmapx/core", () => ({
-  useCategorySearchStore: (sel: (s: unknown) => unknown) => sel({ activeCategory: null }),
   useLayerStore: (sel: (s: unknown) => unknown) => sel({ activeLayer: "default" }),
-  usePlaceStore: (sel: (s: unknown) => unknown) => sel({ selectedPlace: null }),
-  useSidebarStore: (sel: (s: unknown) => unknown) =>
-    sel({ activeSidebarId: null, collapsed: true }),
+  usePlaceStore: (sel: (s: unknown) => unknown) => sel({ selectedPlace: mockState.selectedPlace }),
+  useSidebarStore: (sel: (s: unknown) => unknown) => sel(mockState.sidebar),
+  useNavigationStore: (sel: (s: unknown) => unknown) => sel({ status: "idle" }),
 }));
 vi.mock("./DesktopQuickSelector", () => ({
   DesktopQuickSelector: ({ onMoreClick }: { onMoreClick: (e: unknown) => void }) => (
@@ -36,6 +45,16 @@ import { LayerSelector } from "./LayerSelector";
 
 const quickSelectorToggle = () => screen.getByLabelText("openLayers");
 const quickSelectorOpen = () => quickSelectorToggle().getAttribute("aria-expanded") === "true";
+
+beforeEach(() => {
+  mockState.desktopDock = true;
+  mockState.selectedPlace = null;
+  mockState.sidebar = {
+    activeSidebarId: null,
+    activeDetailId: null,
+    collapsed: true,
+  };
+});
 
 describe("LayerSelector desktop dock", () => {
   it("collapses the quick selector when the full map-details panel opens", async () => {
@@ -75,5 +94,58 @@ describe("LayerSelector desktop dock", () => {
 
     expect(await screen.findByText("map-details-panel")).toBeDefined();
     expect(quickSelectorOpen()).toBe(false);
+  });
+
+  it("keeps the desktop dock visible when an expanded sidebar has a selected place", () => {
+    mockState.sidebar = {
+      activeSidebarId: "place",
+      activeDetailId: null,
+      collapsed: false,
+    };
+    mockState.selectedPlace = {};
+
+    render(<LayerSelector />);
+
+    expect(screen.getByLabelText("openLayers")).toBeDefined();
+  });
+
+  it("hides the desktop dock when an actual detail card is open", () => {
+    mockState.sidebar = {
+      activeSidebarId: "directions",
+      activeDetailId: "place-card",
+      collapsed: false,
+    };
+    mockState.selectedPlace = {};
+
+    render(<LayerSelector />);
+
+    expect(screen.queryByLabelText("openLayers")).toBeNull();
+  });
+
+  it("keeps mobile bottom-sheet avoidance for a selected place in a sidebar", () => {
+    mockState.desktopDock = false;
+    mockState.sidebar = {
+      activeSidebarId: "place",
+      activeDetailId: null,
+      collapsed: false,
+    };
+    mockState.selectedPlace = {};
+
+    render(<LayerSelector />);
+
+    expect(screen.queryByLabelText("openLayerMenu")).toBeNull();
+  });
+
+  it("keeps the mobile layer button visible when the sidebar has no selected place", () => {
+    mockState.desktopDock = false;
+    mockState.sidebar = {
+      activeSidebarId: "directions",
+      activeDetailId: null,
+      collapsed: false,
+    };
+
+    render(<LayerSelector />);
+
+    expect(screen.getByLabelText("openLayerMenu")).toBeDefined();
   });
 });
