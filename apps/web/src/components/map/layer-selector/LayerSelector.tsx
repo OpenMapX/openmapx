@@ -5,14 +5,14 @@ import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
 import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
-import Popover from "@mui/material/Popover";
+import Popover, { type PopoverActions } from "@mui/material/Popover";
 import { useTheme } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useLayerStore, useNavigationStore, usePlaceStore, useSidebarStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import type { FocusEvent, MouseEvent } from "react";
+import type { FocusEvent, MouseEvent, TransitionEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { LAYER_SELECTOR_OPEN_EVENT } from "@/components/command-palette/constants";
 import { isPanelShiftActive, PANEL_WIDTH, shouldHideLayerSelector } from "@/lib/layout";
@@ -28,6 +28,7 @@ export function LayerSelector() {
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [desktopExpanded, setDesktopExpanded] = useState(false);
   const desktopAnchorRef = useRef<HTMLDivElement | null>(null);
+  const popoverActionRef = useRef<PopoverActions | null>(null);
   const closeTimerRef = useRef<number | undefined>(undefined);
   const activeSidebarId = useSidebarStore((s) => s.activeSidebarId);
   const activeDetailId = useSidebarStore((s) => s.activeDetailId);
@@ -56,6 +57,11 @@ export function LayerSelector() {
     if (closeTimerRef.current === undefined) return;
     window.clearTimeout(closeTimerRef.current);
     closeTimerRef.current = undefined;
+  };
+
+  const handleAnchorTransitionEnd = (event: TransitionEvent<HTMLDivElement>) => {
+    if (!desktopDock || !anchorEl || event.propertyName !== "left") return;
+    popoverActionRef.current?.updatePosition();
   };
 
   const handleOpen = (event: MouseEvent<HTMLElement>) => {
@@ -140,6 +146,7 @@ export function LayerSelector() {
     <>
       <Box
         ref={desktopAnchorRef}
+        onTransitionEnd={handleAnchorTransitionEnd}
         sx={{
           position: "absolute",
           bottom: 26,
@@ -264,6 +271,7 @@ export function LayerSelector() {
         id="map-layer-selector"
         open={open}
         anchorEl={anchorEl}
+        action={popoverActionRef}
         onClose={handleClose}
         disableScrollLock
         disableEnforceFocus

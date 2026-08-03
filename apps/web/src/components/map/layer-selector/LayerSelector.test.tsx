@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode, Ref } from "react";
+import { useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LAYER_SELECTOR_OPEN_EVENT } from "@/components/command-palette/constants";
 
@@ -14,12 +16,27 @@ const mockState = {
     collapsed: true,
   },
 };
+const mockPopoverAction = { updatePosition: vi.fn() };
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (k: string) => k,
 }));
 vi.mock("@mui/material/useMediaQuery", () => ({
   default: () => mockState.desktopDock,
+}));
+vi.mock("@mui/material/Popover", () => ({
+  default: ({
+    action,
+    children,
+    open,
+  }: {
+    action?: Ref<{ updatePosition(): void }>;
+    children: ReactNode;
+    open: boolean;
+  }) => {
+    useImperativeHandle(action, () => mockPopoverAction, []);
+    return open ? <div data-testid="layer-selector-popover">{children}</div> : null;
+  },
 }));
 vi.mock("@openmapx/core", () => ({
   useLayerStore: (sel: (s: unknown) => unknown) => sel({ activeLayer: "default" }),
@@ -54,6 +71,7 @@ beforeEach(() => {
     activeDetailId: null,
     collapsed: true,
   };
+  mockPopoverAction.updatePosition.mockClear();
 });
 
 describe("LayerSelector desktop dock", () => {
@@ -147,5 +165,34 @@ describe("LayerSelector desktop dock", () => {
     render(<LayerSelector />);
 
     expect(screen.getByLabelText("openLayerMenu")).toBeDefined();
+  });
+
+  it("repositions an open layer panel after the sidebar offset transition completes", async () => {
+    const user = userEvent.setup();
+    mockState.sidebar = {
+      activeSidebarId: "directions",
+      activeDetailId: null,
+      collapsed: false,
+    };
+    const { rerender } = render(<LayerSelector />);
+
+    await user.hover(quickSelectorToggle());
+    await user.click(screen.getByText("more"));
+    expect(screen.getByTestId("layer-selector-popover")).toBeDefined();
+
+    mockState.sidebar = {
+      activeSidebarId: null,
+      activeDetailId: null,
+      collapsed: false,
+    };
+    rerender(<LayerSelector />);
+
+    const quickSelector = document.getElementById("map-layer-quick-selector");
+    if (!quickSelector) throw new Error("quick selector anchor was not rendered");
+    fireEvent.transitionEnd(quickSelector, {
+      propertyName: "left",
+    });
+
+    expect(mockPopoverAction.updatePosition).toHaveBeenCalledTimes(1);
   });
 });
