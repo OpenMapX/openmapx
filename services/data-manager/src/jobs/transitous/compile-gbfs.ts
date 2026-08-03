@@ -356,8 +356,14 @@ export const run: StageFn = async (ctx) => {
     const failed = validations.filter((result) => !result.ok);
     const ratio = validations.length === 0 ? 0 : failed.length / validations.length;
     if (ratio > floatEnv("MOTIS_GBFS_CATALOG_MAX_FAILURE_RATIO", 0.35)) {
+      const failureDetails = failed
+        .map(
+          (result) =>
+            `${result.sourceId} [${result.errorClass ?? "unknown"}]: ${result.reason ?? "unknown error"}`,
+        )
+        .join("; ");
       throw new Error(
-        `GBFS validation failure ratio ${ratio.toFixed(3)} exceeds configured threshold`,
+        `GBFS validation failure ratio ${ratio.toFixed(3)} exceeds configured threshold; failed sources: ${failureDetails}`,
       );
     }
     injectAdditions(catalogDir, healthy);

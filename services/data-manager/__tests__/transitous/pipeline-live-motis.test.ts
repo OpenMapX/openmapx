@@ -362,9 +362,9 @@ function civilDate(timeZone: string): string {
 /**
  * Build a diagnostic string for a failed stage. The stage result only carries
  * the docker CLI error; the actual MOTIS import failure lives in the container's
- * logs. We fold both into the assertion message so CI shows the root cause inline
- * (the workflow's artifact upload can't help — the tmp dir is torn down in
- * `afterAll` before it runs).
+ * logs. We fold both into the assertion message so CI shows the root cause inline.
+ * On GitHub Actions, the temporary directory is retained until the workflow's
+ * artifact upload step runs; local executions still clean it up in `afterAll`.
  */
 async function failureDiagnostics(
   label: string,
@@ -613,7 +613,7 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
 
   afterAll(async () => {
     if (composeFile && dataDir) await composeDown(composeFile, dataDir);
-    if (tmp) {
+    if (tmp && process.env.GITHUB_ACTIONS !== "true") {
       try {
         rmSync(tmp, { recursive: true, force: true });
       } catch {
@@ -666,8 +666,20 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
         const nativeFetch = globalThis.fetch;
         const oldCatalogEnabled = process.env.MOTIS_GBFS_CATALOG_ENABLED;
         const oldMaxAdditions = process.env.MOTIS_GBFS_CATALOG_MAX_ADDITIONS;
+        const oldPrivateFeedHosts = process.env.OPENMAPX_ALLOW_PRIVATE_FEED_HOSTS;
+        const privateFeedHosts = new Set(
+          (oldPrivateFeedHosts ?? "")
+            .split(",")
+            .map((host) => host.trim().toLowerCase())
+            .filter(Boolean),
+        );
+        // safeFetchJson validates DNS before invoking fetch. This fixture host
+        // exists only on the Docker network, so explicitly declare it for the
+        // test while preserving any operator-provided allowlist entries.
+        privateFeedHosts.add(GBFS_FIXTURE_SERVICE);
         process.env.MOTIS_GBFS_CATALOG_ENABLED = "true";
         process.env.MOTIS_GBFS_CATALOG_MAX_ADDITIONS = "5";
+        process.env.OPENMAPX_ALLOW_PRIVATE_FEED_HOSTS = [...privateFeedHosts].join(",");
         globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
           const url = String(input);
           if (url.includes("raw.githubusercontent.com/MobilityData/gbfs/")) {
@@ -689,6 +701,9 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
           else process.env.MOTIS_GBFS_CATALOG_ENABLED = oldCatalogEnabled;
           if (oldMaxAdditions === undefined) delete process.env.MOTIS_GBFS_CATALOG_MAX_ADDITIONS;
           else process.env.MOTIS_GBFS_CATALOG_MAX_ADDITIONS = oldMaxAdditions;
+          if (oldPrivateFeedHosts === undefined)
+            delete process.env.OPENMAPX_ALLOW_PRIVATE_FEED_HOSTS;
+          else process.env.OPENMAPX_ALLOW_PRIVATE_FEED_HOSTS = oldPrivateFeedHosts;
         }
       };
 

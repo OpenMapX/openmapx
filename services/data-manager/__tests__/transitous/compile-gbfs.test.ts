@@ -105,6 +105,53 @@ describe("bounded GBFS candidate validation", () => {
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
+  it("includes failed source IDs and reasons when the failure ratio trips", async () => {
+    lookupMock.mockResolvedValue(PUBLIC);
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-compile-gbfs-"));
+    const catalog = join(tmp, "data", ".transitous-catalog");
+    mkdirSync(join(catalog, "feeds"), { recursive: true });
+    mkdirSync(join(tmp, "infra", "docker"), { recursive: true });
+    const csv =
+      "Country Code,Name,Location,System ID,URL,Auto-Discovery URL,Supported Versions,Authentication Info URL\nDE,Demo,Berlin,demo,https://example.test,https://example.test/gbfs.json,2.3,\n";
+    const commit = "b".repeat(40);
+    writeFileSync(
+      join(tmp, "infra", "docker", "gbfs-catalog.lock.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        source: "mobilitydata-gbfs",
+        commit,
+        url: `https://raw.githubusercontent.com/MobilityData/gbfs/${commit}/systems.csv`,
+        sha256: createHash("sha256").update(csv).digest("hex"),
+        lockedAt: "2026-01-01T00:00:00Z",
+        lockedBy: "test",
+      }),
+    );
+    globalThis.fetch = vi.fn(async (input: unknown) =>
+      String(input).includes("raw.githubusercontent.com")
+        ? new Response(csv)
+        : new Response("not-json"),
+    ) as typeof fetch;
+    process.env.MOTIS_GBFS_CATALOG_ENABLED = "true";
+    const ctx = buildJobContext({
+      dataDir: join(tmp, "data"),
+      repoRoot: tmp,
+      countries: ["de"],
+      source: "build",
+      store: new StateStore(join(tmp, "data")),
+      now: () => "2026-01-01T00:00:00Z",
+    });
+    ctx.state.catalogDir = catalog;
+
+    const result = await run(ctx);
+
+    expect(result).toMatchObject({
+      status: "error",
+      message: expect.stringContaining("mobilitydata:de:demo:"),
+    });
+    expect(result.message).toContain("json");
+    expect(result.message).toContain("Invalid JSON response");
+  });
+
   it.each([
     "build",
     "mirror",
