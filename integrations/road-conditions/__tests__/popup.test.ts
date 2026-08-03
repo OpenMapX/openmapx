@@ -111,4 +111,55 @@ describe("buildRoadConditionPopupHtml", () => {
     expect(result.html).toContain("2 conditions here");
     expect(result.html.match(/Lane closure \(2 related records\)/g)).toHaveLength(1);
   });
+
+  it("resolves every display group carried by one deduplicated line hit", () => {
+    const otherId = "group:other-overlap";
+    const otherEvent: RoadConditionEvent = {
+      id: "source:other",
+      source: "duesseldorf",
+      provider: "road-conditions-openconditions",
+      groupId: "other-overlap",
+      type: "congestion",
+      severity: "medium",
+      headline: "Traffic congestion",
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [6.77, 51.2],
+          [6.78, 51.2],
+        ],
+      },
+    };
+    const result = buildRoadConditionPopupHtml({
+      hits: [
+        hit(
+          {
+            _displayId: displayId,
+            _displayIds: [displayId, otherId],
+            _sev: 3,
+          },
+          {
+            type: "LineString",
+            coordinates: [
+              [6.77, 51.2],
+              [6.78, 51.2],
+            ],
+          },
+        ),
+      ],
+      fallbackCoordinates: [6.77, 51.2],
+      eventsByDisplayId: new Map([
+        [displayId, events],
+        [otherId, [otherEvent]],
+      ]),
+      formatDateTime: (value) => String(value),
+      formatDate: (value) => String(value),
+      translate,
+    });
+
+    expect(result.groupCount).toBe(2);
+    expect(result.html).toContain("2 conditions here");
+    expect(result.html).toContain("Lane closure (2 related records)");
+    expect(result.html).toContain("Traffic congestion");
+  });
 });

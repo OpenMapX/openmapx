@@ -23,7 +23,11 @@ import { useMap } from "@/lib/MapContext";
 import { useOverlayMinZoom } from "@/lib/overlayZoomGate";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { useDrawnDirectionsRoutes } from "@/lib/useDrawnDirectionsRoutes";
-import { buildRoadConditionDisplayGroups, type RoadConditionDisplayGroup } from "./display";
+import {
+  buildRoadConditionDisplayGroups,
+  buildRoadConditionDisplayLines,
+  type RoadConditionDisplayGroup,
+} from "./display";
 import { markerImageId } from "./markers";
 import { buildRoadConditionPopupHtml } from "./popup";
 import { useRoadConditionsStore } from "./store";
@@ -63,6 +67,9 @@ interface RouteSourceData {
 }
 
 function buildRouteSourceData(displayGroups: RoadConditionDisplayGroup[]): RouteSourceData {
+  const eventsByDisplayId = new Map(
+    displayGroups.map((group) => [group.displayId, group.events] as const),
+  );
   const markers = displayGroups.flatMap((group) => {
     const event = group.events.reduce((best, candidate) => {
       const bestRank = SEVERITY_RANK[best.severity] ?? 0;
@@ -84,9 +91,12 @@ function buildRouteSourceData(displayGroups: RoadConditionDisplayGroup[]): Route
       },
     }));
   });
-  const lines = displayGroups.flatMap((group) => {
-    if (!group.lineGeometry) return [];
-    const event = group.events.reduce((best, candidate) => {
+  const lines = buildRoadConditionDisplayLines(displayGroups).flatMap((line) => {
+    const lineEvents = line.displayIds.flatMap(
+      (displayId) => eventsByDisplayId.get(displayId) ?? [],
+    );
+    if (lineEvents.length === 0) return [];
+    const event = lineEvents.reduce((best, candidate) => {
       const bestRank = SEVERITY_RANK[best.severity] ?? 0;
       const candidateRank = SEVERITY_RANK[candidate.severity] ?? 0;
       return candidateRank > bestRank ? candidate : best;
@@ -94,11 +104,12 @@ function buildRouteSourceData(displayGroups: RoadConditionDisplayGroup[]): Route
     return [
       {
         type: "Feature" as const,
-        geometry: group.lineGeometry as GeoJSON.Geometry,
+        geometry: line.geometry as GeoJSON.Geometry,
         properties: {
           severity: event.severity,
-          future: group.events.every(isFutureRoadCondition),
-          _displayId: group.displayId,
+          future: lineEvents.every(isFutureRoadCondition),
+          _displayId: line.displayIds[0],
+          _displayIds: line.displayIds,
         },
       },
     ];

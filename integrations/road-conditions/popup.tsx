@@ -274,6 +274,14 @@ function pointCoordinates(hit: MapGeoJSONFeature): [number, number] | undefined 
     : undefined;
 }
 
+function displayIdsForHit(properties: Record<string, unknown>): string[] {
+  const groupedIds = Array.isArray(properties._displayIds)
+    ? distinctNonEmpty(properties._displayIds)
+    : [];
+  if (groupedIds.length > 0) return groupedIds;
+  return [String(properties._displayId ?? properties._id ?? properties.headline ?? "")];
+}
+
 /**
  * Build shared incident popup HTML and its anchor from either marker or line
  * hits. The event lookup is authoritative for grouped records, so line hits
@@ -291,38 +299,39 @@ export function buildRoadConditionPopupHtml(
 
   for (const hit of input.hits) {
     const properties = (hit.properties ?? {}) as Record<string, unknown>;
-    const displayId = String(properties._displayId ?? properties._id ?? properties.headline ?? "");
-    if (seen.has(displayId)) continue;
-    seen.add(displayId);
+    for (const displayId of displayIdsForHit(properties)) {
+      if (seen.has(displayId)) continue;
+      seen.add(displayId);
 
-    const childEvents = input.eventsByDisplayId.get(displayId);
-    const popupGroups = childEvents?.length
-      ? buildRoadConditionPopupGroups(displayId, childEvents, (headline, count) =>
-          input.translate("panel.relatedRecords", { headline, count }),
-        )
-      : [{ summary: properties, sourceRecords: [] }];
+      const childEvents = input.eventsByDisplayId.get(displayId);
+      const popupGroups = childEvents?.length
+        ? buildRoadConditionPopupGroups(displayId, childEvents, (headline, count) =>
+            input.translate("panel.relatedRecords", { headline, count }),
+          )
+        : [{ summary: properties, sourceRecords: [] }];
 
-    for (const group of popupGroups) {
-      const summary = formatPopupEntry(group.summary, input);
-      if (typeof group.summary.sourceRecordCount === "number") {
-        summary.recordId = input.translate("panel.sourceRecordCount", {
-          count: group.summary.sourceRecordCount,
+      for (const group of popupGroups) {
+        const summary = formatPopupEntry(group.summary, input);
+        if (typeof group.summary.sourceRecordCount === "number") {
+          summary.recordId = input.translate("panel.sourceRecordCount", {
+            count: group.summary.sourceRecordCount,
+          });
+        }
+        const sourceEntries = group.sourceRecords.map((entry) => formatPopupEntry(entry, input));
+        items.push({
+          properties: summary,
+          ...(sourceEntries.length > 0
+            ? {
+                details: {
+                  label: input.translate("panel.sourceDetails", { count: sourceEntries.length }),
+                  entries: sourceEntries,
+                  spec: SOURCE_DETAIL_SPEC,
+                },
+              }
+            : {}),
         });
+        groupCount += 1;
       }
-      const sourceEntries = group.sourceRecords.map((entry) => formatPopupEntry(entry, input));
-      items.push({
-        properties: summary,
-        ...(sourceEntries.length > 0
-          ? {
-              details: {
-                label: input.translate("panel.sourceDetails", { count: sourceEntries.length }),
-                entries: sourceEntries,
-                spec: SOURCE_DETAIL_SPEC,
-              },
-            }
-          : {}),
-      });
-      groupCount += 1;
     }
   }
 

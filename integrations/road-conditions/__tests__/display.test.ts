@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { RoadConditionEvent } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
-import { buildRoadConditionDisplayGroups } from "../display";
+import { buildRoadConditionDisplayGroups, buildRoadConditionDisplayLines } from "../display";
 
 const DISPLAY_SOURCE_DIR = dirname(fileURLToPath(import.meta.url)).replace(/\/__tests__$/, "");
 
@@ -108,6 +108,37 @@ describe("buildRoadConditionDisplayGroups", () => {
     expect(group?.markerCoordinates).toHaveLength(1);
   });
 
+  it("deduplicates identical grouped line components but keeps every source record", () => {
+    const geometry = {
+      type: "LineString" as const,
+      coordinates: [
+        [6.773093, 51.204357],
+        [6.773365, 51.204536],
+        [6.7736983, 51.204826],
+      ],
+    };
+    const events = [
+      event("oc:roadworks", geometry, {
+        groupId: "works-duplicate",
+        type: "roadworks",
+        severity: "low",
+      }),
+      event("oc:other", geometry, {
+        groupId: "works-duplicate",
+        type: "other",
+        severity: "unknown",
+      }),
+    ];
+
+    const [group] = buildRoadConditionDisplayGroups(events);
+
+    expect(group?.events).toEqual(events);
+    expect(group?.lineGeometry).toEqual({
+      type: "MultiLineString",
+      coordinates: [geometry.coordinates],
+    });
+  });
+
   it("keeps different provider/source/group identities separate", () => {
     const geometry = {
       type: "LineString" as const,
@@ -194,5 +225,79 @@ describe("buildRoadConditionDisplayGroups", () => {
 
     expect(group?.lineGeometry).toEqual(geometry);
     expect(group?.markerCoordinates).toHaveLength(1);
+  });
+
+  it("deduplicates repeated members inside a source MultiLineString", () => {
+    const repeated = [
+      [6.77, 51.2],
+      [6.771, 51.2],
+    ];
+    const distinct = [
+      [6.78, 51.2],
+      [6.781, 51.2],
+    ];
+    const geometry = {
+      type: "MultiLineString" as const,
+      coordinates: [repeated, repeated, distinct],
+    };
+
+    const [group] = buildRoadConditionDisplayGroups([event("oc:multi-duplicate", geometry)]);
+
+    expect(group?.lineGeometry).toEqual({
+      type: "MultiLineString",
+      coordinates: [repeated, distinct],
+    });
+  });
+
+  it("renders an exact line overlap once while retaining every display group id", () => {
+    const geometry = {
+      type: "LineString" as const,
+      coordinates: [
+        [6.7766986, 51.215633],
+        [6.775376, 51.215633],
+      ],
+    };
+    const groups = buildRoadConditionDisplayGroups([
+      event("oc:congestion", geometry, {
+        groupId: "congestion-group",
+        type: "congestion",
+        severity: "medium",
+      }),
+      event("oc:roadworks", geometry, {
+        groupId: "roadworks-group",
+        type: "roadworks",
+        severity: "low",
+      }),
+    ]);
+
+    expect(buildRoadConditionDisplayLines(groups)).toEqual([
+      {
+        geometry,
+        displayIds: [
+          "group:road-conditions-openconditions:source-a:congestion-group",
+          "group:road-conditions-openconditions:source-a:roadworks-group",
+        ],
+      },
+    ]);
+  });
+
+  it("keeps opposite-direction line components separate", () => {
+    const forward = {
+      type: "LineString" as const,
+      coordinates: [
+        [6.77, 51.2],
+        [6.78, 51.2],
+      ],
+    };
+    const reverse = {
+      type: "LineString" as const,
+      coordinates: [...forward.coordinates].reverse(),
+    };
+    const groups = buildRoadConditionDisplayGroups([
+      event("oc:forward", forward, { groupId: "forward" }),
+      event("oc:reverse", reverse, { groupId: "reverse" }),
+    ]);
+
+    expect(buildRoadConditionDisplayLines(groups)).toHaveLength(2);
   });
 });

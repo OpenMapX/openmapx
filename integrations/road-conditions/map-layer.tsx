@@ -18,7 +18,11 @@ import { useMap } from "@/lib/MapContext";
 import { useOverlayMinZoom } from "@/lib/overlayZoomGate";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { useIntegrationDomainAttribution } from "@/lib/useIntegrationAttribution";
-import { buildRoadConditionDisplayGroups, type RoadConditionDisplayGroup } from "./display";
+import {
+  buildRoadConditionDisplayGroups,
+  buildRoadConditionDisplayLines,
+  type RoadConditionDisplayGroup,
+} from "./display";
 import { isUnconfirmedCrowd } from "./evidence";
 import { markerImageData, markerImageId, parseMarkerImageId } from "./markers";
 import {
@@ -144,12 +148,14 @@ function rawFeatureToEvent(feature: RawFeature): RoadConditionEvent | null {
   return event;
 }
 
-function mostSevereEvent(group: RoadConditionDisplayGroup): RoadConditionEvent {
-  return group.events.reduce((best, event) => {
+function mostSevereEvent(events: RoadConditionEvent[]): RoadConditionEvent {
+  const [first, ...rest] = events;
+  if (!first) throw new Error("Cannot select severity from an empty road-condition group");
+  return rest.reduce((best, event) => {
     const bestRank = SEVERITY_RANK[best.severity] ?? 0;
     const eventRank = SEVERITY_RANK[event.severity] ?? 0;
     return eventRank > bestRank ? event : best;
-  });
+  }, first);
 }
 
 function roadNames(event: RoadConditionEvent): string | undefined {
@@ -202,13 +208,13 @@ function markerProperties(
 /**
  * Build the marker + line source data from the raw /events FeatureCollection:
  * one marker per display group (or every real endpoint where a group has no
- * line), and one line feature per display group. Child event records stay in an
- * in-memory lookup for popup resolution; full child payloads are never placed
- * in MapLibre feature properties.
+ * line), and one visual line feature per unique rendered component set. Exact
+ * overlaps can represent multiple display groups; child event records stay in
+ * an in-memory lookup for popup resolution, and full child payloads are never
+ * placed in MapLibre feature properties.
  */
 export function buildSources(features: RawFeature[]): RoadConditionDisplaySources {
   const markerFeatures: unknown[] = [];
-  const lineFeatures: unknown[] = [];
   const events = features
     .map(rawFeatureToEvent)
     .filter((event): event is RoadConditionEvent => event !== null);
@@ -218,7 +224,7 @@ export function buildSources(features: RawFeature[]): RoadConditionDisplaySource
   );
 
   for (const group of groups) {
-    const event = mostSevereEvent(group);
+    const event = mostSevereEvent(group.events);
     const properties = markerProperties(group, event);
     for (const point of group.markerCoordinates) {
       markerFeatures.push({
@@ -227,18 +233,29 @@ export function buildSources(features: RawFeature[]): RoadConditionDisplaySource
         properties,
       });
     }
-    if (group.lineGeometry) {
-      lineFeatures.push({
+  }
+
+  const lineFeatures = buildRoadConditionDisplayLines(groups).flatMap((line) => {
+    const lineEvents = line.displayIds.flatMap(
+      (displayId) => eventsByDisplayId.get(displayId) ?? [],
+    );
+    if (lineEvents.length === 0) return [];
+    const event = mostSevereEvent(lineEvents);
+    return [
+      {
         type: "Feature",
-        geometry: group.lineGeometry,
+        geometry: line.geometry,
         properties: {
           severity: event.severity,
-          future: group.events.every(isFutureRoadCondition),
-          _displayId: group.displayId,
+          future: lineEvents.every(isFutureRoadCondition),
+          // Keep `_displayId` for single-group consumers; `_displayIds` carries
+          // every group represented by an exact-overlap visual line.
+          _displayId: line.displayIds[0],
+          _displayIds: line.displayIds,
         },
-      });
-    }
-  }
+      },
+    ];
+  });
 
   return {
     data: {

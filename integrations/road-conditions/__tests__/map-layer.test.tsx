@@ -381,6 +381,62 @@ describe("road-condition display grouping", () => {
     });
   });
 
+  it("renders exact line overlaps once while keeping every display group for clicks", () => {
+    const geometry = {
+      type: "LineString" as const,
+      coordinates: [
+        [6.7766986, 51.215633],
+        [6.775376, 51.215633],
+      ],
+    };
+    const { data, eventsByDisplayId } = buildSources([
+      {
+        geometry,
+        properties: {
+          id: "congestion",
+          source: "duesseldorf",
+          provider: "road-conditions-openconditions",
+          groupId: "congestion-group",
+          type: "congestion",
+          severity: "medium",
+          headline: "Traffic congestion",
+        },
+      },
+      {
+        geometry,
+        properties: {
+          id: "roadworks",
+          source: "duesseldorf",
+          provider: "road-conditions-openconditions",
+          groupId: "roadworks-group",
+          type: "roadworks",
+          severity: "low",
+          headline: "Road works",
+        },
+      },
+    ]);
+
+    const lines = (data as GeoJSON.FeatureCollection).features.filter(
+      (feature) =>
+        feature.geometry.type === "LineString" || feature.geometry.type === "MultiLineString",
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]?.properties).toMatchObject({
+      severity: "medium",
+      _displayIds: [
+        "group:road-conditions-openconditions:duesseldorf:congestion-group",
+        "group:road-conditions-openconditions:duesseldorf:roadworks-group",
+      ],
+    });
+    expect([...eventsByDisplayId.keys()]).toEqual([
+      "group:road-conditions-openconditions:duesseldorf:congestion-group",
+      "group:road-conditions-openconditions:duesseldorf:roadworks-group",
+    ]);
+    expect(
+      eventsByDisplayId.get("group:road-conditions-openconditions:duesseldorf:roadworks-group"),
+    ).toHaveLength(1);
+  });
+
   it("aggregates mixed grouped source records into one summary and keeps every record in details", () => {
     const dateFrom = "2026-06-22T05:00:00.000Z";
     const dateTo = "2026-09-01T15:00:00.000Z";

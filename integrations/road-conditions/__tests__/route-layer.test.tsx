@@ -282,6 +282,46 @@ describe("RouteConditionsLayer", () => {
     );
   });
 
+  it("renders exact overlapping route groups once while retaining both display ids", async () => {
+    const geometry = {
+      type: "LineString" as const,
+      coordinates: [
+        [8, 50.001],
+        [8, 50.004],
+      ],
+    };
+    fetchMock.mockResolvedValueOnce([
+      {
+        id: "oc:route-congestion",
+        source: "autobahn",
+        provider: "road-conditions-openconditions",
+        groupId: "congestion-group",
+        type: "congestion",
+        severity: "medium",
+        headline: "Traffic congestion",
+        geometry,
+      },
+      {
+        id: "oc:route-roadworks",
+        source: "autobahn",
+        provider: "road-conditions-openconditions",
+        groupId: "roadworks-group",
+        type: "roadworks",
+        severity: "low",
+        headline: "Road works",
+        geometry,
+      },
+    ]);
+
+    render(<RouteConditionsLayer />);
+    await waitFor(() => expect(sourceFeatures("LineString")).toHaveLength(1));
+
+    expect(sourceFeatures("LineString")[0]?.properties?._displayIds).toEqual([
+      "group:road-conditions-openconditions:autobahn:congestion-group",
+      "group:road-conditions-openconditions:autobahn:roadworks-group",
+    ]);
+  });
+
   it("keeps unrelated route alerts distinct even when their geometry and date match", async () => {
     fetchMock.mockResolvedValueOnce([
       {
