@@ -1,6 +1,11 @@
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { RoadConditionEvent } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
 import { buildRoadConditionDisplayGroups } from "../display";
+
+const DISPLAY_SOURCE_DIR = dirname(fileURLToPath(import.meta.url)).replace(/\/__tests__$/, "");
 
 function event(
   id: string,
@@ -20,6 +25,24 @@ function event(
 }
 
 describe("buildRoadConditionDisplayGroups", () => {
+  it("uses source-resolvable local imports for the production bundler", () => {
+    const source = readFileSync(resolve(DISPLAY_SOURCE_DIR, "display.ts"), "utf8");
+    const localImports = [...source.matchAll(/from\s+["'](\.[^"']+)["']/g)].map(
+      ([, specifier]) => specifier,
+    );
+
+    expect(localImports.length).toBeGreaterThan(0);
+    for (const specifier of localImports) {
+      const candidate = resolve(DISPLAY_SOURCE_DIR, specifier ?? "");
+      const hasSourceFile = /\.[a-z]+$/i.test(specifier ?? "")
+        ? existsSync(candidate)
+        : [".ts", ".tsx", ".js", ".jsx"].some((extension) =>
+            existsSync(`${candidate}${extension}`),
+          );
+      expect(hasSourceFile, `unresolvable local import: ${specifier}`).toBe(true);
+    }
+  });
+
   it("combines explicitly grouped line records into one line and one representative marker", () => {
     const events = [
       event(

@@ -1,5 +1,5 @@
 import type { RoadConditionEvent } from "@openmapx/core";
-import { markerPoints, representativePoint } from "./markers.js";
+import { markerPoints, representativePoint } from "./markers";
 
 export type DisplayCoordinate = [number, number];
 type LineString = Extract<RoadConditionEvent["geometry"], { type: "LineString" }>;
