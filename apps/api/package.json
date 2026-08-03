@@ -52,7 +52,7 @@
     "pino": "^10.3.1",
     "postgres": "^3.4.9",
     "simple-git": "^3.36.0",
-    "tsx": "4.23.0",
+    "tsx": "4.23.1",
     "undici": "^8.7.0"
   },
   "devDependencies": {
@@ -61,7 +61,7 @@
     "@vitest/coverage-v8": "^4.1.8",
     "drizzle-kit": "^0.31.10",
     "esbuild": "^0.28.0",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.8"
   }
 }

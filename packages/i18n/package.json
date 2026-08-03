@@ -6,6 +6,6 @@
   "main": "./index.ts",
   "types": "./index.ts",
   "devDependencies": {
-    "tsx": "4.23.0"
+    "tsx": "4.23.1"
   }
 }
