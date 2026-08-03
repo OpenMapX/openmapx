@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
   CANDIDATE_MANIFEST_FILENAME,
@@ -355,7 +355,8 @@ async function promoteTwoSlot(
  *   3. `docker stop motis`, then rename `data/motis/live` →
  *      `data/motis/live.previous` and `data/motis/staging` →
  *      `data/motis/live` (so the rename never happens under a running mount).
- *      Recreate an empty staging dir so the next pipeline run has a clean target.
+ *      Recreate an empty staging dir with the same permissions so the next
+ *      pipeline run has a clean, writable target.
  *   4. `docker restart motis` and poll `/api/v1/map/initial` until it responds
  *      (5-minute budget).
  *
@@ -471,6 +472,17 @@ export const run: StageFn = async (ctx) => {
     }
 
     // Second rename: staging → current.
+    // Preserve the staging root's access mode across the rename. The next
+    // import writes MOTIS's compiled data into a newly-created staging dir;
+    // mkdir's default mode would otherwise apply the process umask and can
+    // silently turn a deliberately group/world-writable bind dir into 0755.
+    let stagingMode = 0o755;
+    try {
+      stagingMode = statSync(stagingDir).mode & 0o777;
+    } catch {
+      // The rename below will provide the authoritative failure if the path
+      // disappeared between the pre-flight check and the swap.
+    }
     try {
       renameSync(stagingDir, currentDir);
     } catch (error) {
@@ -497,7 +509,10 @@ export const run: StageFn = async (ctx) => {
 
     // Recreate an empty staging dir for the next cycle.
     try {
-      mkdirSync(stagingDir, { recursive: true });
+      mkdirSync(stagingDir, { recursive: true, mode: stagingMode });
+      // mkdir applies the process umask, so explicitly restore the exact mode
+      // captured above rather than relying on the requested mode alone.
+      chmodSync(stagingDir, stagingMode);
     } catch {
       // Non-fatal: the next pipeline run will recreate it.
     }

@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -6,6 +7,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -264,6 +266,25 @@ describe("promote stage", () => {
     const artifacts = result.artifacts as { rollback?: boolean; previousDir?: string };
     expect(artifacts.rollback).toBe(false);
     expect(artifacts.previousDir).toBe(fx.previousDir);
+  });
+
+  it("preserves staging directory permissions for the next import", async () => {
+    const fx = setupFixture({ staging: true, current: true });
+    chmodSync(fx.stagingDir, 0o777);
+    globalThis.fetch = vi.fn(async (input: unknown) => {
+      const url = typeof input === "string" ? input : (input as Request | URL).toString();
+      return jsonResponse(successfulBody(url));
+    }) as unknown as typeof fetch;
+
+    const result = await promoteRun(
+      makeCtx({
+        dataDir: fx.dataDir,
+        runner: async () => {},
+      }),
+    );
+
+    expect(result.status).toBe("ok");
+    expect(statSync(fx.stagingDir).mode & 0o777).toBe(0o777);
   });
 
   it("rejects a candidate whose epoch duplicates the active dataset", async () => {
