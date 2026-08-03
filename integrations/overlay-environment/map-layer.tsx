@@ -1,10 +1,11 @@
 "use client";
 
 import { escapeHtml, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
-import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
+import type { MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
+import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
@@ -157,6 +158,12 @@ export function EnvironmentLayer() {
   const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const prevSensorRef = useRef(sensorType);
+  const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
+    mapRef,
+    mapReady,
+    styleVersion,
+    visible: layerVisible,
+  });
 
   const fetchStations = useCallback(async () => {
     const map = mapRef.current;
@@ -169,24 +176,32 @@ export function EnvironmentLayer() {
       `&north=${bounds.getNorth()}&east=${bounds.getEast()}` +
       `&sensor=${sensorType}`;
 
+    const request = beginRequest();
     setLoading(true);
     try {
-      const res = await fetch(url);
-      if (!res.ok) return;
+      const res = await fetch(url, { signal: request.signal });
+      if (!request.isCurrent() || !res.ok) return;
       const stations = (await res.json()) as EnvStation[];
+      if (!request.isCurrent()) return;
       setStationCount(stations.length);
 
       const geojson = buildGeoJson(stations);
-      const source = map.getSource(ENV_SOURCE_ID) as GeoJSONSource | undefined;
-      if (source) {
-        source.setData(geojson);
-      }
+      publishGeoJson([{ sourceId: ENV_SOURCE_ID, data: geojson }]);
     } catch {
       // silent
     } finally {
-      setLoading(false);
+      if (request.isLatest()) setLoading(false);
     }
-  }, [env.apiUrl, mapRef, sensorType, setLoading, setStationCount, minZoom]);
+  }, [
+    beginRequest,
+    env.apiUrl,
+    mapRef,
+    sensorType,
+    publishGeoJson,
+    setLoading,
+    setStationCount,
+    minZoom,
+  ]);
 
   // Refetch when sensor type changes
   useEffect(() => {

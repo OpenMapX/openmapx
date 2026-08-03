@@ -1,11 +1,12 @@
 "use client";
 
 import { useDebouncedCallback } from "@openmapx/core";
-import type { GeoJSONSource, MapMouseEvent } from "maplibre-gl";
+import type { MapMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
+import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { useHikingStore } from "./store";
@@ -39,6 +40,12 @@ export function MountainShelterLayer() {
   const t = useTranslations("hiking");
   const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
+    mapRef,
+    mapReady,
+    styleVersion,
+    visible: layerVisible,
+  });
   const shelterLabelsRef = useRef<Record<string, string>>({});
   shelterLabelsRef.current = Object.fromEntries(
     Object.entries(SHELTER_TYPE_KEYS).map(([type, key]) => [type, t(key)]),
@@ -52,18 +59,17 @@ export function MountainShelterLayer() {
     const { apiUrl } = env;
     const url = `${apiUrl}/api/integrations/overlay-hiking/hiking/shelters?south=${bounds.getSouth()}&west=${bounds.getWest()}&north=${bounds.getNorth()}&east=${bounds.getEast()}`;
 
+    const request = beginRequest();
     try {
-      const res = await fetch(url);
-      if (!res.ok) return;
+      const res = await fetch(url, { signal: request.signal });
+      if (!request.isCurrent() || !res.ok) return;
       const data = await res.json();
-      const source = map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
-      if (source) {
-        source.setData(data);
-      }
+      if (!request.isCurrent()) return;
+      publishGeoJson([{ sourceId: SOURCE_ID, data }]);
     } catch {
       // Silent failure
     }
-  }, [env, mapRef]);
+  }, [beginRequest, env, mapRef, publishGeoJson]);
 
   // Combined layer management + initial fetch
   useEffect(() => {

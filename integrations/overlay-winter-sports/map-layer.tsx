@@ -1,10 +1,11 @@
 "use client";
 
 import { escapeHtml, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
-import type { GeoJSONSource, MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
+import type { MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
+import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
@@ -118,6 +119,12 @@ export function WinterSportsLayer() {
   useOverlayExclusion("winter-sports", layerVisible);
   const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
+    mapRef,
+    mapReady,
+    styleVersion,
+    visible: layerVisible,
+  });
 
   const fetchFeatures = useCallback(async () => {
     const map = mapRef.current;
@@ -127,11 +134,13 @@ export function WinterSportsLayer() {
     const { apiUrl } = env;
     const url = `${apiUrl}/api/winter-sports/features?south=${bounds.getSouth()}&west=${bounds.getWest()}&north=${bounds.getNorth()}&east=${bounds.getEast()}`;
 
+    const request = beginRequest();
     setLoading(true);
     try {
-      const res = await fetch(url);
-      if (!res.ok) return;
+      const res = await fetch(url, { signal: request.signal });
+      if (!request.isCurrent() || !res.ok) return;
       const data = await res.json();
+      if (!request.isCurrent()) return;
 
       const features: GeoJSON.Feature[] = [];
 
@@ -186,16 +195,13 @@ export function WinterSportsLayer() {
         features,
       };
 
-      const source = map.getSource(VECTOR_SOURCE_ID) as GeoJSONSource | undefined;
-      if (source) {
-        source.setData(geojson);
-      }
+      publishGeoJson([{ sourceId: VECTOR_SOURCE_ID, data: geojson }]);
     } catch {
       // Silent failure
     } finally {
-      setLoading(false);
+      if (request.isLatest()) setLoading(false);
     }
-  }, [env, mapRef, setLoading]);
+  }, [beginRequest, env, mapRef, publishGeoJson, setLoading]);
 
   // Manage layers
   useEffect(() => {

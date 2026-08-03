@@ -6,11 +6,13 @@ import {
   type RoadConditionEvent,
   useNavigationStore,
 } from "@openmapx/core";
-import type { GeoJSONSource, MapGeoJSONFeature } from "maplibre-gl";
+import type { MapGeoJSONFeature } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
+import type { GeoJsonSourceData } from "@/components/map/layers/layerStyleUtils";
+import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import {
   registerMapOverlayInteraction,
   removeMapOverlayPopup,
@@ -21,7 +23,7 @@ import { useMap } from "@/lib/MapContext";
 import { useOverlayMinZoom } from "@/lib/overlayZoomGate";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { useDrawnDirectionsRoutes } from "@/lib/useDrawnDirectionsRoutes";
-import { buildRoadConditionDisplayGroups } from "./display";
+import { buildRoadConditionDisplayGroups, type RoadConditionDisplayGroup } from "./display";
 import { markerImageId } from "./markers";
 import { buildRoadConditionPopupHtml } from "./popup";
 import { useRoadConditionsStore } from "./store";
@@ -33,8 +35,7 @@ import {
 } from "./visual-style";
 
 const OVERLAY_ID = "road-conditions";
-const MARKER_SOURCE = "omx-road-conditions-route-markers";
-const LINE_SOURCE = "omx-road-conditions-route-lines";
+const SOURCE = "omx-road-conditions-route";
 const MARKER_LAYER = "omx-road-conditions-route-markers";
 const LINE_LAYER = "omx-road-conditions-route-line";
 
@@ -56,6 +57,56 @@ const EMPTY = { type: "FeatureCollection" as const, features: [] };
 // perfectly memoized re-triggers this effect every render, and each run would
 // otherwise hand React a brand-new empty array, forcing another render forever.
 const EMPTY_EVENTS: RoadConditionEvent[] = [];
+
+interface RouteSourceData {
+  data: GeoJsonSourceData;
+}
+
+function buildRouteSourceData(displayGroups: RoadConditionDisplayGroup[]): RouteSourceData {
+  const markers = displayGroups.flatMap((group) => {
+    const event = group.events.reduce((best, candidate) => {
+      const bestRank = SEVERITY_RANK[best.severity] ?? 0;
+      const candidateRank = SEVERITY_RANK[candidate.severity] ?? 0;
+      return candidateRank > bestRank ? candidate : best;
+    });
+    const future = group.events.every(isFutureRoadCondition);
+    return group.markerCoordinates.map((point) => ({
+      type: "Feature" as const,
+      geometry: { type: "Point" as const, coordinates: point },
+      properties: {
+        headline: event.headline,
+        severity: event.severity,
+        _icon: markerImageId(event.type, event.severity),
+        _id: group.events.length === 1 ? event.id : group.displayId,
+        _displayId: group.displayId,
+        _sev: SEVERITY_RANK[event.severity] ?? 0,
+        future,
+      },
+    }));
+  });
+  const lines = displayGroups.flatMap((group) => {
+    if (!group.lineGeometry) return [];
+    const event = group.events.reduce((best, candidate) => {
+      const bestRank = SEVERITY_RANK[best.severity] ?? 0;
+      const candidateRank = SEVERITY_RANK[candidate.severity] ?? 0;
+      return candidateRank > bestRank ? candidate : best;
+    });
+    return [
+      {
+        type: "Feature" as const,
+        geometry: group.lineGeometry as GeoJSON.Geometry,
+        properties: {
+          severity: event.severity,
+          future: group.events.every(isFutureRoadCondition),
+          _displayId: group.displayId,
+        },
+      },
+    ];
+  });
+  return {
+    data: { type: "FeatureCollection", features: [...markers, ...lines] },
+  };
+}
 
 /** Bounding box around a whole route, padded enough to catch its shoulder. */
 function routeBounds(geometry: [number, number][]): [number, number, number, number] | null {
@@ -97,6 +148,12 @@ export function RouteConditionsLayer() {
 
   const [events, setEvents] = useState<RoadConditionEvent[]>(EMPTY_EVENTS);
   const hasRouteDataRef = useRef(false);
+  const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
+    mapRef,
+    mapReady,
+    styleVersion,
+    visible: layerVisible,
+  });
   const setRouteFetchStatus = useRoadConditionsStore((s) => s.setRouteFetchStatus);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const dtf = useDateTimeFormat();
@@ -123,6 +180,7 @@ export function RouteConditionsLayer() {
 
     let cancelled = false;
     let inFlight = false;
+    let activeRequest: ReturnType<typeof beginRequest> | null = null;
     let timer: ReturnType<typeof setInterval> | undefined;
 
     // A changed route must not briefly display incidents projected on the old
@@ -135,10 +193,12 @@ export function RouteConditionsLayer() {
     const load = async () => {
       if (cancelled || inFlight) return;
       inFlight = true;
+      const request = beginRequest();
+      activeRequest = request;
       setRouteFetchStatus("loading");
       try {
-        const result = await fetchRoadConditionsWithStatus(box);
-        if (cancelled) return;
+        const result = await fetchRoadConditionsWithStatus(box, { signal: request.signal });
+        if (cancelled || !request.isCurrent()) return;
         if (result.ok) {
           setEvents(result.events);
           hasRouteDataRef.current = true;
@@ -147,7 +207,7 @@ export function RouteConditionsLayer() {
           setRouteFetchStatus(hasRouteDataRef.current ? "stale" : "error");
         }
       } catch {
-        if (!cancelled) {
+        if (!cancelled && request.isCurrent()) {
           setRouteFetchStatus(hasRouteDataRef.current ? "stale" : "error");
         }
       } finally {
@@ -182,10 +242,11 @@ export function RouteConditionsLayer() {
     map.on("zoomend", syncPolling);
     return () => {
       cancelled = true;
+      activeRequest?.cancel();
       stopPolling();
       map.off("zoomend", syncPolling);
     };
-  }, [layerVisible, geometry, mapRef, mapReady, minZoom, setRouteFetchStatus]);
+  }, [beginRequest, layerVisible, geometry, mapRef, mapReady, minZoom, setRouteFetchStatus]);
 
   const onRoute = useMemo(() => {
     if (geometry.length < 2 || events.length === 0) return [];
@@ -235,8 +296,7 @@ export function RouteConditionsLayer() {
         try {
           if (map.getLayer(MARKER_LAYER)) map.removeLayer(MARKER_LAYER);
           if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER);
-          if (map.getSource(MARKER_SOURCE)) map.removeSource(MARKER_SOURCE);
-          if (map.getSource(LINE_SOURCE)) map.removeSource(LINE_SOURCE);
+          if (map.getSource(SOURCE)) map.removeSource(SOURCE);
         } catch {
           // Style already torn down.
         }
@@ -251,9 +311,8 @@ export function RouteConditionsLayer() {
         return;
       }
       idleRetryScheduled = false;
-      if (!map.getSource(LINE_SOURCE)) map.addSource(LINE_SOURCE, { type: "geojson", data: EMPTY });
-      if (!map.getSource(MARKER_SOURCE)) {
-        map.addSource(MARKER_SOURCE, { type: "geojson", data: EMPTY });
+      if (!map.getSource(SOURCE)) {
+        map.addSource(SOURCE, { type: "geojson", data: EMPTY });
       }
       if (!map.getLayer(LINE_LAYER)) {
         addLayerInSlot(
@@ -261,7 +320,8 @@ export function RouteConditionsLayer() {
           {
             id: LINE_LAYER,
             type: "line",
-            source: LINE_SOURCE,
+            source: SOURCE,
+            filter: ["match", ["geometry-type"], ["LineString", "MultiLineString"], true, false],
             maxzoom: minZoom,
             layout: { "line-cap": "round", "line-join": "round" },
             paint: {
@@ -293,7 +353,8 @@ export function RouteConditionsLayer() {
           {
             id: MARKER_LAYER,
             type: "symbol",
-            source: MARKER_SOURCE,
+            source: SOURCE,
+            filter: ["==", ["geometry-type"], "Point"],
             maxzoom: minZoom,
             layout: {
               "icon-image": ["get", "_icon"],
@@ -322,60 +383,10 @@ export function RouteConditionsLayer() {
 
   useEffect(() => {
     void styleVersion;
-    const map = mapRef.current;
-    if (!map) return;
-    const markerSource = map.getSource(MARKER_SOURCE) as GeoJSONSource | undefined;
-    const lineSource = map.getSource(LINE_SOURCE) as GeoJSONSource | undefined;
-    if (!markerSource || !lineSource) return;
-
-    markerSource.setData({
-      type: "FeatureCollection",
-      features: displayGroups.flatMap((group) => {
-        const event = group.events.reduce((best, candidate) => {
-          const bestRank = SEVERITY_RANK[best.severity] ?? 0;
-          const candidateRank = SEVERITY_RANK[candidate.severity] ?? 0;
-          return candidateRank > bestRank ? candidate : best;
-        });
-        const future = group.events.every(isFutureRoadCondition);
-        return group.markerCoordinates.map((point) => ({
-          type: "Feature" as const,
-          geometry: { type: "Point" as const, coordinates: point },
-          properties: {
-            headline: event.headline,
-            severity: event.severity,
-            _icon: markerImageId(event.type, event.severity),
-            _id: group.events.length === 1 ? event.id : group.displayId,
-            _displayId: group.displayId,
-            _sev: SEVERITY_RANK[event.severity] ?? 0,
-            future,
-          },
-        }));
-      }),
-    });
-
-    lineSource.setData({
-      type: "FeatureCollection",
-      features: displayGroups.flatMap((group) => {
-        if (!group.lineGeometry) return [];
-        const event = group.events.reduce((best, candidate) => {
-          const bestRank = SEVERITY_RANK[best.severity] ?? 0;
-          const candidateRank = SEVERITY_RANK[candidate.severity] ?? 0;
-          return candidateRank > bestRank ? candidate : best;
-        });
-        return [
-          {
-            type: "Feature" as const,
-            geometry: group.lineGeometry as GeoJSON.Geometry,
-            properties: {
-              severity: event.severity,
-              future: group.events.every(isFutureRoadCondition),
-              _displayId: group.displayId,
-            },
-          },
-        ];
-      }),
-    });
-  }, [mapRef, styleVersion, displayGroups]);
+    if (!layerVisible) return;
+    const sourceData = buildRouteSourceData(displayGroups);
+    publishGeoJson([{ sourceId: SOURCE, data: sourceData.data }]);
+  }, [displayGroups, layerVisible, publishGeoJson, styleVersion]);
 
   // Route markers and route lines resolve through the same grouped popup as
   // the area overlay. This keeps a line click and a marker click equivalent,

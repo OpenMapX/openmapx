@@ -6,6 +6,7 @@ import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
+import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import {
   registerMapOverlayInteraction,
   removeMapOverlayPopup,
@@ -46,8 +47,7 @@ const OVERLAY_ID = "road-conditions";
  * them: renaming the overlay would otherwise silently drop the credits.
  */
 const CREDIT_DOMAIN = "road-conditions";
-const MARKER_SOURCE = "omx-road-conditions-markers";
-const LINE_SOURCE = "omx-road-conditions-lines";
+const SOURCE = "omx-road-conditions";
 const LINE_LAYER = "omx-road-conditions-line";
 const MARKER_LAYER = "omx-road-conditions-markers";
 
@@ -84,8 +84,7 @@ export interface RawFeature {
 }
 
 export interface RoadConditionDisplaySources {
-  markers: GeoJsonData;
-  lines: GeoJsonData;
+  data: GeoJsonData;
   /** In-memory child records used to resolve a grouped marker's popup. */
   eventsByDisplayId: Map<string, RoadConditionEvent[]>;
 }
@@ -242,8 +241,10 @@ export function buildSources(features: RawFeature[]): RoadConditionDisplaySource
   }
 
   return {
-    markers: { type: "FeatureCollection", features: markerFeatures } as GeoJsonData,
-    lines: { type: "FeatureCollection", features: lineFeatures } as GeoJsonData,
+    data: {
+      type: "FeatureCollection",
+      features: [...markerFeatures, ...lineFeatures],
+    } as GeoJsonData,
     eventsByDisplayId,
   };
 }
@@ -265,8 +266,12 @@ export function RoadConditionsLayer() {
   useOverlayExclusion(OVERLAY_ID, layerVisible);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const eventsByDisplayIdRef = useRef<Map<string, RoadConditionEvent[]>>(new Map());
-  const requestGenerationRef = useRef(0);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
+    mapRef,
+    mapReady,
+    styleVersion,
+    visible: layerVisible,
+  });
   const hasViewportDataRef = useRef(false);
   // Keep the latest formatters/translator in refs so the imperative popup click
   // handler (bound once per effect) always uses the current prefs + locale.
@@ -289,14 +294,15 @@ export function RoadConditionsLayer() {
 
   const fetchData = useCallback(async () => {
     const map = mapRef.current;
-    if (!map || map.getZoom() < minZoom) {
+    if (!map) {
       setViewportFetchStatus("idle");
       return;
     }
-    const generation = ++requestGenerationRef.current;
-    abortControllerRef.current?.abort();
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+    const request = beginRequest();
+    if (map.getZoom() < minZoom) {
+      setViewportFetchStatus("idle");
+      return;
+    }
     setViewportFetchStatus("loading");
     const b = map.getBounds();
     const base = apiUrl.replace(/\/$/, "");
@@ -309,25 +315,34 @@ export function RoadConditionsLayer() {
     if (horizonDays !== undefined) params.set("horizonDays", horizonDays);
     const url = `${base}/api/integrations/road-conditions/events?${params.toString()}`;
     try {
-      const res = await fetch(url, { credentials: "include", signal: controller.signal });
+      const res = await fetch(url, { credentials: "include", signal: request.signal });
       if (!res.ok) throw new Error(`road conditions request failed (${res.status})`);
       const fc = (await res.json()) as { features?: RawFeature[] };
-      if (controller.signal.aborted || generation !== requestGenerationRef.current) return;
-      const { markers, lines, eventsByDisplayId } = buildSources(
+      if (!request.isCurrent()) return;
+      const { data, eventsByDisplayId } = buildSources(
         Array.isArray(fc.features) ? fc.features : [],
       );
       eventsByDisplayIdRef.current = eventsByDisplayId;
-      (map.getSource(MARKER_SOURCE) as GeoJSONSource | undefined)?.setData(markers);
-      (map.getSource(LINE_SOURCE) as GeoJSONSource | undefined)?.setData(lines);
+      publishGeoJson([{ sourceId: SOURCE, data }]);
       hasViewportDataRef.current = true;
       setViewportFetchStatus("ready");
     } catch {
-      if (controller.signal.aborted || generation !== requestGenerationRef.current) return;
+      if (!request.isCurrent()) return;
       // Keep the last good source data visible while making the degraded state
       // explicit to the legend. A first-load failure has no stale data to keep.
       setViewportFetchStatus(hasViewportDataRef.current ? "stale" : "error");
     }
-  }, [apiUrl, mapRef, filterTypes, minSeverity, horizon, minZoom, setViewportFetchStatus]);
+  }, [
+    apiUrl,
+    beginRequest,
+    mapRef,
+    filterTypes,
+    minSeverity,
+    horizon,
+    minZoom,
+    publishGeoJson,
+    setViewportFetchStatus,
+  ]);
 
   // Bake a disc+glyph marker image on demand for each (type, severity) the
   // symbol layer requests. Synchronous canvas render → no flicker, no warnings.
@@ -360,8 +375,7 @@ export function RoadConditionsLayer() {
         try {
           if (map.getLayer(MARKER_LAYER)) map.removeLayer(MARKER_LAYER);
           if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER);
-          if (map.getSource(MARKER_SOURCE)) map.removeSource(MARKER_SOURCE);
-          if (map.getSource(LINE_SOURCE)) map.removeSource(LINE_SOURCE);
+          if (map.getSource(SOURCE)) map.removeSource(SOURCE);
         } catch {
           // In-flight render — ignore.
         }
@@ -381,14 +395,8 @@ export function RoadConditionsLayer() {
       }
       idleRetryScheduled = false;
       try {
-        if (!map.getSource(LINE_SOURCE)) {
-          map.addSource(LINE_SOURCE, {
-            type: "geojson",
-            data: { type: "FeatureCollection", features: [] },
-          });
-        }
-        if (!map.getSource(MARKER_SOURCE)) {
-          map.addSource(MARKER_SOURCE, {
+        if (!map.getSource(SOURCE)) {
+          map.addSource(SOURCE, {
             type: "geojson",
             data: { type: "FeatureCollection", features: [] },
           });
@@ -399,7 +407,8 @@ export function RoadConditionsLayer() {
             {
               id: LINE_LAYER,
               type: "line",
-              source: LINE_SOURCE,
+              source: SOURCE,
+              filter: ["match", ["geometry-type"], ["LineString", "MultiLineString"], true, false],
               minzoom: minZoom,
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
@@ -419,7 +428,8 @@ export function RoadConditionsLayer() {
             {
               id: MARKER_LAYER,
               type: "symbol",
-              source: MARKER_SOURCE,
+              source: SOURCE,
+              filter: ["==", ["geometry-type"], "Point"],
               minzoom: minZoom,
               layout: {
                 "icon-image": ["get", "_icon"],
@@ -459,9 +469,6 @@ export function RoadConditionsLayer() {
 
     const map = mapRef.current;
     if (!map || !mapReady || !layerVisible) {
-      requestGenerationRef.current += 1;
-      abortControllerRef.current?.abort();
-      abortControllerRef.current = null;
       hasViewportDataRef.current = false;
       eventsByDisplayIdRef.current = new Map();
       setViewportFetchStatus("idle");
@@ -469,14 +476,6 @@ export function RoadConditionsLayer() {
     }
     void fetchData();
   }, [mapReady, mapRef, styleVersion, layerVisible, fetchData, setViewportFetchStatus]);
-
-  useEffect(() => {
-    return () => {
-      requestGenerationRef.current += 1;
-      abortControllerRef.current?.abort();
-      abortControllerRef.current = null;
-    };
-  }, []);
 
   // bbox-driven refetch on pan/zoom.
   const debouncedFetch = useDebouncedCallback(() => fetchData(), 800);

@@ -4,6 +4,7 @@ import type { AlongRoutePoi, CategoryPlace } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import { useEffect } from "react";
 import { addLayerInSlot } from "@/components/map/layers/layerStack";
+import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { useMap } from "@/lib/MapContext";
 import { createMarkerSvg } from "@/lib/markerSvg";
 import { BRAND_HEX } from "@/lib/theme";
@@ -40,6 +41,12 @@ export function RouteSearchResultsLayer({
 }) {
   const { mapRef, mapReady, styleVersion } = useMap();
   const imageId = `route-search-pin-${categoryKey}`;
+  const { publish: publishGeoJson } = useGeoJsonSourceDataBridge({
+    mapRef,
+    mapReady,
+    styleVersion,
+    visible: true,
+  });
 
   useEffect(() => {
     void styleVersion;
@@ -83,21 +90,24 @@ export function RouteSearchResultsLayer({
 
   useEffect(() => {
     void styleVersion; // re-populate after the source is recreated on a style swap
-    const raw = mapRef.current?.getSource(SOURCE);
-    if (raw?.type !== "geojson") return;
-    (raw as maplibregl.GeoJSONSource).setData({
-      type: "FeatureCollection",
-      features: results.map((poi) => ({
-        type: "Feature" as const,
-        properties: {
-          id: poi.place.id,
-          imageId,
-          label: `+${Math.max(1, Math.round(poi.detourSeconds / 60))} min`,
+    publishGeoJson([
+      {
+        sourceId: SOURCE,
+        data: {
+          type: "FeatureCollection",
+          features: results.map((poi) => ({
+            type: "Feature" as const,
+            properties: {
+              id: poi.place.id,
+              imageId,
+              label: `+${Math.max(1, Math.round(poi.detourSeconds / 60))} min`,
+            },
+            geometry: { type: "Point" as const, coordinates: poi.place.coordinates },
+          })),
         },
-        geometry: { type: "Point" as const, coordinates: poi.place.coordinates },
-      })),
-    });
-  }, [mapRef, results, imageId, styleVersion]);
+      },
+    ]);
+  }, [imageId, publishGeoJson, results, styleVersion]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -126,12 +136,9 @@ export function RouteSearchResultsLayer({
   // Clear pins when the layer unmounts (search closed).
   useEffect(() => {
     return () => {
-      const raw = mapRef.current?.getSource(SOURCE);
-      if (raw && raw.type === "geojson") {
-        (raw as maplibregl.GeoJSONSource).setData({ type: "FeatureCollection", features: [] });
-      }
+      publishGeoJson([{ sourceId: SOURCE, data: { type: "FeatureCollection", features: [] } }]);
     };
-  }, [mapRef]);
+  }, [publishGeoJson]);
 
   return null;
 }

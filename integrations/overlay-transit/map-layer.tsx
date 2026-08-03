@@ -4,13 +4,13 @@ import { API_ENDPOINTS, apiClient, routeColor } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import type { TransitRoute } from "@openmapx/mobility-core/transit";
-import type { GeoJSONSource } from "maplibre-gl";
 import { useEffect, useState } from "react";
 import { addLayerInSlot } from "@/components/map/layers/layerStack";
 import {
   findVectorLineReference,
   setLayerVisibility,
 } from "@/components/map/layers/layerStyleUtils";
+import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { useMap } from "@/lib/MapContext";
 import { PRIMARY_BLUE_HEX } from "@/lib/theme";
 import { useMapAttributions } from "@/lib/useMapAttributions";
@@ -40,6 +40,16 @@ const EMPTY_FC: GeoJSON.FeatureCollection = { type: "FeatureCollection", feature
 export function TransitLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const showTransit = useTransitStore((s) => s.panelOpen && s.layerVisible);
+  const {
+    publish: publishGeoJson,
+    reset: resetGeoJson,
+    beginRequest,
+  } = useGeoJsonSourceDataBridge({
+    mapRef,
+    mapReady,
+    styleVersion,
+    visible: showTransit,
+  });
 
   // Runtime publisher credit carried by the MOTIS routes envelope. The manifest
   // declares no static dataSources (the operated network comes from whatever
@@ -121,8 +131,7 @@ export function TransitLayer() {
 
     let disposed = false;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    let requestSeq = 0;
-    let requestController: AbortController | null = null;
+    let activeRequest: ReturnType<typeof beginRequest> | null = null;
 
     const ensureLayer = () => {
       if (!map.isStyleLoaded() || map.getSource(MOTIS_SOURCE_ID)) return;
@@ -146,21 +155,19 @@ export function TransitLayer() {
     };
 
     const clearData = () => {
-      const src = map.getSource(MOTIS_SOURCE_ID) as GeoJSONSource | undefined;
-      src?.setData(EMPTY_FC);
+      resetGeoJson([{ sourceId: MOTIS_SOURCE_ID, data: EMPTY_FC }]);
       setRouteAttributions([]);
     };
 
     const fetchNetwork = async () => {
       if (disposed || !showTransit) return;
+      const request = beginRequest();
+      activeRequest = request;
       if (map.getZoom() < MOTIS_MIN_ZOOM) {
         clearData();
         return;
       }
       const b = map.getBounds();
-      const seq = ++requestSeq;
-      requestController?.abort();
-      requestController = new AbortController();
       try {
         const env = await apiClient.get<MobilityEnvelope<TransitRoute[]>>(
           API_ENDPOINTS.transitRoutes,
@@ -171,12 +178,10 @@ export function TransitLayer() {
             ne_lng: String(b.getEast()),
             zoom: String(Math.floor(map.getZoom())),
           },
-          { signal: requestController.signal },
+          { signal: request.signal },
         );
         // Ignore stale responses (user kept panning) and post-unmount results.
-        if (disposed || seq !== requestSeq) return;
-        const src = map.getSource(MOTIS_SOURCE_ID) as GeoJSONSource | undefined;
-        if (!src) return;
+        if (disposed || !request.isCurrent()) return;
         const features: GeoJSON.Feature[] = (env.data ?? [])
           .filter((r) => r.geometry)
           .map((r) => ({
@@ -184,7 +189,9 @@ export function TransitLayer() {
             properties: { color: routeColor(r, "#34A853"), routeId: r.id },
             geometry: r.geometry as GeoJSON.Geometry,
           }));
-        src.setData({ type: "FeatureCollection", features });
+        publishGeoJson([
+          { sourceId: MOTIS_SOURCE_ID, data: { type: "FeatureCollection", features } },
+        ]);
         // Credit the feed publishers for the geometry now on screen; clear when
         // nothing was drawn so the strip doesn't credit feeds with no visible data.
         setRouteAttributions(features.length > 0 ? (env.attributions ?? []) : []);
@@ -215,12 +222,12 @@ export function TransitLayer() {
 
     return () => {
       disposed = true;
-      requestController?.abort();
+      activeRequest?.cancel();
       if (debounceTimer) clearTimeout(debounceTimer);
       map.off("moveend", onMoveEnd);
       map.off("styledata", ensureLayer);
     };
-  }, [mapReady, mapRef, styleVersion, showTransit]);
+  }, [beginRequest, mapReady, mapRef, publishGeoJson, resetGeoJson, styleVersion, showTransit]);
 
   return null;
 }

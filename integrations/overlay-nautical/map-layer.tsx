@@ -8,9 +8,10 @@ import {
   useSidebarStore,
 } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
-import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
+import type { MapLayerMouseEvent } from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
+import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
@@ -263,6 +264,20 @@ export function NauticalLayer() {
 
   const harborsFetchKeyRef = useRef<string | null>(null);
   const stationsFetchKeyRef = useRef<string | null>(null);
+  const { publish: publishHarborGeoJson, beginRequest: beginHarborRequest } =
+    useGeoJsonSourceDataBridge({
+      mapRef,
+      mapReady,
+      styleVersion,
+      visible: layerVisible && showHarbors,
+    });
+  const { publish: publishStationGeoJson, beginRequest: beginStationRequest } =
+    useGeoJsonSourceDataBridge({
+      mapRef,
+      mapReady,
+      styleVersion,
+      visible: layerVisible && showTideStations,
+    });
 
   const fetchStations = useCallback(async () => {
     const map = mapRef.current;
@@ -282,16 +297,17 @@ export function NauticalLayer() {
     const url = `${env.apiUrl.replace(/\/$/, "")}/api/integrations/overlay-nautical/stations?${params.toString()}`;
     if (stationsFetchKeyRef.current === url) return;
     stationsFetchKeyRef.current = url;
+    const request = beginStationRequest();
     try {
-      const res = await fetch(url);
-      if (!res.ok) return;
+      const res = await fetch(url, { signal: request.signal });
+      if (!request.isCurrent() || !res.ok) return;
       const data = (await res.json()) as GeoJSON.FeatureCollection;
-      const source = map.getSource(STATION_SOURCE) as GeoJSONSource | undefined;
-      if (source) source.setData(data);
+      if (!request.isCurrent()) return;
+      publishStationGeoJson([{ sourceId: STATION_SOURCE, data }]);
     } catch {
       // Silent: stations are decorative, never fatal.
     }
-  }, [env.apiUrl, mapRef, tideStationFilter]);
+  }, [beginStationRequest, env.apiUrl, mapRef, publishStationGeoJson, tideStationFilter]);
 
   const fetchHarbors = useCallback(async () => {
     const map = mapRef.current;
@@ -305,24 +321,34 @@ export function NauticalLayer() {
     const url = `${env.apiUrl.replace(/\/$/, "")}/api/integrations/overlay-nautical/harbors?south=${b.getSouth()}&north=${b.getNorth()}&west=${b.getWest()}&east=${b.getEast()}&zoom=${zoom}`;
     if (harborsFetchKeyRef.current === url) return;
     harborsFetchKeyRef.current = url;
+    const request = beginHarborRequest();
     setLoading(true);
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: request.signal });
+      if (!request.isCurrent()) return;
       if (!res.ok) {
         setHarborsError(true);
         return;
       }
       const data = (await res.json()) as HarborFeatureCollection;
+      if (!request.isCurrent()) return;
       setHarbors(data);
       setHarborsError(false);
-      const source = map.getSource(HARBOR_SOURCE) as GeoJSONSource | undefined;
-      if (source) source.setData(data);
+      publishHarborGeoJson([{ sourceId: HARBOR_SOURCE, data }]);
     } catch {
-      setHarborsError(true);
+      if (request.isCurrent()) setHarborsError(true);
     } finally {
-      setLoading(false);
+      if (request.isLatest()) setLoading(false);
     }
-  }, [env.apiUrl, mapRef, setHarbors, setHarborsError, setLoading]);
+  }, [
+    beginHarborRequest,
+    env.apiUrl,
+    mapRef,
+    publishHarborGeoJson,
+    setHarbors,
+    setHarborsError,
+    setLoading,
+  ]);
 
   useEffect(() => {
     void styleVersion;

@@ -1,11 +1,12 @@
 "use client";
 
 import { escapeHtml, relativeTime, sanitizeUrl, useOverlayExclusion } from "@openmapx/core";
-import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
+import type { MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
+import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
@@ -148,6 +149,12 @@ export function EarthquakeLayer() {
   const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const pulseAnimRef = useRef<number | null>(null);
+  const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
+    mapRef,
+    mapReady,
+    styleVersion,
+    visible: layerVisible,
+  });
 
   const fetchEarthquakes = useCallback(async () => {
     const map = mapRef.current;
@@ -156,23 +163,31 @@ export function EarthquakeLayer() {
     const { apiUrl } = env;
     const url = `${apiUrl}/api/integrations/overlay-earthquakes/earthquakes?timeRange=${timeRange}&minMagnitude=${minMagnitude}`;
 
+    const request = beginRequest();
     setLoading(true);
     try {
-      const res = await fetch(url);
-      if (!res.ok) return;
+      const res = await fetch(url, { signal: request.signal });
+      if (!request.isCurrent() || !res.ok) return;
       const data = await res.json();
+      if (!request.isCurrent()) return;
 
-      const source = map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
-      if (source) {
-        source.setData(data);
-        setLastUpdated(Date.now());
-      }
+      publishGeoJson([{ sourceId: SOURCE_ID, data }]);
+      setLastUpdated(Date.now());
     } catch {
       // Silent fetch failure
     } finally {
-      setLoading(false);
+      if (request.isLatest()) setLoading(false);
     }
-  }, [env, mapRef, timeRange, minMagnitude, setLoading, setLastUpdated]);
+  }, [
+    beginRequest,
+    env,
+    mapRef,
+    timeRange,
+    minMagnitude,
+    publishGeoJson,
+    setLoading,
+    setLastUpdated,
+  ]);
 
   // Layer management
   useEffect(() => {

@@ -7,9 +7,10 @@ import {
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
-import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
+import type { MapLayerMouseEvent } from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
+import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
@@ -95,6 +96,12 @@ export function AirportsOverlay() {
   const setLastUpdated = useAirportsOverlayStore((s) => s.setLastUpdated);
   useOverlayExclusion("ourairports", layerVisible);
   const fetchedKeyRef = useRef<string | null>(null);
+  const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
+    mapRef,
+    mapReady,
+    styleVersion,
+    visible: layerVisible,
+  });
 
   const fetchAirports = useCallback(async () => {
     const map = mapRef.current;
@@ -120,22 +127,21 @@ export function AirportsOverlay() {
     if (fetchedKeyRef.current === key) return;
     fetchedKeyRef.current = key;
 
+    const request = beginRequest();
     setLoading(true);
     try {
-      const res = await fetch(url);
-      if (!res.ok) return;
+      const res = await fetch(url, { signal: request.signal });
+      if (!request.isCurrent() || !res.ok) return;
       const data = await res.json();
-      const source = map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
-      if (source) {
-        source.setData(data);
-        setLastUpdated(Date.now());
-      }
+      if (!request.isCurrent()) return;
+      publishGeoJson([{ sourceId: SOURCE_ID, data }]);
+      setLastUpdated(Date.now());
     } catch {
       // silent
     } finally {
-      setLoading(false);
+      if (request.isLatest()) setLoading(false);
     }
-  }, [env, mapRef, filter, setLoading, setLastUpdated, minZoom]);
+  }, [beginRequest, env, mapRef, filter, publishGeoJson, setLoading, setLastUpdated, minZoom]);
 
   // Layer add / remove + initial load
   useEffect(() => {

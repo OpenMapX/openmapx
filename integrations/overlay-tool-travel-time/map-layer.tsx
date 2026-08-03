@@ -5,6 +5,7 @@ import { useIsochrone, useReachableStops } from "@openmapx/core";
 import type { MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
+import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
 import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
@@ -51,6 +52,12 @@ export function TravelTimeLayer() {
   const mode = useTravelTimeStore((s) => s.mode);
   const selectedMinutes = useTravelTimeStore((s) => s.selectedMinutes);
   const anchored = useTravelTimeStore((s) => s.anchored);
+  const { publish: publishGeoJson } = useGeoJsonSourceDataBridge({
+    mapRef,
+    mapReady,
+    styleVersion,
+    visible: isActive,
+  });
 
   const draggingRef = useRef(false);
 
@@ -211,14 +218,10 @@ export function TravelTimeLayer() {
   // Update isochrone polygons
   useEffect(() => {
     void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady || !isActive) return;
-
-    const src = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
-    if (!src) return;
+    if (!mapReady || !isActive) return;
 
     if (!isochroneData || isochroneData.contours.length === 0) {
-      src.setData({ type: "FeatureCollection", features: [] });
+      publishGeoJson([{ sourceId: SOURCE_ID, data: { type: "FeatureCollection", features: [] } }]);
       return;
     }
 
@@ -238,22 +241,20 @@ export function TravelTimeLayer() {
         },
       }));
 
-    src.setData({ type: "FeatureCollection", features });
-  }, [mapRef, mapReady, styleVersion, isActive, isochroneData]);
+    publishGeoJson([{ sourceId: SOURCE_ID, data: { type: "FeatureCollection", features } }]);
+  }, [isActive, isochroneData, mapReady, publishGeoJson, styleVersion]);
 
   // Update transit reachability dots (one-to-all). Each reachable stop is
   // coloured by the transit mode and faded by which selected time band it falls
   // into (nearest band most opaque). Cleared whenever transit isn't selected.
   useEffect(() => {
     void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady || !isActive) return;
-
-    const src = map.getSource(REACH_SOURCE) as maplibregl.GeoJSONSource | undefined;
-    if (!src) return;
+    if (!mapReady || !isActive) return;
 
     if (!isTransit || !reachableStops?.length) {
-      src.setData({ type: "FeatureCollection", features: [] });
+      publishGeoJson([
+        { sourceId: REACH_SOURCE, data: { type: "FeatureCollection", features: [] } },
+      ]);
       return;
     }
 
@@ -275,35 +276,46 @@ export function TravelTimeLayer() {
         properties: { color, opacity, reachMinutes: r, name: stop.name },
       });
     }
-    src.setData({ type: "FeatureCollection", features });
-  }, [mapRef, mapReady, styleVersion, isActive, isTransit, reachableStops, selectedMinutes]);
+    publishGeoJson([{ sourceId: REACH_SOURCE, data: { type: "FeatureCollection", features } }]);
+  }, [
+    isActive,
+    isTransit,
+    mapReady,
+    publishGeoJson,
+    reachableStops,
+    selectedMinutes,
+    styleVersion,
+  ]);
 
   // Update origin marker
   useEffect(() => {
     void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady || !isActive) return;
-
-    const src = map.getSource(ORIGIN_SOURCE) as maplibregl.GeoJSONSource | undefined;
-    if (!src) return;
+    if (!mapReady || !isActive) return;
 
     if (!origin) {
-      src.setData({ type: "FeatureCollection", features: [] });
+      publishGeoJson([
+        { sourceId: ORIGIN_SOURCE, data: { type: "FeatureCollection", features: [] } },
+      ]);
       return;
     }
 
     const color = MODE_COLORS[mode];
-    src.setData({
-      type: "FeatureCollection",
-      features: [
-        {
-          type: "Feature",
-          geometry: { type: "Point", coordinates: origin },
-          properties: { color },
+    publishGeoJson([
+      {
+        sourceId: ORIGIN_SOURCE,
+        data: {
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              geometry: { type: "Point", coordinates: origin },
+              properties: { color },
+            },
+          ],
         },
-      ],
-    });
-  }, [mapRef, mapReady, styleVersion, isActive, origin, mode]);
+      },
+    ]);
+  }, [isActive, mapReady, mode, origin, publishGeoJson, styleVersion]);
 
   // Click handler to set origin — disabled in anchored mode (e.g. Explore), where
   // the origin is the searched place and a global click would hijack marker clicks.

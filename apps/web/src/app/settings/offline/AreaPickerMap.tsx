@@ -5,12 +5,11 @@ import { useColorScheme } from "@mui/material/styles";
 import type { AreaGeometry } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
+import { createGeoJsonSourceDataBridge } from "@/components/map/layers/layerStyleUtils";
 import { MapCredits } from "@/components/map/MapCredits";
 import { useEnv } from "@/lib/EnvProvider";
 import { baseMapCreditsHtml, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
 import type { OfflinePackageBbox } from "@/lib/offlineAreas";
-
-type GeoJSONSource = maplibregl.GeoJSONSource;
 
 const BOUNDARY_SOURCE = "picker-boundary-source";
 const BOUNDARY_FILL = "picker-boundary-fill";
@@ -53,17 +52,13 @@ function addBoundaryLayers(map: maplibregl.Map): void {
   });
 }
 
-function applyBoundary(map: maplibregl.Map | null, boundary: AreaGeometry | null): void {
-  const raw = map?.getSource(BOUNDARY_SOURCE);
-  if (raw?.type !== "geojson") return;
-  (raw as GeoJSONSource).setData(
-    boundary
-      ? {
-          type: "FeatureCollection",
-          features: [{ type: "Feature", properties: {}, geometry: boundary }],
-        }
-      : EMPTY,
-  );
+function boundaryData(boundary: AreaGeometry | null): GeoJSON.FeatureCollection {
+  return boundary
+    ? {
+        type: "FeatureCollection",
+        features: [{ type: "Feature", properties: {}, geometry: boundary }],
+      }
+    : EMPTY;
 }
 
 /**
@@ -76,6 +71,9 @@ function applyBoundary(map: maplibregl.Map | null, boundary: AreaGeometry | null
 export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, boundary }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const boundaryBridgeRef = useRef<ReturnType<typeof createGeoJsonSourceDataBridge> | null>(null);
+  if (!boundaryBridgeRef.current) boundaryBridgeRef.current = createGeoJsonSourceDataBridge();
+  const boundaryBridge = boundaryBridgeRef.current;
   // The parent updates its bbox state from this callback. Keep the callback
   // current without making it a map-lifecycle dependency: an inline callback
   // from the parent must not tear down and recreate the map on every move.
@@ -96,6 +94,7 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
     if (!containerRef.current) return;
     let destroyed = false;
     let map: maplibregl.Map | null = null;
+    let replayBoundary: (() => void) | null = null;
 
     const init = async () => {
       const maplibregl = (await import("maplibre-gl")).default;
@@ -143,9 +142,15 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
       map.on("load", () => {
         if (!map) return;
         addBoundaryLayers(map);
-        applyBoundary(map, boundaryRef.current);
+        boundaryBridge.publish([
+          { sourceId: BOUNDARY_SOURCE, data: boundaryData(boundaryRef.current) },
+        ]);
+        boundaryBridge.apply(map);
         emit();
       });
+      replayBoundary = () => boundaryBridge.apply(map as maplibregl.Map);
+      map.on("styledata", replayBoundary);
+      map.on("idle", replayBoundary);
       map.on("moveend", emit);
     };
 
@@ -156,6 +161,10 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
 
     return () => {
       destroyed = true;
+      if (map && replayBoundary && typeof map.off === "function") {
+        map.off("styledata", replayBoundary);
+        map.off("idle", replayBoundary);
+      }
       map?.remove();
       mapRef.current = null;
     };
@@ -181,8 +190,10 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
 
   // Sync the highlighted boundary outline whenever it changes.
   useEffect(() => {
-    applyBoundary(mapRef.current, boundary ?? null);
-  }, [boundary]);
+    const map = mapRef.current;
+    boundaryBridge.publish([{ sourceId: BOUNDARY_SOURCE, data: boundaryData(boundary ?? null) }]);
+    if (map) boundaryBridge.apply(map);
+  }, [boundary, boundaryBridge]);
 
   return (
     <Box

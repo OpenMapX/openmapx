@@ -116,6 +116,21 @@ vi.mock("maplibre-gl", () => ({
 import { RouteConditionsLayer } from "../route-layer";
 
 const fetchMock = vi.mocked(fetchRoadConditions);
+const SOURCE = "omx-road-conditions-route";
+
+function sourceFeatures(geometryType: GeoJSON.Geometry["type"]): GeoJSON.Feature[] {
+  const data = fake.state.sources.get(SOURCE)?.data as GeoJSON.FeatureCollection | undefined;
+  return (
+    data?.features.filter((feature) => {
+      if (geometryType === "LineString") {
+        return (
+          feature.geometry.type === "LineString" || feature.geometry.type === "MultiLineString"
+        );
+      }
+      return feature.geometry.type === geometryType;
+    }) ?? []
+  );
+}
 
 beforeEach(() => {
   // Below the mocked minZoom (7) by default, so tests that don't care about
@@ -130,6 +145,22 @@ beforeEach(() => {
 });
 
 describe("RouteConditionsLayer", () => {
+  it("replays route data received before the map sources become ready", async () => {
+    fake = createFakeMap({ styleLoaded: false, zoom: 5 });
+
+    render(<RouteConditionsLayer />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fake.state.sources.has(SOURCE)).toBe(false);
+
+    fake.state.styleLoaded = true;
+    fake.emit("idle");
+
+    await waitFor(() => {
+      expect(sourceFeatures("Point")).toHaveLength(1);
+      expect(sourceFeatures("LineString")).toHaveLength(1);
+    });
+  });
+
   it("reads maxzoom from the overlay's min-zoom hook, not a hardcoded value", async () => {
     render(<RouteConditionsLayer />);
     await waitFor(() =>
@@ -142,9 +173,7 @@ describe("RouteConditionsLayer", () => {
   it("keeps only the conditions that project onto the route", async () => {
     render(<RouteConditionsLayer />);
     await waitFor(() => {
-      const data = fake.state.sources.get("omx-road-conditions-route-markers")
-        ?.data as GeoJSON.FeatureCollection;
-      expect(data.features).toHaveLength(1);
+      expect(sourceFeatures("Point")).toHaveLength(1);
     });
   });
 
@@ -171,15 +200,11 @@ describe("RouteConditionsLayer", () => {
 
     render(<RouteConditionsLayer />);
     await waitFor(() => {
-      const lines = fake.state.sources.get("omx-road-conditions-route-lines")
-        ?.data as GeoJSON.FeatureCollection;
-      expect(lines.features).toHaveLength(1);
+      expect(sourceFeatures("LineString")).toHaveLength(1);
     });
 
-    const lineData = fake.state.sources.get("omx-road-conditions-route-lines")
-      ?.data as GeoJSON.FeatureCollection;
-    const markerData = fake.state.sources.get("omx-road-conditions-route-markers")
-      ?.data as GeoJSON.FeatureCollection;
+    const lineFeature = sourceFeatures("LineString")[0];
+    const markerFeature = sourceFeatures("Point")[0];
     const linePaint = fake.state.layers.get("omx-road-conditions-route-line")?.paint as Record<
       string,
       unknown
@@ -189,8 +214,8 @@ describe("RouteConditionsLayer", () => {
       unknown
     >;
 
-    expect(lineData.features[0]?.properties?.future).toBe(true);
-    expect(markerData.features[0]?.properties?.future).toBe(true);
+    expect(lineFeature?.properties?.future).toBe(true);
+    expect(markerFeature?.properties?.future).toBe(true);
     expect(linePaint["line-opacity"]).toEqual(["case", ["get", "future"], 0.45, 0.7]);
     expect(linePaint["line-dasharray"]).toEqual([
       "case",
@@ -199,6 +224,15 @@ describe("RouteConditionsLayer", () => {
       ["literal", [1]],
     ]);
     expect(markerPaint["icon-opacity"]).toEqual(["case", ["get", "future"], 0.55, 1]);
+    expect(fake.state.layers.get("omx-road-conditions-route-markers")?.source).toBe(SOURCE);
+    expect(fake.state.layers.get("omx-road-conditions-route-line")?.source).toBe(SOURCE);
+    expect(fake.state.layers.get("omx-road-conditions-route-line")?.filter).toEqual([
+      "match",
+      ["geometry-type"],
+      ["LineString", "MultiLineString"],
+      true,
+      false,
+    ]);
   });
 
   it("collapses explicitly grouped route line records into one marker and one line", async () => {
@@ -239,17 +273,11 @@ describe("RouteConditionsLayer", () => {
 
     render(<RouteConditionsLayer />);
     await waitFor(() => {
-      const markers = fake.state.sources.get("omx-road-conditions-route-markers")
-        ?.data as GeoJSON.FeatureCollection;
-      const lines = fake.state.sources.get("omx-road-conditions-route-lines")
-        ?.data as GeoJSON.FeatureCollection;
-      expect(markers.features).toHaveLength(1);
-      expect(lines.features).toHaveLength(1);
+      expect(sourceFeatures("Point")).toHaveLength(1);
+      expect(sourceFeatures("LineString")).toHaveLength(1);
     });
 
-    const markers = fake.state.sources.get("omx-road-conditions-route-markers")
-      ?.data as GeoJSON.FeatureCollection;
-    expect(markers.features[0]?.properties?._displayId).toBe(
+    expect(sourceFeatures("Point")[0]?.properties?._displayId).toBe(
       "group:road-conditions-openconditions:autobahn:works-42",
     );
   });
@@ -282,9 +310,7 @@ describe("RouteConditionsLayer", () => {
 
     render(<RouteConditionsLayer />);
     await waitFor(() => {
-      const data = fake.state.sources.get("omx-road-conditions-route-markers")
-        ?.data as GeoJSON.FeatureCollection;
-      expect(data.features).toHaveLength(2);
+      expect(sourceFeatures("Point")).toHaveLength(2);
     });
   });
 
@@ -292,9 +318,7 @@ describe("RouteConditionsLayer", () => {
     render(<RouteConditionsLayer />);
     await waitFor(() => {
       expect(fake.state.layers.has("omx-road-conditions-route-line")).toBe(true);
-      const data = fake.state.sources.get("omx-road-conditions-route-markers")
-        ?.data as GeoJSON.FeatureCollection;
-      expect(data.features).toHaveLength(1);
+      expect(sourceFeatures("Point")).toHaveLength(1);
       expect(INTERACTIVE_LAYER_IDS.has("omx-road-conditions-route-markers")).toBe(true);
       expect(INTERACTIVE_LAYER_IDS.has("omx-road-conditions-route-line")).toBe(true);
     });
@@ -331,9 +355,7 @@ describe("RouteConditionsLayer", () => {
   it("retains route events and reports stale when a refresh fails", async () => {
     render(<RouteConditionsLayer />);
     await waitFor(() => {
-      const data = fake.state.sources.get("omx-road-conditions-route-markers")
-        ?.data as GeoJSON.FeatureCollection;
-      expect(data.features).toHaveLength(1);
+      expect(sourceFeatures("Point")).toHaveLength(1);
     });
 
     fetchMock.mockRejectedValueOnce(new Error("temporary outage"));
@@ -343,9 +365,7 @@ describe("RouteConditionsLayer", () => {
     fake.emit("zoomend");
     await waitFor(() => expect(useRoadConditionsStore.getState().routeFetchStatus).toBe("stale"));
 
-    const data = fake.state.sources.get("omx-road-conditions-route-markers")
-      ?.data as GeoJSON.FeatureCollection;
-    expect(data.features).toHaveLength(1);
+    expect(sourceFeatures("Point")).toHaveLength(1);
   });
 
   it("coalesces a refresh while the route request is still in flight", async () => {
@@ -392,13 +412,11 @@ describe("RouteConditionsLayer", () => {
     ]);
     render(<RouteConditionsLayer />);
     await waitFor(() => {
-      const data = fake.state.sources.get("omx-road-conditions-route-markers")
-        ?.data as GeoJSON.FeatureCollection;
-      expect(data.features).toHaveLength(2);
+      expect(sourceFeatures("Point")).toHaveLength(2);
     });
-    const data = fake.state.sources.get("omx-road-conditions-route-markers")
-      ?.data as GeoJSON.FeatureCollection;
-    const coords = data.features.map((f) => (f.geometry as GeoJSON.Point).coordinates);
+    const coords = sourceFeatures("Point").map(
+      (feature) => (feature.geometry as GeoJSON.Point).coordinates,
+    );
     expect(coords).toEqual(
       expect.arrayContaining([
         [8, 50.002],

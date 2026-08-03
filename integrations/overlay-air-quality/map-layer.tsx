@@ -1,10 +1,11 @@
 "use client";
 
 import { escapeHtml, sanitizeUrl, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
-import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
+import type { MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
+import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
@@ -95,6 +96,12 @@ export function AirQualityLayer() {
   useOverlayExclusion("air-quality", layerVisible);
   const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
+    mapRef,
+    mapReady,
+    styleVersion,
+    visible: layerVisible,
+  });
 
   const fetchStations = useCallback(async () => {
     const map = mapRef.current;
@@ -104,23 +111,22 @@ export function AirQualityLayer() {
     const { apiUrl } = env;
     const url = `${apiUrl}/api/integrations/overlay-air-quality/air-quality/stations?south=${bounds.getSouth()}&west=${bounds.getWest()}&north=${bounds.getNorth()}&east=${bounds.getEast()}`;
 
+    const request = beginRequest();
     setLoading(true);
     try {
-      const res = await fetch(url);
-      if (!res.ok) return;
+      const res = await fetch(url, { signal: request.signal });
+      if (!request.isCurrent() || !res.ok) return;
       const stations = (await res.json()) as AQStation[];
+      if (!request.isCurrent()) return;
       const geojson = buildGeoJson(stations);
 
-      const source = map.getSource(AQ_SOURCE_ID) as GeoJSONSource | undefined;
-      if (source) {
-        source.setData(geojson);
-      }
+      publishGeoJson([{ sourceId: AQ_SOURCE_ID, data: geojson }]);
     } catch {
       // Silent fetch failure
     } finally {
-      setLoading(false);
+      if (request.isLatest()) setLoading(false);
     }
-  }, [env, mapRef, setLoading, minZoom]);
+  }, [beginRequest, env, mapRef, publishGeoJson, setLoading, minZoom]);
 
   useEffect(() => {
     void styleVersion;

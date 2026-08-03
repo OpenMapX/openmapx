@@ -68,7 +68,7 @@ beforeEach(() => {
   fake = createFakeMap();
   fetchMock.mockClear();
   vi.stubGlobal("fetch", fetchMock);
-  useAirQualityStore.setState({ layerVisible: true });
+  useAirQualityStore.setState({ layerVisible: true, loading: false });
 });
 
 afterEach(() => {
@@ -126,5 +126,26 @@ describe("AirQualityLayer zoom gate", () => {
       vi.advanceTimersByTime(1000);
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears loading when an in-flight request is aborted by hiding the layer", async () => {
+    let resolveFetch:
+      | ((response: { ok: boolean; json: () => Promise<never[]> }) => void)
+      | undefined;
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    render(<AirQualityLayer />, { wrapper });
+    expect(useAirQualityStore.getState().loading).toBe(true);
+
+    act(() => useAirQualityStore.setState({ layerVisible: false }));
+    await act(async () => {
+      resolveFetch?.({ ok: true, json: async () => [] });
+    });
+
+    expect(useAirQualityStore.getState().loading).toBe(false);
   });
 });

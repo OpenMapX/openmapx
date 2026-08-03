@@ -8,15 +8,11 @@ import {
   useOverlayExclusion,
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
-import type {
-  GeoJSONFeatureDiff,
-  GeoJSONSource,
-  GeoJSONSourceDiff,
-  MapLayerMouseEvent,
-} from "maplibre-gl";
+import type { GeoJSONFeatureDiff, GeoJSONSourceDiff, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
+import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
@@ -171,10 +167,10 @@ function toFeature(vehicle: ParsedVehicle): VehicleFeature {
   };
 }
 
-function buildGeoJson(vehicles: ParsedVehicle[]) {
+function buildGeoJson(features: Map<string, VehicleFeature>) {
   return {
     type: "FeatureCollection" as const,
-    features: vehicles.map(toFeature),
+    features: [...features.values()],
   };
 }
 
@@ -359,6 +355,12 @@ export function LiveTransitLayer() {
   const animationFrameRef = useRef<number | null>(null);
   const renderVehiclesRef = useRef<ParsedVehicle[]>([]);
   const sourceFeaturesRef = useRef<Map<string, VehicleFeature>>(new Map());
+  const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
+    mapRef,
+    mapReady,
+    styleVersion,
+    visible: layerVisible,
+  });
   const parsedVehicles = useMemo(() => toParsedVehicles(snapshot), [snapshot]);
   const filteredVehicles = useMemo(
     () =>
@@ -384,14 +386,13 @@ export function LiveTransitLayer() {
     (vehicles: ParsedVehicle[]) => {
       const map = mapRef.current;
       if (!map) return;
-      const source = map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
-      if (!source) return;
 
       const nextFeatures = buildFeatureMap(vehicles);
       const previousFeatures = sourceFeaturesRef.current;
+      const data = buildGeoJson(nextFeatures);
 
       if (previousFeatures.size === 0) {
-        source.setData(buildGeoJson(vehicles));
+        publishGeoJson([{ sourceId: SOURCE_ID, data }]);
         sourceFeaturesRef.current = nextFeatures;
         return;
       }
@@ -399,15 +400,16 @@ export function LiveTransitLayer() {
       const diff = buildSourceDiff(previousFeatures, nextFeatures);
       if (!diff) return;
 
-      source.updateData(diff);
+      publishGeoJson([{ sourceId: SOURCE_ID, data, update: diff }]);
       sourceFeaturesRef.current = nextFeatures;
     },
-    [mapRef],
+    [mapRef, publishGeoJson],
   );
 
   const fetchSnapshot = useCallback(async () => {
     const map = mapRef.current;
     if (!map || !layerVisible) return;
+    const request = beginRequest();
 
     if (map.getZoom() < minFetchZoom) {
       cancelAnimation();
@@ -425,17 +427,19 @@ export function LiveTransitLayer() {
 
     setLoading(true);
     try {
-      const res = await fetch(url);
-      if (!res.ok) return;
+      const res = await fetch(url, { signal: request.signal });
+      if (!request.isCurrent() || !res.ok) return;
       const data = (await res.json()) as LiveTransitSnapshot;
+      if (!request.isCurrent()) return;
       setSnapshot(data);
       setLastUpdated(Date.now());
     } catch {
       // silent
     } finally {
-      setLoading(false);
+      if (request.isLatest()) setLoading(false);
     }
   }, [
+    beginRequest,
     cancelAnimation,
     commitRenderVehicles,
     env.apiUrl,

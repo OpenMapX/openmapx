@@ -19,6 +19,8 @@ export interface FetchRoadConditionsOptions {
    * validity at the chosen travel time and must still see future closures.
    */
   horizonDays?: number;
+  /** Abort an obsolete viewport/route request without publishing stale data. */
+  signal?: AbortSignal;
 }
 
 export interface FetchRoadConditionsResult {
@@ -80,10 +82,11 @@ export async function fetchRoadConditionsWithStatus(
     if (opts?.minSeverity) params.minSeverity = opts.minSeverity;
     // `0` is a meaningful horizon ("active now"), so test for presence.
     if (opts?.horizonDays != null) params.horizonDays = String(opts.horizonDays);
-    const fc = await apiClient.get<RoadConditionFeatureCollection>(
-      API_ENDPOINTS.roadConditions,
-      params,
-    );
+    const fc = opts?.signal
+      ? await apiClient.get<RoadConditionFeatureCollection>(API_ENDPOINTS.roadConditions, params, {
+          signal: opts.signal,
+        })
+      : await apiClient.get<RoadConditionFeatureCollection>(API_ENDPOINTS.roadConditions, params);
     return {
       ok: true,
       events: (fc.features ?? [])

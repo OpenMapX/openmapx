@@ -34,6 +34,19 @@ describe("fetchRoadConditions", () => {
     });
   });
 
+  it("forwards an abort signal without serializing it as a query parameter", async () => {
+    const spy = vi.spyOn(apiClient, "get").mockResolvedValue({ features: [] } as never);
+    const controller = new AbortController();
+
+    await fetchRoadConditionsWithStatus([13, 52, 14, 53], { signal: controller.signal });
+
+    expect(spy).toHaveBeenCalledWith(
+      "/api/integrations/road-conditions/events",
+      { bbox: "13,52,14,53" },
+      { signal: controller.signal },
+    );
+  });
+
   it("serializes the bbox + filters and parses the FeatureCollection to events", async () => {
     const spy = vi.spyOn(apiClient, "get").mockResolvedValue({
       type: "FeatureCollection",

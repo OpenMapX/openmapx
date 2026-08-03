@@ -6,6 +6,7 @@ import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
+import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
@@ -88,6 +89,12 @@ export function WeatherAlertLayer() {
 
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const fetchedRef = useRef(false);
+  const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
+    mapRef,
+    mapReady,
+    styleVersion,
+    visible: layerVisible,
+  });
 
   const fetchAlerts = useCallback(async () => {
     const map = mapRef.current;
@@ -95,24 +102,23 @@ export function WeatherAlertLayer() {
 
     const url = `${env.apiUrl}/api/integrations/overlay-weather-alerts/events`;
 
+    const request = beginRequest();
     setLoading(true);
     try {
-      const res = await fetch(url);
-      if (!res.ok) return;
+      const res = await fetch(url, { signal: request.signal });
+      if (!request.isCurrent() || !res.ok) return;
       const data = await res.json();
+      if (!request.isCurrent()) return;
       setAlertCount(data.features?.length ?? 0);
       setLastUpdated(Date.now());
 
-      const source = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
-      if (source) {
-        source.setData(data);
-      }
+      publishGeoJson([{ sourceId: SOURCE_ID, data }]);
     } catch {
       // silent
     } finally {
-      setLoading(false);
+      if (request.isLatest()) setLoading(false);
     }
-  }, [env.apiUrl, mapRef, setLoading, setAlertCount, setLastUpdated]);
+  }, [beginRequest, env.apiUrl, mapRef, publishGeoJson, setLoading, setAlertCount, setLastUpdated]);
 
   // Main layer lifecycle
   useEffect(() => {

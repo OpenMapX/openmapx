@@ -1,11 +1,12 @@
 "use client";
 
 import { relativeTime, useOverlayExclusion } from "@openmapx/core";
-import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
+import type { MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
+import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
@@ -91,6 +92,12 @@ export function WildfireLayer() {
   const t = useTranslations("wildfires");
   const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
+    mapRef,
+    mapReady,
+    styleVersion,
+    visible: layerVisible,
+  });
 
   const fetchWildfires = useCallback(async () => {
     const map = mapRef.current;
@@ -99,23 +106,22 @@ export function WildfireLayer() {
     const { apiUrl } = env;
     const url = `${apiUrl}/api/integrations/overlay-wildfires/wildfires?dayRange=${dayRange}&source=${source}`;
 
+    const request = beginRequest();
     setLoading(true);
     try {
-      const res = await fetch(url);
-      if (!res.ok) return;
+      const res = await fetch(url, { signal: request.signal });
+      if (!request.isCurrent() || !res.ok) return;
       const data = await res.json();
+      if (!request.isCurrent()) return;
 
-      const src = map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
-      if (src) {
-        src.setData(data);
-        setLastUpdated(Date.now());
-      }
+      publishGeoJson([{ sourceId: SOURCE_ID, data }]);
+      setLastUpdated(Date.now());
     } catch {
       // Silent fetch failure
     } finally {
-      setLoading(false);
+      if (request.isLatest()) setLoading(false);
     }
-  }, [env, mapRef, dayRange, source, setLoading, setLastUpdated]);
+  }, [beginRequest, env, mapRef, dayRange, source, publishGeoJson, setLoading, setLastUpdated]);
 
   // Layer management
   useEffect(() => {

@@ -50,8 +50,7 @@ vi.mock("maplibre-gl", () => ({
 
 import { buildRoadConditionPopupGroups, buildSources, RoadConditionsLayer } from "../map-layer";
 
-const MARKER_SOURCE = "omx-road-conditions-markers";
-const LINE_SOURCE = "omx-road-conditions-lines";
+const SOURCE = "omx-road-conditions";
 const MARKER_LAYER = "omx-road-conditions-markers";
 const LINE_LAYER = "omx-road-conditions-line";
 
@@ -73,6 +72,20 @@ function lastUrl(): string {
   return String(fetchMock.mock.calls.at(-1)?.[0] ?? "");
 }
 
+function sourceFeatures(geometryType: GeoJSON.Geometry["type"]): GeoJSON.Feature[] {
+  const data = fake.state.sources.get(SOURCE)?.data as GeoJSON.FeatureCollection | undefined;
+  return (
+    data?.features.filter((feature) => {
+      if (geometryType === "LineString") {
+        return (
+          feature.geometry.type === "LineString" || feature.geometry.type === "MultiLineString"
+        );
+      }
+      return feature.geometry.type === geometryType;
+    }) ?? []
+  );
+}
+
 beforeEach(() => {
   fake = createFakeMap();
   fetchMock.mockReset();
@@ -83,6 +96,34 @@ beforeEach(() => {
 });
 
 describe("RoadConditionsLayer horizon query", () => {
+  it("replays a response received before the map sources become ready", async () => {
+    fake = createFakeMap({ styleLoaded: false });
+    respondWith([
+      {
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [13.4, 52.5],
+            [13.41, 52.51],
+          ],
+        },
+        properties: { id: "early", type: "roadworks", severity: "low" },
+      },
+    ]);
+
+    render(<RoadConditionsLayer />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(fake.state.sources.has(SOURCE)).toBe(false);
+
+    fake.state.styleLoaded = true;
+    fake.emit("idle");
+
+    await waitFor(() => {
+      expect(sourceFeatures("Point")[0]?.properties?._id).toBe("early");
+      expect(sourceFeatures("LineString")).toHaveLength(1);
+    });
+  });
+
   it("requests horizonDays=0 under the default Active horizon", async () => {
     render(<RoadConditionsLayer />);
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
@@ -131,10 +172,7 @@ describe("RoadConditionsLayer horizon query", () => {
       }),
     });
     await waitFor(() => {
-      const data = fake.state.sources.get(MARKER_SOURCE)?.data as {
-        features: { properties: Record<string, unknown> }[];
-      };
-      expect(data.features[0]?.properties._id).toBe("new");
+      expect(sourceFeatures("Point")[0]?.properties?._id).toBe("new");
     });
 
     resolveFirst?.({
@@ -149,10 +187,7 @@ describe("RoadConditionsLayer horizon query", () => {
       }),
     });
     await new Promise((resolve) => setTimeout(resolve, 25));
-    const data = fake.state.sources.get(MARKER_SOURCE)?.data as {
-      features: { properties: Record<string, unknown> }[];
-    };
-    expect(data.features[0]?.properties._id).toBe("new");
+    expect(sourceFeatures("Point")[0]?.properties?._id).toBe("new");
   });
 
   it("retains the last viewport data and reports stale after a refresh failure", async () => {
@@ -164,10 +199,7 @@ describe("RoadConditionsLayer horizon query", () => {
     ]);
     render(<RoadConditionsLayer />);
     await waitFor(() => {
-      const data = fake.state.sources.get(MARKER_SOURCE)?.data as {
-        features: { properties: Record<string, unknown> }[];
-      };
-      expect(data.features[0]?.properties._id).toBe("last-good");
+      expect(sourceFeatures("Point")[0]?.properties?._id).toBe("last-good");
     });
 
     fetchMock.mockRejectedValueOnce(new Error("temporary outage"));
@@ -176,10 +208,7 @@ describe("RoadConditionsLayer horizon query", () => {
       expect(useRoadConditionsStore.getState().viewportFetchStatus).toBe("stale"),
     );
 
-    const data = fake.state.sources.get(MARKER_SOURCE)?.data as {
-      features: { properties: Record<string, unknown> }[];
-    };
-    expect(data.features[0]?.properties._id).toBe("last-good");
+    expect(sourceFeatures("Point")[0]?.properties?._id).toBe("last-good");
   });
 });
 
@@ -211,12 +240,14 @@ describe("RoadConditionsLayer future styling", () => {
     ]);
 
     render(<RoadConditionsLayer />);
-    await waitFor(() => expect(fake.state.sources.get(MARKER_SOURCE)?.data).toBeDefined());
+    await waitFor(() => expect(fake.state.sources.get(SOURCE)?.data).toBeDefined());
 
-    const data = fake.state.sources.get(MARKER_SOURCE)?.data as {
-      features: { properties: Record<string, unknown> }[];
-    };
-    const byId = new Map(data.features.map((f) => [f.properties._id, f.properties.future]));
+    const byId = new Map(
+      sourceFeatures("Point").map((feature) => [
+        feature.properties?._id,
+        feature.properties?.future,
+      ]),
+    );
     expect(byId.get("flagged")).toBe(true);
     expect(byId.get("dated")).toBe(true);
     expect(byId.get("current")).toBe(false);
@@ -237,12 +268,9 @@ describe("RoadConditionsLayer future styling", () => {
     ]);
 
     render(<RoadConditionsLayer />);
-    await waitFor(() => expect(fake.state.sources.get(LINE_SOURCE)?.data).toBeDefined());
+    await waitFor(() => expect(fake.state.sources.get(SOURCE)?.data).toBeDefined());
 
-    const data = fake.state.sources.get(LINE_SOURCE)?.data as {
-      features: { properties: Record<string, unknown> }[];
-    };
-    expect(data.features[0]?.properties.future).toBe(true);
+    expect(sourceFeatures("LineString")[0]?.properties?.future).toBe(true);
   });
 
   it("de-emphasises future features in the layer paint expressions", async () => {
@@ -260,6 +288,16 @@ describe("RoadConditionsLayer future styling", () => {
       ["literal", [2, 1.5]],
       ["literal", [1]],
     ]);
+    expect(fake.state.layers.get(MARKER_LAYER)?.source).toBe(SOURCE);
+    expect(fake.state.layers.get(LINE_LAYER)?.source).toBe(SOURCE);
+    expect(fake.state.layers.get(MARKER_LAYER)?.filter).toEqual(["==", ["geometry-type"], "Point"]);
+    expect(fake.state.layers.get(LINE_LAYER)?.filter).toEqual([
+      "match",
+      ["geometry-type"],
+      ["LineString", "MultiLineString"],
+      true,
+      false,
+    ]);
   });
 });
 
@@ -269,7 +307,7 @@ describe("road-condition display grouping", () => {
       { length: 17 },
       (_, index) => [6.77 + index * 0.0001, 51.2] as [number, number],
     );
-    const { markers, lines, eventsByDisplayId } = buildSources([
+    const { data, eventsByDisplayId } = buildSources([
       {
         geometry: {
           type: "LineString",
@@ -314,10 +352,14 @@ describe("road-condition display grouping", () => {
       },
     ]);
 
+    const features = (data as GeoJSON.FeatureCollection).features;
+    expect(features.filter((feature) => feature.geometry.type === "Point")).toHaveLength(1);
     expect(
-      (markers as { features: { properties: Record<string, unknown> }[] }).features,
+      features.filter(
+        (feature) =>
+          feature.geometry.type === "LineString" || feature.geometry.type === "MultiLineString",
+      ),
     ).toHaveLength(1);
-    expect((lines as { features: unknown[] }).features).toHaveLength(1);
     expect(
       eventsByDisplayId
         .get("group:road-conditions-openconditions:duesseldorf:works-42")
@@ -391,7 +433,7 @@ describe("road-condition display grouping", () => {
   });
 
   it("keeps endpoint-only MultiPoint records as endpoint markers", () => {
-    const { markers, lines } = buildSources([
+    const { data } = buildSources([
       {
         geometry: {
           type: "MultiPoint",
@@ -411,7 +453,13 @@ describe("road-condition display grouping", () => {
       },
     ]);
 
-    expect((markers as { features: unknown[] }).features).toHaveLength(2);
-    expect((lines as { features: unknown[] }).features).toHaveLength(0);
+    const features = (data as GeoJSON.FeatureCollection).features;
+    expect(features.filter((feature) => feature.geometry.type === "Point")).toHaveLength(2);
+    expect(
+      features.filter(
+        (feature) =>
+          feature.geometry.type === "LineString" || feature.geometry.type === "MultiLineString",
+      ),
+    ).toHaveLength(0);
   });
 });

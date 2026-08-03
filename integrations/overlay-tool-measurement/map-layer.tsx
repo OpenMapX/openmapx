@@ -8,6 +8,7 @@ import { length } from "@turf/length";
 import type { MapMouseEvent } from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
+import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
 import { useMeasurementStore } from "./store";
@@ -181,6 +182,12 @@ export function MeasurementLayer() {
   const points = useMeasurementStore((s) => s.points);
   const unitSystem = useMeasurementStore((s) => s.unitSystem);
   const isFinalized = useMeasurementStore((s) => s.isFinalized);
+  const { publish: publishGeoJson } = useGeoJsonSourceDataBridge({
+    mapRef,
+    mapReady,
+    styleVersion,
+    visible: isActive,
+  });
 
   const draggingRef = useRef<number | null>(null);
   const mousePositionRef = useRef<LngLat | null>(null);
@@ -380,11 +387,7 @@ export function MeasurementLayer() {
   // Update GeoJSON data when points/mode/units change
   useEffect(() => {
     void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady || !isActive) return;
-
-    const src = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
-    if (!src) return;
+    if (!mapReady || !isActive) return;
 
     const { lineGeoJSON, polygonGeoJSON, verticesGeoJSON, labelsGeoJSON } = buildGeoJSON(
       points,
@@ -401,20 +404,22 @@ export function MeasurementLayer() {
       ...labelsGeoJSON.features,
     ];
 
-    src.setData({ type: "FeatureCollection", features: allFeatures });
-  }, [mapRef, mapReady, styleVersion, isActive, points, mode, unitSystem, isFinalized]);
+    publishGeoJson([
+      { sourceId: SOURCE_ID, data: { type: "FeatureCollection", features: allFeatures } },
+    ]);
+  }, [isActive, isFinalized, mapReady, mode, points, publishGeoJson, styleVersion, unitSystem]);
 
   // Rubber band line following cursor
   const updateRubberBand = useCallback(
     (cursorPos: LngLat | null) => {
-      const map = mapRef.current;
-      if (!map) return;
-      const src = map.getSource(RUBBERBAND_SOURCE) as maplibregl.GeoJSONSource | undefined;
-      if (!src) return;
-
       const { points: pts, isFinalized: fin, mode: m } = useMeasurementStore.getState();
       if (!cursorPos || pts.length === 0 || fin) {
-        src.setData({ type: "FeatureCollection", features: [] });
+        publishGeoJson([
+          {
+            sourceId: RUBBERBAND_SOURCE,
+            data: { type: "FeatureCollection", features: [] },
+          },
+        ]);
         return;
       }
 
@@ -436,9 +441,11 @@ export function MeasurementLayer() {
         });
       }
 
-      src.setData({ type: "FeatureCollection", features });
+      publishGeoJson([
+        { sourceId: RUBBERBAND_SOURCE, data: { type: "FeatureCollection", features } },
+      ]);
     },
-    [mapRef],
+    [publishGeoJson],
   );
 
   // Map click handler for adding points
@@ -629,12 +636,7 @@ export function MeasurementLayer() {
   useEffect(() => {
     if (isActive) return;
     const map = mapRef.current;
-    if (map) {
-      map.getCanvas().style.cursor = "";
-      // Clear rubber band
-      const src = map.getSource(RUBBERBAND_SOURCE) as maplibregl.GeoJSONSource | undefined;
-      if (src) src.setData({ type: "FeatureCollection", features: [] });
-    }
+    if (map) map.getCanvas().style.cursor = "";
   }, [isActive, mapRef]);
 
   // Suppress double-tap zoom on mobile while active
