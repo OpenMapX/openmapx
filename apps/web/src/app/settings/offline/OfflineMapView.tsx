@@ -6,20 +6,26 @@ import type maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { MapCredits } from "@/components/map/MapCredits";
 import { useEnv } from "@/lib/EnvProvider";
-import { baseMapCreditsHtml, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
-import type { OfflineArea, OfflineAreaBbox } from "@/lib/offlineAreas";
+import { baseMapCreditsHtml } from "@/lib/map";
+import {
+  configureDefaultOfflinePackageResolver,
+  getDefaultOfflinePackageResolver,
+  type OfflinePackageBbox,
+  type OfflinePackageRecord,
+  registerOfflinePmtilesProtocol,
+  resolveOfflinePackageStyle,
+} from "@/lib/offlineAreas";
 
-const RECT_SOURCE = "offline-areas-source";
-const RECT_FILL = "offline-areas-fill";
-const RECT_LINE = "offline-areas-line";
-// Brand color so the highlighted download extents read as "ours".
+const RECT_SOURCE = "offline-packages-source";
+const RECT_FILL = "offline-packages-fill";
+const RECT_LINE = "offline-packages-line";
 const RECT_COLOR = "#207E23";
 
-function areaToFeature(area: OfflineArea): GeoJSON.Feature {
-  const { west, south, east, north } = area.bbox;
+function packageToFeature(record: OfflinePackageRecord): GeoJSON.Feature {
+  const { west, south, east, north } = record.manifest.coverage.bbox;
   return {
     type: "Feature",
-    properties: { name: area.name },
+    properties: { name: record.name },
     geometry: {
       type: "Polygon",
       coordinates: [
@@ -35,20 +41,17 @@ function areaToFeature(area: OfflineArea): GeoJSON.Feature {
   };
 }
 
-/** Smallest bbox enclosing every area, or null when there are none. */
-function unionBbox(areas: OfflineArea[]): OfflineAreaBbox | null {
-  if (areas.length === 0) return null;
-  let west = Infinity;
-  let south = Infinity;
-  let east = -Infinity;
-  let north = -Infinity;
-  for (const a of areas) {
-    west = Math.min(west, a.bbox.west);
-    south = Math.min(south, a.bbox.south);
-    east = Math.max(east, a.bbox.east);
-    north = Math.max(north, a.bbox.north);
-  }
-  return { west, south, east, north };
+function unionBbox(packages: OfflinePackageRecord[]): OfflinePackageBbox | null {
+  if (packages.length === 0) return null;
+  return packages.reduce<OfflinePackageBbox>(
+    (box, record) => ({
+      west: Math.min(box.west, record.manifest.coverage.bbox.west),
+      south: Math.min(box.south, record.manifest.coverage.bbox.south),
+      east: Math.max(box.east, record.manifest.coverage.bbox.east),
+      north: Math.max(box.north, record.manifest.coverage.bbox.north),
+    }),
+    { west: Infinity, south: Infinity, east: -Infinity, north: -Infinity },
+  );
 }
 
 function addRectLayers(map: maplibregl.Map, features: GeoJSON.Feature[]): void {
@@ -73,54 +76,47 @@ function addRectLayers(map: maplibregl.Map, features: GeoJSON.Feature[]): void {
 }
 
 interface Props {
-  /** Areas to outline. The map renders downloaded tiles for these from cache. */
-  areas: OfflineArea[];
-  /** Bbox to frame on load; defaults to the union of all areas (else world view). */
-  fitTo?: OfflineAreaBbox | null;
+  packages: OfflinePackageRecord[];
+  fitTo?: OfflinePackageBbox | null;
   height?: number;
 }
 
-/**
- * Read-only MapLibre view used to inspect downloaded offline areas. Renders the
- * same base style the areas were downloaded with — so when framed on a single
- * area, the cached tiles fill in (offline-first via the service worker) — and
- * outlines each area's extent. Rotation is locked to keep the axis-aligned
- * download rectangles legible.
- */
-export function OfflineMapView({ areas, fitTo, height = 360 }: Props) {
+export function OfflineMapView({ packages, fitTo, height = 360 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const env = useEnv();
   const { mode, systemMode } = useColorScheme();
-  const resolvedMode = mode === "system" ? systemMode : mode;
-  const styleName = resolvedMode === "dark" ? "streets-v2-dark" : "bright-v2";
-  const variant = resolvedMode === "dark" ? "dark" : "light";
+  const variant = (mode === "system" ? systemMode : mode) === "dark" ? "dark" : "light";
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: areas/fitTo captured at mount — this is a snapshot viewer, not a live editor; callers remount it per selection.
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || packages.length === 0) return;
     let destroyed = false;
-    let map: maplibregl.Map | null = null;
+    let map: maplibregl.Map | undefined;
+    let unregister: (() => void) | undefined;
+    const first = packages[0];
+    const frame = fitTo ?? unionBbox(packages);
 
-    const frame = fitTo ?? unionBbox(areas);
-
-    const init = async () => {
+    void (async () => {
       const maplibregl = (await import("maplibre-gl")).default;
+      const style = await resolveOfflinePackageStyle(first.manifest, first.id, variant);
       if (destroyed || !containerRef.current) return;
-      const style =
-        env.styleProvider === "openmapx"
-          ? await loadOpenMapXStyle(env, variant)
-          : await loadMaptilerStyle(styleName, env);
-      if (destroyed || !containerRef.current) return;
+      let resolver = getDefaultOfflinePackageResolver();
+      if (!resolver) {
+        resolver = configureDefaultOfflinePackageResolver({
+          datasetVersion: first.manifest.dataset.version,
+          styleVersion: first.manifest.style.version,
+          tileSchema: first.manifest.dataset.tileSchema,
+        });
+        await resolver.refresh();
+      }
+      if (!resolver) throw new Error("offline package resolver is not initialized");
+      unregister = registerOfflinePmtilesProtocol(maplibregl, resolver);
       map = new maplibregl.Map({
         container: containerRef.current,
-        style: style as string | maplibregl.StyleSpecification,
+        style: style as maplibregl.StyleSpecification,
         center: frame ? [(frame.west + frame.east) / 2, (frame.south + frame.north) / 2] : [0, 20],
         zoom: frame ? 6 : 1,
-        // Credits render inline below via `<MapCredits>`, like the main map's
-        // footer, instead of behind MapLibre's ⓘ toggle.
         attributionControl: false,
         canvasContextAttributes: { antialias: true },
-        // North-up only: the download rectangles are axis-aligned.
         dragRotate: false,
         pitchWithRotate: false,
         rollEnabled: false,
@@ -128,11 +124,9 @@ export function OfflineMapView({ areas, fitTo, height = 360 }: Props) {
       });
       map.touchZoomRotate.disableRotation();
       map.keyboard.disableRotation();
-
       map.on("load", () => {
         if (!map) return;
-        map.resize();
-        addRectLayers(map, areas.map(areaToFeature));
+        addRectLayers(map, packages.map(packageToFeature));
         if (frame) {
           map.fitBounds(
             [
@@ -143,18 +137,17 @@ export function OfflineMapView({ areas, fitTo, height = 360 }: Props) {
           );
         }
       });
-    };
-
-    // `loadMaptilerStyle`/`loadOpenMapXStyle` reject on a failed style fetch;
-    // swallow it (leave the container empty) rather than emit an unhandled
-    // rejection — same degradation as the place mini-map.
-    void init().catch(() => {});
+    })().catch(() => {
+      // The surrounding settings UI still exposes package metadata when a
+      // browser cannot render a local archive.
+    });
 
     return () => {
       destroyed = true;
+      unregister?.();
       map?.remove();
     };
-  }, [env, styleName, variant]);
+  }, [fitTo, packages, variant]);
 
   return (
     <Box
@@ -169,7 +162,9 @@ export function OfflineMapView({ areas, fitTo, height = 360 }: Props) {
       }}
     >
       <Box ref={containerRef} sx={{ position: "absolute", inset: 0 }} />
-      <MapCredits html={baseMapCreditsHtml(env)} />
+      {packages.length === 0 ? null : (
+        <MapCredits html={baseMapCreditsHtml({ ...env, tilesUrl: "offline-package" })} />
+      )}
     </Box>
   );
 }

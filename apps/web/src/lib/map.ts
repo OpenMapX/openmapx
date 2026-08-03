@@ -1,6 +1,8 @@
+import type { OfflineMapPackageManifest } from "@openmapx/core";
 import { escapeHtml, sanitizeUrl } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { ClientEnv } from "./env";
+import { resolveOfflinePackageStyle } from "./offlineAreas/packageStyle";
 
 /**
  * Canonical base-map credits — the single source of truth for the OSM /
@@ -150,7 +152,15 @@ export function usesSelfHostedTiles(env: ClientEnv): boolean {
 export async function loadOpenMapXStyle(
   env: ClientEnv,
   variant: MapStyleVariant = "light",
+  offlinePackage?: { packageId: string; manifest: OfflineMapPackageManifest },
 ): Promise<Record<string, unknown>> {
+  if (offlinePackage) {
+    return await resolveOfflinePackageStyle(
+      offlinePackage.manifest,
+      offlinePackage.packageId,
+      variant,
+    );
+  }
   const file = variant === "dark" ? "openmapx-dark.json" : "openmapx-streets.json";
   const res = await fetch(`/styles/${file}`);
   if (!res.ok) {

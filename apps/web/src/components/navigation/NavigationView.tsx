@@ -24,10 +24,12 @@ import { NavigationSettingsDialog } from "@/components/settings/NavigationSettin
 import { NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
 import { useMapOptional } from "@/lib/MapContext";
 import { useMobilePanelClearance } from "@/lib/mobilePanelHeight";
+import { useNavigationConnectivity } from "@/lib/navigation/navigationConnectivity";
 import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
 import { useNavAlerts } from "@/lib/navigation/useNavAlerts";
 import { useNavCamera } from "@/lib/navigation/useNavCamera";
 import { useNavigationEngine } from "@/lib/navigation/useNavigationEngine";
+import { useNavigationSessionPersistence } from "@/lib/navigation/useNavigationSessionPersistence";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { AlertWidget } from "./AlertWidget";
 import { ArrivalCard } from "./ArrivalCard";
@@ -35,9 +37,11 @@ import { FasterRouteBanner } from "./FasterRouteBanner";
 import { ManeuverBanner } from "./ManeuverBanner";
 import { NavBottomBar } from "./NavBottomBar";
 import { NavDirectionsDialog } from "./NavDirectionsDialog";
+import { NavigationSessionResumeDialog } from "./NavigationSessionResumeDialog";
 import { NavMenu } from "./NavMenu";
 import { NavSimControl } from "./NavSimControl";
 import { NavSwipeSheet } from "./NavSwipeSheet";
+import { OfflineNavigationBanner } from "./OfflineNavigationBanner";
 import { RouteSearchControl } from "./RouteSearchControl";
 import { SpeedLimitBadge } from "./SpeedLimitBadge";
 
@@ -52,10 +56,16 @@ export function NavigationView() {
   const rerouteFailedNonce = useNavigationStore((s) => s.rerouteFailedNonce);
   const currentSpeedLimit = useNavigationStore((s) => s.currentSpeedLimit);
   const keepScreenOn = useNavigationStore((s) => s.keepScreenOn);
+  const connectivity = useNavigationStore((s) => s.connectivity);
+  const rerouteUnavailable = useNavigationStore((s) => s.rerouteUnavailable);
+  const liveDataUnavailable = useNavigationStore((s) => s.liveDataUnavailable);
+  const offRoute = useNavigationStore((s) => s.offRoute);
+  const requestRerouteRetry = useNavigationStore((s) => s.requestRerouteRetry);
   const setCameraMode = useNavigationStore((s) => s.setCameraMode);
   const stopNavigation = useNavigationStore((s) => s.stopNavigation);
   const openRouteSearch = useRouteSearchStore((s) => s.openPicker);
   const routeSearchOpen = useRouteSearchStore((s) => s.open);
+  const session = useNavigationSessionPersistence();
 
   const mapCtx = useMapOptional();
   const units = useSettingsStore((s) => s.units);
@@ -65,6 +75,7 @@ export function NavigationView() {
   // Ground nav only; transit navigation is handled by TransitNavigationView.
   const active = status !== "idle" && kind === "ground";
 
+  useNavigationConnectivity();
   useNavigationEngine();
   useNavCamera();
   useWakeLock(active && keepScreenOn);
@@ -90,6 +101,17 @@ export function NavigationView() {
     return () => window.removeEventListener("resize", update);
   }, []);
   const sheetClearance = useMobilePanelClearance(vh);
+
+  if (session.pending && status === "idle" && kind === "ground") {
+    return (
+      <NavigationSessionResumeDialog
+        snapshot={session.pending}
+        coverage={session.coverage}
+        onResume={session.accept}
+        onDiscard={() => void session.discard()}
+      />
+    );
+  }
 
   if (!active) return null;
 
@@ -224,6 +246,15 @@ export function NavigationView() {
                 units={units}
               />
             )}
+            <OfflineNavigationBanner
+              connectivity={connectivity}
+              rerouteUnavailable={rerouteUnavailable}
+              liveDataUnavailable={liveDataUnavailable}
+              coverage={session.coverage}
+              offRoute={offRoute}
+              rerouting={rerouting}
+              onRetryReroute={requestRerouteRetry}
+            />
             {activeAlert && <AlertWidget alert={activeAlert} />}
             {rerouting && (
               <Box

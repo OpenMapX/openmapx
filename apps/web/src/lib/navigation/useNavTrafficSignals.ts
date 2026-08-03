@@ -39,7 +39,9 @@ export function useNavTrafficSignals(): LngLat[] {
   const route = useNavigationStore((s) => s.route);
   const alongMeters = useNavigationStore((s) => s.progress?.alongMeters ?? 0);
   const mode = useNavigationStore((s) => s.mode);
+  const connectivity = useNavigationStore((s) => s.connectivity);
   const setLiveSpeedLimits = useNavigationStore((s) => s.setLiveSpeedLimits);
+  const setLiveDataUnavailable = useNavigationStore((s) => s.setLiveDataUnavailable);
 
   const [signals, setSignals] = useState<LngLat[]>([]);
   const windowRef = useRef({ nextStart: 0, endMeters: 0, done: true });
@@ -59,9 +61,10 @@ export function useNavTrafficSignals(): LngLat[] {
   useEffect(() => {
     genRef.current += 1;
     fetchingRef.current = false;
-    if (!route || route.geometry.length < 2) {
+    if (connectivity === "offline" || !route || route.geometry.length < 2) {
       setSignals([]);
       setLiveSpeedLimits(null);
+      if (connectivity === "offline") setLiveDataUnavailable(true);
       limitsRef.current = [];
       windowRef.current = { nextStart: 0, endMeters: 0, done: true };
       return;
@@ -78,17 +81,22 @@ export function useNavTrafficSignals(): LngLat[] {
         setSignals(found);
         writeLimits(limitsRef.current, 0, speedLimitsByPoint);
         setLiveSpeedLimits([...limitsRef.current]);
+        setLiveDataUnavailable(false);
+      })
+      .catch(() => {
+        if (genRef.current === gen) setLiveDataUnavailable(true);
       })
       .finally(() => {
         // Only release the lock if this is still the active generation; a stale
         // previous-route fetch must not clear the new route's in-flight flag.
         if (genRef.current === gen) fetchingRef.current = false;
       });
-  }, [route, mode, cum, setLiveSpeedLimits]);
+  }, [route, mode, cum, connectivity, setLiveDataUnavailable, setLiveSpeedLimits]);
 
   // Advance the window as the driver nears its far edge (long routes only).
   useEffect(() => {
-    if (!route || windowRef.current.done || fetchingRef.current) return;
+    if (connectivity === "offline" || !route || windowRef.current.done || fetchingRef.current)
+      return;
     if (alongMeters < windowRef.current.endMeters - PREFETCH_METERS) return;
     fetchingRef.current = true;
     const gen = genRef.current;
@@ -105,6 +113,7 @@ export function useNavTrafficSignals(): LngLat[] {
           writeLimits(limitsRef.current, startIndex, speedLimitsByPoint);
           setLiveSpeedLimits([...limitsRef.current]);
         }
+        setLiveDataUnavailable(false);
         if (found.length === 0) return;
         setSignals((prev) => {
           const seen = new Set(prev.map(signalCoordKey));
@@ -119,10 +128,13 @@ export function useNavTrafficSignals(): LngLat[] {
           return merged;
         });
       })
+      .catch(() => {
+        if (genRef.current === gen) setLiveDataUnavailable(true);
+      })
       .finally(() => {
         if (genRef.current === gen) fetchingRef.current = false;
       });
-  }, [alongMeters, route, mode, cum, setLiveSpeedLimits]);
+  }, [alongMeters, route, mode, cum, connectivity, setLiveDataUnavailable, setLiveSpeedLimits]);
 
   return signals;
 }

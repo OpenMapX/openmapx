@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@motis-project/motis-client": "2.10.2",
+    "@openmapx/cli": "workspace:*",
     "@openmapx/core": "workspace:^",
     "@openmapx/db-schema": "workspace:^",
     "@openmapx/hardlinks": "workspace:*",

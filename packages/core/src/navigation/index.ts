@@ -37,6 +37,15 @@ export {
   projectEventsToRoute,
 } from "./incidentProjection";
 export { guidanceApproachMeters, resolveRecommendedLanes, shouldPreviewNextStep } from "./lanes";
+export {
+  createNavigationSessionSnapshot,
+  isNavigationSessionExpired,
+  NAVIGATION_SESSION_MAX_AGE_MS,
+  NAVIGATION_SESSION_SCHEMA_VERSION,
+  type NavigationSessionSnapshot,
+  navigationSessionFingerprint,
+  parseNavigationSessionSnapshot,
+} from "./offlineSession";
 export { navOptionsForMode } from "./options";
 export { processFix } from "./processFix";
 export { computeProgress, upcomingManeuverIndex } from "./progress";

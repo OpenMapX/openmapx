@@ -169,12 +169,13 @@ worth understanding:
   top of your own tiles.
 
 Out of the box `NEXT_PUBLIC_STYLE_PROVIDER` defaults to `openmapx`, so a fresh
-instance renders the OpenMapX house style. Its vector tiles and glyphs, however,
-proxy from MapTiler Cloud through the API until you point `NEXT_PUBLIC_TILES_URL`
-(and fonts) at your own tile server — so the default experience is the OpenMapX
-style over MapTiler-hosted tiles. When you do serve your own tiles, the base URL
-with the built-in Traefik route is `${DOMAIN}/tiles`; for local development
-against the host port it's `http://localhost:8080`.
+instance renders the OpenMapX house style. The tile source is deployment
+configuration: a deployment with no self-hosted `NEXT_PUBLIC_TILES_URL` uses the
+MapTiler Cloud fallback through the API, while the production `openmapx.com`
+instance points the same style at its self-hosted `${DOMAIN}/tiles` service.
+When you serve your own tiles, the base URL with the built-in Traefik route is
+`${DOMAIN}/tiles`; for local development against the host port it's
+`http://localhost:8080`.
 
 After changing these, apply the web service so it picks up the new environment:
 

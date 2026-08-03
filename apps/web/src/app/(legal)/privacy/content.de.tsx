@@ -60,7 +60,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 30. Juli 2026
+        Zuletzt aktualisiert: 3. August 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>

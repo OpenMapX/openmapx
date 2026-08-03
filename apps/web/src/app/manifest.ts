@@ -60,7 +60,7 @@ export default function manifest(): MetadataRoute.Manifest {
       {
         name: "Offline maps",
         short_name: "Offline",
-        description: "Manage downloaded offline areas",
+        description: "Manage downloaded offline map packages",
         url: "/settings/offline",
         icons: [{ src: "/icons/app/icon-192.png", sizes: "192x192" }],
       },

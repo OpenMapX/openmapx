@@ -22,6 +22,7 @@ const CHECK_INTERVAL_MS = 300_000;
 export function useFasterRoute(): void {
   const locale = useLocale();
   const route = useNavigationStore((s) => s.route);
+  const connectivity = useNavigationStore((s) => s.connectivity);
   const enabled = useSettingsStore((s) => s.fasterRoutes);
 
   useEffect(() => {
@@ -36,10 +37,10 @@ export function useFasterRoute(): void {
   // A position change invalidates an offer computed from the old route.
   const offRoute = useNavigationStore((s) => s.offRoute);
   useEffect(() => {
-    if (offRoute && useNavigationStore.getState().fasterRoute) {
+    if ((offRoute || connectivity === "offline") && useNavigationStore.getState().fasterRoute) {
       useNavigationStore.getState().clearFasterRoute();
     }
-  }, [offRoute]);
+  }, [offRoute, connectivity]);
 
   useEffect(() => {
     if (!enabled || !route || route.geometry.length < 2) return;
@@ -49,7 +50,15 @@ export function useFasterRoute(): void {
     const check = () => {
       const s = useNavigationStore.getState();
       if (s.status !== "navigating" || s.kind !== "ground" || s.mode !== "driving") return;
-      if (s.offRoute || s.coasting || s.weakGps || s.fasterRoute) return;
+      if (
+        s.offRoute ||
+        s.coasting ||
+        s.weakGps ||
+        s.fasterRoute ||
+        s.connectivity === "offline" ||
+        s.rerouteUnavailable
+      )
+        return;
       if (s.fasterRouteSuppressed) return;
       if (!s.route || !s.progress) return;
       if (useNavRecordingStore.getState().replaying) return;

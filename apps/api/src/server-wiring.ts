@@ -63,6 +63,7 @@ export const TILE_PUBLIC_PATTERNS = [
   /^\/api\/tiles\//,
   /^\/api\/traffic\//,
   /^\/api\/integrations\/street-level-imagery-[a-z0-9-]+\/tiles\//,
+  /^\/api\/offline\/packages\/(assets\/|[^/]+\/archive)/,
 ];
 
 export const EXPENSIVE_PUBLIC_PATTERNS = [
@@ -75,6 +76,7 @@ export const EXPENSIVE_PUBLIC_PATTERNS = [
   /^\/api\/integrations\/search-nlp(\/|$|\?)/,
   /^\/api\/integrations\/food-delivery\/(resolve|[^/]+\/(open|url))(\/|$|\?)/,
   /^\/api\/integrations\/restaurants\/menu(\/|$|\?)/,
+  /^\/api\/offline\/packages\/prepare(\/|$|\?)/,
 ];
 
 export const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);

@@ -1,5 +1,5 @@
 import type { NavStatus } from "@openmapx/core";
-import { listAreas } from "@/lib/offlineAreas/storage";
+import { hasActiveOfflinePackageDownload } from "@/lib/offlineAreas/packageDownload";
 
 export const AUTO_RELOAD_COOLDOWN_MS = 2 * 60 * 1000;
 const LAST_AUTO_RELOAD_KEY = "omx:sw-last-auto-reload";
@@ -36,12 +36,8 @@ export function hasUnsavedTextEntry(): boolean {
   return false;
 }
 
-export function hasActiveAreaDownload(): boolean {
-  try {
-    return listAreas().some((a) => a.status === "downloading");
-  } catch {
-    return false;
-  }
+export function hasActivePackageDownload(): boolean {
+  return hasActiveOfflinePackageDownload();
 }
 
 export function msSinceLastAutoReload(): number {

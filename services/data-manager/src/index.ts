@@ -23,6 +23,9 @@ import { fetchCoveredWayIds } from "./jobs/traffic/covered-ways.js";
 import { resolveOperationsProfileFromEnv } from "./jobs/transitous/operations-profile.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
 import { rootLogger } from "./logger.js";
+import { OfflinePackageGenerator } from "./offline-packages/generator.js";
+import { getOpenMapxPackageSource } from "./offline-packages/source-catalog.js";
+import { OfflinePackageStorage } from "./offline-packages/storage.js";
 import { discoverPoiSources } from "./poi-source-discovery.js";
 import { StateStore } from "./state.js";
 
@@ -30,6 +33,15 @@ const app = Fastify({ loggerInstance: rootLogger });
 registerAuth(app, resolveAuthToken(app));
 
 const dataDir = process.env.DATA_DIR ?? "/data";
+const offlinePackageStorage = new OfflinePackageStorage(join(dataDir, "offline-packages"));
+const offlinePackages = new OfflinePackageGenerator({
+  source: () => getOpenMapxPackageSource(dataDir),
+  storage: offlinePackageStorage,
+  logger: {
+    info: (message, fields) => app.log.info(fields, message),
+    warn: (message, fields) => app.log.warn(fields, message),
+  },
+});
 const repoRoot = process.env.OPENMAPX_ROOT_DIR ?? "";
 // Where to discover POI sources (`integrations/*/poi-sources.ts`) from. This
 // is decoupled from `repoRoot`: repoRoot stays the host bind-mount used for
@@ -52,6 +64,7 @@ const openConditionsUrl = process.env.OPENCONDITIONS_URL?.trim() ?? "";
 
 registerApi(app, {
   dataDir,
+  offlinePackages,
   repoRoot,
   singleFlight,
   operationsPolicy,
@@ -152,6 +165,13 @@ app
   .listen({ port, host })
   .then(async (addr) => {
     app.log.info(`data-manager listening on ${addr}`);
+
+    try {
+      await offlinePackages.initialize();
+      app.log.info("offline package storage reconciled");
+    } catch (err) {
+      app.log.error({ err }, "offline package storage initialization failed");
+    }
 
     // Reconcile zombie jobs BEFORE wiring cron / accepting work: the
     // single-flight lock is in-memory, so on a fresh boot nothing is genuinely

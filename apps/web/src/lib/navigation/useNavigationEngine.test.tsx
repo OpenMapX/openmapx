@@ -92,4 +92,58 @@ describe("useNavigationEngine", () => {
     );
     expect(useNavigationStore.getState().route?.distance).toBe(999);
   });
+
+  it("keeps the old route and suppresses directions while offline", async () => {
+    useNavigationStore.getState().startGroundNavigation(route, "driving", [
+      [0, 0],
+      [0.004, 0],
+    ]);
+    useNavigationStore.getState().setConnectivity("offline");
+    renderHook(() => useNavigationEngine());
+    const offFixes: FixInput[] = [
+      { coords: [0.001, 0.002], accuracy: 5, speed: 15, timestampMs: 1000 },
+      { coords: [0.0012, 0.002], accuracy: 5, speed: 15, timestampMs: 2000 },
+      { coords: [0.0014, 0.002], accuracy: 5, speed: 15, timestampMs: 3000 },
+      { coords: [0.0016, 0.002], accuracy: 5, speed: 15, timestampMs: 4000 },
+      { coords: [0.0018, 0.002], accuracy: 5, speed: 15, timestampMs: 5000 },
+      { coords: [0.002, 0.002], accuracy: 5, speed: 15, timestampMs: 6000 },
+    ];
+    await act(async () => {
+      for (const fix of offFixes) fixHandler?.(fix);
+      await Promise.resolve();
+    });
+    expect(fetchDirections).toHaveBeenCalledTimes(0);
+    expect(useNavigationStore.getState().route?.distance).toBe(444);
+    expect(useNavigationStore.getState().rerouteUnavailable).toBe(true);
+    expect(useNavigationStore.getState().status).toBe("navigating");
+  });
+
+  it("allows one deliberate retry after connectivity returns", async () => {
+    useNavigationStore.getState().startGroundNavigation(route, "driving", [
+      [0, 0],
+      [0.004, 0],
+    ]);
+    useNavigationStore.getState().setConnectivity("online");
+    useNavigationStore.getState().setRerouteUnavailable(true);
+    useNavigationStore.getState().requestRerouteRetry();
+    const route2 = { ...route, distance: 1111 } as Route;
+    fetchDirections.mockResolvedValue({ routes: [route2], activeRouteIndex: 0 });
+    renderHook(() => useNavigationEngine());
+    const offFixes: FixInput[] = [
+      { coords: [0.001, 0.002], accuracy: 5, speed: 15, timestampMs: 1000 },
+      { coords: [0.0012, 0.002], accuracy: 5, speed: 15, timestampMs: 2000 },
+      { coords: [0.0014, 0.002], accuracy: 5, speed: 15, timestampMs: 3000 },
+      { coords: [0.0016, 0.002], accuracy: 5, speed: 15, timestampMs: 4000 },
+      { coords: [0.0018, 0.002], accuracy: 5, speed: 15, timestampMs: 5000 },
+      { coords: [0.002, 0.002], accuracy: 5, speed: 15, timestampMs: 6000 },
+    ];
+    await act(async () => {
+      for (const fix of offFixes) fixHandler?.(fix);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(fetchDirections).toHaveBeenCalledTimes(1);
+    expect(useNavigationStore.getState().route?.distance).toBe(1111);
+    expect(useNavigationStore.getState().rerouteUnavailable).toBe(false);
+  });
 });

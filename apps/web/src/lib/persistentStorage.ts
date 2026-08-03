@@ -8,7 +8,7 @@
  * is reclaimed there's nothing left to serve the cached app shell, so
  * relaunching offline falls through to the network and the browser shows its
  * own connection-error page instead of the map. Requesting persistence exempts
- * the origin from automatic eviction. See `sw.ts` and `lib/offlineAreas/`.
+ * the origin from automatic eviction. See `sw.ts` and the offline package store.
  */
 
 function supported(): boolean {
@@ -41,7 +41,7 @@ export async function isStoragePersisted(): Promise<boolean> {
  * it returns `true` without re-prompting. Chrome grants silently for installed
  * PWAs / engaged origins; Firefox may show a one-time permission prompt, so
  * call this only from a meaningful context (installed PWA boot, or an explicit
- * "download offline area" action).
+ * offline package download action).
  */
 export async function requestPersistentStorage(): Promise<boolean> {
   if (!supported()) return false;

@@ -16,6 +16,7 @@ import Typography from "@mui/material/Typography";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { type ChangeEvent, useCallback, useEffect, useState } from "react";
+import { createOfflinePackageStorage } from "@/lib/offlineAreas";
 import {
   isStoragePersisted,
   persistentStorageSupported,
@@ -57,8 +58,8 @@ const ROW_LABELS: Record<string, string> = {
   "api-photos": "apiResponses",
 };
 
-// Caches we let "Clear cached tiles" wipe. User-downloaded offline areas
-// (`offline-area-*`) are intentionally preserved.
+// Caches we let "Clear cached tiles" wipe. Downloaded package archives live
+// in OPFS/IndexedDB and are intentionally preserved.
 const CLEARABLE_TILE_CACHES = ["map-tiles", "mapillary-tiles", "vector-tiles"];
 
 async function inspectStorage(t: (key: string) => string): Promise<StorageInfo> {
@@ -81,10 +82,27 @@ async function inspectStorage(t: (key: string) => string): Promise<StorageInfo> 
     });
   }
 
+  try {
+    const packages = await createOfflinePackageStorage().list();
+    const packageBytes = packages.reduce((sum, record) => sum + record.bytesReceived, 0);
+    if (packageBytes > 0) {
+      rows.push({
+        cacheName: "offline-package-archives",
+        label: t("offlinePackages"),
+        bytes: packageBytes,
+        count: packages.length,
+      });
+    }
+  } catch {
+    // IndexedDB/OPFS may be unavailable in private browsing; Cache Storage
+    // inspection below still provides useful information.
+  }
+
   if (typeof caches === "undefined") return { total, rows };
 
   const names = await caches.keys();
   for (const name of names) {
+    if (name.startsWith("offline-area-") || name === "omx-offline-results") continue;
     const cache = await caches.open(name);
     const reqs = await cache.keys();
     let bytes = 0;
@@ -106,8 +124,8 @@ async function inspectStorage(t: (key: string) => string): Promise<StorageInfo> 
         // ignore
       }
     }
-    const labelKey = name.startsWith("offline-area-")
-      ? "offlineAreas"
+    const labelKey = name.startsWith("offline-package-style-")
+      ? "offlinePackages"
       : (ROW_LABELS[name] ?? "apiResponses");
     rows.push({ cacheName: name, label: t(labelKey), bytes, count: reqs.length });
   }

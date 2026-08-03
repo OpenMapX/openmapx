@@ -8,7 +8,7 @@ import { useEffect, useRef } from "react";
 import { MapCredits } from "@/components/map/MapCredits";
 import { useEnv } from "@/lib/EnvProvider";
 import { baseMapCreditsHtml, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
-import type { OfflineAreaBbox } from "@/lib/offlineAreas";
+import type { OfflinePackageBbox } from "@/lib/offlineAreas";
 
 type GeoJSONSource = maplibregl.GeoJSONSource;
 
@@ -23,9 +23,9 @@ const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: 
 interface Props {
   initialCenter: [number, number];
   initialZoom: number;
-  onChange: (bbox: OfflineAreaBbox, zoom: number) => void;
+  onChange: (bbox: OfflinePackageBbox, zoom: number) => void;
   /** When set/changed, the map animates to fit this bbox (e.g. a searched admin area). */
-  fitBbox?: OfflineAreaBbox | null;
+  fitBbox?: OfflinePackageBbox | null;
   /** Admin-boundary outline to highlight inside the picker (drawn in muted red). */
   boundary?: AreaGeometry | null;
 }

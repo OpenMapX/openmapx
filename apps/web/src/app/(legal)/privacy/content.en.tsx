@@ -60,7 +60,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: July 30, 2026
+        Last updated: August 3, 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -571,11 +571,13 @@ export default function PrivacyContent({
           <li>
             <Typography>
               <strong>Service Worker cache</strong> — A Service Worker caches static assets (HTML,
-              CSS, JavaScript), map tiles, and downloaded offline areas using the browser&apos;s
-              Cache Storage API. This enables offline functionality and faster loading. Cached
-              entries expire automatically (static assets: 30 days; map tiles: 3&ndash;7 days).
-              Runtime API response caches for search, route, place, autocomplete, weather, and photo
-              lookups are only written when you enable the recent map-data cache.
+              CSS, JavaScript), online map tiles, and versioned offline-package style assets using
+              the browser&apos;s Cache Storage API. Offline map archives are stored in IndexedDB or
+              the Origin Private File System and are verified before use. This enables offline
+              functionality and faster loading. Cached entries expire automatically (static assets:
+              30 days; online map tiles: 3&ndash;7 days). Runtime API response caches for search,
+              route, place, autocomplete, weather, and photo lookups are only written when you
+              enable the recent map-data cache.
             </Typography>
           </li>
           <li>

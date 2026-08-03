@@ -23,6 +23,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { haptics } from "../haptics";
 import { useWatchPosition } from "../useWatchPosition";
+import { isConnectivityFailure } from "./navigationConnectivity";
 import { useNavRecordingStore } from "./navRecordingStore";
 import { useNavSimStore } from "./navSimStore";
 import { useFasterRoute } from "./useFasterRoute";
@@ -63,6 +64,7 @@ export function useNavigationEngine(): void {
 
   const tickRef = useRef<NavTickState>(freshTick());
   const reroutingRef = useRef(false);
+  const lastHandledRetryNonceRef = useRef(0);
   // Recent successful-reroute times (ms) + cooldown deadline for the churn guard.
   const rerouteTimesRef = useRef<number[]>([]);
   const rerouteCooldownUntilRef = useRef(0);
@@ -106,7 +108,17 @@ export function useNavigationEngine(): void {
   const onFix = useCallback(
     (fix: FixInput) => {
       const store = useNavigationStore.getState();
-      const { status, route, mode, destinationWaypoints, routeOptions, voiceEnabled } = store;
+      const {
+        status,
+        route,
+        mode,
+        destinationWaypoints,
+        routeOptions,
+        voiceEnabled,
+        connectivity,
+        rerouteUnavailable,
+        rerouteRetryNonce,
+      } = store;
       if ((status !== "navigating" && status !== "rerouting") || !route) return;
 
       // Capture the raw fix stream for the recorder (no-op unless recording).
@@ -169,12 +181,20 @@ export function useNavigationEngine(): void {
 
       // Skip live rerouting while replaying a recording — playback applies the
       // recorded reroutes instead, so the engine must not fetch new routes.
+      const retryRequested = rerouteRetryNonce > lastHandledRetryNonceRef.current;
+      const canAttemptReroute =
+        connectivity === "online" && (!rerouteUnavailable || retryRequested);
+      if (result.needsReroute && connectivity === "offline") {
+        store.setRerouteUnavailable(true);
+      }
       if (
         result.needsReroute &&
+        canAttemptReroute &&
         !reroutingRef.current &&
         !useNavRecordingStore.getState().replaying &&
         Date.now() >= rerouteCooldownUntilRef.current
       ) {
+        if (retryRequested) lastHandledRetryNonceRef.current = rerouteRetryNonce;
         reroutingRef.current = true;
         haptics.warn();
         store.beginReroute();
@@ -222,12 +242,15 @@ export function useNavigationEngine(): void {
               useNavigationStore.getState().signalRerouteFailed();
             }
           })
-          .catch(() => {
+          .catch((error) => {
             const st = useNavigationStore.getState().status;
             if (st === "idle" || st === "arrived") return;
             // Offline / API error: keep the old route, surface a toast; the next
             // qualifying off-route fix will retry.
             useNavigationStore.setState({ status: "navigating" });
+            if (isConnectivityFailure(error, useNavigationStore.getState().connectivity)) {
+              useNavigationStore.getState().setRerouteUnavailable(true);
+            }
             useNavigationStore.getState().signalRerouteFailed();
           })
           .finally(() => {
@@ -303,6 +326,10 @@ export function useNavigationEngine(): void {
     if (!fire || reroutingRef.current || Date.now() < rerouteCooldownUntilRef.current) return;
     const store = useNavigationStore.getState();
     const { route, mode, destinationWaypoints, progress, routeOptions } = store;
+    if (store.connectivity === "offline" || store.rerouteUnavailable) {
+      if (store.connectivity === "offline") store.setRerouteUnavailable(true);
+      return;
+    }
     if (!route || !progress) return;
     reroutingRef.current = true;
     haptics.warn();
@@ -337,10 +364,13 @@ export function useNavigationEngine(): void {
           useNavigationStore.getState().signalRerouteFailed();
         }
       })
-      .catch(() => {
+      .catch((error) => {
         const st = useNavigationStore.getState().status;
         if (st === "idle" || st === "arrived") return;
         useNavigationStore.setState({ status: "navigating" });
+        if (isConnectivityFailure(error, useNavigationStore.getState().connectivity)) {
+          useNavigationStore.getState().setRerouteUnavailable(true);
+        }
         useNavigationStore.getState().signalRerouteFailed();
       })
       .finally(() => {

@@ -9,7 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import {
-  hasActiveAreaDownload,
+  hasActivePackageDownload,
   hasUnsavedTextEntry,
   isSafeToAutoReload,
   markAutoReloaded,
@@ -55,7 +55,7 @@ export function SwUpdateNotice() {
         online: navigator.onLine,
         navStatus: useNavigationStore.getState().status,
         mutationCount: queryClient.isMutating(),
-        hasActiveDownload: hasActiveAreaDownload(),
+        hasActiveDownload: hasActivePackageDownload(),
         hasUnsavedText: hasUnsavedTextEntry(),
         msSinceLastAutoReload: msSinceLastAutoReload(),
       });

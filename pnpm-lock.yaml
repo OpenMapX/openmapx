@@ -2217,6 +2217,9 @@ importers:
       '@motis-project/motis-client':
         specifier: 2.10.2
         version: 2.10.2
+      '@openmapx/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core

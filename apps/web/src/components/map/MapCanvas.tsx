@@ -9,6 +9,39 @@ import { useEffect, useRef } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { loadMaptilerStyle, loadOpenMapXStyle, type MapStyleVariant } from "@/lib/map";
+import {
+  ensureOfflinePackageRuntime,
+  registerOfflinePmtilesProtocol,
+  setOfflinePackageActive,
+} from "@/lib/offlineAreas";
+
+type MapLibreRuntime = typeof import("maplibre-gl");
+
+async function loadStyleForViewport(
+  env: ReturnType<typeof useEnv>,
+  variant: MapStyleVariant,
+  mapStyle: string,
+  center: LngLat,
+  maplibre: MapLibreRuntime,
+): Promise<Record<string, unknown>> {
+  if (env.styleProvider === "openmapx" && typeof navigator !== "undefined" && !navigator.onLine) {
+    const resolver = await ensureOfflinePackageRuntime();
+    const packageRecord = resolver?.packageForCoordinate(center);
+    if (resolver && packageRecord) {
+      setOfflinePackageActive(true);
+      registerOfflinePmtilesProtocol(maplibre, resolver);
+      return await loadOpenMapXStyle(env, variant, {
+        packageId: packageRecord.id,
+        manifest: packageRecord.manifest,
+      });
+    }
+  }
+
+  setOfflinePackageActive(false);
+  return env.styleProvider === "openmapx"
+    ? await loadOpenMapXStyle(env, variant)
+    : await loadMaptilerStyle(mapStyle, env);
+}
 
 export function MapCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -31,6 +64,7 @@ export function MapCanvas() {
     const { center, zoom, bearing, pitch } = useMapStore.getState();
 
     let destroyed = false;
+    let cleanupConnectivity: (() => void) | undefined;
 
     const initMap = async (initialCenter: LngLat, initialZoom: number) => {
       setCenter(initialCenter);
@@ -44,10 +78,8 @@ export function MapCanvas() {
       try {
         maplibreRuntime = (await import("maplibre-gl")).default;
         if (destroyed || !containerRef.current) return;
-        style =
-          env.styleProvider === "openmapx"
-            ? await loadOpenMapXStyle(env, variant)
-            : await loadMaptilerStyle(mapStyle, env);
+        const maplibregl = maplibreRuntime as unknown as MapLibreRuntime;
+        style = await loadStyleForViewport(env, variant, mapStyle, initialCenter, maplibregl);
       } catch (err) {
         console.error("Failed to initialize map", err);
         return;
@@ -114,6 +146,24 @@ export function MapCanvas() {
       map.on("style.load", () => {
         if (!destroyed) notifyStyleReload();
       });
+
+      const reloadForConnectivity = () => {
+        if (destroyed) return;
+        const current = map.getCenter();
+        void loadStyleForViewport(env, variant, mapStyle, [current.lng, current.lat], maplibregl)
+          .then((nextStyle) => {
+            if (!destroyed) map.setStyle(nextStyle as maplibregl.StyleSpecification);
+          })
+          .catch((err) => {
+            console.warn("Unable to switch map style for connectivity change", err);
+          });
+      };
+      window.addEventListener("online", reloadForConnectivity);
+      window.addEventListener("offline", reloadForConnectivity);
+      cleanupConnectivity = () => {
+        window.removeEventListener("online", reloadForConnectivity);
+        window.removeEventListener("offline", reloadForConnectivity);
+      };
     };
 
     // If geolocation permission is already granted, initialize the map centered
@@ -148,6 +198,8 @@ export function MapCanvas() {
 
     return () => {
       destroyed = true;
+      setOfflinePackageActive(false);
+      cleanupConnectivity?.();
       mapRef.current?.remove();
       mapRef.current = null;
     };
@@ -172,11 +224,17 @@ export function MapCanvas() {
     if (mapStyle === initialStyleRef.current) return;
     initialStyleRef.current = mapStyle;
 
-    const loadStyle =
-      env.styleProvider === "openmapx"
-        ? loadOpenMapXStyle(env, variant)
-        : loadMaptilerStyle(mapStyle, env);
-    loadStyle
+    const center = map.getCenter();
+    Promise.all([import("maplibre-gl"), Promise.resolve([center.lng, center.lat] as LngLat)])
+      .then(([module, currentCenter]) =>
+        loadStyleForViewport(
+          env,
+          variant,
+          mapStyle,
+          currentCenter,
+          module.default as unknown as MapLibreRuntime,
+        ),
+      )
       .then((s) => {
         // The persistent `style.load` listener registered at map creation bumps
         // styleVersion once the new style lands.

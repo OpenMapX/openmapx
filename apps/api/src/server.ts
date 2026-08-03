@@ -41,6 +41,7 @@ import { legalConfigRoute } from "./routes/legal-config";
 import { maptilerRoute } from "./routes/maptiler";
 import { meRoute } from "./routes/me";
 import { neighborhoodsRoute } from "./routes/neighborhoods";
+import { offlinePackagesRoute } from "./routes/offline-packages";
 import { placesRoute } from "./routes/places";
 import { reviewsKeypairRoute } from "./routes/reviews-keypair";
 import { savedRoute } from "./routes/saved";
@@ -263,6 +264,7 @@ await server.register(legalConfigRoute, { prefix: "/api" });
 // Routes
 await server.register(placesRoute, { prefix: "/api" });
 await server.register(neighborhoodsRoute, { prefix: "/api" });
+await server.register(offlinePackagesRoute, { prefix: "/api" });
 
 await server.register(elevationRoute, { prefix: "/api" });
 await server.register(trafficRoute, { prefix: "/api" });

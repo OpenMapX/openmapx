@@ -44,12 +44,20 @@ export function useNavIncidents(): NavIncidentsResult {
   const along = useNavigationStore((s) => s.progress?.alongMeters ?? 0);
   const incidentAlerts = useSettingsStore((s) => s.incidentAlerts);
   const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
+  const connectivity = useNavigationStore((s) => s.connectivity);
+  const setLiveDataUnavailable = useNavigationStore((s) => s.setLiveDataUnavailable);
   const fetchEnabled = incidentAlerts || avoidIncidents;
 
   const [events, setEvents] = useState<RoadConditionEvent[]>([]);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    if (connectivity === "offline") {
+      setEvents([]);
+      setReady(false);
+      setLiveDataUnavailable(true);
+      return;
+    }
     if (!fetchEnabled || !route || route.geometry.length < 2) {
       setEvents([]);
       setReady(false);
@@ -64,14 +72,25 @@ export function useNavIncidents(): NavIncidentsResult {
     let cancelled = false;
     let firstLoad = true;
     const load = () => {
-      void fetchRoadConditions([box.west, box.south, box.east, box.north]).then((e) => {
-        if (cancelled) return;
-        setEvents(e);
-        if (firstLoad) {
-          firstLoad = false;
-          setReady(true);
-        }
-      });
+      void fetchRoadConditions([box.west, box.south, box.east, box.north])
+        .then((e) => {
+          if (cancelled) return;
+          setEvents(e);
+          setLiveDataUnavailable(false);
+          if (firstLoad) {
+            firstLoad = false;
+            setReady(true);
+          }
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setEvents([]);
+          setLiveDataUnavailable(true);
+          if (firstLoad) {
+            firstLoad = false;
+            setReady(true);
+          }
+        });
     };
     load();
     const timer = setInterval(load, REFRESH_MS);
@@ -80,28 +99,30 @@ export function useNavIncidents(): NavIncidentsResult {
       clearInterval(timer);
       setReady(false);
     };
-  }, [route, fetchEnabled]);
+  }, [route, fetchEnabled, connectivity, setLiveDataUnavailable]);
 
   // Geometry/road/direction matching is intentionally independent of the live
   // GPS position, so perform the expensive route match only when events or the
   // route change. The cheap ahead-window filter may then run on every fix.
   const projected = useMemo(
     () =>
-      route
+      route && connectivity === "online"
         ? projectEventsToRoute(events, route.geometry, 0, {
             routeSteps: route.steps,
             lookaheadMeters: Number.POSITIVE_INFINITY,
           })
         : [],
-    [events, route],
+    [events, route, connectivity],
   );
   const incidents = useMemo(
     () =>
-      projected.filter((incident) => {
-        const ahead = incident.alongMeters - along;
-        return ahead > 0 && ahead <= LOOKAHEAD_M;
-      }),
-    [projected, along],
+      connectivity === "offline"
+        ? []
+        : projected.filter((incident) => {
+            const ahead = incident.alongMeters - along;
+            return ahead > 0 && ahead <= LOOKAHEAD_M;
+          }),
+    [projected, along, connectivity],
   );
 
   return useMemo(() => ({ incidents, ready }), [incidents, ready]);

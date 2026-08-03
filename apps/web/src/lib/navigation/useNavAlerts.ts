@@ -34,14 +34,15 @@ export function useNavAlerts(): ActiveAlert | null {
   const speed = useNavigationStore((s) => s.progress?.speedMps ?? 0);
   const speedCameraAlerts = useSettingsStore((s) => s.speedCameraAlerts);
   const incidentAlerts = useSettingsStore((s) => s.incidentAlerts);
+  const connectivity = useNavigationStore((s) => s.connectivity);
 
   const origin = (route?.geometry[0] ?? null) as LngLat | null;
-  const { data: country } = useCountryFromCoordinates(origin, !!route);
+  const { data: country } = useCountryFromCoordinates(origin, !!route && connectivity === "online");
 
   const [raw, setRaw] = useState<RawRoadAlert[]>([]);
 
   useEffect(() => {
-    if (!route || route.geometry.length < 2) {
+    if (connectivity === "offline" || !route || route.geometry.length < 2) {
       setRaw([]);
       return;
     }
@@ -56,18 +57,22 @@ export function useNavAlerts(): ActiveAlert | null {
       return;
     }
     let cancelled = false;
-    fetchRoadAlerts({ south, west, north, east }).then((a) => {
-      if (!cancelled) setRaw(a);
-    });
+    fetchRoadAlerts({ south, west, north, east })
+      .then((a) => {
+        if (!cancelled) setRaw(a);
+      })
+      .catch(() => {
+        if (!cancelled) setRaw([]);
+      });
     return () => {
       cancelled = true;
     };
-  }, [route]);
+  }, [route, connectivity]);
 
   // Project each raw alert onto the route, keep those on/near the line, and
   // apply the speed-camera opt-in + legal region gate.
   const alerts: RoadAlert[] = useMemo(() => {
-    if (!route) return [];
+    if (!route || connectivity === "offline") return [];
     const cameraAllowed =
       speedCameraAlerts && !(country != null && CAMERA_RESTRICTED_COUNTRIES.has(country));
     const out: RoadAlert[] = [];
@@ -84,14 +89,14 @@ export function useNavAlerts(): ActiveAlert | null {
       });
     }
     return out;
-  }, [raw, route, speedCameraAlerts, country]);
+  }, [raw, route, speedCameraAlerts, country, connectivity]);
 
   // Traffic incidents (from the road-conditions capability) merge into the same
   // selector as the OSM hazards; they carry priority 0, so an in-range incident
   // is surfaced before a speed camera or crossing. Only included when the user
   // has incident alerts on; the fetch may still be active for avoidIncidents.
   const { incidents } = useNavIncidents();
-  const visibleIncidents = incidentAlerts ? incidents : [];
+  const visibleIncidents = incidentAlerts && connectivity === "online" ? incidents : [];
 
   return useMemo(
     () => selectActiveAlert([...visibleIncidents, ...alerts], along, speed, []),

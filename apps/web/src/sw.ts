@@ -25,36 +25,10 @@ import {
 import {
   isCredentialedApiPath,
   isStalePrecacheName,
-  offlineFallback,
-  refreshPinnedStyleAssets,
+  offlineStyleCacheNameForVersion,
 } from "./lib/swCaches";
 
 declare const self: ServiceWorkerGlobalScope;
-
-// Background Fetch API (not in lib.webworker) — only what we consume, plus the
-// event-map augmentation so `addEventListener` types the handler events.
-interface BackgroundFetchRecord {
-  readonly request: Request;
-  readonly responseReady: Promise<Response>;
-}
-interface BackgroundFetchRegistrationSW extends EventTarget {
-  readonly id: string;
-  readonly downloaded: number;
-  readonly downloadTotal: number;
-  readonly failureReason: string;
-  matchAll(): Promise<BackgroundFetchRecord[]>;
-}
-interface BackgroundFetchEvent extends ExtendableEvent {
-  readonly registration: BackgroundFetchRegistrationSW;
-}
-declare global {
-  interface ServiceWorkerGlobalScopeEventMap {
-    backgroundfetchsuccess: BackgroundFetchEvent;
-    backgroundfetchfail: BackgroundFetchEvent;
-    backgroundfetchabort: BackgroundFetchEvent;
-    backgroundfetchclick: BackgroundFetchEvent;
-  }
-}
 
 // Replaced at build time by scripts/build-sw.mjs (esbuild `define`) with a
 // per-build id. Weaving it into the app-shell cache name below makes sw.js's
@@ -69,14 +43,13 @@ const APP_SHELL_CACHE = `app-shell-${__SW_BUILD_ID__}`;
 // Map-style assets (style JSON / sprite / TileJSON) are versioned by build id
 // too, so a deploy that changes the self-hosted style serves the new one on the
 // next load instead of the worker's stale copy. Old style caches are pruned on
-// activate; downloaded offline areas (offline-area-*) are intentionally kept.
+// activate.
 const STYLE_CACHE = `style-assets-${__SW_BUILD_ID__}`;
-// `/` is precached so a user with downloaded offline areas can still reach
-// the map after the runtime `pages` cache has expired (24h / 20 entries).
+// `/` is precached so the app can still be opened after the runtime `pages`
+// cache has expired (24h / 20 entries).
 // Without this, the nav handler would fall through to /offline and the
 // downloaded tiles would be unreachable.
 const APP_SHELL_URLS = [HOME_URL, OFFLINE_URL, "/manifest.webmanifest"];
-const OFFLINE_AREA_CACHE_PREFIX = "offline-area-";
 const RECENT_MAP_DATA_CACHE_NAMES = [
   "api-geodata",
   "api-category-search",
@@ -122,49 +95,13 @@ async function writeRecentMapDataCachePreference(enabled: boolean): Promise<void
   ]);
 }
 
-/**
- * Looks up a request in any user-downloaded offline-area cache. Used by tile
- * and style handlers so a user-pinned area is served instantly and works
- * offline even after the runtime caches expire or are cleared.
- */
-async function matchOfflineArea(request: Request): Promise<Response | null> {
-  const cacheNames = await caches.keys();
-  for (const name of cacheNames) {
-    if (!name.startsWith(OFFLINE_AREA_CACHE_PREFIX)) continue;
-    const cache = await caches.open(name);
-    const match = await cache.match(request, { ignoreSearch: false });
-    if (match) return match;
-  }
-  return null;
-}
-
-/**
- * Wraps a Serwist strategy so user-downloaded offline-area caches are checked
- * first. Anything cached as part of a downloaded area should be served
- * immediately; only on miss do we fall through to the runtime strategy. This
- * keeps a downloaded area usable across runtime cache evictions, theme
- * changes, and self-hosted style deployments.
- */
-function withOfflineFirst(strategy: Strategy): RouteHandlerCallback {
-  return async (options: RouteHandlerCallbackOptions) => {
-    const offlineMatch = await matchOfflineArea(options.request);
-    if (offlineMatch) return offlineMatch;
-    return strategy.handle(options);
-  };
-}
-
-/**
- * Like withOfflineFirst, but the runtime strategy wins when it can respond and
- * the offline-area pin is only a fallback. Used for the map style / sprite,
- * which share one region-independent URL — so a downloaded area must not freeze
- * the style globally after a deploy, yet still renders offline.
- */
-function withOfflineFallback(strategy: Strategy): RouteHandlerCallback {
-  return (options: RouteHandlerCallbackOptions) =>
-    offlineFallback(
-      () => strategy.handle(options),
-      () => matchOfflineArea(options.request),
-    );
+/** Package style assets are small, explicit Cache Storage entries. */
+async function matchOfflineStyle(request: Request): Promise<Response | null> {
+  const url = new URL(request.url);
+  const version = url.searchParams.get("offlineStyle");
+  if (!version || !/^[A-Za-z0-9_-]{1,256}$/.test(version)) return null;
+  const cache = await caches.open(offlineStyleCacheNameForVersion(version));
+  return (await cache.match(request, { ignoreSearch: false })) ?? null;
 }
 
 function withRecentMapDataCache(strategy: Strategy): RouteHandlerCallback {
@@ -228,15 +165,22 @@ const serwist = new Serwist({
       }),
     },
 
-    // MapTiler tiles / style / sprite / glyphs via API proxy — offline-area first, then SWR.
+    // Package style assets are small and explicitly versioned by the package.
+    // The archive itself is read by the page-side PMTiles protocol and never
+    // enters Cache Storage.
+    {
+      matcher: ({ url }: { url: URL }) => url.searchParams.has("offlineStyle"),
+      handler: async ({ request }: { request: Request }) =>
+        (await matchOfflineStyle(request)) ?? fetch(request),
+    },
+
+    // MapTiler tiles / style / sprite / glyphs via API proxy — runtime SWR.
     {
       matcher: /\/api\/maptiler\//i,
-      handler: withOfflineFirst(
-        new StaleWhileRevalidate({
-          cacheName: "map-tiles",
-          plugins: [new ExpirationPlugin({ maxEntries: 1000, maxAgeSeconds: 7 * 24 * 60 * 60 })],
-        }),
-      ),
+      handler: new StaleWhileRevalidate({
+        cacheName: "map-tiles",
+        plugins: [new ExpirationPlugin({ maxEntries: 1000, maxAgeSeconds: 7 * 24 * 60 * 60 })],
+      }),
     },
 
     // Mapillary coverage tiles via API proxy — StaleWhileRevalidate
@@ -248,22 +192,14 @@ const serwist = new Serwist({
       }),
     },
 
-    // Self-hosted map style assets — covers `/styles/*` for the same-origin
-    // openmapx style as well as for any `NEXT_PUBLIC_MAP_STYLE_URL` base
-    // whose path is also `/styles/*`. Style JSON, sprite JSON/PNG, and
-    // TileJSON live here. These share one region-independent URL, so we use
-    // offline-FALLBACK (not offline-first): online, the build-versioned runtime
-    // cache serves the fresh style after a deploy even when the user has a
-    // downloaded area pinning the old one; offline, the area's copy still
-    // renders. (Tiles/glyphs below stay offline-first — they're per-region.)
+    // Self-hosted map style assets — runtime SWR. Package variants carry an
+    // `offlineStyle` query and are handled by the explicit route above.
     {
       matcher: ({ url }: { url: URL }) => /\/styles\//i.test(url.pathname),
-      handler: withOfflineFallback(
-        new StaleWhileRevalidate({
-          cacheName: STYLE_CACHE,
-          plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 7 * 24 * 60 * 60 })],
-        }),
-      ),
+      handler: new StaleWhileRevalidate({
+        cacheName: STYLE_CACHE,
+        plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 7 * 24 * 60 * 60 })],
+      }),
     },
 
     // API geodata — StaleWhileRevalidate
@@ -327,16 +263,13 @@ const serwist = new Serwist({
       ),
     },
 
-    // Self-hosted vector tiles & font glyphs (.pbf) — offline-area first,
-    // then CacheFirst.
+    // Self-hosted vector tiles & font glyphs (.pbf) — online runtime cache.
     {
       matcher: /\.pbf(\?.*)?$/i,
-      handler: withOfflineFirst(
-        new CacheFirst({
-          cacheName: "vector-tiles",
-          plugins: [new ExpirationPlugin({ maxEntries: 5000, maxAgeSeconds: 30 * 24 * 60 * 60 })],
-        }),
-      ),
+      handler: new CacheFirst({
+        cacheName: "vector-tiles",
+        plugins: [new ExpirationPlugin({ maxEntries: 5000, maxAgeSeconds: 30 * 24 * 60 * 60 })],
+      }),
     },
 
     // App shell HTML — NetworkFirst, with offline fallback in setCatchHandler.
@@ -420,148 +353,6 @@ self.addEventListener("activate", (event) => {
           .filter((k) => isStalePrecacheName(k, { appShell: APP_SHELL_CACHE, style: STYLE_CACHE }))
           .map((k) => caches.delete(k)),
       );
-
-      // Refresh the style/sprite pinned in downloaded offline areas, but only
-      // when they actually changed (conditional ETag request → 304 = skip).
-      // Keeps offline rendering on the latest style after a deploy without
-      // re-downloading when nothing changed. Best-effort; offline = no-op.
-      await refreshPinnedStyleAssets({
-        listAreaCacheNames: async () =>
-          (await caches.keys()).filter((k) => k.startsWith(OFFLINE_AREA_CACHE_PREFIX)),
-        openCache: async (name) => {
-          const cache = await caches.open(name);
-          return {
-            keys: () => cache.keys(),
-            match: (url) => cache.match(url),
-            put: (url, response) => cache.put(url, response as Response),
-          };
-        },
-        isStyleUrl: (url) => /\/styles\//i.test(new URL(url).pathname),
-        fetchFresh: async (url, etag) => {
-          try {
-            return await fetch(url, {
-              cache: "no-store",
-              headers: etag ? { "If-None-Match": etag } : undefined,
-            });
-          } catch {
-            return null;
-          }
-        },
-      });
-    })(),
-  );
-});
-
-// Background Fetch — reliable offline-area downloads that survive navigation and
-// the page closing, with an OS progress notification. The client kicks one off
-// (see lib/offlineAreas/backgroundDownload); here we land the results into the
-// same `offline-area-<id>` cache the in-page downloader uses, write a small
-// completion marker the page reconciles from, and ping any open client.
-const OFFLINE_AREA_RESULTS_CACHE = "omx-offline-results";
-
-async function writeAreaResult(
-  id: string,
-  data: { ok: boolean; downloaded?: number; count?: number; reason?: string },
-): Promise<void> {
-  const cache = await caches.open(OFFLINE_AREA_RESULTS_CACHE);
-  await cache.put(
-    `/__offline-area-result/${encodeURIComponent(id)}`,
-    new Response(JSON.stringify(data), { headers: { "content-type": "application/json" } }),
-  );
-}
-
-async function notifyOfflineAreaDone(id: string, ok: boolean): Promise<void> {
-  const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
-  for (const client of clients) client.postMessage({ type: "OFFLINE_AREA_DONE", id, ok });
-}
-
-/** Show an app-icon badge so a finished background download is noticeable when
- * the app is closed/backgrounded. Cleared when the user opens Offline maps. */
-async function badgeOfflineDownloadDone(): Promise<void> {
-  const nav = navigator as unknown as { setAppBadge?: (n?: number) => Promise<void> };
-  if (typeof nav.setAppBadge !== "function") return;
-  try {
-    await nav.setAppBadge(1);
-  } catch {
-    // badging is optional
-  }
-}
-
-/** Copy a Background Fetch's successful responses into the area cache. */
-async function storeBackgroundFetchRecords(reg: BackgroundFetchRegistrationSW): Promise<number> {
-  const cache = await caches.open(`${OFFLINE_AREA_CACHE_PREFIX}${reg.id}`);
-  const records = await reg.matchAll();
-  let stored = 0;
-  await Promise.all(
-    records.map(async (record) => {
-      const response = await record.responseReady.catch(() => null);
-      // Skip 4xx/5xx (e.g. ocean tiles past coverage) — matches the in-page path.
-      if (response?.ok) {
-        await cache.put(record.request, response);
-        stored += 1;
-      }
-    }),
-  );
-  return stored;
-}
-
-self.addEventListener("backgroundfetchsuccess", (event) => {
-  const reg = event.registration;
-  event.waitUntil(
-    (async () => {
-      try {
-        const count = await storeBackgroundFetchRecords(reg);
-        await writeAreaResult(reg.id, { ok: true, downloaded: reg.downloaded, count });
-        await notifyOfflineAreaDone(reg.id, true);
-        await badgeOfflineDownloadDone();
-      } catch (err) {
-        await writeAreaResult(reg.id, {
-          ok: false,
-          reason: (err as Error)?.message ?? "store failed",
-        });
-        await notifyOfflineAreaDone(reg.id, false);
-      }
-    })(),
-  );
-});
-
-self.addEventListener("backgroundfetchfail", (event) => {
-  const reg = event.registration;
-  event.waitUntil(
-    (async () => {
-      // Keep whatever did download so a partial area is still usable.
-      let count = 0;
-      try {
-        count = await storeBackgroundFetchRecords(reg);
-      } catch {
-        // best-effort
-      }
-      await writeAreaResult(reg.id, {
-        ok: false,
-        downloaded: reg.downloaded,
-        count,
-        reason: reg.failureReason || "fetch failed",
-      });
-      await notifyOfflineAreaDone(reg.id, false);
-    })(),
-  );
-});
-
-self.addEventListener("backgroundfetchabort", (event) => {
-  event.waitUntil(writeAreaResult(event.registration.id, { ok: false, reason: "aborted" }));
-});
-
-self.addEventListener("backgroundfetchclick", (event) => {
-  const target = new URL("/settings/offline", self.location.origin).href;
-  event.waitUntil(
-    (async () => {
-      const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-      const existing = clients.find((c) => c.url.includes("/settings/offline"));
-      if (existing) {
-        await existing.focus();
-        return;
-      }
-      await self.clients.openWindow(target);
     })(),
   );
 });

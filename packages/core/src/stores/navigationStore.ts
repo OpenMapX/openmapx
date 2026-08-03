@@ -1,5 +1,9 @@
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { create } from "zustand";
+import {
+  createNavigationSessionSnapshot,
+  type NavigationSessionSnapshot,
+} from "../navigation/offlineSession";
 import type { TransitProgress } from "../navigation/transitProgress";
 import type { CameraMode, NavProgress, NavStatus } from "../navigation/types";
 import { getStorage } from "../platform/storage";
@@ -81,6 +85,9 @@ export interface FasterRouteProposal {
   proposedAtMs: number;
 }
 
+export type NavigationConnectivity = "online" | "offline";
+export type RerouteAvailability = "available" | "unavailable";
+
 interface NavigationState {
   status: NavStatus;
   kind: NavKind;
@@ -134,6 +141,16 @@ interface NavigationState {
   transitRerouteNeeded: boolean;
   /** User's resolved transit options, snapshotted for on-trip replans. */
   transitReplanOptions: TransitReplanOptions | null;
+  /** Browser connectivity signal; route state is intentionally independent of it. */
+  connectivity: NavigationConnectivity;
+  /** True after an offline/error reroute until one succeeds or navigation ends. */
+  rerouteUnavailable: boolean;
+  /** True when live incidents/traffic/alerts are not known to be current. */
+  liveDataUnavailable: boolean;
+  /** Monotonic UI intent consumed by the web navigation engine for one retry. */
+  rerouteRetryNonce: number;
+  /** Start time for the bounded local route-session snapshot. */
+  navigationStartedAtMs: number | null;
 
   startGroundNavigation: (
     route: Route,
@@ -172,6 +189,11 @@ interface NavigationState {
   signalRerouteFailed: () => void;
   beginReroute: () => void;
   applyReroute: (route: Route, provider?: string, alternatives?: Route[]) => void;
+  setConnectivity: (value: NavigationConnectivity) => void;
+  setRerouteUnavailable: (value: boolean) => void;
+  setLiveDataUnavailable: (value: boolean) => void;
+  requestRerouteRetry: () => void;
+  restoreGroundNavigation: (snapshot: NavigationSessionSnapshot) => void;
   proposeFasterRoute: (proposal: FasterRouteProposal) => void;
   /** Switch to the pending proposal and adopt its fresh alternatives. */
   acceptFasterRoute: (routeIntent?: RouteSelectionIntent) => void;
@@ -217,6 +239,11 @@ const INITIAL = {
   transitProgress: null as TransitProgress | null,
   transitRerouteNeeded: false,
   transitReplanOptions: null as TransitReplanOptions | null,
+  connectivity: "online" as NavigationConnectivity,
+  rerouteUnavailable: false,
+  liveDataUnavailable: false,
+  rerouteRetryNonce: 0,
+  navigationStartedAtMs: null as number | null,
 };
 
 export const useNavigationStore = create<NavigationState>((set) => ({
@@ -237,6 +264,10 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       routeProvider: provider ?? null,
       activeRouteIndex: 0,
       destinationWaypoints: waypoints,
+      navigationStartedAtMs: Date.now(),
+      connectivity: "online",
+      rerouteUnavailable: false,
+      liveDataUnavailable: false,
     }),
   // Switch the followed route to a shown alternative. Clears progress (it belongs
   // to the old geometry) like a reroute; the engine/camera reset on route identity.
@@ -290,7 +321,8 @@ export const useNavigationStore = create<NavigationState>((set) => ({
   setOffRoute: (offRoute) => set({ offRoute }),
   setWeakGps: (weakGps) => set({ weakGps }),
   setCoasting: (coasting) => set({ coasting }),
-  signalRerouteFailed: () => set((s) => ({ rerouteFailedNonce: s.rerouteFailedNonce + 1 })),
+  signalRerouteFailed: () =>
+    set((s) => ({ rerouteFailedNonce: s.rerouteFailedNonce + 1, rerouteUnavailable: true })),
   beginReroute: () => set({ status: "rerouting" }),
   // Clear progress: it belongs to the OLD route. Leaving the previous route's
   // (larger) alongMeters in place would mislead every progress consumer for one
@@ -306,8 +338,54 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       routeSelectionIntent: "automatic",
       fasterRoute: null,
       fasterRouteSuppressed: false,
+      rerouteUnavailable: false,
       ...(alternatives && { routes: [route, ...alternatives], activeRouteIndex: 0 }),
     })),
+  setConnectivity: (connectivity) =>
+    set({ connectivity, ...(connectivity === "offline" && { liveDataUnavailable: true }) }),
+  setRerouteUnavailable: (rerouteUnavailable) => set({ rerouteUnavailable }),
+  setLiveDataUnavailable: (liveDataUnavailable) => set({ liveDataUnavailable }),
+  requestRerouteRetry: () => set((s) => ({ rerouteRetryNonce: s.rerouteRetryNonce + 1 })),
+  restoreGroundNavigation: (snapshot) => {
+    if (
+      snapshot.kind !== "ground" ||
+      !["driving", "walking", "cycling", "motorcycle"].includes(snapshot.mode)
+    ) {
+      throw new Error("only a ground navigation snapshot can be restored");
+    }
+    const restored = createNavigationSessionSnapshot({
+      route: snapshot.route,
+      routes: snapshot.routes,
+      activeRouteIndex: snapshot.activeRouteIndex,
+      routeSelectionIntent: snapshot.routeSelectionIntent,
+      mode: snapshot.mode,
+      routeOptions: snapshot.routeOptions,
+      routeProvider: snapshot.routeProvider,
+      destinationWaypoints: snapshot.destinationWaypoints,
+      progress: snapshot.progress,
+      packageIds: snapshot.packageIds,
+      startedAtMs: snapshot.startedAtMs,
+      updatedAtMs: snapshot.updatedAtMs,
+      lastKnownPosition: snapshot.lastKnownPosition,
+    });
+    set({
+      ...INITIAL,
+      status: "navigating",
+      kind: "ground",
+      mode: restored.mode,
+      route: restored.route,
+      routes: restored.routes,
+      activeRouteIndex: restored.activeRouteIndex,
+      routeSelectionIntent: restored.routeSelectionIntent,
+      routeOptions: restored.routeOptions,
+      routeProvider: restored.routeProvider,
+      destinationWaypoints: restored.destinationWaypoints,
+      progress: restored.progress,
+      navigationStartedAtMs: restored.startedAtMs,
+      connectivity: "offline",
+      liveDataUnavailable: true,
+    });
+  },
   proposeFasterRoute: (fasterRoute) => set({ fasterRoute }),
   acceptFasterRoute: (routeIntent) =>
     set((s) => {
@@ -341,7 +419,8 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       getStorage().setString(KEEP_SCREEN_ON_STORAGE_KEY, String(keepScreenOn));
       return { keepScreenOn };
     }),
-  completeArrival: () => set({ status: "arrived" }),
+  completeArrival: () =>
+    set({ status: "arrived", rerouteUnavailable: false, liveDataUnavailable: false }),
   stopNavigation: () => set({ ...INITIAL }),
   hydrate: () =>
     set({

@@ -7,6 +7,12 @@
   "bin": {
     "openmapx": "src/index.ts"
   },
+  "exports": {
+    "./tile-pmtiles": {
+      "types": "./src/lib/tile-pmtiles.ts",
+      "default": "./src/lib/tile-pmtiles.ts"
+    }
+  },
   "scripts": {
     "check-types": "tsc --noEmit"
   },

@@ -23,9 +23,11 @@ export { useMapClickStore } from "./mapClickStore";
 export { useMapStore } from "./mapStore";
 export { useMenuStore } from "./menuStore";
 export type {
+  NavigationConnectivity,
   NavigationRouteOptions,
   NavigationStartOptions,
   NavKind,
+  RerouteAvailability,
   RouteSelectionIntent,
   TransitReplanOptions,
 } from "./navigationStore";

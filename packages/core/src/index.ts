@@ -27,6 +27,7 @@ export {
   coastState,
   computeProgress,
   computeTransitProgress,
+  createNavigationSessionSnapshot,
   cumulativeDistances,
   type DeadReckonOptions,
   type DeadReckonTarget,
@@ -45,16 +46,22 @@ export {
   type GeometryWindow,
   guidanceApproachMeters,
   type IncidentAlert,
+  isNavigationSessionExpired,
   isOverSpeed,
   isReroutingTooOften,
   matchSpeedLimitsByPoint,
   NAV_RECORDING_VERSION,
+  NAVIGATION_SESSION_MAX_AGE_MS,
+  NAVIGATION_SESSION_SCHEMA_VERSION,
+  type NavigationSessionSnapshot,
   type NavRecording,
+  navigationSessionFingerprint,
   navOptionsForMode,
   nextVoiceCue,
   OVER_SPEED_TOLERANCE_KMH,
   type ProjectEventsOptions,
   type ProjectFlowOptions,
+  parseNavigationSessionSnapshot,
   pickSpeedLimit,
   poiAlongRoute,
   positionAt,
@@ -103,6 +110,7 @@ export type {
   SnapResult,
   VoiceCue,
 } from "./navigation/types";
+export * from "./offline";
 export * from "./panels";
 export * from "./platform";
 export * from "./stores";

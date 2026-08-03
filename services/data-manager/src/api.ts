@@ -1,9 +1,10 @@
-import { rmSync } from "node:fs";
+import { createReadStream, rmSync } from "node:fs";
 import { join } from "node:path";
+import { type OfflinePackageRequest, parseOfflinePackageRequest } from "@openmapx/core";
 import { feedState } from "@openmapx/db-schema";
 import { parseTransitSource } from "@openmapx/transitous-core";
 import { execa } from "execa";
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { db } from "./db/index.js";
 import { convertPbfToBz2, convertPbfToBz2ForRegion } from "./jobs/convert-overpass.js";
 import { downloadOsm } from "./jobs/download-osm.js";
@@ -34,6 +35,8 @@ import { runMotisPreflight } from "./jobs/transitous/preflight.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
 import type { SingleFlightController } from "./jobs/transitous/single-flight.js";
 import { asJobLogger, jobChildLogger } from "./logger.js";
+import type { OfflinePackageGenerator } from "./offline-packages/generator.js";
+import { isContentAddressedPackageId } from "./offline-packages/storage.js";
 import { StateStore } from "./state.js";
 import {
   listPinnedTransitCatalog,
@@ -72,6 +75,8 @@ export interface ApiOptions {
    * pretending to work on a deployment without OpenConditions.
    */
   bakePredicted?: () => Promise<BakePredictedResult>;
+  /** Offline package generator initialized by the process entrypoint. */
+  offlinePackages?: OfflinePackageGenerator;
 }
 
 const startedAt = Date.now();
@@ -181,6 +186,184 @@ function openNdjsonStream(reply: FastifyReply): NdjsonStream {
   };
 }
 
+interface ByteRange {
+  start: number;
+  end: number;
+}
+
+function parseByteRange(value: string, total: number): ByteRange | undefined {
+  if (!/^bytes=\d*-\d*$/.test(value)) return undefined;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(value);
+  if (!match) return undefined;
+  const startValue = match[1];
+  const endValue = match[2];
+  if (!startValue && !endValue) return undefined;
+  if (!startValue) {
+    const suffixLength = Number(endValue);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0 || total === 0) return undefined;
+    return { start: Math.max(0, total - suffixLength), end: total - 1 };
+  }
+  const start = Number(startValue);
+  if (!Number.isSafeInteger(start) || start >= total) return undefined;
+  const requestedEnd = endValue ? Number(endValue) : total - 1;
+  if (!Number.isSafeInteger(requestedEnd) || requestedEnd < start) return undefined;
+  return { start, end: Math.min(requestedEnd, total - 1) };
+}
+
+function registerOfflinePackageRoutes(
+  app: FastifyInstance,
+  generator: OfflinePackageGenerator,
+): void {
+  app.get("/offline/packages/capability", async (_request, reply) => {
+    return reply.send(await generator.getCapability());
+  });
+
+  app.post<{ Body: OfflinePackageRequest }>("/offline/packages/prepare", async (request, reply) => {
+    let body: OfflinePackageRequest;
+    try {
+      body = parseOfflinePackageRequest(request.body);
+    } catch (error) {
+      return reply.code(400).send({
+        ok: false,
+        errorCode: "invalid-request",
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+    try {
+      const result = await generator.prepare(body);
+      if (result.status === "ready-to-download") return reply.code(200).send(result);
+      if (result.status === "preparing") return reply.code(202).send(result);
+      const status = result.errorCode === "capacity" ? 409 : 400;
+      return reply.code(status).send(result);
+    } catch (error) {
+      return reply.code(503).send({
+        ok: false,
+        errorCode: "source-unavailable",
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  app.get<{ Params: { jobId: string } }>(
+    "/offline/packages/jobs/:jobId",
+    async (request, reply) => {
+      const result = generator.getJob(request.params.jobId);
+      if (!result)
+        return reply.code(404).send({ ok: false, error: "offline package job not found" });
+      return reply.send(result);
+    },
+  );
+
+  app.get<{ Params: { packageId: string } }>(
+    "/offline/packages/:packageId/manifest",
+    async (request, reply) => {
+      if (!isContentAddressedPackageId(request.params.packageId)) {
+        return reply.code(400).send({ ok: false, error: "invalid offline package id" });
+      }
+      const manifest = await generator.getManifest(request.params.packageId);
+      if (!manifest) return reply.code(404).send({ ok: false, error: "offline package not found" });
+      return reply.send(manifest);
+    },
+  );
+
+  const serveAsset = async (
+    request: FastifyRequest<{ Params: { provider: string; version: string; "*": string } }>,
+    reply: FastifyReply,
+  ): Promise<FastifyReply> => {
+    if (
+      request.params.provider !== "openmapx" ||
+      !/^[A-Za-z0-9_-]{1,256}$/.test(request.params.version)
+    ) {
+      return reply.code(400).send({ ok: false, error: "invalid offline style asset identity" });
+    }
+    const asset = await generator.openStyleAsset(
+      request.params.provider,
+      request.params.version,
+      request.params["*"] ?? "",
+    );
+    if (!asset)
+      return reply.code(404).send({ ok: false, error: "offline package asset not found" });
+    reply
+      .header("Cache-Control", "public, max-age=31536000, immutable")
+      .header("Content-Type", asset.contentType)
+      .header("Content-Length", String(asset.byteLength));
+    if (request.method === "HEAD") return reply.send();
+    return reply.send(createReadStream(asset.path));
+  };
+
+  app.head<{ Params: { provider: string; version: string; "*": string } }>(
+    "/offline/packages/assets/:provider/:version/*",
+    serveAsset,
+  );
+  app.get<{ Params: { provider: string; version: string; "*": string } }>(
+    "/offline/packages/assets/:provider/:version/*",
+    serveAsset,
+  );
+
+  const serveArchive = async (
+    request: FastifyRequest<{ Params: { packageId: string } }>,
+    reply: FastifyReply,
+  ): Promise<FastifyReply> => {
+    const { packageId } = request.params;
+    if (!isContentAddressedPackageId(packageId)) {
+      return reply.code(400).send({ ok: false, error: "invalid offline package id" });
+    }
+    const manifest = await generator.getManifest(packageId);
+    if (!manifest) return reply.code(404).send({ ok: false, error: "offline package not found" });
+    const archive = await generator.openArchive(packageId);
+    if (!archive) return reply.code(404).send({ ok: false, error: "offline package not found" });
+
+    const total = archive.byteLength;
+    const ifRange = request.headers["if-range"];
+    const rangeHeader = request.headers.range;
+    const useRange =
+      typeof rangeHeader === "string" && (!ifRange || ifRange === manifest.archive.etag);
+    const range = useRange && rangeHeader ? parseByteRange(rangeHeader, total) : undefined;
+    if (useRange && rangeHeader && !range) {
+      archive.release();
+      return reply
+        .code(416)
+        .header("Content-Range", `bytes */${total}`)
+        .header("Accept-Ranges", "bytes")
+        .header("ETag", manifest.archive.etag)
+        .send();
+    }
+
+    const headers: Record<string, string> = {
+      "Accept-Ranges": "bytes",
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "Content-Type": manifest.archive.contentType,
+      ETag: manifest.archive.etag,
+    };
+    if (range) {
+      headers["Content-Length"] = String(range.end - range.start + 1);
+      headers["Content-Range"] = `bytes ${range.start}-${range.end}/${total}`;
+      reply.code(206);
+    } else {
+      headers["Content-Length"] = String(total);
+      reply.code(200);
+    }
+    for (const [name, value] of Object.entries(headers)) reply.header(name, value);
+
+    if (request.method === "HEAD") {
+      archive.release();
+      return reply.send();
+    }
+
+    const stream = createReadStream(
+      archive.path,
+      range ? { start: range.start, end: range.end } : undefined,
+    );
+    const release = () => archive.release();
+    stream.once("close", release);
+    stream.once("error", release);
+    return reply.send(stream);
+  };
+
+  app.head<{ Params: { packageId: string } }>("/offline/packages/:packageId/archive", serveArchive);
+  app.get<{ Params: { packageId: string } }>("/offline/packages/:packageId/archive", serveArchive);
+}
+
 export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   const dataDir = opts.dataDir ?? process.env.DATA_DIR ?? "/data";
   const repoRoot = opts.repoRoot ?? process.env.OPENMAPX_ROOT_DIR ?? "";
@@ -191,6 +374,8 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     resolveOperationsProfileFromEnv(process.env, { allowEmptyRegional: true });
   const catalogDir = join(dataDir, ".transitous-catalog");
   const overlayPath = resolveTransitOverlayPath(dataDir);
+
+  if (opts.offlinePackages) registerOfflinePackageRoutes(app, opts.offlinePackages);
 
   function launchReservedTransitSync(jobId: string, countries: string[], trigger: string): void {
     if (opts.launchTransitSync) {

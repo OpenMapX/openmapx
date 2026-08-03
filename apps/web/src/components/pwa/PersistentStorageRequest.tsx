@@ -10,7 +10,7 @@ import { useInstallPrompt } from "./useInstallPrompt";
  * root cause of "offline launch shows the browser's connection error" rather
  * than the cached map. Gated on `installed` so a casual browser tab never
  * triggers Firefox's permission prompt unprompted; the explicit
- * offline-area download is the other, in-context place we ask. Chrome grants
+ * offline package download is the other, in-context place we ask. Chrome grants
  * persistence silently for installed PWAs, so this is usually a no-op there.
  * See `lib/persistentStorage`.
  */

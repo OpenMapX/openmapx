@@ -5,6 +5,7 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { useMemo } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { baseMapVectorCredits } from "@/lib/map";
+import { useOfflinePackageActive } from "@/lib/offlineAreas";
 import { useMapAttributions } from "@/lib/useMapAttributions";
 
 /**
@@ -31,12 +32,16 @@ export function BaseAttributions() {
   // and unrelated bases shouldn't share an unconditional OSM credit (a
   // future non-OSM raster would otherwise be misattributed to OSM).
   const showVectorBase = activeLayer === "default";
+  const offlinePackageActive = useOfflinePackageActive();
   // OSM (data) + OpenMapTiles (our OSM-Bright-derived style: CC-BY design +
   // schema) always, plus MapTiler when their hosted tiles are used. Shared with
   // the offline/mini maps via baseMapVectorCredits so it can't drift.
   const attributions = useMemo<Attribution[]>(
-    () => (showVectorBase ? baseMapVectorCredits(env) : []),
-    [env, showVectorBase],
+    () =>
+      showVectorBase
+        ? baseMapVectorCredits(offlinePackageActive ? { ...env, tilesUrl: "offline-package" } : env)
+        : [],
+    [env, showVectorBase, offlinePackageActive],
   );
   useMapAttributions("base", attributions);
   return null;

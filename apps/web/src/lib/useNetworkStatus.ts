@@ -14,6 +14,8 @@ interface NetworkInformationLike {
 }
 
 export interface NetworkStatus {
+  /** Browser's current reachability heuristic. */
+  online: boolean;
   /** Whether the Network Information API is available at all. */
   supported: boolean;
   saveData: boolean;
@@ -34,8 +36,10 @@ function getConnection(): NetworkInformationLike | null {
 }
 
 function read(conn: NetworkInformationLike | null): NetworkStatus {
+  const online = typeof navigator === "undefined" ? true : navigator.onLine;
   if (!conn) {
     return {
+      online,
       supported: false,
       saveData: false,
       effectiveType: null,
@@ -49,6 +53,7 @@ function read(conn: NetworkInformationLike | null): NetworkStatus {
   const slow = effectiveType === "slow-2g" || effectiveType === "2g" || effectiveType === "3g";
   const cellular = connectionType === "cellular";
   return {
+    online,
     supported: true,
     saveData,
     effectiveType,
@@ -67,11 +72,16 @@ export function useNetworkStatus(): NetworkStatus {
 
   useEffect(() => {
     const conn = getConnection();
-    if (!conn?.addEventListener) return;
     const onChange = () => setStatus(read(conn));
     onChange();
-    conn.addEventListener("change", onChange);
-    return () => conn.removeEventListener?.("change", onChange);
+    conn?.addEventListener?.("change", onChange);
+    window.addEventListener("online", onChange);
+    window.addEventListener("offline", onChange);
+    return () => {
+      conn?.removeEventListener?.("change", onChange);
+      window.removeEventListener("online", onChange);
+      window.removeEventListener("offline", onChange);
+    };
   }, []);
 
   return status;
