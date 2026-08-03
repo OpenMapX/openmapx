@@ -11,3 +11,6 @@
 
 # Private repo paths (security advisories, settings) require auth.
 ^https://github\.com/OpenMapX/openmapx/security/
+
+# npm package page returns 403 to lychee although the documentation link is valid.
+^https://www\.npmjs\.com/package/@openmapx/extension-sdk$

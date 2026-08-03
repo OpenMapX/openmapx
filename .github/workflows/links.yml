@@ -28,10 +28,31 @@ jobs:
             --exclude-path infra/docker/data
             './**/*.md' './**/*.mdx'
           fail: false # don't fail the run; we report via an issue instead
+      - name: Find existing broken-links issue
+        id: find-issue
+        if: steps.lychee.outputs.exit_code != 0
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const title = 'Broken links found by lychee';
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const existingIssue = issues.find(
+              (issue) => !issue.pull_request && issue.title === title,
+            );
+
+            if (existingIssue) {
+              core.setOutput('issue-number', String(existingIssue.number));
+            }
       - name: Open an issue on broken links
         if: steps.lychee.outputs.exit_code != 0
         uses: peter-evans/create-issue-from-file@fca9117c27cdc29c6c4db3b86c48e4115a786710 # v6
         with:
           title: Broken links found by lychee
           content-filepath: ./lychee/out.md
+          issue-number: ${{ steps.find-issue.outputs.issue-number }}
           labels: documentation, broken-link
