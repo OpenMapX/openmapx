@@ -104,4 +104,32 @@ describe("offline package styles", () => {
 
     vi.unstubAllGlobals();
   });
+
+  it("places sprite file extensions before the offline style query", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (...args: unknown[]) => {
+        const url = String(args[0]);
+        urls.push(url);
+        return url.includes("/style.json?") ? styleResponse() : new Response(new ArrayBuffer(1));
+      }),
+    );
+
+    await validateOfflineStyleAssets(manifest);
+
+    expect(urls).toContain(
+      "/api/offline/packages/assets/openmapx/style-v1/styles/osm-bright/sprite.json?offlineStyle=style-v1",
+    );
+    expect(urls).toContain(
+      "/api/offline/packages/assets/openmapx/style-v1/styles/osm-bright/sprite.png?offlineStyle=style-v1",
+    );
+    expect(urls).toContain(
+      "/api/offline/packages/assets/openmapx/style-v1/styles/osm-bright/sprite@2x.json?offlineStyle=style-v1",
+    );
+    expect(urls).toContain(
+      "/api/offline/packages/assets/openmapx/style-v1/styles/osm-bright/sprite@2x.png?offlineStyle=style-v1",
+    );
+    vi.unstubAllGlobals();
+  });
 });

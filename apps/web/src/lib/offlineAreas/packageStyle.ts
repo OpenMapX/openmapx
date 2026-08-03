@@ -44,6 +44,14 @@ function spriteBaseUrl(manifest: OfflineMapPackageManifest, variant: "light" | "
   return assetUrl(manifest, `styles/${variantDirectory(variant)}/sprite`);
 }
 
+function spriteAssetUrl(
+  manifest: OfflineMapPackageManifest,
+  variant: "light" | "dark",
+  suffix: ".json" | ".png" | "@2x.json" | "@2x.png",
+): string {
+  return assetUrl(manifest, `styles/${variantDirectory(variant)}/sprite${suffix}`);
+}
+
 function glyphTemplate(manifest: OfflineMapPackageManifest): string {
   return assetUrl(manifest, "fonts/{fontstack}/{range}.pbf");
 }
@@ -131,11 +139,10 @@ export async function validateOfflineStyleAssets(
     )) {
       await fetchOptionalPinned(url, manifest);
     }
-    const base = spriteBaseUrl(manifest, variant);
-    await fetchPinned(`${base}.json`, manifest);
-    await fetchPinned(`${base}.png`, manifest);
-    await fetchOptionalPinned(`${base}@2x.json`, manifest);
-    await fetchOptionalPinned(`${base}@2x.png`, manifest);
+    await fetchPinned(spriteAssetUrl(manifest, variant, ".json"), manifest);
+    await fetchPinned(spriteAssetUrl(manifest, variant, ".png"), manifest);
+    await fetchOptionalPinned(spriteAssetUrl(manifest, variant, "@2x.json"), manifest);
+    await fetchOptionalPinned(spriteAssetUrl(manifest, variant, "@2x.png"), manifest);
     if (!style.sprite) {
       throw new Error(`OpenMapX ${variant} style has no sprite template`);
     }
