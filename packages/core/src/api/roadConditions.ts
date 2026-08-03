@@ -21,6 +21,11 @@ export interface FetchRoadConditionsOptions {
   horizonDays?: number;
 }
 
+export interface FetchRoadConditionsResult {
+  events: RoadConditionEvent[];
+  ok: boolean;
+}
+
 interface RoadConditionFeature {
   geometry: RoadConditionEvent["geometry"];
   properties: Record<string, unknown> | null;
@@ -62,15 +67,13 @@ function featureToEvent(feature: RoadConditionFeature): RoadConditionEvent | nul
 }
 
 /**
- * Fetch road-condition events within a bounding box from the `road-conditions`
- * capability route, parsing the GeoJSON FeatureCollection back into the
- * provider-agnostic `RoadConditionEvent[]`. Returns [] on any error — this is an
- * optional layer (overlay + nav) that must never break the caller.
+ * Fetch road-condition events with an explicit transport status. This lets
+ * interactive overlays retain their last good data when a refresh fails.
  */
-export async function fetchRoadConditions(
+export async function fetchRoadConditionsWithStatus(
   bbox: BBox,
   opts?: FetchRoadConditionsOptions,
-): Promise<RoadConditionEvent[]> {
+): Promise<FetchRoadConditionsResult> {
   try {
     const params: Record<string, string> = { bbox: bbox.join(",") };
     if (opts?.types && opts.types.length > 0) params.types = opts.types.join(",");
@@ -81,12 +84,27 @@ export async function fetchRoadConditions(
       API_ENDPOINTS.roadConditions,
       params,
     );
-    return (fc.features ?? [])
-      .map(featureToEvent)
-      .filter((e): e is RoadConditionEvent => e !== null);
+    return {
+      ok: true,
+      events: (fc.features ?? [])
+        .map(featureToEvent)
+        .filter((e): e is RoadConditionEvent => e !== null),
+    };
   } catch {
-    return [];
+    return { ok: false, events: [] };
   }
+}
+
+/**
+ * Compatibility wrapper for optional callers that intentionally treat a
+ * transport failure as an empty result.
+ */
+export async function fetchRoadConditions(
+  bbox: BBox,
+  opts?: FetchRoadConditionsOptions,
+): Promise<RoadConditionEvent[]> {
+  const result = await fetchRoadConditionsWithStatus(bbox, opts);
+  return result.events;
 }
 
 /**

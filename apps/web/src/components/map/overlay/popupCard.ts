@@ -28,6 +28,22 @@ export interface PopupCardSpec {
   rows?: PopupCardRow[];
 }
 
+/** Additional records attached to one visible popup card. */
+export interface PopupCardDetails {
+  /** Escaped and shown in the closed disclosure summary. */
+  label: string;
+  /** Source/detail records rendered only after the disclosure is opened. */
+  entries: Record<string, unknown>[];
+  /** Optional compact spec for detail records; defaults to the card spec. */
+  spec?: PopupCardSpec;
+}
+
+/** One user-facing card in a popup stack. */
+export interface PopupCardStackItem {
+  properties: Record<string, unknown>;
+  details?: PopupCardDetails;
+}
+
 /** Severity → badge colors, matching the marker severity ramp. */
 const SEVERITY_STYLE: Record<string, { bg: string; fg: string }> = {
   critical: { bg: "#7e0023", fg: "#ffffff" },
@@ -143,6 +159,22 @@ function renderCardBody(
   return `${header}${chipsHtml}${rows.join("")}${blocks.join("")}${footer}`;
 }
 
+function renderPopupDetails(
+  details: PopupCardDetails,
+  fallbackSpec: PopupCardSpec,
+  resolveLabel?: (key: string) => string,
+): string {
+  if (details.entries.length === 0) return "";
+  const spec = details.spec ?? fallbackSpec;
+  const entries = details.entries
+    .map(
+      (entry) =>
+        `<div class="omx-overlay-popup__details-entry">${renderCardBody(spec, entry, resolveLabel)}</div>`,
+    )
+    .join("");
+  return `<details class="omx-overlay-popup__details"><summary class="omx-overlay-popup__details-summary">${escapeHtml(details.label)}</summary><div class="omx-overlay-popup__details-body">${entries}</div></details>`;
+}
+
 /** A single overlay popup card. */
 export function buildPopupCard(
   spec: PopupCardSpec,
@@ -150,6 +182,42 @@ export function buildPopupCard(
   resolveLabel?: (key: string) => string,
 ): string {
   return `<div class="omx-overlay-popup">${renderCardBody(spec, properties, resolveLabel)}</div>`;
+}
+
+/**
+ * Renders structured popup items. Each item is one user-facing card; optional
+ * source records stay inside that card's closed disclosure instead of becoming
+ * additional stack entries. The item order is preserved.
+ */
+export function buildStackedPopupCardItems(
+  spec: PopupCardSpec,
+  items: PopupCardStackItem[],
+  resolveLabel?: (key: string) => string,
+  countLabel?: string,
+): string {
+  if (items.length === 0) return `<div class="omx-overlay-popup" />`;
+  const firstItem = items[0];
+  if (items.length === 1 && firstItem && !firstItem.details) {
+    return buildPopupCard(spec, firstItem.properties, resolveLabel);
+  }
+
+  const head =
+    items.length > 1 && countLabel
+      ? `<div class="omx-overlay-popup__count">${escapeHtml(countLabel)}</div>`
+      : "";
+  const renderItem = (item: PopupCardStackItem) => {
+    const body = renderCardBody(spec, item.properties, resolveLabel);
+    const details = item.details ? renderPopupDetails(item.details, spec, resolveLabel) : "";
+    return `${body}${details}`;
+  };
+  const sections =
+    items.length === 1 && firstItem
+      ? renderItem(firstItem)
+      : items
+          .map((item) => `<div class="omx-overlay-popup__section">${renderItem(item)}</div>`)
+          .join("");
+  const stackClass = items.length > 1 ? " omx-overlay-popup--stack" : "";
+  return `<div class="omx-overlay-popup${stackClass}">${head}${sections}</div>`;
 }
 
 /**
@@ -165,16 +233,10 @@ export function buildStackedPopupCard(
   resolveLabel?: (key: string) => string,
   countLabel?: string,
 ): string {
-  if (entries.length === 1)
-    return buildPopupCard(spec, entries[0] as Record<string, unknown>, resolveLabel);
-  const head = countLabel
-    ? `<div class="omx-overlay-popup__count">${escapeHtml(countLabel)}</div>`
-    : "";
-  const sections = entries
-    .map(
-      (e) =>
-        `<div class="omx-overlay-popup__section">${renderCardBody(spec, e, resolveLabel)}</div>`,
-    )
-    .join("");
-  return `<div class="omx-overlay-popup omx-overlay-popup--stack">${head}${sections}</div>`;
+  return buildStackedPopupCardItems(
+    spec,
+    entries.map((properties) => ({ properties })),
+    resolveLabel,
+    countLabel,
+  );
 }

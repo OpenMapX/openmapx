@@ -48,7 +48,7 @@ vi.mock("maplibre-gl", () => ({
   },
 }));
 
-import { buildRoadConditionPopupEntries, buildSources, RoadConditionsLayer } from "../map-layer";
+import { buildRoadConditionPopupGroups, buildSources, RoadConditionsLayer } from "../map-layer";
 
 const MARKER_SOURCE = "omx-road-conditions-markers";
 const LINE_SOURCE = "omx-road-conditions-lines";
@@ -98,6 +98,88 @@ describe("RoadConditionsLayer horizon query", () => {
     useRoadConditionsStore.setState({ horizon: "all" });
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(lastUrl()).not.toContain("horizonDays");
+  });
+
+  it("does not let an older viewport response overwrite a newer one", async () => {
+    let resolveFirst: ((value: unknown) => void) | undefined;
+    let resolveSecond: ((value: unknown) => void) | undefined;
+    const first = new Promise((resolve) => {
+      resolveFirst = resolve;
+    });
+    const second = new Promise((resolve) => {
+      resolveSecond = resolve;
+    });
+    fetchMock
+      .mockReset()
+      .mockImplementationOnce(() => first)
+      .mockImplementationOnce(() => second);
+
+    render(<RoadConditionsLayer />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    useRoadConditionsStore.setState({ horizon: "week" });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    resolveSecond?.({
+      ok: true,
+      json: async () => ({
+        features: [
+          {
+            geometry: { type: "Point", coordinates: [13.42, 52.52] },
+            properties: { id: "new", type: "roadworks", severity: "low" },
+          },
+        ],
+      }),
+    });
+    await waitFor(() => {
+      const data = fake.state.sources.get(MARKER_SOURCE)?.data as {
+        features: { properties: Record<string, unknown> }[];
+      };
+      expect(data.features[0]?.properties._id).toBe("new");
+    });
+
+    resolveFirst?.({
+      ok: true,
+      json: async () => ({
+        features: [
+          {
+            geometry: { type: "Point", coordinates: [13.4, 52.5] },
+            properties: { id: "old", type: "roadworks", severity: "low" },
+          },
+        ],
+      }),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    const data = fake.state.sources.get(MARKER_SOURCE)?.data as {
+      features: { properties: Record<string, unknown> }[];
+    };
+    expect(data.features[0]?.properties._id).toBe("new");
+  });
+
+  it("retains the last viewport data and reports stale after a refresh failure", async () => {
+    respondWith([
+      {
+        geometry: { type: "Point", coordinates: [13.4, 52.5] },
+        properties: { id: "last-good", type: "roadworks", severity: "low" },
+      },
+    ]);
+    render(<RoadConditionsLayer />);
+    await waitFor(() => {
+      const data = fake.state.sources.get(MARKER_SOURCE)?.data as {
+        features: { properties: Record<string, unknown> }[];
+      };
+      expect(data.features[0]?.properties._id).toBe("last-good");
+    });
+
+    fetchMock.mockRejectedValueOnce(new Error("temporary outage"));
+    useRoadConditionsStore.setState({ horizon: "week" });
+    await waitFor(() =>
+      expect(useRoadConditionsStore.getState().viewportFetchStatus).toBe("stale"),
+    );
+
+    const data = fake.state.sources.get(MARKER_SOURCE)?.data as {
+      features: { properties: Record<string, unknown> }[];
+    };
+    expect(data.features[0]?.properties._id).toBe("last-good");
   });
 });
 
@@ -241,11 +323,71 @@ describe("road-condition display grouping", () => {
         .get("group:road-conditions-openconditions:duesseldorf:works-42")
         ?.map((event) => event.id),
     ).toEqual(["oc:1", "oc:2", "oc:3"]);
-    const popupEntries = buildRoadConditionPopupEntries(
+    const [popupGroup] = buildRoadConditionPopupGroups(
       "group:road-conditions-openconditions:duesseldorf:works-42",
       eventsByDisplayId.get("group:road-conditions-openconditions:duesseldorf:works-42") ?? [],
     );
-    expect(popupEntries.slice(1).map((entry) => entry.recordId)).toEqual(["oc:1", "oc:2", "oc:3"]);
+    expect(popupGroup?.sourceRecords.map((entry) => entry.recordId)).toEqual([
+      "oc:1",
+      "oc:2",
+      "oc:3",
+    ]);
+    expect(popupGroup?.summary).toMatchObject({
+      headline: "Lane closure (3 related records)",
+      type: "roadworks",
+      sourceRecordCount: 3,
+    });
+  });
+
+  it("aggregates mixed grouped source records into one summary and keeps every record in details", () => {
+    const dateFrom = "2026-06-22T05:00:00.000Z";
+    const dateTo = "2026-09-01T15:00:00.000Z";
+    const events = [
+      ["road-1", "roadworks", "Road works", "2922"],
+      ["road-2", "roadworks", "Road works", "1002"],
+      ["road-3", "roadworks", "Road works", "2119"],
+      ["info-1", "other", "Traffic information", "2922"],
+      ["info-2", "other", "Traffic information", "1002"],
+      ["info-3", "other", "Traffic information", "2119"],
+    ].map(([id, type, headline, road]) => ({
+      id,
+      source: "duesseldorf",
+      provider: "road-conditions-openconditions",
+      groupId: "situation-42",
+      type,
+      severity: "low",
+      headline,
+      geometry: {
+        type: "LineString" as const,
+        coordinates: [
+          [6.77, 51.2],
+          [6.771, 51.2],
+        ],
+      },
+      roads: [{ ref: road, name: road }],
+      validFrom: dateFrom,
+      validTo: dateTo,
+    }));
+
+    const [group] = buildRoadConditionPopupGroups("group:situation-42", events);
+
+    expect(group?.summary).toMatchObject({
+      headline: "Road works (6 related records)",
+      type: "roadworks, other",
+      roads: "2922, 1002, 2119",
+      validFrom: dateFrom,
+      validTo: dateTo,
+      sourceRecordCount: 6,
+    });
+    expect(group?.sourceRecords).toHaveLength(6);
+    expect(group?.sourceRecords.map((entry) => entry.recordId)).toEqual([
+      "road-1",
+      "road-2",
+      "road-3",
+      "info-1",
+      "info-2",
+      "info-3",
+    ]);
   });
 
   it("keeps endpoint-only MultiPoint records as endpoint markers", () => {

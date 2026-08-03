@@ -1,20 +1,18 @@
 "use client";
 
-import {
-  formatDuration,
-  type RoadConditionEvent,
-  useDebouncedCallback,
-  useOverlayExclusion,
-} from "@openmapx/core";
-import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
+import { type RoadConditionEvent, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
+import type { GeoJSONSource, MapGeoJSONFeature } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
-import { buildStackedPopupCard, type PopupCardSpec } from "@/components/map/overlay/popupCard";
+import {
+  registerMapOverlayInteraction,
+  removeMapOverlayPopup,
+  replaceMapOverlayPopup,
+} from "@/components/map/overlay/mapInteractionArbiter";
 import { useOverlayLayerVisible } from "@/components/map/overlay/useOverlayStoreState";
 import { useEnv } from "@/lib/EnvProvider";
-import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
 import { useOverlayMinZoom } from "@/lib/overlayZoomGate";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
@@ -22,10 +20,22 @@ import { useIntegrationDomainAttribution } from "@/lib/useIntegrationAttribution
 import { buildRoadConditionDisplayGroups, type RoadConditionDisplayGroup } from "./display";
 import { isUnconfirmedCrowd } from "./evidence";
 import { markerImageData, markerImageId, parseMarkerImageId } from "./markers";
+import {
+  buildRoadConditionPopupHtml,
+  ROAD_CONDITION_SEVERITY_RANK as SEVERITY_RANK,
+} from "./popup";
 import { RouteConditionsLayer } from "./route-layer";
 // The named import also runs the module side-effect that registers the
 // "road-conditions" overlay store (shared by the layer selector + legend).
 import { horizonDaysParam, useRoadConditionsStore } from "./store";
+import {
+  isFutureRoadCondition,
+  ROAD_CONDITION_LINE_DASHARRAY,
+  ROAD_CONDITION_LINE_OPACITY,
+  ROAD_CONDITION_MARKER_OPACITY,
+} from "./visual-style";
+
+export { buildRoadConditionPopupGroups } from "./popup";
 
 type GeoJsonData = Parameters<GeoJSONSource["setData"]>[0];
 
@@ -56,96 +66,6 @@ const SEVERITY_LINE_COLOR: maplibregl.ExpressionSpecification = [
   "#8a8a8a",
 ];
 
-/** Popup card layout — defined in code, full freedom (no manifest schema). */
-const POPUP_SPEC: PopupCardSpec = {
-  titleField: "headline",
-  severityField: "severity",
-  attributionField: "attribution",
-  rows: [
-    { field: "type", labelKey: "panel.type", format: "label", variant: "chip" },
-    { field: "roadState", labelKey: "panel.roadState", format: "label", variant: "chip" },
-    { field: "roads", labelKey: "panel.roads", variant: "row" },
-    { field: "recordId", label: "Source record", variant: "row" },
-    // Structured validity window (from the feed's validFrom/validTo, not the
-    // free-text description — many feeds don't put it in the text). Pre-formatted
-    // into `validity` at click time.
-    { field: "validity", labelKey: "panel.validity", variant: "row" },
-    // "Starts ⟨date⟩", set at click time for conditions that haven't begun —
-    // without it a widened horizon reads the same as what's in effect now.
-    { field: "startsAt", variant: "row" },
-    // Pre-formatted "+X min" delay (Verlustzeit); set at click time when >= 60 s.
-    { field: "delayText", labelKey: "panel.delay", variant: "row" },
-    { field: "description", labelKey: "panel.description", variant: "block" },
-  ],
-};
-
-/** Numeric severity rank — drives `symbol-sort-key` so the worst condition
- * renders on top where markers overlap, and orders the stacked popup. */
-const SEVERITY_RANK: Record<string, number> = {
-  critical: 4,
-  high: 3,
-  medium: 2,
-  low: 1,
-  unknown: 0,
-};
-
-interface ScheduleEntry {
-  startTime?: string;
-  endTime?: string;
-  startDate?: string;
-  endDate?: string;
-  byDay?: string[];
-}
-
-/**
- * Format the structured validity for the popup. A recurring `schedule` (a
- * schema.org Schedule, e.g. a nightly closure) is shown as its day(s) + band +
- * date range, e.g. "Mo, Tu, We, 08:00–17:00, 29 Jun 2026 – 1 Jul 2026";
- * otherwise the absolute from–until range, e.g.
- * "10 Jul 2026, 22:00 – 13 Jul 2026, 05:00". An open end is shown as "…".
- * Returns "" when nothing is known (ongoing / undated) so the row drops.
- * Schedule times are the source's local clock (`scheduleTimezone`), shown as-is.
- */
-function formatValidity(
-  scheduleJson: unknown,
-  from: unknown,
-  to: unknown,
-  fmtDateTime: (value: string | number | Date) => string,
-  fmtDate: (value: string | number | Date) => string,
-): string {
-  if (typeof scheduleJson === "string" && scheduleJson) {
-    try {
-      const windows = JSON.parse(scheduleJson) as ScheduleEntry[];
-      const hhmm = (t?: string) => (t ? t.slice(0, 5) : "");
-      const parts = windows
-        .map((w) => {
-          const days = w.byDay && w.byDay.length > 0 ? w.byDay.join(", ") : "";
-          const band =
-            w.startTime && w.endTime
-              ? `${hhmm(w.startTime)}–${hhmm(w.endTime)}`
-              : w.startTime
-                ? `from ${hhmm(w.startTime)}`
-                : "";
-          const range =
-            w.startDate && w.endDate
-              ? `${fmtDate(w.startDate)} – ${fmtDate(w.endDate)}`
-              : w.startDate
-                ? fmtDate(w.startDate)
-                : "";
-          return [days, band, range].filter(Boolean).join(", ");
-        })
-        .filter(Boolean);
-      if (parts.length > 0) return parts.join("; ");
-    } catch {
-      // Malformed schedule → fall through to the plain range.
-    }
-  }
-  const f = typeof from === "string" && from ? fmtDateTime(from) : "";
-  const t = typeof to === "string" && to ? fmtDateTime(to) : "";
-  if (!f && !t) return "";
-  return `${f || "…"} – ${t || "…"}`;
-}
-
 /** Collapse the attribution object into a single credit string for the popup. */
 function attributionString(raw: unknown): string {
   if (typeof raw === "string") return raw;
@@ -168,14 +88,6 @@ export interface RoadConditionDisplaySources {
   lines: GeoJsonData;
   /** In-memory child records used to resolve a grouped marker's popup. */
   eventsByDisplayId: Map<string, RoadConditionEvent[]>;
-}
-
-/** Whether a raw feature describes a condition that has not started yet. */
-function isFutureCondition(p: { isForecast?: unknown; validFrom?: unknown }): boolean {
-  if (p.isForecast === true) return true;
-  if (typeof p.validFrom !== "string") return false;
-  const from = Date.parse(p.validFrom);
-  return !Number.isNaN(from) && from > Date.now();
 }
 
 function rawFeatureToEvent(feature: RawFeature): RoadConditionEvent | null {
@@ -255,7 +167,7 @@ function markerProperties(
   group: RoadConditionDisplayGroup,
   event: RoadConditionEvent,
 ): Record<string, unknown> {
-  const future = group.events.every(isFutureCondition);
+  const future = group.events.every(isFutureRoadCondition);
   const properties: Record<string, unknown> = {
     headline: event.headline,
     type: event.type,
@@ -286,87 +198,6 @@ function markerProperties(
   const roads = roadNames(event);
   if (roads) properties.roads = roads;
   return properties;
-}
-
-function popupProperties(
-  event: RoadConditionEvent,
-  displayId: string,
-  includeRecordId: boolean,
-): Record<string, unknown> {
-  const properties: Record<string, unknown> = {
-    headline: event.headline,
-    type: event.type,
-    severity: event.severity,
-    attribution: attributionString(event.attribution),
-    _id: event.id,
-    _displayId: displayId,
-    _sev: SEVERITY_RANK[event.severity] ?? 0,
-    future: isFutureCondition(event),
-  };
-  if (includeRecordId) properties.recordId = event.id;
-  if (event.roadState) properties.roadState = event.roadState;
-  if (event.validFrom) properties.validFrom = event.validFrom;
-  if (event.validTo) properties.validTo = event.validTo;
-  if (event.schedule && event.schedule.length > 0) {
-    properties.schedule = JSON.stringify(event.schedule);
-  }
-  if (event.description) properties.description = event.description;
-  if (typeof event.delaySeconds === "number") properties.delaySeconds = event.delaySeconds;
-  const roads = roadNames(event);
-  if (roads) properties.roads = roads;
-  return properties;
-}
-
-export function buildRoadConditionPopupEntries(
-  displayId: string,
-  events: RoadConditionEvent[],
-): Record<string, unknown>[] {
-  if (events.length === 0) return [];
-  const childEntries = events.map((event) => popupProperties(event, displayId, events.length > 1));
-  if (events.length === 1) return childEntries;
-
-  const representative = events.reduce((best, event) => {
-    const bestRank = SEVERITY_RANK[best.severity] ?? 0;
-    const eventRank = SEVERITY_RANK[event.severity] ?? 0;
-    return eventRank > bestRank ? event : best;
-  });
-  const summary = popupProperties(representative, displayId, false);
-  summary.recordId = `${events.length} source records`;
-
-  const same = (field: keyof RoadConditionEvent) =>
-    events.every((event) => JSON.stringify(event[field]) === JSON.stringify(events[0]?.[field]));
-  if (!same("headline"))
-    summary.headline = `${representative.headline} (${events.length} related records)`;
-  if (!same("description")) delete summary.description;
-  if (!same("roads")) delete summary.roads;
-  if (!same("validFrom")) {
-    const starts = events
-      .map((event) => event.validFrom)
-      .filter((value): value is string => typeof value === "string" && value.length > 0);
-    if (starts.length > 0) {
-      summary.validFrom = starts.reduce((earliest, value) =>
-        Date.parse(value) < Date.parse(earliest) ? value : earliest,
-      );
-    } else {
-      delete summary.validFrom;
-    }
-  }
-  if (!same("validTo")) {
-    const ends = events
-      .map((event) => event.validTo)
-      .filter((value): value is string => typeof value === "string" && value.length > 0);
-    if (ends.length > 0) {
-      summary.validTo = ends.reduce((latest, value) =>
-        Date.parse(value) > Date.parse(latest) ? value : latest,
-      );
-    } else {
-      delete summary.validTo;
-    }
-  }
-  if (!same("schedule")) delete summary.schedule;
-  if (!same("delaySeconds")) delete summary.delaySeconds;
-
-  return [summary, ...childEntries];
 }
 
 /**
@@ -403,7 +234,7 @@ export function buildSources(features: RawFeature[]): RoadConditionDisplaySource
         geometry: group.lineGeometry,
         properties: {
           severity: event.severity,
-          future: group.events.every(isFutureCondition),
+          future: group.events.every(isFutureRoadCondition),
           _displayId: group.displayId,
         },
       });
@@ -434,6 +265,9 @@ export function RoadConditionsLayer() {
   useOverlayExclusion(OVERLAY_ID, layerVisible);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const eventsByDisplayIdRef = useRef<Map<string, RoadConditionEvent[]>>(new Map());
+  const requestGenerationRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const hasViewportDataRef = useRef(false);
   // Keep the latest formatters/translator in refs so the imperative popup click
   // handler (bound once per effect) always uses the current prefs + locale.
   const dtf = useDateTimeFormat();
@@ -451,10 +285,19 @@ export function RoadConditionsLayer() {
   const filterTypes = useRoadConditionsStore((s) => s.types);
   const minSeverity = useRoadConditionsStore((s) => s.minSeverity);
   const horizon = useRoadConditionsStore((s) => s.horizon);
+  const setViewportFetchStatus = useRoadConditionsStore((s) => s.setViewportFetchStatus);
 
   const fetchData = useCallback(async () => {
     const map = mapRef.current;
-    if (!map || map.getZoom() < minZoom) return;
+    if (!map || map.getZoom() < minZoom) {
+      setViewportFetchStatus("idle");
+      return;
+    }
+    const generation = ++requestGenerationRef.current;
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setViewportFetchStatus("loading");
     const b = map.getBounds();
     const base = apiUrl.replace(/\/$/, "");
     const params = new URLSearchParams({
@@ -466,19 +309,25 @@ export function RoadConditionsLayer() {
     if (horizonDays !== undefined) params.set("horizonDays", horizonDays);
     const url = `${base}/api/integrations/road-conditions/events?${params.toString()}`;
     try {
-      const res = await fetch(url, { credentials: "include" });
-      if (!res.ok) return;
+      const res = await fetch(url, { credentials: "include", signal: controller.signal });
+      if (!res.ok) throw new Error(`road conditions request failed (${res.status})`);
       const fc = (await res.json()) as { features?: RawFeature[] };
+      if (controller.signal.aborted || generation !== requestGenerationRef.current) return;
       const { markers, lines, eventsByDisplayId } = buildSources(
         Array.isArray(fc.features) ? fc.features : [],
       );
       eventsByDisplayIdRef.current = eventsByDisplayId;
       (map.getSource(MARKER_SOURCE) as GeoJSONSource | undefined)?.setData(markers);
       (map.getSource(LINE_SOURCE) as GeoJSONSource | undefined)?.setData(lines);
+      hasViewportDataRef.current = true;
+      setViewportFetchStatus("ready");
     } catch {
-      // Silent fetch failure — overlay stays as-is.
+      if (controller.signal.aborted || generation !== requestGenerationRef.current) return;
+      // Keep the last good source data visible while making the degraded state
+      // explicit to the legend. A first-load failure has no stale data to keep.
+      setViewportFetchStatus(hasViewportDataRef.current ? "stale" : "error");
     }
-  }, [apiUrl, mapRef, filterTypes, minSeverity, horizon, minZoom]);
+  }, [apiUrl, mapRef, filterTypes, minSeverity, horizon, minZoom, setViewportFetchStatus]);
 
   // Bake a disc+glyph marker image on demand for each (type, severity) the
   // symbol layer requests. Synchronous canvas render → no flicker, no warnings.
@@ -504,8 +353,10 @@ export function RoadConditionsLayer() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
+    let idleRetryScheduled = false;
     const sync = () => {
       if (!layerVisible) {
+        idleRetryScheduled = false;
         try {
           if (map.getLayer(MARKER_LAYER)) map.removeLayer(MARKER_LAYER);
           if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER);
@@ -516,13 +367,19 @@ export function RoadConditionsLayer() {
         }
         unregisterLayerSlot(MARKER_LAYER);
         unregisterLayerSlot(LINE_LAYER);
-        popupRef.current?.remove();
+        if (popupRef.current) {
+          removeMapOverlayPopup(map, popupRef.current);
+          popupRef.current = null;
+        }
         return;
       }
       if (!map.isStyleLoaded()) {
+        if (idleRetryScheduled) map.off("idle", sync);
+        idleRetryScheduled = true;
         map.once("idle", sync);
         return;
       }
+      idleRetryScheduled = false;
       try {
         if (!map.getSource(LINE_SOURCE)) {
           map.addSource(LINE_SOURCE, {
@@ -548,13 +405,8 @@ export function RoadConditionsLayer() {
               paint: {
                 "line-color": SEVERITY_LINE_COLOR,
                 "line-width": ["interpolate", ["linear"], ["zoom"], 5, 3, 12, 6, 16, 9],
-                "line-opacity": ["case", ["get", "future"], 0.45, 0.7],
-                "line-dasharray": [
-                  "case",
-                  ["get", "future"],
-                  ["literal", [2, 1.5]],
-                  ["literal", [1]],
-                ],
+                "line-opacity": ROAD_CONDITION_LINE_OPACITY,
+                "line-dasharray": ROAD_CONDITION_LINE_DASHARRAY,
               },
             },
             "conditions-lines",
@@ -579,15 +431,13 @@ export function RoadConditionsLayer() {
                 "symbol-sort-key": ["get", "_sev"],
               },
               paint: {
-                "icon-opacity": ["case", ["get", "future"], 0.55, 1],
+                "icon-opacity": ROAD_CONDITION_MARKER_OPACITY,
               },
             },
             "overlay-markers",
             0,
           );
-          INTERACTIVE_LAYER_IDS.add(MARKER_LAYER);
         }
-        void fetchData();
       } catch {
         // Style not ready — styledata will retry.
       }
@@ -597,8 +447,36 @@ export function RoadConditionsLayer() {
     map.on("styledata", sync);
     return () => {
       map.off("styledata", sync);
+      if (idleRetryScheduled) map.off("idle", sync);
     };
-  }, [mapReady, mapRef, styleVersion, layerVisible, fetchData, minZoom]);
+  }, [mapReady, mapRef, styleVersion, layerVisible, minZoom]);
+
+  // Fetch independently from style synchronization. Style swaps should rebuild
+  // sources/layers, while filters, viewport movement, and this style version
+  // control which request is current.
+  useEffect(() => {
+    void styleVersion;
+
+    const map = mapRef.current;
+    if (!map || !mapReady || !layerVisible) {
+      requestGenerationRef.current += 1;
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+      hasViewportDataRef.current = false;
+      eventsByDisplayIdRef.current = new Map();
+      setViewportFetchStatus("idle");
+      return;
+    }
+    void fetchData();
+  }, [mapReady, mapRef, styleVersion, layerVisible, fetchData, setViewportFetchStatus]);
+
+  useEffect(() => {
+    return () => {
+      requestGenerationRef.current += 1;
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+    };
+  }, []);
 
   // bbox-driven refetch on pan/zoom.
   const debouncedFetch = useDebouncedCallback(() => fetchData(), 800);
@@ -612,120 +490,67 @@ export function RoadConditionsLayer() {
     };
   }, [mapReady, mapRef, styleVersion, layerVisible, debouncedFetch]);
 
-  // Click popup + hover cursor on markers.
+  // Area markers and lines share one prioritized interaction registration. The
+  // arbiter also owns the cursor so traffic flow cannot clear incident hover.
   useEffect(() => {
     void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !layerVisible) return;
 
-    const onClick = (e: MapLayerMouseEvent) => {
-      // Collect every marker near the click — not just the top one — so several
-      // conditions stacked at the same spot all stay reachable in a single popup
-      // (linked works often share a segment: roadworks + its lane closure land on
-      // the same point). The radius is ~one marker-width so touching/overlapping
-      // discs are grouped while genuinely separate incidents stay independent.
-      const r = 24;
-      const box: [[number, number], [number, number]] = [
-        [e.point.x - r, e.point.y - r],
-        [e.point.x + r, e.point.y + r],
-      ];
-      const hits = map.getLayer(MARKER_LAYER)
-        ? map.queryRenderedFeatures(box, { layers: [MARKER_LAYER] })
-        : (e.features ?? []);
-      if (hits.length === 0) return;
-
-      // Dedupe by display identity (one MultiPoint group renders a marker per
-      // endpoint), resolve grouped source records from memory, format each
-      // condition's validity, then order most-severe first.
-      const seen = new Set<string>();
-      const entries: Record<string, unknown>[] = [];
-      let recordCount = 0;
-      for (const h of hits) {
-        const p = (h.properties ?? {}) as Record<string, unknown>;
-        const displayId = String(p._displayId ?? p._id ?? p.headline ?? "");
-        if (seen.has(displayId)) continue;
-        seen.add(displayId);
-
-        const childEvents = eventsByDisplayIdRef.current.get(displayId);
-        const sourceEntries = childEvents?.length
-          ? buildRoadConditionPopupEntries(displayId, childEvents)
-          : [p];
-        recordCount += childEvents?.length ?? 1;
-        for (const sourceEntry of sourceEntries) {
-          const validity = formatValidity(
-            sourceEntry.schedule,
-            sourceEntry.validFrom,
-            sourceEntry.validTo,
-            dtfRef.current.dateTime,
-            dtfRef.current.date,
-          );
-          const startsAt =
-            sourceEntry.future === true && typeof sourceEntry.validFrom === "string"
-              ? tRef.current("startsAt", {
-                  date: dtfRef.current.dateTime(sourceEntry.validFrom),
-                })
-              : undefined;
-          const delaySeconds = Number(sourceEntry.delaySeconds);
-          const delayText =
-            Number.isFinite(delaySeconds) && delaySeconds >= 60
-              ? `+${formatDuration(delaySeconds)}`
-              : undefined;
-          entries.push({
-            ...sourceEntry,
-            ...(validity ? { validity } : {}),
-            ...(startsAt ? { startsAt } : {}),
-            ...(delayText ? { delayText } : {}),
-          });
+    const unregister = registerMapOverlayInteraction(map, {
+      id: "road-conditions-area",
+      layerIds: [MARKER_LAYER, LINE_LAYER],
+      priority: 100,
+      onClick: ({ event, features }) => {
+        // Collect every marker near the click — not just the top one — so several
+        // conditions stacked at the same spot all stay reachable in a single popup
+        // (linked works often share a segment: roadworks + its lane closure land on
+        // the same point). The radius is ~one marker-width so touching/overlapping
+        // discs are grouped while genuinely separate incidents stay independent.
+        const markerFeatures = features.filter((feature) => feature.layer?.id === MARKER_LAYER);
+        let hits: MapGeoJSONFeature[] = markerFeatures;
+        if (markerFeatures.length > 0) {
+          const r = 24;
+          const box: [[number, number], [number, number]] = [
+            [event.point.x - r, event.point.y - r],
+            [event.point.x + r, event.point.y + r],
+          ];
+          const queried = map.getLayer(MARKER_LAYER)
+            ? (map.queryRenderedFeatures(box, { layers: [MARKER_LAYER] }) as MapGeoJSONFeature[])
+            : [];
+          if (queried.length > 0) hits = queried;
+        } else {
+          hits = features;
         }
-      }
-      entries.sort((a, b) => (Number(b._sev) || 0) - (Number(a._sev) || 0));
+        if (hits.length === 0) return;
 
-      const top = e.features?.[0];
-      const coords: [number, number] =
-        top?.geometry?.type === "Point"
-          ? (top.geometry.coordinates as [number, number])
-          : [e.lngLat.lng, e.lngLat.lat];
-
-      popupRef.current?.remove();
-      popupRef.current = new maplibregl.Popup({
-        closeButton: true,
-        maxWidth: "300px",
-        className: "omx-popup",
-      })
-        .setLngLat(coords)
-        .setHTML(
-          buildStackedPopupCard(
-            POPUP_SPEC,
-            entries,
-            (k) => tRef.current(k),
-            tRef.current("panel.conditionsHere", { count: recordCount }),
-          ),
-        )
-        .addTo(map);
-    };
-
-    const onMouseMove = (e: maplibregl.MapMouseEvent) => {
-      if (!map.getLayer(MARKER_LAYER)) return;
-      const hit = map.queryRenderedFeatures(e.point, { layers: [MARKER_LAYER] });
-      map.getCanvasContainer().style.cursor = hit.length > 0 ? "pointer" : "";
-    };
-
-    map.on("click", MARKER_LAYER, onClick);
-    map.on("mousemove", onMouseMove);
+        const content = buildRoadConditionPopupHtml({
+          hits,
+          fallbackCoordinates: [event.lngLat.lng, event.lngLat.lat],
+          eventsByDisplayId: eventsByDisplayIdRef.current,
+          formatDateTime: dtfRef.current.dateTime,
+          formatDate: dtfRef.current.date,
+          translate: (key, values) => tRef.current(key, values),
+        });
+        const popup = new maplibregl.Popup({
+          closeButton: true,
+          maxWidth: "300px",
+          className: "omx-popup",
+        })
+          .setLngLat(content.coordinates)
+          .setHTML(content.html);
+        popupRef.current = popup;
+        replaceMapOverlayPopup(map, popup);
+      },
+    });
     return () => {
-      map.off("click", MARKER_LAYER, onClick);
-      map.off("mousemove", onMouseMove);
-      map.getCanvasContainer().style.cursor = "";
-      popupRef.current?.remove();
+      unregister();
+      if (popupRef.current) {
+        removeMapOverlayPopup(map, popupRef.current);
+        popupRef.current = null;
+      }
     };
   }, [mapReady, mapRef, styleVersion, layerVisible]);
-
-  // Deregister the interactive layer id on unmount.
-  useEffect(() => {
-    return () => {
-      INTERACTIVE_LAYER_IDS.delete(MARKER_LAYER);
-    };
-  }, []);
 
   // The area overlay stops at its min zoom; this covers the route at the zooms
   // below it, where a whole trip is on screen.

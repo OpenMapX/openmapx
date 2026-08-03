@@ -349,6 +349,16 @@
       "all": "Alle"
     },
     "startsAt": "Beginnt {date}",
+    "status": {
+      "loading": "Verkehrsstörungen werden aktualisiert …",
+      "stale": "Verkehrsstörungen sind möglicherweise veraltet.",
+      "error": "Verkehrsstörungen sind nicht verfügbar."
+    },
+    "line": {
+      "label": "Betroffene Straße",
+      "active": "Aktiv",
+      "future": "Beginnt später"
+    },
     "reset": "Zurücksetzen",
     "all": "Alle",
     "sev": {
@@ -375,6 +385,10 @@
       "validity": "Aktiv",
       "delay": "Verzögerung",
       "description": "Details",
+      "sourceRecord": "Quelleneintrag",
+      "sourceRecordCount": "{count, plural, one {# Quelleneintrag} other {# Quelleneinträge}}",
+      "sourceDetails": "Quelldetails ({count, plural, one {# Eintrag} other {# Einträge}})",
+      "relatedRecords": "{headline} ({count} zugehörige Einträge)",
       "conditionsHere": "{count, plural, one {# Meldung hier} other {# Meldungen hier}}"
     }
   },

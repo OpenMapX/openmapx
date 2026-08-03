@@ -49,11 +49,15 @@ export function useStyleSyncedLayer(params: {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
+    let idleRetryScheduled = false;
     const syncLayer = () => {
       if (!map.isStyleLoaded()) {
+        if (idleRetryScheduled) map.off("idle", syncLayer);
+        idleRetryScheduled = true;
         map.once("idle", syncLayer);
         return;
       }
+      idleRetryScheduled = false;
 
       if (visible && !map.getSource(sourceId)) {
         addSource(map);
@@ -70,6 +74,7 @@ export function useStyleSyncedLayer(params: {
     map.on("styledata", syncLayer);
     return () => {
       map.off("styledata", syncLayer);
+      if (idleRetryScheduled) map.off("idle", syncLayer);
     };
     // biome-ignore lint/correctness/useExhaustiveDependencies: deps are supplied by the caller to mirror each overlay's original effect dependency array exactly
   }, deps);

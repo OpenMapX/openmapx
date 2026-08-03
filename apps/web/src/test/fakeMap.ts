@@ -77,6 +77,7 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
   };
 
   const baseLayers = options.baseLayers ?? [];
+  const canvas = { style: { cursor: "" } };
   for (const layer of baseLayers) state.layers.set(layer.id, { ...layer });
 
   const on = (event: string, ...rest: unknown[]) => {
@@ -218,8 +219,8 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       getEast: () => 180,
       getNorth: () => 90,
     }),
-    getCanvas: () => ({ style: {} }),
-    getCanvasContainer: () => ({ style: {} }),
+    getCanvas: () => canvas,
+    getCanvasContainer: () => canvas,
     addControl: () => {},
     removeControl: () => {},
     flyTo: () => {},

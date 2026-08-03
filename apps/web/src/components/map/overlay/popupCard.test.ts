@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPopupCard, type PopupCardSpec } from "./popupCard";
+import { buildPopupCard, buildStackedPopupCardItems, type PopupCardSpec } from "./popupCard";
 
 describe("buildPopupCard", () => {
   const spec: PopupCardSpec = {
@@ -122,5 +122,46 @@ describe("buildPopupCard", () => {
     );
     expect(html).not.toContain("<b>x</b>");
     expect(html).not.toContain("<x>");
+  });
+
+  it("keeps source details collapsed inside their owning stack item", () => {
+    const html = buildStackedPopupCardItems(
+      { titleField: "headline", rows: [{ field: "recordId", label: "Record" }] },
+      [
+        {
+          properties: { headline: "Grouped roadworks", recordId: "6 source records" },
+          details: {
+            label: "Source details (6 records)",
+            entries: [
+              { headline: "Road works", recordId: "record <1>" },
+              { headline: "Road works", recordId: "record <2>" },
+            ],
+          },
+        },
+        { properties: { headline: "Separate incident" } },
+      ],
+      undefined,
+      "2 conditions here",
+    );
+
+    expect(html).toContain("2 conditions here");
+    expect(html.match(/omx-overlay-popup__section/g)).toHaveLength(2);
+    expect(html).toContain('<details class="omx-overlay-popup__details">');
+    expect(html).toContain("Source details (6 records)");
+    expect(html).toContain("record &lt;1&gt;");
+    expect(html).not.toContain("<details open");
+  });
+
+  it("renders a single item with details without turning it into a stack", () => {
+    const html = buildStackedPopupCardItems({ titleField: "headline", rows: [] }, [
+      {
+        properties: { headline: "Grouped roadworks" },
+        details: { label: "Source details", entries: [{ headline: "Road works" }] },
+      },
+    ]);
+
+    expect(html).toContain("Grouped roadworks");
+    expect(html).toContain("Source details");
+    expect(html).not.toContain("omx-overlay-popup--stack");
   });
 });

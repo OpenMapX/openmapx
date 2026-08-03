@@ -1,19 +1,23 @@
 "use client";
 
 import { useOverlayExclusion } from "@openmapx/core";
-import type { MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { addLayerInSlot } from "@/components/map/layers/layerStack";
 import { useStyleSyncedLayer } from "@/components/map/layers/useStyleSyncedLayer";
+import {
+  registerMapOverlayInteraction,
+  removeMapOverlayPopup,
+  replaceMapOverlayPopup,
+} from "@/components/map/overlay/mapInteractionArbiter";
 import { buildPopupCard, type PopupCardSpec } from "@/components/map/overlay/popupCard";
 import { useEnv } from "@/lib/EnvProvider";
-import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
 import { flowColorExpression } from "@/lib/trafficFlowExpression";
 import { useIntegrationDomainAttribution } from "@/lib/useIntegrationAttribution";
 import { useTrafficFlowStore } from "./store";
+import { TRAFFIC_FLOW_OPACITY_EXPRESSION } from "./visual-style";
 
 const SRC = "omx-traffic-flow-src";
 const CASING = "omx-traffic-flow-casing";
@@ -37,18 +41,6 @@ const COLOR_EXPR = flowColorExpression("speed_ratio", "los");
  * read as faint colour rather than letting the casing show through as black —
  * most segments are `typical` where live flow data is sparse.
  */
-const OPACITY_EXPR: maplibregl.ExpressionSpecification = [
-  "match",
-  ["get", "confidence"],
-  "measured",
-  0.95,
-  "estimated",
-  0.7,
-  "typical",
-  0.6,
-  0.6,
-];
-
 const COLOR_WIDTH_EXPR: maplibregl.ExpressionSpecification = [
   "interpolate",
   ["exponential", 1.4],
@@ -217,7 +209,7 @@ export function TrafficFlowLayer() {
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
             "line-color": COLOR_EXPR,
-            "line-opacity": OPACITY_EXPR,
+            "line-opacity": TRAFFIC_FLOW_OPACITY_EXPRESSION,
             "line-width": COLOR_WIDTH_EXPR,
             "line-offset": OFFSET_EXPR,
           },
@@ -238,46 +230,43 @@ export function TrafficFlowLayer() {
   }, [t]);
   const popupRef = useRef<maplibregl.Popup | null>(null);
 
-  // Click popup + hover cursor on the color layer.
+  // Flow is intentionally lower priority than incidents when both overlays
+  // have a rendered hit at the same point. The shared arbiter also owns the
+  // pointer cursor and popup replacement for this map.
   useEffect(() => {
     void styleVersion;
     const glMap = mapRef.current;
     if (!glMap || !mapReady || !showFlow) return;
 
-    const onClick = (e: MapLayerMouseEvent) => {
-      const feature = e.features?.[0];
-      if (!feature) return;
-      const properties = (feature.properties ?? {}) as Record<string, unknown>;
-      popupRef.current?.remove();
-      popupRef.current = new maplibregl.Popup({
-        closeButton: true,
-        maxWidth: "280px",
-        className: "omx-popup",
-      })
-        .setLngLat(e.lngLat)
-        .setHTML(
-          buildPopupCard(POPUP_SPEC, buildPopupProperties(properties, tRef.current), (k) =>
-            tRef.current(k),
-          ),
-        )
-        .addTo(glMap);
-    };
-
-    const onMouseMove = (e: maplibregl.MapMouseEvent) => {
-      if (!glMap.getLayer(COLOR)) return;
-      const hit = glMap.queryRenderedFeatures(e.point, { layers: [COLOR] });
-      glMap.getCanvasContainer().style.cursor = hit.length > 0 ? "pointer" : "";
-    };
-
-    INTERACTIVE_LAYER_IDS.add(COLOR);
-    glMap.on("click", COLOR, onClick);
-    glMap.on("mousemove", onMouseMove);
+    const unregister = registerMapOverlayInteraction(glMap, {
+      id: "traffic-flow",
+      layerIds: [COLOR],
+      priority: 10,
+      onClick: ({ event, features }) => {
+        const feature = features[0];
+        if (!feature) return;
+        const properties = (feature.properties ?? {}) as Record<string, unknown>;
+        const popup = new maplibregl.Popup({
+          closeButton: true,
+          maxWidth: "280px",
+          className: "omx-popup",
+        })
+          .setLngLat(event.lngLat)
+          .setHTML(
+            buildPopupCard(POPUP_SPEC, buildPopupProperties(properties, tRef.current), (k) =>
+              tRef.current(k),
+            ),
+          );
+        popupRef.current = popup;
+        replaceMapOverlayPopup(glMap, popup);
+      },
+    });
     return () => {
-      glMap.off("click", COLOR, onClick);
-      glMap.off("mousemove", onMouseMove);
-      glMap.getCanvasContainer().style.cursor = "";
-      popupRef.current?.remove();
-      INTERACTIVE_LAYER_IDS.delete(COLOR);
+      unregister();
+      if (popupRef.current) {
+        removeMapOverlayPopup(glMap, popupRef.current);
+        popupRef.current = null;
+      }
     };
   }, [mapReady, mapRef, styleVersion, showFlow]);
 

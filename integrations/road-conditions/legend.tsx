@@ -9,6 +9,12 @@ import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { SEVERITY_COLORS, TYPE_GLYPHS } from "./markers";
 import { type Horizon, type MinSeverity, useRoadConditionsStore } from "./store";
+import {
+  ROAD_CONDITION_ACTIVE_LINE_DASHARRAY,
+  ROAD_CONDITION_ACTIVE_LINE_OPACITY,
+  ROAD_CONDITION_FUTURE_LINE_DASHARRAY,
+  ROAD_CONDITION_FUTURE_LINE_OPACITY,
+} from "./visual-style";
 
 /**
  * Types offered as filter chips — also the glyph legend, so the same row both
@@ -62,20 +68,77 @@ export function RoadConditionsLegend() {
   const setMinSeverity = useRoadConditionsStore((s) => s.setMinSeverity);
   const setHorizon = useRoadConditionsStore((s) => s.setHorizon);
   const resetFilters = useRoadConditionsStore((s) => s.resetFilters);
+  const viewportFetchStatus = useRoadConditionsStore((s) => s.viewportFetchStatus);
+  const routeFetchStatus = useRoadConditionsStore((s) => s.routeFetchStatus);
   const filtersActive = types.length > 0 || minSeverity !== "all" || horizon !== "active";
+  const fetchStatus = [viewportFetchStatus, routeFetchStatus].includes("loading")
+    ? "loading"
+    : [viewportFetchStatus, routeFetchStatus].includes("error")
+      ? "error"
+      : [viewportFetchStatus, routeFetchStatus].includes("stale")
+        ? "stale"
+        : "ready";
 
   return (
     <OverlayLegend
       title={t("trafficIncidents")}
       panelOpen={panelOpen}
       layerVisible={layerVisible}
-      // This overlay's store tracks no fetch state, so the legend has no
-      // loading bar to show.
-      loading={false}
+      loading={fetchStatus === "loading"}
       setLayerVisible={setLayerVisible}
       toggleAriaLabel={t("toggleOverlay")}
       paperSx={{ maxWidth: "calc(100vw - 24px)" }}
     >
+      {fetchStatus !== "ready" ? (
+        <Typography
+          role="status"
+          aria-live="polite"
+          sx={{ fontSize: 10.5, color: "text.secondary", mb: 0.75 }}
+        >
+          {t(`status.${fetchStatus}`)}
+        </Typography>
+      ) : null}
+
+      <Box sx={{ mb: 1 }}>
+        <Typography sx={{ fontSize: 10.5, color: "text.secondary", mb: 0.4 }}>
+          {t("line.label")}
+        </Typography>
+        <Box sx={{ display: "flex", gap: 1.25, alignItems: "center" }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.4 }}>
+            <Box
+              data-testid="road-conditions-line-active"
+              data-line-opacity={ROAD_CONDITION_ACTIVE_LINE_OPACITY}
+              data-line-dasharray={ROAD_CONDITION_ACTIVE_LINE_DASHARRAY.join(",")}
+              component="span"
+              sx={{
+                width: 24,
+                borderTop: `3px solid ${SEVERITY_COLORS.medium}`,
+                opacity: ROAD_CONDITION_ACTIVE_LINE_OPACITY,
+              }}
+            />
+            <Typography sx={{ fontSize: 10.5, color: "text.secondary" }}>
+              {t("line.active")}
+            </Typography>
+          </Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.4 }}>
+            <Box
+              data-testid="road-conditions-line-future"
+              data-line-opacity={ROAD_CONDITION_FUTURE_LINE_OPACITY}
+              data-line-dasharray={ROAD_CONDITION_FUTURE_LINE_DASHARRAY.join(",")}
+              component="span"
+              sx={{
+                width: 24,
+                borderTop: `3px dashed ${SEVERITY_COLORS.medium}`,
+                opacity: ROAD_CONDITION_FUTURE_LINE_OPACITY,
+              }}
+            />
+            <Typography sx={{ fontSize: 10.5, color: "text.secondary" }}>
+              {t("line.future")}
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
+
       <Box sx={{ mb: 0.75 }}>
         <Typography sx={{ fontSize: 10.5, color: "text.secondary", mb: 0.4 }}>
           {t("filterByType")}

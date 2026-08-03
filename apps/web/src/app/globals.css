@@ -214,4 +214,43 @@ main {
     padding-top: 12px;
     border-top: 1px solid var(--omx-border-light);
   }
+  /* Grouped condition details stay closed until the user asks for source-level
+   * records. The disclosure inherits the popup theme and remains compact so
+   * opening it does not make every child look like a separate condition. */
+  .omx-overlay-popup__details {
+    margin-top: 12px;
+    border-top: 1px solid var(--omx-border-light);
+  }
+  .omx-overlay-popup__details-summary {
+    display: block;
+    padding-top: 8px;
+    color: var(--omx-overlay-text);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    list-style: none;
+  }
+  .omx-overlay-popup__details-summary::-webkit-details-marker {
+    display: none;
+  }
+  .omx-overlay-popup__details-summary::before {
+    display: inline-block;
+    width: 14px;
+    color: var(--omx-overlay-text);
+    content: "›";
+    font-size: 16px;
+    line-height: 10px;
+    vertical-align: -1px;
+  }
+  .omx-overlay-popup__details[open] > .omx-overlay-popup__details-summary::before {
+    content: "⌄";
+  }
+  .omx-overlay-popup__details-body {
+    padding-top: 2px;
+  }
+  .omx-overlay-popup__details-entry + .omx-overlay-popup__details-entry {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--omx-border-light);
+  }
 }

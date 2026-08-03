@@ -30,6 +30,19 @@ describe("road-conditions overlay store", () => {
     expect(after.types).toEqual([]);
     expect(after.minSeverity).toBe("all");
   });
+
+  it("tracks viewport and route fetch status independently", () => {
+    const initial = useRoadConditionsStore.getState();
+    expect(initial.viewportFetchStatus).toBe("idle");
+    expect(initial.routeFetchStatus).toBe("idle");
+
+    initial.setViewportFetchStatus("stale");
+    expect(useRoadConditionsStore.getState().viewportFetchStatus).toBe("stale");
+    expect(useRoadConditionsStore.getState().routeFetchStatus).toBe("idle");
+
+    useRoadConditionsStore.getState().setRouteFetchStatus("loading");
+    expect(useRoadConditionsStore.getState().routeFetchStatus).toBe("loading");
+  });
 });
 
 describe("horizonDaysParam", () => {

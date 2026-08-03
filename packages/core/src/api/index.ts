@@ -16,7 +16,9 @@ export { API_ENDPOINTS } from "./endpoints";
 export { type AlertBBox, fetchRoadAlerts, type RawRoadAlert } from "./roadAlerts";
 export {
   type FetchRoadConditionsOptions,
+  type FetchRoadConditionsResult,
   fetchRoadConditions,
+  fetchRoadConditionsWithStatus,
   fetchRouteFlow,
 } from "./roadConditions";
 export { fetchRouteMatchWindow, type RouteMatchWindow } from "./routeAttributes";

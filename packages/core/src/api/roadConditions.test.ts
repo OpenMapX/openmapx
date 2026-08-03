@@ -1,9 +1,38 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "./client";
-import { fetchRoadConditions, fetchRouteFlow } from "./roadConditions";
+import {
+  fetchRoadConditions,
+  fetchRoadConditionsWithStatus,
+  fetchRouteFlow,
+} from "./roadConditions";
 
 describe("fetchRoadConditions", () => {
   beforeEach(() => vi.restoreAllMocks());
+
+  it("returns parsed events with an explicit success status", async () => {
+    vi.spyOn(apiClient, "get").mockResolvedValue({
+      features: [
+        {
+          geometry: { type: "Point", coordinates: [13.4, 52.5] },
+          properties: { id: "status:1", type: "roadworks" },
+        },
+      ],
+    } as never);
+
+    await expect(fetchRoadConditionsWithStatus([13, 52, 14, 53])).resolves.toMatchObject({
+      ok: true,
+      events: [{ id: "status:1", type: "roadworks" }],
+    });
+  });
+
+  it("returns a failed status without throwing when the request fails", async () => {
+    vi.spyOn(apiClient, "get").mockRejectedValue(new Error("network"));
+
+    await expect(fetchRoadConditionsWithStatus([13, 52, 14, 53])).resolves.toEqual({
+      ok: false,
+      events: [],
+    });
+  });
 
   it("serializes the bbox + filters and parses the FeatureCollection to events", async () => {
     const spy = vi.spyOn(apiClient, "get").mockResolvedValue({

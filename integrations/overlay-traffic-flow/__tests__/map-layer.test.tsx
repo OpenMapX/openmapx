@@ -1,5 +1,6 @@
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { registerMapOverlayInteraction } from "@/components/map/overlay/mapInteractionArbiter";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { createFakeMap, type FakeMap, render } from "@/test";
 import { useTrafficFlowStore } from "../store";
@@ -48,6 +49,7 @@ import { TrafficFlowLayer } from "../map-layer";
 const SRC = "omx-traffic-flow-src";
 const CASING = "omx-traffic-flow-casing";
 const COLOR = "omx-traffic-flow-color";
+const INCIDENT = "test-incident-layer";
 
 const COLOR_EXPR = [
   "case",
@@ -87,6 +89,7 @@ beforeEach(() => {
   useTrafficFlowStore.setState({ panelOpen: false, layerVisible: false });
   popupState.html = "";
   INTERACTIVE_LAYER_IDS.delete(COLOR);
+  INTERACTIVE_LAYER_IDS.delete(INCIDENT);
 });
 
 describe("TrafficFlowLayer", () => {
@@ -143,6 +146,11 @@ describe("TrafficFlowLayer", () => {
         },
       ],
     } as unknown as MapLayerMouseEvent;
+    (
+      fake.map as unknown as {
+        queryRenderedFeatures: (point: unknown, options?: { layers?: string[] }) => unknown[];
+      }
+    ).queryRenderedFeatures = () => clickEvent.features ?? [];
     fake.emit("click", clickEvent);
 
     expect(popupState.html).toContain("42 km/h");
@@ -165,5 +173,56 @@ describe("TrafficFlowLayer", () => {
     } as unknown as MapLayerMouseEvent);
 
     expect(popupState.html).toBe("");
+  });
+
+  it("lets incident interaction win over flow and still opens flow by itself", () => {
+    useTrafficFlowStore.setState({ panelOpen: true, layerVisible: true });
+    const { unmount } = render(<TrafficFlowLayer />);
+    fake.state.layers.set(INCIDENT, { id: INCIDENT, type: "line" });
+
+    const flowFeature = {
+      type: "Feature",
+      properties: { highway: "primary", speed_ratio: 0.5, los: "heavy" },
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [5, 52],
+          [5.01, 52],
+        ],
+      },
+      layer: { id: COLOR, type: "line" },
+    };
+    const incidentFeature = {
+      ...flowFeature,
+      properties: { headline: "Roadworks" },
+      layer: { id: INCIDENT, type: "line" },
+    };
+    (
+      fake.map as unknown as {
+        queryRenderedFeatures: (point: unknown, options?: { layers?: string[] }) => unknown[];
+      }
+    ).queryRenderedFeatures = (_point, options) =>
+      options?.layers?.includes(INCIDENT) ? [incidentFeature] : [flowFeature];
+
+    const incidentClick = vi.fn();
+    const unregisterIncident = registerMapOverlayInteraction(fake.map, {
+      id: "test-incident",
+      layerIds: [INCIDENT],
+      priority: 100,
+      onClick: incidentClick,
+    });
+
+    fake.emit("click", { point: { x: 10, y: 10 }, lngLat: { lng: 5, lat: 52 } });
+    expect(incidentClick).toHaveBeenCalledOnce();
+    expect(popupState.html).toBe("");
+
+    unregisterIncident();
+    fake.emit("click", { point: { x: 10, y: 10 }, lngLat: { lng: 5, lat: 52 } });
+    expect(popupState.html).toContain("50%");
+
+    fake.emit("mousemove", { point: { x: 10, y: 10 } });
+    expect(fake.map.getCanvasContainer().style.cursor).toBe("pointer");
+
+    unmount();
   });
 });

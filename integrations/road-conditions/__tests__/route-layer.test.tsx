@@ -1,6 +1,8 @@
 import { fetchRoadConditions } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { createFakeMap, type FakeMap, render, waitFor } from "@/test";
+import { useRoadConditionsStore } from "../store";
 
 let fake: FakeMap;
 
@@ -44,6 +46,13 @@ vi.mock("@/lib/overlayZoomGate", () => ({ useOverlayMinZoom: () => 7 }));
 vi.mock("@/components/map/overlay/useOverlayStoreState", () => ({
   useOverlayLayerVisible: () => true,
 }));
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
+vi.mock("@/lib/useDateTimeFormat", () => ({
+  useDateTimeFormat: () => ({
+    dateTime: (value: string | number | Date) => String(value),
+    date: (value: string | number | Date) => String(value),
+  }),
+}));
 // A stable object/array reference across calls, matching the real hook's
 // contract (backed by TanStack Query's cache, which keeps `data` referentially
 // stable until a genuine refetch lands). A fresh literal returned on every
@@ -70,9 +79,38 @@ const DRAWN_STATE = {
 vi.mock("@/lib/useDrawnDirectionsRoutes", () => ({
   useDrawnDirectionsRoutes: () => DRAWN_STATE,
 }));
-vi.mock("@openmapx/core", async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  fetchRoadConditions: vi.fn(async () => events),
+vi.mock("@openmapx/core", async (importOriginal) => {
+  const original = await importOriginal<Record<string, unknown>>();
+  const fetchRoadConditions = vi.fn(async () => events);
+  return {
+    ...original,
+    fetchRoadConditions,
+    fetchRoadConditionsWithStatus: vi.fn(async (bbox: unknown) => ({
+      ok: true,
+      events: await fetchRoadConditions(bbox as never),
+    })),
+  };
+});
+
+const popupState = vi.hoisted(() => ({ html: "" }));
+vi.mock("maplibre-gl", () => ({
+  default: {
+    Popup: class FakePopup {
+      setLngLat() {
+        return this;
+      }
+      setHTML(html: string) {
+        popupState.html = html;
+        return this;
+      }
+      addTo() {
+        return this;
+      }
+      remove() {
+        return this;
+      }
+    },
+  },
 }));
 
 import { RouteConditionsLayer } from "../route-layer";
@@ -85,6 +123,10 @@ beforeEach(() => {
   fake = createFakeMap({ styleLoaded: true, zoom: 5 });
   fetchMock.mockClear();
   fetchMock.mockResolvedValue(events);
+  useRoadConditionsStore.setState({ routeFetchStatus: "idle" });
+  popupState.html = "";
+  INTERACTIVE_LAYER_IDS.delete("omx-road-conditions-route-markers");
+  INTERACTIVE_LAYER_IDS.delete("omx-road-conditions-route-line");
 });
 
 describe("RouteConditionsLayer", () => {
@@ -104,6 +146,59 @@ describe("RouteConditionsLayer", () => {
         ?.data as GeoJSON.FeatureCollection;
       expect(data.features).toHaveLength(1);
     });
+  });
+
+  it("uses the shared upcoming style for route markers and lines", async () => {
+    fetchMock.mockResolvedValueOnce([
+      {
+        id: "oc:future-route",
+        source: "autobahn",
+        provider: "road-conditions-openconditions",
+        type: "roadworks",
+        severity: "medium",
+        headline: "Roadworks",
+        isForecast: true,
+        validFrom: "2099-08-03T00:00:00Z",
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [8, 50.001],
+            [8, 50.004],
+          ],
+        },
+      },
+    ]);
+
+    render(<RouteConditionsLayer />);
+    await waitFor(() => {
+      const lines = fake.state.sources.get("omx-road-conditions-route-lines")
+        ?.data as GeoJSON.FeatureCollection;
+      expect(lines.features).toHaveLength(1);
+    });
+
+    const lineData = fake.state.sources.get("omx-road-conditions-route-lines")
+      ?.data as GeoJSON.FeatureCollection;
+    const markerData = fake.state.sources.get("omx-road-conditions-route-markers")
+      ?.data as GeoJSON.FeatureCollection;
+    const linePaint = fake.state.layers.get("omx-road-conditions-route-line")?.paint as Record<
+      string,
+      unknown
+    >;
+    const markerPaint = fake.state.layers.get("omx-road-conditions-route-markers")?.paint as Record<
+      string,
+      unknown
+    >;
+
+    expect(lineData.features[0]?.properties?.future).toBe(true);
+    expect(markerData.features[0]?.properties?.future).toBe(true);
+    expect(linePaint["line-opacity"]).toEqual(["case", ["get", "future"], 0.45, 0.7]);
+    expect(linePaint["line-dasharray"]).toEqual([
+      "case",
+      ["get", "future"],
+      ["literal", [2, 1.5]],
+      ["literal", [1]],
+    ]);
+    expect(markerPaint["icon-opacity"]).toEqual(["case", ["get", "future"], 0.55, 1]);
   });
 
   it("collapses explicitly grouped route line records into one marker and one line", async () => {
@@ -191,6 +286,85 @@ describe("RouteConditionsLayer", () => {
         ?.data as GeoJSON.FeatureCollection;
       expect(data.features).toHaveLength(2);
     });
+  });
+
+  it("registers route markers and lines as one popup target", async () => {
+    render(<RouteConditionsLayer />);
+    await waitFor(() => {
+      expect(fake.state.layers.has("omx-road-conditions-route-line")).toBe(true);
+      const data = fake.state.sources.get("omx-road-conditions-route-markers")
+        ?.data as GeoJSON.FeatureCollection;
+      expect(data.features).toHaveLength(1);
+      expect(INTERACTIVE_LAYER_IDS.has("omx-road-conditions-route-markers")).toBe(true);
+      expect(INTERACTIVE_LAYER_IDS.has("omx-road-conditions-route-line")).toBe(true);
+    });
+
+    (
+      fake.map as unknown as {
+        queryRenderedFeatures: (point: unknown, options?: { layers?: string[] }) => unknown[];
+      }
+    ).queryRenderedFeatures = (_point, options) =>
+      options?.layers?.includes("omx-road-conditions-route-line")
+        ? [
+            {
+              type: "Feature",
+              geometry: {
+                type: "LineString",
+                coordinates: [
+                  [8, 50.004],
+                  [8, 50.006],
+                ],
+              },
+              properties: { _displayId: "event:oc:1", _sev: 4 },
+              layer: { id: "omx-road-conditions-route-line", type: "line" },
+            },
+          ]
+        : [];
+
+    fake.emit("click", {
+      point: { x: 10, y: 10 },
+      lngLat: { lng: 8, lat: 50.005 },
+    });
+    expect(popupState.html).toContain("Vollsperrung");
+  });
+
+  it("retains route events and reports stale when a refresh fails", async () => {
+    render(<RouteConditionsLayer />);
+    await waitFor(() => {
+      const data = fake.state.sources.get("omx-road-conditions-route-markers")
+        ?.data as GeoJSON.FeatureCollection;
+      expect(data.features).toHaveLength(1);
+    });
+
+    fetchMock.mockRejectedValueOnce(new Error("temporary outage"));
+    fake.state.zoom = 9;
+    fake.emit("zoomend");
+    fake.state.zoom = 5;
+    fake.emit("zoomend");
+    await waitFor(() => expect(useRoadConditionsStore.getState().routeFetchStatus).toBe("stale"));
+
+    const data = fake.state.sources.get("omx-road-conditions-route-markers")
+      ?.data as GeoJSON.FeatureCollection;
+    expect(data.features).toHaveLength(1);
+  });
+
+  it("coalesces a refresh while the route request is still in flight", async () => {
+    let resolve: ((value: typeof events) => void) | undefined;
+    const pending = new Promise<typeof events>((done) => {
+      resolve = done;
+    });
+    fetchMock.mockImplementationOnce(() => pending);
+    render(<RouteConditionsLayer />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    fake.state.zoom = 9;
+    fake.emit("zoomend");
+    fake.state.zoom = 5;
+    fake.emit("zoomend");
+    await Promise.resolve();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    resolve?.(events);
   });
 
   it("places one marker per MultiPoint endpoint rather than their centroid", async () => {

@@ -10,6 +10,8 @@ export type MinSeverity = "all" | "low" | "medium" | "high" | "critical";
  */
 export type Horizon = "active" | "week" | "all";
 
+export type RoadConditionFetchStatus = "idle" | "loading" | "ready" | "stale" | "error";
+
 /** The `horizonDays` query value for a step; `"all"` omits the param entirely. */
 export function horizonDaysParam(horizon: Horizon): string | undefined {
   if (horizon === "active") return "0";
@@ -35,6 +37,8 @@ export const useRoadConditionsStore = createOverlayStore({
     types: [] as string[],
     minSeverity: "all" as MinSeverity,
     horizon: "active" as Horizon,
+    viewportFetchStatus: "idle" as RoadConditionFetchStatus,
+    routeFetchStatus: "idle" as RoadConditionFetchStatus,
   },
   actions: (set) => ({
     toggleType: (type: string) =>
@@ -43,6 +47,9 @@ export const useRoadConditionsStore = createOverlayStore({
       })),
     setMinSeverity: (minSeverity: MinSeverity) => set({ minSeverity }),
     setHorizon: (horizon: Horizon) => set({ horizon }),
+    setViewportFetchStatus: (viewportFetchStatus: RoadConditionFetchStatus) =>
+      set({ viewportFetchStatus }),
+    setRouteFetchStatus: (routeFetchStatus: RoadConditionFetchStatus) => set({ routeFetchStatus }),
     resetFilters: () => set({ types: [], minSeverity: "all", horizon: "active" }),
   }),
 });

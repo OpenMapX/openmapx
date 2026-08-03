@@ -349,6 +349,16 @@
       "all": "All"
     },
     "startsAt": "Starts {date}",
+    "status": {
+      "loading": "Updating traffic incidents…",
+      "stale": "Traffic incidents may be outdated.",
+      "error": "Traffic incidents are unavailable."
+    },
+    "line": {
+      "label": "Affected road",
+      "active": "Active",
+      "future": "Starts later"
+    },
     "reset": "Reset",
     "all": "All",
     "sev": {
@@ -375,6 +385,10 @@
       "validity": "Active",
       "delay": "Delay",
       "description": "Details",
+      "sourceRecord": "Source record",
+      "sourceRecordCount": "{count, plural, one {# source record} other {# source records}}",
+      "sourceDetails": "Source details ({count, plural, one {# record} other {# records}})",
+      "relatedRecords": "{headline} ({count} related records)",
       "conditionsHere": "{count, plural, one {# condition here} other {# conditions here}}"
     }
   },

@@ -6,18 +6,12 @@ import { TRAFFIC_BAND_COLORS, type TrafficBand } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { useTrafficFlowStore } from "./store";
+import { TRAFFIC_FLOW_CONFIDENCE_STEPS } from "./visual-style";
 
 /** The five colour-gradient stops (green→dark-red); the key is also the i18n key. */
 export const BANDS: { color: string; key: TrafficBand }[] = (
   ["freeFlow", "light", "moderate", "heavy", "severe"] as const
 ).map((key) => ({ key, color: TRAFFIC_BAND_COLORS[key] }));
-
-/** The three confidence tiers driving `line-opacity`, faintest last. */
-const CONFIDENCE_STEPS: { key: string; opacity: number }[] = [
-  { key: "measured", opacity: 0.95 },
-  { key: "estimated", opacity: 0.7 },
-  { key: "typical", opacity: 0.4 },
-];
 
 export function TrafficFlowLegend() {
   const t = useTranslations("trafficFlow");
@@ -58,9 +52,10 @@ export function TrafficFlowLegend() {
           {t("confidence.label")}
         </Typography>
         <Box sx={{ display: "flex", gap: 1 }}>
-          {CONFIDENCE_STEPS.map((step) => (
+          {TRAFFIC_FLOW_CONFIDENCE_STEPS.map((step) => (
             <Box key={step.key} sx={{ display: "flex", alignItems: "center", gap: 0.4 }}>
               <Box
+                data-testid={`traffic-flow-confidence-${step.key}`}
                 sx={{
                   width: 9,
                   height: 9,

@@ -44,4 +44,25 @@ describe("RoadConditionsLegend time-horizon control", () => {
     await userEvent.click(screen.getByRole("button", { name: "roadConditions.horizon.all" }));
     expect(screen.getByText("roadConditions.reset")).toBeTruthy();
   });
+
+  it("explains active and starts-later incident lines with the renderer styles", () => {
+    render(<RoadConditionsLegend />);
+
+    const active = screen.getByTestId("road-conditions-line-active");
+    const future = screen.getByTestId("road-conditions-line-future");
+    expect(active.getAttribute("data-line-opacity")).toBe("0.7");
+    expect(active.getAttribute("data-line-dasharray")).toBe("1");
+    expect(future.getAttribute("data-line-opacity")).toBe("0.45");
+    expect(future.getAttribute("data-line-dasharray")).toBe("2,1.5");
+  });
+
+  it("shows loading, stale, and unavailable fetch feedback without hiding controls", () => {
+    for (const status of ["loading", "stale", "error"] as const) {
+      useRoadConditionsStore.setState({ viewportFetchStatus: status, routeFetchStatus: "idle" });
+      const { unmount } = render(<RoadConditionsLegend />);
+      expect(screen.getByRole("status")).toHaveTextContent(`roadConditions.status.${status}`);
+      expect(screen.getByRole("button", { name: "roadConditions.horizon.active" })).toBeTruthy();
+      unmount();
+    }
+  });
 });
