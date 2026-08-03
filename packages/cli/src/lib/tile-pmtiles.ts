@@ -567,17 +567,10 @@ export async function extractPmtilesPackage(
       tileData,
     ]);
     writeFileSync(temporaryPath, archive, { flag: "wx" });
+    const inspected = await inspectPmtiles(temporaryPath);
     renameSync(temporaryPath, options.destinationPath);
-    const sha256 = await hashFile(options.destinationPath);
     return {
-      byteLength: archive.length,
-      sha256,
-      etag: `sha256-${sha256}`,
-      bounds,
-      minZoom: options.request.effective.minZoom,
-      maxZoom: options.request.effective.maxZoom,
-      tileCount: tiles.length,
-      tileCompression: tileCompression === TILE_COMPRESSION_GZIP ? "gzip" : "none",
+      ...inspected,
       attribution: options.request.source.attribution,
       sourceBytesRead,
       destinationBytesWritten: archive.length,
