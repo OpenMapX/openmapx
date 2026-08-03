@@ -76,6 +76,11 @@ function applyBoundary(map: maplibregl.Map | null, boundary: AreaGeometry | null
 export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, boundary }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  // The parent updates its bbox state from this callback. Keep the callback
+  // current without making it a map-lifecycle dependency: an inline callback
+  // from the parent must not tear down and recreate the map on every move.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
   // Latest boundary, read by the map's `load` handler (which may run after the
   // boundary prop has already arrived).
   const boundaryRef = useRef<AreaGeometry | null>(boundary ?? null);
@@ -86,7 +91,7 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
   const styleName = resolvedMode === "dark" ? "streets-v2-dark" : "bright-v2";
   const variant = resolvedMode === "dark" ? "dark" : "light";
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: initialCenter / initialZoom intentionally captured at mount only — re-creating the map on every prop change would lose the user's pan/zoom state mid-selection.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: initialCenter / initialZoom and onChange intentionally captured at mount only — re-creating the map on every prop change would lose the user's pan/zoom state mid-selection; refs provide the latest values.
   useEffect(() => {
     if (!containerRef.current) return;
     let destroyed = false;
@@ -124,7 +129,7 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
       const emit = () => {
         if (!map) return;
         const b = map.getBounds();
-        onChange(
+        onChangeRef.current(
           {
             west: b.getWest(),
             south: b.getSouth(),
@@ -154,7 +159,7 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
       map?.remove();
       mapRef.current = null;
     };
-  }, [env, styleName, variant, onChange]);
+  }, [env, styleName, variant]);
 
   // Frame the map to an externally-provided bbox (e.g. a searched admin area).
   // The ensuing `moveend` re-emits the viewport bbox, so the download captures
