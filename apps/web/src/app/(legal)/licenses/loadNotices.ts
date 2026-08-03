@@ -1,5 +1,5 @@
 // Server-side loader for /licenses. Combines the build-time static manifest
-// (web + api + built-in integrations) with one group per installed community
+// (web + api + data manager + built-in integrations) with one group per installed community
 // integration, sourced from the integration's `manifest.json` plus the
 // optional `dist/licenses.json` shipped inside its artifact. Runs on every
 // request so newly-installed integrations show up without rebuilding web.
@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { type LicenseNotice, repoPaths } from "@openmapx/core/server";
 
 export interface LicenseGroup {
-  /** `core` for web/api/built-in deps, or the community integration id. */
+  /** `core` for web/api/data-manager/built-in deps, or the community integration id. */
   scope: string;
   /** Human-readable label shown in the table heading. */
   label: string;
@@ -52,7 +52,7 @@ export async function loadLicenseGroups(): Promise<LicensesPageData> {
   if (staticPayload?.notices?.length) {
     groups.push({
       scope: "core",
-      label: "OpenMapX (web app, API, built-in integrations)",
+      label: "OpenMapX (web app, API, data manager, built-in integrations)",
       notices: staticPayload.notices,
     });
     generatedAt = staticPayload.generatedAt ?? null;

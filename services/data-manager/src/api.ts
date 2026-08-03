@@ -288,6 +288,7 @@ function registerOfflinePackageRoutes(
       .header("Content-Type", asset.contentType)
       .header("Content-Length", String(asset.byteLength));
     if (request.method === "HEAD") return reply.send();
+    if ("body" in asset) return reply.send(Buffer.from(asset.body));
     return reply.send(createReadStream(asset.path));
   };
 

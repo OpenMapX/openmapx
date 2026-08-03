@@ -2214,6 +2214,9 @@ importers:
 
   services/data-manager:
     dependencies:
+      '@mapbox/glyph-pbf-composite':
+        specifier: 0.0.3
+        version: 0.0.3
       '@motis-project/motis-client':
         specifier: 2.10.2
         version: 2.10.2
@@ -3354,6 +3357,9 @@ packages:
 
   '@manypkg/get-packages@1.1.3':
     resolution: {integrity: sha512-fo+QhuU3qE/2TQMQmbVMqaQ6EWbMhi4ABWP+O4AM1NqPBuy0OrApV5LO6BrrgnhtAHS2NH6RrVk9OL181tTi8A==}
+
+  '@mapbox/glyph-pbf-composite@0.0.3':
+    resolution: {integrity: sha512-VcsYpDcFDuly8P4sbqBpFKpTrNsOqyvCkuAsoaQrQv9Y4cQnwrwdWgY3zBXJdS6OgukWfVaRwcUE6dwrDC0URA==}
 
   '@mapbox/jsonlint-lines-primitives@2.0.2':
     resolution: {integrity: sha512-rY0o9A5ECsTQRVhv7tL/OyDpGAoUB4tTvLiW1DSzQGq4bvTPhNw1VpSNjDJc5GFZ2XuyOtSWSVN05qOtcD71qQ==}
@@ -5805,6 +5811,12 @@ packages:
   gbfs-typescript-types@1.0.15:
     resolution: {integrity: sha512-aGMAlo8rX0eqP7JJGO7qrIM5vvbAcZtXg9Ef2zq7HQqNfkm08nmITnXL7UYfEMqUHouAt9sBO9rpJ0HVP5O2NA==}
 
+  generate-function@2.3.1:
+    resolution: {integrity: sha512-eeB5GfMNeevm/GRYq20ShmsaGcmI81kIX2K9XQx5miC8KdHaC6Jm0qQ8ZNeGOi7wYB8OsdxKs+Y2oVuTFuVwKQ==}
+
+  generate-object-property@1.2.0:
+    resolution: {integrity: sha512-TuOwZWgJ2VAMEGJvAyPWvpqxSANF0LDpmyHauMjFYzaACvn+QTT/AZomvPCzVBV7yDN3OmwHQ5OvHaeLKre3JQ==}
+
   geo-tz@8.1.8:
     resolution: {integrity: sha512-i+5koPn3/fzDkEROczIu3QqCEg0uQi2xugDjaVaarK0djuJorLeKHtWrscIGhnsbpPMHc5cLluaRxu3HXtU1ZA==}
     engines: {node: '>=16'}
@@ -6136,6 +6148,9 @@ packages:
 
   is-potential-custom-element-name@1.0.1:
     resolution: {integrity: sha512-bCYeRA2rVibKZd+s2625gGnGF/t7DSqDs4dP7CrLA1m7jKWz6pps0LpYLJN8Q64HtmPKJ1hrN3nzPNKFEKOUiQ==}
+
+  is-property@1.0.2:
+    resolution: {integrity: sha512-Ks/IoX00TtClbGQr4TWXemAnktAQvYB7HzcCxDGqEZU6oCmb2INHuOoKxbtR+HFkmYWBKv/dOZtGRiAjDhj92g==}
 
   is-stream@2.0.1:
     resolution: {integrity: sha512-hFoiJiTl63nn+kstHGBtewWSKnQLpyb155KHheA1l39uvtO9nWIop1p3udqPcUd/xbF1VLMO4n7OI6p7RbngDg==}
@@ -6966,6 +6981,9 @@ packages:
     resolution: {integrity: sha512-WPn+h9RGEExOKdu4bsF4HksG/uzd3cFq3MFtq8PsFeExPse5Ha/VOjQNyHhjboBFwGXGev6muJYTSPAOkROq2g==}
     engines: {node: '>=18'}
 
+  protobuf-schema@1.5.1:
+    resolution: {integrity: sha512-jPi6WrJQeqr717Fd42bY9L+rKb6VwGA3ZMAe9X3hwaIrCqW+bM+K+wu+DlVnP5MY2QoS6mqNIiOf9elymWdT6A==}
+
   protobufjs@8.6.3:
     resolution: {integrity: sha512-alQyzT0j401LGBtwsqu6uprjR6pfNH1UJf9N6GBFMjIcd+HzTe0/HrjAbFCqun+zvnfLarrxAtMM2xvZ+kFZ5A==}
     engines: {node: '>=12.0.0'}
@@ -6976,6 +6994,9 @@ packages:
 
   protocol-buffers-schema@3.6.1:
     resolution: {integrity: sha512-VG2K63Igkiv9p76tk1lilczEK1cT+kCjKtkdhw1dQZV3k3IXJbd3o6Ho8b9zJZaHSnT2hKe4I+ObmX9w6m5SmQ==}
+
+  protocol-buffers@2.7.0:
+    resolution: {integrity: sha512-uaQMT6i8KHUFA/vrSGb97tGXzgoWYxnf/Ledpx7x6vQPjbxRp4muN8DRz0PMi/IuNjB8Uq79h3Y24MFS+jYz3Q==}
 
   pump@3.0.4:
     resolution: {integrity: sha512-VS7sjc6KR7e1ukRFhQSY5LM2uBWAUPiOPa/A3mkKmiMwSmRFUITt0xuj+/lesgnCv+dPIEYlkzrcyXgquIHMcA==}
@@ -7167,6 +7188,9 @@ packages:
   resolve-pkg-maps@1.0.0:
     resolution: {integrity: sha512-seS2Tj26TBVOC2NIc2rOe2y2ZO7efxITtLZcGSOnHHNOQ7CkiUBfw0Iw2ck6xkIhPwLhKNLS8BO+hEpngQlqzw==}
 
+  resolve-protobuf-schema@1.0.2:
+    resolution: {integrity: sha512-x9optLjaRApo9b/CKahouGGpkUYbsBfEp3TpmwQCZUcu4t7c6hTXPWVwpDdy4Y4e5wKtg/G15rp1btIAQG2waA==}
+
   resolve-protobuf-schema@2.1.0:
     resolution: {integrity: sha512-kI5ffTiZWmJaS/huM8wZfEMer1eRd7oJQhDuxeCLe3t7N7mX3z94CN0xPxBQxFYQTSNz9T0i+v6inKqSdK8xrQ==}
 
@@ -7342,6 +7366,9 @@ packages:
   signal-exit@4.1.0:
     resolution: {integrity: sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==}
     engines: {node: '>=14'}
+
+  signed-varint@2.0.1:
+    resolution: {integrity: sha512-abgDPg1106vuZZOvw7cFwdCABddfJRz5akcCcchzTbhyhYnsG31y4AlZEgp315T7W3nQq5P4xeOm186ZiPVFzw==}
 
   simple-git@3.36.0:
     resolution: {integrity: sha512-cGQjLjK8bxJw4QuYT7gxHw3/IouVESbhahSsHrX97MzCL1gu2u7oy38W6L2ZIGECEfIBG4BabsWDPjBxJENv9Q==}
@@ -7773,6 +7800,12 @@ packages:
   validator@13.15.35:
     resolution: {integrity: sha512-TQ5pAGhd5whStmqWvYF4OjQROlmv9SMFVt37qoCBdqRffuuklWYQlCNnEs2ZaIBD1kZRNnikiZOS1eqgkar0iw==}
     engines: {node: '>= 0.10'}
+
+  varint@4.0.1:
+    resolution: {integrity: sha512-vu4cpCqZHA4u77jWdOZlXtXHJofIIyq51DtzstbrvI9e1I1ELseAJLxYr47N/DdLPFGfYMLY1HqAURSTKKJ6ww==}
+
+  varint@5.0.2:
+    resolution: {integrity: sha512-lKxKYG6H03yCZUpAGOPOsMcGxd1RHCu1iKvEHYDPmTyq2HueGhD73ssNBqqQWfvYs04G9iUFRvmAVLW20Jw6ow==}
 
   victory-vendor@37.3.6:
     resolution: {integrity: sha512-SbPDPdDBYp+5MJHhBCAyI7wKM3d5ivekigc2Dk2s7pgbZ9wIgIBYGVw4zGHBml/qTFbexrofXW6Gu4noGxrOwQ==}
@@ -9104,6 +9137,10 @@ snapshots:
       fs-extra: 8.1.0
       globby: 11.1.0
       read-yaml-file: 2.1.0
+
+  '@mapbox/glyph-pbf-composite@0.0.3':
+    dependencies:
+      protocol-buffers: 2.7.0
 
   '@mapbox/jsonlint-lines-primitives@2.0.2': {}
 
@@ -11455,6 +11492,14 @@ snapshots:
     dependencies:
       ts-interface-checker: 1.0.2
 
+  generate-function@2.3.1:
+    dependencies:
+      is-property: 1.0.2
+
+  generate-object-property@1.2.0:
+    dependencies:
+      is-property: 1.0.2
+
   geo-tz@8.1.8:
     dependencies:
       '@turf/boolean-point-in-polygon': 7.3.5
@@ -11754,6 +11799,8 @@ snapshots:
   is-plain-obj@4.1.0: {}
 
   is-potential-custom-element-name@1.0.1: {}
+
+  is-property@1.0.2: {}
 
   is-stream@2.0.1: {}
 
@@ -12472,6 +12519,8 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  protobuf-schema@1.5.1: {}
+
   protobufjs@8.6.3:
     dependencies:
       long: 5.3.2
@@ -12481,6 +12530,15 @@ snapshots:
       long: 5.3.2
 
   protocol-buffers-schema@3.6.1: {}
+
+  protocol-buffers@2.7.0:
+    dependencies:
+      generate-function: 2.3.1
+      generate-object-property: 1.2.0
+      protobuf-schema: 1.5.1
+      resolve-protobuf-schema: 1.0.2
+      signed-varint: 2.0.1
+      varint: 4.0.1
 
   pump@3.0.4:
     dependencies:
@@ -12666,6 +12724,10 @@ snapshots:
   resolve-from@5.0.0: {}
 
   resolve-pkg-maps@1.0.0: {}
+
+  resolve-protobuf-schema@1.0.2:
+    dependencies:
+      protobuf-schema: 1.5.1
 
   resolve-protobuf-schema@2.1.0:
     dependencies:
@@ -12904,6 +12966,10 @@ snapshots:
   signal-exit@3.0.7: {}
 
   signal-exit@4.1.0: {}
+
+  signed-varint@2.0.1:
+    dependencies:
+      varint: 5.0.2
 
   simple-git@3.36.0(supports-color@8.1.1):
     dependencies:
@@ -13349,6 +13415,10 @@ snapshots:
   uuid@14.0.1: {}
 
   validator@13.15.35: {}
+
+  varint@4.0.1: {}
+
+  varint@5.0.2: {}
 
   victory-vendor@37.3.6:
     dependencies:

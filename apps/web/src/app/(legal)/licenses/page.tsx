@@ -54,8 +54,8 @@ export default async function LicensesPage() {
         }}
       >
         {isGerman
-          ? "Diese Seite wird aus den installierten Paket-Metadaten erzeugt und listet die produktiven Open-Source-Abhängigkeiten der Webanwendung, der API, der eingebauten Integrationen sowie installierter Community-Integrationen."
-          : "This page is generated from installed package metadata and lists the production open-source dependencies used by the web app, the API, built-in integrations, and installed community integrations."}
+          ? "Diese Seite wird aus den installierten Paket-Metadaten erzeugt und listet die produktiven Open-Source-Abhängigkeiten der Webanwendung, der API, des Datenmanagers, der eingebauten Integrationen sowie installierter Community-Integrationen."
+          : "This page is generated from installed package metadata and lists the production open-source dependencies used by the web app, the API, the data manager, built-in integrations, and installed community integrations."}
       </Typography>
       <Stack
         direction="row"

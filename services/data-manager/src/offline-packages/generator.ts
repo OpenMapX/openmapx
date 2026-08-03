@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { lstatSync, rmSync, statSync } from "node:fs";
+import { lstatSync, readFileSync, rmSync, statSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import {
   extractPmtilesPackage as extractPmtilesPackageServer,
@@ -32,6 +33,10 @@ const DEFAULT_MAX_PACKAGE_COUNT = 32;
 const DEFAULT_MAX_PACKAGE_BYTES_TOTAL = 20_000_000_000;
 const DEFAULT_MIN_FREE_BYTES = 1_000_000_000;
 const PACKAGE_ID_PREFIX = "omp1-";
+const loadCommonJs = createRequire(import.meta.url);
+const combineGlyphPbf = loadCommonJs("@mapbox/glyph-pbf-composite") as {
+  combine(buffers: Buffer[], fontstack?: string): Buffer | undefined;
+};
 
 function packageErrorCode(error: unknown): OfflinePackageJob["errorCode"] {
   if (error instanceof OfflinePackageSourceError) {
@@ -294,7 +299,11 @@ export class OfflinePackageGenerator {
     provider: string,
     styleVersion: string,
     rawAssetPath: string,
-  ): Promise<{ path: string; byteLength: number; contentType: string } | undefined> {
+  ): Promise<
+    | { path: string; byteLength: number; contentType: string }
+    | { body: Uint8Array; byteLength: number; contentType: string }
+    | undefined
+  > {
     await this.initialize();
     if (provider !== "openmapx") return undefined;
     const source = await this.sourceFactory();
@@ -311,24 +320,59 @@ export class OfflinePackageGenerator {
         assetPath,
       );
     const fontMatch = /^fonts\/([^/]+)\/(\d+-\d+)\.pbf$/.exec(assetPath);
-    let path: string;
-    let contentType: string;
-    if (styleMatch) {
-      path = join(source.styleDirectory, styleMatch[1], styleMatch[2]);
-      contentType = styleMatch[2].endsWith(".json") ? "application/json" : "image/png";
-    } else if (fontMatch) {
-      path = join(source.styleDirectory, "..", "tile-fonts", fontMatch[1], fontMatch[2]);
-      contentType = "application/x-protobuf";
-    } else {
-      return undefined;
-    }
     const root = resolve(source.styleDirectory, "..");
-    const resolvedPath = resolve(path);
-    if (resolvedPath !== root && !resolvedPath.startsWith(`${root}/`)) return undefined;
-    try {
-      if (!lstatSync(resolvedPath).isFile()) return undefined;
-      return { path: resolvedPath, byteLength: statSync(resolvedPath).size, contentType };
-    } catch {
+    const resolved = (candidate: string): string | undefined => {
+      const value = resolve(candidate);
+      return value === root || value.startsWith(`${root}/`) ? value : undefined;
+    };
+    if (styleMatch) {
+      const path = resolved(join(source.styleDirectory, styleMatch[1], styleMatch[2]));
+      if (!path) return undefined;
+      try {
+        if (!lstatSync(path).isFile()) return undefined;
+        return {
+          path,
+          byteLength: statSync(path).size,
+          contentType: styleMatch[2].endsWith(".json") ? "application/json" : "image/png",
+        };
+      } catch {
+        return undefined;
+      }
+    } else if (fontMatch) {
+      const fontStacks = fontMatch[1].split(",").map((font) => font.trim());
+      if (
+        fontStacks.some(
+          (font) =>
+            !font || font.includes("/") || font.includes("\\") || font === "." || font === "..",
+        )
+      )
+        return undefined;
+
+      const paths = fontStacks.map((font) =>
+        resolved(join(source.styleDirectory, "..", "tile-fonts", font, `${fontMatch[2]}.pbf`)),
+      );
+      if (paths.some((path) => !path)) return undefined;
+      try {
+        const files = paths as string[];
+        if (files.length === 1) {
+          const path = files[0];
+          if (!lstatSync(path).isFile()) return undefined;
+          return {
+            path,
+            byteLength: statSync(path).size,
+            contentType: "application/x-protobuf",
+          };
+        }
+        const body = combineGlyphPbf.combine(
+          files.map((path) => readFileSync(path)),
+          fontStacks.join(", "),
+        );
+        if (!body) return undefined;
+        return { body, byteLength: body.byteLength, contentType: "application/x-protobuf" };
+      } catch {
+        return undefined;
+      }
+    } else {
       return undefined;
     }
   }

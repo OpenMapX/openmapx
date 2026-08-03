@@ -35,6 +35,33 @@ const request: OfflinePackageRequest = {
   provider: "openmapx",
 };
 
+function concatBytes(...parts: Uint8Array[]): Uint8Array {
+  const result = new Uint8Array(parts.reduce((length, part) => length + part.byteLength, 0));
+  let offset = 0;
+  for (const part of parts) {
+    result.set(part, offset);
+    offset += part.byteLength;
+  }
+  return result;
+}
+
+function lengthDelimited(tag: number, value: Uint8Array): Uint8Array {
+  return concatBytes(Uint8Array.from([tag, value.byteLength]), value);
+}
+
+function glyphPbf(fontstack: string, glyphIds: number[]): Uint8Array {
+  const encoder = new TextEncoder();
+  const glyphs = glyphIds.map((id) =>
+    concatBytes(Uint8Array.from([0x08, id, 0x18, 1, 0x20, 1, 0x28, 0, 0x30, 0, 0x38, 1])),
+  );
+  const stack = concatBytes(
+    lengthDelimited(0x0a, encoder.encode(fontstack)),
+    lengthDelimited(0x12, encoder.encode("0-255")),
+    ...glyphs.map((glyph) => lengthDelimited(0x1a, glyph)),
+  );
+  return lengthDelimited(0x0a, stack);
+}
+
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -211,6 +238,41 @@ describe("data-manager offline package API", () => {
       url: "/offline/packages/not-a-package/manifest",
     });
     expect(traversal.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it("composes comma-separated font stacks from their individual glyph files", async () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-offline-fonts-"));
+    roots.push(root);
+    const styleDirectory = join(root, "styles");
+    const boldDirectory = join(root, "tile-fonts", "Font Bold");
+    const regularDirectory = join(root, "tile-fonts", "Font Regular");
+    mkdirSync(styleDirectory, { recursive: true });
+    mkdirSync(boldDirectory, { recursive: true });
+    mkdirSync(regularDirectory, { recursive: true });
+    writeFileSync(join(boldDirectory, "0-255.pbf"), glyphPbf("Font Bold", [65]));
+    writeFileSync(join(regularDirectory, "0-255.pbf"), glyphPbf("Font Regular", [66]));
+
+    const storage = new OfflinePackageStorage(join(root, "packages"));
+    const generator = new OfflinePackageGenerator({
+      source: () => ({
+        ...source,
+        styleDirectory,
+        packageRoot: join(root, "packages"),
+      }),
+      storage,
+    });
+    const app = Fastify();
+    registerApi(app, { dataDir: root, offlinePackages: generator });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/offline/packages/assets/openmapx/fixture-style-v1/fonts/Font%20Bold%2CFont%20Regular/0-255.pbf",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/x-protobuf");
+    expect(response.rawPayload).toEqual(Buffer.from(glyphPbf("Font Bold, Font Regular", [65, 66])));
     await app.close();
   });
 });

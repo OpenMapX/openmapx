@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Build-time generator for the /licenses page.
 //
-// Walks production deps from app-web, app-api, the workspace `packages/`, and
-// every built-in integration under `integrations/`, then writes a static JSON
+// Walks production deps from app-web, app-api, data-manager, the workspace
+// `packages/`, and every built-in integration under `integrations/`, then writes a static JSON
 // file consumed by `apps/web/src/app/(legal)/licenses/page.tsx`. Re-runs
 // under `predev` and `prebuild` so the file is always present in dev and
 // production builds.
@@ -26,6 +26,7 @@ const outPath = resolve(outDir, "open-source-licenses.json");
 const rootPackageJsonPaths = [
   resolve(webRoot, "package.json"),
   resolve(repoRoot, "apps/api/package.json"),
+  resolve(repoRoot, "services/data-manager/package.json"),
   ...workspaceChildren("packages"),
   ...workspaceChildren("integrations"),
 ].filter((p) => existsSync(p));
