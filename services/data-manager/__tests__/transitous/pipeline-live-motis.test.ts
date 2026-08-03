@@ -364,7 +364,8 @@ function civilDate(timeZone: string): string {
  * the docker CLI error; the actual MOTIS import failure lives in the container's
  * logs. We fold both into the assertion message so CI shows the root cause inline.
  * On GitHub Actions, the temporary directory is retained until the workflow's
- * artifact upload step runs; local executions still clean it up in `afterAll`.
+ * artifact upload step runs, and `afterAll` writes a bounded container-log
+ * snapshot there before teardown; local executions still clean it up.
  */
 async function failureDiagnostics(
   label: string,
@@ -383,11 +384,16 @@ async function failureDiagnostics(
   // container entrypoint drops into a keep-alive sleep (see motisService), so
   // `exec` still works — this shows the archive sizes MOTIS itself sees, which
   // reveals a hardlink/bind-mount that resolved to an empty or unreadable file.
-  const view = await execa("docker", ["exec", service, "sh", "-c", "ls -la /motis-data"], {
-    reject: false,
-  });
-  if (view.stdout) lines.push(`--- ${service}:/motis-data (container view) ---`, view.stdout);
-  if (view.exitCode !== 0 && view.stderr) lines.push(`--- ${service} exec stderr ---`, view.stderr);
+  try {
+    const view = await execa("docker", ["exec", service, "sh", "-c", "ls -la /motis-data"], {
+      reject: false,
+    });
+    if (view.stdout) lines.push(`--- ${service}:/motis-data (container view) ---`, view.stdout);
+    if (view.exitCode !== 0 && view.stderr)
+      lines.push(`--- ${service} exec stderr ---`, view.stderr);
+  } catch (err) {
+    lines.push(`(could not inspect ${service}:/motis-data: ${(err as Error).message})`);
+  }
   return lines.join("\n");
 }
 
@@ -430,6 +436,24 @@ function stagingDirReport(dir: string): string {
   return lines.join("\n");
 }
 
+async function writeCiDiagnostics(tmpDir: string, stagingDir: string): Promise<void> {
+  if (process.env.GITHUB_ACTIONS !== "true") return;
+  const diagnostics = await Promise.all(
+    [STAGING_SERVICE, PRIMARY_SERVICE].map((service) =>
+      failureDiagnostics(`CI container diagnostics for ${service}`, service),
+    ),
+  );
+  try {
+    writeFileSync(
+      join(tmpDir, "motis-container-diagnostics.log"),
+      `${diagnostics.join("\n")}\n${stagingDirReport(stagingDir)}\n`,
+      "utf-8",
+    );
+  } catch {
+    // Diagnostics must never hide the original test result or block cleanup.
+  }
+}
+
 describeLive("transitous pipeline end-to-end against real motis containers", () => {
   let tmp: string | undefined;
   let composeFile: string | undefined;
@@ -459,14 +483,14 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
 
     // The canary's three tiny GTFS feeds import in seconds, so the pipeline's
     // production-scale health waits — 30 min for staging (motis-health) and
-    // 20 min for the primary after the swap (promote) — dwarf this test's 270s
-    // ceiling. Left at their defaults, ANY failure to become healthy manifests
+    // 20 min for the primary after the swap (promote) — dwarf this test's 12 min
+    // scenario budget. Left at their defaults, ANY failure to become healthy manifests
     // as an opaque "Test timed out" with the pipeline still mid-poll: the
     // `failureDiagnostics` calls below (which fold `docker logs motis-staging`
     // into the assertion message) never run, so CI shows a bare timeout with no
     // container logs. Cap both waits well under the test timeout so a broken
     // staging/primary fails fast WITH diagnostics. Respect an explicit override.
-    process.env.MOTIS_IMPORT_TIMEOUT_MS ??= "120000";
+    process.env.MOTIS_IMPORT_TIMEOUT_MS ??= "300000";
     process.env.MOTIS_PROMOTE_RESTART_TIMEOUT_MS ??= "120000";
     process.env.MOTIS_HEALTH_PLAN_FROM_LAT ??= "52.525";
     process.env.MOTIS_HEALTH_PLAN_FROM_LNG ??= "13.369";
@@ -612,6 +636,7 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
   }, 90_000);
 
   afterAll(async () => {
+    if (tmp && stagingDataDir) await writeCiDiagnostics(tmp, stagingDataDir);
     if (composeFile && dataDir) await composeDown(composeFile, dataDir);
     if (tmp && process.env.GITHUB_ACTIONS !== "true") {
       try {
