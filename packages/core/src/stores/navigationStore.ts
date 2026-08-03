@@ -252,7 +252,7 @@ export const useNavigationStore = create<NavigationState>((set) => ({
   keepScreenOn: readBoolPref(KEEP_SCREEN_ON_STORAGE_KEY, true),
 
   startGroundNavigation: (route, mode, waypoints, alternatives = [], provider, options) =>
-    set({
+    set((current) => ({
       ...INITIAL,
       status: "navigating",
       kind: "ground",
@@ -265,10 +265,10 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       activeRouteIndex: 0,
       destinationWaypoints: waypoints,
       navigationStartedAtMs: Date.now(),
-      connectivity: "online",
-      rerouteUnavailable: false,
-      liveDataUnavailable: false,
-    }),
+      connectivity: current.connectivity,
+      rerouteUnavailable: current.connectivity === "offline",
+      liveDataUnavailable: current.connectivity === "offline",
+    })),
   // Switch the followed route to a shown alternative. Clears progress (it belongs
   // to the old geometry) like a reroute; the engine/camera reset on route identity.
   selectRoute: (index) =>
@@ -321,8 +321,7 @@ export const useNavigationStore = create<NavigationState>((set) => ({
   setOffRoute: (offRoute) => set({ offRoute }),
   setWeakGps: (weakGps) => set({ weakGps }),
   setCoasting: (coasting) => set({ coasting }),
-  signalRerouteFailed: () =>
-    set((s) => ({ rerouteFailedNonce: s.rerouteFailedNonce + 1, rerouteUnavailable: true })),
+  signalRerouteFailed: () => set((s) => ({ rerouteFailedNonce: s.rerouteFailedNonce + 1 })),
   beginReroute: () => set({ status: "rerouting" }),
   // Clear progress: it belongs to the OLD route. Leaving the previous route's
   // (larger) alongMeters in place would mislead every progress consumer for one
@@ -374,7 +373,7 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       updatedAtMs: snapshot.updatedAtMs,
       lastKnownPosition: snapshot.lastKnownPosition,
     });
-    set({
+    set((current) => ({
       ...INITIAL,
       status: "navigating",
       kind: "ground",
@@ -388,10 +387,10 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       destinationWaypoints: restored.destinationWaypoints,
       progress: restored.progress,
       navigationStartedAtMs: restored.startedAtMs,
-      connectivity: "offline",
-      rerouteUnavailable: true,
-      liveDataUnavailable: true,
-    });
+      connectivity: current.connectivity,
+      rerouteUnavailable: current.connectivity === "offline",
+      liveDataUnavailable: current.connectivity === "offline",
+    }));
   },
   proposeFasterRoute: (fasterRoute) => set({ fasterRoute }),
   acceptFasterRoute: (routeIntent) =>
@@ -428,7 +427,7 @@ export const useNavigationStore = create<NavigationState>((set) => ({
     }),
   completeArrival: () =>
     set({ status: "arrived", rerouteUnavailable: false, liveDataUnavailable: false }),
-  stopNavigation: () => set({ ...INITIAL }),
+  stopNavigation: () => set((current) => ({ ...INITIAL, connectivity: current.connectivity })),
   hydrate: () =>
     set({
       voiceEnabled: readBoolPref(VOICE_STORAGE_KEY, true),

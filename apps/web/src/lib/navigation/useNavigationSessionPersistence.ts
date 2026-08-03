@@ -92,6 +92,7 @@ function sameProgress(
 export function useNavigationSessionPersistence(
   storage?: NavigationSessionStorage,
   resolver?: OfflinePackageResolver,
+  now: () => number = Date.now,
 ): NavigationSessionResumeState {
   const storageRef = useMemo(() => storage ?? createNavigationSessionStorage(), [storage]);
   const resolveResolver = useCallback(
@@ -109,7 +110,7 @@ export function useNavigationSessionPersistence(
 
   const enqueueWrite = useCallback(
     (state: ReturnType<typeof useNavigationStore.getState>) => {
-      const nowMs = Date.now();
+      const nowMs = now();
       const snapshot = createSnapshotForState(state, resolveResolver(), nowMs);
       if (!snapshot) return;
       writeQueueRef.current = writeQueueRef.current
@@ -122,7 +123,7 @@ export function useNavigationSessionPersistence(
           };
         });
     },
-    [resolveResolver, storageRef],
+    [now, resolveResolver, storageRef],
   );
 
   useEffect(() => {
@@ -131,7 +132,7 @@ export function useNavigationSessionPersistence(
     let cancelled = false;
     void storageRef.read().then((snapshot) => {
       if (cancelled || !snapshot || useNavigationStore.getState().status !== "idle") return;
-      if (isNavigationSessionExpired(snapshot, Date.now())) {
+      if (isNavigationSessionExpired(snapshot, now())) {
         void storageRef.clear();
         return;
       }
@@ -156,7 +157,7 @@ export function useNavigationSessionPersistence(
     return () => {
       cancelled = true;
     };
-  }, [resolveResolver, storageRef]);
+  }, [now, resolveResolver, storageRef]);
 
   useEffect(() => {
     let previous = useNavigationStore.getState();
@@ -189,12 +190,12 @@ export function useNavigationSessionPersistence(
         JSON.stringify(next.routeOptions) !== JSON.stringify(previous.routeOptions) ||
         JSON.stringify(next.destinationWaypoints) !== JSON.stringify(previous.destinationWaypoints);
       const progressChanged = !sameProgress(next.progress, previous.progress);
-      const nowMs = Date.now();
+      const nowMs = now();
       const last = lastWriteRef.current;
       const checkpointReached =
         !!last &&
-        nowMs - last.atMs >= CHECKPOINT_TIME_MS &&
-        (next.progress?.alongMeters ?? 0) - last.alongMeters >= CHECKPOINT_DISTANCE_M;
+        (nowMs - last.atMs >= CHECKPOINT_TIME_MS ||
+          (next.progress?.alongMeters ?? 0) - last.alongMeters >= CHECKPOINT_DISTANCE_M);
 
       if (routeChanged || (progressChanged && (!last || checkpointReached))) enqueueWrite(next);
       const resolverNow = resolveResolver();
@@ -210,12 +211,12 @@ export function useNavigationSessionPersistence(
       }
       previous = next;
     });
-  }, [enqueueWrite, resolveResolver, storageRef]);
+  }, [enqueueWrite, now, resolveResolver, storageRef]);
 
   useEffect(() => {
     const state = useNavigationStore.getState();
     if (!isGroundActive(state)) return;
-    const current = createSnapshotForState(state, resolveResolver(), Date.now());
+    const current = createSnapshotForState(state, resolveResolver(), now());
     if (!current) return;
     const resolverNow = resolveResolver();
     if (resolverNow) {
@@ -233,7 +234,7 @@ export function useNavigationSessionPersistence(
           : { kind: "not-downloaded", packageIds: [] },
       );
     }
-  }, [resolveResolver]);
+  }, [now, resolveResolver]);
 
   useEffect(() => {
     const onPackageChanged = () => {
@@ -241,7 +242,7 @@ export function useNavigationSessionPersistence(
       if (!resolverNow) return;
       void resolverNow.refresh().then(() => {
         const current =
-          pending ?? createSnapshotForState(useNavigationStore.getState(), resolverNow, Date.now());
+          pending ?? createSnapshotForState(useNavigationStore.getState(), resolverNow, now());
         if (!current) return;
         setCoverage(
           getOfflineRouteCoverage(
@@ -254,7 +255,7 @@ export function useNavigationSessionPersistence(
     };
     window.addEventListener(OFFLINE_PACKAGE_CHANGED_EVENT, onPackageChanged);
     return () => window.removeEventListener(OFFLINE_PACKAGE_CHANGED_EVENT, onPackageChanged);
-  }, [pending, resolveResolver]);
+  }, [now, pending, resolveResolver]);
 
   const accept = useCallback(() => {
     const snapshot = pending;

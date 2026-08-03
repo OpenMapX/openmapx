@@ -78,7 +78,10 @@ function snapshot() {
 }
 
 describe("navigationStore offline state", () => {
-  beforeEach(() => useNavigationStore.getState().stopNavigation());
+  beforeEach(() => {
+    useNavigationStore.getState().setConnectivity("online");
+    useNavigationStore.getState().stopNavigation();
+  });
 
   it("starts online with rerouting and live data available", () => {
     useNavigationStore
@@ -105,11 +108,12 @@ describe("navigationStore offline state", () => {
     expect(state.liveDataUnavailable).toBe(true);
   });
 
-  it("marks rerouting unavailable without making navigation idle", () => {
+  it("keeps a transient online reroute failure retryable", () => {
     const store = useNavigationStore.getState();
     store.startGroundNavigation(route(), "driving", [geometry[0], geometry[2]]);
     store.signalRerouteFailed();
-    expect(useNavigationStore.getState().rerouteUnavailable).toBe(true);
+    expect(useNavigationStore.getState().rerouteUnavailable).toBe(false);
+    expect(useNavigationStore.getState().rerouteFailedNonce).toBe(1);
     expect(useNavigationStore.getState().status).toBe("navigating");
   });
 
@@ -134,7 +138,7 @@ describe("navigationStore offline state", () => {
     expect(state.route?.distance).toBe(400);
   });
 
-  it("restores a ground snapshot without transient faster-route state", () => {
+  it("restores a ground snapshot without overwriting current connectivity", () => {
     const store = useNavigationStore.getState();
     store.proposeFasterRoute({
       route: route(500),
@@ -148,9 +152,27 @@ describe("navigationStore offline state", () => {
     expect(state.status).toBe("navigating");
     expect(state.progress?.alongMeters).toBe(0);
     expect(state.fasterRoute).toBeNull();
-    expect(state.connectivity).toBe("offline");
-    expect(state.rerouteUnavailable).toBe(true);
-    expect(state.liveDataUnavailable).toBe(true);
+    expect(state.connectivity).toBe("online");
+    expect(state.rerouteUnavailable).toBe(false);
+    expect(state.liveDataUnavailable).toBe(false);
+  });
+
+  it("starts and restores in degraded mode when the browser is already offline", () => {
+    const store = useNavigationStore.getState();
+    store.setConnectivity("offline");
+    store.startGroundNavigation(route(), "driving", [geometry[0], geometry[2]]);
+    expect(useNavigationStore.getState()).toMatchObject({
+      connectivity: "offline",
+      rerouteUnavailable: true,
+      liveDataUnavailable: true,
+    });
+
+    store.restoreGroundNavigation(snapshot());
+    expect(useNavigationStore.getState()).toMatchObject({
+      connectivity: "offline",
+      rerouteUnavailable: true,
+      liveDataUnavailable: true,
+    });
   });
 
   it("does not restore a transit snapshot", () => {
@@ -177,6 +199,6 @@ describe("navigationStore offline state", () => {
     expect(useNavigationStore.getState().rerouteUnavailable).toBe(false);
     expect(useNavigationStore.getState().liveDataUnavailable).toBe(false);
     store.stopNavigation();
-    expect(useNavigationStore.getState().connectivity).toBe("online");
+    expect(useNavigationStore.getState().connectivity).toBe("offline");
   });
 });

@@ -100,6 +100,20 @@ describe("canonicalizeOfflinePackageRequest", () => {
     expect(first.requestKey).toBe(second.requestKey);
   });
 
+  it("maps requested overzoom levels with identical package bytes to one key", () => {
+    const request = {
+      bbox: { west: 13.4, south: 52.49, east: 13.6, north: 52.6 },
+      minZoom: 10,
+      provider: "openmapx" as const,
+    };
+    const first = canonicalizeOfflinePackageRequest({ ...request, maxZoom: 15 }, source);
+    const second = canonicalizeOfflinePackageRequest({ ...request, maxZoom: 18 }, source);
+
+    expect(first.effective).toEqual(second.effective);
+    expect(first.request.maxZoom).not.toBe(second.request.maxZoom);
+    expect(first.requestKey).toBe(second.requestKey);
+  });
+
   it("rejects invalid coordinates, zooms, providers, and dateline crossing", () => {
     expect(() =>
       canonicalizeOfflinePackageRequest(

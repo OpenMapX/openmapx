@@ -129,6 +129,56 @@ describe("useNavigationSessionPersistence", () => {
     expect(storage.writes.length).toBe(1);
   });
 
+  it("persists progress after either the distance or time checkpoint", async () => {
+    let nowMs = Date.now() + 1_000;
+    const now = () => nowMs;
+    const storage = memoryStorage();
+    renderHook(() => useNavigationSessionPersistence(storage, undefined, now));
+    act(() =>
+      useNavigationStore.getState().startGroundNavigation(route, "driving", [
+        [0, 0],
+        [0.02, 0],
+      ]),
+    );
+    await waitFor(() => expect(storage.writes.length).toBe(1));
+
+    nowMs += 1_000;
+    act(() =>
+      useNavigationStore.getState().applyProgress({
+        currentStepIndex: 0,
+        distanceToNextManeuver: 1_000,
+        distanceRemaining: 1_000,
+        durationRemaining: 50,
+        snapped: [0.01, 0],
+        alongMeters: 1_000,
+        deviationMeters: 0,
+        segmentIndex: 0,
+        etaEpochMs: nowMs + 50_000,
+        bearing: 90,
+        speedMps: 10,
+      }),
+    );
+    await waitFor(() => expect(storage.writes.length).toBe(2));
+
+    nowMs += 15_000;
+    act(() =>
+      useNavigationStore.getState().applyProgress({
+        currentStepIndex: 0,
+        distanceToNextManeuver: 900,
+        distanceRemaining: 900,
+        durationRemaining: 45,
+        snapped: [0.011, 0],
+        alongMeters: 1_100,
+        deviationMeters: 0,
+        segmentIndex: 1,
+        etaEpochMs: nowMs + 45_000,
+        bearing: 90,
+        speedMps: 10,
+      }),
+    );
+    await waitFor(() => expect(storage.writes.length).toBe(3));
+  });
+
   it("discards the pending route without starting navigation", async () => {
     const storage = memoryStorage(makeSnapshot());
     const { result } = renderHook(() => useNavigationSessionPersistence(storage));

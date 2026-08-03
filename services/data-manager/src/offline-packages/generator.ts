@@ -8,6 +8,7 @@ import {
 import {
   type CanonicalOfflinePackageRequest,
   canonicalizeOfflinePackageRequest,
+  OFFLINE_PACKAGE_ALGORITHM_VERSION,
   type OfflineMapPackageManifest,
   type OfflinePackageCapability,
   type OfflinePackageJob,
@@ -78,7 +79,7 @@ function sourceRequestFromManifest(
     tileSchema: manifest.dataset.tileSchema,
     styleProvider: manifest.style.provider,
     styleVersion: manifest.style.version,
-    packageAlgorithmVersion: "pmtiles-area-v1",
+    packageAlgorithmVersion: OFFLINE_PACKAGE_ALGORITHM_VERSION,
     attribution: manifest.attribution,
   } as const;
   const request: OfflinePackageRequest = {
@@ -205,7 +206,12 @@ export class OfflinePackageGenerator {
     const existingJobId = this.requestJobs.get(canonical.requestKey);
     if (existingJobId) {
       const existing = this.jobs.get(existingJobId);
-      if (existing) return asOfflinePackageJob(existing);
+      if (existing && existing.status !== "failed" && existing.status !== "expired") {
+        return asOfflinePackageJob(existing);
+      }
+      // Failed/expired jobs remain addressable by their job ID for diagnostics,
+      // but a new preparation request must be able to retry the immutable key.
+      this.requestJobs.delete(canonical.requestKey);
     }
 
     const packageId = offlinePackageIdForRequest(canonical);

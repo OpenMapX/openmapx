@@ -10,12 +10,17 @@ import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { loadMaptilerStyle, loadOpenMapXStyle, type MapStyleVariant } from "@/lib/map";
 import {
+  currentOfflinePackageResolver,
   ensureOfflinePackageRuntime,
   registerOfflinePmtilesProtocol,
   setOfflinePackageActive,
 } from "@/lib/offlineAreas";
 
 type MapLibreRuntime = typeof import("maplibre-gl");
+type ViewportStyle = {
+  offlinePackageId: string | null;
+  style: Record<string, unknown>;
+};
 
 async function loadStyleForViewport(
   env: ReturnType<typeof useEnv>,
@@ -23,24 +28,29 @@ async function loadStyleForViewport(
   mapStyle: string,
   center: LngLat,
   maplibre: MapLibreRuntime,
-): Promise<Record<string, unknown>> {
+): Promise<ViewportStyle> {
   if (env.styleProvider === "openmapx" && typeof navigator !== "undefined" && !navigator.onLine) {
     const resolver = await ensureOfflinePackageRuntime();
     const packageRecord = resolver?.packageForCoordinate(center);
     if (resolver && packageRecord) {
-      setOfflinePackageActive(true);
       registerOfflinePmtilesProtocol(maplibre, resolver);
-      return await loadOpenMapXStyle(env, variant, {
-        packageId: packageRecord.id,
-        manifest: packageRecord.manifest,
-      });
+      return {
+        offlinePackageId: packageRecord.id,
+        style: await loadOpenMapXStyle(env, variant, {
+          packageId: packageRecord.id,
+          manifest: packageRecord.manifest,
+        }),
+      };
     }
   }
 
-  setOfflinePackageActive(false);
-  return env.styleProvider === "openmapx"
-    ? await loadOpenMapXStyle(env, variant)
-    : await loadMaptilerStyle(mapStyle, env);
+  return {
+    offlinePackageId: null,
+    style:
+      env.styleProvider === "openmapx"
+        ? await loadOpenMapXStyle(env, variant)
+        : await loadMaptilerStyle(mapStyle, env),
+  };
 }
 
 export function MapCanvas() {
@@ -53,6 +63,7 @@ export function MapCanvas() {
   const mapStyle = resolvedMode === "dark" ? "streets-v2-dark" : "bright-v2";
   const variant: MapStyleVariant = resolvedMode === "dark" ? "dark" : "light";
   const { setCenter, setZoom, setBearing, setPitch, setUserLocation } = useMapStore();
+  const activeOfflinePackageIdRef = useRef<string | null>(null);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: mapStyle intentionally excluded — style changes handled by the style-swap effect below
   useEffect(() => {
@@ -74,20 +85,28 @@ export function MapCanvas() {
       // until inside the guard and then trust the top-level type-only import
       // (`import type maplibregl`) for member typing.
       let maplibreRuntime: unknown;
-      let style: Record<string, unknown> | string | undefined;
+      let viewportStyle: ViewportStyle | undefined;
       try {
         maplibreRuntime = (await import("maplibre-gl")).default;
         if (destroyed || !containerRef.current) return;
         const maplibregl = maplibreRuntime as unknown as MapLibreRuntime;
-        style = await loadStyleForViewport(env, variant, mapStyle, initialCenter, maplibregl);
+        viewportStyle = await loadStyleForViewport(
+          env,
+          variant,
+          mapStyle,
+          initialCenter,
+          maplibregl,
+        );
       } catch (err) {
         console.error("Failed to initialize map", err);
         return;
       }
-      if (!maplibreRuntime || !style) return;
+      if (!maplibreRuntime || !viewportStyle) return;
       const maplibregl = maplibreRuntime as unknown as typeof import("maplibre-gl");
 
       if (destroyed || !containerRef.current) return;
+      activeOfflinePackageIdRef.current = viewportStyle.offlinePackageId;
+      setOfflinePackageActive(viewportStyle.offlinePackageId !== null);
 
       // MapLibre's built-in AttributionControl is disabled: it collapses to a
       // ⓘ toggle on narrow viewports and lives in its own DOM subtree, so it
@@ -98,7 +117,7 @@ export function MapCanvas() {
       // lib/map.ts), so no credit is lost by turning the control off.
       const map = new maplibregl.Map({
         container: containerRef.current,
-        style: style as string | maplibregl.StyleSpecification,
+        style: viewportStyle.style as maplibregl.StyleSpecification,
         center: initialCenter,
         zoom: initialZoom,
         bearing,
@@ -107,7 +126,59 @@ export function MapCanvas() {
         canvasContextAttributes: { antialias: true },
       });
 
+      let viewportStyleRequest = 0;
+      let pendingViewportStyle: { force: boolean; offlinePackageId: string | null } | undefined;
+      const applyStyleForViewport = (
+        center: LngLat,
+        force: boolean,
+        reason: string,
+        expectedOfflinePackageId: string | null,
+      ) => {
+        const request = ++viewportStyleRequest;
+        pendingViewportStyle = { force, offlinePackageId: expectedOfflinePackageId };
+        void loadStyleForViewport(env, variant, mapStyle, center, maplibregl)
+          .then((next) => {
+            if (destroyed || request !== viewportStyleRequest) return;
+            if (!force && next.offlinePackageId === activeOfflinePackageIdRef.current) return;
+            activeOfflinePackageIdRef.current = next.offlinePackageId;
+            setOfflinePackageActive(next.offlinePackageId !== null);
+            map.setStyle(next.style as maplibregl.StyleSpecification);
+          })
+          .catch((err) => {
+            console.warn(`Unable to switch map style for ${reason}`, err);
+          })
+          .finally(() => {
+            if (request === viewportStyleRequest) pendingViewportStyle = undefined;
+          });
+      };
+
       map.on("moveend", (e) => {
+        const c = map.getCenter();
+        const center: LngLat = [c.lng, c.lat];
+        if (
+          env.styleProvider === "openmapx" &&
+          typeof navigator !== "undefined" &&
+          !navigator.onLine
+        ) {
+          const nextPackageId =
+            currentOfflinePackageResolver()?.packageForCoordinate(center)?.id ?? null;
+          if (
+            nextPackageId !== activeOfflinePackageIdRef.current &&
+            nextPackageId !== pendingViewportStyle?.offlinePackageId
+          ) {
+            applyStyleForViewport(center, false, "offline coverage change", nextPackageId);
+          } else if (
+            nextPackageId === activeOfflinePackageIdRef.current &&
+            pendingViewportStyle &&
+            !pendingViewportStyle.force
+          ) {
+            // The camera returned before an earlier async style load completed.
+            // Invalidate it so stale coverage cannot win the race.
+            viewportStyleRequest += 1;
+            pendingViewportStyle = undefined;
+          }
+        }
+
         // The navigation follow camera drives the map with a programmatic
         // jumpTo every animation frame; skip those so we don't write to the
         // store 60×/s while navigating. User gestures and other programmatic
@@ -118,8 +189,7 @@ export function MapCanvas() {
         ) {
           return;
         }
-        const c = map.getCenter();
-        setCenter([c.lng, c.lat]);
+        setCenter(center);
         setZoom(map.getZoom());
         setBearing(map.getBearing());
         setPitch(map.getPitch());
@@ -150,13 +220,12 @@ export function MapCanvas() {
       const reloadForConnectivity = () => {
         if (destroyed) return;
         const current = map.getCenter();
-        void loadStyleForViewport(env, variant, mapStyle, [current.lng, current.lat], maplibregl)
-          .then((nextStyle) => {
-            if (!destroyed) map.setStyle(nextStyle as maplibregl.StyleSpecification);
-          })
-          .catch((err) => {
-            console.warn("Unable to switch map style for connectivity change", err);
-          });
+        const center: LngLat = [current.lng, current.lat];
+        const expectedOfflinePackageId =
+          env.styleProvider === "openmapx" && !navigator.onLine
+            ? (currentOfflinePackageResolver()?.packageForCoordinate(center)?.id ?? null)
+            : null;
+        applyStyleForViewport(center, true, "connectivity change", expectedOfflinePackageId);
       };
       window.addEventListener("online", reloadForConnectivity);
       window.addEventListener("offline", reloadForConnectivity);
@@ -198,6 +267,7 @@ export function MapCanvas() {
 
     return () => {
       destroyed = true;
+      activeOfflinePackageIdRef.current = null;
       setOfflinePackageActive(false);
       cleanupConnectivity?.();
       mapRef.current?.remove();
@@ -238,7 +308,9 @@ export function MapCanvas() {
       .then((s) => {
         // The persistent `style.load` listener registered at map creation bumps
         // styleVersion once the new style lands.
-        map.setStyle(s as maplibregl.StyleSpecification);
+        activeOfflinePackageIdRef.current = s.offlinePackageId;
+        setOfflinePackageActive(s.offlinePackageId !== null);
+        map.setStyle(s.style as maplibregl.StyleSpecification);
       })
       .catch((err) => {
         console.error("Failed to swap map style", err);

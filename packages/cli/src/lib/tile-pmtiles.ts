@@ -266,7 +266,13 @@ function metadataJson(
   parsed.minzoom = request.effective.minZoom;
   parsed.maxzoom = request.effective.maxZoom;
   parsed.attribution = request.source.attribution.join(" ");
-  return Buffer.from(JSON.stringify(parsed));
+  return gzipSync(Buffer.from(JSON.stringify(parsed)), { level: 9 });
+}
+
+function decodeInternal(buffer: Buffer, compression: number): Buffer {
+  if (compression === TILE_COMPRESSION_NONE) return buffer;
+  if (compression === INTERNAL_COMPRESSION_GZIP) return gunzipSync(buffer);
+  throw new Error(`unsupported PMTiles internal compression ${compression}`);
 }
 
 function writeHeader(header: PmtilesHeader): Buffer {
@@ -418,7 +424,10 @@ export async function hashFile(path: string): Promise<string> {
 export async function inspectPmtiles(path: string): Promise<PmtilesPackageMetadata> {
   const header = readHeader(path);
   const metadata = JSON.parse(
-    readRange(path, header.metadataOffset, header.metadataLength).toString("utf8"),
+    decodeInternal(
+      readRange(path, header.metadataOffset, header.metadataLength),
+      header.internalCompression,
+    ).toString("utf8"),
   ) as { attribution?: string };
   const byteLength = statSync(path).size;
   const sha256 = await hashFile(path);

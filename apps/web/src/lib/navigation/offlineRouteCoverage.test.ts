@@ -155,7 +155,7 @@ describe("offline route coverage", () => {
   });
 
   it("reports not-downloaded when the session has no package ids", async () => {
-    const resolver = await resolverWith([]);
+    const resolver = await resolverWith([record(idA, manifest(idA))]);
     expect(getOfflineRouteCoverage(snapshot([]), resolver, [0.2, 0.2])).toEqual({
       kind: "not-downloaded",
       packageIds: [],

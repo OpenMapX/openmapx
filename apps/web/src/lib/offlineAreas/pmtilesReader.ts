@@ -3,6 +3,7 @@ import type { OfflineArchiveFile } from "./types";
 const HEADER_LENGTH = 127;
 const MAGIC = "PMTiles";
 const VERSION = 3;
+const NONE = 1;
 const GZIP = 2;
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
@@ -101,16 +102,22 @@ async function gunzip(bytes: Uint8Array): Promise<Uint8Array> {
   if (typeof DecompressionStream === "undefined") {
     throw new Error("gzip decompression is unavailable in this browser");
   }
-  const stream = new Blob([toArrayBuffer(bytes)])
-    .stream()
-    .pipeThrough(new DecompressionStream("gzip"));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  const decompressor = new DecompressionStream("gzip");
+  const output = new Response(decompressor.readable).arrayBuffer();
+  const writer = decompressor.writable.getWriter();
+  await writer.write(toArrayBuffer(bytes));
+  await writer.close();
+  return new Uint8Array(await output);
+}
+
+async function decodeInternal(bytes: Uint8Array, compression: number): Promise<Uint8Array> {
+  if (compression === NONE) return bytes;
+  if (compression === GZIP) return await gunzip(bytes);
+  throw new Error(`unsupported PMTiles internal compression ${compression}`);
 }
 
 async function decodeDirectory(bytes: Uint8Array, compression: number): Promise<DirectoryEntry[]> {
-  if (compression !== GZIP)
-    throw new Error(`unsupported PMTiles directory compression ${compression}`);
-  const data = await gunzip(bytes);
+  const data = await decodeInternal(bytes, compression);
   let cursor = 0;
   const countResult = readVarint(data, cursor);
   cursor = countResult.next;
@@ -215,7 +222,10 @@ export class LocalPmtilesReader {
 
   async metadata(): Promise<Record<string, unknown>> {
     const header = await this.header();
-    const bytes = await readExact(this.file, header.metadataOffset, header.metadataLength);
+    const bytes = await decodeInternal(
+      await readExact(this.file, header.metadataOffset, header.metadataLength),
+      header.internalCompression,
+    );
     const parsed = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       throw new Error("invalid PMTiles metadata");

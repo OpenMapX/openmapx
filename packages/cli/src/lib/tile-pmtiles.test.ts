@@ -151,6 +151,10 @@ describe("direct MBTiles to PMTiles area extraction", () => {
       expect(result.bounds).toEqual(source.sourceBounds);
       expect(result.attribution).toEqual(source.attribution);
       expect(result.tileCount).toBe(2);
+      const archive = readFileSync(output);
+      const metadataOffset = Number(archive.readBigUInt64LE(24));
+      expect(archive.readUInt8(97)).toBe(2);
+      expect([...archive.subarray(metadataOffset, metadataOffset + 2)]).toEqual([0x1f, 0x8b]);
       expect(await readPmtilesTile(output, 1, 1, 0)).toEqual(Buffer.from("inside-north"));
       expect(await readPmtilesTile(output, 1, 1, 1)).toEqual(Buffer.from("inside-south"));
       expect(await readPmtilesTile(output, 1, 0, 0)).toBeUndefined();

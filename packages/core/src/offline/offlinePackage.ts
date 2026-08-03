@@ -1,7 +1,7 @@
 import z from "zod/v4";
 
 export const OFFLINE_PACKAGE_SCHEMA_VERSION = 1 as const;
-export const OFFLINE_PACKAGE_ALGORITHM_VERSION = "pmtiles-area-v1" as const;
+export const OFFLINE_PACKAGE_ALGORITHM_VERSION = "pmtiles-area-v2" as const;
 export const WEB_MERCATOR_MAX_LATITUDE = 85.05112878;
 export const OFFLINE_PACKAGE_MAX_ZOOM = 24;
 export const OFFLINE_PACKAGE_MAX_AREA_SQUARE_DEGREES = 2_000;
@@ -333,7 +333,6 @@ export function offlinePackageRequestKey(canonical: CanonicalOfflinePackageReque
       styleVersion: canonical.source.styleVersion,
       packageAlgorithmVersion: canonical.source.packageAlgorithmVersion,
     },
-    requested: { maxZoom: canonical.request.maxZoom },
     effective: canonical.effective,
   });
 }

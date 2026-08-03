@@ -18,8 +18,7 @@ export function getOfflineRouteCoverage(
 ): OfflineRouteCoverage {
   const compatible = new Set(resolver.compatiblePackageIds());
   const savedIds = snapshot.packageIds.filter((id) => compatible.has(id));
-  const allowedIds = savedIds.length > 0 ? savedIds : resolver.compatiblePackageIds();
-  const selected = resolver.packageForCoordinate(coordinate, allowedIds);
+  const selected = resolver.packageForCoordinate(coordinate, savedIds);
   if (selected) return { kind: "covered", packageId: selected.id };
   if (snapshot.packageIds.length === 0) return { kind: "not-downloaded", packageIds: [] };
   return { kind: "route-line-only", packageIds: snapshot.packageIds };

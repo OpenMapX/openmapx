@@ -324,6 +324,49 @@ describe("offline package generation", () => {
     expect((await storage.listPublishedPackages()).length).toBe(0);
   });
 
+  it("allows a failed package preparation to be retried", async () => {
+    const dataDir = createDataDir();
+    const storage = new OfflinePackageStorage(join(dataDir, "offline-packages"));
+    const extract = vi.fn(async (options: { destinationPath: string }) => {
+      if (extract.mock.calls.length === 1) throw new Error("temporary extraction failure");
+      mkdirSync(join(dataDir, "offline-packages", ".tmp"), { recursive: true });
+      writeFileSync(options.destinationPath, "pmtiles");
+      return {
+        byteLength: 7,
+        sha256: generatedArchiveSha256,
+        etag: `sha256-${generatedArchiveSha256}`,
+        bounds: request.bbox,
+        minZoom: 1,
+        maxZoom: 12,
+        tileCount: 1,
+        tileCompression: "none" as const,
+        attribution: sourceDescriptor.attribution,
+        sourceBytesRead: 128,
+        destinationBytesWritten: 7,
+        temporaryBytesPeak: 7,
+      };
+    });
+    const generator = new OfflinePackageGenerator({
+      source: () => ({
+        descriptor: sourceDescriptor,
+        mbtilesPath: join(dataDir, "tile-mbtiles", "tiles.mbtiles"),
+        styleDirectory: join(dataDir, "tile-styles"),
+        packageRoot: join(dataDir, "offline-packages"),
+      }),
+      storage,
+      extractor: extract,
+      maxConcurrent: 1,
+    });
+
+    const failed = await generator.prepare(request);
+    await vi.waitFor(() => expect(generator.getJob(failed.jobId)?.status).toBe("failed"));
+    const retry = await generator.prepare(request);
+
+    expect(retry.jobId).not.toBe(failed.jobId);
+    await vi.waitFor(() => expect(generator.getJob(retry.jobId)?.status).toBe("ready-to-download"));
+    expect(extract).toHaveBeenCalledTimes(2);
+  });
+
   it("limits concurrent extractions and does not retain a full-dataset PMTiles derivative", async () => {
     const dataDir = createDataDir();
     const storage = new OfflinePackageStorage(join(dataDir, "offline-packages"));
