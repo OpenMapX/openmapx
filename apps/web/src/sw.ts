@@ -26,6 +26,7 @@ import {
   isCredentialedApiPath,
   isStalePrecacheName,
   offlineStyleCacheNameForVersion,
+  offlineStyleVersionFromAssetPath,
 } from "./lib/swCaches";
 
 declare const self: ServiceWorkerGlobalScope;
@@ -98,9 +99,16 @@ async function writeRecentMapDataCachePreference(enabled: boolean): Promise<void
 /** Package style assets are small, explicit Cache Storage entries. */
 async function matchOfflineStyle(request: Request): Promise<Response | null> {
   const url = new URL(request.url);
-  const version = url.searchParams.get("offlineStyle");
+  const version =
+    url.searchParams.get("offlineStyle") ?? offlineStyleVersionFromAssetPath(url.pathname);
   if (!version || !/^[A-Za-z0-9_-]{1,256}$/.test(version)) return null;
   const cache = await caches.open(offlineStyleCacheNameForVersion(version));
+  if (!url.searchParams.has("offlineStyle")) {
+    url.searchParams.set("offlineStyle", version);
+    return (
+      (await cache.match(new Request(url.toString(), request), { ignoreSearch: false })) ?? null
+    );
+  }
   return (await cache.match(request, { ignoreSearch: false })) ?? null;
 }
 
@@ -169,7 +177,9 @@ const serwist = new Serwist({
     // The archive itself is read by the page-side PMTiles protocol and never
     // enters Cache Storage.
     {
-      matcher: ({ url }: { url: URL }) => url.searchParams.has("offlineStyle"),
+      matcher: ({ url }: { url: URL }) =>
+        url.searchParams.has("offlineStyle") ||
+        offlineStyleVersionFromAssetPath(url.pathname) !== undefined,
       handler: async ({ request }: { request: Request }) =>
         (await matchOfflineStyle(request)) ?? fetch(request),
     },

@@ -16,6 +16,13 @@ export function offlineStyleCacheNameForVersion(version: string): string {
   return `offline-package-style-${version.replace(/[^A-Za-z0-9_-]/g, "_")}`;
 }
 
+export function offlineStyleVersionFromAssetPath(pathname: string): string | undefined {
+  const match = /^\/api\/offline\/packages\/assets\/openmapx\/([A-Za-z0-9_-]{1,256})(?:\/|$)/.exec(
+    pathname,
+  );
+  return match?.[1];
+}
+
 export function isCredentialedApiPath(pathname: string): boolean {
   const entries = [
     "/api/auth/",

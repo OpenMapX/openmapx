@@ -38,7 +38,16 @@ function styleResponse(): Response {
       sources: { openmaptiles: { type: "vector", url: "mbtiles://{openmapx}" } },
       sprite: "sprite",
       glyphs: "{fontstack}/{range}.pbf",
-      layers: [{ layout: { "text-font": ["Metropolis"] } }],
+      layers: [
+        {
+          id: "water",
+          source: "openmaptiles",
+          "source-layer": "water",
+          type: "fill",
+          layout: { "text-font": ["Metropolis"] },
+        },
+        { id: "background", type: "background" },
+      ],
     }),
     { headers: { "content-type": "application/json" } },
   );
@@ -63,7 +72,36 @@ describe("offline package styles", () => {
     expect(source.tiles).toEqual([`pmtiles://offline/${packageId}/{z}/{x}/{y}`]);
     expect(source.url).toBeUndefined();
     expect(style.glyphs).toContain("offlineStyle=style-v1");
-    expect(style.sprite).toContain("/styles/dark-matter/sprite");
+    expect(style.sprite).toBe(
+      "/api/offline/packages/assets/openmapx/style-v1/styles/dark-matter/sprite",
+    );
+    vi.unstubAllGlobals();
+  });
+
+  it("adds a source and matching layers for every overview package", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (...args: unknown[]) => {
+        const url = String(args[0]);
+        return url.includes("/style.json?") ? styleResponse() : new Response(new ArrayBuffer(1));
+      }),
+    );
+
+    const secondPackageId = `omp1-${"c".repeat(64)}`;
+    const style = await resolveOfflinePackageStyle(manifest, packageId, "light", [
+      packageId,
+      secondPackageId,
+    ]);
+    const sources = style.sources as Record<string, Record<string, unknown>>;
+    const layers = style.layers as Array<Record<string, unknown>>;
+    const overviewSource = sources[`openmaptiles-${secondPackageId}`];
+
+    expect(overviewSource?.tiles).toEqual([`pmtiles://offline/${secondPackageId}/{z}/{x}/{y}`]);
+    expect(overviewSource?.url).toBeUndefined();
+    expect(layers.filter((layer) => layer.source === `openmaptiles-${secondPackageId}`)).toEqual([
+      expect.objectContaining({ id: `water-${secondPackageId}` }),
+    ]);
+
     vi.unstubAllGlobals();
   });
 

@@ -3,6 +3,7 @@ import {
   isCredentialedApiPath,
   isStalePrecacheName,
   offlineStyleCacheNameForVersion,
+  offlineStyleVersionFromAssetPath,
 } from "./swCaches";
 
 const current = { appShell: "app-shell-NEW", style: "style-assets-NEW" };
@@ -25,6 +26,17 @@ describe("service-worker cache names", () => {
 
   it("uses a stable, cache-safe package style name", () => {
     expect(offlineStyleCacheNameForVersion("style/v1?x")).toBe("offline-package-style-style_v1_x");
+  });
+
+  it("extracts the version from an unquery-pinned package asset path", () => {
+    expect(
+      offlineStyleVersionFromAssetPath(
+        "/api/offline/packages/assets/openmapx/style-v1/styles/osm-bright/sprite.json",
+      ),
+    ).toBe("style-v1");
+    expect(
+      offlineStyleVersionFromAssetPath("/api/offline/packages/assets/maptiler/style-v1"),
+    ).toBeUndefined();
   });
 });
 

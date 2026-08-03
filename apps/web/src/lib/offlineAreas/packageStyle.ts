@@ -13,7 +13,7 @@ type StyleJson = Record<string, unknown> & {
   sources?: Record<string, Record<string, unknown>>;
   glyphs?: string;
   sprite?: string | { url: string; id?: string }[];
-  layers?: Array<{ layout?: { "text-font"?: unknown } }>;
+  layers?: Array<Record<string, unknown> & { layout?: { "text-font"?: unknown } }>;
 };
 
 function cacheName(manifest: OfflineMapPackageManifest): string {
@@ -41,7 +41,7 @@ function styleUrl(manifest: OfflineMapPackageManifest, variant: "light" | "dark"
 }
 
 function spriteBaseUrl(manifest: OfflineMapPackageManifest, variant: "light" | "dark"): string {
-  return assetUrl(manifest, `styles/${variantDirectory(variant)}/sprite`);
+  return `${manifest.style.assetBaseUrl.replace(/\/$/, "")}/styles/${variantDirectory(variant)}/sprite`;
 }
 
 function spriteAssetUrl(
@@ -156,16 +156,43 @@ export async function resolveOfflinePackageStyle(
   manifest: OfflineMapPackageManifest,
   packageId: string,
   variant: "light" | "dark",
+  packageIds: readonly string[] = [packageId],
 ): Promise<Record<string, unknown>> {
   const response = await fetchPinned(styleUrl(manifest, variant), manifest);
   const style = (await response.json()) as StyleJson;
   const source = style.sources?.openmaptiles;
   if (!source) throw new Error("OpenMapX style has no openmaptiles source");
+  const originalSource = { ...source };
+  const originalLayers = style.layers ?? [];
   source.tiles = [offlinePmtilesTileUrl(packageId)];
   delete source.url;
   source.attribution = "";
   style.glyphs = glyphTemplate(manifest);
   style.sprite = spriteBaseUrl(manifest, variant);
+
+  const additionalPackageIds = [...new Set(packageIds)].filter((id) => id !== packageId);
+  if (additionalPackageIds.length > 0) {
+    style.sources = { ...style.sources };
+    style.layers = [...originalLayers];
+    for (const additionalPackageId of additionalPackageIds) {
+      const sourceId = `openmaptiles-${additionalPackageId}`;
+      style.sources[sourceId] = {
+        ...originalSource,
+        tiles: [offlinePmtilesTileUrl(additionalPackageId)],
+        attribution: "",
+      };
+      delete style.sources[sourceId].url;
+      style.layers.push(
+        ...originalLayers
+          .filter((layer) => layer.source === "openmaptiles")
+          .map((layer) => ({
+            ...layer,
+            id: `${String(layer.id)}-${additionalPackageId}`,
+            source: sourceId,
+          })),
+      );
+    }
+  }
   return style;
 }
 

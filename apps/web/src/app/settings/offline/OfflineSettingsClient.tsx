@@ -332,11 +332,21 @@ function PackageList({
                 <ListItemText
                   primary={record.name}
                   secondary={
-                    <OfflinePackageStatus
-                      record={record}
-                      onResume={() => onResume(record)}
-                      disabled={runningId !== null}
-                    />
+                    <Stack spacing={0.25}>
+                      <Typography
+                        variant="caption"
+                        component="span"
+                        sx={{ color: "text.secondary" }}
+                      >
+                        {formatBytes(record.manifest.archive.byteLength)} · z
+                        {record.manifest.coverage.minZoom}–{record.manifest.coverage.maxZoom}
+                      </Typography>
+                      <OfflinePackageStatus
+                        record={record}
+                        onResume={() => onResume(record)}
+                        disabled={runningId !== null}
+                      />
+                    </Stack>
                   }
                   slotProps={{ secondary: { component: "div" } }}
                 />

@@ -97,8 +97,6 @@ export function OfflineMapView({ packages, fitTo, height = 360 }: Props) {
 
     void (async () => {
       const maplibregl = (await import("maplibre-gl")).default;
-      const style = await resolveOfflinePackageStyle(first.manifest, first.id, variant);
-      if (destroyed || !containerRef.current) return;
       let resolver = getDefaultOfflinePackageResolver();
       if (!resolver) {
         resolver = configureDefaultOfflinePackageResolver({
@@ -106,9 +104,16 @@ export function OfflineMapView({ packages, fitTo, height = 360 }: Props) {
           styleVersion: first.manifest.style.version,
           tileSchema: first.manifest.dataset.tileSchema,
         });
-        await resolver.refresh();
       }
       if (!resolver) throw new Error("offline package resolver is not initialized");
+      await resolver.refresh();
+      const style = await resolveOfflinePackageStyle(
+        first.manifest,
+        first.id,
+        variant,
+        packages.map((record) => record.id),
+      );
+      if (destroyed || !containerRef.current) return;
       unregister = registerOfflinePmtilesProtocol(maplibregl, resolver);
       map = new maplibregl.Map({
         container: containerRef.current,
