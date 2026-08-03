@@ -30,4 +30,11 @@ describe("eventsToFeatureCollection", () => {
     expect(fc.features[1]?.properties.isForecast).toBeNull();
     expect(fc.features[1]?.properties.isPlanned).toBeNull();
   });
+
+  it("serializes the optional source situation group id", () => {
+    const grouped = { ...base, groupId: "SITUATION_1" };
+    const fc = eventsToFeatureCollection([grouped, base]);
+    expect(fc.features[0]?.properties.groupId).toBe("SITUATION_1");
+    expect(fc.features[1]?.properties.groupId).toBeUndefined();
+  });
 });

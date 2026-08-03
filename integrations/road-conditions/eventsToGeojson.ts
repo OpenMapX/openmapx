@@ -31,6 +31,7 @@ export function eventsToFeatureCollection(
         id: e.id,
         source: e.source,
         provider: e.provider,
+        ...(e.groupId ? { groupId: e.groupId } : {}),
         type: e.type,
         severity: e.severity,
         headline: e.headline,

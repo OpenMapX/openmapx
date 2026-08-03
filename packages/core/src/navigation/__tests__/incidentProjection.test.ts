@@ -66,6 +66,21 @@ describe("projectEventsToRoute", () => {
     expect(out[0]?.delaySeconds).toBe(900);
   });
 
+  it("carries the display group id without changing route projection", () => {
+    const out = projectEventsToRoute(
+      [
+        ev("grouped", "high", { type: "Point", coordinates: [13.05, 52.00008] }, "roadworks", {
+          groupId: "works-42",
+        }),
+      ],
+      route,
+      0,
+    );
+
+    expect(out).toHaveLength(1);
+    expect(out[0]?.groupId).toBe("works-42");
+  });
+
   it("drops incidents off the corridor", () => {
     const out = projectEventsToRoute(
       [ev("b", "high", { type: "Point", coordinates: [13.05, 52.02] })], // ~2.2 km off

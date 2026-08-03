@@ -16,6 +16,8 @@ export interface IncidentAlert extends RoadAlert {
   eventType: RoadConditionType;
   severity: RoadConditionSeverity;
   headline: string;
+  /** Provider display relationship, retained for route-layer grouping only. */
+  groupId?: string;
   /** Estimated delay in seconds this incident adds, where the source reports it. */
   delaySeconds?: number;
   /** Original affected-road geometry, retained for navigation-map rendering. */
@@ -331,6 +333,7 @@ export function projectEventsToRoute(
       eventType: event.type,
       severity: event.severity,
       headline: event.headline,
+      ...(event.groupId ? { groupId: event.groupId } : {}),
       ...(typeof event.delaySeconds === "number" ? { delaySeconds: event.delaySeconds } : {}),
       geometry: event.geometry,
       approach: SEVERITY_APPROACH[event.severity] ?? SEVERITY_APPROACH.unknown,

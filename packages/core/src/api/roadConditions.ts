@@ -38,10 +38,12 @@ function featureToEvent(feature: RoadConditionFeature): RoadConditionEvent | nul
   const p = feature.properties ?? {};
   const id = str(p.id);
   if (!feature.geometry || !id) return null;
+  const groupId = str(p.groupId);
   return {
     id,
     source: str(p.source) ?? "",
     provider: str(p.provider) ?? "",
+    ...(groupId ? { groupId } : {}),
     type: (str(p.type) ?? "other") as RoadConditionType,
     severity: (str(p.severity) ?? "unknown") as RoadConditionSeverity,
     geometry: feature.geometry,

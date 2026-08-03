@@ -20,6 +20,7 @@ describe("fetchRoadConditions", () => {
             severity: "high",
             headline: "Accident on A1",
             description: "Two cars",
+            groupId: "SITUATION_1",
           },
         },
       ],
@@ -46,6 +47,7 @@ describe("fetchRoadConditions", () => {
       type: "accident",
       severity: "high",
       headline: "Accident on A1",
+      groupId: "SITUATION_1",
       geometry: { type: "Point", coordinates: [13.4, 52.5] },
     });
   });
@@ -66,6 +68,7 @@ describe("fetchRoadConditions", () => {
     const out = await fetchRoadConditions([0, 0, 1, 1]);
     expect(out.find((e) => e.id === "d:1")?.delaySeconds).toBe(1500);
     expect(out.find((e) => e.id === "d:2")?.delaySeconds).toBeUndefined();
+    expect(out.find((e) => e.id === "d:1")?.groupId).toBeUndefined();
   });
 
   it("sends horizonDays only when set", async () => {

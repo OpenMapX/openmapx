@@ -13,7 +13,8 @@ import { useOverlayLayerVisible } from "@/components/map/overlay/useOverlayStore
 import { useMap } from "@/lib/MapContext";
 import { useOverlayMinZoom } from "@/lib/overlayZoomGate";
 import { useDrawnDirectionsRoutes } from "@/lib/useDrawnDirectionsRoutes";
-import { markerImageId, markerPoints } from "./markers";
+import { buildRoadConditionDisplayGroups } from "./display";
+import { markerImageId } from "./markers";
 
 const OVERLAY_ID = "road-conditions";
 const MARKER_SOURCE = "omx-road-conditions-route-markers";
@@ -140,6 +141,27 @@ export function RouteConditionsLayer() {
     return projectEventsToRoute(events, geometry, 0, { lookaheadMeters });
   }, [events, geometry]);
 
+  const displayGroups = useMemo(() => {
+    if (onRoute.length === 0) return [];
+    const eventsById = new Map(events.map((event) => [event.id, event] as const));
+    const projectedEvents = onRoute.flatMap((alert) => {
+      const event = eventsById.get(alert.id);
+      if (!event) return [];
+      return [
+        {
+          ...event,
+          // Keep the projected event's source geometry as the rendering input;
+          // projection has already established that this record belongs on the
+          // route, while the display helper decides whether related records
+          // should share one line/marker presentation.
+          geometry: alert.geometry,
+          ...(alert.groupId && !event.groupId ? { groupId: alert.groupId } : {}),
+        },
+      ];
+    });
+    return buildRoadConditionDisplayGroups(projectedEvents);
+  }, [events, onRoute]);
+
   useEffect(() => {
     void styleVersion;
     const map = mapRef.current;
@@ -237,20 +259,22 @@ export function RouteConditionsLayer() {
 
     markerSource.setData({
       type: "FeatureCollection",
-      features: onRoute.flatMap((alert) => {
-        // One marker per real MultiPoint endpoint, not a centroid — matches
-        // the area overlay's own placement (`markerPoints` in ./markers) so
-        // the two components never disagree about where an event sits.
-        const points = markerPoints(alert.geometry);
-        const targets = points.length > 0 ? points : [alert.coord];
-        return targets.map((point) => ({
+      features: displayGroups.flatMap((group) => {
+        const event = group.events.reduce((best, candidate) => {
+          const bestRank = SEVERITY_RANK[best.severity] ?? 0;
+          const candidateRank = SEVERITY_RANK[candidate.severity] ?? 0;
+          return candidateRank > bestRank ? candidate : best;
+        });
+        return group.markerCoordinates.map((point) => ({
           type: "Feature" as const,
           geometry: { type: "Point" as const, coordinates: point },
           properties: {
-            headline: alert.headline,
-            severity: alert.severity,
-            _icon: markerImageId(alert.eventType, alert.severity),
-            _sev: SEVERITY_RANK[alert.severity] ?? 0,
+            headline: event.headline,
+            severity: event.severity,
+            _icon: markerImageId(event.type, event.severity),
+            _id: group.events.length === 1 ? event.id : group.displayId,
+            _displayId: group.displayId,
+            _sev: SEVERITY_RANK[event.severity] ?? 0,
           },
         }));
       }),
@@ -258,18 +282,26 @@ export function RouteConditionsLayer() {
 
     lineSource.setData({
       type: "FeatureCollection",
-      features: onRoute
-        .filter(
-          (alert) =>
-            alert.geometry.type === "LineString" || alert.geometry.type === "MultiLineString",
-        )
-        .map((alert) => ({
-          type: "Feature" as const,
-          geometry: alert.geometry as GeoJSON.Geometry,
-          properties: { severity: alert.severity },
-        })),
+      features: displayGroups.flatMap((group) =>
+        group.lineGeometry
+          ? [
+              {
+                type: "Feature" as const,
+                geometry: group.lineGeometry as GeoJSON.Geometry,
+                properties: {
+                  severity: group.events.reduce((best, candidate) => {
+                    const bestRank = SEVERITY_RANK[best.severity] ?? 0;
+                    const candidateRank = SEVERITY_RANK[candidate.severity] ?? 0;
+                    return candidateRank > bestRank ? candidate : best;
+                  }).severity,
+                  _displayId: group.displayId,
+                },
+              },
+            ]
+          : [],
+      ),
     });
-  }, [mapRef, styleVersion, onRoute]);
+  }, [mapRef, styleVersion, displayGroups]);
 
   return null;
 }

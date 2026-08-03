@@ -66,6 +66,11 @@ export interface RoadConditionEvent {
   source: string;
   /** OpenMapX integration id that produced it — stamped by the orchestrator. */
   provider: string;
+  /**
+   * Provider-supplied display relationship for records in one source situation.
+   * It is not a canonical event id, deduplication key, or routing input.
+   */
+  groupId?: string;
   type: RoadConditionType;
   severity: RoadConditionSeverity;
   /** WGS84 [lon,lat] geometry. */

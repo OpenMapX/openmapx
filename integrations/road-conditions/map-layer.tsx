@@ -1,6 +1,11 @@
 "use client";
 
-import { formatDuration, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
+import {
+  formatDuration,
+  type RoadConditionEvent,
+  useDebouncedCallback,
+  useOverlayExclusion,
+} from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -14,8 +19,9 @@ import { useMap } from "@/lib/MapContext";
 import { useOverlayMinZoom } from "@/lib/overlayZoomGate";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { useIntegrationDomainAttribution } from "@/lib/useIntegrationAttribution";
+import { buildRoadConditionDisplayGroups, type RoadConditionDisplayGroup } from "./display";
 import { isUnconfirmedCrowd } from "./evidence";
-import { markerImageData, markerImageId, markerPoints, parseMarkerImageId } from "./markers";
+import { markerImageData, markerImageId, parseMarkerImageId } from "./markers";
 import { RouteConditionsLayer } from "./route-layer";
 // The named import also runs the module side-effect that registers the
 // "road-conditions" overlay store (shared by the layer selector + legend).
@@ -59,6 +65,7 @@ const POPUP_SPEC: PopupCardSpec = {
     { field: "type", labelKey: "panel.type", format: "label", variant: "chip" },
     { field: "roadState", labelKey: "panel.roadState", format: "label", variant: "chip" },
     { field: "roads", labelKey: "panel.roads", variant: "row" },
+    { field: "recordId", label: "Source record", variant: "row" },
     // Structured validity window (from the feed's validFrom/validTo, not the
     // free-text description — many feeds don't put it in the text). Pre-formatted
     // into `validity` at click time.
@@ -151,108 +158,262 @@ function attributionString(raw: unknown): string {
   return "";
 }
 
-interface RawFeature {
+export interface RawFeature {
   geometry?: { type: string; coordinates: unknown } | null;
   properties?: Record<string, unknown> | null;
 }
 
+export interface RoadConditionDisplaySources {
+  markers: GeoJsonData;
+  lines: GeoJsonData;
+  /** In-memory child records used to resolve a grouped marker's popup. */
+  eventsByDisplayId: Map<string, RoadConditionEvent[]>;
+}
+
 /** Whether a raw feature describes a condition that has not started yet. */
-function isFutureCondition(p: Record<string, unknown>): boolean {
+function isFutureCondition(p: { isForecast?: unknown; validFrom?: unknown }): boolean {
   if (p.isForecast === true) return true;
   if (typeof p.validFrom !== "string") return false;
   const from = Date.parse(p.validFrom);
   return !Number.isNaN(from) && from > Date.now();
 }
 
+function rawFeatureToEvent(feature: RawFeature): RoadConditionEvent | null {
+  const properties = feature.properties ?? {};
+  if (!feature.geometry) return null;
+
+  const headline = String(properties.headline ?? "");
+  const id = String(properties.id ?? headline);
+  if (!id) return null;
+
+  const event: RoadConditionEvent = {
+    id,
+    source: String(properties.source ?? "unknown"),
+    provider: String(properties.provider ?? "unknown"),
+    type: String(properties.type ?? "other") as RoadConditionEvent["type"],
+    severity: String(properties.severity ?? "unknown") as RoadConditionEvent["severity"],
+    geometry: feature.geometry as RoadConditionEvent["geometry"],
+    headline,
+  };
+
+  if (typeof properties.groupId === "string" && properties.groupId.length > 0) {
+    event.groupId = properties.groupId;
+  }
+  if (typeof properties.description === "string") event.description = properties.description;
+  if (typeof properties.delaySeconds === "number") event.delaySeconds = properties.delaySeconds;
+  if (typeof properties.roadState === "string") {
+    event.roadState = properties.roadState as RoadConditionEvent["roadState"];
+  }
+  if (Array.isArray(properties.roads)) {
+    event.roads = properties.roads as RoadConditionEvent["roads"];
+  }
+  if (typeof properties.validFrom === "string") event.validFrom = properties.validFrom;
+  if (typeof properties.validTo === "string") event.validTo = properties.validTo;
+  if (Array.isArray(properties.schedule)) {
+    event.schedule = properties.schedule as RoadConditionEvent["schedule"];
+  }
+  if (properties.attribution && typeof properties.attribution === "object") {
+    event.attribution = properties.attribution as RoadConditionEvent["attribution"];
+  }
+  if (properties.originKind === "feed" || properties.originKind === "crowd") {
+    event.originKind = properties.originKind;
+  }
+  if (typeof properties.evidenceState === "string") {
+    event.evidenceState = properties.evidenceState;
+  }
+  if (typeof properties.routingEligible === "boolean") {
+    event.routingEligible = properties.routingEligible;
+  }
+  if (typeof properties.confidenceScore === "number") {
+    event.confidenceScore = properties.confidenceScore;
+  }
+  if (typeof properties.isForecast === "boolean") event.isForecast = properties.isForecast;
+  if (typeof properties.isPlanned === "boolean") event.isPlanned = properties.isPlanned;
+
+  return event;
+}
+
+function mostSevereEvent(group: RoadConditionDisplayGroup): RoadConditionEvent {
+  return group.events.reduce((best, event) => {
+    const bestRank = SEVERITY_RANK[best.severity] ?? 0;
+    const eventRank = SEVERITY_RANK[event.severity] ?? 0;
+    return eventRank > bestRank ? event : best;
+  });
+}
+
+function roadNames(event: RoadConditionEvent): string | undefined {
+  const names = (event.roads ?? [])
+    .map((road) => {
+      const raw = road as unknown as { name?: unknown; ref?: unknown };
+      return String(raw.ref ?? raw.name ?? "").trim();
+    })
+    .filter(Boolean);
+  return names.length > 0 ? [...new Set(names)].join(", ") : undefined;
+}
+
+function markerProperties(
+  group: RoadConditionDisplayGroup,
+  event: RoadConditionEvent,
+): Record<string, unknown> {
+  const future = group.events.every(isFutureCondition);
+  const properties: Record<string, unknown> = {
+    headline: event.headline,
+    type: event.type,
+    severity: event.severity,
+    attribution: attributionString(event.attribution),
+    _icon: markerImageId(event.type, event.severity),
+    // Keep the canonical id for compatibility with existing ungrouped marker
+    // consumers; `_displayId` is the presentation identity used for grouping.
+    _id: group.events.length === 1 ? event.id : group.displayId,
+    _displayId: group.displayId,
+    _sev: SEVERITY_RANK[event.severity] ?? 0,
+    _unconfirmed: group.events.some((item) =>
+      isUnconfirmedCrowd({
+        originKind: item.originKind ?? null,
+        evidenceState: item.evidenceState ?? null,
+      }),
+    ),
+    future,
+  };
+  if (event.roadState) properties.roadState = event.roadState;
+  if (event.validFrom) properties.validFrom = event.validFrom;
+  if (event.validTo) properties.validTo = event.validTo;
+  if (event.schedule && event.schedule.length > 0) {
+    properties.schedule = JSON.stringify(event.schedule);
+  }
+  if (event.description) properties.description = event.description;
+  if (typeof event.delaySeconds === "number") properties.delaySeconds = event.delaySeconds;
+  const roads = roadNames(event);
+  if (roads) properties.roads = roads;
+  return properties;
+}
+
+function popupProperties(
+  event: RoadConditionEvent,
+  displayId: string,
+  includeRecordId: boolean,
+): Record<string, unknown> {
+  const properties: Record<string, unknown> = {
+    headline: event.headline,
+    type: event.type,
+    severity: event.severity,
+    attribution: attributionString(event.attribution),
+    _id: event.id,
+    _displayId: displayId,
+    _sev: SEVERITY_RANK[event.severity] ?? 0,
+    future: isFutureCondition(event),
+  };
+  if (includeRecordId) properties.recordId = event.id;
+  if (event.roadState) properties.roadState = event.roadState;
+  if (event.validFrom) properties.validFrom = event.validFrom;
+  if (event.validTo) properties.validTo = event.validTo;
+  if (event.schedule && event.schedule.length > 0) {
+    properties.schedule = JSON.stringify(event.schedule);
+  }
+  if (event.description) properties.description = event.description;
+  if (typeof event.delaySeconds === "number") properties.delaySeconds = event.delaySeconds;
+  const roads = roadNames(event);
+  if (roads) properties.roads = roads;
+  return properties;
+}
+
+export function buildRoadConditionPopupEntries(
+  displayId: string,
+  events: RoadConditionEvent[],
+): Record<string, unknown>[] {
+  if (events.length === 0) return [];
+  const childEntries = events.map((event) => popupProperties(event, displayId, events.length > 1));
+  if (events.length === 1) return childEntries;
+
+  const representative = events.reduce((best, event) => {
+    const bestRank = SEVERITY_RANK[best.severity] ?? 0;
+    const eventRank = SEVERITY_RANK[event.severity] ?? 0;
+    return eventRank > bestRank ? event : best;
+  });
+  const summary = popupProperties(representative, displayId, false);
+  summary.recordId = `${events.length} source records`;
+
+  const same = (field: keyof RoadConditionEvent) =>
+    events.every((event) => JSON.stringify(event[field]) === JSON.stringify(events[0]?.[field]));
+  if (!same("headline"))
+    summary.headline = `${representative.headline} (${events.length} related records)`;
+  if (!same("description")) delete summary.description;
+  if (!same("roads")) delete summary.roads;
+  if (!same("validFrom")) {
+    const starts = events
+      .map((event) => event.validFrom)
+      .filter((value): value is string => typeof value === "string" && value.length > 0);
+    if (starts.length > 0) {
+      summary.validFrom = starts.reduce((earliest, value) =>
+        Date.parse(value) < Date.parse(earliest) ? value : earliest,
+      );
+    } else {
+      delete summary.validFrom;
+    }
+  }
+  if (!same("validTo")) {
+    const ends = events
+      .map((event) => event.validTo)
+      .filter((value): value is string => typeof value === "string" && value.length > 0);
+    if (ends.length > 0) {
+      summary.validTo = ends.reduce((latest, value) =>
+        Date.parse(value) > Date.parse(latest) ? value : latest,
+      );
+    } else {
+      delete summary.validTo;
+    }
+  }
+  if (!same("schedule")) delete summary.schedule;
+  if (!same("delaySeconds")) delete summary.delaySeconds;
+
+  return [summary, ...childEntries];
+}
+
 /**
  * Build the marker + line source data from the raw /events FeatureCollection:
- * exactly ONE marker per incident (placed at a representative point with the
- * disc+glyph baked into a single icon image), and the original line geometries
- * for the affected-segment lines. Marker properties are flattened to primitives
- * so they survive MapLibre's feature-property serialization.
+ * one marker per display group (or every real endpoint where a group has no
+ * line), and one line feature per display group. Child event records stay in an
+ * in-memory lookup for popup resolution; full child payloads are never placed
+ * in MapLibre feature properties.
  */
-function buildSources(features: RawFeature[]): { markers: GeoJsonData; lines: GeoJsonData } {
+export function buildSources(features: RawFeature[]): RoadConditionDisplaySources {
   const markerFeatures: unknown[] = [];
   const lineFeatures: unknown[] = [];
+  const events = features
+    .map(rawFeatureToEvent)
+    .filter((event): event is RoadConditionEvent => event !== null);
+  const groups = buildRoadConditionDisplayGroups(events);
+  const eventsByDisplayId = new Map(
+    groups.map((group) => [group.displayId, group.events] as const),
+  );
 
-  for (const f of features) {
-    const p = f.properties ?? {};
-    const geom = f.geometry ?? null;
-    const type = String(p.type ?? "other");
-    const severity = String(p.severity ?? "unknown");
-    // Announced but not yet in effect. The upstream `isForecast` flag and a
-    // future `validFrom` are independent signals — sources set the flag while
-    // publishing vague or missing dates — so either one marks the feature.
-    const future = isFutureCondition(p);
-
-    // Marker placement points — see `markerPoints` for why a MultiPoint gets
-    // one marker per real endpoint rather than a centroid.
-    const points = markerPoints(geom);
-
-    if (points.length > 0) {
-      const props: Record<string, unknown> = {
-        headline: String(p.headline ?? ""),
-        type,
-        severity,
-        attribution: attributionString(p.attribution),
-        _icon: markerImageId(type, severity),
-        // Stable id to dedupe overlapping markers into one popup, and a numeric
-        // severity rank for symbol-sort-key (worst on top) + popup ordering.
-        _id: p.id != null ? String(p.id) : String(p.headline ?? ""),
-        _sev: SEVERITY_RANK[severity] ?? 0,
-        // Flag an unconfirmed crowd report so styling/labeling can distinguish it
-        // from a corroborated official condition. Booleans survive MapLibre's
-        // property serialization; the actual dashed/badged rendering is pending.
-        _unconfirmed: isUnconfirmedCrowd({
-          originKind: typeof p.originKind === "string" ? p.originKind : null,
-          evidenceState: typeof p.evidenceState === "string" ? p.evidenceState : null,
-        }),
-        // Drives the dimmed icon / dashed line for not-yet-started works, so a
-        // widened horizon stays visually distinct from what's in effect now.
-        future,
-      };
-      if (p.roadState) props.roadState = String(p.roadState);
-      // Raw ISO validity bounds + recurring schedule — formatted into a human
-      // "Active …" string at click time (needs the user's locale/time-format
-      // prefs). Carried as primitives/JSON so they survive MapLibre's property
-      // serialization.
-      if (p.validFrom) props.validFrom = String(p.validFrom);
-      if (p.validTo) props.validTo = String(p.validTo);
-      if (Array.isArray(p.schedule) && p.schedule.length > 0) {
-        props.schedule = JSON.stringify(p.schedule);
-      }
-      if (p.description) props.description = String(p.description);
-      // Carry the raw delay (Verlustzeit) through; formatted to "+X min" at click
-      // time (popupCard has no generic duration formatter).
-      if (typeof p.delaySeconds === "number") props.delaySeconds = p.delaySeconds;
-      // Flatten affected-road refs into a compact label for the popup row.
-      if (Array.isArray(p.roads) && p.roads.length > 0) {
-        const names = (p.roads as Array<{ name?: unknown; ref?: unknown }>)
-          .map((r) => String(r.ref ?? r.name ?? "").trim())
-          .filter(Boolean);
-        if (names.length > 0) props.roads = [...new Set(names)].join(", ");
-      }
-      for (const pt of points) {
-        markerFeatures.push({
-          type: "Feature",
-          geometry: { type: "Point", coordinates: pt },
-          properties: props,
-        });
-      }
+  for (const group of groups) {
+    const event = mostSevereEvent(group);
+    const properties = markerProperties(group, event);
+    for (const point of group.markerCoordinates) {
+      markerFeatures.push({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: point },
+        properties,
+      });
     }
-
-    // Only genuine line geometry (a `gmlLineString` that follows the road) is
-    // drawn as a line. We deliberately do NOT synthesise a chord for a 2-point
-    // MultiPoint — there's no road path in the data, and the endpoint markers
-    // above convey the extent without misrepresenting the road.
-    if (geom && (geom.type === "LineString" || geom.type === "MultiLineString")) {
-      lineFeatures.push({ type: "Feature", geometry: geom, properties: { severity, future } });
+    if (group.lineGeometry) {
+      lineFeatures.push({
+        type: "Feature",
+        geometry: group.lineGeometry,
+        properties: {
+          severity: event.severity,
+          future: group.events.every(isFutureCondition),
+          _displayId: group.displayId,
+        },
+      });
     }
   }
 
   return {
     markers: { type: "FeatureCollection", features: markerFeatures } as GeoJsonData,
     lines: { type: "FeatureCollection", features: lineFeatures } as GeoJsonData,
+    eventsByDisplayId,
   };
 }
 
@@ -272,6 +433,7 @@ export function RoadConditionsLayer() {
   useIntegrationDomainAttribution(CREDIT_DOMAIN, layerVisible);
   useOverlayExclusion(OVERLAY_ID, layerVisible);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const eventsByDisplayIdRef = useRef<Map<string, RoadConditionEvent[]>>(new Map());
   // Keep the latest formatters/translator in refs so the imperative popup click
   // handler (bound once per effect) always uses the current prefs + locale.
   const dtf = useDateTimeFormat();
@@ -307,7 +469,10 @@ export function RoadConditionsLayer() {
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) return;
       const fc = (await res.json()) as { features?: RawFeature[] };
-      const { markers, lines } = buildSources(Array.isArray(fc.features) ? fc.features : []);
+      const { markers, lines, eventsByDisplayId } = buildSources(
+        Array.isArray(fc.features) ? fc.features : [],
+      );
+      eventsByDisplayIdRef.current = eventsByDisplayId;
       (map.getSource(MARKER_SOURCE) as GeoJSONSource | undefined)?.setData(markers);
       (map.getSource(LINE_SOURCE) as GeoJSONSource | undefined)?.setData(lines);
     } catch {
@@ -469,39 +634,49 @@ export function RoadConditionsLayer() {
         : (e.features ?? []);
       if (hits.length === 0) return;
 
-      // Dedupe by event id (one MultiPoint event renders a marker per endpoint),
-      // format each condition's validity, then order most-severe first.
+      // Dedupe by display identity (one MultiPoint group renders a marker per
+      // endpoint), resolve grouped source records from memory, format each
+      // condition's validity, then order most-severe first.
       const seen = new Set<string>();
       const entries: Record<string, unknown>[] = [];
+      let recordCount = 0;
       for (const h of hits) {
         const p = (h.properties ?? {}) as Record<string, unknown>;
-        const id = String(p._id ?? p.headline ?? "");
-        if (seen.has(id)) continue;
-        seen.add(id);
-        const validity = formatValidity(
-          p.schedule,
-          p.validFrom,
-          p.validTo,
-          dtfRef.current.dateTime,
-          dtfRef.current.date,
-        );
-        const startsAt =
-          p.future === true && typeof p.validFrom === "string"
-            ? tRef.current("startsAt", {
-                date: dtfRef.current.dateTime(p.validFrom),
-              })
-            : undefined;
-        const delaySeconds = Number(p.delaySeconds);
-        const delayText =
-          Number.isFinite(delaySeconds) && delaySeconds >= 60
-            ? `+${formatDuration(delaySeconds)}`
-            : undefined;
-        entries.push({
-          ...p,
-          ...(validity ? { validity } : {}),
-          ...(startsAt ? { startsAt } : {}),
-          ...(delayText ? { delayText } : {}),
-        });
+        const displayId = String(p._displayId ?? p._id ?? p.headline ?? "");
+        if (seen.has(displayId)) continue;
+        seen.add(displayId);
+
+        const childEvents = eventsByDisplayIdRef.current.get(displayId);
+        const sourceEntries = childEvents?.length
+          ? buildRoadConditionPopupEntries(displayId, childEvents)
+          : [p];
+        recordCount += childEvents?.length ?? 1;
+        for (const sourceEntry of sourceEntries) {
+          const validity = formatValidity(
+            sourceEntry.schedule,
+            sourceEntry.validFrom,
+            sourceEntry.validTo,
+            dtfRef.current.dateTime,
+            dtfRef.current.date,
+          );
+          const startsAt =
+            sourceEntry.future === true && typeof sourceEntry.validFrom === "string"
+              ? tRef.current("startsAt", {
+                  date: dtfRef.current.dateTime(sourceEntry.validFrom),
+                })
+              : undefined;
+          const delaySeconds = Number(sourceEntry.delaySeconds);
+          const delayText =
+            Number.isFinite(delaySeconds) && delaySeconds >= 60
+              ? `+${formatDuration(delaySeconds)}`
+              : undefined;
+          entries.push({
+            ...sourceEntry,
+            ...(validity ? { validity } : {}),
+            ...(startsAt ? { startsAt } : {}),
+            ...(delayText ? { delayText } : {}),
+          });
+        }
       }
       entries.sort((a, b) => (Number(b._sev) || 0) - (Number(a._sev) || 0));
 
@@ -523,7 +698,7 @@ export function RoadConditionsLayer() {
             POPUP_SPEC,
             entries,
             (k) => tRef.current(k),
-            tRef.current("panel.conditionsHere", { count: entries.length }),
+            tRef.current("panel.conditionsHere", { count: recordCount }),
           ),
         )
         .addTo(map);

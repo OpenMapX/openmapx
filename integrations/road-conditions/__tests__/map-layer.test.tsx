@@ -48,7 +48,7 @@ vi.mock("maplibre-gl", () => ({
   },
 }));
 
-import { RoadConditionsLayer } from "../map-layer";
+import { buildRoadConditionPopupEntries, buildSources, RoadConditionsLayer } from "../map-layer";
 
 const MARKER_SOURCE = "omx-road-conditions-markers";
 const LINE_SOURCE = "omx-road-conditions-lines";
@@ -178,5 +178,98 @@ describe("RoadConditionsLayer future styling", () => {
       ["literal", [2, 1.5]],
       ["literal", [1]],
     ]);
+  });
+});
+
+describe("road-condition display grouping", () => {
+  it("renders one explicit line group while retaining every child for popup lookup", () => {
+    const itinerary = Array.from(
+      { length: 17 },
+      (_, index) => [6.77 + index * 0.0001, 51.2] as [number, number],
+    );
+    const { markers, lines, eventsByDisplayId } = buildSources([
+      {
+        geometry: {
+          type: "LineString",
+          coordinates: itinerary.slice(0, 6),
+        },
+        properties: {
+          id: "oc:1",
+          source: "duesseldorf",
+          provider: "road-conditions-openconditions",
+          groupId: "works-42",
+          type: "roadworks",
+          severity: "medium",
+          headline: "Roadworks",
+        },
+      },
+      {
+        geometry: {
+          type: "LineString",
+          coordinates: itinerary.slice(5, 12),
+        },
+        properties: {
+          id: "oc:2",
+          source: "duesseldorf",
+          provider: "road-conditions-openconditions",
+          groupId: "works-42",
+          type: "roadworks",
+          severity: "high",
+          headline: "Lane closure",
+        },
+      },
+      {
+        geometry: { type: "LineString", coordinates: itinerary.slice(11) },
+        properties: {
+          id: "oc:3",
+          source: "duesseldorf",
+          provider: "road-conditions-openconditions",
+          groupId: "works-42",
+          type: "roadworks",
+          severity: "medium",
+          headline: "Roadworks",
+        },
+      },
+    ]);
+
+    expect(
+      (markers as { features: { properties: Record<string, unknown> }[] }).features,
+    ).toHaveLength(1);
+    expect((lines as { features: unknown[] }).features).toHaveLength(1);
+    expect(
+      eventsByDisplayId
+        .get("group:road-conditions-openconditions:duesseldorf:works-42")
+        ?.map((event) => event.id),
+    ).toEqual(["oc:1", "oc:2", "oc:3"]);
+    const popupEntries = buildRoadConditionPopupEntries(
+      "group:road-conditions-openconditions:duesseldorf:works-42",
+      eventsByDisplayId.get("group:road-conditions-openconditions:duesseldorf:works-42") ?? [],
+    );
+    expect(popupEntries.slice(1).map((entry) => entry.recordId)).toEqual(["oc:1", "oc:2", "oc:3"]);
+  });
+
+  it("keeps endpoint-only MultiPoint records as endpoint markers", () => {
+    const { markers, lines } = buildSources([
+      {
+        geometry: {
+          type: "MultiPoint",
+          coordinates: [
+            [6.77, 51.2],
+            [6.78, 51.2],
+          ],
+        },
+        properties: {
+          id: "oc:endpoints",
+          source: "duesseldorf",
+          provider: "road-conditions-openconditions",
+          type: "roadworks",
+          severity: "low",
+          headline: "Road works",
+        },
+      },
+    ]);
+
+    expect((markers as { features: unknown[] }).features).toHaveLength(2);
+    expect((lines as { features: unknown[] }).features).toHaveLength(0);
   });
 });

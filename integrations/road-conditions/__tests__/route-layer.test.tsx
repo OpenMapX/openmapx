@@ -106,6 +106,93 @@ describe("RouteConditionsLayer", () => {
     });
   });
 
+  it("collapses explicitly grouped route line records into one marker and one line", async () => {
+    fetchMock.mockResolvedValueOnce([
+      {
+        id: "oc:route-1",
+        source: "autobahn",
+        provider: "road-conditions-openconditions",
+        groupId: "works-42",
+        type: "roadworks",
+        severity: "medium",
+        headline: "Roadworks",
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [8, 50.001],
+            [8, 50.004],
+          ],
+        },
+      },
+      {
+        id: "oc:route-2",
+        source: "autobahn",
+        provider: "road-conditions-openconditions",
+        groupId: "works-42",
+        type: "lane_closure",
+        severity: "high",
+        headline: "Lane closure",
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [8, 50.004],
+            [8, 50.007],
+          ],
+        },
+      },
+    ]);
+
+    render(<RouteConditionsLayer />);
+    await waitFor(() => {
+      const markers = fake.state.sources.get("omx-road-conditions-route-markers")
+        ?.data as GeoJSON.FeatureCollection;
+      const lines = fake.state.sources.get("omx-road-conditions-route-lines")
+        ?.data as GeoJSON.FeatureCollection;
+      expect(markers.features).toHaveLength(1);
+      expect(lines.features).toHaveLength(1);
+    });
+
+    const markers = fake.state.sources.get("omx-road-conditions-route-markers")
+      ?.data as GeoJSON.FeatureCollection;
+    expect(markers.features[0]?.properties?._displayId).toBe(
+      "group:road-conditions-openconditions:autobahn:works-42",
+    );
+  });
+
+  it("keeps unrelated route alerts distinct even when their geometry and date match", async () => {
+    fetchMock.mockResolvedValueOnce([
+      {
+        id: "oc:point-1",
+        source: "autobahn",
+        provider: "road-conditions-openconditions",
+        groupId: "works-a",
+        type: "roadworks",
+        severity: "medium",
+        headline: "Roadworks",
+        geometry: { type: "Point", coordinates: [8, 50.004] },
+        validFrom: "2026-08-03T00:00:00Z",
+      },
+      {
+        id: "oc:point-2",
+        source: "autobahn",
+        provider: "road-conditions-openconditions",
+        groupId: "works-b",
+        type: "roadworks",
+        severity: "medium",
+        headline: "Roadworks",
+        geometry: { type: "Point", coordinates: [8, 50.004] },
+        validFrom: "2026-08-03T00:00:00Z",
+      },
+    ]);
+
+    render(<RouteConditionsLayer />);
+    await waitFor(() => {
+      const data = fake.state.sources.get("omx-road-conditions-route-markers")
+        ?.data as GeoJSON.FeatureCollection;
+      expect(data.features).toHaveLength(2);
+    });
+  });
+
   it("places one marker per MultiPoint endpoint rather than their centroid", async () => {
     // A DATEX-style "zwischen X und Y" closure: only the two endpoints are
     // known, with no path between them. The centroid `representativePoint`
