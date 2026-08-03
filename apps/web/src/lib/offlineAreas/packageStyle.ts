@@ -3,7 +3,11 @@ import { offlineStyleCacheNameForVersion } from "../swCaches";
 import { offlinePmtilesTileUrl } from "./packageProtocol";
 import type { OfflinePackageStyleAssets } from "./types";
 
-const GLYPH_RANGES = ["0-255", "256-511", "8192-8447", "8448-8703", "64512-65023"];
+const REQUIRED_GLYPH_RANGES = ["0-255", "256-511", "8192-8447", "8448-8703"];
+// The private-use range is optional because the OpenMapTiles font archive does
+// not provide it for every font stack. It contains symbols rather than the
+// letters needed for normal map labels.
+const OPTIONAL_GLYPH_RANGES = ["64512-65023"];
 
 type StyleJson = Record<string, unknown> & {
   sources?: Record<string, Record<string, unknown>>;
@@ -69,7 +73,7 @@ async function fetchOptionalPinned(
     const response = await fetch(url, { cache: "no-store" });
     if (response.ok) await cache?.put(url, response.clone());
   } catch {
-    // High-density sprite variants are optional in the source style bundle.
+    // Optional style assets may be absent in the source bundle.
   }
 }
 
@@ -85,9 +89,9 @@ function fontStacks(style: StyleJson): string[] {
   return [...values];
 }
 
-function glyphUrls(template: string, stacks: string[]): string[] {
+function glyphUrls(template: string, stacks: string[], ranges: string[]): string[] {
   return stacks.flatMap((stack) =>
-    GLYPH_RANGES.map((range) =>
+    ranges.map((range) =>
       template.replace("{fontstack}", encodeURIComponent(stack)).replace("{range}", range),
     ),
   );
@@ -113,8 +117,19 @@ export async function validateOfflineStyleAssets(
     if (typeof style.glyphs !== "string") {
       throw new Error(`OpenMapX ${variant} style has no glyph template`);
     }
-    for (const url of glyphUrls(glyphTemplate(manifest), fontStacks(style))) {
+    for (const url of glyphUrls(
+      glyphTemplate(manifest),
+      fontStacks(style),
+      REQUIRED_GLYPH_RANGES,
+    )) {
       await fetchPinned(url, manifest);
+    }
+    for (const url of glyphUrls(
+      glyphTemplate(manifest),
+      fontStacks(style),
+      OPTIONAL_GLYPH_RANGES,
+    )) {
+      await fetchOptionalPinned(url, manifest);
     }
     const base = spriteBaseUrl(manifest, variant);
     await fetchPinned(`${base}.json`, manifest);

@@ -87,4 +87,21 @@ describe("offline package styles", () => {
     expect(String((error as Error).message)).toContain("unavailable");
     vi.unstubAllGlobals();
   });
+
+  it("allows the optional private-use glyph range to be absent", async () => {
+    const fetchMock = vi.fn(async (...args: unknown[]) => {
+      const url = String(args[0]);
+      if (url.includes("/style.json?")) return styleResponse();
+      if (url.includes("/64512-65023.pbf")) {
+        return new Response("missing", { status: 404 });
+      }
+      return new Response(new ArrayBuffer(1));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await validateOfflineStyleAssets(manifest);
+    expect(result.manifest).toBe(manifest);
+
+    vi.unstubAllGlobals();
+  });
 });
