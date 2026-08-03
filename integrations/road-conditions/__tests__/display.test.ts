@@ -14,7 +14,7 @@ function event(
 ): RoadConditionEvent {
   return {
     id,
-    source: "duesseldorf",
+    source: "source-a",
     provider: "road-conditions-openconditions",
     type: "roadworks",
     severity: "medium",
@@ -54,7 +54,7 @@ describe("buildRoadConditionDisplayGroups", () => {
             [6.771, 51.2],
           ],
         },
-        { groupId: "duesseldorf:works-42" },
+        { groupId: "works-42" },
       ),
       event(
         "oc:2",
@@ -65,7 +65,7 @@ describe("buildRoadConditionDisplayGroups", () => {
             [6.772, 51.2],
           ],
         },
-        { groupId: "duesseldorf:works-42" },
+        { groupId: "works-42" },
       ),
       event(
         "oc:3",
@@ -76,14 +76,14 @@ describe("buildRoadConditionDisplayGroups", () => {
             [6.773, 51.2],
           ],
         },
-        { groupId: "duesseldorf:works-42" },
+        { groupId: "works-42" },
       ),
     ];
 
     const [group] = buildRoadConditionDisplayGroups(events);
 
     expect(group).toMatchObject({
-      displayId: "group:road-conditions-openconditions:duesseldorf:duesseldorf:works-42",
+      displayId: "group:road-conditions-openconditions:source-a:works-42",
       events,
       markerCoordinates: [expect.any(Array)],
       representativeCoordinate: expect.any(Array),
@@ -117,7 +117,7 @@ describe("buildRoadConditionDisplayGroups", () => {
       ],
     };
     const groups = buildRoadConditionDisplayGroups([
-      event("oc:duesseldorf", geometry, { groupId: "same" }),
+      event("oc:source-a", geometry, { groupId: "same" }),
       event("oc:other", geometry, { source: "other-source", groupId: "same" }),
       event("other-provider", geometry, { provider: "other-provider", groupId: "same" }),
       event("oc:separate", geometry, { groupId: "different" }),
@@ -125,7 +125,7 @@ describe("buildRoadConditionDisplayGroups", () => {
 
     expect(groups).toHaveLength(4);
     expect(groups.map((group) => group.events.map((item) => item.id))).toEqual([
-      ["oc:duesseldorf"],
+      ["oc:source-a"],
       ["oc:other"],
       ["other-provider"],
       ["oc:separate"],
