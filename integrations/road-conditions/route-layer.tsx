@@ -7,7 +7,7 @@ import {
   useNavigationStore,
 } from "@openmapx/core";
 import type { MapGeoJSONFeature } from "maplibre-gl";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";

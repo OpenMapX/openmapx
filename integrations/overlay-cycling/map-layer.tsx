@@ -1,7 +1,7 @@
 "use client";
 
 import { useDirectionsStore, useOverlayExclusion } from "@openmapx/core";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import {
   CYCLING_COLORS,

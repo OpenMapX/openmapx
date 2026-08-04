@@ -2,7 +2,7 @@
 
 import { escapeHtml, useOverlayExclusion } from "@openmapx/core";
 import type { MapLayerMouseEvent } from "maplibre-gl";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";

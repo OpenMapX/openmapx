@@ -2,7 +2,7 @@
 
 import Box from "@mui/material/Box";
 import { useColorScheme } from "@mui/material/styles";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { MapCredits } from "@/components/map/MapCredits";
 import { useEnv } from "@/lib/EnvProvider";
@@ -96,7 +96,7 @@ export function OfflineMapView({ packages, fitTo, height = 360 }: Props) {
     const frame = fitTo ?? unionBbox(packages);
 
     void (async () => {
-      const maplibregl = (await import("maplibre-gl")).default;
+      const maplibregl = await import("maplibre-gl");
       let resolver = getDefaultOfflinePackageResolver();
       if (!resolver) {
         resolver = configureDefaultOfflinePackageResolver({

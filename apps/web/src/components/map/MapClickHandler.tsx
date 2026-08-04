@@ -10,7 +10,7 @@ import {
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import type { MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
@@ -93,7 +93,7 @@ export function MapClickHandler() {
     }
 
     let destroyed = false;
-    import("maplibre-gl").then(({ default: ml }) => {
+    import("maplibre-gl").then((ml) => {
       if (destroyed || !mapRef.current) return;
       const el = document.createElement("div");
       el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="32" viewBox="0 0 27 43">

@@ -1,7 +1,7 @@
 "use client";
 
 import type { LngLat } from "@openmapx/core";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { useMap } from "@/lib/MapContext";
 
@@ -45,7 +45,7 @@ export function usePinMarker(
 
     let destroyed = false;
 
-    import("maplibre-gl").then(({ default: maplibregl }) => {
+    import("maplibre-gl").then((maplibregl) => {
       if (destroyed || !mapRef.current) return;
 
       // Move and relabel existing marker instead of recreating

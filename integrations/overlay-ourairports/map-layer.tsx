@@ -80,7 +80,7 @@ function typeQueryParams(filter: AirportTypeFilter): string {
 }
 
 // Importing `maplibre-gl` types only — runtime instance comes from the page.
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 
 export function AirportsOverlay() {
   const { mapRef, mapReady, styleVersion } = useMap();

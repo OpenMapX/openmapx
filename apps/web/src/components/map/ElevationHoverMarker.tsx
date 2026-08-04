@@ -1,6 +1,6 @@
 "use client";
 
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { useElevationHover } from "@/components/elevation/ElevationHoverContext";
 import { useMap } from "@/lib/MapContext";
@@ -26,7 +26,7 @@ export function ElevationHoverMarker() {
 
     let cancelled = false;
 
-    import("maplibre-gl").then(({ default: maplibregl }) => {
+    import("maplibre-gl").then((maplibregl) => {
       if (cancelled || !mapRef.current) return;
 
       if (markerRef.current) {

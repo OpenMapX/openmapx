@@ -2,7 +2,7 @@
 
 import { useColorScheme } from "@mui/material/styles";
 import { useLayerStore } from "@openmapx/core";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { useMap } from "@/lib/MapContext";
 

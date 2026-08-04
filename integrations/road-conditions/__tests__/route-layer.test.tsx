@@ -94,22 +94,20 @@ vi.mock("@openmapx/core", async (importOriginal) => {
 
 const popupState = vi.hoisted(() => ({ html: "" }));
 vi.mock("maplibre-gl", () => ({
-  default: {
-    Popup: class FakePopup {
-      setLngLat() {
-        return this;
-      }
-      setHTML(html: string) {
-        popupState.html = html;
-        return this;
-      }
-      addTo() {
-        return this;
-      }
-      remove() {
-        return this;
-      }
-    },
+  Popup: class FakePopup {
+    setLngLat() {
+      return this;
+    }
+    setHTML(html: string) {
+      popupState.html = html;
+      return this;
+    }
+    addTo() {
+      return this;
+    }
+    remove() {
+      return this;
+    }
   },
 }));
 

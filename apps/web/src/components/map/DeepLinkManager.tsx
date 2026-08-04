@@ -59,7 +59,7 @@ import {
   useStreetLevelStore,
 } from "@openmapx/core";
 import type { TransportMode } from "@openmapx/mobility-core/transit";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import {
   DEEPLINK_UPDATE_EVENT,

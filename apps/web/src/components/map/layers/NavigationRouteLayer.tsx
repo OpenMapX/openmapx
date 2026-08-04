@@ -2,7 +2,7 @@
 
 import { useNavigationStore } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { useEffect, useMemo } from "react";
 import { attributionsForProviders } from "@/lib/attributionForProviders";
 import { useMap } from "@/lib/MapContext";

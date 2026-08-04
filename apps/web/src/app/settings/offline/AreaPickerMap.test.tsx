@@ -56,10 +56,10 @@ vi.mock("maplibre-gl", () => {
     }
   }
 
-  return { default: { Map: FakeMap } };
+  return { Map: FakeMap };
 });
 
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import { AreaPickerMap } from "./AreaPickerMap";
 
 const fakeMapClass = maplibregl.Map as unknown as {

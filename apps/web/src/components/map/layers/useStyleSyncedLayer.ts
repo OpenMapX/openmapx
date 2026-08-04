@@ -1,6 +1,6 @@
 "use client";
 
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { type DependencyList, useEffect } from "react";
 import type { MapContextValue } from "@/lib/MapContext";
 import { setLayerVisibility } from "./layerStyleUtils";

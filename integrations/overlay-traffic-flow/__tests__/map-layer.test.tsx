@@ -25,22 +25,20 @@ vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 // check for those stable keys rather than the real translated copy.
 const popupState = vi.hoisted(() => ({ html: "" }));
 vi.mock("maplibre-gl", () => ({
-  default: {
-    Popup: class FakePopup {
-      setLngLat() {
-        return this;
-      }
-      setHTML(html: string) {
-        popupState.html = html;
-        return this;
-      }
-      addTo() {
-        return this;
-      }
-      remove() {
-        return this;
-      }
-    },
+  Popup: class FakePopup {
+    setLngLat() {
+      return this;
+    }
+    setHTML(html: string) {
+      popupState.html = html;
+      return this;
+    }
+    addTo() {
+      return this;
+    }
+    remove() {
+      return this;
+    }
   },
 }));
 

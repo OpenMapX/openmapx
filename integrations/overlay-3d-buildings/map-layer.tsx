@@ -1,7 +1,7 @@
 "use client";
 
 import { useOverlayExclusion } from "@openmapx/core";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { addLayerInSlot } from "@/components/map/layers/layerStack";
 import { setLayerVisibility } from "@/components/map/layers/layerStyleUtils";
