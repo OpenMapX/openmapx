@@ -3,10 +3,10 @@ import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { offlinePackagesRoute } from "../offline-packages.js";
 
-const packageId = `omp1-${"a".repeat(64)}`;
+const packageId = `omp2-${"a".repeat(64)}`;
 const archive = new TextEncoder().encode("pmtiles-fixture");
 const manifest = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   packageId,
   requestKey: "fixture",
   dataset: {
@@ -24,11 +24,9 @@ const manifest = {
     sha256: "a".repeat(64),
     etag: `sha256-${"a".repeat(64)}`,
   },
-  style: {
-    provider: "openmapx",
-    version: "style-v1",
-    variants: ["light", "dark"],
-    assetBaseUrl: "/api/offline/packages/assets/openmapx/style-v1",
+  glyphs: {
+    version: "glyphs-v1",
+    urlTemplate: "/api/offline/packages/glyphs/glyphs-v1/{fontstack}/{range}.pbf",
   },
   attribution: ["© OpenStreetMap contributors", "© OpenMapTiles"],
 } as const;
@@ -61,13 +59,16 @@ describe("offline package public API", () => {
         return jsonResponse({ status: "ready-to-download", request, manifest, packageId }, 200);
       }
       if (url.endsWith(`/offline/packages/${packageId}/manifest`)) return jsonResponse(manifest);
-      if (url.includes("/offline/packages/assets/openmapx/style-v1/")) {
-        return new Response(JSON.stringify({ version: 8 }), {
+      if (url.endsWith("/offline/packages/glyphs/glyphs-v1/catalog.json")) {
+        return jsonResponse({ Metropolis: ["0-255"] });
+      }
+      if (url.includes("/offline/packages/glyphs/glyphs-v1/")) {
+        return new Response("fixture-font", {
           status: 200,
           headers: {
             "cache-control": "public, max-age=31536000, immutable",
-            "content-length": "13",
-            "content-type": "application/json",
+            "content-length": "12",
+            "content-type": "application/x-protobuf",
             etag: "asset-v1",
           },
         });
@@ -103,20 +104,27 @@ describe("offline package public API", () => {
       url: `/offline/packages/${packageId}/manifest`,
     });
     expect(manifestResponse.statusCode).toBe(200);
-    expect(manifestResponse.json().style.version).toBe("style-v1");
+    expect(manifestResponse.json().glyphs.version).toBe("glyphs-v1");
+
+    const catalog = await app.inject({
+      method: "GET",
+      url: "/offline/packages/glyphs/glyphs-v1/catalog.json",
+    });
+    expect(catalog.statusCode).toBe(200);
+    expect(catalog.json()).toEqual({ Metropolis: ["0-255"] });
 
     const assetHead = await app.inject({
       method: "HEAD",
-      url: "/offline/packages/assets/openmapx/style-v1/styles/osm-bright/style.json",
+      url: "/offline/packages/glyphs/glyphs-v1/Metropolis/0-255.pbf",
     });
     expect(assetHead.statusCode).toBe(200);
     expect(assetHead.headers.etag).toBe("asset-v1");
     const asset = await app.inject({
       method: "GET",
-      url: "/offline/packages/assets/openmapx/style-v1/styles/osm-bright/style.json",
+      url: "/offline/packages/glyphs/glyphs-v1/Metropolis/0-255.pbf",
     });
     expect(asset.statusCode).toBe(200);
-    expect(asset.json().version).toBe(8);
+    expect(asset.body).toBe("fixture-font");
 
     const traversal = await app.inject({
       method: "GET",

@@ -65,7 +65,7 @@ describe.skipIf(!manifestsPresent)(
       expect(result.composeYaml).not.toContain("./data/osrm/osm-pbf:/data");
     });
 
-    it("renders TileServer with MBTiles, fonts, and styles data products", async () => {
+    it("renders TileServer with MBTiles and fonts while styles stay in the web app", async () => {
       const registry = new ServiceRegistry({ rootDir: repoRoot });
       await registry.load();
 
@@ -91,17 +91,11 @@ describe.skipIf(!manifestsPresent)(
             consumerService: "tileserver",
             dataType: "tile-fonts",
           }),
-          expect.objectContaining({
-            source: "data/tile-styles",
-            target: "data/tileserver/tile-styles",
-            consumerService: "tileserver",
-            dataType: "tile-styles",
-          }),
         ]),
       );
       expect(result.composeYaml).toContain("./data/tileserver/tile-mbtiles:/data/mbtiles:ro");
       expect(result.composeYaml).toContain("./data/tileserver/tile-fonts:/data/fonts:ro");
-      expect(result.composeYaml).toContain("./data/tileserver/tile-styles:/data/styles:ro");
+      expect(result.composeYaml).not.toContain("tile-styles");
     });
 
     it("renders OTP against a prepared otp-graph product, not raw OSM or GTFS inputs", async () => {

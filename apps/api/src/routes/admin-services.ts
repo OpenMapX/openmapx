@@ -39,7 +39,7 @@ import { getSecretFields, validateConfigBody } from "../utils/validate-config-bo
 const { getProvidedCapabilityNames, serviceConfigEnvPrefix } = coreServices;
 const DATA_JOB_OPERATIONS = new Set([
   "download-osm",
-  "download-style",
+  "download-fonts",
   "update",
   "convert-overpass",
   "link",
@@ -570,7 +570,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     Body: {
       operation?:
         | "download-osm"
-        | "download-style"
+        | "download-fonts"
         | "update"
         | "convert-overpass"
         | "link"

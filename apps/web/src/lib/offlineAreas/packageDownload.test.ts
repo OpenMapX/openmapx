@@ -1,8 +1,8 @@
 import type { OfflineMapPackageManifest } from "@openmapx/core";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OfflinePackageApi } from "./packageApi";
 import { OfflinePackageApiError } from "./packageApi";
-import { downloadOfflinePackage } from "./packageDownload";
+import { downloadOfflinePackage, hasActiveOfflinePackageDownload } from "./packageDownload";
 import { MemoryOfflinePackageStorage } from "./packageStorage";
 import { Sha256 } from "./sha256";
 
@@ -10,7 +10,11 @@ vi.mock("./pmtilesReader", () => ({
   validateLocalPmtilesArchive: vi.fn(async () => ({ minZoom: 1, maxZoom: 14 })),
 }));
 
-const packageId = `omp1-${"c".repeat(64)}`;
+const packageId = `omp2-${"c".repeat(64)}`;
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function hash(bytes: Uint8Array): string {
   return new Sha256().update(bytes).digestHex();
@@ -18,7 +22,7 @@ function hash(bytes: Uint8Array): string {
 
 function manifest(bytes: Uint8Array, sha = hash(bytes)): OfflineMapPackageManifest {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     packageId,
     requestKey: "fixture",
     dataset: {
@@ -36,11 +40,9 @@ function manifest(bytes: Uint8Array, sha = hash(bytes)): OfflineMapPackageManife
       sha256: sha,
       etag: `sha256-${sha}`,
     },
-    style: {
-      provider: "openmapx",
-      version: "style-v1",
-      variants: ["light", "dark"],
-      assetBaseUrl: "/api/offline/packages/assets/openmapx/style-v1",
+    glyphs: {
+      version: "glyphs-v1",
+      urlTemplate: "/api/offline/packages/glyphs/glyphs-v1/{fontstack}/{range}.pbf",
     },
     attribution: ["© OpenStreetMap contributors"],
   };
@@ -107,8 +109,8 @@ describe("downloadOfflinePackage", () => {
     await partial.close();
     const api = {
       openArchive: vi.fn(async (...args: unknown[]) => {
-        const range = args[1] as { start: number } | undefined;
-        expect(range).toEqual({ start: 3 });
+        const range = args[1] as { start: number; etag: string } | undefined;
+        expect(range).toEqual({ start: 3, etag: current.archive.etag });
         return response(bytes.subarray(3), 206, {
           etag: current.archive.etag,
           "content-range": "bytes 3-5/6",
@@ -140,5 +142,115 @@ describe("downloadOfflinePackage", () => {
     const error = await failure(() => downloadOfflinePackage(api, storage, current));
     expect(error.name).toBe(new OfflinePackageApiError("x", 503, "x").name);
     expect((await storage.get(packageId))?.status).toBe("error");
+  });
+
+  it("fails before the network request when browser storage cannot hold the archive", async () => {
+    const bytes = new TextEncoder().encode("abcdef");
+    const current = manifest(bytes);
+    const api = apiFor(response(bytes, 200, { etag: current.archive.etag }));
+    const storage = new MemoryOfflinePackageStorage();
+    storage.estimate = async () => ({ available: bytes.byteLength - 1 });
+
+    const error = await failure(() => downloadOfflinePackage(api, storage, current));
+    expect(error.name).toBe("QuotaExceededError");
+    expect(api.openArchive).not.toHaveBeenCalled();
+    expect((await storage.get(packageId))?.lastError?.code).toBe("quota");
+  });
+
+  it("repairs evicted glyph assets without downloading a valid ready archive again", async () => {
+    const bytes = new TextEncoder().encode("abcdef");
+    const current = manifest(bytes);
+    const api = apiFor(response(bytes, 200, { etag: current.archive.etag }));
+    const storage = new MemoryOfflinePackageStorage();
+    await downloadOfflinePackage(api, storage, current);
+    let validationAttempts = 0;
+    const validateStyles = async (): Promise<void> => {
+      validationAttempts += 1;
+      if (validationAttempts === 1) throw new Error("glyph cache missing");
+    };
+
+    const error = await failure(() =>
+      downloadOfflinePackage(api, storage, current, { validateStyles }),
+    );
+    expect(error.message).toContain("glyph cache missing");
+    expect((await storage.get(packageId))?.lastError?.code).toBe("offline-assets-unavailable");
+
+    const repaired = await downloadOfflinePackage(api, storage, current, { validateStyles });
+    expect(repaired.status).toBe("ready");
+    expect(api.openArchive).toHaveBeenCalledTimes(1);
+  });
+
+  it("shares one same-package download and keeps active state until it settles", async () => {
+    const bytes = new TextEncoder().encode("abcdef");
+    const current = manifest(bytes);
+    let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller;
+      },
+    });
+    let markArchiveOpened: (() => void) | undefined;
+    const archiveOpened = new Promise<void>((resolve) => {
+      markArchiveOpened = resolve;
+    });
+    const api = {
+      openArchive: vi.fn(async () => {
+        markArchiveOpened?.();
+        return new Response(body, { headers: { etag: current.archive.etag } });
+      }),
+    } as unknown as OfflinePackageApi;
+    const storage = new MemoryOfflinePackageStorage();
+
+    const first = downloadOfflinePackage(api, storage, current);
+    const second = downloadOfflinePackage(api, storage, current);
+    await archiveOpened;
+    expect(api.openArchive).toHaveBeenCalledTimes(1);
+    expect(hasActiveOfflinePackageDownload()).toBe(true);
+
+    streamController?.enqueue(bytes);
+    streamController?.close();
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+
+    expect(firstResult.status).toBe("ready");
+    expect(secondResult.status).toBe("ready");
+    expect(api.openArchive).toHaveBeenCalledTimes(1);
+    expect(hasActiveOfflinePackageDownload()).toBe(false);
+  });
+
+  it("runs the durable download inside an exclusive Web Lock when available", async () => {
+    const bytes = new TextEncoder().encode("abcdef");
+    const current = manifest(bytes);
+    const api = apiFor(response(bytes, 200, { etag: current.archive.etag }));
+    const storage = new MemoryOfflinePackageStorage();
+    const originalGet = storage.get.bind(storage);
+    let lockHeld = false;
+    storage.get = async (id: string) => {
+      expect(lockHeld).toBe(true);
+      return await originalGet(id);
+    };
+    const lockRequests: Array<{ name: string; options: LockOptions }> = [];
+    const locks = {
+      request: async (
+        name: string,
+        options: LockOptions,
+        callback: (lock: Lock) => Promise<unknown>,
+      ) => {
+        lockRequests.push({ name, options });
+        lockHeld = true;
+        try {
+          return await callback({ name, mode: "exclusive" } as Lock);
+        } finally {
+          lockHeld = false;
+        }
+      },
+    } as unknown as LockManager;
+    vi.stubGlobal("navigator", { ...navigator, locks });
+
+    const result = await downloadOfflinePackage(api, storage, current);
+
+    expect(result.status).toBe("ready");
+    expect(lockRequests).toEqual([
+      { name: `openmapx-offline-package:${packageId}`, options: { mode: "exclusive" } },
+    ]);
   });
 });

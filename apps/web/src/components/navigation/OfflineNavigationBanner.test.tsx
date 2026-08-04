@@ -33,7 +33,7 @@ describe("OfflineNavigationBanner", () => {
     const retry = vi.fn();
     renderBanner({
       connectivity: "online",
-      coverage: { kind: "covered", packageId: "omp1-a" },
+      coverage: { kind: "covered", packageId: "omp2-a" },
       offRoute: true,
       onRetryReroute: retry,
     });

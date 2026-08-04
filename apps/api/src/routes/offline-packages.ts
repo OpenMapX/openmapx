@@ -9,7 +9,7 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { envString } from "../utils/env.js";
 
 const DATA_MANAGER_URL_DEFAULT = "http://localhost:4000";
-const PACKAGE_ID_PATTERN = /^omp1-[0-9a-f]{64}$/;
+const PACKAGE_ID_PATTERN = /^omp2-[0-9a-f]{64}$/;
 const ARCHIVE_HEADERS = [
   "accept-ranges",
   "cache-control",
@@ -168,22 +168,18 @@ export const offlinePackagesRoute: FastifyPluginAsync = async (fastify) => {
     },
   );
 
-  const asset = async (
-    request: FastifyRequest<{ Params: { provider: string; version: string; "*": string } }>,
+  const glyph = async (
+    request: FastifyRequest<{ Params: { version: string; "*": string } }>,
     reply: FastifyReply,
   ): Promise<FastifyReply> => {
-    if (
-      request.params.provider !== "openmapx" ||
-      !/^[A-Za-z0-9_-]{1,256}$/.test(request.params.version)
-    ) {
-      return reply.code(400).send({ error: "Invalid offline style asset identity" });
+    const glyphPath = /^([^/]+)\/(\d+-\d+)\.pbf$/.exec(request.params["*"] ?? "");
+    if (!/^[A-Za-z0-9_-]{1,256}$/.test(request.params.version) || !glyphPath) {
+      return reply.code(400).send({ error: "Invalid offline package glyph identity" });
     }
-    const assetPath = (request.params["*"] ?? "").split("/").map(encodeURIComponent).join("/");
+    const upstreamPath = `${encodeURIComponent(glyphPath[1])}/${glyphPath[2]}.pbf`;
     try {
       const upstream = await fetch(
-        dataManagerUrl(
-          `/offline/packages/assets/${request.params.provider}/${request.params.version}/${assetPath}`,
-        ),
+        dataManagerUrl(`/offline/packages/glyphs/${request.params.version}/${upstreamPath}`),
         {
           method: request.method,
           headers: dataManagerHeaders(),
@@ -194,20 +190,38 @@ export const offlinePackagesRoute: FastifyPluginAsync = async (fastify) => {
         const body = request.method === "HEAD" ? undefined : await upstream.text();
         return reply.code(upstream.status).send(body || undefined);
       }
-      if (!upstream.body) return reply.code(502).send({ error: "Empty asset response" });
+      if (!upstream.body) return reply.code(502).send({ error: "Empty glyph response" });
       return reply.code(upstream.status).send(Readable.fromWeb(upstream.body as never));
     } catch {
       return reply.code(502).send({ error: "Offline package service unavailable" });
     }
   };
 
-  fastify.head<{ Params: { provider: string; version: string; "*": string } }>(
-    "/offline/packages/assets/:provider/:version/*",
-    asset,
+  fastify.get<{ Params: { version: string } }>(
+    "/offline/packages/glyphs/:version/catalog.json",
+    async (request, reply) => {
+      if (!/^[A-Za-z0-9_-]{1,256}$/.test(request.params.version)) {
+        return reply.code(400).send({ error: "Invalid offline glyph version" });
+      }
+      try {
+        const { response, body } = await proxyJson(
+          `/offline/packages/glyphs/${request.params.version}/catalog.json`,
+        );
+        copyAssetHeaders(response, reply);
+        return reply.code(response.status).send(body);
+      } catch {
+        return reply.code(502).send({ error: "Offline package service unavailable" });
+      }
+    },
   );
-  fastify.get<{ Params: { provider: string; version: string; "*": string } }>(
-    "/offline/packages/assets/:provider/:version/*",
-    asset,
+
+  fastify.head<{ Params: { version: string; "*": string } }>(
+    "/offline/packages/glyphs/:version/*",
+    glyph,
+  );
+  fastify.get<{ Params: { version: string; "*": string } }>(
+    "/offline/packages/glyphs/:version/*",
+    glyph,
   );
 
   const archive = async (

@@ -95,7 +95,7 @@ function input(overrides: Partial<Parameters<typeof createNavigationSessionSnaps
     routeProvider: "osrm",
     destinationWaypoints: [geometry[0], geometry[2]],
     progress,
-    packageIds: [`omp1-${"a".repeat(64)}`],
+    packageIds: [`omp2-${"a".repeat(64)}`],
     startedAtMs: 1_000_000_000,
     updatedAtMs: 1_000_010_000,
     ...overrides,

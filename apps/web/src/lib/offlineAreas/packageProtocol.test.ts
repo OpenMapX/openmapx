@@ -6,13 +6,16 @@ function resolver(tile: Uint8Array | undefined): OfflinePackageResolver {
   return {
     refresh: async () => {},
     packageForCoordinate: () => undefined,
-    coverageForCoordinate: () => ({ kind: "not-downloaded", coordinate: [0, 0] }),
     packageIdsForGeometry: () => [],
     compatiblePackageIds: () => [],
     get: () => undefined,
     openReader: async () => ({ tile: async () => tile }) as never,
     close: async () => {},
   };
+}
+
+function packageId(character: string): string {
+  return `omp2-${character.repeat(64)}`;
 }
 
 describe("offline PMTiles protocol", () => {
@@ -26,7 +29,7 @@ describe("offline PMTiles protocol", () => {
     }) => Promise<{ data: ArrayBuffer }>;
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    const result = await handler({ url: `pmtiles://offline/omp1-${"a".repeat(64)}/14/3/4` });
+    const result = await handler({ url: `pmtiles://offline/omp2-${"a".repeat(64)}/14/3/4` });
     expect(new Uint8Array(result.data)).toEqual(expected);
     expect(fetchMock).toHaveBeenCalledTimes(0);
     vi.unstubAllGlobals();
@@ -45,7 +48,7 @@ describe("offline PMTiles protocol", () => {
     expect(malformed instanceof OfflineCoverageError).toBe(true);
     let missing: unknown;
     try {
-      await handler({ url: `pmtiles://offline/omp1-${"a".repeat(64)}/14/3/4` });
+      await handler({ url: `pmtiles://offline/omp2-${"a".repeat(64)}/14/3/4` });
     } catch (error) {
       missing = error;
     }
@@ -61,7 +64,26 @@ describe("offline PMTiles protocol", () => {
     const handler = addProtocol.mock.calls[0]?.[1] as (params: {
       url: string;
     }) => Promise<{ data: ArrayBuffer }>;
-    const result = await handler({ url: `pmtiles://offline/omp1-${"a".repeat(64)}/1/0/0` });
+    const result = await handler({ url: `pmtiles://offline/omp2-${"a".repeat(64)}/1/0/0` });
     expect(new Uint8Array(result.data)).toEqual(new Uint8Array([2]));
+  });
+
+  it("falls through corrupt or missing packages in a combined source", async () => {
+    const addProtocol = vi.fn();
+    const opened: string[] = [];
+    const openReader: OfflinePackageResolver["openReader"] = async (id) => {
+      opened.push(id);
+      if (id === packageId("a")) throw new Error("archive missing");
+      return { tile: async () => new Uint8Array([4, 2]) } as never;
+    };
+    registerOfflinePmtilesProtocol({ addProtocol }, { ...resolver(undefined), openReader });
+    const handler = addProtocol.mock.calls[0]?.[1] as (params: {
+      url: string;
+    }) => Promise<{ data: ArrayBuffer }>;
+    const result = await handler({
+      url: `pmtiles://offline/${packageId("a")},${packageId("b")}/3/2/1`,
+    });
+    expect(new Uint8Array(result.data)).toEqual(new Uint8Array([4, 2]));
+    expect(opened).toEqual([packageId("a"), packageId("b")]);
   });
 });

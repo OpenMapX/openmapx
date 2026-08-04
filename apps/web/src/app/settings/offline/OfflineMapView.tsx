@@ -6,14 +6,13 @@ import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { MapCredits } from "@/components/map/MapCredits";
 import { useEnv } from "@/lib/EnvProvider";
-import { baseMapCreditsHtml } from "@/lib/map";
+import { baseMapCreditsHtml, loadOpenMapXStyle } from "@/lib/map";
 import {
   configureDefaultOfflinePackageResolver,
   getDefaultOfflinePackageResolver,
   type OfflinePackageBbox,
   type OfflinePackageRecord,
   registerOfflinePmtilesProtocol,
-  resolveOfflinePackageStyle,
 } from "@/lib/offlineAreas";
 
 const RECT_SOURCE = "offline-packages-source";
@@ -92,7 +91,6 @@ export function OfflineMapView({ packages, fitTo, height = 360 }: Props) {
     let destroyed = false;
     let map: maplibregl.Map | undefined;
     let unregister: (() => void) | undefined;
-    const first = packages[0];
     const frame = fitTo ?? unionBbox(packages);
 
     void (async () => {
@@ -100,18 +98,15 @@ export function OfflineMapView({ packages, fitTo, height = 360 }: Props) {
       let resolver = getDefaultOfflinePackageResolver();
       if (!resolver) {
         resolver = configureDefaultOfflinePackageResolver({
-          datasetVersion: first.manifest.dataset.version,
-          styleVersion: first.manifest.style.version,
-          tileSchema: first.manifest.dataset.tileSchema,
+          tileSchema: "openmaptiles",
         });
       }
       if (!resolver) throw new Error("offline package resolver is not initialized");
       await resolver.refresh();
-      const style = await resolveOfflinePackageStyle(
-        first.manifest,
-        first.id,
+      const style = await loadOpenMapXStyle(
+        env,
         variant,
-        packages.map((record) => record.id),
+        packages.map((record) => ({ packageId: record.id, manifest: record.manifest })),
       );
       if (destroyed || !containerRef.current) return;
       unregister = registerOfflinePmtilesProtocol(maplibregl, resolver);
@@ -152,7 +147,7 @@ export function OfflineMapView({ packages, fitTo, height = 360 }: Props) {
       unregister?.();
       map?.remove();
     };
-  }, [fitTo, packages, variant]);
+  }, [env, fitTo, packages, variant]);
 
   return (
     <Box

@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   isCredentialedApiPath,
+  isOfflinePackageArchivePath,
+  isOnlineStyleReachabilityProbe,
   isStalePrecacheName,
-  offlineStyleCacheNameForVersion,
-  offlineStyleVersionFromAssetPath,
+  offlineGlyphCacheNameForVersion,
+  offlineGlyphVersionFromPath,
 } from "./swCaches";
+
+const packageId = `omp2-${"a".repeat(64)}`;
 
 const current = { appShell: "app-shell-NEW", style: "style-assets-NEW" };
 
@@ -20,22 +24,22 @@ describe("service-worker cache names", () => {
   it("removes caches from the retired per-tile implementation", () => {
     expect(isStalePrecacheName("offline-area-old", current)).toBe(true);
     expect(isStalePrecacheName("omx-offline-results", current)).toBe(true);
-    expect(isStalePrecacheName("offline-package-style-abc", current)).toBe(false);
+    expect(isStalePrecacheName("offline-package-glyphs-abc", current)).toBe(false);
     expect(isStalePrecacheName("pages", current)).toBe(false);
   });
 
   it("uses a stable, cache-safe package style name", () => {
-    expect(offlineStyleCacheNameForVersion("style/v1?x")).toBe("offline-package-style-style_v1_x");
+    expect(offlineGlyphCacheNameForVersion("glyphs/v1?x")).toBe(
+      "offline-package-glyphs-glyphs_v1_x",
+    );
   });
 
   it("extracts the version from an unquery-pinned package asset path", () => {
     expect(
-      offlineStyleVersionFromAssetPath(
-        "/api/offline/packages/assets/openmapx/style-v1/styles/osm-bright/sprite.json",
-      ),
-    ).toBe("style-v1");
+      offlineGlyphVersionFromPath("/api/offline/packages/glyphs/glyphs-v1/Metropolis/0-255.pbf"),
+    ).toBe("glyphs-v1");
     expect(
-      offlineStyleVersionFromAssetPath("/api/offline/packages/assets/maptiler/style-v1"),
+      offlineGlyphVersionFromPath("/api/offline/packages/assets/maptiler/style-v1"),
     ).toBeUndefined();
   });
 });
@@ -65,5 +69,35 @@ describe("isCredentialedApiPath", () => {
       "/",
     ])
       expect(isCredentialedApiPath(path)).toBe(false);
+  });
+});
+
+describe("network-only offline map requests", () => {
+  it("matches only canonical offline package archive paths", () => {
+    expect(isOfflinePackageArchivePath(`/api/offline/packages/${packageId}/archive`)).toBe(true);
+
+    for (const path of [
+      `/api/offline/packages/${packageId}`,
+      `/api/offline/packages/${packageId}/archive/extra`,
+      "/api/offline/packages/not-a-package/archive",
+      `/offline/packages/${packageId}/archive`,
+      "/api/offline/packages/glyphs/glyphs-v1/font/0-255.pbf",
+    ])
+      expect(isOfflinePackageArchivePath(path)).toBe(false);
+  });
+
+  it("recognizes only explicit online-style reachability probes", () => {
+    expect(
+      isOnlineStyleReachabilityProbe(
+        new URL("https://maps.example/api/maptiler/tiles.json?openmapxReachability=1"),
+      ),
+    ).toBe(true);
+
+    for (const url of [
+      "https://maps.example/api/maptiler/tiles.json",
+      "https://maps.example/api/maptiler/tiles.json?openmapxReachability=0",
+      "https://maps.example/api/maptiler/tiles.json?openmapxReachability=true",
+    ])
+      expect(isOnlineStyleReachabilityProbe(new URL(url))).toBe(false);
   });
 });

@@ -5,7 +5,7 @@ import {
   sanitizeOfflinePackageMetric,
 } from "./packageMetrics";
 
-const PACKAGE_ID = `omp1-${"a".repeat(64)}`;
+const PACKAGE_ID = `omp2-${"a".repeat(64)}`;
 
 describe("offline package metrics", () => {
   it("keeps lifecycle fields while dropping location and identity data", () => {
@@ -14,7 +14,7 @@ describe("offline package metrics", () => {
       packageId: PACKAGE_ID,
       status: "error",
       datasetVersion: "2026-08-03",
-      styleVersion: "style-1",
+      glyphsVersion: "glyphs-1",
       durationMs: 1234.7,
       byteLength: 2048.2,
       errorCode: "checksum-mismatch",
@@ -33,7 +33,7 @@ describe("offline package metrics", () => {
       packageId: PACKAGE_ID,
       status: "error",
       datasetVersion: "2026-08-03",
-      styleVersion: "style-1",
+      glyphsVersion: "glyphs-1",
       durationMs: 1235,
       byteLength: 2048,
       errorCode: "checksum-mismatch",

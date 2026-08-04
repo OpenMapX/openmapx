@@ -9,7 +9,7 @@ import {
   renameSync,
   rmSync,
   statSync,
-  writeFileSync,
+  writeSync,
 } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -74,7 +74,7 @@ interface TileEntry {
   offset: bigint;
   length: number;
   runLength: number;
-  data?: Buffer;
+  sourceOffset?: bigint;
 }
 
 interface DirectorySections {
@@ -227,15 +227,44 @@ function readMbtilesMetadata(db: DatabaseSync): Map<string, string> {
   return new Map(rows.map((row) => [row.name, String(row.value)]));
 }
 
-function detectTileCompression(metadata: Map<string, string>, tiles: Buffer[]): number {
+function declaredTileCompression(metadata: Map<string, string>): number | undefined {
   const compression = metadata.get("compression")?.toLowerCase();
   if (compression === "gzip" || compression === "gz") return TILE_COMPRESSION_GZIP;
-  if (compression === "none" || compression === "" || compression === undefined) {
-    return tiles.every((tile) => tile.length >= 2 && tile[0] === 0x1f && tile[1] === 0x8b)
-      ? TILE_COMPRESSION_GZIP
-      : TILE_COMPRESSION_NONE;
-  }
+  if (compression === "none" || compression === "") return TILE_COMPRESSION_NONE;
+  if (compression === undefined) return undefined;
   throw new Error(`unsupported MBTiles tile compression ${compression}`);
+}
+
+function detectedTileCompression(tile: Buffer): number {
+  return tile.length >= 2 && tile[0] === 0x1f && tile[1] === 0x8b
+    ? TILE_COMPRESSION_GZIP
+    : TILE_COMPRESSION_NONE;
+}
+
+function writeAll(fd: number, bytes: Uint8Array): void {
+  let offset = 0;
+  while (offset < bytes.byteLength) {
+    const written = writeSync(fd, bytes, offset, bytes.byteLength - offset);
+    if (written <= 0) throw new Error("failed to write PMTiles archive");
+    offset += written;
+  }
+}
+
+function copyRange(
+  sourceFd: number,
+  destinationFd: number,
+  sourceOffset: number,
+  length: number,
+): void {
+  const buffer = Buffer.allocUnsafe(Math.min(1024 * 1024, length));
+  let copied = 0;
+  while (copied < length) {
+    const chunkLength = Math.min(buffer.length, length - copied);
+    const bytesRead = readSync(sourceFd, buffer, 0, chunkLength, sourceOffset + copied);
+    if (bytesRead !== chunkLength) throw new Error("truncated PMTiles tile spool");
+    writeAll(destinationFd, buffer.subarray(0, bytesRead));
+    copied += bytesRead;
+  }
 }
 
 function metadataJson(
@@ -473,12 +502,15 @@ export async function extractPmtilesPackage(
     throw new Error(`MBTiles source does not exist: ${options.sourceMbtilesPath}`);
   }
   const temporaryPath = `${options.destinationPath}.part-${randomUUID()}`;
+  const tileSpoolPath = `${temporaryPath}.tiles`;
   mkdirSync(dirname(options.destinationPath), { recursive: true });
   if (existsSync(options.destinationPath)) {
     throw new Error(`PMTiles destination already exists: ${options.destinationPath}`);
   }
   const sourceBytesRead = statSync(options.sourceMbtilesPath).size;
   let db: DatabaseSync | undefined;
+  let tileSpoolFd: number | undefined;
+  let archiveFd: number | undefined;
   try {
     db = new DatabaseSync(options.sourceMbtilesPath, { readOnly: true });
     const metadata = readMbtilesMetadata(db);
@@ -489,7 +521,10 @@ export async function extractPmtilesPackage(
            AND tile_column BETWEEN ? AND ?
            AND tile_row BETWEEN ? AND ?`,
     );
-    const tiles: Array<{ tileId: bigint; data: Buffer }> = [];
+    const tileEntries: TileEntry[] = [];
+    tileSpoolFd = openSync(tileSpoolPath, "wx+");
+    let tileSpoolBytes = 0;
+    let tileCompression = declaredTileCompression(metadata);
     for (
       let zoom = options.request.effective.minZoom;
       zoom <= options.request.effective.maxZoom;
@@ -502,7 +537,7 @@ export async function extractPmtilesPackage(
       const yMax = latToTileY(options.request.effective.bbox.south, zoom);
       const tmsMin = tileCount - 1 - yMax;
       const tmsMax = tileCount - 1 - yMin;
-      const rows = tileRows.all(zoom, zoom, xMin, xMax, tmsMin, tmsMax) as Array<{
+      const rows = tileRows.iterate(zoom, zoom, xMin, xMax, tmsMin, tmsMax) as Iterable<{
         tile_column: number;
         tile_row: number;
         tile_data: Uint8Array;
@@ -510,34 +545,35 @@ export async function extractPmtilesPackage(
       for (const row of rows) {
         const y = tileCount - 1 - row.tile_row;
         if (y < yMin || y > yMax) continue;
-        tiles.push({
+        const data = Buffer.from(row.tile_data);
+        const detected = detectedTileCompression(data);
+        if (tileCompression === undefined) tileCompression = detected;
+        else if (tileCompression !== detected) {
+          throw new Error("MBTiles contains mixed tile compression");
+        }
+        tileEntries.push({
           tileId: zxyToTileId(zoom, row.tile_column, y),
-          data: Buffer.from(row.tile_data),
+          offset: 0n,
+          sourceOffset: BigInt(tileSpoolBytes),
+          length: data.length,
+          runLength: 1,
         });
+        writeAll(tileSpoolFd, data);
+        tileSpoolBytes += data.length;
       }
     }
-    if (tiles.length === 0) throw new Error("no tiles found for requested package coverage");
-    tiles.sort((a, b) => (a.tileId < b.tileId ? -1 : a.tileId > b.tileId ? 1 : 0));
+    if (tileEntries.length === 0 || tileCompression === undefined) {
+      throw new Error("no tiles found for requested package coverage");
+    }
+    tileEntries.sort((a, b) => (a.tileId < b.tileId ? -1 : a.tileId > b.tileId ? 1 : 0));
 
-    const tileCompression = detectTileCompression(
-      metadata,
-      tiles.map((tile) => tile.data),
-    );
-    const tileEntries: TileEntry[] = [];
     let tileOffset = 0n;
-    for (const tile of tiles) {
-      tileEntries.push({
-        tileId: tile.tileId,
-        offset: tileOffset,
-        length: tile.data.length,
-        runLength: 1,
-        data: tile.data,
-      });
-      tileOffset += BigInt(tile.data.length);
+    for (const entry of tileEntries) {
+      entry.offset = tileOffset;
+      tileOffset += BigInt(entry.length);
     }
     const directories = buildDirectorySections(tileEntries);
     const metadataBuffer = metadataJson(metadata, options.request);
-    const tileData = Buffer.concat(tiles.map((tile) => tile.data));
     const rootOffset = BigInt(PMTILES_HEADER_LENGTH);
     const metadataOffset = rootOffset + BigInt(directories.root.length);
     const leafOffset = metadataOffset + BigInt(metadataBuffer.length);
@@ -551,10 +587,10 @@ export async function extractPmtilesPackage(
       leafOffset,
       leafLength: BigInt(directories.leaves.length),
       tileDataOffset,
-      tileDataLength: BigInt(tileData.length),
-      addressedTiles: BigInt(tiles.length),
+      tileDataLength: tileOffset,
+      addressedTiles: BigInt(tileEntries.length),
       tileEntries: BigInt(tileEntries.length),
-      tileContents: BigInt(tiles.length),
+      tileContents: BigInt(tileEntries.length),
       clustered: true,
       internalCompression: INTERNAL_COMPRESSION_GZIP,
       tileCompression,
@@ -568,25 +604,34 @@ export async function extractPmtilesPackage(
         latitude: (bounds.south + bounds.north) / 2,
       },
     });
-    const archive = Buffer.concat([
-      header,
-      directories.root,
-      metadataBuffer,
-      directories.leaves,
-      tileData,
-    ]);
-    writeFileSync(temporaryPath, archive, { flag: "wx" });
+    archiveFd = openSync(temporaryPath, "wx");
+    for (const section of [header, directories.root, metadataBuffer, directories.leaves]) {
+      writeAll(archiveFd, section);
+    }
+    for (const entry of tileEntries) {
+      const sourceOffset = Number(entry.sourceOffset);
+      if (!Number.isSafeInteger(sourceOffset)) throw new Error("tile spool exceeds browser limits");
+      copyRange(tileSpoolFd, archiveFd, sourceOffset, entry.length);
+    }
+    closeSync(archiveFd);
+    archiveFd = undefined;
+    closeSync(tileSpoolFd);
+    tileSpoolFd = undefined;
     const inspected = await inspectPmtiles(temporaryPath);
     renameSync(temporaryPath, options.destinationPath);
+    rmSync(tileSpoolPath, { force: true });
     return {
       ...inspected,
       attribution: options.request.source.attribution,
       sourceBytesRead,
-      destinationBytesWritten: archive.length,
-      temporaryBytesPeak: archive.length,
+      destinationBytesWritten: inspected.byteLength,
+      temporaryBytesPeak: inspected.byteLength + tileSpoolBytes,
     };
   } catch (error) {
+    if (archiveFd !== undefined) closeSync(archiveFd);
+    if (tileSpoolFd !== undefined) closeSync(tileSpoolFd);
     rmSync(temporaryPath, { force: true });
+    rmSync(tileSpoolPath, { force: true });
     throw error;
   } finally {
     db?.close();

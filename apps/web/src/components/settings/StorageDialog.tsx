@@ -124,7 +124,7 @@ async function inspectStorage(t: (key: string) => string): Promise<StorageInfo> 
         // ignore
       }
     }
-    const labelKey = name.startsWith("offline-package-style-")
+    const labelKey = name.startsWith("offline-package-glyphs-")
       ? "offlinePackages"
       : (ROW_LABELS[name] ?? "apiResponses");
     rows.push({ cacheName: name, label: t(labelKey), bytes, count: reqs.length });

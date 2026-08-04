@@ -344,7 +344,6 @@ export type DatasetType =
   | "gtfs"
   | "tile-mbtiles"
   | "tile-fonts"
-  | "tile-styles"
   | "pelias-placeholder-data"
   | "pelias-whosonfirst-data";
 

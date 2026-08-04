@@ -13,22 +13,23 @@ vi.mock("@mui/material/styles", async (importOriginal) => ({
   useColorScheme: () => ({ mode: "light", systemMode: "light" }),
 }));
 
-vi.mock("@/lib/map", () => ({ baseMapCreditsHtml: () => [] }));
+vi.mock("@/lib/map", () => ({
+  baseMapCreditsHtml: () => [],
+  loadOpenMapXStyle: vi.fn().mockResolvedValue({
+    version: 8,
+    sources: { openmaptiles: { type: "vector", tiles: [] } },
+    layers: [],
+  }),
+}));
 vi.mock("@/components/map/MapCredits", () => ({ MapCredits: () => null }));
 vi.mock("@/lib/offlineAreas", () => {
   const refresh = vi.fn().mockResolvedValue(undefined);
   const register = vi.fn().mockReturnValue(vi.fn());
-  const resolveStyle = vi.fn().mockResolvedValue({
-    version: 8,
-    sources: { openmaptiles: { type: "vector", tiles: [] } },
-    layers: [],
-  });
   return {
-    __test: { refresh, register, resolveStyle },
+    __test: { refresh, register },
     configureDefaultOfflinePackageResolver: vi.fn(),
     getDefaultOfflinePackageResolver: () => ({ refresh }),
     registerOfflinePmtilesProtocol: register,
-    resolveOfflinePackageStyle: resolveStyle,
   };
 });
 
@@ -50,18 +51,17 @@ const mocks = (
     __test: {
       refresh: ReturnType<typeof vi.fn>;
       register: ReturnType<typeof vi.fn>;
-      resolveStyle: ReturnType<typeof vi.fn>;
     };
   }
 ).__test;
 
 const record = {
-  id: `omp1-${"d".repeat(64)}`,
+  id: `omp2-${"d".repeat(64)}`,
   name: "Test area",
   status: "ready",
   manifest: {
     dataset: { version: "dataset-v1", tileSchema: "openmaptiles" },
-    style: { version: "style-v1" },
+    glyphs: { version: "glyphs-v1" },
     coverage: { bbox: { west: 0, south: 0, east: 1, north: 1 } },
   },
 } as OfflinePackageRecord;

@@ -68,25 +68,21 @@ describe("applyHardlinkPlan", () => {
     );
   });
 
-  it("recurses into nested subdirectories (tile-fonts / tile-styles layout)", async () => {
-    // tile-fonts has per-fontstack subdirs (`Metropolis Bold/` etc.), each
-    // with range .pbf files inside. tile-styles has per-style subdirs with
-    // style.json + sprite.* siblings. A flat readdir would skip every entry
-    // because each one is a directory.
-    const src = join(tmp, "tile-styles");
-    mkdirSync(join(src, "osm-bright"), { recursive: true });
-    writeFileSync(join(src, "osm-bright", "style.json"), "{}");
-    writeFileSync(join(src, "osm-bright", "sprite.png"), "PNG");
-    mkdirSync(join(src, "dark-matter"), { recursive: true });
-    writeFileSync(join(src, "dark-matter", "style.json"), "{}");
+  it("recurses into nested tile-font stack directories", async () => {
+    const src = join(tmp, "tile-fonts");
+    mkdirSync(join(src, "Metropolis Bold"), { recursive: true });
+    writeFileSync(join(src, "Metropolis Bold", "0-255.pbf"), "PBF");
+    writeFileSync(join(src, "Metropolis Bold", "256-511.pbf"), "PBF");
+    mkdirSync(join(src, "Noto Sans Regular"), { recursive: true });
+    writeFileSync(join(src, "Noto Sans Regular", "0-255.pbf"), "PBF");
 
     const result = await applyHardlinkPlan(
       [
         {
-          source: "tile-styles",
-          target: "tileserver/tile-styles",
+          source: "tile-fonts",
+          target: "tileserver/tile-fonts",
           consumerService: "tileserver",
-          dataType: "tile-styles",
+          dataType: "tile-fonts",
         },
       ],
       { rootDir: tmp },
@@ -94,8 +90,8 @@ describe("applyHardlinkPlan", () => {
     expect(result.linked).toBe(3);
     expect(result.pruned).toBe(0);
     expect(
-      readFileSync(join(tmp, "tileserver", "tile-styles", "osm-bright", "sprite.png"), "utf-8"),
-    ).toBe("PNG");
+      readFileSync(join(tmp, "tileserver", "tile-fonts", "Metropolis Bold", "0-255.pbf"), "utf-8"),
+    ).toBe("PBF");
   });
 
   it("skips re-link when inode already matches (idempotent)", async () => {

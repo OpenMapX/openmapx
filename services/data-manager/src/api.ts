@@ -7,8 +7,8 @@ import { execa } from "execa";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { db } from "./db/index.js";
 import { convertPbfToBz2, convertPbfToBz2ForRegion } from "./jobs/convert-overpass.js";
+import { downloadFonts } from "./jobs/download-fonts.js";
 import { downloadOsm } from "./jobs/download-osm.js";
-import { downloadStyle } from "./jobs/download-style.js";
 import { applyHardlinkPlan, type HardlinkEntry } from "./jobs/link.js";
 import { extractOsmPois } from "./jobs/overture/extract-osm-pois.js";
 import { ingestOverture } from "./jobs/overture/ingest.js";
@@ -266,23 +266,17 @@ function registerOfflinePackageRoutes(
     },
   );
 
-  const serveAsset = async (
-    request: FastifyRequest<{ Params: { provider: string; version: string; "*": string } }>,
+  const serveGlyph = async (
+    request: FastifyRequest<{ Params: { version: string; "*": string } }>,
     reply: FastifyReply,
   ): Promise<FastifyReply> => {
-    if (
-      request.params.provider !== "openmapx" ||
-      !/^[A-Za-z0-9_-]{1,256}$/.test(request.params.version)
-    ) {
-      return reply.code(400).send({ ok: false, error: "invalid offline style asset identity" });
+    const glyph = /^([^/]+)\/(\d+-\d+)\.pbf$/.exec(request.params["*"] ?? "");
+    if (!/^[A-Za-z0-9_-]{1,256}$/.test(request.params.version) || !glyph) {
+      return reply.code(400).send({ ok: false, error: "invalid offline package glyph identity" });
     }
-    const asset = await generator.openStyleAsset(
-      request.params.provider,
-      request.params.version,
-      request.params["*"] ?? "",
-    );
+    const asset = await generator.openGlyph(request.params.version, glyph[1], glyph[2]);
     if (!asset)
-      return reply.code(404).send({ ok: false, error: "offline package asset not found" });
+      return reply.code(404).send({ ok: false, error: "offline package glyph not found" });
     reply
       .header("Cache-Control", "public, max-age=31536000, immutable")
       .header("Content-Type", asset.contentType)
@@ -292,13 +286,25 @@ function registerOfflinePackageRoutes(
     return reply.send(createReadStream(asset.path));
   };
 
-  app.head<{ Params: { provider: string; version: string; "*": string } }>(
-    "/offline/packages/assets/:provider/:version/*",
-    serveAsset,
+  app.get<{ Params: { version: string } }>(
+    "/offline/packages/glyphs/:version/catalog.json",
+    async (request, reply) => {
+      if (!/^[A-Za-z0-9_-]{1,256}$/.test(request.params.version)) {
+        return reply.code(400).send({ ok: false, error: "invalid offline glyph version" });
+      }
+      const catalog = await generator.glyphCatalog(request.params.version);
+      if (!catalog) return reply.code(404).send({ ok: false, error: "offline glyphs not found" });
+      return reply.header("Cache-Control", "public, max-age=31536000, immutable").send(catalog);
+    },
   );
-  app.get<{ Params: { provider: string; version: string; "*": string } }>(
-    "/offline/packages/assets/:provider/:version/*",
-    serveAsset,
+
+  app.head<{ Params: { version: string; "*": string } }>(
+    "/offline/packages/glyphs/:version/*",
+    serveGlyph,
+  );
+  app.get<{ Params: { version: string; "*": string } }>(
+    "/offline/packages/glyphs/:version/*",
+    serveGlyph,
   );
 
   const serveArchive = async (
@@ -730,8 +736,8 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     }
   });
 
-  app.post("/download/style", async () => {
-    await downloadStyle({ dataDir, store });
+  app.post("/download/fonts", async () => {
+    await downloadFonts({ dataDir, store });
     return { ok: true };
   });
 

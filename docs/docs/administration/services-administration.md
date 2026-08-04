@@ -84,7 +84,7 @@ capability and data wiring that make it swappable —
 
 - **Provides** — the capabilities this service offers to integrations.
 - **Consumes** — the shared data it mounts (an OSM extract, a prepared graph,
-  map styles), with the mount path and whether it's read-only or optional.
+  map glyphs), with the mount path and whether it's read-only or optional.
 - **Environment variables** — the env vars the manifest declares, each marked
   required or optional, with its description and default.
 - **Exposure** — how, if at all, the service is reachable from outside the
@@ -201,7 +201,7 @@ data-manager's source, job, validation, manifest, and promotion metadata; it
 does not contain imported GTFS schedules.
 
 A **Data Operations** panel queues the same data jobs the CLI runs — downloading
-OSM and style assets, transactional transit sync, the full update pipeline, the
+OSM and map glyphs, transactional transit sync, the full update pipeline, the
 Overpass conversion, hardlink sync, cleanup, and the Transitous API-key
 template. Each queues a background job whose log you can follow in the activity
 view. The destructive cleanup operation asks for confirmation first. The full

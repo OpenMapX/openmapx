@@ -36,7 +36,7 @@ export const WELL_KNOWN_CAPABILITIES: ReadonlySet<string> = new Set([
   // assets"). The corresponding produces TYPES (the actual on-disk format)
   // live in WELL_KNOWN_DATA_TYPES below: `osm-data` covers `osm-pbf` /
   // `osm-pbf-bz2`; `gtfs-data` covers `gtfs`; `tile-asset-data` covers
-  // `tile-fonts` / `tile-styles`.
+  // `tile-fonts`.
   "osm-data",
   "gtfs-data",
   "tile-asset-data",
@@ -54,7 +54,6 @@ export const WELL_KNOWN_DATA_TYPES: ReadonlySet<string> = new Set([
   "gtfs",
   "tile-mbtiles",
   "tile-fonts",
-  "tile-styles",
   "pelias-placeholder-data",
   "pelias-whosonfirst-data",
 ]);

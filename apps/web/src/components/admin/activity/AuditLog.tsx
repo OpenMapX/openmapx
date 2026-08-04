@@ -88,7 +88,7 @@ const ACTION_GROUPS: Array<{ label: string; actions: Array<[action: string, labe
     actions: [
       ["data.download-osm", "Download OSM"],
       ["data.download-gtfs", "Download GTFS"],
-      ["data.download-style", "Download Style"],
+      ["data.download-fonts", "Download Map Glyphs"],
       ["data.update", "Update"],
       ["data.convert-overpass", "Convert Overpass"],
       ["data.link", "Link"],

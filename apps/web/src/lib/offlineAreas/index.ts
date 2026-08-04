@@ -8,4 +8,5 @@ export * from "./packageStorage";
 export * from "./packageStyle";
 export * from "./pmtilesReader";
 export * from "./runtime";
+export * from "./styleSelection";
 export * from "./types";

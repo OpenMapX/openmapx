@@ -19,13 +19,12 @@ const source = {
     sourceMaxZoom: 12,
     sourceBounds: { west: 0, south: 0, east: 10, north: 10 },
     tileSchema: "openmaptiles" as const,
-    styleProvider: "openmapx" as const,
-    styleVersion: "fixture-style-v1",
+    glyphsVersion: "fixture-glyphs-v1",
     packageAlgorithmVersion: "pmtiles-area-v1",
     attribution: ["© OpenStreetMap contributors", "© OpenMapTiles"],
   },
   mbtilesPath: "/fixture/tiles.mbtiles",
-  styleDirectory: "/fixture/styles",
+  fontsDirectory: "/fixture/tile-fonts",
   packageRoot: "/fixture/packages",
 };
 const request: OfflinePackageRequest = {
@@ -68,7 +67,7 @@ afterEach(() => {
 
 function publishedManifest(packageId: string): OfflineMapPackageManifest {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     packageId,
     requestKey: "fixture-request-key",
     dataset: {
@@ -86,11 +85,9 @@ function publishedManifest(packageId: string): OfflineMapPackageManifest {
       sha256: archiveSha256,
       etag: `sha256-${archiveSha256}`,
     },
-    style: {
-      provider: "openmapx",
-      version: "fixture-style-v1",
-      variants: ["light", "dark"],
-      assetBaseUrl: "/api/offline/packages/assets/openmapx/fixture-style-v1",
+    glyphs: {
+      version: "fixture-glyphs-v1",
+      urlTemplate: "/api/offline/packages/glyphs/fixture-glyphs-v1/{fontstack}/{range}.pbf",
     },
     attribution: ["© OpenStreetMap contributors", "© OpenMapTiles"],
   };
@@ -101,7 +98,7 @@ async function createGenerator(root: string): Promise<{
   storage: OfflinePackageStorage;
 }> {
   const storage = new OfflinePackageStorage(join(root, "packages"));
-  const existingId = `omp1-${"a".repeat(64)}`;
+  const existingId = `omp2-${"a".repeat(64)}`;
   const part = storage.temporaryArchivePath("existing");
   writeFileSync(part, archiveBytes);
   await storage.publishPackage({ archivePath: part, manifest: publishedManifest(existingId) });
@@ -136,13 +133,14 @@ describe("data-manager offline package API", () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-offline-api-"));
     roots.push(root);
     const { generator } = await createGenerator(root);
-    const assetPath = join(root, "fixture-style.json");
-    writeFileSync(assetPath, JSON.stringify({ version: 8 }));
-    vi.spyOn(generator, "openStyleAsset").mockResolvedValue({
+    const assetPath = join(root, "fixture-font.pbf");
+    writeFileSync(assetPath, "fixture-font");
+    vi.spyOn(generator, "openGlyph").mockResolvedValue({
       path: assetPath,
-      byteLength: Buffer.byteLength(JSON.stringify({ version: 8 })),
-      contentType: "application/json",
+      byteLength: Buffer.byteLength("fixture-font"),
+      contentType: "application/x-protobuf",
     });
+    vi.spyOn(generator, "glyphCatalog").mockResolvedValue({ Metropolis: ["0-255"] });
     const app = Fastify();
     registerApi(app, { dataDir: root, offlinePackages: generator });
 
@@ -162,7 +160,7 @@ describe("data-manager offline package API", () => {
     expect(prepare.statusCode).toBe(202);
     expect(prepare.json().status).toBe("preparing");
 
-    const packageId = `omp1-${"a".repeat(64)}`;
+    const packageId = `omp2-${"a".repeat(64)}`;
     const manifest = await app.inject({
       method: "GET",
       url: `/offline/packages/${packageId}/manifest`,
@@ -170,19 +168,26 @@ describe("data-manager offline package API", () => {
     expect(manifest.statusCode).toBe(200);
     expect(manifest.json().archive.sha256).toBe(archiveSha256);
 
+    const catalog = await app.inject({
+      method: "GET",
+      url: "/offline/packages/glyphs/fixture-glyphs-v1/catalog.json",
+    });
+    expect(catalog.statusCode).toBe(200);
+    expect(catalog.json()).toEqual({ Metropolis: ["0-255"] });
+
     const assetHead = await app.inject({
       method: "HEAD",
-      url: "/offline/packages/assets/openmapx/fixture-style-v1/styles/osm-bright/style.json",
+      url: "/offline/packages/glyphs/fixture-glyphs-v1/Metropolis/0-255.pbf",
     });
     expect(assetHead.statusCode).toBe(200);
     expect(assetHead.headers["cache-control"]).toContain("immutable");
-    expect(assetHead.headers["content-type"]).toContain("application/json");
+    expect(assetHead.headers["content-type"]).toContain("application/x-protobuf");
     const asset = await app.inject({
       method: "GET",
-      url: "/offline/packages/assets/openmapx/fixture-style-v1/styles/osm-bright/style.json",
+      url: "/offline/packages/glyphs/fixture-glyphs-v1/Metropolis/0-255.pbf",
     });
     expect(asset.statusCode).toBe(200);
-    expect(asset.json().version).toBe(8);
+    expect(asset.body).toBe("fixture-font");
 
     const head = await app.inject({
       method: "HEAD",
@@ -230,7 +235,7 @@ describe("data-manager offline package API", () => {
 
     const missing = await app.inject({
       method: "GET",
-      url: `/offline/packages/omp1-${"f".repeat(64)}/manifest`,
+      url: `/offline/packages/omp2-${"f".repeat(64)}/manifest`,
     });
     expect(missing.statusCode).toBe(404);
     const traversal = await app.inject({
@@ -244,10 +249,8 @@ describe("data-manager offline package API", () => {
   it("composes comma-separated font stacks from their individual glyph files", async () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-offline-fonts-"));
     roots.push(root);
-    const styleDirectory = join(root, "styles");
     const boldDirectory = join(root, "tile-fonts", "Font Bold");
     const regularDirectory = join(root, "tile-fonts", "Font Regular");
-    mkdirSync(styleDirectory, { recursive: true });
     mkdirSync(boldDirectory, { recursive: true });
     mkdirSync(regularDirectory, { recursive: true });
     writeFileSync(join(boldDirectory, "0-255.pbf"), glyphPbf("Font Bold", [65]));
@@ -257,17 +260,21 @@ describe("data-manager offline package API", () => {
     const generator = new OfflinePackageGenerator({
       source: () => ({
         ...source,
-        styleDirectory,
+        fontsDirectory: join(root, "tile-fonts"),
         packageRoot: join(root, "packages"),
       }),
       storage,
+    });
+    expect(await generator.glyphCatalog("fixture-glyphs-v1")).toEqual({
+      "Font Bold": ["0-255"],
+      "Font Regular": ["0-255"],
     });
     const app = Fastify();
     registerApi(app, { dataDir: root, offlinePackages: generator });
 
     const response = await app.inject({
       method: "GET",
-      url: "/offline/packages/assets/openmapx/fixture-style-v1/fonts/Font%20Bold%2CFont%20Regular/0-255.pbf",
+      url: "/offline/packages/glyphs/fixture-glyphs-v1/Font%20Bold%2CFont%20Regular/0-255.pbf",
     });
 
     expect(response.statusCode).toBe(200);

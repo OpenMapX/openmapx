@@ -24,7 +24,7 @@ import { resolveOperationsProfileFromEnv } from "./jobs/transitous/operations-pr
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
 import { rootLogger } from "./logger.js";
 import { OfflinePackageGenerator } from "./offline-packages/generator.js";
-import { getOpenMapxPackageSource } from "./offline-packages/source-catalog.js";
+import { createOpenMapxPackageSourceFactory } from "./offline-packages/source-catalog.js";
 import { OfflinePackageStorage } from "./offline-packages/storage.js";
 import { discoverPoiSources } from "./poi-source-discovery.js";
 import { StateStore } from "./state.js";
@@ -34,8 +34,9 @@ registerAuth(app, resolveAuthToken(app));
 
 const dataDir = process.env.DATA_DIR ?? "/data";
 const offlinePackageStorage = new OfflinePackageStorage(join(dataDir, "offline-packages"));
+const offlinePackageSource = createOpenMapxPackageSourceFactory(dataDir);
 const offlinePackages = new OfflinePackageGenerator({
-  source: () => getOpenMapxPackageSource(dataDir),
+  source: offlinePackageSource,
   storage: offlinePackageStorage,
   logger: {
     info: (message, fields) => app.log.info(fields, message),

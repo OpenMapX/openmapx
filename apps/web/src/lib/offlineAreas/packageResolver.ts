@@ -6,7 +6,7 @@ import {
 } from "@openmapx/core";
 import { createOfflinePackageStorage } from "./packageStorage";
 import { LocalPmtilesReader } from "./pmtilesReader";
-import type { OfflineCoverageState, OfflinePackageRecord, OfflinePackageStorage } from "./types";
+import type { OfflinePackageRecord, OfflinePackageStorage } from "./types";
 
 export interface OfflinePackageResolver {
   refresh(): Promise<void>;
@@ -14,7 +14,6 @@ export interface OfflinePackageResolver {
     coordinate: [number, number],
     allowedPackageIds?: readonly string[],
   ): OfflinePackageRecord | undefined;
-  coverageForCoordinate(coordinate: [number, number]): OfflineCoverageState;
   packageIdsForGeometry(coordinates: readonly [number, number][]): string[];
   compatiblePackageIds(): string[];
   get(packageId: string): OfflinePackageRecord | undefined;
@@ -34,9 +33,43 @@ function contains(
   );
 }
 
-function coverageArea(manifest: OfflineMapPackageManifest): number {
-  const { bbox } = manifest.coverage;
-  return (bbox.east - bbox.west) * (bbox.north - bbox.south);
+function segmentIntersectsBbox(
+  bbox: OfflineMapPackageManifest["coverage"]["bbox"],
+  start: [number, number],
+  end: [number, number],
+): boolean {
+  if (contains(bbox, start) || contains(bbox, end)) return true;
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  let minimum = 0;
+  let maximum = 1;
+  for (const [edge, distance] of [
+    [start[0] - bbox.west, -dx],
+    [bbox.east - start[0], dx],
+    [start[1] - bbox.south, -dy],
+    [bbox.north - start[1], dy],
+  ] as const) {
+    if (distance === 0) {
+      if (edge < 0) return false;
+      continue;
+    }
+    const ratio = edge / distance;
+    if (distance < 0) minimum = Math.max(minimum, ratio);
+    else maximum = Math.min(maximum, ratio);
+    if (minimum > maximum) return false;
+  }
+  return true;
+}
+
+function geometryIntersectsBbox(
+  bbox: OfflineMapPackageManifest["coverage"]["bbox"],
+  coordinates: readonly [number, number][],
+): boolean {
+  if (coordinates.some((coordinate) => contains(bbox, coordinate))) return true;
+  for (let index = 1; index < coordinates.length; index++) {
+    if (segmentIntersectsBbox(bbox, coordinates[index - 1], coordinates[index])) return true;
+  }
+  return false;
 }
 
 export function createOfflinePackageResolver(
@@ -63,6 +96,7 @@ export function createOfflinePackageResolver(
       records = next;
       for (const packageId of readers.keys()) {
         if (!records.has(packageId) || records.get(packageId)?.status !== "ready") {
+          await readers.get(packageId)?.close();
           readers.delete(packageId);
         }
       }
@@ -78,34 +112,9 @@ export function createOfflinePackageResolver(
       return selected ? records.get(selected.packageId) : undefined;
     },
 
-    coverageForCoordinate(coordinate) {
-      const selected = this.packageForCoordinate(coordinate);
-      if (selected) return { kind: "covered", packageId: selected.id };
-      const incompatible = [...records.values()]
-        .filter(
-          (record) =>
-            record.status === "ready" &&
-            contains(record.manifest.coverage.bbox, coordinate) &&
-            !isOfflinePackageCompatible(record.manifest, compatibility),
-        )
-        .sort(
-          (a, b) => coverageArea(a.manifest) - coverageArea(b.manifest) || a.id.localeCompare(b.id),
-        )[0];
-      if (incompatible) {
-        return {
-          kind: "incompatible",
-          packageId: incompatible.id,
-          reason: "dataset, style, or tile schema does not match the current map",
-        };
-      }
-      return { kind: "not-downloaded", coordinate };
-    },
-
     packageIdsForGeometry(coordinates) {
       return compatibleRecords()
-        .filter((record) =>
-          coordinates.some((coordinate) => contains(record.manifest.coverage.bbox, coordinate)),
-        )
+        .filter((record) => geometryIntersectsBbox(record.manifest.coverage.bbox, coordinates))
         .map((record) => record.id)
         .sort();
     },
@@ -134,6 +143,7 @@ export function createOfflinePackageResolver(
     },
 
     async close() {
+      await Promise.all([...readers.values()].map((reader) => reader.close()));
       readers.clear();
     },
   };
@@ -144,6 +154,7 @@ let defaultResolver: OfflinePackageResolver | undefined;
 export function configureDefaultOfflinePackageResolver(
   compatibility: OfflinePackageCompatibility,
 ): OfflinePackageResolver {
+  if (defaultResolver) return defaultResolver;
   defaultResolver = createOfflinePackageResolver(createOfflinePackageStorage(), compatibility);
   void defaultResolver.refresh();
   return defaultResolver;

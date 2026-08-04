@@ -10,7 +10,7 @@ import type {
 export interface OfflinePackageSourceCatalog {
   descriptor: OfflinePackageSourceDescriptor;
   mbtilesPath: string;
-  styleDirectory: string;
+  fontsDirectory: string;
   packageRoot: string;
 }
 

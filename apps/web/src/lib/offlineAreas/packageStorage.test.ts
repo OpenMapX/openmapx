@@ -2,9 +2,9 @@ import type { OfflineMapPackageManifest } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
 import { MemoryOfflinePackageStorage } from "./packageStorage";
 
-const packageId = `omp1-${"a".repeat(64)}`;
+const packageId = `omp2-${"a".repeat(64)}`;
 const manifest: OfflineMapPackageManifest = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   packageId,
   requestKey: "fixture",
   dataset: {
@@ -22,11 +22,9 @@ const manifest: OfflineMapPackageManifest = {
     sha256: "a".repeat(64),
     etag: `sha256-${"a".repeat(64)}`,
   },
-  style: {
-    provider: "openmapx",
-    version: "style-v1",
-    variants: ["light", "dark"],
-    assetBaseUrl: "/api/offline/packages/assets/openmapx/style-v1",
+  glyphs: {
+    version: "glyphs-v1",
+    urlTemplate: "/api/offline/packages/glyphs/glyphs-v1/{fontstack}/{range}.pbf",
   },
   attribution: ["© OpenStreetMap contributors"],
 };

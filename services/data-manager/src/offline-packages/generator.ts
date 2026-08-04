@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { lstatSync, readFileSync, rmSync, statSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import {
@@ -32,16 +32,14 @@ const DEFAULT_MAX_PACKAGE_BYTES = 2_000_000_000;
 const DEFAULT_MAX_PACKAGE_COUNT = 32;
 const DEFAULT_MAX_PACKAGE_BYTES_TOTAL = 20_000_000_000;
 const DEFAULT_MIN_FREE_BYTES = 1_000_000_000;
-const PACKAGE_ID_PREFIX = "omp1-";
+const PACKAGE_ID_PREFIX = "omp2-";
 const loadCommonJs = createRequire(import.meta.url);
 const combineGlyphPbf = loadCommonJs("@mapbox/glyph-pbf-composite") as {
   combine(buffers: Buffer[], fontstack?: string): Buffer | undefined;
 };
 
 function packageErrorCode(error: unknown): OfflinePackageJob["errorCode"] {
-  if (error instanceof OfflinePackageSourceError) {
-    return error.reason === "unsupported-provider" ? "unsupported-provider" : "generation-failed";
-  }
+  if (error instanceof OfflinePackageSourceError) return "generation-failed";
   if (error instanceof Error && error.message.startsWith("offline package capacity:")) {
     return "capacity";
   }
@@ -82,8 +80,7 @@ function sourceRequestFromManifest(
     sourceMaxZoom: manifest.dataset.sourceMaxZoom,
     sourceBounds: manifest.coverage.bbox,
     tileSchema: manifest.dataset.tileSchema,
-    styleProvider: manifest.style.provider,
-    styleVersion: manifest.style.version,
+    glyphsVersion: manifest.glyphs.version,
     packageAlgorithmVersion: OFFLINE_PACKAGE_ALGORITHM_VERSION,
     attribution: manifest.attribution,
   } as const;
@@ -103,6 +100,21 @@ function sourceRequestFromManifest(
     source,
     requestKey: manifest.requestKey,
   };
+}
+
+function sameSourceDescriptor(
+  left: CanonicalOfflinePackageRequest["source"],
+  right: CanonicalOfflinePackageRequest["source"],
+): boolean {
+  return (
+    left.datasetId === right.datasetId &&
+    left.datasetVersion === right.datasetVersion &&
+    left.sourceMaxZoom === right.sourceMaxZoom &&
+    left.tileSchema === right.tileSchema &&
+    left.glyphsVersion === right.glyphsVersion &&
+    left.packageAlgorithmVersion === right.packageAlgorithmVersion &&
+    equalBbox(left.sourceBounds, right.sourceBounds)
+  );
 }
 
 export class OfflinePackageGenerator {
@@ -253,7 +265,7 @@ export class OfflinePackageGenerator {
       packageId: job.packageId,
       status: job.status,
       datasetVersion: canonical.source.datasetVersion,
-      styleVersion: canonical.source.styleVersion,
+      glyphsVersion: canonical.source.glyphsVersion,
     });
     this.drain();
     return asOfflinePackageJob(job);
@@ -276,7 +288,7 @@ export class OfflinePackageGenerator {
         available: true,
         provider: "openmapx",
         datasetVersion: source.descriptor.datasetVersion,
-        styleVersion: source.descriptor.styleVersion,
+        glyphsVersion: source.descriptor.glyphsVersion,
         sourceMaxZoom: source.descriptor.sourceMaxZoom,
         sourceBounds: source.descriptor.sourceBounds,
       };
@@ -294,52 +306,45 @@ export class OfflinePackageGenerator {
     return await this.storage.openPublishedArchive(packageId);
   }
 
-  /** Resolve only the package's known, small style/font assets. */
-  async openStyleAsset(
-    provider: string,
-    styleVersion: string,
-    rawAssetPath: string,
+  /** List immutable glyph ranges without making the browser guess Unicode coverage. */
+  async glyphCatalog(glyphsVersion: string): Promise<Record<string, string[]> | undefined> {
+    await this.initialize();
+    const source = await this.sourceFactory();
+    if (source.descriptor.glyphsVersion !== glyphsVersion) return undefined;
+    const catalog: Record<string, string[]> = {};
+    for (const font of readdirSync(source.fontsDirectory, { withFileTypes: true })) {
+      if (!font.isDirectory() || font.isSymbolicLink()) continue;
+      const ranges = readdirSync(join(source.fontsDirectory, font.name), { withFileTypes: true })
+        .filter((entry) => entry.isFile() && /^\d+-\d+\.pbf$/.test(entry.name))
+        .map((entry) => entry.name.slice(0, -4))
+        .sort((a, b) => Number(a.split("-")[0]) - Number(b.split("-")[0]));
+      if (ranges.length > 0) catalog[font.name] = ranges;
+    }
+    return Object.keys(catalog).length > 0 ? catalog : undefined;
+  }
+
+  /** Resolve one immutable glyph range from the package's known font archive. */
+  async openGlyph(
+    glyphsVersion: string,
+    rawFontstack: string,
+    rawRange: string,
   ): Promise<
     | { path: string; byteLength: number; contentType: string }
     | { body: Uint8Array; byteLength: number; contentType: string }
     | undefined
   > {
     await this.initialize();
-    if (provider !== "openmapx") return undefined;
     const source = await this.sourceFactory();
-    if (source.descriptor.styleVersion !== styleVersion) return undefined;
-
-    const assetPath = rawAssetPath.replace(/^\/+/, "");
-    if (
-      assetPath.includes("\\") ||
-      assetPath.split("/").some((segment) => !segment || segment === "." || segment === "..")
-    )
+    if (source.descriptor.glyphsVersion !== glyphsVersion || !/^\d+-\d+$/.test(rawRange)) {
       return undefined;
-    const styleMatch =
-      /^styles\/(osm-bright|dark-matter)\/(style\.json|sprite(?:@2x)?\.(?:json|png))$/.exec(
-        assetPath,
-      );
-    const fontMatch = /^fonts\/([^/]+)\/(\d+-\d+)\.pbf$/.exec(assetPath);
-    const root = resolve(source.styleDirectory, "..");
+    }
+    const root = resolve(source.fontsDirectory);
     const resolved = (candidate: string): string | undefined => {
       const value = resolve(candidate);
       return value === root || value.startsWith(`${root}/`) ? value : undefined;
     };
-    if (styleMatch) {
-      const path = resolved(join(source.styleDirectory, styleMatch[1], styleMatch[2]));
-      if (!path) return undefined;
-      try {
-        if (!lstatSync(path).isFile()) return undefined;
-        return {
-          path,
-          byteLength: statSync(path).size,
-          contentType: styleMatch[2].endsWith(".json") ? "application/json" : "image/png",
-        };
-      } catch {
-        return undefined;
-      }
-    } else if (fontMatch) {
-      const fontStacks = fontMatch[1].split(",").map((font) => font.trim());
+    {
+      const fontStacks = rawFontstack.split(",").map((font) => font.trim());
       if (
         fontStacks.some(
           (font) =>
@@ -349,7 +354,7 @@ export class OfflinePackageGenerator {
         return undefined;
 
       const paths = fontStacks.map((font) =>
-        resolved(join(source.styleDirectory, "..", "tile-fonts", font, `${fontMatch[2]}.pbf`)),
+        resolved(join(source.fontsDirectory, font, `${rawRange}.pbf`)),
       );
       if (paths.some((path) => !path)) return undefined;
       try {
@@ -372,8 +377,6 @@ export class OfflinePackageGenerator {
       } catch {
         return undefined;
       }
-    } else {
-      return undefined;
     }
   }
 
@@ -452,7 +455,7 @@ export class OfflinePackageGenerator {
     }
 
     const freeBytes = this.storage.freeBytes?.();
-    if (freeBytes !== undefined && freeBytes - this.minFreeBytes < this.maxPackageBytes) {
+    if (freeBytes !== undefined && freeBytes - this.minFreeBytes < this.maxPackageBytes * 2) {
       throw new Error("offline package capacity: insufficient temporary disk reserve");
     }
   }
@@ -464,10 +467,13 @@ export class OfflinePackageGenerator {
       jobId: job.jobId,
       packageId: job.packageId,
       datasetVersion: job.request.source.datasetVersion,
-      styleVersion: job.request.source.styleVersion,
+      glyphsVersion: job.request.source.glyphsVersion,
     });
     try {
       const source = await this.sourceFactory();
+      if (!sameSourceDescriptor(job.request.source, source.descriptor)) {
+        throw new Error("offline package source changed after preparation; prepare the area again");
+      }
       await this.ensureCapacity(source.descriptor.datasetVersion);
       temporaryPath = this.storage.temporaryArchivePath(job.jobId);
       const result = await this.extractor({
@@ -478,6 +484,11 @@ export class OfflinePackageGenerator {
       if (result.byteLength > this.maxPackageBytes) {
         throw new Error("offline package capacity: generated archive exceeds the package limit");
       }
+      if (job.status !== "preparing") {
+        rmSync(temporaryPath, { force: true });
+        temporaryPath = undefined;
+        return;
+      }
       if (
         !equalBbox(job.request.effective.bbox, result.bounds) ||
         result.minZoom !== job.request.effective.minZoom ||
@@ -486,7 +497,7 @@ export class OfflinePackageGenerator {
         throw new Error("generated PMTiles metadata does not match the canonical request");
       }
       const manifest = validateOfflineMapPackageManifest({
-        schemaVersion: 1,
+        schemaVersion: 2,
         packageId: job.packageId,
         requestKey: job.request.requestKey,
         dataset: {
@@ -508,11 +519,9 @@ export class OfflinePackageGenerator {
           sha256: result.sha256,
           etag: result.etag,
         },
-        style: {
-          provider: job.request.source.styleProvider,
-          version: job.request.source.styleVersion,
-          variants: ["light", "dark"],
-          assetBaseUrl: `/api/offline/packages/assets/openmapx/${job.request.source.styleVersion}`,
+        glyphs: {
+          version: job.request.source.glyphsVersion,
+          urlTemplate: `/api/offline/packages/glyphs/${job.request.source.glyphsVersion}/{fontstack}/{range}.pbf`,
         },
         attribution: job.request.source.attribution,
       });
@@ -526,7 +535,7 @@ export class OfflinePackageGenerator {
         packageId: job.packageId,
         status: job.status,
         datasetVersion: manifest.dataset.version,
-        styleVersion: manifest.style.version,
+        glyphsVersion: manifest.glyphs.version,
         byteLength: manifest.archive.byteLength,
         durationMs: Math.max(0, job.updatedAtMs - startedAtMs),
       });
@@ -541,7 +550,7 @@ export class OfflinePackageGenerator {
         packageId: job.packageId,
         status: job.status,
         datasetVersion: job.request.source.datasetVersion,
-        styleVersion: job.request.source.styleVersion,
+        glyphsVersion: job.request.source.glyphsVersion,
         errorCode: job.errorCode,
         durationMs: Math.max(0, job.updatedAtMs - startedAtMs),
       });

@@ -11,7 +11,7 @@ const DB_VERSION = 1;
 const PACKAGE_STORE = "packages";
 const ARCHIVE_STORE = "archives";
 const OPFS_DIRECTORY = "offline-packages";
-const PACKAGE_ID_PATTERN = /^omp1-[0-9a-f]{64}$/;
+const PACKAGE_ID_PATTERN = /^omp2-[0-9a-f]{64}$/;
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(new ArrayBuffer(bytes.byteLength));
@@ -105,6 +105,7 @@ class BlobArchiveFile implements OfflineArchiveFile {
   private readonly chunks: Uint8Array[];
   private currentSize: number;
   private closed = false;
+  private dirty = false;
 
   constructor(
     initial: Uint8Array,
@@ -138,6 +139,7 @@ class BlobArchiveFile implements OfflineArchiveFile {
     if (chunk.byteLength === 0) return;
     this.chunks.push(chunk.slice());
     this.currentSize += chunk.byteLength;
+    this.dirty = true;
   }
 
   async truncate(size: number): Promise<void> {
@@ -147,11 +149,14 @@ class BlobArchiveFile implements OfflineArchiveFile {
     this.chunks.length = 0;
     if (bytes.byteLength > 0) this.chunks.push(bytes);
     this.currentSize = bytes.byteLength;
+    this.dirty = true;
   }
 
   async flush(): Promise<void> {
     this.assertOpen();
+    if (!this.dirty) return;
     await this.persist(this.toBytes());
+    this.dirty = false;
   }
 
   async close(): Promise<void> {
@@ -168,6 +173,110 @@ class BlobArchiveFile implements OfflineArchiveFile {
       offset += chunk.byteLength;
     }
     return result;
+  }
+
+  private assertOpen(): void {
+    if (this.closed) throw new Error("offline archive file is closed");
+  }
+}
+
+class IndexedDbBlobArchiveFile implements OfflineArchiveFile {
+  private closed = false;
+  private dirty = false;
+
+  constructor(
+    private blob: Blob,
+    private readonly persist: (blob: Blob) => Promise<void>,
+  ) {}
+
+  async size(): Promise<number> {
+    this.assertOpen();
+    return this.blob.size;
+  }
+
+  async read(offset: number, length: number): Promise<Uint8Array> {
+    this.assertOpen();
+    if (
+      !Number.isSafeInteger(offset) ||
+      !Number.isSafeInteger(length) ||
+      offset < 0 ||
+      length < 0
+    ) {
+      throw new Error("invalid offline archive range");
+    }
+    return new Uint8Array(await this.blob.slice(offset, offset + length).arrayBuffer());
+  }
+
+  async append(chunk: Uint8Array): Promise<void> {
+    this.assertOpen();
+    if (chunk.byteLength === 0) return;
+    this.blob = new Blob([this.blob, toArrayBuffer(chunk)]);
+    this.dirty = true;
+  }
+
+  async truncate(size: number): Promise<void> {
+    this.assertOpen();
+    if (!Number.isSafeInteger(size) || size < 0) throw new Error("invalid offline archive size");
+    this.blob = this.blob.slice(0, size);
+    this.dirty = true;
+  }
+
+  async flush(): Promise<void> {
+    this.assertOpen();
+    if (!this.dirty) return;
+    await this.persist(this.blob);
+    this.dirty = false;
+  }
+
+  async close(): Promise<void> {
+    if (this.closed) return;
+    await this.flush();
+    this.closed = true;
+  }
+
+  private assertOpen(): void {
+    if (this.closed) throw new Error("offline archive file is closed");
+  }
+}
+
+/** Read a finalized IndexedDB Blob in bounded slices instead of copying it all into RAM. */
+class ReadonlyBlobArchiveFile implements OfflineArchiveFile {
+  private closed = false;
+
+  constructor(private readonly blob: Blob) {}
+
+  async size(): Promise<number> {
+    this.assertOpen();
+    return this.blob.size;
+  }
+
+  async read(offset: number, length: number): Promise<Uint8Array> {
+    this.assertOpen();
+    if (
+      !Number.isSafeInteger(offset) ||
+      !Number.isSafeInteger(length) ||
+      offset < 0 ||
+      length < 0
+    ) {
+      throw new Error("invalid offline archive range");
+    }
+    return new Uint8Array(await this.blob.slice(offset, offset + length).arrayBuffer());
+  }
+
+  async append(): Promise<void> {
+    throw new Error("finalized offline archive is read-only");
+  }
+
+  async truncate(): Promise<void> {
+    throw new Error("finalized offline archive is read-only");
+  }
+
+  async flush(): Promise<void> {
+    this.assertOpen();
+  }
+
+  async close(): Promise<void> {
+    this.closed = true;
   }
 
   private assertOpen(): void {
@@ -257,11 +366,14 @@ export class MemoryOfflinePackageStorage implements OfflinePackageStorage {
   private readonly ready = new Map<string, Uint8Array>();
 
   async list(): Promise<OfflinePackageRecord[]> {
-    return [...this.records.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+    return [...this.records.values()]
+      .map((record) => structuredClone(record))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
   async get(packageId: string): Promise<OfflinePackageRecord | undefined> {
-    return this.records.get(packageId);
+    const record = this.records.get(packageId);
+    return record ? structuredClone(record) : undefined;
   }
 
   async put(record: OfflinePackageRecord): Promise<void> {
@@ -316,7 +428,7 @@ export class IndexedDbOfflinePackageStorage implements OfflinePackageStorage {
     const records = await idbRequest<unknown[]>(PACKAGE_STORE, "readonly", (store) =>
       store.getAll(),
     );
-    return records.flatMap((value) => {
+    const validated = records.flatMap((value) => {
       try {
         const record = value as OfflinePackageRecord;
         validateOfflineMapPackageManifest(record.manifest);
@@ -325,6 +437,26 @@ export class IndexedDbOfflinePackageStorage implements OfflinePackageStorage {
         return [];
       }
     });
+    const reconciled = await Promise.all(
+      validated.map(async (record) => {
+        if (record.status !== "ready" || (await this.readyArchiveExists(record.id))) return record;
+        const partialSize = await this.partialArchiveSize(record.id);
+        const next: OfflinePackageRecord = {
+          ...record,
+          status: "error",
+          bytesReceived: partialSize,
+          verifiedPrefixBytes: Math.min(record.verifiedPrefixBytes, partialSize),
+          updatedAt: Date.now(),
+          lastError: {
+            code: "archive-missing",
+            message: "The downloaded map archive is missing and must be downloaded again.",
+          },
+        };
+        await idbRequest(PACKAGE_STORE, "readwrite", (store) => store.put(next));
+        return next;
+      }),
+    );
+    return reconciled.sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
   async get(packageId: string): Promise<OfflinePackageRecord | undefined> {
@@ -386,12 +518,8 @@ export class IndexedDbOfflinePackageStorage implements OfflinePackageStorage {
       return new OpfsArchiveFile(handle);
     }
     const blob = (await readArchiveBlob(this.archiveKey(packageId, "partial"))) ?? new Blob();
-    const initial = new Uint8Array(await blob.arrayBuffer());
-    return new BlobArchiveFile(initial, async (bytes) => {
-      await writeArchiveBlob(
-        this.archiveKey(packageId, "partial"),
-        new Blob([toArrayBuffer(bytes)]),
-      );
+    return new IndexedDbBlobArchiveFile(blob, async (next) => {
+      await writeArchiveBlob(this.archiveKey(packageId, "partial"), next);
     });
   }
 
@@ -430,7 +558,7 @@ export class IndexedDbOfflinePackageStorage implements OfflinePackageStorage {
     }
     const blob = await readArchiveBlob(this.archiveKey(packageId, "ready"));
     if (!blob) throw new Error("offline package archive is not ready");
-    return new BlobArchiveFile(new Uint8Array(await blob.arrayBuffer()), async () => {});
+    return new ReadonlyBlobArchiveFile(blob);
   }
 
   async estimate(): Promise<OfflinePackageStorageEstimate> {
@@ -458,6 +586,33 @@ export class IndexedDbOfflinePackageStorage implements OfflinePackageStorage {
 
   private archiveKey(packageId: string, state: "ready" | "partial"): string {
     return `${packageId}:${state}`;
+  }
+
+  private async readyArchiveExists(packageId: string): Promise<boolean> {
+    if (this.useOpfs) {
+      try {
+        const directory = await this.getOpfsDirectory();
+        const handle = await directory.getFileHandle(`${packageId}.pmtiles`);
+        return (await handle.getFile()).size > 0;
+      } catch {
+        return false;
+      }
+    }
+    const blob = await readArchiveBlob(this.archiveKey(packageId, "ready"));
+    return !!blob && blob.size > 0;
+  }
+
+  private async partialArchiveSize(packageId: string): Promise<number> {
+    if (this.useOpfs) {
+      try {
+        const directory = await this.getOpfsDirectory();
+        const handle = await directory.getFileHandle(`${packageId}.pmtiles.part`);
+        return (await handle.getFile()).size;
+      } catch {
+        return 0;
+      }
+    }
+    return (await readArchiveBlob(this.archiveKey(packageId, "partial")))?.size ?? 0;
   }
 }
 

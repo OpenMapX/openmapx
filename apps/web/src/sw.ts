@@ -24,9 +24,11 @@ import {
 } from "serwist";
 import {
   isCredentialedApiPath,
+  isOfflinePackageArchivePath,
+  isOnlineStyleReachabilityProbe,
   isStalePrecacheName,
-  offlineStyleCacheNameForVersion,
-  offlineStyleVersionFromAssetPath,
+  offlineGlyphCacheNameForVersion,
+  offlineGlyphVersionFromPath,
 } from "./lib/swCaches";
 
 declare const self: ServiceWorkerGlobalScope;
@@ -50,7 +52,14 @@ const STYLE_CACHE = `style-assets-${__SW_BUILD_ID__}`;
 // cache has expired (24h / 20 entries).
 // Without this, the nav handler would fall through to /offline and the
 // downloaded tiles would be unreachable.
-const APP_SHELL_URLS = [HOME_URL, OFFLINE_URL, "/manifest.webmanifest"];
+const BUNDLED_MAP_ASSETS = [
+  "/styles/openmapx-streets.json",
+  "/styles/openmapx-dark.json",
+  "/styles/sprite.json",
+  "/styles/sprite.png",
+] as const;
+const OPTIONAL_BUNDLED_MAP_ASSETS = ["/styles/sprite@2x.json", "/styles/sprite@2x.png"] as const;
+const APP_SHELL_URLS = [HOME_URL, OFFLINE_URL, "/manifest.webmanifest", ...BUNDLED_MAP_ASSETS];
 const RECENT_MAP_DATA_CACHE_NAMES = [
   "api-geodata",
   "api-category-search",
@@ -96,15 +105,15 @@ async function writeRecentMapDataCachePreference(enabled: boolean): Promise<void
   ]);
 }
 
-/** Package style assets are small, explicit Cache Storage entries. */
-async function matchOfflineStyle(request: Request): Promise<Response | null> {
+/** Package font assets are small, explicit Cache Storage entries. */
+async function matchOfflineGlyph(request: Request): Promise<Response | null> {
   const url = new URL(request.url);
   const version =
-    url.searchParams.get("offlineStyle") ?? offlineStyleVersionFromAssetPath(url.pathname);
+    url.searchParams.get("offlineGlyphs") ?? offlineGlyphVersionFromPath(url.pathname);
   if (!version || !/^[A-Za-z0-9_-]{1,256}$/.test(version)) return null;
-  const cache = await caches.open(offlineStyleCacheNameForVersion(version));
-  if (!url.searchParams.has("offlineStyle")) {
-    url.searchParams.set("offlineStyle", version);
+  const cache = await caches.open(offlineGlyphCacheNameForVersion(version));
+  if (!url.searchParams.has("offlineGlyphs")) {
+    url.searchParams.set("offlineGlyphs", version);
     return (
       (await cache.match(new Request(url.toString(), request), { ignoreSearch: false })) ?? null
     );
@@ -130,6 +139,11 @@ const navigationStrategy = new NetworkFirst({
   plugins: [new ExpirationPlugin({ maxEntries: 20, maxAgeSeconds: 24 * 60 * 60 })],
 });
 
+const bundledStyleFallbackStrategy = new StaleWhileRevalidate({
+  cacheName: STYLE_CACHE,
+  plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 7 * 24 * 60 * 60 })],
+});
+
 const serwist = new Serwist({
   precacheEntries: [],
   // Don't auto-skip-waiting. The client surfaces an "Update available" prompt
@@ -148,6 +162,17 @@ const serwist = new Serwist({
   // See https://github.com/GoogleChrome/workbox/issues/3134.
   navigationPreload: false,
   runtimeCaching: [
+    // PMTiles archives are streamed into OPFS/IndexedDB by the page. A full
+    // archive in Cache Storage would silently double offline-map disk use.
+    // Marked TileJSON probes must also bypass cached responses or they cannot
+    // distinguish current backend reachability from a stale runtime entry.
+    // Keep this before every cache-backed route and Serwist's default rules.
+    {
+      matcher: ({ url }: { url: URL }) =>
+        isOfflinePackageArchivePath(url.pathname) || isOnlineStyleReachabilityProbe(url),
+      handler: ({ request }: { request: Request }) => fetch(request),
+    },
+
     // Credentialed API responses — never cached, always straight to network so
     // failures surface to the UI. The keypair envelope carries the cleartext
     // private JWK in unencrypted mode; sign-in state, the admin surface and
@@ -173,15 +198,15 @@ const serwist = new Serwist({
       }),
     },
 
-    // Package style assets are small and explicitly versioned by the package.
+    // Package font assets are small and explicitly versioned by the package.
     // The archive itself is read by the page-side PMTiles protocol and never
     // enters Cache Storage.
     {
       matcher: ({ url }: { url: URL }) =>
-        url.searchParams.has("offlineStyle") ||
-        offlineStyleVersionFromAssetPath(url.pathname) !== undefined,
+        url.searchParams.has("offlineGlyphs") ||
+        offlineGlyphVersionFromPath(url.pathname) !== undefined,
       handler: async ({ request }: { request: Request }) =>
-        (await matchOfflineStyle(request)) ?? fetch(request),
+        (await matchOfflineGlyph(request)) ?? fetch(request),
     },
 
     // MapTiler tiles / style / sprite / glyphs via API proxy — runtime SWR.
@@ -202,14 +227,17 @@ const serwist = new Serwist({
       }),
     },
 
-    // Self-hosted map style assets — runtime SWR. Package variants carry an
-    // `offlineStyle` query and are handled by the explicit route above.
+    // Self-hosted map style assets — runtime SWR. Package font requests carry
+    // an `offlineGlyphs` query and are handled by the explicit route above.
     {
       matcher: ({ url }: { url: URL }) => /\/styles\//i.test(url.pathname),
-      handler: new StaleWhileRevalidate({
-        cacheName: STYLE_CACHE,
-        plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 7 * 24 * 60 * 60 })],
-      }),
+      handler: async (options) => {
+        const bundled = await (await caches.open(APP_SHELL_CACHE)).match(options.request, {
+          ignoreSearch: true,
+        });
+        if (bundled) return bundled;
+        return bundledStyleFallbackStrategy.handle(options);
+      },
     },
 
     // API geodata — StaleWhileRevalidate
@@ -314,14 +342,20 @@ const serwist = new Serwist({
 // offline still renders something useful. We don't use Serwist's precacheEntries
 // because the custom esbuild build pipeline doesn't inject the build manifest.
 //
-// Per-URL via Promise.allSettled rather than `cache.addAll` because addAll is
-// atomic — if /manifest.webmanifest happens to be unavailable, /offline would
-// otherwise not get cached either, breaking the navigation fallback.
+// Required shell/style assets fail installation as a unit. Optional high-DPI
+// sprites are fetched independently because not every build supplies them.
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(APP_SHELL_CACHE).then(async (cache) => {
-      await Promise.allSettled(
+      await Promise.all(
         APP_SHELL_URLS.map(async (url) => {
+          const response = await fetch(url, { cache: "reload" });
+          if (!response.ok) throw new Error(`required app-shell asset unavailable: ${url}`);
+          await cache.put(url, response);
+        }),
+      );
+      await Promise.allSettled(
+        OPTIONAL_BUNDLED_MAP_ASSETS.map(async (url) => {
           const response = await fetch(url, { cache: "reload" });
           if (response.ok) await cache.put(url, response);
         }),

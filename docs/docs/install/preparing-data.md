@@ -1,6 +1,6 @@
 ---
 title: Preparing data
-description: How OpenMapX downloads and prepares the open data its engines need — OSM extracts, GTFS transit feeds, and map styles — with the data-manager service and the openmapx data CLI.
+description: How OpenMapX downloads and prepares OSM extracts, GTFS transit feeds, tile data, and map glyphs with the data-manager service and CLI.
 sidebar_position: 5
 ---
 
@@ -8,8 +8,8 @@ sidebar_position: 5
 
 OpenMapX's backend engines don't ship with data — they build their indexes from
 open sources you provide. A routing engine needs an OpenStreetMap extract, a
-transit engine needs GTFS feeds, a self-hosted tile server needs map styles and
-fonts. This page covers how OpenMapX obtains that data and shapes it into the
+transit engine needs GTFS feeds, and a self-hosted tile server needs vector data
+and glyphs. This page covers how OpenMapX obtains that data and shapes it into the
 form each engine expects.
 
 All of it runs through one service, the **data-manager**, and one CLI namespace,
@@ -24,7 +24,7 @@ The data-manager is a small built-in service that owns the shared data tree at
 things:
 
 - **Downloads** source data — OSM extracts from Geofabrik, transactional transit
-  sources from Transitous or operator URLs, and map styles, fonts, and sprites —
+  sources from Transitous or operator URLs, and map glyph fonts —
   over the network. Partial transfers never replace good files.
 - **Tracks** ordinary downloaded artifacts in its state file and transit source,
   job, validation, manifest, and promotion metadata in Postgres. Postgres does
@@ -149,19 +149,22 @@ Existing values are preserved on regeneration; keys no longer required by the
 current catalog are dropped.
 :::
 
-### Map styles, fonts, and sprites
+### Map glyphs
 
 ```bash
-pnpm openmapx data download style
+pnpm openmapx data download fonts
 ```
 
-This fetches everything a self-hosted tile server needs to render: the OpenMapTiles
-font glyph stacks into `data/tile-fonts/`, and a set of map styles (osm-bright,
-dark-matter, positron, osm-liberty) with their sprites into `data/tile-styles/`.
-The styles are rewritten on the way in so the tile server serves them entirely
-from your local fonts, sprites, and tiles — no external dependency at render time.
-You only need this if you're running a self-hosted tile server; if you point the
-web app at a hosted tile provider, skip it.
+This atomically installs the OpenMapTiles glyph PBF tree in `data/tile-fonts/`.
+Set `OPENMAPTILES_FONTS_URL` to use a pinned or internally mirrored archive.
+The OpenMapX light/dark styles and sprites already ship in the web app; the data
+pipeline does not download or rewrite a duplicate style bundle. Online
+self-hosting and offline packages reuse those same web assets and only source
+glyph PBFs from `data/tile-fonts/`.
+
+You need the glyph tree when running TileServer GL or generating offline map
+packages from the self-hosted OpenMapX dataset. Hosted-only deployments can
+skip it.
 
 ## Building prepared artifacts
 
@@ -276,7 +279,7 @@ pnpm openmapx data update europe/germany
 ```
 
 This downloads the OSM extract, transactionally syncs transit sources, downloads
-styles, builds every buildable engine's artifacts, re-renders the compose plan,
+map glyphs, builds every buildable engine's artifacts, re-renders the compose plan,
 and applies the hardlinks. It's
 the convenient front door once you know which region you want; the individual
 commands above are there for when you want to refresh just one piece.
@@ -287,7 +290,7 @@ To reclaim space, remove the local data for a given type (or everything):
 
 ```bash
 pnpm openmapx data clean osm
-pnpm openmapx data clean style
+pnpm openmapx data clean fonts
 pnpm openmapx data clean all
 ```
 

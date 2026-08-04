@@ -22,11 +22,9 @@ const CLEAN_TYPE_ALIASES: Record<string, string[]> = {
   osm: ["osm-pbf"],
   "osm-bz2": ["osm-pbf-bz2"],
   overpass: ["osm-pbf-bz2"],
-  style: ["tile-fonts", "tile-styles"],
-  styles: ["tile-fonts", "tile-styles"],
   fonts: ["tile-fonts"],
   mbtiles: ["tile-mbtiles"],
-  tiles: ["tile-mbtiles", "tile-fonts", "tile-styles"],
+  tiles: ["tile-mbtiles", "tile-fonts"],
 };
 
 export interface OfflineDataFile {

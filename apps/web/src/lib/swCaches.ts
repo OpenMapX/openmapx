@@ -12,15 +12,23 @@ export function isStalePrecacheName(
   return false;
 }
 
-export function offlineStyleCacheNameForVersion(version: string): string {
-  return `offline-package-style-${version.replace(/[^A-Za-z0-9_-]/g, "_")}`;
+export function offlineGlyphCacheNameForVersion(version: string): string {
+  return `offline-package-glyphs-${version.replace(/[^A-Za-z0-9_-]/g, "_")}`;
 }
 
-export function offlineStyleVersionFromAssetPath(pathname: string): string | undefined {
-  const match = /^\/api\/offline\/packages\/assets\/openmapx\/([A-Za-z0-9_-]{1,256})(?:\/|$)/.exec(
-    pathname,
-  );
+export function offlineGlyphVersionFromPath(pathname: string): string | undefined {
+  const match = /^\/api\/offline\/packages\/glyphs\/([A-Za-z0-9_-]{1,256})(?:\/|$)/.exec(pathname);
   return match?.[1];
+}
+
+/** Package archives live in OPFS/IndexedDB and must never be duplicated in Cache Storage. */
+export function isOfflinePackageArchivePath(pathname: string): boolean {
+  return /^\/api\/offline\/packages\/omp2-[0-9a-f]{64}\/archive$/.test(pathname);
+}
+
+/** A marked probe must bypass runtime caches so it measures current online reachability. */
+export function isOnlineStyleReachabilityProbe(url: URL): boolean {
+  return url.searchParams.get("openmapxReachability") === "1";
 }
 
 export function isCredentialedApiPath(pathname: string): boolean {

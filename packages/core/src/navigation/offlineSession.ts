@@ -242,7 +242,7 @@ function equivalentRoute(a: Route, b: Route): boolean {
 }
 
 function validatePackageId(value: unknown): value is string {
-  return typeof value === "string" && /^omp1-[0-9a-f]{64}$/.test(value);
+  return typeof value === "string" && /^omp2-[0-9a-f]{64}$/.test(value);
 }
 
 function validateSnapshot(value: unknown): value is NavigationSessionSnapshot {

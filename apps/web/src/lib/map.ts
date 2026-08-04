@@ -54,25 +54,12 @@ function creditHtml(attr: Attribution): string {
   return hasCopyright ? `© ${anchor}` : anchor;
 }
 
-const SELF_HOSTED_STYLES: Record<string, string> = {
-  "bright-v2": "osm-bright",
-  "streets-v2": "osm-bright",
-  "streets-v2-dark": "dark-matter",
-  satellite: "osm-bright",
-  "topo-v2": "osm-bright",
-};
-
 function apiRoute(env: ClientEnv, path: string): string {
   const base = env.apiUrl.replace(/\/$/, "");
   return base ? `${base}${path}` : path;
 }
 
 export function maptilerStyleUrl(style = "bright-v2", env: ClientEnv): string {
-  if (env.mapStyleUrl) {
-    const base = env.mapStyleUrl.replace(/\/$/, "");
-    const mappedStyle = SELF_HOSTED_STYLES[style] ?? "osm-bright";
-    return `${base}/styles/${mappedStyle}/style.json`;
-  }
   return apiRoute(env, `/api/maptiler/maps/${encodeURIComponent(style)}/style.json`);
 }
 
@@ -146,21 +133,17 @@ export type MapStyleVariant = "light" | "dark";
  * by default). OSM is credited separately in all cases.
  */
 export function usesSelfHostedTiles(env: ClientEnv): boolean {
-  return Boolean(env.tilesUrl || env.mapStyleUrl);
+  return Boolean(env.tilesUrl);
 }
 
 export async function loadOpenMapXStyle(
   env: ClientEnv,
   variant: MapStyleVariant = "light",
-  offlinePackage?: { packageId: string; manifest: OfflineMapPackageManifest },
+  offlinePackages?: readonly {
+    packageId: string;
+    manifest: OfflineMapPackageManifest;
+  }[],
 ): Promise<Record<string, unknown>> {
-  if (offlinePackage) {
-    return await resolveOfflinePackageStyle(
-      offlinePackage.manifest,
-      offlinePackage.packageId,
-      variant,
-    );
-  }
   const file = variant === "dark" ? "openmapx-dark.json" : "openmapx-streets.json";
   const res = await fetch(`/styles/${file}`);
   if (!res.ok) {
@@ -185,5 +168,5 @@ export async function loadOpenMapXStyle(
     : apiRoute(env, "/api/maptiler/fonts");
   style.glyphs = `${glyphBase}/{fontstack}/{range}.pbf`;
 
-  return style;
+  return offlinePackages ? resolveOfflinePackageStyle(style, offlinePackages) : style;
 }

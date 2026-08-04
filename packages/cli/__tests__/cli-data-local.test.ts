@@ -81,33 +81,25 @@ describe("planDataCleanup", () => {
     ]);
   });
 
-  it("expands style alias into tile-fonts + tile-styles", async () => {
+  it("expands the fonts alias into producer and consumer glyph paths", async () => {
     writeManifest("data-manager", {
       ...baseManifest,
       id: "data-manager",
       provides: ["tile-asset-data"],
-      produces: [
-        { type: "tile-fonts", sourceDir: "data/tile-fonts" },
-        { type: "tile-styles", sourceDir: "data/tile-styles" },
-      ],
+      produces: [{ type: "tile-fonts", sourceDir: "data/tile-fonts" }],
     });
     writeManifest("tileserver", {
       ...baseManifest,
       id: "tileserver",
-      consumes: [
-        { type: "tile-fonts", mountAt: "/data/fonts", required: true },
-        { type: "tile-styles", mountAt: "/data/styles", required: true },
-      ],
+      consumes: [{ type: "tile-fonts", mountAt: "/data/fonts", required: true }],
     });
 
-    const plan = await planDataCleanup("style", tmp);
+    const plan = await planDataCleanup("fonts", tmp);
 
-    expect(plan.normalizedTypes.sort()).toEqual(["tile-fonts", "tile-styles"]);
+    expect(plan.normalizedTypes).toEqual(["tile-fonts"]);
     expect(plan.paths).toEqual([
       join(tmp, "infra", "docker", "data", "tile-fonts"),
-      join(tmp, "infra", "docker", "data", "tile-styles"),
       join(tmp, "infra", "docker", "data", "tileserver", "tile-fonts"),
-      join(tmp, "infra", "docker", "data", "tileserver", "tile-styles"),
     ]);
   });
 

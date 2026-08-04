@@ -217,9 +217,9 @@ async function runTransitSync(
   return result.jobId;
 }
 
-async function runStyleDownload(client: services.DataManagerClient): Promise<void> {
-  await client.downloadStyle();
-  log.ok("Downloaded styles + fonts + sprites");
+async function runFontDownload(client: services.DataManagerClient): Promise<void> {
+  await client.downloadFonts();
+  log.ok("Downloaded map glyphs");
 }
 
 async function renderAndApplyHardlinks(): Promise<void> {
@@ -240,7 +240,7 @@ export function registerDataCommands(program: Command): void {
 
   data
     .command("download <kind> [region]")
-    .description("Download source data (osm <region> | style) or start a transactional GTFS sync")
+    .description("Download source data (osm <region> | fonts) or start a transactional GTFS sync")
     .option(
       "--countries <list>",
       `Comma-separated GTFS country codes (gtfs only; default: $${TRANSITOUS_COUNTRIES_ENV})`,
@@ -252,10 +252,10 @@ export function registerDataCommands(program: Command): void {
           await runOsmDownload(client, region);
         } else if (kind === "gtfs") {
           await runTransitSync(client, options);
-        } else if (kind === "style") {
-          await runStyleDownload(client);
+        } else if (kind === "fonts") {
+          await runFontDownload(client);
         } else {
-          log.err(`Unknown kind: ${kind} (use osm | gtfs | style)`);
+          log.err(`Unknown kind: ${kind} (use osm | gtfs | fonts)`);
           process.exit(1);
         }
       } catch (err) {
@@ -295,7 +295,7 @@ export function registerDataCommands(program: Command): void {
   data
     .command("update [region]")
     .description(
-      "Run the full data refresh sequence: download OSM + GTFS + style, build all prepared artifacts, then render compose and refresh hardlinks",
+      "Run the full data refresh sequence: download OSM + GTFS + fonts, build all prepared artifacts, then render compose and refresh hardlinks",
     )
     .option(
       "--countries <list>",
@@ -309,7 +309,7 @@ export function registerDataCommands(program: Command): void {
         try {
           resolvedRegion = await runOsmDownload(client, region);
           await runTransitSync(client, { countries: options.countries });
-          await runStyleDownload(client);
+          await runFontDownload(client);
         } catch (err) {
           log.err(`update failed: ${(err as Error).message}`);
           if (!(err as Error).message.startsWith("region required")) {
@@ -524,7 +524,7 @@ export function registerDataCommands(program: Command): void {
   data
     .command("clean <target>")
     .description(
-      "Remove local data for one data type alias (e.g. osm, gtfs, style, osrm-graph) or all",
+      "Remove local data for one data type alias (e.g. osm, gtfs, fonts, osrm-graph) or all",
     )
     .action(async (target: string) => {
       try {

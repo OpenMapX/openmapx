@@ -6,10 +6,9 @@ import { OFFLINE_PACKAGE_ALGORITHM_VERSION, type OfflinePackageBbox } from "@ope
 import type { OfflinePackageSourceCatalog } from "./types.js";
 
 const SOURCE_RELATIVE_PATH = join("tile-mbtiles", "tiles.mbtiles");
-const STYLE_VARIANTS = ["osm-bright", "dark-matter"] as const;
 const DEFAULT_ATTRIBUTION = ["© OpenStreetMap contributors", "© OpenMapTiles"];
 
-export type OfflinePackageSourceErrorReason = "source-unavailable" | "unsupported-provider";
+export type OfflinePackageSourceErrorReason = "source-unavailable";
 
 export class OfflinePackageSourceError extends Error {
   readonly reason: OfflinePackageSourceErrorReason;
@@ -73,37 +72,48 @@ function assertRegularPath(path: string, label: string): void {
   }
 }
 
-function collectVersionFiles(root: string): string[] {
-  const files: string[] = [];
-  const walk = (directory: string): void => {
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      const path = join(directory, entry.name);
-      if (entry.isDirectory()) walk(path);
-      else if (entry.isFile()) files.push(path);
+function assertDirectoryPath(path: string, label: string): void {
+  if (!existsSync(path)) {
+    throw new OfflinePackageSourceError("source-unavailable", `${label} does not exist: ${path}`);
+  }
+  try {
+    if (!lstatSync(path).isDirectory()) {
+      throw new OfflinePackageSourceError("source-unavailable", `${label} is not a directory`);
     }
-  };
-  walk(root);
+  } catch (error) {
+    if (error instanceof OfflinePackageSourceError) throw error;
+    throw new OfflinePackageSourceError("source-unavailable", `${label} cannot be inspected`);
+  }
+}
+
+function collectGlyphFiles(root: string): string[] {
+  const files: string[] = [];
+  for (const font of readdirSync(root, { withFileTypes: true })) {
+    if (!font.isDirectory() || font.isSymbolicLink()) continue;
+    const directory = join(root, font.name);
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entry.isFile() && /^\d+-\d+\.pbf$/.test(entry.name)) {
+        files.push(join(directory, entry.name));
+      }
+    }
+  }
   return files.sort();
 }
 
-function styleVersion(styleDirectory: string, dataDir: string): string {
+function glyphsVersion(fontsDirectory: string, dataDir: string): string {
   const hash = createHash("sha256");
-  for (const variant of STYLE_VARIANTS) {
-    const variantDirectory = join(styleDirectory, variant);
-    for (const path of collectVersionFiles(variantDirectory)) {
-      hash.update(relative(dataDir, path));
-      hash.update(readFileSync(path));
-    }
+  const files = collectGlyphFiles(fontsDirectory);
+  if (files.length === 0) {
+    throw new OfflinePackageSourceError(
+      "source-unavailable",
+      `OpenMapX font directory contains no glyph PBF files: ${fontsDirectory}`,
+    );
   }
-
-  const fontsDirectory = join(dataDir, "tile-fonts");
-  if (existsSync(fontsDirectory)) {
-    for (const path of collectVersionFiles(fontsDirectory)) {
-      hash.update(relative(dataDir, path));
-      hash.update(readFileSync(path));
-    }
+  for (const path of files) {
+    hash.update(relative(dataDir, path));
+    hash.update(readFileSync(path));
   }
-  return `openmapx-style-${hash.digest("hex").slice(0, 32)}`;
+  return `openmapx-glyphs-${hash.digest("hex").slice(0, 32)}`;
 }
 
 export function getOpenMapxPackageSource(
@@ -112,17 +122,8 @@ export function getOpenMapxPackageSource(
   const mbtilesPath = join(dataDir, SOURCE_RELATIVE_PATH);
   assertRegularPath(mbtilesPath, "OpenMapX MBTiles source");
 
-  const styleDirectory = join(dataDir, "tile-styles");
-  if (!existsSync(styleDirectory)) {
-    throw new OfflinePackageSourceError(
-      "source-unavailable",
-      `OpenMapX style directory does not exist: ${styleDirectory}`,
-    );
-  }
-  for (const variant of STYLE_VARIANTS) {
-    const styleJson = join(styleDirectory, variant, "style.json");
-    assertRegularPath(styleJson, `OpenMapX ${variant} style`);
-  }
+  const fontsDirectory = join(dataDir, "tile-fonts");
+  assertDirectoryPath(fontsDirectory, "OpenMapX font directory");
 
   let db: DatabaseSync | undefined;
   try {
@@ -130,22 +131,27 @@ export function getOpenMapxPackageSource(
     const metadata = parseMetadata(db);
     const fileStat = statSync(mbtilesPath);
     const datasetLabel = metadata.get("version")?.trim() || "mbtiles";
-    const datasetVersion = `${datasetLabel}-${fileStat.size}-${Math.trunc(fileStat.mtimeMs)}`;
+    const datasetVersion = [
+      datasetLabel,
+      fileStat.size,
+      Math.trunc(fileStat.mtimeMs),
+      Math.trunc(fileStat.ctimeMs),
+      fileStat.ino,
+    ].join("-");
     const descriptor = {
       datasetId: "openmapx" as const,
       datasetVersion,
       sourceMaxZoom: parseMaxZoom(metadata.get("maxzoom")),
       sourceBounds: parseBounds(metadata.get("bounds")),
       tileSchema: "openmaptiles" as const,
-      styleProvider: "openmapx" as const,
-      styleVersion: styleVersion(styleDirectory, dataDir),
+      glyphsVersion: glyphsVersion(fontsDirectory, dataDir),
       packageAlgorithmVersion: OFFLINE_PACKAGE_ALGORITHM_VERSION,
       attribution: [...DEFAULT_ATTRIBUTION],
     };
     return {
       descriptor,
       mbtilesPath,
-      styleDirectory,
+      fontsDirectory,
       packageRoot: join(dataDir, "offline-packages"),
     };
   } catch (error) {
@@ -157,4 +163,42 @@ export function getOpenMapxPackageSource(
   } finally {
     db?.close();
   }
+}
+
+function sourcePathFingerprint(dataDir: string): string {
+  const mbtilesPath = join(dataDir, SOURCE_RELATIVE_PATH);
+  const fontsDirectory = join(dataDir, "tile-fonts");
+  assertRegularPath(mbtilesPath, "OpenMapX MBTiles source");
+  assertDirectoryPath(fontsDirectory, "OpenMapX font directory");
+  const mbtiles = statSync(mbtilesPath);
+  const fonts = statSync(fontsDirectory);
+  return [
+    mbtiles.dev,
+    mbtiles.ino,
+    mbtiles.size,
+    Math.trunc(mbtiles.mtimeMs),
+    Math.trunc(mbtiles.ctimeMs),
+    fonts.dev,
+    fonts.ino,
+    Math.trunc(fonts.mtimeMs),
+    Math.trunc(fonts.ctimeMs),
+  ].join(":");
+}
+
+/**
+ * Cache the content hashes until the atomically replaced MBTiles/font roots
+ * change. Glyph requests otherwise re-hash the complete font tree per PBF.
+ */
+export function createOpenMapxPackageSourceFactory(
+  dataDir = process.env.DATA_DIR ?? "/data",
+): () => OfflinePackageSourceCatalog {
+  let fingerprint: string | undefined;
+  let source: OfflinePackageSourceCatalog | undefined;
+  return () => {
+    const nextFingerprint = sourcePathFingerprint(dataDir);
+    if (source && fingerprint === nextFingerprint) return source;
+    source = getOpenMapxPackageSource(dataDir);
+    fingerprint = nextFingerprint;
+    return source;
+  };
 }

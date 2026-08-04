@@ -2,6 +2,7 @@ import { type OfflineMapPackageManifest, validateOfflineMapPackageManifest } fro
 import { type OfflinePackageApi, OfflinePackageApiError } from "./packageApi";
 import { type OfflinePackageMetric, recordOfflinePackageMetric } from "./packageMetrics";
 import { validateLocalPmtilesArchive } from "./pmtilesReader";
+import { resetOfflinePackageRuntime } from "./runtime";
 import { Sha256 } from "./sha256";
 import type {
   OfflinePackageDownloadProgress,
@@ -12,11 +13,13 @@ import type {
 const PROGRESS_BYTES = 4 * 1024 * 1024;
 const PROGRESS_INTERVAL_MS = 1_000;
 const activeDownloads = new Set<string>();
+const downloadFlights = new Map<string, Promise<OfflinePackageRecord>>();
 
 export const OFFLINE_PACKAGE_CHANGED_EVENT = "openmapx:offline-package-changed";
 
 /** Notify map/navigation consumers that package metadata or readiness changed. */
 export function notifyOfflinePackageChanged(packageId: string): void {
+  resetOfflinePackageRuntime();
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(OFFLINE_PACKAGE_CHANGED_EVENT, { detail: { packageId } }));
 }
@@ -28,7 +31,15 @@ export function hasActiveOfflinePackageDownload(): boolean {
 function errorCode(error: unknown): string {
   if (error instanceof OfflinePackageApiError) return error.code;
   if (error instanceof DOMException && error.name === "AbortError") return "aborted";
-  if (error instanceof Error && /quota/i.test(error.name + error.message)) return "quota";
+  if (
+    error &&
+    typeof error === "object" &&
+    /quota/i.test(
+      `${"name" in error ? String(error.name) : ""}${"message" in error ? String(error.message) : ""}`,
+    )
+  ) {
+    return "quota";
+  }
   return "download-failed";
 }
 
@@ -79,7 +90,17 @@ function baseRecord(
   };
 }
 
-export async function downloadOfflinePackage(
+async function withOfflinePackageLock<T>(packageId: string, task: () => Promise<T>): Promise<T> {
+  const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
+  if (!locks) return await task();
+  return await locks.request(
+    `openmapx-offline-package:${packageId}`,
+    { mode: "exclusive" },
+    async () => await task(),
+  );
+}
+
+export function downloadOfflinePackage(
   api: OfflinePackageApi,
   storage: OfflinePackageStorage,
   rawManifest: OfflineMapPackageManifest,
@@ -92,12 +113,19 @@ export async function downloadOfflinePackage(
   } = {},
 ): Promise<OfflinePackageRecord> {
   const packageId = rawManifest.packageId;
+  const existing = downloadFlights.get(packageId);
+  if (existing) return existing;
+
   activeDownloads.add(packageId);
-  try {
-    return await downloadOfflinePackageImpl(api, storage, rawManifest, options);
-  } finally {
+  const operation = withOfflinePackageLock(packageId, () =>
+    downloadOfflinePackageImpl(api, storage, rawManifest, options),
+  );
+  const tracked = operation.finally(() => {
+    if (downloadFlights.get(packageId) === tracked) downloadFlights.delete(packageId);
     activeDownloads.delete(packageId);
-  }
+  });
+  downloadFlights.set(packageId, tracked);
+  return tracked;
 }
 
 async function downloadOfflinePackageImpl(
@@ -143,15 +171,51 @@ async function downloadOfflinePackageImpl(
   };
 
   const now = Date.now();
-  if (record.status === "ready" && record.bytesReceived === record.bytesTotal) {
-    metric({
-      event: "download",
-      packageId: manifest.packageId,
-      status: "ready",
-      byteLength: manifest.archive.byteLength,
-      durationMs: 0,
-    });
-    return record;
+  if (
+    record.bytesReceived === record.bytesTotal &&
+    (record.status === "ready" || record.lastError?.code === "offline-assets-unavailable")
+  ) {
+    let readyFile: Awaited<ReturnType<OfflinePackageStorage["openReady"]>> | undefined;
+    let archiveValid = false;
+    try {
+      readyFile = await storage.openReady(manifest.packageId);
+      await validateLocalPmtilesArchive(readyFile, {
+        bounds: manifest.coverage.bbox,
+        minZoom: manifest.coverage.minZoom,
+        maxZoom: manifest.coverage.maxZoom,
+      });
+      await readyFile.close();
+      archiveValid = true;
+      if (options.validateStyles) await options.validateStyles();
+      const becameReady = record.status !== "ready";
+      record.status = "ready";
+      record.lastError = undefined;
+      record.updatedAt = Date.now();
+      await storage.put(record);
+      if (becameReady) notifyOfflinePackageChanged(manifest.packageId);
+      metric({
+        event: "download",
+        packageId: manifest.packageId,
+        status: "ready",
+        byteLength: manifest.archive.byteLength,
+        durationMs: 0,
+      });
+      return record;
+    } catch (error) {
+      await readyFile?.close().catch(() => {});
+      if (archiveValid) {
+        record.status = "error";
+        record.lastError = {
+          code: "offline-assets-unavailable",
+          message: errorMessage(error),
+        };
+        record.updatedAt = Date.now();
+        await storage.put(record);
+        throw error;
+      }
+      await storage.delete(manifest.packageId);
+      record = baseRecord(manifest, options.name ?? record.name, Date.now());
+    }
   }
   record.status = "downloading";
   record.lastError = undefined;
@@ -166,7 +230,7 @@ async function downloadOfflinePackageImpl(
     byteLength: manifest.archive.byteLength,
     retry: record.verifiedPrefixBytes > 0,
   });
-  let file = await storage.openPartial(manifest.packageId);
+  const file = await storage.openPartial(manifest.packageId);
   const existingSize = await file.size();
   let prefix = Math.min(record.verifiedPrefixBytes, existingSize, manifest.archive.byteLength);
   if (existingSize !== prefix || prefix !== record.verifiedPrefixBytes) {
@@ -185,74 +249,88 @@ async function downloadOfflinePackageImpl(
   }
 
   try {
-    let response = await api.openArchive(
-      manifest.packageId,
-      prefix > 0 ? { start: prefix } : undefined,
-      options.signal,
-    );
-    const rangeStart = parseRangeStart(response.headers.get("content-range"));
-    const resumeAccepted =
-      prefix > 0 &&
-      response.status === 206 &&
-      rangeStart === prefix &&
-      response.headers.get("etag") === manifest.archive.etag;
-    if (prefix > 0 && !resumeAccepted) {
-      await file.truncate(0);
-      await file.flush();
-      prefix = 0;
-      record.bytesReceived = 0;
-      record.verifiedPrefixBytes = 0;
-      await storage.put(record);
-      response = await api.openArchive(manifest.packageId, undefined, options.signal);
-    }
-    if (
-      !response.ok ||
-      (prefix > 0 && response.status !== 206) ||
-      (prefix === 0 && response.status !== 200)
-    ) {
-      throw new OfflinePackageApiError(
-        `http-${response.status}`,
-        response.status,
-        `Archive download returned HTTP ${response.status}`,
+    const estimate = await storage.estimate();
+    const remainingArchiveBytes = manifest.archive.byteLength - prefix;
+    if (estimate.available !== undefined && estimate.available < remainingArchiveBytes) {
+      throw new DOMException(
+        `Offline map needs ${remainingArchiveBytes} more archive bytes but only ${estimate.available} are available`,
+        "QuotaExceededError",
       );
     }
-    if (response.headers.get("etag") !== manifest.archive.etag) {
-      throw new Error("offline package archive ETag mismatch");
-    }
-
-    const hash = await hashPrefix(file, prefix);
+    let hash = await hashPrefix(file, prefix);
     record.bytesReceived = prefix;
     record.verifiedPrefixBytes = prefix;
-    let lastPersistedAt = Date.now();
-    let lastPersistedBytes = prefix;
-    report("downloading", startedAt);
-    if (!response.body) throw new Error("offline package archive response has no body");
-    const reader = response.body.getReader();
-    try {
-      while (true) {
-        if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
-        const item = await reader.read();
-        if (item.done) break;
-        const chunk = item.value instanceof Uint8Array ? item.value : new Uint8Array(item.value);
-        await file.append(chunk);
-        hash.update(chunk);
-        record.bytesReceived += chunk.byteLength;
-        record.verifiedPrefixBytes = record.bytesReceived;
-        if (
-          record.bytesReceived - lastPersistedBytes >= PROGRESS_BYTES ||
-          Date.now() - lastPersistedAt >= PROGRESS_INTERVAL_MS
-        ) {
-          await file.flush();
-          record.status = "downloading";
-          record.updatedAt = Date.now();
-          await storage.put(record);
-          lastPersistedBytes = record.bytesReceived;
-          lastPersistedAt = Date.now();
-          report("downloading", startedAt);
-        }
+    if (prefix < manifest.archive.byteLength) {
+      let response = await api.openArchive(
+        manifest.packageId,
+        prefix > 0 ? { start: prefix, etag: manifest.archive.etag } : undefined,
+        options.signal,
+      );
+      const rangeStart = parseRangeStart(response.headers.get("content-range"));
+      const resumeAccepted =
+        prefix > 0 &&
+        response.status === 206 &&
+        rangeStart === prefix &&
+        response.headers.get("etag") === manifest.archive.etag;
+      if (prefix > 0 && !resumeAccepted) {
+        await response.body?.cancel();
+        await file.truncate(0);
+        await file.flush();
+        prefix = 0;
+        record.bytesReceived = 0;
+        record.verifiedPrefixBytes = 0;
+        await storage.put(record);
+        hash = new Sha256();
+        response = await api.openArchive(manifest.packageId, undefined, options.signal);
       }
-    } finally {
-      reader.releaseLock();
+      if (
+        !response.ok ||
+        (prefix > 0 && response.status !== 206) ||
+        (prefix === 0 && response.status !== 200)
+      ) {
+        await response.body?.cancel();
+        throw new OfflinePackageApiError(
+          `http-${response.status}`,
+          response.status,
+          `Archive download returned HTTP ${response.status}`,
+        );
+      }
+      if (response.headers.get("etag") !== manifest.archive.etag) {
+        await response.body?.cancel();
+        throw new Error("offline package archive ETag mismatch");
+      }
+
+      let lastPersistedAt = Date.now();
+      let lastPersistedBytes = prefix;
+      report("downloading", startedAt);
+      if (!response.body) throw new Error("offline package archive response has no body");
+      const reader = response.body.getReader();
+      try {
+        while (true) {
+          if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+          const item = await reader.read();
+          if (item.done) break;
+          const chunk = item.value instanceof Uint8Array ? item.value : new Uint8Array(item.value);
+          await file.append(chunk);
+          hash.update(chunk);
+          record.bytesReceived += chunk.byteLength;
+          record.verifiedPrefixBytes = record.bytesReceived;
+          if (
+            record.bytesReceived - lastPersistedBytes >= PROGRESS_BYTES ||
+            Date.now() - lastPersistedAt >= PROGRESS_INTERVAL_MS
+          ) {
+            await file.flush();
+            record.status = "downloading";
+            record.updatedAt = Date.now();
+            await storage.put(record);
+            lastPersistedBytes = record.bytesReceived;
+            lastPersistedAt = Date.now();
+            report("downloading", startedAt);
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
     }
     await file.flush();
     if (record.bytesReceived !== manifest.archive.byteLength) {
@@ -280,9 +358,6 @@ async function downloadOfflinePackageImpl(
       maxZoom: manifest.coverage.maxZoom,
     });
     if (options.validateStyles) await options.validateStyles();
-    await file.close();
-    file = await storage.openPartial(manifest.packageId);
-    await file.flush();
     await file.close();
     await storage.finalize(manifest.packageId);
     record.status = "ready";

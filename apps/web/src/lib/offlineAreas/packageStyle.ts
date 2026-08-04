@@ -1,87 +1,67 @@
 import type { OfflineMapPackageManifest } from "@openmapx/core";
-import { offlineStyleCacheNameForVersion } from "../swCaches";
+import { offlineGlyphCacheNameForVersion } from "../swCaches";
 import { offlinePmtilesTileUrl } from "./packageProtocol";
-import type { OfflinePackageStyleAssets } from "./types";
 
-const REQUIRED_GLYPH_RANGES = ["0-255", "256-511", "8192-8447", "8448-8703"];
-// The private-use range is optional because the OpenMapTiles font archive does
-// not provide it for every font stack. It contains symbols rather than the
-// letters needed for normal map labels.
-const OPTIONAL_GLYPH_RANGES = ["64512-65023"];
+const GLYPH_FETCH_CONCURRENCY = 8;
 
 type StyleJson = Record<string, unknown> & {
   sources?: Record<string, Record<string, unknown>>;
   glyphs?: string;
-  sprite?: string | { url: string; id?: string }[];
+  sprite?: string;
   layers?: Array<Record<string, unknown> & { layout?: { "text-font"?: unknown } }>;
 };
 
 function cacheName(manifest: OfflineMapPackageManifest): string {
-  return offlineStyleCacheNameForVersion(manifest.style.version);
+  return offlineGlyphCacheNameForVersion(manifest.glyphs.version);
+}
+
+export async function deleteOfflineGlyphCacheIfUnused(
+  manifest: OfflineMapPackageManifest,
+  remaining: readonly { manifest: OfflineMapPackageManifest }[],
+): Promise<void> {
+  if (typeof caches === "undefined") return;
+  if (remaining.some((record) => record.manifest.glyphs.version === manifest.glyphs.version))
+    return;
+  await caches.delete(cacheName(manifest));
 }
 
 function withVersion(url: string, version: string): string {
   const separator = url.includes("?") ? "&" : "?";
-  return `${url}${separator}offlineStyle=${encodeURIComponent(version)}`;
-}
-
-function variantDirectory(variant: "light" | "dark"): "osm-bright" | "dark-matter" {
-  return variant === "dark" ? "dark-matter" : "osm-bright";
-}
-
-function assetUrl(manifest: OfflineMapPackageManifest, path: string): string {
-  return withVersion(
-    `${manifest.style.assetBaseUrl.replace(/\/$/, "")}/${path}`,
-    manifest.style.version,
-  );
-}
-
-function styleUrl(manifest: OfflineMapPackageManifest, variant: "light" | "dark"): string {
-  return assetUrl(manifest, `styles/${variantDirectory(variant)}/style.json`);
-}
-
-function spriteBaseUrl(manifest: OfflineMapPackageManifest, variant: "light" | "dark"): string {
-  return `${manifest.style.assetBaseUrl.replace(/\/$/, "")}/styles/${variantDirectory(variant)}/sprite`;
-}
-
-function spriteAssetUrl(
-  manifest: OfflineMapPackageManifest,
-  variant: "light" | "dark",
-  suffix: ".json" | ".png" | "@2x.json" | "@2x.png",
-): string {
-  return assetUrl(manifest, `styles/${variantDirectory(variant)}/sprite${suffix}`);
+  return `${url}${separator}offlineGlyphs=${encodeURIComponent(version)}`;
 }
 
 function glyphTemplate(manifest: OfflineMapPackageManifest): string {
-  return assetUrl(manifest, "fonts/{fontstack}/{range}.pbf");
+  return withVersion(manifest.glyphs.urlTemplate, manifest.glyphs.version);
 }
 
-async function openStyleCache(manifest: OfflineMapPackageManifest): Promise<Cache | undefined> {
+async function openPackageAssetCache(
+  manifest: OfflineMapPackageManifest,
+): Promise<Cache | undefined> {
   if (typeof caches === "undefined") return undefined;
   return await caches.open(cacheName(manifest));
 }
 
 async function fetchPinned(url: string, manifest: OfflineMapPackageManifest): Promise<Response> {
-  const cache = await openStyleCache(manifest);
+  const cache = await openPackageAssetCache(manifest);
   const cached = await cache?.match(url);
   if (cached) return cached.clone();
   const response = await fetch(url, { cache: "no-store" });
-  if (!response.ok) throw new Error(`offline style asset unavailable: ${url} (${response.status})`);
+  if (!response.ok)
+    throw new Error(`offline package asset unavailable: ${url} (${response.status})`);
   await cache?.put(url, response.clone());
   return response;
 }
 
-async function fetchOptionalPinned(
-  url: string,
-  manifest: OfflineMapPackageManifest,
-): Promise<void> {
-  const cache = await openStyleCache(manifest);
-  if (await cache?.match(url)) return;
+async function fetchConfiguredAsset(url: string): Promise<void> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`online style asset unavailable: ${url} (${response.status})`);
+}
+
+async function fetchOptionalConfiguredAsset(url: string): Promise<void> {
   try {
-    const response = await fetch(url, { cache: "no-store" });
-    if (response.ok) await cache?.put(url, response.clone());
+    await fetchConfiguredAsset(url);
   } catch {
-    // Optional style assets may be absent in the source bundle.
+    // High-density sprite assets are optional.
   }
 }
 
@@ -105,97 +85,208 @@ function glyphUrls(template: string, stacks: string[], ranges: string[]): string
   );
 }
 
-export async function validateOfflineStyleAssets(
-  manifest: OfflineMapPackageManifest,
-): Promise<OfflinePackageStyleAssets> {
-  if (manifest.style.provider !== "openmapx") {
-    throw new Error("only OpenMapX styles can be used by an OpenMapX package");
+function glyphCatalogUrl(manifest: OfflineMapPackageManifest): string {
+  const suffix = "/{fontstack}/{range}.pbf";
+  if (!manifest.glyphs.urlTemplate.endsWith(suffix)) {
+    throw new Error("offline package glyph template cannot resolve its catalog");
   }
-  const loaded = {} as OfflinePackageStyleAssets;
-  const variants = ["light", "dark"] as const;
-  for (const variant of variants) {
-    const response = await fetchPinned(styleUrl(manifest, variant), manifest);
-    const style = (await response.json()) as StyleJson;
-    if (!style.sources?.openmaptiles)
-      throw new Error(`OpenMapX ${variant} style has no vector source`);
-    for (const source of Object.values(style.sources)) {
-      if (source && typeof source === "object" && "attribution" in source) source.attribution = "";
-    }
+  return withVersion(
+    `${manifest.glyphs.urlTemplate.slice(0, -suffix.length)}/catalog.json`,
+    manifest.glyphs.version,
+  );
+}
 
+function glyphCompletionUrl(manifest: OfflineMapPackageManifest): string {
+  const catalogUrl = glyphCatalogUrl(manifest);
+  const separator = catalogUrl.includes("?") ? "&" : "?";
+  return `${catalogUrl}${separator}complete=1`;
+}
+
+export async function hasOfflineGlyphAssets(manifest: OfflineMapPackageManifest): Promise<boolean> {
+  if (typeof caches === "undefined") return false;
+  const cache = await caches.open(cacheName(manifest));
+  return (await cache.match(glyphCompletionUrl(manifest))) !== undefined;
+}
+
+function validateGlyphCatalog(raw: unknown): Record<string, string[]> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("offline package glyph catalog is invalid");
+  }
+  const catalog: Record<string, string[]> = {};
+  const entries = Object.entries(raw);
+  if (entries.length === 0 || entries.length > 256) {
+    throw new Error("offline package glyph catalog is empty or too large");
+  }
+  for (const [font, value] of entries) {
+    if (!font || font.length > 256 || !Array.isArray(value) || value.length > 512) {
+      throw new Error("offline package glyph catalog is invalid");
+    }
+    const ranges = value.filter((range): range is string => {
+      if (typeof range !== "string") return false;
+      const match = /^(\d+)-(\d+)$/.exec(range);
+      if (!match) return false;
+      const start = Number(match[1]);
+      const end = Number(match[2]);
+      return (
+        Number.isSafeInteger(start) &&
+        Number.isSafeInteger(end) &&
+        start >= 0 &&
+        start <= 65_280 &&
+        start % 256 === 0 &&
+        end === start + 255
+      );
+    });
+    if (ranges.length !== value.length || ranges.length === 0) {
+      throw new Error("offline package glyph catalog contains an invalid range");
+    }
+    catalog[font] = [...new Set(ranges)];
+  }
+  return catalog;
+}
+
+function rangesForStack(catalog: Record<string, string[]>, stack: string): string[] {
+  const fonts = stack.split(",").map((font) => font.trim());
+  const ranges = fonts.map((font) => catalog[font]);
+  if (ranges.some((value) => !value)) {
+    throw new Error(`offline package has no glyph catalog for style font stack: ${stack}`);
+  }
+  const [first, ...rest] = ranges as string[][];
+  return first.filter((range) => rest.every((candidate) => candidate.includes(range)));
+}
+
+async function fetchPinnedGlyphs(
+  urls: string[],
+  manifest: OfflineMapPackageManifest,
+): Promise<void> {
+  for (let offset = 0; offset < urls.length; offset += GLYPH_FETCH_CONCURRENCY) {
+    await Promise.all(
+      urls.slice(offset, offset + GLYPH_FETCH_CONCURRENCY).map((url) => fetchPinned(url, manifest)),
+    );
+  }
+}
+
+function spriteAssetUrl(sprite: string, suffix: ".json" | ".png" | "@2x.json" | "@2x.png"): string {
+  const queryIndex = sprite.search(/[?#]/);
+  if (queryIndex < 0) return `${sprite}${suffix}`;
+  return `${sprite.slice(0, queryIndex)}${suffix}${sprite.slice(queryIndex)}`;
+}
+
+async function validateOnlineStyleAssets(styles: {
+  light: StyleJson;
+  dark: StyleJson;
+}): Promise<void> {
+  const fetched = new Set<string>();
+  for (const [variant, style] of Object.entries(styles)) {
+    if (!style.sources?.openmaptiles) {
+      throw new Error(`OpenMapX ${variant} style has no vector source`);
+    }
     if (typeof style.glyphs !== "string") {
       throw new Error(`OpenMapX ${variant} style has no glyph template`);
     }
-    for (const url of glyphUrls(
-      glyphTemplate(manifest),
-      fontStacks(style),
-      REQUIRED_GLYPH_RANGES,
-    )) {
-      await fetchPinned(url, manifest);
-    }
-    for (const url of glyphUrls(
-      glyphTemplate(manifest),
-      fontStacks(style),
-      OPTIONAL_GLYPH_RANGES,
-    )) {
-      await fetchOptionalPinned(url, manifest);
-    }
-    await fetchPinned(spriteAssetUrl(manifest, variant, ".json"), manifest);
-    await fetchPinned(spriteAssetUrl(manifest, variant, ".png"), manifest);
-    await fetchOptionalPinned(spriteAssetUrl(manifest, variant, "@2x.json"), manifest);
-    await fetchOptionalPinned(spriteAssetUrl(manifest, variant, "@2x.png"), manifest);
-    if (!style.sprite) {
+    if (typeof style.sprite !== "string") {
       throw new Error(`OpenMapX ${variant} style has no sprite template`);
     }
-    loaded[variant] = style;
-  }
-  loaded.manifest = manifest;
-  return loaded;
-}
 
-export async function resolveOfflinePackageStyle(
-  manifest: OfflineMapPackageManifest,
-  packageId: string,
-  variant: "light" | "dark",
-  packageIds: readonly string[] = [packageId],
-): Promise<Record<string, unknown>> {
-  const response = await fetchPinned(styleUrl(manifest, variant), manifest);
-  const style = (await response.json()) as StyleJson;
-  const source = style.sources?.openmaptiles;
-  if (!source) throw new Error("OpenMapX style has no openmaptiles source");
-  const originalSource = { ...source };
-  const originalLayers = style.layers ?? [];
-  source.tiles = [offlinePmtilesTileUrl(packageId)];
-  delete source.url;
-  source.attribution = "";
-  style.glyphs = glyphTemplate(manifest);
-  style.sprite = spriteBaseUrl(manifest, variant);
-
-  const additionalPackageIds = [...new Set(packageIds)].filter((id) => id !== packageId);
-  if (additionalPackageIds.length > 0) {
-    style.sources = { ...style.sources };
-    style.layers = [...originalLayers];
-    for (const additionalPackageId of additionalPackageIds) {
-      const sourceId = `openmaptiles-${additionalPackageId}`;
-      style.sources[sourceId] = {
-        ...originalSource,
-        tiles: [offlinePmtilesTileUrl(additionalPackageId)],
-        attribution: "",
-      };
-      delete style.sources[sourceId].url;
-      style.layers.push(
-        ...originalLayers
-          .filter((layer) => layer.source === "openmaptiles")
-          .map((layer) => ({
-            ...layer,
-            id: `${String(layer.id)}-${additionalPackageId}`,
-            source: sourceId,
-          })),
-      );
+    const required = [spriteAssetUrl(style.sprite, ".json"), spriteAssetUrl(style.sprite, ".png")];
+    for (const url of required) {
+      if (fetched.has(url)) continue;
+      await fetchConfiguredAsset(url);
+      fetched.add(url);
+    }
+    for (const suffix of ["@2x.json", "@2x.png"] as const) {
+      const url = spriteAssetUrl(style.sprite, suffix);
+      if (fetched.has(url)) continue;
+      await fetchOptionalConfiguredAsset(url);
+      fetched.add(url);
     }
   }
-  return style;
 }
 
-export function offlineStyleCacheName(manifest: OfflineMapPackageManifest): string {
-  return cacheName(manifest);
+export async function validateOfflineStyleAssets(
+  manifest: OfflineMapPackageManifest,
+  styles: { light: Record<string, unknown>; dark: Record<string, unknown> },
+): Promise<void> {
+  const cache = await openPackageAssetCache(manifest);
+  await cache?.delete(glyphCompletionUrl(manifest));
+  const typedStyles = {
+    light: styles.light as StyleJson,
+    dark: styles.dark as StyleJson,
+  };
+  await validateOnlineStyleAssets(typedStyles);
+  const catalogResponse = await fetchPinned(glyphCatalogUrl(manifest), manifest);
+  const catalog = validateGlyphCatalog(await catalogResponse.json());
+  const stacks = [...new Set(Object.values(typedStyles).flatMap(fontStacks))];
+  const urls = new Set<string>();
+  for (const stack of stacks) {
+    const ranges = rangesForStack(catalog, stack);
+    if (ranges.length === 0) {
+      throw new Error(`offline package has no common glyph ranges for style font stack: ${stack}`);
+    }
+    for (const url of glyphUrls(glyphTemplate(manifest), [stack], ranges)) urls.add(url);
+  }
+  await fetchPinnedGlyphs([...urls], manifest);
+  await cache?.put(
+    glyphCompletionUrl(manifest),
+    new Response(JSON.stringify({ glyphsVersion: manifest.glyphs.version }), {
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+}
+
+export function resolveOfflinePackageStyle(
+  configuredStyle: Record<string, unknown>,
+  packages: readonly { packageId: string; manifest: OfflineMapPackageManifest }[],
+): Record<string, unknown> {
+  if (packages.length === 0) throw new Error("at least one offline package is required");
+  const style = configuredStyle as StyleJson;
+  const source = style.sources?.openmaptiles;
+  if (!source) throw new Error("OpenMapX style has no openmaptiles source");
+
+  const uniquePackages = [...new Map(packages.map((item) => [item.packageId, item])).values()].sort(
+    (a, b) => {
+      const area = (item: typeof a) => {
+        const bbox = item.manifest.coverage.bbox;
+        return (bbox.east - bbox.west) * (bbox.north - bbox.south);
+      };
+      return (
+        area(a) - area(b) ||
+        b.manifest.dataset.generatedAt.localeCompare(a.manifest.dataset.generatedAt) ||
+        a.packageId.localeCompare(b.packageId)
+      );
+    },
+  );
+  const packageIds = uniquePackages.map((item) => item.packageId);
+  const typedManifests = uniquePackages.map((item) => item.manifest);
+  const glyphManifest = [...typedManifests].sort(
+    (a, b) =>
+      b.dataset.generatedAt.localeCompare(a.dataset.generatedAt) ||
+      a.packageId.localeCompare(b.packageId),
+  )[0];
+  const bounds = typedManifests.reduce(
+    (value, manifest) => [
+      Math.min(value[0], manifest.coverage.bbox.west),
+      Math.min(value[1], manifest.coverage.bbox.south),
+      Math.max(value[2], manifest.coverage.bbox.east),
+      Math.max(value[3], manifest.coverage.bbox.north),
+    ],
+    [Infinity, Infinity, -Infinity, -Infinity],
+  );
+  const primarySource: Record<string, unknown> = {
+    ...source,
+    tiles: [offlinePmtilesTileUrl(packageIds)],
+    bounds,
+    minzoom: Math.min(...typedManifests.map((manifest) => manifest.coverage.minZoom)),
+    // A single MapLibre source cannot advertise a different native maximum per
+    // package. Use the shared maximum so MapLibre overzooms everywhere above
+    // it instead of requesting native tiles that lower-zoom packages lack.
+    maxzoom: Math.min(...typedManifests.map((manifest) => manifest.coverage.maxZoom)),
+    attribution: "",
+  };
+  delete primarySource.url;
+
+  return {
+    ...configuredStyle,
+    sources: { ...(style.sources ?? {}), openmaptiles: primarySource },
+    glyphs: glyphTemplate(glyphManifest),
+  };
 }

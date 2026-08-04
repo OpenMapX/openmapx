@@ -1,5 +1,6 @@
 export { OfflinePackageGenerator, offlinePackageIdForRequest } from "./generator.js";
 export {
+  createOpenMapxPackageSourceFactory,
   getOpenMapxPackageSource,
   OfflinePackageSourceError,
 } from "./source-catalog.js";

@@ -25,7 +25,7 @@ import type {
   StoredOfflinePackage,
 } from "./types.js";
 
-const PACKAGE_ID_PATTERN = /^omp1-[0-9a-f]{64}$/;
+const PACKAGE_ID_PATTERN = /^omp2-[0-9a-f]{64}$/;
 const JOB_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const ARCHIVE_FILENAME = "package.pmtiles";
 const MANIFEST_FILENAME = "manifest.json";
@@ -166,7 +166,11 @@ export class OfflinePackageStorage implements OfflinePackageStorageLike {
         rmSync(input.archivePath, { force: true });
         return;
       }
-      throw new Error(`offline package already exists: ${manifest.packageId}`);
+      if (existing) throw new Error(`offline package already exists: ${manifest.packageId}`);
+      if ((this.activeStreams.get(manifest.packageId) ?? 0) > 0) {
+        throw new Error(`offline package is currently in use: ${manifest.packageId}`);
+      }
+      rmSync(finalDirectory, { recursive: true, force: true });
     }
 
     const tempDirectory = join(
@@ -261,13 +265,22 @@ export class OfflinePackageStorage implements OfflinePackageStorageLike {
   }
 
   async reconcileOfflinePackageStorage(): Promise<{ removed: number }> {
+    if (!existsSync(this.packageRoot)) return { removed: 0 };
     const tempRoot = join(this.packageRoot, TEMP_DIRECTORY);
-    if (!existsSync(tempRoot)) return { removed: 0 };
-    const entries = readdirSync(tempRoot, { withFileTypes: true });
     let removed = 0;
-    for (const entry of entries) {
-      const path = join(tempRoot, entry.name);
-      rmSync(path, { recursive: true, force: true });
+    if (existsSync(tempRoot)) {
+      for (const entry of readdirSync(tempRoot, { withFileTypes: true })) {
+        const path = join(tempRoot, entry.name);
+        rmSync(path, { recursive: true, force: true });
+        removed++;
+      }
+    }
+    for (const entry of readdirSync(this.packageRoot, { withFileTypes: true })) {
+      if (entry.name === TEMP_DIRECTORY || !entry.isDirectory()) continue;
+      if (!isContentAddressedPackageId(entry.name)) continue;
+      if (await this.readPublishedManifest(entry.name)) continue;
+      if ((this.activeStreams.get(entry.name) ?? 0) > 0) continue;
+      rmSync(this.packageDirectory(entry.name), { recursive: true, force: true });
       removed++;
     }
     return { removed };

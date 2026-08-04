@@ -1,7 +1,7 @@
 import z from "zod/v4";
 
-export const OFFLINE_PACKAGE_SCHEMA_VERSION = 1 as const;
-export const OFFLINE_PACKAGE_ALGORITHM_VERSION = "pmtiles-area-v2" as const;
+export const OFFLINE_PACKAGE_SCHEMA_VERSION = 2 as const;
+export const OFFLINE_PACKAGE_ALGORITHM_VERSION = "pmtiles-area-v3" as const;
 export const WEB_MERCATOR_MAX_LATITUDE = 85.05112878;
 export const OFFLINE_PACKAGE_MAX_ZOOM = 24;
 export const OFFLINE_PACKAGE_MAX_AREA_SQUARE_DEGREES = 2_000;
@@ -26,8 +26,7 @@ export interface OfflinePackageSourceDescriptor {
   sourceMaxZoom: number;
   sourceBounds: OfflinePackageBbox;
   tileSchema: "openmaptiles";
-  styleProvider: "openmapx";
-  styleVersion: string;
+  glyphsVersion: string;
   packageAlgorithmVersion: string;
   attribution: string[];
 }
@@ -56,7 +55,7 @@ export type OfflinePackageLocalStatus =
   | "deleting";
 
 export interface OfflineMapPackageManifest {
-  schemaVersion: 1;
+  schemaVersion: 2;
   packageId: string;
   requestKey: string;
   dataset: {
@@ -78,11 +77,9 @@ export interface OfflineMapPackageManifest {
     sha256: string;
     etag: string;
   };
-  style: {
-    provider: "openmapx";
+  glyphs: {
     version: string;
-    variants: Array<"light" | "dark">;
-    assetBaseUrl: string;
+    urlTemplate: string;
   };
   attribution: string[];
 }
@@ -93,12 +90,7 @@ export interface OfflinePackageJob {
   status: OfflinePackageJobStatus;
   packageId?: string;
   manifest?: OfflineMapPackageManifest;
-  errorCode?:
-    | "unsupported-provider"
-    | "invalid-request"
-    | "capacity"
-    | "generation-failed"
-    | "expired";
+  errorCode?: "invalid-request" | "capacity" | "generation-failed" | "expired";
   errorMessage?: string;
 }
 
@@ -106,10 +98,10 @@ export interface OfflinePackageCapability {
   available: boolean;
   provider: "openmapx";
   datasetVersion?: string;
-  styleVersion?: string;
+  glyphsVersion?: string;
   sourceMaxZoom?: number;
   sourceBounds?: OfflinePackageBbox;
-  reason?: "unsupported-provider" | "source-unavailable" | "capacity";
+  reason?: "source-unavailable";
 }
 
 export interface OfflinePackageCoordinate {
@@ -118,8 +110,6 @@ export interface OfflinePackageCoordinate {
 }
 
 export interface OfflinePackageCompatibility {
-  datasetVersion: string;
-  styleVersion: string;
   tileSchema: "openmaptiles";
 }
 
@@ -145,10 +135,16 @@ const bboxSchema = z
     }
   });
 
-const packageIdSchema = z.string().regex(/^[A-Za-z0-9_-]{8,128}$/, "invalid package id");
+const packageIdSchema = z.string().regex(/^omp2-[0-9a-f]{64}$/, "invalid package id");
 const archiveUrlSchema = z
   .string()
-  .regex(/^\/api\/offline\/packages\/[A-Za-z0-9_-]{8,128}\/archive$/, "invalid archive URL");
+  .regex(/^\/api\/offline\/packages\/omp2-[0-9a-f]{64}\/archive$/, "invalid archive URL");
+const glyphUrlTemplateSchema = z
+  .string()
+  .regex(
+    /^\/api\/offline\/packages\/glyphs\/[A-Za-z0-9_-]{1,256}\/\{fontstack\}\/\{range\}\.pbf$/,
+    "invalid glyph URL template",
+  );
 
 export const offlinePackageRequestSchema = z.object({
   bbox: bboxSchema,
@@ -181,11 +177,9 @@ export const offlineMapPackageManifestSchema = z
       sha256: z.string().regex(/^[0-9a-f]{64}$/),
       etag: z.string().regex(/^sha256-[0-9a-f]{64}$/),
     }),
-    style: z.object({
-      provider: z.literal("openmapx"),
+    glyphs: z.object({
       version: z.string().min(1).max(256),
-      variants: z.array(z.enum(["light", "dark"])).min(1),
-      assetBaseUrl: z.string().regex(/^\/[^\s]*$/),
+      urlTemplate: glyphUrlTemplateSchema,
     }),
     attribution: z.array(z.string().min(1).max(2048)).min(1),
   })
@@ -212,6 +206,14 @@ export const offlineMapPackageManifestSchema = z
         message: "archive URL package id must match packageId",
       });
     }
+    const glyphsVersion = manifest.glyphs.urlTemplate.split("/")[5];
+    if (glyphsVersion !== manifest.glyphs.version) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["glyphs", "urlTemplate"],
+        message: "glyph URL version must match glyphs.version",
+      });
+    }
   });
 
 function roundCoordinate(value: number): number {
@@ -236,8 +238,7 @@ function assertSourceDescriptor(source: OfflinePackageSourceDescriptor): void {
   if (source.datasetId !== "openmapx" || source.tileSchema !== "openmaptiles") {
     throw new Error("unsupported package source");
   }
-  if (source.styleProvider !== "openmapx") throw new Error("unsupported provider");
-  if (!source.datasetVersion || !source.styleVersion || !source.packageAlgorithmVersion) {
+  if (!source.datasetVersion || !source.glyphsVersion || !source.packageAlgorithmVersion) {
     throw new Error("source version metadata is required");
   }
   if (
@@ -323,14 +324,13 @@ export function canonicalizeOfflinePackageRequest(
 
 export function offlinePackageRequestKey(canonical: CanonicalOfflinePackageRequest): string {
   return JSON.stringify({
-    version: 1,
+    version: 2,
     provider: canonical.request.provider,
     source: {
       datasetId: canonical.source.datasetId,
       datasetVersion: canonical.source.datasetVersion,
       tileSchema: canonical.source.tileSchema,
-      styleProvider: canonical.source.styleProvider,
-      styleVersion: canonical.source.styleVersion,
+      glyphsVersion: canonical.source.glyphsVersion,
       packageAlgorithmVersion: canonical.source.packageAlgorithmVersion,
     },
     effective: canonical.effective,
@@ -358,11 +358,7 @@ export function isOfflinePackageCompatible(
   compatibility: OfflinePackageCompatibility,
 ): boolean {
   return (
-    manifest.dataset.id === "openmapx" &&
-    manifest.dataset.version === compatibility.datasetVersion &&
-    manifest.dataset.tileSchema === compatibility.tileSchema &&
-    manifest.style.provider === "openmapx" &&
-    manifest.style.version === compatibility.styleVersion
+    manifest.dataset.id === "openmapx" && manifest.dataset.tileSchema === compatibility.tileSchema
   );
 }
 
@@ -395,5 +391,10 @@ export function selectOfflinePackage(
         isOfflinePackageCompatible(candidate, compatibility) &&
         packageContainsPoint(candidate, point),
     )
-    .sort((a, b) => coverageArea(a) - coverageArea(b) || a.packageId.localeCompare(b.packageId))[0];
+    .sort(
+      (a, b) =>
+        coverageArea(a) - coverageArea(b) ||
+        b.dataset.generatedAt.localeCompare(a.dataset.generatedAt) ||
+        a.packageId.localeCompare(b.packageId),
+    )[0];
 }

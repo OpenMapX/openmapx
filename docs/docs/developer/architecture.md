@@ -166,7 +166,7 @@ client IP — while the loopback admin short-circuit deliberately reads the raw
 socket address, so a forged `X-Forwarded-For` can't bypass it.
 
 **The data plane behind the engines.** The `data-manager` service owns the
-`/data` tree. It downloads OSM extracts and map styles, and runs the
+`/data` tree. It downloads OSM extracts and map glyphs, and runs the
 transactional Transitous/operator-source pipeline that imports candidate static
 schedules into an inactive MOTIS slot. MOTIS is the only compiled static
 schedule runtime. The data-manager promotes a complete candidate only after its

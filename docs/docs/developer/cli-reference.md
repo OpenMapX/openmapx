@@ -113,10 +113,10 @@ hardlinks, authenticated feeds — lives in
 
 | Command | Description |
 | --- | --- |
-| `data download <kind> [region]` | Download source data. `kind` is `osm` (takes `[region]`), `style`, or `gtfs`. The `gtfs` spelling starts the same transactional sync as `data sync`; its only feed flag is `--countries <list>`. |
+| `data download <kind> [region]` | Download source data. `kind` is `osm` (takes `[region]`), `fonts`, or `gtfs`. The `gtfs` spelling starts the same transactional sync as `data sync`; its only feed flag is `--countries <list>`. |
 | `data build <kind> [region]` | Build prepared artifacts (alias for `services build`). `kind` is `motis`, `osrm`, `otp`, `pelias`, or `tiles`. |
 | `data convert <kind> [region]` | Derive a secondary format from a download. `kind` is `overpass` (OSM PBF → bzip2). |
-| `data update [region]` | Run the full refresh: download OSM, transactionally sync transit sources, download styles, build artifacts, render, and link. Flags: `--countries <list>`, `--fail-fast`. |
+| `data update [region]` | Run the full refresh: download OSM, transactionally sync transit sources, download glyph fonts, build artifacts, render, and link. Flags: `--countries <list>`, `--fail-fast`. |
 | `data sync` | Queue a transactional transit-source sync. Flag: `--countries <list>`. The command returns a job id; promotion changes the active set only after the candidate passes. |
 | `data source list` | List requested and active transit sources together with origin, region, and lifecycle state. |
 | `data source add <url>` | Add an operator source and queue a sync. Required: `--name`, `--region`, `--attribution`, plus `--license-spdx` or `--license-url`. |
@@ -124,7 +124,7 @@ hardlinks, authenticated feeds — lives in
 | `data source enable <sourceId>` | Re-enable a disabled catalog source and queue a sync. |
 | `data link` | Re-render the hardlink plan from the current selection, then apply and prune it. |
 | `data status` | Show the data-manager's tracked dataset inventory. Flag: `--offline` scans `infra/docker/data` directly. |
-| `data clean <target>` | Remove local data for one type alias (e.g. `osm`, `gtfs`, `style`, `osrm-graph`) or `all`. |
+| `data clean <target>` | Remove local data for one type alias (e.g. `osm`, `gtfs`, `fonts`, `osrm-graph`) or `all`. |
 | `data generate-api-keys` | Generate the Transitous API-key template for feeds that require keys. Flags: `--repo-url <url>`, `--output <path>`. |
 | `data overture-sync [region]` | Run the release-pinned regional refresh: pull and atomic ingest, then start the independently retryable OSM↔GERS link rebuild. |
 | `data overture-pull [region]` | Resolve exact Overture Places assets through STAC, pull a regional Parquet snapshot, and write its validated release contract. |

@@ -24,6 +24,7 @@ import {
   offlinePackageIdForRequest,
 } from "../src/offline-packages/generator.js";
 import {
+  createOpenMapxPackageSourceFactory,
   getOpenMapxPackageSource,
   OfflinePackageSourceError,
 } from "../src/offline-packages/source-catalog.js";
@@ -71,20 +72,10 @@ function createSourceMbtiles(dataDir: string): string {
   return path;
 }
 
-function createStyleTree(dataDir: string): string {
-  const root = join(dataDir, "tile-styles");
-  for (const variant of ["osm-bright", "dark-matter"]) {
-    const directory = join(root, variant);
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(
-      join(directory, "style.json"),
-      JSON.stringify({ version: 8, sources: {}, layers: [] }),
-    );
-    writeFileSync(join(directory, "sprite.json"), "{}");
-    writeFileSync(join(directory, "sprite.png"), "fixture");
-  }
-  mkdirSync(join(dataDir, "tile-fonts", "Metropolis"), { recursive: true });
-  writeFileSync(join(dataDir, "tile-fonts", "Metropolis", "0-255.pbf"), "fixture-font");
+function createFontTree(dataDir: string): string {
+  const root = join(dataDir, "tile-fonts");
+  mkdirSync(join(root, "Metropolis"), { recursive: true });
+  writeFileSync(join(root, "Metropolis", "0-255.pbf"), "fixture-font");
   return root;
 }
 
@@ -92,7 +83,7 @@ function createDataDir(): string {
   const dataDir = mkdtempSync(join(tmpdir(), "openmapx-offline-packages-"));
   roots.push(dataDir);
   createSourceMbtiles(dataDir);
-  createStyleTree(dataDir);
+  createFontTree(dataDir);
   return dataDir;
 }
 
@@ -102,8 +93,7 @@ const sourceDescriptor: OfflinePackageSourceDescriptor = {
   sourceMaxZoom: 12,
   sourceBounds: { west: 0, south: 0, east: 10, north: 10 },
   tileSchema: "openmaptiles",
-  styleProvider: "openmapx",
-  styleVersion: "fixture-style-v1",
+  glyphsVersion: "fixture-glyphs-v1",
   packageAlgorithmVersion: "pmtiles-area-v1",
   attribution: ["© OpenStreetMap contributors", "© OpenMapTiles"],
 };
@@ -120,7 +110,7 @@ function manifest(
   overrides: Partial<OfflineMapPackageManifest> = {},
 ): OfflineMapPackageManifest {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     packageId,
     requestKey: "fixture-request-key",
     dataset: {
@@ -138,11 +128,9 @@ function manifest(
       sha256: fixtureArchiveSha256,
       etag: `sha256-${fixtureArchiveSha256}`,
     },
-    style: {
-      provider: "openmapx",
-      version: "fixture-style-v1",
-      variants: ["light", "dark"],
-      assetBaseUrl: "/api/offline/packages/assets/openmapx/fixture-style-v1",
+    glyphs: {
+      version: "fixture-glyphs-v1",
+      urlTemplate: "/api/offline/packages/glyphs/fixture-glyphs-v1/{fontstack}/{range}.pbf",
     },
     attribution: ["© OpenStreetMap contributors", "© OpenMapTiles"],
     ...overrides,
@@ -150,12 +138,12 @@ function manifest(
 }
 
 describe("offline package source catalog", () => {
-  it("resolves the existing MBTiles source and styles without creating PMTiles", () => {
+  it("resolves the existing MBTiles source and fonts without creating PMTiles", () => {
     const dataDir = createDataDir();
     const source = getOpenMapxPackageSource(dataDir);
 
     expect(source.mbtilesPath).toBe(join(dataDir, "tile-mbtiles", "tiles.mbtiles"));
-    expect(source.styleDirectory).toBe(join(dataDir, "tile-styles"));
+    expect(source.fontsDirectory).toBe(join(dataDir, "tile-fonts"));
     expect(source.descriptor.sourceMaxZoom).toBe(12);
     expect(source.descriptor.sourceBounds).toEqual({ west: 0, south: 0, east: 10, north: 10 });
     expect(source.descriptor.datasetVersion).toContain("fixture-dataset");
@@ -172,6 +160,12 @@ describe("offline package source catalog", () => {
     roots.push(dataDir);
     expect(() => getOpenMapxPackageSource(dataDir)).toThrow(OfflinePackageSourceError);
   });
+
+  it("reuses a catalog while the atomically managed source roots are unchanged", () => {
+    const dataDir = createDataDir();
+    const source = createOpenMapxPackageSourceFactory(dataDir);
+    expect(source()).toBe(source());
+  });
 });
 
 describe("offline package storage", () => {
@@ -179,7 +173,7 @@ describe("offline package storage", () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-offline-storage-"));
     roots.push(root);
     const storage = new OfflinePackageStorage(root);
-    const packageId = `omp1-${"a".repeat(64)}`;
+    const packageId = `omp2-${"a".repeat(64)}`;
 
     expect(isContentAddressedPackageId(packageId)).toBe(true);
     expect(storage.packageDirectory(packageId)).toBe(packageDirectory(root, packageId));
@@ -193,7 +187,7 @@ describe("offline package storage", () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-offline-storage-"));
     roots.push(root);
     const storage = new OfflinePackageStorage(root);
-    const packageId = `omp1-${"b".repeat(64)}`;
+    const packageId = `omp2-${"b".repeat(64)}`;
     const archivePart = storage.temporaryArchivePath("job-1");
     mkdirSync(join(root, ".tmp"), { recursive: true });
     writeFileSync(archivePart, "12345678");
@@ -221,7 +215,7 @@ describe("offline package storage", () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-offline-storage-"));
     roots.push(root);
     const storage = new OfflinePackageStorage(root);
-    const packageId = `omp1-${"c".repeat(64)}`;
+    const packageId = `omp2-${"c".repeat(64)}`;
     mkdirSync(storage.packageDirectory(packageId), { recursive: true });
     writeFileSync(join(storage.packageDirectory(packageId), "manifest.json"), "{}");
     expect(await storage.readPublishedManifest(packageId)).toBeUndefined();
@@ -238,6 +232,31 @@ describe("offline package storage", () => {
 });
 
 describe("offline package generation", () => {
+  it("fails safely if the source changes between preparation and extraction", async () => {
+    const dataDir = createDataDir();
+    const storage = new OfflinePackageStorage(join(dataDir, "offline-packages"));
+    const extract = vi.fn();
+    let sourceReads = 0;
+    const generator = new OfflinePackageGenerator({
+      source: () => ({
+        descriptor:
+          sourceReads++ === 0
+            ? sourceDescriptor
+            : { ...sourceDescriptor, datasetVersion: "replacement-dataset" },
+        mbtilesPath: join(dataDir, "tile-mbtiles", "tiles.mbtiles"),
+        fontsDirectory: join(dataDir, "tile-fonts"),
+        packageRoot: join(dataDir, "offline-packages"),
+      }),
+      storage,
+      extractor: extract,
+    });
+
+    const job = await generator.prepare(request);
+    await vi.waitFor(() => expect(generator.getJob(job.jobId)?.status).toBe("failed"));
+    expect(generator.getJob(job.jobId)?.errorMessage).toContain("source changed");
+    expect(extract).not.toHaveBeenCalled();
+  });
+
   it("shares one job for equal canonical requests and reports measured readiness", async () => {
     const dataDir = createDataDir();
     const storage = new OfflinePackageStorage(join(dataDir, "offline-packages"));
@@ -263,7 +282,7 @@ describe("offline package generation", () => {
       source: () => ({
         descriptor: sourceDescriptor,
         mbtilesPath: join(dataDir, "tile-mbtiles", "tiles.mbtiles"),
-        styleDirectory: join(dataDir, "tile-styles"),
+        fontsDirectory: join(dataDir, "tile-fonts"),
         packageRoot: join(dataDir, "offline-packages"),
       }),
       storage,
@@ -298,7 +317,7 @@ describe("offline package generation", () => {
       source: () => ({
         descriptor: sourceDescriptor,
         mbtilesPath: join(dataDir, "tile-mbtiles", "tiles.mbtiles"),
-        styleDirectory: join(dataDir, "tile-styles"),
+        fontsDirectory: join(dataDir, "tile-fonts"),
         packageRoot: join(dataDir, "offline-packages"),
       }),
       storage,
@@ -350,7 +369,7 @@ describe("offline package generation", () => {
       source: () => ({
         descriptor: sourceDescriptor,
         mbtilesPath: join(dataDir, "tile-mbtiles", "tiles.mbtiles"),
-        styleDirectory: join(dataDir, "tile-styles"),
+        fontsDirectory: join(dataDir, "tile-fonts"),
         packageRoot: join(dataDir, "offline-packages"),
       }),
       storage,
@@ -398,7 +417,7 @@ describe("offline package generation", () => {
       source: () => ({
         descriptor: sourceDescriptor,
         mbtilesPath: join(dataDir, "tile-mbtiles", "tiles.mbtiles"),
-        styleDirectory: join(dataDir, "tile-styles"),
+        fontsDirectory: join(dataDir, "tile-fonts"),
         packageRoot: join(dataDir, "offline-packages"),
       }),
       storage,

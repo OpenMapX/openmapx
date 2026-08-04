@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OFFLINE_PACKAGE_CHANGED_EVENT } from "../offlineAreas/packageDownload";
 import type { OfflinePackageResolver } from "../offlineAreas/packageResolver";
 import { getDefaultOfflinePackageResolver } from "../offlineAreas/packageResolver";
+import { ensureOfflinePackageRuntime } from "../offlineAreas/runtime";
 import {
   createNavigationSessionStorage,
   type NavigationSessionStorage,
@@ -95,9 +96,10 @@ export function useNavigationSessionPersistence(
   now: () => number = Date.now,
 ): NavigationSessionResumeState {
   const storageRef = useMemo(() => storage ?? createNavigationSessionStorage(), [storage]);
+  const [discoveredResolver, setDiscoveredResolver] = useState<OfflinePackageResolver>();
   const resolveResolver = useCallback(
-    () => resolver ?? getDefaultOfflinePackageResolver(),
-    [resolver],
+    () => resolver ?? discoveredResolver ?? getDefaultOfflinePackageResolver(),
+    [discoveredResolver, resolver],
   );
   const [pending, setPending] = useState<NavigationSessionSnapshot | null>(null);
   const [coverage, setCoverage] = useState<OfflineRouteCoverage>({
@@ -125,6 +127,20 @@ export function useNavigationSessionPersistence(
     },
     [now, resolveResolver, storageRef],
   );
+
+  useEffect(() => {
+    if (resolver) return;
+    let cancelled = false;
+    void ensureOfflinePackageRuntime().then((localResolver) => {
+      if (cancelled || !localResolver) return;
+      setDiscoveredResolver(localResolver);
+      const state = useNavigationStore.getState();
+      if (isGroundActive(state)) enqueueWrite(state);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [enqueueWrite, resolver]);
 
   useEffect(() => {
     if (readRef.current) return;
@@ -235,6 +251,18 @@ export function useNavigationSessionPersistence(
       );
     }
   }, [now, resolveResolver]);
+
+  useEffect(() => {
+    const resolverNow = resolveResolver();
+    if (!pending || !resolverNow) return;
+    setCoverage(
+      getOfflineRouteCoverage(
+        pending,
+        resolverNow,
+        pending.progress?.snapped ?? pending.route.geometry[0],
+      ),
+    );
+  }, [pending, resolveResolver]);
 
   useEffect(() => {
     const onPackageChanged = () => {

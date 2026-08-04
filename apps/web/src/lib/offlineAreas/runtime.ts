@@ -1,4 +1,3 @@
-import { defaultOfflinePackageApi } from "./packageApi";
 import { recordOfflinePackageMetric } from "./packageMetrics";
 import type { OfflinePackageResolver } from "./packageResolver";
 import {
@@ -6,6 +5,7 @@ import {
   getDefaultOfflinePackageResolver,
 } from "./packageResolver";
 import { createOfflinePackageStorage } from "./packageStorage";
+import { hasOfflineGlyphAssets } from "./packageStyle";
 
 let initialization: Promise<OfflinePackageResolver | undefined> | undefined;
 
@@ -13,25 +13,18 @@ let initialization: Promise<OfflinePackageResolver | undefined> | undefined;
 export function ensureOfflinePackageRuntime(): Promise<OfflinePackageResolver | undefined> {
   if (initialization) return initialization;
   initialization = (async () => {
-    try {
-      const capability = await defaultOfflinePackageApi.capability();
-      if (capability.available && capability.datasetVersion && capability.styleVersion) {
-        const resolver = configureDefaultOfflinePackageResolver({
-          datasetVersion: capability.datasetVersion,
-          styleVersion: capability.styleVersion,
-          tileSchema: "openmaptiles",
-        });
-        await resolver.refresh();
-        return resolver;
-      }
-    } catch {
-      // A package must remain usable after a cold offline launch. Fall through
-      // to the compatibility values stored in the local package manifest.
+    const storage = createOfflinePackageStorage();
+    const localRecords = await storage.list().catch(() => []);
+    for (const record of localRecords) {
+      if (record.status !== "ready" || (await hasOfflineGlyphAssets(record.manifest))) continue;
+      record.status = "error";
+      record.lastError = {
+        code: "offline-assets-unavailable",
+        message: "The offline glyph cache is missing and must be downloaded again.",
+      };
+      record.updatedAt = Date.now();
+      await storage.put(record);
     }
-
-    const localRecords = await createOfflinePackageStorage()
-      .list()
-      .catch(() => []);
     const ready = localRecords.find((record) => record.status === "ready");
     if (!ready) {
       recordOfflinePackageMetric({
@@ -39,7 +32,9 @@ export function ensureOfflinePackageRuntime(): Promise<OfflinePackageResolver | 
         status: "no-local-package",
         browserCapability: {
           indexedDb: typeof indexedDB !== "undefined",
-          opfs: typeof navigator !== "undefined" && "storage" in navigator,
+          opfs:
+            typeof navigator !== "undefined" &&
+            typeof navigator.storage?.getDirectory === "function",
           cacheStorage: typeof caches !== "undefined",
         },
       });
@@ -50,13 +45,11 @@ export function ensureOfflinePackageRuntime(): Promise<OfflinePackageResolver | 
       packageId: ready.id,
       status: "local-package",
       datasetVersion: ready.manifest.dataset.version,
-      styleVersion: ready.manifest.style.version,
+      glyphsVersion: ready.manifest.glyphs.version,
       byteLength: ready.manifest.archive.byteLength,
     });
     const resolver = configureDefaultOfflinePackageResolver({
-      datasetVersion: ready.manifest.dataset.version,
-      styleVersion: ready.manifest.style.version,
-      tileSchema: ready.manifest.dataset.tileSchema,
+      tileSchema: "openmaptiles",
     });
     await resolver.refresh();
     return resolver;

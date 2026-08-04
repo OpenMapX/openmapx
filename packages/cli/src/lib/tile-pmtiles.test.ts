@@ -20,8 +20,7 @@ const source: OfflinePackageSourceDescriptor = {
   sourceMaxZoom: 1,
   sourceBounds: { west: 0, south: 0, east: 10, north: 10 },
   tileSchema: "openmaptiles",
-  styleProvider: "openmapx",
-  styleVersion: "openmapx-v1",
+  glyphsVersion: "openmapx-glyphs-v1",
   packageAlgorithmVersion: "pmtiles-area-v1",
   attribution: ["© OpenStreetMap contributors", "© OpenMapTiles"],
 };

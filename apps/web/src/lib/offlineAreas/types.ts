@@ -47,11 +47,6 @@ export interface OfflinePackageStorage {
   estimate(): Promise<OfflinePackageStorageEstimate>;
 }
 
-export type OfflineCoverageState =
-  | { kind: "covered"; packageId: string }
-  | { kind: "not-downloaded"; coordinate: [number, number] }
-  | { kind: "incompatible"; packageId: string; reason: string };
-
 export interface OfflinePackageDownloadProgress {
   packageId: string;
   status: Extract<
@@ -62,12 +57,6 @@ export interface OfflinePackageDownloadProgress {
   bytesTotal: number;
   speedBytesPerSecond: number;
   error?: { code: string; message: string };
-}
-
-export interface OfflinePackageStyleAssets {
-  manifest: OfflineMapPackageManifest;
-  light: Record<string, unknown>;
-  dark: Record<string, unknown>;
 }
 
 export interface OfflinePackageEventMap {

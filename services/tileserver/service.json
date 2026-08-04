@@ -2,7 +2,7 @@
   "id": "tileserver",
   "name": "TileServer GL",
   "version": "1.0.0",
-  "description": "Self-hosted MapLibre/Mapbox vector + raster tile server. Exposed via Traefik at /tiles.",
+  "description": "Serves self-hosted OpenMapTiles vector data and glyphs for the web app's bundled styles.",
   "license": "BSD-2-Clause",
   "quality": "built-in",
   "homepage": "https://tileserver.readthedocs.io/",
@@ -19,8 +19,7 @@
   "produces": [{ "type": "tile-mbtiles", "sourceDir": "data/tile-mbtiles" }],
   "consumes": [
     { "type": "tile-mbtiles", "mountAt": "/data/mbtiles", "readOnly": true, "required": true },
-    { "type": "tile-fonts", "mountAt": "/data/fonts", "readOnly": true, "required": true },
-    { "type": "tile-styles", "mountAt": "/data/styles", "readOnly": true, "required": true }
+    { "type": "tile-fonts", "mountAt": "/data/fonts", "readOnly": true, "required": true }
   ],
   "bindMounts": [{ "source": "config/config.json", "target": "/data/config.json" }],
   "exposure": {

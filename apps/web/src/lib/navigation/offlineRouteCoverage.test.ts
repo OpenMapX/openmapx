@@ -6,8 +6,8 @@ import { MemoryOfflinePackageStorage } from "../offlineAreas/packageStorage";
 import type { OfflinePackageRecord } from "../offlineAreas/types";
 import { getOfflineRouteCoverage } from "./offlineRouteCoverage";
 
-const idA = `omp1-${"a".repeat(64)}`;
-const idB = `omp1-${"b".repeat(64)}`;
+const idA = `omp2-${"a".repeat(64)}`;
+const idB = `omp2-${"b".repeat(64)}`;
 const route: Route = {
   distance: 100,
   duration: 60,
@@ -55,7 +55,7 @@ function manifest(
   bbox = { west: 0, south: 0, east: 1, north: 1 },
 ): OfflineMapPackageManifest {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     packageId,
     requestKey: packageId,
     dataset: {
@@ -73,11 +73,9 @@ function manifest(
       sha256: "a".repeat(64),
       etag: `sha256-${"a".repeat(64)}`,
     },
-    style: {
-      provider: "openmapx",
-      version: "style-v1",
-      variants: ["light", "dark"],
-      assetBaseUrl: "/api/offline/packages/assets/openmapx/style-v1",
+    glyphs: {
+      version: "glyphs-v1",
+      urlTemplate: "/api/offline/packages/glyphs/glyphs-v1/{fontstack}/{range}.pbf",
     },
     attribution: ["© OpenStreetMap contributors"],
   };
@@ -127,8 +125,6 @@ async function resolverWith(records: OfflinePackageRecord[]) {
   const storage = new MemoryOfflinePackageStorage();
   for (const item of records) await storage.put(item);
   const resolver = createOfflinePackageResolver(storage, {
-    datasetVersion: "dataset-v1",
-    styleVersion: "style-v1",
     tileSchema: "openmaptiles",
   });
   await resolver.refresh();
@@ -162,21 +158,19 @@ describe("offline route coverage", () => {
     });
   });
 
-  it("ignores incompatible packages", async () => {
+  it("keeps an older dataset package usable when the tile schema matches", async () => {
     const resolver = await resolverWith([
       record(idA, { ...manifest(idA), dataset: { ...manifest(idA).dataset, version: "old" } }),
     ]);
     expect(getOfflineRouteCoverage(snapshot([idA]), resolver, [0.2, 0.2])).toEqual({
-      kind: "route-line-only",
-      packageIds: [idA],
+      kind: "covered",
+      packageId: idA,
     });
   });
 
   it("can report coverage after a package becomes ready", async () => {
     const storage = new MemoryOfflinePackageStorage();
     const resolver = createOfflinePackageResolver(storage, {
-      datasetVersion: "dataset-v1",
-      styleVersion: "style-v1",
       tileSchema: "openmaptiles",
     });
     await resolver.refresh();
@@ -188,5 +182,15 @@ describe("offline route coverage", () => {
       kind: "covered",
       packageId: idB,
     });
+  });
+
+  it("associates a package when a route segment crosses its bounds", async () => {
+    const resolver = await resolverWith([record(idA, manifest(idA))]);
+    expect(
+      resolver.packageIdsForGeometry([
+        [-1, 0.5],
+        [2, 0.5],
+      ]),
+    ).toEqual([idA]);
   });
 });

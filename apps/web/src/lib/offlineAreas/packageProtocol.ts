@@ -1,7 +1,11 @@
 import type { OfflinePackageResolver } from "./packageResolver";
 
 const PROTOCOL = "pmtiles";
-const URL_PATTERN = /^pmtiles:\/\/offline\/([^/]+)\/(\d+)\/(\d+)\/(\d+)(?:\?.*)?$/;
+const PACKAGE_ID = "omp2-[0-9a-f]{64}";
+const PACKAGE_ID_PATTERN = new RegExp(`^${PACKAGE_ID}$`);
+const URL_PATTERN = new RegExp(
+  `^pmtiles://offline/(${PACKAGE_ID}(?:,${PACKAGE_ID})*)/(\\d+)/(\\d+)/(\\d+)(?:\\?.*)?$`,
+);
 const registrations = new WeakMap<
   object,
   {
@@ -42,12 +46,22 @@ export function registerOfflinePmtilesProtocol(
     handler: async (parameters: { url: string }) => {
       const match = URL_PATTERN.exec(parameters.url);
       if (!match) throw new OfflineCoverageError("invalid offline PMTiles URL");
-      const [, packageId, zoomValue, xValue, yValue] = match;
-      const reader = await registration.resolver.openReader(packageId);
-      const tile = await reader.tile(Number(zoomValue), Number(xValue), Number(yValue));
-      if (!tile)
-        throw new OfflineCoverageError(`offline package ${packageId} does not contain this tile`);
-      return { data: toArrayBuffer(tile) };
+      const [, packageSet, zoomValue, xValue, yValue] = match;
+      let lastError: unknown;
+      for (const packageId of packageSet.split(",")) {
+        try {
+          const reader = await registration.resolver.openReader(packageId);
+          const tile = await reader.tile(Number(zoomValue), Number(xValue), Number(yValue));
+          if (tile) return { data: toArrayBuffer(tile) };
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw new OfflineCoverageError(
+        lastError
+          ? `offline packages ${packageSet} could not read this tile: ${lastError instanceof Error ? lastError.message : String(lastError)}`
+          : `offline packages ${packageSet} do not contain this tile`,
+      );
     },
   };
   maplibre.addProtocol(PROTOCOL, registration.handler);
@@ -58,6 +72,9 @@ export function registerOfflinePmtilesProtocol(
   };
 }
 
-export function offlinePmtilesTileUrl(packageId: string): string {
-  return `pmtiles://offline/${packageId}/{z}/{x}/{y}`;
+export function offlinePmtilesTileUrl(packageIds: readonly string[]): string {
+  if (packageIds.length === 0 || packageIds.some((id) => !PACKAGE_ID_PATTERN.test(id))) {
+    throw new Error("invalid offline package set");
+  }
+  return `pmtiles://offline/${[...new Set(packageIds)].join(",")}/{z}/{x}/{y}`;
 }

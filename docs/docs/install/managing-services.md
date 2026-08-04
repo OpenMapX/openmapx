@@ -246,7 +246,7 @@ stack. Use `--continue-on-error` (on `build`) or `--fail-fast` (on `build-all`)
 to control behavior when one service's build fails.
 
 Building is only half the story — the source data those builds consume (OSM
-extracts, GTFS feeds, map styles) is downloaded and refreshed separately. See
+extracts, GTFS feeds, map glyphs) is downloaded and refreshed separately. See
 [Preparing data](./preparing-data.md) for the full data workflow, including the
 one-command `data update` refresh that downloads, builds, renders, and links in
 sequence.
@@ -320,7 +320,7 @@ section's service-manifest reference.
 
 - **[Getting started](./getting-started.md)** — the first-deployment walkthrough
   that ties these commands together.
-- **[Preparing data](./preparing-data.md)** — downloading OSM, GTFS, and styles,
+- **[Preparing data](./preparing-data.md)** — downloading OSM, GTFS, and map glyphs,
   and the build/link pipeline.
 - **[Configuration](./configuration.md)** — `.env`, secrets, and the admin
   panel.

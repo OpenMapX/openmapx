@@ -249,7 +249,7 @@ producer's data root. In practice the built-in producer for these types is the
 
 Well-known data types include `osm-pbf`, `osm-pbf-bz2`, `osrm-graph`,
 `otp-graph`, `motis-data`, `motis-staging-data`, `motis-feed-proxy-config`,
-`gtfs`, `tile-mbtiles`, `tile-fonts`, `tile-styles`, `pelias-placeholder-data`,
+`gtfs`, `tile-mbtiles`, `tile-fonts`, `pelias-placeholder-data`,
 and `pelias-whosonfirst-data`. New types validate fine as long as a producer and
 a consumer agree on the string. A single service may ship multiple `produces`
 entries of the same `type` only when each carries a distinct `instance`;

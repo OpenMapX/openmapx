@@ -22,7 +22,7 @@ export interface OfflinePackageMetricInput {
   packageId?: string;
   status?: OfflinePackageMetricStatus;
   datasetVersion?: string;
-  styleVersion?: string;
+  glyphsVersion?: string;
   durationMs?: number;
   byteLength?: number;
   retry?: boolean;
@@ -39,7 +39,7 @@ export interface OfflinePackageMetric {
   packageId?: string;
   status?: OfflinePackageMetricStatus;
   datasetVersion?: string;
-  styleVersion?: string;
+  glyphsVersion?: string;
   durationMs?: number;
   byteLength?: number;
   retry?: boolean;
@@ -51,7 +51,7 @@ export interface OfflinePackageMetric {
   };
 }
 
-const PACKAGE_ID_PATTERN = /^omp1-[0-9a-f]{64}$/;
+const PACKAGE_ID_PATTERN = /^omp2-[0-9a-f]{64}$/;
 const SAFE_TOKEN_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 
 function safeToken(value: string | undefined): string | undefined {
@@ -78,8 +78,8 @@ export function sanitizeOfflinePackageMetric(
   if (input.status) metric.status = input.status;
   const datasetVersion = safeToken(input.datasetVersion);
   if (datasetVersion) metric.datasetVersion = datasetVersion;
-  const styleVersion = safeToken(input.styleVersion);
-  if (styleVersion) metric.styleVersion = styleVersion;
+  const glyphsVersion = safeToken(input.glyphsVersion);
+  if (glyphsVersion) metric.glyphsVersion = glyphsVersion;
   const durationMs = finiteNonNegative(input.durationMs);
   if (durationMs !== undefined) metric.durationMs = durationMs;
   const byteLength = finiteNonNegative(input.byteLength);

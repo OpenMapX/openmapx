@@ -249,12 +249,12 @@ export class DataManagerClient {
     return parsed;
   }
 
-  async downloadStyle(): Promise<{ ok: boolean }> {
+  async downloadFonts(): Promise<{ ok: boolean }> {
     const res = await this.fetchImpl(
-      `${this.baseUrl}/download/style`,
+      `${this.baseUrl}/download/fonts`,
       this.authed({ method: "POST" }),
     );
-    if (!res.ok) throw new Error(`download/style failed: HTTP ${res.status}`);
+    if (!res.ok) throw new Error(`download/fonts failed: HTTP ${res.status}`);
     return (await res.json()) as { ok: boolean };
   }
 

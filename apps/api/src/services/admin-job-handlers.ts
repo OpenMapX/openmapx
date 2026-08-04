@@ -7,7 +7,7 @@ import { getServiceRegistry } from "./service-registry";
 
 type DataOperation =
   | "download-osm"
-  | "download-style"
+  | "download-fonts"
   | "update"
   | "convert-overpass"
   | "link"
@@ -132,8 +132,8 @@ export async function handleDataOperationJob(ctx: JobContext): Promise<Record<st
       }
       break;
     }
-    case "download-style": {
-      args.push("download", "style");
+    case "download-fonts": {
+      args.push("download", "fonts");
       break;
     }
     case "update": {

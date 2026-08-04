@@ -25,7 +25,7 @@ export interface OfflinePackageApi {
   getManifest(packageId: string, signal?: AbortSignal): Promise<OfflineMapPackageManifest>;
   openArchive(
     packageId: string,
-    range?: { start: number },
+    range?: { start: number; etag: string },
     signal?: AbortSignal,
   ): Promise<Response>;
 }
@@ -105,7 +105,10 @@ export const defaultOfflinePackageApi: OfflinePackageApi = {
 
   async openArchive(packageId, range, signal) {
     const headers: HeadersInit = {};
-    if (range) headers.Range = `bytes=${range.start}-`;
+    if (range) {
+      headers.Range = `bytes=${range.start}-`;
+      headers["If-Range"] = range.etag;
+    }
     const response = await fetch(
       apiPath(`/api/offline/packages/${encodeURIComponent(packageId)}/archive`),
       { headers, signal },

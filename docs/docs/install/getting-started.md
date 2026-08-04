@@ -180,12 +180,14 @@ the [Geofabrik](https://download.geofabrik.de/) layout (`europe/germany`,
 pnpm openmapx data download osm europe/germany
 ```
 
-Then grab the bundled map styles, fonts, and sprites used by the frontend and
-self-hosted tiles:
+Then download the glyph tree used by self-hosted tiles and offline packages:
 
 ```bash
-pnpm openmapx data download style
+pnpm openmapx data download fonts
 ```
+
+The web app already contains the OpenMapX styles and sprites; this command does
+not download a second style bundle.
 
 If you're running a transit engine, also pull GTFS feeds (via the
 community-curated Transitous catalog), filtered to the countries you want:

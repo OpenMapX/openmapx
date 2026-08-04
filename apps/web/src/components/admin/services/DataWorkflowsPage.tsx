@@ -298,15 +298,15 @@ function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
 
         <Grid size={{ xs: 12, md: 6 }}>
           <OperationCard
-            title="Download Style Assets"
-            description="Runs: openmapx data download style"
+            title="Download Map Glyphs"
+            description="Runs: openmapx data download fonts"
           >
             <Button
               variant="contained"
-              onClick={() => runOperation.mutate({ operation: "download-style" })}
+              onClick={() => runOperation.mutate({ operation: "download-fonts" })}
               disabled={runOperation.isPending}
             >
-              Queue Style Download
+              Queue Glyph Download
             </Button>
           </OperationCard>
         </Grid>

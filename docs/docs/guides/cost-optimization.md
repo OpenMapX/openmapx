@@ -182,10 +182,10 @@ right-sized box, but never for runtime, where swapping wrecks query latency.
 
 Self-hosted tiles are convenient to overlook as a cost, but they aren't free:
 TileServer GL needs an ~80 GB planet MBTiles archive plus its own build, and the
-style/font/sprite download is a few more steps in your pipeline. If you're
+glyph download is another step in your pipeline. If you're
 running lean, keep the hosted MapTiler fallback and skip TileServer GL and
 Martin entirely — along with the
-`openmapx data download style` step and the MBTiles build.
+`openmapx data download fonts` step and the MBTiles build.
 
 Self-host tiles when you need full control over styling or want zero external
 tile dependencies; otherwise a hosted provider is the cheaper default.

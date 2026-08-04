@@ -3,40 +3,13 @@
     "paths": {
       "root": "/data",
       "mbtiles": "/data/mbtiles",
-      "fonts": "/data/fonts",
-      "sprites": "/data/styles",
-      "styles": "/data/styles"
+      "fonts": "/data/fonts"
     },
     "maxScaleFactor": 3,
     "serveAllFonts": true,
     "serveAllStyles": false
   },
-  "styles": {
-    "osm-bright": {
-      "style": "osm-bright/style.json",
-      "tilejson": {
-        "bounds": [-180, -85.05113, 180, 85.05113]
-      }
-    },
-    "dark-matter": {
-      "style": "dark-matter/style.json",
-      "tilejson": {
-        "bounds": [-180, -85.05113, 180, 85.05113]
-      }
-    },
-    "positron": {
-      "style": "positron/style.json",
-      "tilejson": {
-        "bounds": [-180, -85.05113, 180, 85.05113]
-      }
-    },
-    "osm-liberty": {
-      "style": "osm-liberty/style.json",
-      "tilejson": {
-        "bounds": [-180, -85.05113, 180, 85.05113]
-      }
-    }
-  },
+  "styles": {},
   "data": {
     "openmapx": {
       "mbtiles": "tiles.mbtiles"

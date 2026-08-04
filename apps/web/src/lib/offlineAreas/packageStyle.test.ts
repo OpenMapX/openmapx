@@ -1,10 +1,14 @@
 import type { OfflineMapPackageManifest } from "@openmapx/core";
 import { describe, expect, it, vi } from "vitest";
-import { resolveOfflinePackageStyle, validateOfflineStyleAssets } from "./packageStyle";
+import {
+  hasOfflineGlyphAssets,
+  resolveOfflinePackageStyle,
+  validateOfflineStyleAssets,
+} from "./packageStyle";
 
-const packageId = `omp1-${"b".repeat(64)}`;
+const packageId = `omp2-${"b".repeat(64)}`;
 const manifest: OfflineMapPackageManifest = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   packageId,
   requestKey: "fixture",
   dataset: {
@@ -22,152 +26,164 @@ const manifest: OfflineMapPackageManifest = {
     sha256: "a".repeat(64),
     etag: `sha256-${"a".repeat(64)}`,
   },
-  style: {
-    provider: "openmapx",
-    version: "style-v1",
-    variants: ["light", "dark"],
-    assetBaseUrl: "/api/offline/packages/assets/openmapx/style-v1",
+  glyphs: {
+    version: "glyphs-v1",
+    urlTemplate: "/api/offline/packages/glyphs/glyphs-v1/{fontstack}/{range}.pbf",
   },
   attribution: ["© OpenStreetMap contributors"],
 };
 
-function styleResponse(): Response {
-  return new Response(
-    JSON.stringify({
-      version: 8,
-      sources: { openmaptiles: { type: "vector", url: "mbtiles://{openmapx}" } },
-      sprite: "sprite",
-      glyphs: "{fontstack}/{range}.pbf",
-      layers: [
-        {
-          id: "water",
-          source: "openmaptiles",
-          "source-layer": "water",
-          type: "fill",
-          layout: { "text-font": ["Metropolis"] },
-        },
-        { id: "background", type: "background" },
-      ],
-    }),
-    { headers: { "content-type": "application/json" } },
-  );
+function onlineStyle(): Record<string, unknown> {
+  return {
+    version: 8,
+    sources: { openmaptiles: { type: "vector", url: "configured-tilejson" } },
+    sprite: "/styles/sprite",
+    glyphs: "/api/maptiler/fonts/{fontstack}/{range}.pbf",
+    layers: [
+      {
+        id: "water",
+        source: "openmaptiles",
+        "source-layer": "water",
+        type: "fill",
+        layout: { "text-font": ["Metropolis"] },
+      },
+      { id: "background", type: "background" },
+    ],
+  };
+}
+
+function styles(): { light: Record<string, unknown>; dark: Record<string, unknown> } {
+  return { light: onlineStyle(), dark: onlineStyle() };
 }
 
 describe("offline package styles", () => {
-  it("pins both variants and rewrites only the vector source", async () => {
-    const fetchMock = vi.fn(async (...args: unknown[]) => {
-      const input = args[0];
-      const url = String(input);
-      return url.includes("/style.json?") ? styleResponse() : new Response(new ArrayBuffer(1));
-    });
-    vi.stubGlobal("fetch", fetchMock);
-    const result = await validateOfflineStyleAssets(manifest);
-    expect((result.light.sources as Record<string, unknown>).openmaptiles).toBeDefined();
-    expect(
-      fetchMock.mock.calls.some((args) => String(args[0]).includes("offlineStyle=style-v1")),
-    ).toBe(true);
-
-    const style = await resolveOfflinePackageStyle(manifest, packageId, "dark");
-    const source = (style.sources as Record<string, Record<string, unknown>>).openmaptiles;
-    expect(source.tiles).toEqual([`pmtiles://offline/${packageId}/{z}/{x}/{y}`]);
-    expect(source.url).toBeUndefined();
-    expect(style.glyphs).toContain("offlineStyle=style-v1");
-    expect(style.sprite).toBe(
-      "/api/offline/packages/assets/openmapx/style-v1/styles/dark-matter/sprite",
-    );
-    vi.unstubAllGlobals();
-  });
-
-  it("adds a source and matching layers for every overview package", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (...args: unknown[]) => {
-        const url = String(args[0]);
-        return url.includes("/style.json?") ? styleResponse() : new Response(new ArrayBuffer(1));
-      }),
-    );
-
-    const secondPackageId = `omp1-${"c".repeat(64)}`;
-    const style = await resolveOfflinePackageStyle(manifest, packageId, "light", [
-      packageId,
-      secondPackageId,
-    ]);
-    const sources = style.sources as Record<string, Record<string, unknown>>;
-    const layers = style.layers as Array<Record<string, unknown>>;
-    const overviewSource = sources[`openmaptiles-${secondPackageId}`];
-
-    expect(overviewSource?.tiles).toEqual([`pmtiles://offline/${secondPackageId}/{z}/{x}/{y}`]);
-    expect(overviewSource?.url).toBeUndefined();
-    expect(layers.filter((layer) => layer.source === `openmaptiles-${secondPackageId}`)).toEqual([
-      expect.objectContaining({ id: `water-${secondPackageId}` }),
-    ]);
-
-    vi.unstubAllGlobals();
-  });
-
-  it("fails before readiness when a required style asset is unavailable", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (...args: unknown[]) => {
-        const input = args[0];
-        return String(input).includes("/style.json?")
-          ? styleResponse()
-          : new Response("missing", { status: 404 });
-      }),
-    );
-    let error: unknown;
-    try {
-      await validateOfflineStyleAssets(manifest);
-    } catch (reason) {
-      error = reason;
-    }
-    expect(error).toBeDefined();
-    expect(String((error as Error).message)).toContain("unavailable");
-    vi.unstubAllGlobals();
-  });
-
-  it("allows the optional private-use glyph range to be absent", async () => {
+  it("validates the configured online styles and pins only package fonts", async () => {
+    const cacheEntries = new Map<string, Response>();
+    const cache = {
+      async delete(input: RequestInfo | URL) {
+        return cacheEntries.delete(String(input));
+      },
+      async match(input: RequestInfo | URL) {
+        return cacheEntries.get(String(input))?.clone();
+      },
+      async put(input: RequestInfo | URL, response: Response) {
+        cacheEntries.set(String(input), response.clone());
+      },
+    } as unknown as Cache;
+    vi.stubGlobal("caches", { open: async () => cache });
     const fetchMock = vi.fn(async (...args: unknown[]) => {
       const url = String(args[0]);
-      if (url.includes("/style.json?")) return styleResponse();
-      if (url.includes("/64512-65023.pbf")) {
-        return new Response("missing", { status: 404 });
+      if (url.includes("/catalog.json")) {
+        return Response.json({ Metropolis: ["0-255", "1024-1279", "19968-20223"] });
       }
       return new Response(new ArrayBuffer(1));
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await validateOfflineStyleAssets(manifest);
-    expect(result.manifest).toBe(manifest);
+    const configured = styles();
+    expect(await hasOfflineGlyphAssets(manifest)).toBe(false);
+    await validateOfflineStyleAssets(manifest, configured);
+    expect(await hasOfflineGlyphAssets(manifest)).toBe(true);
+    expect(fetchMock.mock.calls.some((args) => String(args[0]).includes("/style.json"))).toBe(
+      false,
+    );
+    expect(
+      fetchMock.mock.calls.some((args) =>
+        String(args[0]).includes("/api/offline/packages/glyphs/glyphs-v1/"),
+      ),
+    ).toBe(true);
+    expect(fetchMock.mock.calls.some((args) => String(args[0]).includes("/19968-20223.pbf"))).toBe(
+      true,
+    );
+    expect(fetchMock.mock.calls.some((args) => String(args[0]).includes("/256-511.pbf"))).toBe(
+      false,
+    );
+    expect(fetchMock.mock.calls.some((args) => String(args[0]) === "/styles/sprite.json")).toBe(
+      true,
+    );
+    expect(fetchMock.mock.calls.some((args) => String(args[0]) === "/styles/sprite.png")).toBe(
+      true,
+    );
 
     vi.unstubAllGlobals();
   });
 
-  it("places sprite file extensions before the offline style query", async () => {
-    const urls: string[] = [];
+  it("rewrites the configured online style for one or more offline packages", () => {
+    const configured = onlineStyle();
+    const style = resolveOfflinePackageStyle(configured, [{ packageId, manifest }]);
+    const source = (style.sources as Record<string, Record<string, unknown>>).openmaptiles;
+
+    expect(source.tiles).toEqual([`pmtiles://offline/${packageId}/{z}/{x}/{y}`]);
+    expect(source.url).toBeUndefined();
+    expect(style.glyphs).toContain("offlineGlyphs=glyphs-v1");
+    expect(style.sprite).toBe("/styles/sprite");
+    expect(style.layers).toEqual(configured.layers);
+  });
+
+  it("uses one vector source and one layer set for every overview package", () => {
+    const secondPackageId = `omp2-${"c".repeat(64)}`;
+    const secondManifest = {
+      ...manifest,
+      packageId: secondPackageId,
+      archive: {
+        ...manifest.archive,
+        url: `/api/offline/packages/${secondPackageId}/archive`,
+      },
+    };
+    const style = resolveOfflinePackageStyle(onlineStyle(), [
+      { packageId, manifest },
+      { packageId: secondPackageId, manifest: secondManifest },
+    ]);
+    const sources = style.sources as Record<string, Record<string, unknown>>;
+    const layers = style.layers as Array<Record<string, unknown>>;
+
+    expect(sources.openmaptiles.tiles).toEqual([
+      `pmtiles://offline/${packageId},${secondPackageId}/{z}/{x}/{y}`,
+    ]);
+    expect(sources.openmaptiles.url).toBeUndefined();
+    expect(layers).toEqual(onlineStyle().layers);
+  });
+
+  it("advertises only the maximum zoom shared by every package", () => {
+    const lowerZoomPackageId = `omp2-${"e".repeat(64)}`;
+    const lowerZoomManifest: OfflineMapPackageManifest = {
+      ...manifest,
+      packageId: lowerZoomPackageId,
+      coverage: { ...manifest.coverage, maxZoom: 12 },
+      archive: {
+        ...manifest.archive,
+        url: `/api/offline/packages/${lowerZoomPackageId}/archive`,
+      },
+    };
+
+    const style = resolveOfflinePackageStyle(onlineStyle(), [
+      { packageId, manifest },
+      { packageId: lowerZoomPackageId, manifest: lowerZoomManifest },
+    ]);
+    const source = (style.sources as Record<string, Record<string, unknown>>).openmaptiles;
+
+    expect(source.maxzoom).toBe(12);
+  });
+
+  it("fails before readiness when a required package font is unavailable", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (...args: unknown[]) => {
         const url = String(args[0]);
-        urls.push(url);
-        return url.includes("/style.json?") ? styleResponse() : new Response(new ArrayBuffer(1));
+        if (url.includes("/catalog.json")) return Response.json({ Metropolis: ["0-255"] });
+        return url.includes("/0-255.pbf")
+          ? new Response("missing", { status: 404 })
+          : new Response(new ArrayBuffer(1));
       }),
     );
 
-    await validateOfflineStyleAssets(manifest);
-
-    expect(urls).toContain(
-      "/api/offline/packages/assets/openmapx/style-v1/styles/osm-bright/sprite.json?offlineStyle=style-v1",
-    );
-    expect(urls).toContain(
-      "/api/offline/packages/assets/openmapx/style-v1/styles/osm-bright/sprite.png?offlineStyle=style-v1",
-    );
-    expect(urls).toContain(
-      "/api/offline/packages/assets/openmapx/style-v1/styles/osm-bright/sprite@2x.json?offlineStyle=style-v1",
-    );
-    expect(urls).toContain(
-      "/api/offline/packages/assets/openmapx/style-v1/styles/osm-bright/sprite@2x.png?offlineStyle=style-v1",
-    );
+    let error: unknown;
+    try {
+      await validateOfflineStyleAssets(manifest, styles());
+    } catch (reason) {
+      error = reason;
+    }
+    expect(String((error as Error).message)).toContain("unavailable");
     vi.unstubAllGlobals();
   });
 });

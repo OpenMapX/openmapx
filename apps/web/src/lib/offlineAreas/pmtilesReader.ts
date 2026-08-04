@@ -5,6 +5,7 @@ const MAGIC = "PMTiles";
 const VERSION = 3;
 const NONE = 1;
 const GZIP = 2;
+const MVT = 1;
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(new ArrayBuffer(bytes.byteLength));
@@ -84,6 +85,79 @@ function parseHeader(bytes: Uint8Array): LocalPmtilesHeader {
   };
 }
 
+function validateHeader(header: LocalPmtilesHeader, archiveSize: number): LocalPmtilesHeader {
+  if (!Number.isSafeInteger(archiveSize) || archiveSize < HEADER_LENGTH) {
+    throw new Error("invalid PMTiles archive size");
+  }
+  if (![NONE, GZIP].includes(header.internalCompression)) {
+    throw new Error(`unsupported PMTiles internal compression ${header.internalCompression}`);
+  }
+  if (![NONE, GZIP].includes(header.tileCompression)) {
+    throw new Error(`unsupported PMTiles tile compression ${header.tileCompression}`);
+  }
+  if (header.tileType !== MVT) throw new Error("offline PMTiles archive is not vector tile data");
+  if (header.minZoom > header.maxZoom || header.maxZoom > 24) {
+    throw new Error("invalid PMTiles zoom range");
+  }
+  const { west, south, east, north } = header.bounds;
+  if (
+    ![west, south, east, north].every(Number.isFinite) ||
+    west < -180 ||
+    east > 180 ||
+    south < -85.05112878 ||
+    north > 85.05112878 ||
+    east <= west ||
+    north <= south
+  ) {
+    throw new Error("invalid PMTiles bounds");
+  }
+  for (const [label, offset, length] of [
+    ["root", header.rootOffset, header.rootLength],
+    ["metadata", header.metadataOffset, header.metadataLength],
+    ["leaf", header.leafOffset, header.leafLength],
+    ["tile data", header.tileDataOffset, header.tileDataLength],
+  ] as const) {
+    if (
+      !Number.isSafeInteger(offset) ||
+      !Number.isSafeInteger(length) ||
+      offset < HEADER_LENGTH ||
+      length < 0 ||
+      offset > archiveSize - length
+    ) {
+      throw new Error(`invalid PMTiles ${label} section`);
+    }
+  }
+  const sections = [
+    ["root", header.rootOffset, header.rootLength],
+    ["metadata", header.metadataOffset, header.metadataLength],
+    ["leaf", header.leafOffset, header.leafLength],
+    ["tile data", header.tileDataOffset, header.tileDataLength],
+  ] as const;
+  for (let index = 1; index < sections.length; index++) {
+    const previous = sections[index - 1];
+    const current = sections[index];
+    if (current[1] < previous[1] + previous[2]) {
+      throw new Error(`PMTiles ${current[0]} section overlaps ${previous[0]} section`);
+    }
+  }
+  if (header.rootLength === 0 || header.metadataLength === 0 || header.tileDataLength === 0) {
+    throw new Error("PMTiles archive is missing required sections");
+  }
+  if (
+    header.addressedTiles <= 0 ||
+    header.tileEntries <= 0 ||
+    header.tileContents <= 0 ||
+    !Number.isSafeInteger(header.addressedTiles) ||
+    !Number.isSafeInteger(header.tileEntries) ||
+    !Number.isSafeInteger(header.tileContents) ||
+    header.tileEntries > header.addressedTiles ||
+    header.tileContents > header.tileEntries
+  ) {
+    throw new Error("invalid PMTiles tile counts");
+  }
+  return header;
+}
+
 function readVarint(bytes: Uint8Array, start: number): { value: number; next: number } {
   let value = 0;
   let multiplier = 1;
@@ -93,6 +167,9 @@ function readVarint(bytes: Uint8Array, start: number): { value: number; next: nu
     value += (byte & 0x7f) * multiplier;
     if (!Number.isSafeInteger(value)) throw new Error("PMTiles directory value is too large");
     if ((byte & 0x80) === 0) return { value, next: offset };
+    if (multiplier > Number.MAX_SAFE_INTEGER / 128) {
+      throw new Error("PMTiles directory value is too large");
+    }
     multiplier *= 128;
   }
   throw new Error("truncated PMTiles directory");
@@ -102,12 +179,10 @@ async function gunzip(bytes: Uint8Array): Promise<Uint8Array> {
   if (typeof DecompressionStream === "undefined") {
     throw new Error("gzip decompression is unavailable in this browser");
   }
-  const decompressor = new DecompressionStream("gzip");
-  const output = new Response(decompressor.readable).arrayBuffer();
-  const writer = decompressor.writable.getWriter();
-  await writer.write(toArrayBuffer(bytes));
-  await writer.close();
-  return new Uint8Array(await output);
+  const compressed = new Response(toArrayBuffer(bytes)).body;
+  if (!compressed) throw new Error("unable to read gzip-compressed PMTiles data");
+  const decompressed = compressed.pipeThrough(new DecompressionStream("gzip"));
+  return new Uint8Array(await new Response(decompressed).arrayBuffer());
 }
 
 async function decodeInternal(bytes: Uint8Array, compression: number): Promise<Uint8Array> {
@@ -123,6 +198,9 @@ async function decodeDirectory(bytes: Uint8Array, compression: number): Promise<
   cursor = countResult.next;
   if (countResult.value <= 0 || !Number.isSafeInteger(countResult.value)) {
     throw new Error("invalid PMTiles directory count");
+  }
+  if (countResult.value > Math.floor((data.byteLength - cursor) / 4)) {
+    throw new Error("PMTiles directory count exceeds its encoded size");
   }
   const entries = Array.from({ length: countResult.value }, () => ({
     tileId: 0,
@@ -157,6 +235,21 @@ async function decodeDirectory(bytes: Uint8Array, compression: number): Promise<
     previousOffset = entry.offset;
     previousLength = entry.length;
   });
+  if (cursor !== data.byteLength) throw new Error("PMTiles directory has trailing data");
+  for (let index = 0; index < entries.length; index++) {
+    const entry = entries[index];
+    if (
+      entry.length <= 0 ||
+      entry.offset < 0 ||
+      !Number.isSafeInteger(entry.length) ||
+      !Number.isSafeInteger(entry.offset) ||
+      !Number.isSafeInteger(entry.runLength) ||
+      !Number.isSafeInteger(entry.tileId + entry.runLength) ||
+      (index > 0 && entry.tileId <= entries[index - 1].tileId)
+    ) {
+      throw new Error("invalid PMTiles directory entry");
+    }
+  }
   return entries;
 }
 
@@ -211,9 +304,12 @@ async function readExact(
 export class LocalPmtilesReader {
   private readonly headerPromise: Promise<LocalPmtilesHeader>;
   private rootPromise: Promise<DirectoryEntry[]> | undefined;
+  private readonly leaves = new Map<string, Promise<DirectoryEntry[]>>();
 
   constructor(private readonly file: OfflineArchiveFile) {
-    this.headerPromise = readExact(file, 0, HEADER_LENGTH).then(parseHeader);
+    this.headerPromise = Promise.all([file.size(), readExact(file, 0, HEADER_LENGTH)]).then(
+      ([size, bytes]) => validateHeader(parseHeader(bytes), size),
+    );
   }
 
   async header(): Promise<LocalPmtilesHeader> {
@@ -233,6 +329,150 @@ export class LocalPmtilesReader {
     return parsed as Record<string, unknown>;
   }
 
+  private async rootDirectory(header: LocalPmtilesHeader): Promise<DirectoryEntry[]> {
+    this.rootPromise ??= readExact(this.file, header.rootOffset, header.rootLength).then((bytes) =>
+      decodeDirectory(bytes, header.internalCompression),
+    );
+    return await this.rootPromise;
+  }
+
+  private async leafDirectory(
+    header: LocalPmtilesHeader,
+    entry: DirectoryEntry,
+  ): Promise<DirectoryEntry[]> {
+    if (header.leafLength === 0 || entry.offset > header.leafLength - entry.length) {
+      throw new Error("PMTiles leaf entry exceeds the leaf directory section");
+    }
+    const key = `${entry.offset}:${entry.length}`;
+    let leaf = this.leaves.get(key);
+    if (!leaf) {
+      leaf = readExact(this.file, header.leafOffset + entry.offset, entry.length).then((bytes) =>
+        decodeDirectory(bytes, header.internalCompression),
+      );
+      this.leaves.set(key, leaf);
+    }
+    return await leaf;
+  }
+
+  private async tilePayload(
+    header: LocalPmtilesHeader,
+    entry: DirectoryEntry,
+  ): Promise<Uint8Array> {
+    if (entry.offset > header.tileDataLength - entry.length) {
+      throw new Error("PMTiles tile entry exceeds the tile data section");
+    }
+    const bytes = await readExact(this.file, header.tileDataOffset + entry.offset, entry.length);
+    return header.tileCompression === GZIP ? await gunzip(bytes) : bytes;
+  }
+
+  /** Traverse every directory and verify its semantic relationship to the header. */
+  async validate(): Promise<void> {
+    const header = await this.header();
+    const root = await this.rootDirectory(header);
+    const tileEntries: DirectoryEntry[] = [];
+    const leafRanges: Array<{ offset: number; length: number }> = [];
+
+    for (let index = 0; index < root.length; index++) {
+      const entry = root[index];
+      if (entry.runLength > 0) {
+        tileEntries.push(entry);
+        continue;
+      }
+
+      const leaf = await this.leafDirectory(header, entry);
+      if (leaf.some((candidate) => candidate.runLength === 0)) {
+        throw new Error("PMTiles leaf directory contains a nested directory pointer");
+      }
+      const nextRootTileId = root[index + 1]?.tileId;
+      if (
+        leaf.some(
+          (candidate) =>
+            candidate.tileId < entry.tileId ||
+            (nextRootTileId !== undefined && candidate.tileId >= nextRootTileId),
+        )
+      ) {
+        throw new Error("PMTiles leaf directory lies outside its root tile range");
+      }
+      leafRanges.push({ offset: entry.offset, length: entry.length });
+      tileEntries.push(...leaf);
+    }
+
+    leafRanges.sort((a, b) => a.offset - b.offset || a.length - b.length);
+    for (let index = 1; index < leafRanges.length; index++) {
+      const previous = leafRanges[index - 1];
+      const current = leafRanges[index];
+      if (current.offset < previous.offset + previous.length) {
+        throw new Error("PMTiles leaf directory ranges overlap");
+      }
+    }
+
+    tileEntries.sort((a, b) => a.tileId - b.tileId);
+    const minimumTileId = (4 ** header.minZoom - 1) / 3;
+    const minimumZoomEnd = (4 ** (header.minZoom + 1) - 1) / 3;
+    const maximumZoomStart = (4 ** header.maxZoom - 1) / 3;
+    const tileIdLimit = (4 ** (header.maxZoom + 1) - 1) / 3;
+    let addressedTiles = 0;
+    const contents = new Map<string, DirectoryEntry>();
+    for (let index = 0; index < tileEntries.length; index++) {
+      const entry = tileEntries[index];
+      if (
+        entry.runLength <= 0 ||
+        entry.tileId < minimumTileId ||
+        entry.tileId + entry.runLength > tileIdLimit
+      ) {
+        throw new Error("PMTiles tile entry is outside the declared zoom range");
+      }
+      const previous = tileEntries[index - 1];
+      if (previous && entry.tileId < previous.tileId + previous.runLength) {
+        throw new Error("PMTiles tile entry address ranges overlap");
+      }
+      if (entry.offset > header.tileDataLength - entry.length) {
+        throw new Error("PMTiles tile entry exceeds the tile data section");
+      }
+      addressedTiles += entry.runLength;
+      if (!Number.isSafeInteger(addressedTiles)) {
+        throw new Error("PMTiles addressed tile count exceeds browser limits");
+      }
+      contents.set(`${entry.offset}:${entry.length}`, entry);
+    }
+
+    const firstEntry = tileEntries[0];
+    const lastEntry = tileEntries[tileEntries.length - 1];
+    if (!firstEntry || firstEntry.tileId >= minimumZoomEnd) {
+      throw new Error("PMTiles archive contains no tiles at the declared minimum zoom");
+    }
+    if (!lastEntry || lastEntry.tileId + lastEntry.runLength <= maximumZoomStart) {
+      throw new Error("PMTiles archive contains no tiles at the declared maximum zoom");
+    }
+
+    const contentRanges = [...contents.values()].sort(
+      (a, b) => a.offset - b.offset || a.length - b.length,
+    );
+    for (let index = 1; index < contentRanges.length; index++) {
+      const previous = contentRanges[index - 1];
+      const current = contentRanges[index];
+      if (current.offset < previous.offset + previous.length) {
+        throw new Error("PMTiles tile content ranges overlap");
+      }
+    }
+
+    if (
+      addressedTiles !== header.addressedTiles ||
+      tileEntries.length !== header.tileEntries ||
+      contents.size !== header.tileContents
+    ) {
+      throw new Error("PMTiles directory tile counts do not match the header");
+    }
+
+    const payload = await this.tilePayload(header, firstEntry);
+    if (payload.byteLength === 0) throw new Error("PMTiles representative tile payload is empty");
+  }
+
+  async close(): Promise<void> {
+    this.leaves.clear();
+    await this.file.close();
+  }
+
   async tile(zoom: number, x: number, y: number): Promise<Uint8Array | undefined> {
     const header = await this.header();
     if (
@@ -246,19 +486,12 @@ export class LocalPmtilesReader {
       return undefined;
     }
     const tileId = zxyToTileId(zoom, x, y);
-    this.rootPromise ??= readExact(this.file, header.rootOffset, header.rootLength).then((bytes) =>
-      decodeDirectory(bytes, header.internalCompression),
-    );
-    let entry = findEntry(await this.rootPromise, tileId);
+    let entry = findEntry(await this.rootDirectory(header), tileId);
     if (entry?.runLength === 0) {
-      if (header.leafLength === 0) return undefined;
-      const leafBytes = await readExact(this.file, header.leafOffset + entry.offset, entry.length);
-      entry = findEntry(await decodeDirectory(leafBytes, header.internalCompression), tileId);
+      entry = findEntry(await this.leafDirectory(header, entry), tileId);
     }
     if (!entry || entry.runLength === 0) return undefined;
-    const bytes = await readExact(this.file, header.tileDataOffset + entry.offset, entry.length);
-    if (header.tileCompression !== GZIP) return bytes;
-    return await gunzip(bytes);
+    return await this.tilePayload(header, entry);
   }
 }
 
@@ -276,5 +509,6 @@ export async function validateLocalPmtilesArchive(
     throw new Error("PMTiles metadata does not match the package manifest");
   }
   await reader.metadata();
+  await reader.validate();
   return header;
 }

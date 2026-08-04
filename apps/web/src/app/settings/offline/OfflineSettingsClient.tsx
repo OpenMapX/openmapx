@@ -23,7 +23,12 @@ import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import type { AutocompleteResult, OfflinePackageBbox, OfflinePackageRequest } from "@openmapx/core";
+import type {
+  AutocompleteResult,
+  OfflineMapPackageManifest,
+  OfflinePackageBbox,
+  OfflinePackageRequest,
+} from "@openmapx/core";
 import {
   createPlace,
   geoJsonBBox,
@@ -35,11 +40,14 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
+import type { ClientEnv } from "@/lib/env";
 import { haptics } from "@/lib/haptics";
+import { loadOpenMapXStyle } from "@/lib/map";
 import {
   configureDefaultOfflinePackageResolver,
   createOfflinePackageStorage,
   defaultOfflinePackageApi,
+  deleteOfflineGlyphCacheIfUnused,
   downloadOfflinePackage,
   notifyOfflinePackageChanged,
   type OfflinePackageDownloadProgress,
@@ -65,6 +73,17 @@ const FALLBACK_REGION_HALF_DEG = 0.15;
 
 const storage = createOfflinePackageStorage();
 const api = defaultOfflinePackageApi;
+
+async function validateConfiguredOfflineStyleAssets(
+  manifest: OfflineMapPackageManifest,
+  env: ClientEnv,
+): Promise<void> {
+  const [light, dark] = await Promise.all([
+    loadOpenMapXStyle(env, "light"),
+    loadOpenMapXStyle(env, "dark"),
+  ]);
+  await validateOfflineStyleAssets(manifest, { light, dark });
+}
 
 async function refreshPackageRecords(
   setRecords: (records: OfflinePackageRecord[]) => void,
@@ -132,10 +151,8 @@ export function OfflineSettingsClient() {
     refresh();
     void api.capability().then((next) => {
       setCapability(next);
-      if (next.available && next.datasetVersion && next.styleVersion) {
+      if (next.available) {
         configureDefaultOfflinePackageResolver({
-          datasetVersion: next.datasetVersion,
-          styleVersion: next.styleVersion,
           tileSchema: "openmaptiles",
         });
       }
@@ -144,6 +161,7 @@ export function OfflineSettingsClient() {
 
   const deletePackage = async (record: OfflinePackageRecord) => {
     await storage.delete(record.id);
+    await deleteOfflineGlyphCacheIfUnused(record.manifest, await storage.list());
     notifyOfflinePackageChanged(record.id);
     await getDefaultResolverRefresh();
     refresh();
@@ -159,7 +177,7 @@ export function OfflineSettingsClient() {
         name: record.name,
         signal: controller.signal,
         validateStyles: async () => {
-          await validateOfflineStyleAssets(record.manifest);
+          await validateConfiguredOfflineStyleAssets(record.manifest, env);
         },
       });
       haptics.success();
@@ -413,6 +431,7 @@ interface DownloadAreaDialogProps {
 
 function DownloadAreaDialog({ open, capability, onClose, onSaved }: DownloadAreaDialogProps) {
   const t = useTranslations("settings");
+  const env = useEnv();
   const [name, setName] = useState("");
   const [bbox, setBbox] = useState<OfflinePackageBbox | null>(null);
   const [zoomRange, setZoomRange] = useState<[number, number]>([
@@ -522,7 +541,7 @@ function DownloadAreaDialog({ open, capability, onClose, onSaved }: DownloadArea
         signal: controller.signal,
         onProgress: setProgress,
         validateStyles: async () => {
-          await validateOfflineStyleAssets(manifest);
+          await validateConfiguredOfflineStyleAssets(manifest, env);
         },
       });
       if (result.status !== "ready") throw new Error(t("offlinePackageNotReady"));
