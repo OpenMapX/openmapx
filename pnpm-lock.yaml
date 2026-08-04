@@ -450,7 +450,7 @@ importers:
         version: link:../../packages/openconditions-contrib-client
       '@tanstack/react-query':
         specifier: ^5.91.3
-        version: 5.101.2(react@19.2.7)
+        version: 5.101.4(react@19.2.7)
       react:
         specifier: 19.2.7
         version: 19.2.7
