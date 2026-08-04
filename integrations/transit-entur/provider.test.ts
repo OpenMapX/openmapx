@@ -425,15 +425,12 @@ describe("nsrCoordinatesFromPosList", () => {
     ]);
   });
 
-  it.each([
-    [null],
-    [undefined],
-    [[0, 0, 0, 1]],
-    [[0, 0, 0, 1, 1]],
-    [[0, 0, 0, 1, Number.NaN, 1]],
-  ])("rejects invalid pos list %j", (input) => {
-    expect(nsrCoordinatesFromPosList(input)).toBeNull();
-  });
+  it.each([[null], [undefined], [[0, 0, 0, 1]], [[0, 0, 0, 1, 1]], [[0, 0, 0, 1, Number.NaN, 1]]])(
+    "rejects invalid pos list %j",
+    (input) => {
+      expect(nsrCoordinatesFromPosList(input)).toBeNull();
+    },
+  );
 });
 
 describe("nsrRefValue", () => {

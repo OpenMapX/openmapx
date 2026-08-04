@@ -222,8 +222,13 @@ export const wikidataSource: KnowledgeProvider = {
         }
       } else if (prop.type === "item") {
         const ids = activeClaims(entity.claims, prop.id)
-          .filter((c) => c.mainsnak.datavalue?.type === "wikibase-entityid")
-          .map((c) => (c.mainsnak.datavalue?.value as EntityValue).id);
+          .map((c) => {
+            const value = c.mainsnak.datavalue;
+            return value?.type === "wikibase-entityid"
+              ? (value.value as EntityValue).id
+              : undefined;
+          })
+          .filter((id): id is string => id !== undefined);
         if (ids.length) itemsToResolve.push({ label: prop.label, ids });
       }
     }

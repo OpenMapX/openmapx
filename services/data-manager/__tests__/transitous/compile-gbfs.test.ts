@@ -152,79 +152,79 @@ describe("bounded GBFS candidate validation", () => {
     expect(result.message).toContain("Invalid JSON response");
   });
 
-  it.each([
-    "build",
-    "mirror",
-  ] as const)("injects the same pinned, verified additions in %s mode", async (source) => {
-    lookupMock.mockResolvedValue(PUBLIC);
-    tmp = mkdtempSync(join(tmpdir(), "openmapx-compile-gbfs-"));
-    const catalog = join(tmp, "data", ".transitous-catalog");
-    mkdirSync(join(tmp, "infra", "docker"), { recursive: true });
-    mkdirSync(join(catalog, "feeds"), { recursive: true });
-    const richSchedule = {
-      name: "schedule",
-      type: "url",
-      url: "https://schedule.test/feed.zip",
-      spec: "gtfs",
-      flex: true,
-      fares: "v2",
-      rt: [{ protocol: "gtfsrt", url: "https://schedule.test/rt" }],
-      script: "scripts/colors.lua",
-    };
-    writeFileSync(join(catalog, "feeds", "de.json"), JSON.stringify({ sources: [richSchedule] }));
-    const csv =
-      "Country Code,Name,Location,System ID,URL,Auto-Discovery URL,Supported Versions,Authentication Info URL\nDE,Demo,Berlin,demo,https://example.test,https://example.test/gbfs.json,2.3,\n";
-    const commit = "a".repeat(40);
-    writeFileSync(
-      join(tmp, "infra", "docker", "gbfs-catalog.lock.json"),
-      JSON.stringify({
-        schemaVersion: 1,
-        source: "mobilitydata-gbfs",
-        commit,
-        url: `https://raw.githubusercontent.com/MobilityData/gbfs/${commit}/systems.csv`,
-        sha256: createHash("sha256").update(csv).digest("hex"),
-        lockedAt: "2026-01-01T00:00:00Z",
-        lockedBy: "test",
-      }),
-    );
-    globalThis.fetch = vi.fn(async (input: unknown) => {
-      const url = String(input);
-      if (url.includes("raw.githubusercontent.com")) return new Response(csv);
-      if (url.endsWith("gbfs.json"))
-        return json({
-          version: "2.3",
-          data: {
-            en: {
-              feeds: [
-                { name: "station_information", url: "https://example.test/stations" },
-                { name: "station_status", url: "https://example.test/status" },
-              ],
+  it.each(["build", "mirror"] as const)(
+    "injects the same pinned, verified additions in %s mode",
+    async (source) => {
+      lookupMock.mockResolvedValue(PUBLIC);
+      tmp = mkdtempSync(join(tmpdir(), "openmapx-compile-gbfs-"));
+      const catalog = join(tmp, "data", ".transitous-catalog");
+      mkdirSync(join(tmp, "infra", "docker"), { recursive: true });
+      mkdirSync(join(catalog, "feeds"), { recursive: true });
+      const richSchedule = {
+        name: "schedule",
+        type: "url",
+        url: "https://schedule.test/feed.zip",
+        spec: "gtfs",
+        flex: true,
+        fares: "v2",
+        rt: [{ protocol: "gtfsrt", url: "https://schedule.test/rt" }],
+        script: "scripts/colors.lua",
+      };
+      writeFileSync(join(catalog, "feeds", "de.json"), JSON.stringify({ sources: [richSchedule] }));
+      const csv =
+        "Country Code,Name,Location,System ID,URL,Auto-Discovery URL,Supported Versions,Authentication Info URL\nDE,Demo,Berlin,demo,https://example.test,https://example.test/gbfs.json,2.3,\n";
+      const commit = "a".repeat(40);
+      writeFileSync(
+        join(tmp, "infra", "docker", "gbfs-catalog.lock.json"),
+        JSON.stringify({
+          schemaVersion: 1,
+          source: "mobilitydata-gbfs",
+          commit,
+          url: `https://raw.githubusercontent.com/MobilityData/gbfs/${commit}/systems.csv`,
+          sha256: createHash("sha256").update(csv).digest("hex"),
+          lockedAt: "2026-01-01T00:00:00Z",
+          lockedBy: "test",
+        }),
+      );
+      globalThis.fetch = vi.fn(async (input: unknown) => {
+        const url = String(input);
+        if (url.includes("raw.githubusercontent.com")) return new Response(csv);
+        if (url.endsWith("gbfs.json"))
+          return json({
+            version: "2.3",
+            data: {
+              en: {
+                feeds: [
+                  { name: "station_information", url: "https://example.test/stations" },
+                  { name: "station_status", url: "https://example.test/status" },
+                ],
+              },
             },
-          },
-        });
-      return json({ data: { stations: [] } });
-    }) as typeof fetch;
-    process.env.MOTIS_GBFS_CATALOG_ENABLED = "true";
-    const ctx = buildJobContext({
-      dataDir: join(tmp, "data"),
-      repoRoot: tmp,
-      countries: ["de"],
-      source,
-      store: new StateStore(join(tmp, "data")),
-      now: () => "2026-01-01T00:00:00Z",
-    });
-    ctx.state.catalogDir = catalog;
-    const result = await run(ctx);
-    expect(result.status).toBe("ok");
-    expect(readFileSync(join(catalog, "feeds", "de.json"), "utf-8")).toContain("openmapx-demo");
-    const updated = JSON.parse(readFileSync(join(catalog, "feeds", "de.json"), "utf-8")) as {
-      sources: unknown[];
-    };
-    expect(
-      updated.sources.find((source) => (source as { name?: unknown }).name === "schedule"),
-    ).toEqual(richSchedule);
-    expect(readFileSync(join(catalog, "out", "gbfs-source-index.json"), "utf-8")).toContain(
-      '"healthy": 1',
-    );
-  });
+          });
+        return json({ data: { stations: [] } });
+      }) as typeof fetch;
+      process.env.MOTIS_GBFS_CATALOG_ENABLED = "true";
+      const ctx = buildJobContext({
+        dataDir: join(tmp, "data"),
+        repoRoot: tmp,
+        countries: ["de"],
+        source,
+        store: new StateStore(join(tmp, "data")),
+        now: () => "2026-01-01T00:00:00Z",
+      });
+      ctx.state.catalogDir = catalog;
+      const result = await run(ctx);
+      expect(result.status).toBe("ok");
+      expect(readFileSync(join(catalog, "feeds", "de.json"), "utf-8")).toContain("openmapx-demo");
+      const updated = JSON.parse(readFileSync(join(catalog, "feeds", "de.json"), "utf-8")) as {
+        sources: unknown[];
+      };
+      expect(
+        updated.sources.find((source) => (source as { name?: unknown }).name === "schedule"),
+      ).toEqual(richSchedule);
+      expect(readFileSync(join(catalog, "out", "gbfs-source-index.json"), "utf-8")).toContain(
+        '"healthy": 1',
+      );
+    },
+  );
 });
