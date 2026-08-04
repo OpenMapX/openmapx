@@ -149,6 +149,7 @@ async function downloadOfflinePackageImpl(
   }
   record.manifest = manifest;
   record.bytesTotal = manifest.archive.byteLength;
+  let attemptStartBytes = 0;
 
   const report = (
     status: OfflinePackageDownloadProgress["status"],
@@ -161,7 +162,9 @@ async function downloadOfflinePackageImpl(
       status,
       bytesReceived: record.bytesReceived,
       bytesTotal: record.bytesTotal,
-      speedBytesPerSecond: Math.round((record.bytesReceived * 1000) / elapsed),
+      speedBytesPerSecond: Math.round(
+        (Math.max(0, record.bytesReceived - attemptStartBytes) * 1000) / elapsed,
+      ),
       ...(error ? { error } : {}),
     });
   };
@@ -247,6 +250,7 @@ async function downloadOfflinePackageImpl(
       retry: true,
     });
   }
+  attemptStartBytes = prefix;
 
   try {
     const estimate = await storage.estimate();
@@ -279,6 +283,7 @@ async function downloadOfflinePackageImpl(
         prefix = 0;
         record.bytesReceived = 0;
         record.verifiedPrefixBytes = 0;
+        attemptStartBytes = 0;
         await storage.put(record);
         hash = new Sha256();
         response = await api.openArchive(manifest.packageId, undefined, options.signal);

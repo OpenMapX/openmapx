@@ -11,8 +11,10 @@ vi.mock("./pmtilesReader", () => ({
 }));
 
 const packageId = `omp2-${"c".repeat(64)}`;
+const originalDateNow = Date.now;
 
 afterEach(() => {
+  Date.now = originalDateNow;
   vi.unstubAllGlobals();
 });
 
@@ -215,6 +217,59 @@ describe("downloadOfflinePackage", () => {
     expect(secondResult.status).toBe("ready");
     expect(api.openArchive).toHaveBeenCalledTimes(1);
     expect(hasActiveOfflinePackageDownload()).toBe(false);
+  });
+
+  it("calculates resumed transfer speed from bytes received in the current attempt", async () => {
+    const bytes = new TextEncoder().encode("abcdef");
+    const current = manifest(bytes);
+    const storage = new MemoryOfflinePackageStorage();
+    await storage.put({
+      id: packageId,
+      name: "Fixture",
+      manifest: current,
+      status: "paused",
+      bytesReceived: 3,
+      bytesTotal: 6,
+      verifiedPrefixBytes: 3,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const partial = await storage.openPartial(packageId);
+    await partial.append(bytes.subarray(0, 3));
+    await partial.close();
+    let now = 1_000;
+    Date.now = () => now;
+    const api = {
+      openArchive: vi.fn(async () => {
+        const body = new ReadableStream<Uint8Array>({
+          pull(controller) {
+            now = 2_000;
+            controller.enqueue(bytes.subarray(3));
+            controller.close();
+          },
+        });
+        return new Response(body, {
+          status: 206,
+          headers: {
+            etag: current.archive.etag,
+            "content-range": "bytes 3-5/6",
+          },
+        });
+      }),
+    } as unknown as OfflinePackageApi;
+    const progress: Array<{ status: string; speedBytesPerSecond: number }> = [];
+
+    await downloadOfflinePackage(api, storage, current, {
+      onProgress: (update) => progress.push(update),
+    });
+
+    expect(progress.at(-1)).toEqual({
+      packageId,
+      status: "ready",
+      bytesReceived: 6,
+      bytesTotal: 6,
+      speedBytesPerSecond: 3,
+    });
   });
 
   it("runs the durable download inside an exclusive Web Lock when available", async () => {

@@ -141,6 +141,9 @@ export function OfflineSettingsClient() {
   const [adding, setAdding] = useState(false);
   const [overview, setOverview] = useState(false);
   const [runningId, setRunningId] = useState<string | null>(null);
+  const [runningProgress, setRunningProgress] = useState<OfflinePackageDownloadProgress | null>(
+    null,
+  );
   const aborts = useRef(new Map<string, AbortController>());
 
   const refresh = useCallback(() => {
@@ -181,10 +184,18 @@ export function OfflineSettingsClient() {
     const controller = new AbortController();
     aborts.current.set(record.id, controller);
     setRunningId(record.id);
+    setRunningProgress({
+      packageId: record.id,
+      status: "downloading",
+      bytesReceived: record.bytesReceived,
+      bytesTotal: record.bytesTotal,
+      speedBytesPerSecond: 0,
+    });
     try {
       await downloadOfflinePackage(api, storage, record.manifest, {
         name: record.name,
         signal: controller.signal,
+        onProgress: setRunningProgress,
         validateStyles: async () => {
           await validateConfiguredOfflineStyleAssets(record.manifest, env);
         },
@@ -195,6 +206,7 @@ export function OfflineSettingsClient() {
     } finally {
       aborts.current.delete(record.id);
       setRunningId(null);
+      setRunningProgress(null);
       await getDefaultResolverRefresh();
       refresh();
     }
@@ -236,6 +248,7 @@ export function OfflineSettingsClient() {
       <PackageList
         records={records}
         runningId={runningId}
+        runningProgress={runningProgress}
         onResume={resume}
         onDelete={deletePackage}
       />
@@ -244,7 +257,10 @@ export function OfflineSettingsClient() {
           open={adding}
           api={api}
           capability={capability}
-          onClose={() => setAdding(false)}
+          onClose={() => {
+            setAdding(false);
+            refresh();
+          }}
           onSaved={() => {
             setAdding(false);
             refresh();
@@ -317,11 +333,13 @@ function RecentDataOfflineToggle() {
 function PackageList({
   records,
   runningId,
+  runningProgress,
   onResume,
   onDelete,
 }: {
   records: OfflinePackageRecord[];
   runningId: string | null;
+  runningProgress: OfflinePackageDownloadProgress | null;
   onResume: (record: OfflinePackageRecord) => void;
   onDelete: (record: OfflinePackageRecord) => void;
 }) {
@@ -371,6 +389,9 @@ function PackageList({
                       </Typography>
                       <OfflinePackageStatus
                         record={record}
+                        progress={
+                          runningProgress?.packageId === record.id ? runningProgress : undefined
+                        }
                         onResume={() => onResume(record)}
                         disabled={runningId !== null}
                       />
@@ -440,6 +461,13 @@ interface DownloadAreaDialogProps {
   onSaved: () => void;
 }
 
+interface SubmittedDownload {
+  name: string;
+  bbox: OfflinePackageBbox;
+  minZoom: number;
+  maxZoom: number;
+}
+
 function DownloadAreaDialog({ api, open, capability, onClose, onSaved }: DownloadAreaDialogProps) {
   const t = useTranslations("settings");
   const env = useEnv();
@@ -450,6 +478,7 @@ function DownloadAreaDialog({ api, open, capability, onClose, onSaved }: Downloa
     DEFAULT_MAX_ZOOM,
   ]);
   const [progress, setProgress] = useState<OfflinePackageDownloadProgress | null>(null);
+  const [submitted, setSubmitted] = useState<SubmittedDownload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -529,6 +558,20 @@ function DownloadAreaDialog({ api, open, capability, onClose, onSaved }: Downloa
 
   const start = async () => {
     if (!bbox || !capability?.available || busy) return;
+    const submission: SubmittedDownload = {
+      name: name.trim() || t("offlineDefaultName"),
+      bbox,
+      minZoom: zoomRange[0],
+      maxZoom: zoomRange[1],
+    };
+    setSubmitted(submission);
+    setProgress({
+      packageId: "pending",
+      status: "preparing",
+      bytesReceived: 0,
+      bytesTotal: 0,
+      speedBytesPerSecond: 0,
+    });
     setBusy(true);
     setError(null);
     const controller = new AbortController();
@@ -537,9 +580,9 @@ function DownloadAreaDialog({ api, open, capability, onClose, onSaved }: Downloa
       await requestPersistentStorage();
       if (recentDataOptInVisible && recentDataOptIn) await setRecentMapDataCacheEnabled(true);
       const request: OfflinePackageRequest = {
-        bbox,
-        minZoom: zoomRange[0],
-        maxZoom: zoomRange[1],
+        bbox: submission.bbox,
+        minZoom: submission.minZoom,
+        maxZoom: submission.maxZoom,
         provider: "openmapx",
       };
       const prepared = await api.prepare(request, controller.signal);
@@ -548,19 +591,47 @@ function DownloadAreaDialog({ api, open, capability, onClose, onSaved }: Downloa
           ? prepared.manifest
           : await waitForManifest(api, prepared.jobId, setProgress, controller.signal);
       const result = await downloadOfflinePackage(api, storage, manifest, {
-        name: name.trim() || t("offlineDefaultName"),
+        name: submission.name,
         signal: controller.signal,
         onProgress: setProgress,
         validateStyles: async () => {
           await validateConfiguredOfflineStyleAssets(manifest, env);
         },
       });
+      if (result.status === "paused") {
+        setProgress({
+          packageId: result.id,
+          status: "paused",
+          bytesReceived: result.bytesReceived,
+          bytesTotal: result.bytesTotal,
+          speedBytesPerSecond: 0,
+        });
+        return;
+      }
       if (result.status !== "ready") throw new Error(t("offlinePackageNotReady"));
       haptics.success();
       onSaved();
     } catch (reason) {
-      if (!(reason instanceof DOMException && reason.name === "AbortError"))
-        setError(reason instanceof Error ? reason.message : String(reason));
+      if (reason instanceof DOMException && reason.name === "AbortError") {
+        setProgress((current) => ({
+          packageId: current?.packageId ?? "pending",
+          status: "paused",
+          bytesReceived: current?.bytesReceived ?? 0,
+          bytesTotal: current?.bytesTotal ?? 0,
+          speedBytesPerSecond: 0,
+        }));
+      } else {
+        const message = reason instanceof Error ? reason.message : String(reason);
+        setError(message);
+        setProgress((current) => ({
+          packageId: current?.packageId ?? "pending",
+          status: "error",
+          bytesReceived: current?.bytesReceived ?? 0,
+          bytesTotal: current?.bytesTotal ?? 0,
+          speedBytesPerSecond: 0,
+          error: { code: "download-failed", message },
+        }));
+      }
     } finally {
       abortRef.current = null;
       setBusy(false);
@@ -578,117 +649,132 @@ function DownloadAreaDialog({ api, open, capability, onClose, onSaved }: Downloa
       <DialogContent>
         <Stack spacing={2}>
           {error ? <Alert severity="error">{error}</Alert> : null}
-          {progress?.status === "preparing" ? (
-            <Alert severity="info">{t("offlinePreparing")}</Alert>
-          ) : null}
-          {progress?.status === "verifying" ? (
-            <Alert severity="info">{t("offlineVerifying")}</Alert>
-          ) : null}
-          <TextField
-            label={t("areaName")}
-            placeholder={t("areaNamePlaceholder")}
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            fullWidth
-          />
-          <Autocomplete
-            options={regionOptions}
-            loading={searching}
-            value={selectedRegion}
-            onChange={(_event, option) => {
-              setSelectedRegion(option);
-              if (option) {
-                setSearchInput(option.label);
-                if (!name.trim()) setName(option.label.split(",")[0]?.trim() ?? "");
-              }
-            }}
-            inputValue={searchInput}
-            onInputChange={(_event, value) => setSearchInput(value)}
-            getOptionLabel={(option) => option.label}
-            renderInput={(params) => (
+          {submitted ? (
+            <>
+              <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                  {submitted.name}
+                </Typography>
+                <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                  {t("downloadZoomRange", {
+                    min: submitted.minZoom,
+                    max: submitted.maxZoom,
+                  })}
+                </Typography>
+              </Paper>
+              {progress ? <OfflinePackageStatus progress={progress} /> : null}
+            </>
+          ) : (
+            <>
               <TextField
-                {...params}
-                label={t("searchArea")}
-                placeholder={t("searchAreaPlaceholder")}
-                helperText={t("searchAreaDescription")}
+                label={t("areaName")}
+                placeholder={t("areaNamePlaceholder")}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                fullWidth
               />
-            )}
-          />
-          <AreaPickerMap
-            initialCenter={[10.45, 51.16]}
-            initialZoom={4}
-            onChange={(nextBbox) => setBbox(nextBbox)}
-            fitBbox={fitBbox}
-            boundary={regionBoundary}
-          />
-          <Typography variant="body2" sx={{ color: "text.secondary" }}>
-            {t("moveToSelect")}
-          </Typography>
-          <Typography variant="body2">
-            {t("minZoom")}: {zoomRange[0]} · {t("maxZoom")}: {zoomRange[1]}
-            {capability?.sourceMaxZoom !== undefined
-              ? ` (${t("sourceMaxZoom")}: ${capability.sourceMaxZoom})`
-              : ""}
-          </Typography>
-          <Slider
-            value={zoomRange}
-            min={MIN_ZOOM_LIMIT}
-            max={maxZoomLimit}
-            step={1}
-            onChange={(_event, value) => {
-              if (Array.isArray(value)) setZoomRange([value[0], value[1]]);
-            }}
-            valueLabelDisplay="auto"
-            disableSwap
-          />
-          {progress && progress.bytesTotal > 0 ? (
-            <OfflinePackageStatus progress={progress} />
-          ) : null}
-          {!network.online ? <Alert severity="warning">{t("offlineNetworkRequired")}</Alert> : null}
-          {recentDataOptInVisible ? (
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={recentDataOptIn}
-                  onChange={(event) => setRecentDataOptIn(event.target.checked)}
+              <Autocomplete
+                options={regionOptions}
+                loading={searching}
+                value={selectedRegion}
+                onChange={(_event, option) => {
+                  setSelectedRegion(option);
+                  if (option) {
+                    setSearchInput(option.label);
+                    if (!name.trim()) setName(option.label.split(",")[0]?.trim() ?? "");
+                  }
+                }}
+                inputValue={searchInput}
+                onInputChange={(_event, value) => setSearchInput(value)}
+                getOptionLabel={(option) => option.label}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label={t("searchArea")}
+                    placeholder={t("searchAreaPlaceholder")}
+                    helperText={t("searchAreaDescription")}
+                  />
+                )}
+              />
+              <AreaPickerMap
+                initialCenter={[10.45, 51.16]}
+                initialZoom={4}
+                onChange={(nextBbox) => setBbox(nextBbox)}
+                fitBbox={fitBbox}
+                boundary={regionBoundary}
+              />
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                {t("moveToSelect")}
+              </Typography>
+              <Typography variant="body2">
+                {t("minZoom")}: {zoomRange[0]} · {t("maxZoom")}: {zoomRange[1]}
+                {capability?.sourceMaxZoom !== undefined
+                  ? ` (${t("sourceMaxZoom")}: ${capability.sourceMaxZoom})`
+                  : ""}
+              </Typography>
+              <Slider
+                value={zoomRange}
+                min={MIN_ZOOM_LIMIT}
+                max={maxZoomLimit}
+                step={1}
+                onChange={(_event, value) => {
+                  if (Array.isArray(value)) setZoomRange([value[0], value[1]]);
+                }}
+                valueLabelDisplay="auto"
+                disableSwap
+              />
+              {!network.online ? (
+                <Alert severity="warning">{t("offlineNetworkRequired")}</Alert>
+              ) : null}
+              {recentDataOptInVisible ? (
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={recentDataOptIn}
+                      onChange={(event) => setRecentDataOptIn(event.target.checked)}
+                    />
+                  }
+                  label={t("rememberRecentMapData")}
                 />
-              }
-              label={t("rememberRecentMapData")}
-            />
-          ) : null}
-          {!meteredConfirmed && network.metered ? (
-            <Alert
-              severity="warning"
-              action={
-                <Button color="inherit" size="small" onClick={() => setMeteredConfirmed(true)}>
-                  {t("meteredConfirm")}
-                </Button>
-              }
-            >
-              {t("meteredWarning", {
-                size: progress?.bytesTotal
-                  ? formatBytes(progress.bytesTotal)
-                  : t("offlineMeasuredAfterPreparation"),
-              })}
-            </Alert>
-          ) : null}
+              ) : null}
+              {!meteredConfirmed && network.metered ? (
+                <Alert
+                  severity="warning"
+                  action={
+                    <Button color="inherit" size="small" onClick={() => setMeteredConfirmed(true)}>
+                      {t("meteredConfirm")}
+                    </Button>
+                  }
+                >
+                  {t("meteredWarning", {
+                    size: t("offlineMeasuredAfterPreparation"),
+                  })}
+                </Alert>
+              ) : null}
+            </>
+          )}
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={close}>{busy ? t("pause") : t("cancel")}</Button>
-        <Button
-          variant="contained"
-          onClick={() => void start()}
-          disabled={
-            busy ||
-            !bbox ||
-            !capability?.available ||
-            !network.online ||
-            (network.metered && !meteredConfirmed)
-          }
-        >
-          {busy ? t("downloading") : t("startDownload")}
-        </Button>
+        {submitted ? (
+          <Button onClick={close}>{busy ? t("pause") : t("close")}</Button>
+        ) : (
+          <>
+            <Button onClick={close}>{t("cancel")}</Button>
+            <Button
+              variant="contained"
+              onClick={() => void start()}
+              disabled={
+                !bbox ||
+                !capability?.available ||
+                !network.online ||
+                (network.metered && !meteredConfirmed)
+              }
+            >
+              {t("startDownload")}
+            </Button>
+          </>
+        )}
       </DialogActions>
     </Dialog>
   );

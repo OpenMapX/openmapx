@@ -47,18 +47,35 @@ export function OfflinePackageStatus({ record, progress, onResume, disabled = fa
     progress?.bytesTotal ?? record?.bytesTotal ?? record?.manifest.archive.byteLength ?? 0;
   const determinate =
     total > 0 && status !== "preparing" && status !== "queued" && status !== "verifying";
-  const percentage = determinate ? Math.min(100, (received / total) * 100) : undefined;
+  const percentage = determinate
+    ? Math.round(Math.min(100, Math.max(0, (received / total) * 100)))
+    : undefined;
   const resumable = record && (record.status === "paused" || record.status === "error") && onResume;
+  const speed = progress?.speedBytesPerSecond ?? 0;
 
   return (
     <Stack spacing={0.5} sx={{ width: "100%" }}>
-      <Stack direction="row" spacing={1} sx={{ minWidth: 0, alignItems: "center" }}>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{ minWidth: 0, alignItems: "center", flexWrap: "wrap", rowGap: 0.25 }}
+      >
         <Typography variant="body2" component="span" sx={{ color: "text.secondary" }}>
           {statusText(status, t)}
         </Typography>
+        {percentage !== undefined && status !== "ready" ? (
+          <Typography variant="caption" component="span" sx={{ fontWeight: 600 }}>
+            {percentage}%
+          </Typography>
+        ) : null}
         {total > 0 && status !== "ready" ? (
           <Typography variant="caption" component="span" sx={{ color: "text.secondary" }}>
             {formatBytes(received)} / {formatBytes(total)}
+          </Typography>
+        ) : null}
+        {status === "downloading" && speed > 0 ? (
+          <Typography variant="caption" component="span" sx={{ color: "text.secondary" }}>
+            {t("downloadSpeed", { speed: formatBytes(speed) })}
           </Typography>
         ) : null}
         {resumable ? (
@@ -80,6 +97,8 @@ export function OfflinePackageStatus({ record, progress, onResume, disabled = fa
           <LinearProgress
             variant={percentage === undefined ? "indeterminate" : "determinate"}
             value={percentage}
+            aria-label={statusText(status, t)}
+            sx={{ height: 8, borderRadius: 1 }}
           />
         </Box>
       )}
