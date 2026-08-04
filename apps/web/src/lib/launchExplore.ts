@@ -7,7 +7,7 @@ import {
   useSearchStore,
   useSidebarStore,
 } from "@openmapx/core";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 
 const FRAME_RADIUS_METRES = 1000;
 

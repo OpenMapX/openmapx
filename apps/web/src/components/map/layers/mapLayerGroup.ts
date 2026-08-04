@@ -1,6 +1,6 @@
 "use client";
 
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { addLayerInSlot, layerRank, type MapLayerSlot, unregisterLayerSlot } from "./layerStack";
 
 /** A layer spec plus the slot that decides its depth. */

@@ -39,7 +39,7 @@ vi.mock("maplibre-gl", () => {
     on = vi.fn();
     remove = vi.fn();
   }
-  return { default: { Map: FakeMap } };
+  return { Map: FakeMap };
 });
 
 import * as offlineAreas from "@/lib/offlineAreas";

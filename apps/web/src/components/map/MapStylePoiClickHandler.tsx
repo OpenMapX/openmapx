@@ -176,10 +176,10 @@ export function MapStylePoiClickHandler() {
     };
 
     map.on("mousemove", onMouseMove);
-    map.on("mouseleave", onMouseLeave);
+    map.on("mouseout", onMouseLeave);
     return () => {
       map.off("mousemove", onMouseMove);
-      map.off("mouseleave", onMouseLeave);
+      map.off("mouseout", onMouseLeave);
     };
   }, [mapRef, mapReady, styleVersion]);
 

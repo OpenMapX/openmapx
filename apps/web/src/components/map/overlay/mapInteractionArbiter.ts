@@ -121,7 +121,7 @@ function createMapState(map: MaplibreMap): MapInteractionState {
 
   map.on("click", state.onClick);
   map.on("mousemove", state.onMouseMove);
-  map.on("mouseleave", state.onMouseLeave);
+  map.on("mouseout", state.onMouseLeave);
   mapStates.set(map, state);
   return state;
 }
@@ -151,7 +151,7 @@ export function registerMapOverlayInteraction(
 
     map.off("click", state.onClick);
     map.off("mousemove", state.onMouseMove);
-    map.off("mouseleave", state.onMouseLeave);
+    map.off("mouseout", state.onMouseLeave);
     setCursor(map, "");
     mapStates.delete(map);
   };

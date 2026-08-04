@@ -1,5 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import type { MutableRefObject } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { type CapturedConsoleErrors, captureConsoleErrors, createFakeMap } from "@/test";

@@ -22,21 +22,19 @@ vi.mock("@/lib/EnvProvider", () => ({
 }));
 
 vi.mock("maplibre-gl", () => ({
-  default: {
-    Popup: class FakePopup {
-      setLngLat() {
-        return this;
-      }
-      setHTML() {
-        return this;
-      }
-      addTo() {
-        return this;
-      }
-      remove() {
-        return this;
-      }
-    },
+  Popup: class FakePopup {
+    setLngLat() {
+      return this;
+    }
+    setHTML() {
+      return this;
+    }
+    addTo() {
+      return this;
+    }
+    remove() {
+      return this;
+    }
   },
 }));
 

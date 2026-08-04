@@ -7,7 +7,7 @@ import {
   useNavigationStore,
   useSettingsStore,
 } from "@openmapx/core";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { useMapOptional } from "@/lib/MapContext";
 
@@ -140,7 +140,7 @@ export function useNavCamera(): void {
     const map = mapRef?.current;
     if (!map || !mapReady || markerRef.current) return;
     let destroyed = false;
-    import("maplibre-gl").then(({ default: maplibregl }) => {
+    import("maplibre-gl").then((maplibregl) => {
       if (destroyed || markerRef.current) return;
       const el = document.createElement("div");
       el.style.cssText = `width:${PUCK_PX}px;height:${PUCK_PX}px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 1px 3px rgba(0,0,0,.45));`;

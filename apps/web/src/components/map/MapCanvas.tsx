@@ -3,7 +3,7 @@
 import { useColorScheme } from "@mui/material/styles";
 import type { LngLat } from "@openmapx/core";
 import { useMapStore, useNavigationStore } from "@openmapx/core";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { useLocale } from "next-intl";
 import { useEffect, useRef } from "react";
 import { useEnv } from "@/lib/EnvProvider";
@@ -80,14 +80,12 @@ export function MapCanvas() {
     const initMap = async (initialCenter: LngLat, initialZoom: number) => {
       setCenter(initialCenter);
       setZoom(initialZoom);
-      // The maplibre-gl type definitions don't expose a typed `default` field
-      // on the module namespace, so we widen the runtime binding to `unknown`
-      // until inside the guard and then trust the top-level type-only import
-      // (`import type maplibregl`) for member typing.
+      // Keep the dynamically loaded module as a namespace: MapLibre 6 no longer
+      // exposes a synthetic default export.
       let maplibreRuntime: unknown;
       let viewportStyle: ViewportStyle | undefined;
       try {
-        maplibreRuntime = (await import("maplibre-gl")).default;
+        maplibreRuntime = await import("maplibre-gl");
         if (destroyed || !containerRef.current) return;
         const maplibregl = maplibreRuntime as unknown as MapLibreRuntime;
         viewportStyle = await loadStyleForViewport(
@@ -297,13 +295,7 @@ export function MapCanvas() {
     const center = map.getCenter();
     Promise.all([import("maplibre-gl"), Promise.resolve([center.lng, center.lat] as LngLat)])
       .then(([module, currentCenter]) =>
-        loadStyleForViewport(
-          env,
-          variant,
-          mapStyle,
-          currentCenter,
-          module.default as unknown as MapLibreRuntime,
-        ),
+        loadStyleForViewport(env, variant, mapStyle, currentCenter, module as MapLibreRuntime),
       )
       .then((s) => {
         // The persistent `style.load` listener registered at map creation bumps

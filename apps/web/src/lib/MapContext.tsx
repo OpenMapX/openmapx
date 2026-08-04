@@ -1,6 +1,6 @@
 "use client";
 
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { createContext, useCallback, useContext, useRef, useState } from "react";
 
 export interface MapContextValue {

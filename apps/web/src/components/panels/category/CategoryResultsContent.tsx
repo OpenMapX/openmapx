@@ -23,7 +23,7 @@ import {
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { useExpandOnBackgroundTap } from "@/components/panels/sheet/sheetState";

@@ -135,7 +135,7 @@ describe("map interaction arbiter", () => {
 
     state.setHits("test-flow", [feature("flow")]);
     state.emit("mousemove", event());
-    state.emit("mouseleave", {});
+    state.emit("mouseout", {});
     expect(state.getCanvasContainer().style.cursor).toBe("");
 
     unregister();

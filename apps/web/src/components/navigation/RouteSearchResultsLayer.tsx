@@ -1,7 +1,7 @@
 "use client";
 
 import type { AlongRoutePoi, CategoryPlace } from "@openmapx/core";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { useEffect } from "react";
 import { addLayerInSlot } from "@/components/map/layers/layerStack";
 import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";

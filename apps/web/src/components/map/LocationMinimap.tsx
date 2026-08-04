@@ -2,6 +2,7 @@
 
 import Box from "@mui/material/Box";
 import { type SxProps, type Theme, useColorScheme } from "@mui/material/styles";
+import type { StyleSpecification } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { baseMapCreditsHtml, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
@@ -36,7 +37,7 @@ export function LocationMinimap({ lng, lat, zoom = 16, onClick, sx }: LocationMi
     let cancelled = false;
 
     (async () => {
-      const [{ default: maplibregl }, style] = await Promise.all([
+      const [maplibregl, style] = await Promise.all([
         import("maplibre-gl"),
         env.styleProvider === "openmapx"
           ? loadOpenMapXStyle(env, variant)
@@ -46,7 +47,7 @@ export function LocationMinimap({ lng, lat, zoom = 16, onClick, sx }: LocationMi
 
       const map = new maplibregl.Map({
         container: el,
-        style: style as string | maplibregl.StyleSpecification,
+        style: style as string | StyleSpecification,
         center: [lng, lat],
         zoom,
         interactive: false,

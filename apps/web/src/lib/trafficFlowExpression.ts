@@ -1,5 +1,5 @@
 import { FLOW_FALLBACK_COLOR, FLOW_LOS_COLORS, FLOW_RATIO_STOPS } from "@openmapx/core";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 
 /**
  * The shared traffic ramp as a MapLibre paint expression. The property names

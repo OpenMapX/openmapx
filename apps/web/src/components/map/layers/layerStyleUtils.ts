@@ -1,6 +1,6 @@
 "use client";
 
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, GeoJSONSourceDiff } from "maplibre-gl";
 
 export type GeoJsonSourceData = Parameters<GeoJSONSource["setData"]>[0];

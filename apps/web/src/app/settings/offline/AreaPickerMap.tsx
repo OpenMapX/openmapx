@@ -3,7 +3,7 @@
 import Box from "@mui/material/Box";
 import { useColorScheme } from "@mui/material/styles";
 import type { AreaGeometry } from "@openmapx/core";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { createGeoJsonSourceDataBridge } from "@/components/map/layers/layerStyleUtils";
 import { MapCredits } from "@/components/map/MapCredits";
@@ -97,7 +97,7 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
     let replayBoundary: (() => void) | null = null;
 
     const init = async () => {
-      const maplibregl = (await import("maplibre-gl")).default;
+      const maplibregl = await import("maplibre-gl");
       if (destroyed || !containerRef.current) return;
       const style =
         env.styleProvider === "openmapx"

@@ -2,7 +2,7 @@
 
 import type { LngLat } from "@openmapx/core";
 import { useDirectionsStore } from "@openmapx/core";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { useMap } from "@/lib/MapContext";
 import { BRAND } from "@/lib/theme";
@@ -79,7 +79,7 @@ export function WaypointMarkers() {
 
     let destroyed = false;
 
-    import("maplibre-gl").then(({ default: maplibregl }) => {
+    import("maplibre-gl").then((maplibregl) => {
       if (destroyed || !mapRef.current) return;
 
       const currentIds = new Set<string>();
