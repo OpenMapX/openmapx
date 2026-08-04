@@ -361,6 +361,18 @@
       "all": "Alle"
     },
     "startsAt": "Beginnt {date}",
+    "schedule": {
+      "from": "ab",
+      "days": {
+        "MO": "Mo",
+        "TU": "Di",
+        "WE": "Mi",
+        "TH": "Do",
+        "FR": "Fr",
+        "SA": "Sa",
+        "SU": "So"
+      }
+    },
     "status": {
       "loading": "Verkehrsstörungen werden aktualisiert …",
       "stale": "Verkehrsstörungen sind möglicherweise veraltet.",
@@ -390,11 +402,18 @@
       "hazard": "Gefahr",
       "obstruction": "Hindernis"
     },
+    "roadState": {
+      "open": "Offen",
+      "closed": "Geschlossen",
+      "some_lanes_closed": "Einige Fahrspuren gesperrt",
+      "single_lane_alternating": "Einspuriger Wechselverkehr"
+    },
     "panel": {
       "type": "Typ",
       "roadState": "Status",
       "roads": "Betroffene Straßen",
       "validity": "Aktiv",
+      "startsAt": "Beginnt am",
       "delay": "Verzögerung",
       "description": "Details",
       "sourceRecord": "Quelleneintrag",

@@ -65,6 +65,17 @@ describe("buildPopupCard", () => {
     expect(html).toContain("#cc0033"); // high severity color, inlined
   });
 
+  it("uses a configured localized label for the severity badge", () => {
+    const html = buildPopupCard(
+      { titleField: "h", severityField: "severity", severityLabelField: "severityText", rows: [] },
+      { h: "T", severity: "medium", severityText: "Mittel" },
+    );
+
+    expect(html).toContain("Mittel");
+    expect(html).not.toContain(">Medium<");
+    expect(html).toContain("#ff9933"); // medium severity color still uses the raw value
+  });
+
   it("omits the severity badge when severity is unknown or empty", () => {
     for (const severity of ["unknown", "Unknown", "", null]) {
       const html = buildPopupCard(

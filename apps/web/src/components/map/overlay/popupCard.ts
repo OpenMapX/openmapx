@@ -23,6 +23,8 @@ export interface PopupCardSpec {
   titleField: string;
   /** Field whose value (low|medium|high|critical|unknown) → colored severity badge. */
   severityField?: string;
+  /** Optional field containing the localized text for the severity badge. */
+  severityLabelField?: string;
   /** Field holding a source credit — a string or `{ provider, license }` → muted footer. */
   attributionField?: string;
   rows?: PopupCardRow[];
@@ -119,7 +121,12 @@ function renderCardBody(
     // "UNKNOWN" pill is just noise. The marker still carries the unknown color.
     if (sevRaw != null && sevRaw !== "" && String(sevRaw).toLowerCase() !== "unknown") {
       const style = SEVERITY_STYLE[String(sevRaw).toLowerCase()] ?? SEVERITY_STYLE.unknown;
-      badge = `<span class="omx-overlay-popup__badge" style="background:${style.bg};color:${style.fg}">${escapeHtml(humanize(String(sevRaw)))}</span>`;
+      const labelRaw = spec.severityLabelField ? properties[spec.severityLabelField] : undefined;
+      const label =
+        labelRaw == null || String(labelRaw).trim() === ""
+          ? humanize(String(sevRaw))
+          : String(labelRaw);
+      badge = `<span class="omx-overlay-popup__badge" style="background:${style.bg};color:${style.fg}">${escapeHtml(label)}</span>`;
     }
   }
   const header = `<div class="omx-overlay-popup__header"><span class="omx-overlay-popup__title">${title}</span></div>`;

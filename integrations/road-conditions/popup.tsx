@@ -14,14 +14,15 @@ export const ROAD_CONDITION_SEVERITY_RANK: Record<string, number> = {
 const POPUP_SPEC: PopupCardSpec = {
   titleField: "headline",
   severityField: "severity",
+  severityLabelField: "severityText",
   attributionField: "attribution",
   rows: [
-    { field: "type", labelKey: "panel.type", format: "label", variant: "chip" },
-    { field: "roadState", labelKey: "panel.roadState", format: "label", variant: "chip" },
+    { field: "typeText", labelKey: "panel.type", variant: "chip" },
+    { field: "roadStateText", labelKey: "panel.roadState", variant: "chip" },
     { field: "roads", labelKey: "panel.roads", variant: "row" },
     { field: "recordId", labelKey: "panel.sourceRecord", variant: "row" },
     { field: "validity", labelKey: "panel.validity", variant: "row" },
-    { field: "startsAt", variant: "row" },
+    { field: "startsAt", labelKey: "panel.startsAt", variant: "row" },
     { field: "delayText", labelKey: "panel.delay", variant: "row" },
     { field: "description", labelKey: "panel.description", variant: "block" },
   ],
@@ -30,9 +31,10 @@ const POPUP_SPEC: PopupCardSpec = {
 const SOURCE_DETAIL_SPEC: PopupCardSpec = {
   titleField: "headline",
   severityField: "severity",
+  severityLabelField: "severityText",
   rows: [
-    { field: "type", labelKey: "panel.type", format: "label", variant: "chip" },
-    { field: "roadState", labelKey: "panel.roadState", format: "label", variant: "chip" },
+    { field: "typeText", labelKey: "panel.type", variant: "chip" },
+    { field: "roadStateText", labelKey: "panel.roadState", variant: "chip" },
     { field: "roads", labelKey: "panel.roads", variant: "row" },
     { field: "recordId", labelKey: "panel.sourceRecord", variant: "row" },
     { field: "validity", labelKey: "panel.validity", variant: "row" },
@@ -73,6 +75,7 @@ function formatValidity(
   to: unknown,
   fmtDateTime: (value: string | number | Date) => string,
   fmtDate: (value: string | number | Date) => string,
+  translate: RoadConditionTranslate,
 ): string {
   if (typeof scheduleJson === "string" && scheduleJson) {
     try {
@@ -80,12 +83,18 @@ function formatValidity(
       const hhmm = (time?: string) => (time ? time.slice(0, 5) : "");
       const parts = windows
         .map((window) => {
-          const days = window.byDay && window.byDay.length > 0 ? window.byDay.join(", ") : "";
+          const days =
+            window.byDay && window.byDay.length > 0
+              ? window.byDay
+                  .map((day) => scheduleDayLabel(day, translate))
+                  .filter(Boolean)
+                  .join(", ")
+              : "";
           const band =
             window.startTime && window.endTime
               ? `${hhmm(window.startTime)}–${hhmm(window.endTime)}`
               : window.startTime
-                ? `from ${hhmm(window.startTime)}`
+                ? `${translate("schedule.from")} ${hhmm(window.startTime)}`
                 : "";
           const range =
             window.startDate && window.endDate
@@ -105,6 +114,53 @@ function formatValidity(
   const t = typeof to === "string" && to ? fmtDateTime(to) : "";
   if (!f && !t) return "";
   return `${f || "…"} – ${t || "…"}`;
+}
+
+const ROAD_CONDITION_TYPES = new Set<RoadConditionType>([
+  "accident",
+  "roadworks",
+  "road_closure",
+  "lane_closure",
+  "hazard",
+  "congestion",
+  "weather",
+  "event",
+  "restriction",
+  "other",
+]);
+
+const ROAD_CONDITION_STATES = new Set([
+  "open",
+  "closed",
+  "some_lanes_closed",
+  "single_lane_alternating",
+]);
+
+const ROAD_CONDITION_SEVERITIES = new Set(Object.keys(ROAD_CONDITION_SEVERITY_RANK));
+const SCHEDULE_WEEKDAY_CODES = new Set(["MO", "TU", "WE", "TH", "FR", "SA", "SU"]);
+
+function humanizeToken(raw: string): string {
+  const value = raw.replace(/[_-]+/g, " ").trim();
+  return value.length === 0 ? value : value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function localizedTokenList(
+  raw: unknown,
+  prefix: string,
+  known: ReadonlySet<string>,
+  translate: RoadConditionTranslate,
+): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const tokens = distinctNonEmpty(raw.split(","));
+  if (tokens.length === 0) return undefined;
+  return tokens
+    .map((token) => (known.has(token) ? translate(`${prefix}.${token}`) : humanizeToken(token)))
+    .join(", ");
+}
+
+function scheduleDayLabel(day: string, translate: RoadConditionTranslate): string {
+  const code = day.trim().toUpperCase();
+  return SCHEDULE_WEEKDAY_CODES.has(code) ? translate(`schedule.days.${code}`) : day.trim();
 }
 
 function attributionString(raw: unknown): string {
@@ -246,10 +302,29 @@ function formatPopupEntry(
     sourceEntry.validTo,
     input.formatDateTime,
     input.formatDate,
+    input.translate,
+  );
+  const typeText = localizedTokenList(
+    sourceEntry.type,
+    "type",
+    ROAD_CONDITION_TYPES,
+    input.translate,
+  );
+  const roadStateText = localizedTokenList(
+    sourceEntry.roadState,
+    "roadState",
+    ROAD_CONDITION_STATES,
+    input.translate,
+  );
+  const severityText = localizedTokenList(
+    sourceEntry.severity,
+    "sev",
+    ROAD_CONDITION_SEVERITIES,
+    input.translate,
   );
   const startsAt =
     sourceEntry.future === true && typeof sourceEntry.validFrom === "string"
-      ? input.translate("startsAt", { date: input.formatDateTime(sourceEntry.validFrom) })
+      ? input.formatDateTime(sourceEntry.validFrom)
       : undefined;
   const delaySeconds = Number(sourceEntry.delaySeconds);
   const delayText =
@@ -258,6 +333,9 @@ function formatPopupEntry(
       : undefined;
   return {
     ...sourceEntry,
+    ...(typeText ? { typeText } : {}),
+    ...(roadStateText ? { roadStateText } : {}),
+    ...(severityText ? { severityText } : {}),
     ...(validity ? { validity } : {}),
     ...(startsAt ? { startsAt } : {}),
     ...(delayText ? { delayText } : {}),

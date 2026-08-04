@@ -361,6 +361,18 @@
       "all": "All"
     },
     "startsAt": "Starts {date}",
+    "schedule": {
+      "from": "from",
+      "days": {
+        "MO": "Mon",
+        "TU": "Tue",
+        "WE": "Wed",
+        "TH": "Thu",
+        "FR": "Fri",
+        "SA": "Sat",
+        "SU": "Sun"
+      }
+    },
     "status": {
       "loading": "Updating traffic incidents…",
       "stale": "Traffic incidents may be outdated.",
@@ -390,11 +402,18 @@
       "hazard": "Hazard",
       "obstruction": "Obstruction"
     },
+    "roadState": {
+      "open": "Open",
+      "closed": "Closed",
+      "some_lanes_closed": "Some lanes closed",
+      "single_lane_alternating": "Single-lane alternating traffic"
+    },
     "panel": {
       "type": "Type",
       "roadState": "Status",
       "roads": "Roads affected",
       "validity": "Active",
+      "startsAt": "Starts at",
       "delay": "Delay",
       "description": "Details",
       "sourceRecord": "Source record",
