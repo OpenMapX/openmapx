@@ -13,6 +13,7 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
+import { safeHref } from "@openmapx/core";
 
 interface FeedAttribution {
   country_code?: string;
@@ -121,7 +122,11 @@ export function TransitFeedAttribution({ feeds, labels }: TransitFeedAttribution
                     <TableRow key={feed.human_name}>
                       <TableCell>
                         {feed.source ? (
-                          <Link href={feed.source} target="_blank" rel="noopener noreferrer">
+                          <Link
+                            href={safeHref(feed.source)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
                             {feed.human_name}
                           </Link>
                         ) : (
@@ -130,7 +135,11 @@ export function TransitFeedAttribution({ feeds, labels }: TransitFeedAttribution
                       </TableCell>
                       <TableCell>
                         {feed.license_url ? (
-                          <Link href={feed.license_url} target="_blank" rel="noopener noreferrer">
+                          <Link
+                            href={safeHref(feed.license_url)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
                             {feed.spdx_license_identifier ?? "Unknown"}
                           </Link>
                         ) : (

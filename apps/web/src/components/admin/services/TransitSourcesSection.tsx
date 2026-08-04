@@ -21,6 +21,7 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import { safeHref } from "@openmapx/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
@@ -427,7 +428,7 @@ export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
                         <Tooltip title={source.originUrl}>
                           <Typography
                             component="a"
-                            href={source.originUrl}
+                            href={safeHref(source.originUrl)}
                             target="_blank"
                             rel="noreferrer noopener"
                             variant="caption"

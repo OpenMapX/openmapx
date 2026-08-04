@@ -1,6 +1,6 @@
 "use client";
 
-import { escapeHtml, useOverlayExclusion } from "@openmapx/core";
+import { escapeHtml, sanitizeUrl, useOverlayExclusion } from "@openmapx/core";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -277,8 +277,8 @@ export function NaturalEventLayer() {
           })
         : "";
       const magLabel = p.magnitudeLabel ? escapeHtml(String(p.magnitudeLabel)) : null;
-      const sourceUrl = p.sourceUrl ? String(p.sourceUrl) : null;
-      const link = p.link ? String(p.link) : null;
+      const sourceUrl = sanitizeUrl(String(p.sourceUrl ?? ""));
+      const link = sanitizeUrl(String(p.link ?? ""));
       const alertLevel = p.alertLevel ? String(p.alertLevel) : null;
       const dataSource = p.source === "gdacs" ? "GDACS" : "NASA EONET";
 
@@ -299,9 +299,9 @@ export function NaturalEventLayer() {
           ${date ? `<div style="font-size:12px;color:#666;margin-bottom:4px">${date}</div>` : ""}
           ${magLabel ? `<div style="font-size:12px;margin-bottom:4px"><span style="color:#666">${t("magnitude")}:</span> <strong>${magLabel}</strong></div>` : ""}
           <div style="font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:4px;margin-top:4px">
-            ${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">${t("viewSource")}</a>` : ""}
+            ${sourceUrl ? `<a href="${sourceUrl}" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">${t("viewSource")}</a>` : ""}
             ${sourceUrl && link ? " · " : ""}
-            ${link ? `<a href="${escapeHtml(link)}" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">${dataSource}</a>` : ""}
+            ${link ? `<a href="${link}" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">${dataSource}</a>` : ""}
             ${!link && !sourceUrl ? dataSource : ""}
           </div>
         </div>`;

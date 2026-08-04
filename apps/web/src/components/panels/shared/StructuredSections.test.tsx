@@ -203,4 +203,60 @@ describe("StructuredSections", () => {
     expect(markup).toContain("Load media");
     expect(markup).not.toContain("https://camera.example.test/live.m3u8");
   });
+
+  it("drops non-http embed URLs instead of framing them", () => {
+    const markup = renderToStaticMarkup(
+      <StructuredSections
+        sections={[
+          {
+            title: "Untrusted camera",
+            type: "embed",
+            embedType: "iframe",
+            embedUrl: "javascript:alert(1)",
+            collapsed: false,
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).not.toContain("<iframe");
+    expect(markup).not.toContain("javascript:");
+  });
+
+  it("drops same-origin relative embed URLs instead of framing them", () => {
+    const markup = renderToStaticMarkup(
+      <StructuredSections
+        sections={[
+          {
+            title: "Local camera",
+            type: "embed",
+            embedType: "iframe",
+            embedUrl: "/local/thing",
+            collapsed: false,
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).not.toContain("<iframe");
+  });
+
+  it("requires consent before rendering an external iframe", () => {
+    const markup = renderToStaticMarkup(
+      <StructuredSections
+        sections={[
+          {
+            title: "External camera",
+            type: "embed",
+            embedType: "iframe",
+            embedUrl: "https://camera.example.test/player",
+            collapsed: false,
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("Load media");
+    expect(markup).not.toContain("<iframe");
+  });
 });

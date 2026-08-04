@@ -1,6 +1,6 @@
 "use client";
 
-import { useDebouncedCallback } from "@openmapx/core";
+import { escapeHtml, useDebouncedCallback } from "@openmapx/core";
 import type { MapMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -213,7 +213,7 @@ export function MountainShelterLayer() {
       if (!f) return;
       const props = f.properties as Record<string, string | number>;
       const coords = (f.geometry as { coordinates: number[] }).coordinates as [number, number];
-      const name = String(props.name || "Shelter");
+      const name = escapeHtml(String(props.name || "Shelter"));
       const type = String(props.type || "");
       const typeLabel = shelterLabelsRef.current[type] || type;
       const altitude = props.altitude ? `${props.altitude} m` : "";
@@ -221,6 +221,7 @@ export function MountainShelterLayer() {
 
       const details = [typeLabel, altitude, capacity ? `${capacity} beds` : ""]
         .filter(Boolean)
+        .map((part) => escapeHtml(part))
         .join(" · ");
 
       const html = `<div style="font-family:'Plus Jakarta Sans',Arial,sans-serif;min-width:180px;padding-right:18px">

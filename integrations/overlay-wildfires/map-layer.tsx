@@ -1,6 +1,6 @@
 "use client";
 
-import { relativeTime, useOverlayExclusion } from "@openmapx/core";
+import { escapeHtml, relativeTime, useOverlayExclusion } from "@openmapx/core";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -75,7 +75,7 @@ function confidenceLabel(conf: string): string {
   if (conf === "nominal" || conf === "n") return "Nominal";
   const num = Number.parseInt(conf, 10);
   if (!Number.isNaN(num)) return `${num}%`;
-  return conf;
+  return escapeHtml(conf);
 }
 
 export function WildfireLayer() {
@@ -308,10 +308,10 @@ export function WildfireLayer() {
       const frp = Number(p.frp ?? 0);
       const brightness = Number(p.brightness ?? 0);
       const confidence = String(p.confidence ?? "");
-      const satellite = String(p.satellite ?? "");
+      const satellite = escapeHtml(String(p.satellite ?? ""));
       const ageMs = Number(p.ageMs ?? 0);
       const dayNight = String(p.dayNight ?? "");
-      const acqDate = String(p.acqDate ?? "");
+      const acqDate = escapeHtml(String(p.acqDate ?? ""));
       const acqTime = String(p.acqTime ?? "");
       const timeStr = acqTime.padStart(4, "0");
       const formattedTime = `${timeStr.slice(0, 2)}:${timeStr.slice(2, 4)} UTC`;

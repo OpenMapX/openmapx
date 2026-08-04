@@ -17,6 +17,7 @@ import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import { safeHref } from "@openmapx/core";
 import { useState } from "react";
 import type { ServiceDetail as ServiceDetailData } from "@/hooks/useServices";
 import {
@@ -97,7 +98,7 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                 <Chip
                   label={manifest.homepage}
                   component="a"
-                  href={manifest.homepage}
+                  href={safeHref(manifest.homepage)}
                   target="_blank"
                   rel="noopener noreferrer"
                   size="small"

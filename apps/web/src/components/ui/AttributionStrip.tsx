@@ -4,7 +4,7 @@ import Box from "@mui/material/Box";
 import Link from "@mui/material/Link";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { sanitizeAttributionHtml } from "@openmapx/core";
+import { safeHref, sanitizeAttributionHtml } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { useTranslations } from "next-intl";
 import { type JSX, useState } from "react";
@@ -38,9 +38,11 @@ export interface AttributionStripProps {
   maxVisible?: number;
 }
 
-function chipHref(attr: Attribution): string {
-  if (attr.url) return attr.url;
-  return `/licenses#source-${encodeURIComponent(attr.sourceId)}`;
+/** The external credit URL when safe to follow, or the in-app licenses anchor. */
+function chipHref(attr: Attribution): { href: string; external: boolean } {
+  const external = safeHref(attr.url);
+  if (external) return { href: external, external: true };
+  return { href: `/licenses#source-${encodeURIComponent(attr.sourceId)}`, external: false };
 }
 
 function displayLabel(attr: Attribution): string {
@@ -138,6 +140,7 @@ export function AttributionStrip({
       )}
       {visibleItems.map((attr, idx) => {
         const labelText = displayLabel(attr);
+        const link = chipHref(attr);
         const tooltip = attr.attributionText ? (
           <Box
             component="span"
@@ -171,9 +174,9 @@ export function AttributionStrip({
         const node = navigable ? (
           <Link
             key={attr.sourceId}
-            href={chipHref(attr)}
-            target={attr.url ? "_blank" : undefined}
-            rel={attr.url ? "noopener noreferrer" : undefined}
+            href={link.href}
+            target={link.external ? "_blank" : undefined}
+            rel={link.external ? "noopener noreferrer" : undefined}
             underline="hover"
             sx={{ color: "inherit", textDecoration: "none" }}
           >

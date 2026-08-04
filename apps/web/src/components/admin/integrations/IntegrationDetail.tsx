@@ -30,6 +30,7 @@ import TableRow from "@mui/material/TableRow";
 import Tabs from "@mui/material/Tabs";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import { safeHref } from "@openmapx/core";
 import type { CredentialSetup } from "@openmapx/integration-framework";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -175,7 +176,7 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
                   Documentation
                 </Typography>
                 <Link
-                  href={data.documentation}
+                  href={safeHref(data.documentation)}
                   target="_blank"
                   rel="noopener noreferrer"
                   variant="body2"
@@ -890,17 +891,18 @@ function HealthTab({
  * exist only because MUI types the anchor (`component="a"`) chip differently.
  */
 function DpaChip({ available, url }: { available?: boolean; url?: string }) {
+  const href = safeHref(url);
   const shared = {
     label: "DPA available",
     size: "small" as const,
     color: (available ? "success" : "default") as "success" | "default",
     variant: "outlined" as const,
   };
-  return url ? (
+  return href ? (
     <Chip
       {...shared}
       component="a"
-      href={url}
+      href={href}
       target="_blank"
       rel="noopener noreferrer"
       clickable
@@ -908,6 +910,30 @@ function DpaChip({ available, url }: { available?: boolean; url?: string }) {
     />
   ) : (
     <Chip {...shared} />
+  );
+}
+
+function ProviderPrivacyLink({ url }: { url: string }) {
+  const href = safeHref(url);
+  return href ? (
+    <Link
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      variant="body2"
+      sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
+    >
+      Privacy policy <OpenInNewIcon sx={{ fontSize: "0.85rem" }} />
+    </Link>
+  ) : (
+    <Typography
+      variant="body2"
+      sx={{
+        color: "text.secondary",
+      }}
+    >
+      {url}
+    </Typography>
   );
 }
 
@@ -951,7 +977,7 @@ function DataSourcesTab({ data }: { data: IntegrationDetailData }) {
                 >
                   {ds.name}
                 </Typography>
-                <Link href={ds.url} target="_blank" rel="noopener noreferrer">
+                <Link href={safeHref(ds.url)} target="_blank" rel="noopener noreferrer">
                   <Stack
                     direction="row"
                     sx={{
@@ -967,7 +993,7 @@ function DataSourcesTab({ data }: { data: IntegrationDetailData }) {
               <MetaRow label="License" labelWidth={110} value={ds.license} />
               {ds.licenseUrl && (
                 <Link
-                  href={ds.licenseUrl}
+                  href={safeHref(ds.licenseUrl)}
                   target="_blank"
                   rel="noopener noreferrer"
                   variant="body2"
@@ -1035,26 +1061,7 @@ function DataSourcesTab({ data }: { data: IntegrationDetailData }) {
                 >
                   Privacy URL
                 </Typography>
-                {ds.providerPrivacyUrl.startsWith("http") ? (
-                  <Link
-                    href={ds.providerPrivacyUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    variant="body2"
-                    sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
-                  >
-                    Privacy policy <OpenInNewIcon sx={{ fontSize: "0.85rem" }} />
-                  </Link>
-                ) : (
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: "text.secondary",
-                    }}
-                  >
-                    {ds.providerPrivacyUrl}
-                  </Typography>
-                )}
+                <ProviderPrivacyLink url={ds.providerPrivacyUrl} />
               </Stack>
             </Stack>
           </CardContent>

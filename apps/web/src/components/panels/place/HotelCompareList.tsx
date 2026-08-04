@@ -9,6 +9,7 @@ import {
   buildHotelOpenUrl,
   type HotelProviderInfo,
   type Place,
+  safeHref,
   useHotelSearchStore,
   useOfficialBookingUrl,
 } from "@openmapx/core";
@@ -109,7 +110,7 @@ export function HotelCompareList({
   };
 
   const openOfficial = () => {
-    const dest = officialUrl ?? place.website;
+    const dest = safeHref(officialUrl ?? place.website);
     if (dest) window.open(dest, "_blank", "noopener,noreferrer");
   };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { escapeHtml, useOverlayExclusion } from "@openmapx/core";
+import { escapeHtml, sanitizeUrl, useOverlayExclusion } from "@openmapx/core";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -277,7 +277,7 @@ export function WeatherAlertLayer() {
       const expires = formatTime(p.expires ? String(p.expires) : null);
       const description = p.description ? escapeHtml(String(p.description).slice(0, 300)) : null;
       const instruction = p.instruction ? escapeHtml(String(p.instruction).slice(0, 200)) : null;
-      const sourceUrl = p.sourceUrl ? String(p.sourceUrl) : null;
+      const sourceUrl = sanitizeUrl(String(p.sourceUrl ?? ""));
       const source =
         p.source === "dwd"
           ? "DWD"
@@ -312,7 +312,7 @@ export function WeatherAlertLayer() {
           ${description ? `<div style="font-size:12px;color:#555;margin-bottom:4px">${description}${String(p.description || "").length > 300 ? "..." : ""}</div>` : ""}
           ${instruction ? `<div style="font-size:11px;color:#666;font-style:italic;margin-bottom:4px">${instruction}${String(p.instruction || "").length > 200 ? "..." : ""}</div>` : ""}
           <div style="font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:4px;margin-top:4px">
-            ${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">${source}</a>` : source}
+            ${sourceUrl ? `<a href="${sourceUrl}" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">${source}</a>` : source}
           </div>
         </div>`;
 

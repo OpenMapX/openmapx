@@ -8,10 +8,13 @@ import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
-import type { LngLat, StreetLevelCapabilities, StreetLevelImage } from "@openmapx/core";
 import {
   createPlace,
+  type LngLat,
   PANEL,
+  type StreetLevelCapabilities,
+  type StreetLevelImage,
+  safeHref,
   usePlaceStore,
   useReverseGeocoding,
   useSearchStore,
@@ -185,7 +188,7 @@ export function StreetLevelInfoCard({
         </Typography>
         {image.license && (
           <Link
-            href={image.licenseUrl ?? provider.licenseUrl}
+            href={safeHref(image.licenseUrl ?? provider.licenseUrl)}
             target="_blank"
             rel="noopener noreferrer"
             sx={{ fontSize: 12, color: "rgba(255,255,255,0.65)" }}

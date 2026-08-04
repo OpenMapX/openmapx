@@ -349,8 +349,10 @@ function ExternalMediaEmbed({ section }: { section: StructuredSection }) {
   const [acceptedEmbedUrl, setAcceptedEmbedUrl] = useState<string | null>(null);
 
   if (!section.embedUrl) return null;
+  const embeddable = isExternalBrowserUrl(section.embedUrl);
+  if (!embeddable) return null;
 
-  const loaded = !isExternalBrowserUrl(section.embedUrl) || acceptedEmbedUrl === section.embedUrl;
+  const loaded = embeddable && acceptedEmbedUrl === section.embedUrl;
 
   if (!loaded) {
     return (
@@ -422,6 +424,7 @@ function ExternalMediaEmbed({ section }: { section: StructuredSection }) {
       <Box
         component="iframe"
         src={section.embedUrl}
+        // This pair is safe here because the guard only permits cross-origin embeds.
         sandbox="allow-scripts allow-same-origin"
         sx={{
           width: "100%",

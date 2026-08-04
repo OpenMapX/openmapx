@@ -7,7 +7,7 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
-import { useDirectionsStore, useStreetLevelStore } from "@openmapx/core";
+import { safeHref, useDirectionsStore, useStreetLevelStore } from "@openmapx/core";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { useEffect } from "react";
@@ -70,7 +70,7 @@ function StreetLevelLoadGate() {
           {t("providerNoticeData", { provider: providerName })}
         </Typography>
         {provider?.privacyUrl && (
-          <Link href={provider.privacyUrl} target="_blank" rel="noopener noreferrer">
+          <Link href={safeHref(provider.privacyUrl)} target="_blank" rel="noopener noreferrer">
             {t("providerPrivacyLink")}
           </Link>
         )}

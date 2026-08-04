@@ -281,23 +281,55 @@ export function pickRentalActionUrl(
   action: NonNullable<NonNullable<DataSourceDetail["actions"]>["primaryRental"]>,
   userAgent: string,
 ): string | undefined {
+  const web = safeHref(action.web);
+  const ios = safeAppDeepLink(action.ios);
+  const android = safeAppDeepLink(action.android);
   const platformUrl = /android/i.test(userAgent)
-    ? action.android
+    ? android
     : /iphone|ipad|ipod/i.test(userAgent)
-      ? action.ios
+      ? ios
       : undefined;
-  return platformUrl ?? action.web ?? action.ios ?? action.android;
+  return platformUrl ?? web ?? ios ?? android;
 }
 
-function safeRentalUri(uri: string | undefined): string | undefined {
-  if (!uri) return undefined;
-  try {
-    const protocol = new URL(uri).protocol.toLowerCase();
-    if (["javascript:", "data:", "file:", "vbscript:"].includes(protocol)) return undefined;
-    return uri;
-  } catch {
-    return undefined;
-  }
+const ALLOWED_DEEP_LINK_SCHEMES = new Set([
+  "android",
+  "app",
+  "bird",
+  "bolt",
+  "dott",
+  "donkey",
+  "example",
+  "example-android",
+  "example-ios",
+  "ios",
+  "lime",
+  "lyft",
+  "nextbike",
+  "tier",
+  "uber",
+  "voi",
+]);
+
+const REVERSE_DNS_DEEP_LINK_SCHEME = /^(?:com|net|org)\.[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/i;
+
+/**
+ * App deep links are the point of GBFS `rental_uris.ios` and `.android`, so
+ * they cannot go through safeHref, which rejects every native scheme. Require
+ * an authority-bearing scheme from the known app-scheme set or a reverse-DNS
+ * app identifier; this excludes browser and local-state schemes by default.
+ */
+function safeAppDeepLink(uri: string | undefined): string | undefined {
+  const trimmed = uri?.trim();
+  const http = trimmed && /^(?:https?):\/\//i.test(trimmed) ? safeHref(trimmed) : undefined;
+  if (http) return http;
+  if (!trimmed) return undefined;
+  const match = /^([a-z][a-z0-9+.-]*):\/\//i.exec(trimmed);
+  if (!match) return undefined;
+  const scheme = match[1].toLowerCase();
+  return ALLOWED_DEEP_LINK_SCHEMES.has(scheme) || REVERSE_DNS_DEEP_LINK_SCHEME.test(scheme)
+    ? trimmed
+    : undefined;
 }
 
 export function DataSourceSections({ detail, domain }: Props) {
@@ -320,14 +352,12 @@ export function DataSourceSections({ detail, domain }: Props) {
     detail.operator.legalName !== detail.branding?.name
       ? detail.operator.legalName
       : null;
-  const rentalUri = safeRentalUri(
-    detail.actions?.primaryRental
-      ? pickRentalActionUrl(
-          detail.actions.primaryRental,
-          typeof navigator === "undefined" ? "" : navigator.userAgent,
-        )
-      : undefined,
-  );
+  const rentalUri = detail.actions?.primaryRental
+    ? pickRentalActionUrl(
+        detail.actions.primaryRental,
+        typeof navigator === "undefined" ? "" : navigator.userAgent,
+      )
+    : undefined;
 
   return (
     <Box>

@@ -59,6 +59,16 @@ const MANGROVE_PRIVACY_URL = "https://mangrove.reviews/terms#2-privacy-policy";
 const MAX_OPINION = 1000;
 const MAX_PHOTOS = 5;
 
+/**
+ * A review image is safe for CSS only after the backend proxy has rewritten it.
+ * The proxy percent-encodes the original URL, so anything it declines to
+ * rewrite is left without a thumbnail while keeping the remove control usable.
+ */
+function proxiedThumbnailUrl(src: string): string | null {
+  const proxied = proxyImageUrl(src);
+  return proxied === src ? null : proxied;
+}
+
 const linkSx = {
   color: "primary.main",
   textDecoration: "underline",
@@ -286,7 +296,7 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
           </Typography>
           <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
             {images.map((img) => {
-              const previewSrc = proxyImageUrl(img.src);
+              const previewSrc = proxiedThumbnailUrl(img.src);
               return (
                 <Box
                   key={img.src}
@@ -295,7 +305,7 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
                     width: 72,
                     height: 72,
                     borderRadius: 1,
-                    backgroundImage: `url("${previewSrc}")`,
+                    ...(previewSrc ? { backgroundImage: `url("${previewSrc}")` } : {}),
                     backgroundSize: "cover",
                     backgroundPosition: "center",
                   }}
