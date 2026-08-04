@@ -65,18 +65,15 @@ describe("maskSecretConfigValues", () => {
     expect(masked.clientId).toMatchObject({ value: "***", source: "vault" });
   });
 
-  it.each([
-    "vault",
-    "env",
-    "database",
-    "config.json",
-    "default",
-  ])("masks a declared secret from %s", (source) => {
-    const schema = { properties: { clientId: { "x-openmapx-secret": true } } };
-    const masked = maskSecretConfigValues({ clientId: { value: PLACEHOLDER, source } }, schema);
+  it.each(["vault", "env", "database", "config.json", "default"])(
+    "masks a declared secret from %s",
+    (source) => {
+      const schema = { properties: { clientId: { "x-openmapx-secret": true } } };
+      const masked = maskSecretConfigValues({ clientId: { value: PLACEHOLDER, source } }, schema);
 
-    expect(masked.clientId).toMatchObject({ value: "***", source });
-  });
+      expect(masked.clientId).toMatchObject({ value: "***", source });
+    },
+  );
 
   it("uses the regex belt for an undeclared sensitive-looking key", () => {
     const masked = maskSecretConfigValues(

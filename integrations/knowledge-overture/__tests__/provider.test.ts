@@ -136,30 +136,30 @@ describe("knowledge-overture provider lookup", () => {
       }),
     );
 
-  it.each([
-    "overture",
-    "gers",
-  ] as const)("uses a direct %s id without link or spatial matching", async (scheme) => {
-    const detailRow = makeOvertureDetailRow();
-    const db = makeDb(
-      vi.fn().mockImplementation((sql: string) => {
-        if (sql.includes("WHERE gers_id = $1")) return Promise.resolve([detailRow]);
-        return Promise.resolve([]);
-      }),
-    );
-    const ctx = makeCtx(db);
-    const { setup, overtureKnowledgeSource } = await import("../index.js");
-    setup(ctx);
+  it.each(["overture", "gers"] as const)(
+    "uses a direct %s id without link or spatial matching",
+    async (scheme) => {
+      const detailRow = makeOvertureDetailRow();
+      const db = makeDb(
+        vi.fn().mockImplementation((sql: string) => {
+          if (sql.includes("WHERE gers_id = $1")) return Promise.resolve([detailRow]);
+          return Promise.resolve([]);
+        }),
+      );
+      const ctx = makeCtx(db);
+      const { setup, overtureKnowledgeSource } = await import("../index.js");
+      setup(ctx);
 
-    const result = await overtureKnowledgeSource.lookup({}, "en", {
-      ids: { [scheme]: "overture-abc-123" },
-    });
+      const result = await overtureKnowledgeSource.lookup({}, "en", {
+        ids: { [scheme]: "overture-abc-123" },
+      });
 
-    expect(result?.externalIds?.gers).toBe("overture-abc-123");
-    expect(db.execute).toHaveBeenCalledTimes(1);
-    expect(db.execute.mock.calls[0][0]).toContain("WHERE gers_id = $1");
-    expect(db.execute.mock.calls[0][1]).toEqual(["overture-abc-123"]);
-  });
+      expect(result?.externalIds?.gers).toBe("overture-abc-123");
+      expect(db.execute).toHaveBeenCalledTimes(1);
+      expect(db.execute.mock.calls[0][0]).toContain("WHERE gers_id = $1");
+      expect(db.execute.mock.calls[0][1]).toEqual(["overture-abc-123"]);
+    },
+  );
 
   it("returns normalized brand, names, address, wikidata, and contacts from the Overture row", async () => {
     const ctx = makeCtx(detailRowDb(makeOvertureDetailRow()));
