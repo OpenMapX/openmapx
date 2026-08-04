@@ -25,12 +25,10 @@ function tokenizeAliases(aliases: string[] | string | undefined): string[] {
   return list.flatMap((a) => normalize(a).split(/\s+/)).filter(Boolean);
 }
 
-function tokenizeTerms(terms: string | undefined): string[] {
+function tokenizeTerms(terms: string[] | string | undefined): string[] {
   if (!terms) return [];
-  return terms
-    .split(",")
-    .map((t) => normalize(t))
-    .filter(Boolean);
+  const list = Array.isArray(terms) ? terms : terms.split(",");
+  return list.map((t) => normalize(t)).filter(Boolean);
 }
 
 let cachedRawPresets: Record<string, RawPreset> | undefined;

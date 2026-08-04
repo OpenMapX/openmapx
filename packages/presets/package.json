@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@openmapx/core": "workspace:^",
-    "@openstreetmap/id-tagging-schema": "^6.18.0"
+    "@openstreetmap/id-tagging-schema": "^7.0.1"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",

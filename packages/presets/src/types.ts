@@ -17,8 +17,8 @@ export interface RawPreset {
 /** Raw translation entry from `dist/translations/<lang>.json` at path `<lang>.presets.presets[<presetId>]`. */
 export interface RawTranslation {
   name?: string;
-  /** Comma-separated. */
-  terms?: string;
+  /** Comma-separated in older schema releases; an array in schema v7. */
+  terms?: string[] | string;
   /**
    * Rare; treated as optional. In practice the iD schema stores this as a
    * newline-separated string, but older spec docs describe it as an array,
