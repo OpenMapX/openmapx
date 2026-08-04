@@ -60,7 +60,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 3. August 2026
+        Zuletzt aktualisiert: 4. August 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -620,14 +620,15 @@ export default function PrivacyContentDe({
           <li>
             <Typography>
               <strong>Service-Worker-Cache</strong> &mdash; Ein Service Worker speichert statische
-              Ressourcen (HTML, CSS, JavaScript), Kartenkacheln und heruntergeladene
-              Offline-Bereiche &uuml;ber die Cache-Storage-API des Browsers zwischen. Dies
-              erm&ouml;glicht Offline-Funktionalit&auml;t und schnelleres Laden.
-              Zwischengespeicherte Eintr&auml;ge laufen automatisch ab (statische Ressourcen:
-              30&nbsp;Tage; Kartenkacheln: 3&ndash;7&nbsp;Tage). Laufzeit-Caches f&uuml;r
-              API-Antworten zu Suche, Routen, Orten, Autovervollst&auml;ndigung, Wetter und
-              Foto-Lookups werden nur geschrieben, wenn Sie den Cache f&uuml;r k&uuml;rzliche
-              Kartendaten aktivieren.
+              Ressourcen (HTML, CSS, JavaScript), Online-Kartenkacheln und versionierte
+              Glyphen-Ressourcen f&uuml;r Offline-Pakete &uuml;ber die Cache-Storage-API des
+              Browsers zwischen. Offline-Kartenarchive werden in IndexedDB oder im Origin Private
+              File System gespeichert und vor der Verwendung verifiziert. Dies erm&ouml;glicht
+              Offline-Funktionalit&auml;t und schnelleres Laden. Zwischengespeicherte Eintr&auml;ge
+              laufen automatisch ab (statische Ressourcen: 30&nbsp;Tage; Online-Kartenkacheln:
+              3&ndash;7&nbsp;Tage). Laufzeit-Caches f&uuml;r API-Antworten zu Suche, Routen, Orten,
+              Autovervollst&auml;ndigung, Wetter und Foto-Lookups werden nur geschrieben, wenn Sie
+              den Cache f&uuml;r k&uuml;rzliche Kartendaten aktivieren.
             </Typography>
           </li>
           <li>
