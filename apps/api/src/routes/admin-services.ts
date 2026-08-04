@@ -502,11 +502,36 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   // GET /admin/services/:id/logs — stream logs as plain text
   app.get<{ Params: { id: string }; Querystring: { lines?: string } }>(
     "/admin/services/:id/logs",
-    (req, reply) => {
+    async (req, reply) => {
+      let registry: ReturnType<typeof getServiceRegistry>;
+      try {
+        registry = getServiceRegistry();
+      } catch {
+        reply.status(503);
+        return { error: "Service registry not available" };
+      }
+      if (!registry.get(req.params.id)) {
+        reply.status(404);
+        return { error: `Service "${req.params.id}" not found` };
+      }
+      const adminSession = getAdminSession(req);
+      await writeAuditLog({
+        actorId: adminSession.user.id,
+        targetId: req.params.id,
+        targetType: "service",
+        action: "service.logs.read",
+        request: req,
+      });
+      // `--tail` is a docker-compose argv element: clamp to a whole number in
+      // range so a non-numeric or negative `lines` can never reach it.
+      const requested = Number(req.query.lines ?? 200);
+      const tail = Number.isFinite(requested)
+        ? Math.min(Math.max(Math.trunc(requested), 1), 1000)
+        : 200;
       reply.header("Content-Type", "text/plain; charset=utf-8");
       reply.hijack();
-      const tail = Math.min(Number(req.query.lines ?? 200), 1000);
       dockerComposeLogs(req.params.id, reply.raw, { tail });
+      return reply;
     },
   );
 

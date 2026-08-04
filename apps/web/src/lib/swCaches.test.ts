@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  appShellCacheNames,
   isCredentialedApiPath,
   isMapLibreRuntimeAssetPath,
   isOfflinePackageArchivePath,
@@ -10,11 +11,29 @@ import {
   offlineGlyphVersionFromPath,
 } from "./swCaches";
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 const packageId = `omp2-${"a".repeat(64)}`;
 
 const current = { appShell: "app-shell-NEW", style: "style-assets-NEW" };
 
 describe("service-worker cache names", () => {
+  it("lists only existing app-shell caches", async () => {
+    vi.stubGlobal("caches", {
+      keys: async () => ["app-shell-abc", "style-assets-abc", "pages", "offline-area-1"],
+    });
+
+    expect(await appShellCacheNames()).toEqual(["app-shell-abc"]);
+  });
+
+  it("returns no app-shell caches when Cache Storage is unavailable", async () => {
+    vi.stubGlobal("caches", undefined);
+
+    expect(await appShellCacheNames()).toEqual([]);
+  });
+
   it("keeps current build caches and removes older build caches", () => {
     expect(isStalePrecacheName("app-shell-NEW", current)).toBe(false);
     expect(isStalePrecacheName("style-assets-NEW", current)).toBe(false);

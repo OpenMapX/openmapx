@@ -26,26 +26,44 @@ export async function registerCapabilityBindingRoutes(
   app.post<{
     Params: { integrationId: string; capability: string };
     Body: { serviceId: string };
-  }>("/api/admin/integrations/:integrationId/bindings/:capability", async (req, reply) => {
-    await requireAdmin(req);
-    const registry = getServiceRegistry();
-    const svc = registry.get(req.body.serviceId);
-    if (!svc) {
-      reply.status(400);
-      return { error: `Unknown service: ${req.body.serviceId}` };
-    }
-    if (!getProvidedCapabilityNames(svc.manifest.provides).includes(req.params.capability)) {
-      reply.status(400);
-      return {
-        error: `Service ${svc.manifest.id} does not provide capability ${req.params.capability}`,
-      };
-    }
-    await setBinding(
-      { integrationId: req.params.integrationId, capability: req.params.capability },
-      req.body.serviceId,
-    );
-    return { ok: true };
-  });
+  }>(
+    "/api/admin/integrations/:integrationId/bindings/:capability",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["serviceId"],
+          properties: { serviceId: { type: "string", minLength: 1 } },
+        },
+      },
+    },
+    async (req, reply) => {
+      await requireAdmin(req);
+      let registry: ReturnType<typeof getServiceRegistry>;
+      try {
+        registry = getServiceRegistry();
+      } catch {
+        reply.status(503);
+        return { error: "Service registry not available" };
+      }
+      const svc = registry.get(req.body.serviceId);
+      if (!svc) {
+        reply.status(400);
+        return { error: `Unknown service: ${req.body.serviceId}` };
+      }
+      if (!getProvidedCapabilityNames(svc.manifest.provides).includes(req.params.capability)) {
+        reply.status(400);
+        return {
+          error: `Service ${svc.manifest.id} does not provide capability ${req.params.capability}`,
+        };
+      }
+      await setBinding(
+        { integrationId: req.params.integrationId, capability: req.params.capability },
+        req.body.serviceId,
+      );
+      return { ok: true };
+    },
+  );
 
   app.delete<{ Params: { integrationId: string; capability: string } }>(
     "/api/admin/integrations/:integrationId/bindings/:capability",

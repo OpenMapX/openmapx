@@ -60,7 +60,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: August 4, 2026
+        Last updated: August 04, 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -476,6 +476,26 @@ export default function PrivacyContent({
             </>
           );
         })()}
+
+        <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 3, mb: 1 }}>
+          Voice Search (Microphone)
+        </Typography>
+        <Typography>
+          The search bar offers an optional voice input button. It is never active until you press
+          it. When you do, your browser asks for microphone permission and then uses your
+          browser&apos;s own built-in speech recognition (the Web Speech API) to turn what you say
+          into search text. Only the resulting text reaches our servers, as an ordinary search query
+          — the audio itself is never sent to us and is never stored by us.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          Where the speech recognition itself happens is decided by your browser, not by OpenMapX.
+          Chromium-based browsers (Chrome, Edge and most derivatives) transmit the captured audio to
+          their vendor&apos;s cloud speech service for transcription, under that vendor&apos;s own
+          privacy policy; other browsers may transcribe on your device or may not offer the feature
+          at all, in which case the button is hidden. If you do not want your audio processed by
+          your browser vendor, do not use the voice button — typing your query has no microphone
+          involvement.
+        </Typography>
 
         <Typography sx={{ mt: 2 }}>
           <strong>Note on data flow:</strong> The &quot;Data Access&quot; column above indicates how

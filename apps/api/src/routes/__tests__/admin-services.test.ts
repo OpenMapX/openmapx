@@ -22,7 +22,9 @@ vi.mock("../../utils/audit-log.js", () => ({
 
 // Docker compose helpers
 const mockDockerComposePs = vi.fn().mockResolvedValue([]);
-const mockDockerComposeLogs = vi.fn();
+const mockDockerComposeLogs = vi.fn((...args: unknown[]) => {
+  (args[1] as NodeJS.WritableStream).end();
+});
 vi.mock("../../utils/docker-compose.js", () => ({
   dockerComposePs: (...args: unknown[]) => mockDockerComposePs(...args),
   dockerComposeLogs: (...args: unknown[]) => mockDockerComposeLogs(...args),
@@ -179,7 +181,11 @@ beforeAll(async () => {
 });
 
 afterAll(() => app.close());
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  mockRegistryGet.mockReset();
+  mockRegistryGet.mockReturnValue(null);
+});
 
 describe("GET /admin/services", () => {
   it("returns running/stopped summary with normalised service fields", async () => {
@@ -240,6 +246,29 @@ describe("GET /admin/services/:id", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body).toMatchObject({ manifest: { id: "motis" }, status: "running" });
+  });
+});
+
+describe("GET /admin/services/:id/logs", () => {
+  it("returns 404 and does not start a log stream for an unknown service", async () => {
+    mockRegistryGet.mockReturnValueOnce(null);
+
+    const res = await app.inject({ method: "GET", url: "/admin/services/unknown/logs" });
+
+    expect(res.statusCode).toBe(404);
+    expect(mockDockerComposeLogs).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["abc", 200],
+    ["99999", 1000],
+    ["-5", 1],
+  ])("clamps lines=%s to a safe tail value", async (lines, tail) => {
+    mockRegistryGet.mockReturnValueOnce(MOCK_SERVICE_RUNNING);
+
+    await app.inject({ method: "GET", url: `/admin/services/motis/logs?lines=${lines}` });
+
+    expect(mockDockerComposeLogs).toHaveBeenCalledWith("motis", expect.anything(), { tail });
   });
 });
 

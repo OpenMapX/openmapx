@@ -236,6 +236,38 @@ describe("PATCH /admin/settings", () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it("rejects a value that does not match the declared number type", async () => {
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/admin/settings",
+      payload: { sessionDurationHours: "abc" },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(mockDbInsert).not.toHaveBeenCalled();
+  });
+
+  it("writes a value that matches the declared number type", async () => {
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/admin/settings",
+      payload: { sessionDurationHours: 24 },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(mockDbInsert).toHaveBeenCalled();
+  });
+
+  it("rejects a value that does not match the declared boolean type", async () => {
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/admin/settings",
+      payload: { allowNonCommercial: "yes" },
+    });
+
+    expect(res.statusCode).toBe(400);
+  });
+
   it("silently skips keys that are env-overridden", async () => {
     // INSTANCE_NAME env override should prevent the write
     const original = process.env.INSTANCE_NAME;
@@ -308,6 +340,24 @@ describe("POST /admin/settings/import", () => {
     expect(res.statusCode).toBe(200);
     // Only the non-secret key should be counted
     expect(res.json().imported).toBe(1);
+  });
+
+  it("imports valid values and reports invalid values as skipped", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/admin/settings/import",
+      payload: { settings: { sessionDurationHours: "abc", instanceName: "good" } },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      ok: true,
+      imported: 1,
+      skipped: ["sessionDurationHours"],
+    });
+    expect(mockWriteAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ details: { imported: 1, skipped: ["sessionDurationHours"] } }),
+    );
   });
 });
 

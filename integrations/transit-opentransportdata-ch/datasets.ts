@@ -1,11 +1,9 @@
-import { execFile } from "node:child_process";
 import { createWriteStream } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { promisify } from "node:util";
 import { fetchWithRedirects, haversineMeters, USER_AGENT } from "@openmapx/core";
 import { parseCsvRecords } from "@openmapx/mobility-formats";
 import { strFromU8, unzipSync } from "fflate";
@@ -54,7 +52,9 @@ const SWISS_REDIRECT_HOSTS = [
   "*.opentransportdata.swiss",
   "83025b28472d6aa2bf5ae59f3724aa78.eu.r2.cloudflarestorage.com",
 ];
-const execFileAsync = promisify(execFile);
+const SWISS_ARCHIVE_TOKEN_RE = /^[0-9A-Za-z][0-9A-Za-z_-]{0,63}$/;
+const MAX_OCCUPANCY_ZIP_BYTES = 64 * 1024 * 1024;
+const MAX_OCCUPANCY_ENTRY_BYTES = 32 * 1024 * 1024;
 
 /**
  * Cap for the first inflated member of a Swiss ZIP dataset. The archive's
@@ -321,13 +321,17 @@ async function downloadToTempFile(url: string, prefix: string): Promise<string> 
   return filePath;
 }
 
-async function extractZipEntryText(zipPath: string, entryName: string): Promise<string | null> {
+export async function extractZipEntryText(
+  zipPath: string,
+  entryName: string,
+): Promise<string | null> {
   try {
-    const { stdout } = await execFileAsync("unzip", ["-p", zipPath, entryName], {
-      encoding: "utf-8",
-      maxBuffer: 32 * 1024 * 1024,
-    });
-    return stdout || null;
+    const { size } = await stat(zipPath);
+    if (size > MAX_OCCUPANCY_ZIP_BYTES) return null;
+    const files = unzipSync(new Uint8Array(await readFile(zipPath)));
+    const entry = files[entryName];
+    if (!entry || entry.length > MAX_OCCUPANCY_ENTRY_BYTES) return null;
+    return strFromU8(entry).replace(/^\uFEFF/, "") || null;
   } catch {
     return null;
   }
@@ -791,6 +795,12 @@ export async function loadSwissOccupancyForecastDataset(
   const normalizedDate = String(opDate).trim();
   const normalizedOperator = String(operatorRef).trim();
   if (!normalizedDate || !normalizedOperator) return null;
+  if (
+    !SWISS_ARCHIVE_TOKEN_RE.test(normalizedDate) ||
+    !SWISS_ARCHIVE_TOKEN_RE.test(normalizedOperator)
+  ) {
+    return null;
+  }
 
   const cacheKey = `${normalizedDate}:${normalizedOperator}`;
   const cached = occupancyDatasetCache.get(cacheKey);

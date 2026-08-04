@@ -50,6 +50,8 @@ export const RAW_BASE = "https://raw.githubusercontent.com/public-transport/tran
 export const DEFAULT_TRANSITOUS_API_KEYS_PATH = "/config/transitous/api-keys.json";
 export const DEFAULT_TRANSITOUS_FEEDS_OVERLAY_PATH = "/data/overrides/feeds-overlay.json";
 
+const COUNTRY_TOKEN_RE = /^[a-z][a-z0-9_-]{0,31}$/;
+
 // Match published GTFS / NeTEx archives only. `.tmp-*.gtfs.zip` and any
 // other dotfile-prefixed name is excluded.
 export const GTFS_ARCHIVE_RE = /^[^.][^/]*\.(gtfs|netex)\.zip$/i;
@@ -63,7 +65,14 @@ export async function defaultRunner(
 }
 
 export function normaliseCountries(countries: string[]): string[] {
-  return [...new Set(countries.map((country) => country.trim().toLowerCase()).filter(Boolean))];
+  return [
+    ...new Set(
+      (Array.isArray(countries) ? countries : [])
+        .filter((country): country is string => typeof country === "string")
+        .map((country) => country.trim().toLowerCase())
+        .filter((country) => COUNTRY_TOKEN_RE.test(country)),
+    ),
+  ];
 }
 
 /**

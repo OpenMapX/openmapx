@@ -1,3 +1,5 @@
+import { appShellCacheNames } from "@/lib/swCaches";
+
 /**
  * Set the next-intl locale cookie and reload the page.
  * Shared between LanguageMenu and HamburgerMenu.
@@ -5,7 +7,8 @@
  * Pages are cached in the service worker's `pages` cache keyed by URL only;
  * the locale lives in a cookie, so cached HTML for the previous language
  * could otherwise leak into the new session for up to the cache TTL. We wipe
- * the runtime page cache and refresh the offline fallback before reloading.
+ * the runtime page cache and refresh shell entries in whichever build-versioned
+ * app-shell caches are present before reloading.
  */
 export async function setLocaleAndReload(newLocale: string): Promise<void> {
   // biome-ignore lint/suspicious/noDocumentCookie: next-intl locale cookie must be set synchronously before reload
@@ -22,11 +25,19 @@ export async function setLocaleAndReload(newLocale: string): Promise<void> {
       // fallback broken until the next deploy. We overwrite in place with
       // freshly-localized responses (the cookie is already set, so HTML
       // renders in the new locale).
-      const shell = await caches.open("app-shell-v1");
+      const shellNames = await appShellCacheNames();
+      const refreshed = await Promise.all(
+        ["/", "/offline"].map(async (url) => ({
+          url,
+          resp: await fetch(url, { cache: "reload" }),
+        })),
+      );
       await Promise.all(
-        ["/", "/offline"].map(async (url) => {
-          const resp = await fetch(url, { cache: "reload" });
-          if (resp.ok) await shell.put(url, resp);
+        shellNames.map(async (name) => {
+          const shell = await caches.open(name);
+          await Promise.all(
+            refreshed.map(({ url, resp }) => (resp.ok ? shell.put(url, resp.clone()) : undefined)),
+          );
         }),
       );
     } catch {

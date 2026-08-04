@@ -4,7 +4,18 @@ import { join } from "node:path";
 import Fastify from "fastify";
 import { describe, expect, it, vi } from "vitest";
 import { registerApi } from "../src/api.js";
+import { resolveOperationsProfile } from "../src/jobs/transitous/operations-profile.js";
 import type { SingleFlightController } from "../src/jobs/transitous/single-flight.js";
+
+const mockDownloadOsm = vi.hoisted(() =>
+  vi.fn(async ({ region }: { region: string }) => ({
+    path: `/data/osm/${region.replace(/\//g, "-")}.osm.pbf`,
+    url: `https://download.example/${region}`,
+    sizeBytes: 1,
+  })),
+);
+
+vi.mock("../src/jobs/download-osm.js", () => ({ downloadOsm: mockDownloadOsm }));
 
 describe("data-manager API", () => {
   function sourceCatalog(dataDir: string): void {
@@ -153,6 +164,112 @@ describe("data-manager API", () => {
     await app.close();
     rmSync(dataDir, { recursive: true, force: true });
   });
+
+  it.each([
+    { countries: "de", label: "a non-array countries value" },
+    { countries: ["-x"], label: "a leading-dash country token" },
+  ])("POST /transit/sync rejects $label", async ({ countries }) => {
+    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-transit-sync-invalid-"));
+    const singleFlight: SingleFlightController = {
+      tryStartSync: vi.fn(),
+      markSyncFinished: vi.fn(),
+      getInflight: () => null,
+    };
+    const app = Fastify();
+    registerApi(app, {
+      dataDir,
+      operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
+      singleFlight,
+      launchTransitSync: vi.fn(),
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/transit/sync",
+      payload: { countries },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(singleFlight.tryStartSync).not.toHaveBeenCalled();
+    await app.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  it("POST /transit/sync starts an in-scope country", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-transit-sync-valid-"));
+    const singleFlight: SingleFlightController = {
+      tryStartSync: vi.fn(async () => ({ ok: true as const, jobId: "job-sync" })),
+      markSyncFinished: vi.fn(),
+      getInflight: () => ({ jobId: "job-sync", startedAt: new Date() }),
+    };
+    const launchTransitSync = vi.fn();
+    const app = Fastify();
+    registerApi(app, {
+      dataDir,
+      operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
+      singleFlight,
+      launchTransitSync,
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/transit/sync",
+      payload: { countries: ["DE"] },
+    });
+
+    expect(res.statusCode).toBe(202);
+    expect(res.json()).toEqual({ ok: true, jobId: "job-sync", status: "started" });
+    expect(launchTransitSync).toHaveBeenCalledWith({
+      jobId: "job-sync",
+      countries: ["DE"],
+      trigger: "api",
+    });
+    await app.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  it.each(["../etc", "Europe/Germany"])(
+    "POST /download/osm rejects an invalid region: %s",
+    async (region) => {
+      const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-download-invalid-"));
+      mockDownloadOsm.mockClear();
+      const app = Fastify();
+      registerApi(app, { dataDir });
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/download/osm",
+        payload: { region },
+      });
+
+      expect(res.statusCode).toBe(500);
+      expect(mockDownloadOsm).not.toHaveBeenCalled();
+      await app.close();
+      rmSync(dataDir, { recursive: true, force: true });
+    },
+  );
+
+  it.each(["europe/germany/berlin", "planet"])(
+    "POST /download/osm accepts a valid region: %s",
+    async (region) => {
+      const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-download-valid-"));
+      mockDownloadOsm.mockClear();
+      const app = Fastify();
+      registerApi(app, { dataDir });
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/download/osm",
+        payload: { region },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(mockDownloadOsm).toHaveBeenCalledWith(expect.objectContaining({ region, dataDir }));
+      expect(res.body).toContain('"event":"done"');
+      await app.close();
+      rmSync(dataDir, { recursive: true, force: true });
+    },
+  );
 
   it("POST /link rejects a plan entry with a traversing targetFilename", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-link-"));

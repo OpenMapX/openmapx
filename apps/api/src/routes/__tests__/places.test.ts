@@ -73,8 +73,11 @@ vi.mock("../../services/review-links.js", () => ({
 
 // Mock cache
 
+const mockWithCache = vi.fn((_key: string, _ttl: number, fn: () => unknown) => fn());
+const mockHashKey = vi.fn((prefix: string, data: unknown) => `${prefix}:${JSON.stringify(data)}`);
 vi.mock("../../utils/cache.js", () => ({
-  withCache: vi.fn((_key: string, _ttl: number, fn: () => unknown) => fn()),
+  hashKey: mockHashKey,
+  withCache: mockWithCache,
   TTL: { places: { detail: 86400 } },
 }));
 
@@ -503,6 +506,28 @@ describe("GET /places/:id", () => {
     });
 
     expect(res.headers["cache-control"]).toBe("public, max-age=86400");
+  });
+
+  it("does not collide when a colon-bearing lang shifts the cache-key separator", async () => {
+    mockLookupByNameAndCoords.mockResolvedValue({ ...MOCK_PLACE, id: "osm:attacker" });
+    mockLookupByOsmRef.mockResolvedValue(MOCK_PLACE);
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+    mockBuildReviewLinks.mockReturnValue([]);
+
+    const attacker = await app.inject({
+      method: "GET",
+      url: "/places/osm?lang=node%2F123:en&lat=52.52&lng=13.37&name=Attacker%20Place",
+    });
+    const victim = await app.inject({
+      method: "GET",
+      url: "/places/osm%3Anode%2F123?lang=en",
+    });
+
+    expect(attacker.statusCode).toBe(200);
+    expect(victim.statusCode).toBe(200);
+    expect(mockWithCache.mock.calls[0]?.[0]).not.toBe(mockWithCache.mock.calls[1]?.[0]);
+    expect(victim.json()).toMatchObject({ id: MOCK_PLACE.id });
+    expect(mockLookupByOsmRef).toHaveBeenCalledWith("node", "123", "osm:node/123", "en");
   });
 
   it("does not set Cache-Control on 400 error", async () => {

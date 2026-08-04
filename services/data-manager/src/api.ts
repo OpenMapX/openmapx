@@ -707,8 +707,11 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   });
 
   app.post<{ Body: { region: string } }>("/download/osm", async (req, reply) => {
-    const { region } = req.body;
-    if (!region) throw new Error("region required");
+    const { region } = req.body ?? {};
+    if (!region || typeof region !== "string") throw new Error("region required");
+    // Same Geofabrik path shape the Overture routes enforce — the region becomes
+    // both a download URL segment and a local filename.
+    assertValidRegion(region);
 
     // Stream NDJSON progress events back to the client. Hijacking the reply
     // lets us write line-by-line; Fastify otherwise buffers the full body.
@@ -961,48 +964,82 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       triggeredBy?: string;
       countries?: string[];
     };
-  }>("/transit/sync", async (req, reply) => {
-    const body = req.body ?? {};
-    // Default to the deployment's configured countries (same as the cron) when
-    // the caller doesn't specify any — an empty list means "every country",
-    // which would kick off a global multi-GB fetch by accident.
-    const countries = body.countries ?? operationsPolicy.countries;
-    const outsideScope = countries.filter(
-      (country) => !operationsPolicy.countries.includes(country.toLowerCase()),
-    );
-    if (operationsPolicy.profile !== "planet" && outsideScope.length > 0) {
-      return reply.code(422).send({
-        ok: false,
-        reason: `countries outside configured operations profile: ${outsideScope.join(", ")}`,
-      });
-    }
-    const start = await singleFlight.tryStartSync({
-      trigger: "api",
-      triggeredBy: body.triggeredBy ?? "api",
-      idempotencyKey: body.idempotencyKey,
-      kind: "transitous-sync",
-      metadata: {
-        source: "api",
-        countries,
+  }>(
+    "/transit/sync",
+    {
+      schema: {
+        body: {
+          type: "object",
+          properties: {
+            idempotencyKey: { type: "string", maxLength: 200 },
+            triggeredBy: { type: "string", maxLength: 200 },
+            countries: {
+              type: "array",
+              maxItems: 250,
+              items: { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_-]{0,31}$" },
+            },
+          },
+        },
       },
-    });
-
-    if (!start.ok) {
-      // 409 Conflict captures both "in-flight" and "duplicate-idempotency-key".
-      // The caller distinguishes via the `reason` payload.
-      return reply.code(409).send({
-        ok: false,
-        reason: start.reason,
-        existingJobId: start.existingJobId,
+      // Fastify's default Ajv configuration can coerce a scalar into a
+      // one-element array. Preserve the request contract before validation so
+      // a caller cannot bypass the array shape check with `countries: "de"`.
+      preValidation: async (req, reply) => {
+        const body = req.body as unknown;
+        if (
+          body !== null &&
+          typeof body === "object" &&
+          !Array.isArray(body) &&
+          Object.hasOwn(body, "countries") &&
+          !Array.isArray((body as { countries?: unknown }).countries)
+        ) {
+          return reply.code(400).send({ error: "countries must be an array" });
+        }
+      },
+    },
+    async (req, reply) => {
+      const body = req.body ?? {};
+      // Default to the deployment's configured countries (same as the cron) when
+      // the caller doesn't specify any — an empty list means "every country",
+      // which would kick off a global multi-GB fetch by accident.
+      const countries = body.countries ?? operationsPolicy.countries;
+      const outsideScope = countries.filter(
+        (country) => !operationsPolicy.countries.includes(country.toLowerCase()),
+      );
+      if (operationsPolicy.profile !== "planet" && outsideScope.length > 0) {
+        return reply.code(422).send({
+          ok: false,
+          reason: `countries outside configured operations profile: ${outsideScope.join(", ")}`,
+        });
+      }
+      const start = await singleFlight.tryStartSync({
+        trigger: "api",
+        triggeredBy: body.triggeredBy ?? "api",
+        idempotencyKey: body.idempotencyKey,
+        kind: "transitous-sync",
+        metadata: {
+          source: "api",
+          countries,
+        },
       });
-    }
 
-    const jobId = start.jobId;
-    launchReservedTransitSync(jobId, countries, "api");
+      if (!start.ok) {
+        // 409 Conflict captures both "in-flight" and "duplicate-idempotency-key".
+        // The caller distinguishes via the `reason` payload.
+        return reply.code(409).send({
+          ok: false,
+          reason: start.reason,
+          existingJobId: start.existingJobId,
+        });
+      }
 
-    reply.code(202);
-    return { ok: true, jobId, status: "started" };
-  });
+      const jobId = start.jobId;
+      launchReservedTransitSync(jobId, countries, "api");
+
+      reply.code(202);
+      return { ok: true, jobId, status: "started" };
+    },
+  );
 
   // POST /transit/restart-motis — bounce the primary MOTIS container. Used
   // when a config change requires a full restart rather than the partial

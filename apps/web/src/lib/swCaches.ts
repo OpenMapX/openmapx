@@ -1,5 +1,16 @@
 export const MAPLIBRE_RUNTIME_CACHE = "maplibre-runtimes";
 
+/**
+ * Names of the app-shell precaches that currently exist. Client code cannot
+ * name the build-versioned cache directly because the build id is defined only
+ * in the worker bundle, so callers that need to refresh shell entries enumerate
+ * them.
+ */
+export async function appShellCacheNames(): Promise<string[]> {
+  if (typeof caches === "undefined") return [];
+  return (await caches.keys()).filter((name) => name.startsWith("app-shell-"));
+}
+
 /** Return whether a build-versioned service-worker cache belongs to an older build. */
 export function isStalePrecacheName(
   name: string,

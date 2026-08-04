@@ -330,6 +330,21 @@ function parseEnvValue(raw: string, type: SettingDef["type"]): unknown {
   return raw;
 }
 
+function matchesDeclaredType(def: SettingDef, value: unknown): boolean {
+  switch (def.type) {
+    case "number":
+      return typeof value === "number" && Number.isFinite(value);
+    case "boolean":
+      return typeof value === "boolean";
+    case "string":
+      return typeof value === "string";
+    case "select":
+      return typeof value === "string" && (def.options?.includes(value) ?? true);
+    case "object":
+      return typeof value === "object" && value !== null && !Array.isArray(value);
+  }
+}
+
 export async function resolveSettings(): Promise<SettingsGroup[]> {
   const dbRows = await db.select().from(systemSettings);
   const dbMap = Object.fromEntries(dbRows.map((r) => [r.key, r.value]));
@@ -413,10 +428,22 @@ export async function adminSettingsRoute(app: FastifyInstance) {
       }).map((d) => d.key),
     );
 
+    const defsByKey = new Map(SETTING_DEFS.map((d) => [d.key, d]));
     const toWrite: Array<{ key: string; value: unknown }> = [];
+    const rejected: string[] = [];
     for (const [key, value] of Object.entries(updates)) {
       if (!allowedKeys.has(key)) continue;
+      const def = defsByKey.get(key);
+      if (!def || !matchesDeclaredType(def, value)) {
+        rejected.push(key);
+        continue;
+      }
       toWrite.push({ key, value });
+    }
+    if (rejected.length > 0) {
+      return reply.status(400).send({
+        error: `Value type does not match the setting definition: ${rejected.join(", ")}`,
+      });
     }
 
     for (const { key, value } of toWrite) {
@@ -577,10 +604,17 @@ export async function adminSettingsRoute(app: FastifyInstance) {
       }
 
       const allowedKeys = new Set(SETTING_DEFS.filter((d) => !d.secret).map((d) => d.key));
+      const defsByKey = new Map(SETTING_DEFS.map((d) => [d.key, d]));
       let imported = 0;
+      const skipped: string[] = [];
 
       for (const [key, value] of Object.entries(settings)) {
         if (!allowedKeys.has(key)) continue;
+        const def = defsByKey.get(key);
+        if (!def || !matchesDeclaredType(def, value)) {
+          skipped.push(key);
+          continue;
+        }
         await db
           .insert(systemSettings)
           .values({ key, value: value as never, updatedBy: adminSession.user.id })
@@ -600,11 +634,11 @@ export async function adminSettingsRoute(app: FastifyInstance) {
         targetType: "settings",
         targetId: "system",
         action: "settings.import",
-        details: { imported },
+        details: { imported, skipped },
         request,
       });
 
-      return { ok: true, imported };
+      return { ok: true, imported, skipped };
     },
   );
 

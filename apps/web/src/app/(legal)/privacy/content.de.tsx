@@ -60,7 +60,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 4. August 2026
+        Zuletzt aktualisiert: 04. August 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -512,6 +512,27 @@ export default function PrivacyContentDe({
             </>
           );
         })()}
+
+        <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 3, mb: 1 }}>
+          Sprachsuche (Mikrofon)
+        </Typography>
+        <Typography>
+          Die Suchleiste bietet optional eine Spracheingabe. Sie ist erst aktiv, wenn Sie die
+          Schaltfläche drücken. Danach fragt Ihr Browser die Mikrofonberechtigung ab und wandelt
+          Ihre Spracheingabe mit der browsereigenen Spracherkennung (Web Speech API) in Suchtext um.
+          An unsere Server gelangt ausschließlich der resultierende Text als gewöhnliche Suchanfrage
+          — die Audiodaten erhalten und speichern wir nicht.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          Wo die Spracherkennung stattfindet, entscheidet Ihr Browser, nicht OpenMapX.
+          Chromium-basierte Browser (Chrome, Edge und die meisten Abkömmlinge) übertragen die
+          aufgenommenen Audiodaten zur Transkription an den Cloud-Sprachdienst ihres Herstellers,
+          für den dessen eigene Datenschutzerklärung gilt; andere Browser erkennen die Sprache
+          gegebenenfalls lokal auf Ihrem Gerät oder bieten die Funktion nicht an — dann wird die
+          Schaltfläche nicht angezeigt. Wenn Sie eine Verarbeitung durch Ihren Browserhersteller
+          nicht wünschen, nutzen Sie die Sprachschaltfläche nicht; die Eingabe über die Tastatur
+          verwendet kein Mikrofon.
+        </Typography>
 
         <Typography sx={{ mt: 2 }}>
           <strong>Hinweis zum Datenfluss:</strong> Die Spalte &quot;Datenzugriff&quot; oben zeigt

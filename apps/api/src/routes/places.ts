@@ -26,7 +26,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { getAllIntegrations, isEnabledIntegrationScheme } from "../integration-host.js";
 import { getPlaceKnowledge } from "../services/knowledge/index";
 import { buildReviewLinks } from "../services/review-links";
-import { TTL, withCache } from "../utils/cache.js";
+import { hashKey, TTL, withCache } from "../utils/cache.js";
 import { createLimiter } from "../utils/concurrency.js";
 
 // Bound concurrent place enrichments. Each enrichPlace runs a heavy fan-out
@@ -345,7 +345,10 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
       const lang = req.query.lang;
       const effectiveLang = lang ?? "en";
       const hasAddress = req.query.hasAddress === "1";
-      const cacheKey = `cache:place:${rawId}:${effectiveLang}${hasAddress ? ":ha" : ""}`;
+      // Structured hash rather than string concatenation: `rawId` and `lang`
+      // are both unconstrained request input, so an interpolated separator
+      // lets one request's key collide with another place's entry.
+      const cacheKey = hashKey("cache:place", { id: rawId, lang: effectiveLang, hasAddress });
 
       try {
         const result = await withCache(cacheKey, TTL.places.detail, async () => {
