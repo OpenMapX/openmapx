@@ -112,7 +112,10 @@
     "proxy": {
       "enabled": true,
       "pathPrefix": "/api",
-      "additionalRoutes": [{ "path": "/health" }]
+      "additionalRoutes": [
+        { "path": "/health" },
+        { "pathPrefix": "/api/internal", "middleware": ["internal-deny@file"] }
+      ]
     }
   },
   "ui": { "category": "application" }

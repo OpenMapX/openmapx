@@ -52,3 +52,26 @@ http:
       headers:
         customResponseHeaders:
           Cache-Control: "public, max-age=300, must-revalidate"
+
+    # Blocks the app-api routes that are documented as internal-only
+    # (/api/internal/metrics, /api/internal/poi-sources/count). Those handlers
+    # are unauthenticated by design because their only real caller is
+    # data-manager, which reaches app-api directly over the docker network and
+    # never traverses Traefik. Allowing loopback only means every request that
+    # arrives through the proxy is rejected with 403, while the in-cluster
+    # caller is unaffected.
+    internal-deny:
+      ipAllowList:
+        sourceRange:
+          - "127.0.0.1/32"
+
+    # HSTS. Traefik terminates TLS for every proxied service, so setting the
+    # header here covers the web app, /api, tiles and everything else from one
+    # place. Traefik only emits it on TLS connections (`forceSTSHeader` is left
+    # off), so the plain-HTTP redirect on the `web` entrypoint is unaffected.
+    # `includeSubDomains` and `preload` are deliberately omitted: a deployment
+    # may host sibling subdomains this stack does not terminate TLS for, and
+    # preload is effectively irreversible.
+    hsts:
+      headers:
+        stsSeconds: 31536000

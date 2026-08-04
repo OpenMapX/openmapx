@@ -1,4 +1,5 @@
 import type { EvChargingConnector } from "@openmapx/mobility-core/ev-charging";
+import { assertNoXmlEntityDeclarations } from "@openmapx/mobility-formats";
 import type { PoiRow, PoiStaticParseFn } from "@openmapx/poi-source-registry";
 import { XMLParser } from "fast-xml-parser";
 import {
@@ -144,6 +145,8 @@ function pointToPoi(point: CyCynapChargingPoint): PoiRow | null {
 
 export const parseCyCynap: PoiStaticParseFn = (buffer) => {
   const text = buffer.toString("utf8");
+  // Keep fast-xml-parser's default value coercion while applying the shared entity guard.
+  assertNoXmlEntityDeclarations(text);
   const doc = parser.parse(text) as {
     d2LogicalModel?: {
       payload?: {

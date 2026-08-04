@@ -1,5 +1,6 @@
 import { fetchJson } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { assertNoXmlEntityDeclarations } from "@openmapx/mobility-formats";
 import { XMLParser } from "fast-xml-parser";
 
 const NOAA_URL = "https://api.weather.gov/alerts/active?status=actual&message_type=alert";
@@ -286,6 +287,8 @@ async function fetchMeteoAlarm(log: IntegrationContext["log"]): Promise<Normaliz
         const res = await fetchWithTimeout(url);
         if (!res.ok) return { cc, entries: [] };
         const xml = await res.text();
+        // Keep fast-xml-parser's default value coercion while applying the shared entity guard.
+        assertNoXmlEntityDeclarations(xml);
         const parsed = parser.parse(xml);
         const entries = parsed?.feed?.entry ?? [];
         return { cc, entries: Array.isArray(entries) ? entries : [entries] };

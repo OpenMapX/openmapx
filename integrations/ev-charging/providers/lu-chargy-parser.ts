@@ -1,4 +1,5 @@
 import type { EvChargingConnector } from "@openmapx/mobility-core/ev-charging";
+import { assertNoXmlEntityDeclarations } from "@openmapx/mobility-formats";
 import type { PoiRow, PoiStaticParseFn } from "@openmapx/poi-source-registry";
 import { XMLParser } from "fast-xml-parser";
 import { cleanString, connector, stableHashId } from "./utils.js";
@@ -120,6 +121,7 @@ export const parseLuChargy: PoiStaticParseFn = (buffer) => {
     attributeNamePrefix: "@_",
     removeNSPrefix: true,
   });
+  assertNoXmlEntityDeclarations(text);
   const parsed = parser.parse(text) as Record<string, unknown>;
   const kml = parsed.kml as Record<string, unknown> | undefined;
   const document = kml?.Document as Record<string, unknown> | undefined;

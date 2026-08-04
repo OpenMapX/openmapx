@@ -73,8 +73,10 @@ export function stripXmlNamespace(name: string): string {
 // Transit feeds (SIRI/OJP/NetEx/DATEX/GTFS-RT) never declare custom XML
 // entities. Reject any document that does: an internal-subset `<!ENTITY ...>`
 // is the "billion laughs" amplification vector, and the parser runs on live,
-// third-party feeds. Numeric/predefined entity decoding stays enabled.
-function assertNoEntityDeclarations(content: string): void {
+// third-party feeds. Numeric/predefined entity decoding stays enabled. The
+// guard is exported so parsers that need fast-xml-parser's default value
+// coercion can apply the same rejection without switching to parseXmlDocument.
+export function assertNoXmlEntityDeclarations(content: string): void {
   // Case-insensitive scan for an ENTITY declaration anywhere in the prolog.
   if (/<!ENTITY/i.test(content)) {
     throw new Error("XML entity declarations are not allowed");
@@ -82,7 +84,7 @@ function assertNoEntityDeclarations(content: string): void {
 }
 
 export function parseXmlDocument(content: string, options: XmlParseOptions = {}): XmlObject {
-  assertNoEntityDeclarations(content);
+  assertNoXmlEntityDeclarations(content);
 
   if (options.validate ?? true) {
     const validationResult = XMLValidator.validate(content);

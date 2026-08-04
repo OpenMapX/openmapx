@@ -1,3 +1,4 @@
+import { assertNoXmlEntityDeclarations } from "@openmapx/mobility-formats";
 import { XMLParser } from "fast-xml-parser";
 
 type XmlRecord = Record<string, unknown>;
@@ -8,6 +9,8 @@ const parser = new XMLParser({
 });
 
 export function parseDatex(xml: string): XmlRecord {
+  // Keep fast-xml-parser's default value coercion while applying the shared entity guard.
+  assertNoXmlEntityDeclarations(xml);
   return parser.parse(xml) as XmlRecord;
 }
 

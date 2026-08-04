@@ -207,6 +207,181 @@ describe("readBackupManifest", () => {
     expect(tiles?.volumes[0]?.resolvedName).toBe("myproject_openmapx-tiles");
   });
 
+  it("rejects a volume resolvedName that is a host path", () => {
+    const dir = writeBackup("host-path", {
+      name: "host-path",
+      createdAt: "2026-04-19T00:00:00Z",
+      services: [
+        {
+          id: "postgis",
+          volumes: [
+            {
+              name: "v",
+              resolvedName: "/etc",
+              mode: "tar",
+              file: "postgis__v.tar.gz",
+              sizeBytes: 1,
+            },
+          ],
+        },
+      ],
+    });
+    expect(() => readBackupManifest(join(dir, "manifest.json"))).toThrow(/Invalid/);
+  });
+
+  it("rejects a volume resolvedName that starts with a dash", () => {
+    const dir = writeBackup("dash-volume", {
+      name: "dash-volume",
+      createdAt: "2026-04-19T00:00:00Z",
+      services: [
+        {
+          id: "postgis",
+          volumes: [
+            {
+              name: "v",
+              resolvedName: "-v",
+              mode: "tar",
+              file: "postgis__v.tar.gz",
+              sizeBytes: 1,
+            },
+          ],
+        },
+      ],
+    });
+    expect(() => readBackupManifest(join(dir, "manifest.json"))).toThrow(/Invalid/);
+  });
+
+  it("rejects an unknown volume mode", () => {
+    const dir = writeBackup("unknown-mode", {
+      name: "unknown-mode",
+      createdAt: "2026-04-19T00:00:00Z",
+      services: [
+        {
+          id: "postgis",
+          volumes: [
+            {
+              name: "v",
+              mode: "exec",
+              file: "postgis__v.tar.gz",
+              sizeBytes: 1,
+            },
+          ],
+        },
+      ],
+    } as unknown as BackupManifest);
+    expect(() => readBackupManifest(join(dir, "manifest.json"))).toThrow(/Invalid/);
+  });
+
+  it("rejects a traversing backup file", () => {
+    const dir = writeBackup("traversing-file", {
+      name: "traversing-file",
+      createdAt: "2026-04-19T00:00:00Z",
+      services: [
+        {
+          id: "postgis",
+          volumes: [
+            {
+              name: "v",
+              mode: "tar",
+              file: "../../../etc/passwd",
+              sizeBytes: 1,
+            },
+          ],
+        },
+      ],
+    });
+    expect(() => readBackupManifest(join(dir, "manifest.json"))).toThrow(/Invalid/);
+  });
+
+  it("rejects a postgres user that starts with a dash", () => {
+    const dir = writeBackup("dash-user", {
+      name: "dash-user",
+      createdAt: "2026-04-19T00:00:00Z",
+      services: [
+        {
+          id: "postgis",
+          volumes: [
+            {
+              name: "v",
+              mode: "pg_dump",
+              file: "postgis__v.sql.gz",
+              sizeBytes: 1,
+              postgresUser: "--host=evil",
+            },
+          ],
+        },
+      ],
+    });
+    expect(() => readBackupManifest(join(dir, "manifest.json"))).toThrow(/Invalid/);
+  });
+
+  it("rejects a postgres database that starts with a dash", () => {
+    const dir = writeBackup("dash-db", {
+      name: "dash-db",
+      createdAt: "2026-04-19T00:00:00Z",
+      services: [
+        {
+          id: "postgis",
+          volumes: [
+            {
+              name: "v",
+              mode: "pg_dump",
+              file: "postgis__v.sql.gz",
+              sizeBytes: 1,
+              postgresDb: "--host=evil",
+            },
+          ],
+        },
+      ],
+    });
+    expect(() => readBackupManifest(join(dir, "manifest.json"))).toThrow(/Invalid/);
+  });
+
+  it("rejects a service id that is not a slug", () => {
+    const dir = writeBackup("bad-service", {
+      name: "bad-service",
+      createdAt: "2026-04-19T00:00:00Z",
+      services: [
+        {
+          id: "--rm",
+          volumes: [],
+        },
+      ],
+    });
+    expect(() => readBackupManifest(join(dir, "manifest.json"))).toThrow(/Invalid service id/);
+  });
+
+  it("accepts a complete portable manifest unchanged", () => {
+    const manifest: BackupManifest = {
+      name: "complete",
+      createdAt: "2026-04-19T00:00:00Z",
+      services: [
+        {
+          id: "tileserver",
+          volumes: [
+            {
+              name: "tiles",
+              resolvedName: "openmapx_openmapx-pgdata",
+              mode: "tar",
+              file: "tileserver__tiles.tar.gz",
+              sizeBytes: 1,
+            },
+            {
+              name: "database",
+              mode: "pg_dump",
+              file: "tileserver__database.sql.gz",
+              sizeBytes: 2,
+              postgresUser: "postgres",
+              postgresDb: "openmapx",
+            },
+          ],
+        },
+      ],
+    };
+    const dir = writeBackup("complete", manifest);
+    expect(readBackupManifest(join(dir, "manifest.json"))).toEqual(manifest);
+  });
+
   it("rejects a missing file", () => {
     expect(() => readBackupManifest(join(tmp, "missing.json"))).toThrow(/not found/);
   });

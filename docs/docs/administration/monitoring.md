@@ -160,8 +160,10 @@ GET /api/internal/metrics
 :::warning[Keep the metrics endpoint internal]
 The endpoint emits no PII, but the labels reveal operational topology — which
 providers exist and how much traffic each one sees. It is meant to be reachable
-only from inside the Docker network. Restrict it with firewall or reverse-proxy
-rules and do **not** expose `/api/internal/metrics` on the public reverse proxy.
+only from inside the Docker network. The bundled Traefik configuration rejects
+`/api/internal/*` from outside that network with HTTP 403 via the
+`internal-deny` middleware. If you want external scraping, add a separate
+authenticated route rather than removing this middleware.
 :::
 
 A ready-to-import Grafana dashboard ships in the repo at

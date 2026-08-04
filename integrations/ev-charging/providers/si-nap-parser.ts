@@ -1,4 +1,5 @@
 import type { EvChargingConnector } from "@openmapx/mobility-core/ev-charging";
+import { assertNoXmlEntityDeclarations } from "@openmapx/mobility-formats";
 import type { PoiRow, PoiStaticParseFn } from "@openmapx/poi-source-registry";
 import { XMLParser } from "fast-xml-parser";
 import { cleanString, connector, parseLocalizedNumber } from "./utils.js";
@@ -188,7 +189,9 @@ const parser = new XMLParser({
 });
 
 export const parseSiNap: PoiStaticParseFn = function* (buffer) {
-  const doc = parser.parse(buffer.toString("utf8")) as {
+  const text = buffer.toString("utf8");
+  assertNoXmlEntityDeclarations(text);
+  const doc = parser.parse(text) as {
     EnergyInfrastructureTablePublication?: {
       energyInfrastructureTable?: {
         energyInfrastructureSite?: Record<string, unknown>[] | Record<string, unknown>;

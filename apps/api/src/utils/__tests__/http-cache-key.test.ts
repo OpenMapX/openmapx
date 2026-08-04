@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 import { httpCacheKey } from "../http-cache-key.js";
 
 describe("httpCacheKey", () => {
-  it("test 1: no headers returns bare URL key (backward compatible)", () => {
+  it("test 1: no headers returns a readable origin/path label with a digest", () => {
     const url = "https://api.example.com/v1/routes?origin=Berlin";
-    expect(httpCacheKey(url)).toBe(`int:http:${url}`);
-    expect(httpCacheKey(url, {})).toBe(`int:http:${url}`);
+    expect(httpCacheKey(url)).toMatch(
+      /^int:http:https:\/\/api\.example\.com\/v1\/routes#[0-9a-f]{32}$/,
+    );
+    expect(httpCacheKey(url, {})).toMatch(
+      /^int:http:https:\/\/api\.example\.com\/v1\/routes#[0-9a-f]{32}$/,
+    );
   });
 
   it("test 2: same URL with different header values produces different keys", () => {
@@ -34,6 +38,23 @@ describe("httpCacheKey", () => {
     const key = httpCacheKey(url, { "x-api-key": secret });
     expect(key).not.toContain(secret);
     // Confirm key contains the expected shape
-    expect(key).toMatch(/^int:http:https:\/\/api\.example\.com\/secure#h=[0-9a-f]{16}$/);
+    expect(key).toMatch(/^int:http:https:\/\/api\.example\.com\/secure#[0-9a-f]{32}$/);
+  });
+
+  it("test 5: no query-borne secret appears as a substring of the key", () => {
+    const key = httpCacheKey("https://api.example.com/geocode?q=berlin&key=super-secret-query-key");
+    expect(key).not.toContain("super-secret-query-key");
+    expect(key).not.toContain("key=");
+  });
+
+  it("test 6: URLs differing only in query parameters produce different keys", () => {
+    const keyA = httpCacheKey("https://api.example.com/data?key=one");
+    const keyB = httpCacheKey("https://api.example.com/data?key=two");
+    expect(keyA).not.toBe(keyB);
+  });
+
+  it("test 7: malformed URLs do not throw", () => {
+    expect(() => httpCacheKey("not a url")).not.toThrow();
+    expect(httpCacheKey("not a url")).toMatch(/^int:http:/);
   });
 });

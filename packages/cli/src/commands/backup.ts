@@ -69,6 +69,19 @@ export interface BackupManifest {
 // remain valid.
 const NAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 
+// Docker volume names, per Docker's grammar. This has no "/", so a manifest
+// cannot turn `docker run -v <name>:/target` into an arbitrary host bind mount.
+const VOLUME_NAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
+
+// Backup archives are bare siblings of manifest.json, never paths or traversal.
+const BACKUP_FILE_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+
+// Compose service ids use the same lowercase slug shape as service manifests.
+const SERVICE_ID_REGEX = /^[a-z0-9][a-z0-9-]*$/;
+
+// A leading dash would make dropdb/createdb/psql interpret the value as a flag.
+const PG_IDENT_REGEX = /^[a-zA-Z_][a-zA-Z0-9_$]*$/;
+
 export function isValidBackupName(name: string): boolean {
   return typeof name === "string" && name.length > 0 && NAME_REGEX.test(name);
 }
@@ -76,6 +89,46 @@ export function isValidBackupName(name: string): boolean {
 export function assertValidBackupName(name: string): void {
   if (!isValidBackupName(name)) {
     throw new Error(`Invalid backup name "${name}" — must match ${NAME_REGEX.toString()}`);
+  }
+}
+
+export function assertValidVolumeEntry(entry: BackupVolumeEntry, context: string): void {
+  if (!entry || typeof entry !== "object") {
+    throw new Error(`Invalid volume entry in ${context}`);
+  }
+  if (typeof entry.name !== "string" || entry.name.length === 0) {
+    throw new Error(`Invalid volume name in ${context}`);
+  }
+  if (entry.mode !== "tar" && entry.mode !== "pg_dump") {
+    throw new Error(`Invalid volume mode in ${context}`);
+  }
+  if (typeof entry.file !== "string" || !BACKUP_FILE_REGEX.test(entry.file)) {
+    throw new Error(`Invalid backup file in ${context}`);
+  }
+  if (
+    typeof entry.sizeBytes !== "number" ||
+    !Number.isFinite(entry.sizeBytes) ||
+    entry.sizeBytes < 0
+  ) {
+    throw new Error(`Invalid backup size in ${context}`);
+  }
+  if (
+    entry.resolvedName !== undefined &&
+    (typeof entry.resolvedName !== "string" || !VOLUME_NAME_REGEX.test(entry.resolvedName))
+  ) {
+    throw new Error(`Invalid docker volume name in ${context}`);
+  }
+  if (
+    entry.postgresUser !== undefined &&
+    (typeof entry.postgresUser !== "string" || !PG_IDENT_REGEX.test(entry.postgresUser))
+  ) {
+    throw new Error(`Invalid postgres user in ${context}`);
+  }
+  if (
+    entry.postgresDb !== undefined &&
+    (typeof entry.postgresDb !== "string" || !PG_IDENT_REGEX.test(entry.postgresDb))
+  ) {
+    throw new Error(`Invalid postgres database in ${context}`);
   }
 }
 
@@ -118,7 +171,11 @@ export function isCompatiblePlatformVersion(
   return { compatible: !majorMismatch, majorMismatch, minorMismatch };
 }
 
-/** Read + validate a manifest from disk. Throws on bad shape. */
+/**
+ * Read and validate an untrusted, portable manifest from disk. Its fields reach
+ * docker run volume mounts, database command argv, and filesystem joins, so
+ * every field is shape-checked here rather than only at the sinks.
+ */
 export function readBackupManifest(filePath: string): BackupManifest {
   if (!existsSync(filePath)) {
     throw new Error(`Backup manifest not found: ${filePath}`);
@@ -135,6 +192,12 @@ export function readBackupManifest(filePath: string): BackupManifest {
   for (const s of raw.services) {
     if (typeof s.id !== "string" || !Array.isArray(s.volumes)) {
       throw new Error(`Malformed service entry in ${filePath}`);
+    }
+    if (!SERVICE_ID_REGEX.test(s.id)) {
+      throw new Error(`Invalid service id in ${filePath}: ${s.id}`);
+    }
+    for (const volume of s.volumes) {
+      assertValidVolumeEntry(volume, filePath);
     }
   }
   return raw as BackupManifest;
@@ -727,7 +790,11 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
     for (const svc of pre.targets) {
       log.info(kleur.bold(`◆ ${svc.id}`));
       for (const vol of svc.volumes) {
-        const file = join(pre.backupDir, vol.file);
+        // Defense-in-depth backstop for the filename validation in readBackupManifest.
+        const file = resolve(pre.backupDir, vol.file);
+        if (!file.startsWith(`${resolve(pre.backupDir)}/`)) {
+          throw new Error(`Refusing to read a backup file outside ${pre.backupDir}: ${file}`);
+        }
         if (!existsSync(file)) {
           throw new Error(`Backup file missing: ${file}`);
         }

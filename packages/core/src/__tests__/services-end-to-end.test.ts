@@ -41,6 +41,17 @@ describe.skipIf(!manifestsPresent)(
       );
     });
 
+    it("publishes /api but denies the internal-only sub-prefix at the proxy", async () => {
+      // These handlers are unauthenticated by design and are documented as
+      // internal-only, so the bundled proxy must reject their public route.
+      const registry = new ServiceRegistry({ rootDir: repoRoot });
+      await registry.load();
+
+      const result = renderCompose(registry.enabled(), { domain: "example.com" });
+      expect(result.composeYaml).toContain("PathPrefix(`/api/internal`)");
+      expect(result.composeYaml).toContain("internal-deny@file");
+    });
+
     it("renders OSRM against a prepared osrm-graph product, not raw OSM PBFs", async () => {
       const registry = new ServiceRegistry({ rootDir: repoRoot });
       await registry.load();

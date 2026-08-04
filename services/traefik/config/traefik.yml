@@ -24,11 +24,14 @@ entryPoints:
     http3:
       advertisedPort: 443
     http:
+      middlewares:
+        - hsts@file
       tls:
         certResolver: letsencrypt
       # To gate the deployment behind basic auth, copy
       # `dynamic/auth.yml.example` to `dynamic/auth.yml` (set credentials
-      # there) and add `middlewares: [basic-auth@file]` here. Without that
+      # there) and append `basic-auth@file` to the existing middleware list.
+      # Without that
       # opt-in, the default config exposes the stack publicly — every
       # router referenced by `basic-auth@file` would otherwise 404 because
       # the middleware doesn't exist on a fresh deployment.

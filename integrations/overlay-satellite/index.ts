@@ -1,5 +1,6 @@
 import { USER_AGENT } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { assertNoXmlEntityDeclarations } from "@openmapx/mobility-formats";
 import { XMLParser } from "fast-xml-parser";
 import { type Capabilities, GIBS_LAYERS, type GibsLayerId } from "./store";
 
@@ -33,6 +34,8 @@ async function fetchAndParseCapabilities(): Promise<Capabilities> {
     removeNSPrefix: true,
     attributeNamePrefix: "@_",
   });
+  // Keep fast-xml-parser's default value coercion while applying the shared entity guard.
+  assertNoXmlEntityDeclarations(xml);
   const parsed = parser.parse(xml);
 
   const layers = parsed?.Capabilities?.Contents?.Layer;

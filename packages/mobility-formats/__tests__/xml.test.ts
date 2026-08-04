@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseXmlDocument } from "../xml.js";
+import { assertNoXmlEntityDeclarations, parseXmlDocument } from "../xml.js";
 
 const BILLION_LAUGHS = `<?xml version="1.0"?>
 <!DOCTYPE lolz [
@@ -40,5 +40,29 @@ describe("parseXmlDocument entity guard", () => {
     ) as Record<string, any>;
     expect(doc.Siri.ServiceDelivery.ResponseTimestamp).toBe("2026-06-17T00:00:00Z");
     expect(doc.Siri["@_version"]).toBe("2.0");
+  });
+});
+
+describe("assertNoXmlEntityDeclarations", () => {
+  it("rejects the billion-laughs entity declaration", () => {
+    expect(() => assertNoXmlEntityDeclarations(BILLION_LAUGHS)).toThrow(
+      /entity declarations are not allowed/i,
+    );
+  });
+
+  it("rejects lowercase entity declarations", () => {
+    expect(() => assertNoXmlEntityDeclarations('<!entity lol "lol">')).toThrow(
+      /entity declarations are not allowed/i,
+    );
+  });
+
+  it("allows a normal feed-shaped document", () => {
+    expect(() => assertNoXmlEntityDeclarations("<root><value>ok</value></root>")).not.toThrow();
+  });
+
+  it("allows predefined entity references", () => {
+    expect(() =>
+      assertNoXmlEntityDeclarations("<root><value>a &amp; b</value></root>"),
+    ).not.toThrow();
   });
 });
