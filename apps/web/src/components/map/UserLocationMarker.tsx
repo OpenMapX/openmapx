@@ -6,7 +6,7 @@ import { useEffect, useRef } from "react";
 import { useMap } from "@/lib/MapContext";
 
 export function UserLocationMarker() {
-  const { mapRef } = useMap();
+  const { mapReady, mapRef } = useMap();
   const userLocation = useMapStore((s) => s.userLocation);
   const markerRef = useRef<maplibregl.Marker | null>(null);
 
@@ -19,7 +19,7 @@ export function UserLocationMarker() {
   }, []);
 
   useEffect(() => {
-    if (!userLocation) return;
+    if (!userLocation || !mapReady) return;
 
     let destroyed = false;
 
@@ -79,7 +79,7 @@ export function UserLocationMarker() {
     return () => {
       destroyed = true;
     };
-  }, [userLocation, mapRef]);
+  }, [userLocation, mapReady, mapRef]);
 
   return null;
 }

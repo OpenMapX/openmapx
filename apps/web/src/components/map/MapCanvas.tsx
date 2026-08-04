@@ -118,83 +118,100 @@ export function MapCanvas() {
         canvasContextAttributes: { antialias: true },
       });
 
-      const applyStyleForViewport = (reason: string) => {
-        const request = ++styleRequestRef.current;
-        const currentStyle = currentStyleRef.current;
-        void loadStyleForViewport(env, currentStyle.variant, currentStyle.mapStyle, maplibregl)
-          .then((next) => {
-            if (destroyed || request !== styleRequestRef.current) return;
-            setOfflinePackageActive(next.offline);
-            map.setStyle(next.style as maplibregl.StyleSpecification);
-          })
-          .catch((err) => {
-            console.warn(`Unable to switch map style for ${reason}`, err);
+      try {
+        const applyStyleForViewport = (reason: string) => {
+          const request = ++styleRequestRef.current;
+          const currentStyle = currentStyleRef.current;
+          void loadStyleForViewport(env, currentStyle.variant, currentStyle.mapStyle, maplibregl)
+            .then((next) => {
+              if (destroyed || request !== styleRequestRef.current) return;
+              setOfflinePackageActive(next.offline);
+              map.setStyle(next.style as maplibregl.StyleSpecification);
+            })
+            .catch((err) => {
+              console.warn(`Unable to switch map style for ${reason}`, err);
+            });
+        };
+
+        map.on("moveend", (e) => {
+          const c = map.getCenter();
+          const center: LngLat = [c.lng, c.lat];
+          // The navigation follow camera drives the map with a programmatic
+          // jumpTo every animation frame; skip those so we don't write to the
+          // store 60×/s while navigating. User gestures and other programmatic
+          // moves (flyTo, deep links) still persist as before.
+          if (
+            (e as { programmatic?: boolean })?.programmatic &&
+            useNavigationStore.getState().status !== "idle"
+          ) {
+            return;
+          }
+          setCenter(center);
+          setZoom(map.getZoom());
+          setBearing(map.getBearing());
+          setPitch(map.getPitch());
+        });
+
+        mapRef.current = map;
+
+        // Every later style load — a dark/light swap, a basemap switch — bumps the
+        // counter layers rebuild on. Registering it once here rather than per swap
+        // is what makes that unconditional: a `once` attached after `setStyle` is
+        // called can miss a style that resolves from cache, and the counter then
+        // never moves for the rest of the session.
+        map.on("style.load", () => {
+          if (!destroyed) notifyStyleReload();
+        });
+
+        const reloadForConnectivity = () => {
+          if (destroyed) return;
+          applyStyleForViewport("connectivity change");
+        };
+        const reloadForPackages = () => {
+          void ensureOfflinePackageRuntime().then(async (resolver) => {
+            await resolver?.refresh();
+            reloadForConnectivity();
           });
-      };
+        };
+        window.addEventListener("online", reloadForConnectivity);
+        window.addEventListener("offline", reloadForConnectivity);
+        window.addEventListener(OFFLINE_PACKAGE_CHANGED_EVENT, reloadForPackages);
+        cleanupConnectivity = () => {
+          window.removeEventListener("online", reloadForConnectivity);
+          window.removeEventListener("offline", reloadForConnectivity);
+          window.removeEventListener(OFFLINE_PACKAGE_CHANGED_EVENT, reloadForPackages);
+        };
 
-      map.on("moveend", (e) => {
-        const c = map.getCenter();
-        const center: LngLat = [c.lng, c.lat];
-        // The navigation follow camera drives the map with a programmatic
-        // jumpTo every animation frame; skip those so we don't write to the
-        // store 60×/s while navigating. User gestures and other programmatic
-        // moves (flyTo, deep links) still persist as before.
-        if (
-          (e as { programmatic?: boolean })?.programmatic &&
-          useNavigationStore.getState().status !== "idle"
-        ) {
-          return;
+        // Publish readiness only after every synchronous setup step succeeds.
+        // Otherwise a later setup exception can leave consumers observing a
+        // "ready" context whose map has already been removed.
+        if (map.isStyleLoaded()) {
+          notifyMapReady();
+        } else {
+          map.once("style.load", () => {
+            if (!destroyed) notifyMapReady();
+          });
         }
-        setCenter(center);
-        setZoom(map.getZoom());
-        setBearing(map.getBearing());
-        setPitch(map.getPitch());
-      });
-
-      mapRef.current = map;
-      // Defer `mapReady` until the style finishes loading so attribution
-      // hooks (`useMapAttributions`) don't have to fall through their
-      // `!isStyleLoaded()` retry path on first paint, which left the strip
-      // showing only style-baked credits until `idle` fired.
-      if (map.isStyleLoaded()) {
-        notifyMapReady();
-      } else {
-        map.once("style.load", () => {
-          if (!destroyed) notifyMapReady();
-        });
+        return map;
+      } catch (error) {
+        cleanupConnectivity?.();
+        cleanupConnectivity = undefined;
+        if (mapRef.current === map) mapRef.current = null;
+        map.remove();
+        throw error;
       }
-
-      // Every later style load — a dark/light swap, a basemap switch — bumps the
-      // counter layers rebuild on. Registering it once here rather than per swap
-      // is what makes that unconditional: a `once` attached after `setStyle` is
-      // called can miss a style that resolves from cache, and the counter then
-      // never moves for the rest of the session.
-      map.on("style.load", () => {
-        if (!destroyed) notifyStyleReload();
-      });
-
-      const reloadForConnectivity = () => {
-        if (destroyed) return;
-        applyStyleForViewport("connectivity change");
-      };
-      const reloadForPackages = () => {
-        void ensureOfflinePackageRuntime().then(async (resolver) => {
-          await resolver?.refresh();
-          reloadForConnectivity();
-        });
-      };
-      window.addEventListener("online", reloadForConnectivity);
-      window.addEventListener("offline", reloadForConnectivity);
-      window.addEventListener(OFFLINE_PACKAGE_CHANGED_EVENT, reloadForPackages);
-      cleanupConnectivity = () => {
-        window.removeEventListener("online", reloadForConnectivity);
-        window.removeEventListener("offline", reloadForConnectivity);
-        window.removeEventListener(OFFLINE_PACKAGE_CHANGED_EVENT, reloadForPackages);
-      };
     };
 
-    // If geolocation permission is already granted, initialize the map centered
-    // on the user's location (zoom 14) and show the marker — without prompting.
+    // Render the saved viewport immediately. A granted geolocation permission
+    // must not become a startup dependency: browsers are allowed to leave
+    // getCurrentPosition pending indefinitely while a provider is unavailable.
+    const mapInitialization = initMap(center, zoom).catch((err) => {
+      console.error("Failed to initialize map", err);
+      return undefined;
+    });
+
+    // If geolocation permission is already granted, move to the user's location
+    // (zoom 14) and show the marker when it arrives — without prompting.
     if (navigator.permissions && navigator.geolocation) {
       navigator.permissions
         .query({ name: "geolocation" })
@@ -205,22 +222,17 @@ export function MapCanvas() {
               (pos) => {
                 if (destroyed) return;
                 const lngLat: LngLat = [pos.coords.longitude, pos.coords.latitude];
-                setUserLocation(lngLat);
-                initMap(lngLat, 14);
+                void mapInitialization.then((map) => {
+                  if (destroyed || !map) return;
+                  setUserLocation(lngLat);
+                  map.jumpTo({ center: lngLat, zoom: 14 }, { programmatic: true });
+                });
               },
-              () => {
-                if (!destroyed) initMap(center, zoom);
-              },
+              () => undefined,
             );
-          } else {
-            initMap(center, zoom);
           }
         })
-        .catch(() => {
-          if (!destroyed) initMap(center, zoom);
-        });
-    } else {
-      initMap(center, zoom);
+        .catch(() => undefined);
     }
 
     return () => {
