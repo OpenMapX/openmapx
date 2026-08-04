@@ -5,16 +5,29 @@ import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
 import type { NavRecording } from "@openmapx/core";
 import { useRef } from "react";
+import { NAV_PERF_SCENARIOS } from "@/lib/navigation/navigationPerfMonitor";
 import { useNavRecordingStore } from "@/lib/navigation/navRecordingStore";
 import { SIM_SPEED_PRESETS, useNavSimStore } from "@/lib/navigation/navSimStore";
 
 const PLAYBACK_RATES = [1, 2, 4] as const;
+
+/** mm:ss for a duration in seconds; keeps the readout free of any timestamps. */
+function clock(seconds: number): string {
+  const whole = Math.max(0, Math.round(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
 
 /**
  * Floating developer control for the navigation simulator. Renders only when
  * the simulator is enabled (`?navsim=1`); lets you pick a ground speed, fast
  * forward, and toggle a deliberate off-route deviation to exercise rerouting.
  * Deliberately unstyled-for-production — this is a QA aid, not a user feature.
+ *
+ * It also names the canonical performance scenarios and the length of a loaded
+ * recording, so a before/after measurement pair is driven under identical
+ * conditions. Fast-forward is listed as a warning there rather than removed: a
+ * sped-up replay compresses per-fix work into fewer wall-clock seconds, which
+ * silently invalidates every frame, battery and thermal number.
  */
 export function NavSimControl() {
   const enabled = useNavSimStore((s) => s.enabled);
@@ -35,6 +48,12 @@ export function NavSimControl() {
   const startReplay = useNavRecordingStore((s) => s.startReplay);
   const stopReplay = useNavRecordingStore((s) => s.stopReplay);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Wall-clock length of the loaded recording, from its own fix timestamps —
+  // how long a replay run will take, without touching any position.
+  const fixes = loaded?.fixes ?? [];
+  const loadedSeconds =
+    fixes.length > 1 ? (fixes[fixes.length - 1].timestampMs - fixes[0].timestampMs) / 1000 : 0;
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -131,10 +150,28 @@ export function NavSimControl() {
       </Box>
       {loaded && (
         <Typography variant="caption" sx={{ opacity: 0.7 }}>
-          loaded: {loaded.fixes.length} fixes
+          loaded: {loaded.fixes.length} fixes · {clock(loadedSeconds)}
         </Typography>
       )}
       <input ref={fileRef} type="file" accept="application/json" hidden onChange={onFile} />
+
+      <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: 0.5, mt: 0.5 }}>
+        PERF SCENARIOS
+      </Typography>
+      {NAV_PERF_SCENARIOS.map((scenario) => (
+        <Typography key={scenario.key} variant="caption" sx={{ opacity: 0.7 }}>
+          {scenario.label}
+        </Typography>
+      ))}
+      <Typography
+        variant="caption"
+        sx={{
+          fontWeight: playbackRate === 1 ? 400 : 700,
+          color: playbackRate === 1 ? "#fff" : "#ffb74d",
+        }}
+      >
+        perf runs stay at 1×
+      </Typography>
     </Box>
   );
 }

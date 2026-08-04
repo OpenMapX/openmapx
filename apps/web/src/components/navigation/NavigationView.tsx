@@ -39,6 +39,7 @@ import { NavBottomBar } from "./NavBottomBar";
 import { NavDirectionsDialog } from "./NavDirectionsDialog";
 import { NavigationSessionResumeDialog } from "./NavigationSessionResumeDialog";
 import { NavMenu } from "./NavMenu";
+import { NavPerfControl } from "./NavPerfControl";
 import { NavSimControl } from "./NavSimControl";
 import { NavSwipeSheet } from "./NavSwipeSheet";
 import { OfflineNavigationBanner } from "./OfflineNavigationBanner";
@@ -201,6 +202,8 @@ export function NavigationView() {
       }}
     >
       <NavSimControl />
+      {/* Both self-gate on their URL flag and render nothing in normal use. */}
+      <NavPerfControl />
       {status === "arrived" ? (
         <Box
           sx={{ pointerEvents: "auto", m: "auto", bgcolor: "background.paper", borderRadius: 3 }}
