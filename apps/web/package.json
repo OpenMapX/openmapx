@@ -57,7 +57,7 @@
     "hls.js": "^1.6.16",
     "maplibre-gl": "^6.1.0",
     "maplibre-theme": "^1.0.0",
-    "next": "^16.2.12",
+    "next": "^16.3.0",
     "next-intl": "^4.13.4",
     "pure-web-bottom-sheet": "1.0.0",
     "qrcode": "^1.5.4",
