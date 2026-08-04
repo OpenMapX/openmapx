@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode, Ref } from "react";
 import { useImperativeHandle } from "react";
@@ -27,15 +27,28 @@ vi.mock("@mui/material/useMediaQuery", () => ({
 vi.mock("@mui/material/Popover", () => ({
   default: ({
     action,
+    anchorEl,
     children,
     open,
+    slotProps,
   }: {
     action?: Ref<{ updatePosition(): void }>;
+    anchorEl?: { getBoundingClientRect(): DOMRect } | HTMLElement | null;
     children: ReactNode;
     open: boolean;
+    slotProps?: { paper?: { sx?: { transition?: string } } };
   }) => {
     useImperativeHandle(action, () => mockPopoverAction, []);
-    return open ? <div data-testid="layer-selector-popover">{children}</div> : null;
+    const anchorRect = anchorEl?.getBoundingClientRect();
+    return open ? (
+      <div
+        data-anchor-left={anchorRect?.left}
+        data-paper-transition={slotProps?.paper?.sx?.transition}
+        data-testid="layer-selector-popover"
+      >
+        {children}
+      </div>
+    ) : null;
   },
 }));
 vi.mock("@openmapx/core", () => ({
@@ -167,7 +180,7 @@ describe("LayerSelector desktop dock", () => {
     expect(screen.getByLabelText("openLayerMenu")).toBeDefined();
   });
 
-  it("repositions an open layer panel after the sidebar offset transition completes", async () => {
+  it("moves an open layer panel with the sidebar offset transition", async () => {
     const user = userEvent.setup();
     mockState.sidebar = {
       activeSidebarId: "directions",
@@ -178,7 +191,10 @@ describe("LayerSelector desktop dock", () => {
 
     await user.hover(quickSelectorToggle());
     await user.click(screen.getByText("more"));
-    expect(screen.getByTestId("layer-selector-popover")).toBeDefined();
+    const popover = screen.getByTestId("layer-selector-popover");
+    expect(popover).toBeDefined();
+    expect(popover.getAttribute("data-anchor-left")).toBe("400");
+    mockPopoverAction.updatePosition.mockClear();
 
     mockState.sidebar = {
       activeSidebarId: null,
@@ -187,12 +203,11 @@ describe("LayerSelector desktop dock", () => {
     };
     rerender(<LayerSelector />);
 
-    const quickSelector = document.getElementById("map-layer-quick-selector");
-    if (!quickSelector) throw new Error("quick selector anchor was not rendered");
-    fireEvent.transitionEnd(quickSelector, {
-      propertyName: "left",
-    });
-
     expect(mockPopoverAction.updatePosition).toHaveBeenCalledTimes(1);
+    const movedPopover = screen.getByTestId("layer-selector-popover");
+    expect(movedPopover.getAttribute("data-anchor-left")).toBe("0");
+    expect(movedPopover.getAttribute("data-paper-transition")).toBe(
+      "left 0.25s ease, opacity 0.18s ease, transform 0.16s ease !important",
+    );
   });
 });
