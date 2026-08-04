@@ -6,6 +6,7 @@
     "lib": ["ES2024", "DOM"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "allowArbitraryExtensions": true,
     "outDir": "./dist"
   },
   "include": ["src", "../../integrations/*/index.ts"]
