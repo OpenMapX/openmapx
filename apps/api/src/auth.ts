@@ -1,9 +1,9 @@
 import { expo } from "@better-auth/expo";
 import { i18n } from "@better-auth/i18n";
 import { passkey } from "@better-auth/passkey";
-import { betterAuth } from "better-auth";
+import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { admin, emailOTP, genericOAuth, twoFactor } from "better-auth/plugins";
+import { admin, customSession, emailOTP, genericOAuth, twoFactor } from "better-auth/plugins";
 import { emailHarmony } from "better-auth-harmony";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
@@ -17,6 +17,7 @@ import {
   verifyEmailEmail,
 } from "./utils/emailTemplates";
 import { envString } from "./utils/env";
+import { projectSessionPayload } from "./utils/session-projection";
 
 const secret = process.env.BETTER_AUTH_SECRET;
 if (!secret) throw new Error("BETTER_AUTH_SECRET env var is required");
@@ -43,7 +44,7 @@ async function fetchProviderImage(
   return undefined;
 }
 
-export const auth = betterAuth({
+const authOptions = {
   database: drizzleAdapter(db, {
     provider: "pg",
   }),
@@ -318,5 +319,26 @@ export const auth = betterAuth({
         enabled: true,
       },
     }),
+  ],
+} satisfies BetterAuthOptions;
+
+/**
+ * better-auth's own session endpoint returns the full stored session row. That
+ * row carries the session token, the client IP address and the user agent,
+ * none of which any caller reads, and the token is the value the signed
+ * session cookie is built from. `customSession` replaces the endpoint's
+ * response with the projection below, so those fields never leave the server.
+ *
+ * The options object is handed to the plugin so it keeps inferring the fields
+ * the enabled plugins add to the user and session models.
+ */
+export const auth = betterAuth({
+  ...authOptions,
+  plugins: [
+    ...authOptions.plugins,
+    customSession(
+      async ({ user, session }) => projectSessionPayload({ user, session }),
+      authOptions,
+    ),
   ],
 });
