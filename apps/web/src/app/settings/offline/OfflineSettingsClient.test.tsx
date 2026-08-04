@@ -140,34 +140,65 @@ describe("OfflineSettingsClient download dialog", () => {
     expect(screen.getByRole("button", { name: "Pause" })).not.toBeNull();
   });
 
-  it("refreshes resumable packages after pausing and closing the transfer view", async () => {
+  it("resumes a paused transfer in the same modal and refreshes after closing", async () => {
     const user = userEvent.setup();
+    const manifest = {
+      packageId: "fixture",
+      archive: { byteLength: 1024 },
+      coverage: {
+        bbox: { west: 13, south: 52, east: 14, north: 53 },
+        minZoom: 10,
+        maxZoom: 14,
+      },
+    };
     mocks.api.prepare.mockResolvedValue({
       jobId: "job",
       packageId: "fixture",
       status: "ready-to-download",
-      manifest: {
-        packageId: "fixture",
-        archive: { byteLength: 1024 },
-      },
+      manifest,
     });
-    mocks.downloadOfflinePackage.mockImplementation(
-      (...args: unknown[]) =>
-        new Promise((resolve) => {
-          const options = args[3] as { signal: AbortSignal };
-          options.signal.addEventListener(
-            "abort",
-            () =>
-              resolve({
-                id: "fixture",
-                status: "paused",
-                bytesReceived: 256,
-                bytesTotal: 1024,
-              }),
-            { once: true },
-          );
-        }),
-    );
+    const pausedRecord = {
+      id: "fixture",
+      name: "Offline map",
+      manifest,
+      status: "paused",
+      bytesReceived: 256,
+      bytesTotal: 1024,
+      verifiedPrefixBytes: 256,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    mocks.storage.get.mockResolvedValue(pausedRecord);
+    let attempts = 0;
+    mocks.downloadOfflinePackage.mockImplementation((...args: unknown[]) => {
+      attempts += 1;
+      const options = args[3] as {
+        signal: AbortSignal;
+        onProgress?: (progress: {
+          packageId: string;
+          status: "downloading";
+          bytesReceived: number;
+          bytesTotal: number;
+          speedBytesPerSecond: number;
+        }) => void;
+      };
+      if (attempts === 2) {
+        options.onProgress?.({
+          packageId: "fixture",
+          status: "downloading",
+          bytesReceived: 512,
+          bytesTotal: 1024,
+          speedBytesPerSecond: 256,
+        });
+      }
+      return new Promise((resolve) => {
+        options.signal.addEventListener(
+          "abort",
+          () => resolve({ ...pausedRecord, bytesReceived: attempts === 1 ? 256 : 512 }),
+          { once: true },
+        );
+      });
+    });
     renderSettings();
 
     const open = await screen.findByRole("button", { name: "Download a new area" });
@@ -178,12 +209,17 @@ describe("OfflineSettingsClient download dialog", () => {
     await screen.findByRole("button", { name: "Pause" });
 
     await user.click(screen.getByRole("button", { name: "Pause" }));
-    const close = await screen.findByRole("button", { name: "Close" });
+    await screen.findByRole("button", { name: "Close" });
     expect(screen.getByText("Paused")).not.toBeNull();
     expect(screen.queryByText("Error")).toBeNull();
+    expect(screen.getByRole("button", { name: "Resume" })).not.toBeNull();
     expect(mocks.storage.list).toHaveBeenCalledTimes(1);
 
-    await user.click(close);
+    await user.click(screen.getByRole("button", { name: "Resume" }));
+    expect(await screen.findByText("50%")).not.toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Pause" }));
+    await user.click(await screen.findByRole("button", { name: "Close" }));
 
     await waitFor(() => expect(mocks.storage.list).toHaveBeenCalledTimes(2));
   });
@@ -205,7 +241,7 @@ describe("OfflineSettingsClient download dialog", () => {
     expect(screen.queryAllByRole("slider")).toHaveLength(0);
   });
 
-  it("shows live byte progress when a paused package is resumed", async () => {
+  it("opens an unfinished package in the transfer modal and resumes it there", async () => {
     const user = userEvent.setup();
     mocks.storage.list.mockResolvedValue([
       {
@@ -245,7 +281,12 @@ describe("OfflineSettingsClient download dialog", () => {
     });
     renderSettings();
 
-    await user.click(await screen.findByRole("button", { name: "Resume" }));
+    await screen.findByText("Fixture");
+    expect(screen.queryByRole("button", { name: "Resume" })).toBeNull();
+
+    await user.click(screen.getByText("Fixture"));
+    expect(await screen.findByRole("progressbar", { name: "Paused" })).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "Resume" }));
 
     expect(await screen.findByText("50%")).not.toBeNull();
     expect(screen.getByText("512 B / 1.0 KB")).not.toBeNull();

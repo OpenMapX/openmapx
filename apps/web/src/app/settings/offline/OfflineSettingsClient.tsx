@@ -139,12 +139,8 @@ export function OfflineSettingsClient() {
   const [records, setRecords] = useState<OfflinePackageRecord[]>([]);
   const [capability, setCapability] = useState<OfflinePackageCapability | null>(null);
   const [adding, setAdding] = useState(false);
+  const [downloadRecord, setDownloadRecord] = useState<OfflinePackageRecord | null>(null);
   const [overview, setOverview] = useState(false);
-  const [runningId, setRunningId] = useState<string | null>(null);
-  const [runningProgress, setRunningProgress] = useState<OfflinePackageDownloadProgress | null>(
-    null,
-  );
-  const aborts = useRef(new Map<string, AbortController>());
 
   const refresh = useCallback(() => {
     void refreshPackageRecords(setRecords);
@@ -179,39 +175,6 @@ export function OfflineSettingsClient() {
     refresh();
   };
 
-  const resume = async (record: OfflinePackageRecord) => {
-    if (runningId) return;
-    const controller = new AbortController();
-    aborts.current.set(record.id, controller);
-    setRunningId(record.id);
-    setRunningProgress({
-      packageId: record.id,
-      status: "downloading",
-      bytesReceived: record.bytesReceived,
-      bytesTotal: record.bytesTotal,
-      speedBytesPerSecond: 0,
-    });
-    try {
-      await downloadOfflinePackage(api, storage, record.manifest, {
-        name: record.name,
-        signal: controller.signal,
-        onProgress: setRunningProgress,
-        validateStyles: async () => {
-          await validateConfiguredOfflineStyleAssets(record.manifest, env);
-        },
-      });
-      haptics.success();
-    } catch {
-      // The record contains the recoverable error and is shown below.
-    } finally {
-      aborts.current.delete(record.id);
-      setRunningId(null);
-      setRunningProgress(null);
-      await getDefaultResolverRefresh();
-      refresh();
-    }
-  };
-
   return (
     <Stack spacing={3}>
       <Box>
@@ -229,7 +192,10 @@ export function OfflineSettingsClient() {
         <Button
           variant="contained"
           startIcon={<AddIcon />}
-          onClick={() => setAdding(true)}
+          onClick={() => {
+            setDownloadRecord(null);
+            setAdding(true);
+          }}
           disabled={!capability?.available || env.styleProvider !== "openmapx"}
         >
           {t("downloadNewArea")}
@@ -247,22 +213,27 @@ export function OfflineSettingsClient() {
       <RecentDataOfflineToggle />
       <PackageList
         records={records}
-        runningId={runningId}
-        runningProgress={runningProgress}
-        onResume={resume}
+        onOpenIncomplete={(record) => {
+          setDownloadRecord(record);
+          setAdding(true);
+        }}
         onDelete={deletePackage}
       />
       {adding ? (
         <DownloadAreaDialog
+          key={downloadRecord?.id ?? "new"}
           open={adding}
           api={api}
           capability={capability}
+          initialRecord={downloadRecord ?? undefined}
           onClose={() => {
             setAdding(false);
+            setDownloadRecord(null);
             refresh();
           }}
           onSaved={() => {
             setAdding(false);
+            setDownloadRecord(null);
             refresh();
           }}
         />
@@ -332,15 +303,11 @@ function RecentDataOfflineToggle() {
 
 function PackageList({
   records,
-  runningId,
-  runningProgress,
-  onResume,
+  onOpenIncomplete,
   onDelete,
 }: {
   records: OfflinePackageRecord[];
-  runningId: string | null;
-  runningProgress: OfflinePackageDownloadProgress | null;
-  onResume: (record: OfflinePackageRecord) => void;
+  onOpenIncomplete: (record: OfflinePackageRecord) => void;
   onDelete: (record: OfflinePackageRecord) => void;
 }) {
   const t = useTranslations("settings");
@@ -374,7 +341,12 @@ function PackageList({
                 </IconButton>
               }
             >
-              <ListItemButton onClick={() => setViewing(record)}>
+              <ListItemButton
+                onClick={() => {
+                  if (record.status === "ready") setViewing(record);
+                  else onOpenIncomplete(record);
+                }}
+              >
                 <ListItemText
                   primary={record.name}
                   secondary={
@@ -387,14 +359,7 @@ function PackageList({
                         {formatBytes(record.manifest.archive.byteLength)} · z
                         {record.manifest.coverage.minZoom}–{record.manifest.coverage.maxZoom}
                       </Typography>
-                      <OfflinePackageStatus
-                        record={record}
-                        progress={
-                          runningProgress?.packageId === record.id ? runningProgress : undefined
-                        }
-                        onResume={() => onResume(record)}
-                        disabled={runningId !== null}
-                      />
+                      <OfflinePackageStatus record={record} />
                     </Stack>
                   }
                   slotProps={{ secondary: { component: "div" } }}
@@ -457,6 +422,7 @@ interface DownloadAreaDialogProps {
   open: boolean;
   api: OfflinePackageApi;
   capability: OfflinePackageCapability | null;
+  initialRecord?: OfflinePackageRecord;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -468,18 +434,54 @@ interface SubmittedDownload {
   maxZoom: number;
 }
 
-function DownloadAreaDialog({ api, open, capability, onClose, onSaved }: DownloadAreaDialogProps) {
+function submittedDownloadFromRecord(record: OfflinePackageRecord): SubmittedDownload {
+  return {
+    name: record.name,
+    bbox: record.manifest.coverage.bbox,
+    minZoom: record.manifest.coverage.minZoom,
+    maxZoom: record.manifest.coverage.maxZoom,
+  };
+}
+
+function progressFromIncompleteRecord(
+  record: OfflinePackageRecord,
+): OfflinePackageDownloadProgress {
+  const error = record.lastError;
+  return {
+    packageId: record.id,
+    status: record.status === "error" ? "error" : "paused",
+    bytesReceived: record.bytesReceived,
+    bytesTotal: record.bytesTotal,
+    speedBytesPerSecond: 0,
+    ...(error ? { error } : {}),
+  };
+}
+
+function DownloadAreaDialog({
+  api,
+  open,
+  capability,
+  initialRecord,
+  onClose,
+  onSaved,
+}: DownloadAreaDialogProps) {
   const t = useTranslations("settings");
   const env = useEnv();
-  const [name, setName] = useState("");
-  const [bbox, setBbox] = useState<OfflinePackageBbox | null>(null);
+  const [name, setName] = useState(initialRecord?.name ?? "");
+  const [bbox, setBbox] = useState<OfflinePackageBbox | null>(
+    initialRecord?.manifest.coverage.bbox ?? null,
+  );
   const [zoomRange, setZoomRange] = useState<[number, number]>([
-    DEFAULT_MIN_ZOOM,
-    DEFAULT_MAX_ZOOM,
+    initialRecord?.manifest.coverage.minZoom ?? DEFAULT_MIN_ZOOM,
+    initialRecord?.manifest.coverage.maxZoom ?? DEFAULT_MAX_ZOOM,
   ]);
-  const [progress, setProgress] = useState<OfflinePackageDownloadProgress | null>(null);
-  const [submitted, setSubmitted] = useState<SubmittedDownload | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<OfflinePackageDownloadProgress | null>(() =>
+    initialRecord ? progressFromIncompleteRecord(initialRecord) : null,
+  );
+  const [submitted, setSubmitted] = useState<SubmittedDownload | null>(() =>
+    initialRecord ? submittedDownloadFromRecord(initialRecord) : null,
+  );
+  const [error, setError] = useState<string | null>(initialRecord?.lastError?.message ?? null);
   const [busy, setBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const locale = useLocale();
@@ -556,48 +558,48 @@ function DownloadAreaDialog({ api, open, capability, onClose, onSaved }: Downloa
     ]);
   }, [maxZoomLimit]);
 
-  const start = async () => {
-    if (!bbox || !capability?.available || busy) return;
-    const submission: SubmittedDownload = {
-      name: name.trim() || t("offlineDefaultName"),
-      bbox,
-      minZoom: zoomRange[0],
-      maxZoom: zoomRange[1],
-    };
-    setSubmitted(submission);
-    setProgress({
-      packageId: "pending",
-      status: "preparing",
-      bytesReceived: 0,
-      bytesTotal: 0,
-      speedBytesPerSecond: 0,
+  const downloadManifest = async (
+    manifest: OfflineMapPackageManifest,
+    downloadName: string,
+    signal: AbortSignal,
+  ): Promise<OfflinePackageRecord> =>
+    await downloadOfflinePackage(api, storage, manifest, {
+      name: downloadName,
+      signal,
+      onProgress: setProgress,
+      validateStyles: async () => {
+        await validateConfiguredOfflineStyleAssets(manifest, env);
+      },
     });
+
+  const prepareAndDownload = async (
+    submission: SubmittedDownload,
+    signal: AbortSignal,
+  ): Promise<OfflinePackageRecord> => {
+    await requestPersistentStorage();
+    if (recentDataOptInVisible && recentDataOptIn) await setRecentMapDataCacheEnabled(true);
+    const request: OfflinePackageRequest = {
+      bbox: submission.bbox,
+      minZoom: submission.minZoom,
+      maxZoom: submission.maxZoom,
+      provider: "openmapx",
+    };
+    const prepared = await api.prepare(request, signal);
+    const manifest =
+      prepared.status === "ready-to-download" && prepared.manifest
+        ? prepared.manifest
+        : await waitForManifest(api, prepared.jobId, setProgress, signal);
+    return await downloadManifest(manifest, submission.name, signal);
+  };
+
+  const runTransfer = async (operation: (signal: AbortSignal) => Promise<OfflinePackageRecord>) => {
+    if (busy) return;
     setBusy(true);
     setError(null);
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      await requestPersistentStorage();
-      if (recentDataOptInVisible && recentDataOptIn) await setRecentMapDataCacheEnabled(true);
-      const request: OfflinePackageRequest = {
-        bbox: submission.bbox,
-        minZoom: submission.minZoom,
-        maxZoom: submission.maxZoom,
-        provider: "openmapx",
-      };
-      const prepared = await api.prepare(request, controller.signal);
-      const manifest =
-        prepared.status === "ready-to-download" && prepared.manifest
-          ? prepared.manifest
-          : await waitForManifest(api, prepared.jobId, setProgress, controller.signal);
-      const result = await downloadOfflinePackage(api, storage, manifest, {
-        name: submission.name,
-        signal: controller.signal,
-        onProgress: setProgress,
-        validateStyles: async () => {
-          await validateConfiguredOfflineStyleAssets(manifest, env);
-        },
-      });
+      const result = await operation(controller.signal);
       if (result.status === "paused") {
         setProgress({
           packageId: result.id,
@@ -636,6 +638,48 @@ function DownloadAreaDialog({ api, open, capability, onClose, onSaved }: Downloa
       abortRef.current = null;
       setBusy(false);
     }
+  };
+
+  const start = async () => {
+    if (!bbox || !capability?.available || busy) return;
+    const submission: SubmittedDownload = {
+      name: name.trim() || t("offlineDefaultName"),
+      bbox,
+      minZoom: zoomRange[0],
+      maxZoom: zoomRange[1],
+    };
+    setSubmitted(submission);
+    setProgress({
+      packageId: "pending",
+      status: "preparing",
+      bytesReceived: 0,
+      bytesTotal: 0,
+      speedBytesPerSecond: 0,
+    });
+    await runTransfer(async (signal) => await prepareAndDownload(submission, signal));
+  };
+
+  const resume = async () => {
+    if (!submitted || busy) return;
+    const packageId = progress?.packageId;
+    setProgress((current) => ({
+      packageId: current?.packageId ?? "pending",
+      status: current?.packageId === "pending" ? "preparing" : "downloading",
+      bytesReceived: current?.bytesReceived ?? 0,
+      bytesTotal: current?.bytesTotal ?? 0,
+      speedBytesPerSecond: 0,
+    }));
+    await runTransfer(async (signal) => {
+      const record =
+        initialRecord && initialRecord.id === packageId
+          ? initialRecord
+          : packageId && packageId !== "pending"
+            ? await storage.get(packageId)
+            : undefined;
+      return record
+        ? await downloadManifest(record.manifest, record.name, signal)
+        : await prepareAndDownload(submitted, signal);
+    });
   };
 
   const close = () => {
@@ -757,7 +801,20 @@ function DownloadAreaDialog({ api, open, capability, onClose, onSaved }: Downloa
       </DialogContent>
       <DialogActions>
         {submitted ? (
-          <Button onClick={close}>{busy ? t("pause") : t("close")}</Button>
+          busy ? (
+            <Button onClick={close}>{t("pause")}</Button>
+          ) : (
+            <>
+              <Button onClick={close}>{t("close")}</Button>
+              <Button
+                variant="contained"
+                onClick={() => void resume()}
+                disabled={!capability?.available || !network.online}
+              >
+                {t("resume")}
+              </Button>
+            </>
+          )
         ) : (
           <>
             <Button onClick={close}>{t("cancel")}</Button>

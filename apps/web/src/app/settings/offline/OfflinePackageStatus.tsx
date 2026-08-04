@@ -1,7 +1,6 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
 import LinearProgress from "@mui/material/LinearProgress";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
@@ -12,8 +11,6 @@ import { formatBytes } from "@/lib/storageFormat";
 interface Props {
   record?: OfflinePackageRecord;
   progress?: OfflinePackageDownloadProgress;
-  onResume?: () => void;
-  disabled?: boolean;
 }
 
 type Status = OfflinePackageRecord["status"] | OfflinePackageDownloadProgress["status"];
@@ -39,7 +36,7 @@ function statusText(status: Status, t: (key: string) => string): string {
   }
 }
 
-export function OfflinePackageStatus({ record, progress, onResume, disabled = false }: Props) {
+export function OfflinePackageStatus({ record, progress }: Props) {
   const t = useTranslations("settings");
   const status = progress?.status ?? record?.status ?? "queued";
   const received = progress?.bytesReceived ?? record?.bytesReceived ?? 0;
@@ -50,7 +47,6 @@ export function OfflinePackageStatus({ record, progress, onResume, disabled = fa
   const percentage = determinate
     ? Math.round(Math.min(100, Math.max(0, (received / total) * 100)))
     : undefined;
-  const resumable = record && (record.status === "paused" || record.status === "error") && onResume;
   const speed = progress?.speedBytesPerSecond ?? 0;
 
   return (
@@ -77,19 +73,6 @@ export function OfflinePackageStatus({ record, progress, onResume, disabled = fa
           <Typography variant="caption" component="span" sx={{ color: "text.secondary" }}>
             {t("downloadSpeed", { speed: formatBytes(speed) })}
           </Typography>
-        ) : null}
-        {resumable ? (
-          <Button
-            size="small"
-            onClick={(event) => {
-              event.stopPropagation();
-              onResume();
-            }}
-            disabled={disabled}
-            sx={{ ml: "auto" }}
-          >
-            {t("resume")}
-          </Button>
         ) : null}
       </Stack>
       {status === "ready" ? null : (
