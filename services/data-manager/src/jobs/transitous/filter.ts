@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { applyFeedOverlay, type FeedFile, readFeedOverlay } from "../transitous-feeds-overlay.js";
 import {
@@ -205,6 +205,9 @@ function applyFeedsOverlayToCatalog(
     const serialisable = { ...feed } as Record<string, unknown>;
     delete serialisable.region;
     writeFileSync(feedPath, `${JSON.stringify(serialisable, null, 2)}\n`, "utf-8");
+    // This rewrite may preserve an API key or credentialed URL override, so
+    // repair the catalog checkout's default 0644 mode after writing.
+    chmodSync(feedPath, 0o600);
   }
   for (const unmatched of result.unmatched) {
     logger.warn(

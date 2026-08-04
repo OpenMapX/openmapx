@@ -1,6 +1,9 @@
+import { statSync } from "node:fs";
+import { join } from "node:path";
 import type { Command } from "commander";
 import { dockerCompose, dockerRun } from "../lib/docker";
 import { log, table } from "../lib/output";
+import { repoPaths } from "../lib/paths";
 
 interface PsLine {
   Service?: string;
@@ -66,6 +69,19 @@ export function probeFailureDetail(stderr: string, exitCode: number): string {
     .map((line) => line.trim())
     .filter((line) => line && !/^Run 'docker run --help' for more information\.?$/.test(line));
   return lines.at(-1) ?? `exit ${exitCode}`;
+}
+
+/**
+ * The env file holds deployment credentials. Anything broader than owner-only
+ * read/write means another local account on the host can read them. Returns a
+ * warning string, or null when the mode is acceptable or the file is absent.
+ */
+export function envFilePermissionWarning(path: string, mode: number | null): string | null {
+  if (mode === null) return null;
+  const permissions = mode & 0o777;
+  if ((permissions & 0o077) === 0) return null;
+  const octal = permissions.toString(8).padStart(3, "0");
+  return `${path} is mode 0${octal} — readable beyond its owner. Run: chmod 600 ${path}`;
 }
 
 export function composeNetworkName(configText: string): string | null {
@@ -138,6 +154,16 @@ export function registerCheckCommand(program: Command): void {
     .description("Run health checks against running services")
     .option("--no-probe", "Skip in-network HTTP deep probes (faster; engine-health only)")
     .action(async (options: { probe: boolean }) => {
+      const envPath = join(repoPaths().infraDir, ".env");
+      let envMode: number | null = null;
+      try {
+        envMode = statSync(envPath).mode;
+      } catch {
+        // A missing local .env is handled by compose; this advisory stays non-fatal.
+      }
+      const permissionWarning = envFilePermissionWarning(envPath, envMode);
+      if (permissionWarning) log.warn(permissionWarning);
+
       const result = await dockerCompose(["ps", "--format", "json"]);
       if (result.exitCode !== 0) {
         log.err(result.stderr || "docker compose ps failed");

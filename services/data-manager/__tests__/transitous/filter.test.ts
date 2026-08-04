@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -43,6 +43,64 @@ function makeRunner(behaviours: Array<"ok" | string>): {
 }
 
 describe("filter stage", () => {
+  it("tightens API-key-stamped feed files to owner-only permissions", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-filter-api-key-mode-"));
+    const catalogDir = makeCatalog(tmp);
+    const feedPath = join(catalogDir, "feeds", "de.json");
+    writeFileSync(
+      feedPath,
+      JSON.stringify({
+        sources: [{ name: "BVG", "transitland-atlas-id": "f-bvg" }],
+      }),
+    );
+    const apiKeysPath = join(tmp, "api-keys.json");
+    writeFileSync(apiKeysPath, JSON.stringify({ "de/BVG": "test-key" }));
+
+    const ctx = buildJobContext({
+      dataDir: tmp,
+      store: new StateStore(tmp),
+      countries: ["de"],
+      apiKeysPath,
+      runner: async () => {},
+      now: () => "2026-05-01T00:00:00.000Z",
+    });
+    ctx.state.catalogDir = catalogDir;
+
+    const result = await filterRun(ctx);
+    expect(result.status).toBe("ok");
+    expect(readSources(feedPath)[0]?.["api-key"]).toBe("test-key");
+    expect(statSync(feedPath).mode & 0o777).toBe(0o600);
+  });
+
+  it("repairs a pre-existing world-readable feed after applying an API key", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-filter-api-key-repair-"));
+    const catalogDir = makeCatalog(tmp);
+    const feedPath = join(catalogDir, "feeds", "de.json");
+    writeFileSync(
+      feedPath,
+      JSON.stringify({
+        sources: [{ name: "BVG", "transitland-atlas-id": "f-bvg" }],
+      }),
+      { mode: 0o644 },
+    );
+    const apiKeysPath = join(tmp, "api-keys.json");
+    writeFileSync(apiKeysPath, JSON.stringify({ "de/BVG": "test-key" }));
+
+    const ctx = buildJobContext({
+      dataDir: tmp,
+      store: new StateStore(tmp),
+      countries: ["de"],
+      apiKeysPath,
+      runner: async () => {},
+      now: () => "2026-05-01T00:00:00.000Z",
+    });
+    ctx.state.catalogDir = catalogDir;
+
+    const result = await filterRun(ctx);
+    expect(result.status).toBe("ok");
+    expect(statSync(feedPath).mode & 0o777).toBe(0o600);
+  });
+
   it("narrows feeds to the requested countries and counts active schedule sources", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-filter-narrow-"));
     const catalogDir = makeCatalog(tmp);
@@ -204,6 +262,7 @@ describe("filter stage", () => {
       url: "https://old.example/bvg.zip",
       skip: true,
     });
+    expect(statSync(deFeedPath).mode & 0o777).toBe(0o600);
     expect(infos.some((m) => m.includes("applying 1 feeds-overlay patch"))).toBe(true);
   });
 });

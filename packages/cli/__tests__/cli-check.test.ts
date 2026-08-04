@@ -3,6 +3,7 @@ import {
   buildProbeArgs,
   composeNetworkName,
   DEEP_PROBES,
+  envFilePermissionWarning,
   PROBE_IMAGE,
   probeFailureDetail,
 } from "../src/commands/check";
@@ -72,6 +73,25 @@ describe("probeFailureDetail", () => {
 
   it("falls back to the exit code when stderr is empty", () => {
     expect(probeFailureDetail("", 125)).toBe("exit 125");
+  });
+});
+
+describe("envFilePermissionWarning", () => {
+  it("warns when the env file is readable beyond its owner", () => {
+    expect(envFilePermissionWarning("infra/docker/.env", 0o644)).toContain("chmod 600");
+  });
+
+  it("accepts owner-only read/write permissions", () => {
+    expect(envFilePermissionWarning("infra/docker/.env", 0o600)).toBeNull();
+    expect(envFilePermissionWarning("infra/docker/.env", 0o400)).toBeNull();
+  });
+
+  it("warns for group-readable permissions", () => {
+    expect(envFilePermissionWarning("infra/docker/.env", 0o660)).toContain("mode 0660");
+  });
+
+  it("ignores an absent env file", () => {
+    expect(envFilePermissionWarning("infra/docker/.env", null)).toBeNull();
   });
 });
 

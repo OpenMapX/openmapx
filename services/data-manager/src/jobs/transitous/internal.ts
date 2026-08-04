@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -178,6 +179,10 @@ export function applyApiKeysOverlay(catalogDir: string, overlayPath: string): nu
 
     if (!modified) continue;
     writeFileSync(feedPath, `${JSON.stringify(data, null, 2)}\n`, "utf-8");
+    // The file now carries a feed API key. writeFileSync's `mode` only applies
+    // when it creates the file, and catalog files arrive at 0644, so tighten
+    // explicitly to repair files stamped by an earlier run as well.
+    chmodSync(feedPath, 0o600);
     applied++;
   }
 
