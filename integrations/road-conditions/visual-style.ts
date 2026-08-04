@@ -1,5 +1,5 @@
 import type { RoadConditionEvent } from "@openmapx/core";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 
 /** Whether a condition has been announced but has not started yet. */
 export function isFutureRoadCondition(
