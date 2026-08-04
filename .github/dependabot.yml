@@ -59,6 +59,27 @@ updates:
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
 
+  # The documentation site is a standalone pnpm workspace and is therefore
+  # not covered by the root npm configuration above.
+  - package-ecosystem: npm
+    directory: "/docs"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 10
+    versioning-strategy: increase-if-necessary
+    labels: [dependencies, docs]
+    commit-message:
+      prefix: chore
+      include: scope
+    ignore:
+      # TypeScript 7 is not supported by this workspace yet; upgrade it with
+      # the compiler API migration rather than as a transitive update.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
