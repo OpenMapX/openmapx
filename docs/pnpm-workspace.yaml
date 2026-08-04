@@ -43,6 +43,9 @@ overrides:
   "serialize-javascript": "^7.0.5"
   "uuid@8.3.2": "^11.1.1"
   "joi": "^18.2.1"
+  # fast-uri 3.1.5 fixes the current host-confusion advisories in the
+  # Docusaurus/AJV dependency tree.
+  "fast-uri": "^3.1.5"
   # >=3.4.9 closes GHSA-vxr8-fq34-vvx9 (low: a Trusted Types policy survives
   # clearConfig()). Transitive via mermaid -> @docusaurus/theme-mermaid.
   "dompurify": "^3.4.9"
