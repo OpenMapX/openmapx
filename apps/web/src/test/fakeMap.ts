@@ -1,4 +1,4 @@
-import type { Map as MaplibreMap } from "maplibre-gl";
+import type { Map as MaplibreMap, MissingStyleImageResolver } from "maplibre-gl";
 
 /**
  * A stateful fake MapLibre `Map` for unit-testing map layers and attribution
@@ -29,6 +29,7 @@ export interface FakeMapState {
   }>;
   movedLayers: Array<{ layerId: string; beforeId?: string }>;
   light: Record<string, unknown> | null;
+  missingStyleImageResolver: MissingStyleImageResolver | null;
   handlers: Map<string, Set<(...args: unknown[]) => void>>;
 }
 
@@ -73,6 +74,7 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     cameraTransitions: [],
     movedLayers: [],
     light: null,
+    missingStyleImageResolver: null,
     handlers: new Map(),
   };
 
@@ -175,6 +177,10 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     },
     removeImage: (id: string) => {
       state.images.delete(id);
+    },
+    setMissingStyleImageResolver: (resolver: MissingStyleImageResolver | null) => {
+      state.missingStyleImageResolver = resolver;
+      return api.map;
     },
     getStyle: () => ({
       layers: [...state.layers.values()],

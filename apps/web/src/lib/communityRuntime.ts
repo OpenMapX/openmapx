@@ -19,6 +19,7 @@ import * as Maplibre from "maplibre-gl";
 import * as React from "react";
 import * as JsxDevRuntime from "react/jsx-dev-runtime";
 import * as JsxRuntime from "react/jsx-runtime";
+import { configureMapLibreRuntime } from "./maplibreRuntime";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -26,6 +27,7 @@ declare global {
 }
 
 if (typeof globalThis !== "undefined") {
+  configureMapLibreRuntime(Maplibre);
   globalThis.__OMX_RUNTIME__ = {
     react: React,
     "react/jsx-runtime": JsxRuntime,

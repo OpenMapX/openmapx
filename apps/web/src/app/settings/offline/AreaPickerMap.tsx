@@ -9,6 +9,7 @@ import { createGeoJsonSourceDataBridge } from "@/components/map/layers/layerStyl
 import { MapCredits } from "@/components/map/MapCredits";
 import { useEnv } from "@/lib/EnvProvider";
 import { baseMapCreditsHtml, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
+import { loadMapLibreRuntime } from "@/lib/maplibreRuntime";
 import type { OfflinePackageBbox } from "@/lib/offlineAreas";
 
 const BOUNDARY_SOURCE = "picker-boundary-source";
@@ -97,7 +98,7 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
     let replayBoundary: (() => void) | null = null;
 
     const init = async () => {
-      const maplibregl = await import("maplibre-gl");
+      const maplibregl = await loadMapLibreRuntime();
       if (destroyed || !containerRef.current) return;
       const style =
         env.styleProvider === "openmapx"

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   isCredentialedApiPath,
+  isMapLibreRuntimeAssetPath,
   isOfflinePackageArchivePath,
   isOnlineStyleReachabilityProbe,
   isStalePrecacheName,
+  MAPLIBRE_RUNTIME_CACHE,
   offlineGlyphCacheNameForVersion,
   offlineGlyphVersionFromPath,
 } from "./swCaches";
@@ -25,6 +27,7 @@ describe("service-worker cache names", () => {
     expect(isStalePrecacheName("offline-area-old", current)).toBe(true);
     expect(isStalePrecacheName("omx-offline-results", current)).toBe(true);
     expect(isStalePrecacheName("offline-package-glyphs-abc", current)).toBe(false);
+    expect(isStalePrecacheName(MAPLIBRE_RUNTIME_CACHE, current)).toBe(false);
     expect(isStalePrecacheName("pages", current)).toBe(false);
   });
 
@@ -41,6 +44,26 @@ describe("service-worker cache names", () => {
     expect(
       offlineGlyphVersionFromPath("/api/offline/packages/assets/maptiler/style-v1"),
     ).toBeUndefined();
+  });
+});
+
+describe("MapLibre runtime cache", () => {
+  it("recognizes current and retained older versioned worker modules", () => {
+    for (const path of [
+      "/runtime/maplibre-gl/6.1.0/maplibre-gl-worker.mjs",
+      "/runtime/maplibre-gl/5.24.0/maplibre-gl-shared.mjs",
+    ])
+      expect(isMapLibreRuntimeAssetPath(path)).toBe(true);
+  });
+
+  it("rejects unversioned, malformed, and unrelated runtime paths", () => {
+    for (const path of [
+      "/runtime/maplibre-gl/maplibre-gl-worker.mjs",
+      "/runtime/maplibre-gl/6.1.0/maplibre-gl.mjs",
+      "/runtime/maplibre-gl/6.1.0/nested/maplibre-gl-worker.mjs",
+      "/runtime/react.js",
+    ])
+      expect(isMapLibreRuntimeAssetPath(path)).toBe(false);
   });
 });
 

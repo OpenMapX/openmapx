@@ -1,3 +1,5 @@
+export const MAPLIBRE_RUNTIME_CACHE = "maplibre-runtimes";
+
 /** Return whether a build-versioned service-worker cache belongs to an older build. */
 export function isStalePrecacheName(
   name: string,
@@ -10,6 +12,12 @@ export function isStalePrecacheName(
   // continue consuming device storage.
   if (name.startsWith("offline-area-") || name === "omx-offline-results") return true;
   return false;
+}
+
+export function isMapLibreRuntimeAssetPath(pathname: string): boolean {
+  return /^\/runtime\/maplibre-gl\/[A-Za-z0-9._+-]{1,128}\/maplibre-gl-(?:worker|shared)\.mjs$/.test(
+    pathname,
+  );
 }
 
 export function offlineGlyphCacheNameForVersion(version: string): string {

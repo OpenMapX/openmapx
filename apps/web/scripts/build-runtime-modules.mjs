@@ -29,12 +29,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { copyMapLibreRuntimeAssets } from "./maplibre-runtime.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const webRoot = resolve(__dirname, "..");
 const outDir = resolve(webRoot, "public/runtime");
 
 mkdirSync(outDir, { recursive: true });
+copyMapLibreRuntimeAssets(outDir);
 
 const GLOBAL = "globalThis.__OMX_RUNTIME__";
 

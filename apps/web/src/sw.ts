@@ -24,9 +24,11 @@ import {
 } from "serwist";
 import {
   isCredentialedApiPath,
+  isMapLibreRuntimeAssetPath,
   isOfflinePackageArchivePath,
   isOnlineStyleReachabilityProbe,
   isStalePrecacheName,
+  MAPLIBRE_RUNTIME_CACHE,
   offlineGlyphCacheNameForVersion,
   offlineGlyphVersionFromPath,
 } from "./lib/swCaches";
@@ -39,6 +41,7 @@ declare const self: ServiceWorkerGlobalScope;
 // SwUpdateNotice can surface the "update available" prompt — without it the
 // custom esbuild output is identical across builds and updates never fire.
 declare const __SW_BUILD_ID__: string;
+declare const __MAPLIBRE_VERSION__: string;
 
 const OFFLINE_URL = "/offline";
 const HOME_URL = "/";
@@ -57,6 +60,10 @@ const BUNDLED_MAP_ASSETS = [
   "/styles/openmapx-dark.json",
   "/styles/sprite.json",
   "/styles/sprite.png",
+] as const;
+const MAPLIBRE_RUNTIME_ASSETS = [
+  `/runtime/maplibre-gl/${__MAPLIBRE_VERSION__}/maplibre-gl-worker.mjs`,
+  `/runtime/maplibre-gl/${__MAPLIBRE_VERSION__}/maplibre-gl-shared.mjs`,
 ] as const;
 const OPTIONAL_BUNDLED_MAP_ASSETS = ["/styles/sprite@2x.json", "/styles/sprite@2x.png"] as const;
 const APP_SHELL_URLS = [HOME_URL, OFFLINE_URL, "/manifest.webmanifest", ...BUNDLED_MAP_ASSETS];
@@ -148,6 +155,16 @@ const bundledStyleFallbackStrategy = new StaleWhileRevalidate({
   plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 7 * 24 * 60 * 60 })],
 });
 
+// Keep multiple versioned pairs because an already-open client or an offline
+// page/runtime-cache entry can outlive the build-scoped app-shell cache. Each
+// version is two files (~500 KiB total); 32 entries retain up to 16 MapLibre
+// releases while keeping storage bounded. `last-used` also registers pairs
+// written by a prior worker the first time they are read.
+const maplibreRuntimeStrategy = new CacheFirst({
+  cacheName: MAPLIBRE_RUNTIME_CACHE,
+  plugins: [new ExpirationPlugin({ maxEntries: 32, maxAgeFrom: "last-used" })],
+});
+
 const serwist = new Serwist({
   precacheEntries: [],
   // Don't auto-skip-waiting. The client surfaces an "Update available" prompt
@@ -200,6 +217,15 @@ const serwist = new Serwist({
         cacheName: "static-assets",
         plugins: [new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 30 * 24 * 60 * 60 })],
       }),
+    },
+
+    // MapLibre's ESM worker and its shared module are copied from the installed
+    // package under a versioned path. Match every valid version so an older
+    // client can keep using its retained pair after a new worker activates.
+    {
+      matcher: ({ url }: { url: URL }) =>
+        url.origin === self.location.origin && isMapLibreRuntimeAssetPath(url.pathname),
+      handler: maplibreRuntimeStrategy,
     },
 
     // Package font assets are small and explicitly versioned by the package.
@@ -350,21 +376,34 @@ const serwist = new Serwist({
 // sprites are fetched independently because not every build supplies them.
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(APP_SHELL_CACHE).then(async (cache) => {
-      await Promise.all(
-        APP_SHELL_URLS.map(async (url) => {
-          const response = await fetch(url, { cache: "reload" });
-          if (!response.ok) throw new Error(`required app-shell asset unavailable: ${url}`);
-          await cache.put(url, response);
+    Promise.all([
+      caches.open(APP_SHELL_CACHE).then(async (cache) => {
+        await Promise.all(
+          APP_SHELL_URLS.map(async (url) => {
+            const response = await fetch(url, { cache: "reload" });
+            if (!response.ok) throw new Error(`required app-shell asset unavailable: ${url}`);
+            await cache.put(url, response);
+          }),
+        );
+        await Promise.allSettled(
+          OPTIONAL_BUNDLED_MAP_ASSETS.map(async (url) => {
+            const response = await fetch(url, { cache: "reload" });
+            if (response.ok) await cache.put(url, response);
+          }),
+        );
+      }),
+      Promise.all(
+        MAPLIBRE_RUNTIME_ASSETS.map(async (url) => {
+          const [responsePromise, donePromise] = maplibreRuntimeStrategy.handleAll({
+            event,
+            request: new Request(url, { cache: "reload" }),
+          });
+          const response = await responsePromise;
+          await donePromise;
+          if (!response?.ok) throw new Error(`required MapLibre runtime asset unavailable: ${url}`);
         }),
-      );
-      await Promise.allSettled(
-        OPTIONAL_BUNDLED_MAP_ASSETS.map(async (url) => {
-          const response = await fetch(url, { cache: "reload" });
-          if (response.ok) await cache.put(url, response);
-        }),
-      );
-    }),
+      ),
+    ]),
   );
 });
 

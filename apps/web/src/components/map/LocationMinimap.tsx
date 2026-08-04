@@ -6,6 +6,7 @@ import type { StyleSpecification } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { baseMapCreditsHtml, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
+import { loadMapLibreRuntime } from "@/lib/maplibreRuntime";
 import { MapCredits } from "./MapCredits";
 
 interface LocationMinimapProps {
@@ -38,7 +39,7 @@ export function LocationMinimap({ lng, lat, zoom = 16, onClick, sx }: LocationMi
 
     (async () => {
       const [maplibregl, style] = await Promise.all([
-        import("maplibre-gl"),
+        loadMapLibreRuntime(),
         env.styleProvider === "openmapx"
           ? loadOpenMapXStyle(env, variant)
           : loadMaptilerStyle("bright-v2", env),

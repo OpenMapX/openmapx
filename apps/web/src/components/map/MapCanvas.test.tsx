@@ -73,6 +73,8 @@ vi.mock("@/lib/offlineAreas", () => ({
 vi.mock("maplibre-gl", () => {
   const instances: FakeMap[] = [];
   const options: Array<{ center: [number, number]; container: HTMLElement; zoom: number }> = [];
+  const workerUrlsAtConstruction: string[] = [];
+  let workerUrl = "";
   let setupError: Error | undefined;
   let setupErrorOnCall = 1;
   let onCallCount = 0;
@@ -82,6 +84,7 @@ vi.mock("maplibre-gl", () => {
     constructor(mapOptions: { center: [number, number]; container: HTMLElement; zoom: number }) {
       instances.push(this);
       options.push(mapOptions);
+      workerUrlsAtConstruction.push(workerUrl);
       mapOptions.container.append(document.createElement("canvas"));
     }
 
@@ -101,6 +104,7 @@ vi.mock("maplibre-gl", () => {
     __test: {
       instances,
       options,
+      workerUrlsAtConstruction,
       failSetup(error: Error, onCall = 1) {
         setupError = error;
         setupErrorOnCall = onCall;
@@ -108,12 +112,19 @@ vi.mock("maplibre-gl", () => {
       reset() {
         instances.length = 0;
         options.length = 0;
+        workerUrlsAtConstruction.length = 0;
+        workerUrl = "";
         setupError = undefined;
         setupErrorOnCall = 1;
         onCallCount = 0;
       },
     },
+    getVersion: () => "6.1.0",
+    getWorkerUrl: () => workerUrl,
     Map: FakeMap,
+    setWorkerUrl: (url: string) => {
+      workerUrl = url;
+    },
   };
 });
 
@@ -131,6 +142,7 @@ const maplibreTest = (
         remove: ReturnType<typeof vi.fn>;
       }>;
       options: Array<{ center: [number, number]; zoom: number }>;
+      workerUrlsAtConstruction: string[];
       failSetup(error: Error, onCall?: number): void;
       reset(): void;
     };
@@ -174,6 +186,9 @@ describe("MapCanvas", () => {
     const { container } = render(<MapCanvas />);
 
     await waitFor(() => expect(container.querySelector("canvas")).not.toBeNull());
+    expect(maplibreTest.workerUrlsAtConstruction).toEqual([
+      "/runtime/maplibre-gl/6.1.0/maplibre-gl-worker.mjs",
+    ]);
   });
 
   it("applies a fast granted location only after the saved viewport map exists", async () => {

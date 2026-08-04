@@ -362,20 +362,22 @@ export function RoadConditionsLayer() {
   ]);
 
   // Bake a disc+glyph marker image on demand for each (type, severity) the
-  // symbol layer requests. Synchronous canvas render → no flicker, no warnings.
+  // symbol layer requests. MapLibre v6 awaits this resolver before declaring
+  // an image missing; the later `styleimagemissing` event can no longer supply
+  // the requested image. The map carries the resolver across style rebuilds.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
-    const onMissing = (e: { id: string }) => {
-      if (map.hasImage(e.id)) return;
-      const parsed = parseMarkerImageId(e.id);
+    const resolveMissingImage = (id: string) => {
+      if (map.hasImage(id)) return;
+      const parsed = parseMarkerImageId(id);
       if (!parsed) return;
       const data = markerImageData(parsed.type, parsed.severity);
-      if (data && !map.hasImage(e.id)) map.addImage(e.id, data, { pixelRatio: 2 });
+      if (data && !map.hasImage(id)) map.addImage(id, data, { pixelRatio: 2 });
     };
-    map.on("styleimagemissing", onMissing);
+    map.setMissingStyleImageResolver(resolveMissingImage);
     return () => {
-      map.off("styleimagemissing", onMissing);
+      map.setMissingStyleImageResolver(null);
     };
   }, [mapRef, mapReady]);
 

@@ -93,6 +93,21 @@ beforeEach(() => {
   useRoadConditionsStore.getState().resetFilters();
 });
 
+describe("RoadConditionsLayer marker images", () => {
+  it("uses MapLibre's missing-image resolver and removes it on unmount", async () => {
+    const { unmount } = render(<RoadConditionsLayer />);
+
+    await waitFor(() => expect(fake.state.missingStyleImageResolver).toEqual(expect.any(Function)));
+    expect(fake.state.handlers.get("styleimagemissing")?.size ?? 0).toBe(0);
+
+    await fake.state.missingStyleImageResolver?.("unrelated-style-image");
+    expect(fake.state.images.size).toBe(0);
+
+    unmount();
+    expect(fake.state.missingStyleImageResolver).toBeNull();
+  });
+});
+
 describe("RoadConditionsLayer horizon query", () => {
   it("replays a response received before the map sources become ready", async () => {
     fake = createFakeMap({ styleLoaded: false });

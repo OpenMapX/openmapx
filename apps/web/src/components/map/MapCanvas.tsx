@@ -9,6 +9,7 @@ import { useEffect, useRef } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { loadMaptilerStyle, loadOpenMapXStyle, type MapStyleVariant } from "@/lib/map";
+import { loadMapLibreRuntime, type MapLibreRuntime } from "@/lib/maplibreRuntime";
 import {
   ensureOfflinePackageRuntime,
   OFFLINE_PACKAGE_CHANGED_EVENT,
@@ -16,8 +17,6 @@ import {
   selectOnlineFirstOpenMapXStyle,
   setOfflinePackageActive,
 } from "@/lib/offlineAreas";
-
-type MapLibreRuntime = typeof import("maplibre-gl");
 
 async function loadStyleForViewport(
   env: ReturnType<typeof useEnv>,
@@ -80,7 +79,7 @@ export function MapCanvas() {
       let maplibreRuntime: unknown;
       let viewportStyle: Awaited<ReturnType<typeof loadStyleForViewport>> | undefined;
       try {
-        maplibreRuntime = await import("maplibre-gl");
+        maplibreRuntime = await loadMapLibreRuntime();
         if (destroyed || !containerRef.current) return;
         const maplibregl = maplibreRuntime as unknown as MapLibreRuntime;
         const currentStyle = currentStyleRef.current;
@@ -265,7 +264,7 @@ export function MapCanvas() {
     initialStyleRef.current = mapStyle;
 
     const request = ++styleRequestRef.current;
-    import("maplibre-gl")
+    loadMapLibreRuntime()
       .then((module) => loadStyleForViewport(env, variant, mapStyle, module as MapLibreRuntime))
       .then((s) => {
         if (request !== styleRequestRef.current || mapRef.current !== map) return;

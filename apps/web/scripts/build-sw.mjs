@@ -9,7 +9,12 @@
 //   2. the local git short SHA (dev builds)
 //   3. a timestamp fallback (no env, no git)
 import { execFileSync } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { copyMapLibreRuntimeAssets, maplibreVersion } from "./maplibre-runtime.mjs";
+
+const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 export function resolveSwBuildId(env = process.env) {
   const fromEnv = (env.SW_BUILD_ID ?? "").trim();
@@ -28,6 +33,7 @@ export function resolveSwBuildId(env = process.env) {
 
 if (process.argv[1]?.endsWith("build-sw.mjs")) {
   const buildId = resolveSwBuildId();
+  copyMapLibreRuntimeAssets(resolve(webRoot, "public/runtime"));
   await build({
     entryPoints: ["src/sw.ts"],
     bundle: true,
@@ -36,6 +42,7 @@ if (process.argv[1]?.endsWith("build-sw.mjs")) {
     platform: "browser",
     define: {
       "process.env.NODE_ENV": '"production"',
+      __MAPLIBRE_VERSION__: JSON.stringify(maplibreVersion),
       __SW_BUILD_ID__: JSON.stringify(buildId),
     },
   });

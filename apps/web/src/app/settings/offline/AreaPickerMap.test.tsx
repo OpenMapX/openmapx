@@ -19,8 +19,10 @@ vi.mock("@/components/map/MapCredits", () => ({
 }));
 
 vi.mock("maplibre-gl", () => {
+  let workerUrl = "";
   class FakeMap {
     static instances: FakeMap[] = [];
+    static workerUrlsAtConstruction: string[] = [];
 
     remove = vi.fn();
     touchZoomRotate = { disableRotation: vi.fn() };
@@ -29,6 +31,7 @@ vi.mock("maplibre-gl", () => {
 
     constructor() {
       FakeMap.instances.push(this);
+      FakeMap.workerUrlsAtConstruction.push(workerUrl);
     }
 
     on = vi.fn((event: unknown, handler: unknown) => {
@@ -56,7 +59,14 @@ vi.mock("maplibre-gl", () => {
     }
   }
 
-  return { Map: FakeMap };
+  return {
+    getVersion: () => "6.1.0",
+    getWorkerUrl: () => workerUrl,
+    Map: FakeMap,
+    setWorkerUrl: (url: string) => {
+      workerUrl = url;
+    },
+  };
 });
 
 import * as maplibregl from "maplibre-gl";
@@ -67,10 +77,12 @@ const fakeMapClass = maplibregl.Map as unknown as {
     remove: ReturnType<typeof vi.fn>;
     trigger: (event: string) => void;
   }>;
+  workerUrlsAtConstruction: string[];
 };
 
 afterEach(() => {
   fakeMapClass.instances.length = 0;
+  fakeMapClass.workerUrlsAtConstruction.length = 0;
 });
 
 describe("AreaPickerMap", () => {
@@ -82,6 +94,9 @@ describe("AreaPickerMap", () => {
     );
 
     await waitFor(() => expect(fakeMapClass.instances).toHaveLength(1));
+    expect(fakeMapClass.workerUrlsAtConstruction).toEqual([
+      "/runtime/maplibre-gl/6.1.0/maplibre-gl-worker.mjs",
+    ]);
 
     rerender(
       <AreaPickerMap initialCenter={[10.45, 51.16]} initialZoom={4} onChange={latestOnChange} />,

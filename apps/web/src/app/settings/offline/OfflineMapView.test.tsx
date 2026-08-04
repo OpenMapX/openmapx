@@ -34,15 +34,30 @@ vi.mock("@/lib/offlineAreas", () => {
 });
 
 vi.mock("maplibre-gl", () => {
+  let workerUrl = "";
   class FakeMap {
+    static workerUrlsAtConstruction: string[] = [];
+
     touchZoomRotate = { disableRotation: vi.fn() };
     keyboard = { disableRotation: vi.fn() };
     on = vi.fn();
     remove = vi.fn();
+
+    constructor() {
+      FakeMap.workerUrlsAtConstruction.push(workerUrl);
+    }
   }
-  return { Map: FakeMap };
+  return {
+    getVersion: () => "6.1.0",
+    getWorkerUrl: () => workerUrl,
+    Map: FakeMap,
+    setWorkerUrl: (url: string) => {
+      workerUrl = url;
+    },
+  };
 });
 
+import * as maplibregl from "maplibre-gl";
 import * as offlineAreas from "@/lib/offlineAreas";
 import { OfflineMapView } from "./OfflineMapView";
 
@@ -54,6 +69,7 @@ const mocks = (
     };
   }
 ).__test;
+const fakeMapClass = maplibregl.Map as unknown as { workerUrlsAtConstruction: string[] };
 
 const record = {
   id: `omp2-${"d".repeat(64)}`,
@@ -67,6 +83,7 @@ const record = {
 } as OfflinePackageRecord;
 
 afterEach(() => {
+  fakeMapClass.workerUrlsAtConstruction.length = 0;
   vi.clearAllMocks();
 });
 
@@ -76,5 +93,8 @@ describe("OfflineMapView", () => {
 
     await waitFor(() => expect(mocks.refresh).toHaveBeenCalledTimes(1));
     expect(mocks.register).toHaveBeenCalledTimes(1);
+    expect(fakeMapClass.workerUrlsAtConstruction).toEqual([
+      "/runtime/maplibre-gl/6.1.0/maplibre-gl-worker.mjs",
+    ]);
   });
 });

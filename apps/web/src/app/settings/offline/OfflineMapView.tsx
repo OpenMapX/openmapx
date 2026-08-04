@@ -7,6 +7,7 @@ import { useEffect, useRef } from "react";
 import { MapCredits } from "@/components/map/MapCredits";
 import { useEnv } from "@/lib/EnvProvider";
 import { baseMapCreditsHtml, loadOpenMapXStyle } from "@/lib/map";
+import { loadMapLibreRuntime } from "@/lib/maplibreRuntime";
 import {
   configureDefaultOfflinePackageResolver,
   getDefaultOfflinePackageResolver,
@@ -93,7 +94,7 @@ export function OfflineMapView({ packages, fitTo, height = 360 }: Props) {
     const frame = fitTo ?? unionBbox(packages);
 
     void (async () => {
-      const maplibregl = await import("maplibre-gl");
+      const maplibregl = await loadMapLibreRuntime();
       let resolver = getDefaultOfflinePackageResolver();
       if (!resolver) {
         resolver = configureDefaultOfflinePackageResolver({
