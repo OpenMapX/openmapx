@@ -7,6 +7,6 @@
   "dependencies": {
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
-    "fast-xml-parser": "^5.8.0"
+    "fast-xml-parser": "^5.10.1"
   }
 }

@@ -17,7 +17,7 @@
  *     so the default `pnpm test` invocation never spins up Docker. The pinned
  *     image canary remains a required weekly and manual release workflow.
  *   - `OPENMAPX_E9_LIVE_MOTIS=true` + Docker daemon reachable + the
- *     `ghcr.io/motis-project/motis:2.10.2` image already cached locally:
+ *     `ghcr.io/motis-project/motis:2.11.0` image already cached locally:
  *     the suite runs. If the image is missing we additionally `it.skip(...)`
  *     the actual probes with a clear log so a local run surfaces the missing
  *     prerequisite. The required workflow pre-pulls both images, so a missing
@@ -72,7 +72,7 @@ const STUB_SCRIPTS_DIR = resolve(HERE, "fixtures", "stub-catalog-scripts");
 const LIVE = process.env.OPENMAPX_E9_LIVE_MOTIS === "true";
 const describeLive = LIVE ? describe : describe.skip;
 
-const MOTIS_IMAGE = "ghcr.io/motis-project/motis:2.10.2";
+const MOTIS_IMAGE = "ghcr.io/motis-project/motis:2.11.0";
 const STAGING_SERVICE = "motis-staging";
 const STAGING_PORT = 8082;
 // The promote stage restarts the primary `motis` container (`docker restart

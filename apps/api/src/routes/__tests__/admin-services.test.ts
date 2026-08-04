@@ -145,7 +145,7 @@ const MOCK_SERVICE_RUNNING = {
   manifest: {
     id: "motis",
     name: "MOTIS",
-    version: "2.10.2",
+    version: "2.11.0",
     description: "Transit routing engine",
     quality: "stable",
     provides: [],

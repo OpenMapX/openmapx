@@ -9,7 +9,7 @@ FROM docker.io/debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7e
 # Keep this aligned with the `ghcr.io/motis-project/motis` image tag the
 # `motis`/`motis-staging` services run and the `@motis-project/motis-client`
 # version in package.json.
-ARG MOTIS_VERSION=v2.10.2
+ARG MOTIS_VERSION=v2.11.0
 # Per-arch SHA256 of the corresponding motis-linux-<arch>.tar.bz2 release
 # asset. When non-empty for the target arch, the build fails if the
 # downloaded tarball's hash differs — protects against an in-flight retag /

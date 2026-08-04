@@ -38,7 +38,7 @@ const RESTART_POLL_INTERVAL_MS = parseIntEnv("MOTIS_PROMOTE_RESTART_POLL_INTERVA
 
 /**
  * Artifacts MOTIS writes into the working dir's `data/` subdir during a
- * successful import (verified against a live MOTIS 2.10.2 dataset: `data/tt.bin`
+ * successful import (verified against a live MOTIS 2.x dataset: `data/tt.bin`
  * is the compiled timetable, `data/meta` the import metadata, `data/osr`/`data/adr`
  * the street-routing + address indexes). Used only as a fallback when the
  * data-manager-written {@link IMPORT_MARKER_FILE} is absent (e.g. an operator

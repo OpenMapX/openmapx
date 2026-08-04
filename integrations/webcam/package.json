@@ -10,6 +10,6 @@
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
     "@openmapx/place-ids": "workspace:^",
-    "fast-xml-parser": "^5.8.0"
+    "fast-xml-parser": "^5.10.1"
   }
 }

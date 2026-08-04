@@ -29,7 +29,7 @@ export const TRANSITOUS_DOWNLOADS_DIR = ".transitous-downloads";
  * the `@motis-project/motis-client` deps must all match it — enforced by
  * `pnpm check-toolchain-pins`.
  */
-export const MOTIS_VERSION = "2.10.2";
+export const MOTIS_VERSION = "2.11.0";
 
 /**
  * Pinned `gtfsclean` build (the GTFS post-processor fetch.py runs). Single

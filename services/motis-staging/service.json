@@ -8,7 +8,7 @@
   "homepage": "https://github.com/motis-project/motis",
   "container": {
     "image": "ghcr.io/motis-project/motis",
-    "tag": "2.10.2",
+    "tag": "2.11.0",
     "containerName": "motis-staging",
     "expose": [8080],
     "user": "${UID:-1000}:${GID:-1000}",

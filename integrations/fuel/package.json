@@ -11,6 +11,6 @@
     "@openmapx/integration-geocoding": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
     "@openmapx/place-ids": "workspace:^",
-    "opening_hours": "^3.13.0"
+    "opening_hours": "^3.14.0"
   }
 }

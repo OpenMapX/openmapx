@@ -1,7 +1,7 @@
 /**
  * MOTIS HTTP API endpoint builders, centralised so a server version bump is a
  * single edit rather than a hunt across motis-health, promote, and the live
- * canary test. Paths are for MOTIS 2.x (verified against 2.10.2):
+ * canary test. Paths are for MOTIS 2.x:
  *   - `/api/v1/health`      — liveness gate
  *   - `/api/v1/map/initial` — bounded initial map view (NOT `/api/v1/initial`)
  *   - `/api/v1/map/stops`   — stops in a bbox (NOT `/api/v1/stops`)

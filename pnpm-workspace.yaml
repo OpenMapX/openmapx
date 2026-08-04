@@ -31,28 +31,23 @@ minimumReleaseAgeStrict: true
 minimumReleaseAgeIgnoreMissingTime: false
 trustPolicy: no-downgrade
 
+# TypeScript 7 has no compiler API yet; keep this workspace's direct compiler
+# dependencies on TypeScript 6 while allowing other dependencies to move.
+updateConfig:
+  ignoreDependencies:
+    - typescript
+
 overrides:
   "@hey-api/client-fetch": "workspace:*"
-  "react": "19.2.7"
-  "react-dom": "19.2.7"
-  "@tanstack/react-query": "^5.91.3"
   "protobufjs": ">=7.5.5"
   "uuid": ">=14.0.0"
-  # Pinned exact to close GHSA-fx2h-pf6j-xcff (server.fs.deny bypass) and
-  # GHSA-v6wh-96g9-6wx3 (launch-editor NTLMv2 hash disclosure). Must be exact,
-  # not a caret: raising a caret floor doesn't make pnpm re-resolve an
-  # already-locked transitive dep, so it kept the vulnerable 8.0.10. 8.0.16 is
-  # the only release in the fixed range today; bump this line for later patches.
-  # vite is a dev/test-only transitive dep (vitest, better-auth) here.
-  "vite": "8.0.16"
-  "vitest>vite": "8.0.16"
-  "@vitest/mocker>vite": "8.0.16"
+  # Next's optional sharp dependency currently resolves to vulnerable 0.34.x.
+  # The workspace requires Node >=24, which is compatible with sharp 0.35+.
+  "sharp": ">=0.35.0"
   "esbuild": ">=0.28.1"
   "postcss": ">=8.5.10"
-  "next": ">=16.2.6"
-  "fast-uri": ">=3.1.2"
-  "kysely": ">=0.28.17"
-  "fast-xml-builder": ">=1.1.7"
+  # Keep ajv's fast-uri dependency off the vulnerable 4.1.1 release.
+  "fast-uri": ">=4.1.2"
   # js-yaml 5.2.x is a dual CJS/ESM package that addresses the merge-key DoS
   # (GHSA-h67p-54hq-rp68) structurally: load() defaults to CORE_SCHEMA (no
   # `!!merge`), plus the maxTotalMergeKeys/maxAliases caps added in 5.2.0.
@@ -64,12 +59,6 @@ overrides:
   # (5.x is a dual package) and its `load`. 3.0.0 is ESM-only and breaks the
   # CJS changesets requires, so stay on 2.1.0.
   "read-yaml-file": "^2.1.0"
-  # ^7.28.0 closes the 7 advisories pnpm audit reports against undici 7.27.2,
-  # incl. GHSA-vmh5-mc38-953g, GHSA-vxpw-j846-p89q and GHSA-hm92-r4w5-c3mj
-  # (high). Test-tooling-only transitive (jsdom <- vitest <- better-auth).
-  # Scoped to jsdom on purpose: an unscoped override would also rewrite
-  # testcontainers' undici@^8.3.0 spec and move that copy.
-  "jsdom>undici": "^7.28.0"
   # react-redux@9.2.0 and reselect@5.1.1 ship without provenance attestation
   # even though earlier and later versions have it; pin to the latest provenance-
   # signed releases so pnpm's `trustPolicy: no-downgrade` lets the install
@@ -97,3 +86,6 @@ overrides:
   # publisher) satisfies commitlint's `^1.0.0` range, so pin to it until
   # tinyexec regains trusted-publisher evidence on a newer release.
   "tinyexec": "1.1.2"
+  # tsup@8.5.1 requests chokidar@^4.0.3, but 4.0.3 has no npm provenance
+  # attestation. Keep this tsup-only edge on the last attested 4.x release.
+  "tsup>chokidar": "4.0.1"
