@@ -28,9 +28,7 @@ function tokenizeAliases(aliases: string[] | string | undefined): string[] {
 function tokenizeTerms(terms: string[] | string | undefined): string[] {
   if (!terms) return [];
   const list = Array.isArray(terms) ? terms : terms.split(",");
-  return list
-    .map((t) => normalize(t))
-    .filter(Boolean);
+  return list.map((t) => normalize(t)).filter(Boolean);
 }
 
 let cachedRawPresets: Record<string, RawPreset> | undefined;
