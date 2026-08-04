@@ -41,6 +41,7 @@ async function loadStyleForViewport(
   const selected = await selectOnlineFirstOpenMapXStyle(
     configuredStyle,
     packageRecords.map((record) => ({ packageId: record.id, manifest: record.manifest })),
+    { apiBaseUrl: env.apiUrl },
   );
   if (selected.offline && resolver) registerOfflinePmtilesProtocol(maplibre, resolver);
   return selected;
@@ -55,9 +56,11 @@ export function MapCanvas() {
   const resolvedMode = mode === "system" ? systemMode : mode;
   const mapStyle = resolvedMode === "dark" ? "streets-v2-dark" : "bright-v2";
   const variant: MapStyleVariant = resolvedMode === "dark" ? "dark" : "light";
+  const currentStyleRef = useRef({ mapStyle, variant });
+  currentStyleRef.current = { mapStyle, variant };
+  const styleRequestRef = useRef(0);
   const { setCenter, setZoom, setBearing, setPitch, setUserLocation } = useMapStore();
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: mapStyle intentionally excluded — style changes handled by the style-swap effect below
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -80,7 +83,13 @@ export function MapCanvas() {
         maplibreRuntime = await import("maplibre-gl");
         if (destroyed || !containerRef.current) return;
         const maplibregl = maplibreRuntime as unknown as MapLibreRuntime;
-        viewportStyle = await loadStyleForViewport(env, variant, mapStyle, maplibregl);
+        const currentStyle = currentStyleRef.current;
+        viewportStyle = await loadStyleForViewport(
+          env,
+          currentStyle.variant,
+          currentStyle.mapStyle,
+          maplibregl,
+        );
       } catch (err) {
         console.error("Failed to initialize map", err);
         return;
@@ -109,12 +118,12 @@ export function MapCanvas() {
         canvasContextAttributes: { antialias: true },
       });
 
-      let viewportStyleRequest = 0;
       const applyStyleForViewport = (reason: string) => {
-        const request = ++viewportStyleRequest;
-        void loadStyleForViewport(env, variant, mapStyle, maplibregl)
+        const request = ++styleRequestRef.current;
+        const currentStyle = currentStyleRef.current;
+        void loadStyleForViewport(env, currentStyle.variant, currentStyle.mapStyle, maplibregl)
           .then((next) => {
-            if (destroyed || request !== viewportStyleRequest) return;
+            if (destroyed || request !== styleRequestRef.current) return;
             setOfflinePackageActive(next.offline);
             map.setStyle(next.style as maplibregl.StyleSpecification);
           })
@@ -216,6 +225,7 @@ export function MapCanvas() {
 
     return () => {
       destroyed = true;
+      styleRequestRef.current++;
       setOfflinePackageActive(false);
       cleanupConnectivity?.();
       mapRef.current?.remove();
@@ -242,15 +252,18 @@ export function MapCanvas() {
     if (mapStyle === initialStyleRef.current) return;
     initialStyleRef.current = mapStyle;
 
+    const request = ++styleRequestRef.current;
     import("maplibre-gl")
       .then((module) => loadStyleForViewport(env, variant, mapStyle, module as MapLibreRuntime))
       .then((s) => {
+        if (request !== styleRequestRef.current || mapRef.current !== map) return;
         // The persistent `style.load` listener registered at map creation bumps
         // styleVersion once the new style lands.
         setOfflinePackageActive(s.offline);
         map.setStyle(s.style as maplibregl.StyleSpecification);
       })
       .catch((err) => {
+        if (request !== styleRequestRef.current) return;
         console.error("Failed to swap map style", err);
       });
   }, [env, mapStyle, variant, mapRef, mapReady]);

@@ -113,6 +113,8 @@ function sameSourceDescriptor(
     left.tileSchema === right.tileSchema &&
     left.glyphsVersion === right.glyphsVersion &&
     left.packageAlgorithmVersion === right.packageAlgorithmVersion &&
+    left.attribution.length === right.attribution.length &&
+    left.attribution.every((value, index) => value === right.attribution[index]) &&
     equalBbox(left.sourceBounds, right.sourceBounds)
   );
 }

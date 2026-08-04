@@ -91,6 +91,20 @@ describe("online-first OpenMapX style selection", () => {
     ).toEqual([`pmtiles://offline/${packageId}/{z}/{x}/{y}`]);
   });
 
+  it("uses the runtime API origin only for offline glyphs", async () => {
+    const style = configuredStyle();
+    const selected = await selectOnlineFirstOpenMapXStyle(style, packages, {
+      online: false,
+      apiBaseUrl: "https://api.example.test/",
+    });
+
+    expect(selected.style.glyphs).toBe(
+      "https://api.example.test/api/offline/packages/glyphs/glyphs-v1/{fontstack}/{range}.pbf?offlineGlyphs=glyphs-v1",
+    );
+    expect(selected.style.layers).toEqual(style.layers);
+    expect(selected.style.sprite).toBe(style.sprite);
+  });
+
   it("does not probe or alter online behavior when no local package is ready", async () => {
     const style = configuredStyle();
     let probeCalls = 0;

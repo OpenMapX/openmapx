@@ -1,5 +1,6 @@
 import type { OfflineMapPackageManifest } from "@openmapx/core";
 import { offlineGlyphCacheNameForVersion } from "../swCaches";
+import { offlinePackageApiPath } from "./packageApi";
 import { offlinePmtilesTileUrl } from "./packageProtocol";
 
 const GLYPH_FETCH_CONCURRENCY = 8;
@@ -30,8 +31,11 @@ function withVersion(url: string, version: string): string {
   return `${url}${separator}offlineGlyphs=${encodeURIComponent(version)}`;
 }
 
-function glyphTemplate(manifest: OfflineMapPackageManifest): string {
-  return withVersion(manifest.glyphs.urlTemplate, manifest.glyphs.version);
+function glyphTemplate(manifest: OfflineMapPackageManifest, apiBaseUrl = ""): string {
+  return withVersion(
+    offlinePackageApiPath(manifest.glyphs.urlTemplate, apiBaseUrl),
+    manifest.glyphs.version,
+  );
 }
 
 async function openPackageAssetCache(
@@ -43,12 +47,20 @@ async function openPackageAssetCache(
 
 async function fetchPinned(url: string, manifest: OfflineMapPackageManifest): Promise<Response> {
   const cache = await openPackageAssetCache(manifest);
-  const cached = await cache?.match(url);
+  // Store package assets under their manifest path rather than the current API
+  // origin. The runtime API host is environment configuration and may change;
+  // the immutable glyph version and path are the durable identity.
+  const parsed = new URL(
+    url,
+    typeof window === "undefined" ? "http://localhost/" : window.location.href,
+  );
+  const cacheKey = `${parsed.pathname}${parsed.search}`;
+  const cached = await cache?.match(cacheKey);
   if (cached) return cached.clone();
   const response = await fetch(url, { cache: "no-store" });
   if (!response.ok)
     throw new Error(`offline package asset unavailable: ${url} (${response.status})`);
-  await cache?.put(url, response.clone());
+  await cache?.put(cacheKey, response.clone());
   return response;
 }
 
@@ -85,27 +97,32 @@ function glyphUrls(template: string, stacks: string[], ranges: string[]): string
   );
 }
 
-function glyphCatalogUrl(manifest: OfflineMapPackageManifest): string {
+function glyphCatalogUrl(manifest: OfflineMapPackageManifest, apiBaseUrl = ""): string {
   const suffix = "/{fontstack}/{range}.pbf";
   if (!manifest.glyphs.urlTemplate.endsWith(suffix)) {
     throw new Error("offline package glyph template cannot resolve its catalog");
   }
   return withVersion(
-    `${manifest.glyphs.urlTemplate.slice(0, -suffix.length)}/catalog.json`,
+    offlinePackageApiPath(
+      `${manifest.glyphs.urlTemplate.slice(0, -suffix.length)}/catalog.json`,
+      apiBaseUrl,
+    ),
     manifest.glyphs.version,
   );
 }
 
 function glyphCompletionUrl(manifest: OfflineMapPackageManifest): string {
-  const catalogUrl = glyphCatalogUrl(manifest);
-  const separator = catalogUrl.includes("?") ? "&" : "?";
-  return `${catalogUrl}${separator}complete=1`;
+  return `/__openmapx/offline-glyphs/${encodeURIComponent(manifest.glyphs.version)}/complete`;
 }
 
 export async function hasOfflineGlyphAssets(manifest: OfflineMapPackageManifest): Promise<boolean> {
   if (typeof caches === "undefined") return false;
-  const cache = await caches.open(cacheName(manifest));
-  return (await cache.match(glyphCompletionUrl(manifest))) !== undefined;
+  try {
+    const cache = await caches.open(cacheName(manifest));
+    return (await cache.match(glyphCompletionUrl(manifest))) !== undefined;
+  } catch {
+    return false;
+  }
 }
 
 function validateGlyphCatalog(raw: unknown): Record<string, string[]> {
@@ -205,15 +222,20 @@ async function validateOnlineStyleAssets(styles: {
 export async function validateOfflineStyleAssets(
   manifest: OfflineMapPackageManifest,
   styles: { light: Record<string, unknown>; dark: Record<string, unknown> },
+  options: { apiBaseUrl?: string } = {},
 ): Promise<void> {
   const cache = await openPackageAssetCache(manifest);
-  await cache?.delete(glyphCompletionUrl(manifest));
+  if (!cache) {
+    throw new Error("Cache Storage is required to keep offline map glyphs");
+  }
+  const apiBaseUrl = options.apiBaseUrl ?? "";
+  await cache.delete(glyphCompletionUrl(manifest));
   const typedStyles = {
     light: styles.light as StyleJson,
     dark: styles.dark as StyleJson,
   };
   await validateOnlineStyleAssets(typedStyles);
-  const catalogResponse = await fetchPinned(glyphCatalogUrl(manifest), manifest);
+  const catalogResponse = await fetchPinned(glyphCatalogUrl(manifest, apiBaseUrl), manifest);
   const catalog = validateGlyphCatalog(await catalogResponse.json());
   const stacks = [...new Set(Object.values(typedStyles).flatMap(fontStacks))];
   const urls = new Set<string>();
@@ -222,10 +244,11 @@ export async function validateOfflineStyleAssets(
     if (ranges.length === 0) {
       throw new Error(`offline package has no common glyph ranges for style font stack: ${stack}`);
     }
-    for (const url of glyphUrls(glyphTemplate(manifest), [stack], ranges)) urls.add(url);
+    for (const url of glyphUrls(glyphTemplate(manifest, apiBaseUrl), [stack], ranges))
+      urls.add(url);
   }
   await fetchPinnedGlyphs([...urls], manifest);
-  await cache?.put(
+  await cache.put(
     glyphCompletionUrl(manifest),
     new Response(JSON.stringify({ glyphsVersion: manifest.glyphs.version }), {
       headers: { "Content-Type": "application/json" },
@@ -236,6 +259,7 @@ export async function validateOfflineStyleAssets(
 export function resolveOfflinePackageStyle(
   configuredStyle: Record<string, unknown>,
   packages: readonly { packageId: string; manifest: OfflineMapPackageManifest }[],
+  options: { apiBaseUrl?: string } = {},
 ): Record<string, unknown> {
   if (packages.length === 0) throw new Error("at least one offline package is required");
   const style = configuredStyle as StyleJson;
@@ -287,6 +311,6 @@ export function resolveOfflinePackageStyle(
   return {
     ...configuredStyle,
     sources: { ...(style.sources ?? {}), openmaptiles: primarySource },
-    glyphs: glyphTemplate(glyphManifest),
+    glyphs: glyphTemplate(glyphManifest, options.apiBaseUrl),
   };
 }

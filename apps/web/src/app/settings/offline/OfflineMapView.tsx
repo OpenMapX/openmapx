@@ -90,7 +90,6 @@ export function OfflineMapView({ packages, fitTo, height = 360 }: Props) {
     if (!containerRef.current || packages.length === 0) return;
     let destroyed = false;
     let map: maplibregl.Map | undefined;
-    let unregister: (() => void) | undefined;
     const frame = fitTo ?? unionBbox(packages);
 
     void (async () => {
@@ -109,7 +108,7 @@ export function OfflineMapView({ packages, fitTo, height = 360 }: Props) {
         packages.map((record) => ({ packageId: record.id, manifest: record.manifest })),
       );
       if (destroyed || !containerRef.current) return;
-      unregister = registerOfflinePmtilesProtocol(maplibregl, resolver);
+      registerOfflinePmtilesProtocol(maplibregl, resolver);
       map = new maplibregl.Map({
         container: containerRef.current,
         style: style as maplibregl.StyleSpecification,
@@ -144,7 +143,6 @@ export function OfflineMapView({ packages, fitTo, height = 360 }: Props) {
 
     return () => {
       destroyed = true;
-      unregister?.();
       map?.remove();
     };
   }, [env, fitTo, packages, variant]);

@@ -76,7 +76,12 @@ describe("corsOptions", () => {
   async function corsApp(): Promise<FastifyInstance> {
     const app = Fastify({ logger: false });
     await app.register(cors, corsOptions());
-    app.get("/api/thing", async () => ({ ok: true }));
+    app.get("/api/thing", async (_request, reply) => {
+      return reply
+        .header("ETag", `sha256-${"a".repeat(64)}`)
+        .header("Content-Range", "bytes 4-7/8")
+        .send({ ok: true });
+    });
     await app.ready();
     return app;
   }
@@ -91,6 +96,8 @@ describe("corsOptions", () => {
     });
     expect(res.headers["access-control-allow-origin"]).toBe("http://allowed.test");
     expect(res.headers["access-control-allow-credentials"]).toBe("true");
+    expect(res.headers["access-control-expose-headers"]).toContain("ETag");
+    expect(res.headers["access-control-expose-headers"]).toContain("Content-Range");
     await app.close();
   });
 
@@ -133,6 +140,9 @@ describe("makeRateLimitTierHook", () => {
     { url: "/health", tier: null },
     { url: "/api/auth/sign-in", tier: "auth" },
     { url: "/api/tiles/1/2/3", tier: "tile" },
+    { url: "/api/offline/packages/glyphs/glyphs-v1/Noto%20Sans/0-255.pbf", tier: "tile" },
+    { url: `/api/offline/packages/omp2-${"a".repeat(64)}/archive`, tier: "tile" },
+    { url: "/api/offline/packages/prepare", tier: "expensive" },
     { url: "/api/isochrone?x=1", tier: "expensive" },
     { url: "/api/motis/plan", tier: "expensive" },
     { url: "/api/integrations/food-delivery/resolve", tier: "expensive" },

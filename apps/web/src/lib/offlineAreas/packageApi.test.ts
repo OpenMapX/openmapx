@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { defaultOfflinePackageApi } from "./packageApi";
+import { createOfflinePackageApi, defaultOfflinePackageApi } from "./packageApi";
 
 const packageId = `omp2-${"a".repeat(64)}`;
 
@@ -21,6 +21,35 @@ describe("offline package API client", () => {
         "If-Range": `sha256-${"b".repeat(64)}`,
       },
       signal: undefined,
+    });
+  });
+
+  it("uses the runtime API origin for every package request", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 206 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createOfflinePackageApi("https://api.example.test/").openArchive(packageId);
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      `https://api.example.test/api/offline/packages/${packageId}/archive`,
+    );
+  });
+
+  it("accepts a typed unavailable capability from a failed public proxy", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { available: false, provider: "openmapx", reason: "source-unavailable" },
+          { status: 502 },
+        ),
+      ),
+    );
+
+    expect(await defaultOfflinePackageApi.capability()).toEqual({
+      available: false,
+      provider: "openmapx",
+      reason: "source-unavailable",
     });
   });
 });

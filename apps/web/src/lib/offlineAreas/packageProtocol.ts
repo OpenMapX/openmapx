@@ -29,17 +29,21 @@ export class OfflineCoverageError extends Error {
 
 interface ProtocolMaplibre {
   addProtocol(name: string, handler: unknown): void;
-  removeProtocol?(name: string): void;
 }
 
+/**
+ * Install MapLibre's process-wide protocol once and keep its resolver current.
+ * Protocols belong to the MapLibre module, not to an individual Map instance;
+ * removing one when a preview unmounts would also break the main map.
+ */
 export function registerOfflinePmtilesProtocol(
   maplibre: ProtocolMaplibre,
   resolver: OfflinePackageResolver,
-): () => void {
+): void {
   const existing = registrations.get(maplibre as object);
   if (existing) {
     existing.resolver = resolver;
-    return () => {};
+    return;
   }
   const registration = {
     resolver,
@@ -66,10 +70,6 @@ export function registerOfflinePmtilesProtocol(
   };
   maplibre.addProtocol(PROTOCOL, registration.handler);
   registrations.set(maplibre as object, registration);
-  return () => {
-    maplibre.removeProtocol?.(PROTOCOL);
-    registrations.delete(maplibre as object);
-  };
 }
 
 export function offlinePmtilesTileUrl(packageIds: readonly string[]): string {

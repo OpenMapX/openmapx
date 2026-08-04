@@ -112,6 +112,22 @@ describe("canonicalizeOfflinePackageRequest", () => {
     expect(first.requestKey).toBe(second.requestKey);
   });
 
+  it("includes PMTiles attribution in the immutable package identity", () => {
+    const request: Parameters<typeof canonicalizeOfflinePackageRequest>[0] = {
+      bbox: { west: 13.4, south: 52.49, east: 13.6, north: 52.6 },
+      minZoom: 10,
+      maxZoom: 14,
+      provider: "openmapx",
+    };
+    const first = canonicalizeOfflinePackageRequest(request, source);
+    const second = canonicalizeOfflinePackageRequest(request, {
+      ...source,
+      attribution: [...source.attribution, "© Deployment data"],
+    });
+
+    expect(first.requestKey).not.toBe(second.requestKey);
+  });
+
   it("rejects invalid coordinates, zooms, providers, and dateline crossing", () => {
     expect(() =>
       canonicalizeOfflinePackageRequest(
@@ -198,6 +214,7 @@ describe("validateOfflineMapPackageManifest", () => {
     ["length", { archive: { ...manifest().archive, byteLength: 0 } }],
     ["hash", { archive: { ...manifest().archive, sha256: "bad" } }],
     ["glyph URL", { glyphs: { ...manifest().glyphs, urlTemplate: "/invalid" } }],
+    ["ETag", { archive: { ...manifest().archive, etag: `sha256-${"b".repeat(64)}` } }],
   ])("rejects a manifest with an invalid %s", (_name, override) => {
     expect(() =>
       validateOfflineMapPackageManifest(manifest(override as Partial<OfflineMapPackageManifest>)),

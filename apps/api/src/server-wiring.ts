@@ -51,7 +51,10 @@ export function corsOptions() {
       .split(",")
       .map((o) => o.trim()),
     credentials: true,
-    exposedHeaders: ["X-Tile-Source"],
+    // Offline archive downloads use these response headers to verify immutable
+    // identities and safely resume byte ranges when the web app and API are on
+    // different origins (the default local-development topology).
+    exposedHeaders: ["X-Tile-Source", "Accept-Ranges", "Content-Range", "ETag"],
   };
 }
 
@@ -63,7 +66,7 @@ export const TILE_PUBLIC_PATTERNS = [
   /^\/api\/tiles\//,
   /^\/api\/traffic\//,
   /^\/api\/integrations\/street-level-imagery-[a-z0-9-]+\/tiles\//,
-  /^\/api\/offline\/packages\/(assets\/|[^/]+\/archive)/,
+  /^\/api\/offline\/packages\/(glyphs\/|omp2-[0-9a-f]{64}\/archive(?:$|\?))/,
 ];
 
 export const EXPENSIVE_PUBLIC_PATTERNS = [

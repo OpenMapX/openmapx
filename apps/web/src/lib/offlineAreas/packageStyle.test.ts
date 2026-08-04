@@ -1,5 +1,5 @@
 import type { OfflineMapPackageManifest } from "@openmapx/core";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   hasOfflineGlyphAssets,
   resolveOfflinePackageStyle,
@@ -33,6 +33,23 @@ const manifest: OfflineMapPackageManifest = {
   attribution: ["© OpenStreetMap contributors"],
 };
 
+afterEach(() => vi.unstubAllGlobals());
+
+function memoryCache(): Cache {
+  const entries = new Map<string, Response>();
+  return {
+    async delete(input: RequestInfo | URL) {
+      return entries.delete(String(input));
+    },
+    async match(input: RequestInfo | URL) {
+      return entries.get(String(input))?.clone();
+    },
+    async put(input: RequestInfo | URL, response: Response) {
+      entries.set(String(input), response.clone());
+    },
+  } as unknown as Cache;
+}
+
 function onlineStyle(): Record<string, unknown> {
   return {
     version: 8,
@@ -58,18 +75,7 @@ function styles(): { light: Record<string, unknown>; dark: Record<string, unknow
 
 describe("offline package styles", () => {
   it("validates the configured online styles and pins only package fonts", async () => {
-    const cacheEntries = new Map<string, Response>();
-    const cache = {
-      async delete(input: RequestInfo | URL) {
-        return cacheEntries.delete(String(input));
-      },
-      async match(input: RequestInfo | URL) {
-        return cacheEntries.get(String(input))?.clone();
-      },
-      async put(input: RequestInfo | URL, response: Response) {
-        cacheEntries.set(String(input), response.clone());
-      },
-    } as unknown as Cache;
+    const cache = memoryCache();
     vi.stubGlobal("caches", { open: async () => cache });
     const fetchMock = vi.fn(async (...args: unknown[]) => {
       const url = String(args[0]);
@@ -82,14 +88,18 @@ describe("offline package styles", () => {
 
     const configured = styles();
     expect(await hasOfflineGlyphAssets(manifest)).toBe(false);
-    await validateOfflineStyleAssets(manifest, configured);
+    await validateOfflineStyleAssets(manifest, configured, {
+      apiBaseUrl: "https://api.example.test/",
+    });
     expect(await hasOfflineGlyphAssets(manifest)).toBe(true);
     expect(fetchMock.mock.calls.some((args) => String(args[0]).includes("/style.json"))).toBe(
       false,
     );
     expect(
       fetchMock.mock.calls.some((args) =>
-        String(args[0]).includes("/api/offline/packages/glyphs/glyphs-v1/"),
+        String(args[0]).startsWith(
+          "https://api.example.test/api/offline/packages/glyphs/glyphs-v1/",
+        ),
       ),
     ).toBe(true);
     expect(fetchMock.mock.calls.some((args) => String(args[0]).includes("/19968-20223.pbf"))).toBe(
@@ -104,8 +114,6 @@ describe("offline package styles", () => {
     expect(fetchMock.mock.calls.some((args) => String(args[0]) === "/styles/sprite.png")).toBe(
       true,
     );
-
-    vi.unstubAllGlobals();
   });
 
   it("rewrites the configured online style for one or more offline packages", () => {
@@ -165,7 +173,34 @@ describe("offline package styles", () => {
     expect(source.maxzoom).toBe(12);
   });
 
+  it("resolves package glyphs through the runtime API origin", () => {
+    const style = resolveOfflinePackageStyle(onlineStyle(), [{ packageId, manifest }], {
+      apiBaseUrl: "https://api.example.test/",
+    });
+
+    expect(style.glyphs).toBe(
+      "https://api.example.test/api/offline/packages/glyphs/glyphs-v1/{fontstack}/{range}.pbf?offlineGlyphs=glyphs-v1",
+    );
+  });
+
+  it("refuses readiness when Cache Storage cannot durably retain glyphs", async () => {
+    vi.stubGlobal("caches", undefined);
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    let error: unknown;
+    try {
+      await validateOfflineStyleAssets(manifest, styles());
+    } catch (reason) {
+      error = reason;
+    }
+    expect(String((error as Error).message).toLowerCase()).toContain("cache storage");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("fails before readiness when a required package font is unavailable", async () => {
+    const cache = memoryCache();
+    vi.stubGlobal("caches", { open: async () => cache });
     vi.stubGlobal(
       "fetch",
       vi.fn(async (...args: unknown[]) => {
@@ -184,6 +219,5 @@ describe("offline package styles", () => {
       error = reason;
     }
     expect(String((error as Error).message)).toContain("unavailable");
-    vi.unstubAllGlobals();
   });
 });

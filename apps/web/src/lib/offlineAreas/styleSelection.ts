@@ -63,6 +63,7 @@ export async function selectOnlineFirstOpenMapXStyle(
   options: {
     online?: boolean;
     probe?: (configuredStyle: Record<string, unknown>) => Promise<boolean>;
+    apiBaseUrl?: string;
   } = {},
 ): Promise<ViewportStyle> {
   if (packages.length === 0) return { offline: false, style: configuredStyle };
@@ -76,6 +77,8 @@ export async function selectOnlineFirstOpenMapXStyle(
 
   return {
     offline: true,
-    style: resolveOfflinePackageStyle(configuredStyle, packages),
+    style: resolveOfflinePackageStyle(configuredStyle, packages, {
+      apiBaseUrl: options.apiBaseUrl,
+    }),
   };
 }

@@ -140,21 +140,29 @@ describe("offline route coverage", () => {
     });
   });
 
-  it("reports route-line-only when a saved route has no map coverage", async () => {
+  it("reports not-downloaded when no installed package intersects the route", async () => {
     const resolver = await resolverWith([
       record(idA, manifest(idA, { west: 2, south: 2, east: 3, north: 3 })),
     ]);
     expect(getOfflineRouteCoverage(snapshot([idA]), resolver, [0.2, 0.2])).toEqual({
-      kind: "route-line-only",
-      packageIds: [idA],
+      kind: "not-downloaded",
+      packageIds: [],
     });
   });
 
-  it("reports not-downloaded when the session has no package ids", async () => {
+  it("uses a package downloaded after the session checkpoint", async () => {
     const resolver = await resolverWith([record(idA, manifest(idA))]);
     expect(getOfflineRouteCoverage(snapshot([]), resolver, [0.2, 0.2])).toEqual({
-      kind: "not-downloaded",
-      packageIds: [],
+      kind: "covered",
+      packageId: idA,
+    });
+  });
+
+  it("reports route-line-only when an installed package intersects the route but not the fix", async () => {
+    const resolver = await resolverWith([record(idA, manifest(idA))]);
+    expect(getOfflineRouteCoverage(snapshot([]), resolver, [1.5, 1.5])).toEqual({
+      kind: "route-line-only",
+      packageIds: [idA],
     });
   });
 
@@ -175,7 +183,7 @@ describe("offline route coverage", () => {
     });
     await resolver.refresh();
     const first = getOfflineRouteCoverage(snapshot([idB]), resolver, [0.2, 0.2]);
-    expect(first.kind).toBe("route-line-only");
+    expect(first.kind).toBe("not-downloaded");
     await storage.put(record(idB, manifest(idB)));
     await resolver.refresh();
     expect(getOfflineRouteCoverage(snapshot([idB]), resolver, [0.2, 0.2])).toEqual({

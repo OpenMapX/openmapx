@@ -27,6 +27,7 @@ import type {
   AutocompleteResult,
   OfflineMapPackageManifest,
   OfflinePackageBbox,
+  OfflinePackageCapability,
   OfflinePackageRequest,
 } from "@openmapx/core";
 import {
@@ -45,11 +46,12 @@ import { haptics } from "@/lib/haptics";
 import { loadOpenMapXStyle } from "@/lib/map";
 import {
   configureDefaultOfflinePackageResolver,
+  createOfflinePackageApi,
   createOfflinePackageStorage,
-  defaultOfflinePackageApi,
   deleteOfflineGlyphCacheIfUnused,
   downloadOfflinePackage,
   notifyOfflinePackageChanged,
+  type OfflinePackageApi,
   type OfflinePackageDownloadProgress,
   type OfflinePackageRecord,
   validateOfflineStyleAssets,
@@ -72,8 +74,6 @@ const DEFAULT_MAX_ZOOM = 14;
 const FALLBACK_REGION_HALF_DEG = 0.15;
 
 const storage = createOfflinePackageStorage();
-const api = defaultOfflinePackageApi;
-
 async function validateConfiguredOfflineStyleAssets(
   manifest: OfflineMapPackageManifest,
   env: ClientEnv,
@@ -82,7 +82,7 @@ async function validateConfiguredOfflineStyleAssets(
     loadOpenMapXStyle(env, "light"),
     loadOpenMapXStyle(env, "dark"),
   ]);
-  await validateOfflineStyleAssets(manifest, { light, dark });
+  await validateOfflineStyleAssets(manifest, { light, dark }, { apiBaseUrl: env.apiUrl });
 }
 
 async function refreshPackageRecords(
@@ -92,6 +92,7 @@ async function refreshPackageRecords(
 }
 
 async function waitForManifest(
+  api: OfflinePackageApi,
   jobId: string,
   onProgress: (progress: OfflinePackageDownloadProgress) => void,
   signal: AbortSignal,
@@ -134,10 +135,9 @@ async function waitForManifest(
 export function OfflineSettingsClient() {
   const t = useTranslations("settings");
   const env = useEnv();
+  const api = useMemo(() => createOfflinePackageApi(env.apiUrl), [env.apiUrl]);
   const [records, setRecords] = useState<OfflinePackageRecord[]>([]);
-  const [capability, setCapability] = useState<Awaited<ReturnType<typeof api.capability>> | null>(
-    null,
-  );
+  const [capability, setCapability] = useState<OfflinePackageCapability | null>(null);
   const [adding, setAdding] = useState(false);
   const [overview, setOverview] = useState(false);
   const [runningId, setRunningId] = useState<string | null>(null);
@@ -149,15 +149,24 @@ export function OfflineSettingsClient() {
 
   useEffect(() => {
     refresh();
-    void api.capability().then((next) => {
-      setCapability(next);
-      if (next.available) {
-        configureDefaultOfflinePackageResolver({
-          tileSchema: "openmaptiles",
+    void api
+      .capability()
+      .then((next) => {
+        setCapability(next);
+        if (next.available) {
+          configureDefaultOfflinePackageResolver({
+            tileSchema: "openmaptiles",
+          });
+        }
+      })
+      .catch(() => {
+        setCapability({
+          available: false,
+          provider: "openmapx",
+          reason: "source-unavailable",
         });
-      }
-    });
-  }, [refresh]);
+      });
+  }, [api, refresh]);
 
   const deletePackage = async (record: OfflinePackageRecord) => {
     await storage.delete(record.id);
@@ -233,6 +242,7 @@ export function OfflineSettingsClient() {
       {adding ? (
         <DownloadAreaDialog
           open={adding}
+          api={api}
           capability={capability}
           onClose={() => setAdding(false)}
           onSaved={() => {
@@ -424,12 +434,13 @@ function PackageList({
 
 interface DownloadAreaDialogProps {
   open: boolean;
-  capability: Awaited<ReturnType<typeof api.capability>> | null;
+  api: OfflinePackageApi;
+  capability: OfflinePackageCapability | null;
   onClose: () => void;
   onSaved: () => void;
 }
 
-function DownloadAreaDialog({ open, capability, onClose, onSaved }: DownloadAreaDialogProps) {
+function DownloadAreaDialog({ api, open, capability, onClose, onSaved }: DownloadAreaDialogProps) {
   const t = useTranslations("settings");
   const env = useEnv();
   const [name, setName] = useState("");
@@ -535,7 +546,7 @@ function DownloadAreaDialog({ open, capability, onClose, onSaved }: DownloadArea
       const manifest =
         prepared.status === "ready-to-download" && prepared.manifest
           ? prepared.manifest
-          : await waitForManifest(prepared.jobId, setProgress, controller.signal);
+          : await waitForManifest(api, prepared.jobId, setProgress, controller.signal);
       const result = await downloadOfflinePackage(api, storage, manifest, {
         name: name.trim() || t("offlineDefaultName"),
         signal: controller.signal,

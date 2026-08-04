@@ -97,7 +97,10 @@ NEXT_PUBLIC_MAP_STYLE_URL=https://maps.example.com/tiles
 `NEXT_PUBLIC_TILES_URL` replaces only the bundled style's `openmaptiles` vector
 source. `NEXT_PUBLIC_MAP_STYLE_URL` supplies `/fonts`; despite its historical
 name, it is not a style JSON endpoint. The sprites remain same-origin web-app
-assets. Restart `app-web` after changing these values.
+assets. Offline package preparation, polling, archives, and glyph downloads use
+`NEXT_PUBLIC_API_URL` as well; this matters in local development where the web
+app and API normally use different origins. Restart `app-web` after changing
+these values.
 
 `NEXT_PUBLIC_STYLE_PROVIDER=maptiler` selects MapTiler's complete hosted style
 through the API and does not use the local OpenMapX offline-package pipeline.

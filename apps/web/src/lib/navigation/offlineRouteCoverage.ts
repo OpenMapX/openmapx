@@ -16,10 +16,12 @@ export function getOfflineRouteCoverage(
   resolver: OfflinePackageResolver,
   coordinate: LngLat,
 ): OfflineRouteCoverage {
-  const compatible = new Set(resolver.compatiblePackageIds());
-  const savedIds = snapshot.packageIds.filter((id) => compatible.has(id));
-  const selected = resolver.packageForCoordinate(coordinate, savedIds);
+  // Package readiness is live device state. Snapshot IDs are useful
+  // diagnostics, but must not hide a package downloaded after the checkpoint
+  // or keep reporting one that has since been deleted.
+  const selected = resolver.packageForCoordinate(coordinate);
   if (selected) return { kind: "covered", packageId: selected.id };
-  if (snapshot.packageIds.length === 0) return { kind: "not-downloaded", packageIds: [] };
-  return { kind: "route-line-only", packageIds: snapshot.packageIds };
+  const packageIds = resolver.packageIdsForGeometry(snapshot.route.geometry);
+  if (packageIds.length === 0) return { kind: "not-downloaded", packageIds: [] };
+  return { kind: "route-line-only", packageIds };
 }

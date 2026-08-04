@@ -114,11 +114,15 @@ async function matchOfflineGlyph(request: Request): Promise<Response | null> {
   const cache = await caches.open(offlineGlyphCacheNameForVersion(version));
   if (!url.searchParams.has("offlineGlyphs")) {
     url.searchParams.set("offlineGlyphs", version);
-    return (
-      (await cache.match(new Request(url.toString(), request), { ignoreSearch: false })) ?? null
-    );
   }
-  return (await cache.match(request, { ignoreSearch: false })) ?? null;
+  const exact = await cache.match(new Request(url.toString(), request), { ignoreSearch: false });
+  if (exact) return exact;
+
+  // Glyphs are pinned under a same-origin manifest path so changing
+  // NEXT_PUBLIC_API_URL does not strand an otherwise valid offline package.
+  url.protocol = self.location.protocol;
+  url.host = self.location.host;
+  return (await cache.match(url.toString(), { ignoreSearch: false })) ?? null;
 }
 
 function withRecentMapDataCache(strategy: Strategy): RouteHandlerCallback {

@@ -30,8 +30,9 @@ export interface OfflinePackageApi {
   ): Promise<Response>;
 }
 
-function apiPath(path: string): string {
-  return path;
+export function offlinePackageApiPath(path: string, apiBaseUrl = ""): string {
+  const base = apiBaseUrl.replace(/\/$/, "");
+  return base ? `${base}${path}` : path;
 }
 
 async function jsonBody(response: Response): Promise<unknown> {
@@ -61,58 +62,66 @@ async function expectJson(response: Response): Promise<unknown> {
   return body;
 }
 
-export const defaultOfflinePackageApi: OfflinePackageApi = {
-  async capability(signal) {
-    const response = await fetch(apiPath("/api/offline/packages/capability"), { signal });
-    const value = (await expectJson(response)) as OfflinePackageCapability;
-    if (value.provider !== "openmapx" || typeof value.available !== "boolean") {
-      throw new OfflinePackageApiError(
-        "invalid-response",
-        response.status,
-        "Invalid package capability",
+export function createOfflinePackageApi(apiBaseUrl = ""): OfflinePackageApi {
+  const apiPath = (path: string) => offlinePackageApiPath(path, apiBaseUrl);
+  return {
+    async capability(signal) {
+      const response = await fetch(apiPath("/api/offline/packages/capability"), { signal });
+      // The public proxy deliberately reports an unavailable capability with a
+      // 502 when data-manager is down. It is still a valid capability response,
+      // not an exception that should leave Settings stuck in its loading state.
+      const value = (await jsonBody(response)) as OfflinePackageCapability | undefined;
+      if (value?.provider !== "openmapx" || typeof value.available !== "boolean") {
+        throw new OfflinePackageApiError(
+          "invalid-response",
+          response.status,
+          "Invalid package capability",
+        );
+      }
+      return value;
+    },
+
+    async prepare(request, signal) {
+      const canonicalRequest = parseOfflinePackageRequest(request);
+      const response = await fetch(apiPath("/api/offline/packages/prepare"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(canonicalRequest),
+        signal,
+      });
+      return (await expectJson(response)) as OfflinePackageJob;
+    },
+
+    async getJob(jobId, signal) {
+      const response = await fetch(
+        apiPath(`/api/offline/packages/jobs/${encodeURIComponent(jobId)}`),
+        { signal },
       );
-    }
-    return value;
-  },
+      return (await expectJson(response)) as OfflinePackageJob;
+    },
 
-  async prepare(request, signal) {
-    const canonicalRequest = parseOfflinePackageRequest(request);
-    const response = await fetch(apiPath("/api/offline/packages/prepare"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(canonicalRequest),
-      signal,
-    });
-    return (await expectJson(response)) as OfflinePackageJob;
-  },
+    async getManifest(packageId, signal) {
+      const response = await fetch(
+        apiPath(`/api/offline/packages/${encodeURIComponent(packageId)}/manifest`),
+        { signal },
+      );
+      const manifest = validateOfflineMapPackageManifest(await expectJson(response));
+      return manifest;
+    },
 
-  async getJob(jobId, signal) {
-    const response = await fetch(
-      apiPath(`/api/offline/packages/jobs/${encodeURIComponent(jobId)}`),
-      { signal },
-    );
-    return (await expectJson(response)) as OfflinePackageJob;
-  },
+    async openArchive(packageId, range, signal) {
+      const headers: HeadersInit = {};
+      if (range) {
+        headers.Range = `bytes=${range.start}-`;
+        headers["If-Range"] = range.etag;
+      }
+      const response = await fetch(
+        apiPath(`/api/offline/packages/${encodeURIComponent(packageId)}/archive`),
+        { headers, signal },
+      );
+      return response;
+    },
+  };
+}
 
-  async getManifest(packageId, signal) {
-    const response = await fetch(
-      apiPath(`/api/offline/packages/${encodeURIComponent(packageId)}/manifest`),
-      { signal },
-    );
-    const manifest = validateOfflineMapPackageManifest(await expectJson(response));
-    return manifest;
-  },
-
-  async openArchive(packageId, range, signal) {
-    const headers: HeadersInit = {};
-    if (range) {
-      headers.Range = `bytes=${range.start}-`;
-      headers["If-Range"] = range.etag;
-    }
-    const response = await fetch(
-      apiPath(`/api/offline/packages/${encodeURIComponent(packageId)}/archive`),
-      { headers, signal },
-    );
-    return response;
-  },
-};
+export const defaultOfflinePackageApi: OfflinePackageApi = createOfflinePackageApi();

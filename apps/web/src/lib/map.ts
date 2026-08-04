@@ -168,5 +168,7 @@ export async function loadOpenMapXStyle(
     : apiRoute(env, "/api/maptiler/fonts");
   style.glyphs = `${glyphBase}/{fontstack}/{range}.pbf`;
 
-  return offlinePackages ? resolveOfflinePackageStyle(style, offlinePackages) : style;
+  return offlinePackages
+    ? resolveOfflinePackageStyle(style, offlinePackages, { apiBaseUrl: env.apiUrl })
+    : style;
 }

@@ -30,7 +30,8 @@ offline packages; select the `openmapx` provider first.
 
 The schema-2 manifest records coverage, zooms, tile schema, source and glyph
 versions, attribution, byte length, SHA-256, and immutable ETag. Package IDs are
-content-addressed from the canonical request and source identity.
+content-addressed from the canonical request and every input embedded in the
+archive, including attribution.
 
 ## Download and storage guarantees
 
@@ -53,7 +54,11 @@ The service worker installs the offline entry page, home page, both bundled
 styles, and required sprites as one app-shell generation. PMTiles bytes never
 enter Cache Storage: the page-side protocol reads them directly. Glyphs use a
 separate cache keyed by their content version and are removed only after the
-last package using that version is deleted.
+last package using that version is deleted. Glyph cache keys use the manifest's
+stable API path; `NEXT_PUBLIC_API_URL` only selects where missing glyphs are
+downloaded from, so moving the API origin does not strand installed assets.
+Cache Storage is a readiness requirement—a package is not advertised as ready
+if its glyphs cannot be retained durably.
 
 ## Rendering one or many areas
 
@@ -77,7 +82,10 @@ alternatives, waypoints, options, progress, and intersecting offline package
 IDs. Route-to-package matching checks complete line segments, including a
 segment that crosses a package even when neither endpoint lies inside it.
 
-After reload, restoring the route always requires confirmation. While offline:
+After reload, restoring the route always requires confirmation. Coverage is
+recomputed from currently ready packages, so an area downloaded after the last
+route checkpoint is recognized and a deleted area is not reported as present.
+While offline:
 
 - existing geometry, maneuvers, progress, voice guidance, and the last known
   route remain available;

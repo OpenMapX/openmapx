@@ -1,7 +1,7 @@
 import z from "zod/v4";
 
 export const OFFLINE_PACKAGE_SCHEMA_VERSION = 2 as const;
-export const OFFLINE_PACKAGE_ALGORITHM_VERSION = "pmtiles-area-v3" as const;
+export const OFFLINE_PACKAGE_ALGORITHM_VERSION = "pmtiles-area-v4" as const;
 export const WEB_MERCATOR_MAX_LATITUDE = 85.05112878;
 export const OFFLINE_PACKAGE_MAX_ZOOM = 24;
 export const OFFLINE_PACKAGE_MAX_AREA_SQUARE_DEGREES = 2_000;
@@ -214,6 +214,13 @@ export const offlineMapPackageManifestSchema = z
         message: "glyph URL version must match glyphs.version",
       });
     }
+    if (manifest.archive.etag !== `sha256-${manifest.archive.sha256}`) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["archive", "etag"],
+        message: "archive ETag must match archive.sha256",
+      });
+    }
   });
 
 function roundCoordinate(value: number): number {
@@ -240,6 +247,12 @@ function assertSourceDescriptor(source: OfflinePackageSourceDescriptor): void {
   }
   if (!source.datasetVersion || !source.glyphsVersion || !source.packageAlgorithmVersion) {
     throw new Error("source version metadata is required");
+  }
+  if (
+    source.attribution.length === 0 ||
+    source.attribution.some((value) => !value.trim() || value.length > 2048)
+  ) {
+    throw new Error("source attribution is invalid");
   }
   if (
     !Number.isInteger(source.sourceMaxZoom) ||
@@ -324,7 +337,7 @@ export function canonicalizeOfflinePackageRequest(
 
 export function offlinePackageRequestKey(canonical: CanonicalOfflinePackageRequest): string {
   return JSON.stringify({
-    version: 2,
+    version: 3,
     provider: canonical.request.provider,
     source: {
       datasetId: canonical.source.datasetId,
@@ -332,6 +345,7 @@ export function offlinePackageRequestKey(canonical: CanonicalOfflinePackageReque
       tileSchema: canonical.source.tileSchema,
       glyphsVersion: canonical.source.glyphsVersion,
       packageAlgorithmVersion: canonical.source.packageAlgorithmVersion,
+      attribution: canonical.source.attribution,
     },
     effective: canonical.effective,
   });
