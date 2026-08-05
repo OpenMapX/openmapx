@@ -73,6 +73,42 @@ function makeSnapshot(updatedAtMs = 1_000) {
   });
 }
 
+/** Loosely typed view of a stored record, so corruptions can be written down. */
+type Snapshot = {
+  route: {
+    steps: Record<string, unknown>[];
+    legs: unknown;
+    elevation: unknown;
+  };
+};
+
+function onStep(field: string, value: unknown) {
+  return (snapshot: Snapshot) => {
+    snapshot.route.steps[0][field] = value;
+  };
+}
+
+/** Malformed optional nested data must be cleared, not thrown on. */
+const corruptions: [string, (snapshot: Snapshot) => void][] = [
+  ["step lane container", onStep("lanes", {})],
+  ["step sign container", onStep("sign", { exitNumbers: 3 })],
+  ["step road name list", onStep("roadNames", [null])],
+  ["step maneuver", onStep("maneuver", "turn")],
+  ["spoken instruction", onStep("verbalPre", 12)],
+  [
+    "route elevation profile",
+    (snapshot) => {
+      snapshot.route.elevation = {};
+    },
+  ],
+  [
+    "leg container",
+    (snapshot) => {
+      snapshot.route.legs = {};
+    },
+  ],
+];
+
 function harness(now = 1_000) {
   const map = new Map<string, unknown>();
   const storage = createNavigationSessionStorage(
@@ -104,6 +140,31 @@ describe("navigation session storage", () => {
     const { map, storage } = harness();
     map.set(NAVIGATION_SESSION_STORAGE_KEY, { schemaVersion: 999 });
     expect(await storage.read()).toBeNull();
+    expect(map.has(NAVIGATION_SESSION_STORAGE_KEY)).toBe(false);
+  });
+
+  for (const [name, corrupt] of corruptions) {
+    it(`clears a record with a malformed ${name}`, async () => {
+      const { map, storage } = harness();
+      const snapshot = structuredClone(makeSnapshot()) as unknown as Snapshot;
+      corrupt(snapshot);
+      map.set(NAVIGATION_SESSION_STORAGE_KEY, snapshot);
+      expect(await storage.read()).toBeNull();
+      expect(map.has(NAVIGATION_SESSION_STORAGE_KEY)).toBe(false);
+    });
+  }
+
+  it("refuses to persist a snapshot with malformed nested step data", async () => {
+    const { map, storage } = harness();
+    const snapshot = structuredClone(makeSnapshot()) as unknown as Snapshot;
+    snapshot.route.steps[0].lanes = {};
+    let error: unknown;
+    try {
+      await storage.write(snapshot as never);
+    } catch (reason) {
+      error = reason;
+    }
+    expect(error).toBeDefined();
     expect(map.has(NAVIGATION_SESSION_STORAGE_KEY)).toBe(false);
   });
 

@@ -1,10 +1,11 @@
-import type { Route } from "@openmapx/core";
-import { createNavigationSessionSnapshot, type OfflineMapPackageManifest } from "@openmapx/core";
-import { describe, expect, it } from "vitest";
+import type { LngLat, Route } from "@openmapx/core";
+import { type OfflineMapPackageManifest } from "@openmapx/core";
+import { describe, expect, it, vi } from "vitest";
+import type { OfflinePackageResolver } from "../offlineAreas/packageResolver";
 import { createOfflinePackageResolver } from "../offlineAreas/packageResolver";
 import { MemoryOfflinePackageStorage } from "../offlineAreas/packageStorage";
 import type { OfflinePackageRecord } from "../offlineAreas/types";
-import { getOfflineRouteCoverage } from "./offlineRouteCoverage";
+import { getOfflineRouteCoverage, sameOfflineRouteCoverage } from "./offlineRouteCoverage";
 
 const idA = `omp2-${"a".repeat(64)}`;
 const idB = `omp2-${"b".repeat(64)}`;
@@ -96,31 +97,6 @@ function record(id: string, m: OfflineMapPackageManifest): OfflinePackageRecord 
   };
 }
 
-function snapshot(packageIds: string[]) {
-  return createNavigationSessionSnapshot({
-    route,
-    routes: [route],
-    activeRouteIndex: 0,
-    routeSelectionIntent: "automatic",
-    mode: "driving",
-    routeOptions: {
-      avoidHighways: false,
-      avoidTolls: false,
-      avoidFerries: false,
-      avoidClosures: false,
-    },
-    routeProvider: "osrm",
-    destinationWaypoints: [
-      [0.2, 0.2],
-      [0.8, 0.8],
-    ],
-    progress: null,
-    packageIds,
-    startedAtMs: 1,
-    updatedAtMs: 2,
-  });
-}
-
 async function resolverWith(records: OfflinePackageRecord[]) {
   const storage = new MemoryOfflinePackageStorage();
   for (const item of records) await storage.put(item);
@@ -131,36 +107,40 @@ async function resolverWith(records: OfflinePackageRecord[]) {
   return resolver;
 }
 
+/** What the hook caches once per (route geometry, resolver generation). */
+function routeIds(resolver: OfflinePackageResolver) {
+  return resolver.packageIdsForGeometry(route.geometry);
+}
+
+function coverage(resolver: OfflinePackageResolver, coordinate: LngLat) {
+  return getOfflineRouteCoverage({
+    coordinate,
+    routePackageIds: routeIds(resolver),
+    resolver,
+  });
+}
+
 describe("offline route coverage", () => {
   it("reports covered for a compatible ready package", async () => {
     const resolver = await resolverWith([record(idA, manifest(idA))]);
-    expect(getOfflineRouteCoverage(snapshot([idA]), resolver, [0.2, 0.2])).toEqual({
-      kind: "covered",
-      packageId: idA,
-    });
+    expect(coverage(resolver, [0.2, 0.2])).toEqual({ kind: "covered", packageId: idA });
   });
 
   it("reports not-downloaded when no installed package intersects the route", async () => {
     const resolver = await resolverWith([
       record(idA, manifest(idA, { west: 2, south: 2, east: 3, north: 3 })),
     ]);
-    expect(getOfflineRouteCoverage(snapshot([idA]), resolver, [0.2, 0.2])).toEqual({
-      kind: "not-downloaded",
-      packageIds: [],
-    });
+    expect(coverage(resolver, [0.2, 0.2])).toEqual({ kind: "not-downloaded", packageIds: [] });
   });
 
   it("uses a package downloaded after the session checkpoint", async () => {
     const resolver = await resolverWith([record(idA, manifest(idA))]);
-    expect(getOfflineRouteCoverage(snapshot([]), resolver, [0.2, 0.2])).toEqual({
-      kind: "covered",
-      packageId: idA,
-    });
+    expect(coverage(resolver, [0.2, 0.2])).toEqual({ kind: "covered", packageId: idA });
   });
 
   it("reports route-line-only when an installed package intersects the route but not the fix", async () => {
     const resolver = await resolverWith([record(idA, manifest(idA))]);
-    expect(getOfflineRouteCoverage(snapshot([]), resolver, [1.5, 1.5])).toEqual({
+    expect(coverage(resolver, [1.5, 1.5])).toEqual({
       kind: "route-line-only",
       packageIds: [idA],
     });
@@ -170,10 +150,7 @@ describe("offline route coverage", () => {
     const resolver = await resolverWith([
       record(idA, { ...manifest(idA), dataset: { ...manifest(idA).dataset, version: "old" } }),
     ]);
-    expect(getOfflineRouteCoverage(snapshot([idA]), resolver, [0.2, 0.2])).toEqual({
-      kind: "covered",
-      packageId: idA,
-    });
+    expect(coverage(resolver, [0.2, 0.2])).toEqual({ kind: "covered", packageId: idA });
   });
 
   it("can report coverage after a package becomes ready", async () => {
@@ -182,14 +159,10 @@ describe("offline route coverage", () => {
       tileSchema: "openmaptiles",
     });
     await resolver.refresh();
-    const first = getOfflineRouteCoverage(snapshot([idB]), resolver, [0.2, 0.2]);
-    expect(first.kind).toBe("not-downloaded");
+    expect(coverage(resolver, [0.2, 0.2]).kind).toBe("not-downloaded");
     await storage.put(record(idB, manifest(idB)));
     await resolver.refresh();
-    expect(getOfflineRouteCoverage(snapshot([idB]), resolver, [0.2, 0.2])).toEqual({
-      kind: "covered",
-      packageId: idB,
-    });
+    expect(coverage(resolver, [0.2, 0.2])).toEqual({ kind: "covered", packageId: idB });
   });
 
   it("associates a package when a route segment crosses its bounds", async () => {
@@ -200,5 +173,76 @@ describe("offline route coverage", () => {
         [2, 0.5],
       ]),
     ).toEqual([idA]);
+  });
+
+  it("never scans the route geometry itself", async () => {
+    const resolver = await resolverWith([record(idA, manifest(idA))]);
+    const scan = vi.spyOn(resolver, "packageIdsForGeometry");
+    const cached = [idA];
+    expect(
+      getOfflineRouteCoverage({ coordinate: [1.5, 1.5], routePackageIds: cached, resolver }),
+    ).toEqual({ kind: "route-line-only", packageIds: [idA] });
+    expect(scan).not.toHaveBeenCalled();
+  });
+
+  it("returns a defensive copy of the cached route package ids", async () => {
+    const resolver = await resolverWith([record(idA, manifest(idA))]);
+    const cached = [idA];
+    const result = getOfflineRouteCoverage({
+      coordinate: [1.5, 1.5],
+      routePackageIds: cached,
+      resolver,
+    });
+    expect(result.kind === "route-line-only" && result.packageIds).not.toBe(cached);
+  });
+});
+
+describe("coverage equality", () => {
+  it("treats equal kinds and ids as the same state", () => {
+    expect(
+      sameOfflineRouteCoverage(
+        { kind: "covered", packageId: idA },
+        { kind: "covered", packageId: idA },
+      ),
+    ).toBe(true);
+    expect(
+      sameOfflineRouteCoverage(
+        { kind: "route-line-only", packageIds: [idA, idB] },
+        { kind: "route-line-only", packageIds: [idA, idB] },
+      ),
+    ).toBe(true);
+    expect(
+      sameOfflineRouteCoverage(
+        { kind: "not-downloaded", packageIds: [] },
+        { kind: "not-downloaded", packageIds: [] },
+      ),
+    ).toBe(true);
+  });
+
+  it("separates different kinds, ids, order, and lengths", () => {
+    expect(
+      sameOfflineRouteCoverage(
+        { kind: "covered", packageId: idA },
+        { kind: "covered", packageId: idB },
+      ),
+    ).toBe(false);
+    expect(
+      sameOfflineRouteCoverage(
+        { kind: "route-line-only", packageIds: [idA] },
+        { kind: "not-downloaded", packageIds: [idA] },
+      ),
+    ).toBe(false);
+    expect(
+      sameOfflineRouteCoverage(
+        { kind: "route-line-only", packageIds: [idA, idB] },
+        { kind: "route-line-only", packageIds: [idB, idA] },
+      ),
+    ).toBe(false);
+    expect(
+      sameOfflineRouteCoverage(
+        { kind: "route-line-only", packageIds: [idA] },
+        { kind: "route-line-only", packageIds: [idA, idB] },
+      ),
+    ).toBe(false);
   });
 });

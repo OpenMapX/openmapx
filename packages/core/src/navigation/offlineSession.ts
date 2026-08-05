@@ -1,6 +1,6 @@
 import type { NavigationRouteOptions, RouteSelectionIntent } from "../stores/navigationStore";
 import type { LngLat } from "../types/geometry";
-import type { Route, RouteLeg, RouteStep } from "../types/routing";
+import type { ManeuverLane, ManeuverSign, Route, RouteLeg, RouteStep } from "../types/routing";
 import type { NavProgress } from "./types";
 
 /** Hard compatibility gate for route sessions stored by the browser. */
@@ -114,6 +114,44 @@ function copyRoute(route: Route): Route {
   };
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === "string";
+}
+
+function validateManeuver(value: unknown): value is NonNullable<RouteStep["maneuver"]> {
+  if (!isPlainObject(value)) return false;
+  return typeof value.type === "string" && isOptionalString(value.modifier);
+}
+
+function validateLanes(value: unknown): value is ManeuverLane[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (lane) =>
+        isPlainObject(lane) &&
+        isStringArray(lane.indications) &&
+        typeof lane.valid === "boolean" &&
+        isOptionalString(lane.active),
+    )
+  );
+}
+
+function validateSign(value: unknown): value is ManeuverSign {
+  if (!isPlainObject(value)) return false;
+  return [value.exitNumbers, value.exitBranches, value.exitToward, value.exitNames].every(
+    // The copy drops falsy entries, so only present values have to be arrays.
+    (entry) => !entry || isStringArray(entry),
+  );
+}
+
 function validateStep(step: unknown): step is RouteStep {
   if (!step || typeof step !== "object") return false;
   const value = step as RouteStep;
@@ -141,7 +179,44 @@ function validateStep(step: unknown): step is RouteStep {
   ) {
     return false;
   }
+  // Every optional container below is spread, mapped or read field by field by
+  // `copyStep`, so its shape has to hold before the copy can touch it.
+  if (value.roadNames && !isStringArray(value.roadNames)) return false;
+  if (value.maneuver && !validateManeuver(value.maneuver)) return false;
+  if (value.lanes && !validateLanes(value.lanes)) return false;
+  if (value.sign && !validateSign(value.sign)) return false;
+  if (
+    ![value.verbalAlert, value.verbalPre, value.verbalPost, value.verbalSuccinct].every(
+      isOptionalString,
+    )
+  ) {
+    return false;
+  }
+  if (
+    value.drivingSide !== undefined &&
+    value.drivingSide !== "left" &&
+    value.drivingSide !== "right"
+  ) {
+    return false;
+  }
   return true;
+}
+
+function validateLeg(leg: unknown): leg is RouteLeg {
+  if (!leg || typeof leg !== "object") return false;
+  const value = leg as RouteLeg;
+  return (
+    isFiniteNumber(value.distance) &&
+    value.distance >= 0 &&
+    isFiniteNumber(value.duration) &&
+    value.duration >= 0 &&
+    Array.isArray(value.geometry) &&
+    value.geometry.length >= 2 &&
+    value.geometry.every(isLngLat) &&
+    Array.isArray(value.steps) &&
+    value.steps.every(validateStep) &&
+    isOptionalString(value.summary)
+  );
 }
 
 function validateRoute(value: unknown): value is Route {
@@ -163,23 +238,7 @@ function validateRoute(value: unknown): value is Route {
   ) {
     return false;
   }
-  if (
-    !route.legs.every(
-      (leg) =>
-        !!leg &&
-        isFiniteNumber(leg.distance) &&
-        leg.distance >= 0 &&
-        isFiniteNumber(leg.duration) &&
-        leg.duration >= 0 &&
-        Array.isArray(leg.geometry) &&
-        leg.geometry.length >= 2 &&
-        leg.geometry.every(isLngLat) &&
-        Array.isArray(leg.steps) &&
-        leg.steps.every(validateStep),
-    )
-  ) {
-    return false;
-  }
+  if (!route.legs.every(validateLeg)) return false;
   if (
     route.segmentSpeedLimits &&
     (!Array.isArray(route.segmentSpeedLimits) ||
@@ -194,6 +253,15 @@ function validateRoute(value: unknown): value is Route {
     route.baselineDuration !== undefined &&
     (!isFiniteNumber(route.baselineDuration) || route.baselineDuration < 0)
   ) {
+    return false;
+  }
+  if (!isOptionalString(route.summary)) return false;
+  if (
+    route.elevation &&
+    (!Array.isArray(route.elevation) || !route.elevation.every(isFiniteNumber))
+  )
+    return false;
+  if (route.elevationInterval !== undefined && !isFiniteNumber(route.elevationInterval)) {
     return false;
   }
   return true;
@@ -333,7 +401,27 @@ export function createNavigationSessionSnapshot(input: {
   updatedAtMs: number;
   lastKnownPosition?: { coords: LngLat; timestampMs: number };
 }): NavigationSessionSnapshot {
-  const snapshot = {
+  const snapshot = buildSnapshot(input);
+  snapshot.routeFingerprint = navigationSessionFingerprint(snapshot);
+  if (!validateRoute(snapshot.route) || !validateSnapshot(snapshot)) {
+    throw new Error("cannot create an invalid navigation session snapshot");
+  }
+  return snapshot;
+}
+
+function buildSnapshot(input: Parameters<typeof createNavigationSessionSnapshot>[0]) {
+  try {
+    return copySnapshotFields(input);
+  } catch {
+    // Copying reads nested containers directly. Input that is not shaped like a
+    // route at all fails here rather than at validation; both mean the same
+    // thing to callers, so report the single documented failure.
+    throw new Error("cannot create an invalid navigation session snapshot");
+  }
+}
+
+function copySnapshotFields(input: Parameters<typeof createNavigationSessionSnapshot>[0]) {
+  return {
     schemaVersion: NAVIGATION_SESSION_SCHEMA_VERSION,
     kind: "ground" as const,
     route: copyRoute(input.route),
@@ -361,14 +449,22 @@ export function createNavigationSessionSnapshot(input: {
     }),
     routeFingerprint: "",
   } satisfies NavigationSessionSnapshot;
-  snapshot.routeFingerprint = navigationSessionFingerprint(snapshot);
-  if (!validateRoute(snapshot.route) || !validateSnapshot(snapshot)) {
-    throw new Error("cannot create an invalid navigation session snapshot");
-  }
-  return snapshot;
 }
 
+/**
+ * Total parse boundary: arbitrary IndexedDB input either produces a fully
+ * validated, freshly copied snapshot or `null`. It never throws, so a corrupt
+ * record is always clearable rather than fatal to the page that read it.
+ */
 export function parseNavigationSessionSnapshot(value: unknown): NavigationSessionSnapshot | null {
+  try {
+    return parseValidatedSnapshot(value);
+  } catch {
+    return null;
+  }
+}
+
+function parseValidatedSnapshot(value: unknown): NavigationSessionSnapshot | null {
   if (!validateSnapshot(value)) return null;
   const route = copyRoute(value.route);
   const routes = value.routes.map(copyRoute);

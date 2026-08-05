@@ -3,7 +3,9 @@
 import {
   createNavigationSessionSnapshot,
   isNavigationSessionExpired,
+  type LngLat,
   type NavigationSessionSnapshot,
+  type Route,
   useNavigationStore,
 } from "@openmapx/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -15,10 +17,33 @@ import {
   createNavigationSessionStorage,
   type NavigationSessionStorage,
 } from "./navigationSessionStorage";
-import { getOfflineRouteCoverage, type OfflineRouteCoverage } from "./offlineRouteCoverage";
+import {
+  getOfflineRouteCoverage,
+  type OfflineRouteCoverage,
+  sameOfflineRouteCoverage,
+} from "./offlineRouteCoverage";
 
 const CHECKPOINT_TIME_MS = 15_000;
 const CHECKPOINT_DISTANCE_M = 1_000;
+
+const NO_PACKAGE_IDS: readonly string[] = [];
+const NO_COVERAGE: OfflineRouteCoverage = { kind: "not-downloaded", packageIds: [] };
+
+type NavigationState = ReturnType<typeof useNavigationStore.getState>;
+
+/** When the last snapshot was scheduled/persisted, in both checkpoint units. */
+interface Checkpoint {
+  atMs: number;
+  alongMeters: number;
+}
+
+/** Route-to-package membership, valid while its three cache keys all hold. */
+interface RoutePackageCache {
+  resolver: OfflinePackageResolver;
+  geometry: LngLat[];
+  generation: number;
+  ids: string[];
+}
 
 export interface NavigationSessionResumeState {
   pending: NavigationSessionSnapshot | null;
@@ -27,7 +52,7 @@ export interface NavigationSessionResumeState {
   discard: () => Promise<void>;
 }
 
-function isGroundActive(state: ReturnType<typeof useNavigationStore.getState>): boolean {
+function isGroundActive(state: NavigationState): boolean {
   return (
     state.kind === "ground" &&
     (state.status === "navigating" || state.status === "rerouting") &&
@@ -37,7 +62,7 @@ function isGroundActive(state: ReturnType<typeof useNavigationStore.getState>): 
   );
 }
 
-function routeListForState(state: ReturnType<typeof useNavigationStore.getState>) {
+function routeListForState(state: NavigationState) {
   const route = state.route;
   if (!route) return { routes: [], activeRouteIndex: 0 };
   const active = state.routes[state.activeRouteIndex];
@@ -48,9 +73,13 @@ function routeListForState(state: ReturnType<typeof useNavigationStore.getState>
   };
 }
 
+function coordinateForRoute(route: Route, progress: NavigationState["progress"]): LngLat {
+  return progress?.snapped ?? route.geometry[0];
+}
+
 function createSnapshotForState(
-  state: ReturnType<typeof useNavigationStore.getState>,
-  resolver: OfflinePackageResolver | undefined,
+  state: NavigationState,
+  packageIds: readonly string[],
   nowMs: number,
 ): NavigationSessionSnapshot | null {
   if (!isGroundActive(state) || !state.route) return null;
@@ -66,7 +95,7 @@ function createSnapshotForState(
       routeProvider: state.routeProvider,
       destinationWaypoints: state.destinationWaypoints,
       progress: state.progress,
-      packageIds: resolver?.packageIdsForGeometry(state.route.geometry) ?? [],
+      packageIds: [...packageIds],
       startedAtMs: state.navigationStartedAtMs ?? nowMs,
       updatedAtMs: nowMs,
     });
@@ -78,17 +107,15 @@ function createSnapshotForState(
   }
 }
 
-function sameProgress(
-  a: ReturnType<typeof useNavigationStore.getState>["progress"],
-  b: typeof a,
-): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
-}
-
 /**
  * Persists one bounded ground-route checkpoint and exposes an explicit resume
  * prompt after reload. The hook never writes raw GPS history and never enters
  * navigation on its own.
+ *
+ * Snapshot construction is deliberately tied to the checkpoint cadence: copying,
+ * fingerprinting and validating a full route is only worth doing when a write
+ * follows. Everything between checkpoints reads the current fix and the cached
+ * route-package membership.
  */
 export function useNavigationSessionPersistence(
   storage?: NavigationSessionStorage,
@@ -102,30 +129,118 @@ export function useNavigationSessionPersistence(
     [discoveredResolver, resolver],
   );
   const [pending, setPending] = useState<NavigationSessionSnapshot | null>(null);
-  const [coverage, setCoverage] = useState<OfflineRouteCoverage>({
-    kind: "not-downloaded",
-    packageIds: [],
-  });
+  const [coverage, setCoverage] = useState<OfflineRouteCoverage>(NO_COVERAGE);
   const readRef = useRef(false);
-  const lastWriteRef = useRef<{ atMs: number; alongMeters: number } | null>(null);
+  // Two checkpoint marks. `scheduled` advances synchronously when a snapshot is
+  // handed to the write queue, so fixes arriving while a write is still in
+  // flight cannot open a second checkpoint in the same window. `written` only
+  // advances once storage confirmed, and a rejected write rolls `scheduled`
+  // back to it so the next eligible fix retries instead of losing the window.
+  const lastWriteRef = useRef<Checkpoint | null>(null);
+  const lastScheduledRef = useRef<Checkpoint | null>(null);
   const writeQueueRef = useRef(Promise.resolve());
+  // The installed package set is the only thing that can invalidate cached
+  // route membership, so every path that can change it bumps this counter.
+  const generationRef = useRef(0);
+  const routePackagesRef = useRef<RoutePackageCache | null>(null);
+  const adoptedResolverRef = useRef<OfflinePackageResolver>(undefined);
+
+  const routePackageIdsFor = useCallback(
+    (route: Route, activeResolver: OfflinePackageResolver): readonly string[] => {
+      const cached = routePackagesRef.current;
+      if (
+        cached &&
+        cached.resolver === activeResolver &&
+        cached.geometry === route.geometry &&
+        cached.generation === generationRef.current
+      ) {
+        return cached.ids;
+      }
+      const ids = activeResolver.packageIdsForGeometry(route.geometry);
+      routePackagesRef.current = {
+        resolver: activeResolver,
+        geometry: route.geometry,
+        generation: generationRef.current,
+        ids,
+      };
+      return ids;
+    },
+    [],
+  );
+
+  const publishCoverage = useCallback((next: OfflineRouteCoverage) => {
+    setCoverage((previous) => (sameOfflineRouteCoverage(previous, next) ? previous : next));
+  }, []);
+
+  const coverageForRoute = useCallback(
+    (route: Route, progress: NavigationState["progress"], activeResolver: OfflinePackageResolver) =>
+      getOfflineRouteCoverage({
+        coordinate: coordinateForRoute(route, progress),
+        routePackageIds: routePackageIdsFor(route, activeResolver),
+        resolver: activeResolver,
+      }),
+    [routePackageIdsFor],
+  );
+
+  /** Recompute whichever session is currently visible: pending, else active. */
+  const refreshCoverage = useCallback(
+    (activeResolver: OfflinePackageResolver) => {
+      if (pending) {
+        publishCoverage(coverageForRoute(pending.route, pending.progress, activeResolver));
+        return;
+      }
+      const state = useNavigationStore.getState();
+      if (!isGroundActive(state) || !state.route) return;
+      publishCoverage(coverageForRoute(state.route, state.progress, activeResolver));
+    },
+    [coverageForRoute, pending, publishCoverage],
+  );
 
   const enqueueWrite = useCallback(
-    (state: ReturnType<typeof useNavigationStore.getState>) => {
-      const nowMs = now();
-      const snapshot = createSnapshotForState(state, resolveResolver(), nowMs);
-      if (!snapshot) return;
+    (snapshot: NavigationSessionSnapshot, atMs: number) => {
+      const mark: Checkpoint = { atMs, alongMeters: snapshot.progress?.alongMeters ?? 0 };
+      lastScheduledRef.current = mark;
       writeQueueRef.current = writeQueueRef.current
         .catch(() => {})
         .then(async () => {
-          await storageRef.write(snapshot);
-          lastWriteRef.current = {
-            atMs: nowMs,
-            alongMeters: snapshot.progress?.alongMeters ?? 0,
-          };
+          try {
+            await storageRef.write(snapshot);
+            lastWriteRef.current = mark;
+          } catch {
+            if (lastScheduledRef.current === mark) lastScheduledRef.current = lastWriteRef.current;
+          }
         });
     },
-    [now, resolveResolver, storageRef],
+    [storageRef],
+  );
+
+  const scheduleWrite = useCallback(
+    (state: NavigationState, atMs: number, activeResolver: OfflinePackageResolver | undefined) => {
+      const packageIds =
+        activeResolver && state.route
+          ? routePackageIdsFor(state.route, activeResolver)
+          : NO_PACKAGE_IDS;
+      const snapshot = createSnapshotForState(state, packageIds, atMs);
+      if (!snapshot) return;
+      enqueueWrite(snapshot, atMs);
+    },
+    [enqueueWrite, routePackageIdsFor],
+  );
+
+  /** Adopt a resolver that only became available after the hook mounted. */
+  const adoptResolver = useCallback(
+    (next: OfflinePackageResolver) => {
+      const isNew = adoptedResolverRef.current !== next;
+      adoptedResolverRef.current = next;
+      setDiscoveredResolver(next);
+      const state = useNavigationStore.getState();
+      // The active session was persisted without package IDs; the resolver now
+      // supplies them, which is worth exactly one replacement snapshot. Rerunning
+      // discovery for the same resolver must not schedule another.
+      if (isNew && isGroundActive(state)) scheduleWrite(state, now(), next);
+      refreshCoverage(next);
+    },
+    [now, refreshCoverage, scheduleWrite],
   );
 
   useEffect(() => {
@@ -133,14 +248,12 @@ export function useNavigationSessionPersistence(
     let cancelled = false;
     void ensureOfflinePackageRuntime().then((localResolver) => {
       if (cancelled || !localResolver) return;
-      setDiscoveredResolver(localResolver);
-      const state = useNavigationStore.getState();
-      if (isGroundActive(state)) enqueueWrite(state);
+      adoptResolver(localResolver);
     });
     return () => {
       cancelled = true;
     };
-  }, [enqueueWrite, resolver]);
+  }, [adoptResolver, resolver]);
 
   useEffect(() => {
     if (readRef.current) return;
@@ -153,27 +266,20 @@ export function useNavigationSessionPersistence(
         return;
       }
       setPending(snapshot);
-      const resolverNow = resolveResolver();
-      if (resolverNow) {
-        setCoverage(
-          getOfflineRouteCoverage(
-            snapshot,
-            resolverNow,
-            snapshot.progress?.snapped ?? snapshot.route.geometry[0],
-          ),
-        );
-      } else {
-        setCoverage(
+      // With a resolver present the coverage effect below recomputes against
+      // live device state; without one the persisted IDs are all we know.
+      if (!resolveResolver()) {
+        publishCoverage(
           snapshot.packageIds.length > 0
             ? { kind: "route-line-only", packageIds: snapshot.packageIds }
-            : { kind: "not-downloaded", packageIds: [] },
+            : NO_COVERAGE,
         );
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [now, resolveResolver, storageRef]);
+  }, [now, publishCoverage, resolveResolver, storageRef]);
 
   useEffect(() => {
     let previous = useNavigationStore.getState();
@@ -190,12 +296,16 @@ export function useNavigationSessionPersistence(
             .catch(() => {})
             .then(() => storageRef.clear());
           lastWriteRef.current = null;
+          lastScheduledRef.current = null;
           setPending(null);
         }
         previous = next;
         return;
       }
 
+      // The navigation store replaces route, options, waypoints and progress as
+      // whole immutable objects and never edits them in place, so reference
+      // identity is an exact change test here — no serialization needed.
       const routeChanged =
         !wasActive ||
         next.route !== previous.route ||
@@ -203,87 +313,59 @@ export function useNavigationSessionPersistence(
         next.activeRouteIndex !== previous.activeRouteIndex ||
         next.mode !== previous.mode ||
         next.routeProvider !== previous.routeProvider ||
-        JSON.stringify(next.routeOptions) !== JSON.stringify(previous.routeOptions) ||
-        JSON.stringify(next.destinationWaypoints) !== JSON.stringify(previous.destinationWaypoints);
-      const progressChanged = !sameProgress(next.progress, previous.progress);
-      const nowMs = now();
-      const last = lastWriteRef.current;
-      const checkpointReached =
-        !!last &&
-        (nowMs - last.atMs >= CHECKPOINT_TIME_MS ||
-          (next.progress?.alongMeters ?? 0) - last.alongMeters >= CHECKPOINT_DISTANCE_M);
-
-      if (routeChanged || (progressChanged && (!last || checkpointReached))) enqueueWrite(next);
-      const resolverNow = resolveResolver();
-      const currentSnapshot = createSnapshotForState(next, resolverNow, nowMs);
-      if (currentSnapshot && resolverNow) {
-        setCoverage(
-          getOfflineRouteCoverage(
-            currentSnapshot,
-            resolverNow,
-            currentSnapshot.progress?.snapped ?? currentSnapshot.route.geometry[0],
-          ),
-        );
-      }
+        next.routeOptions !== previous.routeOptions ||
+        next.destinationWaypoints !== previous.destinationWaypoints;
+      const progressChanged = next.progress !== previous.progress;
       previous = next;
+      if (!routeChanged && !progressChanged) return;
+
+      const nowMs = now();
+      const scheduled = lastScheduledRef.current;
+      const checkpointReached =
+        !!scheduled &&
+        (nowMs - scheduled.atMs >= CHECKPOINT_TIME_MS ||
+          (next.progress?.alongMeters ?? 0) - scheduled.alongMeters >= CHECKPOINT_DISTANCE_M);
+      const activeResolver = resolveResolver();
+
+      if (routeChanged || !scheduled || checkpointReached) {
+        scheduleWrite(next, nowMs, activeResolver);
+      }
+      if (activeResolver && next.route) {
+        publishCoverage(coverageForRoute(next.route, next.progress, activeResolver));
+      }
     });
-  }, [enqueueWrite, now, resolveResolver, storageRef]);
+  }, [coverageForRoute, now, publishCoverage, resolveResolver, scheduleWrite, storageRef]);
 
   useEffect(() => {
-    const state = useNavigationStore.getState();
-    if (!isGroundActive(state)) return;
-    const current = createSnapshotForState(state, resolveResolver(), now());
-    if (!current) return;
-    const resolverNow = resolveResolver();
-    if (resolverNow) {
-      setCoverage(
-        getOfflineRouteCoverage(
-          current,
-          resolverNow,
-          current.progress?.snapped ?? current.route.geometry[0],
-        ),
-      );
-    } else {
-      setCoverage(
-        current.packageIds.length > 0
-          ? { kind: "route-line-only", packageIds: current.packageIds }
-          : { kind: "not-downloaded", packageIds: [] },
-      );
-    }
-  }, [now, resolveResolver]);
-
-  useEffect(() => {
-    const resolverNow = resolveResolver();
-    if (!pending || !resolverNow) return;
-    setCoverage(
-      getOfflineRouteCoverage(
-        pending,
-        resolverNow,
-        pending.progress?.snapped ?? pending.route.geometry[0],
-      ),
-    );
-  }, [pending, resolveResolver]);
+    const activeResolver = resolveResolver();
+    if (activeResolver) refreshCoverage(activeResolver);
+  }, [refreshCoverage, resolveResolver]);
 
   useEffect(() => {
     const onPackageChanged = () => {
-      const resolverNow = resolveResolver();
-      if (!resolverNow) return;
-      void resolverNow.refresh().then(() => {
-        const current =
-          pending ?? createSnapshotForState(useNavigationStore.getState(), resolverNow, now());
-        if (!current) return;
-        setCoverage(
-          getOfflineRouteCoverage(
-            current,
-            resolverNow,
-            current.progress?.snapped ?? current.route.geometry[0],
-          ),
-        );
+      // One bump per event: it invalidates route membership exactly once and
+      // also fences any resolution still in flight from an earlier event.
+      generationRef.current += 1;
+      const generation = generationRef.current;
+      const existing = resolveResolver();
+      if (existing) {
+        void existing.refresh().then(() => {
+          if (generationRef.current !== generation) return;
+          refreshCoverage(existing);
+        });
+        return;
+      }
+      // No resolver yet: the first package to become ready must refresh the
+      // visible session on its own, without a navigation-store mutation or a
+      // reload. Runtime discovery was already reset by the notifying side.
+      void ensureOfflinePackageRuntime().then((discovered) => {
+        if (!discovered || generationRef.current !== generation) return;
+        adoptResolver(discovered);
       });
     };
     window.addEventListener(OFFLINE_PACKAGE_CHANGED_EVENT, onPackageChanged);
     return () => window.removeEventListener(OFFLINE_PACKAGE_CHANGED_EVENT, onPackageChanged);
-  }, [now, pending, resolveResolver]);
+  }, [adoptResolver, refreshCoverage, resolveResolver]);
 
   const accept = useCallback(() => {
     const snapshot = pending;
