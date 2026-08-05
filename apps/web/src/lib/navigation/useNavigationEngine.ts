@@ -133,23 +133,21 @@ export function useNavigationEngine(): void {
       tickRef.current = result.nextState;
       // Surface noisy GPS: fixes dropped for poor accuracy flag "Weak GPS"; a
       // usable fix clears it. (Dropping them also suppresses false off-route.)
+      // Returning early keeps the last valid progress on screen; the flag is
+      // only published when it actually changes, so a run of bad fixes is silent.
       if (!result.progress) {
-        if (result.accuracyRejected) store.setWeakGps(true);
+        if (result.accuracyRejected && !store.weakGps) store.setWeakGps(true);
         return;
       }
-      store.setWeakGps(result.weakGps);
 
-      store.applyProgress(result.progress);
-      store.setOffRoute(result.offRoute);
-
-      // A real accepted fix re-anchors the coasting driver and ends any coast.
+      // A real accepted fix re-anchors the coasting driver; the publication
+      // below ends any coast that was running.
       if (!fix.coasted) {
         lastRealFixRef.current = {
           atMs: fix.timestampMs,
           alongMeters: result.progress.alongMeters,
           speedMps: result.progress.speedMps,
         };
-        store.setCoasting(false);
       }
 
       // Speed limit (driving only): read the limit for the segment the user is
@@ -158,18 +156,25 @@ export function useNavigationEngine(): void {
       // `liveSpeedLimits` by the windowed map-match — both indexed by the snap's
       // segment, so no per-fix lookup. The per-step `speedLimit` is the final
       // fallback. Walking/cycling clear the badge.
-      if (mode === "driving") {
-        const segIdx = result.progress.segmentIndex;
-        store.setSpeedLimit(
-          pickSpeedLimit(
-            route.segmentSpeedLimits?.[segIdx],
-            store.liveSpeedLimits?.[segIdx],
-            route.steps[result.progress.currentStepIndex]?.speedLimit,
-          ),
-        );
-      } else {
-        store.setSpeedLimit(null);
-      }
+      const currentSpeedLimit =
+        mode === "driving"
+          ? pickSpeedLimit(
+              route.segmentSpeedLimits?.[result.progress.segmentIndex],
+              store.liveSpeedLimits?.[result.progress.segmentIndex],
+              route.steps[result.progress.currentStepIndex]?.speedLimit,
+            )
+          : null;
+
+      // Everything this fix produced describes one instant, so publish it as one
+      // store update. A coasted fix leaves `coasting` alone to keep the coast
+      // running; a real fix clears it in the same update.
+      store.applyGroundFix({
+        progress: result.progress,
+        weakGps: result.weakGps,
+        offRoute: result.offRoute,
+        currentSpeedLimit,
+        coasting: fix.coasted ? undefined : false,
+      });
 
       if (result.arrived) {
         haptics.success();

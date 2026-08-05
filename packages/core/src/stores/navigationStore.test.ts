@@ -239,6 +239,154 @@ describe("navigationStore", () => {
   });
 });
 
+describe("navigationStore applyGroundFix", () => {
+  const progress = {
+    snapped: [0.001, 0],
+    alongMeters: 111,
+    deviationMeters: 2,
+    segmentIndex: 0,
+    etaEpochMs: 1_700_000_000_000,
+    bearing: 90,
+    speedMps: 13,
+    currentStepIndex: 0,
+  } as unknown as NavProgress;
+
+  beforeEach(() => {
+    useNavigationStore.getState().stopNavigation();
+    useNavigationStore.getState().startGroundNavigation(route, "driving", [
+      [0, 0],
+      [1, 1],
+    ]);
+  });
+
+  /** Count store publications while `run` executes, then unsubscribe. */
+  function countPublications(run: () => void): number {
+    let count = 0;
+    const unsubscribe = useNavigationStore.subscribe(() => {
+      count += 1;
+    });
+    try {
+      run();
+    } finally {
+      unsubscribe();
+    }
+    return count;
+  }
+
+  it("publishes every per-fix field in a single notification", () => {
+    const store = useNavigationStore.getState();
+    store.setWeakGps(true);
+    store.setOffRoute(true);
+
+    let seen: {
+      progress: NavProgress | null;
+      weakGps: boolean;
+      offRoute: boolean;
+      currentSpeedLimit: number | null;
+      coasting: boolean;
+    } | null = null;
+    const unsubscribe = useNavigationStore.subscribe((s) => {
+      seen = {
+        progress: s.progress,
+        weakGps: s.weakGps,
+        offRoute: s.offRoute,
+        currentSpeedLimit: s.currentSpeedLimit,
+        coasting: s.coasting,
+      };
+    });
+    let calls = 0;
+    const countUnsubscribe = useNavigationStore.subscribe(() => {
+      calls += 1;
+    });
+    store.applyGroundFix({
+      progress,
+      weakGps: false,
+      offRoute: false,
+      currentSpeedLimit: 50,
+      coasting: false,
+    });
+    countUnsubscribe();
+    unsubscribe();
+
+    expect(calls).toBe(1);
+    // Every field must already carry its new value in that one notification —
+    // no subscriber ever observes a half-applied fix.
+    expect(seen).toEqual({
+      progress,
+      weakGps: false,
+      offRoute: false,
+      currentSpeedLimit: 50,
+      coasting: false,
+    });
+  });
+
+  it("preserves the progress object identity", () => {
+    useNavigationStore.getState().applyGroundFix({
+      progress,
+      weakGps: false,
+      offRoute: false,
+      currentSpeedLimit: null,
+    });
+    expect(useNavigationStore.getState().progress).toBe(progress);
+  });
+
+  it("keeps coasting when the update omits it (synthetic fix)", () => {
+    const store = useNavigationStore.getState();
+    store.setCoasting(true);
+    const publications = countPublications(() =>
+      store.applyGroundFix({
+        progress,
+        weakGps: false,
+        offRoute: false,
+        currentSpeedLimit: 30,
+      }),
+    );
+    expect(publications).toBe(1);
+    expect(useNavigationStore.getState().coasting).toBe(true);
+    expect(useNavigationStore.getState().currentSpeedLimit).toBe(30);
+  });
+
+  it("clears coasting when the update passes false (real fix re-anchors)", () => {
+    const store = useNavigationStore.getState();
+    store.setCoasting(true);
+    store.applyGroundFix({
+      progress,
+      weakGps: false,
+      offRoute: false,
+      currentSpeedLimit: null,
+      coasting: false,
+    });
+    expect(useNavigationStore.getState().coasting).toBe(false);
+  });
+
+  it("treats an explicit undefined coasting like an omitted one", () => {
+    const store = useNavigationStore.getState();
+    store.setCoasting(true);
+    store.applyGroundFix({
+      progress,
+      weakGps: false,
+      offRoute: false,
+      currentSpeedLimit: null,
+      coasting: undefined,
+    });
+    expect(useNavigationStore.getState().coasting).toBe(true);
+  });
+
+  it("leaves the granular setters usable for non-fix callers", () => {
+    const store = useNavigationStore.getState();
+    store.setWeakGps(true);
+    expect(useNavigationStore.getState().weakGps).toBe(true);
+    store.setOffRoute(true);
+    expect(useNavigationStore.getState().offRoute).toBe(true);
+    store.setSpeedLimit(80);
+    expect(useNavigationStore.getState().currentSpeedLimit).toBe(80);
+    store.setCoasting(true);
+    expect(useNavigationStore.getState().coasting).toBe(true);
+    store.applyProgress(progress);
+    expect(useNavigationStore.getState().progress).toBe(progress);
+  });
+});
+
 describe("navigationStore preference persistence", () => {
   beforeEach(() => {
     configureStorage(makeMemoryStorage());

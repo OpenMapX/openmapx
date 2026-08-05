@@ -88,6 +88,21 @@ export interface FasterRouteProposal {
 export type NavigationConnectivity = "online" | "offline";
 export type RerouteAvailability = "available" | "unavailable";
 
+/**
+ * The continuous state derived from one accepted navigation fix. These fields
+ * describe a single instant, so they are published together — a subscriber must
+ * never see the new progress next to the previous off-route or speed-limit
+ * verdict.
+ */
+export interface GroundFixStoreUpdate {
+  progress: NavProgress;
+  weakGps: boolean;
+  offRoute: boolean;
+  currentSpeedLimit: number | null;
+  /** Omit for a synthetic/coasted fix; `false` for a real fix that re-anchors. */
+  coasting?: false;
+}
+
 interface NavigationState {
   status: NavStatus;
   kind: NavKind;
@@ -181,6 +196,11 @@ interface NavigationState {
    */
   updateItinerary: (itinerary: TripItinerary) => void;
   applyProgress: (progress: NavProgress) => void;
+  /**
+   * Publish everything one accepted ground fix produced in a single update. The
+   * granular setters below remain for callers outside the per-fix hot path.
+   */
+  applyGroundFix: (update: GroundFixStoreUpdate) => void;
   setSpeedLimit: (v: number | null) => void;
   setLiveSpeedLimits: (v: (number | null)[] | null) => void;
   setOffRoute: (v: boolean) => void;
@@ -316,6 +336,16 @@ export const useNavigationStore = create<NavigationState>((set) => ({
     set({ itinerary, transitProgress: null, transitRerouteNeeded: false }),
   updateItinerary: (itinerary) => set({ itinerary }),
   applyProgress: (progress) => set({ progress }),
+  // One publication per accepted fix. A coasted fix omits `coasting` so the
+  // ongoing coast survives; a real fix passes false to end it in the same update.
+  applyGroundFix: (update) =>
+    set((s) => ({
+      progress: update.progress,
+      weakGps: update.weakGps,
+      offRoute: update.offRoute,
+      currentSpeedLimit: update.currentSpeedLimit,
+      coasting: update.coasting ?? s.coasting,
+    })),
   setSpeedLimit: (currentSpeedLimit) => set({ currentSpeedLimit }),
   setLiveSpeedLimits: (liveSpeedLimits) => set({ liveSpeedLimits }),
   setOffRoute: (offRoute) => set({ offRoute }),
