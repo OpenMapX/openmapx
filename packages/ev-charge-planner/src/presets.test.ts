@@ -65,7 +65,8 @@ describe("vehicle presets", () => {
   it("gives Teslas a connector that station data can match", () => {
     const tesla = listVehicles().find((v) => v.label.startsWith("Tesla "));
     expect(tesla).toBeTruthy();
-    const spec = getVehiclePreset(tesla!.id);
+    if (!tesla) throw new Error("expected a Tesla preset in the vehicle list");
+    const spec = getVehiclePreset(tesla.id);
     expect(spec?.connectors).toContain("tesla_ccs");
   });
 });

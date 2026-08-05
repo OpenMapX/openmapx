@@ -32,7 +32,7 @@ function positions(geometry: RoadConditionEvent["geometry"]): [number, number][]
   if (raw.length <= VERTEX_SAMPLE) return raw;
   const stride = raw.length / VERTEX_SAMPLE;
   const out: [number, number][] = [];
-  for (let i = 0; i < VERTEX_SAMPLE; i++) out.push(raw[Math.floor(i * stride)]!);
+  for (let i = 0; i < VERTEX_SAMPLE; i++) out.push(raw[Math.floor(i * stride)]);
   return out;
 }
 
@@ -65,10 +65,10 @@ function pointToPolylineMeters(
   verts: [number, number][],
   cosRefLat: number,
 ): number {
-  if (verts.length === 1) return pointToSegmentMeters(p, verts[0]!, verts[0]!, cosRefLat);
+  if (verts.length === 1) return pointToSegmentMeters(p, verts[0], verts[0], cosRefLat);
   let min = Infinity;
   for (let i = 0; i < verts.length - 1; i++) {
-    const d = pointToSegmentMeters(p, verts[i]!, verts[i + 1]!, cosRefLat);
+    const d = pointToSegmentMeters(p, verts[i], verts[i + 1], cosRefLat);
     if (d < min) min = d;
   }
   return min;
@@ -81,7 +81,7 @@ function pointToPolylineMeters(
  */
 function geometryDistanceMeters(a: [number, number][], b: [number, number][]): number {
   if (a.length === 0 || b.length === 0) return Infinity;
-  const cosRefLat = Math.cos((((a[0]![1] + b[0]![1]) / 2) * Math.PI) / 180);
+  const cosRefLat = Math.cos((((a[0][1] + b[0][1]) / 2) * Math.PI) / 180);
   let min = Infinity;
   for (const p of a) {
     const d = pointToPolylineMeters(p, b, cosRefLat);
@@ -175,7 +175,7 @@ export function dedupeRoadConditionEvents(events: RoadConditionEvent[]): RoadCon
     const ep = positions(e.geometry);
     const dupIdx = survivors.findIndex((s, i) => {
       if (s.type !== e.type) return false;
-      const sp = survivorPos[i]!;
+      const sp = survivorPos[i];
       if (ep.length === 0 || sp.length === 0) return false;
       if (geometryDistanceMeters(ep, sp) > CLUSTER_METERS) return false;
       if (roadsConflict(s, e)) return false;
@@ -185,7 +185,7 @@ export function dedupeRoadConditionEvents(events: RoadConditionEvent[]): RoadCon
       survivors.push(e);
       survivorPos.push(ep);
     } else {
-      const survivor = newer(survivors[dupIdx]!, e);
+      const survivor = newer(survivors[dupIdx], e);
       // Keep the surviving event's own geometry as the cluster's representative.
       if (survivor === e) survivorPos[dupIdx] = ep;
       survivors[dupIdx] = survivor;

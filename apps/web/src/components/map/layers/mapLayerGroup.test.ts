@@ -53,7 +53,9 @@ describe("applyGroup", () => {
     const fake = createFakeMap({ styleLoaded: true });
     const data = fc(8);
     const applied = applyGroup(fake.map, group(data), emptyApplied());
-    fake.state.sources.get("g-src")!.data = "sentinel";
+    const source = fake.state.sources.get("g-src");
+    if (!source) throw new Error("expected the g-src source to be registered");
+    source.data = "sentinel";
     applyGroup(fake.map, group(data), applied);
     expect(fake.state.sources.get("g-src")?.data).toBe("sentinel");
   });

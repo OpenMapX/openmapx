@@ -39,6 +39,13 @@ function routesOf() {
   return byKey;
 }
 
+/** Resolves a registered route's handler, failing loudly when the route is missing. */
+function handlerFor(key: string) {
+  const route = routesOf().get(key);
+  if (!route) throw new Error(`no route registered for ${key}`);
+  return route.handler;
+}
+
 function fakeFetch(status: number, body: unknown) {
   return vi.fn(async () => ({
     status,
@@ -67,7 +74,7 @@ describe("crowd-reports setup", () => {
   it("POST /reports forwards the signed body to the contributions-api and passes status through", async () => {
     const fetchMock = fakeFetch(201, { id: "r1" });
     vi.stubGlobal("fetch", fetchMock);
-    const handler = routesOf().get("POST /reports")!.handler;
+    const handler = handlerFor("POST /reports");
     const { reply, captured } = fakeReply();
 
     await handler(
@@ -86,7 +93,7 @@ describe("crowd-reports setup", () => {
   it("POST /reports/:id/:action rejects an unknown action before relaying", async () => {
     const fetchMock = fakeFetch(200, {});
     vi.stubGlobal("fetch", fetchMock);
-    const handler = routesOf().get("POST /reports/:id/:action")!.handler;
+    const handler = handlerFor("POST /reports/:id/:action");
     const { reply, captured } = fakeReply();
 
     await handler({ query: {}, params: { id: "r1", action: "delete" }, body: {} }, reply as never);
@@ -98,7 +105,7 @@ describe("crowd-reports setup", () => {
   it("POST /reports/:id/:action rejects a path-traversal id before relaying", async () => {
     const fetchMock = fakeFetch(200, {});
     vi.stubGlobal("fetch", fetchMock);
-    const handler = routesOf().get("POST /reports/:id/:action")!.handler;
+    const handler = handlerFor("POST /reports/:id/:action");
     const { reply, captured } = fakeReply();
 
     await handler({ query: {}, params: { id: "..", action: "confirm" }, body: {} }, reply as never);
@@ -110,7 +117,7 @@ describe("crowd-reports setup", () => {
   it("POST /reports/:id/:action relays a valid confirm to the encoded path", async () => {
     const fetchMock = fakeFetch(200, { ok: true });
     vi.stubGlobal("fetch", fetchMock);
-    const handler = routesOf().get("POST /reports/:id/:action")!.handler;
+    const handler = handlerFor("POST /reports/:id/:action");
     const { reply, captured } = fakeReply();
 
     await handler(
@@ -127,7 +134,7 @@ describe("crowd-reports setup", () => {
   it("GET /issuer-keys does not cache a non-2xx upstream response", async () => {
     const fetchMock = fakeFetch(503, { error: "down" });
     vi.stubGlobal("fetch", fetchMock);
-    const handler = routesOf().get("GET /issuer-keys")!.handler;
+    const handler = handlerFor("GET /issuer-keys");
     const { reply, captured } = fakeReply();
 
     await handler({ query: {}, params: {}, body: undefined }, reply as never);
@@ -141,7 +148,7 @@ describe("crowd-reports setup", () => {
       throw new Error("ECONNREFUSED");
     });
     vi.stubGlobal("fetch", fetchMock);
-    const handler = routesOf().get("POST /enroll")!.handler;
+    const handler = handlerFor("POST /enroll");
     const { reply, captured } = fakeReply();
 
     await handler({ query: {}, params: {}, body: {} }, reply as never);

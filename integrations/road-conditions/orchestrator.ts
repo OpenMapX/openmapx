@@ -15,6 +15,11 @@ import type {
  * aggregation boundary rather than on the wire type. */
 export type RoadFlowSegmentWithProvider = RoadFlowSegment & { provider: string };
 
+/** A provider that implements the optional `getFlow` capability. */
+type FlowCapableProvider = RoadConditionsProvider & {
+  getFlow: NonNullable<RoadConditionsProvider["getFlow"]>;
+};
+
 /** All road-conditions providers registered across enabled integrations. */
 export function collectProviders(ctx: IntegrationContext): RoadConditionsProvider[] {
   return ctx
@@ -59,7 +64,7 @@ export async function aggregateRoadConditions(
 
   const merged: RoadConditionEvent[] = [];
   settled.forEach((res, i) => {
-    const providerId = providers[i]!.id;
+    const providerId = providers[i].id;
     if (res.status === "fulfilled") {
       for (const e of res.value) merged.push(e.provider ? e : { ...e, provider: providerId });
     } else {
@@ -75,9 +80,10 @@ export async function aggregateRoadConditions(
   // Providers that can push the horizon into their own query already have (see
   // the OpenConditions provider); applying it again here is what guarantees the
   // semantics for third-party providers that ignore `opts` entirely.
-  if (opts?.horizonDays == null) return deduped;
+  const horizonDays = opts?.horizonDays;
+  if (horizonDays == null) return deduped;
   const now = Date.now();
-  return deduped.filter((e) => withinHorizon(e, opts.horizonDays!, now));
+  return deduped.filter((e) => withinHorizon(e, horizonDays, now));
 }
 
 /**
@@ -95,13 +101,14 @@ export async function aggregateRoadFlow(
   opts?: RoadFlowQuery,
 ): Promise<RoadFlowSegmentWithProvider[]> {
   const providers = collectProviders(ctx).filter(
-    (p) => coversBbox(p.coverage, bbox) && typeof p.getFlow === "function",
+    (p): p is FlowCapableProvider =>
+      coversBbox(p.coverage, bbox) && typeof p.getFlow === "function",
   );
-  const settled = await Promise.allSettled(providers.map((p) => p.getFlow!(bbox, opts)));
+  const settled = await Promise.allSettled(providers.map((p) => p.getFlow(bbox, opts)));
 
   const merged: RoadFlowSegmentWithProvider[] = [];
   settled.forEach((res, i) => {
-    const providerId = providers[i]!.id;
+    const providerId = providers[i].id;
     if (res.status === "fulfilled") {
       for (const s of res.value) merged.push({ ...s, provider: providerId });
     } else {

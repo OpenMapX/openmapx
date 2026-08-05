@@ -21,12 +21,14 @@ describe("parseXmlDocument entity guard", () => {
   });
 
   it("leaves numeric character references unchanged (parser config does not decode them)", () => {
-    const doc = parseXmlDocument("<root><name>Z&#252;rich</name></root>") as Record<string, any>;
+    const doc = parseXmlDocument("<root><name>Z&#252;rich</name></root>") as {
+      root: { name: string };
+    };
     expect(doc.root.name).toBe("Z&#252;rich");
   });
 
   it("still decodes predefined entities", () => {
-    const doc = parseXmlDocument("<root><x>a &amp; b</x></root>") as Record<string, any>;
+    const doc = parseXmlDocument("<root><x>a &amp; b</x></root>") as { root: { x: string } };
     expect(doc.root.x).toBe("a & b");
   });
 
@@ -37,7 +39,9 @@ describe("parseXmlDocument entity guard", () => {
           <ResponseTimestamp>2026-06-17T00:00:00Z</ResponseTimestamp>
         </ServiceDelivery>
       </Siri>`,
-    ) as Record<string, any>;
+    ) as {
+      Siri: { "@_version": string; ServiceDelivery: { ResponseTimestamp: string } };
+    };
     expect(doc.Siri.ServiceDelivery.ResponseTimestamp).toBe("2026-06-17T00:00:00Z");
     expect(doc.Siri["@_version"]).toBe("2.0");
   });

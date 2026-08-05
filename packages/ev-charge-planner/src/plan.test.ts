@@ -1,6 +1,14 @@
-import type { EvVehicleSpec } from "@openmapx/core";
+import type { EvVehicleSpec, LngLat } from "@openmapx/core";
+import type { EvChargingStation, EvChargingTariff } from "@openmapx/mobility-core/ev-charging";
 import { describe, expect, it, vi } from "vitest";
 import { estimateSessionCost, planCharges } from "./plan.js";
+
+/**
+ * estimateSessionCost reads only `station.tariffs`, so these fixtures carry
+ * nothing else, and their tariffs omit the provenance fields it never looks at.
+ */
+type TariffOnlyStation = { tariffs?: Omit<EvChargingTariff, "source" | "updatedAt">[] };
+const asStation = (fixture: TariffOnlyStation): EvChargingStation => fixture as EvChargingStation;
 
 const vehicle: EvVehicleSpec = {
   batteryKwh: 60,
@@ -60,7 +68,7 @@ describe("planCharges", () => {
       requestCorridorChargers: vi.fn().mockResolvedValue([charger("mid", 1.35)]),
       requestMatrix: vi
         .fn()
-        .mockImplementation(async (s: any[], t: any[]) =>
+        .mockImplementation(async (s: LngLat[], t: LngLat[]) =>
           s.map(() => t.map(() => ({ seconds: 120, km: 2 }))),
         ),
     };
@@ -184,7 +192,7 @@ describe("planCharges", () => {
       requestCorridorChargers: vi.fn().mockResolvedValue([charger("mid", 0.4)]),
       requestMatrix: vi
         .fn()
-        .mockImplementation(async (s: any[], t: any[]) =>
+        .mockImplementation(async (s: LngLat[], t: LngLat[]) =>
           s.map(() => t.map(() => ({ seconds: 60, km: 1 }))),
         ),
     };
@@ -219,7 +227,7 @@ describe("planCharges", () => {
       requestCorridorChargers: vi.fn().mockResolvedValue([full, free]),
       requestMatrix: vi
         .fn()
-        .mockImplementation(async (s: any[], t: any[]) =>
+        .mockImplementation(async (s: LngLat[], t: LngLat[]) =>
           s.map(() => t.map(() => ({ seconds: 120, km: 2 }))),
         ),
     };
@@ -254,7 +262,7 @@ describe("planCharges", () => {
     // targets order is [full, free, onward]; give "full" the cheap detour.
     const cb = {
       requestCorridorChargers: vi.fn().mockResolvedValue([full, free]),
-      requestMatrix: vi.fn().mockImplementation(async (s: any[], t: any[]) =>
+      requestMatrix: vi.fn().mockImplementation(async (s: LngLat[], t: LngLat[]) =>
         s.map(() =>
           t.map((_: unknown, ti: number) => ({
             seconds: ti === 0 ? 60 : 300,
@@ -290,7 +298,7 @@ describe("planCharges", () => {
     // The ~10-min preference bonus outweighs the small detour gap → ionity wins.
     const cb = {
       requestCorridorChargers: vi.fn().mockResolvedValue([other, ionity]),
-      requestMatrix: vi.fn().mockImplementation(async (s: any[], t: any[]) =>
+      requestMatrix: vi.fn().mockImplementation(async (s: LngLat[], t: LngLat[]) =>
         s.map(() =>
           t.map((_: unknown, ti: number) => ({
             seconds: ti === 0 ? 60 : 180,
@@ -326,7 +334,7 @@ describe("planCharges", () => {
     const cb = {
       requestCorridorChargers: vi.fn().mockResolvedValue([enbw, other]),
       // "enbw" is the shorter detour (ti=0), so only the avoid penalty can flip this.
-      requestMatrix: vi.fn().mockImplementation(async (s: any[], t: any[]) =>
+      requestMatrix: vi.fn().mockImplementation(async (s: LngLat[], t: LngLat[]) =>
         s.map(() =>
           t.map((_: unknown, ti: number) => ({
             seconds: ti === 0 ? 60 : 180,
@@ -359,7 +367,7 @@ describe("planCharges", () => {
       requestCorridorChargers: vi.fn().mockResolvedValue([enbw]),
       requestMatrix: vi
         .fn()
-        .mockImplementation(async (s: any[], t: any[]) =>
+        .mockImplementation(async (s: LngLat[], t: LngLat[]) =>
           s.map(() => t.map(() => ({ seconds: 120, km: 2 }))),
         ),
     };
@@ -388,7 +396,7 @@ describe("planCharges", () => {
       requestCorridorChargers: vi.fn().mockResolvedValue([only]),
       requestMatrix: vi
         .fn()
-        .mockImplementation(async (s: any[], t: any[]) =>
+        .mockImplementation(async (s: LngLat[], t: LngLat[]) =>
           s.map(() => t.map(() => ({ seconds: 120, km: 2 }))),
         ),
     };
@@ -411,7 +419,7 @@ describe("planCharges", () => {
   });
 
   it("estimateSessionCost sums energy + flat with VAT and filters by power/current (D10)", () => {
-    const station: any = {
+    const station: TariffOnlyStation = {
       tariffs: [
         {
           scope: "cpo",
@@ -423,12 +431,14 @@ describe("planCharges", () => {
       ],
     };
     // 20 kWh session: 0.5*20 + 1 = 11 EUR
-    expect(estimateSessionCost(station, { powerKw: 150, current: "dc" }, 20, 30)).toEqual({
+    expect(
+      estimateSessionCost(asStation(station), { powerKw: 150, current: "dc" }, 20, 30),
+    ).toEqual({
       amount: 11,
       currency: "EUR",
     });
     // AC-only tariff must not apply to a DC session → unknown (null)
-    const acOnly: any = {
+    const acOnly: TariffOnlyStation = {
       tariffs: [
         {
           scope: "cpo",
@@ -437,9 +447,11 @@ describe("planCharges", () => {
         },
       ],
     };
-    expect(estimateSessionCost(acOnly, { powerKw: 150, current: "dc" }, 20, 30)).toBeNull();
     expect(
-      estimateSessionCost({ tariffs: [] } as any, { powerKw: 50, current: "dc" }, 10, 10),
+      estimateSessionCost(asStation(acOnly), { powerKw: 150, current: "dc" }, 20, 30),
+    ).toBeNull();
+    expect(
+      estimateSessionCost(asStation({ tariffs: [] }), { powerKw: 50, current: "dc" }, 10, 10),
     ).toBeNull();
   });
 
@@ -456,7 +468,7 @@ describe("planCharges", () => {
       requestCorridorChargers: vi.fn().mockResolvedValue([pricey, cheap]),
       requestMatrix: vi
         .fn()
-        .mockImplementation(async (s: any[], t: any[]) =>
+        .mockImplementation(async (s: LngLat[], t: LngLat[]) =>
           s.map(() => t.map(() => ({ seconds: 120, km: 2 }))),
         ),
     };
@@ -489,7 +501,7 @@ describe("planCharges", () => {
     // pricyNear (ti=0) is close; cheapFar (ti=1) is a 30-min detour.
     const cb = {
       requestCorridorChargers: vi.fn().mockResolvedValue([pricyNear, cheapFar]),
-      requestMatrix: vi.fn().mockImplementation(async (s: any[], t: any[]) =>
+      requestMatrix: vi.fn().mockImplementation(async (s: LngLat[], t: LngLat[]) =>
         s.map(() =>
           t.map((_: unknown, ti: number) => ({
             seconds: ti === 0 ? 60 : 1800,
@@ -520,7 +532,7 @@ describe("planCharges", () => {
       requestCorridorChargers: vi.fn().mockResolvedValue([ionity]),
       requestMatrix: vi
         .fn()
-        .mockImplementation(async (s: any[], t: any[]) =>
+        .mockImplementation(async (s: LngLat[], t: LngLat[]) =>
           s.map(() => t.map(() => ({ seconds: 120, km: 2 }))),
         ),
     };

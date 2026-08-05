@@ -23,7 +23,7 @@ describe("dedupeRoadConditionEvents", () => {
       ev({ id: "x", dataUpdatedAt: "2026-06-01T00:00:00Z", headline: "new" }),
     ]);
     expect(out).toHaveLength(1);
-    expect(out[0]!.headline).toBe("new");
+    expect(out[0].headline).toBe("new");
   });
 
   it("collapses near-identical events from different providers (newest wins, keeps its provider)", () => {
@@ -44,7 +44,7 @@ describe("dedupeRoadConditionEvents", () => {
       }),
     ]);
     expect(out).toHaveLength(1);
-    expect(out[0]!.provider).toBe("road-conditions-tomtom");
+    expect(out[0].provider).toBe("road-conditions-tomtom");
   });
 
   it("keeps events that differ in type even when co-located", () => {
@@ -89,7 +89,7 @@ describe("dedupeRoadConditionEvents", () => {
       }),
     ]);
     expect(out).toHaveLength(1);
-    expect(out[0]!.provider).toBe("road-conditions-tomtom");
+    expect(out[0].provider).toBe("road-conditions-tomtom");
   });
 
   it("merges two sparsely-digitised overlapping lines (no shared/near vertices)", () => {

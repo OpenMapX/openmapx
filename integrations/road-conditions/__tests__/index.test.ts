@@ -13,6 +13,13 @@ type Handler = (
   },
 ) => Promise<void>;
 
+/** The handler `setup` registered for `path`, failing loudly when it registered none. */
+function handlerFor(routes: Map<string, Handler>, path: string): Handler {
+  const handler = routes.get(path);
+  if (!handler) throw new Error(`no route registered for ${path}`);
+  return handler;
+}
+
 /**
  * Drives the `/events` route with a stub host: records the cache key each call
  * derives and the query options the aggregation would run under.
@@ -41,7 +48,7 @@ function eventsHarness() {
     async get(query: Record<string, string | undefined>) {
       let status = 200;
       let body: unknown;
-      await routes.get("/events")!(
+      await handlerFor(routes, "/events")(
         { query, body: undefined },
         {
           status: (code) => {
@@ -117,7 +124,7 @@ function flowRouteHarness(opts?: {
     async post(body: unknown) {
       let status = 200;
       let resBody: unknown;
-      await routes.get("/flow-along-route")!(
+      await handlerFor(routes, "/flow-along-route")(
         { query: {}, body },
         {
           status: (code) => {
@@ -275,9 +282,9 @@ describe("POST /flow-along-route", () => {
         },
       ],
     })) as { body: { routes: Array<{ id: string; spans: Array<{ los: string }> }> } };
-    const spans = body.routes[0]!.spans;
+    const spans = body.routes[0].spans;
     expect(spans.length).toBeGreaterThan(0);
-    expect(spans[0]!.los).toBe("heavy");
+    expect(spans[0].los).toBe("heavy");
   });
 
   it("degrades only the route whose own processing fails, leaving a healthy route in the same request intact", async () => {
@@ -326,7 +333,9 @@ describe("POST /flow-along-route", () => {
 
     expect(status).toBe(200);
     expect(body.routes.find((r) => r.id === "r0")).toEqual({ id: "r0", spans: [] });
-    const r1Spans = body.routes.find((r) => r.id === "r1")!.spans;
-    expect(r1Spans.length).toBeGreaterThan(0);
+    const r1 = body.routes.find((r) => r.id === "r1");
+    expect(r1).toBeDefined();
+    if (!r1) throw new Error("expected route r1 in the response");
+    expect(r1.spans.length).toBeGreaterThan(0);
   });
 });

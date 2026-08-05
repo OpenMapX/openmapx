@@ -178,8 +178,9 @@ describe("projectFlowToRoute", () => {
     );
     const worst = spans.find((s) => s.los === "stationary");
     expect(worst).toBeDefined();
-    expect(worst!.startMeters).toBeGreaterThan(550);
-    expect(worst!.endMeters).toBeLessThan(750);
+    if (!worst) throw new Error("expected a stationary span");
+    expect(worst.startMeters).toBeGreaterThan(550);
+    expect(worst.endMeters).toBeLessThan(750);
     expect(spans.filter((s) => s.los === "heavy")).toHaveLength(2);
   });
 
@@ -260,8 +261,9 @@ describe("projectFlowToRoute", () => {
     );
     const jam = spans.find((s) => s.los === "stationary");
     expect(jam).toBeDefined();
-    expect(jam!.startMeters).toBeGreaterThan(450);
-    expect(jam!.endMeters).toBeLessThan(750);
+    if (!jam) throw new Error("expected a stationary span");
+    expect(jam.startMeters).toBeGreaterThan(450);
+    expect(jam.endMeters).toBeLessThan(750);
     const freeFlowSpans = spans.filter((s) => s.los === "free_flow");
     expect(freeFlowSpans.some((s) => s.endMeters <= 550)).toBe(true);
     expect(freeFlowSpans.some((s) => s.startMeters >= 650)).toBe(true);

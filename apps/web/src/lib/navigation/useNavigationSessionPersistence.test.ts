@@ -372,7 +372,7 @@ describe("useNavigationSessionPersistence", () => {
   });
 
   it("invalidates route membership exactly once per package change", async () => {
-    let nowMs = Date.now() + 1_000;
+    const nowMs = Date.now() + 1_000;
     const now = () => nowMs;
     const storage = controllableStorage();
     const resolver = fakeResolver({ covered: false });
@@ -410,7 +410,7 @@ describe("useNavigationSessionPersistence", () => {
   });
 
   it("writes the first package ids once a resolver appears mid-route", async () => {
-    let nowMs = Date.now() + 1_000;
+    const nowMs = Date.now() + 1_000;
     const now = () => nowMs;
     const storage = controllableStorage();
     renderHook(() => useNavigationSessionPersistence(storage, undefined, now));
@@ -448,7 +448,7 @@ describe("useNavigationSessionPersistence", () => {
   });
 
   it("schedules a checkpoint when the store replaces waypoints or options", async () => {
-    let nowMs = Date.now() + 1_000;
+    const nowMs = Date.now() + 1_000;
     const now = () => nowMs;
     const storage = controllableStorage();
     const resolver = fakeResolver();

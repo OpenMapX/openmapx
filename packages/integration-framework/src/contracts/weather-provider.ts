@@ -1,5 +1,4 @@
 import type {
-  CurrentWeather,
   DailyForecastPoint,
   HourlyForecastPoint,
   LngLat,

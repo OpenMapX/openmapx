@@ -8,7 +8,7 @@ const t = (key: string, values?: Record<string, string>): string => {
     "incidentType.road_closure": "Road closure",
     "incidentType.accident": "Accident",
   };
-  if (key in types) return types[key]!;
+  if (key in types) return types[key];
   if (key === "incidentAhead") return `${values?.type} ahead in ${values?.distance}`;
   if (key === "incidentRoadClosed") return "— road closed";
   return key;

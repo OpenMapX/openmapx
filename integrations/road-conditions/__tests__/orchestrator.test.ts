@@ -106,7 +106,7 @@ describe("aggregateRoadConditions", () => {
       provider("road-conditions-openconditions", async () => [ev({ id: "1" })]),
     ]);
     const out = await aggregateRoadConditions(ctx, BBOX);
-    expect(out[0]!.provider).toBe("road-conditions-openconditions");
+    expect(out[0].provider).toBe("road-conditions-openconditions");
   });
 
   it("filters out events whose source is disallowed by the data-use policy", async () => {

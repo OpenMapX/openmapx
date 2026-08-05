@@ -1,5 +1,4 @@
-import type { LngLat, Route } from "@openmapx/core";
-import { type OfflineMapPackageManifest } from "@openmapx/core";
+import type { LngLat, OfflineMapPackageManifest, Route } from "@openmapx/core";
 import { describe, expect, it, vi } from "vitest";
 import type { OfflinePackageResolver } from "../offlineAreas/packageResolver";
 import { createOfflinePackageResolver } from "../offlineAreas/packageResolver";
