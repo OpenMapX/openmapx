@@ -144,7 +144,11 @@ async function downloadOfflinePackageImpl(
   const existing = await storage.get(manifest.packageId);
   let record = existing ?? baseRecord(manifest, options.name ?? "Offline map", Date.now());
   if (record.manifest.archive.etag !== manifest.archive.etag) {
+    // Only a stored record can carry a different ETag, so this always drops one:
+    // tell consumers now instead of leaving stale coverage visible until the
+    // replacement download finishes.
     await storage.delete(manifest.packageId);
+    notifyOfflinePackageChanged(manifest.packageId);
     record = baseRecord(manifest, options.name ?? record.name, Date.now());
   }
   record.manifest = manifest;
@@ -216,7 +220,11 @@ async function downloadOfflinePackageImpl(
         await storage.put(record);
         throw error;
       }
+      // The record only reaches this branch once it was stored as ready, and its
+      // archive just turned out to be unusable, so consumers must stop offering
+      // it while the retry below downloads a replacement.
       await storage.delete(manifest.packageId);
+      notifyOfflinePackageChanged(manifest.packageId);
       record = baseRecord(manifest, options.name ?? record.name, Date.now());
     }
   }

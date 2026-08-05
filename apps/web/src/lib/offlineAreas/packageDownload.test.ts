@@ -1,10 +1,17 @@
-import type { OfflineMapPackageManifest } from "@openmapx/core";
+import type { OfflineMapPackageManifest, OfflinePackageCompatibility } from "@openmapx/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OfflinePackageApi } from "./packageApi";
 import { OfflinePackageApiError } from "./packageApi";
-import { downloadOfflinePackage, hasActiveOfflinePackageDownload } from "./packageDownload";
+import {
+  downloadOfflinePackage,
+  hasActiveOfflinePackageDownload,
+  OFFLINE_PACKAGE_CHANGED_EVENT,
+} from "./packageDownload";
+import type { OfflinePackageResolver } from "./packageResolver";
+import { createOfflinePackageResolver } from "./packageResolver";
 import { MemoryOfflinePackageStorage } from "./packageStorage";
 import { Sha256 } from "./sha256";
+import type { OfflinePackageStorage } from "./types";
 
 vi.mock("./pmtilesReader", () => ({
   validateLocalPmtilesArchive: vi.fn(async () => ({ minZoom: 1, maxZoom: 14 })),
@@ -60,6 +67,52 @@ function response(bytes: Uint8Array, status = 200, headers: Record<string, strin
   const body = new Uint8Array(new ArrayBuffer(bytes.byteLength));
   body.set(bytes);
   return new Response(body.buffer, { status, headers });
+}
+
+async function storeReadyRecord(
+  storage: OfflinePackageStorage,
+  current: OfflineMapPackageManifest,
+): Promise<void> {
+  const byteLength = current.archive.byteLength;
+  await storage.put({
+    id: packageId,
+    name: "Fixture",
+    manifest: current,
+    status: "ready",
+    bytesReceived: byteLength,
+    bytesTotal: byteLength,
+    verifiedPrefixBytes: byteLength,
+    createdAt: 1,
+    updatedAt: 1,
+  });
+}
+
+async function resolverFor(storage: OfflinePackageStorage): Promise<OfflinePackageResolver> {
+  const compatibility: OfflinePackageCompatibility = { tileSchema: "openmaptiles" };
+  const resolver = createOfflinePackageResolver(storage, compatibility);
+  await resolver.refresh();
+  return resolver;
+}
+
+/** Refresh `resolver` from every package-changed event, the way the app does. */
+function trackPackageChanges(resolver: OfflinePackageResolver): {
+  events: string[];
+  settle(): Promise<void>;
+} {
+  const events: string[] = [];
+  const refreshes: Promise<void>[] = [];
+  const listener = (event: Event) => {
+    events.push((event as CustomEvent<{ packageId: string }>).detail.packageId);
+    refreshes.push(resolver.refresh());
+  };
+  window.addEventListener(OFFLINE_PACKAGE_CHANGED_EVENT, listener);
+  return {
+    events,
+    async settle() {
+      window.removeEventListener(OFFLINE_PACKAGE_CHANGED_EVENT, listener);
+      await Promise.all(refreshes);
+    },
+  };
 }
 
 async function failure(task: () => Promise<unknown>): Promise<Error> {
@@ -307,5 +360,59 @@ describe("downloadOfflinePackage", () => {
     expect(lockRequests).toEqual([
       { name: `openmapx-offline-package:${packageId}`, options: { mode: "exclusive" } },
     ]);
+  });
+
+  it("announces the deletion of a record replaced by a new archive ETag", async () => {
+    const bytes = new TextEncoder().encode("abcdef");
+    const stale = manifest(bytes, "a".repeat(64));
+    const current = manifest(bytes);
+    const storage = new MemoryOfflinePackageStorage();
+    await storeReadyRecord(storage, stale);
+    const resolver = await resolverFor(storage);
+    expect(resolver.packageForCoordinate([0.5, 0.5])?.id).toBe(packageId);
+    const changes = trackPackageChanges(resolver);
+
+    // The replacement download fails, so the only event can be the deletion.
+    const api = apiFor(response(new Uint8Array(), 503));
+    await failure(() => downloadOfflinePackage(api, storage, current));
+    await changes.settle();
+
+    expect(changes.events).toEqual([packageId]);
+    expect(resolver.packageForCoordinate([0.5, 0.5])).toBeUndefined();
+    expect(resolver.compatiblePackageIds()).toEqual([]);
+  });
+
+  it("announces the deletion of a ready record whose archive is no longer usable", async () => {
+    const bytes = new TextEncoder().encode("abcdef");
+    const current = manifest(bytes);
+    const storage = new MemoryOfflinePackageStorage();
+    // A record left behind after the browser evicted the finalized archive.
+    await storeReadyRecord(storage, current);
+    const resolver = await resolverFor(storage);
+    expect(resolver.packageForCoordinate([0.5, 0.5])?.id).toBe(packageId);
+    const changes = trackPackageChanges(resolver);
+
+    const api = apiFor(response(new Uint8Array(), 503));
+    const error = await failure(() => downloadOfflinePackage(api, storage, current));
+    await changes.settle();
+
+    expect(error.name).toBe(new OfflinePackageApiError("x", 503, "x").name);
+    expect(changes.events).toEqual([packageId]);
+    expect(resolver.packageForCoordinate([0.5, 0.5])).toBeUndefined();
+    expect(resolver.compatiblePackageIds()).toEqual([]);
+  });
+
+  it("does not announce a deletion when nothing was stored for the package", async () => {
+    const bytes = new TextEncoder().encode("abcdef");
+    const current = manifest(bytes);
+    const storage = new MemoryOfflinePackageStorage();
+    const resolver = await resolverFor(storage);
+    const changes = trackPackageChanges(resolver);
+
+    const api = apiFor(response(new Uint8Array(), 503));
+    await failure(() => downloadOfflinePackage(api, storage, current));
+    await changes.settle();
+
+    expect(changes.events).toEqual([]);
   });
 });
