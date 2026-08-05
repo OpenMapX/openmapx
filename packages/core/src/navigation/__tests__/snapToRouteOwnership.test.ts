@@ -17,7 +17,6 @@ const ALLOWED: Record<string, string> = {
   "apps/web/src/lib/navigation/useNavAlerts.ts": "OSM alert projection, migrated by a later plan",
   "packages/core/src/navigation/incidentProjection.ts":
     "incident projection, migrated by a later plan",
-  "packages/core/src/navigation/flowProjection.ts": "flow projection, migrated by a later plan",
 };
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), "../../../../../..");

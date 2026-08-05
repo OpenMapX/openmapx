@@ -2,9 +2,7 @@ import type { LngLat } from "../types/geometry";
 import type { RoadFlowSegment, RouteFlowSpan } from "../types/roadConditions";
 import { haversineDistance } from "../utils/coordinates";
 import { angularDifference, bearingBetween, routeBearingAt } from "./bearing";
-import { cumulativeDistances } from "./deadReckon";
-import { snapToRoute } from "./snap";
-import type { SnapResult } from "./types";
+import { type PreparedRouteMatcher, prepareRouteMatcher, snapPreparedRoute } from "./routeMatcher";
 
 export interface ProjectFlowOptions {
   /** Maximum distance from the routed carriageway for a sample to count. */
@@ -94,200 +92,13 @@ function sampleIndices(count: number): number[] {
   return Array.from({ length: MAX_SEGMENT_SAMPLES }, (_, i) => Math.round(i * step));
 }
 
-/** Metres per degree of latitude at its shortest, so a metre pad never under-pads. */
-const METERS_PER_DEG_LAT = 110_574;
 /**
- * Roughly how many consecutive route edges a grid cell should hold. It sets
- * how much route a corridor query drags in with the stretch it actually wants:
- * too coarse and every sample re-scans kilometres of polyline, too fine and the
- * grid costs more to walk than the edges it saves.
+ * A projected stretch of route with the severity it was ranked at. The rank is
+ * dropped on the way out; it exists so overlapping observations can be ordered
+ * against each other. Exported for the differential tests that pin
+ * {@link resolveFlowOverlaps} against the resolver it replaced.
  */
-const CELL_EDGES = 8;
-/**
- * An edge spanning more cells than this is held aside rather than written into
- * every cell it crosses, which keeps one 20 km hop between two consecutive
- * route points from filling the whole grid.
- */
-const MAX_CELLS_PER_EDGE = 8;
-/** Past this a box query costs more than simply considering the whole route. */
-const MAX_QUERY_CELLS = 4096;
-/**
- * Beyond this latitude a metre-to-degree longitude pad stops being meaningful
- * (a degree of longitude is metres wide at the pole), so the query box is
- * widened to every longitude instead of being computed wrong.
- */
-const POLAR_LAT_DEG = 85;
-
-interface DegreeBox {
-  west: number;
-  south: number;
-  east: number;
-  north: number;
-}
-
-/**
- * The route's edges bucketed into a coarse lon/lat grid, built once per call.
- * `snapToRoute` scans the entire polyline, so snapping every sample of every
- * flow segment against the whole route is O(routePoints) per sample — seconds
- * to minutes of uninterruptible work on the shared event loop for a long route
- * with a busy corridor. The grid answers "which edges could be within the
- * corridor of this box" in roughly constant time, so each sample only scans
- * the handful of edges that could actually win.
- */
-interface RouteIndex {
-  geometry: LngLat[];
-  /** Along-route distance to each vertex, which makes a sub-line snap global. */
-  cumulative: number[];
-  cellLng: number;
-  cellLat: number;
-  cells: Map<string, number[]>;
-  /** Edges too long to bucket; considered by every query. */
-  longEdges: number[];
-  edgeCount: number;
-}
-
-/** A contiguous stretch of the route that a query box touched. */
-interface CorridorRun {
-  /** Index of the run's first vertex in the full route. */
-  start: number;
-  line: LngLat[];
-}
-
-const cellKey = (col: number, row: number): string => `${col}|${row}`;
-
-/**
- * Box around `points` guaranteed to contain everything within `padMeters` of
- * any of them, so an edge that could snap inside the corridor can never be
- * missed. Padding is computed with the shortest degree on each axis and a
- * safety factor, since it only ever costs a few extra candidate edges.
- */
-function paddedBox(points: readonly LngLat[], padMeters: number): DegreeBox {
-  let west = Number.POSITIVE_INFINITY;
-  let south = Number.POSITIVE_INFINITY;
-  let east = Number.NEGATIVE_INFINITY;
-  let north = Number.NEGATIVE_INFINITY;
-  for (const [lng, lat] of points) {
-    if (lng < west) west = lng;
-    if (lng > east) east = lng;
-    if (lat < south) south = lat;
-    if (lat > north) north = lat;
-  }
-  const latPad = (padMeters / METERS_PER_DEG_LAT) * 1.05;
-  const maxAbsLat = Math.max(Math.abs(south), Math.abs(north));
-  if (maxAbsLat > POLAR_LAT_DEG) {
-    return { west: -180, south: south - latPad, east: 180, north: north + latPad };
-  }
-  const lngPad = latPad / Math.cos((maxAbsLat * Math.PI) / 180);
-  return { west: west - lngPad, south: south - latPad, east: east + lngPad, north: north + latPad };
-}
-
-function buildRouteIndex(geometry: LngLat[], corridor: number): RouteIndex {
-  const edgeCount = geometry.length - 1;
-  const bounds = paddedBox(geometry, 0);
-  // Each axis is sized off that axis' mean edge span, so a route that is long
-  // in one direction and narrow in the other gets cells shaped the same way.
-  // The floor keeps a route with near-coincident points (or no span at all on
-  // one axis) from producing cells so fine that a corridor-sized box spans
-  // hundreds of them.
-  const minCell = (4 * corridor) / METERS_PER_DEG_LAT;
-  const cellLat = Math.max(((bounds.north - bounds.south) / edgeCount) * CELL_EDGES, minCell);
-  const cellLng = Math.max(((bounds.east - bounds.west) / edgeCount) * CELL_EDGES, minCell);
-
-  const cells = new Map<string, number[]>();
-  const longEdges: number[] = [];
-  for (let edge = 0; edge < edgeCount; edge++) {
-    const [aLng, aLat] = geometry[edge];
-    const [bLng, bLat] = geometry[edge + 1];
-    const colStart = Math.floor(Math.min(aLng, bLng) / cellLng);
-    const colEnd = Math.floor(Math.max(aLng, bLng) / cellLng);
-    const rowStart = Math.floor(Math.min(aLat, bLat) / cellLat);
-    const rowEnd = Math.floor(Math.max(aLat, bLat) / cellLat);
-    if ((colEnd - colStart + 1) * (rowEnd - rowStart + 1) > MAX_CELLS_PER_EDGE) {
-      longEdges.push(edge);
-      continue;
-    }
-    for (let col = colStart; col <= colEnd; col++) {
-      for (let row = rowStart; row <= rowEnd; row++) {
-        const key = cellKey(col, row);
-        const bucket = cells.get(key);
-        if (bucket) bucket.push(edge);
-        else cells.set(key, [edge]);
-      }
-    }
-  }
-  return {
-    geometry,
-    cumulative: cumulativeDistances(geometry),
-    cellLng,
-    cellLat,
-    cells,
-    longEdges,
-    edgeCount,
-  };
-}
-
-/**
- * Contiguous stretches of the route whose edges the box touches, as sub-lines
- * plus the vertex they start at. A route that doubles back through the same
- * area yields one run per pass, so the two never merge into a sub-line that
- * spans the gap between them.
- */
-function corridorRuns(index: RouteIndex, box: DegreeBox): CorridorRun[] {
-  const colStart = Math.floor(box.west / index.cellLng);
-  const colEnd = Math.floor(box.east / index.cellLng);
-  const rowStart = Math.floor(box.south / index.cellLat);
-  const rowEnd = Math.floor(box.north / index.cellLat);
-
-  let edges: number[];
-  if ((colEnd - colStart + 1) * (rowEnd - rowStart + 1) > MAX_QUERY_CELLS) {
-    edges = Array.from({ length: index.edgeCount }, (_, i) => i);
-  } else {
-    const found = new Set<number>(index.longEdges);
-    for (let col = colStart; col <= colEnd; col++) {
-      for (let row = rowStart; row <= rowEnd; row++) {
-        const bucket = index.cells.get(cellKey(col, row));
-        if (bucket) for (const edge of bucket) found.add(edge);
-      }
-    }
-    edges = [...found].sort((a, b) => a - b);
-  }
-
-  const runs: CorridorRun[] = [];
-  for (let i = 0; i < edges.length; ) {
-    let last = i;
-    while (last + 1 < edges.length && edges[last + 1] === edges[last] + 1) last++;
-    const start = edges[i];
-    runs.push({ start, line: index.geometry.slice(start, edges[last] + 2) });
-    i = last + 1;
-  }
-  return runs;
-}
-
-/**
- * Nearest point on the route to `point`, searched only within the candidate
- * runs, with `alongMeters` and `segmentIndex` translated back to the whole
- * route — the backward-jump guard and the bearing lookup both read them as
- * route-global. Any snap closer than the corridor is guaranteed to be found,
- * because the box the runs came from was padded by exactly that corridor;
- * beyond it only the fact that the sample is out of corridor matters, not how
- * far out it is.
- */
-function snapWithinRuns(index: RouteIndex, runs: CorridorRun[], point: LngLat): SnapResult | null {
-  let best: SnapResult | null = null;
-  for (const run of runs) {
-    const snap = snapToRoute(run.line, point);
-    if (best && snap.deviationMeters >= best.deviationMeters) continue;
-    best = {
-      snapped: snap.snapped,
-      alongMeters: index.cumulative[run.start] + snap.alongMeters,
-      deviationMeters: snap.deviationMeters,
-      segmentIndex: run.start + snap.segmentIndex,
-    };
-  }
-  return best;
-}
-
-interface RawSpan extends RouteFlowSpan {
+export interface RankedFlowSpan extends RouteFlowSpan {
   rank: number;
 }
 
@@ -312,26 +123,27 @@ interface AcceptedSample {
  *    the corridor but whose chord cuts across a route bend, so the segment
  *    looks contiguous yet would claim the whole bend — caught by the forward
  *    guard below, scaled by `RUN_STEP_SLACK_FACTOR` (see its doc comment).
+ *
+ * Each sample is matched against the whole route by the prepared matcher, so
+ * the nearest carriageway and its route-global distance are exact wherever the
+ * route runs. A degree-space candidate box cannot make that promise: the route
+ * between two vertices follows a great circle, which at high latitude leaves
+ * the box those vertices span entirely — a road at latitude 80 bows about 165 m
+ * poleward of it over two degrees of longitude, far outside any corridor, so
+ * traffic sitting exactly on the route was dropped as unmatched.
  */
 function segmentSpans(
   segment: RoadFlowSegment,
-  index: RouteIndex,
+  matcher: PreparedRouteMatcher,
   corridor: number,
   tolerance: number,
-): RawSpan[] {
+): RankedFlowSpan[] {
   const coords = segment.geometry.coordinates as LngLat[];
   if (coords.length < 2) return [];
 
-  // One corridor query for the whole segment, not one per sample: the samples
-  // are what gets snapped, so the box around them is the only route the segment
-  // can possibly match.
   const indices = sampleIndices(coords.length);
-  const sampled = indices.map((i) => coords[i]);
-  const runs = corridorRuns(index, paddedBox(sampled, corridor));
-  if (runs.length === 0) return [];
-
   const rank = flowSeverityRank(segment.los, segment.speedRatio);
-  const spans: RawSpan[] = [];
+  const spans: RankedFlowSpan[] = [];
   let run: AcceptedSample[] = [];
 
   const closeRun = (): void => {
@@ -350,10 +162,16 @@ function segmentSpans(
     run = [];
   };
 
+  // The previous sample's edge, offered as the first one to evaluate. Samples
+  // walk along the segment, so its neighbour is usually the answer; the hint
+  // only reorders the search, it can never change which edge wins.
+  let seedSegmentIndex: number | undefined;
+
   for (const sample of indices) {
     const point = coords[sample];
-    const snap = snapWithinRuns(index, runs, point);
-    if (!snap || snap.deviationMeters > corridor) {
+    const snap = snapPreparedRoute(matcher, point, seedSegmentIndex);
+    if (snap.segmentIndex >= 0) seedSegmentIndex = snap.segmentIndex;
+    if (snap.deviationMeters > corridor) {
       closeRun();
       continue;
     }
@@ -361,7 +179,7 @@ function segmentSpans(
     const behind = coords[Math.max(sample - 1, 0)];
     const segmentBearing = bearingBetween(behind, ahead);
     if (
-      angularDifference(segmentBearing, routeBearingAt(index.geometry, snap.segmentIndex)) >
+      angularDifference(segmentBearing, routeBearingAt(matcher.geometry, snap.segmentIndex)) >
       tolerance
     ) {
       closeRun();
@@ -384,11 +202,155 @@ function segmentSpans(
 }
 
 /** Whether two spans describe the same condition closely enough to merge. */
-function sameCondition(a: RawSpan, b: RawSpan): boolean {
+function sameCondition(a: RankedFlowSpan, b: RankedFlowSpan): boolean {
   if (a.los !== b.los) return false;
   const ratioA = a.speedRatio ?? -1;
   const ratioB = b.speedRatio ?? -1;
   return Math.abs(ratioA - ratioB) < 0.05;
+}
+
+/**
+ * Diagnostic operation counts for {@link resolveFlowOverlaps}, off unless a
+ * caller supplies somewhere to put them. The scaling tests use them to prove
+ * the sweep never degenerates into comparing every span with every interval.
+ */
+export interface FlowOverlapCounters {
+  /** Pushes and pops on the active-span heap. */
+  heapOperations: number;
+  /** Span-against-span comparisons, sorting and heap ordering together. */
+  comparisons: number;
+  /** Boundary intervals emitted, before merging. */
+  intervals: number;
+}
+
+/**
+ * Cut the route at every span boundary, let the worst observation own each
+ * interval, then glue the neighbouring intervals that describe one condition
+ * back together. This resolves overlaps without any span having to be aware of
+ * its neighbours.
+ *
+ * The interval an observation owns is decided by a left-to-right sweep over the
+ * boundaries, with the spans covering the current interval held in a heap
+ * ordered by severity and, for equal severity, by the order they were submitted
+ * in — a jam reported by two providers is attributed to whichever reported it
+ * first, exactly as an in-order scan of the spans would have decided. Spans
+ * leave the sweep by being marked closed and dropped when they surface, so no
+ * boundary costs more than the spans that actually start or end at it.
+ *
+ * Exported for the tests that pin this against the resolver it replaced;
+ * `projectFlowToRoute` is its only production caller.
+ */
+export function resolveFlowOverlaps(
+  raw: readonly RankedFlowSpan[],
+  minSpan: number,
+  mergeGap: number,
+  counters?: FlowOverlapCounters,
+): RouteFlowSpan[] {
+  if (raw.length === 0) return [];
+  const count = raw.length;
+
+  /**
+   * Whether `a` should own an interval that both cover. Severity first, then
+   * the submission order — never the order a sort happened to leave them in.
+   */
+  const beats = (a: number, b: number): boolean => {
+    if (counters) counters.comparisons++;
+    if (raw[a].rank > raw[b].rank) return true;
+    if (raw[b].rank > raw[a].rank) return false;
+    return a < b;
+  };
+
+  const byValue = (values: (span: RankedFlowSpan) => number): number[] =>
+    Array.from({ length: count }, (_, i) => i).sort((a, b) => {
+      if (counters) counters.comparisons++;
+      return values(raw[a]) - values(raw[b]) || a - b;
+    });
+  const byStart = byValue((span) => span.startMeters);
+  const byEnd = byValue((span) => span.endMeters);
+  const bounds = [...new Set(raw.flatMap((s) => [s.startMeters, s.endMeters]))].sort(
+    (a, b) => a - b,
+  );
+
+  const heap: number[] = [];
+  const open = new Uint8Array(count).fill(1);
+
+  const push = (ordinal: number): void => {
+    if (counters) counters.heapOperations++;
+    heap.push(ordinal);
+    let child = heap.length - 1;
+    while (child > 0) {
+      const parent = (child - 1) >> 1;
+      if (!beats(heap[child], heap[parent])) break;
+      [heap[child], heap[parent]] = [heap[parent], heap[child]];
+      child = parent;
+    }
+  };
+
+  const pop = (): void => {
+    if (counters) counters.heapOperations++;
+    const last = heap.pop();
+    if (last === undefined || heap.length === 0) return;
+    heap[0] = last;
+    let parent = 0;
+    for (;;) {
+      const left = parent * 2 + 1;
+      const right = left + 1;
+      let best = parent;
+      if (left < heap.length && beats(heap[left], heap[best])) best = left;
+      if (right < heap.length && beats(heap[right], heap[best])) best = right;
+      if (best === parent) return;
+      [heap[parent], heap[best]] = [heap[best], heap[parent]];
+      parent = best;
+    }
+  };
+
+  /** The span owning the interval about to be emitted, or -1 if none does. */
+  const owner = (): number => {
+    while (heap.length > 0 && open[heap[0]] === 0) pop();
+    return heap.length > 0 ? heap[0] : -1;
+  };
+
+  const intervals: RankedFlowSpan[] = [];
+  let started = 0;
+  let ended = 0;
+  for (let i = 1; i < bounds.length; i++) {
+    const start = bounds[i - 1];
+    const end = bounds[i];
+    if (end - start <= 0) continue;
+    // A span covers this interval when it began at or before `start` and runs
+    // past it. Both event lists are walked once across the whole sweep, so a
+    // span is opened and closed once no matter how many boundaries it spans.
+    while (ended < count && raw[byEnd[ended]].endMeters <= start) {
+      open[byEnd[ended]] = 0;
+      ended++;
+    }
+    while (started < count && raw[byStart[started]].startMeters <= start) {
+      push(byStart[started]);
+      started++;
+    }
+    const winner = owner();
+    if (winner < 0) continue;
+    if (counters) counters.intervals++;
+    intervals.push({ ...raw[winner], startMeters: start, endMeters: end });
+  }
+
+  const merged: RankedFlowSpan[] = [];
+  for (const interval of intervals) {
+    const previous = merged[merged.length - 1];
+    if (
+      previous &&
+      sameCondition(previous, interval) &&
+      interval.startMeters - previous.endMeters <= mergeGap
+    ) {
+      previous.endMeters = interval.endMeters;
+      continue;
+    }
+    merged.push({ ...interval });
+  }
+
+  return merged
+    .filter((span) => span.endMeters - span.startMeters >= minSpan)
+    .map(({ rank: _rank, ...span }) => span);
 }
 
 /**
@@ -411,50 +373,15 @@ export function projectFlowToRoute(
   const minSpan = opts.minSpanMeters ?? DEFAULT_MIN_SPAN_M;
   const mergeGap = opts.mergeGapMeters ?? DEFAULT_MERGE_GAP_M;
 
-  const index = buildRouteIndex(routeGeometry, corridor);
-  const raw: RawSpan[] = [];
+  // One index for the route, shared by every sample of every segment: building
+  // it is the only per-route cost, and matching a sample against it touches a
+  // handful of edges instead of the whole polyline.
+  const matcher = prepareRouteMatcher(routeGeometry);
+  const raw: RankedFlowSpan[] = [];
   for (const segment of segments) {
-    for (const span of segmentSpans(segment, index, corridor, tolerance)) {
+    for (const span of segmentSpans(segment, matcher, corridor, tolerance)) {
       if (span.endMeters - span.startMeters >= minSpan) raw.push(span);
     }
   }
-  if (raw.length === 0) return [];
-
-  // Cut the route at every span boundary, then let the worst observation own
-  // each interval. This resolves overlaps without any span having to be aware
-  // of its neighbours.
-  const bounds = [...new Set(raw.flatMap((s) => [s.startMeters, s.endMeters]))].sort(
-    (a, b) => a - b,
-  );
-  const intervals: RawSpan[] = [];
-  for (let i = 1; i < bounds.length; i++) {
-    const start = bounds[i - 1];
-    const end = bounds[i];
-    if (end - start <= 0) continue;
-    const mid = (start + end) / 2;
-    let winner: RawSpan | null = null;
-    for (const span of raw) {
-      if (span.startMeters > mid || span.endMeters < mid) continue;
-      if (!winner || span.rank > winner.rank) winner = span;
-    }
-    if (winner) intervals.push({ ...winner, startMeters: start, endMeters: end });
-  }
-
-  const merged: RawSpan[] = [];
-  for (const interval of intervals) {
-    const previous = merged[merged.length - 1];
-    if (
-      previous &&
-      sameCondition(previous, interval) &&
-      interval.startMeters - previous.endMeters <= mergeGap
-    ) {
-      previous.endMeters = interval.endMeters;
-      continue;
-    }
-    merged.push({ ...interval });
-  }
-
-  return merged
-    .filter((span) => span.endMeters - span.startMeters >= minSpan)
-    .map(({ rank: _rank, ...span }) => span);
+  return resolveFlowOverlaps(raw, minSpan, mergeGap);
 }
