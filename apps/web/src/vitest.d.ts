@@ -8,6 +8,8 @@ interface VitestExpectation {
   toBeGreaterThan(expected: number): void;
   toBeGreaterThanOrEqual(expected: number): void;
   toBeLessThan(expected: number): void;
+  toBeLessThanOrEqual(expected: number): void;
+  toBeTypeOf(expected: string): void;
   toBeDefined(): void;
   toBeUndefined(): void;
   toBeNull(): void;
@@ -30,6 +32,7 @@ interface VitestMockFunction {
   mockReturnValue(value: unknown): VitestMockFunction;
   mockReset(): VitestMockFunction;
   mockClear(): VitestMockFunction;
+  mockRestore(): VitestMockFunction;
 }
 
 type VitestMockFactory = (importOriginal: <T = unknown>() => Promise<T>) => unknown;
@@ -48,10 +51,12 @@ declare module "vitest" {
     fn(implementation?: VitestMockImplementation): VitestMockFunction;
     mock(id: string, factory: VitestMockFactory): void;
     mocked<T>(item: T): T;
+    spyOn<T, K extends keyof T>(object: T, method: K): VitestMockFunction;
     importActual<T = unknown>(id: string): Promise<T>;
     stubGlobal(name: string, value: unknown): void;
     unstubAllGlobals(): void;
     clearAllMocks(): void;
+    restoreAllMocks(): void;
     useFakeTimers(options?: { shouldAdvanceTime?: boolean }): void;
     useRealTimers(): void;
     advanceTimersByTime(ms: number): void;

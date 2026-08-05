@@ -23,9 +23,17 @@ export interface FakeMapState {
   zoom: number;
   pitch: number;
   maxPitch: number;
+  /** Backing value for `getBearing()`. */
+  bearing: number;
+  /** Backing value for `getCenter()`; `jumpTo`/`easeTo` write it when they carry a centre. */
+  center: { lng: number; lat: number };
+  /** Last padding passed to `setPadding()`, or null if never called. */
+  padding: Record<string, number> | null;
   cameraTransitions: Array<{
     method: "easeTo" | "jumpTo";
     options: Record<string, unknown>;
+    /** Second argument, e.g. `{ programmatic: true }`; undefined when omitted. */
+    eventData?: Record<string, unknown>;
   }>;
   movedLayers: Array<{ layerId: string; beforeId?: string }>;
   light: Record<string, unknown> | null;
@@ -57,6 +65,12 @@ export interface CreateFakeMapOptions {
   /** Initial camera pitch and pitch constraint. */
   pitch?: number;
   maxPitch?: number;
+  /** Initial `getBearing()` value (default 0). */
+  bearing?: number;
+  /** Initial `getCenter()` value (default null island). */
+  center?: { lng: number; lat: number };
+  /** `getContainer().clientHeight`, which camera padding maths read (default 800). */
+  containerHeight?: number;
 }
 
 export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
@@ -71,6 +85,9 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     zoom: options.zoom ?? 10,
     pitch: options.pitch ?? 0,
     maxPitch: options.maxPitch ?? 60,
+    bearing: options.bearing ?? 0,
+    center: options.center ?? { lng: 0, lat: 0 },
+    padding: null,
     cameraTransitions: [],
     movedLayers: [],
     light: null,
@@ -80,7 +97,23 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
 
   const baseLayers = options.baseLayers ?? [];
   const canvas = { style: { cursor: "" } };
+  const container = { clientHeight: options.containerHeight ?? 800 };
   for (const layer of baseLayers) state.layers.set(layer.id, { ...layer });
+
+  // Camera transitions move the state a caller can read back. Centre and pitch
+  // follow the transition; zoom and bearing stay test-driven inputs, since tests
+  // set `state.zoom` by hand to stage a gesture and then assert on what the code
+  // under test did with it.
+  const applyCamera = (options: Record<string, unknown>) => {
+    if (typeof options.pitch === "number") state.pitch = options.pitch;
+    const center = options.center;
+    if (Array.isArray(center) && typeof center[0] === "number" && typeof center[1] === "number") {
+      state.center = { lng: center[0], lat: center[1] };
+    } else if (center && typeof center === "object") {
+      const { lng, lat } = center as { lng?: number; lat?: number };
+      if (typeof lng === "number" && typeof lat === "number") state.center = { lng, lat };
+    }
+  };
 
   const on = (event: string, ...rest: unknown[]) => {
     // MapLibre overloads: on(type, handler) and on(type, layerId, handler).
@@ -218,7 +251,12 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     setLight: (light: Record<string, unknown>) => {
       state.light = light;
     },
-    getCenter: () => ({ lng: 0, lat: 0 }),
+    getCenter: () => state.center,
+    getBearing: () => state.bearing,
+    setPadding: (padding: Record<string, number>) => {
+      state.padding = padding;
+    },
+    getContainer: () => container,
     getBounds: () => ({
       getWest: () => -180,
       getSouth: () => -90,
@@ -230,13 +268,13 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     addControl: () => {},
     removeControl: () => {},
     flyTo: () => {},
-    easeTo: (options: Record<string, unknown>) => {
-      state.cameraTransitions.push({ method: "easeTo", options });
-      if (typeof options.pitch === "number") state.pitch = options.pitch;
+    easeTo: (options: Record<string, unknown>, eventData?: Record<string, unknown>) => {
+      state.cameraTransitions.push({ method: "easeTo", options, eventData });
+      applyCamera(options);
     },
-    jumpTo: (options: Record<string, unknown>) => {
-      state.cameraTransitions.push({ method: "jumpTo", options });
-      if (typeof options.pitch === "number") state.pitch = options.pitch;
+    jumpTo: (options: Record<string, unknown>, eventData?: Record<string, unknown>) => {
+      state.cameraTransitions.push({ method: "jumpTo", options, eventData });
+      applyCamera(options);
     },
     fitBounds: () => {},
     on,

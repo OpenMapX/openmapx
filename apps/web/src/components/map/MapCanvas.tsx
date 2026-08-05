@@ -133,18 +133,20 @@ export function MapCanvas() {
         };
 
         map.on("moveend", (e) => {
-          const c = map.getCenter();
-          const center: LngLat = [c.lng, c.lat];
           // The navigation follow camera drives the map with a programmatic
           // jumpTo every animation frame; skip those so we don't write to the
-          // store 60×/s while navigating. User gestures and other programmatic
-          // moves (flyTo, deep links) still persist as before.
+          // store 60×/s while navigating. Bail before reading the camera at all:
+          // getCenter() allocates, and this is the hottest listener on the map
+          // during a trip. User gestures and other programmatic moves (flyTo,
+          // deep links) still persist as before.
           if (
             (e as { programmatic?: boolean })?.programmatic &&
             useNavigationStore.getState().status !== "idle"
           ) {
             return;
           }
+          const c = map.getCenter();
+          const center: LngLat = [c.lng, c.lat];
           setCenter(center);
           setZoom(map.getZoom());
           setBearing(map.getBearing());

@@ -80,6 +80,8 @@ vi.mock("maplibre-gl", () => {
   let onCallCount = 0;
   class FakeMap {
     jumpTo = vi.fn();
+    /** Counts camera reads so a test can prove a guarded path never took one. */
+    cameraReads = 0;
 
     constructor(mapOptions: { center: [number, number]; container: HTMLElement; zoom: number }) {
       instances.push(this);
@@ -88,6 +90,13 @@ vi.mock("maplibre-gl", () => {
       mapOptions.container.append(document.createElement("canvas"));
     }
 
+    getCenter = () => {
+      this.cameraReads += 1;
+      return { lng: 1.5, lat: 2.5 };
+    };
+    getZoom = () => 12;
+    getBearing = () => 33;
+    getPitch = () => 44;
     isStyleLoaded = () => true;
     off = vi.fn();
     on = vi.fn(() => {
@@ -128,7 +137,7 @@ vi.mock("maplibre-gl", () => {
   };
 });
 
-import { useMapStore } from "@openmapx/core";
+import { useMapStore, useNavigationStore } from "@openmapx/core";
 import * as maplibre from "maplibre-gl";
 import * as mapContext from "@/lib/MapContext";
 import * as mapStyle from "@/lib/map";
@@ -138,7 +147,9 @@ const maplibreTest = (
   maplibre as unknown as {
     __test: {
       instances: Array<{
+        cameraReads: number;
         jumpTo: ReturnType<typeof vi.fn>;
+        on: ReturnType<typeof vi.fn>;
         remove: ReturnType<typeof vi.fn>;
       }>;
       options: Array<{ center: [number, number]; zoom: number }>;
@@ -166,7 +177,25 @@ afterEach(() => {
   console.error = originalConsoleError;
   vi.unstubAllGlobals();
   vi.clearAllMocks();
+  useNavigationStore.getState().stopNavigation();
 });
+
+/** Render a map and hand back its registered `moveend` listener. */
+async function renderWithMoveEnd() {
+  maplibreTest.reset();
+  mapStyleTest.reset();
+  useMapStore.setState({ bearing: 0, center: [0, 20], pitch: 0, userLocation: null, zoom: 2 });
+  vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
+
+  render(<MapCanvas />);
+  await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+  const map = maplibreTest.instances[0];
+  const moveEnd = map.on.mock.calls.find(([event]: unknown[]) => event === "moveend")?.[1] as (
+    e?: unknown,
+  ) => void;
+  expect(moveEnd).toBeTypeOf("function");
+  return { map, moveEnd };
+}
 
 describe("MapCanvas", () => {
   it("renders the base map without waiting for a granted geolocation callback", async () => {
@@ -251,5 +280,53 @@ describe("MapCanvas", () => {
     expect(maplibreTest.instances[0]?.remove).toHaveBeenCalledTimes(1);
     expect(mapContextTest.mapRef.current).toBeNull();
     expect(mapContextTest.notifyMapReady).not.toHaveBeenCalled();
+  });
+
+  it("persists the viewport for a user-originated move", async () => {
+    const { map, moveEnd } = await renderWithMoveEnd();
+    const readsBefore = map.cameraReads;
+
+    act(() => moveEnd({}));
+
+    expect(map.cameraReads).toBe(readsBefore + 1);
+    expect(useMapStore.getState()).toMatchObject({
+      bearing: 33,
+      center: [1.5, 2.5],
+      pitch: 44,
+      zoom: 12,
+    });
+  });
+
+  it("persists the viewport for a programmatic move outside navigation", async () => {
+    const { moveEnd } = await renderWithMoveEnd();
+
+    act(() => moveEnd({ programmatic: true }));
+
+    expect(useMapStore.getState().center).toEqual([1.5, 2.5]);
+  });
+
+  it("reads no camera state for its own programmatic move while navigating", async () => {
+    const { map, moveEnd } = await renderWithMoveEnd();
+    useNavigationStore.setState({ status: "navigating" });
+    const readsBefore = map.cameraReads;
+
+    act(() => moveEnd({ programmatic: true }));
+
+    expect(map.cameraReads).toBe(readsBefore);
+    expect(useMapStore.getState()).toMatchObject({
+      bearing: 0,
+      center: [0, 20],
+      pitch: 0,
+      zoom: 2,
+    });
+  });
+
+  it("still persists a user gesture while navigating", async () => {
+    const { moveEnd } = await renderWithMoveEnd();
+    useNavigationStore.setState({ status: "navigating" });
+
+    act(() => moveEnd({}));
+
+    expect(useMapStore.getState().center).toEqual([1.5, 2.5]);
   });
 });
