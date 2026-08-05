@@ -1,5 +1,5 @@
 import type { LngLat } from "../types/geometry";
-import { snapToRoute } from "./snap";
+import { asRouteMatcher, type RouteMatcherInput, snapPreparedRoute } from "./routeMatcher";
 import type { RerouteOpts } from "./types";
 
 /** Deviation change (m) below which a stationary fix is treated as GPS jitter. */
@@ -71,7 +71,8 @@ export function shouldReroute(
  * behind us along the route are dropped so a reroute doesn't send the driver
  * back to a stop they've passed; the final destination is always kept. Each
  * remaining stop is located by projecting it onto the route and comparing its
- * arc-length to how far we've travelled (`alongMeters`).
+ * arc-length to how far we've travelled (`alongMeters`). All stops share one
+ * prepared index for the active route — the caller's, when it has one.
  */
 /**
  * Drop reroute timestamps (ms) older than `windowMs` relative to `nowMs`, keeping
@@ -96,7 +97,7 @@ export function isReroutingTooOften(timestampsMs: number[], maxInWindow: number)
 }
 
 export function remainingWaypoints(
-  routeGeometry: LngLat[],
+  route: RouteMatcherInput,
   destinationWaypoints: LngLat[],
   from: LngLat,
   alongMeters: number,
@@ -105,6 +106,7 @@ export function remainingWaypoints(
   if (destinationWaypoints.length <= 2) {
     return [from, ...destinationWaypoints.slice(1)];
   }
+  const matcher = asRouteMatcher(route);
   const lastIdx = destinationWaypoints.length - 1;
   const kept: LngLat[] = [];
   for (let i = 1; i < destinationWaypoints.length; i++) {
@@ -112,7 +114,7 @@ export function remainingWaypoints(
       kept.push(destinationWaypoints[i]); // always keep the final destination
       continue;
     }
-    const wpAlong = snapToRoute(routeGeometry, destinationWaypoints[i]).alongMeters;
+    const wpAlong = snapPreparedRoute(matcher, destinationWaypoints[i]).alongMeters;
     if (wpAlong > alongMeters) kept.push(destinationWaypoints[i]); // still ahead
   }
   return [from, ...kept];

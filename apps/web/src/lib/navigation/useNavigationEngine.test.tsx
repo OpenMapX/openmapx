@@ -1,9 +1,16 @@
 // @vitest-environment jsdom
 
 import type { Route } from "@integrations/routing/types";
-import { type FixInput, useNavigationStore, useSettingsStore } from "@openmapx/core";
+import {
+  type FixInput,
+  readRouteMatcherCounters,
+  resetRouteMatcherCounters,
+  setRouteMatcherCounting,
+  useNavigationStore,
+  useSettingsStore,
+} from "@openmapx/core";
 import { act, renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useNavigationEngine } from "./useNavigationEngine";
 
 vi.mock("next-intl", () => ({
@@ -250,5 +257,94 @@ describe("useNavigationEngine fix publications", () => {
     // Weak GPS is already flagged; a second bad fix must not publish again.
     expect(publicationsForFix({ ...rejected, timestampMs: 3000 })).toBe(0);
     expect(useNavigationStore.getState().progress).toBe(accepted);
+  });
+});
+
+describe("useNavigationEngine route index ownership", () => {
+  const waypoints: [number, number][] = [
+    [0, 0],
+    [0.004, 0],
+  ];
+
+  // A fresh geometry array per route, so the index is genuinely built for it
+  // rather than served from the factory's identity cache by an earlier test.
+  const freshRoute = (): Route => {
+    const geom: [number, number][] = [
+      [0, 0],
+      [0.002, 0],
+      [0.004, 0],
+    ];
+    return { ...route, geometry: geom } as Route;
+  };
+
+  beforeEach(() => {
+    useNavigationStore.getState().stopNavigation();
+    useSettingsStore.setState({ incidentAlerts: false, avoidIncidents: false });
+    fixHandler = null;
+    fetchDirections.mockReset();
+    resetRouteMatcherCounters();
+    setRouteMatcherCounting(true);
+  });
+
+  afterEach(() => {
+    setRouteMatcherCounting(false);
+    resetRouteMatcherCounters();
+  });
+
+  it("indexes the active route once for a whole run of fixes", () => {
+    useNavigationStore.getState().startGroundNavigation(freshRoute(), "driving", waypoints);
+    renderHook(() => useNavigationEngine());
+
+    act(() => {
+      for (let i = 1; i <= 12; i++) {
+        fixHandler?.({ coords: [0.0002 * i, 0], accuracy: 5, speed: 12, timestampMs: 1000 * i });
+      }
+    });
+
+    const counters = readRouteMatcherCounters();
+    expect(counters.preparations).toBe(1);
+    // One snap per accepted fix, all against that single index.
+    expect(counters.snaps).toBe(12);
+  });
+
+  it("keeps the same index through a 4 Hz coast", () => {
+    vi.useFakeTimers();
+    try {
+      useNavigationStore.getState().startGroundNavigation(freshRoute(), "driving", waypoints);
+      renderHook(() => useNavigationEngine());
+      act(() => {
+        fixHandler?.({ coords: [0.0005, 0], accuracy: 5, speed: 12, timestampMs: Date.now() });
+      });
+      const afterRealFix = readRouteMatcherCounters().snaps;
+
+      // Past the coast start delay, then two seconds of synthetic 4 Hz fixes.
+      act(() => vi.advanceTimersByTime(3_500));
+      act(() => vi.advanceTimersByTime(2_000));
+
+      const counters = readRouteMatcherCounters();
+      expect(counters.preparations).toBe(1);
+      expect(useNavigationStore.getState().coasting).toBe(true);
+      expect(counters.snaps).toBeGreaterThanOrEqual(afterRealFix + 8);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("indexes the replacement route exactly once after a reroute", () => {
+    useNavigationStore.getState().startGroundNavigation(freshRoute(), "driving", waypoints);
+    renderHook(() => useNavigationEngine());
+    act(() => {
+      fixHandler?.({ coords: [0.0005, 0], accuracy: 5, speed: 12, timestampMs: 1000 });
+    });
+    expect(readRouteMatcherCounters().preparations).toBe(1);
+
+    act(() => useNavigationStore.getState().applyReroute(freshRoute()));
+    act(() => {
+      for (let i = 1; i <= 6; i++) {
+        fixHandler?.({ coords: [0.0002 * i, 0], accuracy: 5, speed: 12, timestampMs: 2000 + i });
+      }
+    });
+
+    expect(readRouteMatcherCounters().preparations).toBe(2);
   });
 });

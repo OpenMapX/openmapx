@@ -4,7 +4,7 @@ import { haversineDistance } from "../utils/coordinates";
 import { eta } from "./eta";
 import { computeProgress, upcomingManeuverIndex } from "./progress";
 import { shouldReroute, updateOffRouteScore } from "./reroute";
-import { snapToRoute } from "./snap";
+import { type PreparedRouteMatcher, routeMatcherFor, snapPreparedRoute } from "./routeMatcher";
 import { advanceStepGate } from "./stepGate";
 import type { FixInput, NavTickOptions, NavTickResult, NavTickState } from "./types";
 import { nextVoiceCue } from "./voiceCue";
@@ -66,12 +66,18 @@ function motionBearing(fix: FixInput, lastRaw: LngLat | undefined, moving: boole
  * envelope. Off-route evidence accrues into a speed-weighted score (escalating
  * when heading the wrong way / U-turning) that, once high enough and past a
  * growing back-off, asks for a reroute.
+ *
+ * `matcher` is the caller's prepared index for `route.geometry`. It belongs to
+ * the route, not to the fix, so the live engine builds it once when the route
+ * is selected or replaced and passes the same object on every fix; omit it and
+ * one is prepared (and cached) here instead.
  */
 export function processFix(
   route: Route,
   fix: FixInput,
   state: NavTickState,
   opts: NavTickOptions,
+  matcher?: PreparedRouteMatcher,
 ): NavTickResult {
   // Reject fixes that are too inaccurate or have a non-finite coordinate: a
   // NaN/Infinity longitude or latitude would throw in the snap and otherwise
@@ -94,7 +100,7 @@ export function processFix(
   }
 
   const weakGps = fix.accuracy > opts.weakGpsMeters;
-  const snap = snapToRoute(route.geometry, fix.coords);
+  const snap = snapPreparedRoute(routeMatcherFor(route.geometry, matcher), fix.coords);
   // Gate which step is shown/announced on maneuver completion, so the banner
   // doesn't flip before the turn is made and a brief forward GPS jump can't skip
   // a step. The gate is monotonic; arrival (below) stays distance-based so it's

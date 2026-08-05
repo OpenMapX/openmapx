@@ -4,6 +4,8 @@ import {
   computeTransitProgress,
   detectMissedConnection,
   type FixInput,
+  type PreparedTransitProgress,
+  prepareTransitProgress,
   useNavigationStore,
 } from "@openmapx/core";
 import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
@@ -30,6 +32,10 @@ export function useTransitNavigationEngine(): void {
   // replan (destination temporarily unreachable, offline) doesn't fire on every
   // ~1Hz fix and storm the BFF.
   const nextReplanAllowedAtRef = useRef(0);
+  // The planned trip's per-leg snap indexes. They describe the itinerary, so
+  // they outlive every fix and are rebuilt only when a replan swaps the
+  // itinerary in. A ref, because the fix handler reads it from the store.
+  const preparedRef = useRef<PreparedTransitProgress | null>(null);
 
   const replan = useCallback(async (from: [number, number], to: [number, number]) => {
     if (replanningRef.current) return;
@@ -92,7 +98,12 @@ export function useTransitNavigationEngine(): void {
       const { status, kind, itinerary } = store;
       if (status !== "navigating" || kind !== "transit" || !itinerary) return;
 
-      const tp = computeTransitProgress(itinerary, fix.coords);
+      const held = preparedRef.current;
+      // Dropping the reference releases the previous itinerary's indexes.
+      const prepared = held?.itinerary === itinerary ? held : prepareTransitProgress(itinerary);
+      preparedRef.current = prepared;
+
+      const tp = computeTransitProgress(itinerary, fix.coords, prepared);
       store.applyTransitProgress(tp);
 
       // Follow the snapped position unless the user has released the camera

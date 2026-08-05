@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 
-import { useNavigationStore, useSettingsStore } from "@openmapx/core";
+import {
+  readRouteMatcherCounters,
+  resetRouteMatcherCounters,
+  setRouteMatcherCounting,
+  useNavigationStore,
+  useSettingsStore,
+} from "@openmapx/core";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useNavRecordingStore } from "./navRecordingStore";
@@ -208,6 +214,58 @@ describe("useFasterRoute", () => {
     renderHook(() => useFasterRoute());
     await act(async () => vi.advanceTimersByTimeAsync(301_000));
     expect(useNavigationStore.getState().fasterRoute).toBeNull();
+  });
+
+  describe("index ownership", () => {
+    beforeEach(() => {
+      resetRouteMatcherCounters();
+      setRouteMatcherCounting(true);
+    });
+
+    afterEach(() => {
+      setRouteMatcherCounting(false);
+      resetRouteMatcherCounters();
+    });
+
+    it("indexes the active route once and the corridor once per check", async () => {
+      // A stop in the middle, so waypoint pruning really projects onto the route.
+      useNavigationStore.getState().stopNavigation();
+      useNavigationStore.getState().startGroundNavigation(routeOf(3600, 0), "driving", [
+        [0, 0],
+        [0.09, 0],
+        [0.18, 0],
+      ]);
+      useNavigationStore.getState().applyProgress({
+        snapped: [0.045, 0],
+        alongMeters: 5_000,
+        deviationMeters: 0,
+        segmentIndex: 0,
+        etaEpochMs: Date.now() + 4_500_000,
+        bearing: 90,
+        speedMps: 30,
+      } as never);
+      // Two candidates that stay in the corridor, each with plenty of vertices:
+      // no offer fires, and no vertex may build an index of its own.
+      const following = (duration: number) => ({
+        ...routeOf(duration, 0),
+        geometry: Array.from({ length: 12 }, (_, i) => [0.045 + i * 0.0122, 0] as [number, number]),
+      });
+      fetchDirections.mockResolvedValue({
+        routes: [following(3400), following(3500)],
+        waypoints: [],
+        activeRouteIndex: 0,
+      });
+
+      renderHook(() => useFasterRoute());
+      await act(async () => vi.advanceTimersByTimeAsync(301_000));
+      // The route index the hook owns, plus the corridor sliced for this check.
+      expect(readRouteMatcherCounters().preparations).toBe(2);
+
+      await act(async () => vi.advanceTimersByTimeAsync(300_000));
+      // Only the freshly sliced corridor is new; the route index is reused.
+      expect(readRouteMatcherCounters().preparations).toBe(3);
+      expect(useNavigationStore.getState().fasterRoute).toBeNull();
+    });
   });
 
   it("discards a result whose route changed while in flight", async () => {

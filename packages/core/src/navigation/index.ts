@@ -70,6 +70,18 @@ export {
   updateOffRouteScore,
 } from "./reroute";
 export {
+  asRouteMatcher,
+  type PreparedRouteMatcher,
+  prepareRouteMatcher,
+  type RouteMatcherCounters,
+  type RouteMatcherInput,
+  readRouteMatcherCounters,
+  resetRouteMatcherCounters,
+  routeMatcherFor,
+  setRouteMatcherCounting,
+  snapPreparedRoute,
+} from "./routeMatcher";
+export {
   type AlongRouteOptions,
   type AlongRoutePoi,
   poiAlongRoute,
@@ -88,6 +100,8 @@ export {
 export {
   computeTransitProgress,
   detectMissedConnection,
+  type PreparedTransitProgress,
+  prepareTransitProgress,
   stopsUntilAlight,
   type TransitProgress,
 } from "./transitProgress";

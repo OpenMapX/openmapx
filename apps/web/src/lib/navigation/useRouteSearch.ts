@@ -7,6 +7,7 @@ import {
   fetchDirections,
   type LngLat,
   poiAlongRoute,
+  prepareRouteMatcher,
   remainingWaypoints,
   routeAheadBounds,
   useCategorySearch,
@@ -46,6 +47,12 @@ export function useRouteSearch(searchKey: string | null): UseRouteSearch {
   const alongMeters = useNavigationStore((s) => s.progress?.alongMeters ?? 0);
   const speedMps = useNavigationStore((s) => s.progress?.speedMps ?? 0);
 
+  // One snap index for the active route, so a results refresh projects the whole
+  // POI set — and prunes the waypoints for an added stop — against the same
+  // index. A position fix alone never rebuilds it.
+  const geometry = route?.geometry;
+  const matcher = useMemo(() => (geometry ? prepareRouteMatcher(geometry) : null), [geometry]);
+
   // Quantize so the query box (and its cache key) only changes every few km,
   // not on every position fix. Results are still filtered against the live
   // position below, so they stay accurate between box refreshes.
@@ -64,20 +71,22 @@ export function useRouteSearch(searchKey: string | null): UseRouteSearch {
   );
 
   const results = useMemo(() => {
-    if (!route || !query.data?.results) return [];
-    return poiAlongRoute(query.data.results, route.geometry, alongMeters, {
+    if (!matcher || !query.data?.results) return [];
+    return poiAlongRoute(query.data.results, matcher, alongMeters, {
       lookaheadMeters: LOOKAHEAD_M,
       speedMps: speedMps > 0 ? speedMps : undefined,
     });
-  }, [route, query.data, alongMeters, speedMps]);
+  }, [matcher, query.data, alongMeters, speedMps]);
 
   const addStop = async (coord: LngLat): Promise<boolean> => {
     const store = useNavigationStore.getState();
     const { route: r, mode, destinationWaypoints, progress } = store;
     if (!r) return false;
     const from = progress?.snapped ?? destinationWaypoints[0] ?? coord;
+    // The store's route wins if a reroute landed since the last render, in which
+    // case the memoized index no longer describes it and the geometry is used.
     const tail = remainingWaypoints(
-      r.geometry,
+      matcher?.geometry === r.geometry ? matcher : r.geometry,
       destinationWaypoints,
       from,
       progress?.alongMeters ?? 0,

@@ -5,10 +5,13 @@ import {
   fetchDirections,
   formatSpokenDistance,
   isReroutingTooOften,
+  type LngLat,
   type NavTickState,
   navOptionsForMode,
+  type PreparedRouteMatcher,
   pickSpeedLimit,
   positionAt,
+  prepareRouteMatcher,
   processFix,
   pruneRerouteTimes,
   type Route,
@@ -83,6 +86,21 @@ export function useNavigationEngine(): void {
   );
   // Cached cumulative distances for the coasting driver's positionAt lookups.
   const cumRef = useRef<{ route: Route; cum: number[] } | null>(null);
+  // The active route's snap index. It belongs to the geometry, not to the fix,
+  // so it is built when the route is selected or replaced and reused by every
+  // fix, coast tick, and waypoint pruning until then. A ref, because the fix
+  // handler reads the route from the store rather than from render state.
+  const matcherRef = useRef<PreparedRouteMatcher | null>(null);
+
+  /** The index for `geometry`, building it only when the route was replaced. */
+  const matcherFor = useCallback((geometry: LngLat[]): PreparedRouteMatcher => {
+    const held = matcherRef.current;
+    if (held?.geometry === geometry) return held;
+    // Dropping the reference here releases the previous route's index.
+    const prepared = prepareRouteMatcher(geometry);
+    matcherRef.current = prepared;
+    return prepared;
+  }, []);
 
   const speakCue = useCallback(
     (cue: VoiceCue) => {
@@ -129,7 +147,8 @@ export function useNavigationEngine(): void {
       // Shift voice-cue timing earlier/later per the user's preference.
       opts.announceMultiplier =
         VOICE_TIMING_MULTIPLIER[useSettingsStore.getState().voiceGuidanceTiming];
-      const result = processFix(route, fix, tickRef.current, opts);
+      const matcher = matcherFor(route.geometry);
+      const result = processFix(route, fix, tickRef.current, opts, matcher);
       tickRef.current = result.nextState;
       // Surface noisy GPS: fixes dropped for poor accuracy flag "Weak GPS"; a
       // usable fix clears it. (Dropping them also suppresses false off-route.)
@@ -209,7 +228,7 @@ export function useNavigationEngine(): void {
         // a reroute → waiting-for-GPS loop. Keep the old route projection only
         // for deciding which intermediate stops are already behind us.
         const waypoints = remainingWaypoints(
-          route.geometry,
+          matcher,
           destinationWaypoints,
           fix.coords,
           result.progress.alongMeters,
@@ -263,7 +282,7 @@ export function useNavigationEngine(): void {
           });
       }
     },
-    [locale, speakCue, captureFix],
+    [locale, speakCue, captureFix, matcherFor],
   );
 
   // Reset per-session tick state (spoken cues + deviation history) whenever the
@@ -280,6 +299,8 @@ export function useNavigationEngine(): void {
     // The coast anchor's arc-length is relative to the old route; drop it (and
     // any active coast) so we don't extrapolate onto the new geometry.
     lastRealFixRef.current = null;
+    // The old geometry's index goes with it; the next fix indexes the new route.
+    matcherRef.current = null;
     useNavigationStore.getState().setCoasting(false);
   }, [activeRoute]);
 
@@ -302,6 +323,7 @@ export function useNavigationEngine(): void {
       rerouteCooldownUntilRef.current = 0;
       lastRealFixRef.current = null;
       cumRef.current = null;
+      matcherRef.current = null;
     }
   }, [navStatus]);
 
@@ -341,7 +363,7 @@ export function useNavigationEngine(): void {
     store.beginReroute();
     const from = progress.snapped;
     const waypoints = remainingWaypoints(
-      route.geometry,
+      matcherFor(route.geometry),
       destinationWaypoints,
       from,
       progress.alongMeters,
@@ -381,7 +403,7 @@ export function useNavigationEngine(): void {
       .finally(() => {
         reroutingRef.current = false;
       });
-  }, [incidents, avoidIncidents, navStatus, locale]);
+  }, [incidents, avoidIncidents, navStatus, locale, matcherFor]);
 
   // Opt into the navigation simulator from the URL (`?navsim=1`) once on mount.
   // It swaps synthetic fixes for real geolocation so the full pipeline can be

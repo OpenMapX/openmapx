@@ -1,7 +1,7 @@
 import type { LngLat } from "../types/geometry";
 import type { Route } from "../types/routing";
 import { cumulativeDistances, positionAt } from "./deadReckon";
-import { snapToRoute } from "./snap";
+import { type PreparedRouteMatcher, prepareRouteMatcher, snapPreparedRoute } from "./routeMatcher";
 
 export interface FasterRouteOptions {
   /** Lateral metres a candidate may stray before it counts as leaving the corridor. */
@@ -76,13 +76,18 @@ const SKIP_TOLERANCE_METERS = 250;
  */
 function divergenceAlong(
   candidate: LngLat[],
-  corridor: LngLat[],
+  corridor: PreparedRouteMatcher,
   toleranceMeters: number,
 ): number | null {
-  if (candidate.length < 2 || corridor.length < 2) return null;
+  if (candidate.length < 2 || corridor.geometry.length < 2) return null;
   const cum = cumulativeDistances(candidate);
+  // Consecutive candidate vertices land on neighbouring corridor edges, so the
+  // previous projection is a good place to start the next one.
+  let previousSegment: number | undefined;
   for (let i = 0; i < candidate.length; i++) {
-    const { deviationMeters, alongMeters } = snapToRoute(corridor, candidate[i]);
+    const snap = snapPreparedRoute(corridor, candidate[i], previousSegment);
+    previousSegment = snap.segmentIndex;
+    const { deviationMeters, alongMeters } = snap;
     if (deviationMeters > toleranceMeters) return cum[i];
     if (alongMeters - cum[i] > SKIP_TOLERANCE_METERS) return i > 0 ? cum[i - 1] : 0;
   }
@@ -104,7 +109,9 @@ export function evaluateFasterRoute(
   candidates: Route[],
   opts: FasterRouteOptions,
 ): FasterRouteEvaluation {
-  const corridor = remainingGeometry(current.geometry, alongMeters);
+  // The corridor is freshly sliced for this evaluation, so index it once here
+  // and let every candidate's every vertex query the same index.
+  const corridor = prepareRouteMatcher(remainingGeometry(current.geometry, alongMeters));
 
   let refreshedRemainingSeconds: number | null = null;
   const divergent: FasterRouteCandidate[] = [];

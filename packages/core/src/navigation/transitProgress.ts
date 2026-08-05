@@ -1,7 +1,14 @@
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import type { LngLat } from "../types/geometry";
 import { haversineDistance } from "../utils/coordinates";
-import { snapToRoute } from "./snap";
+import {
+  asRouteMatcher,
+  type PreparedRouteMatcher,
+  prepareRouteMatcher,
+  type RouteMatcherInput,
+  reportPreparedMismatch,
+  snapPreparedRoute,
+} from "./routeMatcher";
 
 export interface TransitProgress {
   currentLegIndex: number;
@@ -9,6 +16,22 @@ export interface TransitProgress {
   fractionAlongLeg: number;
   deviationMeters: number;
   arrived: boolean;
+}
+
+/** One usable leg's prepared index and its total polyline length in metres. */
+interface PreparedTransitLeg {
+  readonly matcher: PreparedRouteMatcher;
+  readonly lengthMeters: number;
+}
+
+/**
+ * The per-leg indexes and lengths an itinerary needs for follow-along. Built
+ * once per itinerary identity and reused for every fix; a replan produces a new
+ * itinerary and therefore a new prepared object.
+ */
+export interface PreparedTransitProgress {
+  readonly itinerary: TripItinerary;
+  readonly legs: readonly (PreparedTransitLeg | null)[];
 }
 
 /** Total length of a polyline in metres (sum of segment haversine distances). */
@@ -21,13 +44,36 @@ function lineLength(coords: LngLat[]): number {
 }
 
 /**
+ * Index every leg of an itinerary that has usable geometry, together with its
+ * length. Legs without a polyline hold a null slot so leg indices stay aligned.
+ */
+export function prepareTransitProgress(itinerary: TripItinerary): PreparedTransitProgress {
+  const legs = (itinerary.legs ?? []).map((leg) => {
+    const coords = leg.geometry?.coordinates as LngLat[] | undefined;
+    if (!coords || coords.length < 2) return null;
+    return { matcher: prepareRouteMatcher(coords), lengthMeters: lineLength(coords) };
+  });
+  return { itinerary, legs };
+}
+
+/**
  * Follow-along progress for a planned transit itinerary. Snaps the raw fix onto
  * each leg's polyline and picks the leg with the smallest perpendicular
  * deviation — i.e. the leg the traveller is most plausibly on right now. There
  * is NO rerouting; this only reports where along the planned trip we are.
+ *
+ * `prepared` is the itinerary's leg index, retained by the caller across fixes.
+ * Without it one is built here, which is correct but rebuilds on every fix.
  */
-export function computeTransitProgress(itinerary: TripItinerary, raw: LngLat): TransitProgress {
+export function computeTransitProgress(
+  itinerary: TripItinerary,
+  raw: LngLat,
+  prepared?: PreparedTransitProgress,
+): TransitProgress {
   const legs = itinerary.legs ?? [];
+  if (prepared && prepared.itinerary !== itinerary) reportPreparedMismatch("transit leg index");
+  const index =
+    prepared && prepared.itinerary === itinerary ? prepared : prepareTransitProgress(itinerary);
 
   let bestLegIndex = -1;
   let bestSnapped: LngLat = raw;
@@ -36,15 +82,15 @@ export function computeTransitProgress(itinerary: TripItinerary, raw: LngLat): T
   let bestLength = 0;
 
   for (let i = 0; i < legs.length; i++) {
-    const coords = legs[i].geometry?.coordinates as LngLat[] | undefined;
-    if (!coords || coords.length < 2) continue;
-    const snap = snapToRoute(coords, raw);
+    const leg = index.legs[i];
+    if (!leg) continue;
+    const snap = snapPreparedRoute(leg.matcher, raw);
     if (snap.deviationMeters < bestDeviation) {
       bestDeviation = snap.deviationMeters;
       bestLegIndex = i;
       bestSnapped = snap.snapped;
       bestAlong = snap.alongMeters;
-      bestLength = lineLength(coords);
+      bestLength = leg.lengthMeters;
     }
   }
 
@@ -112,19 +158,21 @@ export function detectMissedConnection(
  * position, work out the next stop and how many stops remain until alighting.
  * Each stop and the snapped point are projected onto the leg geometry to get a
  * comparable along-line distance, which is robust to GPS jitter and to stops
- * that aren't exactly on the polyline.
+ * that aren't exactly on the polyline. The whole stop list shares the leg's
+ * prepared index — the caller's, when it holds one across progress renders.
  */
 export function stopsUntilAlight(
-  legCoords: LngLat[],
+  leg: RouteMatcherInput,
   stops: { lat: number; lng: number; name: string }[],
   snapped: LngLat,
 ): { nextStopIndex: number; stopsRemaining: number; nextStopName: string | null } {
-  if (legCoords.length < 2 || stops.length === 0) {
+  const matcher = asRouteMatcher(leg);
+  if (matcher.geometry.length < 2 || stops.length === 0) {
     return { nextStopIndex: -1, stopsRemaining: 0, nextStopName: null };
   }
 
-  const snappedAlong = snapToRoute(legCoords, snapped).alongMeters;
-  const stopAlong = stops.map((s) => snapToRoute(legCoords, [s.lng, s.lat]).alongMeters);
+  const snappedAlong = snapPreparedRoute(matcher, snapped).alongMeters;
+  const stopAlong = stops.map((s) => snapPreparedRoute(matcher, [s.lng, s.lat]).alongMeters);
 
   // The next stop is the first stop strictly ahead of the snapped position.
   let nextStopIndex = -1;

@@ -1,6 +1,6 @@
 import type { BoundingBox, LngLat } from "../types/geometry";
 import { cumulativeDistances } from "./deadReckon";
-import { snapToRoute } from "./snap";
+import { asRouteMatcher, type RouteMatcherInput, snapPreparedRoute } from "./routeMatcher";
 
 /** A POI projected onto the active route, with an estimated detour. */
 export interface AlongRoutePoi<T> {
@@ -33,21 +33,26 @@ const DEFAULT_SPEED_MPS = 14;
  * current position, within the corridor, and within the look-ahead window;
  * each is returned with an estimated detour (leave the route + rejoin ≈ twice
  * the perpendicular deviation). Sorted by distance along the route. Pure.
+ *
+ * `route` is the active route's prepared matcher, so a results refresh projects
+ * the whole POI set against one index. Passing the bare geometry prepares it
+ * once here, never once per POI.
  */
 export function poiAlongRoute<T extends { coordinates: LngLat }>(
   places: T[],
-  routeGeometry: LngLat[],
+  route: RouteMatcherInput,
   currentAlongMeters: number,
   opts: AlongRouteOptions = {},
 ): AlongRoutePoi<T>[] {
-  if (routeGeometry.length < 2) return [];
+  const matcher = asRouteMatcher(route);
+  if (matcher.geometry.length < 2) return [];
   const corridor = opts.corridorMeters ?? DEFAULT_CORRIDOR_M;
   const lookahead = opts.lookaheadMeters ?? DEFAULT_LOOKAHEAD_M;
   const speed = opts.speedMps && opts.speedMps > 0 ? opts.speedMps : DEFAULT_SPEED_MPS;
 
   const out: AlongRoutePoi<T>[] = [];
   for (const place of places) {
-    const snap = snapToRoute(routeGeometry, place.coordinates);
+    const snap = snapPreparedRoute(matcher, place.coordinates);
     if (snap.deviationMeters > corridor) continue;
     const ahead = snap.alongMeters - currentAlongMeters;
     if (ahead <= 0 || ahead > lookahead) continue;

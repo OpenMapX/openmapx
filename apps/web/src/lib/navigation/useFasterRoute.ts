@@ -4,6 +4,7 @@ import {
   evaluateFasterRoute,
   FASTER_ROUTE_DEFAULTS,
   fetchDirections,
+  prepareRouteMatcher,
   remainingWaypoints,
   useNavigationStore,
   useSettingsStore,
@@ -45,6 +46,11 @@ export function useFasterRoute(): void {
   useEffect(() => {
     if (!enabled || !route || route.geometry.length < 2) return;
 
+    // One index for the route this polling cycle belongs to. The effect is keyed
+    // on the route, so a reroute tears the cycle down and the next one indexes
+    // the new geometry — nothing is built inside `check`.
+    const matcher = prepareRouteMatcher(route.geometry);
+
     let cancelled = false;
 
     const check = () => {
@@ -71,7 +77,9 @@ export function useFasterRoute(): void {
 
       try {
         const waypoints = remainingWaypoints(
-          active.geometry,
+          // A route swap that has not yet retriggered the effect falls back to
+          // its own geometry rather than reusing an index built for the old one.
+          active === route ? matcher : active.geometry,
           s.destinationWaypoints,
           progress.snapped,
           progress.alongMeters,

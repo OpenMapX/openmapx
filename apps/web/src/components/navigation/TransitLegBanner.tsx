@@ -8,6 +8,7 @@ import Box from "@mui/material/Box";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import {
+  prepareRouteMatcher,
   stopsUntilAlight,
   type TransitProgress,
   useNavigationStore,
@@ -15,7 +16,7 @@ import {
 } from "@openmapx/core";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
@@ -75,11 +76,17 @@ export function TransitLegBanner({
   const alertedRef = useRef(false);
   const line = leg.route?.shortName || leg.route?.longName || "";
 
+  // One index for this leg's shape, shared by the snapped position and every
+  // stop. It belongs to the leg, so the countdown re-renders that follow the
+  // rider along it query the same index instead of rebuilding one each time.
+  const legGeometry = leg.geometry.coordinates;
+  const legMatcher = useMemo(() => prepareRouteMatcher(legGeometry), [legGeometry]);
+
   const legStops =
     isTransitLeg && journey?.stops && transitProgress ? legStopsFor(journey.stops, leg) : [];
   const { nextStopName, stopsRemaining } =
     transitProgress && legStops.length > 0
-      ? stopsUntilAlight(leg.geometry.coordinates, legStops, transitProgress.snapped)
+      ? stopsUntilAlight(legMatcher, legStops, transitProgress.snapped)
       : { nextStopName: null as string | null, stopsRemaining: 0 };
 
   const alightSoon = legStops.length > 0 && stopsRemaining > 0 && stopsRemaining <= 1;
