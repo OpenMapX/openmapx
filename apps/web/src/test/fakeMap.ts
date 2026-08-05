@@ -19,6 +19,24 @@ export interface FakeMapState {
   filters: Map<string, unknown>;
   images: Set<string>;
   styleLoaded: boolean;
+  /**
+   * Cumulative operation counts, for tests asserting a hot path did (or did
+   * not) call the map. These are test instrumentation, not map state: unlike
+   * every other field above, `setStyle` does NOT reset them, so a test can
+   * prove something survived a style rebuild without being re-created (e.g.
+   * "a layer was never removed and re-added across many updates"). A test
+   * that wants a fresh window can snapshot the counts before an action and
+   * subtract after.
+   */
+  counts: {
+    setData: Map<string, number>;
+    setPaintProperty: Map<string, number>;
+    /** Keyed by `${layerId}:${propertyName}`, e.g. to isolate `line-gradient` updates. */
+    setPaintPropertyByName: Map<string, number>;
+    setFilter: Map<string, number>;
+    addLayer: Map<string, number>;
+    removeLayer: Map<string, number>;
+  };
   /** Backing value for `getZoom()` — mutate then emit("moveend") to simulate a zoom gesture. */
   zoom: number;
   pitch: number;
@@ -93,6 +111,18 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     light: null,
     missingStyleImageResolver: null,
     handlers: new Map(),
+    counts: {
+      setData: new Map(),
+      setPaintProperty: new Map(),
+      setPaintPropertyByName: new Map(),
+      setFilter: new Map(),
+      addLayer: new Map(),
+      removeLayer: new Map(),
+    },
+  };
+
+  const bump = (counts: Map<string, number>, key: string) => {
+    counts.set(key, (counts.get(key) ?? 0) + 1);
   };
 
   const baseLayers = options.baseLayers ?? [];
@@ -142,6 +172,7 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       if (source.type === "geojson") {
         stored.setData = (data: unknown) => {
           stored.data = data;
+          bump(state.counts.setData, id);
         };
       }
       state.sources.set(id, stored);
@@ -151,14 +182,21 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     },
     getLayer: (id: string) => state.layers.get(id),
     addLayer: (layer: { id: string } & Record<string, unknown>, beforeId?: string) => {
+      bump(state.counts.addLayer, layer.id);
       state.paint.delete(layer.id);
       state.layout.delete(layer.id);
       state.filters.delete(layer.id);
+      // Shallow-copy, not a reference to the caller's own object: real
+      // MapLibre never retains or mutates the spec passed to `addLayer` (it
+      // builds its own `StyleLayer`/`Transitionable` state from it), so
+      // `setPaintProperty` below must not silently rewrite a caller's — often
+      // memoized — layer descriptor. Matches the convention `addSource`
+      // already uses for `data`.
       if (layer.paint && typeof layer.paint === "object") {
-        state.paint.set(layer.id, layer.paint as Record<string, unknown>);
+        state.paint.set(layer.id, { ...(layer.paint as Record<string, unknown>) });
       }
       if (layer.layout && typeof layer.layout === "object") {
-        state.layout.set(layer.id, layer.layout as Record<string, unknown>);
+        state.layout.set(layer.id, { ...(layer.layout as Record<string, unknown>) });
       }
       if (layer.filter !== undefined) state.filters.set(layer.id, layer.filter);
       if (beforeId === undefined || !state.layers.has(beforeId)) {
@@ -171,6 +209,7 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       state.layers = new Map(entries);
     },
     removeLayer: (id: string) => {
+      bump(state.counts.removeLayer, id);
       state.layers.delete(id);
       state.paint.delete(id);
       state.layout.delete(id);
@@ -190,6 +229,8 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       const m = state.paint.get(layerId) ?? {};
       m[name] = value;
       state.paint.set(layerId, m);
+      bump(state.counts.setPaintProperty, layerId);
+      bump(state.counts.setPaintPropertyByName, `${layerId}:${name}`);
     },
     getPaintProperty: (layerId: string, name: string) => state.paint.get(layerId)?.[name],
     setLayoutProperty: (layerId: string, name: string, value: unknown) => {
@@ -200,6 +241,7 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     getLayoutProperty: (layerId: string, name: string) => state.layout.get(layerId)?.[name],
     setFilter: (layerId: string, filter: unknown) => {
       state.filters.set(layerId, filter);
+      bump(state.counts.setFilter, layerId);
     },
     getFilter: (layerId: string) => state.filters.get(layerId),
     setFeatureState: () => {},

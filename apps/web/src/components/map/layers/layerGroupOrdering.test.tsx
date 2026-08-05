@@ -119,6 +119,7 @@ describe("layer groups from several components on one map", () => {
       "nav-route-traveled",
       "nav-route-remaining",
       "route-traffic-active",
+      "route-traffic-current",
       "place-labels",
       "nav-traffic-signals",
     ]);

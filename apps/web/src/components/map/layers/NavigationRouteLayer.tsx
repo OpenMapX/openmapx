@@ -9,7 +9,9 @@ import { useMap } from "@/lib/MapContext";
 import { ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
 import { useMapAttributions } from "@/lib/useMapAttributions";
 import type { MapLayerGroup, SlottedLayer } from "./mapLayerGroup";
-import { buildNavRouteLine, splitNavRoute } from "./navRouteSplit";
+import { buildNavRouteLine, navRouteProgressFraction } from "./navRouteSplit";
+import type { DynamicLineState } from "./useMapDynamicLineState";
+import { useMapDynamicLineState } from "./useMapDynamicLineState";
 import { useMapLayerGroup } from "./useMapLayerGroup";
 
 const SOURCE = "nav-route-source";
@@ -22,6 +24,7 @@ const ALT_SOURCE = "nav-route-alts-source";
 const ALT = "nav-route-alts";
 const PROPOSED = "nav-route-proposed";
 const EMPTY_FC = { type: "FeatureCollection" as const, features: [] };
+const TRANSPARENT = "rgba(0,0,0,0)";
 
 export function NavigationRouteLayer() {
   const { mapRef } = useMap();
@@ -46,13 +49,74 @@ export function NavigationRouteLayer() {
   // doesn't re-walk the whole geometry every time the user moves.
   const navLine = useMemo(() => (route ? buildNavRouteLine(route.geometry) : null), [route]);
 
+  // One feature for the whole route, published once per route — never per
+  // fix. The traveled/remaining boundary is now purely a paint concern (see
+  // `dynamicState` below), so this memo must not depend on `progress`:
+  // depending on it would put the `setData` upload straight back on the hot
+  // path this rewrite exists to take it off of.
   const activeFeatures = useMemo(() => {
     if (status === "idle" || !route || route.geometry.length < 2) return EMPTY_FC;
     return {
       type: "FeatureCollection" as const,
-      features: splitNavRoute(route.geometry, progress?.alongMeters ?? 0, navLine ?? undefined),
+      features: [
+        {
+          type: "Feature" as const,
+          properties: {},
+          geometry: { type: "LineString" as const, coordinates: route.geometry },
+        },
+      ],
     };
-  }, [status, route, navLine, progress?.alongMeters]);
+  }, [status, route]);
+
+  // Where along the line (as a `line-progress` fraction, not a naive
+  // geodesic ratio — see navRouteSplit.ts) the traveled/remaining boundary
+  // sits. This is the only thing that changes per GPS fix.
+  const progressFraction = useMemo(
+    () => (navLine ? navRouteProgressFraction(navLine, progress?.alongMeters ?? 0) : 0),
+    [navLine, progress?.alongMeters],
+  );
+
+  // `step`, not `interpolate`: MapLibre's line renderer only sizes the
+  // gradient texture from the line's actual on-screen length and samples it
+  // with `gl.NEAREST` when the expression is a step interpolant
+  // (`stepInterpolant` in `line_style_layer.ts`). An `interpolate` gradient
+  // always uses a flat 256px texture with linear filtering, which would
+  // quantize and blur the traveled/remaining boundary into a visible ramp
+  // instead of the hard edge the driver sees today.
+  const dynamicState = useMemo<DynamicLineState>(
+    () => ({
+      paint: {
+        [TRAVELED]: {
+          "line-gradient": [
+            "step",
+            ["line-progress"],
+            ROUTE_COLORS.traveled,
+            progressFraction,
+            TRANSPARENT,
+          ],
+        },
+        [NAV_ROUTE_REMAINING_LAYER_ID]: {
+          "line-gradient": [
+            "step",
+            ["line-progress"],
+            TRANSPARENT,
+            progressFraction,
+            ROUTE_COLORS.active,
+          ],
+        },
+        [REMAINING_CASING]: {
+          "line-gradient": [
+            "step",
+            ["line-progress"],
+            TRANSPARENT,
+            progressFraction,
+            ROUTE_COLORS.casing,
+          ],
+        },
+      },
+    }),
+    [progressFraction],
+  );
 
   const altFeatures = useMemo(() => {
     if (status === "idle") return EMPTY_FC;
@@ -85,7 +149,9 @@ export function NavigationRouteLayer() {
     () => ({
       sources: {
         [ALT_SOURCE]: { type: "geojson", data: altFeatures },
-        [SOURCE]: { type: "geojson", data: activeFeatures },
+        // `lineMetrics` is what makes `["line-progress"]` available to the
+        // gradients in `dynamicState` above.
+        [SOURCE]: { type: "geojson", lineMetrics: true, data: activeFeatures },
       },
       layers: [
         {
@@ -117,11 +183,16 @@ export function NavigationRouteLayer() {
           order: 4,
         },
         {
+          // No `kind` filter: the source now holds one feature covering the
+          // whole route. Which portion this casing actually shows is a
+          // `line-gradient` paint concern, applied dynamically below — see
+          // `dynamicState`.
           id: REMAINING_CASING,
           type: "line",
           source: SOURCE,
-          filter: ["==", ["get", "kind"], "remaining"],
           layout: { "line-cap": "round", "line-join": "round" },
+          // `line-color` is the fallback shown for the one tick before the
+          // gradient in `dynamicState` lands.
           paint: { "line-color": ROUTE_COLORS.casing, "line-width": ROUTE_WIDTHS.nav.casing },
           slot: "route-active",
           order: 2,
@@ -130,7 +201,6 @@ export function NavigationRouteLayer() {
           id: TRAVELED,
           type: "line",
           source: SOURCE,
-          filter: ["==", ["get", "kind"], "traveled"],
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
             "line-color": ROUTE_COLORS.traveled,
@@ -144,7 +214,6 @@ export function NavigationRouteLayer() {
           id: NAV_ROUTE_REMAINING_LAYER_ID,
           type: "line",
           source: SOURCE,
-          filter: ["==", ["get", "kind"], "remaining"],
           layout: { "line-cap": "round", "line-join": "round" },
           paint: { "line-color": ROUTE_COLORS.active, "line-width": NAV_ROUTE_REMAINING_WIDTH },
           slot: "route-active",
@@ -155,6 +224,9 @@ export function NavigationRouteLayer() {
     [activeFeatures, altFeatures],
   );
   useMapLayerGroup(group);
+  // Must run after `useMapLayerGroup` so its effect fires after the layers
+  // it targets exist.
+  useMapDynamicLineState(dynamicState);
 
   // Tap an alternative to switch to it; show a pointer cursor over one.
   useEffect(() => {
