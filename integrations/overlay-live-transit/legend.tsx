@@ -3,7 +3,7 @@
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
-import { relativeTime } from "@openmapx/core";
+import { relativeTime, useOverlayVisibilitySetter } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { TransportMode } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
@@ -43,7 +43,7 @@ export function LiveTransitLegend() {
   const registry = useIntegrationRegistry();
   const panelOpen = useLiveTransitStore((s) => s.panelOpen);
   const layerVisible = useLiveTransitStore((s) => s.layerVisible);
-  const setLayerVisible = useLiveTransitStore((s) => s.setLayerVisible);
+  const setLayerVisible = useOverlayVisibilitySetter("live-transit");
   const loading = useLiveTransitStore((s) => s.loading);
   const totalVehicleCount = useLiveTransitStore((s) => s.totalVehicleCount);
   const visibleVehicleCount = useLiveTransitStore((s) => s.visibleVehicleCount);

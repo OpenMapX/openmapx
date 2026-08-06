@@ -5,6 +5,7 @@ import Chip from "@mui/material/Chip";
 import Slider from "@mui/material/Slider";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { useEnv } from "@/lib/EnvProvider";
@@ -15,7 +16,7 @@ export function SatelliteLegend() {
   const env = useEnv();
   const panelOpen = useSatelliteStore((s) => s.panelOpen);
   const layerVisible = useSatelliteStore((s) => s.layerVisible);
-  const setLayerVisible = useSatelliteStore((s) => s.setLayerVisible);
+  const setLayerVisible = useOverlayVisibilitySetter("satellite");
   const activeLayer = useSatelliteStore((s) => s.activeLayer);
   const setActiveLayer = useSatelliteStore((s) => s.setActiveLayer);
   const date = useSatelliteStore((s) => s.date);

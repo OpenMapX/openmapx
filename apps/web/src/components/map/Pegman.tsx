@@ -4,7 +4,7 @@ import BoyIcon from "@mui/icons-material/Boy";
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Tooltip from "@mui/material/Tooltip";
-import { useStreetLevelStore } from "@openmapx/core";
+import { useOverlayVisibilitySetter, useStreetLevelStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import {
@@ -49,7 +49,7 @@ export function Pegman() {
   const { mapRef, mapReady } = useMap();
   const t = useTranslations("streetLevel");
   const { providers } = useStreetLevelProviders();
-  const setLayerVisible = useStreetLevelStore((s) => s.setLayerVisible);
+  const setLayerVisible = useOverlayVisibilitySetter("street-level-imagery");
   const requestImageLoad = useStreetLevelStore((s) => s.requestImageLoad);
   const [dragging, setDragging] = useState(false);
   const [ghostPos, setGhostPos] = useState({ x: 0, y: 0 });

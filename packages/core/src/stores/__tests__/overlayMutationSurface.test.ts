@@ -102,27 +102,6 @@ const REGISTRY_IMPL_FILE = "packages/core/src/stores/overlayRegistry.ts";
 const DIRECT_MUTATION_ALLOWED: Record<string, string> = {
   "packages/core/src/hooks/useOverlayExclusion.ts":
     "effect-driven peer closing; closeExclusionPeers no-ops once a transaction already closed the peer, so it never re-bumps userRevision",
-  "apps/web/src/components/map/overlay/useOverlayStoreState.ts":
-    "useOverlaySetLayerVisible — generic user-facing visibility setter, user intent by construction",
-  "apps/web/src/components/map/Pegman.tsx": "legend-style checkbox — user intent by construction",
-  "apps/web/src/components/map/street-level-imagery/StreetLevelLegend.tsx":
-    "legend checkbox — user intent by construction",
-  "integrations/overlay-air-quality/legend.tsx": "legend checkbox — user intent by construction",
-  "integrations/overlay-cycling/legend.tsx": "legend checkbox — user intent by construction",
-  "integrations/overlay-earthquakes/legend.tsx": "legend checkbox — user intent by construction",
-  "integrations/overlay-environment/legend.tsx": "legend checkbox — user intent by construction",
-  "integrations/overlay-hiking/legend.tsx": "legend checkbox — user intent by construction",
-  "integrations/overlay-live-transit/legend.tsx": "legend checkbox — user intent by construction",
-  "integrations/overlay-natural-events/legend.tsx": "legend checkbox — user intent by construction",
-  "integrations/overlay-nautical/legend.tsx": "legend checkbox — user intent by construction",
-  "integrations/overlay-ourairports/legend.tsx": "legend checkbox — user intent by construction",
-  "integrations/overlay-satellite/legend.tsx": "legend checkbox — user intent by construction",
-  "integrations/overlay-traffic-flow/legend.tsx": "legend checkbox — user intent by construction",
-  "integrations/overlay-weather/legend.tsx": "legend checkbox — user intent by construction",
-  "integrations/overlay-weather-alerts/legend.tsx": "legend checkbox — user intent by construction",
-  "integrations/overlay-wildfires/legend.tsx": "legend checkbox — user intent by construction",
-  "integrations/overlay-winter-sports/legend.tsx": "legend checkbox — user intent by construction",
-  "integrations/road-conditions/legend.tsx": "legend checkbox — user intent by construction",
 };
 
 /** Production callers that are expected to reference `toggleOverlay(` at all. */

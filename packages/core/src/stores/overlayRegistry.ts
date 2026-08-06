@@ -263,6 +263,47 @@ export function runOverlayTransaction(
 }
 
 /**
+ * Visibility-only counterpart to runOverlayTransaction, for controls (legend
+ * checkboxes, Pegman, the street-level coverage switch) that must leave
+ * panelOpen untouched — runOverlayTransaction's apply path always resolves to
+ * either "open, closing exclusion peers" or "close", neither of which fits a
+ * layer-visible flip with the panel left exactly as it was. It deliberately
+ * does NOT call closeExclusionPeers: useOverlayExclusion already reacts to
+ * layerVisible turning true and closes peers itself, so doing it here too
+ * would double-handle the same peer closure. Records use the same
+ * before/after closure shape as runOverlayTransaction purely for uniformity —
+ * only the target's own entry actually changes.
+ */
+export function setOverlayLayerVisible(
+  overlayId: OverlayId,
+  visible: boolean,
+  origin: OverlayChangeOrigin,
+): OverlayTransactionRecord | undefined {
+  const entry = getOverlayEntry(overlayId);
+  if (!entry) return undefined;
+
+  const closureIds = overlayTransactionClosure(overlayId);
+  const before = closureIds
+    .map(snapshotOverlay)
+    .filter((snap): snap is OverlaySnapshotEntry => Boolean(snap));
+
+  const apply = () => entry.getState().setLayerVisible(visible);
+
+  if (origin.kind === "automation") {
+    runInOverlayTransaction(apply);
+  } else {
+    apply();
+  }
+
+  const after = closureIds
+    .map(snapshotOverlay)
+    .filter((snap): snap is OverlaySnapshotEntry => Boolean(snap));
+
+  overlayTransactionRevision += 1;
+  return { revision: overlayTransactionRevision, origin, targetId: overlayId, before, after };
+}
+
+/**
  * Restores each captured entry's panelOpen/layerVisible through the public
  * store actions, but only for entries whose userRevision is still exactly
  * what it was when the snapshot was taken. A changed userRevision means a

@@ -2,6 +2,7 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
+import { useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { CYCLING_COLORS } from "@/components/map/layers/cyclingConfig";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
@@ -66,7 +67,7 @@ export function CyclingLegend() {
   const t = useTranslations("cycling");
   const panelOpen = useCyclingStore((s) => s.panelOpen);
   const layerVisible = useCyclingStore((s) => s.layerVisible);
-  const setLayerVisible = useCyclingStore((s) => s.setLayerVisible);
+  const setLayerVisible = useOverlayVisibilitySetter("cycling");
 
   return (
     <OverlayLegend

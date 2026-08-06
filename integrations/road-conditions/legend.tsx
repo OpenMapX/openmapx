@@ -5,6 +5,7 @@ import Chip from "@mui/material/Chip";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
+import { useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { SEVERITY_COLORS, TYPE_GLYPHS } from "./markers";
@@ -63,7 +64,7 @@ export function RoadConditionsLegend() {
   const types = useRoadConditionsStore((s) => s.types);
   const minSeverity = useRoadConditionsStore((s) => s.minSeverity);
   const horizon = useRoadConditionsStore((s) => s.horizon);
-  const setLayerVisible = useRoadConditionsStore((s) => s.setLayerVisible);
+  const setLayerVisible = useOverlayVisibilitySetter("road-conditions");
   const toggleType = useRoadConditionsStore((s) => s.toggleType);
   const setMinSeverity = useRoadConditionsStore((s) => s.setMinSeverity);
   const setHorizon = useRoadConditionsStore((s) => s.setHorizon);

@@ -4,7 +4,7 @@ import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
-import { useStreetLevelStore } from "@openmapx/core";
+import { useOverlayVisibilitySetter, useStreetLevelStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useStreetLevelProviders } from "./useStreetLevelProviders";
 
@@ -16,7 +16,7 @@ export function StreetLevelLegend() {
   const t = useTranslations("streetLevel");
   const panelOpen = useStreetLevelStore((s) => s.panelOpen);
   const layerVisible = useStreetLevelStore((s) => s.layerVisible);
-  const setLayerVisible = useStreetLevelStore((s) => s.setLayerVisible);
+  const setLayerVisible = useOverlayVisibilitySetter("street-level-imagery");
   const { providers } = useStreetLevelProviders();
 
   if (!panelOpen) return null;

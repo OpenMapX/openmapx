@@ -2,7 +2,7 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { TRAFFIC_BAND_COLORS, type TrafficBand } from "@openmapx/core";
+import { TRAFFIC_BAND_COLORS, type TrafficBand, useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { useTrafficFlowStore } from "./store";
@@ -17,7 +17,7 @@ export function TrafficFlowLegend() {
   const t = useTranslations("trafficFlow");
   const panelOpen = useTrafficFlowStore((s) => s.panelOpen);
   const layerVisible = useTrafficFlowStore((s) => s.layerVisible);
-  const setLayerVisible = useTrafficFlowStore((s) => s.setLayerVisible);
+  const setLayerVisible = useOverlayVisibilitySetter("traffic-flow");
 
   return (
     <OverlayLegend

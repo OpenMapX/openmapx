@@ -2,7 +2,7 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { SAC_GRADES } from "@openmapx/core";
+import { SAC_GRADES, useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { useHikingStore } from "./store";
@@ -28,7 +28,7 @@ export function HikingTrailsLegend() {
   const panelOpen = useHikingStore((s) => s.panelOpen);
   const layerVisible = useHikingStore((s) => s.layerVisible);
   const loading = useHikingStore((s) => s.loading);
-  const setLayerVisible = useHikingStore((s) => s.setLayerVisible);
+  const setLayerVisible = useOverlayVisibilitySetter("hiking");
 
   return (
     <OverlayLegend

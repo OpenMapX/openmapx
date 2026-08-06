@@ -2,6 +2,7 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
+import { useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { useWinterSportsStore } from "./store";
@@ -20,7 +21,7 @@ export function WinterSportsLegend() {
   const panelOpen = useWinterSportsStore((s) => s.panelOpen);
   const layerVisible = useWinterSportsStore((s) => s.layerVisible);
   const loading = useWinterSportsStore((s) => s.loading);
-  const setLayerVisible = useWinterSportsStore((s) => s.setLayerVisible);
+  const setLayerVisible = useOverlayVisibilitySetter("winter-sports");
 
   return (
     <OverlayLegend

@@ -6,6 +6,7 @@ import Switch from "@mui/material/Switch";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
+import { useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { useWildfireStore } from "./store";
@@ -36,7 +37,7 @@ export function WildfireLegend() {
   const source = useWildfireStore((s) => s.source);
   const showHeatmap = useWildfireStore((s) => s.showHeatmap);
   const lastUpdated = useWildfireStore((s) => s.lastUpdated);
-  const setLayerVisible = useWildfireStore((s) => s.setLayerVisible);
+  const setLayerVisible = useOverlayVisibilitySetter("wildfires");
   const setDayRange = useWildfireStore((s) => s.setDayRange);
   const setSource = useWildfireStore((s) => s.setSource);
   const setShowHeatmap = useWildfireStore((s) => s.setShowHeatmap);

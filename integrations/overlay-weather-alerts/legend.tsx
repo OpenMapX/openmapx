@@ -3,7 +3,7 @@
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
-import { relativeTime } from "@openmapx/core";
+import { relativeTime, useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { SEVERITY_COLORS } from "./map-layer";
@@ -13,7 +13,7 @@ export function WeatherAlertLegend() {
   const t = useTranslations("weatherAlerts");
   const panelOpen = useWeatherAlertStore((s) => s.panelOpen);
   const layerVisible = useWeatherAlertStore((s) => s.layerVisible);
-  const setLayerVisible = useWeatherAlertStore((s) => s.setLayerVisible);
+  const setLayerVisible = useOverlayVisibilitySetter("weather-alerts");
   const loading = useWeatherAlertStore((s) => s.loading);
   const activeSeverities = useWeatherAlertStore((s) => s.activeSeverities);
   const toggleSeverity = useWeatherAlertStore((s) => s.toggleSeverity);

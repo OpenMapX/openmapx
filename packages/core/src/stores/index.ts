@@ -55,6 +55,7 @@ export {
   registerOverlayEntry,
   restoreOverlaySnapshot,
   runOverlayTransaction,
+  setOverlayLayerVisible,
   toggleOverlay,
 } from "./overlayRegistry";
 export { usePlaceStore } from "./placeStore";

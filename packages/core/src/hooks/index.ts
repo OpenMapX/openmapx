@@ -85,6 +85,7 @@ export { type NlpCloudAccess, type NlpParseResponse, useNlpSearch } from "./useN
 export { useOfficialBookingUrl } from "./useOfficialBookingUrl";
 export { useOptimizeRoute } from "./useOptimizeRoute";
 export { useOverlayExclusion } from "./useOverlayExclusion";
+export { useOverlayVisibilitySetter } from "./useOverlayVisibilitySetter";
 export { usePlaceDetails } from "./usePlaceDetails";
 export { usePlacePhotos } from "./usePlacePhotos";
 export { usePresetSuggest } from "./usePresetSuggest";

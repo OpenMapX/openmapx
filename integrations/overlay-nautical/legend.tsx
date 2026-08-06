@@ -11,6 +11,7 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import { useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
@@ -96,7 +97,7 @@ export function NauticalLegend() {
   const setShowHarbors = useNauticalStore((s) => s.setShowHarbors);
   const setShowTideStations = useNauticalStore((s) => s.setShowTideStations);
   const setTideStationFilter = useNauticalStore((s) => s.setTideStationFilter);
-  const setLayerVisible = useNauticalStore((s) => s.setLayerVisible);
+  const setLayerVisible = useOverlayVisibilitySetter("nautical");
 
   const handleFilterChange = (_e: unknown, value: TideStationFilter | null) => {
     if (value !== null) setTideStationFilter(value);

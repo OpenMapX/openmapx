@@ -5,7 +5,7 @@ import Chip from "@mui/material/Chip";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
-import { relativeTime } from "@openmapx/core";
+import { relativeTime, useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { CATEGORY_COLORS } from "./map-layer";
@@ -29,7 +29,7 @@ export function NaturalEventLegend() {
   const t = useTranslations("naturalEvents");
   const panelOpen = useNaturalEventStore((s) => s.panelOpen);
   const layerVisible = useNaturalEventStore((s) => s.layerVisible);
-  const setLayerVisible = useNaturalEventStore((s) => s.setLayerVisible);
+  const setLayerVisible = useOverlayVisibilitySetter("natural-events");
   const loading = useNaturalEventStore((s) => s.loading);
   const days = useNaturalEventStore((s) => s.days);
   const setDays = useNaturalEventStore((s) => s.setDays);

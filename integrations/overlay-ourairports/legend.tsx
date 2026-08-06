@@ -4,6 +4,7 @@ import Box from "@mui/material/Box";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
+import { useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { type AirportTypeFilter, useAirportsOverlayStore } from "./store";
@@ -22,7 +23,7 @@ export function AirportsOverlayLegend() {
   const layerVisible = useAirportsOverlayStore((s) => s.layerVisible);
   const loading = useAirportsOverlayStore((s) => s.loading);
   const filter = useAirportsOverlayStore((s) => s.filter);
-  const setLayerVisible = useAirportsOverlayStore((s) => s.setLayerVisible);
+  const setLayerVisible = useOverlayVisibilitySetter("ourairports");
   const setFilter = useAirportsOverlayStore((s) => s.setFilter);
 
   const handleFilter = (_e: unknown, value: AirportTypeFilter | null) => {

@@ -3,6 +3,7 @@
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
+import { useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { type EnvironmentSensorType, useEnvironmentStore } from "./store";
@@ -57,7 +58,7 @@ export function EnvironmentLegend() {
   const t = useTranslations("environment");
   const panelOpen = useEnvironmentStore((s) => s.panelOpen);
   const layerVisible = useEnvironmentStore((s) => s.layerVisible);
-  const setLayerVisible = useEnvironmentStore((s) => s.setLayerVisible);
+  const setLayerVisible = useOverlayVisibilitySetter("environment");
   const loading = useEnvironmentStore((s) => s.loading);
   const sensorType = useEnvironmentStore((s) => s.sensorType);
   const setSensorType = useEnvironmentStore((s) => s.setSensorType);

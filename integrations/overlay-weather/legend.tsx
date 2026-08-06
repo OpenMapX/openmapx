@@ -7,7 +7,11 @@ import Slider from "@mui/material/Slider";
 import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { type WeatherSubLayer, weatherCodeToInfo } from "@openmapx/core";
+import {
+  useOverlayVisibilitySetter,
+  type WeatherSubLayer,
+  weatherCodeToInfo,
+} from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { WeatherIcon } from "@/components/weather/WeatherIcon";
@@ -38,7 +42,7 @@ export function WeatherLegend() {
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const panelOpen = useWeatherStore((s) => s.panelOpen);
   const layerVisible = useWeatherStore((s) => s.layerVisible);
-  const setLayerVisible = useWeatherStore((s) => s.setLayerVisible);
+  const setLayerVisible = useOverlayVisibilitySetter("weather");
   const loading = useWeatherStore((s) => s.loading);
   const radarLoading = useWeatherStore((s) => s.radarLoading);
 

@@ -2,6 +2,7 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
+import { useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { useAirQualityStore } from "./store";
@@ -20,7 +21,7 @@ export function AirQualityLegend() {
   const panelOpen = useAirQualityStore((s) => s.panelOpen);
   const layerVisible = useAirQualityStore((s) => s.layerVisible);
   const loading = useAirQualityStore((s) => s.loading);
-  const setLayerVisible = useAirQualityStore((s) => s.setLayerVisible);
+  const setLayerVisible = useOverlayVisibilitySetter("air-quality");
 
   return (
     <OverlayLegend

@@ -1,6 +1,10 @@
 "use client";
 
-import { getRegisteredOverlayStore, subscribeOverlayStoreChanges } from "@openmapx/core";
+import {
+  getRegisteredOverlayStore,
+  setOverlayLayerVisible,
+  subscribeOverlayStoreChanges,
+} from "@openmapx/core";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 
 /**
@@ -39,13 +43,12 @@ export function useOverlayPanelOpen(overlayId: string): boolean {
   return useOverlayFlag(overlayId, selectPanelOpen);
 }
 
-// A direct write to setLayerVisible, not routed through runOverlayTransaction
-// — every caller of this hook is a user-facing visibility control, so the
+// Every caller of this hook is a user-facing visibility control, so the
 // resulting userRevision bump correctly reads as user intent.
 export function useOverlaySetLayerVisible(overlayId: string): (visible: boolean) => void {
   return useCallback(
     (visible: boolean) => {
-      getRegisteredOverlayStore(overlayId)?.getState().setLayerVisible(visible);
+      setOverlayLayerVisible(overlayId, visible, { kind: "user" });
     },
     [overlayId],
   );

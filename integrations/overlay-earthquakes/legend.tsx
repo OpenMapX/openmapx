@@ -6,6 +6,7 @@ import Switch from "@mui/material/Switch";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
+import { useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { useEarthquakeStore } from "./store";
@@ -50,7 +51,7 @@ export function EarthquakeLegend() {
   const colorMode = useEarthquakeStore((s) => s.colorMode);
   const showHeatmap = useEarthquakeStore((s) => s.showHeatmap);
   const lastUpdated = useEarthquakeStore((s) => s.lastUpdated);
-  const setLayerVisible = useEarthquakeStore((s) => s.setLayerVisible);
+  const setLayerVisible = useOverlayVisibilitySetter("earthquakes");
   const setTimeRange = useEarthquakeStore((s) => s.setTimeRange);
   const setMinMagnitude = useEarthquakeStore((s) => s.setMinMagnitude);
   const setColorMode = useEarthquakeStore((s) => s.setColorMode);
