@@ -81,9 +81,13 @@ function renderNavigationView() {
   );
 }
 
-/** The `active` argument `useWakeLock` was most recently called with. */
-function lastWakeLockCall(): boolean | undefined {
-  return requestWakeLock.mock.calls.at(-1)?.[0] as boolean | undefined;
+/**
+ * Whether a wake lock is currently being held — `false` covers both "called
+ * with false" and "never called at all" (idle and transit navigation no
+ * longer mount the runtime that calls `useWakeLock` at all).
+ */
+function wakeLockHeld(): boolean {
+  return (requestWakeLock.mock.calls.at(-1)?.[0] as boolean | undefined) ?? false;
 }
 
 describe("NavigationView — wake lock follows live navigation status", () => {
@@ -100,7 +104,7 @@ describe("NavigationView — wake lock follows live navigation status", () => {
 
   it("does not request a wake lock before navigation starts", () => {
     renderNavigationView();
-    expect(lastWakeLockCall()).toBe(false);
+    expect(wakeLockHeld()).toBe(false);
   });
 
   it("requests a wake lock while navigating", () => {
@@ -111,7 +115,7 @@ describe("NavigationView — wake lock follows live navigation status", () => {
         [0.01, 0],
       ]);
     });
-    expect(lastWakeLockCall()).toBe(true);
+    expect(wakeLockHeld()).toBe(true);
   });
 
   it("holds the wake lock through a reroute", () => {
@@ -125,7 +129,7 @@ describe("NavigationView — wake lock follows live navigation status", () => {
     act(() => {
       useNavigationStore.getState().beginReroute();
     });
-    expect(lastWakeLockCall()).toBe(true);
+    expect(wakeLockHeld()).toBe(true);
   });
 
   it("releases the wake lock on arrival — the arrival card stays, but live sensors and rendering are done", () => {
@@ -136,11 +140,11 @@ describe("NavigationView — wake lock follows live navigation status", () => {
         [0.01, 0],
       ]);
     });
-    expect(lastWakeLockCall()).toBe(true);
+    expect(wakeLockHeld()).toBe(true);
     act(() => {
       useNavigationStore.getState().completeArrival();
     });
-    expect(lastWakeLockCall()).toBe(false);
+    expect(wakeLockHeld()).toBe(false);
   });
 
   it("never requests a wake lock for transit navigation (kind !== 'ground')", () => {
@@ -148,7 +152,7 @@ describe("NavigationView — wake lock follows live navigation status", () => {
     act(() => {
       useNavigationStore.setState({ status: "navigating", kind: "transit" });
     });
-    expect(lastWakeLockCall()).toBe(false);
+    expect(wakeLockHeld()).toBe(false);
   });
 
   it("does not request a wake lock while navigating if keepScreenOn is off", () => {
@@ -160,6 +164,6 @@ describe("NavigationView — wake lock follows live navigation status", () => {
         [0.01, 0],
       ]);
     });
-    expect(lastWakeLockCall()).toBe(false);
+    expect(wakeLockHeld()).toBe(false);
   });
 });
