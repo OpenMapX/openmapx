@@ -59,17 +59,32 @@ function makeController(): SingleFlightController {
 
 describe("Overture cron gating", () => {
   let dataDir: string;
+  const started: ReturnType<typeof setupCron>[] = [];
+
+  /**
+   * `setupCron`, but the handles are also stopped in `afterEach`. croner keys
+   * its jobs by name globally, and a test that throws or times out before
+   * reaching its own `handles.stop()` leaves that name registered — so every
+   * later `setupCron` in this file dies with "name already taken", turning one
+   * failure into a cascade of unrelated ones.
+   */
+  function startCron(options: Parameters<typeof setupCron>[0]): ReturnType<typeof setupCron> {
+    const handles = setupCron(options);
+    started.push(handles);
+    return handles;
+  }
 
   beforeEach(() => {
     dataDir = mkdtempSync(join(tmpdir(), "openmapx-overture-cron-"));
   });
 
   afterEach(() => {
+    for (const handles of started.splice(0)) handles.stop();
     rmSync(dataDir, { recursive: true, force: true });
   });
 
   it("overtureCron is null when overtureEnabled is false (default)", () => {
-    const handles = setupCron({
+    const handles = startCron({
       dataDir,
       repoRoot: "/tmp/nope",
       countries: [],
@@ -85,7 +100,7 @@ describe("Overture cron gating", () => {
   });
 
   it("overtureCron is null when overtureCronExpression is a disable sentinel", () => {
-    const handles = setupCron({
+    const handles = startCron({
       dataDir,
       repoRoot: "/tmp/nope",
       countries: [],
@@ -102,7 +117,7 @@ describe("Overture cron gating", () => {
   });
 
   it("overtureCron is registered when overtureEnabled=true and valid cron expression", () => {
-    const handles = setupCron({
+    const handles = startCron({
       dataDir,
       repoRoot: "/tmp/nope",
       countries: [],
@@ -119,7 +134,7 @@ describe("Overture cron gating", () => {
   });
 
   it("runOvertureNow is always present as a callable function", () => {
-    const handles = setupCron({
+    const handles = startCron({
       dataDir,
       repoRoot: "/tmp/nope",
       countries: [],
@@ -135,7 +150,7 @@ describe("Overture cron gating", () => {
 
   it("runOvertureNow with overtureEnabled=true contains sync failures", async () => {
     let overtureCalled = false;
-    const handles = setupCron({
+    const handles = startCron({
       dataDir,
       repoRoot: "/tmp/nope",
       countries: [],
@@ -151,18 +166,26 @@ describe("Overture cron gating", () => {
         overtureCalled = true;
         return { finalStatus: "done", results: [] } as never;
       },
+      // Every outbound seam is stubbed so the failure under test is the one we
+      // inject. Left to their defaults these reach the live Overture STAC
+      // catalogue and then the real regional pull, which is neither a fast nor
+      // a deterministic way to observe error containment.
+      discoverOvertureRelease: async () => "2026-07-22.0",
+      getInstalledOvertureRelease: async () => null,
+      syncOvertureRelease: async () => {
+        throw new Error("overture sync failed");
+      },
     });
     expect(typeof handles.runOvertureNow).toBe("function");
     handles.stop();
-    // The real sync will fail (no DuckDB/Postgres), but the cron handler contains errors.
-    // but the cron handler swallows errors — assert it resolves without throwing.
+    // The cron handler swallows sync errors, so this resolves rather than rejecting.
     await expect(handles.runOvertureNow()).resolves.toBeUndefined();
     void overtureCalled;
   });
 
   it("discovers and imports a newer release before updating feed state", async () => {
     const calls: string[] = [];
-    const handles = setupCron({
+    const handles = startCron({
       dataDir,
       repoRoot: "/tmp/nope",
       countries: [],
@@ -204,7 +227,7 @@ describe("Overture cron gating", () => {
       status: "already_completed" as const,
       linked: 17,
     }));
-    const handles = setupCron({
+    const handles = startCron({
       dataDir,
       repoRoot: "/tmp/nope",
       countries: [],
@@ -220,6 +243,11 @@ describe("Overture cron gating", () => {
       syncOvertureRelease,
       rebuildOvertureLinks,
       writeOvertureFeedState,
+      // An `already_completed` rebuild goes on to finalize the release files.
+      // Left to its default that is the real implementation, walking the actual
+      // release directories — unrelated to what this test asserts, and slow
+      // enough to exhaust the timeout.
+      finalizeOvertureReleaseFiles: async () => ({ retained: ["2026-07-22.0"], removed: [] }),
     });
 
     await handles.runOvertureNow();
@@ -249,7 +277,7 @@ describe("Overture cron gating", () => {
       components: 20,
       phaseDurationsMs: {},
     }));
-    const handles = setupCron({
+    const handles = startCron({
       dataDir,
       repoRoot: "/tmp/nope",
       countries: [],
@@ -282,7 +310,7 @@ describe("Overture cron gating", () => {
 
   it("marks Places imported even when the link rebuild reports failure", async () => {
     const calls: string[] = [];
-    const handles = setupCron({
+    const handles = startCron({
       dataDir,
       repoRoot: "/tmp/nope",
       countries: [],
@@ -318,7 +346,7 @@ describe("Overture cron gating", () => {
 
   it("does not mark a release imported when the sync fails", async () => {
     const writeOvertureFeedState = vi.fn();
-    const handles = setupCron({
+    const handles = startCron({
       dataDir,
       repoRoot: "/tmp/nope",
       countries: [],
@@ -346,7 +374,7 @@ describe("Overture cron gating", () => {
     const prev = process.env.OVERTURE_ENABLED;
     try {
       process.env.OVERTURE_ENABLED = "true";
-      const handles = setupCron({
+      const handles = startCron({
         dataDir,
         repoRoot: "/tmp/nope",
         countries: [],
