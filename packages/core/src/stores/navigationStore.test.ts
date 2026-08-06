@@ -387,6 +387,145 @@ describe("navigationStore applyGroundFix", () => {
   });
 });
 
+describe("navigationStore route-identity reset", () => {
+  // The four actions that swap in a different route identity (selectRoute,
+  // addStop, applyReroute, acceptFasterRoute) must all drop state measured
+  // against the OLD route/geometry — including the previous road's speed
+  // limit, which used to survive the swap and left the regulatory badge
+  // showing against the new route until the next fix overwrote it.
+  const routeWith = (distance: number): Route => ({ ...route, distance }) as Route;
+
+  function seedTransientState(): void {
+    useNavigationStore.setState({
+      progress: { alongMeters: 42 } as NavProgress,
+      offRoute: true,
+      liveSpeedLimits: [50, 60],
+      currentSpeedLimit: 90,
+    });
+  }
+
+  const scenarios: {
+    name: string;
+    setup: () => void;
+    invoke: () => void;
+    assertSpecific: () => void;
+  }[] = [
+    {
+      name: "selectRoute",
+      setup: () => {
+        const alt = routeWith(555);
+        useNavigationStore.getState().startGroundNavigation(
+          route,
+          "driving",
+          [
+            [0, 0],
+            [1, 1],
+          ],
+          [alt],
+        );
+        seedTransientState();
+      },
+      invoke: () => useNavigationStore.getState().selectRoute(1),
+      assertSpecific: () => {
+        const s = useNavigationStore.getState();
+        expect(s.route?.distance).toBe(555);
+        expect(s.fasterRoute).toBeNull();
+      },
+    },
+    {
+      name: "addStop",
+      setup: () => {
+        useNavigationStore.getState().startGroundNavigation(route, "driving", [
+          [0, 0],
+          [1, 1],
+        ]);
+        const pendingProposal = routeWith(777);
+        useNavigationStore.getState().proposeFasterRoute({
+          route: pendingProposal,
+          alternatives: [],
+          savedSeconds: 300,
+          proposedAtMs: 1,
+        });
+        seedTransientState();
+      },
+      invoke: () =>
+        useNavigationStore.getState().addStop(routeWith(321), [
+          [0.5, 0.5],
+          [1, 1],
+        ]),
+      assertSpecific: () => {
+        const s = useNavigationStore.getState();
+        expect(s.route?.distance).toBe(321);
+        // Unlike the other three route-identity actions, addStop does not
+        // touch a pending faster-route proposal.
+        expect(s.fasterRoute?.route.distance).toBe(777);
+      },
+    },
+    {
+      name: "applyReroute",
+      setup: () => {
+        useNavigationStore.getState().startGroundNavigation(route, "driving", [
+          [0, 0],
+          [1, 1],
+        ]);
+        seedTransientState();
+      },
+      invoke: () => useNavigationStore.getState().applyReroute(routeWith(654)),
+      assertSpecific: () => {
+        const s = useNavigationStore.getState();
+        expect(s.route?.distance).toBe(654);
+        expect(s.fasterRoute).toBeNull();
+      },
+    },
+    {
+      name: "acceptFasterRoute",
+      setup: () => {
+        useNavigationStore.getState().startGroundNavigation(route, "driving", [
+          [0, 0],
+          [1, 1],
+        ]);
+        useNavigationStore.getState().proposeFasterRoute({
+          route: routeWith(888),
+          alternatives: [],
+          savedSeconds: 300,
+          proposedAtMs: 1,
+        });
+        seedTransientState();
+      },
+      invoke: () => useNavigationStore.getState().acceptFasterRoute(),
+      assertSpecific: () => {
+        const s = useNavigationStore.getState();
+        expect(s.route?.distance).toBe(888);
+        expect(s.fasterRoute).toBeNull();
+      },
+    },
+  ];
+
+  it.each(scenarios)(
+    "$name clears progress/offRoute/liveSpeedLimits/currentSpeedLimit in a single notification",
+    ({ setup, invoke, assertSpecific }) => {
+      useNavigationStore.getState().stopNavigation();
+      setup();
+      expect(useNavigationStore.getState().currentSpeedLimit).not.toBeNull();
+
+      let calls = 0;
+      const unsubscribe = useNavigationStore.subscribe(() => {
+        calls += 1;
+      });
+      invoke();
+      unsubscribe();
+
+      expect(calls).toBe(1);
+      const s = useNavigationStore.getState();
+      expect(s.progress).toBeNull();
+      expect(s.offRoute).toBe(false);
+      expect(s.liveSpeedLimits).toBeNull();
+      expect(s.currentSpeedLimit).toBeNull();
+      assertSpecific();
+    },
+  );
+});
+
 describe("navigationStore preference persistence", () => {
   beforeEach(() => {
     configureStorage(makeMemoryStorage());

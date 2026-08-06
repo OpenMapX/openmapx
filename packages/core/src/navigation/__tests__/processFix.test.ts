@@ -220,3 +220,73 @@ describe("processFix", () => {
     expect(r.arrived).toBe(true);
   });
 });
+
+// A route with geometry but no steps — a limited provider, a malformed
+// response, or a restored offline session can all produce `steps: []` on an
+// otherwise valid route. Arrival must key off destination distance alone
+// (there is no step-advance gate to reach), and the maneuver-announcement
+// path must never surface the resulting undefined step.
+describe("processFix on a route with no steps (geometry-only)", () => {
+  const noStepsGeometry: [number, number][] = [
+    [0, 0],
+    [0.00899320363724538, 0], // ~1000 m east
+  ];
+  const noStepsRoute = {
+    distance: 1000,
+    duration: 100,
+    geometry: noStepsGeometry,
+    legs: [],
+    mode: "driving",
+    steps: [],
+  } as unknown as Route;
+
+  it("reports full progress and does not arrive at the start", () => {
+    const r = processFix(
+      noStepsRoute,
+      { coords: [0, 0], accuracy: 5, timestampMs: 0 },
+      emptyState,
+      opts,
+    );
+    expect(r.progress).not.toBeNull();
+    expect(r.progress?.currentStepIndex).toBe(0);
+    expect(r.progress?.distanceRemaining).toBeCloseTo(1000, 0);
+    expect(r.progress?.durationRemaining).toBeCloseTo(100, 0);
+    expect(r.progress?.snapped).toBeDefined();
+    expect(r.progress?.alongMeters).toBeCloseTo(0, 0);
+    expect(r.progress?.deviationMeters).toBeCloseTo(0, 3);
+    expect(r.progress?.segmentIndex).toBe(0);
+    expect(r.progress?.etaEpochMs).toBeGreaterThan(0);
+    expect(r.offRoute).toBe(false);
+    expect(r.needsReroute).toBe(false);
+    expect(r.arrived).toBe(false);
+    expect(r.voiceCue).toBeNull();
+  });
+
+  it("keeps reporting progress without arriving or announcing a maneuver mid-route", () => {
+    // ~700 m along → 300 m remaining, inside the driving voice cue's "far"
+    // trigger (400 m): without the missing-step guard this would surface a
+    // cue carrying an undefined step.
+    const r = processFix(
+      noStepsRoute,
+      { coords: [0.006295242546071764, 0], accuracy: 5, timestampMs: 1000 },
+      emptyState,
+      opts,
+    );
+    expect(r.progress?.distanceRemaining).toBeCloseTo(300, 0);
+    expect(r.arrived).toBe(false);
+    expect(r.voiceCue).toBeNull();
+  });
+
+  it("arrives once within the arrival threshold of the destination", () => {
+    // ~980 m along → 20 m remaining, inside the 35 m driving arrival threshold.
+    const r = processFix(
+      noStepsRoute,
+      { coords: [0.00881333956450047, 0], accuracy: 5, timestampMs: 2000 },
+      emptyState,
+      opts,
+    );
+    expect(r.progress?.distanceRemaining).toBeCloseTo(20, 0);
+    expect(r.arrived).toBe(true);
+    expect(r.voiceCue).toBeNull();
+  });
+});

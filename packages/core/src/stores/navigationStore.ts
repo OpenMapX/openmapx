@@ -234,6 +234,22 @@ interface NavigationState {
   hydrate: () => void;
 }
 
+/**
+ * Fields derived from the OLD route that must never survive a route identity
+ * change (route switch, added stop, reroute, or accepted faster route): they
+ * are indexed into / measured against geometry that no longer exists, and
+ * would mislead every consumer for one render until the next accepted fix
+ * overwrites them. `currentSpeedLimit` belongs here alongside `progress` /
+ * `offRoute` / `liveSpeedLimits` — it describes the OLD road, and leaving it
+ * in place shows the previous route's regulatory badge against the new one.
+ */
+const ROUTE_IDENTITY_RESET = {
+  progress: null as NavProgress | null,
+  offRoute: false,
+  liveSpeedLimits: null as (number | null)[] | null,
+  currentSpeedLimit: null as number | null,
+};
+
 const INITIAL = {
   status: "idle" as NavStatus,
   kind: "ground" as NavKind,
@@ -299,9 +315,7 @@ export const useNavigationStore = create<NavigationState>((set) => ({
         route: next,
         activeRouteIndex: index,
         routeSelectionIntent: "userSelected",
-        progress: null,
-        offRoute: false,
-        liveSpeedLimits: null,
+        ...ROUTE_IDENTITY_RESET,
         fasterRoute: null,
         fasterRouteSuppressed: false,
       };
@@ -313,9 +327,7 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       routes: [route],
       activeRouteIndex: 0,
       destinationWaypoints: waypoints,
-      progress: null,
-      offRoute: false,
-      liveSpeedLimits: null,
+      ...ROUTE_IDENTITY_RESET,
       routeSelectionIntent: "userSelected",
       fasterRouteSuppressed: false,
     }),
@@ -360,9 +372,7 @@ export const useNavigationStore = create<NavigationState>((set) => ({
     set((s) => ({
       status: "navigating",
       route,
-      offRoute: false,
-      progress: null,
-      liveSpeedLimits: null,
+      ...ROUTE_IDENTITY_RESET,
       routeProvider: provider ?? s.routeProvider,
       routeSelectionIntent: "automatic",
       fasterRoute: null,
@@ -433,9 +443,7 @@ export const useNavigationStore = create<NavigationState>((set) => ({
         routes: [proposal.route, ...proposal.alternatives],
         activeRouteIndex: 0,
         routeSelectionIntent: routeIntent ?? s.routeSelectionIntent,
-        offRoute: false,
-        progress: null,
-        liveSpeedLimits: null,
+        ...ROUTE_IDENTITY_RESET,
         fasterRoute: null,
         fasterRouteSuppressed: false,
       };

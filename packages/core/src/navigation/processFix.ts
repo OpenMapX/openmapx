@@ -1,5 +1,5 @@
 import type { LngLat } from "../types/geometry";
-import type { Route } from "../types/routing";
+import type { Route, RouteStep } from "../types/routing";
 import { haversineDistance } from "../utils/coordinates";
 import { eta } from "./eta";
 import { computeProgress, upcomingManeuverIndex } from "./progress";
@@ -176,23 +176,28 @@ export function processFix(
   // `distanceRemaining <= lastStep.distance` would collapse to `<= 0` and only
   // fire when snapped exactly at the route end. `committedStepIndex >= lastIndex
   // - 1` reaches true on the last travel step, so a multi-step route can't
-  // false-arrive near the start.
+  // false-arrive near the start. A step-less route has no gate to reach, so
+  // arrival there is destination distance alone.
   const lastIndex = route.steps.length - 1;
   const arrived =
-    prog.distanceRemaining <= opts.arrivalThresholdMeters &&
-    gate.committedStepIndex >= lastIndex - 1;
+    route.steps.length === 0
+      ? prog.distanceRemaining <= opts.arrivalThresholdMeters
+      : prog.distanceRemaining <= opts.arrivalThresholdMeters &&
+        gate.committedStepIndex >= lastIndex - 1;
 
   // Announce the UPCOMING maneuver (at the end of the current step), not the one
   // already performed at the start of it. distanceToNextManeuver counts down to
   // exactly this maneuver.
   const upcomingIndex = upcomingManeuverIndex(prog.currentStepIndex, route.steps.length);
-  const step = route.steps[upcomingIndex];
+  const step: RouteStep | undefined = route.steps[upcomingIndex];
   // Suppress voice while off the route: the snapped distance-to-maneuver is a
   // phantom (a laterally-far fix still projects onto the line somewhere), so any
   // countdown read off it would be wrong. The off-route/reroute UI is the right
-  // cue instead; normal cues resume on return.
+  // cue instead; normal cues resume on return. A step-less (or exhausted)
+  // route has no maneuver to announce — `step == null` covers both — so this
+  // can never surface an undefined step to the caller.
   const cue =
-    arrived || offRoute
+    arrived || offRoute || step == null
       ? null
       : nextVoiceCue(
           step,

@@ -18,11 +18,26 @@ export function computeProgress(
 ): ProgressResult {
   const steps = route.steps;
   if (steps.length === 0) {
+    // A route with geometry but no steps is a real shape — a limited
+    // provider, a malformed response, or a restored offline session can all
+    // produce `steps: []`. There is no step to index into, so
+    // `currentStepIndex: 0` below is a compatibility value, not a claim that
+    // step 0 exists. Distance/duration remaining are still reported honestly
+    // off the route total, rather than hard-coded to 0 (which used to read as
+    // an instant arrival). `total <= 0` or non-finite is a genuinely
+    // zero-length or unusable route — nothing is left, and dividing by it
+    // would produce NaN/Infinity.
+    const total = route.distance;
+    const usable = Number.isFinite(total) && total > 0;
+    const along = usable ? Math.max(0, Math.min(alongMeters, total)) : 0;
+    const distanceRemaining = usable ? Math.max(0, total - along) : 0;
+    const durationRemaining =
+      usable && Number.isFinite(route.duration) ? route.duration * (distanceRemaining / total) : 0;
     return {
       currentStepIndex: 0,
-      distanceToNextManeuver: 0,
-      distanceRemaining: 0,
-      durationRemaining: 0,
+      distanceToNextManeuver: distanceRemaining,
+      distanceRemaining,
+      durationRemaining,
     };
   }
   const total = route.distance;

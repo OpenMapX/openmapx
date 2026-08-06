@@ -69,3 +69,69 @@ describe("computeProgress", () => {
     expect(p.distanceToNextManeuver).toBe(0);
   });
 });
+
+// A route with geometry but no steps is a real shape — limited providers,
+// malformed responses, or a restored offline session can all produce
+// `steps: []` on an otherwise valid route. `currentStepIndex` stays 0 because
+// there is no step to index into; it is a compatibility value, not a claim
+// that step 0 exists.
+const noStepsRoute = {
+  distance: 1000,
+  duration: 100,
+  geometry: [
+    [0, 0],
+    [0.00899320363724538, 0], // ~1000 m east
+  ],
+  legs: [],
+  mode: "driving",
+  steps: [],
+} as unknown as Route;
+
+describe("computeProgress with no steps (geometry-only route)", () => {
+  it("reports the full distance/duration remaining at the start", () => {
+    const p = computeProgress(noStepsRoute, 0);
+    expect(p.currentStepIndex).toBe(0);
+    expect(p.distanceRemaining).toBe(1000);
+    expect(p.distanceToNextManeuver).toBe(1000);
+    expect(p.durationRemaining).toBe(100);
+  });
+
+  it("pro-rates duration remaining by the remaining-distance fraction mid-route", () => {
+    const p = computeProgress(noStepsRoute, 700);
+    expect(p.currentStepIndex).toBe(0);
+    expect(p.distanceRemaining).toBe(300);
+    expect(p.distanceToNextManeuver).toBe(300);
+    expect(p.durationRemaining).toBeCloseTo(30, 5); // 100 * 300/1000
+  });
+
+  it("clamps past the end to zero remaining", () => {
+    const p = computeProgress(noStepsRoute, 1500);
+    expect(p.currentStepIndex).toBe(0);
+    expect(p.distanceRemaining).toBe(0);
+    expect(p.distanceToNextManeuver).toBe(0);
+    expect(p.durationRemaining).toBe(0);
+  });
+
+  it("returns all zeros without dividing when the route's total distance is 0", () => {
+    const degenerate = { ...noStepsRoute, distance: 0 } as Route;
+    const p = computeProgress(degenerate, 50);
+    expect(p).toEqual({
+      currentStepIndex: 0,
+      distanceToNextManeuver: 0,
+      distanceRemaining: 0,
+      durationRemaining: 0,
+    });
+  });
+
+  it("returns all zeros, never NaN, when the route's total distance is non-finite", () => {
+    const degenerate = { ...noStepsRoute, distance: Number.NaN } as Route;
+    const p = computeProgress(degenerate, 50);
+    expect(p).toEqual({
+      currentStepIndex: 0,
+      distanceToNextManeuver: 0,
+      distanceRemaining: 0,
+      durationRemaining: 0,
+    });
+    expect(Number.isNaN(p.durationRemaining)).toBe(false);
+  });
+});
