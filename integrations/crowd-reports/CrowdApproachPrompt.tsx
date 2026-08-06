@@ -9,18 +9,21 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { useNavigationStore } from "@openmapx/core";
+import { useNavIncidentResource } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
-import { useNavIncidents } from "@/lib/navigation/useNavIncidents";
 import { selectCrowdApproach } from "./approach";
 import { useVote } from "./useCrowdReports";
 
 /**
  * One-tap confirm/negate prompt shown while navigating when the driver nears an
- * active crowd-sourced report ahead on the route. Reuses the existing nav
- * incident projection (`useNavIncidents`) — a crowd report is just an
- * Observation flowing through the same road-conditions pipeline — rather than a
- * parallel proximity detector.
+ * active crowd-sourced report ahead on the route. Reuses the host's shared nav
+ * incident resource (`useNavIncidentResource`, from `@openmapx/integration-framework/react`)
+ * — a crowd report is just an Observation flowing through the same
+ * road-conditions pipeline — rather than a parallel proximity detector. Reading
+ * the resource through the framework context (instead of importing the app's
+ * `useNavIncidents` hook directly) keeps this integration on the framework
+ * boundary, not apps/web internals.
  *
  * Browser-verify: rendering/interaction and the exact crowd-origin id marker
  * depend on the live contributions → road-conditions pipeline.
@@ -30,7 +33,7 @@ export function CrowdApproachPrompt() {
   const navigating = useNavigationStore((s) => s.status !== "idle");
   const alongMeters = useNavigationStore((s) => s.progress?.alongMeters ?? 0);
   const speedMps = useNavigationStore((s) => s.progress?.speedMps ?? 0);
-  const { incidents } = useNavIncidents();
+  const { incidents } = useNavIncidentResource();
   const vote = useVote();
   // Track every dismissed/voted id in a Set so a report that becomes "nearest"
   // again after another is passed stays suppressed (not just the last one).

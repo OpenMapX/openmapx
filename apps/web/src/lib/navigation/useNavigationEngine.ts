@@ -22,6 +22,7 @@ import {
   VOICE_TIMING_MULTIPLIER,
   type VoiceCue,
 } from "@openmapx/core";
+import type { NavIncidentResource } from "@openmapx/integration-framework/react";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { haptics } from "../haptics";
@@ -30,7 +31,6 @@ import { isConnectivityFailure } from "./navigationConnectivity";
 import { useNavRecordingStore } from "./navRecordingStore";
 import { useNavSimStore } from "./navSimStore";
 import { useFasterRoute } from "./useFasterRoute";
-import { useNavIncidents } from "./useNavIncidents";
 import { useNavigationVoice } from "./useNavigationVoice";
 import { useNavRecorder } from "./useNavRecorder";
 import { useReplayPosition } from "./useReplayPosition";
@@ -60,7 +60,7 @@ const COAST_MAX_METERS = 3000;
 const COAST_TICK_MS = 250;
 
 /** Wires GPS fixes → processFix → navigationStore + side effects (voice, reroute). */
-export function useNavigationEngine(): void {
+export function useNavigationEngine(incidentResource: NavIncidentResource): void {
   const t = useTranslations("navigation");
   const locale = useLocale();
   const speak = useNavigationVoice(locale);
@@ -78,6 +78,12 @@ export function useNavigationEngine(): void {
   // True once the baseline has been captured from the route's first fetch result.
   // Resets on route change so we don't fire against stale/empty state.
   const baselineReadyRef = useRef(false);
+  // The last `successfulRevision` this engine has already reacted to, so a
+  // revision that hasn't changed (status flipping between renders without a new
+  // fetch resolving) never re-runs the arm-or-detect step. Resets on route
+  // change alongside `baselineReadyRef` — otherwise a coincidental revision
+  // number collision with the previous route could skip arming the new one.
+  const lastSeenRevisionRef = useRef(0);
   const captureFix = useNavRecorder();
   // Last accepted *real* fix, for the coasting driver: its arc-length and speed
   // anchor the extrapolation, its timestamp measures the outage.
@@ -289,13 +295,14 @@ export function useNavigationEngine(): void {
   // active route changes — a fresh start or an applied reroute — so a second
   // navigation session doesn't inherit the previous one's spoken-cue keys.
   const activeRoute = useNavigationStore((s) => s.route);
-  const { incidents, ready } = useNavIncidents();
+  const { incidents, status: incidentStatus, successfulRevision } = incidentResource;
   useFasterRoute();
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset is keyed on route identity, not tickRef.
   useEffect(() => {
     tickRef.current = freshTick();
     knownClosureIdsRef.current = new Set();
     baselineReadyRef.current = false;
+    lastSeenRevisionRef.current = 0;
     // The coast anchor's arc-length is relative to the old route; drop it (and
     // any active coast) so we don't extrapolate onto the new geometry.
     lastRealFixRef.current = null;
@@ -304,16 +311,20 @@ export function useNavigationEngine(): void {
     useNavigationStore.getState().setCoasting(false);
   }, [activeRoute]);
 
-  // Capture the closure baseline only once the first road-conditions fetch for
-  // the committed route has resolved. This prevents pre-fetch state (an empty or
-  // stale snapshot) from being mistaken for "no closures", which would make every
-  // closure that arrives with the first response look "new" and trigger a spurious
-  // reroute at navigation start.
+  // Capture the closure baseline only once the first SUCCESSFUL road-conditions
+  // fetch for the committed route has resolved — `status === "fresh"` is the
+  // only truthful signal of that; a failed or stale revision must never be
+  // mistaken for "no closures", which would make every closure that arrives
+  // with the real first response look "new" and trigger a spurious reroute at
+  // navigation start. Guards on `successfulRevision` so re-renders between
+  // fetches (e.g. from `along` ticking) don't re-run this for the same fetch.
   useEffect(() => {
-    if (!ready || baselineReadyRef.current) return;
+    if (incidentStatus !== "fresh" || successfulRevision === lastSeenRevisionRef.current) return;
+    lastSeenRevisionRef.current = successfulRevision;
+    if (baselineReadyRef.current) return;
     knownClosureIdsRef.current = new Set(incidents.map((a) => a.id));
     baselineReadyRef.current = true;
-  }, [ready, incidents]);
+  }, [incidentStatus, successfulRevision, incidents]);
 
   // Clear the churn guard when navigation ends so a new session starts clean.
   const navStatus = useNavigationStore((s) => s.status);
@@ -332,11 +343,15 @@ export function useNavigationEngine(): void {
   // automatic reroute. Uses the same backoff + churn guard as off-route reroutes.
   // Gated on baselineReadyRef so we never fire before the first fetch resolves —
   // closures present when the route was planned are always part of the baseline.
+  // Also gated on `status === "fresh"`: a stale or failed revision replays the
+  // last-good incident set unchanged, so re-evaluating it is harmless, but it
+  // must never be the thing that FLAGS a closure as newly discovered.
   const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
   useEffect(() => {
     if (!avoidIncidents) return;
     if (navStatus !== "navigating") return;
     if (!baselineReadyRef.current) return;
+    if (incidentStatus !== "fresh") return;
     const newClosureAhead = incidents.some(
       (a) =>
         (a.eventType === "road_closure" || a.eventType === "lane_closure") &&
@@ -403,7 +418,7 @@ export function useNavigationEngine(): void {
       .finally(() => {
         reroutingRef.current = false;
       });
-  }, [incidents, avoidIncidents, navStatus, locale, matcherFor]);
+  }, [incidents, incidentStatus, avoidIncidents, navStatus, locale, matcherFor]);
 
   // Opt into the navigation simulator from the URL (`?navsim=1`) once on mount.
   // It swaps synthetic fixes for real geolocation so the full pipeline can be

@@ -25,8 +25,50 @@ describe("fetchRoadConditions", () => {
     });
   });
 
-  it("returns a failed status without throwing when the request fails", async () => {
+  it("returns a failed status without throwing when the request fails (transport throw)", async () => {
     vi.spyOn(apiClient, "get").mockRejectedValue(new Error("network"));
+
+    await expect(fetchRoadConditionsWithStatus([13, 52, 14, 53])).resolves.toEqual({
+      ok: false,
+      events: [],
+    });
+  });
+
+  it("returns a failed status when the server responds non-2xx", async () => {
+    // `apiClient.get` throws on `!res.ok`, so this exercises the same catch
+    // path as a transport failure — confirmed by reading `client.ts`, not
+    // assumed.
+    vi.spyOn(apiClient, "get").mockRejectedValue(new Error("API error 503: {}"));
+
+    await expect(fetchRoadConditionsWithStatus([13, 52, 14, 53])).resolves.toEqual({
+      ok: false,
+      events: [],
+    });
+  });
+
+  it("reports a genuine empty successful aggregation as ok: true with zero events", async () => {
+    vi.spyOn(apiClient, "get").mockResolvedValue({
+      type: "FeatureCollection",
+      features: [],
+    } as never);
+
+    await expect(fetchRoadConditionsWithStatus([13, 52, 14, 53])).resolves.toEqual({
+      ok: true,
+      events: [],
+    });
+  });
+
+  it("treats a non-object response body as a failure", async () => {
+    vi.spyOn(apiClient, "get").mockResolvedValue(null as never);
+
+    await expect(fetchRoadConditionsWithStatus([13, 52, 14, 53])).resolves.toEqual({
+      ok: false,
+      events: [],
+    });
+  });
+
+  it("treats a `features` field that isn't an array as a failure", async () => {
+    vi.spyOn(apiClient, "get").mockResolvedValue({ features: "nope" } as never);
 
     await expect(fetchRoadConditionsWithStatus([13, 52, 14, 53])).resolves.toEqual({
       ok: false,

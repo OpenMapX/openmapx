@@ -45,6 +45,7 @@ import { UserLocationMarker } from "@/components/map/UserLocationMarker";
 import { WaypointMarkers } from "@/components/map/WaypointMarkers";
 import { HamburgerMenu } from "@/components/menu/HamburgerMenu";
 import { HideDuringNavigation } from "@/components/navigation/HideDuringNavigation";
+import { NavIncidentsProvider } from "@/components/navigation/NavIncidentsProvider";
 import { NavigationView } from "@/components/navigation/NavigationView";
 import { TransitNavigationView } from "@/components/navigation/TransitNavigationView";
 import { MapClickFloatingCard } from "@/components/panels/MapClickFloatingCard";
@@ -113,90 +114,96 @@ export default function HomePage() {
       <GlobalKeybindings />
       <ElevationHoverProvider>
         <div className="relative w-full h-dvh overflow-hidden">
-          <MapCanvas />
-          <GlobeProjection />
-          <BaseAttributions />
-          <RasterBaseLayer
-            sourceId="openmapx-satellite-source"
-            layerId="openmapx-satellite-layer"
-            tiles={satelliteTiles}
-            activeWhen="satellite"
-            maxzoom={20}
-            attributions={SATELLITE_ATTRIBUTIONS}
-          />
-          <RasterBaseLayer
-            sourceId="openmapx-terrain-source"
-            layerId="openmapx-terrain-layer"
-            tiles={[terrainTileUrl]}
-            activeWhen="terrain"
-            maxzoom={17}
-            attributions={TERRAIN_ATTRIBUTIONS}
-            paint={{ "raster-opacity": 0.95, "raster-saturation": -0.15 }}
-          />
-          <CyclingBaseLayer />
-          {/* Core layers (not integration-managed) */}
-          <PlaceBoundaryLayer />
-          <MapLayerStack />
-          <RouteLayer />
-          <NavigationRouteLayer />
-          <RouteTrafficLayer />
-          <NavTrafficSignalsLayer />
-          <NavigationView />
-          <TransitNavigationView />
-          <FlightArcLayer />
-          <TransitRouteLayer />
-          <VehicleLiveLayer />
-          <TransitItineraryLayer />
-          <TransitVehicleLayer />
-          <ContextualOverlays />
-          <CategoryResultMarkers />
-          <DataSourceLayer />
-          <SavedPlacesLayer />
-          <ImportedGeometryLayer />
-          {/* All overlay/tool layers loaded dynamically by MapLayerHost.
-              HostMapProvider exposes the curated map surface (useHostMap) to
-              community code overlays rendered within. */}
-          <HostMapProvider>
-            <MapLayerHost />
-          </HostMapProvider>
-          <DataSourceDetailBridge />
-          <MapClickHandler />
-          <MapStylePoiClickHandler />
-          <UserLocationMarker />
-          <SelectedPlaceMarker />
-          <ExploreAnchorMarker />
-          <SelectedStopInfrastructureLayer />
-          <WaypointMarkers />
-          <ElevationHoverMarker />
-          <HideDuringNavigation>
-            <HamburgerMenu />
-            <SearchBar />
-            <WeatherWidget />
-            <CategoryChips />
-            <CategoryFilterBar />
-          </HideDuringNavigation>
-          <SearchInAreaChip />
-          <ImportedGeometryBanner />
-          <PanelHost />
-          <MapClickFloatingCard />
-          <HideDuringNavigation>
-            <TopRightControls />
-          </HideDuringNavigation>
-          <StreetLevelViewer />
-          {/* Overlay legends — self-positioned (sheet-aware), hidden behind a
-              toggle during navigation / when a panel is expanded. */}
-          <LegendHost />
-          <HideDuringNavigation>
-            <LayerSelector />
-          </HideDuringNavigation>
-          <MapControls />
-          <MapFooter />
-          <Suspense>
-            <DeepLinkManager />
-          </Suspense>
-          <Suspense>
-            <ShareIntentHandler />
-          </Suspense>
+          {/* Shares one road-conditions fetch/timer/projection between the
+              reroute engine and approach-alert selector in NavigationView and
+              the crowd-report approach prompt lazily loaded beneath
+              MapControls — both live in this subtree. */}
+          <NavIncidentsProvider>
+            <MapCanvas />
+            <GlobeProjection />
+            <BaseAttributions />
+            <RasterBaseLayer
+              sourceId="openmapx-satellite-source"
+              layerId="openmapx-satellite-layer"
+              tiles={satelliteTiles}
+              activeWhen="satellite"
+              maxzoom={20}
+              attributions={SATELLITE_ATTRIBUTIONS}
+            />
+            <RasterBaseLayer
+              sourceId="openmapx-terrain-source"
+              layerId="openmapx-terrain-layer"
+              tiles={[terrainTileUrl]}
+              activeWhen="terrain"
+              maxzoom={17}
+              attributions={TERRAIN_ATTRIBUTIONS}
+              paint={{ "raster-opacity": 0.95, "raster-saturation": -0.15 }}
+            />
+            <CyclingBaseLayer />
+            {/* Core layers (not integration-managed) */}
+            <PlaceBoundaryLayer />
+            <MapLayerStack />
+            <RouteLayer />
+            <NavigationRouteLayer />
+            <RouteTrafficLayer />
+            <NavTrafficSignalsLayer />
+            <NavigationView />
+            <TransitNavigationView />
+            <FlightArcLayer />
+            <TransitRouteLayer />
+            <VehicleLiveLayer />
+            <TransitItineraryLayer />
+            <TransitVehicleLayer />
+            <ContextualOverlays />
+            <CategoryResultMarkers />
+            <DataSourceLayer />
+            <SavedPlacesLayer />
+            <ImportedGeometryLayer />
+            {/* All overlay/tool layers loaded dynamically by MapLayerHost.
+                HostMapProvider exposes the curated map surface (useHostMap) to
+                community code overlays rendered within. */}
+            <HostMapProvider>
+              <MapLayerHost />
+            </HostMapProvider>
+            <DataSourceDetailBridge />
+            <MapClickHandler />
+            <MapStylePoiClickHandler />
+            <UserLocationMarker />
+            <SelectedPlaceMarker />
+            <ExploreAnchorMarker />
+            <SelectedStopInfrastructureLayer />
+            <WaypointMarkers />
+            <ElevationHoverMarker />
+            <HideDuringNavigation>
+              <HamburgerMenu />
+              <SearchBar />
+              <WeatherWidget />
+              <CategoryChips />
+              <CategoryFilterBar />
+            </HideDuringNavigation>
+            <SearchInAreaChip />
+            <ImportedGeometryBanner />
+            <PanelHost />
+            <MapClickFloatingCard />
+            <HideDuringNavigation>
+              <TopRightControls />
+            </HideDuringNavigation>
+            <StreetLevelViewer />
+            {/* Overlay legends — self-positioned (sheet-aware), hidden behind a
+                toggle during navigation / when a panel is expanded. */}
+            <LegendHost />
+            <HideDuringNavigation>
+              <LayerSelector />
+            </HideDuringNavigation>
+            <MapControls />
+            <MapFooter />
+            <Suspense>
+              <DeepLinkManager />
+            </Suspense>
+            <Suspense>
+              <ShareIntentHandler />
+            </Suspense>
+          </NavIncidentsProvider>
         </div>
       </ElevationHoverProvider>
     </MapProvider>

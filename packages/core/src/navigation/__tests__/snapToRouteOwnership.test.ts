@@ -14,9 +14,6 @@ const ALLOWED: Record<string, string> = {
   "packages/core/src/navigation/snap.ts": "the compatibility/oracle function itself",
   "packages/core/src/navigation/index.ts": "navigation barrel export (API exposure, not a caller)",
   "packages/core/src/index.ts": "public barrel export (API exposure, not a caller)",
-  "apps/web/src/lib/navigation/useNavAlerts.ts": "OSM alert projection, migrated by a later plan",
-  "packages/core/src/navigation/incidentProjection.ts":
-    "incident projection, migrated by a later plan",
 };
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), "../../../../../..");

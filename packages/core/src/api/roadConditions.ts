@@ -41,6 +41,19 @@ function str(v: unknown): string | undefined {
   return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
+/**
+ * A genuine `{ type: "FeatureCollection", features: [] }` must read as
+ * `ok: true` with zero events — that is the whole point of distinguishing it
+ * from a failed aggregation (see `fetchRoadConditionsWithStatus`). So the only
+ * shapes this rejects are ones a well-formed response could never take: a
+ * non-object body, or a `features` field present but not an array.
+ */
+function isWellFormedFeatureCollection(v: unknown): v is RoadConditionFeatureCollection {
+  if (typeof v !== "object" || v === null) return false;
+  if (!("features" in v)) return true;
+  return Array.isArray((v as { features: unknown }).features);
+}
+
 function featureToEvent(feature: RoadConditionFeature): RoadConditionEvent | null {
   const p = feature.properties ?? {};
   const id = str(p.id);
@@ -82,14 +95,13 @@ export async function fetchRoadConditionsWithStatus(
     if (opts?.minSeverity) params.minSeverity = opts.minSeverity;
     // `0` is a meaningful horizon ("active now"), so test for presence.
     if (opts?.horizonDays != null) params.horizonDays = String(opts.horizonDays);
-    const fc = opts?.signal
-      ? await apiClient.get<RoadConditionFeatureCollection>(API_ENDPOINTS.roadConditions, params, {
-          signal: opts.signal,
-        })
-      : await apiClient.get<RoadConditionFeatureCollection>(API_ENDPOINTS.roadConditions, params);
+    const raw = opts?.signal
+      ? await apiClient.get<unknown>(API_ENDPOINTS.roadConditions, params, { signal: opts.signal })
+      : await apiClient.get<unknown>(API_ENDPOINTS.roadConditions, params);
+    if (!isWellFormedFeatureCollection(raw)) return { ok: false, events: [] };
     return {
       ok: true,
-      events: (fc.features ?? [])
+      events: (raw.features ?? [])
         .map(featureToEvent)
         .filter((e): e is RoadConditionEvent => e !== null),
     };

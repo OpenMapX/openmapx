@@ -8,7 +8,12 @@ import type { RouteStep } from "../types/routing";
 import { haversineDistance } from "../utils/coordinates";
 import type { RoadAlert } from "./alerts";
 import { angularDifference, bearingBetween, routeBearingAt } from "./bearing";
-import { snapToRoute } from "./snap";
+import {
+  type PreparedRouteMatcher,
+  prepareRouteMatcher,
+  routeMatcherFor,
+  snapPreparedRoute,
+} from "./routeMatcher";
 
 /** A road-condition event projected onto the active route as an approach alert. */
 export interface IncidentAlert extends RoadAlert {
@@ -46,6 +51,14 @@ export interface ProjectEventsOptions {
   /** Minimum sustained line overlap for long affected geometries. */
   minLineOverlapMeters?: number;
   directionToleranceDegrees?: number;
+  /**
+   * The caller's prepared index for `routeGeometry`. It belongs to the route,
+   * not to any one call, so a caller ticking this repeatedly (e.g. navigation
+   * re-evaluating incidents on every fix) should build it once when the route
+   * is selected or replaced and pass the same object every time; omit it and
+   * one is prepared (and cached) here instead.
+   */
+  routeMatcher?: PreparedRouteMatcher;
 }
 
 const DEFAULT_CORRIDOR_M = 20;
@@ -109,13 +122,37 @@ function eventRoadNames(event: RoadConditionEvent): Set<string> {
   return new Set((event.roads ?? []).flatMap((road) => roadNameKeys(road.name)));
 }
 
+/**
+ * One prepared spherical index per eligible named step (road names present,
+ * at least two coordinates), built once per {@link projectEventsToRoute} call
+ * and reused by every event and every coordinate that call evaluates — never
+ * rebuilt per event, per point, or per line sample. `prepareRouteMatcher`
+ * itself caches on the step's coordinate array identity, so a route that is
+ * re-evaluated across ticks with the same step objects builds nothing new
+ * here either.
+ */
+function prepareStepMatchers(steps: RouteStep[] | undefined): Map<RouteStep, PreparedRouteMatcher> {
+  const matchers = new Map<RouteStep, PreparedRouteMatcher>();
+  if (!steps) return matchers;
+  for (const step of steps) {
+    if (!step.roadNames?.length || step.coordinates.length < 2) continue;
+    matchers.set(step, prepareRouteMatcher(step.coordinates));
+  }
+  return matchers;
+}
+
 /** Road names/refs on the route steps closest to a candidate coordinate. */
-function routeRoadNamesAt(steps: RouteStep[] | undefined, coord: LngLat): Set<string> {
+function routeRoadNamesAt(
+  steps: RouteStep[] | undefined,
+  stepMatchers: Map<RouteStep, PreparedRouteMatcher>,
+  coord: LngLat,
+): Set<string> {
   if (!steps?.length) return new Set();
   const candidates: Array<{ deviation: number; names: string[] }> = [];
   for (const step of steps) {
-    if (!step.roadNames?.length || step.coordinates.length < 2) continue;
-    const deviation = snapToRoute(step.coordinates, coord).deviationMeters;
+    const matcher = stepMatchers.get(step);
+    if (!matcher || !step.roadNames?.length) continue;
+    const deviation = snapPreparedRoute(matcher, coord).deviationMeters;
     candidates.push({ deviation, names: step.roadNames });
   }
   if (candidates.length === 0) return new Set();
@@ -132,10 +169,11 @@ function routeRoadNamesAt(steps: RouteStep[] | undefined, coord: LngLat): Set<st
 function roadMatches(
   eventNames: Set<string>,
   routeSteps: RouteStep[] | undefined,
+  stepMatchers: Map<RouteStep, PreparedRouteMatcher>,
   coord: LngLat,
 ): boolean {
   if (eventNames.size === 0) return true;
-  const routeNames = routeRoadNamesAt(routeSteps, coord);
+  const routeNames = routeRoadNamesAt(routeSteps, stepMatchers, coord);
   if (routeNames.size === 0) return true;
   return [...eventNames].some((name) => routeNames.has(name));
 }
@@ -194,23 +232,24 @@ function directionMatches(
 
 function pointCandidate(
   event: RoadConditionEvent,
-  route: LngLat[],
+  matcher: PreparedRouteMatcher,
   currentAlongMeters: number,
   corridor: number,
   lookahead: number,
   routeSteps: RouteStep[] | undefined,
+  stepMatchers: Map<RouteStep, PreparedRouteMatcher>,
   tolerance: number,
 ): RouteCandidate | null {
   const names = eventRoadNames(event);
   const direction = eventDirection(event);
   let best: RouteCandidate | null = null;
   for (const coord of flattenPositions(event.geometry)) {
-    const snap = snapToRoute(route, coord);
+    const snap = snapPreparedRoute(matcher, coord);
     if (snap.deviationMeters > corridor) continue;
     const ahead = snap.alongMeters - currentAlongMeters;
     if (ahead <= 0 || ahead > lookahead) continue;
-    if (!roadMatches(names, routeSteps, snap.snapped)) continue;
-    const routeBearing = routeBearingAt(route, snap.segmentIndex);
+    if (!roadMatches(names, routeSteps, stepMatchers, snap.snapped)) continue;
+    const routeBearing = routeBearingAt(matcher.geometry, snap.segmentIndex);
     if (!directionMatches(direction, routeBearing, null, tolerance)) continue;
     if (!best || snap.alongMeters < best.alongMeters) {
       best = { coord, alongMeters: snap.alongMeters, routeBearing };
@@ -222,11 +261,12 @@ function pointCandidate(
 function lineCandidate(
   event: RoadConditionEvent,
   lines: LngLat[][],
-  route: LngLat[],
+  matcher: PreparedRouteMatcher,
   currentAlongMeters: number,
   corridor: number,
   lookahead: number,
   routeSteps: RouteStep[] | undefined,
+  stepMatchers: Map<RouteStep, PreparedRouteMatcher>,
   minLineOverlap: number,
   tolerance: number,
 ): RouteCandidate | null {
@@ -256,9 +296,9 @@ function lineCandidate(
           start[0] + (end[0] - start[0]) * ratio,
           start[1] + (end[1] - start[1]) * ratio,
         ];
-        const snap = snapToRoute(route, coord);
+        const snap = snapPreparedRoute(matcher, coord);
         if (snap.deviationMeters > corridor) continue;
-        const routeBearing = routeBearingAt(route, snap.segmentIndex);
+        const routeBearing = routeBearingAt(matcher.geometry, snap.segmentIndex);
         if (!directionMatches(direction, routeBearing, lineBearing, tolerance)) continue;
         matchedLength += sampleLength;
         const ahead = snap.alongMeters - currentAlongMeters;
@@ -274,7 +314,9 @@ function lineCandidate(
     minLineOverlap,
     Math.max(MIN_SHORT_LINE_OVERLAP_M, totalLength * LINE_OVERLAP_FRACTION),
   );
-  return best && matchedLength >= requiredOverlap && roadMatches(names, routeSteps, best.coord)
+  return best &&
+    matchedLength >= requiredOverlap &&
+    roadMatches(names, routeSteps, stepMatchers, best.coord)
     ? best
     : null;
 }
@@ -299,6 +341,14 @@ export function projectEventsToRoute(
   const minLineOverlap = opts.minLineOverlapMeters ?? DEFAULT_MIN_LINE_OVERLAP_M;
   const tolerance = opts.directionToleranceDegrees ?? DEFAULT_DIRECTION_TOLERANCE_DEG;
 
+  // One index for the route, shared by every event this call evaluates, and
+  // one per eligible named step, shared by every road-identity check any of
+  // those events triggers — both hoisted out of the per-event loop so a
+  // route with many events or a line event with many samples never rebuilds
+  // either.
+  const matcher = routeMatcherFor(routeGeometry, opts.routeMatcher);
+  const stepMatchers = prepareStepMatchers(opts.routeSteps);
+
   const out: IncidentAlert[] = [];
   for (const event of events) {
     const lines = lineStrings(event.geometry);
@@ -307,21 +357,23 @@ export function projectEventsToRoute(
         ? lineCandidate(
             event,
             lines,
-            routeGeometry,
+            matcher,
             currentAlongMeters,
             corridor,
             lookahead,
             opts.routeSteps,
+            stepMatchers,
             minLineOverlap,
             tolerance,
           )
         : pointCandidate(
             event,
-            routeGeometry,
+            matcher,
             currentAlongMeters,
             corridor,
             lookahead,
             opts.routeSteps,
+            stepMatchers,
             tolerance,
           );
     if (!candidate) continue;

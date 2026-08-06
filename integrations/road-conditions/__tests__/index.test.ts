@@ -2,7 +2,7 @@ import { routeFingerprint } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { describe, expect, it } from "vitest";
 import { parseBbox, setup } from "../index.js";
-import type { RoadConditionsProvider, RoadFlowSegment } from "../types.js";
+import type { RoadConditionEvent, RoadConditionsProvider, RoadFlowSegment } from "../types.js";
 
 type Handler = (
   req: { query: Record<string, string | undefined>; body: unknown },
@@ -22,22 +22,31 @@ function handlerFor(routes: Map<string, Handler>, path: string): Handler {
 
 /**
  * Drives the `/events` route with a stub host: records the cache key each call
- * derives and the query options the aggregation would run under.
+ * derives and the query options the aggregation would run under. Defaults to
+ * no providers registered and a pass-through cache; both can be overridden to
+ * exercise partial-provider-failure and total-aggregation-failure paths.
  */
-function eventsHarness() {
+function eventsHarness(opts?: {
+  providers?: RoadConditionsProvider[];
+  withCache?: <T>(key: string, ttl: number, fn: () => Promise<T>) => Promise<T>;
+}) {
   const cacheKeys: string[] = [];
+  const integrations = (opts?.providers ?? []).map((p) => ({
+    id: p.id,
+    providers: new Map<string, RoadConditionsProvider[]>([["road-conditions", [p]]]),
+  }));
   const routes = new Map<string, Handler>();
   const ctx = {
     registerRoute(_method: string, path: string, handler: Handler) {
       routes.set(path, handler);
     },
     cache: {
-      async withCache<T>(key: string, _ttl: number, fn: () => Promise<T>): Promise<T> {
+      async withCache<T>(key: string, ttl: number, fn: () => Promise<T>): Promise<T> {
         cacheKeys.push(key);
-        return fn();
+        return opts?.withCache ? opts.withCache(key, ttl, fn) : fn();
       },
     },
-    getIntegrationsByDomain: () => [],
+    getIntegrationsByDomain: () => integrations,
     log: { warn() {}, error() {}, info() {}, debug() {} },
   } as unknown as IntegrationContext;
 
@@ -48,6 +57,7 @@ function eventsHarness() {
     async get(query: Record<string, string | undefined>) {
       let status = 200;
       let body: unknown;
+      const headers: Record<string, string> = {};
       await handlerFor(routes, "/events")(
         { query, body: undefined },
         {
@@ -55,12 +65,37 @@ function eventsHarness() {
             status = code;
             return { send: (b: unknown) => (body = b) };
           },
-          header: () => {},
+          header: (k: string, v: string) => {
+            headers[k] = v;
+          },
           send: (b: unknown) => (body = b),
         },
       );
-      return { status, body };
+      return { status, body, headers };
     },
+  };
+}
+
+/** A minimal events-capable provider, mirroring the orchestrator's own test fixtures. */
+function eventsProvider(
+  id: string,
+  getEvents: RoadConditionsProvider["getEvents"],
+): RoadConditionsProvider {
+  return { id, getEvents };
+}
+
+/** A minimal event fixture, mirroring the orchestrator's own test fixtures. */
+function event(
+  over: Partial<RoadConditionEvent> & Pick<RoadConditionEvent, "id">,
+): RoadConditionEvent {
+  return {
+    source: "s",
+    provider: "",
+    type: "accident",
+    severity: "high",
+    geometry: { type: "Point", coordinates: [13.4, 52.5] },
+    headline: "Accident on A1",
+    ...over,
   };
 }
 
@@ -204,6 +239,51 @@ describe("GET /events horizonDays", () => {
     const h = eventsHarness();
     const res = await h.get({ bbox: "1,,3,4", horizonDays: "0" });
     expect(res.status).toBe(400);
+  });
+});
+
+describe("GET /events failure semantics", () => {
+  const BBOX = "13.39,52.49,13.41,52.51";
+
+  it("responds 503 with no-cache when the whole aggregation throws, never a 200 empty collection", async () => {
+    // Nothing about this is a per-provider failure — `Promise.allSettled` never
+    // runs because the failure is in the cache layer wrapping it, so this
+    // exercises the "everything failed" path navigation must not mistake for
+    // "the road ahead is clear".
+    const h = eventsHarness({
+      withCache: async () => {
+        throw new Error("cache backend down");
+      },
+    });
+    const res = await h.get({ bbox: BBOX });
+    expect(res.status).toBe(503);
+    expect(res.headers["Cache-Control"]).toBe("no-cache");
+    expect(res.body).toEqual({ error: "road-conditions aggregation failed" });
+  });
+
+  it("responds 200 with a cacheable empty collection for a genuine empty result", async () => {
+    const h = eventsHarness();
+    const res = await h.get({ bbox: BBOX });
+    expect(res.status).toBe(200);
+    expect(res.headers["Cache-Control"]).toBe("public, max-age=90, s-maxage=90");
+    expect(res.body).toEqual({ type: "FeatureCollection", features: [] });
+  });
+
+  it("responds 200 with the surviving providers' events when only some providers fail", async () => {
+    const h = eventsHarness({
+      providers: [
+        eventsProvider("road-conditions-ok", async () => [event({ id: "ok:1" })]),
+        eventsProvider("road-conditions-broken", async () => {
+          throw new Error("upstream down");
+        }),
+      ],
+    });
+    const res = await h.get({ bbox: BBOX });
+    expect(res.status).toBe(200);
+    expect(res.headers["Cache-Control"]).toBe("public, max-age=90, s-maxage=90");
+    const body = res.body as { type: string; features: Array<{ properties: { id: string } }> };
+    expect(body.type).toBe("FeatureCollection");
+    expect(body.features.map((f) => f.properties.id)).toEqual(["ok:1"]);
   });
 });
 

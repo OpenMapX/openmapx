@@ -8,6 +8,12 @@ import { useSyncExternalStore } from "react";
 import { getCommunityModulesVersion, subscribeCommunityModules } from "./community";
 
 export { type HostMapApi, HostMapContext, useHostMap } from "./hostMap";
+export {
+  NavIncidentContext,
+  type NavIncidentResource,
+  type NavIncidentStatus,
+  useNavIncidentResource,
+} from "./navIncidents";
 export { IntegrationRegistryContext, useIntegrationRegistry } from "./useIntegrationRegistry";
 
 /**

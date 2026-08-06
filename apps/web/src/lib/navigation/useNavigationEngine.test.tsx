@@ -3,15 +3,43 @@
 import type { Route } from "@integrations/routing/types";
 import {
   type FixInput,
+  type IncidentAlert,
   readRouteMatcherCounters,
   resetRouteMatcherCounters,
   setRouteMatcherCounting,
   useNavigationStore,
   useSettingsStore,
 } from "@openmapx/core";
+import type { NavIncidentResource } from "@openmapx/integration-framework/react";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useNavigationEngine } from "./useNavigationEngine";
+
+/** No live incident data — most of this file exercises fix/reroute plumbing unrelated to it. */
+const disabledResource: NavIncidentResource = {
+  incidents: [],
+  status: "disabled",
+  routeIdentity: null,
+  successfulRevision: 0,
+};
+
+function resourceWith(overrides: Partial<NavIncidentResource>): NavIncidentResource {
+  return { ...disabledResource, ...overrides };
+}
+
+function closureIncident(id: string): IncidentAlert {
+  return {
+    id,
+    type: "traffic_incident",
+    coord: [0.002, 0],
+    alongMeters: 200,
+    eventType: "road_closure",
+    severity: "high",
+    headline: `closure ${id}`,
+    geometry: { type: "Point", coordinates: [0.002, 0] },
+    approach: { leadSec: 20, minM: 400, maxM: 1500 },
+  };
+}
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
@@ -63,7 +91,7 @@ describe("useNavigationEngine", () => {
       [0, 0],
       [0.004, 0],
     ]);
-    renderHook(() => useNavigationEngine());
+    renderHook(() => useNavigationEngine(disabledResource));
     act(() => fixHandler?.({ coords: [0.001, 0], accuracy: 5, timestampMs: 1000 }));
     expect(useNavigationStore.getState().progress?.currentStepIndex).toBe(0);
   });
@@ -75,7 +103,7 @@ describe("useNavigationEngine", () => {
     ]);
     const route2 = { ...route, distance: 999 } as Route;
     fetchDirections.mockResolvedValue({ routes: [route2], activeRouteIndex: 0 });
-    renderHook(() => useNavigationEngine());
+    renderHook(() => useNavigationEngine(disabledResource));
     // Enough moving, off-route fixes (each ~222 m off the line) to accrue the
     // off-route score past the reroute threshold. They advance east, parallel to
     // the route, so this reads as a deviation rather than a wrong-way turn.
@@ -109,7 +137,7 @@ describe("useNavigationEngine", () => {
       [0.004, 0],
     ]);
     useNavigationStore.getState().setConnectivity("offline");
-    renderHook(() => useNavigationEngine());
+    renderHook(() => useNavigationEngine(disabledResource));
     const offFixes: FixInput[] = [
       { coords: [0.001, 0.002], accuracy: 5, speed: 15, timestampMs: 1000 },
       { coords: [0.0012, 0.002], accuracy: 5, speed: 15, timestampMs: 2000 },
@@ -138,7 +166,7 @@ describe("useNavigationEngine", () => {
     useNavigationStore.getState().requestRerouteRetry();
     const route2 = { ...route, distance: 1111 } as Route;
     fetchDirections.mockResolvedValue({ routes: [route2], activeRouteIndex: 0 });
-    renderHook(() => useNavigationEngine());
+    renderHook(() => useNavigationEngine(disabledResource));
     const offFixes: FixInput[] = [
       { coords: [0.001, 0.002], accuracy: 5, speed: 15, timestampMs: 1000 },
       { coords: [0.0012, 0.002], accuracy: 5, speed: 15, timestampMs: 2000 },
@@ -187,7 +215,7 @@ describe("useNavigationEngine fix publications", () => {
   it("publishes one combined update for an accepted driving fix", () => {
     const limited = { ...route, segmentSpeedLimits: [50, 70] } as Route;
     useNavigationStore.getState().startGroundNavigation(limited, "driving", waypoints);
-    renderHook(() => useNavigationEngine());
+    renderHook(() => useNavigationEngine(disabledResource));
 
     expect(publicationsForFix(onRouteFix)).toBe(1);
     const s = useNavigationStore.getState();
@@ -200,7 +228,7 @@ describe("useNavigationEngine fix publications", () => {
 
   it("falls back to the live map-matched speed limit", () => {
     useNavigationStore.getState().startGroundNavigation(route, "driving", waypoints);
-    renderHook(() => useNavigationEngine());
+    renderHook(() => useNavigationEngine(disabledResource));
     useNavigationStore.getState().setLiveSpeedLimits([80, 100]);
 
     expect(publicationsForFix(onRouteFix)).toBe(1);
@@ -213,7 +241,7 @@ describe("useNavigationEngine fix publications", () => {
       steps: [{ ...route.steps[0], speedLimit: 30 }, route.steps[1]],
     } as Route;
     useNavigationStore.getState().startGroundNavigation(stepLimited, "driving", waypoints);
-    renderHook(() => useNavigationEngine());
+    renderHook(() => useNavigationEngine(disabledResource));
 
     expect(publicationsForFix(onRouteFix)).toBe(1);
     expect(useNavigationStore.getState().currentSpeedLimit).toBe(30);
@@ -222,7 +250,7 @@ describe("useNavigationEngine fix publications", () => {
   it("clears the speed limit for walking in that same update", () => {
     const limited = { ...route, segmentSpeedLimits: [50, 70] } as Route;
     useNavigationStore.getState().startGroundNavigation(limited, "walking", waypoints);
-    renderHook(() => useNavigationEngine());
+    renderHook(() => useNavigationEngine(disabledResource));
     useNavigationStore.getState().setSpeedLimit(99);
 
     expect(publicationsForFix(onRouteFix)).toBe(1);
@@ -233,7 +261,7 @@ describe("useNavigationEngine fix publications", () => {
 
   it("keeps coasting alive for a coasted fix, and one publication", () => {
     useNavigationStore.getState().startGroundNavigation(route, "driving", waypoints);
-    renderHook(() => useNavigationEngine());
+    renderHook(() => useNavigationEngine(disabledResource));
     useNavigationStore.getState().setCoasting(true);
 
     expect(publicationsForFix({ ...onRouteFix, coasted: true })).toBe(1);
@@ -244,7 +272,7 @@ describe("useNavigationEngine fix publications", () => {
 
   it("keeps the last progress on an accuracy-rejected fix and stops republishing", () => {
     useNavigationStore.getState().startGroundNavigation(route, "driving", waypoints);
-    renderHook(() => useNavigationEngine());
+    renderHook(() => useNavigationEngine(disabledResource));
     act(() => fixHandler?.(onRouteFix));
     const accepted = useNavigationStore.getState().progress;
 
@@ -293,7 +321,7 @@ describe("useNavigationEngine route index ownership", () => {
 
   it("indexes the active route once for a whole run of fixes", () => {
     useNavigationStore.getState().startGroundNavigation(freshRoute(), "driving", waypoints);
-    renderHook(() => useNavigationEngine());
+    renderHook(() => useNavigationEngine(disabledResource));
 
     act(() => {
       for (let i = 1; i <= 12; i++) {
@@ -311,7 +339,7 @@ describe("useNavigationEngine route index ownership", () => {
     vi.useFakeTimers();
     try {
       useNavigationStore.getState().startGroundNavigation(freshRoute(), "driving", waypoints);
-      renderHook(() => useNavigationEngine());
+      renderHook(() => useNavigationEngine(disabledResource));
       act(() => {
         fixHandler?.({ coords: [0.0005, 0], accuracy: 5, speed: 12, timestampMs: Date.now() });
       });
@@ -332,7 +360,7 @@ describe("useNavigationEngine route index ownership", () => {
 
   it("indexes the replacement route exactly once after a reroute", () => {
     useNavigationStore.getState().startGroundNavigation(freshRoute(), "driving", waypoints);
-    renderHook(() => useNavigationEngine());
+    renderHook(() => useNavigationEngine(disabledResource));
     act(() => {
       fixHandler?.({ coords: [0.0005, 0], accuracy: 5, speed: 12, timestampMs: 1000 });
     });
@@ -346,5 +374,90 @@ describe("useNavigationEngine route index ownership", () => {
     });
 
     expect(readRouteMatcherCounters().preparations).toBe(2);
+  });
+});
+
+describe("useNavigationEngine incident-resource baseline", () => {
+  const waypoints: [number, number][] = [
+    [0, 0],
+    [0.004, 0],
+  ];
+
+  beforeEach(() => {
+    useNavigationStore.getState().stopNavigation();
+    useSettingsStore.setState({ incidentAlerts: true, avoidIncidents: true });
+    fixHandler = null;
+    fetchDirections.mockReset();
+    fetchDirections.mockResolvedValue({ routes: [route], activeRouteIndex: 0 });
+  });
+
+  afterEach(() => {
+    useSettingsStore.setState({ incidentAlerts: false, avoidIncidents: false });
+  });
+
+  it("arms the baseline on the first fresh revision without rerouting for closures already present", () => {
+    useNavigationStore.getState().startGroundNavigation(route, "driving", waypoints);
+    const { rerender } = renderHook(({ resource }) => useNavigationEngine(resource), {
+      initialProps: { resource: resourceWith({ status: "loading" }) },
+    });
+    act(() => fixHandler?.({ coords: [0.001, 0], accuracy: 5, speed: 10, timestampMs: 1000 }));
+
+    rerender({
+      resource: resourceWith({
+        status: "fresh",
+        successfulRevision: 1,
+        incidents: [closureIncident("c1")],
+      }),
+    });
+
+    expect(fetchDirections).not.toHaveBeenCalled();
+  });
+
+  it("reroutes once a later fresh revision reveals a genuinely new closure", () => {
+    useNavigationStore.getState().startGroundNavigation(route, "driving", waypoints);
+    const { rerender } = renderHook(({ resource }) => useNavigationEngine(resource), {
+      initialProps: {
+        resource: resourceWith({
+          status: "fresh",
+          successfulRevision: 1,
+          incidents: [closureIncident("c1")],
+        }),
+      },
+    });
+    act(() => fixHandler?.({ coords: [0.001, 0], accuracy: 5, speed: 10, timestampMs: 1000 }));
+
+    rerender({
+      resource: resourceWith({
+        status: "fresh",
+        successfulRevision: 2,
+        incidents: [closureIncident("c1"), closureIncident("c2")],
+      }),
+    });
+
+    expect(fetchDirections).toHaveBeenCalledWith(expect.objectContaining({ avoidClosures: true }));
+  });
+
+  it("a stale revision never arms an empty baseline nor triggers a reroute", () => {
+    useNavigationStore.getState().startGroundNavigation(route, "driving", waypoints);
+    const { rerender } = renderHook(({ resource }) => useNavigationEngine(resource), {
+      initialProps: { resource: resourceWith({ status: "loading" }) },
+    });
+    act(() => fixHandler?.({ coords: [0.001, 0], accuracy: 5, speed: 10, timestampMs: 1000 }));
+
+    // A stale revision surfaces an incident before any fetch has succeeded —
+    // must not be mistaken for the baseline, and must not fire a reroute either.
+    rerender({ resource: resourceWith({ status: "stale", incidents: [closureIncident("c1")] }) });
+    expect(fetchDirections).not.toHaveBeenCalled();
+
+    // The first genuinely fresh revision arms the baseline INCLUDING that
+    // closure, since it's present at the moment the baseline is captured.
+    rerender({
+      resource: resourceWith({
+        status: "fresh",
+        successfulRevision: 1,
+        incidents: [closureIncident("c1")],
+      }),
+    });
+    expect(fetchDirections).not.toHaveBeenCalled();
   });
 });

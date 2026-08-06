@@ -84,7 +84,12 @@ export {
 export {
   type AlongRouteOptions,
   type AlongRoutePoi,
+  DEFAULT_CORRIDOR_PAD_METERS,
+  PROGRESS_BUCKET_METERS,
+  paddedRouteAheadBounds,
   poiAlongRoute,
+  progressBucket,
+  progressBucketStartMeters,
   routeAheadBounds,
 } from "./searchAlongRoute";
 export { simulatePositions } from "./simulatePositions";

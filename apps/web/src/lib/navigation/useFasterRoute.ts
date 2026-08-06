@@ -52,6 +52,12 @@ export function useFasterRoute(): void {
     const matcher = prepareRouteMatcher(route.geometry);
 
     let cancelled = false;
+    // A slow response must not overlap the next tick's own request — without
+    // this, two in-flight `fetchDirections` calls could both resolve and race
+    // to be the one whose `.then` observes `fasterRoute` still unset. Scoped to
+    // this effect run, so a route or setting change (which tears the effect
+    // down) implicitly clears it — the next run starts with a fresh `false`.
+    let inFlight = false;
 
     const check = () => {
       const s = useNavigationStore.getState();
@@ -69,11 +75,14 @@ export function useFasterRoute(): void {
       if (!s.route || !s.progress) return;
       if (useNavRecordingStore.getState().replaying) return;
       if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+      if (inFlight) return;
 
       const active = s.route;
       const { progress } = s;
       const remainingSeconds = (progress.etaEpochMs - Date.now()) / 1000;
-      if (remainingSeconds <= 0) return;
+      // No non-negative candidate can save enough of a trip this short to
+      // clear the acceptance floor, so asking is guaranteed waste.
+      if (remainingSeconds <= FASTER_ROUTE_DEFAULTS.minSavedSeconds) return;
 
       try {
         const waypoints = remainingWaypoints(
@@ -85,6 +94,7 @@ export function useFasterRoute(): void {
           progress.alongMeters,
         );
 
+        inFlight = true;
         void fetchDirections({
           waypoints,
           mode: "driving",
@@ -122,9 +132,13 @@ export function useFasterRoute(): void {
           })
           .catch(() => {
             // Offline, timeout, HTTP error, or malformed data: skip this cycle.
+          })
+          .finally(() => {
+            inFlight = false;
           });
       } catch {
         // Building the request must not be able to break navigation either.
+        inFlight = false;
       }
     };
 

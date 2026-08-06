@@ -18,6 +18,7 @@ import {
   useNavigationStore,
   useSettingsStore,
 } from "@openmapx/core";
+import { useNavIncidentResource } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { NavigationSettingsDialog } from "@/components/settings/NavigationSettingsDialog";
@@ -76,11 +77,12 @@ export function NavigationView() {
   // Ground nav only; transit navigation is handled by TransitNavigationView.
   const active = status !== "idle" && kind === "ground";
 
+  const incidentResource = useNavIncidentResource();
   useNavigationConnectivity();
-  useNavigationEngine();
+  useNavigationEngine(incidentResource);
   useNavCamera();
   useWakeLock(active && keepScreenOn);
-  const activeAlert = useNavAlerts();
+  const activeAlert = useNavAlerts(incidentResource);
 
   const [rerouteToastOpen, setRerouteToastOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);

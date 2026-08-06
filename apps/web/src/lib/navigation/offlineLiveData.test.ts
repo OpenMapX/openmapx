@@ -7,7 +7,7 @@ import { useNavAlerts } from "./useNavAlerts";
 import { useNavIncidents } from "./useNavIncidents";
 import { useNavTrafficSignals } from "./useNavTrafficSignals";
 
-const fetchRoadConditions = vi.fn();
+const fetchRoadConditionsWithStatus = vi.fn();
 const fetchRouteMatchWindow = vi.fn();
 const fetchRoadAlerts = vi.fn();
 
@@ -15,7 +15,7 @@ vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();
   return {
     ...actual,
-    fetchRoadConditions: (...args: unknown[]) => fetchRoadConditions(...args),
+    fetchRoadConditionsWithStatus: (...args: unknown[]) => fetchRoadConditionsWithStatus(...args),
     fetchRouteMatchWindow: (...args: unknown[]) => fetchRouteMatchWindow(...args),
     fetchRoadAlerts: (...args: unknown[]) => fetchRoadAlerts(...args),
     useCountryFromCoordinates: () => ({ data: null }),
@@ -49,7 +49,7 @@ function startNavigation() {
 
 describe("offline live-data gating", () => {
   beforeEach(() => {
-    fetchRoadConditions.mockReset().mockResolvedValue([]);
+    fetchRoadConditionsWithStatus.mockReset().mockResolvedValue({ ok: true, events: [] });
     fetchRouteMatchWindow.mockReset().mockResolvedValue({
       signals: [],
       speedLimitsByPoint: [50, null],
@@ -76,15 +76,15 @@ describe("offline live-data gating", () => {
 
   it("does not schedule incidents, route-match, or alert requests offline", async () => {
     renderHook(() => {
-      useNavIncidents();
+      const resource = useNavIncidents();
       useNavTrafficSignals();
-      useNavAlerts();
+      useNavAlerts(resource);
     });
     await act(async () => {
       await Promise.resolve();
     });
 
-    expect(fetchRoadConditions).not.toHaveBeenCalled();
+    expect(fetchRoadConditionsWithStatus).not.toHaveBeenCalled();
     expect(fetchRouteMatchWindow).not.toHaveBeenCalled();
     expect(fetchRoadAlerts).not.toHaveBeenCalled();
     expect(useNavigationStore.getState().liveDataUnavailable).toBe(true);
@@ -104,16 +104,16 @@ describe("offline live-data gating", () => {
 
   it("allows the live hooks to fetch again after connectivity returns", async () => {
     const { rerender } = renderHook(() => {
-      useNavIncidents();
+      const resource = useNavIncidents();
       useNavTrafficSignals();
-      useNavAlerts();
+      useNavAlerts(resource);
     });
-    expect(fetchRoadConditions).not.toHaveBeenCalled();
+    expect(fetchRoadConditionsWithStatus).not.toHaveBeenCalled();
 
     act(() => useNavigationStore.getState().setConnectivity("online"));
     rerender();
     await waitFor(() => {
-      expect(fetchRoadConditions).toHaveBeenCalled();
+      expect(fetchRoadConditionsWithStatus).toHaveBeenCalled();
       expect(fetchRouteMatchWindow).toHaveBeenCalled();
       expect(fetchRoadAlerts).toHaveBeenCalled();
     });

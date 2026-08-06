@@ -82,9 +82,17 @@ export function setup(ctx: IntegrationContext): void {
       reply.header("Cache-Control", "public, max-age=90, s-maxage=90");
       reply.send(fc);
     } catch (err) {
+      // A total aggregation failure (every provider threw, or a step outside
+      // `Promise.allSettled` — dedupe, the disallowed-source lookup — threw)
+      // must not read as "no closures on this road": navigation arms its
+      // closure baseline off this response, and an empty 200 here would let
+      // it treat pre-existing closures as newly appeared once the aggregator
+      // recovers. Partial provider failure never reaches this catch —
+      // `aggregateRoadConditions` tolerates that internally and still
+      // resolves with whatever providers did succeed.
       ctx.log.error("road-conditions aggregation failed", err);
       reply.header("Cache-Control", "no-cache");
-      reply.send({ type: "FeatureCollection", features: [] });
+      reply.status(503).send({ error: "road-conditions aggregation failed" });
     }
   });
 

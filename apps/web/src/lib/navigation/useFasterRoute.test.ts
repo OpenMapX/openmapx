@@ -216,6 +216,64 @@ describe("useFasterRoute", () => {
     expect(useNavigationStore.getState().fasterRoute).toBeNull();
   });
 
+  describe("remaining-time floor", () => {
+    // The first tick fires exactly CHECK_INTERVAL_MS (300 s) after render, so
+    // an eta set to `now + 300_000 + N * 1000` reads as N seconds remaining
+    // at check time.
+    function setRemainingAtFirstCheck(seconds: number) {
+      useNavigationStore.getState().applyProgress({
+        snapped: [0.045, 0],
+        alongMeters: 5_000,
+        deviationMeters: 0,
+        segmentIndex: 0,
+        etaEpochMs: Date.now() + 300_000 + seconds * 1000,
+        bearing: 90,
+        speedMps: 30,
+      } as never);
+    }
+
+    it("does not check when 299 s would remain (below the 300 s floor)", async () => {
+      setRemainingAtFirstCheck(299);
+      renderHook(() => useFasterRoute());
+      await act(async () => vi.advanceTimersByTimeAsync(300_000));
+      expect(fetchDirections).not.toHaveBeenCalled();
+    });
+
+    it("does not check when exactly 300 s would remain (at the floor)", async () => {
+      setRemainingAtFirstCheck(300);
+      renderHook(() => useFasterRoute());
+      await act(async () => vi.advanceTimersByTimeAsync(300_000));
+      expect(fetchDirections).not.toHaveBeenCalled();
+    });
+
+    it("checks when more than 300 s would remain", async () => {
+      setRemainingAtFirstCheck(301);
+      renderHook(() => useFasterRoute());
+      await act(async () => vi.advanceTimersByTimeAsync(300_000));
+      expect(fetchDirections).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("does not overlap a slow request with the next tick", async () => {
+    let resolveFirst: (v: unknown) => void = () => {};
+    fetchDirections.mockReturnValue(
+      new Promise((r) => {
+        resolveFirst = r;
+      }),
+    );
+    renderHook(() => useFasterRoute());
+    await act(async () => vi.advanceTimersByTimeAsync(300_000));
+    expect(fetchDirections).toHaveBeenCalledTimes(1);
+
+    // The next tick fires while the first request is still in flight.
+    await act(async () => vi.advanceTimersByTimeAsync(300_000));
+    expect(fetchDirections).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveFirst({ routes: [], waypoints: [], activeRouteIndex: 0 });
+    });
+  });
+
   describe("index ownership", () => {
     beforeEach(() => {
       resetRouteMatcherCounters();
