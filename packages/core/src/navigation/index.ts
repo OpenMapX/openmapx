@@ -37,6 +37,7 @@ export {
   projectEventsToRoute,
 } from "./incidentProjection";
 export { guidanceApproachMeters, resolveRecommendedLanes, shouldPreviewNextStep } from "./lanes";
+export { isLiveNavigationStatus } from "./liveStatus";
 export {
   createNavigationSessionSnapshot,
   isNavigationSessionExpired,

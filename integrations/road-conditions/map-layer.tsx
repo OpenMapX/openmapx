@@ -1,6 +1,6 @@
 "use client";
 
-import { type RoadConditionEvent, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
+import { type RoadConditionEvent, useOverlayExclusion } from "@openmapx/core";
 import type { GeoJSONSource, MapGeoJSONFeature } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -34,6 +34,11 @@ import { RouteConditionsLayer } from "./route-layer";
 // "road-conditions" overlay store (shared by the layer selector + legend).
 import { horizonDaysParam, useRoadConditionsStore } from "./store";
 import {
+  createViewportFetchScheduler,
+  type ViewportBox,
+  type ViewportFetchScheduler,
+} from "./viewport-scheduler";
+import {
   isFutureRoadCondition,
   ROAD_CONDITION_LINE_DASHARRAY,
   ROAD_CONDITION_LINE_OPACITY,
@@ -54,6 +59,35 @@ const CREDIT_DOMAIN = "road-conditions";
 const SOURCE = "omx-road-conditions";
 const LINE_LAYER = "omx-road-conditions-line";
 const MARKER_LAYER = "omx-road-conditions-markers";
+
+/**
+ * The server's own `/events` cache TTL (`index.ts` caches the aggregation for
+ * 90s and sends `Cache-Control: max-age=90`) — refetching sooner than this
+ * with no viewport change would only replay the same cached response, so 90s
+ * is the shortest interval that can actually return newer data while parked.
+ */
+const VIEWPORT_FRESHNESS_DEADLINE_MS = 90_000;
+
+/**
+ * Slack added on every side of the last-fetched viewport, as a fraction of
+ * its own width/height, before a pan/zoom is judged to have left it. Large
+ * enough that a navigation camera-follow — which nudges the viewport by a
+ * small fraction of itself per frame — coasts inside it for a while; small
+ * enough that a deliberate pan (which typically moves by more than half a
+ * screen) crosses it on the very next coalesced evaluation.
+ */
+const VIEWPORT_PADDING_FACTOR = 0.5;
+
+function boundsToViewportBox(map: maplibregl.Map | null): ViewportBox {
+  const bounds = map?.getBounds();
+  if (!bounds) return { west: 0, south: 0, east: 0, north: 0 };
+  return {
+    west: bounds.getWest(),
+    south: bounds.getSouth(),
+    east: bounds.getEast(),
+    north: bounds.getNorth(),
+  };
+}
 
 /** Affected-segment line color by severity (matches the marker disc ramp). */
 const SEVERITY_LINE_COLOR: maplibregl.ExpressionSpecification = [
@@ -290,6 +324,11 @@ export function RoadConditionsLayer() {
     visible: layerVisible,
   });
   const hasViewportDataRef = useRef(false);
+  // Created once (lazy ref init, same pattern as the GeoJSON bridge below) so
+  // it exists before any effect runs — including the mount-time fetch, which
+  // must be able to record its bbox into the scheduler no matter which effect
+  // fires first. See viewport-scheduler.ts for the scheduling policy itself.
+  const schedulerRef = useRef<ViewportFetchScheduler | null>(null);
   // Keep the latest formatters/translator in refs so the imperative popup click
   // handler (bound once per effect) always uses the current prefs + locale.
   const dtf = useDateTimeFormat();
@@ -322,6 +361,12 @@ export function RoadConditionsLayer() {
     }
     setViewportFetchStatus("loading");
     const b = map.getBounds();
+    schedulerRef.current?.recordFetch({
+      west: b.getWest(),
+      south: b.getSouth(),
+      east: b.getEast(),
+      north: b.getNorth(),
+    });
     const base = apiUrl.replace(/\/$/, "");
     const params = new URLSearchParams({
       bbox: `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`,
@@ -480,6 +525,48 @@ export function RoadConditionsLayer() {
     };
   }, [mapReady, mapRef, styleVersion, layerVisible, minZoom]);
 
+  // A followed navigation camera fires `moveend` on every animation frame —
+  // up to 60/s for the whole length of a drive — so `fetchData` must never
+  // hang directly off it. `fetchDataRef` lets the scheduler's `onDue`, which
+  // is wired up once, always reach whichever `fetchData` closure is current.
+  const fetchDataRef = useRef(fetchData);
+  useEffect(() => {
+    fetchDataRef.current = fetchData;
+  }, [fetchData]);
+
+  if (!schedulerRef.current) {
+    schedulerRef.current = createViewportFetchScheduler({
+      freshnessDeadlineMs: VIEWPORT_FRESHNESS_DEADLINE_MS,
+      paddingFactor: VIEWPORT_PADDING_FACTOR,
+      getViewport: () => boundsToViewportBox(mapRef.current),
+      onDue: () => {
+        void fetchDataRef.current();
+      },
+    });
+  }
+
+  // bbox-driven refetch on pan/zoom. The `moveend` handler itself only marks
+  // the scheduler dirty — see viewport-scheduler.ts for the coalesced
+  // evaluation that decides whether a refetch is actually due. Declared
+  // before the immediate-fetch effect below so that, on a style change, this
+  // effect's cleanup (which disposes stale scheduler timers) runs first and
+  // the freshness timer the immediate fetch arms is the one left standing —
+  // not the other way around.
+  useEffect(() => {
+    void styleVersion;
+    const map = mapRef.current;
+    const scheduler = schedulerRef.current;
+    if (!map || !mapReady || !layerVisible || !scheduler) return;
+    const handleMoveEnd = () => scheduler.markDirty();
+    map.on("moveend", handleMoveEnd);
+    return () => {
+      map.off("moveend", handleMoveEnd);
+      // Nothing left to coalesce toward while hidden/unmounted/torn down for a
+      // style swap — an idle map must not keep a scheduler timer alive.
+      scheduler.dispose();
+    };
+  }, [mapReady, mapRef, styleVersion, layerVisible]);
+
   // Fetch independently from style synchronization. Style swaps should rebuild
   // sources/layers, while filters, viewport movement, and this style version
   // control which request is current.
@@ -495,18 +582,6 @@ export function RoadConditionsLayer() {
     }
     void fetchData();
   }, [mapReady, mapRef, styleVersion, layerVisible, fetchData, setViewportFetchStatus]);
-
-  // bbox-driven refetch on pan/zoom.
-  const debouncedFetch = useDebouncedCallback(() => fetchData(), 800);
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady || !layerVisible) return;
-    map.on("moveend", debouncedFetch);
-    return () => {
-      map.off("moveend", debouncedFetch);
-    };
-  }, [mapReady, mapRef, styleVersion, layerVisible, debouncedFetch]);
 
   // Area markers and lines share one prioritized interaction registration. The
   // arbiter also owns the cursor so traffic flow cannot clear incident hover.

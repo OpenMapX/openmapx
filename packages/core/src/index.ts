@@ -47,6 +47,7 @@ export {
   type GeometryWindow,
   guidanceApproachMeters,
   type IncidentAlert,
+  isLiveNavigationStatus,
   isNavigationSessionExpired,
   isOverSpeed,
   isReroutingTooOften,

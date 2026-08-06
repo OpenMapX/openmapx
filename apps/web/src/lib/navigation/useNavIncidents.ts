@@ -3,6 +3,7 @@
 import {
   type BoundingBox,
   fetchRoadConditionsWithStatus,
+  isLiveNavigationStatus,
   type LngLat,
   PROGRESS_BUCKET_METERS,
   type PreparedRouteMatcher,
@@ -92,7 +93,7 @@ export function useNavIncidents(): NavIncidentResource {
   const fetchEnabled = incidentAlerts || avoidIncidents;
   // Transit and post-arrival sessions keep `route` populated for other UI, but
   // road conditions are a driving/cycling/walking concern — never fetch for them.
-  const active = kind === "ground" && (navStatus === "navigating" || navStatus === "rerouting");
+  const active = kind === "ground" && isLiveNavigationStatus(navStatus);
 
   const bucket = progressBucket(along);
 

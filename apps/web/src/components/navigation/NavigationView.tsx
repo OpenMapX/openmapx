@@ -12,6 +12,7 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import {
   geoJsonBBox,
   guidanceApproachMeters,
+  isLiveNavigationStatus,
   isOverSpeed,
   shouldPreviewNextStep,
   upcomingManeuverIndex,
@@ -81,7 +82,9 @@ export function NavigationView() {
   useNavigationConnectivity();
   useNavigationEngine(incidentResource);
   useNavCamera();
-  useWakeLock(active && keepScreenOn);
+  // Screen stays awake through the drive itself, not the arrival card: the
+  // sensors and rendering behind it are done once the trip ends.
+  useWakeLock(isLiveNavigationStatus(status) && kind === "ground" && keepScreenOn);
   const activeAlert = useNavAlerts(incidentResource);
 
   const [rerouteToastOpen, setRerouteToastOpen] = useState(false);

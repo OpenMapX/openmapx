@@ -193,6 +193,41 @@ describe("RouteTrafficLayer", () => {
     }
   });
 
+  it("stops polling once the driver arrives but keeps drawing the last-fetched bands", () => {
+    useNavigationStore.getState().startGroundNavigation(NAV_ROUTE, "driving", [
+      [8, 50],
+      [8, 50.02],
+    ]);
+    useNavigationStore.getState().applyProgress({ alongMeters: 300 } as NavProgress);
+
+    const { rerender } = render(<RouteTrafficLayer />);
+    expect(useRouteFlow.mock.calls.at(-1)?.[1]).toBe(true);
+    const bandsBefore = fake.state.sources.get("route-traffic-source")
+      ?.data as GeoJSON.FeatureCollection;
+    expect(bandsBefore.features.length).toBeGreaterThan(0);
+    const widthBefore = fake.state.paint.get("route-traffic-active")?.["line-width"];
+
+    act(() => {
+      useNavigationStore.getState().completeArrival();
+    });
+    rerender(<RouteTrafficLayer />);
+
+    // The query is disabled — no more refetching — but the active route is
+    // still "navigating" for drawing purposes, so the bands and widths stay
+    // exactly what they were the instant before arrival.
+    expect(useRouteFlow.mock.calls.at(-1)?.[1]).toBe(false);
+    const bandsAfter = fake.state.sources.get("route-traffic-source")
+      ?.data as GeoJSON.FeatureCollection;
+    expect(bandsAfter.features.length).toBeGreaterThan(0);
+    expect(bandsAfter).toEqual(bandsBefore);
+    expect(fake.state.paint.get("route-traffic-active")?.["line-width"]).toBe(widthBefore);
+  });
+
+  it("keeps polling in planning mode, where there is no nav status to gate on", () => {
+    render(<RouteTrafficLayer />);
+    expect(useRouteFlow.mock.calls.at(-1)?.[1]).toBe(true);
+  });
+
   it("keeps the congestion bands across a style change", () => {
     render(<RouteTrafficLayer />);
     const before = fake.state.sources.get("route-traffic-source")?.data as { features: unknown[] };

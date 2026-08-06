@@ -1,6 +1,11 @@
 "use client";
 
-import { type RouteFlowInput, useNavigationStore, useRouteFlow } from "@openmapx/core";
+import {
+  isLiveNavigationStatus,
+  type RouteFlowInput,
+  useNavigationStore,
+  useRouteFlow,
+} from "@openmapx/core";
 import { useMemo } from "react";
 import { ROUTE_ALT_OPACITY, ROUTE_WIDTHS } from "@/lib/routeStyle";
 import { flowColorExpression } from "@/lib/trafficFlowExpression";
@@ -85,7 +90,12 @@ export function RouteTrafficLayer() {
     () => routes.map((route) => ({ id: route.id, geometry: route.geometry })),
     [routes],
   );
-  const spansByRoute = useRouteFlow(flowInputs, enabled);
+  // Congestion keeps polling in planning mode (there is no nav status to gate
+  // on) and throughout an active drive, but stops once the driver arrives —
+  // the disabled query keeps its last-fetched spans, so the bands stay drawn
+  // exactly as `enabled` alone would draw them; only the refetching stops.
+  const live = !navigating || isLiveNavigationStatus(navStatus);
+  const spansByRoute = useRouteFlow(flowInputs, enabled && live);
 
   const hasBands = Object.values(spansByRoute).some((spans) => spans.length > 0);
   useIntegrationDomainAttribution("road-conditions", enabled && hasBands);

@@ -1,11 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createFakeMap, type FakeMap, render, waitFor } from "@/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
 import { useRoadConditionsStore } from "../store";
 
 let fake: FakeMap;
+// Mutable so the style-change test can bump it and re-render, the same way a
+// real style swap would change what `useMap()` returns.
+let mockStyleVersion = 0;
 
 vi.mock("@/lib/MapContext", () => ({
-  useMap: () => ({ mapRef: { current: fake.map }, mapReady: true, styleVersion: 0 }),
+  useMap: () => ({ mapRef: { current: fake.map }, mapReady: true, styleVersion: mockStyleVersion }),
 }));
 
 vi.mock("@/lib/EnvProvider", () => ({
@@ -86,6 +89,7 @@ function sourceFeatures(geometryType: GeoJSON.Geometry["type"]): GeoJSON.Feature
 
 beforeEach(() => {
   fake = createFakeMap();
+  mockStyleVersion = 0;
   fetchMock.mockReset();
   respondWith([]);
   vi.stubGlobal("fetch", fetchMock);
@@ -530,5 +534,173 @@ describe("road-condition display grouping", () => {
           feature.geometry.type === "LineString" || feature.geometry.type === "MultiLineString",
       ),
     ).toHaveLength(0);
+  });
+});
+
+describe("RoadConditionsLayer viewport scheduler", () => {
+  // Mirrors VIEWPORT_FRESHNESS_DEADLINE_MS / VIEWPORT_PADDING_FACTOR in
+  // ../map-layer.tsx (the server's `/events` cache TTL, and the padding
+  // factor documented there). Not imported — those constants are
+  // intentionally private to the module under test.
+  const FRESHNESS_DEADLINE_MS = 90_000;
+  const BASE_BOX = { west: 10, south: 45, east: 11, north: 46 };
+
+  function setBounds(box: { west: number; south: number; east: number; north: number }) {
+    Object.defineProperty(fake.map, "getBounds", {
+      value: () => ({
+        getWest: () => box.west,
+        getSouth: () => box.south,
+        getEast: () => box.east,
+        getNorth: () => box.north,
+      }),
+      writable: true,
+      configurable: true,
+    });
+  }
+
+  /** Advance the fake clock while letting fetch/json promise chains settle. */
+  async function flush(ms = 0) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  beforeEach(() => {
+    setBounds(BASE_BOX);
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("bounds getBounds() reads and network requests under a 60Hz moveend burst that stays in the padded viewport", async () => {
+    const getBoundsSpy = vi.spyOn(fake.map, "getBounds");
+    render(<RoadConditionsLayer />);
+    await flush();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    fetchMock.mockClear();
+    getBoundsSpy.mockClear();
+
+    await act(async () => {
+      for (let i = 0; i < 3600; i++) {
+        fake.emit("moveend");
+        await vi.advanceTimersByTimeAsync(1000 / 60);
+      }
+    });
+
+    // 60 moveend events/second for a simulated minute of continuous,
+    // in-bounds camera motion (a followed navigation camera). The scheduler
+    // throttles evaluations to at most one per 5s, so ~60s of continuous
+    // motion is ~12-13 evaluations — each reads getBounds() exactly once,
+    // and since the viewport never left the padded last-fetched bbox, none
+    // of them fetch. 3600 raw `moveend` events must not translate into
+    // anything close to 3600 of any of this.
+    expect(getBoundsSpy.mock.calls.length).toBeGreaterThan(0);
+    expect(getBoundsSpy.mock.calls.length).toBeLessThanOrEqual(15);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("a real pan that leaves the padded bbox refetches promptly", async () => {
+    render(<RoadConditionsLayer />);
+    await flush();
+    fetchMock.mockClear();
+
+    setBounds({ west: 40, south: 45, east: 41, north: 46 }); // far past BASE_BOX's 50% padding
+    fake.emit("moveend");
+    await flush(); // the leading-edge evaluation runs with ~0 delay
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(lastUrl()).toContain("bbox=40");
+  });
+
+  it("does not refetch for a move that stays inside the padded bbox", async () => {
+    render(<RoadConditionsLayer />);
+    await flush();
+    fetchMock.mockClear();
+
+    setBounds({ west: 10.1, south: 45.1, east: 11.1, north: 46.1 }); // inside the 50% padding
+    fake.emit("moveend");
+    await flush();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("fires a freshness refresh with no movement at all", async () => {
+    render(<RoadConditionsLayer />);
+    await flush();
+    fetchMock.mockClear();
+
+    await flush(FRESHNESS_DEADLINE_MS - 1);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await flush(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds no repeating short timer once motion stops", async () => {
+    render(<RoadConditionsLayer />);
+    await flush();
+
+    await act(async () => {
+      for (let i = 0; i < 60; i++) {
+        fake.emit("moveend");
+        await vi.advanceTimersByTimeAsync(1000 / 60);
+      }
+    });
+    await flush(6000); // let any evaluation the burst scheduled actually run
+
+    // Only the freshness deadline should still be armed — a repeating 5s
+    // evaluation timer must not survive motion stopping.
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  it("the coalesced evaluation uses the viewport at evaluation time, not at moveend time", async () => {
+    render(<RoadConditionsLayer />);
+    await flush();
+    fetchMock.mockClear();
+
+    fake.emit("moveend"); // schedules the evaluation; it has not run yet
+    setBounds({ west: 70, south: 45, east: 71, north: 46 }); // the camera keeps moving before it does
+    await flush();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(lastUrl()).toContain("bbox=70");
+  });
+
+  it("refetches immediately on a style change, and the freshness deadline still fires afterward", async () => {
+    const { rerender } = render(<RoadConditionsLayer />);
+    await flush();
+    fetchMock.mockClear();
+
+    mockStyleVersion += 1;
+    await act(async () => {
+      rerender(<RoadConditionsLayer />);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // The style-change fetch must have re-armed the freshness deadline, not
+    // left it cleared by the moveend effect's own cleanup running afterward.
+    fetchMock.mockClear();
+    await flush(FRESHNESS_DEADLINE_MS);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("a freshness-triggered refresh failure keeps the last-good data and reports stale", async () => {
+    respondWith([
+      {
+        geometry: { type: "Point", coordinates: [10.5, 45.5] },
+        properties: { id: "last-good", type: "roadworks", severity: "low" },
+      },
+    ]);
+    render(<RoadConditionsLayer />);
+    await flush();
+    expect(sourceFeatures("Point")[0]?.properties?._id).toBe("last-good");
+
+    fetchMock.mockRejectedValueOnce(new Error("temporary outage"));
+    await flush(FRESHNESS_DEADLINE_MS);
+
+    expect(useRoadConditionsStore.getState().viewportFetchStatus).toBe("stale");
+    expect(sourceFeatures("Point")[0]?.properties?._id).toBe("last-good");
   });
 });
