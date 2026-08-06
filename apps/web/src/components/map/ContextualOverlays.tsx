@@ -1,9 +1,9 @@
 "use client";
 
 import {
+  createContextualOverlayOwnership,
   getOverlayEntry,
-  isOverlayActive,
-  toggleOverlay,
+  isLiveNavigationStatus,
   useDirectionsStore,
   useNavigationStore,
 } from "@openmapx/core";
@@ -17,7 +17,7 @@ type OverlayContext = "transit-planning" | "transit-nav" | "driving-planning" | 
  * overlay's id (as registered in the overlay registry) and the contexts it
  * belongs to. A manual toggle is never overridden — an overlay the user already
  * enabled stays on when the context ends, and one they turn off mid-context is
- * left off.
+ * left off, even if the value they set happens to match what automation had.
  */
 const CONTEXTUAL_OVERLAYS: Array<{ overlayId: string; contexts: OverlayContext[] }> = [
   // Live vehicles + the static transit-line map, while planning or riding transit.
@@ -30,11 +30,20 @@ const CONTEXTUAL_OVERLAYS: Array<{ overlayId: string; contexts: OverlayContext[]
 
 const DRIVING_MODES = new Set(["driving", "motorcycle"]);
 
+let contextualSessionSeq = 0;
+
 /**
- * Drives {@link CONTEXTUAL_OVERLAYS} through the overlay registry (the same
- * `toggleOverlay` path the layer selector uses, so overlays read as enabled and
- * stay user-disableable), enabling the mapped overlays while the user is planning
- * or navigating a matching context and restoring their prior choice on exit.
+ * Drives {@link CONTEXTUAL_OVERLAYS} through the overlay registry's
+ * transaction API (the same runOverlayTransaction path the layer selector's
+ * toggleOverlay uses, so overlays read as enabled and stay user-disableable),
+ * enabling the mapped overlays while the user is planning or navigating a
+ * matching context and restoring their prior choice — including any
+ * exclusion peer it displaced — on context exit, on a teardown mid-context,
+ * or when two contexts both wanted the same overlay and only one has let go.
+ * isLiveNavigationStatus deliberately excludes "arrived": the arrival card
+ * and session summary stay on screen after arrival, but contextual
+ * automation ends with the live navigation it was driven by, not the
+ * lingering summary.
  */
 export function ContextualOverlays() {
   const directionsOpen = useDirectionsStore((s) => s.isOpen);
@@ -47,31 +56,48 @@ export function ContextualOverlays() {
     const set = new Set<OverlayContext>();
     if (directionsOpen && directionsMode === "transit") set.add("transit-planning");
     if (directionsOpen && DRIVING_MODES.has(directionsMode)) set.add("driving-planning");
-    const navigating = navStatus !== "idle";
+    const navigating = isLiveNavigationStatus(navStatus);
     if (navigating && navKind === "transit") set.add("transit-nav");
     if (navigating && navKind === "ground" && DRIVING_MODES.has(navMode)) set.add("driving-nav");
     return set;
   }, [directionsOpen, directionsMode, navKind, navMode, navStatus]);
 
-  // Overlays this mechanism turned on, so it only turns back off the ones it
-  // enabled (never a manual toggle).
-  const autoEnabledRef = useRef<Set<string>>(new Set());
+  // One ownership session per mount. Each CONTEXTUAL_OVERLAYS row is its own
+  // refcounted owner (keyed by array index, not overlayId, so two rows that
+  // ever named the same overlay wouldn't collapse into a single owner) — the
+  // tracker itself only releases an overlay once every row that wanted it has
+  // let go, so a driving-planning -> driving-nav transition that keeps the
+  // same overlay wanted the whole time never dips through a release+reacquire.
+  const ownershipRef = useRef<ReturnType<typeof createContextualOverlayOwnership> | null>(null);
+  if (!ownershipRef.current) {
+    contextualSessionSeq += 1;
+    ownershipRef.current = createContextualOverlayOwnership(
+      `contextual-overlays:${contextualSessionSeq}`,
+    );
+  }
+  const ownership = ownershipRef.current;
 
   useEffect(() => {
-    for (const { overlayId, contexts } of CONTEXTUAL_OVERLAYS) {
+    CONTEXTUAL_OVERLAYS.forEach(({ overlayId, contexts }, index) => {
       // Skip overlays whose integration isn't registered on this deployment.
-      if (!getOverlayEntry(overlayId)) continue;
+      if (!getOverlayEntry(overlayId)) return;
+      const ownerKey = String(index);
       const want = contexts.some((context) => active.has(context));
-      const enabled = isOverlayActive(overlayId);
-      if (want && !enabled) {
-        toggleOverlay(overlayId);
-        autoEnabledRef.current.add(overlayId);
-      } else if (!want && autoEnabledRef.current.has(overlayId)) {
-        if (enabled) toggleOverlay(overlayId);
-        autoEnabledRef.current.delete(overlayId);
+      if (want) {
+        ownership.acquire(overlayId, ownerKey);
+      } else {
+        ownership.release(overlayId, ownerKey);
       }
-    }
-  }, [active]);
+    });
+  }, [active, ownership]);
+
+  // A teardown mid-context must not leave an auto-enabled overlay on. This is
+  // its own effect — with no dependency that ever changes across the
+  // component's lifetime — so its cleanup fires only on unmount, not on every
+  // `active` change the effect above already handles.
+  useEffect(() => {
+    return () => ownership.releaseAll();
+  }, [ownership]);
 
   return null;
 }

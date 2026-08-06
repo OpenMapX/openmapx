@@ -134,7 +134,7 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
         keywords,
         isActive: () => isOverlayActive(overlayId),
         run: () => {
-          toggleOverlay(overlayId);
+          toggleOverlay(overlayId, { kind: "user" });
           return false;
         },
       });

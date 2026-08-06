@@ -1,6 +1,6 @@
 "use client";
 
-import { useDirectionsStore, useOverlayExclusion } from "@openmapx/core";
+import { runOverlayTransaction, useDirectionsStore, useOverlayExclusion } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import {
@@ -30,6 +30,8 @@ function findTransportationSource(map: maplibregl.Map): string | null {
   return null;
 }
 
+const CYCLING_AUTOMATION_ORIGIN = { kind: "automation", owner: "cycling" } as const;
+
 function findPoiSource(map: maplibregl.Map): string | null {
   const layers = map.getStyle()?.layers;
   if (!layers) return null;
@@ -53,7 +55,11 @@ export function CyclingLayer() {
   const directionsOpen = useDirectionsStore((s) => s.isOpen);
   const prevModeRef = useRef(directionsMode);
 
-  // Auto-enable cycling overlay when user enters cycling directions mode
+  // Auto-enable cycling overlay when user enters cycling directions mode. This
+  // runs its writes through runOverlayTransaction, tagged as its own
+  // contextual-automation owner, so a userRevision bump never mistakes this
+  // for a user toggle — the same reason ContextualOverlays does for the
+  // overlays it drives.
   useEffect(() => {
     const prev = prevModeRef.current;
     prevModeRef.current = directionsMode;
@@ -61,7 +67,7 @@ export function CyclingLayer() {
     if (!directionsOpen) {
       const store = useCyclingStore.getState();
       if (store.autoEnabled && store.panelOpen) {
-        store.closePanel();
+        runOverlayTransaction("cycling", { panelOpen: false }, CYCLING_AUTOMATION_ORIGIN);
       }
       return;
     }
@@ -69,13 +75,13 @@ export function CyclingLayer() {
     if (directionsMode === "cycling" && prev !== "cycling") {
       const store = useCyclingStore.getState();
       if (!store.panelOpen) {
-        store.openPanel();
+        runOverlayTransaction("cycling", { panelOpen: true }, CYCLING_AUTOMATION_ORIGIN);
         store.setAutoEnabled(true);
       }
     } else if (directionsMode !== "cycling" && prev === "cycling") {
       const store = useCyclingStore.getState();
       if (store.autoEnabled) {
-        store.closePanel();
+        runOverlayTransaction("cycling", { panelOpen: false }, CYCLING_AUTOMATION_ORIGIN);
       }
     }
   }, [directionsMode, directionsOpen]);

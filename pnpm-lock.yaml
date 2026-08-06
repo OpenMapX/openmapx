@@ -884,6 +884,13 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.2.18
+        version: 19.2.18
+      react:
+        specifier: 19.2.8
+        version: 19.2.8
 
   integrations/overlay-earthquakes:
     dependencies:

@@ -31,7 +31,6 @@ import {
   type BoundingBox,
   CATEGORY_DEFINITIONS,
   type CategoryId,
-  closeExclusionPeers,
   createPlace,
   formatStreetLevelRef,
   getOverlayEntry,
@@ -45,6 +44,7 @@ import {
   PANEL,
   type Place,
   parseStreetLevelRef,
+  runOverlayTransaction,
   type TravelMode,
   type UnitSystem,
   useCategorySearchStore,
@@ -223,14 +223,18 @@ function getOverlayState(id: string) {
   return getOverlayEntry(id)?.getState() ?? getRegisteredOverlayStore(id)?.getState();
 }
 
+// A deep link's `ov` param is the clearest possible expression of user
+// intent — someone opened (or shared) a URL naming these exact overlays — so
+// every write here is tagged "user" and, unlike contextual automation, is
+// never restored away later.
 function openOverlay(id: string): void {
-  closeExclusionPeers(id);
-  getOverlayState(id)?.openPanel();
+  runOverlayTransaction(id, { panelOpen: true }, { kind: "user" });
 }
 
 function closeOverlay(id: string): void {
   const state = getOverlayState(id);
-  if (state?.panelOpen) state.closePanel();
+  if (!state?.panelOpen) return;
+  runOverlayTransaction(id, { panelOpen: false }, { kind: "user" });
 }
 
 function activeOverlayIds(): string[] {

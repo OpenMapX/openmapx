@@ -56,7 +56,7 @@ function OverlaySwitchRow({ entry }: { entry: GeneratedLayerEntry }) {
         <Switch
           checked={active && !belowMinZoom}
           onChange={() => {
-            if (!belowMinZoom) toggleOverlay(entry.overlayId);
+            if (!belowMinZoom) toggleOverlay(entry.overlayId, { kind: "user" });
           }}
           slotProps={{ input: { "aria-label": t("toggleOverlay", { layer: t(entry.labelKey) }) } }}
           size="small"

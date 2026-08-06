@@ -90,6 +90,7 @@ describe("useOverlayStoreState hooks under store replacement", () => {
         getRegisteredOverlayStore(id)?.getState() ?? {
           panelOpen: false,
           layerVisible: false,
+          userRevision: 0,
           openPanel: () => {},
           closePanel: () => {},
           setLayerVisible: () => {},
@@ -107,12 +108,12 @@ describe("useOverlayStoreState hooks under store replacement", () => {
       createOverlayStore({ overlayId: id, extra: {} });
     });
     act(() => {
-      toggleOverlay(id);
+      toggleOverlay(id, { kind: "user" });
     });
     expect(result.current).toBe(true);
 
     act(() => {
-      toggleOverlay(id);
+      toggleOverlay(id, { kind: "user" });
     });
     expect(result.current).toBe(false);
   });

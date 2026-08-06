@@ -1,6 +1,8 @@
 export { useCategoryFacetStore } from "./categoryFacetStore";
 export { AD_HOC_CATEGORY_ID, useCategorySearchStore } from "./categorySearchStore";
 export { useCommandPaletteStore } from "./commandPaletteStore";
+export type { ContextualOverlayOwnership } from "./contextualOverlayOwnership";
+export { createContextualOverlayOwnership } from "./contextualOverlayOwnership";
 export type { OverlayStoreBase } from "./createOverlayStore";
 export {
   createOverlayStore,
@@ -35,7 +37,13 @@ export { useNavigationStore } from "./navigationStore";
 export { useNlpSearchStore } from "./nlpSearchStore";
 export type { OpeningHoursFilter } from "./openingHoursStore";
 export { useOpeningHoursStore } from "./openingHoursStore";
-export type { OverlayEntry, OverlayId } from "./overlayRegistry";
+export type {
+  OverlayChangeOrigin,
+  OverlayEntry,
+  OverlayId,
+  OverlaySnapshotEntry,
+  OverlayTransactionRecord,
+} from "./overlayRegistry";
 export {
   closeExclusionPeers,
   getOverlayEntry,
@@ -43,7 +51,10 @@ export {
   integrationIdToOverlayId,
   isOverlayActive,
   OVERLAY_REGISTRY,
+  overlayTransactionClosure,
   registerOverlayEntry,
+  restoreOverlaySnapshot,
+  runOverlayTransaction,
   toggleOverlay,
 } from "./overlayRegistry";
 export { usePlaceStore } from "./placeStore";

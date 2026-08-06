@@ -47,7 +47,7 @@ function DetailOptionTile({ entry }: { entry: GeneratedLayerEntry }) {
         icon={entry.icon}
         disabled={disabled}
         onClick={() => {
-          if (!disabled) toggleOverlay(entry.overlayId);
+          if (!disabled) toggleOverlay(entry.overlayId, { kind: "user" });
         }}
       >
         {disabled ? (

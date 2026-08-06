@@ -4,6 +4,13 @@ import { create } from "zustand";
 export interface OverlayStoreBase {
   panelOpen: boolean;
   layerVisible: boolean;
+  /** Bumped by every direct call to openPanel/closePanel/setLayerVisible — but
+   *  NOT by a write applied through runOverlayTransaction (overlayRegistry.ts).
+   *  A direct call always originates outside contextual automation (a legend
+   *  checkbox, the deep-link applier, another integration), so this is the
+   *  answer to "has something other than automation touched this overlay
+   *  since revision N" that contextual restore logic depends on. */
+  userRevision: number;
   openPanel: () => void;
   closePanel: () => void;
   setLayerVisible: (visible: boolean) => void;
@@ -37,6 +44,34 @@ const overlayChangeListeners = new Set<() => void>();
 
 function notifyOverlayChangeListeners(): void {
   for (const listener of overlayChangeListeners) listener();
+}
+
+/**
+ * True while a transaction (runOverlayTransaction, overlayRegistry.ts) is
+ * applying its own writes, so the base actions below know to skip the
+ * userRevision bump — a transaction's writes are automation re-stating a
+ * decision it already made, not a new user/external change. This MUST only
+ * ever be true for the duration of a synchronous call: if a transaction ever
+ * awaited something between opening and closing this window, an unrelated
+ * direct call from anywhere else in the app could land inside that window
+ * and silently lose its bump. runOverlayTransaction enforces this by never
+ * awaiting inside runInOverlayTransaction.
+ */
+let inOverlayTransaction = false;
+
+/**
+ * Runs `apply` with the shared transaction flag set, so every base-store
+ * write it triggers (however many stores it touches) skips the userRevision
+ * bump. `apply` must be fully synchronous — see the flag's own doc comment.
+ */
+export function runInOverlayTransaction<T>(apply: () => T): T {
+  const previous = inOverlayTransaction;
+  inOverlayTransaction = true;
+  try {
+    return apply();
+  } finally {
+    inOverlayTransaction = previous;
+  }
 }
 
 /**
@@ -86,14 +121,34 @@ export function createOverlayStore<
     return {
       panelOpen: false,
       layerVisible: false,
-      openPanel: () => set({ panelOpen: true, layerVisible: true } as Partial<FullState>),
+      userRevision: 0,
+      openPanel: () =>
+        set(
+          (state) =>
+            ({
+              panelOpen: true,
+              layerVisible: true,
+              userRevision: inOverlayTransaction ? state.userRevision : state.userRevision + 1,
+            }) as Partial<FullState>,
+        ),
       closePanel: () =>
-        set({
-          panelOpen: false,
-          layerVisible: false,
-          ...(config.onClose ? config.onClose() : {}),
-        } as Partial<FullState>),
-      setLayerVisible: (layerVisible: boolean) => set({ layerVisible } as Partial<FullState>),
+        set(
+          (state) =>
+            ({
+              panelOpen: false,
+              layerVisible: false,
+              userRevision: inOverlayTransaction ? state.userRevision : state.userRevision + 1,
+              ...(config.onClose ? config.onClose() : {}),
+            }) as Partial<FullState>,
+        ),
+      setLayerVisible: (layerVisible: boolean) =>
+        set(
+          (state) =>
+            ({
+              layerVisible,
+              userRevision: inOverlayTransaction ? state.userRevision : state.userRevision + 1,
+            }) as Partial<FullState>,
+        ),
       ...config.extra,
       ...extraActions,
     } as FullState;

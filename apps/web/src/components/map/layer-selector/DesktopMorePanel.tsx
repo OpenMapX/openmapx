@@ -39,7 +39,7 @@ function OverlayDetailTile({ item, label }: { item: GeneratedLayerEntry; label: 
       onClick={
         item.overlayId && !belowMinZoom
           ? () => {
-              toggleOverlay(item.overlayId);
+              toggleOverlay(item.overlayId, { kind: "user" });
             }
           : undefined
       }
