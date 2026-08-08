@@ -26,6 +26,25 @@ may include the Apache-2.0 libraries, but not the other way around. That is why
 the SDK and shared libraries — the parts we want others to reuse — are the
 permissive ones, and the product that ties them together is copyleft.
 
+## Trademarks
+
+The code licenses above cover the **code**. They do not grant any right to the
+**OpenMapX name or logo**, which are trademarks held by the Project and licensed
+separately under the [Trademark Policy](https://openmapx.org/trademark).
+
+In short — and the policy, not this summary, is what governs:
+
+| You may | You may not |
+|---|---|
+| Run your own instance, modified or not, and say it runs OpenMapX | Use "OpenMapX" (or a confusingly similar name) as, or as part of, the name of your own product, company, service, app, domain, or social-media handle |
+| Refer to OpenMapX truthfully and referentially | Brand a modified or forked version as OpenMapX |
+| Leave the marks where they already appear in the unmodified software and its documentation | |
+| Write, talk, teach, and run meetups about OpenMapX | |
+
+This split is deliberate. The AGPL guarantees the freedom to fork; the trademark
+policy makes sure a fork is presented as its own project rather than as this
+one. Neither restricts what the software can do.
+
 ## Bundled map style
 
 The default map style (`apps/web/public/styles/openmapx-streets.json` and its
