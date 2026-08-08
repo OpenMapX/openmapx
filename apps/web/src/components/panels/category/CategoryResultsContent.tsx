@@ -411,12 +411,14 @@ export function CategoryResultsContent() {
               {tc("resultsCount", { count: results.length })}
             </Typography>
           </Box>
-          <AttributionStrip
-            attributions={poiAttributions}
-            variant="inline"
-            label={tc("dataSources")}
-            maxVisible={3}
-          />
+          <Box sx={{ px: 2 }}>
+            <AttributionStrip
+              attributions={poiAttributions}
+              variant="inline"
+              label={tc("dataSources")}
+              maxVisible={3}
+            />
+          </Box>
           <ResultList
             items={results}
             getKey={(place) => place.id}
