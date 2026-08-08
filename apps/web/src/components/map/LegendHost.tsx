@@ -1,5 +1,7 @@
 "use client";
 
+import { useMeasurementStore } from "@integrations/overlay-tool-measurement/store";
+import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import Box from "@mui/material/Box";
@@ -62,6 +64,8 @@ export function LegendHost() {
   const activeDetailId = useSidebarStore((s) => s.activeDetailId);
   const collapsed = useSidebarStore((s) => s.collapsed);
   const navigating = useNavigationStore((s) => s.status !== "idle");
+  const measurementActive = useMeasurementStore((s) => s.isActive);
+  const travelTimeActive = useTravelTimeStore((s) => s.isActive);
 
   // Overlay legends are map-browsing chrome. They stay one tap away via the
   // toggle, but default to hidden while the map isn't the user's focus — during
@@ -111,14 +115,16 @@ export function LegendHost() {
     registry.getWithLegend().filter((i) => !declarativeIds.has(i.id)),
   );
 
-  // A legend integration being *enabled* (installed) doesn't mean its overlay is
-  // active — each legend renders only when its overlay panel is open (see
-  // OverlayLegend). Gate the whole host (toggle included) on the same condition
-  // so the toggle never appears over an empty stack.
+  // A normal legend integration being *enabled* (installed) doesn't mean its
+  // overlay is active — each legend renders only when its overlay panel is open
+  // (see OverlayLegend). The measurement and travel-time integrations are
+  // standalone toolbars, though: they deliberately use their own `isActive`
+  // stores instead of the generic panel state.
   const overlayIds = [...declarative, ...codeLegends].map((i) => integrationIdToOverlayId(i.id));
   const anyPanelOpen = useAnyOverlayPanelOpen(overlayIds);
+  const anyStandaloneToolbarActive = measurementActive || travelTimeActive;
 
-  if (!anyPanelOpen) return null;
+  if (!anyPanelOpen && !anyStandaloneToolbarActive) return null;
 
   const bottom = {
     // Flush against the top edge of the mobile bottom sheet (no gap).
