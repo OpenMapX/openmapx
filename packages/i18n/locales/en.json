@@ -398,9 +398,13 @@
       "lane_closure": "Lane closure",
       "accident": "Accident",
       "congestion": "Congestion",
+      "weather": "Weather",
+      "event": "Event",
+      "restriction": "Restriction",
       "detour": "Detour",
       "hazard": "Hazard",
-      "obstruction": "Obstruction"
+      "obstruction": "Obstruction",
+      "other": "Other"
     },
     "roadState": {
       "open": "Open",

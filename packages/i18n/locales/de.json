@@ -398,9 +398,13 @@
       "lane_closure": "Spursperrung",
       "accident": "Unfall",
       "congestion": "Stau",
+      "weather": "Wetter",
+      "event": "Ereignis",
+      "restriction": "Einschränkung",
       "detour": "Umleitung",
       "hazard": "Gefahr",
-      "obstruction": "Hindernis"
+      "obstruction": "Hindernis",
+      "other": "Sonstiges"
     },
     "roadState": {
       "open": "Offen",

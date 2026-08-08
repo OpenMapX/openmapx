@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import de from "../locales/de.json";
+import en from "../locales/en.json";
 import { extractICUVariables, flattenKeys } from "./check-translations.ts";
 
 // Pure helpers from the translation health checker. flattenKeys + extractICUVariables
@@ -118,6 +120,28 @@ describe("cross-locale key consistency diff (composed)", () => {
     );
     expect(missingInLocale).toEqual([]);
     expect(extraInLocale).toEqual([]);
+  });
+});
+
+describe("road-condition type catalog", () => {
+  const roadConditionTypes = [
+    "accident",
+    "roadworks",
+    "road_closure",
+    "lane_closure",
+    "hazard",
+    "congestion",
+    "weather",
+    "event",
+    "restriction",
+    "other",
+  ];
+
+  it.each([
+    ["en", en.roadConditions.type],
+    ["de", de.roadConditions.type],
+  ])("defines every supported road-condition type in %s", (_, typeMessages) => {
+    expect(Object.keys(typeMessages)).toEqual(expect.arrayContaining(roadConditionTypes));
   });
 });
 
