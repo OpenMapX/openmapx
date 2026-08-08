@@ -52,7 +52,12 @@ export function useSimulatedPosition(active: boolean, onFix: (fix: FixInput) => 
           clearInterval(id);
           return;
         }
-        onFixRef.current(fixes[idxRef.current++]);
+        // Stamp at delivery rather than reusing the generated clock, which is
+        // zero-based and would make every epoch derived from a fix — the ETA,
+        // and so the faster-route check that compares it against `Date.now()` —
+        // read as decades in the past. Delivery time is also what a real
+        // receiver reports, so it stays honest at any playback rate.
+        onFixRef.current({ ...fixes[idxRef.current++], timestampMs: Date.now() });
       },
       Math.max(50, SIM_INTERVAL_MS / playbackRate),
     );
