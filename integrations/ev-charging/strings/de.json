@@ -9,9 +9,7 @@
   "column": {
     "power": "Leistung",
     "current": "Strom",
-    "qty": "Anzahl",
-    "price": "Preis",
-    "conditions": "Bedingungen"
+    "qty": "Anzahl"
   },
   "row": {
     "cost": "Kosten",
@@ -27,6 +25,8 @@
   "priceFlat": "{amount}/Ladevorgang",
   "priceParking": "{amount}/Min. Parken",
   "pricingNote": "Direktzahlungspreis an dieser Ladestation – der Roaming- oder Abo-Preis deines Anbieters kann abweichen.",
+  "pricingNoteOperator": "Vom Betreiber veröffentlichter Preis – der Roaming- oder Abo-Preis deines Anbieters kann abweichen.",
+  "allConnectors": "Alle Anschlüsse",
   "tariffDetails": "Tarifdetails ansehen",
   "summary": {
     "connectorsTyped": "{count}× {types}",

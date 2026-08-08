@@ -2,7 +2,6 @@ import type {
   EvChargingAddress,
   EvChargingConnector,
   EvChargingStatus,
-  EvChargingTariff,
 } from "@openmapx/mobility-core/ev-charging";
 import type { PoiRow, PoiSourceLogger, PoiStaticParseFn } from "@openmapx/poi-source-registry";
 import {
@@ -15,6 +14,7 @@ import {
   parseEipaEnvelope,
 } from "./pl-eipa-client.js";
 import { type EipaPrice, mapEipaDynamicPrices } from "./pl-eipa-tariff.js";
+import { createTariffCollector } from "./tariff-collector.js";
 import { cleanString, connector, idString, joinAddress, newestIsoString } from "./utils.js";
 
 const SOURCE_URL = "https://eipa.udt.gov.pl";
@@ -232,7 +232,7 @@ function mapStationToRow(
 
   const points = pointsByStationId.get(poiId) ?? [];
   const connectors: EvChargingConnector[] = [];
-  const tariffs: EvChargingTariff[] = [];
+  const tariffCollector = createTariffCollector();
   const dynamicEntries: EipaDynamicEntry[] = [];
 
   for (const point of points) {
@@ -241,10 +241,11 @@ function mapStationToRow(
     if (dyn) dynamicEntries.push(dyn);
 
     const status = connectorStatus(dyn?.status);
+    const pointConnectors: EvChargingConnector[] = [];
     for (const raw of point.connectors ?? []) {
       const interfaceId = idString(raw.interfaces?.[0]);
       const interfaceName = interfaceId ? connectorInterfaceNames.get(interfaceId) : undefined;
-      connectors.push(
+      pointConnectors.push(
         connector({
           type: mapConnectorInterfaceName(interfaceName),
           powerKw: typeof raw.power === "number" ? raw.power : undefined,
@@ -252,9 +253,12 @@ function mapStationToRow(
         }),
       );
     }
+    connectors.push(...pointConnectors);
 
+    // EIPA prices per charge point, so a pool mixing an AC and a DC point
+    // carries two tariffs — keep each one tied to its point's connectors.
     const tariff = mapEipaDynamicPrices(dyn?.prices);
-    if (tariff) tariffs.push(tariff);
+    if (tariff) tariffCollector.add(pointConnectors, [tariff]);
   }
 
   const address: EvChargingAddress = {
@@ -285,7 +289,7 @@ function mapStationToRow(
       operator: operatorName ? { name: operatorName } : undefined,
       status: stationStatus(dynamicEntries),
       connectors,
-      tariffs: tariffs.length > 0 ? tariffs : undefined,
+      tariffs: tariffCollector.build(connectors),
       updatedAt,
       sourceUrl: SOURCE_URL,
     },

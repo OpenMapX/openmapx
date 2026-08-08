@@ -8,6 +8,7 @@ import {
   fetchAllFiTariffs,
 } from "./fi-digitraffic-client.js";
 import { buildFiTariffMapById } from "./fi-digitraffic-tariff.js";
+import { createTariffCollector } from "./tariff-collector.js";
 import { cleanString, connector } from "./utils.js";
 
 export { FI_DIGITRAFFIC_LOCATIONS_URL };
@@ -42,32 +43,19 @@ function roundKw(watts: number | undefined): number | undefined {
 }
 
 // Resolves a connector's tariffs via its own `tariffIds[]` (the join is
-// connector-level in this feed, not evse-level), appending content-deduped
-// tariffs to `out`. A station whose connectors share the same tariff id (or
-// whose distinct ids map to content-identical tariffs) collects one copy per
-// distinct tariff — mirrors de-ocpdb-parser.ts's `collectTariffs`.
-function collectTariffs(
+// connector-level in this feed, not evse-level). Content-deduping — and keeping
+// which connectors each tariff was joined to — is the collector's job.
+function connectorTariffs(
   conn: FiConnector,
   tariffMap: Map<string, EvChargingTariff[]>,
-  out: EvChargingTariff[],
-  seen: Set<string>,
-): void {
+): EvChargingTariff[] {
+  const out: EvChargingTariff[] = [];
   for (const rawId of conn.tariffIds ?? []) {
     const tariffId = cleanString(rawId);
     if (!tariffId) continue;
-    for (const tariff of tariffMap.get(tariffId) ?? []) {
-      const key = JSON.stringify({
-        elements: tariff.elements,
-        restrictions: tariff.restrictions,
-        isDirectPayment: tariff.isDirectPayment,
-        source: tariff.source,
-      });
-      if (!seen.has(key)) {
-        seen.add(key);
-        out.push(tariff);
-      }
-    }
+    out.push(...(tariffMap.get(tariffId) ?? []));
   }
+  return out;
 }
 
 function mapFeatureToRow(
@@ -84,18 +72,16 @@ function mapFeatureToRow(
   if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
 
   const connectors: EvChargingConnector[] = [];
-  const tariffs: EvChargingTariff[] = [];
-  const seenTariff = new Set<string>();
+  const tariffCollector = createTariffCollector();
   for (const evse of props?.evses ?? []) {
     for (const conn of evse.connectors ?? []) {
-      collectTariffs(conn, tariffMap, tariffs, seenTariff);
-      connectors.push(
-        connector({
-          type: mapConnectorStandard(conn.standard),
-          powerKw: roundKw(conn.maxElectricPower),
-          currentType: mapCurrentType(conn.powerType),
-        }),
-      );
+      const mapped = connector({
+        type: mapConnectorStandard(conn.standard),
+        powerKw: roundKw(conn.maxElectricPower),
+        currentType: mapCurrentType(conn.powerType),
+      });
+      connectors.push(mapped);
+      tariffCollector.add([mapped], connectorTariffs(conn, tariffMap));
     }
   }
 
@@ -122,7 +108,7 @@ function mapFeatureToRow(
       status: "unknown",
       openingHours: props?.openingTimes?.twentyFourSeven ? "24/7" : undefined,
       connectors,
-      tariffs: tariffs.length > 0 ? tariffs : undefined,
+      tariffs: tariffCollector.build(connectors),
       updatedAt: cleanString(props?.modifiedAt),
       sourceUrl: SOURCE_URL,
     },

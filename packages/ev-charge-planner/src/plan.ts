@@ -78,8 +78,30 @@ function availabilityPenaltySec(
   return OCCUPANCY_PENALTY_SEC * occupancy * proximity;
 }
 
+/**
+ * Was this tariff joined to the connector we plan to charge on? Only meaningful
+ * for feeds that price per EVSE — absent `appliesTo` means station-wide. Matched
+ * on current + power rather than connector type, because `appliesTo.type` is the
+ * source's own plug vocabulary while `CompatibleConn.standard` is our normalized
+ * one; the two numbers are unambiguous and already enough to separate a DC bay
+ * from an AC one.
+ */
+function tariffCoversConnector(
+  t: EvChargingTariff,
+  powerKw: number,
+  current: CurrentStandard,
+): boolean {
+  if (!t.appliesTo?.length) return true;
+  return t.appliesTo.some((group) => {
+    if (group.currentType && group.currentType.toLowerCase() !== current) return false;
+    if (group.powerKw != null && group.powerKw !== powerKw) return false;
+    return true;
+  });
+}
+
 /** Does a tariff apply to this connector's power + current? (time-of-day is Phase 2.) */
 function tariffApplies(t: EvChargingTariff, powerKw: number, current: CurrentStandard): boolean {
+  if (!tariffCoversConnector(t, powerKw, current)) return false;
   const r = t.restrictions;
   if (!r) return true;
   if (r.currentType && r.currentType !== current) return false;
@@ -103,9 +125,16 @@ export function estimateSessionCost(
 ): { amount: number; currency: string } | null {
   const tariffs = station.tariffs;
   if (!tariffs?.length) return null;
+  // A tariff the source pinned to this very connector beats a station-wide one
+  // at the same scope — otherwise "first applicable" is arbitrary on a station
+  // that prices its DC bays apart from its AC unit.
   const applicable = tariffs
     .filter((t) => tariffApplies(t, connector.powerKw, connector.current))
-    .sort((a, b) => (SCOPE_RANK[b.scope] ?? 0) - (SCOPE_RANK[a.scope] ?? 0));
+    .sort(
+      (a, b) =>
+        (SCOPE_RANK[b.scope] ?? 0) - (SCOPE_RANK[a.scope] ?? 0) ||
+        Number(Boolean(b.appliesTo?.length)) - Number(Boolean(a.appliesTo?.length)),
+    );
   const t = applicable[0];
   if (!t) return null;
   let amount = 0;

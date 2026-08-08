@@ -284,15 +284,38 @@ describe("mapStationToDetail pricing section", () => {
     const detail = mapStationToDetail(station);
     const pricing = detail.sections.find((s) => s.sectionIcon === "payments" && s.caption);
     expect(pricing).toBeDefined();
-    expect(pricing?.rows).toEqual(
-      expect.arrayContaining([
-        [expect.anything(), { $t: "priceEnergy", values: { amount: "€0.59" } }],
-      ]),
-    );
+    expect(pricing?.rowLayout).toBe("pricing");
+    expect(pricing?.rows).toEqual([
+      [{ $t: "row.pricingEnergy" }, { $t: "priceEnergy", values: { amount: "€0.59" } }, ""],
+    ]);
+    expect(pricing?.caption).toEqual({ $t: "pricingNote" });
     expect(isI18nToken(pricing?.caption)).toBe(true);
   });
 
-  it("collects rows from all price components across all tariffs, with no Conditions column when no tariff has restrictions", () => {
+  it("softens the caption to an operator-published price unless every tariff is ad-hoc", () => {
+    const station = makeStation({
+      tariffs: [
+        {
+          elements: [{ type: "energy", price: 0.59, currency: "EUR" }],
+          scope: "cpo",
+          isDirectPayment: true,
+          source: "de-ocpdb",
+          updatedAt: "2026-07-01T00:00:00.000Z",
+        },
+        {
+          elements: [{ type: "time", price: 0.1, currency: "EUR" }],
+          scope: "cpo",
+          source: "de-ocpdb",
+          updatedAt: "2026-07-01T00:00:00.000Z",
+        },
+      ],
+    });
+    const detail = mapStationToDetail(station);
+    const pricing = detail.sections.find((s) => s.sectionIcon === "payments" && s.caption);
+    expect(pricing?.caption).toEqual({ $t: "pricingNoteOperator" });
+  });
+
+  it("collects rows from all price components across all tariffs, with empty conditions when no tariff has restrictions", () => {
     const station = makeStation({
       tariffs: [
         {
@@ -318,14 +341,14 @@ describe("mapStationToDetail pricing section", () => {
     expect(pricing?.rows).toHaveLength(3);
     expect(pricing?.rows).toEqual(
       expect.arrayContaining([
-        [expect.anything(), { $t: "priceEnergy", values: { amount: "€0.59" } }],
-        [expect.anything(), { $t: "priceParking", values: { amount: "€2.00" } }],
-        [expect.anything(), { $t: "priceFlat", values: { amount: "€0.50" } }],
+        [expect.anything(), { $t: "priceEnergy", values: { amount: "€0.59" } }, ""],
+        [expect.anything(), { $t: "priceParking", values: { amount: "€2.00" } }, ""],
+        [expect.anything(), { $t: "priceFlat", values: { amount: "€0.50" } }, ""],
       ]),
     );
   });
 
-  it("adds a Conditions column when an AC and a DC energy tariff would otherwise collide on the same row label", () => {
+  it("qualifies an AC and a DC energy tariff that would otherwise collide on the same row label", () => {
     const station = makeStation({
       tariffs: [
         {
@@ -346,11 +369,7 @@ describe("mapStationToDetail pricing section", () => {
     });
     const detail = mapStationToDetail(station);
     const pricing = detail.sections.find((s) => s.sectionIcon === "payments" && s.caption);
-    expect(pricing?.columns).toEqual([
-      { $t: "shared.row.type" },
-      { $t: "column.price" },
-      { $t: "column.conditions" },
-    ]);
+    expect(pricing?.columns).toBeUndefined();
     expect(pricing?.rows).toEqual(
       expect.arrayContaining([
         [expect.anything(), expect.anything(), "AC · ≤22 kW"],
@@ -381,13 +400,13 @@ describe("mapStationToDetail pricing section", () => {
     const pricing = detail.sections.find((s) => s.sectionIcon === "payments" && s.caption);
     expect(pricing?.rows).toEqual(
       expect.arrayContaining([
-        [expect.anything(), expect.anything(), "-"],
+        [expect.anything(), expect.anything(), ""],
         [expect.anything(), expect.anything(), "≥2 h"],
       ]),
     );
   });
 
-  it("gives rows without restrictions an empty conditions cell once the column exists", () => {
+  it("gives rows without restrictions an empty conditions cell", () => {
     const station = makeStation({
       tariffs: [
         {
@@ -410,7 +429,7 @@ describe("mapStationToDetail pricing section", () => {
     expect(pricing?.rows).toEqual(
       expect.arrayContaining([
         [expect.anything(), expect.anything(), "AC"],
-        [expect.anything(), expect.anything(), "-"],
+        [expect.anything(), expect.anything(), ""],
       ]),
     );
   });
@@ -436,8 +455,164 @@ describe("mapStationToDetail pricing section", () => {
     const pricing = detail.sections.find((s) => s.sectionIcon === "payments" && s.caption);
     expect(pricing?.rows).toHaveLength(1);
     expect(pricing?.rows).toEqual([
-      [expect.anything(), { $t: "priceEnergy", values: { amount: "€0.28" } }],
+      [expect.anything(), { $t: "priceEnergy", values: { amount: "€0.28" } }, ""],
     ]);
+  });
+
+  it("labels rows by the connectors they price when a station prices its connectors differently", () => {
+    const station = makeStation({
+      connectors: [
+        { type: "CCS", powerKw: 60, currentType: "DC", quantity: 2 },
+        { type: "Type 2", powerKw: 11, currentType: "AC", quantity: 1 },
+      ],
+      tariffs: [
+        {
+          elements: [{ type: "energy", price: 0.46, currency: "EUR" }],
+          appliesTo: [{ type: "CCS", powerKw: 60, currentType: "DC", quantity: 2 }],
+          scope: "cpo",
+          source: "de-ocpdb",
+          updatedAt: "2026-07-01T00:00:00.000Z",
+        },
+        {
+          elements: [{ type: "energy", price: 0.4, currency: "EUR" }],
+          appliesTo: [{ type: "Type 2", powerKw: 11, currentType: "AC", quantity: 1 }],
+          scope: "cpo",
+          source: "de-ocpdb",
+          updatedAt: "2026-07-01T00:00:00.000Z",
+        },
+      ],
+    });
+    const detail = mapStationToDetail(station);
+    const pricing = detail.sections.find((s) => s.sectionIcon === "payments" && s.caption);
+    expect(pricing?.rows).toEqual([
+      ["CCS · DC · 60 kW", { $t: "priceEnergy", values: { amount: "€0.46" } }, ""],
+      ["Type 2 · AC · 11 kW", { $t: "priceEnergy", values: { amount: "€0.40" } }, ""],
+    ]);
+  });
+
+  it("names a station-wide tariff sitting alongside a connector-specific one", () => {
+    const station = makeStation({
+      connectors: [
+        { type: "CCS", powerKw: 60, currentType: "DC", quantity: 2 },
+        { type: "Type 2", powerKw: 11, currentType: "AC", quantity: 1 },
+      ],
+      tariffs: [
+        {
+          elements: [{ type: "energy", price: 0.46, currency: "EUR" }],
+          appliesTo: [{ type: "CCS", powerKw: 60, currentType: "DC", quantity: 2 }],
+          scope: "cpo",
+          source: "de-ocpdb",
+          updatedAt: "2026-07-01T00:00:00.000Z",
+        },
+        {
+          elements: [{ type: "parking", price: 2, currency: "EUR" }],
+          scope: "cpo",
+          source: "de-ocpdb",
+          updatedAt: "2026-07-01T00:00:00.000Z",
+        },
+      ],
+    });
+    const detail = mapStationToDetail(station);
+    const pricing = detail.sections.find((s) => s.sectionIcon === "payments" && s.caption);
+    expect(pricing?.rows).toEqual([
+      ["CCS · DC · 60 kW", { $t: "priceEnergy", values: { amount: "€0.46" } }, ""],
+      [{ $t: "allConnectors" }, { $t: "priceParking", values: { amount: "€2.00" } }, ""],
+    ]);
+  });
+
+  it("keeps the dimension labels when every tariff prices the same connectors", () => {
+    const appliesTo = [{ type: "CCS", powerKw: 60, currentType: "DC", quantity: 2 }];
+    const station = makeStation({
+      tariffs: [
+        {
+          elements: [{ type: "energy", price: 0.46, currency: "EUR" }],
+          appliesTo,
+          scope: "cpo",
+          source: "de-ocpdb",
+          updatedAt: "2026-07-01T00:00:00.000Z",
+        },
+        {
+          elements: [{ type: "time", price: 0.1, currency: "EUR" }],
+          appliesTo,
+          scope: "cpo",
+          source: "de-ocpdb",
+          updatedAt: "2026-07-01T00:00:00.000Z",
+        },
+      ],
+    });
+    const detail = mapStationToDetail(station);
+    const pricing = detail.sections.find((s) => s.sectionIcon === "payments" && s.caption);
+    expect(pricing?.rows).toEqual([
+      [{ $t: "row.pricingEnergy" }, { $t: "priceEnergy", values: { amount: "€0.46" } }, ""],
+      [{ $t: "row.pricingTime" }, { $t: "priceTime", values: { amount: "€0.10" } }, ""],
+    ]);
+  });
+
+  it("blanks the repeated label when one applicability carries several price components", () => {
+    const station = makeStation({
+      connectors: [
+        { type: "CCS", powerKw: 60, currentType: "DC", quantity: 2 },
+        { type: "Type 2", powerKw: 11, currentType: "AC", quantity: 1 },
+      ],
+      tariffs: [
+        {
+          elements: [
+            { type: "energy", price: 0.46, currency: "EUR" },
+            { type: "flat", price: 1, currency: "EUR" },
+          ],
+          appliesTo: [{ type: "CCS", powerKw: 60, currentType: "DC", quantity: 2 }],
+          scope: "cpo",
+          source: "de-ocpdb",
+          updatedAt: "2026-07-01T00:00:00.000Z",
+        },
+        {
+          elements: [{ type: "energy", price: 0.4, currency: "EUR" }],
+          appliesTo: [{ type: "Type 2", powerKw: 11, currentType: "AC", quantity: 1 }],
+          scope: "cpo",
+          source: "de-ocpdb",
+          updatedAt: "2026-07-01T00:00:00.000Z",
+        },
+      ],
+    });
+    const detail = mapStationToDetail(station);
+    const pricing = detail.sections.find((s) => s.sectionIcon === "payments" && s.caption);
+    expect(pricing?.rows).toEqual([
+      ["CCS · DC · 60 kW", { $t: "priceEnergy", values: { amount: "€0.46" } }, ""],
+      ["", { $t: "priceFlat", values: { amount: "€1.00" } }, ""],
+      ["Type 2 · AC · 11 kW", { $t: "priceEnergy", values: { amount: "€0.40" } }, ""],
+    ]);
+  });
+
+  it("drops power and current from the label when the priced connectors disagree on them", () => {
+    const station = makeStation({
+      connectors: [
+        { type: "CCS", powerKw: 60, currentType: "DC", quantity: 1 },
+        { type: "CHAdeMO", powerKw: 50, currentType: "DC", quantity: 1 },
+        { type: "Type 2", powerKw: 11, currentType: "AC", quantity: 1 },
+      ],
+      tariffs: [
+        {
+          elements: [{ type: "energy", price: 0.46, currency: "EUR" }],
+          appliesTo: [
+            { type: "CCS", powerKw: 60, currentType: "DC", quantity: 1 },
+            { type: "CHAdeMO", powerKw: 50, currentType: "DC", quantity: 1 },
+          ],
+          scope: "cpo",
+          source: "de-ocpdb",
+          updatedAt: "2026-07-01T00:00:00.000Z",
+        },
+        {
+          elements: [{ type: "energy", price: 0.4, currency: "EUR" }],
+          appliesTo: [{ type: "Type 2", powerKw: 11, currentType: "AC", quantity: 1 }],
+          scope: "cpo",
+          source: "de-ocpdb",
+          updatedAt: "2026-07-01T00:00:00.000Z",
+        },
+      ],
+    });
+    const detail = mapStationToDetail(station);
+    const pricing = detail.sections.find((s) => s.sectionIcon === "payments" && s.caption);
+    expect(pricing?.rows?.[0]?.[0]).toBe("CCS / CHAdeMO · DC");
   });
 
   it("keeps an AC and a DC energy row distinct even at the same price, since their conditions differ", () => {

@@ -107,23 +107,24 @@ export function parseNlDotnlTariffs(buffer: Buffer): Map<string, EvChargingTarif
 }
 
 /**
- * Resolves a station's collected `connector.tariff_ids` (deduped, opaque
- * exact-match strings — see the NDW scout report §6) against the tariff map
- * built from the tariffs feed. One tariff id can map to several `EvChargingTariff`s
- * (one per distinct restriction), so matches are flattened.
+ * Resolves one connector's `tariff_ids` (opaque exact-match strings — see the
+ * NDW scout report §6) against the tariff map built from the tariffs feed. One
+ * tariff id can map to several `EvChargingTariff`s (one per distinct
+ * restriction), so matches are flattened. Deduping across a station's
+ * connectors is the tariff collector's job, since it also has to fold in which
+ * connectors resolved to each tariff.
  */
-export function attachTariffs(
-  tariffIds: readonly string[] | undefined,
+export function resolveTariffs(
+  tariffIds: ReadonlyArray<string | null> | null | undefined,
   tariffMap: Map<string, EvChargingTariff[]>,
-): EvChargingTariff[] | undefined {
-  if (!tariffIds || tariffIds.length === 0) return undefined;
-  const seen = new Set<string>();
+): EvChargingTariff[] {
   const out: EvChargingTariff[] = [];
-  for (const id of tariffIds) {
-    if (seen.has(id)) continue;
+  const seen = new Set<string>();
+  for (const rawId of tariffIds ?? []) {
+    const id = cleanString(rawId ?? undefined);
+    if (!id || seen.has(id)) continue;
     seen.add(id);
-    const tariffs = tariffMap.get(id);
-    if (tariffs) out.push(...tariffs);
+    out.push(...(tariffMap.get(id) ?? []));
   }
-  return out.length > 0 ? out : undefined;
+  return out;
 }

@@ -214,6 +214,7 @@ function translateStructuredSection(
     type: section.type,
     columns: translatedColumns,
     rows: translatedRows,
+    rowLayout: section.rowLayout,
     items: section.items?.map((item) => resolveT(item)),
     content: section.content === undefined ? undefined : resolveT(section.content),
     imageUrl: section.imageUrl,

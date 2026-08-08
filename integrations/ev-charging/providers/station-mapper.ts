@@ -15,6 +15,7 @@ import type {
   EvChargingPriceComponent,
   EvChargingStation,
   EvChargingTariffRestriction,
+  EvTariffConnectorGroup,
   EvTariffDimension,
 } from "@openmapx/mobility-core/ev-charging";
 import { cleanString, groupConnectors, isSafeHttpUrl } from "./utils.js";
@@ -196,24 +197,63 @@ function tariffQualifier(restrictions: EvChargingTariffRestriction | undefined):
   return parts.join(" · ");
 }
 
-type TariffTableRows = [I18nToken, Translatable][] | [Translatable, Translatable, Translatable][];
+/**
+ * Names the connector groups a tariff was joined to, e.g. "CCS · DC · 60 kW".
+ * The parts are the same ones the Connectors table above shows, so the label
+ * reads as a pointer into it; quantity is left out because it lives there.
+ * Power and current are only stated when the whole group agrees on them —
+ * a tariff spanning 11 kW and 22 kW plugs says just the types.
+ */
+function applicabilityLabel(groups: EvTariffConnectorGroup[] | undefined): string | undefined {
+  if (!groups?.length) return undefined;
+  const distinct = <T>(values: (T | undefined)[]): T[] =>
+    Array.from(new Set(values.filter((value): value is T => value !== undefined)));
+  const types = distinct(groups.map((group) => group.type));
+  const currents = distinct(groups.map((group) => group.currentType));
+  const powers = distinct(groups.map((group) => group.powerKw));
 
-// Two shapes: a plain [label, price] table when no tariff carries a
-// restriction, or a [label, price, conditions] table once at least one row
-// needs to be disambiguated. A partial-column ("only some rows have
-// restrictions") table would leave an all-empty column, so the switch is
-// all-or-nothing across the whole pricing section.
-function tariffRows(station: EvChargingStation): TariffTableRows {
-  const rows: [I18nToken, Translatable, string][] = [];
+  const parts: string[] = [];
+  if (types.length > 0) parts.push(types.join(" / "));
+  if (currents.length === 1) parts.push(currents[0]);
+  if (powers.length === 1) parts.push(`${powers[0]} kW`);
+  return parts.length > 0 ? parts.join(" · ") : undefined;
+}
+
+interface TariffRow {
+  label: Translatable;
+  price: Translatable;
+  conditions: string;
+}
+
+/**
+ * One row per price component. The label is normally the tariff dimension
+ * ("Energy", "Time"), but a station whose tariffs price different connectors
+ * differently — two DC bays at €0.46/kWh, one AC unit at €0.40/kWh — would then
+ * show two identical "Energy" rows with no way to tell which plug each price is
+ * for. In that case the connector applicability becomes the label instead; the
+ * dimension is still readable from the price's unit (/kWh, /min, /session).
+ */
+function tariffRows(station: EvChargingStation): TariffRow[] {
+  const tariffs = station.tariffs ?? [];
+  const labels = tariffs.map((tariff) => applicabilityLabel(tariff.appliesTo));
+  // A single applicability tells the reader nothing they can act on — only a
+  // split across connectors does. Tariffs with no `appliesTo` count as their
+  // own "station-wide" bucket, since that is exactly what they mean.
+  const byApplicability =
+    new Set(labels.map((label) => label ?? "")).size > 1
+      ? labels.map((label): Translatable => label ?? token("allConnectors"))
+      : undefined;
+
+  const rows: TariffRow[] = [];
   const seen = new Set<string>();
-  for (const tariff of station.tariffs ?? []) {
-    const qualifier = tariffQualifier(tariff.restrictions);
+  for (const [index, tariff] of tariffs.entries()) {
+    const conditions = tariffQualifier(tariff.restrictions);
     for (const element of tariff.elements) {
-      const row: [I18nToken, Translatable, string] = [
-        TARIFF_DIMENSION_TOKENS[element.type],
-        formatTariff(element),
-        qualifier,
-      ];
+      const row: TariffRow = {
+        label: byApplicability?.[index] ?? TARIFF_DIMENSION_TOKENS[element.type],
+        price: formatTariff(element),
+        conditions,
+      };
       // NL stations often carry several OCPI tariffs whose price components
       // are byte-identical (same dimension, price and restrictions), which
       // would otherwise render duplicate rows in the Pricing table.
@@ -223,15 +263,29 @@ function tariffRows(station: EvChargingStation): TariffTableRows {
       rows.push(row);
     }
   }
-  const hasQualifier = rows.some(([, , qualifier]) => qualifier.length > 0);
-  if (!hasQualifier) {
-    return rows.map(([label, price]): [I18nToken, Translatable] => [label, price]);
-  }
-  return rows.map(([label, price, qualifier]): [Translatable, Translatable, Translatable] => [
-    label,
-    price,
-    qualifier || "-",
-  ]);
+
+  // Consecutive rows priced for the same connectors repeat their label; blank
+  // the repeats so the group reads as one block. Compared by value, since the
+  // station-wide label is a freshly built token per row.
+  return rows.map((row, index) =>
+    index > 0 &&
+    byApplicability &&
+    JSON.stringify(row.label) === JSON.stringify(rows[index - 1].label)
+      ? { ...row, label: "" }
+      : row,
+  );
+}
+
+/**
+ * The pricing caption may only promise a walk-up price when every tariff is
+ * flagged as ad-hoc/direct payment at the source; otherwise the section is
+ * whatever the operator published, which can already be a roaming rate.
+ */
+function pricingCaption(station: EvChargingStation): I18nToken {
+  const tariffs = station.tariffs ?? [];
+  return tariffs.every((tariff) => tariff.isDirectPayment)
+    ? token("pricingNote")
+    : token("pricingNoteOperator");
 }
 
 // Whole-value spellings that per-word casing cannot produce.
@@ -348,6 +402,7 @@ export function mapStationToDetail(
           }
         : {}),
       type: "table",
+      rowLayout: "connector",
       columns: [
         sharedT.row.type,
         token("column.power"),
@@ -388,16 +443,21 @@ export function mapStationToDetail(
   }
 
   if (structuredTariffRows.length > 0) {
-    const hasConditionsColumn = structuredTariffRows[0].length === 3;
     const links = tariffLinks(station);
     sections.push({
       title: sharedT.section.pricing,
-      caption: token("pricingNote"),
+      caption: pricingCaption(station),
       type: "table",
-      ...(hasConditionsColumn
-        ? { columns: [sharedT.row.type, token("column.price"), token("column.conditions")] }
-        : {}),
-      rows: structuredTariffRows,
+      // The pricing layout stacks the conditions under the label rather than
+      // giving them a column, so the cell stays present even when empty.
+      rowLayout: "pricing",
+      rows: structuredTariffRows.map(
+        ({ label, price, conditions }): [Translatable, Translatable, Translatable] => [
+          label,
+          price,
+          conditions,
+        ],
+      ),
       sectionIcon: "payments",
       ...(links ? { links } : {}),
     });

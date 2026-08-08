@@ -73,6 +73,78 @@ describe("parseDeOcpdb", () => {
     expect(new Set(dims)).toEqual(new Set(["energy", "time"]));
   });
 
+  it("records which connectors a tariff prices when a station's EVSEs are priced apart", async () => {
+    // Two 60 kW CCS EVSEs on one tariff, one 11 kW Type 2 EVSE on another —
+    // the shape behind the two indistinguishable "Energy" rows this fixes.
+    const evse = (uid: string, standard: string, powerType: string, watts: number) => ({
+      uid,
+      status: "AVAILABLE",
+      connectors: [{ id: `${uid}-1`, standard, power_type: powerType, max_electric_power: watts }],
+    });
+    const locations = Buffer.from(
+      JSON.stringify({
+        items: [
+          {
+            id: "424242",
+            name: "Lidl",
+            coordinates: { latitude: 50.78, longitude: 6.11 },
+            evses: [
+              evse("e-ccs-1", "IEC_62196_T2_COMBO", "DC", 60000),
+              evse("e-ccs-2", "IEC_62196_T2_COMBO", "DC", 60000),
+              evse("e-ac", "IEC_62196_T2", "AC_3_PHASE", 11000),
+            ],
+          },
+        ],
+        next_offset: null,
+      }),
+    );
+    const tariffs = {
+      items: [
+        {
+          id: "t-dc",
+          currency: "EUR",
+          elements: [{ price_components: [{ type: "ENERGY", price: 0.46 }] }],
+        },
+        {
+          id: "t-ac",
+          currency: "EUR",
+          elements: [{ price_components: [{ type: "ENERGY", price: 0.4 }] }],
+        },
+      ],
+      next_offset: null,
+    };
+    const associations = {
+      items: [
+        { tariff_id: "t-dc", evses: [{ evse_uid: "e-ccs-1" }, { evse_uid: "e-ccs-2" }] },
+        { tariff_id: "t-ac", evses: [{ evse_uid: "e-ac" }] },
+      ],
+      next_offset: null,
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        url.includes("/tariff-associations")
+          ? new Response(JSON.stringify(associations))
+          : new Response(JSON.stringify(tariffs)),
+      ),
+    );
+    const rows = [];
+    for await (const row of parseDeOcpdb(locations, { log })) rows.push(row);
+    vi.unstubAllGlobals();
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].payload.tariffs).toEqual([
+      expect.objectContaining({
+        elements: [expect.objectContaining({ price: 0.46 })],
+        appliesTo: [{ type: "CCS", powerKw: 60, currentType: "DC", quantity: 2 }],
+      }),
+      expect.objectContaining({
+        elements: [expect.objectContaining({ price: 0.4 })],
+        appliesTo: [{ type: "Type 2", powerKw: 11, currentType: "AC", quantity: 1 }],
+      }),
+    ]);
+  });
+
   it("maps DOMESTIC_F to Schuko so it merges with the de-bnetza duplicate", async () => {
     const rows = await collect();
     const types = rows.flatMap((r) =>

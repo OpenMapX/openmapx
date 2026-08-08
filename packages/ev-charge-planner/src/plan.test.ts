@@ -455,6 +455,50 @@ describe("planCharges", () => {
     ).toBeNull();
   });
 
+  it("estimateSessionCost picks the tariff the source pinned to the connector we charge on", () => {
+    // A station whose DC bays and AC unit carry different unrestricted energy
+    // prices — "first applicable" would otherwise be a coin flip.
+    const station: TariffOnlyStation = {
+      tariffs: [
+        {
+          scope: "cpo",
+          appliesTo: [{ type: "CCS", powerKw: 60, currentType: "DC" }],
+          elements: [{ type: "energy", price: 0.46, currency: "EUR" }],
+        },
+        {
+          scope: "cpo",
+          appliesTo: [{ type: "Type 2", powerKw: 11, currentType: "AC" }],
+          elements: [{ type: "energy", price: 0.4, currency: "EUR" }],
+        },
+      ],
+    };
+    expect(
+      estimateSessionCost(asStation(station), { powerKw: 60, current: "dc" }, 10, 30)?.amount,
+    ).toBeCloseTo(4.6);
+    expect(
+      estimateSessionCost(asStation(station), { powerKw: 11, current: "ac" }, 10, 30)?.amount,
+    ).toBeCloseTo(4);
+  });
+
+  it("estimateSessionCost prefers a connector-pinned tariff over a station-wide one", () => {
+    const station: TariffOnlyStation = {
+      tariffs: [
+        {
+          scope: "cpo",
+          elements: [{ type: "energy", price: 0.79, currency: "EUR" }],
+        },
+        {
+          scope: "cpo",
+          appliesTo: [{ type: "CCS", powerKw: 60, currentType: "DC" }],
+          elements: [{ type: "energy", price: 0.46, currency: "EUR" }],
+        },
+      ],
+    };
+    expect(
+      estimateSessionCost(asStation(station), { powerKw: 60, current: "dc" }, 10, 30)?.amount,
+    ).toBeCloseTo(4.6);
+  });
+
   it("prefers the cheaper of two comparable chargers (D10)", async () => {
     const cheap = {
       ...charger("cheap", 1.35),

@@ -23,9 +23,29 @@ export interface EvChargingTariffRestriction {
   maxDurationMinutes?: number;
 }
 
+/**
+ * A connector group a tariff was associated with at the source. Mirrors the
+ * identifying fields of {@link EvChargingConnector} (no live status, no
+ * source-native reference) so it can be matched against the station's own
+ * connector list.
+ */
+export interface EvTariffConnectorGroup {
+  type?: string;
+  powerKw?: number;
+  currentType?: string;
+  quantity?: number;
+}
+
 export interface EvChargingTariff {
   elements: EvChargingPriceComponent[];
   restrictions?: EvChargingTariffRestriction;
+  /**
+   * Connector groups this tariff was joined to at the source, for feeds that
+   * associate tariffs per EVSE/connector rather than per station. Omitted when
+   * the source has no such join, or when the tariff covers every connector the
+   * station has — both mean "applies station-wide" to consumers.
+   */
+  appliesTo?: EvTariffConnectorGroup[];
   scope: "country" | "cpo" | "evse";
   isDirectPayment?: boolean;
   source: string;

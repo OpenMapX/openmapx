@@ -2,6 +2,7 @@ import type { EvChargingConnector, EvChargingTariff } from "@openmapx/mobility-c
 import type { PoiRow, PoiSourceLogger, PoiStaticParseFn } from "@openmapx/poi-source-registry";
 import { fetchAllLtLocations, fetchAllLtTariffs, type LtLocation } from "./lt-vialietuva-client.js";
 import { buildLtTariffMapById } from "./lt-vialietuva-tariff.js";
+import { createTariffCollector } from "./tariff-collector.js";
 import { cleanString, connector, idString } from "./utils.js";
 
 const SOURCE_URL = "https://ev.vialietuva.lt/en/data-provision";
@@ -52,31 +53,21 @@ function ltLocationPoiId(location: LtLocation): string | undefined {
 }
 
 /**
- * Resolves a station's collected connector `tariff_ids` against the tariff-id
- * map, content-deduping so a station whose connectors share the same tariff
- * id (or several connectors resolve to identical tariff content) doesn't
- * carry duplicate entries in its `tariffs` array.
+ * Resolves one connector's `tariff_ids` against the tariff-id map. Content-
+ * deduping across the station's connectors — and keeping which connectors each
+ * tariff was joined to — is the collector's job.
  */
-function collectTariffs(
-  tariffIds: ReadonlySet<string>,
+function connectorTariffs(
+  rawIds: Array<string | number | null> | null | undefined,
   tariffMap: Map<string, EvChargingTariff[]>,
-): EvChargingTariff[] | undefined {
-  const seen = new Set<string>();
+): EvChargingTariff[] {
   const out: EvChargingTariff[] = [];
-  for (const id of tariffIds) {
-    for (const tariff of tariffMap.get(id) ?? []) {
-      const key = JSON.stringify({
-        elements: tariff.elements,
-        restrictions: tariff.restrictions,
-        source: tariff.source,
-      });
-      if (!seen.has(key)) {
-        seen.add(key);
-        out.push(tariff);
-      }
-    }
+  for (const rawId of rawIds ?? []) {
+    const id = idString(rawId ?? undefined);
+    if (!id) continue;
+    out.push(...(tariffMap.get(id) ?? []));
   }
-  return out.length > 0 ? out : undefined;
+  return out;
 }
 
 function mapLocationToRow(
@@ -90,22 +81,18 @@ function mapLocationToRow(
   const lng = Number.parseFloat(location.coordinates?.longitude ?? "");
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
-  const tariffIds = new Set<string>();
   const connectors: EvChargingConnector[] = [];
+  const tariffCollector = createTariffCollector();
   for (const evse of location.evses ?? []) {
     for (const conn of evse.connectors ?? []) {
-      for (const tariffId of conn.tariff_ids ?? []) {
-        const cleaned = idString(tariffId ?? undefined);
-        if (cleaned) tariffIds.add(cleaned);
-      }
-      connectors.push(
-        connector({
-          type: mapConnectorStandard(conn.standard),
-          powerKw: roundKw(conn.max_electric_power),
-          currentType: mapCurrentType(conn.power_type),
-          reference: idString(conn.id),
-        }),
-      );
+      const mapped = connector({
+        type: mapConnectorStandard(conn.standard),
+        powerKw: roundKw(conn.max_electric_power),
+        currentType: mapCurrentType(conn.power_type),
+        reference: idString(conn.id),
+      });
+      connectors.push(mapped);
+      tariffCollector.add([mapped], connectorTariffs(conn.tariff_ids, tariffMap));
     }
   }
 
@@ -128,7 +115,7 @@ function mapLocationToRow(
         : undefined,
       status: "unknown",
       connectors,
-      tariffs: collectTariffs(tariffIds, tariffMap),
+      tariffs: tariffCollector.build(connectors),
       updatedAt: cleanString(location.last_updated),
       sourceUrl: SOURCE_URL,
     },

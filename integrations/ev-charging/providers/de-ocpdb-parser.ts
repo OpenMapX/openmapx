@@ -7,6 +7,7 @@ import {
   fetchAllOcpdbItems,
 } from "./de-ocpdb-client.js";
 import { buildEvseUidToTariffIds, buildTariffMapById } from "./de-ocpdb-tariff.js";
+import { createTariffCollector } from "./tariff-collector.js";
 import { cleanString, connector, deOcpdbLocationPoiId, idString } from "./utils.js";
 
 interface OcpdbConnector {
@@ -69,35 +70,22 @@ function roundKw(watts: number | undefined): number | undefined {
 }
 
 // Resolves an EVSE's tariffs via the association map (evse.uid → tariff_ids)
-// then the by-id tariff map, appending content-deduped tariffs to `out`. OCPDB
-// emits one association per EVSE, so a multi-EVSE station collects
-// content-identical tariffs — dedupe by content, not object identity, so the
-// payload carries one copy per distinct tariff.
-function collectTariffs(
+// then the by-id tariff map. OCPDB emits one association per EVSE, and a
+// station's EVSEs can carry different tariffs (e.g. a DC pair priced apart from
+// an AC unit), so the resolved tariffs are handed to the collector together with
+// that EVSE's connectors — the collector dedupes by content and keeps the join.
+function evseTariffs(
   evse: OcpdbEvse,
   evseUidToTariffIds: Map<string, Set<string>>,
   tariffMap: Map<string, EvChargingTariff[]>,
-  out: EvChargingTariff[],
-  seen: Set<string>,
-): void {
+): EvChargingTariff[] {
   const uid = idString(evse.uid);
-  if (!uid) return;
+  if (!uid) return [];
   const tariffIds = evseUidToTariffIds.get(uid);
-  if (!tariffIds) return;
-  for (const tariffId of tariffIds) {
-    for (const tariff of tariffMap.get(tariffId) ?? []) {
-      const key = JSON.stringify({
-        elements: tariff.elements,
-        restrictions: tariff.restrictions,
-        isDirectPayment: tariff.isDirectPayment,
-        source: tariff.source,
-      });
-      if (!seen.has(key)) {
-        seen.add(key);
-        out.push(tariff);
-      }
-    }
-  }
+  if (!tariffIds) return [];
+  const out: EvChargingTariff[] = [];
+  for (const tariffId of tariffIds) out.push(...(tariffMap.get(tariffId) ?? []));
+  return out;
 }
 
 function mapLocationToRow(
@@ -116,20 +104,18 @@ function mapLocationToRow(
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
   const connectors: EvChargingConnector[] = [];
-  const tariffs: EvChargingTariff[] = [];
-  const seenTariff = new Set<string>();
+  const tariffCollector = createTariffCollector();
   for (const evse of location.evses ?? []) {
-    collectTariffs(evse, evseUidToTariffIds, tariffMap, tariffs, seenTariff);
-    for (const conn of evse.connectors ?? []) {
-      connectors.push(
-        connector({
-          type: mapConnectorStandard(conn.standard),
-          powerKw: roundKw(conn.max_electric_power),
-          currentType: mapCurrentType(conn.power_type),
-          reference: cleanString(conn.id),
-        }),
-      );
-    }
+    const evseConnectors = (evse.connectors ?? []).map((conn) =>
+      connector({
+        type: mapConnectorStandard(conn.standard),
+        powerKw: roundKw(conn.max_electric_power),
+        currentType: mapCurrentType(conn.power_type),
+        reference: cleanString(conn.id),
+      }),
+    );
+    connectors.push(...evseConnectors);
+    tariffCollector.add(evseConnectors, evseTariffs(evse, evseUidToTariffIds, tariffMap));
   }
 
   const operatorName = cleanString(location.operator?.name);
@@ -151,7 +137,7 @@ function mapLocationToRow(
       },
       operator: operatorName ? { name: operatorName } : undefined,
       connectors,
-      tariffs: tariffs.length > 0 ? tariffs : undefined,
+      tariffs: tariffCollector.build(connectors),
       updatedAt: cleanString(location.last_updated),
     },
   };

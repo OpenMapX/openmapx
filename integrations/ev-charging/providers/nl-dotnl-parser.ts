@@ -1,7 +1,8 @@
 import { gunzipSync } from "node:zlib";
 import type { EvChargingConnector, EvChargingTariff } from "@openmapx/mobility-core/ev-charging";
 import type { PoiRow, PoiSourceLogger, PoiStaticParseFn } from "@openmapx/poi-source-registry";
-import { attachTariffs, buildTariffMap, NL_DOTNL_TARIFFS_URL } from "./nl-dotnl-tariff.js";
+import { buildTariffMap, NL_DOTNL_TARIFFS_URL, resolveTariffs } from "./nl-dotnl-tariff.js";
+import { createTariffCollector } from "./tariff-collector.js";
 import { cleanString, connector, nlDotnlLocationPoiId } from "./utils.js";
 
 // NDW/DOT-NL national open charging data (National Access Point) — OCPI 2.2
@@ -106,22 +107,18 @@ function mapLocationToRow(raw: unknown, tariffMap: Map<string, EvChargingTariff[
   const lng = Number(location.coordinates?.longitude);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
-  const tariffIds = new Set<string>();
   const connectors: EvChargingConnector[] = [];
+  const tariffCollector = createTariffCollector();
   for (const evse of location.evses ?? []) {
     for (const conn of evse.connectors ?? []) {
-      for (const tariffId of conn.tariff_ids ?? []) {
-        const cleaned = cleanString(tariffId ?? undefined);
-        if (cleaned) tariffIds.add(cleaned);
-      }
-      connectors.push(
-        connector({
-          type: mapConnectorStandard(conn.standard),
-          powerKw: roundKw(conn.max_electric_power),
-          currentType: mapCurrentType(conn.power_type),
-          reference: cleanString(conn.id),
-        }),
-      );
+      const mapped = connector({
+        type: mapConnectorStandard(conn.standard),
+        powerKw: roundKw(conn.max_electric_power),
+        currentType: mapCurrentType(conn.power_type),
+        reference: cleanString(conn.id),
+      });
+      connectors.push(mapped);
+      tariffCollector.add([mapped], resolveTariffs(conn.tariff_ids, tariffMap));
     }
   }
 
@@ -142,7 +139,7 @@ function mapLocationToRow(raw: unknown, tariffMap: Map<string, EvChargingTariff[
       },
       operator: operatorName ? { name: operatorName } : undefined,
       connectors,
-      tariffs: attachTariffs(Array.from(tariffIds), tariffMap),
+      tariffs: tariffCollector.build(connectors),
       updatedAt: cleanString(location.last_updated),
     },
   };

@@ -140,6 +140,48 @@ describe("StructuredSections", () => {
     );
   });
 
+  it("renders a pricing-layout table as label + conditions caption with the price alongside", () => {
+    const markup = renderToStaticMarkup(
+      <StructuredSections
+        sections={[
+          {
+            title: "Pricing",
+            type: "table",
+            rowLayout: "pricing",
+            rows: [
+              ["CCS · DC · 60 kW", "€0.46/kWh", ""],
+              ["Type 2 · AC · 11 kW", "€0.13/min", "≥1 h"],
+            ],
+            sectionIcon: "payments",
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("CCS · DC · 60 kW");
+    expect(markup).toContain("€0.46/kWh");
+    expect(markup).toContain("Type 2 · AC · 11 kW");
+    expect(markup).toContain("≥1 h");
+  });
+
+  it("does not render a pricing row's conditions caption when the cell is empty", () => {
+    const markup = renderToStaticMarkup(
+      <StructuredSections
+        sections={[
+          {
+            title: "Pricing",
+            type: "table",
+            rowLayout: "pricing",
+            rows: [["Energy", "€0.46/kWh", ""]],
+            sectionIcon: "payments",
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).not.toContain("MuiTypography-caption");
+  });
+
   it("renders a section's links as clickable anchors to the given urls", () => {
     const markup = renderToStaticMarkup(
       <StructuredSections

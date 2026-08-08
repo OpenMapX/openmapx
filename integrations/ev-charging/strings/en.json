@@ -9,9 +9,7 @@
   "column": {
     "power": "Power",
     "current": "Current",
-    "qty": "Qty",
-    "price": "Price",
-    "conditions": "Conditions"
+    "qty": "Qty"
   },
   "row": {
     "cost": "Cost",
@@ -27,6 +25,8 @@
   "priceFlat": "{amount}/session",
   "priceParking": "{amount}/min parking",
   "pricingNote": "Direct payment price at this charger — your provider's roaming or subscription price may differ.",
+  "pricingNoteOperator": "Price published by the operator — your provider's roaming or subscription price may differ.",
+  "allConnectors": "All connectors",
   "tariffDetails": "View tariff details",
   "summary": {
     "connectorsTyped": "{count}x {types}",

@@ -33,6 +33,8 @@ export interface StructuredSection {
   type: "table" | "list" | "text" | "image" | "embed" | "pricing";
   columns?: string[];
   rows?: (string | number)[][];
+  /** Layout for ≥3-cell rows — see `DataSourceDetailSection.rowLayout`. */
+  rowLayout?: "connector" | "pricing";
   items?: string[];
   content?: string;
   imageUrl?: string;
@@ -152,6 +154,44 @@ function FormattedValue({ value }: { value: string | number }) {
     );
   }
   return <>{value}</>;
+}
+
+/**
+ * `[label, price, conditions]` — the label (a tariff dimension, or the
+ * connectors the price applies to) with its conditions as a caption beneath,
+ * and the price on the right. A blank label continues the row above it, which
+ * is how a tariff with several price components reads as one block.
+ */
+function PricingRow({ row }: { row: (string | number)[] }) {
+  const [label, price, conditions] = row;
+  const conditionsStr = String(conditions ?? "");
+
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "space-between",
+        gap: 1,
+        py: 0.5,
+        "&:not(:last-child)": { borderBottom: 1, borderColor: "divider" },
+      }}
+    >
+      <Box sx={{ minWidth: 0, flex: 1 }}>
+        <Typography variant="body2" sx={{ color: "text.secondary" }}>
+          {label}
+        </Typography>
+        {conditionsStr && (
+          <Typography variant="caption" sx={{ color: "text.disabled", display: "block" }}>
+            {conditionsStr}
+          </Typography>
+        )}
+      </Box>
+      <Typography variant="body2" sx={{ fontWeight: 500, flexShrink: 0, textAlign: "right" }}>
+        <FormattedValue value={price} />
+      </Typography>
+    </Box>
+  );
 }
 
 function KeyValueRow({ row }: { row: (string | number)[] }) {
@@ -459,11 +499,12 @@ function SectionContent({
           </Box>
         );
       }
+      const Row = section.rowLayout === "pricing" ? PricingRow : ConnectorRow;
       return (
         <Box>
           {section.rows.map((row, index) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: static render rows have no stable id
-            <ConnectorRow key={index} row={row} />
+            <Row key={index} row={row} />
           ))}
         </Box>
       );

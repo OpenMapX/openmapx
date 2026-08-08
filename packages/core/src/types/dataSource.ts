@@ -167,6 +167,18 @@ export interface DataSourceDetailSection {
     | [I18nToken, Translatable | Translatable[]][]
     | [Translatable, Translatable, Translatable, ...Translatable[]][];
   /**
+   * How the client should lay out ≥3-cell rows. Ignored for 2-cell key/value
+   * rows, which always render as label/value.
+   *
+   *  - `"connector"` (default): the plug-style row — first cell as the title,
+   *    the middle cells joined into a caption beneath it, the last cell as a
+   *    right-hand status. Suits `[type, power, current, qty, status]`.
+   *  - `"pricing"`: `[label, price, conditions]` — label left with the
+   *    conditions as a caption beneath it, price right. The conditions cell may
+   *    be an empty string, and a blank label continues the row above it.
+   */
+  rowLayout?: "connector" | "pricing";
+  /**
    * User-visible list items. Tokens preferred for fixed vocabulary; raw
    * `string` passthrough allowed for upstream-provided notes (operator
    * descriptions, OSM addenda, quality warnings forwarded verbatim).

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { attachTariffs, mapNlDotnlTariff, parseNlDotnlTariffs } from "../nl-dotnl-tariff.js";
+import { mapNlDotnlTariff, parseNlDotnlTariffs, resolveTariffs } from "../nl-dotnl-tariff.js";
 
 const FIXTURE = readFileSync(join(__dirname, "fixtures", "netherlands-tariffs-sample.json"));
 
@@ -108,26 +108,27 @@ describe("mapNlDotnlTariff split", () => {
   });
 });
 
-describe("attachTariffs", () => {
+describe("resolveTariffs", () => {
   const map = parse();
 
-  it("attaches the matching tariffs from the map, deduped, in first-seen order", () => {
-    const attached = attachTariffs(
+  it("resolves the matching tariffs from the map, deduped, in first-seen order", () => {
+    const resolved = resolveTariffs(
       ["t-62b5709e191e25e2a4482cac-1", "t-62b5709e191e25e2a4482cac-1", "677"],
       map,
     );
-    expect(attached).toHaveLength(2);
-    expect(attached?.[0]).toBe(map.get("t-62b5709e191e25e2a4482cac-1")?.[0]);
-    expect(attached?.[1]).toBe(map.get("677")?.[0]);
+    expect(resolved).toHaveLength(2);
+    expect(resolved[0]).toBe(map.get("t-62b5709e191e25e2a4482cac-1")?.[0]);
+    expect(resolved[1]).toBe(map.get("677")?.[0]);
   });
 
-  it("returns undefined when no tariff_ids are given", () => {
-    expect(attachTariffs(undefined, map)).toBeUndefined();
-    expect(attachTariffs([], map)).toBeUndefined();
+  it("returns nothing when no tariff_ids are given", () => {
+    expect(resolveTariffs(undefined, map)).toEqual([]);
+    expect(resolveTariffs([], map)).toEqual([]);
+    expect(resolveTariffs([null, "  "], map)).toEqual([]);
   });
 
   it("skips ids with no matching tariff in the map rather than throwing", () => {
-    expect(attachTariffs(["does-not-exist"], map)).toBeUndefined();
-    expect(attachTariffs(["does-not-exist", "677"], map)).toEqual(map.get("677"));
+    expect(resolveTariffs(["does-not-exist"], map)).toEqual([]);
+    expect(resolveTariffs(["does-not-exist", "677"], map)).toEqual(map.get("677"));
   });
 });
