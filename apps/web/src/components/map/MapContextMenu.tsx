@@ -34,7 +34,7 @@ import {
   useSidebarStore,
 } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
@@ -70,12 +70,14 @@ function cameFromTouch(event: MouseEvent & { pointerType?: string }): boolean {
 
 export function MapContextMenu(): React.ReactNode {
   const t = useTranslations("mapContextMenu");
+  const locale = useLocale();
   const { mapRef, mapReady, styleVersion } = useMap();
   const [target, setTarget] = useState<MapContextTarget | null>(null);
   const [activeAction, setActiveAction] = useState<ActionId>("from");
   const [copyOpen, setCopyOpen] = useState(false);
   const [copyOpensLeft, setCopyOpensLeft] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const targetRef = useRef<MapContextTarget | null>(null);
   const mountedRef = useRef(true);
   const targetGenerationRef = useRef(0);
   const actionGenerationRef = useRef(0);
@@ -100,7 +102,7 @@ export function MapContextMenu(): React.ReactNode {
   }, []);
 
   const coordinates = target?.coordinates ?? null;
-  const { data: reverseGeo } = useReverseGeocoding(coordinates);
+  const { data: reverseGeo } = useReverseGeocoding(coordinates, locale);
   const coordinateLabel = target ? formatContextCoordinates(target.coordinates) : "";
   const title = target?.poi?.name ?? reverseGeo?.city ?? reverseGeo?.address ?? coordinateLabel;
   const address = reverseGeo?.address ?? coordinateLabel;
@@ -113,7 +115,7 @@ export function MapContextMenu(): React.ReactNode {
         primaryScheme: "stylePoi",
         ids: { stylePoi: target.poi.featureId },
         name: target.poi.name,
-        address: target.poi.name,
+        address: reverseGeo?.address ?? target.poi.name,
         coordinates: target.poi.coordinates,
         category: target.poi.category,
         rawCategory: target.poi.rawCategory,
@@ -126,7 +128,7 @@ export function MapContextMenu(): React.ReactNode {
       address,
       coordinates: target.coordinates,
     });
-  }, [address, target, title]);
+  }, [address, reverseGeo?.address, target, title]);
 
   const restoreCanvasFocus = useCallback(() => {
     if (restoreFocusFrameRef.current !== null) cancelAnimationFrame(restoreFocusFrameRef.current);
@@ -139,6 +141,7 @@ export function MapContextMenu(): React.ReactNode {
   const closeMenu = useCallback(() => {
     targetGenerationRef.current += 1;
     actionGenerationRef.current += 1;
+    targetRef.current = null;
     setCopyOpen(false);
     setTarget(null);
     restoreCanvasFocus();
@@ -165,10 +168,14 @@ export function MapContextMenu(): React.ReactNode {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    setCopyOpen(false);
-    setTarget(null);
-    targetGenerationRef.current += 1;
-    actionGenerationRef.current += 1;
+    if (targetRef.current) {
+      closeMenu();
+    } else {
+      setCopyOpen(false);
+      setTarget(null);
+      targetGenerationRef.current += 1;
+      actionGenerationRef.current += 1;
+    }
 
     const captureTarget = (
       targetCoordinates: [number, number],
@@ -177,11 +184,13 @@ export function MapContextMenu(): React.ReactNode {
     ) => {
       const poiLayerIds = getStylePoiLayerIds(map);
       const poi = findStylePoiAtPoint(map, point, poiLayerIds, INTERACTIVE_LAYER_IDS);
+      const nextTarget = { coordinates: targetCoordinates, anchorPosition, poi };
       targetGenerationRef.current += 1;
       actionGenerationRef.current += 1;
       setCopyOpen(false);
       useMapClickStore.getState().setClickedLngLat(null);
-      setTarget({ coordinates: targetCoordinates, anchorPosition, poi });
+      targetRef.current = nextTarget;
+      setTarget(nextTarget);
     };
 
     const onContextMenu = (event: maplibregl.MapMouseEvent) => {
@@ -215,7 +224,9 @@ export function MapContextMenu(): React.ReactNode {
       });
     };
 
-    const onMoveStart = () => closeMenu();
+    const onMoveStart = () => {
+      if (targetRef.current) closeMenu();
+    };
     const canvas = map.getCanvas();
     map.on("contextmenu", onContextMenu);
     map.on("movestart", onMoveStart);
@@ -419,11 +430,29 @@ export function MapContextMenu(): React.ReactNode {
             {target && (
               <Box sx={{ py: 1 }}>
                 <Box sx={{ px: 2, py: 1 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>
+                  <Typography
+                    variant="subtitle1"
+                    sx={{
+                      fontWeight: 700,
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                    }}
+                  >
                     {title}
                   </Typography>
                   {address !== title && (
-                    <Typography variant="body2" color="text.secondary" noWrap>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                      }}
+                    >
                       {address}
                     </Typography>
                   )}
@@ -442,13 +471,17 @@ export function MapContextMenu(): React.ReactNode {
                     autoFocus
                     aria-label={t("fromHere")}
                     onClick={() => chooseRouteEndpoint("origin")}
-                    sx={{
+                    sx={(theme) => ({
                       minHeight: 44,
                       borderRadius: 999,
                       bgcolor: "action.hover",
                       gap: 1,
                       px: 1.5,
-                    }}
+                      "&.Mui-focusVisible": {
+                        outline: `2px solid ${theme.palette.primary.main}`,
+                        outlineOffset: 2,
+                      },
+                    })}
                   >
                     <MyLocationIcon fontSize="small" />
                     <Typography variant="body2" sx={{ fontWeight: 600 }}>
@@ -459,14 +492,18 @@ export function MapContextMenu(): React.ReactNode {
                     {...commonActionProps("to")}
                     aria-label={t("toHere")}
                     onClick={() => chooseRouteEndpoint("destination")}
-                    sx={{
+                    sx={(theme) => ({
                       minHeight: 44,
                       borderRadius: 999,
                       bgcolor: "primary.main",
                       color: "primary.contrastText",
                       gap: 1,
                       px: 1.5,
-                    }}
+                      "&.Mui-focusVisible": {
+                        outline: `2px solid ${theme.palette.primary.main}`,
+                        outlineOffset: 2,
+                      },
+                    })}
                   >
                     <LocationOnIcon fontSize="small" />
                     <Typography variant="body2" sx={{ fontWeight: 600 }}>
@@ -478,6 +515,8 @@ export function MapContextMenu(): React.ReactNode {
                 <MenuList component="div" role="presentation" disablePadding>
                   <MenuItem
                     {...commonActionProps("copy")}
+                    aria-haspopup="menu"
+                    aria-expanded={copyOpen}
                     onClick={openCopyMenu}
                     onMouseEnter={openCopyMenu}
                     sx={{ minHeight: "44px !important" }}

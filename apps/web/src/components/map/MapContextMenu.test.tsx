@@ -15,11 +15,17 @@ vi.mock("@/lib/MapContext", () => {
 });
 vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();
-  const state = { reverseData: null as { address: string; city: string } | null };
+  const state = {
+    reverseData: null as { address: string; city: string } | null,
+    requiredLocale: null as string | null,
+  };
   return {
     ...actual,
     __test: state,
-    useReverseGeocoding: () => ({ data: state.reverseData, isLoading: false }),
+    useReverseGeocoding: (_coordinates: [number, number] | null, locale?: string) => ({
+      data: !state.requiredLocale || locale === state.requiredLocale ? state.reverseData : null,
+      isLoading: false,
+    }),
   };
 });
 vi.mock("@/lib/deepLink", async (importOriginal) => {
@@ -45,7 +51,10 @@ import { MapContextMenu } from "./MapContextMenu";
 
 const coreTest = (
   coreModule as unknown as {
-    __test: { reverseData: { address: string; city: string } | null };
+    __test: {
+      reverseData: { address: string; city: string } | null;
+      requiredLocale: string | null;
+    };
   }
 ).__test;
 const mapContextTest = (
@@ -121,6 +130,22 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+function focusVisibleStyle(element: HTMLElement): CSSStyleDeclaration | undefined {
+  const generatedClass = [...element.classList].find((className) => className.startsWith("css-"));
+  if (!generatedClass) return undefined;
+  for (const sheet of document.styleSheets) {
+    for (const rule of sheet.cssRules) {
+      if (
+        rule instanceof CSSStyleRule &&
+        rule.selectorText === `.${generatedClass}.Mui-focusVisible`
+      ) {
+        return rule.style;
+      }
+    }
+  }
+  return undefined;
+}
+
 beforeEach(() => {
   fake = createFakeMap({
     baseLayers: [{ id: "poi-label", type: "symbol", "source-layer": "poi" } as never],
@@ -139,6 +164,7 @@ beforeEach(() => {
   mapContextTest.mapReady = true;
   mapContextTest.styleVersion = 0;
   coreTest.reverseData = null;
+  coreTest.requiredLocale = null;
   shareUrlMock.mockReset();
   shareUrlMock.mockResolvedValue("shared");
   useDirectionsStore.getState().close();
@@ -216,6 +242,23 @@ describe("MapContextMenu opening", () => {
 
     expect(screen.getByText("Washington")).toBeDefined();
     expect(screen.getByText("1000 Jefferson Drive")).toBeDefined();
+  });
+
+  it("clamps long identity title and address to at most two lines", () => {
+    coreTest.reverseData = {
+      city: "A deliberately long reverse-geocoded city identity",
+      address: "A deliberately long reverse-geocoded street address",
+    };
+    render(<MapContextMenu />);
+
+    openAtMapPoint();
+
+    for (const text of [coreTest.reverseData.city, coreTest.reverseData.address]) {
+      const style = getComputedStyle(screen.getByText(text));
+      expect(style.display).toBe("-webkit-box");
+      expect(style.webkitLineClamp).toBe("2");
+      expect(style.overflow).toBe("hidden");
+    }
   });
 
   it("clears only the plain-map click target when opening", () => {
@@ -350,6 +393,20 @@ describe("MapContextMenu route and place actions", () => {
     expect(useSidebarStore.getState().activeDetailId).toBeNull();
   });
 
+  it("uses the active-locale reverse-geocoded address for a named POI", async () => {
+    fake.setRenderedFeatures("poi-label", [poiFeature()]);
+    coreTest.requiredLocale = "en";
+    coreTest.reverseData = { city: "Washington", address: "1000 Jefferson Drive" };
+    render(<MapContextMenu />);
+    openAtMapPoint();
+
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: "mapContextMenu.openPlaceDetails" }),
+    );
+
+    expect(usePlaceStore.getState().selectedPlace?.address).toBe("1000 Jefferson Drive");
+  });
+
   it("uses canonical coordinate identity and preserves an unrelated sidebar", async () => {
     coreTest.reverseData = { city: "Washington", address: "1000 Jefferson Drive" };
     useSidebarStore.setState({ activeSidebarId: PANEL.CATEGORY });
@@ -400,6 +457,59 @@ describe("MapContextMenu keyboard behavior", () => {
       );
     });
   }
+
+  for (const status of ["navigating", "rerouting"] as const) {
+    it(`suppresses keyboard opening and native behavior without mutating state while ${status}`, () => {
+      useNavigationStore.setState({ status });
+      useMapClickStore.setState({ clickedLngLat: [1, 2] });
+      const selectedPlace = createPlace({
+        primaryScheme: "test",
+        ids: { test: "kept" },
+        name: "Kept place",
+        address: "Kept address",
+        coordinates: [3, 4],
+      });
+      usePlaceStore.setState({ selectedPlace });
+      useSidebarStore.setState({ activeSidebarId: PANEL.CATEGORY });
+      const waypointsBefore = useDirectionsStore.getState().waypoints;
+      render(<MapContextMenu />);
+      const event = new KeyboardEvent("keydown", {
+        key: "ContextMenu",
+        bubbles: true,
+        cancelable: true,
+      });
+
+      fireEvent(fake.state.canvas, event);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(useMapClickStore.getState().clickedLngLat).toEqual([1, 2]);
+      expect(usePlaceStore.getState().selectedPlace).toBe(selectedPlace);
+      expect(useDirectionsStore.getState().waypoints).toBe(waypointsBefore);
+      expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.CATEGORY);
+    });
+  }
+
+  it("defines visible theme-aware focus rings for both keyboard-focused route pills", async () => {
+    render(<MapContextMenu />);
+    openAtMapPoint();
+    const from = screen.getByRole("menuitem", { name: "mapContextMenu.fromHere" });
+    const to = screen.getByRole("menuitem", { name: "mapContextMenu.toHere" });
+
+    await userEvent.keyboard("{ArrowRight}");
+    expect(document.activeElement).toBe(to);
+    const toStyle = focusVisibleStyle(to);
+    expect(toStyle?.outline.startsWith("2px solid ")).toBe(true);
+    expect(toStyle?.outline.includes("transparent")).toBe(false);
+    expect(toStyle?.outlineOffset).toBe("2px");
+
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(document.activeElement).toBe(from);
+    const fromStyle = focusVisibleStyle(from);
+    expect(fromStyle?.outline.startsWith("2px solid ")).toBe(true);
+    expect(fromStyle?.outline.includes("transparent")).toBe(false);
+    expect(fromStyle?.outlineOffset).toBe("2px");
+  });
 
   it("supports roving focus, submenu return, Escape order, and canvas restoration", async () => {
     render(<MapContextMenu />);
@@ -454,6 +564,19 @@ describe("MapContextMenu keyboard behavior", () => {
 });
 
 describe("MapContextMenu copy behavior", () => {
+  it("exposes copy submenu state on its trigger", async () => {
+    render(<MapContextMenu />);
+    openAtMapPoint();
+    const copy = screen.getByRole("menuitem", { name: "mapContextMenu.copyLocation" });
+
+    expect(copy.getAttribute("aria-haspopup")).toBe("menu");
+    expect(copy.getAttribute("aria-expanded")).toBe("false");
+
+    await userEvent.click(copy);
+
+    expect(copy.getAttribute("aria-expanded")).toBe("true");
+  });
+
   it("opens the copy submenu to the left when the right edge has insufficient room", async () => {
     render(<MapContextMenu />);
     openAtMapPoint();
@@ -622,6 +745,33 @@ describe("MapContextMenu share behavior", () => {
 });
 
 describe("MapContextMenu dismissal and semantics", () => {
+  it("does not steal focus when the map moves with no open context menu", async () => {
+    render(
+      <>
+        <input aria-label="Outside focus target" />
+        <MapContextMenu />
+      </>,
+    );
+    const outside = screen.getByRole("textbox", { name: "Outside focus target" });
+    outside.focus();
+
+    act(() => fake.emit("movestart"));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    expect(document.activeElement).toBe(outside);
+  });
+
+  it("restores canvas focus when a style reload dismisses an open menu", async () => {
+    const view = render(<MapContextMenu />);
+    openAtMapPoint();
+
+    mapContextTest.styleVersion += 1;
+    view.rerender(<MapContextMenu />);
+
+    expect(screen.queryByRole("menu")).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(fake.state.canvas));
+  });
+
   it("dismisses on outside click, map movement, and style-version change", async () => {
     const view = render(<MapContextMenu />);
     openAtMapPoint();
