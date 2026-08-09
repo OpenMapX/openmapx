@@ -9,6 +9,9 @@ import Typography from "@mui/material/Typography";
 import type { RideProviderInfo, RideQuoteRequest } from "@openmapx/core";
 import {
   buildRideOpenUrl,
+  formatDistance,
+  formatDuration,
+  isQuoteExpired,
   useDirectionsStore,
   useRideProviders,
   useRideQuotes,
@@ -229,7 +232,12 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
     enabled: quotesEnabled,
   });
 
-  const expired = expiresAt !== null && now >= Date.parse(expiresAt);
+  // Uses the canonical rule rather than comparing the timestamp inline: an
+  // unparseable expiry counts as already expired, where `now >= Date.parse(...)`
+  // would be false for NaN and leave a stale price on screen indefinitely.
+  const nowDate = useMemo(() => new Date(now), [now]);
+  const allQuotes = useMemo(() => results.flatMap((r) => r.quotes), [results]);
+  const expired = allQuotes.length > 0 && allQuotes.some((q) => isQuoteExpired(q, nowDate));
 
   // Refresh the moment a quote lapses, so long as the panel is still being
   // watched. Without this a price simply dies after a minute and Book stays
@@ -301,6 +309,15 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
 
   return (
     <Box sx={{ px: 2, py: 1.5, display: "flex", flexDirection: "column", gap: 1.75 }}>
+      {route && (
+        <Typography variant="caption" sx={{ color: BRAND, fontWeight: 600 }}>
+          {t("rideTripSummary", {
+            distance: formatDistance(route.distanceMeters),
+            duration: formatDuration(route.durationSeconds),
+          })}
+        </Typography>
+      )}
+
       <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.4 }}>
         {t("rideDisclaimer")}
       </Typography>

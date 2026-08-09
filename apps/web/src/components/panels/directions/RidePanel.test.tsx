@@ -3,9 +3,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const providers = {
+let providers = {
   providers: [
     {
       id: "uber",
@@ -32,11 +32,20 @@ const providers = {
   comparison: { allowed: false, comparableProviderIds: [] },
 };
 
+let quoteResults: unknown[] = [];
+
 vi.mock("@openmapx/core", async () => {
   const actual = await vi.importActual<typeof import("@openmapx/core")>("@openmapx/core");
   return {
     ...actual,
     useRideProviders: () => ({ data: providers, isLoading: false }),
+    useRideQuotes: () => ({
+      results: quoteResults,
+      isLoading: false,
+      expiresAt:
+        (quoteResults[0] as { quotes?: { expiresAt: string }[] })?.quotes?.[0]?.expiresAt ?? null,
+      refetch: vi.fn(),
+    }),
     useDirectionsStore: (selector: (s: unknown) => unknown) =>
       selector({ origin: [13.405, 52.52], destination: [13.377, 52.516] }),
   };
@@ -56,6 +65,12 @@ const renderPanel = () => {
 };
 
 describe("RidePanel", () => {
+  const baseProviders = providers;
+  beforeEach(() => {
+    quoteResults = [];
+    providers = baseProviders;
+  });
+
   it("renders one chip per available provider", async () => {
     renderPanel();
     expect((await screen.findByText("Uber")).textContent).toBe("Uber");
@@ -72,6 +87,30 @@ describe("RidePanel", () => {
   it("says availability was not checked for a link-out provider", async () => {
     renderPanel();
     expect(await screen.findByText(/availability is not checked/i)).not.toBeNull();
+  });
+
+  it("keeps a stale price off screen when the expiry is unparseable", async () => {
+    // `now >= Date.parse(x)` is false for NaN, which would leave the price up
+    // forever; the canonical rule treats an unparseable expiry as expired.
+    providers = {
+      ...baseProviders,
+      providers: [
+        {
+          ...baseProviders.providers[0],
+          capabilities: { deepLink: true, quote: true, booking: false, tracking: false },
+        },
+        baseProviders.providers[1],
+      ],
+    };
+    quoteResults = [
+      {
+        providerId: "uber",
+        attributions: [],
+        quotes: [{ productId: "x", product: { id: "x", name: "X" }, expiresAt: "not-a-date" }],
+      },
+    ];
+    renderPanel();
+    expect(await screen.findByText(/out of date/i)).not.toBeNull();
   });
 
   it("does not warn about coordinates for a provider whose link carries them", async () => {
