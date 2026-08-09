@@ -1,8 +1,11 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { assertRideProviderContract } from "@openmapx/integration-framework";
-import { createGofsCatalog } from "./catalog.js";
+import { type CatalogEntry, createGofsCatalog } from "./catalog.js";
 import type { GofsFetchJson } from "./feed.js";
 import { createGofsRideProvider } from "./provider.js";
+
+/** Ceiling on how long catalog resolution may hold up API boot. */
+const CATALOG_RESOLVE_BUDGET_MS = 10_000;
 
 /**
  * GOFS ride provider integration. Every feed the catalog resolves — from
@@ -18,7 +21,22 @@ import { createGofsRideProvider } from "./provider.js";
  * `createGofsRideProvider` use.
  */
 export async function setup(ctx: IntegrationContext, fetchJson?: GofsFetchJson): Promise<void> {
-  const feeds = await createGofsCatalog(ctx, fetchJson).resolveFeeds();
+  // Resolving the catalog fetches the registry and probes every entry, and
+  // integrations load sequentially — so an unresponsive host would otherwise
+  // hold up API boot for as long as its TCP timeouts take. Bound it: a feed
+  // that cannot answer within the budget is simply not offered this time
+  // round, which is the same outcome as failing its probe.
+  const feeds = await Promise.race([
+    createGofsCatalog(ctx, fetchJson).resolveFeeds(),
+    new Promise<CatalogEntry[]>((resolve) => {
+      setTimeout(() => {
+        ctx.log.warn(
+          `GOFS catalog resolve exceeded ${CATALOG_RESOLVE_BUDGET_MS}ms; starting with no feeds`,
+        );
+        resolve([]);
+      }, CATALOG_RESOLVE_BUDGET_MS).unref?.();
+    }),
+  ]);
 
   for (const feed of feeds) {
     const provider = createGofsRideProvider(ctx, feed, fetchJson);

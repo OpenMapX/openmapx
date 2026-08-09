@@ -17,6 +17,7 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { RideQuoteList } from "@/components/panels/directions/RideQuoteList";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { BRAND } from "@/lib/theme";
 
 /** Stop refreshing quotes once the user has stopped interacting with the panel. */
@@ -229,6 +230,13 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
   });
 
   const expired = expiresAt !== null && now >= Date.parse(expiresAt);
+
+  // Refresh the moment a quote lapses, so long as the panel is still being
+  // watched. Without this a price simply dies after a minute and Book stays
+  // disabled until someone notices the Refresh link.
+  useEffect(() => {
+    if (expired && quotesEnabled) void refetch();
+  }, [expired, quotesEnabled, refetch]);
   const secondsLeft =
     expiresAt === null ? null : Math.max(0, Math.round((Date.parse(expiresAt) - now) / 1000));
 
@@ -280,6 +288,16 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
   const chipProviders = comparing
     ? providers.filter((p) => !comparison?.comparableProviderIds.includes(p.id))
     : providers;
+  // While comparing, the list above already covers the comparable providers,
+  // so the detail block below belongs to the chip row only — otherwise the
+  // auto-selected default could render a second CTA for a provider already
+  // shown in the list.
+  const detailProvider = comparing
+    ? (chipProviders.find((p) => p.id === selected?.id) ?? null)
+    : selected;
+  // Whoever supplied the numbers gets credited beside them.
+  const detailAttributions =
+    results.find((r) => r.providerId === detailProvider?.id)?.attributions ?? [];
 
   return (
     <Box sx={{ px: 2, py: 1.5, display: "flex", flexDirection: "column", gap: 1.75 }}>
@@ -305,6 +323,9 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
                   locale={locale}
                   onBook={(productId) => openProvider(result.providerId, productId)}
                 />
+                {result.attributions.length > 0 && (
+                  <AttributionStrip attributions={result.attributions} variant="inline" />
+                )}
               </Box>
             );
           })}
@@ -363,27 +384,38 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
         </Box>
       )}
 
-      {!comparing && selected && (
+      {detailProvider && (
         <>
-          {!selected.availability.coverageChecked && (
+          {!detailProvider.availability.coverageChecked && (
             <Typography variant="caption" color="text.secondary">
-              {t("rideCoverageUnknown", { provider: selected.name })}
+              {t("rideCoverageUnknown", { provider: detailProvider.name })}
             </Typography>
           )}
 
-          {selected.capabilities.quote ? (
-            <RideQuoteList
-              providerName={selected.name}
-              quotes={results.find((r) => r.providerId === selected.id)?.quotes ?? []}
-              expired={expired}
-              locale={locale}
-              onBook={(productId) => openProvider(selected.id, productId)}
-            />
+          {!detailProvider.handoffCarriesCoordinates && (
+            <Typography variant="caption" color="text.secondary">
+              {t("rideNoCoordinates", { provider: detailProvider.name })}
+            </Typography>
+          )}
+
+          {detailProvider.capabilities.quote ? (
+            <>
+              <RideQuoteList
+                providerName={detailProvider.name}
+                quotes={results.find((r) => r.providerId === detailProvider.id)?.quotes ?? []}
+                expired={expired}
+                locale={locale}
+                onBook={(productId) => openProvider(detailProvider.id, productId)}
+              />
+              {detailAttributions.length > 0 && (
+                <AttributionStrip attributions={detailAttributions} variant="inline" />
+              )}
+            </>
           ) : (
             <Box
               component="button"
               type="button"
-              onClick={() => openProvider(selected.id)}
+              onClick={() => openProvider(detailProvider.id)}
               sx={{
                 mt: 0.5,
                 width: "100%",
@@ -405,7 +437,7 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
               }}
             >
               <LocalTaxiIcon sx={{ fontSize: 18 }} />
-              {t("rideOpenIn", { provider: selected.name })}
+              {t("rideOpenIn", { provider: detailProvider.name })}
             </Box>
           )}
         </>

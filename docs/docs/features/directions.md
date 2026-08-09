@@ -259,8 +259,9 @@ A few things worth knowing:
   operator's published tariff, not quoted by the service for your trip. A price
   without it came from the provider.
 - **Quotes go stale.** They expire in about a minute. The panel counts down and
-  refreshes while you are looking at it, and stops once you have left it alone —
-  it will not keep pricing a trip nobody is watching.
+  fetches a fresh price the moment one lapses, but only while you are actually
+  looking at it — switch tabs or leave it alone for a few minutes and it stops,
+  rather than pricing a trip nobody is watching. A Refresh link brings it back.
 - **Your trip leaves the server, not your browser.** For open feeds, your pickup and
   destination are sent by your OpenMapX server to the feed, and the answer is never
   cached or stored. For the app handoffs nothing is sent at all until you click.

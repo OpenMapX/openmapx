@@ -73,12 +73,35 @@ describe("loadStatic", () => {
     expect(fetchJson.mock.calls.length).toBe(calls);
   });
 
-  it("re-fetches every call when the feed declares ttl 0", async () => {
-    const ctx = createMockIntegrationContext({
-      id: "ride-gofs",
-      config: {},
-      cache: memoryCache(),
+  it("never writes a ttl-0 feed to the shared cache", async () => {
+    // A feed declaring ttl 0 says its data can change at any moment, so a
+    // later request (a fresh client) must not be served a stored copy. Within
+    // one client the in-flight memo still applies — that is per-request work,
+    // not caching.
+    const cache = memoryCache();
+    const fetchJson = vi.fn(async (url: string) => {
+      const doc = LEAN_FEED_DOCUMENTS[url.split("?")[0]];
+      if (!doc) throw new Error(`404 ${url}`);
+      return doc;
     });
+    const makeClient = () =>
+      createGofsFeedClient(
+        createMockIntegrationContext({ id: "ride-gofs", config: {}, cache }),
+        LEAN_FEED_CONFIG,
+        fetchJson,
+      );
+
+    await makeClient().loadStatic();
+    const calls = fetchJson.mock.calls.length;
+    await makeClient().loadStatic();
+    expect(fetchJson.mock.calls.length).toBeGreaterThan(calls);
+  });
+
+  it("loads the static files once per client, even for a ttl-0 feed", async () => {
+    // The live Freebee feed sends ttl 0 on every file, so nothing is cached.
+    // A single quote resolves availability, realtime booking and wait times —
+    // without a per-client memo that is three full downloads of every file.
+    const ctx = createMockIntegrationContext({ id: "ride-gofs", config: {} });
     const fetchJson = vi.fn(async (url: string) => {
       const doc = LEAN_FEED_DOCUMENTS[url.split("?")[0]];
       if (!doc) throw new Error(`404 ${url}`);
@@ -86,10 +109,27 @@ describe("loadStatic", () => {
     });
     const client = createGofsFeedClient(ctx, LEAN_FEED_CONFIG, fetchJson);
 
-    await client.loadStatic();
-    const calls = fetchJson.mock.calls.length;
-    await client.loadStatic();
-    expect(fetchJson.mock.calls.length).toBeGreaterThan(calls);
+    await Promise.all([client.loadStatic(), client.loadStatic(), client.loadStatic()]);
+    const discoveryFetches = fetchJson.mock.calls.filter(([u]) => u === LEAN_FEED_CONFIG.url);
+    expect(discoveryFetches).toHaveLength(1);
+  });
+
+  it("retries after a failure rather than memoising the rejection", async () => {
+    const ctx = createMockIntegrationContext({ id: "ride-gofs", config: {} });
+    let failFirst = true;
+    const fetchJson = vi.fn(async (url: string) => {
+      if (failFirst) {
+        failFirst = false;
+        throw new Error("transient");
+      }
+      const doc = LEAN_FEED_DOCUMENTS[url.split("?")[0]];
+      if (!doc) throw new Error(`404 ${url}`);
+      return doc;
+    });
+    const client = createGofsFeedClient(ctx, LEAN_FEED_CONFIG, fetchJson);
+
+    await expect(client.loadStatic()).rejects.toThrow("transient");
+    await expect(client.loadStatic()).resolves.toMatchObject({ system: { name: "Freebee" } });
   });
 
   it("throws when discovery itself cannot be fetched", async () => {

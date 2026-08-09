@@ -216,11 +216,16 @@ export function createGofsRideProvider(
     const vehicleIdsByBrand = new Map<string, string[]>();
     const brandOrder: string[] = [];
     for (const rule of rules) {
-      const brandId = rule.brand_id;
-      if (!brandId || fareIdByBrand.has(brandId)) continue;
-      fareIdByBrand.set(brandId, rule.fare_id);
-      vehicleIdsByBrand.set(brandId, rule.vehicle_type_id ?? []);
-      brandOrder.push(brandId);
+      // `brand_id` is optional: the spec says a rule without one "applies to
+      // every service brand defined in service_brands.json". Skipping such a
+      // rule would report no products and drop a feed that does cover the trip.
+      const brandIds = rule.brand_id ? [rule.brand_id] : feed.brands.map((b) => b.brand_id);
+      for (const brandId of brandIds) {
+        if (fareIdByBrand.has(brandId)) continue;
+        fareIdByBrand.set(brandId, rule.fare_id);
+        vehicleIdsByBrand.set(brandId, rule.vehicle_type_id ?? []);
+        brandOrder.push(brandId);
+      }
     }
 
     const byId = new Map(feed.brands.map((b) => [b.brand_id, b]));

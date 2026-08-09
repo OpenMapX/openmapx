@@ -1,6 +1,7 @@
 import { en } from "@openmapx/i18n";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import { describe, expect, it, vi } from "vitest";
 
@@ -13,6 +14,7 @@ const providers = {
       capabilities: { deepLink: true, quote: false, booking: false, tracking: false },
       permitsComparison: false,
       availability: { available: true, coverageChecked: false, products: [] },
+      handoffCarriesCoordinates: true,
       isDefault: true,
     },
     {
@@ -22,6 +24,7 @@ const providers = {
       capabilities: { deepLink: true, quote: false, booking: false, tracking: false },
       permitsComparison: false,
       availability: { available: true, coverageChecked: false, products: [] },
+      handoffCarriesCoordinates: false,
       isDefault: false,
     },
   ],
@@ -66,8 +69,21 @@ describe("RidePanel", () => {
     expect(actions[0].textContent?.toLowerCase()).toContain("uber");
   });
 
-  it("warns that a coordinate-less provider will not carry the trip", async () => {
+  it("says availability was not checked for a link-out provider", async () => {
     renderPanel();
     expect(await screen.findByText(/availability is not checked/i)).not.toBeNull();
+  });
+
+  it("does not warn about coordinates for a provider whose link carries them", async () => {
+    renderPanel();
+    await screen.findByText("Uber");
+    expect(screen.queryByText(/cannot carry your pickup/i)).toBeNull();
+  });
+
+  it("warns that a coordinate-less provider will not carry the trip", async () => {
+    renderPanel();
+    // Bolt publishes no parameterised link format, so selecting it must say so.
+    await userEvent.click(await screen.findByText("Bolt"));
+    expect(await screen.findByText(/cannot carry your pickup/i)).not.toBeNull();
   });
 });

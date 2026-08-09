@@ -38,6 +38,12 @@ export function useRideQuotes({ request, providerIds, enabled }: UseRideQuotesOp
       request?.dropoff?.join(","),
       request?.passengers,
       request?.pickupAt,
+      // The driving route resolves asynchronously and usually lands *after*
+      // the first quote fetch. It must be part of the key: a provider that
+      // prices from a static tariff needs it, so without this the panel would
+      // keep the fare-less first answer and never show an estimate.
+      request?.route?.distanceMeters,
+      request?.route?.durationSeconds,
     ],
     enabled: active,
     gcTime: 0,

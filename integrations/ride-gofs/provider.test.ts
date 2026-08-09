@@ -53,6 +53,25 @@ describe("getAvailability", () => {
     expect(result.data.bookingRules?.infoUrl).toBe("https://feed.example/how-to-book");
   });
 
+  it("applies a rule with no brand_id to every service brand", async () => {
+    // The spec: "If this field is not provided, the operating rule applies to
+    // every service brand defined in service_brands.json." Skipping such a
+    // rule would report no products and drop a feed that does cover the trip.
+    const { provider } = providerWith({
+      "https://feed.example/operating_rules.json": {
+        ttl: 3600,
+        data: {
+          operating_rules: [
+            { from_zone_id: "city", to_zone_id: "city", calendars: ["all"], fare_id: "std" },
+          ],
+        },
+      },
+    });
+    const result = await provider.getAvailability({ pickup: inZone, dropoff: inZone });
+    expect(result.data.available).toBe(true);
+    expect(result.data.products.map((p) => p.id)).toEqual(["regular", "large"]);
+  });
+
   it("attributes to the feed's system name", async () => {
     const { provider } = providerWith();
     const result = await provider.getAvailability({ pickup: inZone });

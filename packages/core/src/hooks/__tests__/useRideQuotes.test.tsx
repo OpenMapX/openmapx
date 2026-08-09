@@ -81,3 +81,21 @@ describe("useRideQuotes", () => {
     expect(result.current.expiresAt).toBeNull();
   });
 });
+
+describe("refetch triggers", () => {
+  it("refetches when the driving route arrives, so a tariff fare can be priced", async () => {
+    const post = vi.spyOn(apiClient, "post").mockResolvedValue({ results: [] });
+    const { rerender } = renderHook(
+      ({ route }: { route?: { distanceMeters: number; durationSeconds: number } }) =>
+        useRideQuotes({ request: { ...request, route }, providerIds: ["gofs-a"], enabled: true }),
+      { wrapper, initialProps: {} },
+    );
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+
+    // The driving query resolves after the panel first rendered; without the
+    // route in the key the quote would keep its fare-less first answer.
+    rerender({ route: { distanceMeters: 5000, durationSeconds: 600 } });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    expect(post.mock.calls[1][1]).toMatchObject({ routeDistanceMeters: "5000" });
+  });
+});

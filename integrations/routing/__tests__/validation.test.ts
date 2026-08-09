@@ -22,6 +22,15 @@ describe("parseTravelMode", () => {
     expect(parseTravelMode("motorcycle")).toBe("motorcycle");
   });
 
+  it("rejects the UI-only modes no ground engine can route", () => {
+    // "flying" and "ride" exist as TravelMode values so the directions panel
+    // can offer them, but neither is routed by an engine — flights deep-link
+    // out, and a ride reuses the driving route. Accepting them here would
+    // silently hand the caller a car route under another mode's name.
+    expect(() => parseTravelMode("flying")).toThrow(/Invalid mode: "flying"/);
+    expect(() => parseTravelMode("ride")).toThrow(/Invalid mode: "ride"/);
+  });
+
   it("throws on unknown modes with a list of accepted values", () => {
     expect(() => parseTravelMode("banana")).toThrow(/Invalid mode: "banana"/);
     expect(() => parseTravelMode("banana")).toThrow(

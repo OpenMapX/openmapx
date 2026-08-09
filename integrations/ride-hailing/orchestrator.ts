@@ -20,6 +20,17 @@ export class RideComparisonError extends Error {
   }
 }
 
+/**
+ * Strip query strings out of anything URL-shaped in an error message before it
+ * is logged. Fetch helpers embed the failing URL in the message
+ * (`Request failed: HTTP 500 for https://…?pickup_lat=…`), and a GOFS dynamic
+ * URL carries the rider's coordinates — and, for a feed keyed by query
+ * parameter, its API key. Neither belongs in a log line.
+ */
+export function redactUrlsInReason(reason: string): string {
+  return reason.replace(/(https?:\/\/[^\s?]+)\?\S*/g, "$1?<redacted>");
+}
+
 function withinBbox(bbox: [number, number, number, number], [lng, lat]: [number, number]): boolean {
   const [west, south, east, north] = bbox;
   return lng >= west && lng <= east && lat >= south && lat <= north;
@@ -81,8 +92,10 @@ export function createRideOrchestrator(ctx: IntegrationContext) {
       return value;
     } catch (err) {
       const latency = Date.now() - start;
-      const reason = err instanceof Error ? err.message : String(err);
-      // Coordinates never reach the log — only the provider, method and reason.
+      const raw = err instanceof Error ? err.message : String(err);
+      // Coordinates never reach the log — only the provider, method and a
+      // reason with any URL query string stripped out.
+      const reason = redactUrlsInReason(raw);
       ctx.log.warn(`ride provider call failed: ${provider.id}.${method}`, reason);
       await ctx.providerHealth?.recordFailure(provider.id, latency, reason);
       ctx.metricsRecorder?.recordProviderCall(
@@ -109,6 +122,13 @@ export function createRideOrchestrator(ctx: IntegrationContext) {
           e.provider.getAvailability(request),
         );
         if (!result?.data.available) return null;
+        // Ask the provider to build the handoff it would actually use, so the
+        // panel can warn when the trip will not carry into the app. Cheap for
+        // the pure URL builders; the feed-backed providers memoise their
+        // static data for the life of the request.
+        const handoff = await call(e.provider, "createHandoff", async () =>
+          e.provider.createHandoff(request),
+        );
         return {
           id: e.provider.id,
           name: e.provider.meta.name,
@@ -117,6 +137,7 @@ export function createRideOrchestrator(ctx: IntegrationContext) {
           capabilities: e.provider.capabilities,
           permitsComparison: e.provider.permitsComparison,
           availability: result.data,
+          handoffCarriesCoordinates: handoff?.carriesCoordinates ?? false,
           isDefault: e.provider.id === configuredDefault,
         };
       }),

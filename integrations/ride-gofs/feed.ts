@@ -126,7 +126,27 @@ export function createGofsFeedClient(
     }
   }
 
-  async function loadStatic(): Promise<GofsStaticFeed> {
+  /**
+   * In-flight/settled memo for one request's worth of work. A feed declaring
+   * `ttl: 0` is never written to `ctx.cache`, so without this a single quote —
+   * which resolves availability, then realtime booking, then wait times —
+   * would re-download every static file three times over.
+   */
+  let staticFeed: Promise<GofsStaticFeed> | null = null;
+
+  function loadStatic(): Promise<GofsStaticFeed> {
+    if (!staticFeed) {
+      staticFeed = loadStaticUncached().catch((err) => {
+        // Don't memoise a failure: the next request should retry rather than
+        // inherit a permanently rejected promise.
+        staticFeed = null;
+        throw err;
+      });
+    }
+    return staticFeed;
+  }
+
+  async function loadStaticUncached(): Promise<GofsStaticFeed> {
     // Discovery is mandatory: without it there is no feed at all, so a failure
     // here propagates rather than degrading to an empty feed.
     const discovery = await cachedFetch("gofs", config.url);

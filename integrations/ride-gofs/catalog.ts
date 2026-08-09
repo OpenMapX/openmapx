@@ -168,7 +168,18 @@ export function createGofsCatalog(ctx: IntegrationContext, fetchJson?: GofsFetch
   // Named `doFetch`, not `fetch`: shadowing the global would both confuse
   // readers and defeat the repo guard that looks for bare fetch() in
   // integrations.
-  const doFetch: GofsFetchJson = fetchJson ?? ((url, headers) => safeFetchJson(url, { headers }));
+  // Redirects are pinned to the target host whenever the request carries a
+  // credential header: `safeFetchJson` forwards headers across hops, so a 302
+  // from an otherwise-trusted feed would hand its API key to whatever host the
+  // `Location` names. Same guard as the feed client's fetcher.
+  const doFetch: GofsFetchJson = (url, headers) =>
+    fetchJson
+      ? fetchJson(url, headers)
+      : safeFetchJson(url, {
+          headers,
+          allowedRedirectHosts:
+            headers && Object.keys(headers).length > 0 ? [new URL(url).hostname] : undefined,
+        });
 
   // The cache is an optimisation, not a dependency. A Redis outage must read as
   // a miss and fall through to a live fetch — treating it as an error would

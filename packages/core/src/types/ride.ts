@@ -173,6 +173,13 @@ export interface RideProviderInfo {
   capabilities: Record<RideCapability, boolean>;
   permitsComparison: boolean;
   availability: RideAvailability;
+  /**
+   * Whether this provider's handoff link can actually carry the pickup and
+   * destination. False for apps that publish no parameterised link format, so
+   * the panel can say the trip will not carry over instead of letting the
+   * destination vanish silently.
+   */
+  handoffCarriesCoordinates: boolean;
   isDefault: boolean;
 }
 

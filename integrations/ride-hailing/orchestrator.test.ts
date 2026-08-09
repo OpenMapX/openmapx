@@ -1,7 +1,7 @@
 import type { RideProvider } from "@openmapx/integration-framework";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
-import { createRideOrchestrator } from "./orchestrator.js";
+import { createRideOrchestrator, redactUrlsInReason } from "./orchestrator.js";
 
 const freshness = {
   fetchedAt: "2026-08-09T00:00:00.000Z",
@@ -97,6 +97,50 @@ describe("listProviders", () => {
     const { comparison } = await o.listProviders(request);
     expect(comparison.allowed).toBe(true);
     expect(comparison.comparableProviderIds).toEqual(["open"]);
+  });
+});
+
+describe("redactUrlsInReason", () => {
+  it("strips the query string that carries rider coordinates", () => {
+    const raw =
+      "Request failed: HTTP 500 for https://feed.example/wait_time?pickup_lat=52.52&pickup_lon=13.405";
+    const out = redactUrlsInReason(raw);
+    expect(out).not.toContain("52.52");
+    expect(out).not.toContain("13.405");
+    expect(out).toContain("https://feed.example/wait_time");
+  });
+
+  it("strips a query-parameter API key", () => {
+    const out = redactUrlsInReason(
+      "Request failed: HTTP 403 for https://x.example/gofs?api_key=s3cret",
+    );
+    expect(out).not.toContain("s3cret");
+  });
+
+  it("leaves a message with no URL untouched", () => {
+    expect(redactUrlsInReason("ECONNREFUSED")).toBe("ECONNREFUSED");
+  });
+});
+
+describe("logging", () => {
+  it("never writes rider coordinates into the log on a provider failure", async () => {
+    const warn = vi.fn();
+    const broken = makeProvider({
+      id: "broken",
+      getAvailability: async () => {
+        throw new Error(
+          "Request failed: HTTP 500 for https://feed.example/wait_time?pickup_lat=52.52&pickup_lon=13.405",
+        );
+      },
+    });
+    const ctx = ctxWith([broken]);
+    ctx.log.warn = warn;
+    await createRideOrchestrator(ctx).listProviders(request);
+    for (const call of warn.mock.calls) {
+      expect(JSON.stringify(call)).not.toContain("52.52");
+      expect(JSON.stringify(call)).not.toContain("13.405");
+    }
+    expect(warn).toHaveBeenCalled();
   });
 });
 
