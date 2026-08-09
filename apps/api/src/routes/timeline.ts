@@ -103,12 +103,6 @@ export const timelineRoute: FastifyPluginAsync = async (fastify) => {
     if (errorStatusCode === 401) {
       return reply.status(401).send({ error: "Authentication required", code: "UNAUTHORIZED" });
     }
-    if (errorStatusCode && errorStatusCode >= 400 && errorStatusCode < 500) {
-      return reply.status(errorStatusCode).send({
-        error: "Invalid timeline request",
-        code: "TIMELINE_INSTANCE_UNSUPPORTED",
-      });
-    }
     request.log.error({ errorCode, statusCode: errorStatusCode ?? 500 }, "Timeline request error");
     return reply.status(503).send({
       error: "Timeline source is unavailable",

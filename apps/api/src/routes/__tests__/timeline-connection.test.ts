@@ -84,6 +84,22 @@ describe("timeline connection authentication and safe views", () => {
     );
     expectNoStore(response);
   });
+
+  it("maps an unrecognized scoped hook error to the stable redacted 503", async () => {
+    authMock.requireAuthHook.mockRejectedValueOnce(
+      Object.assign(new Error("sensitive hook detail"), { statusCode: 418 }),
+    );
+
+    const response = await app.inject({ method: "GET", url: "/api/timeline/connection" });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({
+      error: "Timeline source is unavailable",
+      code: "TIMELINE_UPSTREAM_UNAVAILABLE",
+    });
+    expect(response.payload).not.toContain("sensitive hook detail");
+    expectNoStore(response);
+  });
 });
 
 describe("PUT /api/timeline/connection validation", () => {
@@ -104,6 +120,36 @@ describe("PUT /api/timeline/connection validation", () => {
     expect(response.headers["cache-control"]).toBe("private, no-store");
     expect(response.headers.pragma).toBe("no-cache");
     expect(response.headers.vary).toContain("Cookie");
+  });
+
+  it.each([
+    {
+      label: "unsupported media type",
+      expectedStatus: 415,
+      headers: { "content-type": "application/xml" },
+      payload: "<connection>secret parser detail</connection>",
+    },
+    {
+      label: "body above Fastify's limit",
+      expectedStatus: 413,
+      headers: { "content-type": "application/json" },
+      payload: JSON.stringify({ apiKey: "x".repeat(1_048_577) }),
+    },
+  ])("returns a private stable error for $label", async ({ expectedStatus, headers, payload }) => {
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/timeline/connection",
+      headers,
+      payload,
+    });
+
+    expect(response.statusCode).toBe(expectedStatus);
+    expect(response.json()).toEqual({
+      error: "Invalid timeline request",
+      code: "TIMELINE_INSTANCE_UNSUPPORTED",
+    });
+    expect(response.payload).not.toMatch(/secret parser detail|body.*large|media type/i);
+    expectNoStore(response);
   });
 
   it("accepts a display name of 100 Unicode code points, not 100 UTF-16 units", async () => {
