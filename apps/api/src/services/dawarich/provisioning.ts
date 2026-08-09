@@ -504,6 +504,23 @@ async function stagePendingGeneration(
   return generation;
 }
 
+async function finalizePendingGeneration(
+  dependencies: ManagedDawarichProvisioningDependencies,
+  interimGeneration: string,
+): Promise<string> {
+  const candidate = dependencies.randomBytes(16).toString("hex");
+  const generation =
+    candidate === interimGeneration
+      ? `${candidate.slice(0, -1)}${candidate.endsWith("0") ? "1" : "0"}`
+      : candidate;
+  for (const serviceId of [DAWARICH_APP_SERVICE_ID, DAWARICH_WORKER_SERVICE_ID]) {
+    await dependencies.mergeConfig(serviceId, {
+      [DAWARICH_PROVISIONING_GENERATION_KEY]: generation,
+    });
+  }
+  return generation;
+}
+
 /**
  * Better Auth stores only a hash of the client secret, so equal vault copies
  * cannot prove they still match after a failed rotation. This raw, non-secret
@@ -524,10 +541,14 @@ async function stageOidcRecoveryRequired(
 async function clearOidcRecoveryRequired(
   dependencies: ManagedDawarichProvisioningDependencies,
 ): Promise<void> {
-  for (const serviceId of [DAWARICH_APP_SERVICE_ID, DAWARICH_WORKER_SERVICE_ID]) {
-    await dependencies.mergeConfig(serviceId, {
-      [DAWARICH_OIDC_RECOVERY_REQUIRED_KEY]: null,
-    });
+  try {
+    for (const serviceId of [DAWARICH_APP_SERVICE_ID, DAWARICH_WORKER_SERVICE_ID]) {
+      await dependencies.mergeConfig(serviceId, {
+        [DAWARICH_OIDC_RECOVERY_REQUIRED_KEY]: null,
+      });
+    }
+  } catch {
+    throw new ManagedDawarichProvisioningError("DAWARICH_OIDC_SECRET_RECOVERY_REQUIRED");
   }
 }
 
@@ -637,7 +658,6 @@ async function storeOidcSecret(
       ],
       actorId,
     );
-    await clearOidcRecoveryRequired(dependencies);
   } catch {
     throw new ManagedDawarichProvisioningError("DAWARICH_OIDC_SECRET_RECOVERY_REQUIRED");
   }
@@ -682,18 +702,21 @@ async function executeProvision(
       (classifyCopies(initialSecrets.oidc) !== "consistent" ||
         (await hasOidcRecoveryMarker(dependencies))),
   );
+  const oidcMutationRequired = !client || oidcRecoveryRequired;
   const runtimeMutationRequired =
     !client ||
     Object.keys(updates).length > 0 ||
     databaseState === "missing" ||
     railsState !== "consistent" ||
     oidcRecoveryRequired;
+  if (oidcMutationRequired) {
+    await stageOidcRecoveryRequired(dependencies);
+  }
   const pendingGeneration = runtimeMutationRequired
     ? await stagePendingGeneration(dependencies)
     : null;
 
   if (!client) {
-    await stageOidcRecoveryRequired(dependencies);
     client = await dependencies.createClient(input.headers, desiredClient(context));
     created = true;
     await storeOidcSecret(dependencies, client.client_secret, input.actorId);
@@ -747,13 +770,18 @@ async function executeProvision(
   }
 
   if (!created && oidcRecoveryRequired) {
-    await stageOidcRecoveryRequired(dependencies);
     const rotatedClient = await dependencies.rotateClientSecret(input.headers, client.client_id);
     rotated = true;
     await storeOidcSecret(dependencies, rotatedClient.client_secret, input.actorId);
   }
 
   await reconcileConfig(dependencies, context, client.client_id, pendingGeneration);
+  if (pendingGeneration) {
+    await finalizePendingGeneration(dependencies, pendingGeneration);
+  }
+  if (oidcMutationRequired) {
+    await clearOidcRecoveryRequired(dependencies);
+  }
   const status = await buildStatus(dependencies, context, clients);
   return {
     status,
@@ -793,11 +821,13 @@ export async function rotateManagedDawarichOidcSecret(
     }
     const client = clients[0] as ManagedOAuthClient;
     assertImmutableClientSecurity(client);
+    await stageOidcRecoveryRequired(dependencies);
     const pendingGeneration = await stagePendingGeneration(dependencies);
     await reconcileConfig(dependencies, context, client.client_id, pendingGeneration);
-    await stageOidcRecoveryRequired(dependencies);
     const rotated = await dependencies.rotateClientSecret(input.headers, client.client_id);
     await storeOidcSecret(dependencies, rotated.client_secret, input.actorId);
+    await finalizePendingGeneration(dependencies, pendingGeneration);
+    await clearOidcRecoveryRequired(dependencies);
     const status = await buildStatus(dependencies, context, clients);
     return {
       status,

@@ -647,7 +647,7 @@ describe("provisionManagedDawarich", () => {
 });
 
 describe("rotateManagedDawarichOidcSecret", () => {
-  it("does not rotate when the first pending-generation write fails", async () => {
+  it("does not rotate when the first recovery-phase write fails", async () => {
     const harness = await createAppliedHarness();
     harness.mergeConfig.mockRejectedValueOnce(new Error("app config unavailable"));
 
@@ -666,14 +666,15 @@ describe("rotateManagedDawarichOidcSecret", () => {
 
   it("does not rotate and fails closed when only the app pending generation is written", async () => {
     const harness = await createAppliedHarness();
-    harness.mergeConfig
-      .mockImplementationOnce(async (serviceId, updates) => {
-        harness.configs.set(serviceId, {
-          ...(harness.configs.get(serviceId) ?? {}),
-          ...updates,
-        });
-      })
-      .mockRejectedValueOnce(new Error("worker config unavailable"));
+    let mergeCount = 0;
+    harness.mergeConfig.mockImplementation(async (serviceId, updates) => {
+      mergeCount += 1;
+      if (mergeCount === 4) throw new Error("worker config unavailable");
+      harness.configs.set(serviceId, {
+        ...(harness.configs.get(serviceId) ?? {}),
+        ...updates,
+      });
+    });
 
     await expect(
       rotateManagedDawarichOidcSecret(
@@ -720,8 +721,8 @@ describe("rotateManagedDawarichOidcSecret", () => {
   });
 
   it.each([
-    ["first", 3, false],
-    ["second", 4, true],
+    ["first", 1, false],
+    ["second", 2, true],
   ] as const)(
     "does not rotate when the %s OIDC recovery-marker write fails",
     async (_name, failedMerge, recoveryRequired) => {
@@ -842,9 +843,95 @@ describe("rotateManagedDawarichOidcSecret", () => {
     });
   });
 
+  it("requires a fresh full Apply after both containers apply during OIDC rotation", async () => {
+    const harness = await createAppliedHarness();
+    const oldSecret = harness.secrets.get(secretKey(DAWARICH_APP_SERVICE_ID, "OIDC_CLIENT_SECRET"));
+    let releaseVaultWrite!: () => void;
+    let signalVaultWrite!: () => void;
+    const vaultWriteReached = new Promise<void>((resolve) => {
+      signalVaultWrite = resolve;
+    });
+    const vaultWriteReleased = new Promise<void>((resolve) => {
+      releaseVaultWrite = resolve;
+    });
+    let firstWrite = true;
+    harness.setSecret.mockImplementation(async (serviceId, key, value) => {
+      if (firstWrite) {
+        firstWrite = false;
+        signalVaultWrite();
+        await vaultWriteReleased;
+      }
+      harness.secrets.set(secretKey(serviceId, key), value);
+    });
+
+    const rotation = rotateManagedDawarichOidcSecret(
+      { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+      harness.dependencies,
+    );
+    await vaultWriteReached;
+
+    const interimGeneration = harness.configs.get(DAWARICH_APP_SERVICE_ID)?.[GENERATION_KEY];
+    expect(harness.configs.get(DAWARICH_APP_SERVICE_ID)?.[OIDC_RECOVERY_KEY]).toBeTruthy();
+    expect(harness.secrets.get(secretKey(DAWARICH_APP_SERVICE_ID, "OIDC_CLIENT_SECRET"))).toBe(
+      oldSecret,
+    );
+    harness.appliedGenerations.set(DAWARICH_APP_SERVICE_ID, interimGeneration as string);
+    harness.appliedGenerations.set(DAWARICH_WORKER_SERVICE_ID, interimGeneration as string);
+    releaseVaultWrite();
+
+    const result = await rotation;
+    const finalGeneration = harness.configs.get(DAWARICH_APP_SERVICE_ID)?.[GENERATION_KEY];
+    expect(finalGeneration).toMatch(/^[0-9a-f]{32}$/);
+    expect(finalGeneration).not.toBe(interimGeneration);
+    expect(result.status).toMatchObject({
+      oauthClient: { recoveryRequired: false },
+      readyToStart: true,
+      needsApply: true,
+    });
+    expect(harness.secrets.get(secretKey(DAWARICH_APP_SERVICE_ID, "OIDC_CLIENT_SECRET"))).not.toBe(
+      oldSecret,
+    );
+  });
+
+  it("keeps a worker Apply between the two final-generation writes pending", async () => {
+    const harness = await createAppliedHarness();
+    let generationWrites = 0;
+    harness.mergeConfig.mockImplementation(async (serviceId, updates) => {
+      harness.configs.set(serviceId, {
+        ...(harness.configs.get(serviceId) ?? {}),
+        ...updates,
+      });
+      if (GENERATION_KEY in updates) {
+        generationWrites += 1;
+        if (generationWrites === 3) {
+          harness.appliedGenerations.set(
+            DAWARICH_APP_SERVICE_ID,
+            updates[GENERATION_KEY] as string,
+          );
+          harness.appliedGenerations.set(
+            DAWARICH_WORKER_SERVICE_ID,
+            harness.configs.get(DAWARICH_WORKER_SERVICE_ID)?.[GENERATION_KEY] as string,
+          );
+        }
+      }
+    });
+
+    const result = await rotateManagedDawarichOidcSecret(
+      { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+      harness.dependencies,
+    );
+
+    expect(generationWrites).toBe(4);
+    expect(result.status).toMatchObject({
+      oauthClient: { recoveryRequired: false },
+      readyToStart: true,
+      needsApply: true,
+    });
+  });
+
   it.each([
-    ["first", 5],
-    ["second", 6],
+    ["first", 7],
+    ["second", 8],
   ] as const)(
     "fails closed when the %s OIDC recovery-marker clear fails",
     async (_name, failedMerge) => {

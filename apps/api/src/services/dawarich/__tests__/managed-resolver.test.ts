@@ -207,6 +207,13 @@ describe("ManagedDawarichServiceResolver", () => {
         [DAWARICH_WORKER_SERVICE_ID]: "fedcba9876543210fedcba9876543210",
       },
     ],
+    [
+      "both containers with the interim generation",
+      {
+        [DAWARICH_APP_SERVICE_ID]: "fedcba9876543210fedcba9876543210",
+        [DAWARICH_WORKER_SERVICE_ID]: "fedcba9876543210fedcba9876543210",
+      },
+    ],
   ] as const)(
     "fails closed while %s has the desired generation",
     async (_name, appliedGenerations) => {

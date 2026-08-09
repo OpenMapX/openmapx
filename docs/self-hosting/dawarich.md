@@ -79,12 +79,16 @@ OIDC creation and rotation also set a raw, non-secret recovery marker on both
 consumers before Better Auth changes. Its value is not part of the public
 service schema, response payload, generated Compose environment, or container
 environment; the admin status exposes only a recovery-required boolean. It
-clears only after both vault copies are written. If a write or
+remains set while both vault copies are written and a fresh final provisioning
+generation is stored for both consumers; only then is it cleared. An **Apply**
+that races the rotation can therefore load only the interim generation and
+cannot satisfy readiness after rotation completes. If a write, finalization, or
 clear fails, **Apply** cannot clear recovery readiness—even if both containers
-later run the staged generation. Restore vault access and use
+later run a staged generation. Restore vault access and use
 **Provision/reconcile** again; OpenMapX will rotate once more because Better
 Auth intentionally does not expose a secret value that could be compared with
-the vault, synchronize both copies, and clear the marker before Apply is safe.
+the vault, synchronize both copies, store another fresh final generation, and
+clear the marker before Apply is safe.
 
 The generic **Credentials** tab reports the database, Rails, and OIDC fields as
 **Managed** and does not offer Set, Rotate, or Remove actions. Its API returns
