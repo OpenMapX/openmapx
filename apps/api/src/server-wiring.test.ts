@@ -136,7 +136,11 @@ describe("makeRateLimitTierHook", () => {
     return app;
   }
 
-  const cases: Array<{ url: string; tier: keyof RateLimitTiers | null }> = [
+  const cases: Array<{
+    method?: "GET" | "POST" | "PUT" | "DELETE";
+    url: string;
+    tier: keyof RateLimitTiers | null;
+  }> = [
     { url: "/health", tier: null },
     { url: "/api/auth/sign-in", tier: "auth" },
     { url: "/api/tiles/1/2/3", tier: "tile" },
@@ -149,15 +153,19 @@ describe("makeRateLimitTierHook", () => {
     { url: "/api/integrations/food-delivery/ubereats/open", tier: "expensive" },
     { url: "/api/integrations/restaurants/menu?website=https://example.com", tier: "expensive" },
     { url: "/api/integrations/food-delivery/providers?country=de", tier: "public" },
+    { method: "GET", url: "/api/timeline/connection", tier: "public" },
+    { method: "PUT", url: "/api/timeline/connection", tier: "expensive" },
+    { method: "POST", url: "/api/timeline/connection/test", tier: "expensive" },
+    { method: "DELETE", url: "/api/timeline/connection", tier: "expensive" },
     { url: "/api/saved", tier: "public" },
     { url: "/whatever", tier: null },
   ];
 
-  for (const { url, tier } of cases) {
-    it(`routes ${url} to the ${tier ?? "no"} tier`, async () => {
+  for (const { method = "GET", url, tier } of cases) {
+    it(`routes ${method} ${url} to the ${tier ?? "no"} tier`, async () => {
       const { hook, stubs } = stubTiers();
       const app = await tierApp(hook);
-      await app.inject({ method: "GET", url, remoteAddress: "198.51.100.7" });
+      await app.inject({ method, url, remoteAddress: "198.51.100.7" });
       for (const key of Object.keys(stubs) as Array<keyof RateLimitTiers>) {
         if (key === tier) {
           expect(stubs[key]).toHaveBeenCalledTimes(1);

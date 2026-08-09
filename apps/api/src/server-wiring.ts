@@ -82,6 +82,15 @@ export const EXPENSIVE_PUBLIC_PATTERNS = [
   /^\/api\/offline\/packages\/prepare(\/|$|\?)/,
 ];
 
+function isExpensiveTimelineConnectionRequest(request: FastifyRequest): boolean {
+  const path = request.url.split("?", 1)[0];
+  return (
+    (request.method === "PUT" && path === "/api/timeline/connection") ||
+    (request.method === "POST" && path === "/api/timeline/connection/test") ||
+    (request.method === "DELETE" && path === "/api/timeline/connection")
+  );
+}
+
 export const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 
 type Limit = (request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
@@ -125,7 +134,10 @@ export function makeRateLimitTierHook(limits: RateLimitTiers) {
       await limits.tile(request, reply);
       return;
     }
-    if (EXPENSIVE_PUBLIC_PATTERNS.some((p) => p.test(url))) {
+    if (
+      isExpensiveTimelineConnectionRequest(request) ||
+      EXPENSIVE_PUBLIC_PATTERNS.some((p) => p.test(url))
+    ) {
       await limits.expensive(request, reply);
       return;
     }

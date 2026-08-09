@@ -48,6 +48,7 @@ import { savedRoute } from "./routes/saved";
 import { statusRoute } from "./routes/status";
 import { streetLevelRoute } from "./routes/street-level-imagery";
 import { tilesRoute } from "./routes/tiles";
+import { timelineRoute } from "./routes/timeline";
 import { trafficRoute } from "./routes/traffic";
 import { winterSportsRoute } from "./routes/winter-sports";
 import {
@@ -278,6 +279,7 @@ await server.register(internalPoiSourcesRoute, { prefix: "/api" });
 await server.register(winterSportsRoute, { prefix: "/api" });
 await server.register(reviewsKeypairRoute, { prefix: "/api" });
 await server.register(savedRoute, { prefix: "/api" });
+await server.register(timelineRoute, { prefix: "/api" });
 await server.register(meRoute, { prefix: "/api" });
 await server.register(statusRoute, { prefix: "/api" });
 await server.register(adminRoute, { prefix: "/api" });

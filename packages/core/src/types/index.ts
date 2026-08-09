@@ -89,11 +89,15 @@ export type {
   OpeningHoursStatus,
 } from "./openingHoursInfo";
 export type {
+  ConnectPersonalTimelineRequest,
   PersonalTimelineDayV1,
   PersonalTimelineJourneyV1,
   PersonalTimelineSummaryV1,
   PersonalTimelineVisitV1,
   PersonalTimelineWarning,
+  TimelineConnectionMode,
+  TimelineConnectionStatus,
+  TimelineConnectionView,
 } from "./personalTimeline";
 export type {
   AirportFrequencyInfo,

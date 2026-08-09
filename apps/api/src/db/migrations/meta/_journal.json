@@ -71,6 +71,13 @@
       "when": 1782504723183,
       "tag": "0009_installed_extension",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786286610530,
+      "tag": "0010_personal_timeline_connection",
+      "breakpoints": true
     }
   ]
 }

@@ -63,3 +63,8 @@ export { type ServiceRepositoryRow, serviceRepository } from "./service-reposito
 export { serviceSecret } from "./service-secret-schema";
 // System settings
 export { systemSettings } from "./system-settings-schema";
+// Encrypted per-user Dawarich timeline connection
+export {
+  type PersonalTimelineConnectionRow,
+  personalTimelineConnection,
+} from "./timeline-connection-schema";

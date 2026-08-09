@@ -1,5 +1,33 @@
 export type PersonalTimelineWarning = "TRACK_GEOMETRY_UNAVAILABLE" | "PARTIAL_TRACK_PAGE_LIMIT";
 
+export type TimelineConnectionMode = "external" | "managed";
+export type TimelineConnectionStatus = "connected" | "degraded" | "invalid";
+
+export type ConnectPersonalTimelineRequest =
+  | { mode: "external"; instanceUrl: string; apiKey: string; displayName?: string }
+  | { mode: "managed"; apiKey: string };
+
+export interface TimelineConnectionView {
+  connected: boolean;
+  connection: null | {
+    mode: TimelineConnectionMode;
+    publicOrigin: string;
+    displayName: string;
+    upstreamEmail: string | null;
+    timeZone: string;
+    distanceUnit: string | null;
+    status: TimelineConnectionStatus;
+    validatedAt: string;
+    lastReadAt: string | null;
+  };
+  managed: {
+    available: boolean;
+    healthy: boolean;
+    publicOrigin: string | null;
+    reason: "disabled" | "unhealthy" | "unprovisioned" | null;
+  };
+}
+
 export interface PersonalTimelineSummaryV1 {
   totalDistance: number;
   placesVisited: number;
