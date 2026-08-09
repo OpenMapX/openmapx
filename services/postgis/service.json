@@ -7,7 +7,7 @@
   "quality": "built-in",
   "homepage": "https://postgis.net/",
   "container": {
-    "image": "postgis/postgis",
+    "image": "ghcr.io/baosystems/postgis",
     "tag": "18-3.6",
     "containerName": "postgis",
     "expose": [5432],
