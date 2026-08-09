@@ -147,13 +147,33 @@ describe("validateServiceManifest", () => {
       ...validMinimal,
       container: {
         ...validMinimal.container,
-        environment: { POSTGRES_USER: "timeline", POSTGRES_DB: "timeline" },
+        environment: {
+          POSTGRES_USER: "timeline_2026$archive",
+          POSTGRES_DB: "timeline_2026$archive",
+        },
       },
       volumes: [
         { name: "openmapx-valhalla-data", mountAt: "/data", backup: true, backupMode: "pg_dump" },
       ],
     });
     expect(pgDump.valid).toBe(true);
+
+    const interpolation = validateFirstParty({
+      ...validMinimal,
+      container: {
+        ...validMinimal.container,
+        environment: {
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: test data is literal Compose interpolation syntax
+          POSTGRES_USER: "${POSTGRES_USER:-timeline}",
+          POSTGRES_DB: "timeline",
+        },
+      },
+      volumes: [
+        { name: "openmapx-valhalla-data", mountAt: "/data", backup: true, backupMode: "pg_dump" },
+      ],
+    });
+    expect(interpolation.valid).toBe(false);
+    expect(interpolation.errors.join(" ")).toMatch(/POSTGRES_USER/);
   });
 
   it("accepts a minimal valid manifest", () => {

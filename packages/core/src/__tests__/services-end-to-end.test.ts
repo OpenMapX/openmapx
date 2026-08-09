@@ -231,6 +231,19 @@ describe.skipIf(!manifestsPresent)(
         }
       });
 
+      it("declares an explicit mode for every first-party backup volume", () => {
+        for (const path of builtInManifestPaths) {
+          const raw = JSON.parse(readFileSync(path, "utf-8")) as {
+            volumes?: Array<{ name: string; backup?: boolean; backupMode?: unknown }>;
+          };
+          for (const volume of raw.volumes ?? []) {
+            if (volume.backup === true) {
+              expect(volume.backupMode, `${path}: ${volume.name}`).toMatch(/^(tar|pg_dump)$/);
+            }
+          }
+        }
+      });
+
       it("rejects every shipped manifest when it arrives without first-party provenance", () => {
         for (const path of builtInManifestPaths) {
           const raw: unknown = JSON.parse(readFileSync(path, "utf-8"));

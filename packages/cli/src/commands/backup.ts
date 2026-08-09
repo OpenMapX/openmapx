@@ -20,7 +20,7 @@ import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { applyServiceSelection } from "../lib/service-selection";
 
-const { ServiceRegistry } = coreServices;
+const { ServiceRegistry, isSafePostgresIdentifier } = coreServices;
 
 // ─── Public types ───────────────────────────────────────────────────────────
 
@@ -81,9 +81,6 @@ const BACKUP_FILE_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 // Compose service ids use the same lowercase slug shape as service manifests.
 const SERVICE_ID_REGEX = /^[a-z0-9][a-z0-9-]*$/;
 
-// A leading dash would make dropdb/createdb/psql interpret the value as a flag.
-const PG_IDENT_REGEX = /^[a-zA-Z_][a-zA-Z0-9_$]*$/;
-
 export function isValidBackupName(name: string): boolean {
   return typeof name === "string" && name.length > 0 && NAME_REGEX.test(name);
 }
@@ -120,16 +117,10 @@ export function assertValidVolumeEntry(entry: BackupVolumeEntry, context: string
   ) {
     throw new Error(`Invalid docker volume name in ${context}`);
   }
-  if (
-    entry.postgresUser !== undefined &&
-    (typeof entry.postgresUser !== "string" || !PG_IDENT_REGEX.test(entry.postgresUser))
-  ) {
+  if (entry.postgresUser !== undefined && !isSafePostgresIdentifier(entry.postgresUser)) {
     throw new Error(`Invalid postgres user in ${context}`);
   }
-  if (
-    entry.postgresDb !== undefined &&
-    (typeof entry.postgresDb !== "string" || !PG_IDENT_REGEX.test(entry.postgresDb))
-  ) {
+  if (entry.postgresDb !== undefined && !isSafePostgresIdentifier(entry.postgresDb)) {
     throw new Error(`Invalid postgres database in ${context}`);
   }
 }
@@ -264,11 +255,27 @@ export async function discoverBackupableServices(
     const backupVolumes = (svc.manifest.volumes ?? []).filter((v) => v.backup === true);
     if (backupVolumes.length === 0) continue;
     const env = svc.manifest.container.environment ?? {};
+    const modes = backupVolumes.map(
+      (volume) => volume.backupMode ?? (svc.manifest.id === "postgis" ? "pg_dump" : "tar"),
+    );
+    const legacyPostgis =
+      svc.manifest.id === "postgis" &&
+      backupVolumes.every((volume) => volume.backupMode === undefined);
+    const postgresUser = env.POSTGRES_USER ?? (legacyPostgis ? "postgres" : undefined);
+    const postgresDb = env.POSTGRES_DB ?? (legacyPostgis ? "openmapx" : undefined);
+    if (
+      modes.includes("pg_dump") &&
+      (!isSafePostgresIdentifier(postgresUser) || !isSafePostgresIdentifier(postgresDb))
+    ) {
+      throw new Error(
+        `Service "${svc.manifest.id}" declares pg_dump backup data without safe literal POSTGRES_USER and POSTGRES_DB values`,
+      );
+    }
     out.push({
       id: svc.manifest.id,
       version: svc.manifest.version,
-      postgresUser: env.POSTGRES_USER,
-      postgresDb: env.POSTGRES_DB,
+      postgresUser,
+      postgresDb,
       volumes: backupVolumes.map((v) => ({
         serviceId: svc.manifest.id,
         volumeName: v.name,
@@ -473,6 +480,11 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
         const out = join(backupDir, file);
         const user = svc.postgresUser ?? "postgres";
         const db = svc.postgresDb ?? "openmapx";
+        if (!isSafePostgresIdentifier(user) || !isSafePostgresIdentifier(db)) {
+          throw new Error(
+            `Service "${svc.id}" declares pg_dump backup data without safe literal POSTGRES_USER and POSTGRES_DB values`,
+          );
+        }
         log.dim(`  pg_dump ${db} (user=${user}) → ${file}`);
         await pgDumpToFile(ctx, svc.id, user, db, out);
         serviceEntry.volumes.push({

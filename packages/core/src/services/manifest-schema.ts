@@ -14,6 +14,13 @@ const ABSOLUTE_PATH_REGEX = /^\/[^\s]+$/;
 const PATH_PREFIX_REGEX = /^\/[a-zA-Z0-9._\-/]*$/;
 const SERVICE_ID_REGEX = /^[a-z0-9][a-z0-9-]*$/;
 const CONFIG_PROPERTY_KEY_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
+/** PostgreSQL role/database names passed as individual docker-compose argv values. */
+export const POSTGRES_IDENTIFIER_REGEX = /^[a-zA-Z_][a-zA-Z0-9_$]*$/;
+
+/** Shared literal-only contract for pg_dump backup metadata. */
+export function isSafePostgresIdentifier(value: unknown): value is string {
+  return typeof value === "string" && POSTGRES_IDENTIFIER_REGEX.test(value);
+}
 
 function isValidHostname(value: string): boolean {
   if (value.length === 0 || value.length > 253) return false;
@@ -437,14 +444,14 @@ export function validateServiceManifest(
     if (volume.backupMode && volume.backup !== true) {
       errors.push(`volumes: backupMode requires backup: true on "${volume.name}"`);
     }
-    if (
-      volume.backupMode === "pg_dump" &&
-      (typeof m.container.environment?.POSTGRES_USER !== "string" ||
-        typeof m.container.environment?.POSTGRES_DB !== "string")
-    ) {
-      errors.push(
-        `volumes: pg_dump backupMode requires container environment strings POSTGRES_USER and POSTGRES_DB`,
-      );
+    if (volume.backupMode === "pg_dump") {
+      for (const key of ["POSTGRES_USER", "POSTGRES_DB"] as const) {
+        if (!isSafePostgresIdentifier(m.container.environment?.[key])) {
+          errors.push(
+            `volumes: pg_dump backupMode requires ${key} to be a safe literal PostgreSQL identifier`,
+          );
+        }
+      }
     }
   }
 

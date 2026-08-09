@@ -361,6 +361,30 @@ describe("readBackupManifest", () => {
     expect(() => readBackupManifest(join(dir, "manifest.json"))).toThrow(/Invalid/);
   });
 
+  it("rejects compose interpolation in postgres backup metadata", () => {
+    const dir = writeBackup("interpolated-postgres", {
+      name: "interpolated-postgres",
+      createdAt: "2026-04-19T00:00:00Z",
+      services: [
+        {
+          id: "timeline",
+          volumes: [
+            {
+              name: "database",
+              mode: "pg_dump",
+              file: "timeline__database.sql.gz",
+              sizeBytes: 1,
+              // biome-ignore lint/suspicious/noTemplateCurlyInString: test data is literal Compose interpolation syntax
+              postgresUser: "${POSTGRES_USER:-timeline}",
+              postgresDb: "timeline",
+            },
+          ],
+        },
+      ],
+    });
+    expect(() => readBackupManifest(join(dir, "manifest.json"))).toThrow(/Invalid postgres user/);
+  });
+
   it("rejects a service id that is not a slug", () => {
     const dir = writeBackup("bad-service", {
       name: "bad-service",
@@ -619,7 +643,10 @@ describe("backup volume modes", () => {
       version: "2.3.4",
       container: {
         ...baseService.container,
-        environment: { POSTGRES_USER: "timeline", POSTGRES_DB: "timeline" },
+        environment: {
+          POSTGRES_USER: "timeline_2026$archive",
+          POSTGRES_DB: "timeline_2026$archive",
+        },
       },
       volumes: [
         { name: "openmapx-db", mountAt: "/db", backup: true, backupMode: "pg_dump" },
@@ -645,6 +672,10 @@ describe("backup volume modes", () => {
       "pg_dump",
       "tar",
     ]);
+    expect(result.manifest.services[0]?.volumes[0]).toMatchObject({
+      postgresUser: "timeline_2026$archive",
+      postgresDb: "timeline_2026$archive",
+    });
   });
 
   it("restores pg_dump volumes while running, then stops and restarts only for tar volumes", async () => {
@@ -661,8 +692,8 @@ describe("backup volume modes", () => {
               mode: "pg_dump",
               file: "timeline__openmapx-db.sql.gz",
               sizeBytes: 0,
-              postgresUser: "timeline",
-              postgresDb: "timeline",
+              postgresUser: "timeline_2026$archive",
+              postgresDb: "timeline_2026$archive",
             },
             {
               name: "openmapx-files",
@@ -691,6 +722,7 @@ describe("backup volume modes", () => {
     expect(stop).toBeGreaterThan(psql);
     expect(tar).toBeGreaterThan(stop);
     expect(start).toBeGreaterThan(tar);
+    expect(calls.some(([, args]) => args.includes("-U timeline_2026$archive"))).toBe(true);
   });
 });
 
