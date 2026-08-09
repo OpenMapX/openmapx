@@ -170,13 +170,34 @@ export function createGofsCatalog(ctx: IntegrationContext, fetchJson?: GofsFetch
   // integrations.
   const doFetch: GofsFetchJson = fetchJson ?? ((url, headers) => safeFetchJson(url, { headers }));
 
+  // The cache is an optimisation, not a dependency. A Redis outage must read as
+  // a miss and fall through to a live fetch — treating it as an error would
+  // silently empty the whole catalog, which is exactly what happened the first
+  // time this ran against a host with Redis down.
+  async function cacheGet<T>(key: string): Promise<T | null> {
+    try {
+      return await ctx.cache.get<T>(key);
+    } catch {
+      return null;
+    }
+  }
+
+  async function cacheSet(key: string, value: unknown, ttlSeconds: number): Promise<void> {
+    try {
+      await ctx.cache.set(key, value, ttlSeconds);
+    } catch {
+      // Nothing to do: the value was still computed and returned to the caller.
+    }
+  }
+
   async function loadUpstream(): Promise<CatalogEntry[]> {
     if (ctx.config.useUpstreamCatalog === false) return [];
+    const cached = await cacheGet<UpstreamSystem[]>(CATALOG_CACHE_KEY);
+    if (cached) return cached.flatMap((s) => toEntry(s, "upstream") ?? []);
     try {
-      const cached = await ctx.cache.get<UpstreamSystem[]>(CATALOG_CACHE_KEY);
       const systems =
-        cached ?? ((await doFetch(UPSTREAM_URL)) as { systems?: UpstreamSystem[] })?.systems ?? [];
-      if (!cached) await ctx.cache.set(CATALOG_CACHE_KEY, systems, CATALOG_TTL_SECONDS);
+        ((await doFetch(UPSTREAM_URL)) as { systems?: UpstreamSystem[] })?.systems ?? [];
+      await cacheSet(CATALOG_CACHE_KEY, systems, CATALOG_TTL_SECONDS);
       return systems.flatMap((s) => toEntry(s, "upstream") ?? []);
     } catch (err) {
       // A registry outage must not take out the operator's own feeds.
@@ -203,7 +224,7 @@ export function createGofsCatalog(ctx: IntegrationContext, fetchJson?: GofsFetch
    */
   async function probe(entry: CatalogEntry): Promise<CatalogEntry> {
     const key = `gofs:probe:${entry.id}:${entry.auth ? "keyed" : "anon"}`;
-    const cached = await ctx.cache.get<CatalogStatus>(key);
+    const cached = await cacheGet<CatalogStatus>(key);
     if (cached) return { ...entry, status: cached };
 
     let status: CatalogStatus;
@@ -214,7 +235,7 @@ export function createGofsCatalog(ctx: IntegrationContext, fetchJson?: GofsFetch
     } catch (err) {
       status = statusFromError(err);
     }
-    await ctx.cache.set(key, status, PROBE_TTL_SECONDS);
+    await cacheSet(key, status, PROBE_TTL_SECONDS);
     return { ...entry, status };
   }
 

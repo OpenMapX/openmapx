@@ -98,6 +98,33 @@ describe("resolveFeeds", () => {
     expect(matches[0].origin).toBe("operator");
   });
 
+  it("survives a cache outage, still resolving feeds from the live registry", async () => {
+    // Redis being down must read as a cache miss, not as an empty catalog —
+    // running this against a host with Redis down was how the bug surfaced.
+    const ctx = createMockIntegrationContext({
+      id: "ride-gofs",
+      config: {},
+      cache: {
+        get: async () => {
+          throw new Error("ECONNREFUSED");
+        },
+        set: async () => {
+          throw new Error("ECONNREFUSED");
+        },
+        del: async () => {
+          throw new Error("ECONNREFUSED");
+        },
+        withCache: async <T>(_k: string, _t: number, fn: () => Promise<T>) => fn(),
+      },
+    });
+    const fetchJson = vi.fn(async (url: string) => {
+      if (url === UPSTREAM_URL) return UPSTREAM;
+      return { data: { en: { feeds: [{ name: "zones", url: "https://x/z" }] } } };
+    });
+    const feeds = await createGofsCatalog(ctx, fetchJson).resolveFeeds();
+    expect(feeds.map((f) => f.id)).toContain("freebee-miami-beach");
+  });
+
   it("survives an unreachable upstream registry, keeping operator feeds", async () => {
     const ctx = createMockIntegrationContext({
       id: "ride-gofs",

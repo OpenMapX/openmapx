@@ -86,14 +86,29 @@ export function createGofsFeedClient(
     return fetchJson(url, headers);
   }
 
+  // The cache is an optimisation, not a dependency: a Redis outage must read as
+  // a miss and fall through to a live fetch rather than failing the whole feed.
   async function cachedFetch(name: string, url: string): Promise<unknown> {
-    const cached = await ctx.cache.get(cacheKey(name));
+    let cached: unknown = null;
+    try {
+      cached = await ctx.cache.get(cacheKey(name));
+    } catch {
+      cached = null;
+    }
     if (cached !== null && cached !== undefined) return cached;
+
     const doc = await authedFetch(url);
     const ttl = envelopeTtl(doc);
     // A feed declaring ttl 0 is telling us its data can change at any moment;
     // honour that by not caching it at all rather than picking a lifetime for it.
-    if (ttl > 0) await ctx.cache.set(cacheKey(name), doc, ttl);
+    if (ttl > 0) {
+      try {
+        await ctx.cache.set(cacheKey(name), doc, ttl);
+      } catch {
+        // The document was fetched successfully; failing to cache it is not
+        // a reason to fail the request.
+      }
+    }
     return doc;
   }
 
