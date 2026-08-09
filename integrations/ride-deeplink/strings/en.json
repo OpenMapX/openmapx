@@ -1,0 +1,26 @@
+{
+  "name": "Ride Apps",
+  "description": "Opens a ride-hailing app (Uber, Lyft, Bolt, FREENOW, Yango) from the ride directions mode. OpenMapX fetches no fares, wait times or vehicle data: each result is a link built locally and opened in your browser only when you click it.",
+  "dataSources": {
+    "uber": {
+      "purpose": "Link to open a ride request in Uber for the chosen pickup and destination",
+      "dataSent": "None sent by OpenMapX — an outbound link to m.uber.com is built locally and opened in your browser only when you click it. When the operator has configured an Uber Client ID, the URL carries the pickup and destination latitude, longitude and formatted address, plus that Client ID so referrals can be attributed. Without a Client ID the web link is the plain Uber site and carries no trip data at all."
+    },
+    "lyft": {
+      "purpose": "Link to open a ride request in Lyft for the chosen pickup and destination",
+      "dataSent": "None sent by OpenMapX — an outbound link to lyft.com is built locally and opened in your browser only when you click it. The URL carries the pickup and destination latitude and longitude, and their addresses when known. If the operator has configured a Lyft partner Client ID it is added so referrals can be attributed."
+    },
+    "bolt": {
+      "purpose": "Link to open the Bolt ride-hailing app",
+      "dataSent": "None sent by OpenMapX — an outbound link to bolt.eu is opened in your browser only when you click it. Bolt publishes no parameterised link format, so the URL carries no pickup, destination or address data."
+    },
+    "freenow": {
+      "purpose": "Link to open the FREENOW ride-hailing app",
+      "dataSent": "None sent by OpenMapX — an outbound link to free-now.com is opened in your browser only when you click it. FREENOW publishes no parameterised link format, so the URL carries no pickup, destination or address data."
+    },
+    "yango": {
+      "purpose": "Link to open the Yango ride-hailing app",
+      "dataSent": "None sent by OpenMapX — an outbound link to yango.com is opened in your browser only when you click it. The URL carries no pickup, destination or address data."
+    }
+  }
+}

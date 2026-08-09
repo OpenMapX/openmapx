@@ -118,6 +118,25 @@ export type {
   ReviewSubject,
 } from "./reviews";
 export type {
+  RideAttribution,
+  RideAvailability,
+  RideBooking,
+  RideBookingRequest,
+  RideBookingRules,
+  RideBookingState,
+  RideCapability,
+  RideComparisonPolicy,
+  RideFare,
+  RideHandoff,
+  RideProduct,
+  RideProviderInfo,
+  RideProvidersResponse,
+  RideQuote,
+  RideQuoteRequest,
+  RideUnavailableReason,
+} from "./ride";
+export { isQuoteExpired } from "./ride";
+export type {
   RoadConditionAttribution,
   RoadConditionEvent,
   RoadConditionRoadRef,

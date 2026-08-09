@@ -7,6 +7,7 @@ import type { PhotoProvider } from "./contracts/photo-provider.js";
 import type { PoiSearchProvider } from "./contracts/poi-search-provider.js";
 import type { RealtimeProvider } from "./contracts/realtime-provider.js";
 import type { ReviewProvider } from "./contracts/review-provider.js";
+import type { RideProvider } from "./contracts/ride-provider.js";
 import type { RoadConditionsProvider } from "./contracts/road-conditions-provider.js";
 import type { RoutingProvider } from "./contracts/routing-provider.js";
 import type { AiCloudProcessor } from "./contracts/search-nlp-provider.js";
@@ -319,6 +320,11 @@ export interface IntegrationContext {
   registerGeocodingProvider(provider: GeocodingProvider): void;
   /** Typed registrar for routing providers. Stored under the `routing` key. */
   registerRoutingProvider(provider: RoutingProvider): void;
+  /**
+   * Typed registrar for ride-hailing providers. Stored under the
+   * `ride-hailing` key; the `ride-hailing` orchestrator collects them.
+   */
+  registerRideProvider(provider: RideProvider): void;
   /**
    * Typed registrar for road-conditions providers (live incidents, roadworks,
    * closures, hazards). Stored under the `road-conditions` key; the

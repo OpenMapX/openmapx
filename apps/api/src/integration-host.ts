@@ -440,6 +440,11 @@ function buildIntegrationContext(args: {
       existing.push(provider);
       providers.set("routing", existing);
     },
+    registerRideProvider(provider) {
+      const existing = providers.get("ride-hailing") ?? [];
+      existing.push(provider);
+      providers.set("ride-hailing", existing);
+    },
     registerRoadConditionsProvider(provider) {
       const existing = providers.get("road-conditions") ?? [];
       existing.push(provider);

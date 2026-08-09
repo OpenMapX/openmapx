@@ -91,6 +91,7 @@ function makeCtx(overrides: CtxOverrides = {}): IntegrationContext {
     registerWeatherProvider: noop,
     registerGeocodingProvider: noop,
     registerRoutingProvider: noop,
+    registerRideProvider: noop,
     registerPhotoProvider: noop,
     registerReviewProvider: noop,
     registerPoiSearchProvider: noop,

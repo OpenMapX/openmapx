@@ -1,0 +1,26 @@
+{
+  "name": "Mitfahr-Apps",
+  "description": "Öffnet eine Mitfahr-App (Uber, Lyft, Bolt, FREENOW, Yango) aus dem Fahrten-Modus der Routenplanung. OpenMapX ruft keine Preise, Wartezeiten oder Fahrzeugdaten ab: Jedes Ergebnis ist ein lokal erzeugter Link, der erst beim Anklicken in Ihrem Browser geöffnet wird.",
+  "dataSources": {
+    "uber": {
+      "purpose": "Link zum Öffnen einer Fahrtanfrage bei Uber für den gewählten Abhol- und Zielort",
+      "dataSent": "Keine Übermittlung durch OpenMapX – ein ausgehender Link zu m.uber.com wird lokal erzeugt und erst beim Anklicken in Ihrem Browser geöffnet. Wenn der Betreiber eine Uber-Client-ID hinterlegt hat, enthält die URL Breite, Länge und formatierte Adresse von Abhol- und Zielort sowie diese Client-ID, damit Vermittlungen zugeordnet werden können. Ohne Client-ID verweist der Web-Link auf die einfache Uber-Website und enthält überhaupt keine Fahrtdaten."
+    },
+    "lyft": {
+      "purpose": "Link zum Öffnen einer Fahrtanfrage bei Lyft für den gewählten Abhol- und Zielort",
+      "dataSent": "Keine Übermittlung durch OpenMapX – ein ausgehender Link zu lyft.com wird lokal erzeugt und erst beim Anklicken in Ihrem Browser geöffnet. Die URL enthält Breite und Länge von Abhol- und Zielort sowie, falls bekannt, deren Adressen. Ist vom Betreiber eine Lyft-Partner-Client-ID konfiguriert, wird sie ergänzt, damit Vermittlungen zugeordnet werden können."
+    },
+    "bolt": {
+      "purpose": "Link zum Öffnen der Bolt-Mitfahr-App",
+      "dataSent": "Keine Übermittlung durch OpenMapX – ein ausgehender Link zu bolt.eu wird erst beim Anklicken in Ihrem Browser geöffnet. Bolt veröffentlicht kein parametrisiertes Linkformat, daher enthält die URL keine Abhol-, Ziel- oder Adressdaten."
+    },
+    "freenow": {
+      "purpose": "Link zum Öffnen der FREENOW-Mitfahr-App",
+      "dataSent": "Keine Übermittlung durch OpenMapX – ein ausgehender Link zu free-now.com wird erst beim Anklicken in Ihrem Browser geöffnet. FREENOW veröffentlicht kein parametrisiertes Linkformat, daher enthält die URL keine Abhol-, Ziel- oder Adressdaten."
+    },
+    "yango": {
+      "purpose": "Link zum Öffnen der Yango-Mitfahr-App",
+      "dataSent": "Keine Übermittlung durch OpenMapX – ein ausgehender Link zu yango.com wird erst beim Anklicken in Ihrem Browser geöffnet. Die URL enthält keine Abhol-, Ziel- oder Adressdaten."
+    }
+  }
+}

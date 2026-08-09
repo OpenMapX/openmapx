@@ -1,0 +1,5 @@
+{
+  "name": "Mitfahrdienste",
+  "description": "Ermittelt die für eine Fahrt verfügbaren Mitfahrdienste und übergibt an den von Ihnen gewählten Anbieter. Die Route selbst berechnet der normale Auto-Router; diese Integration ergänzt Anbieter, Preise und Buchungslinks.",
+  "dataSources": {}
+}

@@ -45,6 +45,7 @@ export const DOMAIN_TO_SECTION_KEY: Record<string, string> = {
   "live-transit": "liveTransit",
   "gtfs-catalog": "transitDataCatalogs",
   "flight-search": "flights",
+  "ride-hailing": "rideHailing",
   "hotel-search": "hotels",
   "food-delivery": "foodDelivery",
   "restaurant-menu": "restaurantMenus",

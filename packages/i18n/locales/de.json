@@ -1553,7 +1553,8 @@
       "flights": "Flüge",
       "hotels": "Hotels",
       "foodDelivery": "Essenslieferung",
-      "restaurantMenus": "Restaurant-Speisekarten"
+      "restaurantMenus": "Restaurant-Speisekarten",
+      "rideHailing": "Mitfahr-Apps"
     },
     "attributionSections": {
       "geocoding": "Kartendaten und Geokodierung",
@@ -1572,7 +1573,8 @@
       "flights": "Flüge",
       "hotels": "Hotels",
       "foodDelivery": "Essenslieferung",
-      "restaurantMenus": "Restaurant-Speisekarten"
+      "restaurantMenus": "Restaurant-Speisekarten",
+      "rideHailing": "Mitfahr-Apps"
     },
     "exposure": {
       "direct": "Direkt (Browser)",

@@ -2,11 +2,19 @@ import type { DataSourceAttribution } from "./dataSource";
 import type { ConnectorStandard, EvVehicleSpec } from "./ev";
 import type { LngLat } from "./geometry";
 
-// "transit" and "flying" are handled outside the ground-routing engines:
-// transit goes through the transit plan endpoint, and "flying" is a UI-only mode
-// that deep-links to external flight search (no engine routes air legs). The
-// routing route handlers reject both via `parseTravelMode`'s allow-list.
-export type TravelMode = "driving" | "walking" | "cycling" | "motorcycle" | "transit" | "flying";
+// "transit", "flying" and "ride" are handled outside the ground-routing engines:
+// transit goes through the transit plan endpoint, "flying" deep-links to
+// external flight search, and "ride" pairs a driving route with a ride-hailing
+// provider handoff. No engine routes any of them, and the routing route
+// handlers reject all three via `parseTravelMode`'s allow-list.
+export type TravelMode =
+  | "driving"
+  | "walking"
+  | "cycling"
+  | "motorcycle"
+  | "transit"
+  | "flying"
+  | "ride";
 
 export interface Waypoint {
   id: string;

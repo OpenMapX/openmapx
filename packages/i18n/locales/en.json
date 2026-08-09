@@ -1553,7 +1553,8 @@
       "flights": "Flights",
       "hotels": "Hotels",
       "foodDelivery": "Food Delivery",
-      "restaurantMenus": "Restaurant Menus"
+      "restaurantMenus": "Restaurant Menus",
+      "rideHailing": "Ride-Hailing Apps"
     },
     "attributionSections": {
       "geocoding": "Map Data and Geocoding",
@@ -1572,7 +1573,8 @@
       "flights": "Flights",
       "hotels": "Hotels",
       "foodDelivery": "Food Delivery",
-      "restaurantMenus": "Restaurant Menus"
+      "restaurantMenus": "Restaurant Menus",
+      "rideHailing": "Ride-Hailing Apps"
     },
     "exposure": {
       "direct": "Direct (browser)",

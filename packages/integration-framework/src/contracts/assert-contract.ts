@@ -1,4 +1,6 @@
+import type { RideCapability } from "@openmapx/core";
 import type { RealtimeCapabilities } from "./realtime-provider.js";
+import type { RideProvider } from "./ride-provider.js";
 import type { TransitCapabilities } from "./transit-provider.js";
 
 /**
@@ -132,4 +134,36 @@ export function assertRealtimeProviderContract(
     REALTIME_CAPABILITY_METHODS,
     provider.id,
   );
+}
+
+/**
+ * `[capability, requiredMethodName]` pairs for `RideProvider`. A provider that
+ * advertises a capability must implement the method backing it, or the host
+ * would dispatch to `undefined` at request time.
+ */
+const RIDE_CAPABILITY_METHODS: ReadonlyArray<[RideCapability, string]> = [
+  ["quote", "getQuotes"],
+  ["booking", "book"],
+  ["tracking", "getBooking"],
+];
+
+export function assertRideProviderContract(provider: RideProvider): void {
+  if (!provider.capabilities?.deepLink) {
+    throw new Error(
+      `Ride provider "${provider.id}" must declare the deepLink capability — handoff is the one required surface`,
+    );
+  }
+  if (typeof provider.createHandoff !== "function") {
+    throw new Error(`Ride provider "${provider.id}" declares deepLink but has no createHandoff()`);
+  }
+  for (const [capability, method] of RIDE_CAPABILITY_METHODS) {
+    if (
+      provider.capabilities[capability] &&
+      typeof (provider as unknown as Record<string, unknown>)[method] !== "function"
+    ) {
+      throw new Error(
+        `Ride provider "${provider.id}" declares the ${capability} capability but has no ${method}()`,
+      );
+    }
+  }
 }

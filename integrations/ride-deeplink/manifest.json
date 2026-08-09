@@ -1,0 +1,104 @@
+{
+  "id": "ride-deeplink",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["ride-hailing"],
+  "backend": { "routes": false },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true },
+      "enabledProviders": {
+        "type": "array",
+        "title": "Enabled ride apps",
+        "description": "Which ride-hailing apps appear in the ride mode. Leave empty to offer all of them.",
+        "items": { "type": "string", "enum": ["uber", "lyft", "bolt", "freenow", "yango"] }
+      },
+      "uberClientId": {
+        "type": "string",
+        "title": "Uber affiliate Client ID",
+        "description": "Uber documents client_id as required on its web universal link, so without one the Uber option opens the plain site and the panel says the trip will not carry over (the app link still does). Set it to get a prefilled web handoff and to attribute referrals to your Uber developer account."
+      },
+      "lyftPartnerId": {
+        "type": "string",
+        "title": "Lyft partner Client ID",
+        "description": "Optional. Appended to Lyft links as partner so referrals are attributed to your Lyft developer account. Leave empty to link without tracking (no account required)."
+      }
+    }
+  },
+  "quality": "built-in",
+  "category": "External",
+  "dataSources": [
+    {
+      "sourceId": "uber",
+      "name": "Uber",
+      "url": "https://www.uber.com/",
+      "license": "Proprietary (deep-link only)",
+      "licenseUrl": "https://developer.uber.com/docs/businesses/terms-of-use",
+      "commercialUse": "conditional",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.uber.com/legal/privacy/users/en/",
+      "endUserExposure": "direct",
+      "personalData": true,
+      "cookies": true,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "lyft",
+      "name": "Lyft",
+      "url": "https://www.lyft.com/",
+      "license": "Proprietary (deep-link only)",
+      "licenseUrl": "https://www.lyft.com/terms",
+      "commercialUse": "conditional",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.lyft.com/privacy",
+      "endUserExposure": "direct",
+      "personalData": true,
+      "cookies": true,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "bolt",
+      "name": "Bolt",
+      "url": "https://bolt.eu/",
+      "license": "Proprietary (link-out only)",
+      "licenseUrl": "https://bolt.eu/en/legal/",
+      "commercialUse": "conditional",
+      "providerCountry": "EE",
+      "providerPrivacyUrl": "https://bolt.eu/en/legal/privacy-for-riders/",
+      "endUserExposure": "direct",
+      "personalData": false,
+      "cookies": true,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "freenow",
+      "name": "FREENOW",
+      "url": "https://www.free-now.com/",
+      "license": "Proprietary (link-out only)",
+      "licenseUrl": "https://www.free-now.com/uk/terms-conditions/",
+      "commercialUse": "conditional",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.free-now.com/uk/privacy/",
+      "endUserExposure": "direct",
+      "personalData": false,
+      "cookies": true,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "yango",
+      "name": "Yango",
+      "url": "https://yango.com/",
+      "license": "Proprietary (link-out only)",
+      "licenseUrl": "https://yango.com/en_int/legal/",
+      "commercialUse": "conditional",
+      "providerCountry": "NL",
+      "providerPrivacyUrl": "https://yango.com/en_int/legal/confidential/",
+      "endUserExposure": "direct",
+      "personalData": false,
+      "cookies": true,
+      "dpaAvailable": false
+    }
+  ]
+}

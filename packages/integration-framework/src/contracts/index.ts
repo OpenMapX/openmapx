@@ -1,6 +1,7 @@
 export {
   assertProviderSatisfiesContract,
   assertRealtimeProviderContract,
+  assertRideProviderContract,
   assertTransitProviderContract,
 } from "./assert-contract";
 export type {
@@ -61,6 +62,26 @@ export type {
   ReviewProvider,
   ReviewSubject,
 } from "./review-provider.js";
+export type {
+  RideAttribution,
+  RideAvailability,
+  RideBooking,
+  RideBookingRequest,
+  RideBookingRules,
+  RideBookingState,
+  RideCapability,
+  RideComparisonPolicy,
+  RideFare,
+  RideHandoff,
+  RideProduct,
+  RideProvider,
+  RideProviderInfo,
+  RideProviderMeta,
+  RideProvidersResponse,
+  RideQuote,
+  RideQuoteRequest,
+  RideUnavailableReason,
+} from "./ride-provider.js";
 export type {
   RoadConditionAttribution,
   RoadConditionEvent,

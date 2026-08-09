@@ -1,0 +1,10 @@
+{
+  "name": "@openmapx/integration-ride-deeplink",
+  "license": "AGPL-3.0-or-later",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openmapx/integration-framework": "workspace:^"
+  }
+}

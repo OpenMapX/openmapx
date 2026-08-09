@@ -1,0 +1,27 @@
+{
+  "id": "ride-hailing",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["ride-hailing"],
+  "backend": { "routes": true },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true },
+      "defaultProvider": {
+        "type": "string",
+        "title": "Default ride provider",
+        "description": "Which ride provider is pre-selected in the directions panel. Leave empty to use the first available one."
+      },
+      "allowQuoteComparison": {
+        "type": "boolean",
+        "title": "Allow side-by-side fare comparison",
+        "description": "Off by default. Several ride-hailing providers' API terms forbid presenting them in an aggregated view alongside competitors, so OpenMapX shows one provider at a time. Turning this on enables a ranked multi-provider list, but only for providers that have declared their terms permit it (open feeds such as GOFS). Providers that forbid comparison are never added to the list, whatever this setting says.",
+        "default": false
+      }
+    }
+  },
+  "quality": "built-in",
+  "category": "Routing"
+}

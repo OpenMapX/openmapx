@@ -1,0 +1,5 @@
+{
+  "name": "Ride Hailing",
+  "description": "Collects the available ride-hailing providers for a trip and hands off to the one you choose. The route itself is calculated by the normal driving router; this integration adds providers, fares and booking links on top.",
+  "dataSources": {}
+}
