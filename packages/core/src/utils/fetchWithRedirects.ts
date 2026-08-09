@@ -1,11 +1,3 @@
-import {
-  Agent,
-  buildConnector,
-  type Dispatcher,
-  type RequestInit as UndiciRequestInit,
-  fetch as undiciFetch,
-} from "undici";
-
 export interface FetchConnectionAddress {
   address: string;
   family: 4 | 6;
@@ -13,8 +5,21 @@ export interface FetchConnectionAddress {
 
 export type FetchImplementation = (
   input: string | URL,
-  init?: RequestInit & { dispatcher?: Dispatcher },
+  init?: RequestInit & { dispatcher?: unknown },
 ) => Promise<Response>;
+
+/**
+ * A server-only transport that opens a socket using exactly `addresses`.
+ * Kept structural so this client-facing module never imports a Node transport.
+ */
+export type PinnedFetchImplementation = (
+  input: string | URL,
+  addresses: FetchConnectionAddress[],
+  init: RequestInit,
+) => Promise<Response>;
+
+/** Releases server-only resources associated with a response after its body is consumed or canceled. */
+export type ReleaseResponse = (response: Response) => Promise<void>;
 
 export interface FetchWithRedirectsOptions extends Omit<RequestInit, "redirect"> {
   /**
@@ -29,9 +34,13 @@ export interface FetchWithRedirectsOptions extends Omit<RequestInit, "redirect">
   validateRedirectUrl?: (nextUrl: URL, previousUrl: URL) => boolean;
   /** Resolve validated addresses immediately before each socket is opened. */
   resolveConnectionAddresses?: (url: URL) => Promise<FetchConnectionAddress[]>;
+  /** Server-only socket-pinning transport paired with `resolveConnectionAddresses`. */
+  pinnedFetchImplementation?: PinnedFetchImplementation;
+  /** Server-only lifecycle callback, called after an intermediate redirect body is canceled. */
+  releaseResponse?: ReleaseResponse;
   /**
-   * Test-only or specialized transport override. Defaults to global fetch for
-   * ordinary requests and to this package's Undici fetch when DNS is pinned.
+   * Test-only or specialized transport override. Defaults to global fetch.
+   * Pinned requests must instead provide `pinnedFetchImplementation`.
    */
   fetchImplementation?: FetchImplementation;
   /**
@@ -99,49 +108,15 @@ function assertRedirectAllowed(
   }
 }
 
-function createPinnedDispatcher(addresses: FetchConnectionAddress[]): Dispatcher {
-  if (!addresses.length) throw new Error("No validated addresses available for connection");
-  const connector = buildConnector({});
-  let nextAddress = 0;
-  return new Agent({
-    connect(options, callback) {
-      const connectNext = (): void => {
-        const address = addresses[nextAddress++];
-        connector(
-          {
-            ...options,
-            hostname: address.address,
-            // Preserve the requested hostname for TLS certificate verification and SNI.
-            servername: options.servername ?? options.hostname,
-          },
-          (error, socket) => {
-            if (error) {
-              if (nextAddress < addresses.length) {
-                connectNext();
-                return;
-              }
-              callback(error, null);
-              return;
-            }
-            callback(null, socket);
-          },
-        );
-      };
-      connectNext();
-    },
-  });
-}
-
-function toRequestInit(
-  init: FetchWithRedirectsOptions,
-  dispatcher: Dispatcher | undefined,
-): RequestInit & { dispatcher?: Dispatcher } {
+function toRequestInit(init: FetchWithRedirectsOptions): RequestInit {
   const {
     allowedRedirectHosts: _allowedRedirectHosts,
     allowedRedirectOrigin: _allowedRedirectOrigin,
     fetchImplementation: _fetchImplementation,
     follow203Redirect: _follow203Redirect,
     maxRedirects: _maxRedirects,
+    pinnedFetchImplementation: _pinnedFetchImplementation,
+    releaseResponse: _releaseResponse,
     resolveConnectionAddresses: _resolveConnectionAddresses,
     timeoutMs: _timeoutMs,
     validateRedirectUrl: _validateRedirectUrl,
@@ -149,19 +124,22 @@ function toRequestInit(
   } = init;
   return {
     ...fetchInit,
-    ...(dispatcher ? { dispatcher } : {}),
     redirect: "manual",
     signal: withTimeoutSignal(init.signal, init.timeoutMs),
   };
 }
 
-function fetchWithPinnedDispatcher(
-  input: string | URL,
-  init: RequestInit & { dispatcher?: Dispatcher },
-): Promise<Response> {
-  // Node's global fetch may bundle a different Undici version. Pair this
-  // package's fetch with the same-version Agent that owns the pinned socket.
-  return undiciFetch(input, init as unknown as UndiciRequestInit) as unknown as Promise<Response>;
+async function releaseRedirectResponse(
+  response: Response,
+  releaseResponse: ReleaseResponse | undefined,
+): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // A failed cancellation must not leave the server-only dispatcher alive.
+  } finally {
+    await releaseResponse?.(response);
+  }
 }
 
 function nextRequestInit(
@@ -191,13 +169,20 @@ export async function fetchWithRedirects(
   };
 
   for (let i = 0; i <= maxRedirects; i++) {
-    const dispatcher = currentInit.resolveConnectionAddresses
-      ? createPinnedDispatcher(await currentInit.resolveConnectionAddresses(new URL(currentUrl)))
+    const addresses = currentInit.resolveConnectionAddresses
+      ? await currentInit.resolveConnectionAddresses(new URL(currentUrl))
       : undefined;
-    const fetchImplementation =
-      currentInit.fetchImplementation ??
-      (dispatcher ? fetchWithPinnedDispatcher : globalThis.fetch);
-    const response = await fetchImplementation(currentUrl, toRequestInit(currentInit, dispatcher));
+    const requestInit = toRequestInit(currentInit);
+    const response = addresses
+      ? await (currentInit.pinnedFetchImplementation
+          ? currentInit.pinnedFetchImplementation(currentUrl, addresses, requestInit)
+          : (() => {
+              if (!currentInit.fetchImplementation) {
+                throw new Error("Pinned requests require a pinned fetch implementation");
+              }
+              return currentInit.fetchImplementation(currentUrl, requestInit);
+            })())
+      : await (currentInit.fetchImplementation ?? globalThis.fetch)(currentUrl, requestInit);
 
     if (!isRedirectStatus(response.status, response, follow203Redirect)) {
       return response;
@@ -210,7 +195,17 @@ export async function fetchWithRedirects(
 
     const previousUrl = new URL(currentUrl);
     const nextUrl = new URL(location, currentUrl);
-    assertRedirectAllowed(nextUrl, previousUrl, currentInit);
+    try {
+      assertRedirectAllowed(nextUrl, previousUrl, currentInit);
+      if (i === maxRedirects) {
+        throw new Error(`Too many redirects while fetching ${currentUrl}`);
+      }
+    } catch (error) {
+      await releaseRedirectResponse(response, currentInit.releaseResponse);
+      throw error;
+    }
+
+    await releaseRedirectResponse(response, currentInit.releaseResponse);
 
     currentUrl = nextUrl.toString();
     currentInit = nextRequestInit(currentInit, response);

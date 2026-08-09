@@ -92,6 +92,26 @@ describe("DawarichClient", () => {
     });
   });
 
+  it("accepts the explicit first-page empty result metadata", async () => {
+    const emptyPage = vi.fn(async () =>
+      response(
+        { ...tracksPageFixture, features: [] },
+        {
+          "x-current-page": "1",
+          "x-total-pages": "0",
+          "x-total-count": "0",
+        },
+      ),
+    ) as unknown as FetchJsonResponse;
+
+    await expect(
+      clientWith(emptyPage).getTracksPage(
+        { startAt: "2026-01-02T00:00:00Z", endAt: "2026-01-03T00:00:00Z" },
+        1,
+      ),
+    ).resolves.toMatchObject({ pagination: { currentPage: 1, totalPages: 0, totalCount: 0 } });
+  });
+
   it.each([
     [401, "unauthorized"],
     [403, "forbidden"],

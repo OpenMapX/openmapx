@@ -1,4 +1,12 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const undiciLifecycle = vi.hoisted(() => ({
+  close: vi.fn().mockResolvedValue(undefined),
+  destroy: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("node:dns/promises", () => ({
   lookup: vi.fn(),
@@ -6,7 +14,13 @@ vi.mock("node:dns/promises", () => ({
 
 vi.mock("undici", async (importOriginal) => {
   const actual = await importOriginal<typeof import("undici")>();
-  return { ...actual, fetch: vi.fn() };
+  return {
+    ...actual,
+    Agent: vi.fn(function PinnedAgent() {
+      return { close: undiciLifecycle.close, destroy: undiciLifecycle.destroy };
+    }),
+    fetch: vi.fn(),
+  };
 });
 
 // Import AFTER vi.mock so the mocked lookup is captured. We re-import the
@@ -16,6 +30,7 @@ import { fetch as undiciFetch } from "undici";
 import {
   assertResolvesToPublicIp,
   SafeFetchHttpError,
+  safeDownload,
   safeFetchJson,
   safeFetchJsonResponse,
 } from "../utils/safe-download";
@@ -27,6 +42,10 @@ const undiciFetchMock = undiciFetch as unknown as ReturnType<typeof vi.fn>;
 afterEach(() => {
   lookupMock.mockReset();
   undiciFetchMock.mockReset();
+  undiciLifecycle.close.mockReset();
+  undiciLifecycle.close.mockResolvedValue(undefined);
+  undiciLifecycle.destroy.mockReset();
+  undiciLifecycle.destroy.mockResolvedValue(undefined);
 });
 
 describe("assertResolvesToPublicIp", () => {
@@ -91,7 +110,7 @@ function stubFetchSequence(...responses: Response[]): ReturnType<typeof vi.fn> {
 }
 
 describe("safeFetchJson", () => {
-  it("resolves parsed JSON on the happy path", async () => {
+  it("resolves parsed JSON on the happy path and closes its pinned transport afterward", async () => {
     lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
     stubFetchSequence(
       makeResponse({
@@ -101,6 +120,7 @@ describe("safeFetchJson", () => {
       }),
     );
     await expect(safeFetchJson("https://ex.test/x.json")).resolves.toEqual({ version: "1.2.3" });
+    expect(undiciLifecycle.close).toHaveBeenCalledOnce();
   });
 
   it("exposes successful status, headers, and final URL without changing parsed data", async () => {
@@ -150,6 +170,7 @@ describe("safeFetchJson", () => {
         acceptedContentTypes: ["application/json"],
       }),
     ).rejects.toThrow(/content type/i);
+    expect(undiciLifecycle.close).toHaveBeenCalledOnce();
   });
 
   it("reports a 401 without retaining the upstream response body", async () => {
@@ -319,5 +340,31 @@ describe("safeFetchJson", () => {
     await expect(safeFetchJson("file:///etc/passwd", { allowPrivateHosts: ["*"] })).rejects.toThrow(
       /HTTP\(S\)/,
     );
+  });
+});
+
+describe("safeDownload", () => {
+  it("streams a successful response before closing its pinned transport", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "openmapx-safe-download-"));
+    const destPath = join(directory, "fixture.json");
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(
+      makeResponse({
+        headers: { "content-type": "application/json" },
+        bodyText: '{"ok":true}',
+      }),
+    );
+
+    try {
+      await expect(safeDownload("https://ex.test/fixture.json", { destPath })).resolves.toEqual({
+        bytesWritten: 11,
+        contentType: "application/json",
+        finalUrl: "https://ex.test/fixture.json",
+      });
+      await expect(readFile(destPath, "utf8")).resolves.toBe('{"ok":true}');
+      expect(undiciLifecycle.close).toHaveBeenCalledOnce();
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
   });
 });

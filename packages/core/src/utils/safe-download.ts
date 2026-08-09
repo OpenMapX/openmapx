@@ -9,6 +9,7 @@ import {
   fetchWithRedirects,
   hostMatchesAllowlist,
 } from "./fetchWithRedirects";
+import { createPinnedFetchTransport } from "./pinned-fetch";
 import { assertHttpProtocol, validatePublicUrl } from "./validate-url";
 
 export { hostMatchesAllowlist } from "./fetchWithRedirects";
@@ -34,6 +35,14 @@ export interface SafeDownloadResult {
   bytesWritten: number;
   finalUrl: string;
   contentType: string | null;
+}
+
+async function cancelResponseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // Cancellation is best-effort; dispatcher cleanup still happens in finally.
+  }
 }
 
 const PRIVATE_IPV4_RANGES: Array<[number, number]> = [
@@ -129,6 +138,7 @@ export async function safeDownload(
   validatePublicUrl(url);
   const { hostname } = new URL(url);
   await resolvePublicAddresses(hostname);
+  const pinnedTransport = createPinnedFetchTransport();
 
   const fetchOpts: FetchWithRedirectsOptions = {
     headers: opts.headers,
@@ -147,65 +157,68 @@ export async function safeDownload(
       validatePublicUrl(nextUrl.toString());
       return resolvePublicAddresses(nextUrl.hostname);
     },
+    pinnedFetchImplementation: pinnedTransport.fetch,
+    releaseResponse: pinnedTransport.releaseResponse,
   };
 
-  const response = await fetchWithRedirects(url, fetchOpts);
+  let response: Response | undefined;
+  let bodyConsumed = false;
+  try {
+    response = await fetchWithRedirects(url, fetchOpts);
 
-  if (!response.ok) {
-    try {
-      await response.body?.cancel();
-    } catch {
-      // ignore
+    if (!response.ok) {
+      await cancelResponseBody(response);
+      throw new Error(`Download failed: ${response.status} ${response.statusText} for ${url}`);
     }
-    throw new Error(`Download failed: ${response.status} ${response.statusText} for ${url}`);
-  }
 
-  const finalUrl = response.url || url;
-  // Re-check DNS for the final host — it may differ from the initial hostname
-  // after redirects.
-  const finalHostname = new URL(finalUrl).hostname;
-  if (finalHostname !== hostname) {
-    await resolvePublicAddresses(finalHostname);
-  }
+    const finalUrl = response.url || url;
+    // Re-check DNS for the final host — it may differ from the initial hostname
+    // after redirects.
+    const finalHostname = new URL(finalUrl).hostname;
+    if (finalHostname !== hostname) {
+      await resolvePublicAddresses(finalHostname);
+    }
 
-  const contentLengthHeader = response.headers.get("content-length");
-  if (contentLengthHeader) {
-    const declared = Number(contentLengthHeader);
-    if (Number.isFinite(declared) && declared > maxBytes) {
-      try {
-        await response.body?.cancel();
-      } catch {
-        // ignore
+    const contentLengthHeader = response.headers.get("content-length");
+    if (contentLengthHeader) {
+      const declared = Number(contentLengthHeader);
+      if (Number.isFinite(declared) && declared > maxBytes) {
+        await cancelResponseBody(response);
+        throw new Error(
+          `Declared Content-Length ${declared} exceeds max ${maxBytes} for ${finalUrl}`,
+        );
       }
-      throw new Error(
-        `Declared Content-Length ${declared} exceeds max ${maxBytes} for ${finalUrl}`,
-      );
     }
-  }
 
-  if (!response.body) {
-    throw new Error(`Empty response body for ${finalUrl}`);
-  }
-
-  let bytesWritten = 0;
-  const fileStream = createWriteStream(opts.destPath);
-  const nodeStream = Readable.fromWeb(
-    response.body as unknown as import("node:stream/web").ReadableStream<Uint8Array>,
-  );
-  nodeStream.on("data", (chunk: Buffer) => {
-    bytesWritten += chunk.length;
-    if (bytesWritten > maxBytes) {
-      nodeStream.destroy(new Error(`Download exceeded max size of ${maxBytes} bytes`));
+    if (!response.body) {
+      throw new Error(`Empty response body for ${finalUrl}`);
     }
-  });
 
-  await pipeline(nodeStream, fileStream);
+    let bytesWritten = 0;
+    const fileStream = createWriteStream(opts.destPath);
+    const nodeStream = Readable.fromWeb(
+      response.body as unknown as import("node:stream/web").ReadableStream<Uint8Array>,
+    );
+    nodeStream.on("data", (chunk: Buffer) => {
+      bytesWritten += chunk.length;
+      if (bytesWritten > maxBytes) {
+        nodeStream.destroy(new Error(`Download exceeded max size of ${maxBytes} bytes`));
+      }
+    });
 
-  return {
-    bytesWritten,
-    finalUrl,
-    contentType: response.headers.get("content-type"),
-  };
+    await pipeline(nodeStream, fileStream);
+    bodyConsumed = true;
+
+    return {
+      bytesWritten,
+      finalUrl,
+      contentType: response.headers.get("content-type"),
+    };
+  } finally {
+    if (response && !bodyConsumed) await cancelResponseBody(response);
+    if (response) await pinnedTransport.releaseResponse(response);
+    await pinnedTransport.dispose();
+  }
 }
 
 export interface SafeFetchJsonOptions {
@@ -344,106 +357,108 @@ export async function safeFetchJsonResponse<T = unknown>(
 
   await assertFetchTargetAllowed(url, allowPrivateHosts);
   const { hostname } = new URL(url);
+  const pinnedTransport = createPinnedFetchTransport();
+  let response: Response | undefined;
+  let bodyConsumed = false;
 
-  const response = await fetchWithRedirects(url, {
-    headers: opts.headers,
-    maxRedirects,
-    timeoutMs,
-    allowedRedirectHosts: opts.allowedRedirectHosts,
-    allowedRedirectOrigin: opts.allowedRedirectOrigin,
-    fetchImplementation: opts.fetchImplementation,
-    validateRedirectUrl: (nextUrl) => {
-      const next = nextUrl.hostname;
-      if (!isDeclaredPrivateHost(next, allowPrivateHosts)) {
-        validatePublicUrl(nextUrl.toString());
-      } else {
-        assertHttpProtocol(nextUrl.toString());
-      }
-      return true;
-    },
-    resolveConnectionAddresses: (nextUrl) =>
-      assertFetchTargetAllowed(nextUrl.toString(), allowPrivateHosts),
-  });
-
-  const finalUrl = response.url || url;
-
-  if (!response.ok) {
-    try {
-      await response.body?.cancel();
-    } catch {
-      // ignore
-    }
-    const retryAfterSeconds = parseRetryAfterSeconds(response.headers.get("retry-after"));
-    throw new SafeFetchHttpError(response.status, finalUrl, retryAfterSeconds);
-  }
-
-  const finalHostname = new URL(finalUrl).hostname;
-  if (finalHostname !== hostname) {
-    await assertFetchTargetAllowed(finalUrl, allowPrivateHosts);
-  }
-
-  const contentLengthHeader = response.headers.get("content-length");
-  if (contentLengthHeader) {
-    const declared = Number(contentLengthHeader);
-    if (Number.isFinite(declared) && declared > maxBytes) {
-      try {
-        await response.body?.cancel();
-      } catch {
-        // ignore
-      }
-      throw new Error(`Response too large (declared ${declared} > ${maxBytes} bytes)`);
-    }
-  }
-
-  if (opts.acceptedContentTypes) {
-    const contentType = response.headers
-      .get("content-type")
-      ?.split(";", 1)[0]
-      ?.trim()
-      .toLowerCase();
-    const accepted = opts.acceptedContentTypes.map((value) => value.toLowerCase());
-    if (!contentType || !accepted.includes(contentType)) {
-      try {
-        await response.body?.cancel();
-      } catch {
-        // ignore
-      }
-      throw new Error(`Unexpected response content type for ${finalUrl}`);
-    }
-  }
-
-  if (!response.body) {
-    throw new Error(`Empty response body for ${finalUrl}`);
-  }
-
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
   try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > maxBytes) {
-        await reader.cancel().catch(() => {});
-        throw new Error(`Response too large (exceeded ${maxBytes} bytes)`);
+    const fetchImplementation = opts.fetchImplementation;
+    response = await fetchWithRedirects(url, {
+      headers: opts.headers,
+      maxRedirects,
+      timeoutMs,
+      allowedRedirectHosts: opts.allowedRedirectHosts,
+      allowedRedirectOrigin: opts.allowedRedirectOrigin,
+      pinnedFetchImplementation: fetchImplementation
+        ? (input, _addresses, init) => fetchImplementation(input, init)
+        : pinnedTransport.fetch,
+      releaseResponse: pinnedTransport.releaseResponse,
+      validateRedirectUrl: (nextUrl) => {
+        const next = nextUrl.hostname;
+        if (!isDeclaredPrivateHost(next, allowPrivateHosts)) {
+          validatePublicUrl(nextUrl.toString());
+        } else {
+          assertHttpProtocol(nextUrl.toString());
+        }
+        return true;
+      },
+      resolveConnectionAddresses: (nextUrl) =>
+        assertFetchTargetAllowed(nextUrl.toString(), allowPrivateHosts),
+    });
+
+    const finalUrl = response.url || url;
+
+    if (!response.ok) {
+      await cancelResponseBody(response);
+      const retryAfterSeconds = parseRetryAfterSeconds(response.headers.get("retry-after"));
+      throw new SafeFetchHttpError(response.status, finalUrl, retryAfterSeconds);
+    }
+
+    const finalHostname = new URL(finalUrl).hostname;
+    if (finalHostname !== hostname) {
+      await assertFetchTargetAllowed(finalUrl, allowPrivateHosts);
+    }
+
+    const contentLengthHeader = response.headers.get("content-length");
+    if (contentLengthHeader) {
+      const declared = Number(contentLengthHeader);
+      if (Number.isFinite(declared) && declared > maxBytes) {
+        await cancelResponseBody(response);
+        throw new Error(`Response too large (declared ${declared} > ${maxBytes} bytes)`);
       }
-      chunks.push(value);
+    }
+
+    if (opts.acceptedContentTypes) {
+      const contentType = response.headers
+        .get("content-type")
+        ?.split(";", 1)[0]
+        ?.trim()
+        .toLowerCase();
+      const accepted = opts.acceptedContentTypes.map((value) => value.toLowerCase());
+      if (!contentType || !accepted.includes(contentType)) {
+        await cancelResponseBody(response);
+        throw new Error(`Unexpected response content type for ${finalUrl}`);
+      }
+    }
+
+    if (!response.body) {
+      throw new Error(`Empty response body for ${finalUrl}`);
+    }
+
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxBytes) {
+          await reader.cancel().catch(() => {});
+          throw new Error(`Response too large (exceeded ${maxBytes} bytes)`);
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock?.();
+    }
+    bodyConsumed = true;
+
+    const text = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
+    try {
+      return {
+        data: JSON.parse(text) as T,
+        status: response.status,
+        headers: response.headers,
+        finalUrl,
+      };
+    } catch {
+      throw new Error(`Invalid JSON response from ${finalUrl}`);
     }
   } finally {
-    reader.releaseLock?.();
-  }
-
-  const text = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
-  try {
-    return {
-      data: JSON.parse(text) as T,
-      status: response.status,
-      headers: response.headers,
-      finalUrl,
-    };
-  } catch {
-    throw new Error(`Invalid JSON response from ${finalUrl}`);
+    if (response && !bodyConsumed) await cancelResponseBody(response);
+    if (response) await pinnedTransport.releaseResponse(response);
+    await pinnedTransport.dispose();
   }
 }
 

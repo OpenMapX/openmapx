@@ -29,6 +29,27 @@ describe("fetchWithRedirects", () => {
     expect(await response.json()).toEqual({ ok: true });
   });
 
+  it("cancels an intermediate redirect body before requesting the next hop", async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const redirect = {
+      body: { cancel },
+      headers: new Headers({ Location: "https://files.test/final.json" }),
+      status: 302,
+    } as unknown as Response;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(redirect)
+      .mockResolvedValueOnce(new Response('{"ok":true}', { status: 200 }));
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await fetchWithRedirects("https://api.test/feed");
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(await response.json()).toEqual({ ok: true });
+  });
+
   it("does not follow 203 responses by default", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(null, {
@@ -94,6 +115,27 @@ describe("fetchWithRedirects", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("cancels and releases a redirect response when redirect validation fails", async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const releaseResponse = vi.fn().mockResolvedValue(undefined);
+    const redirect = {
+      body: { cancel },
+      headers: new Headers({ Location: "https://metadata.internal/latest" }),
+      status: 302,
+    } as unknown as Response;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(redirect));
+
+    await expect(
+      fetchWithRedirects("https://api.test/original", {
+        allowedRedirectHosts: ["api.test"],
+        releaseResponse,
+      }),
+    ).rejects.toThrow("Redirect target not allowed: metadata.internal");
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(releaseResponse).toHaveBeenCalledWith(redirect);
+  });
+
   it("rejects non-http redirect targets", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       new Response(null, {
@@ -146,8 +188,8 @@ describe("fetchWithRedirects", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("uses the already validated address set for every connection hop", async () => {
-    const fetchMock = vi
+  it("passes the already validated address set to the pinned transport for every hop", async () => {
+    const pinnedFetch = vi
       .fn()
       .mockResolvedValueOnce(
         new Response(null, { status: 302, headers: { Location: "https://redirect.test/final" } }),
@@ -162,16 +204,22 @@ describe("fetchWithRedirects", () => {
 
     await fetchWithRedirects("https://api.test/original", {
       resolveConnectionAddresses: validatedAddresses,
-      fetchImplementation: fetchMock,
+      pinnedFetchImplementation: pinnedFetch,
     });
 
     expect(validatedAddresses).toHaveBeenNthCalledWith(1, new URL("https://api.test/original"));
     expect(validatedAddresses).toHaveBeenNthCalledWith(2, new URL("https://redirect.test/final"));
-    expect(fetchMock.mock.calls[0]?.[1]).toEqual(
-      expect.objectContaining({ dispatcher: expect.anything() }),
+    expect(pinnedFetch).toHaveBeenNthCalledWith(
+      1,
+      "https://api.test/original",
+      [{ address: "93.184.216.34", family: 4 }],
+      expect.objectContaining({ redirect: "manual" }),
     );
-    expect(fetchMock.mock.calls[1]?.[1]).toEqual(
-      expect.objectContaining({ dispatcher: expect.anything() }),
+    expect(pinnedFetch).toHaveBeenNthCalledWith(
+      2,
+      "https://redirect.test/final",
+      [{ address: "93.184.216.35", family: 4 }],
+      expect.objectContaining({ redirect: "manual" }),
     );
   });
 });
