@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   corsOptions,
   makeRateLimitTierHook,
+  makeTimelineAwareRateLimit,
   type RateLimitTiers,
   trustProxyConfig,
   uniformErrorHandler,
@@ -206,6 +207,79 @@ describe("makeRateLimitTierHook", () => {
     expect(second.statusCode).toBe(429);
     expect(second.payload).toContain("Too many requests");
     expect(second.headers["retry-after"]).toBeDefined();
+    await app.close();
+    limiter.destroy();
+  });
+
+  it("protects a registered timeline route before an exhausted parent limiter replies", async () => {
+    const limiter = new RateLimiter({ max: 1, windowMs: 2 * 86_400_000 });
+    const { hook } = stubTiers();
+    hook.expensive = makeTimelineAwareRateLimit(limiter);
+    const app = Fastify({ logger: false });
+    app.addHook("onRequest", makeRateLimitTierHook(hook));
+    await app.register(
+      async (timeline) => {
+        timeline.put("/timeline/connection", async () => ({ ok: true }));
+      },
+      { prefix: "/api" },
+    );
+    await app.ready();
+
+    const first = await app.inject({
+      method: "PUT",
+      url: "/api/timeline/connection",
+      remoteAddress: "198.51.100.7",
+    });
+    const exhausted = await app.inject({
+      method: "PUT",
+      url: "/api/timeline/connection",
+      remoteAddress: "198.51.100.7",
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(first.headers["cache-control"]).toBe("private, no-store");
+    expect(exhausted.statusCode).toBe(429);
+    expect(exhausted.json()).toEqual({
+      error: "Timeline source is rate limited",
+      code: "TIMELINE_RATE_LIMITED",
+      retryAfterSeconds: 86_400,
+    });
+    expect(exhausted.headers["retry-after"]).toBe("86400");
+    expect(exhausted.headers["cache-control"]).toBe("private, no-store");
+    expect(exhausted.headers.pragma).toBe("no-cache");
+    expect(exhausted.headers.vary).toContain("Cookie");
+    await app.close();
+    limiter.destroy();
+  });
+
+  it("gives future timeline read routes the same public-tier privacy boundary", async () => {
+    const limiter = new RateLimiter({ max: 1, windowMs: 60_000 });
+    const { hook } = stubTiers();
+    hook.public = makeTimelineAwareRateLimit(limiter);
+    const app = Fastify({ logger: false });
+    app.addHook("onRequest", makeRateLimitTierHook(hook));
+    await app.register(
+      async (timeline) => {
+        timeline.get("/timeline/days/:date", async () => ({ ok: true }));
+      },
+      { prefix: "/api" },
+    );
+    await app.ready();
+
+    const request = {
+      method: "GET" as const,
+      url: "/api/timeline/days/2026-08-09",
+      remoteAddress: "198.51.100.8",
+    };
+    const first = await app.inject(request);
+    const exhausted = await app.inject(request);
+
+    expect(first.statusCode).toBe(200);
+    expect(exhausted.statusCode).toBe(429);
+    expect(exhausted.json()).toMatchObject({ code: "TIMELINE_RATE_LIMITED" });
+    expect(exhausted.headers["cache-control"]).toBe("private, no-store");
+    expect(exhausted.headers.pragma).toBe("no-cache");
+    expect(exhausted.headers.vary).toContain("Cookie");
     await app.close();
     limiter.destroy();
   });

@@ -26,6 +26,7 @@ export type DawarichRange = { startAt: string; endAt: string };
 export type DawarichErrorKind =
   | "unauthorized"
   | "forbidden"
+  | "unsupported"
   | "rate_limited"
   | "unavailable"
   | "invalid_response"
@@ -85,11 +86,13 @@ function mapHttpError(error: SafeFetchHttpError): DawarichClientError {
       ? "unauthorized"
       : error.status === 403
         ? "forbidden"
-        : error.status === 429
-          ? "rate_limited"
-          : error.status >= 500
-            ? "unavailable"
-            : "invalid_response";
+        : error.status === 404
+          ? "unsupported"
+          : error.status === 429
+            ? "rate_limited"
+            : error.status >= 500
+              ? "unavailable"
+              : "invalid_response";
   return new DawarichClientError(kind, error.status, error.retryAfterSeconds);
 }
 

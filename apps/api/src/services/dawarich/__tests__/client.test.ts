@@ -115,6 +115,7 @@ describe("DawarichClient", () => {
   it.each([
     [401, "unauthorized"],
     [403, "forbidden"],
+    [404, "unsupported"],
     [429, "rate_limited"],
     [503, "unavailable"],
   ] as const)("maps HTTP %i to a redacted %s error", async (status, kind) => {

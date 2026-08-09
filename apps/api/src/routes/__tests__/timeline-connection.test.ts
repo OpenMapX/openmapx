@@ -53,6 +53,8 @@ afterEach(async () => {
 
 function expectNoStore(response: { headers: Record<string, unknown> }) {
   expect(response.headers["cache-control"]).toBe("private, no-store");
+  expect(response.headers.pragma).toBe("no-cache");
+  expect(response.headers.vary).toContain("Cookie");
 }
 
 describe("timeline connection authentication and safe views", () => {
@@ -85,6 +87,25 @@ describe("timeline connection authentication and safe views", () => {
 });
 
 describe("PUT /api/timeline/connection validation", () => {
+  it("returns a private stable error for malformed JSON without exposing parser details", async () => {
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/timeline/connection",
+      headers: { "content-type": "application/json" },
+      payload: '{"mode":',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "Invalid timeline request",
+      code: "TIMELINE_INSTANCE_UNSUPPORTED",
+    });
+    expect(response.payload).not.toMatch(/JSON|position|unexpected|parse/i);
+    expect(response.headers["cache-control"]).toBe("private, no-store");
+    expect(response.headers.pragma).toBe("no-cache");
+    expect(response.headers.vary).toContain("Cookie");
+  });
+
   it("accepts a display name of 100 Unicode code points, not 100 UTF-16 units", async () => {
     const displayName = "🗺️".repeat(50);
     expect([...displayName]).toHaveLength(100);
@@ -158,6 +179,31 @@ describe("PUT /api/timeline/connection validation", () => {
 });
 
 describe("timeline connection lifecycle errors", () => {
+  it.each([
+    ["TIMELINE_INSTANCE_UNSUPPORTED", 400, "Timeline instance is not supported"],
+    ["TIMELINE_RESPONSE_INVALID", 502, "Timeline source returned an invalid response"],
+  ] as const)("maps connect-time %s to a redacted %i", async (code, status, message) => {
+    const { TimelineConnectionError } = await import(
+      "../../services/dawarich/connection-service.js"
+    );
+    vi.mocked(service.connect).mockRejectedValueOnce(new TimelineConnectionError(code));
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/timeline/connection",
+      payload: {
+        mode: "external",
+        instanceUrl: "https://new.example.test",
+        apiKey: "secret-that-must-not-leak",
+      },
+    });
+
+    expect(response.statusCode).toBe(status);
+    expect(response.json()).toEqual({ error: message, code });
+    expect(response.payload).not.toContain("secret-that-must-not-leak");
+    expectNoStore(response);
+  });
+
   it.each([
     ["TIMELINE_INSTANCE_UNSUPPORTED", 400, "Timeline instance is not supported", null],
     ["TIMELINE_NOT_CONNECTED", 400, "Timeline is not connected", null],

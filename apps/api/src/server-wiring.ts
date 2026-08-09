@@ -1,5 +1,6 @@
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import { envString } from "./utils/env";
+import type { RateLimiter } from "./utils/rate-limit.js";
 
 // Trust proxy hops in front of the API. The default deployment terminates TLS
 // at Traefik (one hop) and forwards to this container, so `request.ip` must be
@@ -82,6 +83,11 @@ export const EXPENSIVE_PUBLIC_PATTERNS = [
   /^\/api\/offline\/packages\/prepare(\/|$|\?)/,
 ];
 
+export function isTimelineApiRequest(request: FastifyRequest): boolean {
+  const path = request.url.split("?", 1)[0];
+  return path?.startsWith("/api/timeline/") ?? false;
+}
+
 function isExpensiveTimelineConnectionRequest(request: FastifyRequest): boolean {
   const path = request.url.split("?", 1)[0];
   return (
@@ -91,9 +97,48 @@ function isExpensiveTimelineConnectionRequest(request: FastifyRequest): boolean 
   );
 }
 
+function addVaryHeader(reply: FastifyReply, value: string): void {
+  const existing = reply.getHeader("Vary");
+  const values = (Array.isArray(existing) ? existing : [existing])
+    .flatMap((entry) => String(entry ?? "").split(","))
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  if (!values.some((entry) => entry.toLowerCase() === value.toLowerCase())) values.push(value);
+  reply.header("Vary", values.join(", "));
+}
+
+export function applyTimelinePrivacyHeaders(reply: FastifyReply): void {
+  reply.header("Cache-Control", "private, no-store");
+  reply.header("Pragma", "no-cache");
+  addVaryHeader(reply, "Cookie");
+}
+
+export function sendTimelineRateLimitResponse(reply: FastifyReply, retryAfterSeconds: number) {
+  const boundedRetryAfter = Math.min(
+    86_400,
+    Math.max(0, Number.isFinite(retryAfterSeconds) ? Math.ceil(retryAfterSeconds) : 86_400),
+  );
+  applyTimelinePrivacyHeaders(reply);
+  return reply.header("Retry-After", String(boundedRetryAfter)).status(429).send({
+    error: "Timeline source is rate limited",
+    code: "TIMELINE_RATE_LIMITED",
+    retryAfterSeconds: boundedRetryAfter,
+  });
+}
+
 export const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 
 type Limit = (request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
+
+export function makeTimelineAwareRateLimit(limiter: Pick<RateLimiter, "preHandler">): Limit {
+  const defaultLimit = limiter.preHandler();
+  const timelineLimit = limiter.preHandler({
+    onLimit: (_request, reply, retryAfterSeconds) =>
+      sendTimelineRateLimitResponse(reply, retryAfterSeconds),
+  });
+  return async (request, reply) =>
+    isTimelineApiRequest(request) ? timelineLimit(request, reply) : defaultLimit(request, reply);
+}
 
 export interface RateLimitTiers {
   auth: Limit;
@@ -120,6 +165,7 @@ export interface RateLimitTiers {
 export function makeRateLimitTierHook(limits: RateLimitTiers) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const url = request.url;
+    if (isTimelineApiRequest(request)) applyTimelinePrivacyHeaders(reply);
     if (url === "/health" || url.startsWith("/health?")) return;
 
     // Trust only the actual TCP peer here, never XFF.

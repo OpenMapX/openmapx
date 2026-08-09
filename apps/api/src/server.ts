@@ -54,6 +54,7 @@ import { winterSportsRoute } from "./routes/winter-sports";
 import {
   corsOptions,
   makeRateLimitTierHook,
+  makeTimelineAwareRateLimit,
   trustProxyConfig,
   uniformErrorHandler,
 } from "./server-wiring";
@@ -173,8 +174,8 @@ server.addHook(
   makeRateLimitTierHook({
     auth: authLimit.preHandler(),
     tile: tilePublicApiLimit.preHandler(),
-    expensive: expensivePublicApiLimit.preHandler(),
-    public: publicApiLimit.preHandler(),
+    expensive: makeTimelineAwareRateLimit(expensivePublicApiLimit),
+    public: makeTimelineAwareRateLimit(publicApiLimit),
   }),
 );
 

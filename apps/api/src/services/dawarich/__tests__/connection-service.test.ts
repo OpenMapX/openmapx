@@ -1,6 +1,7 @@
 import type { ConnectPersonalTimelineRequest } from "@openmapx/core";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { user } from "../../../db/auth-schema.js";
 import type { PersonalTimelineConnectionRow } from "../../../db/timeline-connection-schema.js";
 import { personalTimelineConnection } from "../../../db/timeline-connection-schema.js";
 import { encrypt } from "../../secrets.js";
@@ -70,6 +71,33 @@ class MemoryConnectionStore implements TimelineConnectionStore {
     return next;
   }
 
+  async recordFailureForUser(
+    userId: string,
+    expectedEncryptedApiKey: string,
+    failureKind: "credential_invalid" | "transient",
+    updatedAt: Date,
+  ) {
+    const current = this.rows.get(userId);
+    if (!current || current.encryptedApiKey !== expectedEncryptedApiKey) return null;
+    const consecutiveFailures = current.consecutiveFailures + 1;
+    const status =
+      failureKind === "credential_invalid"
+        ? "invalid"
+        : current.status === "invalid"
+          ? "invalid"
+          : consecutiveFailures >= 3
+            ? "degraded"
+            : "connected";
+    const next: PersonalTimelineConnectionRow = {
+      ...current,
+      consecutiveFailures,
+      status,
+      updatedAt,
+    };
+    this.rows.set(userId, next);
+    return next;
+  }
+
   async deleteForUser(userId: string) {
     this.rows.delete(userId);
   }
@@ -125,14 +153,17 @@ describe("personal timeline connection schema", () => {
       "created_at",
       "updated_at",
     ]);
-    expect(
-      config.uniqueConstraints.some((constraint) =>
-        constraint.columns.some((column) => column.name === "user_id"),
-      ),
-    ).toBe(true);
+    expect(config.uniqueConstraints).toHaveLength(1);
+    expect(config.uniqueConstraints[0]?.columns.map((column) => column.name)).toEqual(["user_id"]);
     const userId = config.columns.find((column) => column.name === "user_id");
     expect(userId?.notNull).toBe(true);
-    expect(config.foreignKeys[0]?.onDelete).toBe("cascade");
+    expect(config.foreignKeys).toHaveLength(1);
+    const foreignKey = config.foreignKeys[0];
+    const reference = foreignKey?.reference();
+    expect(reference?.columns.map((column) => column.name)).toEqual(["user_id"]);
+    expect(reference?.foreignColumns.map((column) => column.name)).toEqual(["id"]);
+    expect(reference?.foreignTable).toBe(user);
+    expect(foreignKey?.onDelete).toBe("cascade");
     for (const secretColumn of ["encrypted_api_key", "encryption_iv", "encryption_tag"]) {
       expect(config.columns.find((column) => column.name === secretColumn)?.notNull).toBe(true);
     }
@@ -262,13 +293,40 @@ describe("TimelineConnectionService", () => {
     expect(store.replaceCalls).toBe(0);
   });
 
-  it("preserves a prior row byte-for-byte when replacement validation fails", async () => {
+  it("maps malformed replacement metadata to an invalid upstream response without replacing", async () => {
     const store = new MemoryConnectionStore();
     store.rows.set(USER_ID, connectionRow());
     const before = structuredClone(store.rows.get(USER_ID));
     const client = validClient();
     client.getSettings.mockRejectedValueOnce(new DawarichClientError("invalid_response"));
-    const service = new TimelineConnectionService({ store, clientFactory: () => client });
+    const service = new TimelineConnectionService({
+      store,
+      clientFactory: () => client,
+      audit: async () => {},
+    });
+
+    await expect(
+      service.connect(USER_ID, {
+        mode: "external",
+        instanceUrl: "https://new.example.test",
+        apiKey: "bad-key",
+      }),
+    ).rejects.toMatchObject({ code: "TIMELINE_RESPONSE_INVALID" });
+    expect(store.rows.get(USER_ID)).toEqual(before);
+    expect(store.replaceCalls).toBe(0);
+  });
+
+  it("maps a missing required endpoint to unsupported without replacing", async () => {
+    const store = new MemoryConnectionStore();
+    store.rows.set(USER_ID, connectionRow());
+    const before = structuredClone(store.rows.get(USER_ID));
+    const client = validClient();
+    client.getSettings.mockRejectedValueOnce(new DawarichClientError("unsupported", 404));
+    const service = new TimelineConnectionService({
+      store,
+      clientFactory: () => client,
+      audit: async () => {},
+    });
 
     await expect(
       service.connect(USER_ID, {
@@ -404,6 +462,57 @@ describe("TimelineConnectionService", () => {
       status: "connected",
       consecutiveFailures: 0,
       upstreamEmail: "fixture@example.invalid",
+    });
+  });
+
+  it("atomically counts concurrent transient failures before deriving connection status", async () => {
+    const store = new MemoryConnectionStore();
+    const encrypted = encrypt("stored-key");
+    store.rows.set(
+      USER_ID,
+      connectionRow({
+        encryptedApiKey: encrypted.ciphertext,
+        encryptionIv: encrypted.iv,
+        encryptionTag: encrypted.tag,
+      }),
+    );
+    let waitingClients = 0;
+    let releaseClients: (() => void) | undefined;
+    const bothClientsWaiting = new Promise<void>((resolve) => {
+      releaseClients = resolve;
+    });
+    const service = new TimelineConnectionService({
+      store,
+      clientFactory: () => {
+        const client = validClient();
+        client.getCurrentUser.mockImplementationOnce(async () => {
+          waitingClients += 1;
+          if (waitingClients === 2) releaseClients?.();
+          await bothClientsWaiting;
+          throw new DawarichClientError("unavailable", 503);
+        });
+        return client;
+      },
+      audit: async () => {},
+    });
+
+    const concurrentResults = await Promise.allSettled([
+      service.testConnection(USER_ID),
+      service.testConnection(USER_ID),
+    ]);
+
+    expect(concurrentResults.map((result) => result.status)).toEqual(["rejected", "rejected"]);
+    expect(store.rows.get(USER_ID)).toMatchObject({
+      status: "connected",
+      consecutiveFailures: 2,
+    });
+
+    await expect(service.testConnection(USER_ID)).rejects.toMatchObject({
+      code: "TIMELINE_UPSTREAM_UNAVAILABLE",
+    });
+    expect(store.rows.get(USER_ID)).toMatchObject({
+      status: "degraded",
+      consecutiveFailures: 3,
     });
   });
 

@@ -5,7 +5,7 @@ import type {
   TimelineConnectionStatus,
   TimelineConnectionView,
 } from "@openmapx/core";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import {
   type PersonalTimelineConnectionRow,
@@ -69,10 +69,16 @@ export interface TimelineConnectionStore {
     updates: Partial<PersonalTimelineConnectionRow>,
     expectedEncryptedApiKey?: string,
   ): Promise<PersonalTimelineConnectionRow | null>;
+  recordFailureForUser(
+    userId: string,
+    expectedEncryptedApiKey: string,
+    failureKind: "credential_invalid" | "transient",
+    updatedAt: Date,
+  ): Promise<PersonalTimelineConnectionRow | null>;
   deleteForUser(userId: string): Promise<void>;
 }
 
-class DrizzleTimelineConnectionStore implements TimelineConnectionStore {
+export class DrizzleTimelineConnectionStore implements TimelineConnectionStore {
   async findByUserId(userId: string): Promise<PersonalTimelineConnectionRow | null> {
     const [row] = await db
       .select()
@@ -128,6 +134,38 @@ class DrizzleTimelineConnectionStore implements TimelineConnectionStore {
               eq(personalTimelineConnection.encryptedApiKey, expectedEncryptedApiKey),
             )
           : eq(personalTimelineConnection.userId, userId),
+      )
+      .returning();
+    return row ?? null;
+  }
+
+  async recordFailureForUser(
+    userId: string,
+    expectedEncryptedApiKey: string,
+    failureKind: "credential_invalid" | "transient",
+    updatedAt: Date,
+  ): Promise<PersonalTimelineConnectionRow | null> {
+    const nextFailureCount = sql<number>`${personalTimelineConnection.consecutiveFailures} + 1`;
+    const nextStatus =
+      failureKind === "credential_invalid"
+        ? "invalid"
+        : sql<TimelineConnectionStatus>`CASE
+            WHEN ${personalTimelineConnection.status} = 'invalid' THEN 'invalid'
+            WHEN ${nextFailureCount} >= 3 THEN 'degraded'
+            ELSE 'connected'
+          END`;
+    const [row] = await db
+      .update(personalTimelineConnection)
+      .set({
+        consecutiveFailures: nextFailureCount,
+        status: nextStatus,
+        updatedAt,
+      })
+      .where(
+        and(
+          eq(personalTimelineConnection.userId, userId),
+          eq(personalTimelineConnection.encryptedApiKey, expectedEncryptedApiKey),
+        ),
       )
       .returning();
     return row ?? null;
@@ -209,7 +247,7 @@ function strictOrigin(value: string, protocol: "https:" | "http-or-https"): URL 
   return new URL(parsed.origin);
 }
 
-function asConnectionError(error: unknown, connecting: boolean): TimelineConnectionError {
+function asConnectionError(error: unknown): TimelineConnectionError {
   if (error instanceof TimelineConnectionError) return error;
   if (!(error instanceof DawarichClientError)) {
     return new TimelineConnectionError("TIMELINE_UPSTREAM_UNAVAILABLE");
@@ -222,10 +260,10 @@ function asConnectionError(error: unknown, connecting: boolean): TimelineConnect
       return new TimelineConnectionError("TIMELINE_RATE_LIMITED", error.retryAfterSeconds);
     case "unavailable":
       return new TimelineConnectionError("TIMELINE_UPSTREAM_UNAVAILABLE");
+    case "unsupported":
+      return new TimelineConnectionError("TIMELINE_INSTANCE_UNSUPPORTED");
     case "invalid_response":
-      return new TimelineConnectionError(
-        connecting ? "TIMELINE_INSTANCE_UNSUPPORTED" : "TIMELINE_RESPONSE_INVALID",
-      );
+      return new TimelineConnectionError("TIMELINE_RESPONSE_INVALID");
     case "page_limit":
       return new TimelineConnectionError("TIMELINE_RESPONSE_INVALID");
   }
@@ -276,7 +314,7 @@ export class TimelineConnectionService {
     try {
       candidate = await this.resolveCandidate(request);
       auditContext = candidate;
-      const metadata = await this.validate(candidate, true);
+      const metadata = await this.validate(candidate);
       const encrypted = encrypt(candidate.apiKey);
       const now = this.now();
       await this.store.replaceForUser({
@@ -302,7 +340,7 @@ export class TimelineConnectionService {
       await this.writeLifecycleAudit(userId, action, auditContext, "success");
       return this.getConnectionView(userId);
     } catch (error) {
-      const safeError = asConnectionError(error, true);
+      const safeError = asConnectionError(error);
       await this.writeLifecycleAudit(userId, action, auditContext, "failure");
       throw safeError;
     }
@@ -331,15 +369,12 @@ export class TimelineConnectionService {
     };
     try {
       const credential = await this.decryptConnectionCredential(userId);
-      const metadata = await this.validate(
-        {
-          ...auditCandidate,
-          upstreamBaseUrl: credential.upstreamBaseUrl,
-          allowPrivateHosts: credential.allowPrivateHosts,
-          apiKey: credential.apiKey,
-        },
-        false,
-      );
+      const metadata = await this.validate({
+        ...auditCandidate,
+        upstreamBaseUrl: credential.upstreamBaseUrl,
+        allowPrivateHosts: credential.allowPrivateHosts,
+        apiKey: credential.apiKey,
+      });
       const now = this.now();
       await this.store.updateForUser(
         userId,
@@ -358,25 +393,13 @@ export class TimelineConnectionService {
       await this.writeLifecycleAudit(userId, "timeline.test", auditCandidate, "success");
       return this.getConnectionView(userId);
     } catch (error) {
-      const safeError = asConnectionError(error, false);
+      const safeError = asConnectionError(error);
       if (safeError.code !== "TIMELINE_MANAGED_DISABLED") {
-        const consecutiveFailures = row.consecutiveFailures + 1;
-        const status: TimelineConnectionStatus =
-          safeError.code === "TIMELINE_CREDENTIAL_INVALID"
-            ? "invalid"
-            : consecutiveFailures >= 3
-              ? "degraded"
-              : row.status === "invalid"
-                ? "invalid"
-                : "connected";
-        await this.store.updateForUser(
+        await this.store.recordFailureForUser(
           userId,
-          {
-            consecutiveFailures,
-            status,
-            updatedAt: this.now(),
-          },
           row.encryptedApiKey,
+          safeError.code === "TIMELINE_CREDENTIAL_INVALID" ? "credential_invalid" : "transient",
+          this.now(),
         );
       }
       await this.writeLifecycleAudit(userId, "timeline.test", auditCandidate, "failure");
@@ -475,10 +498,7 @@ export class TimelineConnectionService {
     };
   }
 
-  private async validate(
-    candidate: ResolvedCandidate,
-    connecting: boolean,
-  ): Promise<ValidatedMetadata> {
+  private async validate(candidate: ResolvedCandidate): Promise<ValidatedMetadata> {
     const client = this.clientFactory({
       baseUrl: candidate.upstreamBaseUrl,
       apiKey: candidate.apiKey,
@@ -501,7 +521,7 @@ export class TimelineConnectionService {
         distanceUnit,
       };
     } catch (error) {
-      throw asConnectionError(error, connecting);
+      throw asConnectionError(error);
     }
   }
 

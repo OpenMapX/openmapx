@@ -15,6 +15,10 @@ interface RateLimiterOptions {
   keyFn?: (request: FastifyRequest) => string;
 }
 
+export interface RateLimitHookOptions {
+  onLimit?: (request: FastifyRequest, reply: FastifyReply, retryAfterSeconds: number) => unknown;
+}
+
 /**
  * Default rate-limit key. Combines:
  *  - `request.ip` — the trusted-proxy-derived client IP. Behind a correctly
@@ -55,7 +59,7 @@ export class RateLimiter {
   /**
    * Returns a Fastify preHandler hook that enforces the rate limit.
    */
-  preHandler() {
+  preHandler(options: RateLimitHookOptions = {}) {
     return async (request: FastifyRequest, reply: FastifyReply) => {
       const key = this.keyFn(request);
       const now = Date.now();
@@ -74,6 +78,9 @@ export class RateLimiter {
 
       if (bucket.tokens < 1) {
         const retryAfterSec = Math.ceil((((1 - bucket.tokens) / this.max) * this.windowMs) / 1000);
+        if (options.onLimit) {
+          return options.onLimit(request, reply, retryAfterSec);
+        }
         reply.header("Retry-After", String(retryAfterSec));
         return reply.status(429).send({
           error: "Too many requests",

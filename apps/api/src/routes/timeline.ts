@@ -1,6 +1,7 @@
 import type { ConnectPersonalTimelineRequest } from "@openmapx/core";
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { z } from "zod";
+import { applyTimelinePrivacyHeaders } from "../server-wiring.js";
 import {
   TimelineConnectionError,
   type TimelineConnectionErrorCode,
@@ -77,8 +78,45 @@ function sendTimelineError(reply: FastifyReply, error: unknown) {
 }
 
 export const timelineRoute: FastifyPluginAsync = async (fastify) => {
+  fastify.setErrorHandler((error, request, reply) => {
+    const errorFields =
+      typeof error === "object" && error !== null
+        ? (error as { code?: unknown; statusCode?: unknown })
+        : {};
+    const errorCode = typeof errorFields.code === "string" ? errorFields.code : null;
+    const errorStatusCode =
+      typeof errorFields.statusCode === "number" && Number.isInteger(errorFields.statusCode)
+        ? errorFields.statusCode
+        : null;
+    applyTimelinePrivacyHeaders(reply);
+    if (errorCode?.startsWith("FST_ERR_CTP_")) {
+      // Preserve protocol-meaningful parser statuses (400 malformed JSON,
+      // 413 body limit, 415 media type), while replacing every parser message
+      // with one stable redacted timeline error.
+      const statusCode =
+        errorStatusCode && errorStatusCode >= 400 && errorStatusCode < 500 ? errorStatusCode : 400;
+      return reply.status(statusCode).send({
+        error: "Invalid timeline request",
+        code: "TIMELINE_INSTANCE_UNSUPPORTED",
+      });
+    }
+    if (errorStatusCode === 401) {
+      return reply.status(401).send({ error: "Authentication required", code: "UNAUTHORIZED" });
+    }
+    if (errorStatusCode && errorStatusCode >= 400 && errorStatusCode < 500) {
+      return reply.status(errorStatusCode).send({
+        error: "Invalid timeline request",
+        code: "TIMELINE_INSTANCE_UNSUPPORTED",
+      });
+    }
+    request.log.error({ errorCode, statusCode: errorStatusCode ?? 500 }, "Timeline request error");
+    return reply.status(503).send({
+      error: "Timeline source is unavailable",
+      code: "TIMELINE_UPSTREAM_UNAVAILABLE",
+    });
+  });
   fastify.addHook("onRequest", async (_request, reply) => {
-    reply.header("Cache-Control", "private, no-store");
+    applyTimelinePrivacyHeaders(reply);
   });
   fastify.addHook("preHandler", async (request, reply) => {
     try {
