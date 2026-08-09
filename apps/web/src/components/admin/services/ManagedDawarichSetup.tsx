@@ -97,8 +97,16 @@ function SetupChecklist({ status }: { status: ManagedDawarichProvisioningStatus 
       />
       <ChecklistRow
         label="OAuth client"
-        status={stateLabel(status.oauthClient.present && status.oauthClient.settingsMatch)}
-        ready={status.oauthClient.present && status.oauthClient.settingsMatch}
+        status={stateLabel(
+          status.oauthClient.present &&
+            status.oauthClient.settingsMatch &&
+            !status.oauthClient.recoveryRequired,
+        )}
+        ready={
+          status.oauthClient.present &&
+          status.oauthClient.settingsMatch &&
+          !status.oauthClient.recoveryRequired
+        }
       />
       <ChecklistRow
         label="Database secret"
@@ -179,6 +187,12 @@ export function ManagedDawarichSetup() {
           )}
           {statusQuery.isError && <Alert severity="error">{errorMessage(statusQuery.error)}</Alert>}
           {status && <SetupChecklist status={status} />}
+          {status?.oauthClient.recoveryRequired && (
+            <Alert severity="error">
+              OIDC recovery is incomplete. Do not apply the bundle yet. Restore vault access, then
+              use Provision/reconcile to rotate and synchronize both secret copies.
+            </Alert>
+          )}
           {mutationError && <Alert severity="error">{mutationError}</Alert>}
 
           <Stack

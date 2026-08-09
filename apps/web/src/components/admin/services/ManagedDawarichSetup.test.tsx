@@ -16,6 +16,7 @@ const hookState = {
         clientId: "public-client-id",
         redirectUriMatches: true,
         settingsMatch: true,
+        recoveryRequired: false,
       },
       secrets: {
         databasePassword: "consistent",
@@ -69,6 +70,7 @@ describe("ManagedDawarichSetup", () => {
         clientId: "public-client-id",
         redirectUriMatches: true,
         settingsMatch: true,
+        recoveryRequired: false,
       },
       secrets: {
         databasePassword: "consistent",
@@ -128,6 +130,16 @@ describe("ManagedDawarichSetup", () => {
     expect(oauthRow).not.toBeNull();
     expect(within(oauthRow as HTMLElement).getByText("Pending")).toBeInTheDocument();
     expect(within(oauthRow as HTMLElement).queryByText("Ready")).not.toBeInTheDocument();
+  });
+
+  it("directs an incomplete OIDC recovery back to reconciliation instead of Apply", () => {
+    hookState.statusQuery.data.oauthClient.recoveryRequired = true;
+    hookState.statusQuery.data.readyToStart = false;
+
+    render(<ManagedDawarichSetup />);
+
+    expect(screen.getByText(/OIDC recovery is incomplete/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Apply changes to both/i)).not.toBeInTheDocument();
   });
 
   it("validates a hostname before provisioning and sends only the normalized hostname", async () => {

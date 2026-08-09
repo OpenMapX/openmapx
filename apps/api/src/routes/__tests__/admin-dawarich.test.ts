@@ -77,6 +77,7 @@ const safeStatus = {
     clientId: "client-public-id",
     redirectUriMatches: true,
     settingsMatch: true,
+    recoveryRequired: false,
   },
   secrets: {
     databasePassword: "consistent",

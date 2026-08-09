@@ -18,6 +18,7 @@ export const DAWARICH_POSTGIS_SERVICE_ID = "dawarich-postgis";
 export const DAWARICH_REDIS_SERVICE_ID = "dawarich-redis";
 export const DAWARICH_VERSION = "1.10.3";
 export const DAWARICH_PROVISIONING_GENERATION_KEY = "OPENMAPX_PROVISIONING_GENERATION";
+export const DAWARICH_OIDC_RECOVERY_REQUIRED_KEY = "OPENMAPX_OIDC_RECOVERY_REQUIRED";
 
 const LOCK_NAME = "openmapx:managed-dawarich:provision";
 const CALLBACK_PATH = "/users/auth/openid_connect/callback";
@@ -48,6 +49,7 @@ export interface ManagedDawarichProvisioningStatus {
     clientId: string | null;
     redirectUriMatches: boolean;
     settingsMatch: boolean;
+    recoveryRequired: boolean;
   };
   secrets: {
     databasePassword: ProvisioningSecretState;
@@ -436,6 +438,10 @@ function sharedGeneration(
     : null;
 }
 
+function recoveryMarkerCleared(config: Record<string, unknown>): boolean {
+  return config[DAWARICH_OIDC_RECOVERY_REQUIRED_KEY] == null;
+}
+
 function hasExpectedConfig(
   current: Record<string, unknown>,
   expected: Record<string, unknown>,
@@ -498,6 +504,43 @@ async function stagePendingGeneration(
   return generation;
 }
 
+/**
+ * Better Auth stores only a hash of the client secret, so equal vault copies
+ * cannot prove they still match after a failed rotation. This raw, non-secret
+ * marker survives process and container restarts and is intentionally not part
+ * of the manifest schema or rendered container environment.
+ */
+async function stageOidcRecoveryRequired(
+  dependencies: ManagedDawarichProvisioningDependencies,
+): Promise<void> {
+  const marker = dependencies.randomBytes(16).toString("hex");
+  for (const serviceId of [DAWARICH_APP_SERVICE_ID, DAWARICH_WORKER_SERVICE_ID]) {
+    await dependencies.mergeConfig(serviceId, {
+      [DAWARICH_OIDC_RECOVERY_REQUIRED_KEY]: marker,
+    });
+  }
+}
+
+async function clearOidcRecoveryRequired(
+  dependencies: ManagedDawarichProvisioningDependencies,
+): Promise<void> {
+  for (const serviceId of [DAWARICH_APP_SERVICE_ID, DAWARICH_WORKER_SERVICE_ID]) {
+    await dependencies.mergeConfig(serviceId, {
+      [DAWARICH_OIDC_RECOVERY_REQUIRED_KEY]: null,
+    });
+  }
+}
+
+async function hasOidcRecoveryMarker(
+  dependencies: ManagedDawarichProvisioningDependencies,
+): Promise<boolean> {
+  const configs = await Promise.all([
+    dependencies.getConfig(DAWARICH_APP_SERVICE_ID),
+    dependencies.getConfig(DAWARICH_WORKER_SERVICE_ID),
+  ]);
+  return configs.some((config) => !recoveryMarkerCleared(config));
+}
+
 async function matchingClients(
   dependencies: ManagedDawarichProvisioningDependencies,
   headers: Headers,
@@ -534,6 +577,7 @@ async function buildStatus(
     client && Object.keys(mutableClientUpdates(client, context)).length === 0,
   );
   const desiredGeneration = sharedGeneration(rawApp, rawWorker);
+  const recoveryRequired = !recoveryMarkerCleared(rawApp) || !recoveryMarkerCleared(rawWorker);
   const configReady = Boolean(
     client &&
       desiredGeneration &&
@@ -548,6 +592,7 @@ async function buildStatus(
     runtime.installed &&
     Boolean(client) &&
     settingsMatch &&
+    !recoveryRequired &&
     configReady &&
     Object.values(secretStates).every((state) => state === "consistent");
   const applied = Boolean(
@@ -564,6 +609,7 @@ async function buildStatus(
       clientId: client?.client_id ?? null,
       redirectUriMatches,
       settingsMatch,
+      recoveryRequired,
     },
     secrets: secretStates,
     configReady,
@@ -591,6 +637,7 @@ async function storeOidcSecret(
       ],
       actorId,
     );
+    await clearOidcRecoveryRequired(dependencies);
   } catch {
     throw new ManagedDawarichProvisioningError("DAWARICH_OIDC_SECRET_RECOVERY_REQUIRED");
   }
@@ -631,7 +678,9 @@ async function executeProvision(
     updates = mutableClientUpdates(client, context);
   }
   const oidcRecoveryRequired = Boolean(
-    client && classifyCopies(initialSecrets.oidc) !== "consistent",
+    client &&
+      (classifyCopies(initialSecrets.oidc) !== "consistent" ||
+        (await hasOidcRecoveryMarker(dependencies))),
   );
   const runtimeMutationRequired =
     !client ||
@@ -644,6 +693,7 @@ async function executeProvision(
     : null;
 
   if (!client) {
+    await stageOidcRecoveryRequired(dependencies);
     client = await dependencies.createClient(input.headers, desiredClient(context));
     created = true;
     await storeOidcSecret(dependencies, client.client_secret, input.actorId);
@@ -697,6 +747,7 @@ async function executeProvision(
   }
 
   if (!created && oidcRecoveryRequired) {
+    await stageOidcRecoveryRequired(dependencies);
     const rotatedClient = await dependencies.rotateClientSecret(input.headers, client.client_id);
     rotated = true;
     await storeOidcSecret(dependencies, rotatedClient.client_secret, input.actorId);
@@ -744,6 +795,7 @@ export async function rotateManagedDawarichOidcSecret(
     assertImmutableClientSecurity(client);
     const pendingGeneration = await stagePendingGeneration(dependencies);
     await reconcileConfig(dependencies, context, client.client_id, pendingGeneration);
+    await stageOidcRecoveryRequired(dependencies);
     const rotated = await dependencies.rotateClientSecret(input.headers, client.client_id);
     await storeOidcSecret(dependencies, rotated.client_secret, input.actorId);
     const status = await buildStatus(dependencies, context, clients);

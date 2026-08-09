@@ -18,6 +18,7 @@ import {
 const HEADERS = new Headers({ cookie: "session=admin" });
 const ACTOR = "admin-1";
 const GENERATION_KEY = "OPENMAPX_PROVISIONING_GENERATION";
+const OIDC_RECOVERY_KEY = "OPENMAPX_OIDC_RECOVERY_REQUIRED";
 
 function secretKey(serviceId: string, key: string): string {
   return `${serviceId}:${key}`;
@@ -718,6 +719,40 @@ describe("rotateManagedDawarichOidcSecret", () => {
     ).resolves.toMatchObject({ needsApply: true });
   });
 
+  it.each([
+    ["first", 3, false],
+    ["second", 4, true],
+  ] as const)(
+    "does not rotate when the %s OIDC recovery-marker write fails",
+    async (_name, failedMerge, recoveryRequired) => {
+      const harness = await createAppliedHarness();
+      let mergeCount = 0;
+      harness.mergeConfig.mockImplementation(async (serviceId, updates) => {
+        mergeCount += 1;
+        if (mergeCount === failedMerge) throw new Error("recovery marker unavailable");
+        harness.configs.set(serviceId, {
+          ...(harness.configs.get(serviceId) ?? {}),
+          ...updates,
+        });
+      });
+
+      await expect(
+        rotateManagedDawarichOidcSecret(
+          { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+          harness.dependencies,
+        ),
+      ).rejects.toThrow("recovery marker unavailable");
+
+      expect(harness.rotateClientSecret).not.toHaveBeenCalled();
+      await expect(
+        inspectManagedDawarichProvisioning(
+          { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+          harness.dependencies,
+        ),
+      ).resolves.toMatchObject({ oauthClient: { recoveryRequired } });
+    },
+  );
+
   it.each(["first", "second"] as const)(
     "keeps rotation pending when the %s vault write fails",
     async (failedWrite) => {
@@ -744,9 +779,106 @@ describe("rotateManagedDawarichOidcSecret", () => {
         harness.dependencies,
       );
       expect(status.needsApply).toBe(true);
+      expect(status.oauthClient.recoveryRequired).toBe(true);
       expect(status.secrets.oidcClientSecret).toBe(
         failedWrite === "first" ? "consistent" : "conflict",
       );
+    },
+  );
+
+  it("cannot clear first-write OIDC recovery by applying both containers", async () => {
+    const harness = await createAppliedHarness();
+    harness.setSecret.mockRejectedValueOnce(new Error("app vault unavailable"));
+
+    await expect(
+      rotateManagedDawarichOidcSecret(
+        { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+        harness.dependencies,
+      ),
+    ).rejects.toMatchObject({ code: "DAWARICH_OIDC_SECRET_RECOVERY_REQUIRED" });
+
+    const failedGeneration = harness.configs.get(DAWARICH_APP_SERVICE_ID)?.[GENERATION_KEY];
+    const recoveryMarker = harness.configs.get(DAWARICH_APP_SERVICE_ID)?.[OIDC_RECOVERY_KEY];
+    expect(recoveryMarker).toBeTruthy();
+    expect(harness.configs.get(DAWARICH_WORKER_SERVICE_ID)?.[OIDC_RECOVERY_KEY]).toBeTruthy();
+    harness.appliedGenerations.set(DAWARICH_APP_SERVICE_ID, failedGeneration as string);
+    harness.appliedGenerations.set(DAWARICH_WORKER_SERVICE_ID, failedGeneration as string);
+
+    const restartedStatus = await inspectManagedDawarichProvisioning(
+      { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+      harness.dependencies,
+    );
+    expect(restartedStatus).toMatchObject({
+      oauthClient: { recoveryRequired: true },
+      readyToStart: false,
+      needsApply: false,
+    });
+    expect(JSON.stringify(restartedStatus)).not.toContain(recoveryMarker as string);
+    expect(JSON.stringify(restartedStatus)).not.toContain(OIDC_RECOVERY_KEY);
+
+    vi.clearAllMocks();
+    const recovered = await provision(harness.dependencies);
+    const recoveredGeneration = harness.configs.get(DAWARICH_APP_SERVICE_ID)?.[GENERATION_KEY];
+    expect(harness.rotateClientSecret).toHaveBeenCalledTimes(1);
+    expect(recovered.status).toMatchObject({
+      oauthClient: { recoveryRequired: false },
+      readyToStart: true,
+      needsApply: true,
+    });
+    expect(harness.configs.get(DAWARICH_APP_SERVICE_ID)?.[OIDC_RECOVERY_KEY]).toBeNull();
+    expect(harness.configs.get(DAWARICH_WORKER_SERVICE_ID)?.[OIDC_RECOVERY_KEY]).toBeNull();
+
+    harness.appliedGenerations.set(DAWARICH_APP_SERVICE_ID, recoveredGeneration as string);
+    harness.appliedGenerations.set(DAWARICH_WORKER_SERVICE_ID, recoveredGeneration as string);
+    await expect(
+      inspectManagedDawarichProvisioning(
+        { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+        harness.dependencies,
+      ),
+    ).resolves.toMatchObject({
+      oauthClient: { recoveryRequired: false },
+      readyToStart: true,
+      needsApply: false,
+    });
+  });
+
+  it.each([
+    ["first", 5],
+    ["second", 6],
+  ] as const)(
+    "fails closed when the %s OIDC recovery-marker clear fails",
+    async (_name, failedMerge) => {
+      const harness = await createAppliedHarness();
+      let mergeCount = 0;
+      harness.mergeConfig.mockImplementation(async (serviceId, updates) => {
+        mergeCount += 1;
+        if (mergeCount === failedMerge) throw new Error("recovery clear unavailable");
+        harness.configs.set(serviceId, {
+          ...(harness.configs.get(serviceId) ?? {}),
+          ...updates,
+        });
+      });
+
+      await expect(
+        rotateManagedDawarichOidcSecret(
+          { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+          harness.dependencies,
+        ),
+      ).rejects.toMatchObject({ code: "DAWARICH_OIDC_SECRET_RECOVERY_REQUIRED" });
+
+      const failedGeneration = harness.configs.get(DAWARICH_APP_SERVICE_ID)?.[GENERATION_KEY];
+      harness.appliedGenerations.set(DAWARICH_APP_SERVICE_ID, failedGeneration as string);
+      harness.appliedGenerations.set(DAWARICH_WORKER_SERVICE_ID, failedGeneration as string);
+      await expect(
+        inspectManagedDawarichProvisioning(
+          { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+          harness.dependencies,
+        ),
+      ).resolves.toMatchObject({
+        oauthClient: { recoveryRequired: true },
+        readyToStart: false,
+        needsApply: false,
+      });
     },
   );
 

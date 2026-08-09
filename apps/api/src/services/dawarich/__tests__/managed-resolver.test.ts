@@ -70,6 +70,7 @@ function createHarness(
     oauthAuthority?: { issuer: string; clients: readonly ManagedOAuthClient[] };
     appliedGenerations?: Partial<Record<string, string | null>>;
     desiredGenerations?: Partial<Record<string, string | null>>;
+    recoveryMarkers?: Partial<Record<string, unknown>>;
   } = {},
 ) {
   let now = 1_000;
@@ -117,12 +118,13 @@ function createHarness(
       }
       return GENERATION;
     }),
-    getDesiredGeneration: vi.fn(async (serviceId: string) => {
-      if (serviceId in (options.desiredGenerations ?? {})) {
-        return options.desiredGenerations?.[serviceId] ?? null;
-      }
-      return GENERATION;
-    }),
+    getRawProvisioningState: vi.fn(async (serviceId: string) => ({
+      generation:
+        serviceId in (options.desiredGenerations ?? {})
+          ? (options.desiredGenerations?.[serviceId] ?? null)
+          : GENERATION,
+      oidcRecoveryRequired: options.recoveryMarkers?.[serviceId] ?? null,
+    })),
   };
   return { dependencies, fetchHealth, advance: (milliseconds: number) => (now += milliseconds) };
 }
@@ -253,6 +255,28 @@ describe("ManagedDawarichServiceResolver", () => {
     });
     expect(harness.fetchHealth).not.toHaveBeenCalled();
   });
+
+  it.each([
+    [
+      "both consumers",
+      { [DAWARICH_APP_SERVICE_ID]: "pending", [DAWARICH_WORKER_SERVICE_ID]: "pending" },
+    ],
+    ["only the app", { [DAWARICH_APP_SERVICE_ID]: "pending" }],
+    ["only the worker", { [DAWARICH_WORKER_SERVICE_ID]: "pending" }],
+  ] as const)(
+    "rejects an OIDC recovery marker on %s after both containers apply",
+    async (_name, recoveryMarkers) => {
+      const harness = createHarness({ recoveryMarkers });
+      const resolver = new ManagedDawarichServiceResolver(harness.dependencies);
+
+      await expect(resolver.resolve()).resolves.toMatchObject({
+        publicOrigin: "",
+        provisioned: false,
+        healthy: false,
+      });
+      expect(harness.fetchHealth).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ["missing app", { [DAWARICH_APP_SERVICE_ID]: null }],
