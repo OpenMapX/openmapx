@@ -1002,7 +1002,16 @@ export function DirectionsPanelContent() {
         {isFlightMode ? (
           <FlightPanel />
         ) : isRideMode ? (
-          <RidePanel />
+          <RidePanel
+            route={
+              data?.routes[0]
+                ? {
+                    distanceMeters: data.routes[0].distance,
+                    durationSeconds: data.routes[0].duration,
+                  }
+                : undefined
+            }
+          />
         ) : !allWaypointsFilled ? (
           <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
             <Typography

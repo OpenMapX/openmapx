@@ -165,14 +165,17 @@ function statusFromError(err: unknown): CatalogStatus {
 }
 
 export function createGofsCatalog(ctx: IntegrationContext, fetchJson?: GofsFetchJson) {
-  const fetch: GofsFetchJson = fetchJson ?? ((url, headers) => safeFetchJson(url, { headers }));
+  // Named `doFetch`, not `fetch`: shadowing the global would both confuse
+  // readers and defeat the repo guard that looks for bare fetch() in
+  // integrations.
+  const doFetch: GofsFetchJson = fetchJson ?? ((url, headers) => safeFetchJson(url, { headers }));
 
   async function loadUpstream(): Promise<CatalogEntry[]> {
     if (ctx.config.useUpstreamCatalog === false) return [];
     try {
       const cached = await ctx.cache.get<UpstreamSystem[]>(CATALOG_CACHE_KEY);
       const systems =
-        cached ?? ((await fetch(UPSTREAM_URL)) as { systems?: UpstreamSystem[] })?.systems ?? [];
+        cached ?? ((await doFetch(UPSTREAM_URL)) as { systems?: UpstreamSystem[] })?.systems ?? [];
       if (!cached) await ctx.cache.set(CATALOG_CACHE_KEY, systems, CATALOG_TTL_SECONDS);
       return systems.flatMap((s) => toEntry(s, "upstream") ?? []);
     } catch (err) {
@@ -206,7 +209,7 @@ export function createGofsCatalog(ctx: IntegrationContext, fetchJson?: GofsFetch
     let status: CatalogStatus;
     try {
       const { url, headers } = applyGofsAuth(entry.url, entry.auth);
-      const doc = await fetch(url, headers);
+      const doc = await doFetch(url, headers);
       status = parseGofsDiscovery(doc).length > 0 ? "live" : "unavailable";
     } catch (err) {
       status = statusFromError(err);

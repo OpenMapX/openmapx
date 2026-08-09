@@ -1,4 +1,5 @@
 import { en } from "@openmapx/i18n";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { describe, expect, it, vi } from "vitest";
@@ -40,12 +41,16 @@ vi.mock("@openmapx/core", async () => {
 
 import { RidePanel } from "./RidePanel";
 
-const renderPanel = () =>
-  render(
-    <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
-      <RidePanel />
-    </NextIntlClientProvider>,
+const renderPanel = () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+        <RidePanel />
+      </NextIntlClientProvider>
+    </QueryClientProvider>,
   );
+};
 
 describe("RidePanel", () => {
   it("renders one chip per available provider", async () => {

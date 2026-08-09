@@ -712,7 +712,16 @@
     "rideCoverageUnknown": "Availability is not checked for {provider}.",
     "rideNoProviders": "No ride providers are available for this trip.",
     "ridePassengers": "Passengers",
-    "rideTripSummary": "{distance} · about {duration} by car"
+    "rideTripSummary": "{distance} · about {duration} by car",
+    "rideEta": "{duration} away",
+    "rideFareEstimated": "Estimated",
+    "rideQuoteExpired": "This price is out of date.",
+    "rideRefreshQuotes": "Refresh",
+    "rideQuoteExpiresIn": "Updates in {seconds}s",
+    "rideBook": "Book",
+    "rideNoQuotes": "{provider} did not return a price for this trip.",
+    "ridePickupTime": "Pick up at",
+    "ridePrebookNotice": "This service needs at least {minutes} minutes' notice."
   },
   "openingHours": {
     "open24Hours": "Open 24 hours",
