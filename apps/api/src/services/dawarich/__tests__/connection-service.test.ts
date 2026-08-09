@@ -258,6 +258,28 @@ describe("timelinePrivateHostAllowlist", () => {
 });
 
 describe("TimelineConnectionService", () => {
+  it("records exactly one closed aggregate outcome for a managed connect", async () => {
+    const recordMetric = vi.fn();
+    const metricNow = vi.fn().mockReturnValueOnce(100).mockReturnValueOnce(137);
+    const service = new TimelineConnectionService({
+      store: new MemoryConnectionStore(),
+      managedResolver: healthyManagedResolver(),
+      clientFactory: () => validClient(),
+      audit: async () => {},
+      metricNow,
+      recordMetric,
+    });
+
+    await service.connect(USER_ID, { mode: "managed", apiKey: "sensitive-key" });
+
+    expect(recordMetric).toHaveBeenCalledOnce();
+    expect(recordMetric).toHaveBeenCalledWith(
+      { mode: "managed", operation: "connect", outcome: "ok" },
+      37,
+    );
+    expect(JSON.stringify(recordMetric.mock.calls)).not.toContain("sensitive-key");
+  });
+
   it("validates all read-only endpoints before atomically storing an encrypted external key", async () => {
     const store = new MemoryConnectionStore();
     const client = validClient();

@@ -46,8 +46,12 @@ entrypoints. Do not add plaintext environment fallbacks.
 
 ## Provision, enable, and apply
 
-Provision the managed OAuth client first through the OpenMapX managed-service
-flow. It must use these exact values:
+Open the **Dawarich** service detail in the OpenMapX admin service catalog. In
+**Managed Dawarich setup**, optionally enter the public hostname, then select
+**Provision/reconcile**. The operation runs under a database lock, creates or
+reconciles one persisted Better Auth client, writes file-backed secrets, and
+stores non-secret service config. It is safe to retry and deliberately does not
+start containers or delete data. It must produce these exact values:
 
 ```text
 Issuer:       https://<DOMAIN>/api/auth
@@ -59,7 +63,12 @@ Scopes:       openid profile email
 
 Provisioning must finish writing all vault secrets before the bundle is
 enabled. A retry reconciles the existing client; it must not create a second
-client or reveal the existing client secret.
+client, rotate a consistent client secret, or reveal credential material in the
+UI, response, audit event, log, metric, or generated Compose YAML. A partial or
+conflicting database/Rails secret is a blocking operator conflict, not something
+the reconciler guesses how to repair. The collapsed OIDC recovery action is only
+for an explicit rotation: it invalidates the old secret immediately and requires
+**Apply changes** afterward.
 
 From the admin service catalog, select **Dawarich Timeline**, review the
 resource requirements, then use **Save & Apply**. The equivalent CLI sequence
@@ -86,8 +95,9 @@ so this is not single logout; on shared devices, sign out of both applications.
 OIDC authenticates the browser only. Dawarich 1.10.3 does not authorize its API
 with the Better Auth token or Rails session. Every user must open Dawarich,
 finish OIDC registration or explicit account linking, copy their personal
-Dawarich API key from account settings, and paste it into OpenMapX Timeline
-settings. OpenMapX stores that key encrypted and uses it only as a Bearer token
+Dawarich API key from **Account settings** at `/users/edit`, and paste it into
+OpenMapX Timeline settings. (`/settings` is not a web account route in Dawarich
+1.10.3.) OpenMapX stores that key encrypted and uses it only as a Bearer token
 for read-only timeline calls. Tracking, imports, edits, and other writes go
 directly to Dawarich.
 
@@ -126,6 +136,23 @@ The app's stock entrypoint waits for PostgreSQL, runs schema and data
 migrations, runs seeds, and starts Puma. Repeating startup at the same pinned
 version is expected and migration-idempotent. The worker waits for PostgreSQL
 and then starts stock Sidekiq.
+
+OpenMapX considers the managed user flow available only when the exact bundle is
+installed, selected, provisioned with a validated public HTTPS origin, and the
+app is reachable. It calls Dawarich APIs through the internal
+`http://dawarich-app:3000` origin only; user links use the public HTTPS origin.
+Only the non-user `/api/v1/health` result is cached in memory, for at most 15
+seconds. Disabling or an unhealthy probe returns `TIMELINE_MANAGED_DISABLED` to
+existing users without deleting their connection.
+
+## Aggregate monitoring
+
+The internal Prometheus endpoint exports `personal_timeline_requests_total` and
+`personal_timeline_request_duration_ms`. Suggested dashboards may split only by
+the closed `mode`, `operation`, and `outcome` labels. Do not add account IDs,
+hostnames, dates, time zones, upstream messages, places, tracks, or coordinates.
+No alert threshold or SLO is defined until representative operational baseline
+data exists.
 
 ## Persistence and backups
 
@@ -171,6 +198,14 @@ location history. Retain off-host backups and follow Dawarich's official
 
 ## Image and architecture release check
 
+| Component | Reviewed release | Reviewed OCI index / source | Native architectures tested or inspected | Support note |
+| --- | --- | --- | --- | --- |
+| OpenMapX | dependency-complete baseline `1a2d0396fb97b1957a6907ef41877f91cab640eb` plus this release change | repository source | CI targets plus staging host | Record the final release commit with acceptance evidence |
+| Better Auth OAuth Provider | `better-auth` and `@better-auth/oauth-provider` 1.6.25 | exact package lock | server runtime | One persisted confidential client; admin API only, no direct table writes |
+| Dawarich app + worker | `freikin/dawarich:1.10.3` | `sha256:d7457e7b27a9992f2fdd367fe22a515b1b44fc6e0cfb7a68f3c69c439c465a6b` | linux/amd64, linux/arm64, linux/arm/v7 inspected; arm64 entrypoints exercised | Upstream Dawarich release |
+| Dedicated PostGIS | `ghcr.io/baosystems/postgis:17-3.5` | index `sha256:789ecd05031a4f98b06d6e48e0d9be054fd4c5df2cd8b14ef967bad24f359a07`; Bao revision `603ccfa15a094bf677524275bdf7e8a7478885ce` | linux/amd64 + linux/arm64 inspected; native arm64 PostgreSQL 17.5/PostGIS 3.5.2 exercised | Bao rebuilds weekly and explicitly provides no support |
+| Dedicated Redis | `redis:7.4-alpine` | mutable pinned release tag; re-inspect before release | linux/amd64 + linux/arm64 inspected | Transient queues/cache; not restored |
+
 The application manifest pins the human-readable `freikin/dawarich:1.10.3`
 tag. On 2026-08-09 its OCI index was verified as linux/amd64, linux/arm64, and
 linux/arm/v7 at digest
@@ -206,6 +241,33 @@ native PostgreSQL/PostGIS smoke fails. Do not silently choose another image or
 force emulation. Re-run the full synthetic restore drill because the Bao image
 has no support guarantee. See the [Bao Systems repository](https://github.com/baosystems/docker-postgis)
 and Dawarich's [updating guide](https://dawarich.app/docs/self-hosting/updating/).
+
+## Release acceptance
+
+Use synthetic data only. The release rehearsal must use two real public HTTPS
+origins (OpenMapX and `timeline.<domain>`) with trusted certificates, exact
+Traefik routing, no database/cache ports, and enough host memory for the full
+stack. Prove all of the following before release:
+
+1. provisioning twice creates one OAuth client and does not rewrite consistent
+   secrets;
+2. signed-out SSO, existing OpenMapX-session SSO, and the explicit same-email
+   account-link challenge all complete with PKCE and the exact callback;
+3. a synthetic day spanning a daylight-saving transition renders visits,
+   journey, bounds and track geometry after copying the key from `/users/edit`;
+4. browser Cache Storage, IndexedDB, local/session storage, OpenMapX logs, audit
+   events, metrics and Traefik access logs contain no key, synthetic history
+   marker, date, or coordinates, and the browser never calls the Dawarich API;
+5. disable/re-enable preserves the connection without repasting the key; and
+6. a same-version empty-volume restore recovers the OpenMapX OAuth/connection
+   state, Dawarich account/history, and app volumes using the preserved external
+   environment, encryption keys and ACME state.
+
+A local trusted-CA or tunnel rehearsal does not replace the public DNS/TLS gate.
+The bilingual privacy/legal text also requires explicit human/project-owner
+approval. Stop release on image drift, automatic same-email linking, credential
+or timeline leakage, restore loss, failed automated legal gates, or absent legal
+approval.
 
 ## Upgrades
 

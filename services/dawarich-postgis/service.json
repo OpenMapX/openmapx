@@ -30,6 +30,16 @@
   "configSchema": {
     "type": "object",
     "properties": {
+      "POSTGRES_USER": {
+        "type": "string",
+        "title": "Dawarich database user",
+        "default": "postgres"
+      },
+      "POSTGRES_DB": {
+        "type": "string",
+        "title": "Dawarich database name",
+        "default": "dawarich_production"
+      },
       "POSTGRES_PASSWORD": {
         "type": "string",
         "title": "Dawarich database password",

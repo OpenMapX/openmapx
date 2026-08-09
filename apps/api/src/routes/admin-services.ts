@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
@@ -8,10 +7,7 @@ import {
   type SharedMobilityCategory,
   setSharedMobilityRollback,
 } from "@openmapx/mobility-core/shared-mobility-orchestrator";
-import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import { db } from "../db";
-import { serviceConfig } from "../db/schema";
 import {
   assertValidBackupName,
   getServiceSelectionSummary,
@@ -23,6 +19,7 @@ import { isDockerAvailable } from "../services/admin-ops";
 import { jobRunner } from "../services/job-runner";
 import { isSecretsConfigured } from "../services/secrets";
 import { resolveServiceConfigWithSources } from "../services/service-config-resolver";
+import { mergeServiceConfig } from "../services/service-config-writer";
 import { getServiceRegistry } from "../services/service-registry";
 import {
   deleteServiceSecret,
@@ -342,21 +339,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         return { errors };
       }
       const adminSession = getAdminSession(req);
-      const [existing] = await db
-        .select({ config: serviceConfig.config })
-        .from(serviceConfig)
-        .where(eq(serviceConfig.serviceId, req.params.id))
-        .limit(1);
-      const existingConfig = (existing?.config as Record<string, unknown>) ?? {};
-      const newConfig = { ...existingConfig, ...config };
-
-      await db
-        .insert(serviceConfig)
-        .values({ id: randomUUID(), serviceId: req.params.id, config: newConfig })
-        .onConflictDoUpdate({
-          target: serviceConfig.serviceId,
-          set: { config: newConfig, updatedAt: new Date() },
-        });
+      await mergeServiceConfig(req.params.id, config);
       await writeAuditLog({
         actorId: adminSession.user.id,
         targetId: req.params.id,

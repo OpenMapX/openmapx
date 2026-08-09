@@ -136,7 +136,7 @@ describe("TimelineConnectionSection", () => {
     await user.click(screen.getByRole("button", { name: "account.timeline.openManagedSettings" }));
 
     expect(open).toHaveBeenCalledWith(
-      "https://timeline.example.test/settings",
+      "https://timeline.example.test/users/edit",
       "_blank",
       "noopener,noreferrer",
     );

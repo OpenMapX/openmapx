@@ -76,7 +76,10 @@ function transportResponse<T>(data: T, headers: Record<string, string> = {}): Sa
   };
 }
 
-function harness(connectionOverrides: Record<string, unknown> = {}) {
+function harness(
+  connectionOverrides: Record<string, unknown> = {},
+  serviceOverrides: Record<string, unknown> = {},
+) {
   const connection = {
     decryptConnectionCredential: vi.fn(async () => credential()),
     updateReadMetadata: vi.fn(async () => REFRESHED_SNAPSHOT),
@@ -104,6 +107,7 @@ function harness(connectionOverrides: Record<string, unknown> = {}) {
       clientOptions.push(options);
       return client;
     },
+    ...serviceOverrides,
   });
   return { service, connection, client, clientOptions };
 }
@@ -113,6 +117,29 @@ beforeEach(() => {
 });
 
 describe("TimelineDayService", () => {
+  it("records one aggregate partial outcome without date, user, host or credential labels", async () => {
+    const recordMetric = vi.fn();
+    const metricNow = vi.fn().mockReturnValueOnce(10).mockReturnValueOnce(34);
+    const { service, client } = harness({}, { recordMetric, metricNow });
+    const partialTimeline = timelineWithTrackIds(["fixture-partial-0"]);
+    partialTimeline.days[0] = { ...partialTimeline.days[0], date: "2026-03-29" };
+    client.getTimeline.mockResolvedValueOnce(partialTimeline);
+    client.getTracksPage.mockRejectedValueOnce(new DawarichClientError("unavailable", 503));
+
+    await service.getPersonalTimelineDay(USER_ID, "2026-03-29");
+
+    expect(recordMetric).toHaveBeenCalledOnce();
+    expect(recordMetric).toHaveBeenCalledWith(
+      { mode: "external", operation: "day", outcome: "partial" },
+      24,
+    );
+    const serialized = JSON.stringify(recordMetric.mock.calls);
+    expect(serialized).not.toContain(USER_ID);
+    expect(serialized).not.toContain("2026-03-29");
+    expect(serialized).not.toContain("fixture-secret-key");
+    expect(serialized).not.toContain("timeline.example.test");
+  });
+
   it.each(["TIMELINE_NOT_CONNECTED", "TIMELINE_MANAGED_DISABLED"] as const)(
     "preserves connection error %s without creating an upstream client",
     async (code) => {

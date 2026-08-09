@@ -75,7 +75,18 @@
         "title": "Public Dawarich URL",
         "default": "https://timeline.{domain}"
       },
+      "DOMAIN": { "type": "string", "title": "Dawarich public hostname" },
+      "APPLICATION_PROTOCOL": {
+        "type": "string",
+        "title": "Dawarich public protocol",
+        "default": "https"
+      },
       "TIME_ZONE": { "type": "string", "title": "Default time zone", "default": "UTC" },
+      "REDIS_URL": { "type": "string", "title": "Dawarich Redis URL" },
+      "DATABASE_HOST": { "type": "string", "title": "Dawarich database host" },
+      "DATABASE_PORT": { "type": "string", "title": "Dawarich database port" },
+      "DATABASE_USERNAME": { "type": "string", "title": "Dawarich database user" },
+      "DATABASE_NAME": { "type": "string", "title": "Dawarich database name" },
       "OIDC_CLIENT_ID": { "type": "string", "title": "OpenMapX OIDC client ID" },
       "OIDC_ISSUER": {
         "type": "string",
@@ -87,6 +98,9 @@
         "title": "Dawarich OIDC callback URL",
         "default": "https://timeline.{domain}/users/auth/openid_connect/callback"
       },
+      "OIDC_PROVIDER_NAME": { "type": "string", "title": "OIDC provider name" },
+      "OIDC_AUTO_REGISTER": { "type": "string", "title": "OIDC automatic registration" },
+      "OIDC_PKCE_ENABLED": { "type": "string", "title": "OIDC PKCE requirement" },
       "WEB_CONCURRENCY": {
         "type": "string",
         "title": "Puma worker count",

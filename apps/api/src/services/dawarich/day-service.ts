@@ -1,5 +1,9 @@
 import type { PersonalTimelineDayV1 } from "@openmapx/core";
 import {
+  type PersonalTimelineRequestLabels,
+  recordPersonalTimelineRequest,
+} from "../metrics/index.js";
+import {
   DawarichClient,
   DawarichClientError,
   type DawarichClientOptions,
@@ -7,6 +11,7 @@ import {
 } from "./client.js";
 import {
   type DecryptedTimelineConnection,
+  metricOutcome,
   TimelineConnectionError,
   type TimelineConnectionSnapshot,
   timelineConnectionService,
@@ -42,6 +47,8 @@ export interface TimelineDayConnectionService {
 export interface TimelineDayServiceOptions {
   connectionService?: TimelineDayConnectionService;
   clientFactory?: TimelineDayClientFactory;
+  metricNow?: () => number;
+  recordMetric?: (labels: PersonalTimelineRequestLabels, latencyMs: number) => void;
 }
 
 function mapRequiredError(error: unknown): TimelineConnectionError {
@@ -124,15 +131,49 @@ function pageFeatures(page: DawarichTracksPage): DawarichTrackFeatureCollection[
 export class TimelineDayService {
   private readonly connectionService: TimelineDayConnectionService;
   private readonly clientFactory: TimelineDayClientFactory;
+  private readonly metricNow: () => number;
+  private readonly recordMetric: (labels: PersonalTimelineRequestLabels, latencyMs: number) => void;
 
   constructor(options: TimelineDayServiceOptions = {}) {
     this.connectionService = options.connectionService ?? timelineConnectionService;
     this.clientFactory =
       options.clientFactory ?? ((clientOptions) => new DawarichClient(clientOptions));
+    this.metricNow = options.metricNow ?? (() => performance.now());
+    this.recordMetric = options.recordMetric ?? recordPersonalTimelineRequest;
   }
 
   async getPersonalTimelineDay(userId: string, date: string): Promise<PersonalTimelineDayV1> {
+    const startedAt = this.metricNow();
+    let mode: "external" | "managed" = "external";
+    try {
+      const result = await this.getPersonalTimelineDayUnmetered(userId, date, (resolvedMode) => {
+        mode = resolvedMode;
+      });
+      this.recordMetric(
+        {
+          mode,
+          operation: "day",
+          outcome: result.warnings.length > 0 ? "partial" : "ok",
+        },
+        this.metricNow() - startedAt,
+      );
+      return result;
+    } catch (error) {
+      this.recordMetric(
+        { mode, operation: "day", outcome: metricOutcome(error) },
+        this.metricNow() - startedAt,
+      );
+      throw error;
+    }
+  }
+
+  private async getPersonalTimelineDayUnmetered(
+    userId: string,
+    date: string,
+    captureMode: (mode: "external" | "managed") => void,
+  ): Promise<PersonalTimelineDayV1> {
     const credential = await this.connectionService.decryptConnectionCredential(userId);
+    captureMode(credential.mode);
     let snapshot = credential.connectionSnapshot;
     const client = this.clientFactory({
       baseUrl: credential.upstreamBaseUrl,

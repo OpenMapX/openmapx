@@ -13,10 +13,20 @@ import {
   personalTimelineConnection,
 } from "../../db/timeline-connection-schema.js";
 import { type AuditLogEntry, writeAuditLog } from "../../utils/audit-log.js";
+import {
+  type PersonalTimelineRequestLabels,
+  recordPersonalTimelineRequest,
+} from "../metrics/index.js";
 import { decrypt, encrypt } from "../secrets.js";
-import { serviceUrl } from "../service-registry.js";
 import { DawarichClient, DawarichClientError, type DawarichClientOptions } from "./client.js";
+import {
+  type ManagedDawarichResolver,
+  type ManagedDawarichState,
+  managedDawarichResolver,
+} from "./managed-resolver.js";
 import { timelinePrivateHostAllowlist } from "./private-hosts.js";
+
+export type { ManagedDawarichResolver, ManagedDawarichState } from "./managed-resolver.js";
 
 export type TimelineConnectionErrorCode = PersonalTimelineErrorCode;
 
@@ -27,30 +37,6 @@ export class TimelineConnectionError extends Error {
   ) {
     super(code);
     this.name = "TimelineConnectionError";
-  }
-}
-
-export interface ManagedDawarichState {
-  internalBaseUrl: string;
-  publicOrigin: string;
-  healthy: boolean;
-  provisioned: boolean;
-}
-
-export interface ManagedDawarichResolver {
-  resolve(): Promise<ManagedDawarichState | null> | ManagedDawarichState | null;
-}
-
-/**
- * Plan 025 replaces this conservative bootstrap resolver with one backed by
- * provisioning state and a bounded health probe. Until then, merely finding
- * the enabled service is not enough to declare it provisioned or healthy.
- */
-class ServiceRegistryManagedDawarichResolver implements ManagedDawarichResolver {
-  resolve(): ManagedDawarichState | null {
-    const internalBaseUrl = serviceUrl("dawarich-app");
-    if (!internalBaseUrl) return null;
-    return { internalBaseUrl, publicOrigin: "", healthy: false, provisioned: false };
   }
 }
 
@@ -248,6 +234,8 @@ export interface TimelineConnectionServiceOptions {
   audit?: AuditWriter;
   now?: () => Date;
   id?: () => string;
+  metricNow?: () => number;
+  recordMetric?: (labels: PersonalTimelineRequestLabels, latencyMs: number) => void;
 }
 
 interface ResolvedCandidate {
@@ -328,6 +316,27 @@ function asConnectionError(error: unknown): TimelineConnectionError {
   }
 }
 
+export function metricOutcome(
+  error: unknown,
+): Exclude<PersonalTimelineRequestLabels["outcome"], "ok" | "partial"> {
+  const safe = asConnectionError(error);
+  switch (safe.code) {
+    case "TIMELINE_NOT_CONNECTED":
+      return "not_connected";
+    case "TIMELINE_CREDENTIAL_INVALID":
+      return "invalid_credential";
+    case "TIMELINE_RATE_LIMITED":
+      return "rate_limited";
+    case "TIMELINE_MANAGED_DISABLED":
+    case "TIMELINE_UPSTREAM_UNAVAILABLE":
+      return "unavailable";
+    case "TIMELINE_INSTANCE_UNSUPPORTED":
+    case "TIMELINE_PLAN_RESTRICTED":
+    case "TIMELINE_RESPONSE_INVALID":
+      return "invalid_response";
+  }
+}
+
 function connectionView(row: PersonalTimelineConnectionRow): TimelineConnectionView["connection"] {
   return {
     mode: row.mode,
@@ -350,19 +359,44 @@ export class TimelineConnectionService {
   private readonly audit: AuditWriter;
   private readonly now: () => Date;
   private readonly id: () => string;
+  private readonly metricNow: () => number;
+  private readonly recordMetric: (labels: PersonalTimelineRequestLabels, latencyMs: number) => void;
 
   constructor(options: TimelineConnectionServiceOptions = {}) {
     this.store = options.store ?? new DrizzleTimelineConnectionStore();
-    this.managedResolver = options.managedResolver ?? new ServiceRegistryManagedDawarichResolver();
+    this.managedResolver = options.managedResolver ?? managedDawarichResolver;
     this.clientFactory =
       options.clientFactory ?? ((clientOptions) => new DawarichClient(clientOptions));
     this.privateHosts = options.privateHosts ?? timelinePrivateHostAllowlist();
     this.audit = options.audit ?? writeAuditLog;
     this.now = options.now ?? (() => new Date());
     this.id = options.id ?? randomUUID;
+    this.metricNow = options.metricNow ?? (() => performance.now());
+    this.recordMetric = options.recordMetric ?? recordPersonalTimelineRequest;
   }
 
   async connect(
+    userId: string,
+    request: ConnectPersonalTimelineRequest,
+  ): Promise<TimelineConnectionView> {
+    const startedAt = this.metricNow();
+    try {
+      const result = await this.connectUnmetered(userId, request);
+      this.recordMetric(
+        { mode: request.mode, operation: "connect", outcome: "ok" },
+        this.metricNow() - startedAt,
+      );
+      return result;
+    } catch (error) {
+      this.recordMetric(
+        { mode: request.mode, operation: "connect", outcome: metricOutcome(error) },
+        this.metricNow() - startedAt,
+      );
+      throw error;
+    }
+  }
+
+  private async connectUnmetered(
     userId: string,
     request: ConnectPersonalTimelineRequest,
   ): Promise<TimelineConnectionView> {
@@ -414,8 +448,30 @@ export class TimelineConnectionService {
   }
 
   async testConnection(userId: string): Promise<TimelineConnectionView> {
+    const startedAt = this.metricNow();
+    let mode: TimelineConnectionMode = "external";
+    try {
+      const result = await this.testConnectionUnmetered(userId, (resolvedMode) => {
+        mode = resolvedMode;
+      });
+      this.recordMetric({ mode, operation: "test", outcome: "ok" }, this.metricNow() - startedAt);
+      return result;
+    } catch (error) {
+      this.recordMetric(
+        { mode, operation: "test", outcome: metricOutcome(error) },
+        this.metricNow() - startedAt,
+      );
+      throw error;
+    }
+  }
+
+  private async testConnectionUnmetered(
+    userId: string,
+    captureMode: (mode: TimelineConnectionMode) => void,
+  ): Promise<TimelineConnectionView> {
     const row = await this.store.findByUserId(userId);
     if (!row) throw new TimelineConnectionError("TIMELINE_NOT_CONNECTED");
+    captureMode(row.mode);
     const hostname = strictOrigin(row.publicOrigin, "https:").hostname;
     const auditCandidate: ResolvedCandidate = {
       mode: row.mode,

@@ -70,7 +70,7 @@ function managedSettingsUrl(view: TimelineConnectionView): string | null {
     ) {
       return null;
     }
-    return `${parsed.origin}/settings`;
+    return `${parsed.origin}/users/edit`;
   } catch {
     return null;
   }

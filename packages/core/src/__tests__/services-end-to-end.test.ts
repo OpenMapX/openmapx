@@ -306,10 +306,20 @@ describe.skipIf(!manifestsPresent)(
         for (const key of [
           "APPLICATION_HOSTS",
           "APPLICATION_URL",
+          "DOMAIN",
+          "APPLICATION_PROTOCOL",
           "TIME_ZONE",
+          "REDIS_URL",
+          "DATABASE_HOST",
+          "DATABASE_PORT",
+          "DATABASE_USERNAME",
+          "DATABASE_NAME",
           "OIDC_CLIENT_ID",
           "OIDC_ISSUER",
           "OIDC_REDIRECT_URI",
+          "OIDC_PROVIDER_NAME",
+          "OIDC_AUTO_REGISTER",
+          "OIDC_PKCE_ENABLED",
           "WEB_CONCURRENCY",
           "RAILS_MAX_THREADS",
           "LOG_MAX_SIZE",
@@ -321,6 +331,10 @@ describe.skipIf(!manifestsPresent)(
         for (const key of ["DATABASE_PASSWORD", "SECRET_KEY_BASE", "OIDC_CLIENT_SECRET"]) {
           expect(appConfig[key]?.["x-openmapx-secret"], key).toBe(true);
         }
+        const postgisConfig = (registry.get("dawarich-postgis")?.manifest.configSchema
+          ?.properties ?? {}) as Record<string, Record<string, unknown>>;
+        expect(postgisConfig.POSTGRES_USER?.type).toBe("string");
+        expect(postgisConfig.POSTGRES_DB?.type).toBe("string");
         expect(app?.bindMounts).toEqual([
           {
             source: "scripts/openmapx-entrypoint.sh",

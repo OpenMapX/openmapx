@@ -107,6 +107,11 @@ vi.mock("../../services/service-config-resolver.js", () => ({
     mockResolveServiceConfigWithSources(...args),
 }));
 
+const mockMergeServiceConfig = vi.fn().mockResolvedValue(undefined);
+vi.mock("../../services/service-config-writer.js", () => ({
+  mergeServiceConfig: (...args: unknown[]) => mockMergeServiceConfig(...args),
+}));
+
 // @openmapx/core/server — getProvidedCapabilityNames + serviceConfigEnvPrefix
 vi.mock("@openmapx/core/server", () => ({
   services: {
@@ -117,9 +122,10 @@ vi.mock("@openmapx/core/server", () => ({
 
 // validate-config-body — keep the real `getSecretFields` (pure), mock only the
 // config validator.
+const mockValidateConfigBody = vi.fn().mockReturnValue({ updates: {}, errors: [] });
 vi.mock("../../utils/validate-config-body.js", async (importActual) => ({
   ...(await importActual<typeof import("../../utils/validate-config-body.js")>()),
-  validateConfigBody: vi.fn().mockReturnValue({ updates: {}, errors: [] }),
+  validateConfigBody: (...args: unknown[]) => mockValidateConfigBody(...args),
 }));
 
 // Service secret vault + apply plumbing
@@ -395,6 +401,8 @@ describe("service credentials", () => {
     mockDeleteServiceSecret.mockReset().mockResolvedValue(undefined);
     mockJobRunnerEnqueue.mockReset().mockResolvedValue("job-123");
     mockResolveServiceConfigWithSources.mockReset().mockResolvedValue({});
+    mockValidateConfigBody.mockReset().mockReturnValue({ updates: {}, errors: [] });
+    mockMergeServiceConfig.mockReset().mockResolvedValue(undefined);
   });
 
   describe("GET /admin/services/:id/config", () => {
@@ -416,6 +424,27 @@ describe("service credentials", () => {
       expect(res.payload).not.toContain("placeholder-not-a-real-value");
       expect(body.schema).toEqual(SECRET_SERVICE.manifest.configSchema);
       expect(body.envPrefix).toBe("SERVICE_ID");
+    });
+  });
+
+  describe("POST /admin/services/:id/config", () => {
+    it("persists only the route-validated update through the atomic writer", async () => {
+      mockValidateConfigBody.mockReturnValueOnce({
+        updates: { RATE_LIMIT_MAX: 240 },
+        errors: [],
+      });
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/admin/services/openconditions-ingest/config",
+        payload: { config: { RATE_LIMIT_MAX: 240, UNKNOWN: "discarded" } },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(mockMergeServiceConfig).toHaveBeenCalledWith("openconditions-ingest", {
+        RATE_LIMIT_MAX: 240,
+      });
+      expect(mockDbSelect).not.toHaveBeenCalled();
     });
   });
 
