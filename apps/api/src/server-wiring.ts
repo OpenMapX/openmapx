@@ -88,13 +88,17 @@ export function isTimelineApiRequest(request: FastifyRequest): boolean {
   return path?.startsWith("/api/timeline/") ?? false;
 }
 
+export function isTimelineDayRequest(request: FastifyRequest): boolean {
+  const path = request.url.split("?", 1)[0];
+  return request.method === "GET" && /^\/api\/timeline\/day\/[^/]+$/.test(path ?? "");
+}
+
 function isExpensiveTimelineRequest(request: FastifyRequest): boolean {
   const path = request.url.split("?", 1)[0];
   return (
     (request.method === "PUT" && path === "/api/timeline/connection") ||
     (request.method === "POST" && path === "/api/timeline/connection/test") ||
-    (request.method === "DELETE" && path === "/api/timeline/connection") ||
-    (request.method === "GET" && /^\/api\/timeline\/day\/[^/]+$/.test(path ?? ""))
+    (request.method === "DELETE" && path === "/api/timeline/connection")
   );
 }
 
@@ -168,6 +172,10 @@ export function makeRateLimitTierHook(limits: RateLimitTiers) {
     const url = request.url;
     if (isTimelineApiRequest(request)) applyTimelinePrivacyHeaders(reply);
     if (url === "/health" || url.startsWith("/health?")) return;
+    // Day reads are limited after the timeline plugin authenticates the user,
+    // using a separate per-user expensive bucket. Do not stack the pre-auth IP
+    // limiter or broad public floor on this privacy-sensitive route.
+    if (isTimelineDayRequest(request)) return;
 
     // Trust only the actual TCP peer here, never XFF.
     const peer = request.socket?.remoteAddress;

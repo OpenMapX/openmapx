@@ -155,7 +155,7 @@ describe("makeRateLimitTierHook", () => {
     { url: "/api/integrations/restaurants/menu?website=https://example.com", tier: "expensive" },
     { url: "/api/integrations/food-delivery/providers?country=de", tier: "public" },
     { method: "GET", url: "/api/timeline/connection", tier: "public" },
-    { method: "GET", url: "/api/timeline/day/2026-08-09", tier: "expensive" },
+    { method: "GET", url: "/api/timeline/day/2026-08-09", tier: null },
     { method: "PUT", url: "/api/timeline/connection", tier: "expensive" },
     { method: "POST", url: "/api/timeline/connection/test", tier: "expensive" },
     { method: "DELETE", url: "/api/timeline/connection", tier: "expensive" },
@@ -253,7 +253,7 @@ describe("makeRateLimitTierHook", () => {
     limiter.destroy();
   });
 
-  it("gives timeline day reads the expensive-tier privacy boundary", async () => {
+  it("skips the global IP limiter for timeline day reads while retaining privacy headers", async () => {
     const limiter = new RateLimiter({ max: 1, windowMs: 60_000 });
     const { hook } = stubTiers();
     hook.expensive = makeTimelineAwareRateLimit(limiter);
@@ -276,8 +276,8 @@ describe("makeRateLimitTierHook", () => {
     const exhausted = await app.inject(request);
 
     expect(first.statusCode).toBe(200);
-    expect(exhausted.statusCode).toBe(429);
-    expect(exhausted.json()).toMatchObject({ code: "TIMELINE_RATE_LIMITED" });
+    expect(exhausted.statusCode).toBe(200);
+    expect(exhausted.json()).toEqual({ ok: true });
     expect(exhausted.headers["cache-control"]).toBe("private, no-store");
     expect(exhausted.headers.pragma).toBe("no-cache");
     expect(exhausted.headers.vary).toContain("Cookie");

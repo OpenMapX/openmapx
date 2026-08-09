@@ -63,6 +63,15 @@ export interface DawarichTracksPage {
   pagination: { currentPage: number; totalPages: number; totalCount: number };
 }
 
+export interface DawarichTracksPageOptions {
+  /**
+   * The Plan 018 default rejects aggregate totals beyond the configured day
+   * caps. The day assembler opts into validated current pages so it can retain
+   * a bounded partial result and stop at its own page/feature limits.
+   */
+  overflowMode?: "reject" | "bounded-partial";
+}
+
 function normalizeBaseUrl(value: string): URL {
   let parsed: URL;
   try {
@@ -143,7 +152,11 @@ export class DawarichClient {
     );
   }
 
-  async getTracksPage(range: DawarichRange, page: number): Promise<DawarichTracksPage> {
+  async getTracksPage(
+    range: DawarichRange,
+    page: number,
+    options: DawarichTracksPageOptions = {},
+  ): Promise<DawarichTracksPage> {
     if (!Number.isInteger(page) || page < 1 || page > this.limits.maxTrackPages) {
       throw new DawarichClientError("page_limit");
     }
@@ -181,7 +194,10 @@ export class DawarichClient {
     ) {
       throw new DawarichClientError("invalid_response");
     }
-    if (totalPages > this.limits.maxTrackPages || totalCount > this.limits.maxTrackFeaturesPerDay) {
+    if (
+      options.overflowMode !== "bounded-partial" &&
+      (totalPages > this.limits.maxTrackPages || totalCount > this.limits.maxTrackFeaturesPerDay)
+    ) {
       throw new DawarichClientError("page_limit");
     }
     const expectedFeatureCount =

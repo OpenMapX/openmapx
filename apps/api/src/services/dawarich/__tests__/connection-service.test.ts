@@ -617,7 +617,7 @@ describe("TimelineConnectionService", () => {
         encryptionTag: oldEncrypted.tag,
       }),
     );
-    const service = new TimelineConnectionService({ store });
+    const service = new TimelineConnectionService({ store, audit: async () => {} });
     const credential = await service.decryptConnectionCredential(USER_ID);
     const switched = connectionRow({
       publicOrigin: "https://new.example",
@@ -631,10 +631,42 @@ describe("TimelineConnectionService", () => {
     });
     store.rows.set(USER_ID, switched);
 
+    const metadata = await service.updateReadMetadata(USER_ID, credential.connectionSnapshot, {
+      timeZone: "Europe/Berlin",
+      distanceUnit: "mi",
+    });
     await service.recordReadFailure(USER_ID, credential.connectionSnapshot, "credential_invalid");
-    await service.recordReadSuccess(USER_ID, credential.connectionSnapshot);
+    const applied = await service.recordReadSuccess(USER_ID, credential.connectionSnapshot);
 
+    expect(metadata).toBeNull();
+    expect(applied).toBe(false);
     expect(store.rows.get(USER_ID)).toEqual(switched);
+  });
+
+  it("reports a read-success CAS miss after the captured connection is disconnected", async () => {
+    const store = new MemoryConnectionStore();
+    const encrypted = encrypt("disconnected-read-key");
+    store.rows.set(
+      USER_ID,
+      connectionRow({
+        encryptedApiKey: encrypted.ciphertext,
+        encryptionIv: encrypted.iv,
+        encryptionTag: encrypted.tag,
+      }),
+    );
+    const service = new TimelineConnectionService({ store, audit: async () => {} });
+    const credential = await service.decryptConnectionCredential(USER_ID);
+    await service.deleteConnection(USER_ID);
+
+    const metadata = await service.updateReadMetadata(USER_ID, credential.connectionSnapshot, {
+      timeZone: "Europe/Berlin",
+      distanceUnit: "mi",
+    });
+    const applied = await service.recordReadSuccess(USER_ID, credential.connectionSnapshot);
+
+    expect(metadata).toBeNull();
+    expect(applied).toBe(false);
+    expect(store.rows.has(USER_ID)).toBe(false);
   });
 
   it("applies read success after same-credential metadata refresh", async () => {

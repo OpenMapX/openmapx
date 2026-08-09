@@ -62,13 +62,13 @@ function normalizeJourney(
   };
 }
 
-function emptyLineCollection(): GeoJSON.FeatureCollection<GeoJSON.LineString> {
+function emptyLineCollection(): GeoJSON.FeatureCollection<GeoJSON.LineString, { id: string }> {
   return { type: "FeatureCollection", features: [] };
 }
 
 function visitCollection(
   entries: Array<PersonalTimelineVisitV1 | PersonalTimelineJourneyV1>,
-): GeoJSON.FeatureCollection<GeoJSON.Point> {
+): GeoJSON.FeatureCollection<GeoJSON.Point, { id: string }> {
   return {
     type: "FeatureCollection",
     features: entries.flatMap((entry) => {
@@ -91,14 +91,24 @@ export function normalizeDawarichDay(input: NormalizeDawarichDayInput): Personal
   const entries = input.day.entries
     .map((entry) => (entry.type === "visit" ? normalizeVisit(entry) : normalizeJourney(entry)))
     .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  const journeyTrackIds = new Set(
+    entries.filter((entry) => entry.type === "journey").map((entry) => entry.id),
+  );
   const tracks = input.tracks
     ? {
         type: "FeatureCollection" as const,
-        features: input.tracks.features.map((feature) => ({
-          type: "Feature" as const,
-          geometry: feature.geometry,
-          properties: feature.properties,
-        })),
+        features: input.tracks.features.flatMap((feature) => {
+          const id = String(feature.properties.id);
+          return journeyTrackIds.has(id)
+            ? [
+                {
+                  type: "Feature" as const,
+                  geometry: feature.geometry,
+                  properties: { id },
+                },
+              ]
+            : [];
+        }),
       }
     : emptyLineCollection();
   const warnings: PersonalTimelineDayV1["warnings"] = [];

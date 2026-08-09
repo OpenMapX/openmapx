@@ -109,6 +109,13 @@ describe("Dawarich runtime contracts", () => {
       }),
     ],
     [
+      "a track without a usable identifier",
+      () => ({
+        ...tracksPageFixture,
+        features: [{ ...tracksPageFixture.features[0], properties: { device_id: "private" } }],
+      }),
+    ],
+    [
       "malformed bounds",
       () => ({
         ...timelineResponseFixture,

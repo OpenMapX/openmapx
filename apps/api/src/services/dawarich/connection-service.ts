@@ -493,14 +493,15 @@ export class TimelineConnectionService {
     };
   }
 
-  async recordReadSuccess(userId: string, snapshot: TimelineConnectionSnapshot): Promise<void> {
+  async recordReadSuccess(userId: string, snapshot: TimelineConnectionSnapshot): Promise<boolean> {
     const now = this.now();
-    await this.store.updateForSnapshot(userId, snapshot, {
+    const row = await this.store.updateForSnapshot(userId, snapshot, {
       lastReadAt: now,
       status: "connected",
       consecutiveFailures: 0,
       updatedAt: now,
     });
+    return row !== null;
   }
 
   async updateReadMetadata(

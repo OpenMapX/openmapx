@@ -1,13 +1,14 @@
 import type { ConnectPersonalTimelineRequest } from "@openmapx/core";
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { z } from "zod";
-import { applyTimelinePrivacyHeaders } from "../server-wiring.js";
+import { applyTimelinePrivacyHeaders, sendTimelineRateLimitResponse } from "../server-wiring.js";
 import {
   TimelineConnectionError,
   type TimelineConnectionErrorCode,
   timelineConnectionService,
 } from "../services/dawarich/connection-service.js";
 import { timelineDayService } from "../services/dawarich/day-service.js";
+import { timelineDayApiLimit } from "../utils/rate-limit.js";
 import { getUserId, requireAuthHook } from "../utils/require-auth.js";
 
 const MAX_API_KEY_BYTES = 4 * 1024;
@@ -40,6 +41,10 @@ const connectRequestSchema = z.discriminatedUnion("mode", [
 ]);
 
 const dayDateSchema = z.iso.date();
+const timelineDayRateLimit = timelineDayApiLimit.preHandler({
+  onLimit: (_request, reply, retryAfterSeconds) =>
+    sendTimelineRateLimitResponse(reply, retryAfterSeconds),
+});
 
 const errorResponses: Record<TimelineConnectionErrorCode, { status: number; message: string }> = {
   TIMELINE_NOT_CONNECTED: { status: 400, message: "Timeline is not connected" },
@@ -180,7 +185,7 @@ export const timelineRoute: FastifyPluginAsync = async (fastify) => {
 
   fastify.get<{ Params: { date: string } }>(
     "/timeline/day/:date",
-    { logLevel: "silent" },
+    { logLevel: "silent", preHandler: timelineDayRateLimit },
     async (request, reply) => {
       const parsed = dayDateSchema.safeParse(request.params.date);
       if (!parsed.success) {

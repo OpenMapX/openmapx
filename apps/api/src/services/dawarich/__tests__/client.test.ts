@@ -177,6 +177,34 @@ describe("DawarichClient", () => {
     ).rejects.toMatchObject({ kind: "page_limit" });
   });
 
+  it("returns a validated oversized page only in explicit bounded-partial mode", async () => {
+    const firstPage = {
+      ...tracksPageFixture,
+      features: Array.from({ length: 500 }, (_, index) => ({
+        ...tracksPageFixture.features[0],
+        properties: { id: `track-${index}` },
+      })),
+    };
+    const excessivePages = vi.fn(async () =>
+      response(firstPage, {
+        "x-current-page": "1",
+        "x-total-pages": "21",
+        "x-total-count": "10001",
+      }),
+    ) as unknown as FetchJsonResponse;
+
+    await expect(
+      clientWith(excessivePages).getTracksPage(
+        { startAt: "2026-01-02T00:00:00Z", endAt: "2026-01-03T00:00:00Z" },
+        1,
+        { overflowMode: "bounded-partial" },
+      ),
+    ).resolves.toMatchObject({
+      data: { features: expect.arrayContaining([expect.any(Object)]) },
+      pagination: { currentPage: 1, totalPages: 21, totalCount: 10_001 },
+    });
+  });
+
   it("rejects contradictory oversized pagination headers before applying caps", async () => {
     const contradictory = vi.fn(async () =>
       response(tracksPageFixture, {

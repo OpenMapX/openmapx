@@ -1,7 +1,13 @@
+import type { SafeJsonResponse } from "@openmapx/core/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { timelineResponseFixture } from "../__fixtures__/timeline-day.js";
 import { tracksPageFixture } from "../__fixtures__/tracks-page.js";
-import { DawarichClientError, type DawarichTracksPage } from "../client.js";
+import {
+  DawarichClient,
+  DawarichClientError,
+  type DawarichTracksPage,
+  type FetchJsonResponse,
+} from "../client.js";
 import { TimelineConnectionError, type TimelineConnectionSnapshot } from "../connection-service.js";
 import { TimelineDayService } from "../day-service.js";
 
@@ -44,11 +50,37 @@ function trackFeatures(count: number, prefix: string) {
   }));
 }
 
+function trackIds(count: number, prefix: string) {
+  return Array.from({ length: count }, (_, index) => `${prefix}-${index}`);
+}
+
+function timelineWithTrackIds(ids: string[]) {
+  const journey = timelineResponseFixture.days[0].entries.find((entry) => entry.type === "journey");
+  if (!journey) throw new Error("fixture needs a journey");
+  return {
+    days: [
+      {
+        ...timelineResponseFixture.days[0],
+        entries: ids.map((trackId) => ({ ...journey, track_id: trackId })),
+      },
+    ],
+  };
+}
+
+function transportResponse<T>(data: T, headers: Record<string, string> = {}): SafeJsonResponse<T> {
+  return {
+    data,
+    status: 200,
+    headers: new Headers(headers),
+    finalUrl: "https://timeline.example.test/api",
+  };
+}
+
 function harness(connectionOverrides: Record<string, unknown> = {}) {
   const connection = {
     decryptConnectionCredential: vi.fn(async () => credential()),
     updateReadMetadata: vi.fn(async () => REFRESHED_SNAPSHOT),
-    recordReadSuccess: vi.fn(async () => {}),
+    recordReadSuccess: vi.fn(async () => true),
     recordReadFailure: vi.fn(async () => {}),
     ...connectionOverrides,
   };
@@ -159,6 +191,37 @@ describe("TimelineDayService", () => {
     expect(connection.recordReadSuccess).toHaveBeenCalledWith(USER_ID, REFRESHED_SNAPSHOT);
   });
 
+  it("aborts before reading old-source data when the connection switches during metadata refresh", async () => {
+    const { service, connection, client } = harness({
+      decryptConnectionCredential: vi.fn(async () =>
+        credential({ timeZone: "", distanceUnit: null }),
+      ),
+      updateReadMetadata: vi.fn(async () => null),
+    });
+
+    await expect(service.getPersonalTimelineDay(USER_ID, "2026-01-02")).rejects.toMatchObject({
+      code: "TIMELINE_UPSTREAM_UNAVAILABLE",
+    });
+    expect(connection.updateReadMetadata).toHaveBeenCalledWith(USER_ID, SNAPSHOT, {
+      timeZone: "Etc/UTC",
+      distanceUnit: "km",
+    });
+    expect(client.getTimeline).not.toHaveBeenCalled();
+    expect(connection.recordReadSuccess).not.toHaveBeenCalled();
+  });
+
+  it("discards old-source data when the connection disconnects before final success CAS", async () => {
+    const { service, connection, client } = harness({
+      recordReadSuccess: vi.fn(async () => false),
+    });
+
+    await expect(service.getPersonalTimelineDay(USER_ID, "2026-01-02")).rejects.toMatchObject({
+      code: "TIMELINE_UPSTREAM_UNAVAILABLE",
+    });
+    expect(client.getTimeline).toHaveBeenCalledOnce();
+    expect(connection.recordReadSuccess).toHaveBeenCalledWith(USER_ID, SNAPSHOT);
+  });
+
   it.each([
     { kind: "unauthorized", code: "TIMELINE_CREDENTIAL_INVALID", failure: "credential_invalid" },
     { kind: "unavailable", code: "TIMELINE_UPSTREAM_UNAVAILABLE", failure: "transient" },
@@ -236,6 +299,9 @@ describe("TimelineDayService", () => {
 
   it("combines every bounded tracks page with the required timeline", async () => {
     const { service, client } = harness();
+    client.getTimeline.mockResolvedValueOnce(
+      timelineWithTrackIds([...trackIds(500, "fixture-page-1"), ...trackIds(1, "fixture-page-2")]),
+    );
     client.getTracksPage
       .mockResolvedValueOnce({
         data: { ...tracksPageFixture, features: trackFeatures(500, "fixture-page-1") },
@@ -256,6 +322,9 @@ describe("TimelineDayService", () => {
 
   it("keeps validated geometry and warns when a later tracks page fails", async () => {
     const { service, connection, client } = harness();
+    client.getTimeline.mockResolvedValueOnce(
+      timelineWithTrackIds(trackIds(500, "fixture-partial")),
+    );
     client.getTracksPage
       .mockResolvedValueOnce({
         data: { ...tracksPageFixture, features: trackFeatures(500, "fixture-partial") },
@@ -273,6 +342,7 @@ describe("TimelineDayService", () => {
 
   it("keeps accepted pages and warns when the client reports the page cap", async () => {
     const { service, client } = harness();
+    client.getTimeline.mockResolvedValueOnce(timelineWithTrackIds(trackIds(500, "fixture-capped")));
     client.getTracksPage
       .mockResolvedValueOnce({
         data: { ...tracksPageFixture, features: trackFeatures(500, "fixture-capped") },
@@ -288,6 +358,13 @@ describe("TimelineDayService", () => {
 
   it("stops at the configured page cap and retains the bounded partial result", async () => {
     const { service, client } = harness();
+    client.getTimeline.mockResolvedValueOnce(
+      timelineWithTrackIds(
+        Array.from({ length: 20 }, (_, pageIndex) =>
+          trackIds(500, `fixture-track-${pageIndex + 1}`),
+        ).flat(),
+      ),
+    );
     client.getTracksPage.mockImplementation(async (_range, page) => ({
       data: {
         ...tracksPageFixture,
@@ -301,6 +378,85 @@ describe("TimelineDayService", () => {
     expect(client.getTracksPage).toHaveBeenCalledTimes(20);
     expect(day.map.tracks.features).toHaveLength(10_000);
     expect(day.warnings).toEqual(["PARTIAL_TRACK_PAGE_LIMIT"]);
+  });
+
+  it("retains 20 validated pages from the real client when aggregate totals exceed the cap", async () => {
+    const ids = Array.from({ length: 20 }, (_, pageIndex) =>
+      trackIds(500, `fixture-real-page-${pageIndex + 1}`),
+    ).flat();
+    const fetchJsonResponse = vi.fn(async (urlValue: string) => {
+      const url = new URL(urlValue);
+      if (url.pathname === "/api/v1/timeline") {
+        return transportResponse(timelineWithTrackIds(ids));
+      }
+      if (url.pathname === "/api/v1/tracks") {
+        const page = Number(url.searchParams.get("page"));
+        return transportResponse(
+          {
+            type: "FeatureCollection" as const,
+            features: trackFeatures(500, `fixture-real-page-${page}`),
+          },
+          {
+            "x-current-page": String(page),
+            "x-total-pages": "21",
+            "x-total-count": "10001",
+          },
+        );
+      }
+      throw new Error("Unexpected request in fixture transport");
+    }) as unknown as FetchJsonResponse;
+    const connection = harness().connection;
+    const service = new TimelineDayService({
+      connectionService: connection,
+      clientFactory: (options) => new DawarichClient({ ...options, fetchJsonResponse }),
+    });
+
+    const day = await service.getPersonalTimelineDay(USER_ID, "2026-01-02");
+
+    expect(day.map.tracks.features).toHaveLength(10_000);
+    expect(day.warnings).toEqual(["PARTIAL_TRACK_PAGE_LIMIT"]);
+    const trackUrls = vi
+      .mocked(fetchJsonResponse)
+      .mock.calls.map(([url]) => url)
+      .filter((url) => new URL(url).pathname === "/api/v1/tracks");
+    expect(trackUrls).toHaveLength(20);
+    expect(trackUrls.at(-1)).toContain("page=20");
+    expect(trackUrls.some((url) => url.includes("page=21"))).toBe(false);
+  });
+
+  it("degrades a real tracks page without an identifier instead of exposing its properties", async () => {
+    const fetchJsonResponse = vi.fn(async (urlValue: string) => {
+      const url = new URL(urlValue);
+      if (url.pathname === "/api/v1/timeline") {
+        return transportResponse(timelineResponseFixture);
+      }
+      if (url.pathname === "/api/v1/tracks") {
+        return transportResponse(
+          {
+            type: "FeatureCollection" as const,
+            features: [
+              {
+                ...tracksPageFixture.features[0],
+                properties: { device_id: "private-device" },
+              },
+            ],
+          },
+          { "x-current-page": "1", "x-total-pages": "1", "x-total-count": "1" },
+        );
+      }
+      throw new Error("Unexpected request in fixture transport");
+    }) as unknown as FetchJsonResponse;
+    const connection = harness().connection;
+    const service = new TimelineDayService({
+      connectionService: connection,
+      clientFactory: (options) => new DawarichClient({ ...options, fetchJsonResponse }),
+    });
+
+    const day = await service.getPersonalTimelineDay(USER_ID, "2026-01-02");
+
+    expect(day.map.tracks.features).toEqual([]);
+    expect(day.warnings).toEqual(["TRACK_GEOMETRY_UNAVAILABLE"]);
+    expect(JSON.stringify(day)).not.toContain("private-device");
   });
 
   it("treats a mismatched required day as an invalid response without recording success", async () => {

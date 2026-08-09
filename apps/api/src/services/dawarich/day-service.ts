@@ -31,7 +31,7 @@ export interface TimelineDayConnectionService {
     snapshot: TimelineConnectionSnapshot,
     metadata: { timeZone: string; distanceUnit: string | null },
   ): Promise<TimelineConnectionSnapshot | null>;
-  recordReadSuccess(userId: string, snapshot: TimelineConnectionSnapshot): Promise<void>;
+  recordReadSuccess(userId: string, snapshot: TimelineConnectionSnapshot): Promise<boolean>;
   recordReadFailure(
     userId: string,
     snapshot: TimelineConnectionSnapshot,
@@ -156,7 +156,10 @@ export class TimelineDayService {
         timeZone,
         distanceUnit,
       });
-      if (updatedSnapshot) snapshot = updatedSnapshot;
+      if (!updatedSnapshot) {
+        throw new TimelineConnectionError("TIMELINE_UPSTREAM_UNAVAILABLE");
+      }
+      snapshot = updatedSnapshot;
     }
 
     let range: { startAt: string; endAt: string };
@@ -185,7 +188,10 @@ export class TimelineDayService {
       trackFetchFailed: trackResult.unavailable,
       acceptedPartialTrackPageLimit: trackResult.pageLimitReached,
     });
-    await this.connectionService.recordReadSuccess(userId, snapshot);
+    const successRecorded = await this.connectionService.recordReadSuccess(userId, snapshot);
+    if (!successRecorded) {
+      throw new TimelineConnectionError("TIMELINE_UPSTREAM_UNAVAILABLE");
+    }
     return normalized;
   }
 
@@ -198,7 +204,7 @@ export class TimelineDayService {
     while (page <= DAWARICH_LIMITS.maxTrackPages) {
       let result: DawarichTracksPage;
       try {
-        result = await client.getTracksPage(range, page);
+        result = await client.getTracksPage(range, page, { overflowMode: "bounded-partial" });
       } catch (error) {
         return {
           tracks: { type: "FeatureCollection", features },

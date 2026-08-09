@@ -130,4 +130,49 @@ describe("normalizeDawarichDay", () => {
     expect(partial.capabilities).toEqual({ trackGeometry: true, elevation: true });
     expect(partial.warnings).toEqual(["PARTIAL_TRACK_PAGE_LIMIT"]);
   });
+
+  it("joins tracks to selected-day journeys and omits unrelated geometry", () => {
+    const unrelated = {
+      ...tracksPageFixture.features[0],
+      properties: { id: "track-from-another-day" },
+    };
+    const result = normalizeDawarichDay({
+      day: timelineDayFixture,
+      selectedDate: "2026-01-02",
+      timeZone: "Etc/UTC",
+      distanceUnit: "km",
+      tracks: {
+        type: "FeatureCollection",
+        features: [unrelated, tracksPageFixture.features[0]],
+      },
+    });
+
+    expect(result.map.tracks.features).toHaveLength(1);
+    expect(result.map.tracks.features[0].properties).toEqual({ id: "track-fixture-1" });
+  });
+
+  it("strips additive upstream track properties from the browser contract", () => {
+    const result = normalizeDawarichDay({
+      day: timelineDayFixture,
+      selectedDate: "2026-01-02",
+      timeZone: "Etc/UTC",
+      distanceUnit: "km",
+      tracks: {
+        type: "FeatureCollection",
+        features: [
+          {
+            ...tracksPageFixture.features[0],
+            properties: {
+              id: "track-fixture-1",
+              device_id: "private-device",
+              raw_point_ids: ["private-point"],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(result.map.tracks.features[0].properties).toEqual({ id: "track-fixture-1" });
+    expect(JSON.stringify(result.map.tracks)).not.toMatch(/private-device|private-point/);
+  });
 });

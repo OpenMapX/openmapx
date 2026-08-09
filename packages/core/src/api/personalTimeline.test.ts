@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import type { PersonalTimelineDayV1 } from "../types/personalTimeline";
 import { apiClient } from "./client";
 import { API_ENDPOINTS } from "./endpoints";
 import {
@@ -12,6 +13,14 @@ import {
 afterEach(() => vi.restoreAllMocks());
 
 describe("personal timeline API", () => {
+  it("types normalized map features with identifier-only properties", () => {
+    type TrackProperties = PersonalTimelineDayV1["map"]["tracks"]["features"][number]["properties"];
+    type VisitProperties = PersonalTimelineDayV1["map"]["visits"]["features"][number]["properties"];
+
+    expectTypeOf<TrackProperties>().toEqualTypeOf<{ id: string }>();
+    expectTypeOf<VisitProperties>().toEqualTypeOf<{ id: string }>();
+  });
+
   it("gets connection metadata from the provider-neutral endpoint", async () => {
     const response = { connected: false };
     const get = vi.spyOn(apiClient, "get").mockResolvedValue(response as never);

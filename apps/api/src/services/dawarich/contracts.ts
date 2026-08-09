@@ -101,7 +101,7 @@ export const trackLineStringSchema = z.object({
 export const trackFeatureSchema = z.object({
   type: z.literal("Feature"),
   geometry: trackLineStringSchema,
-  properties: z.record(z.string(), z.unknown()),
+  properties: z.object({ id: identifier }).passthrough(),
 });
 
 export const tracksFeatureCollectionSchema = z.object({

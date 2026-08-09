@@ -159,6 +159,25 @@ export const expensivePublicApiLimit = new RateLimiter({
 });
 
 /**
+ * Separate expensive bucket for personal-timeline day reads. The route runs
+ * this hook only after authentication has populated `request.userId`, keeping
+ * users behind the same address isolated and avoiding Dawarich credentials as
+ * an identity. It intentionally shares the expensive tier's deployment knobs
+ * while retaining independent buckets from unrelated fan-out endpoints.
+ */
+export const timelineDayApiLimit = new RateLimiter({
+  max: envInt("RATE_LIMIT_EXPENSIVE_MAX", 60),
+  windowMs: envInt("RATE_LIMIT_EXPENSIVE_WINDOW_MS", 60_000),
+  keyFn: (request) => {
+    const userId = (request as FastifyRequest & { userId?: unknown }).userId;
+    if (typeof userId !== "string" || !userId) {
+      throw new Error("Timeline day rate limit requires an authenticated user");
+    }
+    return userId;
+  },
+});
+
+/**
  * Generous limiter for tile proxies and tile-adjacent static assets
  * (style.json, sprites, fonts, vector and raster tiles). These endpoints
  * serve cacheable, idempotent content and are pulled in bursts of 30-60

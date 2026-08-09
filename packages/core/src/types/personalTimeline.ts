@@ -86,8 +86,8 @@ export interface PersonalTimelineDayV1 {
   bounds: [west: number, south: number, east: number, north: number] | null;
   entries: Array<PersonalTimelineVisitV1 | PersonalTimelineJourneyV1>;
   map: {
-    tracks: GeoJSON.FeatureCollection<GeoJSON.LineString>;
-    visits: GeoJSON.FeatureCollection<GeoJSON.Point>;
+    tracks: GeoJSON.FeatureCollection<GeoJSON.LineString, { id: string }>;
+    visits: GeoJSON.FeatureCollection<GeoJSON.Point, { id: string }>;
   };
   capabilities: { trackGeometry: boolean; elevation: boolean };
   warnings: PersonalTimelineWarning[];
