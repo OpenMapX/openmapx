@@ -1,6 +1,6 @@
 "use client";
 
-import type { BoundingBox, LngLat } from "@openmapx/core";
+import { type BoundingBox, type LngLat, PANEL } from "@openmapx/core";
 
 export const DEEPLINK_UPDATE_EVENT = "openmapx:deeplink:update";
 
@@ -169,6 +169,31 @@ export function formatCameraParam(camera: CameraDeepLink): string {
     formatNumber(camera.pitch ?? 0, 1),
   ];
   return parts.join(",");
+}
+
+export interface LocationShareTarget {
+  id: string;
+  coordinates: LngLat;
+  name: string;
+  category?: string;
+  rawCategory?: string;
+}
+
+export function buildLocationShareUrl(currentHref: string, target: LocationShareTarget): string {
+  const url = new URL(currentHref);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set(
+    "map",
+    formatCameraParam({ center: target.coordinates, zoom: 16, bearing: 0, pitch: 0 }),
+  );
+  url.searchParams.set("panel", PANEL.PLACE);
+  url.searchParams.set("place", target.id);
+  url.searchParams.set("at", formatLngLat(target.coordinates));
+  if (target.name) url.searchParams.set("name", target.name);
+  if (target.category) url.searchParams.set("cat", target.category);
+  if (target.rawCategory) url.searchParams.set("raw", target.rawCategory);
+  return url.toString();
 }
 
 export function parseCameraParam(value: string | null): CameraDeepLink | null {
@@ -369,6 +394,36 @@ export function requestDeepLinkUpdate(): string {
   return window.location.href;
 }
 
+export async function shareUrl({
+  url,
+  title = "OpenMapX",
+  text,
+}: {
+  url: string;
+  title?: string;
+  text?: string;
+}): Promise<ShareCurrentUrlResult> {
+  if (typeof navigator === "undefined") return "unavailable";
+  const payload = { title, text, url };
+  if (typeof navigator.share === "function" && (navigator.canShare?.(payload) ?? true)) {
+    try {
+      await navigator.share(payload);
+      return "shared";
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return "cancelled";
+    }
+  }
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+      return "copied";
+    }
+  } catch {
+    return "unavailable";
+  }
+  return "unavailable";
+}
+
 export async function shareCurrentUrl({
   title = "OpenMapX",
   text,
@@ -376,29 +431,6 @@ export async function shareCurrentUrl({
   title?: string;
   text?: string;
 } = {}): Promise<ShareCurrentUrlResult> {
-  if (typeof window === "undefined" || typeof navigator === "undefined") {
-    return "unavailable";
-  }
-
-  const url = requestDeepLinkUpdate();
-  const payload = { title, text, url };
-
-  try {
-    // `canShare` lets us avoid calling `share()` with a payload the platform
-    // would reject (and falling back to copy instead). When `canShare` is
-    // absent but `share` exists, assume the URL payload is shareable.
-    if (typeof navigator.share === "function" && (navigator.canShare?.(payload) ?? true)) {
-      await navigator.share(payload);
-      return "shared";
-    }
-
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(url);
-      return "copied";
-    }
-  } catch {
-    return "cancelled";
-  }
-
-  return "unavailable";
+  if (typeof window === "undefined") return "unavailable";
+  return shareUrl({ title, text, url: requestDeepLinkUpdate() });
 }
