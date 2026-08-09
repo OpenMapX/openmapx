@@ -1,37 +1,11 @@
 "use client";
 
 import { createPlace, PANEL, usePlaceStore, useSidebarStore } from "@openmapx/core";
-import type { MapMouseEvent, StyleSpecification } from "maplibre-gl";
+import type { MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
-
-// OpenMapTiles source-layer names that contain named POIs
-const POI_SOURCE_LAYERS = new Set(["poi"]);
-
-// Our own overlay layers — never treat these as style POIs
-const OWN_LAYER_IDS = new Set([
-  "category-results-layer",
-  "category-results-labels",
-  "mapillary-sequence-layer",
-  "mapillary-photo-layer",
-  "mapillary-pano-layer",
-]);
-
-type StyleLayer = StyleSpecification["layers"][number];
-
-function getPoiLayerIds(map: import("maplibre-gl").Map): string[] {
-  const style = map.getStyle();
-  if (!style?.layers) return [];
-  return (style.layers as StyleLayer[])
-    .filter((layer) => {
-      if (layer.type !== "symbol") return false;
-      if (OWN_LAYER_IDS.has(layer.id)) return false;
-      const sourceLayer = (layer as { "source-layer"?: string })["source-layer"];
-      return !!sourceLayer && POI_SOURCE_LAYERS.has(sourceLayer);
-    })
-    .map((l) => l.id);
-}
+import { findStylePoiAtPoint, getStylePoiLayerIds } from "./mapStylePoiTarget";
 
 /**
  * Makes the map style's built-in POI symbols (restaurants, hotels, hospitals,
@@ -55,7 +29,7 @@ export function MapStylePoiClickHandler() {
 
     const syncLayers = () => {
       // getStyle() returns null/undefined while style is still loading
-      const ids = getPoiLayerIds(map);
+      const ids = getStylePoiLayerIds(map);
       if (ids.length === 0 && registeredIds.length === 0) return;
 
       for (const id of registeredIds) {
@@ -89,50 +63,23 @@ export function MapStylePoiClickHandler() {
     if (!map || !mapReady) return;
 
     const onClick = (e: MapMouseEvent) => {
-      const layerIds = poiLayerIdsRef.current.filter((id) => !!map.getLayer(id));
-      if (layerIds.length === 0) return;
-
-      // Skip if the click landed on one of our own overlay layers (category results,
-      // data source markers, street-level imagery, etc.) — those have their own handlers.
-      const ownLayers = [...INTERACTIVE_LAYER_IDS].filter(
-        (id) => !layerIds.includes(id) && !!map.getLayer(id),
+      const target = findStylePoiAtPoint(
+        map,
+        e.point,
+        poiLayerIdsRef.current,
+        INTERACTIVE_LAYER_IDS,
       );
-      if (
-        ownLayers.length > 0 &&
-        map.queryRenderedFeatures(e.point, { layers: ownLayers }).length > 0
-      ) {
-        return;
-      }
-
-      const features = map.queryRenderedFeatures(e.point, { layers: layerIds });
-      if (!features.length) return;
-
-      const feature = features[0];
-      if (feature.geometry.type !== "Point") return;
-
-      const name: string | undefined = feature.properties?.name;
-      if (!name) return;
-
-      const coords = feature.geometry.coordinates as [number, number];
-
-      // Build a deterministic, non-OSM id so the API uses name + coordinate
-      // lookup (which finds the correct OSM element for knowledge data).
-      const featureId = feature.id ?? `${coords[0].toFixed(5)}-${coords[1].toFixed(5)}`;
-
-      const poiClass = feature.properties?.class as string | undefined;
-      const poiSubclass = feature.properties?.subclass as string | undefined;
+      if (!target) return;
 
       setSelectedPlace(
         createPlace({
           primaryScheme: "stylePoi",
-          ids: { stylePoi: String(featureId) },
-          name,
-          address: name,
-          coordinates: coords,
-          // Use subclass as category (more specific, e.g. "charging_station")
-          // and fall back to class (broader, e.g. "car")
-          category: poiSubclass ?? poiClass,
-          rawCategory: poiSubclass ? `${poiClass}/${poiSubclass}` : poiClass,
+          ids: { stylePoi: target.featureId },
+          name: target.name,
+          address: target.name,
+          coordinates: target.coordinates,
+          category: target.category,
+          rawCategory: target.rawCategory,
         }),
       );
       const sidebarId = useSidebarStore.getState().activeSidebarId;
