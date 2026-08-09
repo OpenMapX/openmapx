@@ -18,6 +18,9 @@ export const API_ENDPOINTS = {
   crowdReportsIssuerKeys: "/api/integrations/crowd-reports/issuer-keys",
   flights: "/api/integrations/flights", // used as `${base}/${provider}/open`
   flightProviders: "/api/integrations/flights/providers",
+  rideHailing: "/api/integrations/ride-hailing", // used as `${base}/${provider}/open`
+  rideProviders: "/api/integrations/ride-hailing/providers",
+  rideQuotes: "/api/integrations/ride-hailing/quotes",
   airportNearest: "/api/integrations/knowledge-ourairports/nearest",
   foodDelivery: "/api/integrations/food-delivery", // used as `${base}/${provider}/open`
   foodDeliveryProviders: "/api/integrations/food-delivery/providers",

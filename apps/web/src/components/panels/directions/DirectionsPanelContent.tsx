@@ -57,6 +57,7 @@ import { EvPlanCard } from "@/components/panels/directions/EvPlanCard";
 import { EvVehiclePanel } from "@/components/panels/directions/EvVehiclePanel";
 import { FlightPanel } from "@/components/panels/directions/FlightPanel";
 import { MODES, ModeButton } from "@/components/panels/directions/ModeSelector";
+import { RidePanel } from "@/components/panels/directions/RidePanel";
 import { RouteCard } from "@/components/panels/directions/RouteCard";
 import { RouteOptions } from "@/components/panels/directions/RouteOptions";
 import {
@@ -199,6 +200,14 @@ export function DirectionsPanelContent() {
 
   const isTransitMode = mode === "transit";
   const isFlightMode = mode === "flying";
+  // Ride mode still needs the real road route — it draws on the map and gives
+  // the panel its trip summary — so it fetches like driving rather than being
+  // excluded the way flight mode is. Only the results area differs.
+  const isRideMode = mode === "ride";
+  const routeMode: TravelMode = isRideMode ? "driving" : mode;
+  // Rows that describe driving the route yourself (time picker, avoid options,
+  // share, optimize) do not apply when someone else is doing the driving.
+  const hidesRouteControls = isFlightMode || isRideMode;
   // Time-aware road modes — Valhalla honors depart/arrive on these; OSRM ignores it.
   const isDrivingTimeMode = mode === "driving" || mode === "motorcycle";
 
@@ -229,7 +238,7 @@ export function DirectionsPanelContent() {
   const { data, isLoading, isError } = useDirections({
     waypoints:
       isTransitMode || isFlightMode || isEvMode ? [] : allWaypointsFilled ? routeWaypoints : [],
-    mode,
+    mode: routeMode,
     avoidHighways,
     avoidTolls,
     avoidFerries,
@@ -598,7 +607,8 @@ export function DirectionsPanelContent() {
   ]);
 
   const hasMultipleStops = waypoints.length > 2;
-  const showOptimize = hasMultipleStops && allWaypointsFilled && !isTransitMode && !isFlightMode;
+  const showOptimize =
+    hasMultipleStops && allWaypointsFilled && !isTransitMode && !hidesRouteControls;
   const lowestCo2Grams = useMemo(() => {
     const values = transitItineraries
       .map((itinerary) => itinerary.co2Grams)
@@ -861,7 +871,7 @@ export function DirectionsPanelContent() {
 
         {/* Leave now / Depart at / Arrive by (transit only) + Options (non-transit).
             Flight mode renders its own form below, so this row is hidden. */}
-        {!isFlightMode && (
+        {!hidesRouteControls && (
           <Box
             sx={{
               display: "flex",
@@ -940,10 +950,10 @@ export function DirectionsPanelContent() {
           />
         )}
 
-        {showOptions && !isFlightMode && <RouteOptions />}
+        {showOptions && !hidesRouteControls && <RouteOptions />}
 
         {/* Share row — sits between the options row and the offered routes */}
-        {!isFlightMode && allWaypointsFilled && (
+        {!hidesRouteControls && allWaypointsFilled && (
           <Box
             sx={{
               display: "flex",
@@ -991,6 +1001,8 @@ export function DirectionsPanelContent() {
         {/* Route results */}
         {isFlightMode ? (
           <FlightPanel />
+        ) : isRideMode ? (
+          <RidePanel />
         ) : !allWaypointsFilled ? (
           <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
             <Typography

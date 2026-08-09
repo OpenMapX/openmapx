@@ -702,7 +702,17 @@
         "gbt_dc": "GB/T DC",
         "type3": "Type 3"
       }
-    }
+    },
+    "ride": "Ride",
+    "chooseRidePoints": "Choose a pickup and destination to see ride options.",
+    "rideDisclaimer": "OpenMapX does not book rides. Choosing a provider opens their app or website, where the fare and availability are set by that provider.",
+    "rideProvider": "Ride provider",
+    "rideOpenIn": "Open in {provider}",
+    "rideNoCoordinates": "{provider} cannot carry your pickup and destination — the link opens the app, and you will need to enter them there.",
+    "rideCoverageUnknown": "Availability is not checked for {provider}.",
+    "rideNoProviders": "No ride providers are available for this trip.",
+    "ridePassengers": "Passengers",
+    "rideTripSummary": "{distance} · about {duration} by car"
   },
   "openingHours": {
     "open24Hours": "Open 24 hours",

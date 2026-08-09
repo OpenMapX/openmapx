@@ -59,6 +59,7 @@ export {
   toggleOverlay,
 } from "./overlayRegistry";
 export { usePlaceStore } from "./placeStore";
+export { useRideStore } from "./rideStore";
 export { useSavedPlacesStore } from "./savedPlacesStore";
 export { useSearchStore } from "./searchStore";
 export {

@@ -5,6 +5,7 @@ import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
 import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
 import FlightIcon from "@mui/icons-material/Flight";
+import LocalTaxiIcon from "@mui/icons-material/LocalTaxi";
 import TwoWheelerIcon from "@mui/icons-material/TwoWheeler";
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -24,6 +25,7 @@ const MODES: { mode: TravelMode; icon: ReactNode; labelKey: string; disabled?: b
   { mode: "walking", icon: <DirectionsWalkIcon sx={{ fontSize: 22 }} />, labelKey: "walking" },
   { mode: "cycling", icon: <DirectionsBikeIcon sx={{ fontSize: 22 }} />, labelKey: "cycling" },
   { mode: "motorcycle", icon: <TwoWheelerIcon sx={{ fontSize: 22 }} />, labelKey: "motorcycle" },
+  { mode: "ride", icon: <LocalTaxiIcon sx={{ fontSize: 22 }} />, labelKey: "ride" },
   { mode: "flying", icon: <FlightIcon sx={{ fontSize: 22 }} />, labelKey: "flights" },
 ];
 

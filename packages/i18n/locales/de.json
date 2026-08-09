@@ -702,7 +702,17 @@
         "gbt_dc": "GB/T DC",
         "type3": "Typ 3"
       }
-    }
+    },
+    "ride": "Fahrt",
+    "chooseRidePoints": "Wählen Sie Abhol- und Zielort, um Fahrtoptionen zu sehen.",
+    "rideDisclaimer": "OpenMapX bucht keine Fahrten. Die Auswahl eines Anbieters öffnet dessen App oder Website; Preis und Verfügbarkeit legt der jeweilige Anbieter fest.",
+    "rideProvider": "Anbieter",
+    "rideOpenIn": "In {provider} öffnen",
+    "rideNoCoordinates": "{provider} kann Abhol- und Zielort nicht übernehmen — der Link öffnet die App, dort müssen Sie beides erneut eingeben.",
+    "rideCoverageUnknown": "Die Verfügbarkeit bei {provider} wird nicht geprüft.",
+    "rideNoProviders": "Für diese Fahrt sind keine Anbieter verfügbar.",
+    "ridePassengers": "Personen",
+    "rideTripSummary": "{distance} · etwa {duration} mit dem Auto"
   },
   "openingHours": {
     "open24Hours": "24 Stunden geöffnet",
