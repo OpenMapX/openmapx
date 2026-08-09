@@ -51,6 +51,8 @@ export interface BackupVolumeEntry {
 
 export interface BackupServiceEntry {
   id: string;
+  /** Absent only when reading legacy manifests written before service versions existed. */
+  version?: string;
   volumes: BackupVolumeEntry[];
 }
 
@@ -190,7 +192,11 @@ export function readBackupManifest(filePath: string): BackupManifest {
     throw new Error(`Malformed backup manifest at ${filePath}`);
   }
   for (const s of raw.services) {
-    if (typeof s.id !== "string" || !Array.isArray(s.volumes)) {
+    if (
+      typeof s.id !== "string" ||
+      (s.version !== undefined && typeof s.version !== "string") ||
+      !Array.isArray(s.volumes)
+    ) {
       throw new Error(`Malformed service entry in ${filePath}`);
     }
     if (!SERVICE_ID_REGEX.test(s.id)) {
@@ -225,11 +231,12 @@ export function filterManifestServices(manifest: BackupManifest, ids: string[]):
 export interface BackupableVolume {
   serviceId: string;
   volumeName: string;
+  mode: BackupVolumeMode;
 }
 
 export interface BackupableService {
   id: string;
-  isPostgres: boolean;
+  version: string;
   postgresUser?: string;
   postgresDb?: string;
   volumes: BackupableVolume[];
@@ -259,12 +266,13 @@ export async function discoverBackupableServices(
     const env = svc.manifest.container.environment ?? {};
     out.push({
       id: svc.manifest.id,
-      isPostgres: svc.manifest.id === "postgis",
+      version: svc.manifest.version,
       postgresUser: env.POSTGRES_USER,
       postgresDb: env.POSTGRES_DB,
       volumes: backupVolumes.map((v) => ({
         serviceId: svc.manifest.id,
         volumeName: v.name,
+        mode: v.backupMode ?? (svc.manifest.id === "postgis" ? "pg_dump" : "tar"),
       })),
     });
   }
@@ -411,8 +419,9 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
   // before we mutate anything.
   const declaredNames: string[] = [];
   for (const svc of targets) {
-    if (svc.isPostgres) continue;
-    for (const v of svc.volumes) declaredNames.push(v.volumeName);
+    for (const v of svc.volumes) {
+      if (v.mode === "tar") declaredNames.push(v.volumeName);
+    }
   }
   const volumeNames = await resolveVolumeNames(ctx, declaredNames);
 
@@ -454,53 +463,53 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
   try {
     for (const svc of targets) {
       log.info(kleur.bold(`◆ ${svc.id}`));
-      const serviceEntry: BackupServiceEntry = { id: svc.id, volumes: [] };
+      const serviceEntry: BackupServiceEntry = { id: svc.id, version: svc.version, volumes: [] };
 
-      for (const v of svc.volumes) {
-        if (svc.isPostgres) {
-          // Postgres: pg_dump while running. One dump file per declared volume
-          // keeps the manifest schema simple even though the volume is just a
-          // marker for "this service has data to back up".
-          const file = `${svc.id}__${v.volumeName}.sql.gz`;
-          const out = join(backupDir, file);
-          const user = svc.postgresUser ?? "postgres";
-          const db = svc.postgresDb ?? "openmapx";
-          log.dim(`  pg_dump ${db} (user=${user}) → ${file}`);
-          await pgDumpToFile(ctx, svc.id, user, db, out);
-          serviceEntry.volumes.push({
-            name: v.volumeName,
-            mode: "pg_dump",
-            file,
-            sizeBytes: safeSize(out),
-            // Persist the credentials so restore can target the same
-            // database/user even if the manifest changes later.
-            postgresUser: user,
-            postgresDb: db,
-          });
-        } else {
-          const realVol = volumeNames.get(v.volumeName) ?? v.volumeName;
-          const file = `${svc.id}__${v.volumeName}.tar.gz`;
-          const out = join(backupDir, file);
+      for (const v of svc.volumes.filter((volume) => volume.mode === "pg_dump")) {
+        // Postgres: pg_dump while running. One dump file per declared volume
+        // keeps the manifest schema simple even though the volume is just a
+        // marker for "this service has data to back up".
+        const file = `${svc.id}__${v.volumeName}.sql.gz`;
+        const out = join(backupDir, file);
+        const user = svc.postgresUser ?? "postgres";
+        const db = svc.postgresDb ?? "openmapx";
+        log.dim(`  pg_dump ${db} (user=${user}) → ${file}`);
+        await pgDumpToFile(ctx, svc.id, user, db, out);
+        serviceEntry.volumes.push({
+          name: v.volumeName,
+          mode: "pg_dump",
+          file,
+          sizeBytes: safeSize(out),
+          // Persist the credentials so restore can target the same
+          // database/user even if the manifest changes later.
+          postgresUser: user,
+          postgresDb: db,
+        });
+      }
 
-          if (!stoppedServices.includes(svc.id)) {
-            log.dim(`  stopping ${svc.id}…`);
-            await dockerCompose(ctx, ["stop", svc.id]);
-            stoppedServices.push(svc.id);
-          }
+      for (const v of svc.volumes.filter((volume) => volume.mode === "tar")) {
+        const realVol = volumeNames.get(v.volumeName) ?? v.volumeName;
+        const file = `${svc.id}__${v.volumeName}.tar.gz`;
+        const out = join(backupDir, file);
 
-          log.dim(`  tar ${realVol} → ${file}`);
-          await tarVolumeToFile(realVol, backupDir, file);
-
-          serviceEntry.volumes.push({
-            name: v.volumeName,
-            // Persist the resolved on-host volume name so restore works even
-            // if the compose project name changes between backup and restore.
-            resolvedName: realVol,
-            mode: "tar",
-            file,
-            sizeBytes: safeSize(out),
-          });
+        if (!stoppedServices.includes(svc.id)) {
+          log.dim(`  stopping ${svc.id}…`);
+          await dockerCompose(ctx, ["stop", svc.id]);
+          stoppedServices.push(svc.id);
         }
+
+        log.dim(`  tar ${realVol} → ${file}`);
+        await tarVolumeToFile(realVol, backupDir, file);
+
+        serviceEntry.volumes.push({
+          name: v.volumeName,
+          // Persist the resolved on-host volume name so restore works even
+          // if the compose project name changes between backup and restore.
+          resolvedName: realVol,
+          mode: "tar",
+          file,
+          sizeBytes: safeSize(out),
+        });
       }
 
       manifest.services.push(serviceEntry);
@@ -762,34 +771,28 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
   if (pre.versionWarning) log.warn(pre.versionWarning);
 
   const ctx = ctxFromRepo(opts.rootDir);
-  const targetIds = pre.targets.map((s) => s.id);
-
   const running = await listRunningServices(ctx);
-  const runningTargets = targetIds.filter((id) => running.has(id));
-  if (runningTargets.length > 0 && !opts.stopRunning) {
+  const runningTarTargets = pre.targets
+    .filter((service) => service.volumes.some((volume) => volume.mode === "tar"))
+    .map((service) => service.id)
+    .filter((id) => running.has(id));
+  if (runningTarTargets.length > 0 && !opts.stopRunning) {
     throw new Error(
-      `Refusing to restore — these target services are running: ${runningTargets.join(
+      `Refusing to restore — these target services are running: ${runningTarTargets.join(
         ", ",
       )}. Pass --stop-running to stop them automatically.`,
     );
   }
 
   const stopped: string[] = [];
+  const active = new Set(running);
   try {
-    // Stop running targets up-front (postgres handled separately below — we
-    // do NOT stop it because we're restoring via dropdb/createdb/psql, which
-    // requires the server to be up).
-    for (const id of runningTargets) {
-      const isPg = id === "postgis";
-      if (isPg) continue;
-      log.dim(`stopping ${id}…`);
-      await dockerCompose(ctx, ["stop", id]);
-      stopped.push(id);
-    }
-
     for (const svc of pre.targets) {
       log.info(kleur.bold(`◆ ${svc.id}`));
-      for (const vol of svc.volumes) {
+      const pgVolumes = svc.volumes.filter((volume) => volume.mode === "pg_dump");
+      const tarVolumes = svc.volumes.filter((volume) => volume.mode === "tar");
+
+      for (const vol of pgVolumes) {
         // Defense-in-depth backstop for the filename validation in readBackupManifest.
         const file = resolve(pre.backupDir, vol.file);
         if (!file.startsWith(`${resolve(pre.backupDir)}/`)) {
@@ -799,31 +802,46 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
           throw new Error(`Backup file missing: ${file}`);
         }
 
-        if (vol.mode === "pg_dump") {
-          // Postgres needs to be running for psql.
-          if (!running.has(svc.id)) {
-            log.dim(`  starting ${svc.id} for restore…`);
-            await dockerCompose(ctx, ["start", svc.id]);
-          }
-          // Credentials persisted at backup time.
-          if (!vol.postgresUser || !vol.postgresDb) {
-            throw new Error(
-              `Backup entry ${vol.name} is missing postgres credentials — re-create the backup.`,
-            );
-          }
-          const user = vol.postgresUser;
-          const db = vol.postgresDb;
-          log.dim(`  restoring database ${db} (user=${user}) from ${vol.file}…`);
-          await pgRestoreFromFile(ctx, svc.id, file, user, db);
-        } else {
-          if (!vol.resolvedName) {
-            throw new Error(
-              `Backup entry ${vol.name} is missing its resolved docker volume name — re-create the backup.`,
-            );
-          }
-          log.dim(`  restoring volume ${vol.resolvedName} from ${vol.file}…`);
-          await tarRestoreFromFile(vol.resolvedName, pre.backupDir, vol.file);
+        // pg_dump restores require a live server. A service can use this mode
+        // regardless of its id, so never infer the behavior from `postgis`.
+        if (!active.has(svc.id)) {
+          log.dim(`  starting ${svc.id} for restore…`);
+          await dockerCompose(ctx, ["start", svc.id]);
+          active.add(svc.id);
         }
+        if (!vol.postgresUser || !vol.postgresDb) {
+          throw new Error(
+            `Backup entry ${vol.name} is missing postgres credentials — re-create the backup.`,
+          );
+        }
+        const user = vol.postgresUser;
+        const db = vol.postgresDb;
+        log.dim(`  restoring database ${db} (user=${user}) from ${vol.file}…`);
+        await pgRestoreFromFile(ctx, svc.id, file, user, db);
+      }
+
+      if (tarVolumes.length > 0 && active.has(svc.id)) {
+        log.dim(`stopping ${svc.id}…`);
+        await dockerCompose(ctx, ["stop", svc.id]);
+        active.delete(svc.id);
+        if (running.has(svc.id)) stopped.push(svc.id);
+      }
+
+      for (const vol of tarVolumes) {
+        const file = resolve(pre.backupDir, vol.file);
+        if (!file.startsWith(`${resolve(pre.backupDir)}/`)) {
+          throw new Error(`Refusing to read a backup file outside ${pre.backupDir}: ${file}`);
+        }
+        if (!existsSync(file)) {
+          throw new Error(`Backup file missing: ${file}`);
+        }
+        if (!vol.resolvedName) {
+          throw new Error(
+            `Backup entry ${vol.name} is missing its resolved docker volume name — re-create the backup.`,
+          );
+        }
+        log.dim(`  restoring volume ${vol.resolvedName} from ${vol.file}…`);
+        await tarRestoreFromFile(vol.resolvedName, pre.backupDir, vol.file);
       }
     }
 

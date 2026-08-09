@@ -12,6 +12,27 @@ const CONTAINER_NAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
 const VOLUME_NAME_REGEX = /^openmapx-[a-z0-9-]+$/;
 const ABSOLUTE_PATH_REGEX = /^\/[^\s]+$/;
 const PATH_PREFIX_REGEX = /^\/[a-zA-Z0-9._\-/]*$/;
+const SERVICE_ID_REGEX = /^[a-z0-9][a-z0-9-]*$/;
+const CONFIG_PROPERTY_KEY_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function isValidHostname(value: string): boolean {
+  if (value.length === 0 || value.length > 253) return false;
+  const labels = value.split(".");
+  return labels.every(
+    (label) =>
+      label.length >= 1 &&
+      label.length <= 63 &&
+      /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label),
+  );
+}
+
+function isValidHostnameTemplate(value: string): boolean {
+  const token = "{domain}";
+  const first = value.indexOf(token);
+  if (first !== -1 && value.indexOf(token, first + token.length) !== -1) return false;
+  const candidate = value.replace(token, "example.invalid").replace(/\.$/, "");
+  return isValidHostname(candidate);
+}
 
 // Services loaded from the first-party services/ tree may request a bind mount
 // from one of these special host sources. Manifests from cloned community repos
@@ -99,15 +120,29 @@ const additionalRouteSchema = z
     "exactly one of 'pathPrefix' or 'path' must be set on each additional route",
   );
 
-const proxyExposureSchema = z.object({
-  enabled: z.boolean(),
-  pathPrefix: z.string().regex(PATH_PREFIX_REGEX).optional(),
-  stripPrefix: z.boolean().optional(),
-  middleware: z.array(z.string()).optional(),
-  authRequired: z.boolean().optional(),
-  priority: z.number().int().min(0).max(1_000_000).optional(),
-  additionalRoutes: z.array(additionalRouteSchema).optional(),
+const proxyHostSchema = z.object({
+  default: z.string().refine(isValidHostnameTemplate, "must be a valid hostname template"),
+  configKey: z
+    .string()
+    .regex(CONFIG_PROPERTY_KEY_REGEX, "must be a config property key")
+    .optional(),
 });
+
+const proxyExposureSchema = z
+  .object({
+    enabled: z.boolean(),
+    host: proxyHostSchema.optional(),
+    pathPrefix: z.string().regex(PATH_PREFIX_REGEX).optional(),
+    stripPrefix: z.boolean().optional(),
+    middleware: z.array(z.string()).optional(),
+    authRequired: z.boolean().optional(),
+    priority: z.number().int().min(0).max(1_000_000).optional(),
+    additionalRoutes: z.array(additionalRouteSchema).optional(),
+  })
+  .refine(
+    (proxy) => !(proxy.stripPrefix && proxy.host && !proxy.pathPrefix),
+    "stripPrefix requires pathPrefix when proxy.host is set",
+  );
 
 const exposureSchema = z.object({
   hostPorts: z.array(portMappingSchema).optional(),
@@ -122,6 +157,7 @@ const volumeSchema = z.object({
     .refine((p) => !pathHasParentEscape(p), "must not contain '..'"),
   readOnly: z.boolean().optional(),
   backup: z.boolean().optional(),
+  backupMode: z.enum(["tar", "pg_dump"]).optional(),
 });
 
 // Instance ids end up in on-disk hardlink target paths (data/<consumer-id>/
@@ -307,10 +343,7 @@ const providesEntrySchema = z.union([
 ]);
 
 export const serviceManifestSchema = z.object({
-  id: z
-    .string()
-    .min(1)
-    .regex(/^[a-z0-9][a-z0-9-]*$/, "must be lowercase, hyphen-separated"),
+  id: z.string().min(1).regex(SERVICE_ID_REGEX, "must be lowercase, hyphen-separated"),
   name: z.string().min(1),
   version: z.string().min(1),
   description: z.string().optional(),
@@ -326,6 +359,10 @@ export const serviceManifestSchema = z.object({
   provides: z.array(providesEntrySchema).optional(),
   consumes: z.array(consumesSchema).optional(),
   produces: z.array(producesSchema).optional(),
+  selectionDependencies: z
+    .array(z.string().regex(SERVICE_ID_REGEX, "must be a service id"))
+    .refine((ids) => new Set(ids).size === ids.length, "must not contain duplicates")
+    .optional(),
 
   configSchema: z.record(z.string(), z.unknown()).optional(),
   envVars: z.array(envVarSchema).optional(),
@@ -373,6 +410,43 @@ export function validateServiceManifest(
   const m = result.data as ServiceManifest;
   const errors: string[] = [];
   errors.push(...checkManifestSandbox(m, provenance));
+
+  if (m.selectionDependencies?.includes(m.id)) {
+    errors.push(`selectionDependencies: service "${m.id}" must not reference itself`);
+  }
+
+  const proxyHost = m.exposure?.proxy?.host;
+  if (proxyHost?.configKey) {
+    const properties = m.configSchema
+      ? ((m.configSchema.properties ?? m.configSchema) as Record<string, unknown>)
+      : {};
+    const field = properties[proxyHost.configKey];
+    if (
+      !field ||
+      typeof field !== "object" ||
+      (field as Record<string, unknown>).type !== "string" ||
+      (field as Record<string, unknown>)["x-openmapx-secret"] === true
+    ) {
+      errors.push(
+        `exposure.proxy.host.configKey: "${proxyHost.configKey}" must name a declared non-secret string configSchema field`,
+      );
+    }
+  }
+
+  for (const volume of m.volumes ?? []) {
+    if (volume.backupMode && volume.backup !== true) {
+      errors.push(`volumes: backupMode requires backup: true on "${volume.name}"`);
+    }
+    if (
+      volume.backupMode === "pg_dump" &&
+      (typeof m.container.environment?.POSTGRES_USER !== "string" ||
+        typeof m.container.environment?.POSTGRES_DB !== "string")
+    ) {
+      errors.push(
+        `volumes: pg_dump backupMode requires container environment strings POSTGRES_USER and POSTGRES_DB`,
+      );
+    }
+  }
 
   // A secret field's key name becomes a filename under the generated-secrets
   // directory, a Docker secret target and a `<KEY>_FILE` env name at render

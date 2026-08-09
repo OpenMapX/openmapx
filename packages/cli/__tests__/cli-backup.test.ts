@@ -1,10 +1,13 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
+import { execa } from "execa";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   assertValidBackupName,
   type BackupManifest,
+  createBackup,
   defaultBackupName,
   deleteBackup,
   discoverBackupableServices,
@@ -16,7 +19,10 @@ import {
   preflightRestore,
   readBackupManifest,
   resolveBackupDir,
+  restoreBackup,
 } from "../src/commands/backup";
+
+vi.mock("execa", () => ({ execa: vi.fn() }));
 
 let tmp: string;
 
@@ -55,6 +61,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.mocked(execa).mockReset();
   rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -165,6 +172,23 @@ describe("readBackupManifest", () => {
     const m = readBackupManifest(join(dir, "manifest.json"));
     expect(m.name).toBe("good");
     expect(m.services).toHaveLength(1);
+  });
+
+  it("reads versioned service metadata and remains compatible with legacy entries", () => {
+    const dir = writeBackup("service-versions", {
+      name: "service-versions",
+      createdAt: "2026-04-19T00:00:00Z",
+      services: [
+        { id: "timeline", version: "2.3.4", volumes: [] },
+        { id: "legacy", volumes: [] },
+      ],
+    });
+
+    const manifest = readBackupManifest(join(dir, "manifest.json"));
+    expect(manifest.services).toEqual([
+      { id: "timeline", version: "2.3.4", volumes: [] },
+      { id: "legacy", volumes: [] },
+    ]);
   });
 
   it("preserves resolvedName + postgresUser/postgresDb on tar / pg_dump entries", () => {
@@ -457,9 +481,57 @@ describe("discoverBackupableServices", () => {
     expect(ids).toEqual(["postgis"]);
 
     const pg = targets.find((t) => t.id === "postgis");
-    expect(pg?.isPostgres).toBe(true);
+    expect(pg?.version).toBe("1.0.0");
     expect(pg?.postgresUser).toBe("postgres");
     expect(pg?.postgresDb).toBe("openmapx");
+    expect(pg?.volumes).toEqual([
+      { serviceId: "postgis", volumeName: "openmapx-pgdata", mode: "pg_dump" },
+    ]);
+  });
+
+  it("uses declared per-volume modes for any service while preserving legacy postgis fallback", async () => {
+    writeManifest("timeline", {
+      ...baseService,
+      id: "timeline",
+      container: {
+        ...baseService.container,
+        environment: {
+          POSTGRES_USER: "timeline",
+          POSTGRES_DB: "timeline",
+          POSTGRES_PASSWORD: "secret",
+        },
+      },
+      volumes: [
+        { name: "openmapx-timeline-db", mountAt: "/db", backup: true, backupMode: "pg_dump" },
+        { name: "openmapx-timeline-files", mountAt: "/files", backup: true, backupMode: "tar" },
+      ],
+    });
+    writeManifest("postgis", {
+      ...baseService,
+      id: "postgis",
+      container: {
+        ...baseService.container,
+        environment: { POSTGRES_USER: "postgres", POSTGRES_DB: "openmapx" },
+      },
+      volumes: [{ name: "openmapx-pgdata", mountAt: "/db", backup: true }],
+    });
+
+    process.env.OPENMAPX_ENABLED_SERVICES = "timeline,postgis";
+    const targets = await discoverBackupableServices({
+      rootDir: tmp,
+      serviceIds: ["timeline", "postgis"],
+    });
+
+    expect(targets.find((target) => target.id === "timeline")).toMatchObject({
+      postgresUser: "timeline",
+      postgresDb: "timeline",
+      volumes: [
+        { volumeName: "openmapx-timeline-db", mode: "pg_dump" },
+        { volumeName: "openmapx-timeline-files", mode: "tar" },
+      ],
+    });
+    expect(targets.find((target) => target.id === "postgis")?.volumes[0]?.mode).toBe("pg_dump");
+    expect(JSON.stringify(targets)).not.toContain("secret");
   });
 
   it("respects the serviceIds allow-list", async () => {
@@ -498,6 +570,127 @@ describe("discoverBackupableServices", () => {
     const out = await discoverBackupableServices({ rootDir: tmp });
 
     expect(out.map((t) => t.id).sort()).toEqual(["postgis", "tileserver"]);
+  });
+});
+
+describe("backup volume modes", () => {
+  function mockSuccessfulDocker(): void {
+    vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+      if (command === "gunzip") {
+        return Object.assign(Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }), {
+          stdout: Readable.from(["dump"]),
+        });
+      }
+      if (command === "docker" && args.includes("pg_dump")) {
+        return Object.assign(Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }), {
+          stdout: Readable.from(["dump"]),
+        });
+      }
+      if (command === "docker" && args.includes("ps")) {
+        return Promise.resolve({ exitCode: 0, stdout: '{"Service":"timeline"}\n', stderr: "" });
+      }
+      if (command === "docker" && args.includes("config")) {
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: JSON.stringify({
+            name: "openmapx",
+            volumes: { "openmapx-files": { name: "openmapx_openmapx-files" } },
+          }),
+          stderr: "",
+        });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+    }) as never);
+  }
+
+  function mockedCommandCalls(): Array<[string, string]> {
+    return vi
+      .mocked(execa)
+      .mock.calls.map((call) => [
+        typeof call[0] === "string" ? call[0] : call[0].toString(),
+        Array.isArray(call[1]) ? call[1].join(" ") : "",
+      ]);
+  }
+
+  it("creates generic mixed-mode backups with pg_dump before stopping for tar and writes service versions", async () => {
+    writeManifest("timeline", {
+      ...baseService,
+      id: "timeline",
+      version: "2.3.4",
+      container: {
+        ...baseService.container,
+        environment: { POSTGRES_USER: "timeline", POSTGRES_DB: "timeline" },
+      },
+      volumes: [
+        { name: "openmapx-db", mountAt: "/db", backup: true, backupMode: "pg_dump" },
+        { name: "openmapx-files", mountAt: "/files", backup: true, backupMode: "tar" },
+      ],
+    });
+    process.env.OPENMAPX_ENABLED_SERVICES = "timeline";
+    mockSuccessfulDocker();
+
+    const result = await createBackup({ rootDir: tmp, name: "mixed" });
+    const calls = mockedCommandCalls();
+    const pgDump = calls.findIndex(([, args]) => args.includes("pg_dump"));
+    const stop = calls.findIndex(([, args]) => args.includes(" stop timeline"));
+    const tar = calls.findIndex(([, args]) => args.includes("openmapx_openmapx-files:/source:ro"));
+
+    expect(pgDump).toBeGreaterThanOrEqual(0);
+    expect(stop).toBeGreaterThan(pgDump);
+    expect(tar).toBeGreaterThan(stop);
+    expect(result.manifest.services).toEqual([
+      expect.objectContaining({ id: "timeline", version: "2.3.4" }),
+    ]);
+    expect(result.manifest.services[0]?.volumes.map((volume) => volume.mode)).toEqual([
+      "pg_dump",
+      "tar",
+    ]);
+  });
+
+  it("restores pg_dump volumes while running, then stops and restarts only for tar volumes", async () => {
+    const dir = writeBackup("mixed-restore", {
+      name: "mixed-restore",
+      createdAt: "2026-04-19T00:00:00Z",
+      services: [
+        {
+          id: "timeline",
+          version: "2.3.4",
+          volumes: [
+            {
+              name: "openmapx-db",
+              mode: "pg_dump",
+              file: "timeline__openmapx-db.sql.gz",
+              sizeBytes: 0,
+              postgresUser: "timeline",
+              postgresDb: "timeline",
+            },
+            {
+              name: "openmapx-files",
+              mode: "tar",
+              resolvedName: "openmapx_openmapx-files",
+              file: "timeline__openmapx-files.tar.gz",
+              sizeBytes: 0,
+            },
+          ],
+        },
+      ],
+    });
+    writeFileSync(join(dir, "timeline__openmapx-db.sql.gz"), "dump");
+    writeFileSync(join(dir, "timeline__openmapx-files.tar.gz"), "tar");
+    mockSuccessfulDocker();
+
+    await restoreBackup({ rootDir: tmp, name: "mixed-restore", stopRunning: true });
+
+    const calls = mockedCommandCalls();
+    const psql = calls.findIndex(([, args]) => args.includes(" psql "));
+    const stop = calls.findIndex(([, args]) => args.includes(" stop timeline"));
+    const tar = calls.findIndex(([, args]) => args.includes("openmapx_openmapx-files:/target"));
+    const start = calls.findIndex(([, args]) => args.includes(" start timeline"));
+
+    expect(psql).toBeGreaterThanOrEqual(0);
+    expect(stop).toBeGreaterThan(psql);
+    expect(tar).toBeGreaterThan(stop);
+    expect(start).toBeGreaterThan(tar);
   });
 });
 

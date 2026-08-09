@@ -34,7 +34,14 @@
     }
   },
   "provides": ["database"],
-  "volumes": [{ "name": "openmapx-pgdata", "mountAt": "/var/lib/postgresql", "backup": true }],
+  "volumes": [
+    {
+      "name": "openmapx-pgdata",
+      "mountAt": "/var/lib/postgresql",
+      "backup": true,
+      "backupMode": "pg_dump"
+    }
+  ],
   "bindMounts": [
     {
       "source": "scripts/sync-password.sh",

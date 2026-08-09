@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { renderServiceSnippet } from "../services/compose-renderer";
 import {
   buildAppApiServiceEnv,
   DEFAULT_SELECTED_SERVICE_IDS,
@@ -134,6 +135,35 @@ describe("service selection helpers", () => {
 });
 
 describe("expandServiceSelection", () => {
+  it("selects direct and transitive companions without introducing runtime dependencies", () => {
+    const services = [
+      svc("primary", { selectionDependencies: ["worker"] } as never),
+      svc("worker", { selectionDependencies: ["scheduler"] } as never),
+      svc("scheduler"),
+    ];
+
+    const selection = expandServiceSelection(services, ["primary"]);
+
+    expect(selection.enabledIdsOrdered).toEqual(["primary", "worker", "scheduler"]);
+    expect(selection.warnings).toEqual([]);
+    expect(services[0]?.manifest.container.dependsOn).toBeUndefined();
+    expect(renderServiceSnippet(services[0] as LoadedService, {}).depends_on).toBeUndefined();
+  });
+
+  it("warns for unavailable companions and terminates mutual companion cycles", () => {
+    const services = [
+      svc("alpha", { selectionDependencies: ["beta", "missing"] } as never),
+      svc("beta", { selectionDependencies: ["alpha"] } as never),
+    ];
+
+    const selection = expandServiceSelection(services, ["alpha"]);
+
+    expect(selection.enabledIdsOrdered).toEqual(["alpha", "beta"]);
+    expect(selection.warnings).toEqual([
+      'Service "missing" referenced by selectionDependencies of "alpha" is not installed',
+    ]);
+  });
+
   it("adds container dependencies, proxied traefik, and unique data producers", () => {
     const services = [
       svc("traefik"),

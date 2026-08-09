@@ -2,7 +2,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { load as parseYaml } from "js-yaml";
 import { describe, expect, it } from "vitest";
-import { renderCompose, renderServiceSnippet } from "../services/compose-renderer";
+import {
+  renderCompose,
+  renderServiceSnippet,
+  resolveProxyHost,
+} from "../services/compose-renderer";
 import type { LoadedService } from "../services/types";
 
 function svc(id: string, opts: Partial<LoadedService["manifest"]> = {}): LoadedService {
@@ -22,6 +26,69 @@ function svc(id: string, opts: Partial<LoadedService["manifest"]> = {}): LoadedS
 }
 
 describe("renderServiceSnippet", () => {
+  it("routes a custom host by itself or with an explicit path and reuses it for additional routes", () => {
+    const service = svc("timeline", {
+      container: { image: "t/timeline", tag: "latest", expose: [3000] },
+      exposure: {
+        proxy: {
+          enabled: true,
+          host: { default: "timeline.{domain}", configKey: "APPLICATION_HOSTS" },
+          pathPrefix: "/app",
+          additionalRoutes: [{ path: "/health" }],
+        },
+      } as never,
+    });
+    const labels = renderServiceSnippet(service, {
+      domain: "Example.COM",
+      resolvedServiceConfigs: new Map([
+        ["timeline", { APPLICATION_HOSTS: "Timeline.Operator.EXAMPLE." }],
+      ]),
+    }).labels as Record<string, string>;
+
+    expect(labels["traefik.http.routers.timeline.rule"]).toBe(
+      "Host(`timeline.operator.example`) && PathPrefix(`/app`)",
+    );
+    expect(labels["traefik.http.routers.timeline-r1.rule"]).toBe(
+      "Host(`timeline.operator.example`) && Path(`/health`)",
+    );
+
+    const hostOnly = renderServiceSnippet(
+      svc("timeline", {
+        exposure: { proxy: { enabled: true, host: { default: "timeline.{domain}" } } } as never,
+      }),
+      { domain: "example.com" },
+    ).labels as Record<string, string>;
+    expect(hostOnly["traefik.http.routers.timeline.rule"]).toBe("Host(`timeline.example.com`)");
+  });
+
+  it("rejects unsafe resolved custom host values before emitting Traefik labels", () => {
+    const service = svc("timeline", {
+      exposure: {
+        proxy: {
+          enabled: true,
+          host: { default: "timeline.example.com", configKey: "APPLICATION_HOSTS" },
+        },
+      } as never,
+    });
+    expect(() =>
+      renderServiceSnippet(service, {
+        resolvedServiceConfigs: new Map([
+          ["timeline", { APPLICATION_HOSTS: "evil`) || PathPrefix(`/" }],
+        ]),
+      }),
+    ).toThrow(/Invalid proxy hostname/);
+  });
+
+  it("preserves legacy proxy rules byte-for-byte when no custom host is declared", () => {
+    const service = svc("alpha", { exposure: { proxy: { enabled: true } } });
+    expect(resolveProxyHost(service.manifest, { domain: "example.com" })).toBeUndefined();
+    expect(
+      renderServiceSnippet(service, { domain: "example.com" }).labels?.[
+        "traefik.http.routers.alpha.rule"
+      ],
+    ).toBe("Host(`example.com`) && PathPrefix(`/alpha`)");
+  });
+
   it("forwards the complete MOTIS pipeline environment contract", () => {
     const manifest = JSON.parse(
       readFileSync(join(process.cwd(), "services/data-manager/service.json"), "utf-8"),
