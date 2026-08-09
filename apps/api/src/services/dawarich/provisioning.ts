@@ -5,6 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { serviceConfig } from "../../db/schema.js";
 import { dockerComposePs } from "../../utils/docker-compose.js";
+import { resolveEffectiveServiceConfig } from "../service-config-resolver.js";
 import { mergeServiceConfig } from "../service-config-writer.js";
 import { getServiceRegistry } from "../service-registry.js";
 import { getServiceSecretStrict, setServiceSecret } from "../service-secrets.js";
@@ -45,6 +46,7 @@ export interface ManagedDawarichProvisioningStatus {
     present: boolean;
     clientId: string | null;
     redirectUriMatches: boolean;
+    settingsMatch: boolean;
   };
   secrets: {
     databasePassword: ProvisioningSecretState;
@@ -102,6 +104,7 @@ export interface ManagedDawarichProvisioningDependencies {
     updatedBy?: string | null,
   ): Promise<void>;
   getConfig(serviceId: string): Promise<Record<string, unknown>>;
+  getEffectiveConfig(serviceId: string): Promise<Record<string, unknown>>;
   mergeConfig(serviceId: string, updates: Record<string, unknown>): Promise<void>;
   withLock<T>(work: () => Promise<T>): Promise<T>;
   randomBytes(size: number): Buffer;
@@ -317,6 +320,49 @@ function mutableClientUpdates(
   return updates;
 }
 
+/**
+ * Compare a redacted persisted client snapshot with the one managed client
+ * contract. This intentionally accepts Better Auth's omitted non-expiring
+ * sentinel, matching reconciliation, and never needs the client secret.
+ */
+export function managedOAuthClientMatchesExpected(
+  client: ManagedOAuthClient,
+  publicOrigin: string,
+): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(publicOrigin);
+  } catch {
+    return false;
+  }
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username ||
+    parsed.password ||
+    parsed.port ||
+    parsed.pathname !== "/" ||
+    parsed.search ||
+    parsed.hash ||
+    parsed.origin !== publicOrigin ||
+    validatePublicHostname(parsed.hostname) !== parsed.hostname ||
+    client.software_id !== DAWARICH_SOFTWARE_ID
+  ) {
+    return false;
+  }
+  try {
+    assertImmutableClientSecurity(client);
+  } catch {
+    return false;
+  }
+  const context: ProvisioningContext = {
+    hostname: parsed.hostname,
+    publicOrigin,
+    callback: `${publicOrigin}${CALLBACK_PATH}`,
+    issuer: "",
+  };
+  return Object.keys(mutableClientUpdates(client, context)).length === 0;
+}
+
 async function readSecretSnapshot(
   dependencies: ManagedDawarichProvisioningDependencies,
 ): Promise<SecretSnapshot> {
@@ -414,9 +460,9 @@ async function buildStatus(
   const client = clients.length === 1 ? clients[0] : undefined;
   const [secrets, app, worker, postgis] = await Promise.all([
     readSecretSnapshot(dependencies),
-    dependencies.getConfig(DAWARICH_APP_SERVICE_ID),
-    dependencies.getConfig(DAWARICH_WORKER_SERVICE_ID),
-    dependencies.getConfig(DAWARICH_POSTGIS_SERVICE_ID),
+    dependencies.getEffectiveConfig(DAWARICH_APP_SERVICE_ID),
+    dependencies.getEffectiveConfig(DAWARICH_WORKER_SERVICE_ID),
+    dependencies.getEffectiveConfig(DAWARICH_POSTGIS_SERVICE_ID),
   ]);
   const secretStates = {
     databasePassword: classifyCopies(secrets.database),
@@ -424,6 +470,9 @@ async function buildStatus(
     oidcClientSecret: classifyCopies(secrets.oidc),
   };
   const redirectUriMatches = Boolean(client && sameArray(client.redirect_uris, [context.callback]));
+  const settingsMatch = Boolean(
+    client && Object.keys(mutableClientUpdates(client, context)).length === 0,
+  );
   const configReady = Boolean(
     client &&
       hasExpectedConfig(app, appConfig(context, client.client_id)) &&
@@ -436,7 +485,7 @@ async function buildStatus(
   const readyToStart =
     runtime.installed &&
     Boolean(client) &&
-    redirectUriMatches &&
+    settingsMatch &&
     configReady &&
     Object.values(secretStates).every((state) => state === "consistent");
   return {
@@ -446,6 +495,7 @@ async function buildStatus(
       present: Boolean(client),
       clientId: client?.client_id ?? null,
       redirectUriMatches,
+      settingsMatch,
     },
     secrets: secretStates,
     configReady,
@@ -643,6 +693,16 @@ async function readServiceConfig(serviceId: string): Promise<Record<string, unkn
   return row?.config ?? {};
 }
 
+async function readEffectiveServiceConfig(serviceId: string): Promise<Record<string, unknown>> {
+  const service = getServiceRegistry().get(serviceId);
+  if (!service) return {};
+  return resolveEffectiveServiceConfig({
+    id: service.manifest.id,
+    configSchema: service.manifest.configSchema,
+    containerEnv: service.manifest.container.environment,
+  });
+}
+
 export async function withDawarichProvisioningLock<T>(work: () => Promise<T>): Promise<T> {
   return db.transaction(async (transaction) => {
     await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${LOCK_NAME}))`);
@@ -702,6 +762,7 @@ const defaultDependencies: ManagedDawarichProvisioningDependencies = {
   getSecret: getServiceSecretStrict,
   setSecret: setServiceSecret,
   getConfig: readServiceConfig,
+  getEffectiveConfig: readEffectiveServiceConfig,
   mergeConfig: mergeServiceConfig,
   withLock: withDawarichProvisioningLock,
   randomBytes: nodeRandomBytes,

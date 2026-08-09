@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mutateProvision = vi.fn();
@@ -11,7 +11,12 @@ const hookState = {
       running: false,
       healthy: false,
       publicOrigin: "https://timeline.example.test",
-      oauthClient: { present: true, clientId: "public-client-id", redirectUriMatches: true },
+      oauthClient: {
+        present: true,
+        clientId: "public-client-id",
+        redirectUriMatches: true,
+        settingsMatch: true,
+      },
       secrets: {
         databasePassword: "consistent",
         secretKeyBase: "consistent",
@@ -59,7 +64,12 @@ describe("ManagedDawarichSetup", () => {
       running: false,
       healthy: false,
       publicOrigin: "https://timeline.example.test",
-      oauthClient: { present: true, clientId: "public-client-id", redirectUriMatches: true },
+      oauthClient: {
+        present: true,
+        clientId: "public-client-id",
+        redirectUriMatches: true,
+        settingsMatch: true,
+      },
       secrets: {
         databasePassword: "consistent",
         secretKeyBase: "consistent",
@@ -92,6 +102,18 @@ describe("ManagedDawarichSetup", () => {
       screen.getByText(/select the Dawarich bundle and use Apply changes/i),
     ).toBeInTheDocument();
     expect(screen.queryByText("public-client-id")).not.toBeInTheDocument();
+  });
+
+  it("shows a drifted OAuth client as not ready for reconciliation", () => {
+    hookState.statusQuery.data.oauthClient.settingsMatch = false;
+    hookState.statusQuery.data.readyToStart = false;
+
+    render(<ManagedDawarichSetup />);
+
+    const oauthRow = screen.getByText("OAuth client").parentElement;
+    expect(oauthRow).not.toBeNull();
+    expect(within(oauthRow as HTMLElement).getByText("Pending")).toBeInTheDocument();
+    expect(within(oauthRow as HTMLElement).queryByText("Ready")).not.toBeInTheDocument();
   });
 
   it("validates a hostname before provisioning and sends only the normalized hostname", async () => {

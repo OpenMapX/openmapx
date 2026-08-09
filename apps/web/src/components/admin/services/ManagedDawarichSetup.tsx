@@ -97,8 +97,8 @@ function SetupChecklist({ status }: { status: ManagedDawarichProvisioningStatus 
       />
       <ChecklistRow
         label="OAuth client"
-        status={stateLabel(status.oauthClient.present && status.oauthClient.redirectUriMatches)}
-        ready={status.oauthClient.present && status.oauthClient.redirectUriMatches}
+        status={stateLabel(status.oauthClient.present && status.oauthClient.settingsMatch)}
+        ready={status.oauthClient.present && status.oauthClient.settingsMatch}
       />
       <ChecklistRow
         label="Database secret"

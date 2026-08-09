@@ -3,6 +3,34 @@ import {
   type ManagedDawarichResolverDependencies,
   ManagedDawarichServiceResolver,
 } from "../managed-resolver.js";
+import {
+  DAWARICH_SOFTWARE_ID,
+  MANAGED_REFERENCE_ID,
+  type ManagedOAuthClient,
+} from "../provisioning.js";
+
+function readyClient(overrides: Partial<ManagedOAuthClient> = {}): ManagedOAuthClient {
+  return {
+    client_id: "client-1",
+    client_name: "OpenMapX Managed Dawarich",
+    client_uri: "https://timeline.example.test",
+    software_id: DAWARICH_SOFTWARE_ID,
+    software_version: "1.10.3",
+    reference_id: MANAGED_REFERENCE_ID,
+    redirect_uris: ["https://timeline.example.test/users/auth/openid_connect/callback"],
+    token_endpoint_auth_method: "client_secret_basic",
+    grant_types: ["authorization_code"],
+    response_types: ["code"],
+    scope: "openid profile email",
+    require_pkce: true,
+    skip_consent: true,
+    enable_end_session: false,
+    public: false,
+    disabled: false,
+    type: "web",
+    ...overrides,
+  };
+}
 
 function readyConfig(origin = "https://timeline.example.test") {
   const hostname = new URL(origin).hostname;
@@ -34,6 +62,7 @@ function createHarness(
     workerConfig?: Record<string, unknown>;
     secrets?: Record<string, string>;
     healthOk?: boolean;
+    oauthAuthority?: { issuer: string; clients: readonly ManagedOAuthClient[] };
   } = {},
 ) {
   let now = 1_000;
@@ -66,6 +95,13 @@ function createHarness(
           : { POSTGRES_USER: "postgres", POSTGRES_DB: "dawarich_production" },
     ),
     getSecret: vi.fn(async (serviceId, key) => secrets[`${serviceId}:${key}`] ?? null),
+    getOAuthAuthority: vi.fn(
+      async () =>
+        options.oauthAuthority ?? {
+          issuer: "https://example.test/api/auth",
+          clients: [readyClient()],
+        },
+    ),
     fetchHealth,
     now: () => now,
   };
@@ -109,6 +145,7 @@ describe("ManagedDawarichServiceResolver", () => {
 
   it.each([
     readyConfig("http://timeline.example.test"),
+    readyConfig("https://timeline.example.test:444"),
     { ...readyConfig(), APPLICATION_URL: "https://timeline.example.test/path" },
     { ...readyConfig(), OIDC_CLIENT_ID: "" },
     { ...readyConfig(), OIDC_PKCE_ENABLED: "false" },
@@ -136,6 +173,42 @@ describe("ManagedDawarichServiceResolver", () => {
     const resolver = new ManagedDawarichServiceResolver(harness.dependencies);
 
     await expect(resolver.resolve()).resolves.toMatchObject({ provisioned: false, healthy: false });
+    expect(harness.fetchHealth).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["deleted", { issuer: "https://example.test/api/auth", clients: [] }],
+    [
+      "replaced",
+      { issuer: "https://example.test/api/auth", clients: [readyClient({ client_id: "other" })] },
+    ],
+    [
+      "duplicated",
+      {
+        issuer: "https://example.test/api/auth",
+        clients: [readyClient(), readyClient({ client_id: "client-2" })],
+      },
+    ],
+    [
+      "security-drifted",
+      {
+        issuer: "https://example.test/api/auth",
+        clients: [readyClient({ grant_types: ["authorization_code", "client_credentials"] })],
+      },
+    ],
+    [
+      "issued elsewhere",
+      { issuer: "https://other.example.test/api/auth", clients: [readyClient()] },
+    ],
+  ] as const)("marks a %s Better Auth authority unprovisioned", async (_name, oauthAuthority) => {
+    const harness = createHarness({ oauthAuthority });
+    const resolver = new ManagedDawarichServiceResolver(harness.dependencies);
+
+    await expect(resolver.resolve()).resolves.toMatchObject({
+      publicOrigin: "",
+      provisioned: false,
+      healthy: false,
+    });
     expect(harness.fetchHealth).not.toHaveBeenCalled();
   });
 

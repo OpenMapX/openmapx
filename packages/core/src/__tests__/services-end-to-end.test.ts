@@ -218,6 +218,13 @@ describe.skipIf(!manifestsPresent)(
     });
 
     describe("managed Dawarich bundle", () => {
+      it("links the optional timeline highlight to its feature documentation", () => {
+        const readme = readFileSync(join(repoRoot, "README.md"), "utf8");
+        expect(readme).toContain(
+          "[Optional personal timeline](docs/features/personal-timeline.md)",
+        );
+      });
+
       it("selects the complete isolated topology without an app-to-worker runtime edge", async () => {
         const registry = new ServiceRegistry({ rootDir: repoRoot });
         await registry.load();

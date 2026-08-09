@@ -20,7 +20,10 @@ vi.mock("../../db/schema", () => ({
 }));
 
 // Import AFTER the mocks are registered.
-import { resolveServiceConfigWithSources } from "../service-config-resolver";
+import {
+  resolveEffectiveServiceConfig,
+  resolveServiceConfigWithSources,
+} from "../service-config-resolver";
 
 afterEach(() => {
   selectLimitMock.mockReset();
@@ -59,6 +62,15 @@ describe("resolveServiceConfigWithSources", () => {
     process.env.SERVICE_TEST_MEMORY_LIMIT = "8g";
     const r = await resolveServiceConfigWithSources({ id: "test", configSchema: schema });
     expect(r.memory_limit).toEqual({ value: "8g", source: "env" });
+  });
+
+  it("returns effective values without source metadata for readiness consumers", async () => {
+    selectLimitMock.mockResolvedValueOnce([{ config: { memory_limit: "2g", workers: 6 } }]);
+    process.env.SERVICE_TEST_MEMORY_LIMIT = "8g";
+
+    await expect(
+      resolveEffectiveServiceConfig({ id: "test", configSchema: schema }),
+    ).resolves.toEqual({ memory_limit: "8g", workers: 6 });
   });
 
   it("ignores DB keys not declared in the configSchema", async () => {

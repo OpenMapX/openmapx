@@ -14,7 +14,7 @@ const status = {
   running: false,
   healthy: false,
   publicOrigin: "https://timeline.example.test",
-  oauthClient: { present: true, clientId: null, redirectUriMatches: true },
+  oauthClient: { present: true, clientId: null, redirectUriMatches: true, settingsMatch: true },
   secrets: {
     databasePassword: "consistent",
     secretKeyBase: "consistent",

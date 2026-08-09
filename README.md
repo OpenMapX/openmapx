@@ -33,7 +33,7 @@ OpenMapX is a complete mapping platform you run on your own infrastructure: sear
 - **Self-host the provider stack** — routing, geocoding, transit, tiles, search, and data pipelines have local/open implementations; the lightweight app, database, cache, proxy, and data-manager form the required core
 - **Open data** — OpenStreetMap, GTFS via Transitous, Wikidata, Wikipedia, Mapillary, NASA, NOAA, ECCC, DWD, MeteoAlarm, OpenAQ, USGS, NPS, and more
 - **Privacy-first** — no third-party analytics; most upstream calls are proxied through your API server, and unavoidable direct browser asset loads are explicitly documented
-- **Optional personal timeline** — connect an external or managed Dawarich account and view read-only day history without persisting timeline payloads in OpenMapX
+- **[Optional personal timeline](docs/features/personal-timeline.md)** — connect an external or managed Dawarich account and view read-only day history without persisting timeline payloads in OpenMapX
 - **First-class admin UI** — service catalog, integration config, capability bindings, audit log, users, jobs, compose preview, data workflows
 - **Modern stack** — Next.js 16, Fastify 5, MapLibre GL JS 5, MUI 9, PostgreSQL + PostGIS, Valkey (Redis), Drizzle ORM, Better Auth, TypeScript 6 end-to-end
 

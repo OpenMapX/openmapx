@@ -15,6 +15,7 @@ export interface ManagedDawarichProvisioningStatus {
     present: boolean;
     clientId: string | null;
     redirectUriMatches: boolean;
+    settingsMatch: boolean;
   };
   secrets: {
     databasePassword: ProvisioningSecretState;

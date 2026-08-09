@@ -72,7 +72,12 @@ const safeStatus = {
   running: false,
   healthy: false,
   publicOrigin: "https://timeline.example.test",
-  oauthClient: { present: true, clientId: "client-public-id", redirectUriMatches: true },
+  oauthClient: {
+    present: true,
+    clientId: "client-public-id",
+    redirectUriMatches: true,
+    settingsMatch: true,
+  },
   secrets: {
     databasePassword: "consistent",
     secretKeyBase: "consistent",

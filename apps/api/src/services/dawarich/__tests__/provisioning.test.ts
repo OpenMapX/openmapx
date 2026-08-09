@@ -49,6 +49,7 @@ function createHarness(initial?: {
   clients?: ManagedOAuthClient[];
   secrets?: Record<string, string>;
   configs?: Record<string, Record<string, unknown>>;
+  effectiveConfigOverrides?: Record<string, Record<string, unknown>>;
 }) {
   const clients = [...(initial?.clients ?? [])];
   const secrets = new Map(Object.entries(initial?.secrets ?? {}));
@@ -92,6 +93,10 @@ function createHarness(initial?: {
     },
   );
   const getConfig = vi.fn(async (serviceId: string) => ({ ...(configs.get(serviceId) ?? {}) }));
+  const getEffectiveConfig = vi.fn(async (serviceId: string) => ({
+    ...(configs.get(serviceId) ?? {}),
+    ...(initial?.effectiveConfigOverrides?.[serviceId] ?? {}),
+  }));
   const mergeConfig = vi.fn(async (serviceId: string, updates: Record<string, unknown>) => {
     configs.set(serviceId, { ...(configs.get(serviceId) ?? {}), ...updates });
   });
@@ -121,6 +126,7 @@ function createHarness(initial?: {
     getSecret,
     setSecret,
     getConfig,
+    getEffectiveConfig,
     mergeConfig,
     withLock: runWithLock,
     randomBytes: (size) => Buffer.alloc(size, size),
@@ -143,6 +149,7 @@ function createHarness(initial?: {
     getSecret,
     setSecret,
     getConfig,
+    getEffectiveConfig,
     mergeConfig,
     withLock,
   };
@@ -324,6 +331,49 @@ describe("provisionManagedDawarich", () => {
 
     expect(status.configReady).toBe(false);
     expect(status.readyToStart).toBe(false);
+  });
+
+  it("rejects effective env override drift without exposing the override value", async () => {
+    const overrideMarker = "operator-env-sensitive-marker";
+    const harness = createHarness({
+      effectiveConfigOverrides: {
+        [DAWARICH_APP_SERVICE_ID]: { OIDC_CLIENT_ID: overrideMarker },
+      },
+    });
+
+    const result = await provision(harness.dependencies);
+
+    expect(result.status.configReady).toBe(false);
+    expect(result.status.readyToStart).toBe(false);
+    expect(harness.configs.get(DAWARICH_APP_SERVICE_ID)?.OIDC_CLIENT_ID).toBe("client-1");
+    expect(JSON.stringify(result)).not.toContain(overrideMarker);
+  });
+
+  it.each([
+    ["client name", { client_name: "Drifted client" }],
+    ["client URI", { client_uri: "https://drifted.example.test" }],
+    ["software version", { software_version: "0.0.0" }],
+    ["redirect URI", { redirect_uris: ["https://drifted.example.test/callback"] }],
+    ["grant types", { grant_types: ["authorization_code", "client_credentials"] }],
+    ["response types", { response_types: ["code", "token"] }],
+    ["scope", { scope: "openid" }],
+    ["consent", { skip_consent: false }],
+    ["end-session behavior", { enable_end_session: true }],
+    ["secret expiry", { client_secret_expires_at: 123 }],
+    ["client type", { type: "native" }],
+  ] as const)("reports %s drift as OAuth-not-ready until reconciliation", async (_name, drift) => {
+    const harness = createHarness();
+    await provision(harness.dependencies);
+    Object.assign(harness.clients[0] as ManagedOAuthClient, drift);
+
+    const status = await inspectManagedDawarichProvisioning(
+      { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+      harness.dependencies,
+    );
+
+    expect(status.oauthClient.settingsMatch).toBe(false);
+    expect(status.readyToStart).toBe(false);
+    expect(harness.updateClient).not.toHaveBeenCalled();
   });
 
   it("reconciles only safe mutable client metadata and redirect drift", async () => {

@@ -128,6 +128,28 @@ describe("TimelineConnectionSection", () => {
     expect(screen.getByText("account.timeline.managedUnavailable")).toBeInTheDocument();
   });
 
+  it("keeps first-time managed setup hidden until the enabled service is healthy", () => {
+    timelineState.connection.data = {
+      ...unconfigured(),
+      managed: {
+        available: true,
+        healthy: false,
+        publicOrigin: "https://timeline.example.test",
+        reason: "unhealthy",
+      },
+    };
+
+    render(<TimelineConnectionSection ownerId="user-a" />);
+
+    expect(screen.queryByRole("radio", { name: "account.timeline.modeManaged" })).toBeNull();
+    expect(screen.getByRole("radio", { name: "account.timeline.modeExternal" })).toBeChecked();
+    expect(screen.getByText("account.timeline.managedUnavailable")).toBeInTheDocument();
+    expect(screen.queryByText("account.timeline.managedSsoExplanation")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "account.timeline.openManagedSettings" }),
+    ).toBeNull();
+  });
+
   it("opens managed settings safely and explains SSO versus API-key authorization", async () => {
     const user = userEvent.setup();
     const open = vi.spyOn(window, "open").mockImplementation(() => null);

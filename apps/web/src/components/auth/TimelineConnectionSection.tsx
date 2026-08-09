@@ -56,8 +56,12 @@ function errorMessageKey(error: PersonalTimelineApiError | null): string | null 
   }
 }
 
+function hasHealthyManagedSetup(view: TimelineConnectionView | null | undefined): boolean {
+  return Boolean(view?.managed.available && view.managed.healthy);
+}
+
 function managedSettingsUrl(view: TimelineConnectionView): string | null {
-  if (!view.managed.available || !view.managed.publicOrigin) return null;
+  if (!hasHealthyManagedSetup(view) || !view.managed.publicOrigin) return null;
   try {
     const parsed = new URL(view.managed.publicOrigin);
     if (
@@ -90,7 +94,7 @@ export const TimelineConnectionSection = forwardRef<
   const view = connectionQuery.data ?? null;
   const current = view?.connection ?? null;
   const [mode, setMode] = useState<TimelineConnectionMode>(() =>
-    view?.managed.available ? "managed" : "external",
+    hasHealthyManagedSetup(view) ? "managed" : "external",
   );
   const [editing, setEditing] = useState(() => !view?.connected);
   const [instanceUrl, setInstanceUrl] = useState("");
@@ -114,7 +118,7 @@ export const TimelineConnectionSection = forwardRef<
       setMode(
         view.connected
           ? (view.connection?.mode ?? "external")
-          : view.managed.available
+          : hasHealthyManagedSetup(view)
             ? "managed"
             : "external",
       );
@@ -122,8 +126,13 @@ export const TimelineConnectionSection = forwardRef<
       setEditing(false);
       setApiKey("");
     }
+    if (editing && mode === "managed" && !hasHealthyManagedSetup(view)) {
+      keyRef.current = "";
+      setApiKey("");
+      setMode("external");
+    }
     previouslyConnected.current = view.connected;
-  }, [view]);
+  }, [editing, mode, view]);
 
   useEffect(
     () => () => {
@@ -259,6 +268,7 @@ export const TimelineConnectionSection = forwardRef<
       )
     : null;
   const settingsUrl = view ? managedSettingsUrl(view) : null;
+  const managedReady = hasHealthyManagedSetup(view);
   const busy = connectMutation.isPending || disconnectMutation.isPending;
 
   return (
@@ -377,9 +387,7 @@ export const TimelineConnectionSection = forwardRef<
               size="small"
               onClick={() =>
                 beginEdit(
-                  current.mode === "managed" && !view?.managed.available
-                    ? "external"
-                    : current.mode,
+                  current.mode === "managed" && !managedReady ? "external" : current.mode,
                   true,
                 )
               }
@@ -391,7 +399,7 @@ export const TimelineConnectionSection = forwardRef<
               size="small"
               onClick={() =>
                 beginEdit(
-                  current.mode === "external" && view?.managed.available ? "managed" : "external",
+                  current.mode === "external" && managedReady ? "managed" : "external",
                   false,
                 )
               }
@@ -429,7 +437,7 @@ export const TimelineConnectionSection = forwardRef<
               value={mode}
               onChange={(event) => chooseMode(event.target.value as TimelineConnectionMode)}
             >
-              {view.managed.available && (
+              {managedReady && (
                 <FormControlLabel
                   value="managed"
                   control={<Radio slotProps={{ input: { "aria-label": t("modeManaged") } }} />}
@@ -451,7 +459,7 @@ export const TimelineConnectionSection = forwardRef<
             </RadioGroup>
           </FormControl>
 
-          {!view.managed.available && <Alert severity="info">{t("managedUnavailable")}</Alert>}
+          {!managedReady && <Alert severity="info">{t("managedUnavailable")}</Alert>}
 
           {mode === "managed" ? (
             <Stack spacing={1.5}>

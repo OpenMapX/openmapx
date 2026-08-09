@@ -1,14 +1,19 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../../db/index.js";
-import { serviceConfig } from "../../db/schema.js";
+import { oauthClient } from "../../db/schema.js";
+import { envString } from "../../utils/env.js";
+import { resolveEffectiveServiceConfig } from "../service-config-resolver.js";
 import { getServiceRegistry, serviceUrl } from "../service-registry.js";
 import { getServiceSecretStrict } from "../service-secrets.js";
 import {
   DAWARICH_APP_SERVICE_ID,
   DAWARICH_POSTGIS_SERVICE_ID,
   DAWARICH_REDIS_SERVICE_ID,
+  DAWARICH_SOFTWARE_ID,
   DAWARICH_WORKER_SERVICE_ID,
+  type ManagedOAuthClient,
+  managedOAuthClientMatchesExpected,
   validatePublicHostname,
 } from "./provisioning.js";
 
@@ -42,8 +47,14 @@ export interface ManagedDawarichResolverDependencies {
   getRuntimeState(): RuntimeState;
   getConfig(serviceId: string): Promise<Record<string, unknown>>;
   getSecret(serviceId: string, key: string): Promise<string | null>;
+  getOAuthAuthority(): Promise<ManagedOAuthAuthoritySnapshot>;
   fetchHealth(url: string, init: RequestInit): Promise<Pick<Response, "ok">>;
   now(): number;
+}
+
+export interface ManagedOAuthAuthoritySnapshot {
+  issuer: string | null;
+  clients: readonly ManagedOAuthClient[];
 }
 
 interface HealthCacheEntry {
@@ -60,6 +71,7 @@ function exactPublicOrigin(value: unknown): string | null {
       parsed.protocol !== "https:" ||
       parsed.username ||
       parsed.password ||
+      parsed.port ||
       parsed.pathname !== "/" ||
       parsed.search ||
       parsed.hash ||
@@ -98,11 +110,17 @@ function sameSecret(left: string | null, right: string | null): boolean {
   return timingSafeEqual(leftHash, rightHash);
 }
 
+interface ReadyConfig {
+  publicOrigin: string;
+  issuer: string;
+  clientId: string;
+}
+
 function configsReady(
   app: Record<string, unknown>,
   worker: Record<string, unknown>,
   postgis: Record<string, unknown>,
-): string | null {
+): ReadyConfig | null {
   const publicOrigin = exactPublicOrigin(app.APPLICATION_URL);
   if (!publicOrigin) return null;
   const hostname = new URL(publicOrigin).hostname;
@@ -134,7 +152,21 @@ function configsReady(
   ) {
     return null;
   }
-  return publicOrigin;
+  return {
+    publicOrigin,
+    issuer: app.OIDC_ISSUER as string,
+    clientId: app.OIDC_CLIENT_ID as string,
+  };
+}
+
+function authorityReady(config: ReadyConfig, authority: ManagedOAuthAuthoritySnapshot): boolean {
+  if (authority.issuer !== config.issuer || authority.clients.length !== 1) return false;
+  const client = authority.clients[0];
+  return Boolean(
+    client &&
+      client.client_id === config.clientId &&
+      managedOAuthClientMatchesExpected(client, config.publicOrigin),
+  );
 }
 
 async function secretsReady(dependencies: ManagedDawarichResolverDependencies): Promise<boolean> {
@@ -176,8 +208,12 @@ export class ManagedDawarichServiceResolver implements ManagedDawarichResolver {
       this.dependencies.getConfig(DAWARICH_WORKER_SERVICE_ID),
       this.dependencies.getConfig(DAWARICH_POSTGIS_SERVICE_ID),
     ]);
-    const publicOrigin = configsReady(app, worker, postgis);
-    const provisioned = Boolean(publicOrigin) && (await secretsReady(this.dependencies));
+    const config = configsReady(app, worker, postgis);
+    const provisioned = Boolean(
+      config &&
+        authorityReady(config, await this.dependencies.getOAuthAuthority()) &&
+        (await secretsReady(this.dependencies)),
+    );
     if (!provisioned) {
       return {
         internalBaseUrl: runtime.internalBaseUrl,
@@ -188,7 +224,7 @@ export class ManagedDawarichServiceResolver implements ManagedDawarichResolver {
     }
     return {
       internalBaseUrl: runtime.internalBaseUrl,
-      publicOrigin: publicOrigin as string,
+      publicOrigin: (config as ReadyConfig).publicOrigin,
       provisioned: true,
       healthy: await this.resolveHealth(runtime.internalBaseUrl),
     };
@@ -222,12 +258,74 @@ export class ManagedDawarichServiceResolver implements ManagedDawarichResolver {
 }
 
 async function readConfig(serviceId: string): Promise<Record<string, unknown>> {
-  const [row] = await db
-    .select({ config: serviceConfig.config })
-    .from(serviceConfig)
-    .where(eq(serviceConfig.serviceId, serviceId))
-    .limit(1);
-  return row?.config ?? {};
+  const service = getServiceRegistry().get(serviceId);
+  if (!service) return {};
+  return resolveEffectiveServiceConfig({
+    id: service.manifest.id,
+    configSchema: service.manifest.configSchema,
+    containerEnv: service.manifest.container.environment,
+  });
+}
+
+function authoritativeIssuer(): string | null {
+  const configured = envString("BETTER_AUTH_URL", "http://localhost:3001");
+  try {
+    const parsed = new URL(configured);
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.username ||
+      parsed.password ||
+      parsed.port ||
+      parsed.pathname !== "/" ||
+      parsed.search ||
+      parsed.hash ||
+      validatePublicHostname(parsed.hostname) !== parsed.hostname
+    ) {
+      return null;
+    }
+    return `${parsed.origin}/api/auth`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read-only authority snapshot for user-facing readiness. Better Auth 1.6.25
+ * has no supported system/headerless client inspector and its full API is
+ * intentionally admin-session protected. Select only non-secret client
+ * metadata from Better Auth's own persistence; all client writes remain
+ * exclusively behind Better Auth's authenticated public API.
+ */
+async function readOAuthAuthority(): Promise<ManagedOAuthAuthoritySnapshot> {
+  const clients = await db
+    .select({
+      client_id: oauthClient.clientId,
+      client_name: oauthClient.name,
+      client_uri: oauthClient.uri,
+      software_id: oauthClient.softwareId,
+      software_version: oauthClient.softwareVersion,
+      reference_id: oauthClient.referenceId,
+      redirect_uris: oauthClient.redirectUris,
+      token_endpoint_auth_method: oauthClient.tokenEndpointAuthMethod,
+      grant_types: oauthClient.grantTypes,
+      response_types: oauthClient.responseTypes,
+      scopes: oauthClient.scopes,
+      require_pkce: oauthClient.requirePKCE,
+      skip_consent: oauthClient.skipConsent,
+      enable_end_session: oauthClient.enableEndSession,
+      public: oauthClient.public,
+      disabled: oauthClient.disabled,
+      type: oauthClient.type,
+    })
+    .from(oauthClient)
+    .where(eq(oauthClient.softwareId, DAWARICH_SOFTWARE_ID));
+  return {
+    issuer: authoritativeIssuer(),
+    clients: clients.map(({ scopes, ...client }) => ({
+      ...client,
+      scope: scopes?.join(" "),
+    })) as ManagedOAuthClient[],
+  };
 }
 
 function runtimeState(): RuntimeState {
@@ -250,6 +348,7 @@ const defaultDependencies: ManagedDawarichResolverDependencies = {
   getRuntimeState: runtimeState,
   getConfig: readConfig,
   getSecret: getServiceSecretStrict,
+  getOAuthAuthority: readOAuthAuthority,
   fetchHealth: (url, init) => fetch(url, init),
   now: Date.now,
 };

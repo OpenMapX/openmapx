@@ -112,6 +112,19 @@ export async function resolveServiceConfigWithSources(
 }
 
 /**
+ * Resolve the same env > database > default cascade as Compose and return only
+ * effective values. Readiness callers use this internally for exact equality
+ * checks; they must never serialize the returned values because env overrides
+ * may contain operator-controlled or secret material.
+ */
+export async function resolveEffectiveServiceConfig(
+  manifest: ResolveServiceConfigInput,
+): Promise<Record<string, unknown>> {
+  const resolved = await resolveServiceConfigWithSources(manifest);
+  return Object.fromEntries(Object.entries(resolved).map(([key, entry]) => [key, entry.value]));
+}
+
+/**
  * Batch version: resolve configs for many services in parallel. Used by the
  * compose-render path where we need the full map before handing control to
  * the renderer.
