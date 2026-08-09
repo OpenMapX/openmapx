@@ -31,7 +31,7 @@ function normalizeVisit(
     startedAt: toIsoString(visit.started_at),
     endedAt: toIsoString(visit.ended_at),
     durationMinutes: visit.duration,
-    ...(visit.point_count === undefined ? {} : { pointCount: visit.point_count }),
+    ...(visit.point_count == null ? {} : { pointCount: visit.point_count }),
     ...(visit.place_id == null ? {} : { placeId: String(visit.place_id) }),
     tags: visit.tags.map((tag) => tag.name),
     location,

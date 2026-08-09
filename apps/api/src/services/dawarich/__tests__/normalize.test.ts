@@ -57,6 +57,36 @@ describe("normalizeDawarichDay", () => {
     expect(result.map.visits.features[0].geometry.coordinates).toEqual([12.4, 45.7]);
   });
 
+  it("omits null optional visit and journey fields", () => {
+    const journey = timelineDayFixture.entries.find(
+      (entry): entry is Extract<typeof entry, { type: "journey" }> => entry.type === "journey",
+    );
+    if (!journey) throw new Error("fixture needs a journey");
+    const result = normalizeDawarichDay({
+      day: {
+        ...timelineDayFixture,
+        entries: [
+          { ...timelineDayFixture.entries[0], point_count: null },
+          {
+            ...journey,
+            speed_unit: null,
+            day_distance: null,
+            day_duration: null,
+          },
+        ],
+      } as typeof timelineDayFixture,
+      selectedDate: "2026-01-02",
+      timeZone: "Etc/UTC",
+      distanceUnit: "km",
+    });
+
+    expect(result.entries[0]).not.toHaveProperty("pointCount");
+    const normalizedJourney = result.entries.find((entry) => entry.type === "journey");
+    expect(normalizedJourney).not.toHaveProperty("speedUnit");
+    expect(normalizedJourney).not.toHaveProperty("dayDistance");
+    expect(normalizedJourney).not.toHaveProperty("dayDurationSeconds");
+  });
+
   it("normalizes an empty day and upstream bounds into the public tuple", () => {
     const result = normalizeDawarichDay({
       day: { ...timelineDayFixture, entries: [], bounds: null },

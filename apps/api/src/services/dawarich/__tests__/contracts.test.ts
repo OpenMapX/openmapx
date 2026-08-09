@@ -43,12 +43,29 @@ describe("Dawarich runtime contracts", () => {
                 avg_speed: null,
                 elevation_gain: null,
                 elevation_loss: null,
+                speed_unit: null,
+                day_distance: null,
+                day_duration: null,
               },
             ],
           },
         ],
       }).days[0].entries,
     ).toHaveLength(2);
+  });
+
+  it("accepts a null optional visit point count", () => {
+    expect(
+      timelineResponseSchema.parse({
+        ...timelineResponseFixture,
+        days: [
+          {
+            ...timelineResponseFixture.days[0],
+            entries: [{ ...timelineResponseFixture.days[0].entries[0], point_count: null }],
+          },
+        ],
+      }).days[0].entries,
+    ).toHaveLength(1);
   });
 
   it.each([

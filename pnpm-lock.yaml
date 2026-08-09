@@ -1809,6 +1809,9 @@ importers:
       tz-lookup:
         specifier: ^6.1.25
         version: 6.1.25
+      undici:
+        specifier: 8.9.0
+        version: 8.9.0
       zod:
         specifier: ^4.4.3
         version: 4.4.3

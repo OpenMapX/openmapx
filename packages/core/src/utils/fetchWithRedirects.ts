@@ -1,12 +1,39 @@
+import {
+  Agent,
+  buildConnector,
+  type Dispatcher,
+  type RequestInit as UndiciRequestInit,
+  fetch as undiciFetch,
+} from "undici";
+
+export interface FetchConnectionAddress {
+  address: string;
+  family: 4 | 6;
+}
+
+export type FetchImplementation = (
+  input: string | URL,
+  init?: RequestInit & { dispatcher?: Dispatcher },
+) => Promise<Response>;
+
 export interface FetchWithRedirectsOptions extends Omit<RequestInit, "redirect"> {
   /**
    * Optional allowlist for redirect targets. Supports exact hostnames and
    * wildcard suffixes in the form "*.example.com".
    */
   allowedRedirectHosts?: string[];
+  /** Require redirects to retain this exact scheme/host/port origin. */
+  allowedRedirectOrigin?: string;
   maxRedirects?: number;
   timeoutMs?: number;
   validateRedirectUrl?: (nextUrl: URL, previousUrl: URL) => boolean;
+  /** Resolve validated addresses immediately before each socket is opened. */
+  resolveConnectionAddresses?: (url: URL) => Promise<FetchConnectionAddress[]>;
+  /**
+   * Test-only or specialized transport override. Defaults to global fetch for
+   * ordinary requests and to this package's Undici fetch when DNS is pinned.
+   */
+  fetchImplementation?: FetchImplementation;
   /**
    * Some third-party APIs misuse HTTP 203 together with a Location header for
    * large-file redirects. When enabled, follow that Location manually.
@@ -60,9 +87,81 @@ function assertRedirectAllowed(
     throw new Error(`Redirect target not allowed: ${nextUrl.hostname}`);
   }
 
+  if (
+    options.allowedRedirectOrigin &&
+    nextUrl.origin !== new URL(options.allowedRedirectOrigin).origin
+  ) {
+    throw new Error(`Redirect target origin not allowed: ${nextUrl.origin}`);
+  }
+
   if (options.validateRedirectUrl && !options.validateRedirectUrl(nextUrl, previousUrl)) {
     throw new Error(`Redirect target rejected: ${nextUrl.toString()}`);
   }
+}
+
+function createPinnedDispatcher(addresses: FetchConnectionAddress[]): Dispatcher {
+  if (!addresses.length) throw new Error("No validated addresses available for connection");
+  const connector = buildConnector({});
+  let nextAddress = 0;
+  return new Agent({
+    connect(options, callback) {
+      const connectNext = (): void => {
+        const address = addresses[nextAddress++];
+        connector(
+          {
+            ...options,
+            hostname: address.address,
+            // Preserve the requested hostname for TLS certificate verification and SNI.
+            servername: options.servername ?? options.hostname,
+          },
+          (error, socket) => {
+            if (error) {
+              if (nextAddress < addresses.length) {
+                connectNext();
+                return;
+              }
+              callback(error, null);
+              return;
+            }
+            callback(null, socket);
+          },
+        );
+      };
+      connectNext();
+    },
+  });
+}
+
+function toRequestInit(
+  init: FetchWithRedirectsOptions,
+  dispatcher: Dispatcher | undefined,
+): RequestInit & { dispatcher?: Dispatcher } {
+  const {
+    allowedRedirectHosts: _allowedRedirectHosts,
+    allowedRedirectOrigin: _allowedRedirectOrigin,
+    fetchImplementation: _fetchImplementation,
+    follow203Redirect: _follow203Redirect,
+    maxRedirects: _maxRedirects,
+    resolveConnectionAddresses: _resolveConnectionAddresses,
+    timeoutMs: _timeoutMs,
+    validateRedirectUrl: _validateRedirectUrl,
+    ...fetchInit
+  } = init;
+  return {
+    ...fetchInit,
+    ...(dispatcher ? { dispatcher } : {}),
+    redirect: "manual",
+    signal: withTimeoutSignal(init.signal, init.timeoutMs),
+  };
+}
+
+function fetchWithPinnedDispatcher(
+  input: string | URL,
+  init: RequestInit & { dispatcher?: Dispatcher },
+): Promise<Response> {
+  // Node's global fetch may bundle a different Undici version. Pair this
+  // package's fetch with the same-version Agent that owns the pinned socket.
+  return undiciFetch(input, init as unknown as UndiciRequestInit) as unknown as Promise<Response>;
 }
 
 function nextRequestInit(
@@ -92,11 +191,13 @@ export async function fetchWithRedirects(
   };
 
   for (let i = 0; i <= maxRedirects; i++) {
-    const response = await fetch(currentUrl, {
-      ...currentInit,
-      redirect: "manual",
-      signal: withTimeoutSignal(currentInit.signal, currentInit.timeoutMs),
-    });
+    const dispatcher = currentInit.resolveConnectionAddresses
+      ? createPinnedDispatcher(await currentInit.resolveConnectionAddresses(new URL(currentUrl)))
+      : undefined;
+    const fetchImplementation =
+      currentInit.fetchImplementation ??
+      (dispatcher ? fetchWithPinnedDispatcher : globalThis.fetch);
+    const response = await fetchImplementation(currentUrl, toRequestInit(currentInit, dispatcher));
 
     if (!isRedirectStatus(response.status, response, follow203Redirect)) {
       return response;

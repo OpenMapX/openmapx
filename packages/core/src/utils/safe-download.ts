@@ -3,6 +3,8 @@ import { createWriteStream } from "node:fs";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import {
+  type FetchConnectionAddress,
+  type FetchImplementation,
   type FetchWithRedirectsOptions,
   fetchWithRedirects,
   hostMatchesAllowlist,
@@ -81,11 +83,16 @@ function isPrivateIpv6(address: string): boolean {
  * window where `validatePublicUrl` approves a textual hostname but the actual
  * socket ends up on a private address.
  */
-export async function assertResolvesToPublicIp(hostname: string): Promise<void> {
+async function resolveHostname(hostname: string): Promise<FetchConnectionAddress[]> {
   const addresses = await dnsLookup(hostname, { all: true, verbatim: true });
   if (!addresses.length) {
     throw new Error(`No DNS records for ${hostname}`);
   }
+  return addresses as FetchConnectionAddress[];
+}
+
+async function resolvePublicAddresses(hostname: string): Promise<FetchConnectionAddress[]> {
+  const addresses = await resolveHostname(hostname);
   for (const { address, family } of addresses) {
     if (family === 4) {
       const int = ipv4ToInt(address);
@@ -98,6 +105,11 @@ export async function assertResolvesToPublicIp(hostname: string): Promise<void> 
       }
     }
   }
+  return addresses;
+}
+
+export async function assertResolvesToPublicIp(hostname: string): Promise<void> {
+  await resolvePublicAddresses(hostname);
 }
 
 /**
@@ -116,7 +128,7 @@ export async function safeDownload(
 
   validatePublicUrl(url);
   const { hostname } = new URL(url);
-  await assertResolvesToPublicIp(hostname);
+  await resolvePublicAddresses(hostname);
 
   const fetchOpts: FetchWithRedirectsOptions = {
     headers: opts.headers,
@@ -130,6 +142,10 @@ export async function safeDownload(
       // actually lands on.
       validatePublicUrl(nextUrl.toString());
       return true;
+    },
+    resolveConnectionAddresses: async (nextUrl) => {
+      validatePublicUrl(nextUrl.toString());
+      return resolvePublicAddresses(nextUrl.hostname);
     },
   };
 
@@ -149,7 +165,7 @@ export async function safeDownload(
   // after redirects.
   const finalHostname = new URL(finalUrl).hostname;
   if (finalHostname !== hostname) {
-    await assertResolvesToPublicIp(finalHostname);
+    await resolvePublicAddresses(finalHostname);
   }
 
   const contentLengthHeader = response.headers.get("content-length");
@@ -212,6 +228,13 @@ export interface SafeFetchJsonOptions {
    * host hands the credential to whatever host the Location names.
    */
   allowedRedirectHosts?: string[];
+  /** Require credential-bearing redirects to retain this exact origin. */
+  allowedRedirectOrigin?: string;
+  /**
+   * Dependency-injection hook for a trusted transport. Production callers
+   * should omit this so pinned requests use this package's Undici fetch.
+   */
+  fetchImplementation?: FetchImplementation;
   /** Optional allowlist of response media types, compared without parameters. */
   acceptedContentTypes?: string[];
 }
@@ -242,9 +265,9 @@ export class SafeFetchHttpError extends Error {
  * Resolve `hostname` and reject private targets, rethrowing without the
  * resolved IP so an operator-facing error never echoes an internal address.
  */
-async function assertPublicHostOrThrow(hostname: string): Promise<void> {
+async function resolvePublicHostOrThrow(hostname: string): Promise<FetchConnectionAddress[]> {
   try {
-    await assertResolvesToPublicIp(hostname);
+    return await resolvePublicAddresses(hostname);
   } catch {
     throw new Error(
       `URL host "${hostname}" is not allowed (private, internal, or unresolvable address)`,
@@ -278,11 +301,16 @@ function isDeclaredPrivateHost(hostname: string, allowPrivateHosts: string[]): b
  * Gate a fetch target: always HTTP(S), and public unless the operator declared
  * this specific host as an allowed private target.
  */
-async function assertFetchTargetAllowed(url: string, allowPrivateHosts: string[]): Promise<void> {
+async function assertFetchTargetAllowed(
+  url: string,
+  allowPrivateHosts: string[],
+): Promise<FetchConnectionAddress[]> {
   const parsed = assertHttpProtocol(url);
-  if (isDeclaredPrivateHost(parsed.hostname, allowPrivateHosts)) return;
+  if (isDeclaredPrivateHost(parsed.hostname, allowPrivateHosts)) {
+    return resolveHostname(parsed.hostname);
+  }
   validatePublicUrl(url);
-  await assertPublicHostOrThrow(parsed.hostname);
+  return resolvePublicHostOrThrow(parsed.hostname);
 }
 
 /**
@@ -322,6 +350,8 @@ export async function safeFetchJsonResponse<T = unknown>(
     maxRedirects,
     timeoutMs,
     allowedRedirectHosts: opts.allowedRedirectHosts,
+    allowedRedirectOrigin: opts.allowedRedirectOrigin,
+    fetchImplementation: opts.fetchImplementation,
     validateRedirectUrl: (nextUrl) => {
       const next = nextUrl.hostname;
       if (!isDeclaredPrivateHost(next, allowPrivateHosts)) {
@@ -331,6 +361,8 @@ export async function safeFetchJsonResponse<T = unknown>(
       }
       return true;
     },
+    resolveConnectionAddresses: (nextUrl) =>
+      assertFetchTargetAllowed(nextUrl.toString(), allowPrivateHosts),
   });
 
   const finalUrl = response.url || url;
@@ -341,8 +373,7 @@ export async function safeFetchJsonResponse<T = unknown>(
     } catch {
       // ignore
     }
-    const retryAfter = response.headers.get("retry-after");
-    const retryAfterSeconds = retryAfter && /^\d+$/.test(retryAfter) ? Number(retryAfter) : null;
+    const retryAfterSeconds = parseRetryAfterSeconds(response.headers.get("retry-after"));
     throw new SafeFetchHttpError(response.status, finalUrl, retryAfterSeconds);
   }
 
@@ -414,6 +445,15 @@ export async function safeFetchJsonResponse<T = unknown>(
   } catch {
     throw new Error(`Invalid JSON response from ${finalUrl}`);
   }
+}
+
+// A full day bounds automatic retries while covering ordinary rate-limit windows.
+const MAX_RETRY_AFTER_SECONDS = 24 * 60 * 60;
+
+function parseRetryAfterSeconds(value: string | null): number | null {
+  if (!value || !/^\d+$/.test(value)) return null;
+  const seconds = Number(value);
+  return Number.isSafeInteger(seconds) && seconds <= MAX_RETRY_AFTER_SECONDS ? seconds : null;
 }
 
 /** Compatibility wrapper for callers that need only parsed JSON data. */

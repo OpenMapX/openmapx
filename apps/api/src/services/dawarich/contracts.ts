@@ -51,7 +51,7 @@ export const timelineVisitSchema = z.object({
   name: z.string().nullable(),
   status: z.string().nullable(),
   place_id: identifier.nullable().optional(),
-  point_count: z.number().int().nonnegative().optional(),
+  point_count: z.number().int().nonnegative().nullable().optional(),
   tags: z.array(z.object({ name: z.string() }).passthrough()),
   started_at: timestamp,
   ended_at: timestamp,
@@ -69,12 +69,12 @@ export const timelineJourneySchema = z.object({
   distance_unit: z.string().min(1),
   dominant_mode: z.string().nullable(),
   avg_speed: finiteNumber.nullable().optional(),
-  speed_unit: z.string().optional(),
+  speed_unit: z.string().nullable().optional(),
   elevation_gain: finiteNumber.nullable().optional(),
   elevation_loss: finiteNumber.nullable().optional(),
   continuation_of_date: z.iso.date().nullable().optional(),
-  day_distance: finiteNumber.optional(),
-  day_duration: finiteNumber.nonnegative().optional(),
+  day_distance: finiteNumber.nullable().optional(),
+  day_duration: finiteNumber.nonnegative().nullable().optional(),
 });
 
 export const timelineEntrySchema = z.discriminatedUnion("type", [

@@ -37,6 +37,7 @@ describe("DawarichClient", () => {
     expect(options).toMatchObject({
       acceptedContentTypes: ["application/json"],
       allowedRedirectHosts: ["fixture.invalid"],
+      allowedRedirectOrigin: "https://fixture.invalid",
       allowPrivateHosts: ["fixture.invalid"],
       timeoutMs: 10_000,
       maxBytes: 2 * 1024 * 1024,
@@ -138,6 +139,57 @@ describe("DawarichClient", () => {
     ).rejects.toMatchObject({ kind: "invalid_response" });
   });
 
+  it("classifies syntactically valid totals beyond configured caps as page_limit", async () => {
+    const excessivePages = vi.fn(async () =>
+      response(tracksPageFixture, {
+        "x-current-page": "1",
+        "x-total-pages": "21",
+        "x-total-count": "10001",
+      }),
+    ) as unknown as FetchJsonResponse;
+
+    await expect(
+      clientWith(excessivePages).getTracksPage(
+        { startAt: "2026-01-02T00:00:00Z", endAt: "2026-01-03T00:00:00Z" },
+        1,
+      ),
+    ).rejects.toMatchObject({ kind: "page_limit" });
+  });
+
+  it("rejects contradictory oversized pagination headers before applying caps", async () => {
+    const contradictory = vi.fn(async () =>
+      response(tracksPageFixture, {
+        "x-current-page": "1",
+        "x-total-pages": "21",
+        "x-total-count": "1",
+      }),
+    ) as unknown as FetchJsonResponse;
+
+    await expect(
+      clientWith(contradictory).getTracksPage(
+        { startAt: "2026-01-02T00:00:00Z", endAt: "2026-01-03T00:00:00Z" },
+        1,
+      ),
+    ).rejects.toMatchObject({ kind: "invalid_response" });
+  });
+
+  it("rejects contradictory page metadata and feature counts", async () => {
+    const inconsistent = vi.fn(async () =>
+      response(tracksPageFixture, {
+        "x-current-page": "1",
+        "x-total-pages": "1",
+        "x-total-count": "501",
+      }),
+    ) as unknown as FetchJsonResponse;
+
+    await expect(
+      clientWith(inconsistent).getTracksPage(
+        { startAt: "2026-01-02T00:00:00Z", endAt: "2026-01-03T00:00:00Z" },
+        1,
+      ),
+    ).rejects.toMatchObject({ kind: "invalid_response" });
+  });
+
   it("enforces the explicit tracks page and feature bounds before returning data", async () => {
     const neverFetch = vi.fn() as unknown as FetchJsonResponse;
     await expect(
@@ -165,6 +217,6 @@ describe("DawarichClient", () => {
         { startAt: "2026-01-02T00:00:00Z", endAt: "2026-01-03T00:00:00Z" },
         1,
       ),
-    ).rejects.toMatchObject({ kind: "page_limit" });
+    ).rejects.toMatchObject({ kind: "invalid_response" });
   });
 });

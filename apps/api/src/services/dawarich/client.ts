@@ -159,20 +159,34 @@ export class DawarichClient {
     const currentPage = parseIntegerHeader(result.headers, "x-current-page");
     const totalPages = parseIntegerHeader(result.headers, "x-total-pages");
     const totalCount = parseIntegerHeader(result.headers, "x-total-count");
+    if (currentPage === null || totalPages === null || totalCount === null) {
+      throw new DawarichClientError("invalid_response");
+    }
+    const featureCount = result.data.features.length;
+    if (totalCount === 0) {
+      if (currentPage !== 1 || page !== 1 || totalPages !== 0 || featureCount !== 0) {
+        throw new DawarichClientError("invalid_response");
+      }
+      return { data: result.data, pagination: { currentPage, totalPages, totalCount } };
+    }
+    const expectedTotalPages = Math.ceil(totalCount / this.limits.tracksPerPage);
     if (
-      currentPage === null ||
-      totalPages === null ||
-      totalCount === null ||
       currentPage !== page ||
       currentPage < 1 ||
-      totalPages > this.limits.maxTrackPages ||
-      totalCount > this.limits.maxTrackFeaturesPerDay ||
-      currentPage > Math.max(totalPages, 1)
+      currentPage > totalPages ||
+      totalPages !== expectedTotalPages
     ) {
       throw new DawarichClientError("invalid_response");
     }
-    if (result.data.features.length > this.limits.tracksPerPage) {
+    if (totalPages > this.limits.maxTrackPages || totalCount > this.limits.maxTrackFeaturesPerDay) {
       throw new DawarichClientError("page_limit");
+    }
+    const expectedFeatureCount =
+      page === expectedTotalPages
+        ? totalCount - this.limits.tracksPerPage * (expectedTotalPages - 1)
+        : this.limits.tracksPerPage;
+    if (featureCount !== expectedFeatureCount) {
+      throw new DawarichClientError("invalid_response");
     }
     return { data: result.data, pagination: { currentPage, totalPages, totalCount } };
   }
@@ -201,6 +215,7 @@ export class DawarichClient {
       headers: { Accept: "application/json", Authorization: `Bearer ${this.apiKey}` },
       allowPrivateHosts: this.allowPrivateHosts,
       allowedRedirectHosts: [this.baseUrl.hostname],
+      allowedRedirectOrigin: this.baseUrl.origin,
       maxRedirects: this.limits.maxRedirects,
       timeoutMs: this.limits.requestTimeoutMs,
       maxBytes,
