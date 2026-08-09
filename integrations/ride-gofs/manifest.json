@@ -1,0 +1,190 @@
+{
+  "id": "ride-gofs",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["ride-hailing"],
+  "backend": { "routes": false },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true },
+      "useUpstreamCatalog": {
+        "type": "boolean",
+        "title": "Use the MobilityData GOFS registry",
+        "description": "On by default. Reads the community-maintained systems.json from the GOFS repository so newly published on-demand systems appear without a config change. Each entry is checked before it is offered: unreachable feeds are hidden, and feeds that need an API key are shown with a link to the operator's access page. Turn off to use only the feeds listed below.",
+        "default": true
+      },
+      "feeds": {
+        "type": "array",
+        "title": "Additional GOFS feeds",
+        "description": "On-demand transport feeds published in the General On-Demand Feed Specification (GOFS 1.0), added on top of the upstream registry — or instead of it. Use this for a feed the registry does not list yet, or a private deployment. Point 'url' at the feed's discovery document; note that many feeds serve it at a bare base URL rather than a path ending in gofs.json. Service areas, brands, fares and booking links are read from the feed itself. An entry here overrides an upstream one with the same id.",
+        "items": {
+          "type": "object",
+          "required": ["id", "url"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "title": "Feed id",
+              "description": "Short stable identifier, e.g. montreal-taxi. Becomes the provider id gofs-<id>."
+            },
+            "name": {
+              "type": "string",
+              "title": "Display name",
+              "description": "Shown in the ride panel until the feed's own system name loads."
+            },
+            "url": {
+              "type": "string",
+              "title": "Discovery URL",
+              "description": "Absolute https URL of the feed's discovery document. Often a bare base URL such as https://api.example.com/gofs/11 rather than a path ending in gofs.json."
+            },
+            "credentialSlot": {
+              "type": "integer",
+              "title": "API key slot",
+              "description": "Only for a feed that needs an API key. Pick a slot (1-3) and paste the key into the matching 'Custom GOFS feed N API key' field below. The key is stored encrypted; the settings here are not secret.",
+              "enum": [1, 2, 3]
+            },
+            "authKind": {
+              "type": "string",
+              "title": "How the key is sent",
+              "description": "Send the key as an HTTP header (default, preferred — a key in a query string ends up in access logs) or as a query parameter.",
+              "enum": ["header", "query"],
+              "default": "header"
+            },
+            "authParam": {
+              "type": "string",
+              "title": "Header or parameter name",
+              "description": "The name the feed expects, e.g. X-API-KEY for a header or api_key for a query parameter. Defaults to X-API-KEY.",
+              "default": "X-API-KEY"
+            }
+          }
+        },
+        "default": []
+      },
+      "ca-taxi-montreal-api-key": {
+        "type": "string",
+        "title": "Taxi Montréal API key",
+        "description": "Unlocks the Montreal Taxi Registry GOFS feed (~3,300 taxis), which the registry lists publicly but serves only to keyed callers. Leave empty to skip it; every other feed works without a key.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://www.registretaximontreal.ca/documentation-technique/",
+          "urlLabel": "Registre des taxis technical documentation",
+          "steps": [
+            "Open the Registre des taxis technical documentation and read the operator guide (the deep-link approach) to see which endpoints your deployment will call.",
+            "Develop against the acceptance environment, which the documentation describes.",
+            "Contact the registry administrator via the 'Nous joindre' page to have your integration verified.",
+            "The administrator issues a production API key once the integration is confirmed. Paste it here."
+          ],
+          "cost": "No published price; access is granted by the registry administrator.",
+          "notes": "The key is sent as an X-API-KEY request header. The published guide is written for taxi dispatch operators, so a consuming application should say so explicitly when making contact."
+        }
+      },
+      "gofs-custom-1-api-key": {
+        "type": "string",
+        "title": "Custom GOFS feed 1 API key",
+        "description": "API key for a feed you added above with 'API key slot' set to 1. Stored encrypted and sent only to that feed.",
+        "x-openmapx-secret": true
+      },
+      "gofs-custom-2-api-key": {
+        "type": "string",
+        "title": "Custom GOFS feed 2 API key",
+        "description": "API key for a feed you added above with 'API key slot' set to 2. Stored encrypted and sent only to that feed.",
+        "x-openmapx-secret": true
+      },
+      "gofs-custom-3-api-key": {
+        "type": "string",
+        "title": "Custom GOFS feed 3 API key",
+        "description": "API key for a feed you added above with 'API key slot' set to 3. Stored encrypted and sent only to that feed.",
+        "x-openmapx-secret": true
+      }
+    }
+  },
+  "quality": "built-in",
+  "category": "Routing",
+  "dataSources": [
+    {
+      "sourceId": "ca-taxi-montreal",
+      "name": "Registre des taxis de Montréal",
+      "url": "https://www.registretaximontreal.ca/",
+      "license": "Proprietary (API key required)",
+      "licenseUrl": "https://www.registretaximontreal.ca/documentation-technique/",
+      "commercialUse": "conditional",
+      "providerCountry": "CA",
+      "providerPrivacyUrl": "https://www.registretaximontreal.ca/",
+      "endUserExposure": "server-only",
+      "personalData": true,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "gofs-custom-1",
+      "name": "Custom GOFS feed 1",
+      "url": "https://gofs.org/",
+      "license": "Set by the feed operator",
+      "licenseUrl": "https://gofs.org/",
+      "commercialUse": "conditional",
+      "providerCountry": "XX",
+      "providerPrivacyUrl": "https://gofs.org/",
+      "endUserExposure": "server-only",
+      "personalData": true,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "gofs-custom-2",
+      "name": "Custom GOFS feed 2",
+      "url": "https://gofs.org/",
+      "license": "Set by the feed operator",
+      "licenseUrl": "https://gofs.org/",
+      "commercialUse": "conditional",
+      "providerCountry": "XX",
+      "providerPrivacyUrl": "https://gofs.org/",
+      "endUserExposure": "server-only",
+      "personalData": true,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "gofs-custom-3",
+      "name": "Custom GOFS feed 3",
+      "url": "https://gofs.org/",
+      "license": "Set by the feed operator",
+      "licenseUrl": "https://gofs.org/",
+      "commercialUse": "conditional",
+      "providerCountry": "XX",
+      "providerPrivacyUrl": "https://gofs.org/",
+      "endUserExposure": "server-only",
+      "personalData": true,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "gofs-registry",
+      "name": "MobilityData GOFS registry",
+      "url": "https://github.com/MobilityData/GOFS",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://github.com/MobilityData/GOFS/blob/main/LICENSE",
+      "commercialUse": "yes",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "gofs",
+      "name": "GOFS on-demand feeds",
+      "url": "https://gofs.org/",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://github.com/MobilityData/GOFS/blob/main/LICENSE",
+      "commercialUse": "yes",
+      "providerCountry": "XX",
+      "providerPrivacyUrl": "https://mobilitydata.org/privacy-policy/",
+      "endUserExposure": "server-only",
+      "personalData": true,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

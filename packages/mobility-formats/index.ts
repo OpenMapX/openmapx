@@ -2,6 +2,7 @@ export * from "./csv.js";
 export * from "./datex.js";
 export * from "./datex-parking.js";
 export * from "./gbfs.js";
+export * from "./gofs.js";
 export * from "./gtfs.js";
 export * from "./gtfs-realtime.js";
 export * from "./netex.js";

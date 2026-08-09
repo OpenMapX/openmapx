@@ -1,0 +1,12 @@
+{
+  "name": "@openmapx/integration-ride-gofs",
+  "license": "AGPL-3.0-or-later",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openmapx/core": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/mobility-formats": "workspace:^"
+  }
+}

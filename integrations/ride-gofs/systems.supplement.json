@@ -1,0 +1,4 @@
+{
+  "_comment": "Feeds verified by OpenMapX that MobilityData's systems.json does not list yet. Anything added here MUST also be submitted upstream at https://github.com/MobilityData/GOFS (GitHub issue or PR) and removed from this file once it lands there. Same columns as the upstream registry.",
+  "systems": []
+}

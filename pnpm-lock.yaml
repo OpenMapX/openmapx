@@ -1268,6 +1268,18 @@ importers:
         specifier: workspace:^
         version: link:../../packages/integration-framework
 
+  integrations/ride-gofs:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+      '@openmapx/mobility-formats':
+        specifier: workspace:^
+        version: link:../../packages/mobility-formats
+
   integrations/ride-hailing:
     dependencies:
       '@openmapx/integration-framework':

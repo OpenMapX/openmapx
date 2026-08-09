@@ -1,0 +1,30 @@
+{
+  "name": "GOFS-Bedarfsverkehr",
+  "description": "Liest Bedarfsverkehrs-Feeds im Format der General On-Demand Feed Specification (GOFS 1.0) — Taxiregister, Microtransit- und Paratransit-Betreiber — und zeigt, welche Dienste Ihre Fahrt abdecken, wie lange die Wartezeit ist, was die Fahrt kostet und wie sie gebucht wird. Die Feeds stammen aus dem gemeinschaftlich gepflegten GOFS-Verzeichnis sowie aus allen, die der Betreiber dieser Instanz ergänzt.",
+  "dataSources": {
+    "gofs": {
+      "purpose": "Bediengebiete, Betriebszeiten, Servicemarken, Wartezeiten, Preisschätzungen und Buchungslinks für Bedarfsverkehre entlang Ihrer Fahrt",
+      "dataSent": "Abgerufen von diesem OpenMapX-Server, nicht von Ihrem Browser. Bediengebiete, Marken, Kalender und Tarife werden einmalig geladen und zwischengespeichert. Wenn Sie den Fahrten-Modus öffnen, werden die Koordinaten von Abhol- und Zielort (und, falls bekannt, deren Adressen) an die Wartezeit- und Buchungs-Endpunkte des konfigurierten Feeds gesendet, damit dieser Wartezeit und Preis zurückgeben kann. Das Ergebnis wird nie zwischengespeichert oder gespeichert; welche Feeds kontaktiert werden, legt der Betreiber dieser Instanz fest."
+    },
+    "gofs-registry": {
+      "purpose": "Die gemeinschaftlich gepflegte Liste veröffentlichter GOFS-Feeds, damit neu veröffentlichte Systeme ohne Konfigurationsänderung verfügbar werden",
+      "dataSent": "Nichts über Sie. Dieser OpenMapX-Server lädt eine öffentliche Liste von Feed-URLs aus dem GOFS-Repository auf GitHub. Die Anfrage enthält keinerlei Abhol-, Ziel-, Konto- oder Geräteinformationen und erfolgt unabhängig davon, ob jemand den Fahrten-Modus nutzt."
+    },
+    "ca-taxi-montreal": {
+      "purpose": "Taxi-Bediengebiete, Wartezeiten und Buchungslinks für Montreal, sofern der Betreiber dieser Instanz einen API-Schlüssel des Registre des taxis hinterlegt hat",
+      "dataSent": "Nur wenn ein API-Schlüssel konfiguriert ist, und abgerufen von diesem OpenMapX-Server statt von Ihrem Browser. Bediengebiete und Betriebsregeln werden geladen und zwischengespeichert. Wenn Sie den Fahrten-Modus mit einem Abholort in Montreal öffnen, werden die Koordinaten von Abhol- und Zielort (und, falls bekannt, deren Adressen) an das Register gesendet, damit es eine Wartezeit zurückgeben kann. Ihre Identität wird nicht übermittelt, und das Ergebnis wird nie zwischengespeichert oder gespeichert."
+    },
+    "gofs-custom-1": {
+      "purpose": "Ein zusätzlicher GOFS-Feed nach Wahl des Betreibers dieser Instanz, über den ersten API-Schlüssel-Platz",
+      "dataSent": "Nur wenn der Betreiber in diesem Platz einen Feed konfiguriert hat, und abgerufen von diesem OpenMapX-Server statt von Ihrem Browser. Bediengebiete und Betriebsregeln werden geladen und zwischengespeichert. Wenn Sie den Fahrten-Modus innerhalb des Bediengebiets dieses Feeds öffnen, werden die Koordinaten von Abhol- und Zielort (und, falls bekannt, deren Adressen) an ihn gesendet, damit er Wartezeit und Preis zurückgeben kann. Ihre Identität wird nicht übermittelt, und das Ergebnis wird nie zwischengespeichert oder gespeichert. Um welchen Feed es sich handelt und unter welchen Bedingungen er betrieben wird, legt der Betreiber dieser Instanz fest."
+    },
+    "gofs-custom-2": {
+      "purpose": "Ein zusätzlicher GOFS-Feed nach Wahl des Betreibers dieser Instanz, über den zweiten API-Schlüssel-Platz",
+      "dataSent": "Nur wenn der Betreiber in diesem Platz einen Feed konfiguriert hat, und abgerufen von diesem OpenMapX-Server statt von Ihrem Browser. Bediengebiete und Betriebsregeln werden geladen und zwischengespeichert. Wenn Sie den Fahrten-Modus innerhalb des Bediengebiets dieses Feeds öffnen, werden die Koordinaten von Abhol- und Zielort (und, falls bekannt, deren Adressen) an ihn gesendet, damit er Wartezeit und Preis zurückgeben kann. Ihre Identität wird nicht übermittelt, und das Ergebnis wird nie zwischengespeichert oder gespeichert. Um welchen Feed es sich handelt und unter welchen Bedingungen er betrieben wird, legt der Betreiber dieser Instanz fest."
+    },
+    "gofs-custom-3": {
+      "purpose": "Ein zusätzlicher GOFS-Feed nach Wahl des Betreibers dieser Instanz, über den dritten API-Schlüssel-Platz",
+      "dataSent": "Nur wenn der Betreiber in diesem Platz einen Feed konfiguriert hat, und abgerufen von diesem OpenMapX-Server statt von Ihrem Browser. Bediengebiete und Betriebsregeln werden geladen und zwischengespeichert. Wenn Sie den Fahrten-Modus innerhalb des Bediengebiets dieses Feeds öffnen, werden die Koordinaten von Abhol- und Zielort (und, falls bekannt, deren Adressen) an ihn gesendet, damit er Wartezeit und Preis zurückgeben kann. Ihre Identität wird nicht übermittelt, und das Ergebnis wird nie zwischengespeichert oder gespeichert. Um welchen Feed es sich handelt und unter welchen Bedingungen er betrieben wird, legt der Betreiber dieser Instanz fest."
+    }
+  }
+}

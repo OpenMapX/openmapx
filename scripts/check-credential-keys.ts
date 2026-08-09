@@ -47,6 +47,7 @@ export const CREDENTIAL_KEYED_INTEGRATIONS = [
   "scooter-sharing",
   "bike-sharing",
   "webcam",
+  "ride-gofs",
 ] as const;
 
 /** Allowed `<field>` suffixes for a credential key, per the naming convention. */

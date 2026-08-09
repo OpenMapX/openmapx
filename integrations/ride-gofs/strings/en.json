@@ -1,0 +1,30 @@
+{
+  "name": "GOFS On-Demand Rides",
+  "description": "Reads on-demand transport feeds published in the General On-Demand Feed Specification (GOFS 1.0) — taxi registries, microtransit and paratransit operators — to show which services cover your trip, how long the wait is, what the ride costs and how to book it. Feeds come from the community-maintained GOFS registry plus any the operator of this deployment adds.",
+  "dataSources": {
+    "gofs": {
+      "purpose": "Service areas, operating hours, service brands, wait times, fare estimates and booking links for on-demand transport covering your trip",
+      "dataSent": "Requested by this OpenMapX server, not by your browser. Service areas, brands, calendars and fares are downloaded once and cached. When you open the ride mode, the pickup and destination coordinates (and their addresses, when known) are sent to the configured feed's wait-time and booking endpoints so it can return a wait time and price. The result is never cached or stored, and which feeds are contacted is set by the operator of this deployment."
+    },
+    "gofs-registry": {
+      "purpose": "The community-maintained list of published GOFS on-demand feeds, so newly published systems become available without a configuration change",
+      "dataSent": "None about you. This OpenMapX server downloads a public list of feed URLs from the GOFS repository on GitHub. The request carries no pickup, destination, account or device information of any kind, and is made whether or not anyone is using the ride mode."
+    },
+    "ca-taxi-montreal": {
+      "purpose": "Taxi service areas, wait times and booking links for Montreal, when the operator of this deployment has configured a Registre des taxis API key",
+      "dataSent": "Only when an API key has been configured, and requested by this OpenMapX server rather than your browser. Service areas and operating rules are downloaded and cached. When you open the ride mode with a pickup in Montreal, the pickup and destination coordinates (and their addresses, when known) are sent to the registry so it can return a wait time. Your identity is not sent, and the result is never cached or stored."
+    },
+    "gofs-custom-1": {
+      "purpose": "An additional GOFS on-demand feed chosen by the operator of this deployment, using the first API key slot",
+      "dataSent": "Only when the operator has configured a feed in this slot, and requested by this OpenMapX server rather than your browser. Service areas and operating rules are downloaded and cached. When you open the ride mode within that feed's service area, the pickup and destination coordinates (and their addresses, when known) are sent to it so it can return a wait time and price. Your identity is not sent, and the result is never cached or stored. Which feed this is, and the terms it operates under, are set by the operator of this deployment."
+    },
+    "gofs-custom-2": {
+      "purpose": "An additional GOFS on-demand feed chosen by the operator of this deployment, using the second API key slot",
+      "dataSent": "Only when the operator has configured a feed in this slot, and requested by this OpenMapX server rather than your browser. Service areas and operating rules are downloaded and cached. When you open the ride mode within that feed's service area, the pickup and destination coordinates (and their addresses, when known) are sent to it so it can return a wait time and price. Your identity is not sent, and the result is never cached or stored. Which feed this is, and the terms it operates under, are set by the operator of this deployment."
+    },
+    "gofs-custom-3": {
+      "purpose": "An additional GOFS on-demand feed chosen by the operator of this deployment, using the third API key slot",
+      "dataSent": "Only when the operator has configured a feed in this slot, and requested by this OpenMapX server rather than your browser. Service areas and operating rules are downloaded and cached. When you open the ride mode within that feed's service area, the pickup and destination coordinates (and their addresses, when known) are sent to it so it can return a wait time and price. Your identity is not sent, and the result is never cached or stored. Which feed this is, and the terms it operates under, are set by the operator of this deployment."
+    }
+  }
+}
