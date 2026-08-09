@@ -1542,7 +1542,34 @@
     "oauthSignInFailed": "{provider} sign-in failed",
     "togglePasswordVisibility": "Toggle password visibility",
     "checkYourEmail": "Check your email to verify your account before signing in.",
-    "invalidResetLink": "This password reset link is invalid or has expired. Please request a new one."
+    "invalidResetLink": "This password reset link is invalid or has expired. Please request a new one.",
+    "oidcProvider": {
+      "checkingSession": "Checking your OpenMapX session",
+      "signInTitle": "Sign in to continue",
+      "signInBody": "Use your OpenMapX account to continue to the connected service.",
+      "alreadySignedInTitle": "You’re already signed in",
+      "alreadySignedInBody": "Retry the authorization request from the connected service, or return to OpenMapX.",
+      "sessionErrorTitle": "We couldn’t check your session",
+      "sessionError": "Retry this page, or return to OpenMapX and start again.",
+      "backToOpenMapX": "Back to OpenMapX",
+      "consentTitle": "Allow access",
+      "loadingClient": "Loading connected service",
+      "invalidClient": "This authorization request is invalid or no longer available.",
+      "unknownClient": "Connected service",
+      "consentBody": "This service is asking to access:",
+      "deny": "Deny",
+      "accept": "Allow",
+      "scopes": {
+        "openid": "Your account identity",
+        "profile": "Your basic profile",
+        "email": "Your email address"
+      },
+      "scopeDetails": {
+        "openid": "Confirm which OpenMapX account you are using.",
+        "profile": "Share your name and profile picture.",
+        "email": "Share your email address and whether it is verified."
+      }
+    }
   },
   "legal": {
     "legal": "Legal",

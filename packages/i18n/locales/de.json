@@ -1542,7 +1542,34 @@
     "oauthSignInFailed": "{provider}-Anmeldung fehlgeschlagen",
     "togglePasswordVisibility": "Passwort-Sichtbarkeit umschalten",
     "checkYourEmail": "Überprüfen Sie Ihre E-Mails, um Ihr Konto vor der Anmeldung zu bestätigen.",
-    "invalidResetLink": "Dieser Link zum Zurücksetzen des Passworts ist ungültig oder abgelaufen. Bitte fordern Sie einen neuen an."
+    "invalidResetLink": "Dieser Link zum Zurücksetzen des Passworts ist ungültig oder abgelaufen. Bitte fordern Sie einen neuen an.",
+    "oidcProvider": {
+      "checkingSession": "OpenMapX-Sitzung wird geprüft",
+      "signInTitle": "Zum Fortfahren anmelden",
+      "signInBody": "Melden Sie sich mit Ihrem OpenMapX-Konto an, um mit dem verbundenen Dienst fortzufahren.",
+      "alreadySignedInTitle": "Sie sind bereits angemeldet",
+      "alreadySignedInBody": "Starten Sie die Autorisierungsanfrage im verbundenen Dienst erneut oder kehren Sie zu OpenMapX zurück.",
+      "sessionErrorTitle": "Ihre Sitzung konnte nicht geprüft werden",
+      "sessionError": "Versuchen Sie es erneut oder kehren Sie zu OpenMapX zurück und beginnen Sie von vorn.",
+      "backToOpenMapX": "Zurück zu OpenMapX",
+      "consentTitle": "Zugriff erlauben",
+      "loadingClient": "Verbundener Dienst wird geladen",
+      "invalidClient": "Diese Autorisierungsanfrage ist ungültig oder nicht mehr verfügbar.",
+      "unknownClient": "Verbundener Dienst",
+      "consentBody": "Dieser Dienst bittet um Zugriff auf:",
+      "deny": "Ablehnen",
+      "accept": "Erlauben",
+      "scopes": {
+        "openid": "Ihre Kontoidentität",
+        "profile": "Ihr Basisprofil",
+        "email": "Ihre E-Mail-Adresse"
+      },
+      "scopeDetails": {
+        "openid": "Bestätigt, welches OpenMapX-Konto Sie verwenden.",
+        "profile": "Gibt Ihren Namen und Ihr Profilbild weiter.",
+        "email": "Gibt Ihre E-Mail-Adresse und ihren Bestätigungsstatus weiter."
+      }
+    }
   },
   "legal": {
     "legal": "Recht",

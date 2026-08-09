@@ -28,9 +28,10 @@ type AuthMode = "sign-in" | "sign-up" | "2fa" | "forgot-password" | "reset-passw
 interface AuthDialogProps {
   open: boolean;
   onClose: () => void;
+  dismissible?: boolean;
 }
 
-export function AuthDialog({ open, onClose }: AuthDialogProps) {
+export function AuthDialog({ open, onClose, dismissible = true }: AuthDialogProps) {
   const t = useTranslations("auth");
   const tc = useTranslations("common");
   const fullScreen = useFullScreenOnMobile();
@@ -79,6 +80,10 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
     resetForm();
     setMode("sign-in");
     onClose();
+  };
+
+  const handleDialogClose = () => {
+    if (dismissible) handleClose();
   };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
@@ -244,13 +249,13 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
   return (
     <Dialog
       open={open}
-      onClose={handleClose}
+      onClose={handleDialogClose}
       maxWidth="xs"
       fullWidth
       fullScreen={fullScreen}
       slotProps={{ paper: { sx: [mobileFullScreenDialogPaperSx, { p: 0 }] } }}
     >
-      {fullScreen && (
+      {fullScreen && dismissible && (
         <IconButton
           onClick={handleClose}
           aria-label={tc("close")}
