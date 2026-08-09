@@ -9,7 +9,7 @@ import {
   setOverpassUrl,
 } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import type { PoiSearchProvider, PoiSearchResult } from "@openmapx/integration-poi-search/types";
+import type { PoiSearchOutcome, PoiSearchProvider } from "@openmapx/integration-poi-search/types";
 
 const PRESET_SENTINEL = "__preset__";
 
@@ -24,24 +24,24 @@ export const overpassProvider: PoiSearchProvider = {
       filters?: Record<string, unknown>;
       osmTags?: Record<string, string>;
     },
-  ): Promise<PoiSearchResult[]> {
+  ): Promise<PoiSearchOutcome> {
     if (options?.osmTags) {
       // Preset path: tag-set must be ANDed; wildcards (`"*"`) become key-existence
       // predicates. Bypasses CATEGORY_FILTERS entirely.
       return searchByOsmTags(options.osmTags, bbox);
     }
     const filters = CATEGORY_FILTERS[category];
-    if (!filters || filters.length === 0) return [];
+    if (!filters || filters.length === 0) return { results: [], truncated: false };
     return searchByCategory(filters, bbox);
   },
-  async searchText(query: string, bbox: BoundingBox): Promise<PoiSearchResult[]> {
+  async searchText(query: string, bbox: BoundingBox): Promise<PoiSearchOutcome> {
     return searchByText(query, bbox);
   },
   async searchFiltered(
     category: string,
     attributes: Record<string, string>,
     bbox: BoundingBox,
-  ): Promise<PoiSearchResult[]> {
+  ): Promise<PoiSearchOutcome> {
     const filters = CATEGORY_FILTERS[category];
     if (!filters) {
       throw Object.assign(new Error(`Unknown category: ${category}`), { statusCode: 400 });

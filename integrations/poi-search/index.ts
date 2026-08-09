@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
-import { normalizeFilter, OverpassTimeoutError, validateOverpassFilter } from "@openmapx/core";
+import {
+  bboxCacheKey,
+  normalizeFilter,
+  OverpassTimeoutError,
+  validateOverpassFilter,
+} from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { getChipTranslations, suggestPresets } from "@openmapx/presets";
 import { createPoiSearchOrchestrator } from "./orchestrator.js";
-
-function round(value: number, decimals: number): number {
-  const factor = 10 ** decimals;
-  return Math.round(value * factor) / factor;
-}
 
 export function setup(ctx: IntegrationContext): void {
   const orchestrator = createPoiSearchOrchestrator(ctx);
@@ -29,13 +29,7 @@ export function setup(ctx: IntegrationContext): void {
       }
     }
 
-    const bboxRounded = {
-      east: round(bbox.east, 2),
-      north: round(bbox.north, 2),
-      south: round(bbox.south, 2),
-      west: round(bbox.west, 2),
-    };
-    const cacheKey = `category:${category}:${bboxRounded.south},${bboxRounded.west},${bboxRounded.north},${bboxRounded.east}`;
+    const cacheKey = `category:${category}:${lang ?? "en"}:${bboxCacheKey(bbox)}`;
 
     try {
       const result = await ctx.cache.withCache(cacheKey, 300, () =>
@@ -61,7 +55,7 @@ export function setup(ctx: IntegrationContext): void {
     const { q, south, west, north, east, lang } = req.query;
 
     if (!q || q.trim().length < 2) {
-      reply.send({ results: [], partial: false });
+      reply.send({ results: [], partial: false, truncated: false, total: 0 });
       return;
     }
 
@@ -78,13 +72,7 @@ export function setup(ctx: IntegrationContext): void {
       }
     }
 
-    const bboxRounded = {
-      east: round(bbox.east, 2),
-      north: round(bbox.north, 2),
-      south: round(bbox.south, 2),
-      west: round(bbox.west, 2),
-    };
-    const cacheKey = `text:${q.trim().toLowerCase()}:${bboxRounded.south},${bboxRounded.west},${bboxRounded.north},${bboxRounded.east}`;
+    const cacheKey = `text:${q.trim().toLowerCase()}:${lang ?? "en"}:${bboxCacheKey(bbox)}`;
 
     try {
       const result = await ctx.cache.withCache(cacheKey, 300, () =>
@@ -157,17 +145,11 @@ export function setup(ctx: IntegrationContext): void {
       }
     }
 
-    const bboxRounded = {
-      east: round(bbox.east, 2),
-      north: round(bbox.north, 2),
-      south: round(bbox.south, 2),
-      west: round(bbox.west, 2),
-    };
     const sortedTagKey = Object.keys(attributes)
       .sort()
       .map((k) => `${k}=${attributes[k]}`)
       .join(",");
-    const cacheKey = `filtered:${category}:${sortedTagKey}:${bboxRounded.south},${bboxRounded.west},${bboxRounded.north},${bboxRounded.east}`;
+    const cacheKey = `filtered:${category}:${sortedTagKey}:${lang ?? "en"}:${bboxCacheKey(bbox)}`;
 
     try {
       const result = await ctx.cache.withCache(cacheKey, 300, () =>
@@ -253,17 +235,11 @@ export function setup(ctx: IntegrationContext): void {
 
     const lang = typeof body?.lang === "string" ? body.lang : undefined;
 
-    const bboxRounded = {
-      east: round(bbox.east, 2),
-      north: round(bbox.north, 2),
-      south: round(bbox.south, 2),
-      west: round(bbox.west, 2),
-    };
     const filterHash = createHash("sha256")
       .update(JSON.stringify(normalizeFilter(v.filter)))
       .digest("hex")
       .slice(0, 16);
-    const cacheKey = `filter:${filterHash}:${bboxRounded.south},${bboxRounded.west},${bboxRounded.north},${bboxRounded.east}`;
+    const cacheKey = `filter:${filterHash}:${lang ?? "en"}:${bboxCacheKey(bbox)}`;
 
     try {
       const result = await ctx.cache.withCache(cacheKey, 300, () =>

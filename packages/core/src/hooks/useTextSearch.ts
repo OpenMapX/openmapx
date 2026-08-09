@@ -46,5 +46,15 @@ export function useTextSearchResults(lang?: string) {
   );
   const filtered = useExploreFilters(rawResults);
 
-  return { rawResults, filtered, isLoading, isError, error, partial, dominantCategory };
+  return {
+    rawResults,
+    filtered,
+    isLoading,
+    isError,
+    error,
+    partial,
+    truncated: data?.truncated ?? false,
+    total: data?.total,
+    dominantCategory,
+  };
 }

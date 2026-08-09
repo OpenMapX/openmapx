@@ -486,6 +486,12 @@ export interface CategoryPlace {
 export interface CategorySearchResponse {
   results: CategoryPlace[];
   partial: boolean;
+  /** True when the bbox holds more matches than `results` carries, so the list
+   *  is a selection rather than the complete answer for the area. */
+  truncated?: boolean;
+  /** How many matches the bbox holds in total. Only present when that number is
+   *  exact — it is omitted once an upstream ceiling made it a lower bound. */
+  total?: number;
 }
 
 /** Set of category IDs that support the opening hours filter chip, derived from CATEGORY_DEFINITIONS. */
@@ -555,4 +561,23 @@ export interface PoiSearchResult {
   osmTags?: Record<string, string>;
   /** Set by the orchestrator after the provider returns results. */
   openingHoursInfo?: OpeningHoursInfo;
+}
+
+/**
+ * Richer provider return that also says whether the provider's own result
+ * ceiling cut the set. Providers may keep returning a bare array — callers
+ * normalize both shapes — so out-of-tree extensions stay source compatible.
+ */
+export interface PoiSearchOutcome {
+  results: PoiSearchResult[];
+  /** True when the provider hit its own ceiling, so `results` is a selection of
+   *  the matches in the bbox rather than all of them. */
+  truncated?: boolean;
+}
+
+export type PoiSearchReturn = PoiSearchResult[] | PoiSearchOutcome;
+
+/** Widen a provider return to {@link PoiSearchOutcome}, defaulting the flag. */
+export function toPoiSearchOutcome(value: PoiSearchReturn): PoiSearchOutcome {
+  return Array.isArray(value) ? { results: value, truncated: false } : value;
 }

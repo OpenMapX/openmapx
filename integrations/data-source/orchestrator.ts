@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { bboxCacheKey } from "@openmapx/core";
 import type {
   IntegrationContext,
   MobilityDataSourceProvider,
@@ -8,11 +9,6 @@ const DEFAULT_SEARCH_TTL = 21600;
 const DEFAULT_DETAIL_TTL = 21600;
 const DEFAULT_MAP_CONTEXT_TTL = 300;
 const FILTER_TTL = 172800;
-
-function round(value: number, decimals: number): number {
-  const factor = 10 ** decimals;
-  return Math.round(value * factor) / factor;
-}
 
 function hashKey(prefix: string, data: unknown): string {
   const hash = createHash("sha256").update(JSON.stringify(data)).digest("hex").slice(0, 16);
@@ -78,9 +74,8 @@ export function createDataSourceOrchestrator(ctx: IntegrationContext) {
     bbox: { south: number; west: number; north: number; east: number },
     filters?: Record<string, unknown>,
   ): string {
-    const roundedBbox = `${round(bbox.south, 2)},${round(bbox.west, 2)},${round(bbox.north, 2)},${round(bbox.east, 2)}`;
     const filterHash = filters ? hashKey("f", filters) : "none";
-    return `ds:search:${providerId}:${roundedBbox}:${filterHash}`;
+    return `ds:search:${providerId}:${bboxCacheKey(bbox)}:${filterHash}`;
   }
 
   function detailCacheKey(providerId: string, itemId: string): string {
@@ -94,10 +89,9 @@ export function createDataSourceOrchestrator(ctx: IntegrationContext) {
     filters?: Record<string, unknown>,
     options?: Record<string, unknown>,
   ): string {
-    const roundedBbox = `${round(bbox.south, 2)},${round(bbox.west, 2)},${round(bbox.north, 2)},${round(bbox.east, 2)}`;
     const filterHash = filters ? hashKey("f", filters) : "none";
     const optionsHash = options ? hashKey("o", options) : "none";
-    return `ds:map-context:${providerId}:${roundedBbox}:${filterHash}:${optionsHash}`;
+    return `ds:map-context:${providerId}:${bboxCacheKey(bbox)}:${filterHash}:${optionsHash}`;
   }
 
   return {

@@ -1,6 +1,12 @@
+import { toPoiSearchOutcome } from "@openmapx/core";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
-import type { PoiSearchProvider } from "@openmapx/integration-poi-search/types";
+import type { PoiSearchProvider, PoiSearchReturn } from "@openmapx/integration-poi-search/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+/** Providers may answer with a bare array or an outcome; normalize either. */
+async function toOutcome(pending: Promise<PoiSearchReturn>) {
+  return toPoiSearchOutcome(await pending);
+}
 
 const BBOX = { south: 52.49, west: 13.38, north: 52.53, east: 13.43 };
 
@@ -98,8 +104,11 @@ describe("poi-overture provider.search", () => {
     const { setup } = await import("../index.js");
     setup(ctx);
     const provider = ctx.registered.poiSearch[0] as PoiSearchProvider;
-    const results = await provider.search("cafes", BBOX, { lang: "de-DE" });
+    const { results, truncated } = await toOutcome(
+      provider.search("cafes", BBOX, { lang: "de-DE" }),
+    );
     expect(results.length).toBe(2);
+    expect(truncated).toBe(false);
     const first = results[0];
     expect(first.id).toBe("overture:gers-abc-001");
     expect(first.gersId).toBe("gers-abc-001");
@@ -124,7 +133,7 @@ describe("poi-overture provider.search", () => {
     const { setup } = await import("../index.js");
     setup(ctx);
     const provider = ctx.registered.poiSearch[0] as PoiSearchProvider;
-    const results = await provider.search("drinking_water", BBOX);
+    const { results } = await toOutcome(provider.search("drinking_water", BBOX));
     expect(results).toEqual([]);
     expect(db.execute).not.toHaveBeenCalled();
   });
@@ -135,7 +144,7 @@ describe("poi-overture provider.search", () => {
     const { setup } = await import("../index.js");
     setup(ctx);
     const provider = ctx.registered.poiSearch[0] as PoiSearchProvider;
-    const results = await provider.search("restaurants", BBOX);
+    const { results } = await toOutcome(provider.search("restaurants", BBOX));
     expect(results[0].phone).toBe("+49 30 12345678");
   });
 });

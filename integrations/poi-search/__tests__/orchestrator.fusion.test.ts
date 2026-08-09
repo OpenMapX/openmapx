@@ -1,4 +1,4 @@
-import { OverpassTimeoutError } from "@openmapx/core";
+import { MAX_POI_SEARCH_RESULTS, OverpassTimeoutError } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
 import { createPoiSearchOrchestrator } from "../orchestrator";
 import type { PoiSearchProvider, PoiSearchResult } from "../types";
@@ -113,12 +113,12 @@ describe("(B2) Result quality", () => {
     ]);
   });
 
-  it("caps even a single provider at 50 results", async () => {
+  it("caps even a single provider at the public result limit", async () => {
     const provider: PoiSearchProvider = {
       id: "overpass",
       categories: ["cafes"],
       async search() {
-        return Array.from({ length: 75 }, (_, index) => ({
+        return Array.from({ length: MAX_POI_SEARCH_RESULTS + 25 }, (_, index) => ({
           id: `osm:node/${index}`,
           name: `Cafe ${index}`,
           coordinates: [13.4 + index / 100_000, 52.51] as [number, number],
@@ -127,7 +127,7 @@ describe("(B2) Result quality", () => {
       },
     };
     const result = await createPoiSearchOrchestrator(makeCtx([provider])).search("cafes", BBOX);
-    expect(result.results).toHaveLength(50);
+    expect(result.results).toHaveLength(MAX_POI_SEARCH_RESULTS);
   });
 });
 

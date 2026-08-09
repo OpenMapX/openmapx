@@ -194,8 +194,17 @@ export function CategoryResultsContent() {
   const expandOnBackgroundTap = useExpandOnBackgroundTap();
   const registry = useIntegrationRegistry();
 
-  const { filtered, isLoading, isError, error, partial, relaxed, isTransitCategory } =
-    useExploreReachResults();
+  const {
+    filtered,
+    isLoading,
+    isError,
+    error,
+    partial,
+    truncated,
+    total,
+    relaxed,
+    isTransitCategory,
+  } = useExploreReachResults();
   const transitStopsQuery = useTransitStops(isTransitCategory ? searchBbox : null);
   const { data: transitStops, isPending: transitPending } = transitStopsQuery;
   const transitAttributions = useAttributionFromHooks(transitStopsQuery);
@@ -331,6 +340,20 @@ export function CategoryResultsContent() {
         <Box sx={{ px: 2, pt: 1.5 }}>
           <Alert severity="info" variant="outlined">
             {ts("partialResults")}
+          </Alert>
+        </Box>
+      )}
+      {/* The area holds more matches than the result cap returns. `partial`
+          already tells the stronger story (something failed), so only one of the
+          two notices ever shows. Both phrasings describe the *area*, never "showing
+          N" — the count below is post-filter, so a "showing N" here would contradict
+          it whenever an hours or facet chip is active. */}
+      {!isTransitCategory && !isError && !partial && truncated && (
+        <Box sx={{ px: 2, pt: 1.5 }}>
+          <Alert severity="info" variant="outlined">
+            {total === undefined
+              ? ts("truncatedResultsUnknown")
+              : ts("truncatedResults", { total })}
           </Alert>
         </Box>
       )}

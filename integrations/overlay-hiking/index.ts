@@ -1,4 +1,4 @@
-import { fetchJson, OverpassRateLimitError, USER_AGENT } from "@openmapx/core";
+import { bboxCacheKey, fetchJson, OverpassRateLimitError, USER_AGENT } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { fetchRouteGeometry } from "./overpass-geometry.js";
 import { searchTrails, trailDetail, trailsByArea } from "./waymarked-trails.js";
@@ -16,11 +16,6 @@ export function classifyShelterType(rawType: string): string {
   if (t.includes("passage") || t.includes("col") || t.includes("pass")) return "pt_passage";
   if (t.includes("hut") || t.includes("shelter")) return "cabane";
   return "cabane";
-}
-
-function round(n: number, decimals: number): number {
-  const f = 10 ** decimals;
-  return Math.round(n * f) / f;
 }
 
 export function setup(ctx: IntegrationContext): void {
@@ -102,11 +97,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const rs = round(south, 2);
-    const rw = round(west, 2);
-    const rn = round(north, 2);
-    const re = round(east, 2);
-    const cacheKey = `area:${rs},${rw},${rn},${re}:${limit}`;
+    const cacheKey = `area:${bboxCacheKey({ south, west, north, east })}:${limit}`;
 
     try {
       const cached = await ctx.cache.get(cacheKey);
@@ -114,7 +105,7 @@ export function setup(ctx: IntegrationContext): void {
         reply.send(cached);
         return;
       }
-      const results = await trailsByArea(rs, rw, rn, re, limit);
+      const results = await trailsByArea(south, west, north, east, limit);
       await ctx.cache.set(cacheKey, results, CACHE_TTL_SHORT);
       reply.send(results);
     } catch (err) {
@@ -187,11 +178,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const rs = round(south, 2);
-    const rw = round(west, 2);
-    const rn = round(north, 2);
-    const re = round(east, 2);
-    const cacheKey = `shelters:${rs},${rw},${rn},${re}:${typeFilter}`;
+    const cacheKey = `shelters:${bboxCacheKey({ south, west, north, east })}:${typeFilter}`;
 
     try {
       const cached = await ctx.cache.get(cacheKey);
@@ -200,7 +187,7 @@ export function setup(ctx: IntegrationContext): void {
         return;
       }
 
-      const bbox = `${rw},${rs},${re},${rn}`;
+      const bbox = `${west},${south},${east},${north}`;
       let url = `https://www.refuges.info/api/bbox?bbox=${bbox}&format=geojson&detail=simple&nb_points=200`;
       if (typeFilter) {
         url += `&type_points=${encodeURIComponent(typeFilter)}`;

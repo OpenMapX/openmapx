@@ -1,11 +1,11 @@
+import type { PoiSearchOutcome } from "../types/category";
 import type { BoundingBox } from "../types/geometry";
-import { overpassQuery } from "./overpass";
 import type { CategoryPlaceResult } from "./overpass.service";
 import {
   CATEGORY_FILTERS,
   escapeOverpassLiteral,
-  MAX_RESULTS,
-  mapOverpassElements,
+  overpassOutStatement,
+  overpassPoiSearch,
 } from "./overpass.service";
 
 /**
@@ -220,8 +220,8 @@ function compilePredicate(pred: TagPredicate, exclude: boolean): string {
 /**
  * Compile a validated `OverpassFilter` to an Overpass QL query string.
  * Selectors are OR-ed; require and exclude predicates are AND-ed onto every
- * line. The result is wrapped in `[out:json][timeout:15]` and capped at
- * `out center 50`.
+ * line. The result is wrapped in `[out:json][timeout:15]` and bounded by the
+ * shared Overpass fetch ceiling.
  */
 export function buildFilterQuery(filter: OverpassFilter, bbox: BoundingBox): string {
   const { south, west, north, east } = bbox;
@@ -239,7 +239,7 @@ export function buildFilterQuery(filter: OverpassFilter, bbox: BoundingBox): str
     }
   }
 
-  return `[out:json][timeout:15];\n(\n  ${lines.join("\n  ")}\n);\nout center ${MAX_RESULTS};`;
+  return `[out:json][timeout:15];\n(\n  ${lines.join("\n  ")}\n);\n${overpassOutStatement()}`;
 }
 
 function sortPredicates(preds: TagPredicate[]): TagPredicate[] {
@@ -320,10 +320,8 @@ export function categoriesToFilter(
 export async function searchByFilter(
   filter: OverpassFilter,
   bbox: BoundingBox,
-): Promise<CategoryPlaceResult[]> {
-  const query = buildFilterQuery(filter, bbox);
-  const data = await overpassQuery(query);
-  return mapOverpassElements(data.elements);
+): Promise<PoiSearchOutcome> {
+  return overpassPoiSearch(buildFilterQuery(filter, bbox));
 }
 
 /**

@@ -1,3 +1,4 @@
+import type { PoiSearchOutcome } from "../types/category";
 import type { BoundingBox } from "../types/geometry";
 import type { PlaceProvenance } from "../types/place";
 import type { OsmFilter } from "./osmCategoryFilters";
@@ -7,7 +8,22 @@ import type { OverpassElement } from "./overpass/types";
 export type { OsmFilter } from "./osmCategoryFilters";
 export { CATEGORY_FILTERS } from "./osmCategoryFilters";
 
-export const MAX_RESULTS = 50;
+/**
+ * How many elements a POI query asks Overpass for.
+ *
+ * Overpass evaluates the whole statement regardless of the `out` limit — the
+ * limit only bounds serialization — so a wide ceiling costs transfer, not query
+ * time. It has to be wide, because `out` truncates in element order (nodes
+ * before ways, ascending OSM id), which is uncorrelated with location: a low
+ * ceiling silently returns the oldest matches in the bbox and drops the rest.
+ * Callers narrow this candidate pool to the display cap themselves, by
+ * relevance and spatial spread.
+ *
+ * Kept several times the display cap on purpose. The surplus is what lets the
+ * spatial selection choose, and what keeps the reported match total exact —
+ * once this ceiling is hit the total degrades to a lower bound and is withheld.
+ */
+export const OVERPASS_FETCH_LIMIT = 1000;
 
 export type { BoundingBox };
 
@@ -29,6 +45,27 @@ export interface CategoryPlaceResult {
   fuelAttribution?: { label: string; url: string };
 }
 
+/**
+ * The trailing `out` statement shared by every POI query. One element beyond
+ * {@link OVERPASS_FETCH_LIMIT} is requested so that hitting the ceiling is
+ * detectable rather than silent — see {@link overpassPoiSearch}.
+ */
+export function overpassOutStatement(): string {
+  return `out center ${OVERPASS_FETCH_LIMIT + 1};`;
+}
+
+/**
+ * Run a POI query and map it to results, reporting whether the fetch ceiling
+ * cut the set. The sentinel element beyond the ceiling is dropped rather than
+ * returned, so `results` never exceeds {@link OVERPASS_FETCH_LIMIT}.
+ */
+export async function overpassPoiSearch(query: string): Promise<PoiSearchOutcome> {
+  const data = await overpassQuery(query);
+  const truncated = data.elements.length > OVERPASS_FETCH_LIMIT;
+  const elements = truncated ? data.elements.slice(0, OVERPASS_FETCH_LIMIT) : data.elements;
+  return { results: mapOverpassElements(elements), truncated };
+}
+
 function buildCategoryQuery(filters: OsmFilter[], bbox: BoundingBox): string {
   const { south, west, north, east } = bbox;
   const bboxStr = `${south},${west},${north},${east}`;
@@ -38,7 +75,7 @@ function buildCategoryQuery(filters: OsmFilter[], bbox: BoundingBox): string {
       `way["${f.key}"="${f.value}"](${bboxStr});`,
     ])
     .join("\n  ");
-  return `[out:json][timeout:15];\n(\n  ${lines}\n);\nout center ${MAX_RESULTS};`;
+  return `[out:json][timeout:15];\n(\n  ${lines}\n);\n${overpassOutStatement()}`;
 }
 
 /**
@@ -55,12 +92,12 @@ function buildPresetQuery(tags: Record<string, string>, bbox: BoundingBox): stri
     .join("");
   if (tagPredicates.length === 0) {
     // Defensive: empty tag-set would otherwise match every node/way in the bbox.
-    return `[out:json][timeout:15];\n(\n);\nout center ${MAX_RESULTS};`;
+    return `[out:json][timeout:15];\n(\n);\n${overpassOutStatement()}`;
   }
   const lines = [`node${tagPredicates}(${bboxStr});`, `way${tagPredicates}(${bboxStr});`].join(
     "\n  ",
   );
-  return `[out:json][timeout:15];\n(\n  ${lines}\n);\nout center ${MAX_RESULTS};`;
+  return `[out:json][timeout:15];\n(\n  ${lines}\n);\n${overpassOutStatement()}`;
 }
 
 // OSM tag keys surfaced on results for client-side facet filters (wheelchair,
@@ -176,10 +213,8 @@ export function mapOverpassElements(elements: readonly OverpassElement[]): Categ
 export async function searchByCategory(
   filters: OsmFilter[],
   bbox: BoundingBox,
-): Promise<CategoryPlaceResult[]> {
-  const query = buildCategoryQuery(filters, bbox);
-  const data = await overpassQuery(query);
-  return mapOverpassElements(data.elements);
+): Promise<PoiSearchOutcome> {
+  return overpassPoiSearch(buildCategoryQuery(filters, bbox));
 }
 
 /**
@@ -191,10 +226,8 @@ export async function searchByCategory(
 export async function searchByOsmTags(
   tags: Record<string, string>,
   bbox: BoundingBox,
-): Promise<CategoryPlaceResult[]> {
-  const query = buildPresetQuery(tags, bbox);
-  const data = await overpassQuery(query);
-  return mapOverpassElements(data.elements);
+): Promise<PoiSearchOutcome> {
+  return overpassPoiSearch(buildPresetQuery(tags, bbox));
 }
 
 /** Escape backslash and double-quote so a literal value can be safely embedded inside `"..."`. */
@@ -226,17 +259,15 @@ export function buildCategoryWithAttributesQuery(
       `way["${f.key}"="${f.value}"]${attrs}(${bboxStr});`,
     ])
     .join("\n  ");
-  return `[out:json][timeout:15];\n(\n  ${lines}\n);\nout center ${MAX_RESULTS};`;
+  return `[out:json][timeout:15];\n(\n  ${lines}\n);\n${overpassOutStatement()}`;
 }
 
 export async function searchByCategoryWithAttributes(
   filters: OsmFilter[],
   attributes: Record<string, string>,
   bbox: BoundingBox,
-): Promise<CategoryPlaceResult[]> {
-  const query = buildCategoryWithAttributesQuery(filters, attributes, bbox);
-  const data = await overpassQuery(query);
-  return mapOverpassElements(data.elements);
+): Promise<PoiSearchOutcome> {
+  return overpassPoiSearch(buildCategoryWithAttributesQuery(filters, attributes, bbox));
 }
 
 // POI tag keys a free-text name search is scoped to, so we match named places
@@ -260,7 +291,7 @@ function buildTextQuery(query: string, bbox: BoundingBox): string {
     `node["name"~"${escaped}",i]["${key}"](${bboxStr});`,
     `way["name"~"${escaped}",i]["${key}"](${bboxStr});`,
   ]).join("\n  ");
-  return `[out:json][timeout:25];\n(\n  ${lines}\n);\nout center ${MAX_RESULTS};`;
+  return `[out:json][timeout:25];\n(\n  ${lines}\n);\n${overpassOutStatement()}`;
 }
 
 /**
@@ -269,11 +300,7 @@ function buildTextQuery(query: string, bbox: BoundingBox): string {
  * Returns the same rich shape as {@link searchByCategory} so the results panel
  * and facet filters work identically for text and category searches.
  */
-export async function searchByText(
-  query: string,
-  bbox: BoundingBox,
-): Promise<CategoryPlaceResult[]> {
-  if (query.trim().length === 0) return [];
-  const data = await overpassQuery(buildTextQuery(query, bbox));
-  return mapOverpassElements(data.elements);
+export async function searchByText(query: string, bbox: BoundingBox): Promise<PoiSearchOutcome> {
+  if (query.trim().length === 0) return { results: [], truncated: false };
+  return overpassPoiSearch(buildTextQuery(query, bbox));
 }

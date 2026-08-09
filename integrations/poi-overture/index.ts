@@ -9,6 +9,7 @@ import {
 import type { DatabaseClient, IntegrationContext } from "@openmapx/integration-framework";
 import type {
   CategoryId,
+  PoiSearchOutcome,
   PoiSearchProvider,
   PoiSearchResult,
 } from "@openmapx/integration-poi-search/types";
@@ -156,6 +157,15 @@ function overtureRowToPoiSearchResult(
   };
 }
 
+/**
+ * Rows fetched per bbox query. Ordered nearest-first, so this is a candidate
+ * pool the orchestrator narrows further — one row beyond it is fetched so
+ * hitting the ceiling is detectable and can be reported as truncation. Kept
+ * above the display cap so this augment source still has something to
+ * contribute after fusion with OSM.
+ */
+const OVERTURE_FETCH_LIMIT = 500;
+
 async function queryOverturePlaces(
   db: DatabaseClient,
   opts: { bbox: BoundingBox; concepts: string[]; lang?: string; minConfidence: number },
@@ -196,7 +206,7 @@ async function queryOverturePlaces(
       ((addresses IS NOT NULL)::INT + (websites IS NOT NULL)::INT +
        (phones IS NOT NULL)::INT + (emails IS NOT NULL)::INT) DESC,
       gers_id
-    LIMIT 200
+    LIMIT ${OVERTURE_FETCH_LIMIT + 1}
   `;
   const params: unknown[] = [bbox.west, bbox.south, bbox.east, bbox.north, concepts, minConfidence];
   return db.execute<OvertureRow[]>(sql, params);
@@ -288,10 +298,10 @@ export const overtureProvider: PoiSearchProvider = {
       filters?: Record<string, unknown>;
       osmTags?: Record<string, string>;
     },
-  ): Promise<PoiSearchResult[]> {
+  ): Promise<PoiSearchOutcome> {
     const concepts = openMapXCategoryToOvertureConcepts(category);
-    if (!concepts.length) return [];
-    if (!boundDb) return [];
+    if (!concepts.length) return { results: [], truncated: false };
+    if (!boundDb) return { results: [], truncated: false };
     const rows = await queryOverturePlaces(boundDb, {
       bbox,
       concepts,
@@ -300,9 +310,14 @@ export const overtureProvider: PoiSearchProvider = {
       // places; matches the offline conflation candidate floor.
       minConfidence: 0.5,
     });
-    return rows.map((row) =>
-      overtureRowToPoiSearchResult(row, category as CategoryId, _options?.lang),
-    );
+    const truncated = rows.length > OVERTURE_FETCH_LIMIT;
+    const kept = truncated ? rows.slice(0, OVERTURE_FETCH_LIMIT) : rows;
+    return {
+      results: kept.map((row) =>
+        overtureRowToPoiSearchResult(row, category as CategoryId, _options?.lang),
+      ),
+      truncated,
+    };
   },
 };
 

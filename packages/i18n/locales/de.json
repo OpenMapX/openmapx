@@ -231,6 +231,8 @@
     "failedToLoad": "Ergebnisse konnten nicht geladen werden. Erneut versuchen.",
     "zoomInToSearch": "Näher heranzoomen, um Ergebnisse in diesem Bereich zu sehen.",
     "partialResults": "Einige Ergebnisse fehlen möglicherweise. Für vollständige Ergebnisse näher heranzoomen.",
+    "truncatedResults": "In diesem Bereich gibt es {total} Treffer – zu viele für eine gleichzeitige Anzeige. Zum Anzeigen aller näher heranzoomen.",
+    "truncatedResultsUnknown": "In diesem Bereich gibt es mehr Treffer als angezeigt werden können. Für die übrigen näher heranzoomen.",
     "relaxedFilters": "Keine genauen Treffer. Ergebnisse in der Nähe ohne: {filters}",
     "emptyStateSignedOut": "Melde dich an, um deine gespeicherten Orte hier zu sehen.",
     "emptyStateNoLabels": "Deine gespeicherten Orte erscheinen hier.",

@@ -3,13 +3,32 @@ import {
   DEFAULT_CONFLATION_THRESHOLDS,
   fusePoiResults,
   OverpassTimeoutError,
-  rankAndLimitPoiResults,
+  rankPoiResults,
   removeFilterPredicate,
+  toPoiSearchOutcome,
 } from "@openmapx/core";
 import { buildOpeningHoursInfo } from "@openmapx/core/server";
 import { httpError, type IntegrationContext } from "@openmapx/integration-framework";
 import { getPresetById } from "@openmapx/presets";
-import type { PoiSearchProvider, PoiSearchResult } from "./types.js";
+import type { PoiSearchProvider, PoiSearchResult, PoiSearchReturn } from "./types.js";
+
+/**
+ * What every orchestrator search returns.
+ *
+ * `partial` means something went wrong (a provider failed, or the bbox had to
+ * be shrunk to beat a timeout). `truncated` means nothing went wrong but the
+ * area simply holds more matches than are being returned — a normal, expected
+ * state that the client still has to be told about, or it presents a selection
+ * as the complete answer. `total` is the exact number of matches in the area,
+ * and is deliberately absent whenever it could not be counted for exactly the
+ * requested bbox — see `finalize`.
+ */
+export interface PoiSearchResponse {
+  results: PoiSearchResult[];
+  partial: boolean;
+  truncated: boolean;
+  total?: number;
+}
 
 const MAX_SHRINK_RETRIES = 3;
 const SHRINK_FACTOR = 0.6;
@@ -94,15 +113,25 @@ function shrinkBbox(bbox: BoundingBox, factor: number): BoundingBox {
   };
 }
 
+/** One provider's answer, before ranking and the public result cap. */
+interface ProviderRun {
+  results: PoiSearchResult[];
+  partial: boolean;
+  truncated: boolean;
+}
+
+const EMPTY_RUN: ProviderRun = { results: [], partial: false, truncated: false };
+const FAILED_RUN: ProviderRun = { results: [], partial: true, truncated: false };
+
 async function runWithShrink(
-  fn: (bbox: BoundingBox) => Promise<PoiSearchResult[]>,
+  fn: (bbox: BoundingBox) => Promise<PoiSearchReturn>,
   bbox: BoundingBox,
-): Promise<{ results: PoiSearchResult[]; partial: boolean }> {
+): Promise<ProviderRun> {
   let currentBbox = bbox;
   for (let attempt = 0; ; attempt++) {
     try {
-      const results = await fn(currentBbox);
-      for (const r of results) {
+      const outcome = toPoiSearchOutcome(await fn(currentBbox));
+      for (const r of outcome.results) {
         if (r.openingHours && !r.openingHoursInfo) {
           r.openingHoursInfo = buildOpeningHoursInfo(r.openingHours, {
             lat: r.coordinates[1],
@@ -110,7 +139,11 @@ async function runWithShrink(
           });
         }
       }
-      return { results, partial: attempt > 0 };
+      return {
+        results: outcome.results,
+        partial: attempt > 0,
+        truncated: outcome.truncated ?? false,
+      };
     } catch (err) {
       if (err instanceof OverpassTimeoutError && attempt < MAX_SHRINK_RETRIES) {
         currentBbox = shrinkBbox(currentBbox, SHRINK_FACTOR);
@@ -119,6 +152,26 @@ async function runWithShrink(
       throw err;
     }
   }
+}
+
+/**
+ * Rank a provider run, apply the public cap, and describe what was left out.
+ *
+ * `total` is only reported when it is an exact count *for the requested bbox*.
+ * Two things spoil that and both must withhold it, since the response is
+ * publicly cached and a wrong total is worse than none: a provider ceiling
+ * turns it into a floor, and a timeout shrink turns it into a count for a
+ * smaller box than the caller asked about.
+ */
+function finalize(run: ProviderRun, bbox: BoundingBox): PoiSearchResponse {
+  const ranked = rankPoiResults(run.results, bbox);
+  const totalIsExact = !run.truncated && !run.partial;
+  return {
+    results: ranked.results,
+    partial: run.partial,
+    truncated: run.truncated || ranked.truncated,
+    ...(totalIsExact ? { total: ranked.total } : {}),
+  };
 }
 
 export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
@@ -136,7 +189,7 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
     category: unknown,
     bbox: BoundingBox,
     options?: { lang?: string },
-  ): Promise<{ results: PoiSearchResult[]; partial: boolean }> {
+  ): Promise<PoiSearchResponse> {
     if (typeof category !== "string" || category.length === 0) {
       throw httpError(400, "Missing or invalid category");
     }
@@ -163,12 +216,12 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
 
     if (matching.length === 1) {
       const provider = matching[0];
-      const result = await runWithShrink(
+      const run = await runWithShrink(
         (currentBbox) =>
           provider.search(lookupCategory, currentBbox, { lang: options?.lang, osmTags }),
         bbox,
       );
-      return { ...result, results: rankAndLimitPoiResults(result.results, bbox) };
+      return finalize(run, bbox);
     }
 
     // The OSM/Overpass provider is the authoritative base set; every other
@@ -188,22 +241,21 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
             bbox,
           ).catch((err: unknown) => {
             if (err instanceof OverpassTimeoutError) throw err;
-            return { results: [] as PoiSearchResult[], partial: true };
+            return FAILED_RUN;
           })
-        : { results: [] as PoiSearchResult[], partial: false };
+        : EMPTY_RUN;
 
     const augmentSettled = await Promise.all(
       augmentProviders.map((p) =>
         runWithShrink(
           (currentBbox) => p.search(lookupCategory, currentBbox, { lang: options?.lang, osmTags }),
           bbox,
-        ).catch(() => ({ results: [] as PoiSearchResult[], partial: true })),
+        ).catch(() => FAILED_RUN),
       ),
     );
 
     const osmResults = baseResult.results;
     const augmentResults = augmentSettled.flatMap((s) => s.results);
-    const partial = baseResult.partial || augmentSettled.some((s) => s.partial);
 
     const linkMap = await buildConflationLinkMap(ctx, osmResults);
 
@@ -213,46 +265,35 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
       DEFAULT_CONFLATION_THRESHOLDS,
       linkMap,
     );
-    return {
-      results: rankAndLimitPoiResults(fused, bbox),
-      partial,
-    };
+    return finalize(
+      {
+        results: fused,
+        partial: baseResult.partial || augmentSettled.some((s) => s.partial),
+        truncated: baseResult.truncated || augmentSettled.some((s) => s.truncated),
+      },
+      bbox,
+    );
   }
 
   async function searchText(
     query: unknown,
     bbox: BoundingBox,
     options?: { lang?: string },
-  ): Promise<{ results: PoiSearchResult[]; partial: boolean }> {
+  ): Promise<PoiSearchResponse> {
     if (typeof query !== "string" || query.trim().length === 0) {
       throw httpError(400, "Missing or empty query");
     }
     const provider = getProviders().find((p) => typeof p.searchText === "function");
-    if (!provider?.searchText) {
+    const searchTextFn = provider?.searchText;
+    if (!searchTextFn) {
       throw httpError(400, "No text-search provider available");
     }
 
-    let currentBbox = bbox;
-    for (let attempt = 0; ; attempt++) {
-      try {
-        const results = await provider.searchText(query, currentBbox, { lang: options?.lang });
-        for (const r of results) {
-          if (r.openingHours && !r.openingHoursInfo) {
-            r.openingHoursInfo = buildOpeningHoursInfo(r.openingHours, {
-              lat: r.coordinates[1],
-              lon: r.coordinates[0],
-            });
-          }
-        }
-        return { results, partial: attempt > 0 };
-      } catch (err) {
-        if (err instanceof OverpassTimeoutError && attempt < MAX_SHRINK_RETRIES) {
-          currentBbox = shrinkBbox(currentBbox, SHRINK_FACTOR);
-          continue;
-        }
-        throw err;
-      }
-    }
+    const run = await runWithShrink(
+      (currentBbox) => searchTextFn.call(provider, query, currentBbox, { lang: options?.lang }),
+      bbox,
+    );
+    return finalize(run, bbox);
   }
 
   async function searchFiltered(
@@ -260,94 +301,58 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
     attributes: Record<string, string>,
     bbox: BoundingBox,
     options?: { lang?: string },
-  ): Promise<{ results: PoiSearchResult[]; partial: boolean }> {
+  ): Promise<PoiSearchResponse> {
     if (typeof category !== "string" || category.length === 0) {
       throw Object.assign(new Error("Missing or invalid category"), { statusCode: 400 });
     }
     const provider = getProviders().find(
       (p) => typeof p.searchFiltered === "function" && p.categories.includes(category),
     );
-    if (!provider?.searchFiltered) {
+    const searchFilteredFn = provider?.searchFiltered;
+    if (!searchFilteredFn) {
       throw Object.assign(new Error(`No filtered-search provider for category: ${category}`), {
         statusCode: 400,
       });
     }
-    let currentBbox = bbox;
-    for (let attempt = 0; ; attempt++) {
-      try {
-        const results = await provider.searchFiltered(category, attributes, currentBbox, {
+
+    const run = await runWithShrink(
+      (currentBbox) =>
+        searchFilteredFn.call(provider, category, attributes, currentBbox, {
           lang: options?.lang,
-        });
-        for (const r of results) {
-          if (r.openingHours && !r.openingHoursInfo) {
-            r.openingHoursInfo = buildOpeningHoursInfo(r.openingHours, {
-              lat: r.coordinates[1],
-              lon: r.coordinates[0],
-            });
-          }
-        }
-        return { results, partial: attempt > 0 };
-      } catch (err) {
-        if (err instanceof OverpassTimeoutError && attempt < MAX_SHRINK_RETRIES) {
-          currentBbox = shrinkBbox(currentBbox, SHRINK_FACTOR);
-          continue;
-        }
-        throw err;
-      }
-    }
+        }),
+      bbox,
+    );
+    return finalize(run, bbox);
   }
 
   async function searchByFilter(
     filter: OverpassFilter,
     bbox: BoundingBox,
     options?: { lang?: string },
-  ): Promise<{ results: PoiSearchResult[]; partial: boolean; relaxed: TagPredicate[] }> {
+  ): Promise<PoiSearchResponse & { relaxed: TagPredicate[] }> {
     const provider = getProviders().find((p) => typeof p.searchByFilter === "function");
-    if (!provider?.searchByFilter) {
+    const searchByFilterFn = provider?.searchByFilter;
+    if (!searchByFilterFn) {
       throw httpError(400, "No filter-search provider available");
     }
-    const boundSearch = provider.searchByFilter.bind(provider);
 
-    // Run one filter with the existing shrink-on-timeout retry, enriching each
-    // result's opening-hours info before returning.
-    async function runWithShrinkFilter(
-      f: OverpassFilter,
-    ): Promise<{ results: PoiSearchResult[]; partial: boolean }> {
-      let currentBbox = bbox;
-      for (let attempt = 0; ; attempt++) {
-        try {
-          const results = await boundSearch(f, currentBbox, { lang: options?.lang });
-          for (const r of results) {
-            if (r.openingHours && !r.openingHoursInfo) {
-              r.openingHoursInfo = buildOpeningHoursInfo(r.openingHours, {
-                lat: r.coordinates[1],
-                lon: r.coordinates[0],
-              });
-            }
-          }
-          return { results, partial: attempt > 0 };
-        } catch (err) {
-          if (err instanceof OverpassTimeoutError && attempt < MAX_SHRINK_RETRIES) {
-            currentBbox = shrinkBbox(currentBbox, SHRINK_FACTOR);
-            continue;
-          }
-          throw err;
-        }
-      }
-    }
+    const runFilter = (f: OverpassFilter) =>
+      runWithShrink(
+        (currentBbox) => searchByFilterFn.call(provider, f, currentBbox, { lang: options?.lang }),
+        bbox,
+      );
 
-    const full = await runWithShrinkFilter(filter);
+    const full = await runFilter(filter);
     // Enough exact matches, or no attribute predicates to drop — return as-is.
     if (full.results.length >= RELAX_MIN_RESULTS || (filter.require?.length ?? 0) === 0) {
-      return { ...full, relaxed: [] };
+      return { ...finalize(full, bbox), relaxed: [] };
     }
 
     // Too few exact matches: progressively drop `require` predicates from the
     // end (never the category selectors) until we clear the threshold or run
     // out of allowed drops.
     let working = filter;
-    let bestResults = full.results;
-    let anyPartial = full.partial;
+    let best = full;
     const relaxed: TagPredicate[] = [];
     const maxDrops = Math.min(filter.require?.length ?? 0, MAX_RELAX_DROPS);
     for (let i = 0; i < maxDrops; i++) {
@@ -355,19 +360,18 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
       if (!reqs || reqs.length === 0) break;
       relaxed.push(reqs[reqs.length - 1]);
       working = removeFilterPredicate(working, "require", reqs.length - 1);
-      const next = await runWithShrinkFilter(working);
-      anyPartial = anyPartial || next.partial;
-      bestResults = next.results;
-      if (bestResults.length >= RELAX_MIN_RESULTS) break;
+      const next = await runFilter(working);
+      best = { ...next, partial: best.partial || next.partial };
+      if (best.results.length >= RELAX_MIN_RESULTS) break;
     }
 
     // Relaxing only helps when it surfaced more than the strict query did. If it
     // never did (e.g. the area is simply empty), keep the strict results and
     // report no relaxation so the UI doesn't claim filters were ignored.
-    if (bestResults.length > full.results.length) {
-      return { results: bestResults, partial: anyPartial, relaxed };
+    if (best.results.length > full.results.length) {
+      return { ...finalize(best, bbox), relaxed };
     }
-    return { ...full, relaxed: [] };
+    return { ...finalize(full, bbox), relaxed: [] };
   }
 
   return { search, searchText, searchFiltered, searchByFilter, getProviders };

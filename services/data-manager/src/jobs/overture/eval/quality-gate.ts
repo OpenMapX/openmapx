@@ -24,6 +24,15 @@ export interface OvertureQualityGateResult {
   cases: OvertureQualityCaseResult[];
 }
 
+/**
+ * Result window the baseline judgments were labeled against. Pinned rather than
+ * inherited from the product display cap: the gate's thresholds (known
+ * irrelevant and duplicate hits) count occurrences inside the window, so
+ * widening it would move the measurements without any change in conflation
+ * quality. Re-label the baselines before changing this.
+ */
+const QUALITY_GATE_RESULT_WINDOW = 50;
+
 /** True when the imported Geofabrik region contains the labeled case. */
 export function appliesToImportedRegion(importedRegion: string, caseRegion: string): boolean {
   assertValidRegion(importedRegion);
@@ -172,6 +181,7 @@ async function queryFusedCase(
   return rankAndLimitPoiResults(
     fusePoiResults(osm, overture, DEFAULT_CONFLATION_THRESHOLDS, links),
     { west, south, east, north },
+    QUALITY_GATE_RESULT_WINDOW,
   );
 }
 

@@ -231,6 +231,8 @@
     "failedToLoad": "Failed to load results. Try again.",
     "zoomInToSearch": "Zoom in to see results in this area.",
     "partialResults": "Some results may be missing. Zoom in for complete results.",
+    "truncatedResults": "This area has {total} matches — too many to show at once. Zoom in to see them all.",
+    "truncatedResultsUnknown": "This area has more matches than can be shown. Zoom in to see the rest.",
     "relaxedFilters": "No exact matches. Showing nearby results without: {filters}",
     "emptyStateSignedOut": "Sign in to see your saved places here.",
     "emptyStateNoLabels": "Your saved places will appear here.",

@@ -1,4 +1,5 @@
 import type { OverpassFilter, TagPredicate } from "@openmapx/core";
+import { MAX_POI_SEARCH_RESULTS, OverpassTimeoutError } from "@openmapx/core";
 import { describe, expect, it, vi } from "vitest";
 import { createPoiSearchOrchestrator } from "../orchestrator";
 import type { PoiSearchProvider, PoiSearchResult } from "../types";
@@ -131,5 +132,95 @@ describe("orchestrator searchByFilter progressive relaxation", () => {
     const result = await orch.searchByFilter(filterWithRequire([WIFI]), bbox);
     expect(result.results).toHaveLength(1);
     expect(result.relaxed).toEqual([]);
+  });
+});
+
+// Results spread across the bbox, so the spatial selection has something to
+// spread — coincident points would all land in one grid cell.
+function spreadResults(n: number): PoiSearchResult[] {
+  return Array.from({ length: n }, (_, i) => ({
+    id: `osm:node/${i}`,
+    name: `Place ${i}`,
+    coordinates: [13.4 + (i % 10) * 0.01, 52.5 + Math.floor(i / 10) * 0.005] as [number, number],
+  }));
+}
+
+describe("orchestrator truncation reporting", () => {
+  function providerReturning(value: unknown): PoiSearchProvider {
+    return {
+      id: "overpass",
+      categories: ["cafes"],
+      search: vi.fn(async () => value),
+      searchText: vi.fn(async () => value),
+      searchByFilter: vi.fn(async () => value),
+    } as unknown as PoiSearchProvider;
+  }
+
+  it("reports the exact total and flags truncation when the cap drops candidates", async () => {
+    const over = MAX_POI_SEARCH_RESULTS + 20;
+    const orch = createPoiSearchOrchestrator(makeCtx(providerReturning(spreadResults(over))));
+    const result = await orch.search("cafes", bbox);
+    expect(result.results).toHaveLength(MAX_POI_SEARCH_RESULTS);
+    expect(result.truncated).toBe(true);
+    expect(result.total).toBe(over);
+  });
+
+  it("reports no truncation when everything fits under the cap", async () => {
+    const orch = createPoiSearchOrchestrator(makeCtx(providerReturning(spreadResults(12))));
+    const result = await orch.search("cafes", bbox);
+    expect(result).toMatchObject({ truncated: false, total: 12 });
+  });
+
+  it("omits total when the provider itself hit a ceiling, since it is only a floor", async () => {
+    const provider = providerReturning({
+      results: spreadResults(MAX_POI_SEARCH_RESULTS + 20),
+      truncated: true,
+    });
+    const orch = createPoiSearchOrchestrator(makeCtx(provider));
+    const result = await orch.search("cafes", bbox);
+    expect(result.truncated).toBe(true);
+    expect(result.total).toBeUndefined();
+  });
+
+  it("accepts a bare array from a provider that does not report truncation", async () => {
+    const orch = createPoiSearchOrchestrator(makeCtx(providerReturning(spreadResults(3))));
+    const result = await orch.search("cafes", bbox);
+    expect(result.results).toHaveLength(3);
+    expect(result.truncated).toBe(false);
+  });
+
+  it("withholds the total after a timeout shrink, since it describes a smaller bbox", async () => {
+    // First attempt times out; the retry against the shrunk bbox succeeds, so
+    // the count we end up with is not a count for the requested area.
+    let calls = 0;
+    const provider = {
+      id: "overpass",
+      categories: ["cafes"],
+      search: vi.fn(async () => {
+        calls += 1;
+        if (calls === 1) throw new OverpassTimeoutError("area_too_large");
+        return spreadResults(12);
+      }),
+    } as unknown as PoiSearchProvider;
+
+    const result = await createPoiSearchOrchestrator(makeCtx(provider)).search("cafes", bbox);
+    expect(result.partial).toBe(true);
+    expect(result.total).toBeUndefined();
+  });
+
+  it("caps and reports truncation on the text path too", async () => {
+    const over = MAX_POI_SEARCH_RESULTS + 30;
+    const orch = createPoiSearchOrchestrator(makeCtx(providerReturning(spreadResults(over))));
+    const result = await orch.searchText("cafe", bbox);
+    expect(result.results).toHaveLength(MAX_POI_SEARCH_RESULTS);
+    expect(result).toMatchObject({ truncated: true, total: over });
+  });
+
+  it("caps and reports truncation on the structured-filter path too", async () => {
+    const over = MAX_POI_SEARCH_RESULTS + 30;
+    const orch = createPoiSearchOrchestrator(makeCtx(providerReturning(spreadResults(over))));
+    const result = await orch.searchByFilter(validFilter, bbox);
+    expect(result.results).toHaveLength(MAX_POI_SEARCH_RESULTS);
+    expect(result).toMatchObject({ truncated: true, total: over });
   });
 });

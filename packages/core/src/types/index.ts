@@ -3,12 +3,15 @@ export type {
   CategoryId,
   CategoryPlace,
   CategorySearchResponse,
+  PoiSearchOutcome,
   PoiSearchResult,
+  PoiSearchReturn,
 } from "./category";
 export {
   CATEGORY_DEFINITIONS,
   categoryPlaceToPlace,
   HOURS_FILTER_CATEGORY_IDS,
+  toPoiSearchOutcome,
 } from "./category";
 export type {
   DataSourceAttribution,

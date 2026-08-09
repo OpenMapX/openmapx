@@ -126,7 +126,7 @@ class FuelDataSourceProvider implements MobilityDataSourceProvider {
       // Fallback to Overpass for areas without dedicated fuel price providers
       const osmFilters = CATEGORY_FILTERS.fuel;
       if (!osmFilters) return wrapStatic([], []);
-      const osmResults = await searchByCategory(osmFilters, bbox);
+      const { results: osmResults } = await searchByCategory(osmFilters, bbox);
       results = osmResults.map((r) => ({
         id: r.id,
         name: r.name,

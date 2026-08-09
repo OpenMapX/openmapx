@@ -9,4 +9,9 @@ export {
   categoryPlaceToPlace,
   HOURS_FILTER_CATEGORY_IDS,
 } from "@openmapx/core";
-export type { PoiSearchProvider, PoiSearchResult } from "@openmapx/integration-framework";
+export type {
+  PoiSearchOutcome,
+  PoiSearchProvider,
+  PoiSearchResult,
+  PoiSearchReturn,
+} from "@openmapx/integration-framework";

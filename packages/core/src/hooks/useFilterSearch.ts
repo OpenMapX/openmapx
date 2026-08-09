@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
-import type { CategoryPlace } from "../types/category";
+import type { CategorySearchResponse } from "../types/category";
 import type { BoundingBox } from "../types/geometry";
 import { normalizeFilter, type OverpassFilter, type TagPredicate } from "../utils/overpassFilter";
 import { isAreaTooLarge } from "./useCategorySearch";
@@ -19,7 +19,7 @@ export function useFilterSearch(
       lang,
     ],
     queryFn: () =>
-      apiClient.post<{ results: CategoryPlace[]; partial: boolean; relaxed?: TagPredicate[] }>(
+      apiClient.post<CategorySearchResponse & { relaxed?: TagPredicate[] }>(
         API_ENDPOINTS.poiFilter,
         {
           filter,

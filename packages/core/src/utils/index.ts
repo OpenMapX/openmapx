@@ -9,7 +9,7 @@ export {
   pickIntegrationForSources,
   sanitizeAttributionHtml,
 } from "./attribution";
-export { bboxAroundPoint, geoJsonBBox } from "./bbox";
+export { bboxAroundPoint, bboxCacheKey, geoJsonBBox } from "./bbox";
 export { withCache } from "./cache-helpers";
 export type { CategoryFacet, FacetPlacement, FacetType } from "./categoryFacets";
 export {
@@ -198,7 +198,8 @@ export {
 } from "./poiConflation";
 export { fusePoiResults } from "./poiFusion";
 export { pointInIsochroneGeometry } from "./pointInPolygon";
-export { MAX_POI_SEARCH_RESULTS, rankAndLimitPoiResults } from "./poiRanking";
+export type { RankedPoiResults } from "./poiRanking";
+export { MAX_POI_SEARCH_RESULTS, rankAndLimitPoiResults, rankPoiResults } from "./poiRanking";
 export { decodePolyline, encodePolyline } from "./polyline";
 export { sectionSlug } from "./sectionSlug";
 export {

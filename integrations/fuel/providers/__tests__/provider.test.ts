@@ -113,9 +113,10 @@ describe("fuelProvider.search", () => {
 
   it("null result falls back to Overpass", async () => {
     vi.mocked(searchFuelStations).mockResolvedValue(null as never);
-    vi.mocked(searchByCategory).mockResolvedValue([
-      { id: "osm:node/100", name: "Shell", coordinates: [11.5, 48.5] as [number, number] },
-    ] as never);
+    vi.mocked(searchByCategory).mockResolvedValue({
+      results: [{ id: "osm:node/100", name: "Shell", coordinates: [11.5, 48.5] }],
+      truncated: false,
+    } as never);
 
     const results = (await fuelProvider.search(makeBbox())).data;
 
@@ -154,9 +155,10 @@ describe("fuelProvider.search", () => {
 
   it("OSM-only results kept when fuelType filter active (no cache entry)", async () => {
     vi.mocked(searchFuelStations).mockResolvedValue(null as never);
-    vi.mocked(searchByCategory).mockResolvedValue([
-      { id: "osm:node/200", name: "OSM Station", coordinates: [11.5, 48.5] as [number, number] },
-    ] as never);
+    vi.mocked(searchByCategory).mockResolvedValue({
+      results: [{ id: "osm:node/200", name: "OSM Station", coordinates: [11.5, 48.5] }],
+      truncated: false,
+    } as never);
 
     const results = (await fuelProvider.search(makeBbox(), { fuelType: "diesel" })).data;
 

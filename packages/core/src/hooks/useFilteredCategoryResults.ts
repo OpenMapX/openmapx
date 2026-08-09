@@ -64,6 +64,8 @@ export function useFilteredCategoryResults() {
       isError: filterIsError,
       error: filterError,
       partial: adHocPartial,
+      truncated: filterResponse?.truncated ?? false,
+      total: filterResponse?.total,
       relaxed: adHocRelaxed,
       isTransitCategory: false,
     };
@@ -76,6 +78,8 @@ export function useFilteredCategoryResults() {
     isError: categoryIsError,
     error: categoryError,
     partial: categoryPartial,
+    truncated: categoryResponse?.truncated ?? false,
+    total: categoryResponse?.total,
     relaxed: [] as TagPredicate[],
     isTransitCategory,
   };

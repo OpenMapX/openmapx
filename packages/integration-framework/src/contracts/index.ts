@@ -41,8 +41,10 @@ export type {
   PhotoQuery,
 } from "./photo-provider.js";
 export type {
+  PoiSearchOutcome,
   PoiSearchProvider,
   PoiSearchResult,
+  PoiSearchReturn,
 } from "./poi-search-provider.js";
 export type {
   RealtimeCapabilities,

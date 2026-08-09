@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { OVERPASS_FETCH_LIMIT } from "../overpass.service";
 import {
   buildFilterQuery,
   categoriesToFilter,
@@ -106,7 +107,7 @@ describe("buildFilterQuery", () => {
       'way["shop"="bakery"]["diet:vegan"~"yes|only"]["internet_access"]["brand"!~"."](48.85,2.33,48.87,2.37);',
     );
     expect(q.startsWith("[out:json][timeout:15];")).toBe(true);
-    expect(q.trimEnd().endsWith("out center 50;")).toBe(true);
+    expect(q.trimEnd().endsWith(`out center ${OVERPASS_FETCH_LIMIT + 1};`)).toBe(true);
   });
 
   it("escapes literal values and regex values", () => {
@@ -194,10 +195,10 @@ describe("searchByFilter", () => {
       selectors: [{ tags: [{ key: "amenity", value: "cafe" }] }],
     });
     if (!filter.ok) throw new Error("expected ok");
-    const results = await searchByFilter(filter.filter, BBOX);
-    expect(Array.isArray(results)).toBe(true);
+    const { results, truncated } = await searchByFilter(filter.filter, BBOX);
     expect(results.length).toBeGreaterThanOrEqual(1);
     expect(results[0].name).toBe("Test Cafe");
+    expect(truncated).toBe(false);
   });
 });
 
