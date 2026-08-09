@@ -3,7 +3,7 @@
   "name": "Dawarich Redis",
   "version": "7.4",
   "description": "Dedicated transient job queue and cache for the managed Dawarich timeline.",
-  "license": "BSD-3-Clause",
+  "license": "RSALv2 OR SSPL-1.0",
   "quality": "built-in",
   "homepage": "https://redis.io/",
   "container": {

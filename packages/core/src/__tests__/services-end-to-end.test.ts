@@ -237,6 +237,7 @@ describe.skipIf(!manifestsPresent)(
 
         const app = registry.get("dawarich-app")?.manifest;
         const worker = registry.get("dawarich-sidekiq")?.manifest;
+        expect(registry.get("dawarich-redis")?.manifest.license).toBe("RSALv2 OR SSPL-1.0");
         expect(app?.version).toBe("1.10.3");
         expect(app?.container).toMatchObject({
           image: "freikin/dawarich",
