@@ -1,3 +1,4 @@
+import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { passkeyClient } from "@better-auth/passkey/client";
 import {
   adminClient,
@@ -22,6 +23,7 @@ function _buildClient(baseURL: string) {
     plugins: [
       passkeyClient(),
       genericOAuthClient(),
+      oauthProviderClient(),
       twoFactorClient(),
       emailOTPClient(),
       adminClient(),
@@ -40,6 +42,7 @@ export function initAuth(config: AuthConfig): void {
     plugins: [
       (config.passkeyPlugin ?? passkeyClient()) as ReturnType<typeof passkeyClient>,
       genericOAuthClient(),
+      oauthProviderClient(),
       twoFactorClient(),
       emailOTPClient(),
       adminClient(),

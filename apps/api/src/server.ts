@@ -30,6 +30,7 @@ import { adminServicesRoute } from "./routes/admin-services";
 import { adminSettingsRoute } from "./routes/admin-settings";
 import { adminSystemRoute } from "./routes/admin-system";
 import { attributionRoute } from "./routes/attribution";
+import { authRoute } from "./routes/auth";
 import { capabilitiesRoute } from "./routes/capabilities";
 import { dataManagerRoute } from "./routes/data-manager";
 import { elevationRoute } from "./routes/elevation";
@@ -226,32 +227,11 @@ setIntegrationsReloadedHook(() => {
 });
 
 // Better Auth handler
-server.route({
-  method: ["GET", "POST"],
-  url: "/api/auth/*",
-  async handler(request, reply) {
-    try {
-      const url = new URL(request.url, `http://${request.headers.host}`);
-      const headers = new Headers();
-      for (const [key, value] of Object.entries(request.headers)) {
-        if (value) headers.append(key, Array.isArray(value) ? value.join(", ") : value);
-      }
-      const req = new Request(url.toString(), {
-        method: request.method,
-        headers,
-        ...(request.body ? { body: JSON.stringify(request.body) } : {}),
-      });
-      const response = await auth.handler(req);
-      reply.status(response.status);
-      response.headers.forEach((value, key) => {
-        reply.header(key, value);
-      });
-      return reply.send(response.status === 204 ? null : await response.text());
-    } catch (error) {
-      server.log.error(error, "Auth error");
-      return reply.status(500).send({ error: "Internal authentication error" });
-    }
-  },
+await server.register(authRoute, {
+  authHandler: auth.handler,
+  authUiOrigin:
+    envString("CORS_ORIGIN", "http://localhost:3000").split(",")[0]?.trim() ||
+    "http://localhost:3000",
 });
 
 // Health check

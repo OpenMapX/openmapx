@@ -78,6 +78,13 @@
       "when": 1786286610530,
       "tag": "0010_personal_timeline_connection",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786291984663,
+      "tag": "0011_better_auth_oauth_provider",
+      "breakpoints": true
     }
   ]
 }
