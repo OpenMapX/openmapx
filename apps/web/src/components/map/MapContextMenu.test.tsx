@@ -56,6 +56,7 @@ const mapContextTest = (
 const shareUrlMock = (deepLinkModule as unknown as { __test: ReturnType<typeof vi.fn> }).__test;
 
 let fake: ReturnType<typeof createFakeMap>;
+let domContextCoordinates: [number, number];
 
 function poiFeature(name = "Smithsonian Institution Building"): MapGeoJSONFeature {
   return {
@@ -95,9 +96,43 @@ function openAtMapPoint(
   return preventDefault;
 }
 
+function dispatchDomMapContextMenu(coordinates: [number, number]) {
+  domContextCoordinates = coordinates;
+  const modalRoot = document.querySelector<HTMLElement>(".MuiPopover-root");
+  const blockingLayer =
+    modalRoot && getComputedStyle(modalRoot).pointerEvents !== "none"
+      ? (modalRoot.querySelector<HTMLElement>(".MuiBackdrop-root") ?? modalRoot)
+      : fake.state.canvas;
+  const event = new MouseEvent("contextmenu", {
+    bubbles: true,
+    cancelable: true,
+    clientX: 240,
+    clientY: 260,
+  });
+  fireEvent(blockingLayer, event);
+  return { blockingLayer, event };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 beforeEach(() => {
   fake = createFakeMap({
     baseLayers: [{ id: "poi-label", type: "symbol", "source-layer": "poi" } as never],
+  });
+  domContextCoordinates = [-77.02573, 38.88859];
+  fake.state.canvas.addEventListener("contextmenu", (event) => {
+    const [lng, lat] = domContextCoordinates;
+    fake.emit("contextmenu", {
+      point: { x: event.clientX, y: event.clientY },
+      lngLat: { lng, lat },
+      originalEvent: event,
+    });
   });
   document.body.appendChild(fake.state.canvas);
   mapContextTest.mapRef.current = fake.map;
@@ -402,6 +437,20 @@ describe("MapContextMenu keyboard behavior", () => {
 
     await waitFor(() => expect(document.activeElement).toBe(from));
   });
+
+  it("lets an already-open menu receive a second real DOM map contextmenu", async () => {
+    render(<MapContextMenu />);
+    dispatchDomMapContextMenu([-77.02573, 38.88859]);
+    expect(screen.getByText("38.888590, -77.025730")).toBeDefined();
+
+    const second = dispatchDomMapContextMenu([13.405, 52.52]);
+
+    expect(second.blockingLayer).toBe(fake.state.canvas);
+    expect(second.event.defaultPrevented).toBe(true);
+    expect(screen.getByText("52.520000, 13.405000")).toBeDefined();
+    await userEvent.click(screen.getByRole("menuitem", { name: "mapContextMenu.fromHere" }));
+    expect(useDirectionsStore.getState().origin).toEqual([13.405, 52.52]);
+  });
 });
 
 describe("MapContextMenu copy behavior", () => {
@@ -454,6 +503,46 @@ describe("MapContextMenu copy behavior", () => {
     expect(screen.getByText("mapContextMenu.copied")).toBeDefined();
   });
 
+  it("ignores a pending copy completion after unmount", async () => {
+    const pending = deferred<void>();
+    installClipboard(vi.fn(() => pending.promise));
+    const view = render(<MapContextMenu />);
+    openAtMapPoint();
+    const submenu = await openCopySubmenu();
+    await userEvent.click(
+      within(submenu).getByRole("menuitem", { name: /38\.888590, -77\.025730/ }),
+    );
+    const focusCanvas = vi.spyOn(fake.state.canvas, "focus");
+
+    view.unmount();
+    focusCanvas.mockClear();
+    await act(async () => pending.resolve());
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    expect(focusCanvas).not.toHaveBeenCalled();
+  });
+
+  it("does not let a pending copy from target A close or update target B", async () => {
+    const pending = deferred<void>();
+    installClipboard(vi.fn(() => pending.promise));
+    render(<MapContextMenu />);
+    openAtMapPoint();
+    const submenu = await openCopySubmenu();
+    await userEvent.click(
+      within(submenu).getByRole("menuitem", { name: /38\.888590, -77\.025730/ }),
+    );
+
+    openAtMapPoint({ coordinates: [13.405, 52.52] });
+    await act(async () => pending.resolve());
+
+    expect(
+      within(screen.getByRole("menu", { name: "mapContextMenu.ariaLabel" })).getByText(
+        "52.520000, 13.405000",
+      ),
+    ).toBeDefined();
+    expect(screen.queryByText("mapContextMenu.copied")).toBeNull();
+  });
+
   for (const mode of ["rejected", "unavailable"] as const) {
     it(`keeps the main card open and shows failure when Clipboard is ${mode}`, async () => {
       if (mode === "rejected") installClipboard(vi.fn().mockRejectedValue(new Error("denied")));
@@ -500,13 +589,44 @@ describe("MapContextMenu share behavior", () => {
       expect(window.location.href).toBe(hrefBefore);
     });
   }
+
+  it("ignores a pending share completion after unmount", async () => {
+    const pending = deferred<"copied">();
+    shareUrlMock.mockImplementation(() => pending.promise);
+    const view = render(<MapContextMenu />);
+    openAtMapPoint();
+    await userEvent.click(screen.getByRole("menuitem", { name: "mapContextMenu.shareLocation" }));
+    const focusCanvas = vi.spyOn(fake.state.canvas, "focus");
+
+    view.unmount();
+    focusCanvas.mockClear();
+    await act(async () => pending.resolve("copied"));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    expect(focusCanvas).not.toHaveBeenCalled();
+  });
+
+  it("does not let a pending share from target A close or update target B", async () => {
+    const pending = deferred<"copied">();
+    shareUrlMock.mockImplementation(() => pending.promise);
+    render(<MapContextMenu />);
+    openAtMapPoint();
+    await userEvent.click(screen.getByRole("menuitem", { name: "mapContextMenu.shareLocation" }));
+
+    openAtMapPoint({ coordinates: [13.405, 52.52] });
+    await act(async () => pending.resolve("copied"));
+
+    expect(screen.getByText("52.520000, 13.405000")).toBeDefined();
+    expect(screen.queryByText("mapContextMenu.linkCopied")).toBeNull();
+  });
 });
 
 describe("MapContextMenu dismissal and semantics", () => {
-  it("dismisses on outside click, map movement, and style-version change", () => {
+  it("dismisses on outside click, map movement, and style-version change", async () => {
     const view = render(<MapContextMenu />);
     openAtMapPoint();
-    fireEvent.click(document.querySelector(".MuiBackdrop-root") as Element);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    fireEvent.click(fake.state.canvas);
     expect(screen.queryByRole("menu")).toBeNull();
 
     openAtMapPoint();

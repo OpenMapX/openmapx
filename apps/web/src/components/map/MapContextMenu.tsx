@@ -9,6 +9,7 @@ import ShareIcon from "@mui/icons-material/Share";
 import {
   Box,
   ButtonBase,
+  ClickAwayListener,
   Divider,
   ListItemIcon,
   ListItemText,
@@ -75,6 +76,9 @@ export function MapContextMenu(): React.ReactNode {
   const [copyOpen, setCopyOpen] = useState(false);
   const [copyOpensLeft, setCopyOpensLeft] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+  const targetGenerationRef = useRef(0);
+  const actionGenerationRef = useRef(0);
   const menuFocusFrameRef = useRef<number | null>(null);
   const restoreFocusFrameRef = useRef<number | null>(null);
   const actionRefs = useRef<Record<ActionId, HTMLElement | null>>({
@@ -85,6 +89,15 @@ export function MapContextMenu(): React.ReactNode {
     share: null,
   });
   const copyRowRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      targetGenerationRef.current += 1;
+      actionGenerationRef.current += 1;
+    };
+  }, []);
 
   const coordinates = target?.coordinates ?? null;
   const { data: reverseGeo } = useReverseGeocoding(coordinates);
@@ -124,6 +137,8 @@ export function MapContextMenu(): React.ReactNode {
   }, [mapRef]);
 
   const closeMenu = useCallback(() => {
+    targetGenerationRef.current += 1;
+    actionGenerationRef.current += 1;
     setCopyOpen(false);
     setTarget(null);
     restoreCanvasFocus();
@@ -152,6 +167,8 @@ export function MapContextMenu(): React.ReactNode {
 
     setCopyOpen(false);
     setTarget(null);
+    targetGenerationRef.current += 1;
+    actionGenerationRef.current += 1;
 
     const captureTarget = (
       targetCoordinates: [number, number],
@@ -160,6 +177,8 @@ export function MapContextMenu(): React.ReactNode {
     ) => {
       const poiLayerIds = getStylePoiLayerIds(map);
       const poi = findStylePoiAtPoint(map, point, poiLayerIds, INTERACTIVE_LAYER_IDS);
+      targetGenerationRef.current += 1;
+      actionGenerationRef.current += 1;
       setCopyOpen(false);
       useMapClickStore.getState().setClickedLngLat(null);
       setTarget({ coordinates: targetCoordinates, anchorPosition, poi });
@@ -297,18 +316,36 @@ export function MapContextMenu(): React.ReactNode {
   }, [coordinateLabel, reverseGeo?.address, t, target]);
 
   const copyValue = async (value: string) => {
+    const targetGeneration = targetGenerationRef.current;
+    const actionGeneration = ++actionGenerationRef.current;
     try {
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
       await navigator.clipboard.writeText(value);
+      if (
+        !mountedRef.current ||
+        targetGeneration !== targetGenerationRef.current ||
+        actionGeneration !== actionGenerationRef.current
+      ) {
+        return;
+      }
       closeMenu();
       setFeedback(t("copied"));
     } catch {
+      if (
+        !mountedRef.current ||
+        targetGeneration !== targetGenerationRef.current ||
+        actionGeneration !== actionGenerationRef.current
+      ) {
+        return;
+      }
       setFeedback(t("copyFailed"));
     }
   };
 
   const shareLocation = async () => {
     if (!place) return;
+    const targetGeneration = targetGenerationRef.current;
+    const actionGeneration = ++actionGenerationRef.current;
     const url = buildLocationShareUrl(window.location.href, {
       id: place.id,
       coordinates: place.coordinates,
@@ -317,6 +354,13 @@ export function MapContextMenu(): React.ReactNode {
       rawCategory: place.rawCategory,
     });
     const result = await shareUrl({ url, title: place.name });
+    if (
+      !mountedRef.current ||
+      targetGeneration !== targetGenerationRef.current ||
+      actionGeneration !== actionGenerationRef.current
+    ) {
+      return;
+    }
     if (result === "unavailable") {
       setFeedback(t("shareFailed"));
       return;
@@ -344,139 +388,174 @@ export function MapContextMenu(): React.ReactNode {
 
   return (
     <>
-      <Popover
-        open={target !== null}
-        disableAutoFocus
-        anchorReference="anchorPosition"
-        anchorPosition={target?.anchorPosition}
-        marginThreshold={8}
-        onClose={closeMenu}
-        onKeyDown={handleTopLevelKeyDown}
-        slotProps={{
-          paper: {
-            role: "menu",
-            "aria-label": t("ariaLabel", { location: title }),
-            sx: {
-              width: 304,
-              maxWidth: "calc(100vw - 16px)",
-              borderRadius: "12px",
-              overflow: "visible",
-            },
-          },
-        }}
-      >
-        {target && (
-          <Box sx={{ py: 1 }}>
-            <Box sx={{ px: 2, py: 1 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>
-                {title}
-              </Typography>
-              {address !== title && (
-                <Typography variant="body2" color="text.secondary" noWrap>
-                  {address}
-                </Typography>
-              )}
-            </Box>
-            <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, px: 1.5, pb: 1.5 }}>
-              <ButtonBase
-                {...commonActionProps("from")}
-                autoFocus
-                aria-label={t("fromHere")}
-                onClick={() => chooseRouteEndpoint("origin")}
-                sx={{ minHeight: 44, borderRadius: 999, bgcolor: "action.hover", gap: 1, px: 1.5 }}
-              >
-                <MyLocationIcon fontSize="small" />
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                  {t("fromHere")}
-                </Typography>
-              </ButtonBase>
-              <ButtonBase
-                {...commonActionProps("to")}
-                aria-label={t("toHere")}
-                onClick={() => chooseRouteEndpoint("destination")}
-                sx={{
-                  minHeight: 44,
-                  borderRadius: 999,
-                  bgcolor: "primary.main",
-                  color: "primary.contrastText",
-                  gap: 1,
-                  px: 1.5,
-                }}
-              >
-                <LocationOnIcon fontSize="small" />
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                  {t("toHere")}
-                </Typography>
-              </ButtonBase>
-            </Box>
-            <Divider />
-            <MenuList component="div" role="presentation" disablePadding>
-              <MenuItem
-                {...commonActionProps("copy")}
-                onClick={openCopyMenu}
-                onMouseEnter={openCopyMenu}
-                sx={{ minHeight: "44px !important" }}
-              >
-                <ListItemIcon>
-                  <CopyAllIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>{t("copyLocation")}</ListItemText>
-                <ChevronRightIcon fontSize="small" />
-              </MenuItem>
-              <MenuItem
-                {...commonActionProps("details")}
-                onClick={openPlaceDetails}
-                sx={{ minHeight: "44px !important" }}
-              >
-                <ListItemIcon>
-                  <PlaceIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>{t("openPlaceDetails")}</ListItemText>
-              </MenuItem>
-              <MenuItem
-                {...commonActionProps("share")}
-                onClick={() => void shareLocation()}
-                sx={{ minHeight: "44px !important" }}
-              >
-                <ListItemIcon>
-                  <ShareIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>{t("shareLocation")}</ListItemText>
-              </MenuItem>
-            </MenuList>
-          </Box>
-        )}
-      </Popover>
-      <Menu
-        anchorEl={copyRowRef.current}
-        open={copyOpen}
-        onClose={() => {
-          setCopyOpen(false);
-          focusAction("copy");
-        }}
-        autoFocus
-        anchorOrigin={{ vertical: "top", horizontal: copyOpensLeft ? "left" : "right" }}
-        transformOrigin={{ vertical: "top", horizontal: copyOpensLeft ? "right" : "left" }}
-        slotProps={{ paper: { sx: { minWidth: 240, maxWidth: "calc(100vw - 16px)" } } }}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowLeft" || event.key === "Escape") {
-            event.preventDefault();
-            event.stopPropagation();
-            setCopyOpen(false);
-            focusAction("copy");
-          }
-        }}
-      >
-        {copyRows.map((row) => (
-          <MenuItem
-            key={row.value}
-            onClick={() => void copyValue(row.value)}
-            sx={{ minHeight: "44px !important" }}
+      <ClickAwayListener onClickAway={() => target && closeMenu()}>
+        <Box component="span" sx={{ display: "contents" }}>
+          <Popover
+            open={target !== null}
+            disableAutoFocus
+            disableEnforceFocus
+            disableRestoreFocus
+            hideBackdrop
+            anchorReference="anchorPosition"
+            anchorPosition={target?.anchorPosition}
+            marginThreshold={8}
+            onClose={closeMenu}
+            onKeyDown={handleTopLevelKeyDown}
+            slotProps={{
+              root: { sx: { pointerEvents: "none" } },
+              paper: {
+                role: "menu",
+                "aria-label": t("ariaLabel", { location: title }),
+                sx: {
+                  width: 304,
+                  maxWidth: "calc(100vw - 16px)",
+                  borderRadius: "12px",
+                  overflow: "visible",
+                  pointerEvents: "auto",
+                },
+              },
+            }}
           >
-            <ListItemText primary={row.label} secondary={row.value} />
-          </MenuItem>
-        ))}
-      </Menu>
+            {target && (
+              <Box sx={{ py: 1 }}>
+                <Box sx={{ px: 2, py: 1 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>
+                    {title}
+                  </Typography>
+                  {address !== title && (
+                    <Typography variant="body2" color="text.secondary" noWrap>
+                      {address}
+                    </Typography>
+                  )}
+                </Box>
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 1,
+                    px: 1.5,
+                    pb: 1.5,
+                  }}
+                >
+                  <ButtonBase
+                    {...commonActionProps("from")}
+                    autoFocus
+                    aria-label={t("fromHere")}
+                    onClick={() => chooseRouteEndpoint("origin")}
+                    sx={{
+                      minHeight: 44,
+                      borderRadius: 999,
+                      bgcolor: "action.hover",
+                      gap: 1,
+                      px: 1.5,
+                    }}
+                  >
+                    <MyLocationIcon fontSize="small" />
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {t("fromHere")}
+                    </Typography>
+                  </ButtonBase>
+                  <ButtonBase
+                    {...commonActionProps("to")}
+                    aria-label={t("toHere")}
+                    onClick={() => chooseRouteEndpoint("destination")}
+                    sx={{
+                      minHeight: 44,
+                      borderRadius: 999,
+                      bgcolor: "primary.main",
+                      color: "primary.contrastText",
+                      gap: 1,
+                      px: 1.5,
+                    }}
+                  >
+                    <LocationOnIcon fontSize="small" />
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {t("toHere")}
+                    </Typography>
+                  </ButtonBase>
+                </Box>
+                <Divider />
+                <MenuList component="div" role="presentation" disablePadding>
+                  <MenuItem
+                    {...commonActionProps("copy")}
+                    onClick={openCopyMenu}
+                    onMouseEnter={openCopyMenu}
+                    sx={{ minHeight: "44px !important" }}
+                  >
+                    <ListItemIcon>
+                      <CopyAllIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>{t("copyLocation")}</ListItemText>
+                    <ChevronRightIcon fontSize="small" />
+                  </MenuItem>
+                  <MenuItem
+                    {...commonActionProps("details")}
+                    onClick={openPlaceDetails}
+                    sx={{ minHeight: "44px !important" }}
+                  >
+                    <ListItemIcon>
+                      <PlaceIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>{t("openPlaceDetails")}</ListItemText>
+                  </MenuItem>
+                  <MenuItem
+                    {...commonActionProps("share")}
+                    onClick={() => void shareLocation()}
+                    sx={{ minHeight: "44px !important" }}
+                  >
+                    <ListItemIcon>
+                      <ShareIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>{t("shareLocation")}</ListItemText>
+                  </MenuItem>
+                </MenuList>
+              </Box>
+            )}
+          </Popover>
+          <Menu
+            anchorEl={copyRowRef.current}
+            open={copyOpen}
+            onClose={() => {
+              setCopyOpen(false);
+              focusAction("copy");
+            }}
+            autoFocus
+            disableEnforceFocus
+            disableRestoreFocus
+            hideBackdrop
+            anchorOrigin={{ vertical: "top", horizontal: copyOpensLeft ? "left" : "right" }}
+            transformOrigin={{ vertical: "top", horizontal: copyOpensLeft ? "right" : "left" }}
+            slotProps={{
+              root: { sx: { pointerEvents: "none" } },
+              paper: {
+                sx: {
+                  minWidth: 240,
+                  maxWidth: "calc(100vw - 16px)",
+                  pointerEvents: "auto",
+                },
+              },
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft" || event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                setCopyOpen(false);
+                focusAction("copy");
+              }
+            }}
+          >
+            {copyRows.map((row) => (
+              <MenuItem
+                key={row.value}
+                onClick={() => void copyValue(row.value)}
+                sx={{ minHeight: "44px !important" }}
+              >
+                <ListItemText primary={row.label} secondary={row.value} />
+              </MenuItem>
+            ))}
+          </Menu>
+        </Box>
+      </ClickAwayListener>
       <Snackbar
         open={feedback !== null}
         message={feedback}
