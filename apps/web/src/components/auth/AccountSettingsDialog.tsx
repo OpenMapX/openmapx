@@ -33,18 +33,26 @@ import type { User } from "@openmapx/core";
 import { authClient, getInitials, oauthProviders, proxyImageUrl } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import QRCode from "qrcode";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
+import type { AccountSettingsSection } from "@/stores/accountSettingsStore";
 import { MangroveAccountSection } from "./MangroveAccountSection";
+import { TimelineConnectionSection } from "./TimelineConnectionSection";
 
 interface AccountSettingsDialogProps {
   open: boolean;
   onClose: () => void;
   user: User;
+  initialSection: AccountSettingsSection;
 }
 
-export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDialogProps) {
+export function AccountSettingsDialog({
+  open,
+  onClose,
+  user,
+  initialSection,
+}: AccountSettingsDialogProps) {
   const t = useTranslations("account");
   const tc = useTranslations("common");
   const fmt = useDateTimeFormat();
@@ -65,6 +73,17 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const [confirmUnlinkProvider, setConfirmUnlinkProvider] = useState<string | null>(null);
+  const timelineHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  const focusInitialSection = () => {
+    if (initialSection !== "timeline") return;
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    timelineHeadingRef.current?.focus({ preventScroll: true });
+    timelineHeadingRef.current?.scrollIntoView({
+      block: "start",
+      behavior: reducedMotion ? "auto" : "smooth",
+    });
+  };
 
   // Email change state
   const [changingEmail, setChangingEmail] = useState(false);
@@ -402,7 +421,10 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
       maxWidth="sm"
       fullWidth
       fullScreen={fullScreen}
-      slotProps={{ paper: { sx: mobileFullScreenDialogPaperSx } }}
+      slotProps={{
+        paper: { sx: mobileFullScreenDialogPaperSx },
+        transition: { onEntered: focusInitialSection },
+      }}
     >
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
         <PersonIcon />
@@ -1038,6 +1060,10 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
             );
           })}
         </List>
+
+        <Divider sx={{ my: 2 }} />
+
+        <TimelineConnectionSection ref={timelineHeadingRef} ownerId={user.id} />
 
         <Divider sx={{ my: 2 }} />
 

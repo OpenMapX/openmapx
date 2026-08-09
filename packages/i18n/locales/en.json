@@ -1332,6 +1332,61 @@
   "account": {
     "language": "Language",
     "accountSettings": "Account settings",
+    "timeline": {
+      "heading": "Timeline",
+      "description": "Connect one Dawarich account to view your location history in OpenMapX. OpenMapX only reads timeline data; recording and changes stay in Dawarich.",
+      "loading": "Loading timeline connection…",
+      "modeLabel": "Connection",
+      "modeManaged": "OpenMapX-hosted Dawarich",
+      "modeExternal": "External Dawarich instance",
+      "recommended": "Recommended",
+      "managedUnavailable": "This OpenMapX server does not currently offer a hosted Dawarich service. You can connect an external instance instead.",
+      "managedSsoExplanation": "Your OpenMapX account signs you in to the hosted Dawarich service through single sign-on.",
+      "managedApiKeyStep": "To let OpenMapX read your timeline, open Dawarich settings and create an API key. The key is stored encrypted and is never shown again.",
+      "openManagedSettings": "Open Dawarich settings",
+      "instanceUrl": "Dawarich instance URL",
+      "displayName": "Display name (optional)",
+      "externalApiKeyHelp": "How to create a Dawarich API key",
+      "apiKey": "Dawarich API key",
+      "connect": "Connect",
+      "connecting": "Connecting…",
+      "cancelEdit": "Cancel",
+      "test": "Test connection",
+      "testing": "Testing…",
+      "replace": "Replace credentials",
+      "switch": "Switch connection mode",
+      "openDawarich": "Open Dawarich",
+      "disconnect": "Disconnect",
+      "disconnectTitle": "Disconnect your timeline?",
+      "disconnectKeepsHistory": "OpenMapX will forget this connection and its cached timeline data. Your location history remains in Dawarich.",
+      "confirmDisconnect": "Disconnect",
+      "timezone": "Time zone",
+      "validatedAt": "Last validated",
+      "validationUrl": "Enter a valid Dawarich instance URL without credentials or a fragment.",
+      "validationHttps": "Use an HTTPS URL for your Dawarich instance.",
+      "validationApiKey": "Enter a Dawarich API key.",
+      "status": {
+        "connected": "Connected",
+        "degraded": "Needs attention",
+        "invalid": "Credentials invalid"
+      },
+      "connectionState": {
+        "connected": "The connection is ready.",
+        "degraded": "Dawarich is temporarily unavailable. Your saved connection is unchanged.",
+        "invalid": "The API key is no longer accepted. Replace the credentials to continue."
+      },
+      "errors": {
+        "TIMELINE_NOT_CONNECTED": "No Dawarich timeline is connected.",
+        "TIMELINE_MANAGED_DISABLED": "The hosted Dawarich service is not available on this server.",
+        "TIMELINE_CREDENTIAL_INVALID": "Dawarich rejected the API key. Replace the credentials and try again.",
+        "TIMELINE_INSTANCE_UNSUPPORTED": "This Dawarich instance is not compatible with the timeline integration.",
+        "TIMELINE_PLAN_RESTRICTED": "This Dawarich account does not allow the required timeline access.",
+        "TIMELINE_RATE_LIMITED": "Dawarich is receiving too many requests. Wait a moment and try again.",
+        "TIMELINE_UPSTREAM_UNAVAILABLE": "Dawarich cannot be reached right now. Try again later.",
+        "TIMELINE_RESPONSE_INVALID": "Dawarich returned data OpenMapX could not safely read.",
+        "unknown": "The timeline connection could not be completed. Try again."
+      }
+    },
     "mangroveSectionTitle": "<m>Mangrove Reviews</m> account",
     "mangroveSectionIntro": "Your reviews are signed with a cryptographic keypair. You can import an existing Mangrove Reviews account to use it here, or export yours to back it up.",
     "mangroveIdentity": "Current identity",
@@ -1943,6 +1998,7 @@
   },
   "menu": {
     "saved": "Saved",
+    "timeline": "Your timeline",
     "recent": "Recent",
     "contributions": "My contributions",
     "shareMap": "Share or embed map",
@@ -1974,6 +2030,54 @@
     "privacy": "Privacy",
     "terms": "Terms",
     "imprint": "Imprint"
+  },
+  "timeline": {
+    "onboardingTitle": "Your timeline",
+    "onboardingReadOnly": "Connect Dawarich in Account settings to explore your location history here. OpenMapX is read-only: recording and changes happen in Dawarich.",
+    "openSettings": "Open Timeline settings",
+    "loadingConnection": "Loading timeline connection…",
+    "loadingDay": "Loading this day…",
+    "previousDay": "Previous day",
+    "nextDay": "Next day",
+    "datePicker": "Timeline date",
+    "today": "Today",
+    "timezoneLabel": "Dawarich time zone:",
+    "futureDay": "Choose today or an earlier date to view your timeline.",
+    "emptyDay": "No timeline activity",
+    "emptyDayHint": "Dawarich has no visits or journeys for this day.",
+    "testConnection": "Test connection",
+    "testingConnection": "Testing…",
+    "replaceConnection": "Replace credentials",
+    "visitFallback": "Unnamed visit",
+    "journeyFallback": "Journey",
+    "selected": "Selected",
+    "pointCount": "Points",
+    "entriesAriaLabel": "Timeline entries",
+    "summary": {
+      "distance": "Distance",
+      "places": "Places",
+      "moving": "Moving",
+      "stationary": "Stationary"
+    },
+    "connection": {
+      "degraded": "Dawarich is temporarily unavailable. Previously loaded data may remain visible.",
+      "invalid": "Dawarich no longer accepts this API key. Replace the credentials to continue."
+    },
+    "warnings": {
+      "TRACK_GEOMETRY_UNAVAILABLE": "The day is available, but its journey lines could not be loaded.",
+      "PARTIAL_TRACK_PAGE_LIMIT": "Only part of this day's journey geometry could be loaded."
+    },
+    "errors": {
+      "TIMELINE_NOT_CONNECTED": "Connect Dawarich in Account settings to view your timeline.",
+      "TIMELINE_MANAGED_DISABLED": "The hosted Dawarich service is not available on this server.",
+      "TIMELINE_CREDENTIAL_INVALID": "Dawarich rejected the API key. Replace the credentials and try again.",
+      "TIMELINE_INSTANCE_UNSUPPORTED": "This Dawarich instance is not compatible with the timeline integration.",
+      "TIMELINE_PLAN_RESTRICTED": "This Dawarich account does not allow the required timeline access.",
+      "TIMELINE_RATE_LIMITED": "Dawarich is receiving too many requests. Wait a moment and try again.",
+      "TIMELINE_UPSTREAM_UNAVAILABLE": "Dawarich cannot be reached right now. Try again later.",
+      "TIMELINE_RESPONSE_INVALID": "Dawarich returned data OpenMapX could not safely read.",
+      "unknown": "Your timeline could not be loaded. Try again."
+    }
   },
   "saved": {
     "title": "Saved",

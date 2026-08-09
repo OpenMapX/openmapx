@@ -7,6 +7,7 @@ import {
   getTimelineConnection,
   testTimelineConnection,
 } from "../api/personalTimeline";
+import { usePersonalTimelineStore } from "../stores/personalTimelineStore";
 import type {
   ConnectPersonalTimelineRequest,
   PersonalTimelineDayV1,
@@ -20,16 +21,23 @@ export type PersonalTimelineApiError = ApiError & {
   readonly code: PersonalTimelineErrorCode | null;
 };
 
-const connectionQueryKey = [...PERSONAL_TIMELINE_QUERY_KEY, "connection"] as const;
+export const personalTimelineOwnerQueryKey = (ownerId: string) =>
+  [...PERSONAL_TIMELINE_QUERY_KEY, ownerId] as const;
 
-export function useTimelineConnection() {
+export const personalTimelineConnectionQueryKey = (ownerId: string) =>
+  [...personalTimelineOwnerQueryKey(ownerId), "connection"] as const;
+
+export const personalTimelineDayQueryKey = (ownerId: string, date: string) =>
+  [...personalTimelineOwnerQueryKey(ownerId), "day", date] as const;
+
+export function useTimelineConnection(ownerId: string) {
   return useQuery<TimelineConnectionView, PersonalTimelineApiError>({
-    queryKey: connectionQueryKey,
+    queryKey: personalTimelineConnectionQueryKey(ownerId),
     queryFn: getTimelineConnection,
   });
 }
 
-export function useConnectTimeline() {
+export function useConnectTimeline(ownerId: string) {
   const queryClient = useQueryClient();
   return useMutation<
     TimelineConnectionView,
@@ -37,31 +45,34 @@ export function useConnectTimeline() {
     ConnectPersonalTimelineRequest
   >({
     mutationFn: connectTimeline,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: PERSONAL_TIMELINE_QUERY_KEY }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: personalTimelineOwnerQueryKey(ownerId) }),
   });
 }
 
-export function useTestTimelineConnection() {
+export function useTestTimelineConnection(ownerId: string) {
   const queryClient = useQueryClient();
   return useMutation<TimelineConnectionView, PersonalTimelineApiError, void>({
     mutationFn: testTimelineConnection,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: PERSONAL_TIMELINE_QUERY_KEY }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: personalTimelineOwnerQueryKey(ownerId) }),
   });
 }
 
-export function useDisconnectTimeline() {
+export function useDisconnectTimeline(ownerId: string) {
   const queryClient = useQueryClient();
   return useMutation<{ ok: true }, PersonalTimelineApiError, void>({
     mutationFn: disconnectTimeline,
     onSuccess: () => {
-      queryClient.removeQueries({ queryKey: PERSONAL_TIMELINE_QUERY_KEY });
+      queryClient.removeQueries({ queryKey: personalTimelineOwnerQueryKey(ownerId) });
+      usePersonalTimelineStore.getState().resetForSession();
     },
   });
 }
 
-export function usePersonalTimelineDay(date: string, enabled: boolean) {
+export function usePersonalTimelineDay(ownerId: string, date: string, enabled: boolean) {
   return useQuery<PersonalTimelineDayV1, PersonalTimelineApiError>({
-    queryKey: [...PERSONAL_TIMELINE_QUERY_KEY, "day", date] as const,
+    queryKey: personalTimelineDayQueryKey(ownerId, date),
     queryFn: () => getPersonalTimelineDay(date),
     enabled,
     staleTime: 30_000,

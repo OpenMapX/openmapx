@@ -7,6 +7,7 @@ import Tooltip from "@mui/material/Tooltip";
 import { getInitials, proxyImageUrl, useSession } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
+import { useAccountSettingsStore } from "@/stores/accountSettingsStore";
 import { AccountMenu } from "./AccountMenu";
 import { AccountSettingsDialog } from "./AccountSettingsDialog";
 import { AuthDialog } from "./AuthDialog";
@@ -25,7 +26,10 @@ export function AccountAvatarButton({ size = 36, sx }: Props) {
   const { data: session, isPending } = useSession();
   const [authOpen, setAuthOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsOpen = useAccountSettingsStore((state) => state.open);
+  const settingsSection = useAccountSettingsStore((state) => state.section);
+  const showSettings = useAccountSettingsStore((state) => state.show);
+  const closeSettings = useAccountSettingsStore((state) => state.close);
   const avatarRef = useRef<HTMLButtonElement>(null);
 
   // Render the settled signed-out state until mounted, so the first client
@@ -87,15 +91,16 @@ export function AccountAvatarButton({ size = 36, sx }: Props) {
           anchorEl={menuAnchor}
           onClose={() => setMenuAnchor(null)}
           user={user}
-          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenSettings={() => showSettings()}
         />
       )}
 
       {user && (
         <AccountSettingsDialog
           open={settingsOpen}
-          onClose={() => setSettingsOpen(false)}
+          onClose={closeSettings}
           user={user}
+          initialSection={settingsSection}
         />
       )}
     </>

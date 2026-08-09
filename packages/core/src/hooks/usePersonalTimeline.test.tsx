@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { ApiError, apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
+import { usePersonalTimelineStore } from "../stores/personalTimelineStore";
 import {
   PERSONAL_TIMELINE_QUERY_KEY,
   type PersonalTimelineApiError,
@@ -32,7 +33,7 @@ describe("personal timeline hooks", () => {
     const response = { connected: false, connection: null };
     const get = vi.spyOn(apiClient, "get").mockResolvedValue(response as never);
 
-    const { result } = renderHook(() => useTimelineConnection(), {
+    const { result } = renderHook(() => useTimelineConnection("user-a"), {
       wrapper: wrapperWith(client),
     });
 
@@ -40,7 +41,9 @@ describe("personal timeline hooks", () => {
     expect(result.current.data).toBe(response);
     expect(get).toHaveBeenCalledWith(API_ENDPOINTS.timelineConnection);
     expect(
-      client.getQueryCache().find({ queryKey: [...PERSONAL_TIMELINE_QUERY_KEY, "connection"] }),
+      client
+        .getQueryCache()
+        .find({ queryKey: [...PERSONAL_TIMELINE_QUERY_KEY, "user-a", "connection"] }),
     ).toBeDefined();
   });
 
@@ -48,7 +51,7 @@ describe("personal timeline hooks", () => {
     const client = queryClient();
     const get = vi.spyOn(apiClient, "get").mockResolvedValue({ version: 1 } as never);
     const { result, rerender } = renderHook(
-      ({ enabled }) => usePersonalTimelineDay("2026-08-09", enabled),
+      ({ enabled }) => usePersonalTimelineDay("user-a", "2026-08-09", enabled),
       { wrapper: wrapperWith(client), initialProps: { enabled: false } },
     );
 
@@ -60,7 +63,7 @@ describe("personal timeline hooks", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     const query = client.getQueryCache().find({
-      queryKey: [...PERSONAL_TIMELINE_QUERY_KEY, "day", "2026-08-09"],
+      queryKey: [...PERSONAL_TIMELINE_QUERY_KEY, "user-a", "day", "2026-08-09"],
     });
     expect(query).toBeDefined();
     expect(query?.observers[0]?.options.staleTime).toBe(30_000);
@@ -77,11 +80,11 @@ describe("personal timeline hooks", () => {
     { status: 429, code: "TIMELINE_RATE_LIMITED", first: false, second: false },
   ])("uses the typed retry policy for $status/$code", ({ status, code, first, second }) => {
     const client = queryClient();
-    renderHook(() => usePersonalTimelineDay("2026-08-09", false), {
+    renderHook(() => usePersonalTimelineDay("user-a", "2026-08-09", false), {
       wrapper: wrapperWith(client),
     });
     const query = client.getQueryCache().find({
-      queryKey: [...PERSONAL_TIMELINE_QUERY_KEY, "day", "2026-08-09"],
+      queryKey: [...PERSONAL_TIMELINE_QUERY_KEY, "user-a", "day", "2026-08-09"],
     });
     const retry = query?.options.retry;
     expect(typeof retry).toBe("function");
@@ -96,8 +99,10 @@ describe("personal timeline hooks", () => {
     const invalidate = vi.spyOn(client, "invalidateQueries").mockResolvedValue(undefined);
     vi.spyOn(apiClient, "put").mockResolvedValue({ connected: true } as never);
     vi.spyOn(apiClient, "post").mockResolvedValue({ connected: true } as never);
-    const connect = renderHook(() => useConnectTimeline(), { wrapper: wrapperWith(client) });
-    const testConnection = renderHook(() => useTestTimelineConnection(), {
+    const connect = renderHook(() => useConnectTimeline("user-a"), {
+      wrapper: wrapperWith(client),
+    });
+    const testConnection = renderHook(() => useTestTimelineConnection("user-a"), {
       wrapper: wrapperWith(client),
     });
 
@@ -106,26 +111,61 @@ describe("personal timeline hooks", () => {
       await testConnection.result.current.mutateAsync();
     });
 
-    expect(invalidate).toHaveBeenNthCalledWith(1, { queryKey: PERSONAL_TIMELINE_QUERY_KEY });
-    expect(invalidate).toHaveBeenNthCalledWith(2, { queryKey: PERSONAL_TIMELINE_QUERY_KEY });
+    const ownerRoot = [...PERSONAL_TIMELINE_QUERY_KEY, "user-a"];
+    expect(invalidate).toHaveBeenNthCalledWith(1, { queryKey: ownerRoot });
+    expect(invalidate).toHaveBeenNthCalledWith(2, { queryKey: ownerRoot });
   });
 
   it("removes all personal timeline data from memory after disconnect", async () => {
     const client = queryClient();
-    client.setQueryData([...PERSONAL_TIMELINE_QUERY_KEY, "day", "2026-08-09"], {
+    client.setQueryData([...PERSONAL_TIMELINE_QUERY_KEY, "user-a", "day", "2026-08-09"], {
       private: true,
     });
     vi.spyOn(apiClient, "delete").mockResolvedValue({ ok: true } as never);
+    usePersonalTimelineStore.getState().setSelectedDate("2026-08-09");
+    usePersonalTimelineStore.getState().selectEntry("private-entry");
     const remove = vi.spyOn(client, "removeQueries");
-    const { result } = renderHook(() => useDisconnectTimeline(), { wrapper: wrapperWith(client) });
+    const { result } = renderHook(() => useDisconnectTimeline("user-a"), {
+      wrapper: wrapperWith(client),
+    });
 
     await act(async () => {
       await result.current.mutateAsync();
     });
 
-    expect(remove).toHaveBeenCalledWith({ queryKey: PERSONAL_TIMELINE_QUERY_KEY });
+    expect(remove).toHaveBeenCalledWith({
+      queryKey: [...PERSONAL_TIMELINE_QUERY_KEY, "user-a"],
+    });
     expect(
-      client.getQueryData([...PERSONAL_TIMELINE_QUERY_KEY, "day", "2026-08-09"]),
+      client.getQueryData([...PERSONAL_TIMELINE_QUERY_KEY, "user-a", "day", "2026-08-09"]),
     ).toBeUndefined();
+    expect(usePersonalTimelineStore.getState()).toMatchObject({
+      selectedDate: null,
+      selectedEntryId: null,
+    });
+  });
+
+  it("never exposes user A connection or day data to user B before cache cleanup", () => {
+    const client = queryClient();
+    const userAConnection = { connected: true, connection: { displayName: "Alice" } };
+    const userADay = { version: 1, date: "2026-08-09", entries: [{ id: "private-a" }] };
+    client.setQueryData([...PERSONAL_TIMELINE_QUERY_KEY, "user-a", "connection"], userAConnection);
+    client.setQueryData([...PERSONAL_TIMELINE_QUERY_KEY, "user-a", "day", "2026-08-09"], userADay);
+
+    const connection = renderHook(() => useTimelineConnection("user-b"), {
+      wrapper: wrapperWith(client),
+    });
+    const day = renderHook(() => usePersonalTimelineDay("user-b", "2026-08-09", false), {
+      wrapper: wrapperWith(client),
+    });
+
+    expect(connection.result.current.data).toBeUndefined();
+    expect(day.result.current.data).toBeUndefined();
+    expect(client.getQueryData([...PERSONAL_TIMELINE_QUERY_KEY, "user-a", "connection"])).toBe(
+      userAConnection,
+    );
+    expect(
+      client.getQueryData([...PERSONAL_TIMELINE_QUERY_KEY, "user-a", "day", "2026-08-09"]),
+    ).toBe(userADay);
   });
 });

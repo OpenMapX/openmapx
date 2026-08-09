@@ -9,6 +9,7 @@ import LinkIcon from "@mui/icons-material/Link";
 import PrintIcon from "@mui/icons-material/Print";
 import SettingsIcon from "@mui/icons-material/Settings";
 import StorageIcon from "@mui/icons-material/Storage";
+import TimelineIcon from "@mui/icons-material/Timeline";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
@@ -38,8 +39,8 @@ export function HamburgerMenu() {
   const tCommon = useTranslations("common");
   const isOpen = useMenuStore((s) => s.isOpen);
   const close = useMenuStore((s) => s.close);
-  const { data: session } = useSession();
-  const isSignedIn = !!session?.user?.id;
+  const { data: session, isPending: sessionPending } = useSession();
+  const isSignedIn = !sessionPending && !!session?.user?.id;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
@@ -67,6 +68,11 @@ export function HamburgerMenu() {
       return;
     }
     useSidebarStore.getState().openSidebar(PANEL.SAVED);
+  };
+
+  const handleTimeline = () => {
+    close();
+    useSidebarStore.getState().openSidebar(PANEL.TIMELINE);
   };
 
   const handleShareMap = async () => {
@@ -114,6 +120,15 @@ export function HamburgerMenu() {
             </ListItemIcon>
             <ListItemText primary={t("saved")} />
           </ListItemButton>
+
+          {isSignedIn && (
+            <ListItemButton sx={{ height: 48 }} onClick={handleTimeline}>
+              <ListItemIcon sx={{ minWidth: 40 }}>
+                <TimelineIcon />
+              </ListItemIcon>
+              <ListItemText primary={t("timeline")} />
+            </ListItemButton>
+          )}
 
           <ListItemButton
             sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}

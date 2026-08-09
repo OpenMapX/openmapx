@@ -1332,6 +1332,61 @@
   "account": {
     "language": "Sprache",
     "accountSettings": "Kontoeinstellungen",
+    "timeline": {
+      "heading": "Zeitleiste",
+      "description": "Verbinden Sie ein Dawarich-Konto, um Ihren Standortverlauf in OpenMapX anzusehen. OpenMapX liest Zeitleistendaten nur; Aufzeichnung und Änderungen bleiben in Dawarich.",
+      "loading": "Zeitleisten-Verbindung wird geladen…",
+      "modeLabel": "Verbindung",
+      "modeManaged": "Von OpenMapX gehostetes Dawarich",
+      "modeExternal": "Externe Dawarich-Instanz",
+      "recommended": "Empfohlen",
+      "managedUnavailable": "Dieser OpenMapX-Server bietet derzeit keinen gehosteten Dawarich-Dienst an. Sie können stattdessen eine externe Instanz verbinden.",
+      "managedSsoExplanation": "Ihr OpenMapX-Konto meldet Sie per Single Sign-on beim gehosteten Dawarich-Dienst an.",
+      "managedApiKeyStep": "Damit OpenMapX Ihre Zeitleiste lesen kann, öffnen Sie die Dawarich-Einstellungen und erstellen Sie einen API-Schlüssel. Der Schlüssel wird verschlüsselt gespeichert und nie wieder angezeigt.",
+      "openManagedSettings": "Dawarich-Einstellungen öffnen",
+      "instanceUrl": "URL der Dawarich-Instanz",
+      "displayName": "Anzeigename (optional)",
+      "externalApiKeyHelp": "So erstellen Sie einen Dawarich-API-Schlüssel",
+      "apiKey": "Dawarich-API-Schlüssel",
+      "connect": "Verbinden",
+      "connecting": "Verbindung wird hergestellt…",
+      "cancelEdit": "Abbrechen",
+      "test": "Verbindung testen",
+      "testing": "Verbindung wird getestet…",
+      "replace": "Zugangsdaten ersetzen",
+      "switch": "Verbindungsart wechseln",
+      "openDawarich": "Dawarich öffnen",
+      "disconnect": "Verbindung trennen",
+      "disconnectTitle": "Zeitleisten-Verbindung trennen?",
+      "disconnectKeepsHistory": "OpenMapX vergisst diese Verbindung und die zwischengespeicherten Zeitleistendaten. Ihr Standortverlauf bleibt in Dawarich erhalten.",
+      "confirmDisconnect": "Verbindung trennen",
+      "timezone": "Zeitzone",
+      "validatedAt": "Zuletzt geprüft",
+      "validationUrl": "Geben Sie eine gültige URL der Dawarich-Instanz ohne Zugangsdaten oder Fragment ein.",
+      "validationHttps": "Verwenden Sie eine HTTPS-URL für Ihre Dawarich-Instanz.",
+      "validationApiKey": "Geben Sie einen Dawarich-API-Schlüssel ein.",
+      "status": {
+        "connected": "Verbunden",
+        "degraded": "Aktion erforderlich",
+        "invalid": "Zugangsdaten ungültig"
+      },
+      "connectionState": {
+        "connected": "Die Verbindung ist bereit.",
+        "degraded": "Dawarich ist vorübergehend nicht erreichbar. Ihre gespeicherte Verbindung bleibt unverändert.",
+        "invalid": "Der API-Schlüssel wird nicht mehr akzeptiert. Ersetzen Sie die Zugangsdaten, um fortzufahren."
+      },
+      "errors": {
+        "TIMELINE_NOT_CONNECTED": "Es ist keine Dawarich-Zeitleiste verbunden.",
+        "TIMELINE_MANAGED_DISABLED": "Der gehostete Dawarich-Dienst ist auf diesem Server nicht verfügbar.",
+        "TIMELINE_CREDENTIAL_INVALID": "Dawarich hat den API-Schlüssel abgelehnt. Ersetzen Sie die Zugangsdaten und versuchen Sie es erneut.",
+        "TIMELINE_INSTANCE_UNSUPPORTED": "Diese Dawarich-Instanz ist mit der Zeitleisten-Integration nicht kompatibel.",
+        "TIMELINE_PLAN_RESTRICTED": "Dieses Dawarich-Konto erlaubt den erforderlichen Zeitleistenzugriff nicht.",
+        "TIMELINE_RATE_LIMITED": "Dawarich erhält zu viele Anfragen. Warten Sie kurz und versuchen Sie es erneut.",
+        "TIMELINE_UPSTREAM_UNAVAILABLE": "Dawarich ist derzeit nicht erreichbar. Versuchen Sie es später erneut.",
+        "TIMELINE_RESPONSE_INVALID": "Dawarich hat Daten zurückgegeben, die OpenMapX nicht sicher lesen konnte.",
+        "unknown": "Die Zeitleisten-Verbindung konnte nicht hergestellt werden. Versuchen Sie es erneut."
+      }
+    },
     "mangroveSectionTitle": "<m>Mangrove Reviews</m>-Konto",
     "mangroveSectionIntro": "Ihre Bewertungen werden mit einem kryptografischen Schlüsselpaar signiert. Sie können ein bestehendes Mangrove-Reviews-Konto importieren oder Ihres exportieren, um es zu sichern.",
     "mangroveIdentity": "Aktuelle Identität",
@@ -1943,6 +1998,7 @@
   },
   "menu": {
     "saved": "Gespeichert",
+    "timeline": "Ihre Zeitleiste",
     "recent": "Zuletzt verwendet",
     "contributions": "Meine Beiträge",
     "shareMap": "Karte teilen oder einbetten",
@@ -1974,6 +2030,54 @@
     "privacy": "Datenschutz",
     "terms": "Nutzungsbedingungen",
     "imprint": "Impressum"
+  },
+  "timeline": {
+    "onboardingTitle": "Ihre Zeitleiste",
+    "onboardingReadOnly": "Verbinden Sie Dawarich in den Kontoeinstellungen, um Ihren Standortverlauf hier anzusehen. OpenMapX hat nur Lesezugriff: Aufzeichnung und Änderungen erfolgen in Dawarich.",
+    "openSettings": "Zeitleisten-Einstellungen öffnen",
+    "loadingConnection": "Zeitleisten-Verbindung wird geladen…",
+    "loadingDay": "Dieser Tag wird geladen…",
+    "previousDay": "Vorheriger Tag",
+    "nextDay": "Nächster Tag",
+    "datePicker": "Datum der Zeitleiste",
+    "today": "Heute",
+    "timezoneLabel": "Dawarich-Zeitzone:",
+    "futureDay": "Wählen Sie heute oder ein früheres Datum, um Ihre Zeitleiste anzusehen.",
+    "emptyDay": "Keine Zeitleisten-Aktivität",
+    "emptyDayHint": "Dawarich enthält für diesen Tag keine Besuche oder Wege.",
+    "testConnection": "Verbindung testen",
+    "testingConnection": "Verbindung wird getestet…",
+    "replaceConnection": "Zugangsdaten ersetzen",
+    "visitFallback": "Unbenannter Besuch",
+    "journeyFallback": "Weg",
+    "selected": "Ausgewählt",
+    "pointCount": "Punkte",
+    "entriesAriaLabel": "Zeitleisteneinträge",
+    "summary": {
+      "distance": "Entfernung",
+      "places": "Orte",
+      "moving": "In Bewegung",
+      "stationary": "An Orten"
+    },
+    "connection": {
+      "degraded": "Dawarich ist vorübergehend nicht erreichbar. Bereits geladene Daten können sichtbar bleiben.",
+      "invalid": "Dawarich akzeptiert diesen API-Schlüssel nicht mehr. Ersetzen Sie die Zugangsdaten, um fortzufahren."
+    },
+    "warnings": {
+      "TRACK_GEOMETRY_UNAVAILABLE": "Der Tag ist verfügbar, aber seine Weglinien konnten nicht geladen werden.",
+      "PARTIAL_TRACK_PAGE_LIMIT": "Nur ein Teil der Weggeometrie dieses Tages konnte geladen werden."
+    },
+    "errors": {
+      "TIMELINE_NOT_CONNECTED": "Verbinden Sie Dawarich in den Kontoeinstellungen, um Ihre Zeitleiste anzusehen.",
+      "TIMELINE_MANAGED_DISABLED": "Der gehostete Dawarich-Dienst ist auf diesem Server nicht verfügbar.",
+      "TIMELINE_CREDENTIAL_INVALID": "Dawarich hat den API-Schlüssel abgelehnt. Ersetzen Sie die Zugangsdaten und versuchen Sie es erneut.",
+      "TIMELINE_INSTANCE_UNSUPPORTED": "Diese Dawarich-Instanz ist mit der Zeitleisten-Integration nicht kompatibel.",
+      "TIMELINE_PLAN_RESTRICTED": "Dieses Dawarich-Konto erlaubt den erforderlichen Zeitleistenzugriff nicht.",
+      "TIMELINE_RATE_LIMITED": "Dawarich erhält zu viele Anfragen. Warten Sie kurz und versuchen Sie es erneut.",
+      "TIMELINE_UPSTREAM_UNAVAILABLE": "Dawarich ist derzeit nicht erreichbar. Versuchen Sie es später erneut.",
+      "TIMELINE_RESPONSE_INVALID": "Dawarich hat Daten zurückgegeben, die OpenMapX nicht sicher lesen konnte.",
+      "unknown": "Ihre Zeitleiste konnte nicht geladen werden. Versuchen Sie es erneut."
+    }
   },
   "saved": {
     "title": "Gespeichert",

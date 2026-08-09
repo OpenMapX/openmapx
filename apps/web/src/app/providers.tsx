@@ -28,6 +28,7 @@ import { localStorageAdapter } from "../lib/storage";
 import { IntegrationProvider } from "../providers/IntegrationProvider";
 import { KeypairSessionGuard } from "../providers/KeypairSessionGuard";
 import { MangroveTransportProvider } from "../providers/MangroveTransportProvider";
+import { PersonalTimelineSessionGuard } from "../providers/PersonalTimelineSessionGuard";
 
 configureStorage(localStorageAdapter);
 registerBuiltinIdSchemeViews();
@@ -134,6 +135,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <SavedPlacesMirror />
       <MangroveTransportProvider>
         <KeypairSessionGuard />
+        <PersonalTimelineSessionGuard />
         <IntegrationProvider>{children}</IntegrationProvider>
       </MangroveTransportProvider>
     </ThemeProvider>
