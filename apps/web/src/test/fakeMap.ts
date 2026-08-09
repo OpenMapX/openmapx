@@ -1,4 +1,4 @@
-import type { Map as MaplibreMap, MissingStyleImageResolver } from "maplibre-gl";
+import type { MapGeoJSONFeature, Map as MaplibreMap, MissingStyleImageResolver } from "maplibre-gl";
 
 /**
  * A stateful fake MapLibre `Map` for unit-testing map layers and attribution
@@ -12,6 +12,9 @@ import type { Map as MaplibreMap, MissingStyleImageResolver } from "maplibre-gl"
  * matters) as layer tests need them, rather than silently no-op'ing.
  */
 export interface FakeMapState {
+  renderedFeatures: Map<string, MapGeoJSONFeature[]>;
+  canvas: HTMLCanvasElement;
+  projectedPoint: { x: number; y: number };
   sources: Map<string, Record<string, unknown>>;
   layers: Map<string, Record<string, unknown>>;
   paint: Map<string, Record<string, unknown>>;
@@ -66,6 +69,7 @@ export interface FakeMap {
   state: FakeMapState;
   /** Fire every handler registered for `event` (e.g. emit("load")). */
   emit(event: string, ...args: unknown[]): void;
+  setRenderedFeatures(layerId: string, features: MapGeoJSONFeature[]): void;
   /** Attribution strings of all registered sources (what the control shows). */
   registeredAttributions(): string[];
 }
@@ -92,7 +96,12 @@ export interface CreateFakeMapOptions {
 }
 
 export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
+  const canvas = document.createElement("canvas");
+  canvas.tabIndex = 0;
   const state: FakeMapState = {
+    renderedFeatures: new Map(),
+    canvas,
+    projectedPoint: { x: 0, y: 0 },
     sources: new Map(),
     layers: new Map(),
     paint: new Map(),
@@ -126,7 +135,6 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
   };
 
   const baseLayers = options.baseLayers ?? [];
-  const canvas = { style: { cursor: "" } };
   const container = { clientHeight: options.containerHeight ?? 800 };
   for (const layer of baseLayers) state.layers.set(layer.id, { ...layer });
 
@@ -280,9 +288,10 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       api.emit("style.load");
       api.emit("styledata");
     },
-    queryRenderedFeatures: () => [],
+    queryRenderedFeatures: (_point: unknown, queryOptions?: { layers?: string[] }) =>
+      queryOptions?.layers?.flatMap((layerId) => state.renderedFeatures.get(layerId) ?? []) ?? [],
     querySourceFeatures: () => [],
-    project: (lngLat: unknown) => ({ x: 0, y: 0, lngLat }),
+    project: () => state.projectedPoint,
     unproject: () => ({ lng: 0, lat: 0 }),
     getZoom: () => state.zoom,
     getPitch: () => state.pitch,
@@ -329,6 +338,9 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     state,
     emit(event, ...args) {
       for (const handler of state.handlers.get(event) ?? []) handler(...args);
+    },
+    setRenderedFeatures(layerId, features) {
+      state.renderedFeatures.set(layerId, features);
     },
     registeredAttributions() {
       return [...state.sources.values()].map((s) => (s.attribution as string | undefined) ?? "");

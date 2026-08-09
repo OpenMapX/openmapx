@@ -33,6 +33,7 @@ import { TransitVehicleLayer } from "@/components/map/layers/TransitVehicleLayer
 import { VehicleLiveLayer } from "@/components/map/layers/VehicleLiveLayer";
 import { MapCanvas } from "@/components/map/MapCanvas";
 import { MapClickHandler } from "@/components/map/MapClickHandler";
+import { MapContextMenu } from "@/components/map/MapContextMenu";
 import { MapControls } from "@/components/map/MapControls";
 import { MapFooter } from "@/components/map/MapFooter";
 import { MapLayerHost } from "@/components/map/MapLayerHost";
@@ -168,6 +169,7 @@ export default function HomePage() {
             <DataSourceDetailBridge />
             <MapClickHandler />
             <MapStylePoiClickHandler />
+            <MapContextMenu />
             <UserLocationMarker />
             <SelectedPlaceMarker />
             <ExploreAnchorMarker />

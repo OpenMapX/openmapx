@@ -191,3 +191,24 @@ describe("fake map operation counters", () => {
     expect(after - before).toBe(1);
   });
 });
+
+describe("fake map interaction controls", () => {
+  it("exposes a focusable canvas for keyboard interaction tests", () => {
+    const fake = createFakeMap();
+    document.body.appendChild(fake.state.canvas);
+    fake.state.canvas.focus();
+    expect(document.activeElement).toBe(fake.state.canvas);
+    fake.state.canvas.remove();
+  });
+
+  it("returns rendered hits only from requested layers", () => {
+    const fake = createFakeMap();
+    const poi = { id: "poi" } as never;
+    const overlay = { id: "overlay" } as never;
+    fake.setRenderedFeatures("poi-label", [poi]);
+    fake.setRenderedFeatures("overlay-layer", [overlay]);
+    expect(
+      fake.map.queryRenderedFeatures({ x: 0, y: 0 } as never, { layers: ["poi-label"] }),
+    ).toEqual([poi]);
+  });
+});

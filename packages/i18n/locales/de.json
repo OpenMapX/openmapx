@@ -1,4 +1,19 @@
 {
+  "mapContextMenu": {
+    "ariaLabel": "Kartenaktionen für {location}",
+    "fromHere": "Von hier",
+    "toHere": "Hierher",
+    "copyLocation": "Standort kopieren",
+    "coordinates": "Koordinaten",
+    "name": "Name",
+    "address": "Adresse",
+    "openPlaceDetails": "Ortsdetails öffnen",
+    "shareLocation": "Standort teilen",
+    "copied": "Kopiert",
+    "copyFailed": "Kopieren fehlgeschlagen",
+    "linkCopied": "Link in die Zwischenablage kopiert",
+    "shareFailed": "Teilen fehlgeschlagen"
+  },
   "crowdReports": {
     "reportButton": "Zustand melden",
     "reportTitle": "Zustand melden",

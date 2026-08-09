@@ -1,4 +1,19 @@
 {
+  "mapContextMenu": {
+    "ariaLabel": "Map actions for {location}",
+    "fromHere": "From here",
+    "toHere": "To here",
+    "copyLocation": "Copy location",
+    "coordinates": "Coordinates",
+    "name": "Name",
+    "address": "Address",
+    "openPlaceDetails": "Open place details",
+    "shareLocation": "Share location",
+    "copied": "Copied",
+    "copyFailed": "Couldn’t copy",
+    "linkCopied": "Link copied to clipboard",
+    "shareFailed": "Couldn’t share"
+  },
   "crowdReports": {
     "reportButton": "Report a condition",
     "reportTitle": "Report a condition",
