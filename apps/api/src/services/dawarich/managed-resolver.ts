@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../../db/index.js";
-import { oauthClient } from "../../db/schema.js";
+import { oauthClient, serviceConfig } from "../../db/schema.js";
 import { dockerComposeContainerEnv } from "../../utils/docker-compose.js";
 import { envString } from "../../utils/env.js";
 import { resolveEffectiveServiceConfig } from "../service-config-resolver.js";
@@ -53,6 +53,7 @@ export interface ManagedDawarichResolverDependencies {
   fetchHealth(url: string, init: RequestInit): Promise<Pick<Response, "ok">>;
   now(): number;
   getAppliedGeneration(serviceId: string): Promise<string | null>;
+  getDesiredGeneration(serviceId: string): Promise<string | null>;
 }
 
 export interface ManagedOAuthAuthoritySnapshot {
@@ -124,6 +125,7 @@ function configsReady(
   app: Record<string, unknown>,
   worker: Record<string, unknown>,
   postgis: Record<string, unknown>,
+  desiredGeneration: string,
 ): ReadyConfig | null {
   const publicOrigin = exactPublicOrigin(app.APPLICATION_URL);
   if (!publicOrigin) return null;
@@ -151,9 +153,8 @@ function configsReady(
     worker.OIDC_CLIENT_ID !== app.OIDC_CLIENT_ID ||
     !exactIssuer(app.OIDC_ISSUER) ||
     worker.OIDC_ISSUER !== app.OIDC_ISSUER ||
-    typeof app[DAWARICH_PROVISIONING_GENERATION_KEY] !== "string" ||
-    !/^[0-9a-f]{32}$/.test(app[DAWARICH_PROVISIONING_GENERATION_KEY] as string) ||
-    worker[DAWARICH_PROVISIONING_GENERATION_KEY] !== app[DAWARICH_PROVISIONING_GENERATION_KEY] ||
+    app[DAWARICH_PROVISIONING_GENERATION_KEY] !== desiredGeneration ||
+    worker[DAWARICH_PROVISIONING_GENERATION_KEY] !== desiredGeneration ||
     postgis.POSTGRES_USER !== "postgres" ||
     postgis.POSTGRES_DB !== "dawarich_production"
   ) {
@@ -163,7 +164,7 @@ function configsReady(
     publicOrigin,
     issuer: app.OIDC_ISSUER as string,
     clientId: app.OIDC_CLIENT_ID as string,
-    generation: app[DAWARICH_PROVISIONING_GENERATION_KEY] as string,
+    generation: desiredGeneration,
   };
 }
 
@@ -211,12 +212,20 @@ export class ManagedDawarichServiceResolver implements ManagedDawarichResolver {
     const runtime = this.dependencies.getRuntimeState();
     if (!runtime.installed || !runtime.selected || !runtime.internalBaseUrl) return null;
 
-    const [app, worker, postgis] = await Promise.all([
+    const [app, worker, postgis, rawAppGeneration, rawWorkerGeneration] = await Promise.all([
       this.dependencies.getConfig(DAWARICH_APP_SERVICE_ID),
       this.dependencies.getConfig(DAWARICH_WORKER_SERVICE_ID),
       this.dependencies.getConfig(DAWARICH_POSTGIS_SERVICE_ID),
+      this.dependencies.getDesiredGeneration(DAWARICH_APP_SERVICE_ID),
+      this.dependencies.getDesiredGeneration(DAWARICH_WORKER_SERVICE_ID),
     ]);
-    const config = configsReady(app, worker, postgis);
+    const desiredGeneration =
+      rawAppGeneration &&
+      /^[0-9a-f]{32}$/.test(rawAppGeneration) &&
+      rawWorkerGeneration === rawAppGeneration
+        ? rawAppGeneration
+        : null;
+    const config = desiredGeneration ? configsReady(app, worker, postgis, desiredGeneration) : null;
     const provisioned = Boolean(
       config &&
         (await this.dependencies.getAppliedGeneration(DAWARICH_APP_SERVICE_ID)) ===
@@ -277,6 +286,17 @@ async function readConfig(serviceId: string): Promise<Record<string, unknown>> {
     configSchema: service.manifest.configSchema,
     containerEnv: service.manifest.container.environment,
   });
+}
+
+/** Raw DB authority for the desired non-secret generation; env is not trusted here. */
+async function readDesiredGeneration(serviceId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ config: serviceConfig.config })
+    .from(serviceConfig)
+    .where(eq(serviceConfig.serviceId, serviceId))
+    .limit(1);
+  const value = row?.config?.[DAWARICH_PROVISIONING_GENERATION_KEY];
+  return typeof value === "string" ? value : null;
 }
 
 function authoritativeIssuer(): string | null {
@@ -365,6 +385,7 @@ const defaultDependencies: ManagedDawarichResolverDependencies = {
   now: Date.now,
   getAppliedGeneration: (serviceId) =>
     dockerComposeContainerEnv(serviceId, DAWARICH_PROVISIONING_GENERATION_KEY),
+  getDesiredGeneration: readDesiredGeneration,
 };
 
 /** Shared runtime resolver so every caller uses the same bounded health-only cache. */

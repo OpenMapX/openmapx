@@ -180,6 +180,17 @@ function provision(dependencies: ManagedDawarichProvisioningDependencies) {
   );
 }
 
+async function createAppliedHarness() {
+  const harness = createHarness({ runtime: { selected: true, running: true, healthy: true } });
+  await provision(harness.dependencies);
+  const generation = harness.configs.get(DAWARICH_APP_SERVICE_ID)?.[GENERATION_KEY];
+  expect(generation).toMatch(/^[0-9a-f]{32}$/);
+  harness.appliedGenerations.set(DAWARICH_APP_SERVICE_ID, generation as string);
+  harness.appliedGenerations.set(DAWARICH_WORKER_SERVICE_ID, generation as string);
+  vi.clearAllMocks();
+  return { ...harness, generation: generation as string };
+}
+
 describe("validatePublicHostname", () => {
   it.each([
     "https://timeline.example.test",
@@ -635,6 +646,153 @@ describe("provisionManagedDawarich", () => {
 });
 
 describe("rotateManagedDawarichOidcSecret", () => {
+  it("does not rotate when the first pending-generation write fails", async () => {
+    const harness = await createAppliedHarness();
+    harness.mergeConfig.mockRejectedValueOnce(new Error("app config unavailable"));
+
+    await expect(
+      rotateManagedDawarichOidcSecret(
+        { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+        harness.dependencies,
+      ),
+    ).rejects.toThrow("app config unavailable");
+
+    expect(harness.rotateClientSecret).not.toHaveBeenCalled();
+    expect(harness.secrets.get(secretKey(DAWARICH_APP_SERVICE_ID, "OIDC_CLIENT_SECRET"))).toBe(
+      "oidc-created-sensitive-marker",
+    );
+  });
+
+  it("does not rotate and fails closed when only the app pending generation is written", async () => {
+    const harness = await createAppliedHarness();
+    harness.mergeConfig
+      .mockImplementationOnce(async (serviceId, updates) => {
+        harness.configs.set(serviceId, {
+          ...(harness.configs.get(serviceId) ?? {}),
+          ...updates,
+        });
+      })
+      .mockRejectedValueOnce(new Error("worker config unavailable"));
+
+    await expect(
+      rotateManagedDawarichOidcSecret(
+        { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+        harness.dependencies,
+      ),
+    ).rejects.toThrow("worker config unavailable");
+
+    expect(harness.rotateClientSecret).not.toHaveBeenCalled();
+    expect(harness.configs.get(DAWARICH_APP_SERVICE_ID)?.[GENERATION_KEY]).not.toBe(
+      harness.configs.get(DAWARICH_WORKER_SERVICE_ID)?.[GENERATION_KEY],
+    );
+    await expect(
+      inspectManagedDawarichProvisioning(
+        { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+        harness.dependencies,
+      ),
+    ).resolves.toMatchObject({ configReady: false, needsApply: true });
+  });
+
+  it("keeps the new generation pending when Better Auth rotation fails", async () => {
+    const harness = await createAppliedHarness();
+    harness.rotateClientSecret.mockRejectedValueOnce(new Error("Better Auth unavailable"));
+
+    await expect(
+      rotateManagedDawarichOidcSecret(
+        { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+        harness.dependencies,
+      ),
+    ).rejects.toThrow("Better Auth unavailable");
+
+    expect(harness.configs.get(DAWARICH_APP_SERVICE_ID)?.[GENERATION_KEY]).not.toBe(
+      harness.generation,
+    );
+    expect(harness.secrets.get(secretKey(DAWARICH_APP_SERVICE_ID, "OIDC_CLIENT_SECRET"))).toBe(
+      "oidc-created-sensitive-marker",
+    );
+    await expect(
+      inspectManagedDawarichProvisioning(
+        { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+        harness.dependencies,
+      ),
+    ).resolves.toMatchObject({ needsApply: true });
+  });
+
+  it.each(["first", "second"] as const)(
+    "keeps rotation pending when the %s vault write fails",
+    async (failedWrite) => {
+      const harness = await createAppliedHarness();
+      if (failedWrite === "first") {
+        harness.setSecret.mockRejectedValueOnce(new Error("app vault unavailable"));
+      } else {
+        harness.setSecret
+          .mockImplementationOnce(async (serviceId, key, value) => {
+            harness.secrets.set(secretKey(serviceId, key), value);
+          })
+          .mockRejectedValueOnce(new Error("worker vault unavailable"));
+      }
+
+      await expect(
+        rotateManagedDawarichOidcSecret(
+          { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+          harness.dependencies,
+        ),
+      ).rejects.toMatchObject({ code: "DAWARICH_OIDC_SECRET_RECOVERY_REQUIRED" });
+
+      const status = await inspectManagedDawarichProvisioning(
+        { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+        harness.dependencies,
+      );
+      expect(status.needsApply).toBe(true);
+      expect(status.secrets.oidcClientSecret).toBe(
+        failedWrite === "first" ? "consistent" : "conflict",
+      );
+    },
+  );
+
+  it("recovers a partial rotation once and stays pending until both containers apply", async () => {
+    const harness = await createAppliedHarness();
+    harness.setSecret
+      .mockImplementationOnce(async (serviceId, key, value) => {
+        harness.secrets.set(secretKey(serviceId, key), value);
+      })
+      .mockRejectedValueOnce(new Error("worker vault unavailable"));
+    await expect(
+      rotateManagedDawarichOidcSecret(
+        { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+        harness.dependencies,
+      ),
+    ).rejects.toMatchObject({ code: "DAWARICH_OIDC_SECRET_RECOVERY_REQUIRED" });
+    vi.clearAllMocks();
+
+    const recovered = await provision(harness.dependencies);
+    const desiredGeneration = harness.configs.get(DAWARICH_APP_SERVICE_ID)?.[GENERATION_KEY];
+    expect(harness.rotateClientSecret).toHaveBeenCalledTimes(1);
+    expect(recovered.audit.rotated).toBe(true);
+    expect(recovered.status).toMatchObject({
+      secrets: { oidcClientSecret: "consistent" },
+      needsApply: true,
+    });
+    harness.appliedGenerations.set(DAWARICH_APP_SERVICE_ID, desiredGeneration as string);
+    await expect(
+      inspectManagedDawarichProvisioning(
+        { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+        harness.dependencies,
+      ),
+    ).resolves.toMatchObject({ needsApply: true });
+    harness.appliedGenerations.set(DAWARICH_WORKER_SERVICE_ID, desiredGeneration as string);
+    await expect(
+      inspectManagedDawarichProvisioning(
+        { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+        harness.dependencies,
+      ),
+    ).resolves.toMatchObject({ needsApply: false });
+
+    vi.clearAllMocks();
+    await provision(harness.dependencies);
+    expect(harness.rotateClientSecret).not.toHaveBeenCalled();
+  });
+
   it("rotates only the OIDC secret and marks the service for apply", async () => {
     const harness = createHarness({
       clients: [baseClient()],

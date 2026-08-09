@@ -16,6 +16,12 @@ import {
   validateServiceSelectionForWrite,
 } from "../services/admin-cli";
 import { isDockerAvailable } from "../services/admin-ops";
+import {
+  DAWARICH_CREDENTIAL_MANAGED_BY,
+  DAWARICH_CREDENTIAL_MANAGED_CODE,
+  DAWARICH_CREDENTIAL_MANAGED_ERROR,
+  isProvisioningOwnedDawarichCredential,
+} from "../services/dawarich/credential-policy.js";
 import { jobRunner } from "../services/job-runner";
 import { isSecretsConfigured } from "../services/secrets";
 import { resolveServiceConfigWithSources } from "../services/service-config-resolver";
@@ -390,6 +396,9 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
           description: f.description,
           setup: f.setup,
           source: v ? ("vault" as const) : ("missing" as const),
+          managedBy: isProvisioningOwnedDawarichCredential(svc.manifest.id, f.key)
+            ? DAWARICH_CREDENTIAL_MANAGED_BY
+            : undefined,
           updatedAt: v?.updatedAt?.toISOString(),
           updatedBy: v?.updatedBy ?? null,
         };
@@ -406,13 +415,20 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         reply.status(404);
         return { error: "Service not found" };
       }
-      if (!isSecretsConfigured()) {
-        reply.status(400);
-        return { error: "Secret vault not configured — set OPENMAPX_SECRETS_KEY" };
-      }
       if (!isValidSecretKey(req.params.key)) {
         reply.status(400);
         return { error: "Invalid credential key" };
+      }
+      if (isProvisioningOwnedDawarichCredential(svc.manifest.id, req.params.key)) {
+        reply.status(409);
+        return {
+          code: DAWARICH_CREDENTIAL_MANAGED_CODE,
+          error: DAWARICH_CREDENTIAL_MANAGED_ERROR,
+        };
+      }
+      if (!isSecretsConfigured()) {
+        reply.status(400);
+        return { error: "Secret vault not configured — set OPENMAPX_SECRETS_KEY" };
       }
       const field = getSecretFields(svc.manifest.configSchema).find(
         (f) => f.key === req.params.key,
@@ -452,6 +468,13 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       if (!isValidSecretKey(req.params.key)) {
         reply.status(400);
         return { error: "Invalid credential key" };
+      }
+      if (isProvisioningOwnedDawarichCredential(svc.manifest.id, req.params.key)) {
+        reply.status(409);
+        return {
+          code: DAWARICH_CREDENTIAL_MANAGED_CODE,
+          error: DAWARICH_CREDENTIAL_MANAGED_ERROR,
+        };
       }
       // Mirror the PUT handler's declared-field check. A stored key can
       // legitimately outlive its declaration (the service's manifest changed

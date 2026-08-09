@@ -75,6 +75,17 @@ therefore survives page/API restarts and remains pending after an app-only apply
 it clears only when both containers run the same current generation. The marker
 never contains or hashes credential material.
 
+The generic **Credentials** tab reports the database, Rails, and OIDC fields as
+**Managed** and does not offer Set, Rotate, or Remove actions. Its API returns
+`409 DAWARICH_CREDENTIAL_MANAGED` for those fields, including the PostGIS
+password. This boundary prevents one service from receiving a shared credential
+without the other consumers and prevents an arbitrary OIDC value from diverging
+from Better Auth. Rotate OIDC only with the dedicated recovery action. Treat a
+database or Rails credential conflict as host-level maintenance: stop the whole
+bundle, repair the database role or affected vault rows as one coordinated
+operation, then run **Provision/reconcile** and apply both the app and Sidekiq.
+Do not use per-service credential rotation for managed Dawarich secrets.
+
 From the admin service catalog, select **Dawarich Timeline**, review the
 resource requirements, then use **Save & Apply** for both the timeline app and
 Sidekiq worker. The admin render is required after provisioning because it reads

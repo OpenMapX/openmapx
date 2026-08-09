@@ -69,6 +69,7 @@ function createHarness(
     healthOk?: boolean;
     oauthAuthority?: { issuer: string; clients: readonly ManagedOAuthClient[] };
     appliedGenerations?: Partial<Record<string, string | null>>;
+    desiredGenerations?: Partial<Record<string, string | null>>;
   } = {},
 ) {
   let now = 1_000;
@@ -113,6 +114,12 @@ function createHarness(
     getAppliedGeneration: vi.fn(async (serviceId: string) => {
       if (serviceId in (options.appliedGenerations ?? {})) {
         return options.appliedGenerations?.[serviceId] ?? null;
+      }
+      return GENERATION;
+    }),
+    getDesiredGeneration: vi.fn(async (serviceId: string) => {
+      if (serviceId in (options.desiredGenerations ?? {})) {
+        return options.desiredGenerations?.[serviceId] ?? null;
       }
       return GENERATION;
     }),
@@ -218,6 +225,49 @@ describe("ManagedDawarichServiceResolver", () => {
       expect(harness.fetchHealth).not.toHaveBeenCalled();
     },
   );
+
+  it("rejects effective env markers that mask a newer database generation", async () => {
+    const staleGeneration = "fedcba9876543210fedcba9876543210";
+    const effectiveConfig = {
+      ...readyConfig(),
+      OPENMAPX_PROVISIONING_GENERATION: staleGeneration,
+    };
+    const harness = createHarness({
+      appConfig: effectiveConfig,
+      workerConfig: effectiveConfig,
+      desiredGenerations: {
+        [DAWARICH_APP_SERVICE_ID]: GENERATION,
+        [DAWARICH_WORKER_SERVICE_ID]: GENERATION,
+      },
+      appliedGenerations: {
+        [DAWARICH_APP_SERVICE_ID]: staleGeneration,
+        [DAWARICH_WORKER_SERVICE_ID]: staleGeneration,
+      },
+    });
+    const resolver = new ManagedDawarichServiceResolver(harness.dependencies);
+
+    await expect(resolver.resolve()).resolves.toMatchObject({
+      publicOrigin: "",
+      provisioned: false,
+      healthy: false,
+    });
+    expect(harness.fetchHealth).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing app", { [DAWARICH_APP_SERVICE_ID]: null }],
+    ["missing worker", { [DAWARICH_WORKER_SERVICE_ID]: null }],
+    ["conflicting worker", { [DAWARICH_WORKER_SERVICE_ID]: "fedcba9876543210fedcba9876543210" }],
+  ] as const)("rejects a %s raw desired generation", async (_name, desiredGenerations) => {
+    const harness = createHarness({ desiredGenerations });
+    const resolver = new ManagedDawarichServiceResolver(harness.dependencies);
+
+    await expect(resolver.resolve()).resolves.toMatchObject({
+      provisioned: false,
+      healthy: false,
+    });
+    expect(harness.fetchHealth).not.toHaveBeenCalled();
+  });
 
   it.each([
     ["deleted", { issuer: "https://example.test/api/auth", clients: [] }],

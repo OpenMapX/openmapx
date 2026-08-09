@@ -389,6 +389,28 @@ describe("service credentials", () => {
     isBuiltIn: false,
   };
 
+  function managedDawarichService(serviceId: string, key: string) {
+    return {
+      manifest: {
+        id: serviceId,
+        name: serviceId,
+        version: "1.10.3",
+        quality: "built-in",
+        configSchema: {
+          properties: {
+            [key]: {
+              type: "string",
+              title: key,
+              "x-openmapx-secret": true,
+            },
+          },
+        },
+      },
+      enabled: true,
+      isBuiltIn: true,
+    };
+  }
+
   // Reset the shared mocks' queues + implementations so leftover `…Once`
   // values from earlier describes can't leak in (the global afterEach only
   // clears call history, not queued implementations).
@@ -472,6 +494,81 @@ describe("service credentials", () => {
       },
     ]);
     expect(body.secretsConfigured).toBe(true);
+  });
+
+  it("GET marks provisioning-owned Dawarich credentials as managed", async () => {
+    mockRegistryGet.mockReturnValueOnce(
+      managedDawarichService("dawarich-app", "OIDC_CLIENT_SECRET"),
+    );
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/admin/services/dawarich-app/credentials",
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().credentials).toEqual([
+      expect.objectContaining({
+        key: "OIDC_CLIENT_SECRET",
+        managedBy: "dawarich-provisioning",
+      }),
+    ]);
+  });
+
+  it.each([
+    ["dawarich-app", "DATABASE_PASSWORD"],
+    ["dawarich-app", "SECRET_KEY_BASE"],
+    ["dawarich-app", "OIDC_CLIENT_SECRET"],
+    ["dawarich-sidekiq", "DATABASE_PASSWORD"],
+    ["dawarich-sidekiq", "SECRET_KEY_BASE"],
+    ["dawarich-sidekiq", "OIDC_CLIENT_SECRET"],
+    ["dawarich-postgis", "POSTGRES_PASSWORD"],
+  ])("rejects generic PUT/DELETE for managed %s:%s", async (serviceId, key) => {
+    mockRegistryGet.mockReturnValue(managedDawarichService(serviceId, key));
+
+    const [put, remove] = await Promise.all([
+      app.inject({
+        method: "PUT",
+        url: `/admin/services/${serviceId}/credentials/${key}`,
+        payload: { value: "must-not-be-written" },
+      }),
+      app.inject({
+        method: "DELETE",
+        url: `/admin/services/${serviceId}/credentials/${key}`,
+      }),
+    ]);
+
+    for (const response of [put, remove]) {
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({
+        code: "DAWARICH_CREDENTIAL_MANAGED",
+      });
+      expect(response.json().error).toMatch(/Managed Dawarich setup/i);
+    }
+    expect(mockSetServiceSecret).not.toHaveBeenCalled();
+    expect(mockDeleteServiceSecret).not.toHaveBeenCalled();
+    expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
+    expect(mockWriteAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("rejects concurrent generic writes without bypassing managed ownership", async () => {
+    mockRegistryGet.mockImplementation((serviceId: string) =>
+      managedDawarichService(serviceId, "DATABASE_PASSWORD"),
+    );
+
+    const responses = await Promise.all(
+      ["dawarich-app", "dawarich-sidekiq"].map((serviceId) =>
+        app.inject({
+          method: "PUT",
+          url: `/admin/services/${serviceId}/credentials/DATABASE_PASSWORD`,
+          payload: { value: "same-but-unsafe" },
+        }),
+      ),
+    );
+
+    expect(responses.map((response) => response.statusCode)).toEqual([409, 409]);
+    expect(mockSetServiceSecret).not.toHaveBeenCalled();
+    expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
   });
 
   it("PUT stores the secret and enqueues an apply when Docker is available", async () => {

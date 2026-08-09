@@ -447,7 +447,7 @@ async function reconcileConfig(
   dependencies: ManagedDawarichProvisioningDependencies,
   context: ProvisioningContext,
   clientId: string,
-  forceGeneration: boolean,
+  pendingGeneration: string | null = null,
 ): Promise<boolean> {
   const app = appConfig(context, clientId);
   const postgis = { POSTGRES_USER: "postgres", POSTGRES_DB: "dawarich_production" };
@@ -462,9 +462,10 @@ async function reconcileConfig(
     !hasExpectedConfig(currentPostgis, postgis);
   const existingGeneration = sharedGeneration(currentApp, currentWorker);
   const generation =
-    forceGeneration || baseChanged || !existingGeneration
+    pendingGeneration ??
+    (baseChanged || !existingGeneration
       ? dependencies.randomBytes(16).toString("hex")
-      : existingGeneration;
+      : existingGeneration);
   let changed = false;
   for (const [serviceId, current, expected] of [
     [DAWARICH_APP_SERVICE_ID, currentApp, appConfig(context, clientId, generation)],
@@ -477,6 +478,24 @@ async function reconcileConfig(
     }
   }
   return changed;
+}
+
+/**
+ * Establish the fail-closed apply boundary before mutating Better Auth or the
+ * secret vault. Writes are deliberately ordered: if the worker write fails,
+ * the raw generations disagree and every readiness path remains closed. The
+ * previous generation is never restored after a partial write.
+ */
+async function stagePendingGeneration(
+  dependencies: ManagedDawarichProvisioningDependencies,
+): Promise<string> {
+  const generation = dependencies.randomBytes(16).toString("hex");
+  for (const serviceId of [DAWARICH_APP_SERVICE_ID, DAWARICH_WORKER_SERVICE_ID]) {
+    await dependencies.mergeConfig(serviceId, {
+      [DAWARICH_PROVISIONING_GENERATION_KEY]: generation,
+    });
+  }
+  return generation;
 }
 
 async function matchingClients(
@@ -534,6 +553,9 @@ async function buildStatus(
   const applied = Boolean(
     desiredGeneration && appliedApp === desiredGeneration && appliedWorker === desiredGeneration,
   );
+  const hasGenerationState =
+    validGeneration(rawApp[DAWARICH_PROVISIONING_GENERATION_KEY]) ||
+    validGeneration(rawWorker[DAWARICH_PROVISIONING_GENERATION_KEY]);
   return {
     ...runtime,
     publicOrigin: client ? context.publicOrigin : null,
@@ -546,7 +568,9 @@ async function buildStatus(
     secrets: secretStates,
     configReady,
     readyToStart,
-    needsApply: readyToStart && (!runtime.selected || !runtime.running || !applied),
+    needsApply:
+      hasGenerationState &&
+      (!runtime.selected || !runtime.running || !desiredGeneration || !applied),
   };
 }
 
@@ -601,19 +625,33 @@ async function executeProvision(
   let reconciled = false;
   let rotated = false;
   let client = clients[0];
+  let updates: Partial<ManagedOAuthClient> = {};
+  if (client) {
+    assertImmutableClientSecurity(client);
+    updates = mutableClientUpdates(client, context);
+  }
+  const oidcRecoveryRequired = Boolean(
+    client && classifyCopies(initialSecrets.oidc) !== "consistent",
+  );
+  const runtimeMutationRequired =
+    !client ||
+    Object.keys(updates).length > 0 ||
+    databaseState === "missing" ||
+    railsState !== "consistent" ||
+    oidcRecoveryRequired;
+  const pendingGeneration = runtimeMutationRequired
+    ? await stagePendingGeneration(dependencies)
+    : null;
+
   if (!client) {
     client = await dependencies.createClient(input.headers, desiredClient(context));
     created = true;
     await storeOidcSecret(dependencies, client.client_secret, input.actorId);
     clients = [{ ...client, client_secret: undefined }];
-  } else {
-    assertImmutableClientSecurity(client);
-    const updates = mutableClientUpdates(client, context);
-    if (Object.keys(updates).length > 0) {
-      client = await dependencies.updateClient(input.headers, client.client_id, updates);
-      reconciled = true;
-      clients = [client];
-    }
+  } else if (Object.keys(updates).length > 0) {
+    client = await dependencies.updateClient(input.headers, client.client_id, updates);
+    reconciled = true;
+    clients = [client];
   }
 
   if (databaseState === "missing") {
@@ -658,18 +696,13 @@ async function executeProvision(
     }
   }
 
-  if (!created && classifyCopies(initialSecrets.oidc) !== "consistent") {
+  if (!created && oidcRecoveryRequired) {
     const rotatedClient = await dependencies.rotateClientSecret(input.headers, client.client_id);
     rotated = true;
     await storeOidcSecret(dependencies, rotatedClient.client_secret, input.actorId);
   }
 
-  await reconcileConfig(
-    dependencies,
-    context,
-    client.client_id,
-    created || reconciled || rotated || databaseState === "missing" || railsState !== "consistent",
-  );
+  await reconcileConfig(dependencies, context, client.client_id, pendingGeneration);
   const status = await buildStatus(dependencies, context, clients);
   return {
     status,
@@ -709,9 +742,10 @@ export async function rotateManagedDawarichOidcSecret(
     }
     const client = clients[0] as ManagedOAuthClient;
     assertImmutableClientSecurity(client);
+    const pendingGeneration = await stagePendingGeneration(dependencies);
+    await reconcileConfig(dependencies, context, client.client_id, pendingGeneration);
     const rotated = await dependencies.rotateClientSecret(input.headers, client.client_id);
     await storeOidcSecret(dependencies, rotated.client_secret, input.actorId);
-    await reconcileConfig(dependencies, context, client.client_id, true);
     const status = await buildStatus(dependencies, context, clients);
     return {
       status,
