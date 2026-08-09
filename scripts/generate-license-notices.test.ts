@@ -46,3 +46,33 @@ it("includes data-manager runtime dependency licenses in the generated notices",
     } else writeFileSync(outputPath, original, "utf8");
   }
 });
+
+it("includes the Foursquare OS Places notice in the generated notices", () => {
+  const original = existsSync(outputPath) ? readFileSync(outputPath, "utf8") : undefined;
+
+  try {
+    execFileSync(
+      process.execPath,
+      ["--experimental-strip-types", "--no-warnings=ExperimentalWarning", scriptPath],
+      { cwd: repositoryRoot, stdio: "pipe" },
+    );
+
+    const payload = JSON.parse(readFileSync(outputPath, "utf8")) as LicensePayload;
+    const foursquare = payload.notices.find((notice) => notice.name === "Foursquare OS Places");
+
+    expect(foursquare).toEqual(
+      expect.objectContaining({
+        name: "Foursquare OS Places",
+        version: "data-source",
+        license: "Apache-2.0",
+        licenseUrl: "https://www.apache.org/licenses/LICENSE-2.0",
+        projectUrl: "https://opensource.foursquare.com/places-notice-txt/",
+      }),
+    );
+    expect(foursquare?.licenseText).toContain("Foursquare OS Places");
+  } finally {
+    if (original === undefined) {
+      if (existsSync(outputPath)) unlinkSync(outputPath);
+    } else writeFileSync(outputPath, original, "utf8");
+  }
+});
