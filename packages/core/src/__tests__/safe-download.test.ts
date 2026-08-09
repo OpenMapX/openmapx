@@ -173,6 +173,25 @@ describe("safeFetchJson", () => {
     expect(undiciLifecycle.close).toHaveBeenCalledOnce();
   });
 
+  it("forces dispatcher destruction when rejecting a response whose cancellation fails", async () => {
+    const cancel = vi.fn().mockRejectedValue(new Error("cancel failed"));
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence({
+      ...makeResponse({ headers: { "content-type": "text/html" } }),
+      body: { cancel },
+    } as unknown as Response);
+
+    await expect(
+      safeFetchJsonResponse("https://ex.test/error", {
+        acceptedContentTypes: ["application/json"],
+      }),
+    ).rejects.toThrow(/content type/i);
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(undiciLifecycle.destroy).toHaveBeenCalledOnce();
+    expect(undiciLifecycle.close).not.toHaveBeenCalled();
+  });
+
   it("reports a 401 without retaining the upstream response body", async () => {
     lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
     stubFetchSequence(
@@ -366,5 +385,22 @@ describe("safeDownload", () => {
     } finally {
       await rm(directory, { force: true, recursive: true });
     }
+  });
+
+  it("forces dispatcher destruction when an HTTP-error body cannot be canceled", async () => {
+    const cancel = vi.fn().mockRejectedValue(new Error("cancel failed"));
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence({
+      ...makeResponse({ status: 503 }),
+      body: { cancel },
+    } as unknown as Response);
+
+    await expect(
+      safeDownload("https://ex.test/unavailable", { destPath: "/tmp/unused-download.json" }),
+    ).rejects.toThrow(/download failed/i);
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(undiciLifecycle.destroy).toHaveBeenCalledOnce();
+    expect(undiciLifecycle.close).not.toHaveBeenCalled();
   });
 });

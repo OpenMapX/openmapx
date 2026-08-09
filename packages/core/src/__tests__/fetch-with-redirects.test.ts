@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fetchWithRedirects } from "../utils/fetchWithRedirects.js";
+import { createPinnedFetchTransport } from "../utils/pinned-fetch.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -133,7 +134,60 @@ describe("fetchWithRedirects", () => {
     ).rejects.toThrow("Redirect target not allowed: metadata.internal");
 
     expect(cancel).toHaveBeenCalledOnce();
-    expect(releaseResponse).toHaveBeenCalledWith(redirect);
+    expect(releaseResponse).toHaveBeenCalledWith(redirect, { force: false });
+  });
+
+  it("cancels and releases a redirect response when its Location is malformed", async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const releaseResponse = vi.fn().mockResolvedValue(undefined);
+    const redirect = {
+      body: { cancel },
+      headers: new Headers({ Location: "http://[::1" }),
+      status: 302,
+    } as unknown as Response;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(redirect));
+
+    await expect(
+      fetchWithRedirects("https://api.test/original", { releaseResponse }),
+    ).rejects.toThrow(/invalid url/i);
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(releaseResponse).toHaveBeenCalledWith(redirect, { force: false });
+  });
+
+  it("forces destruction exactly once when redirect-body cancellation rejects", async () => {
+    const cancel = vi.fn().mockRejectedValue(new Error("cancel failed"));
+    const close = vi.fn().mockResolvedValue(undefined);
+    const destroy = vi.fn().mockResolvedValue(undefined);
+    const redirect = {
+      body: { cancel },
+      headers: new Headers({ Location: "https://metadata.internal/latest" }),
+      status: 302,
+    } as unknown as Response;
+    const transport = createPinnedFetchTransport({
+      createDispatcher: () => ({ close, destroy }),
+      fetchImplementation: vi.fn().mockResolvedValue(redirect),
+    });
+    const releaseResponse = vi.fn((response: Response, options?: { force?: boolean }) =>
+      transport.releaseResponse(response, options),
+    );
+
+    await expect(
+      fetchWithRedirects("https://api.test/original", {
+        allowedRedirectHosts: ["api.test"],
+        pinnedFetchImplementation: transport.fetch,
+        releaseResponse,
+        resolveConnectionAddresses: async () => [{ address: "93.184.216.34", family: 4 }],
+      }),
+    ).rejects.toThrow("Redirect target not allowed: metadata.internal");
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(releaseResponse).toHaveBeenCalledOnce();
+    expect(releaseResponse).toHaveBeenCalledWith(redirect, { force: true });
+    expect(destroy).toHaveBeenCalledOnce();
+    expect(close).not.toHaveBeenCalled();
+    await transport.dispose();
+    expect(destroy).toHaveBeenCalledOnce();
   });
 
   it("rejects non-http redirect targets", async () => {

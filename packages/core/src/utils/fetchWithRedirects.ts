@@ -18,8 +18,16 @@ export type PinnedFetchImplementation = (
   init: RequestInit,
 ) => Promise<Response>;
 
+export interface ReleaseResponseOptions {
+  /** Destroy rather than gracefully close when response-body cancellation failed. */
+  force?: boolean;
+}
+
 /** Releases server-only resources associated with a response after its body is consumed or canceled. */
-export type ReleaseResponse = (response: Response) => Promise<void>;
+export type ReleaseResponse = (
+  response: Response,
+  options?: ReleaseResponseOptions,
+) => Promise<void>;
 
 export interface FetchWithRedirectsOptions extends Omit<RequestInit, "redirect"> {
   /**
@@ -133,12 +141,13 @@ async function releaseRedirectResponse(
   response: Response,
   releaseResponse: ReleaseResponse | undefined,
 ): Promise<void> {
+  let force = false;
   try {
     await response.body?.cancel();
   } catch {
-    // A failed cancellation must not leave the server-only dispatcher alive.
+    force = true;
   } finally {
-    await releaseResponse?.(response);
+    await releaseResponse?.(response, { force });
   }
 }
 
@@ -193,9 +202,10 @@ export async function fetchWithRedirects(
       return response;
     }
 
-    const previousUrl = new URL(currentUrl);
-    const nextUrl = new URL(location, currentUrl);
+    let nextUrl: URL;
     try {
+      const previousUrl = new URL(currentUrl);
+      nextUrl = new URL(location, currentUrl);
       assertRedirectAllowed(nextUrl, previousUrl, currentInit);
       if (i === maxRedirects) {
         throw new Error(`Too many redirects while fetching ${currentUrl}`);

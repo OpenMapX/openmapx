@@ -37,11 +37,12 @@ export interface SafeDownloadResult {
   contentType: string | null;
 }
 
-async function cancelResponseBody(response: Response): Promise<void> {
+async function cancelResponseBody(response: Response): Promise<boolean> {
   try {
     await response.body?.cancel();
+    return true;
   } catch {
-    // Cancellation is best-effort; dispatcher cleanup still happens in finally.
+    return false;
   }
 }
 
@@ -163,11 +164,18 @@ export async function safeDownload(
 
   let response: Response | undefined;
   let bodyConsumed = false;
+  let bodyCancellationAttempted = false;
+  let forceDestroy = false;
+  const cancelUnconsumedBody = async (): Promise<void> => {
+    if (!response || bodyConsumed || bodyCancellationAttempted) return;
+    bodyCancellationAttempted = true;
+    if (!(await cancelResponseBody(response))) forceDestroy = true;
+  };
   try {
     response = await fetchWithRedirects(url, fetchOpts);
 
     if (!response.ok) {
-      await cancelResponseBody(response);
+      await cancelUnconsumedBody();
       throw new Error(`Download failed: ${response.status} ${response.statusText} for ${url}`);
     }
 
@@ -183,7 +191,7 @@ export async function safeDownload(
     if (contentLengthHeader) {
       const declared = Number(contentLengthHeader);
       if (Number.isFinite(declared) && declared > maxBytes) {
-        await cancelResponseBody(response);
+        await cancelUnconsumedBody();
         throw new Error(
           `Declared Content-Length ${declared} exceeds max ${maxBytes} for ${finalUrl}`,
         );
@@ -215,8 +223,8 @@ export async function safeDownload(
       contentType: response.headers.get("content-type"),
     };
   } finally {
-    if (response && !bodyConsumed) await cancelResponseBody(response);
-    if (response) await pinnedTransport.releaseResponse(response);
+    await cancelUnconsumedBody();
+    if (response) await pinnedTransport.releaseResponse(response, { force: forceDestroy });
     await pinnedTransport.dispose();
   }
 }
@@ -360,6 +368,13 @@ export async function safeFetchJsonResponse<T = unknown>(
   const pinnedTransport = createPinnedFetchTransport();
   let response: Response | undefined;
   let bodyConsumed = false;
+  let bodyCancellationAttempted = false;
+  let forceDestroy = false;
+  const cancelUnconsumedBody = async (): Promise<void> => {
+    if (!response || bodyConsumed || bodyCancellationAttempted) return;
+    bodyCancellationAttempted = true;
+    if (!(await cancelResponseBody(response))) forceDestroy = true;
+  };
 
   try {
     const fetchImplementation = opts.fetchImplementation;
@@ -389,7 +404,7 @@ export async function safeFetchJsonResponse<T = unknown>(
     const finalUrl = response.url || url;
 
     if (!response.ok) {
-      await cancelResponseBody(response);
+      await cancelUnconsumedBody();
       const retryAfterSeconds = parseRetryAfterSeconds(response.headers.get("retry-after"));
       throw new SafeFetchHttpError(response.status, finalUrl, retryAfterSeconds);
     }
@@ -403,7 +418,7 @@ export async function safeFetchJsonResponse<T = unknown>(
     if (contentLengthHeader) {
       const declared = Number(contentLengthHeader);
       if (Number.isFinite(declared) && declared > maxBytes) {
-        await cancelResponseBody(response);
+        await cancelUnconsumedBody();
         throw new Error(`Response too large (declared ${declared} > ${maxBytes} bytes)`);
       }
     }
@@ -416,7 +431,7 @@ export async function safeFetchJsonResponse<T = unknown>(
         .toLowerCase();
       const accepted = opts.acceptedContentTypes.map((value) => value.toLowerCase());
       if (!contentType || !accepted.includes(contentType)) {
-        await cancelResponseBody(response);
+        await cancelUnconsumedBody();
         throw new Error(`Unexpected response content type for ${finalUrl}`);
       }
     }
@@ -434,7 +449,12 @@ export async function safeFetchJsonResponse<T = unknown>(
         if (done) break;
         total += value.byteLength;
         if (total > maxBytes) {
-          await reader.cancel().catch(() => {});
+          bodyCancellationAttempted = true;
+          try {
+            await reader.cancel();
+          } catch {
+            forceDestroy = true;
+          }
           throw new Error(`Response too large (exceeded ${maxBytes} bytes)`);
         }
         chunks.push(value);
@@ -456,8 +476,8 @@ export async function safeFetchJsonResponse<T = unknown>(
       throw new Error(`Invalid JSON response from ${finalUrl}`);
     }
   } finally {
-    if (response && !bodyConsumed) await cancelResponseBody(response);
-    if (response) await pinnedTransport.releaseResponse(response);
+    await cancelUnconsumedBody();
+    if (response) await pinnedTransport.releaseResponse(response, { force: forceDestroy });
     await pinnedTransport.dispose();
   }
 }

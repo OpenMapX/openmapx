@@ -5,7 +5,7 @@ import {
   type RequestInit as UndiciRequestInit,
   fetch as undiciFetch,
 } from "undici";
-import type { FetchConnectionAddress } from "./fetchWithRedirects";
+import type { FetchConnectionAddress, ReleaseResponseOptions } from "./fetchWithRedirects";
 
 interface PinnedDispatcher {
   close(): Promise<void>;
@@ -20,7 +20,7 @@ export interface PinnedFetchTransport {
     addresses: FetchConnectionAddress[],
     init: RequestInit,
   ): Promise<Response>;
-  releaseResponse(response: Response): Promise<void>;
+  releaseResponse(response: Response, options?: ReleaseResponseOptions): Promise<void>;
   dispose(): Promise<void>;
 }
 
@@ -89,8 +89,15 @@ export function createPinnedFetchTransport(
   const dispatchers = new Set<PinnedDispatcher>();
   const responseDispatchers = new WeakMap<Response, PinnedDispatcher>();
 
-  const releaseDispatcher = async (dispatcher: PinnedDispatcher): Promise<void> => {
+  const releaseDispatcher = async (
+    dispatcher: PinnedDispatcher,
+    options: ReleaseResponseOptions = {},
+  ): Promise<void> => {
     if (!dispatchers.delete(dispatcher)) return;
+    if (options.force) {
+      await dispatcher.destroy();
+      return;
+    }
     await closeDispatcher(dispatcher);
   };
 
@@ -107,11 +114,11 @@ export function createPinnedFetchTransport(
         throw error;
       }
     },
-    async releaseResponse(response) {
+    async releaseResponse(response, options) {
       const dispatcher = responseDispatchers.get(response);
       if (!dispatcher) return;
       responseDispatchers.delete(response);
-      await releaseDispatcher(dispatcher);
+      await releaseDispatcher(dispatcher, options);
     },
     async dispose() {
       await Promise.all([...dispatchers].map((dispatcher) => releaseDispatcher(dispatcher)));
