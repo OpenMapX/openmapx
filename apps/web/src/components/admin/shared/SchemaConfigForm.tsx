@@ -54,6 +54,7 @@ interface SchemaProperty {
   enum?: string[];
   format?: string;
   "x-openmapx-secret"?: boolean;
+  readOnly?: boolean;
   "x-openmapx-setup"?: CredentialSetup;
 }
 
@@ -113,9 +114,9 @@ function humanize(key: string): string {
 }
 
 /**
- * The editable (non-secret) fields of a configSchema. Secrets and any
+ * The editable fields of a configSchema. Secrets, read-only state, and any
  * `excludeKeys` (e.g. `enabled`, handled by a dedicated toggle) are dropped, so
- * a credential never renders on the Config tab.
+ * neither a credential nor an internal state marker renders on the Config tab.
  */
 export function extractConfigFields(
   schema: Record<string, unknown> | undefined,
@@ -125,7 +126,7 @@ export function extractConfigFields(
   const props = (schema.properties ?? schema) as Record<string, SchemaProperty>;
   const skip = new Set<string>(["type", "properties", ...excludeKeys]);
   return Object.entries(props)
-    .filter(([key, def]) => !skip.has(key) && !def?.["x-openmapx-secret"])
+    .filter(([key, def]) => !skip.has(key) && !def?.["x-openmapx-secret"] && def?.readOnly !== true)
     .map(([key, def]) => ({
       key,
       title: def?.title ?? humanize(key),

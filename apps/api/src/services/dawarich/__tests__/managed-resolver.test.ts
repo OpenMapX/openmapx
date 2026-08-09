@@ -4,10 +4,14 @@ import {
   ManagedDawarichServiceResolver,
 } from "../managed-resolver.js";
 import {
+  DAWARICH_APP_SERVICE_ID,
   DAWARICH_SOFTWARE_ID,
+  DAWARICH_WORKER_SERVICE_ID,
   MANAGED_REFERENCE_ID,
   type ManagedOAuthClient,
 } from "../provisioning.js";
+
+const GENERATION = "0123456789abcdef0123456789abcdef";
 
 function readyClient(overrides: Partial<ManagedOAuthClient> = {}): ManagedOAuthClient {
   return {
@@ -51,6 +55,7 @@ function readyConfig(origin = "https://timeline.example.test") {
     OIDC_PROVIDER_NAME: "OpenMapX",
     OIDC_AUTO_REGISTER: "true",
     OIDC_PKCE_ENABLED: "true",
+    OPENMAPX_PROVISIONING_GENERATION: GENERATION,
   };
 }
 
@@ -63,6 +68,7 @@ function createHarness(
     secrets?: Record<string, string>;
     healthOk?: boolean;
     oauthAuthority?: { issuer: string; clients: readonly ManagedOAuthClient[] };
+    appliedGenerations?: Partial<Record<string, string | null>>;
   } = {},
 ) {
   let now = 1_000;
@@ -104,6 +110,12 @@ function createHarness(
     ),
     fetchHealth,
     now: () => now,
+    getAppliedGeneration: vi.fn(async (serviceId: string) => {
+      if (serviceId in (options.appliedGenerations ?? {})) {
+        return options.appliedGenerations?.[serviceId] ?? null;
+      }
+      return GENERATION;
+    }),
   };
   return { dependencies, fetchHealth, advance: (milliseconds: number) => (now += milliseconds) };
 }
@@ -175,6 +187,37 @@ describe("ManagedDawarichServiceResolver", () => {
     await expect(resolver.resolve()).resolves.toMatchObject({ provisioned: false, healthy: false });
     expect(harness.fetchHealth).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ["neither container", {}],
+    ["only the app container", { [DAWARICH_APP_SERVICE_ID]: GENERATION }],
+    [
+      "a stale worker container",
+      {
+        [DAWARICH_APP_SERVICE_ID]: GENERATION,
+        [DAWARICH_WORKER_SERVICE_ID]: "fedcba9876543210fedcba9876543210",
+      },
+    ],
+  ] as const)(
+    "fails closed while %s has the desired generation",
+    async (_name, appliedGenerations) => {
+      const harness = createHarness({
+        appliedGenerations: {
+          [DAWARICH_APP_SERVICE_ID]: null,
+          [DAWARICH_WORKER_SERVICE_ID]: null,
+          ...appliedGenerations,
+        },
+      });
+      const resolver = new ManagedDawarichServiceResolver(harness.dependencies);
+
+      await expect(resolver.resolve()).resolves.toMatchObject({
+        publicOrigin: "",
+        provisioned: false,
+        healthy: false,
+      });
+      expect(harness.fetchHealth).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ["deleted", { issuer: "https://example.test/api/auth", clients: [] }],

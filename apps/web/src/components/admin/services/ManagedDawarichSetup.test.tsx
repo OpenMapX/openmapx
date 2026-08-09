@@ -99,9 +99,23 @@ describe("ManagedDawarichSetup", () => {
     expect(screen.getByText("OIDC secret")).toBeInTheDocument();
     expect(screen.getByText("https://timeline.example.test")).toBeInTheDocument();
     expect(
-      screen.getByText(/select the Dawarich bundle and use Apply changes/i),
+      screen.getByText(/Apply changes to both Dawarich Timeline and Dawarich Sidekiq/i),
     ).toBeInTheDocument();
     expect(screen.queryByText("public-client-id")).not.toBeInTheDocument();
+  });
+
+  it("confirms the full app and worker bundle after the durable apply check clears", () => {
+    hookState.statusQuery.data.selected = true;
+    hookState.statusQuery.data.running = true;
+    hookState.statusQuery.data.healthy = true;
+    hookState.statusQuery.data.needsApply = false;
+
+    render(<ManagedDawarichSetup />);
+
+    expect(
+      screen.getByText(/current configuration is applied to both the app and worker/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Apply changes to both/i)).not.toBeInTheDocument();
   });
 
   it("shows a drifted OAuth client as not ready for reconciliation", () => {

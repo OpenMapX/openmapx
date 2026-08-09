@@ -99,6 +99,12 @@
       "OIDC_PROVIDER_NAME": { "type": "string", "title": "OIDC provider name" },
       "OIDC_AUTO_REGISTER": { "type": "string", "title": "OIDC automatic registration" },
       "OIDC_PKCE_ENABLED": { "type": "string", "title": "OIDC PKCE requirement" },
+      "OPENMAPX_PROVISIONING_GENERATION": {
+        "type": "string",
+        "title": "OpenMapX managed provisioning generation",
+        "description": "Internal non-secret marker used to verify that the managed app and worker run the same applied configuration.",
+        "readOnly": true
+      },
       "WEB_CONCURRENCY": {
         "type": "string",
         "title": "Puma worker count",

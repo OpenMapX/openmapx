@@ -327,6 +327,7 @@ describe.skipIf(!manifestsPresent)(
           "OIDC_PROVIDER_NAME",
           "OIDC_AUTO_REGISTER",
           "OIDC_PKCE_ENABLED",
+          "OPENMAPX_PROVISIONING_GENERATION",
           "WEB_CONCURRENCY",
           "RAILS_MAX_THREADS",
           "LOG_MAX_SIZE",
@@ -338,6 +339,12 @@ describe.skipIf(!manifestsPresent)(
         for (const key of ["DATABASE_PASSWORD", "SECRET_KEY_BASE", "OIDC_CLIENT_SECRET"]) {
           expect(appConfig[key]?.["x-openmapx-secret"], key).toBe(true);
         }
+        expect(appConfig.OPENMAPX_PROVISIONING_GENERATION?.readOnly).toBe(true);
+        const workerConfig = (worker?.configSchema?.properties ?? {}) as Record<
+          string,
+          Record<string, unknown>
+        >;
+        expect(workerConfig.OPENMAPX_PROVISIONING_GENERATION?.readOnly).toBe(true);
         const postgisConfig = (registry.get("dawarich-postgis")?.manifest.configSchema
           ?.properties ?? {}) as Record<string, Record<string, unknown>>;
         expect(postgisConfig.POSTGRES_USER?.type).toBe("string");
@@ -410,9 +417,14 @@ describe.skipIf(!manifestsPresent)(
         registry.applyEnabledIds(selection.enabledIds);
 
         const secretKeys = ["DATABASE_PASSWORD", "SECRET_KEY_BASE", "OIDC_CLIENT_SECRET"];
+        const provisioningGeneration = "0123456789abcdef0123456789abcdef";
         const { composeYaml } = renderCompose(registry.enabled(), {
           domain: "example.test",
           allServices: registry.list(),
+          resolvedServiceConfigs: new Map([
+            ["dawarich-app", { OPENMAPX_PROVISIONING_GENERATION: provisioningGeneration }],
+            ["dawarich-sidekiq", { OPENMAPX_PROVISIONING_GENERATION: provisioningGeneration }],
+          ]),
           serviceSecretKeys: new Map([
             ["dawarich-postgis", ["POSTGRES_PASSWORD"]],
             ["dawarich-app", secretKeys],
@@ -485,6 +497,9 @@ describe.skipIf(!manifestsPresent)(
           expect(service?.environment?.DATABASE_HOST).toBe("dawarich-postgis");
           expect(service?.environment?.DATABASE_NAME).toBe("dawarich_production");
           expect(service?.environment?.OIDC_CLIENT_ID).toBeDefined();
+          expect(service?.environment?.OPENMAPX_PROVISIONING_GENERATION).toBe(
+            provisioningGeneration,
+          );
           // biome-ignore lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation syntax
           expect(service?.environment?.OIDC_ISSUER).toBe("https://${DOMAIN:-localhost}/api/auth");
           expect(service?.environment?.DATABASE_PASSWORD).toBeUndefined();

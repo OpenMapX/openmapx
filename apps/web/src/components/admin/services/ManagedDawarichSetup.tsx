@@ -212,8 +212,9 @@ export function ManagedDawarichSetup() {
 
           {status?.readyToStart && (
             <Alert severity={status.needsApply ? "info" : "success"}>
-              Provisioning is ready. Select the Dawarich bundle and use Apply changes in the
-              existing service controls. Disabling preserves its data and user connections.
+              {status.needsApply
+                ? "Provisioning is ready but not fully applied. Select the Dawarich bundle, then use Apply changes to both Dawarich Timeline and Dawarich Sidekiq. This notice stays pending until both containers run the current configuration."
+                : "Provisioning is ready and the current configuration is applied to both the app and worker. Disabling preserves its data and user connections."}
             </Alert>
           )}
 

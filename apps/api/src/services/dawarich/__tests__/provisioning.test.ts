@@ -17,6 +17,7 @@ import {
 
 const HEADERS = new Headers({ cookie: "session=admin" });
 const ACTOR = "admin-1";
+const GENERATION_KEY = "OPENMAPX_PROVISIONING_GENERATION";
 
 function secretKey(serviceId: string, key: string): string {
   return `${serviceId}:${key}`;
@@ -50,12 +51,27 @@ function createHarness(initial?: {
   secrets?: Record<string, string>;
   configs?: Record<string, Record<string, unknown>>;
   effectiveConfigOverrides?: Record<string, Record<string, unknown>>;
+  runtime?: Partial<{
+    installed: boolean;
+    selected: boolean;
+    running: boolean;
+    healthy: boolean;
+  }>;
 }) {
   const clients = [...(initial?.clients ?? [])];
   const secrets = new Map(Object.entries(initial?.secrets ?? {}));
   const configs = new Map(Object.entries(initial?.configs ?? {}));
   let nextSecret = 0;
+  let nextRandom = 0;
   let lockTail = Promise.resolve();
+  const runtime = {
+    installed: true,
+    selected: false,
+    running: false,
+    healthy: false,
+    ...initial?.runtime,
+  };
+  const appliedGenerations = new Map<string, string>();
 
   const listClients = vi.fn(async () => clients.map((client) => ({ ...client })));
   const createClient = vi.fn(async (_headers: Headers, body: Record<string, unknown>) => {
@@ -129,13 +145,9 @@ function createHarness(initial?: {
     getEffectiveConfig,
     mergeConfig,
     withLock: runWithLock,
-    randomBytes: (size) => Buffer.alloc(size, size),
-    getRuntimeState: async () => ({
-      installed: true,
-      selected: false,
-      running: false,
-      healthy: false,
-    }),
+    randomBytes: (size) => Buffer.alloc(size, (size + ++nextRandom) % 256),
+    getRuntimeState: async () => ({ ...runtime }),
+    getAppliedGeneration: async (serviceId) => appliedGenerations.get(serviceId) ?? null,
   };
   return {
     dependencies,
@@ -152,6 +164,8 @@ function createHarness(initial?: {
     getEffectiveConfig,
     mergeConfig,
     withLock,
+    runtime,
+    appliedGenerations,
   };
 }
 
@@ -279,6 +293,54 @@ describe("provisionManagedDawarich", () => {
     expect(harness.setSecret).not.toHaveBeenCalled();
     expect(harness.mergeConfig).not.toHaveBeenCalled();
     expect(second.audit).toMatchObject({ created: false, reconciled: false, rotated: false });
+  });
+
+  it("keeps reconciled runtime changes pending across GETs until app and worker are applied", async () => {
+    const harness = createHarness({ runtime: { selected: true, running: true, healthy: true } });
+    const initial = await provision(harness.dependencies);
+    const previousGeneration = harness.configs.get(DAWARICH_APP_SERVICE_ID)?.[GENERATION_KEY];
+    expect(previousGeneration).toMatch(/^[0-9a-f]{32}$/);
+    expect(JSON.stringify(initial)).not.toContain(previousGeneration as string);
+    harness.appliedGenerations.set(DAWARICH_APP_SERVICE_ID, previousGeneration as string);
+    harness.appliedGenerations.set(DAWARICH_WORKER_SERVICE_ID, previousGeneration as string);
+
+    await expect(
+      inspectManagedDawarichProvisioning(
+        { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+        harness.dependencies,
+      ),
+    ).resolves.toMatchObject({ needsApply: false });
+
+    Object.assign(harness.clients[0] as ManagedOAuthClient, { client_name: "Drifted client" });
+    const reconciled = await provision(harness.dependencies);
+    const desiredGeneration = harness.configs.get(DAWARICH_APP_SERVICE_ID)?.[GENERATION_KEY];
+    expect(desiredGeneration).toMatch(/^[0-9a-f]{32}$/);
+    expect(desiredGeneration).not.toBe(previousGeneration);
+    expect(reconciled.status.needsApply).toBe(true);
+    expect(JSON.stringify(reconciled)).not.toContain(desiredGeneration as string);
+
+    await expect(
+      inspectManagedDawarichProvisioning(
+        { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+        harness.dependencies,
+      ),
+    ).resolves.toMatchObject({ needsApply: true });
+
+    harness.appliedGenerations.set(DAWARICH_APP_SERVICE_ID, desiredGeneration as string);
+    await expect(
+      inspectManagedDawarichProvisioning(
+        { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+        harness.dependencies,
+      ),
+    ).resolves.toMatchObject({ needsApply: true });
+
+    harness.appliedGenerations.set(DAWARICH_WORKER_SERVICE_ID, desiredGeneration as string);
+    await expect(
+      inspectManagedDawarichProvisioning(
+        { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+        harness.dependencies,
+      ),
+    ).resolves.toMatchObject({ needsApply: false });
   });
 
   it("does not churn a non-expiring Better Auth client whose expiry is omitted", async () => {
@@ -602,6 +664,47 @@ describe("rotateManagedDawarichOidcSecret", () => {
     expect(harness.rotateClientSecret).toHaveBeenCalledTimes(1);
     expect(result.status.needsApply).toBe(true);
     expect(result.audit.rotated).toBe(true);
+  });
+
+  it("persists rotation apply state across GETs until the full bundle runs the new generation", async () => {
+    const harness = createHarness({ runtime: { selected: true, running: true, healthy: true } });
+    await provision(harness.dependencies);
+    const previousGeneration = harness.configs.get(DAWARICH_APP_SERVICE_ID)?.[GENERATION_KEY];
+    harness.appliedGenerations.set(DAWARICH_APP_SERVICE_ID, previousGeneration as string);
+    harness.appliedGenerations.set(DAWARICH_WORKER_SERVICE_ID, previousGeneration as string);
+
+    const rotated = await rotateManagedDawarichOidcSecret(
+      { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+      harness.dependencies,
+    );
+    const desiredGeneration = harness.configs.get(DAWARICH_APP_SERVICE_ID)?.[GENERATION_KEY];
+    expect(desiredGeneration).toMatch(/^[0-9a-f]{32}$/);
+    expect(desiredGeneration).not.toBe(previousGeneration);
+    expect(rotated.status.needsApply).toBe(true);
+    expect(JSON.stringify(rotated)).not.toContain(desiredGeneration as string);
+
+    await expect(
+      inspectManagedDawarichProvisioning(
+        { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+        harness.dependencies,
+      ),
+    ).resolves.toMatchObject({ needsApply: true });
+
+    harness.appliedGenerations.set(DAWARICH_APP_SERVICE_ID, desiredGeneration as string);
+    await expect(
+      inspectManagedDawarichProvisioning(
+        { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+        harness.dependencies,
+      ),
+    ).resolves.toMatchObject({ needsApply: true });
+
+    harness.appliedGenerations.set(DAWARICH_WORKER_SERVICE_ID, desiredGeneration as string);
+    await expect(
+      inspectManagedDawarichProvisioning(
+        { headers: HEADERS, actorId: ACTOR, controllerDomain: "example.test" },
+        harness.dependencies,
+      ),
+    ).resolves.toMatchObject({ needsApply: false });
   });
 
   it("uses the persisted custom public host in rotation status and audit", async () => {

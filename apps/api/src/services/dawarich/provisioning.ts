@@ -4,7 +4,7 @@ import { domainToASCII } from "node:url";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { serviceConfig } from "../../db/schema.js";
-import { dockerComposePs } from "../../utils/docker-compose.js";
+import { dockerComposeContainerEnv, dockerComposePs } from "../../utils/docker-compose.js";
 import { resolveEffectiveServiceConfig } from "../service-config-resolver.js";
 import { mergeServiceConfig } from "../service-config-writer.js";
 import { getServiceRegistry } from "../service-registry.js";
@@ -17,6 +17,7 @@ export const DAWARICH_WORKER_SERVICE_ID = "dawarich-sidekiq";
 export const DAWARICH_POSTGIS_SERVICE_ID = "dawarich-postgis";
 export const DAWARICH_REDIS_SERVICE_ID = "dawarich-redis";
 export const DAWARICH_VERSION = "1.10.3";
+export const DAWARICH_PROVISIONING_GENERATION_KEY = "OPENMAPX_PROVISIONING_GENERATION";
 
 const LOCK_NAME = "openmapx:managed-dawarich:provision";
 const CALLBACK_PATH = "/users/auth/openid_connect/callback";
@@ -109,6 +110,7 @@ export interface ManagedDawarichProvisioningDependencies {
   withLock<T>(work: () => Promise<T>): Promise<T>;
   randomBytes(size: number): Buffer;
   getRuntimeState(): Promise<ManagedDawarichRuntimeState>;
+  getAppliedGeneration(serviceId: string): Promise<string | null>;
 }
 
 export interface ManagedDawarichProvisioningInput {
@@ -392,8 +394,12 @@ async function writeSecretCopies(
   }
 }
 
-function appConfig(context: ProvisioningContext, clientId: string): Record<string, unknown> {
-  return {
+function appConfig(
+  context: ProvisioningContext,
+  clientId: string,
+  generation?: string,
+): Record<string, unknown> {
+  const config: Record<string, unknown> = {
     APPLICATION_HOSTS: context.hostname,
     APPLICATION_URL: context.publicOrigin,
     DOMAIN: context.hostname,
@@ -411,6 +417,23 @@ function appConfig(context: ProvisioningContext, clientId: string): Record<strin
     OIDC_AUTO_REGISTER: "true",
     OIDC_PKCE_ENABLED: "true",
   };
+  if (generation) config[DAWARICH_PROVISIONING_GENERATION_KEY] = generation;
+  return config;
+}
+
+function validGeneration(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{32}$/.test(value);
+}
+
+function sharedGeneration(
+  app: Record<string, unknown>,
+  worker: Record<string, unknown>,
+): string | null {
+  const appGeneration = app[DAWARICH_PROVISIONING_GENERATION_KEY];
+  const workerGeneration = worker[DAWARICH_PROVISIONING_GENERATION_KEY];
+  return validGeneration(appGeneration) && workerGeneration === appGeneration
+    ? appGeneration
+    : null;
 }
 
 function hasExpectedConfig(
@@ -424,16 +447,30 @@ async function reconcileConfig(
   dependencies: ManagedDawarichProvisioningDependencies,
   context: ProvisioningContext,
   clientId: string,
+  forceGeneration: boolean,
 ): Promise<boolean> {
   const app = appConfig(context, clientId);
   const postgis = { POSTGRES_USER: "postgres", POSTGRES_DB: "dawarich_production" };
+  const [currentApp, currentWorker, currentPostgis] = await Promise.all([
+    dependencies.getConfig(DAWARICH_APP_SERVICE_ID),
+    dependencies.getConfig(DAWARICH_WORKER_SERVICE_ID),
+    dependencies.getConfig(DAWARICH_POSTGIS_SERVICE_ID),
+  ]);
+  const baseChanged =
+    !hasExpectedConfig(currentApp, app) ||
+    !hasExpectedConfig(currentWorker, app) ||
+    !hasExpectedConfig(currentPostgis, postgis);
+  const existingGeneration = sharedGeneration(currentApp, currentWorker);
+  const generation =
+    forceGeneration || baseChanged || !existingGeneration
+      ? dependencies.randomBytes(16).toString("hex")
+      : existingGeneration;
   let changed = false;
-  for (const [serviceId, expected] of [
-    [DAWARICH_APP_SERVICE_ID, app],
-    [DAWARICH_WORKER_SERVICE_ID, app],
-    [DAWARICH_POSTGIS_SERVICE_ID, postgis],
+  for (const [serviceId, current, expected] of [
+    [DAWARICH_APP_SERVICE_ID, currentApp, appConfig(context, clientId, generation)],
+    [DAWARICH_WORKER_SERVICE_ID, currentWorker, appConfig(context, clientId, generation)],
+    [DAWARICH_POSTGIS_SERVICE_ID, currentPostgis, postgis],
   ] as const) {
-    const current = await dependencies.getConfig(serviceId);
     if (!hasExpectedConfig(current, expected)) {
       await dependencies.mergeConfig(serviceId, expected);
       changed = true;
@@ -454,16 +491,20 @@ async function buildStatus(
   dependencies: ManagedDawarichProvisioningDependencies,
   context: ProvisioningContext,
   clients: ManagedOAuthClient[],
-  needsApplyOverride = false,
 ): Promise<ManagedDawarichProvisioningStatus> {
   const runtime = await dependencies.getRuntimeState();
   const client = clients.length === 1 ? clients[0] : undefined;
-  const [secrets, app, worker, postgis] = await Promise.all([
-    readSecretSnapshot(dependencies),
-    dependencies.getEffectiveConfig(DAWARICH_APP_SERVICE_ID),
-    dependencies.getEffectiveConfig(DAWARICH_WORKER_SERVICE_ID),
-    dependencies.getEffectiveConfig(DAWARICH_POSTGIS_SERVICE_ID),
-  ]);
+  const [secrets, rawApp, rawWorker, app, worker, postgis, appliedApp, appliedWorker] =
+    await Promise.all([
+      readSecretSnapshot(dependencies),
+      dependencies.getConfig(DAWARICH_APP_SERVICE_ID),
+      dependencies.getConfig(DAWARICH_WORKER_SERVICE_ID),
+      dependencies.getEffectiveConfig(DAWARICH_APP_SERVICE_ID),
+      dependencies.getEffectiveConfig(DAWARICH_WORKER_SERVICE_ID),
+      dependencies.getEffectiveConfig(DAWARICH_POSTGIS_SERVICE_ID),
+      dependencies.getAppliedGeneration(DAWARICH_APP_SERVICE_ID),
+      dependencies.getAppliedGeneration(DAWARICH_WORKER_SERVICE_ID),
+    ]);
   const secretStates = {
     databasePassword: classifyCopies(secrets.database),
     secretKeyBase: classifyCopies(secrets.rails),
@@ -473,10 +514,12 @@ async function buildStatus(
   const settingsMatch = Boolean(
     client && Object.keys(mutableClientUpdates(client, context)).length === 0,
   );
+  const desiredGeneration = sharedGeneration(rawApp, rawWorker);
   const configReady = Boolean(
     client &&
-      hasExpectedConfig(app, appConfig(context, client.client_id)) &&
-      hasExpectedConfig(worker, appConfig(context, client.client_id)) &&
+      desiredGeneration &&
+      hasExpectedConfig(app, appConfig(context, client.client_id, desiredGeneration)) &&
+      hasExpectedConfig(worker, appConfig(context, client.client_id, desiredGeneration)) &&
       hasExpectedConfig(postgis, {
         POSTGRES_USER: "postgres",
         POSTGRES_DB: "dawarich_production",
@@ -488,6 +531,9 @@ async function buildStatus(
     settingsMatch &&
     configReady &&
     Object.values(secretStates).every((state) => state === "consistent");
+  const applied = Boolean(
+    desiredGeneration && appliedApp === desiredGeneration && appliedWorker === desiredGeneration,
+  );
   return {
     ...runtime,
     publicOrigin: client ? context.publicOrigin : null,
@@ -500,7 +546,7 @@ async function buildStatus(
     secrets: secretStates,
     configReady,
     readyToStart,
-    needsApply: needsApplyOverride || (readyToStart && (!runtime.selected || !runtime.running)),
+    needsApply: readyToStart && (!runtime.selected || !runtime.running || !applied),
   };
 }
 
@@ -618,18 +664,13 @@ async function executeProvision(
     await storeOidcSecret(dependencies, rotatedClient.client_secret, input.actorId);
   }
 
-  const configChanged = await reconcileConfig(dependencies, context, client.client_id);
-  const status = await buildStatus(
+  await reconcileConfig(
     dependencies,
     context,
-    clients,
-    created ||
-      reconciled ||
-      rotated ||
-      databaseState === "missing" ||
-      railsState !== "consistent" ||
-      configChanged,
+    client.client_id,
+    created || reconciled || rotated || databaseState === "missing" || railsState !== "consistent",
   );
+  const status = await buildStatus(dependencies, context, clients);
   return {
     status,
     audit: { hostname: context.hostname, created, reconciled, rotated, outcome: "success" },
@@ -670,7 +711,8 @@ export async function rotateManagedDawarichOidcSecret(
     assertImmutableClientSecurity(client);
     const rotated = await dependencies.rotateClientSecret(input.headers, client.client_id);
     await storeOidcSecret(dependencies, rotated.client_secret, input.actorId);
-    const status = await buildStatus(dependencies, context, clients, true);
+    await reconcileConfig(dependencies, context, client.client_id, true);
+    const status = await buildStatus(dependencies, context, clients);
     return {
       status,
       audit: {
@@ -767,4 +809,6 @@ const defaultDependencies: ManagedDawarichProvisioningDependencies = {
   withLock: withDawarichProvisioningLock,
   randomBytes: nodeRandomBytes,
   getRuntimeState: getDefaultRuntimeState,
+  getAppliedGeneration: (serviceId) =>
+    dockerComposeContainerEnv(serviceId, DAWARICH_PROVISIONING_GENERATION_KEY),
 };

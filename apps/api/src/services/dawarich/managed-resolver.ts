@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { oauthClient } from "../../db/schema.js";
+import { dockerComposeContainerEnv } from "../../utils/docker-compose.js";
 import { envString } from "../../utils/env.js";
 import { resolveEffectiveServiceConfig } from "../service-config-resolver.js";
 import { getServiceRegistry, serviceUrl } from "../service-registry.js";
@@ -9,6 +10,7 @@ import { getServiceSecretStrict } from "../service-secrets.js";
 import {
   DAWARICH_APP_SERVICE_ID,
   DAWARICH_POSTGIS_SERVICE_ID,
+  DAWARICH_PROVISIONING_GENERATION_KEY,
   DAWARICH_REDIS_SERVICE_ID,
   DAWARICH_SOFTWARE_ID,
   DAWARICH_WORKER_SERVICE_ID,
@@ -50,6 +52,7 @@ export interface ManagedDawarichResolverDependencies {
   getOAuthAuthority(): Promise<ManagedOAuthAuthoritySnapshot>;
   fetchHealth(url: string, init: RequestInit): Promise<Pick<Response, "ok">>;
   now(): number;
+  getAppliedGeneration(serviceId: string): Promise<string | null>;
 }
 
 export interface ManagedOAuthAuthoritySnapshot {
@@ -114,6 +117,7 @@ interface ReadyConfig {
   publicOrigin: string;
   issuer: string;
   clientId: string;
+  generation: string;
 }
 
 function configsReady(
@@ -147,6 +151,9 @@ function configsReady(
     worker.OIDC_CLIENT_ID !== app.OIDC_CLIENT_ID ||
     !exactIssuer(app.OIDC_ISSUER) ||
     worker.OIDC_ISSUER !== app.OIDC_ISSUER ||
+    typeof app[DAWARICH_PROVISIONING_GENERATION_KEY] !== "string" ||
+    !/^[0-9a-f]{32}$/.test(app[DAWARICH_PROVISIONING_GENERATION_KEY] as string) ||
+    worker[DAWARICH_PROVISIONING_GENERATION_KEY] !== app[DAWARICH_PROVISIONING_GENERATION_KEY] ||
     postgis.POSTGRES_USER !== "postgres" ||
     postgis.POSTGRES_DB !== "dawarich_production"
   ) {
@@ -156,6 +163,7 @@ function configsReady(
     publicOrigin,
     issuer: app.OIDC_ISSUER as string,
     clientId: app.OIDC_CLIENT_ID as string,
+    generation: app[DAWARICH_PROVISIONING_GENERATION_KEY] as string,
   };
 }
 
@@ -211,6 +219,10 @@ export class ManagedDawarichServiceResolver implements ManagedDawarichResolver {
     const config = configsReady(app, worker, postgis);
     const provisioned = Boolean(
       config &&
+        (await this.dependencies.getAppliedGeneration(DAWARICH_APP_SERVICE_ID)) ===
+          config.generation &&
+        (await this.dependencies.getAppliedGeneration(DAWARICH_WORKER_SERVICE_ID)) ===
+          config.generation &&
         authorityReady(config, await this.dependencies.getOAuthAuthority()) &&
         (await secretsReady(this.dependencies)),
     );
@@ -351,6 +363,8 @@ const defaultDependencies: ManagedDawarichResolverDependencies = {
   getOAuthAuthority: readOAuthAuthority,
   fetchHealth: (url, init) => fetch(url, init),
   now: Date.now,
+  getAppliedGeneration: (serviceId) =>
+    dockerComposeContainerEnv(serviceId, DAWARICH_PROVISIONING_GENERATION_KEY),
 };
 
 /** Shared runtime resolver so every caller uses the same bounded health-only cache. */

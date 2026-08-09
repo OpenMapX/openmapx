@@ -68,11 +68,20 @@ UI, response, audit event, log, metric, or generated Compose YAML. A partial or
 conflicting database/Rails secret is a blocking operator conflict, not something
 the reconciler guesses how to repair. The collapsed OIDC recovery action is only
 for an explicit rotation: it invalidates the old secret immediately and requires
-**Apply changes** afterward.
+**Apply changes** on both **Dawarich Timeline** and **Dawarich Sidekiq** afterward.
+OpenMapX stores an opaque, non-secret provisioning generation in both service
+configs and compares it with the two running containers. The apply notice
+therefore survives page/API restarts and remains pending after an app-only apply;
+it clears only when both containers run the same current generation. The marker
+never contains or hashes credential material.
 
 From the admin service catalog, select **Dawarich Timeline**, review the
-resource requirements, then use **Save & Apply**. The equivalent CLI sequence
-after provisioning is:
+resource requirements, then use **Save & Apply** for both the timeline app and
+Sidekiq worker. The admin render is required after provisioning because it reads
+the service-config database and credential vault. Do not run a fresh CLI render
+between provisioning and this first admin apply: the CLI intentionally has no
+database/vault access. A CLI-only selection/render sequence before provisioning
+is:
 
 ```bash
 pnpm openmapx services enable dawarich-app
