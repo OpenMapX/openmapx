@@ -1,6 +1,6 @@
 import type { PersonalTimelineDayV1, TimelineConnectionView } from "@openmapx/core";
 import { PANEL, usePersonalTimelineStore, useSidebarStore } from "@openmapx/core";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createFakeMap, expectStyleSwapIsLossless, type FakeMap, render } from "@/test";
 
 let fake: FakeMap;
@@ -123,6 +123,11 @@ beforeEach(() => {
   useSidebarStore.getState().closeAll();
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
 describe("TimelineMapLayer", () => {
   it("does not query or register resources while the timeline panel is inactive", () => {
     render(<TimelineMapLayer />);
@@ -183,6 +188,19 @@ describe("TimelineMapLayer", () => {
     expect(fake.state.sources.size).toBe(0);
   });
 
+  it("does not fetch or register geometry for a future date in the connection timezone", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-09T10:00:00.000Z"));
+    openTimeline("2026-08-10");
+    render(<TimelineMapLayer />);
+
+    expect(connectionHook).toHaveBeenCalledWith("user-a");
+    expect(dayHook).not.toHaveBeenCalled();
+    expect(fake.state.sources.size).toBe(0);
+    expect(fake.state.layers.size).toBe(1);
+    expect(fake.state.handlers.get("click")?.size ?? 0).toBe(0);
+  });
+
   it("fits each successful date once and does not refit for entry selection or rerenders", () => {
     openTimeline();
     const view = render(<TimelineMapLayer />);
@@ -203,6 +221,24 @@ describe("TimelineMapLayer", () => {
     queryState.day = { data: day("2026-08-08", [10, 40, 12, 42]), isSuccess: true };
     act(() => usePersonalTimelineStore.getState().setSelectedDate("2026-08-08"));
     expect(fitBounds).toHaveBeenCalledTimes(2);
+  });
+
+  it("fits instantly when reduced motion is requested", () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({ matches: true })),
+    );
+    openTimeline();
+    render(<TimelineMapLayer />);
+
+    expect(fitBounds).toHaveBeenCalledWith(
+      [
+        [13, 52],
+        [14, 53],
+      ],
+      80,
+      { duration: 0 },
+    );
   });
 
   it("selects an entry only from timeline layer clicks and synchronizes pointer feedback", () => {

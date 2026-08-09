@@ -32,6 +32,7 @@ interface VitestExpectation {
   toHaveAccessibleName(expected: string | RegExp): void;
   toHaveAttribute(name: string, value?: unknown): void;
   toHaveFocus(): void;
+  toHaveStyle(expected: Record<string, string> | string): void;
   toHaveTextContent(expected: string | RegExp): void;
   toHaveValue(expected?: unknown): void;
   toBeChecked(): void;
@@ -47,6 +48,7 @@ interface VitestMockFunction {
   mockImplementation(implementation: VitestMockImplementation): VitestMockFunction;
   mockResolvedValue(value: unknown): VitestMockFunction;
   mockRejectedValue(value: unknown): VitestMockFunction;
+  mockRejectedValueOnce(value: unknown): VitestMockFunction;
   mockReturnValue(value: unknown): VitestMockFunction;
   mockReset(): VitestMockFunction;
   mockClear(): VitestMockFunction;

@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { onlineManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -25,7 +25,11 @@ function queryClient() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  onlineManager.setOnline(true);
+  usePersonalTimelineStore.getState().resetForSession();
+  vi.restoreAllMocks();
+});
 
 describe("personal timeline hooks", () => {
   it("uses a stable connection key and fetches safe connection metadata", async () => {
@@ -114,16 +118,25 @@ describe("personal timeline hooks", () => {
     const ownerRoot = [...PERSONAL_TIMELINE_QUERY_KEY, "user-a"];
     expect(invalidate).toHaveBeenNthCalledWith(1, { queryKey: ownerRoot });
     expect(invalidate).toHaveBeenNthCalledWith(2, { queryKey: ownerRoot });
+    expect(
+      client
+        .getMutationCache()
+        .getAll()
+        .map((mutation) => mutation.options),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ mutationKey: [...ownerRoot, "connect"], networkMode: "always" }),
+        expect.objectContaining({ mutationKey: [...ownerRoot, "test"], networkMode: "always" }),
+      ]),
+    );
   });
 
-  it("removes all personal timeline data from memory after disconnect", async () => {
+  it("removes only the settled owner's personal timeline query data after disconnect", async () => {
     const client = queryClient();
     client.setQueryData([...PERSONAL_TIMELINE_QUERY_KEY, "user-a", "day", "2026-08-09"], {
       private: true,
     });
     vi.spyOn(apiClient, "delete").mockResolvedValue({ ok: true } as never);
-    usePersonalTimelineStore.getState().setSelectedDate("2026-08-09");
-    usePersonalTimelineStore.getState().selectEntry("private-entry");
     const remove = vi.spyOn(client, "removeQueries");
     const { result } = renderHook(() => useDisconnectTimeline("user-a"), {
       wrapper: wrapperWith(client),
@@ -139,10 +152,78 @@ describe("personal timeline hooks", () => {
     expect(
       client.getQueryData([...PERSONAL_TIMELINE_QUERY_KEY, "user-a", "day", "2026-08-09"]),
     ).toBeUndefined();
-    expect(usePersonalTimelineStore.getState()).toMatchObject({
-      selectedDate: null,
-      selectedEntryId: null,
+    expect(client.getMutationCache().getAll()[0]?.options).toMatchObject({
+      mutationKey: [...PERSONAL_TIMELINE_QUERY_KEY, "user-a", "disconnect"],
+      networkMode: "always",
     });
+  });
+
+  it("does not let a late user-A disconnect clear user-B panel state", async () => {
+    const client = queryClient();
+    let resolveDisconnect!: (value: { ok: true }) => void;
+    vi.spyOn(apiClient, "delete").mockImplementation(
+      () => new Promise((resolve) => (resolveDisconnect = resolve)) as never,
+    );
+    const { result } = renderHook(() => useDisconnectTimeline("user-a"), {
+      wrapper: wrapperWith(client),
+    });
+
+    let pending!: Promise<{ ok: true }>;
+    act(() => {
+      pending = result.current.mutateAsync();
+    });
+    await waitFor(() => expect(resolveDisconnect).toBeDefined());
+    act(() => {
+      usePersonalTimelineStore.getState().setSelectedDate("2026-08-10");
+      usePersonalTimelineStore.getState().selectEntry("user-b-entry");
+      resolveDisconnect({ ok: true });
+    });
+    await act(async () => pending);
+
+    expect(usePersonalTimelineStore.getState()).toMatchObject({
+      selectedDate: "2026-08-10",
+      selectedEntryId: "user-b-entry",
+    });
+  });
+
+  it("starts connect immediately while offline so credentials are never queued for resume", async () => {
+    const client = queryClient();
+    onlineManager.setOnline(false);
+    const put = vi
+      .spyOn(apiClient, "put")
+      .mockRejectedValue(new ApiError("offline", 0, null, null));
+    const { result } = renderHook(() => useConnectTimeline("user-a"), {
+      wrapper: wrapperWith(client),
+    });
+
+    await act(async () => {
+      await result.current
+        .mutateAsync({ mode: "managed", apiKey: "must-not-queue" })
+        .catch(() => undefined);
+    });
+
+    expect(put).toHaveBeenCalledTimes(1);
+    expect(client.getMutationCache().getAll()[0]?.state.isPaused).toBe(false);
+  });
+
+  it("removes settled connect variables from the mutation cache when the observer resets", async () => {
+    const client = queryClient();
+    vi.spyOn(apiClient, "put").mockResolvedValue({ connected: true } as never);
+    const { result } = renderHook(() => useConnectTimeline("user-a"), {
+      wrapper: wrapperWith(client),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ mode: "managed", apiKey: "must-not-remain" });
+    });
+    expect(JSON.stringify(client.getMutationCache().getAll())).toContain("must-not-remain");
+
+    act(() => result.current.reset());
+
+    expect(JSON.stringify(client.getMutationCache().getAll())).not.toContain("must-not-remain");
+    expect(
+      client.getMutationCache().findAll({ mutationKey: PERSONAL_TIMELINE_QUERY_KEY, exact: false }),
+    ).toEqual([]);
   });
 
   it("never exposes user A connection or day data to user B before cache cleanup", () => {

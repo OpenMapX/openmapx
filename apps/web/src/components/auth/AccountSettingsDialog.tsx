@@ -1063,7 +1063,7 @@ export function AccountSettingsDialog({
 
         <Divider sx={{ my: 2 }} />
 
-        <TimelineConnectionSection ref={timelineHeadingRef} ownerId={user.id} />
+        <TimelineConnectionSection key={user.id} ref={timelineHeadingRef} ownerId={user.id} />
 
         <Divider sx={{ my: 2 }} />
 

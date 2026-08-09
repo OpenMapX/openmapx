@@ -11,7 +11,11 @@ export interface MapContextValue {
   notifyMapReady: () => void;
   notifyStyleReload: () => void;
   flyTo: (center: [number, number], zoom?: number) => void;
-  fitBounds: (bounds: [[number, number], [number, number]], padding?: number) => void;
+  fitBounds: (
+    bounds: [[number, number], [number, number]],
+    padding?: number,
+    motion?: { duration?: number },
+  ) => void;
   zoomIn: () => void;
   zoomOut: () => void;
   resetBearing: () => void;
@@ -54,9 +58,20 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const fitBounds = useCallback((bounds: [[number, number], [number, number]], padding = 80) => {
-    mapRef.current?.fitBounds(bounds, { padding, duration: 1000 }, { programmatic: true });
-  }, []);
+  const fitBounds = useCallback(
+    (
+      bounds: [[number, number], [number, number]],
+      padding = 80,
+      motion?: { duration?: number },
+    ) => {
+      mapRef.current?.fitBounds(
+        bounds,
+        { padding, duration: motion?.duration ?? 1000 },
+        { programmatic: true },
+      );
+    },
+    [],
+  );
 
   const zoomIn = useCallback(() => {
     mapRef.current?.zoomIn({ duration: 200 });

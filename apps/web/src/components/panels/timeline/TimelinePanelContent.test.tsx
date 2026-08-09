@@ -228,6 +228,47 @@ describe("TimelinePanelContent", () => {
     expect(refetchDay).toHaveBeenCalledTimes(1);
   });
 
+  it("maps an unknown day error code to safe fallback copy", () => {
+    dayState.data = null;
+    dayState.error = new ApiError("private auth response", 401, "UNAUTHORIZED", null);
+    render(<TimelinePanelContent />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent("timeline.errors.unknown");
+    expect(screen.getByRole("button", { name: "common.retry" })).toHaveStyle({
+      minHeight: "44px",
+      minWidth: "44px",
+    });
+    expect(screen.queryByText("private auth response")).toBeNull();
+  });
+
+  it("maps an unknown connection error code to safe fallback copy", () => {
+    connectionState.data = null;
+    connectionState.error = new ApiError("private auth response", 401, "UNAUTHORIZED", null);
+    render(<TimelinePanelContent />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent("timeline.errors.unknown");
+    expect(screen.getByRole("button", { name: "common.retry" })).toHaveStyle({
+      minHeight: "44px",
+      minWidth: "44px",
+    });
+    expect(screen.queryByText("private auth response")).toBeNull();
+  });
+
+  it.each(["TIMELINE_NOT_CONNECTED", "TIMELINE_MANAGED_DISABLED", "TIMELINE_CREDENTIAL_INVALID"])(
+    "offers connection recovery actions when a day read returns %s",
+    (code) => {
+      dayState.data = null;
+      dayState.error = new ApiError("private upstream response", 422, code, null);
+      render(<TimelinePanelContent />);
+
+      expect(screen.getByRole("button", { name: "timeline.testConnection" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "timeline.replaceConnection" }),
+      ).toBeInTheDocument();
+      expect(usePersonalTimelineStore.getState().selectedDate).toBe("2026-08-09");
+    },
+  );
+
   it("renders summary, chronological cards and both partial warnings", () => {
     render(<TimelinePanelContent />);
 
@@ -237,7 +278,7 @@ describe("TimelinePanelContent", () => {
     expect(screen.getByText("timeline.warnings.PARTIAL_TRACK_PAGE_LIMIT")).toBeInTheDocument();
   });
 
-  it("keeps navigation, timeline content and recovery context available at a narrow viewport", () => {
+  it("declares narrow-safe layout while keeping navigation, content and recovery context", () => {
     const originalWidth = window.innerWidth;
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
     window.dispatchEvent(new Event("resize"));
@@ -245,6 +286,8 @@ describe("TimelinePanelContent", () => {
     try {
       render(<TimelinePanelContent />);
 
+      expect(screen.getByTestId("timeline-panel-root")).toHaveStyle({ minWidth: "0" });
+      expect(screen.getByTestId("timeline-day-controls")).toHaveStyle({ flexWrap: "wrap" });
       expect(screen.getByRole("button", { name: "timeline.previousDay" })).toBeInTheDocument();
       expect(screen.getByLabelText("timeline.datePicker")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "timeline.nextDay" })).toBeInTheDocument();

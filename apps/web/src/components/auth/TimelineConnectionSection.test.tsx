@@ -1,4 +1,4 @@
-import { ApiError, type TimelineConnectionView } from "@openmapx/core";
+import { ApiError, type TimelineConnectionView, usePersonalTimelineStore } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, userEvent, waitFor } from "@/test";
 
@@ -86,6 +86,7 @@ const connected: TimelineConnectionView = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  usePersonalTimelineStore.getState().resetForSession();
   timelineState.connection.data = unconfigured();
   timelineState.connection.isPending = false;
   timelineState.connection.isFetching = false;
@@ -143,6 +144,26 @@ describe("TimelineConnectionSection", () => {
     expect(screen.getByText("account.timeline.managedApiKeyStep")).toBeInTheDocument();
   });
 
+  it("disables managed settings when the server supplies a non-HTTPS origin", async () => {
+    timelineState.connection.data = {
+      ...unconfigured(),
+      managed: {
+        available: true,
+        healthy: true,
+        publicOrigin: "javascript:alert(document.domain)",
+        reason: null,
+      },
+    };
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    render(<TimelineConnectionSection ownerId="user-a" />);
+
+    const button = screen.getByRole("button", {
+      name: "account.timeline.openManagedSettings",
+    });
+    expect(button).toBeDisabled();
+    expect(open).not.toHaveBeenCalled();
+  });
+
   it("validates the external URL locally and preserves non-secret fields for retry", async () => {
     const user = userEvent.setup();
     render(<TimelineConnectionSection ownerId="user-a" />);
@@ -172,10 +193,45 @@ describe("TimelineConnectionSection", () => {
       expect(connect).toHaveBeenCalledWith({ mode: "managed", apiKey: "managed-secret" }),
     );
     expect(key).toHaveValue("");
+    expect(timelineState.connect.reset).toHaveBeenCalledTimes(2);
 
     await user.type(key, "never-retain-me");
     await user.click(screen.getByRole("radio", { name: "account.timeline.modeExternal" }));
     expect(screen.getByLabelText("account.timeline.apiKey")).toHaveValue("");
+  });
+
+  it("removes rejected key material from mutation state while retaining non-secret retry fields", async () => {
+    const failure = new ApiError(
+      "private upstream response",
+      422,
+      "TIMELINE_CREDENTIAL_INVALID",
+      19,
+    );
+    connect.mockRejectedValueOnce(failure);
+    const user = userEvent.setup();
+    render(<TimelineConnectionSection ownerId="user-a" />);
+    await user.click(screen.getByRole("radio", { name: "account.timeline.modeExternal" }));
+    await user.type(
+      screen.getByLabelText("account.timeline.instanceUrl"),
+      "https://private.example.test",
+    );
+    await user.type(screen.getByLabelText("account.timeline.displayName"), "Private server");
+    await user.type(screen.getByLabelText("account.timeline.apiKey"), "rejected-private-key");
+    const resetsBeforeSubmit = timelineState.connect.reset.mock.calls.length;
+
+    await user.click(screen.getByRole("button", { name: "account.timeline.connect" }));
+
+    await waitFor(() => expect(connect).toHaveBeenCalledTimes(1));
+    expect(timelineState.connect.reset).toHaveBeenCalledTimes(resetsBeforeSubmit + 2);
+    expect(screen.getByLabelText("account.timeline.apiKey")).toHaveValue("");
+    expect(screen.getByLabelText("account.timeline.instanceUrl")).toHaveValue(
+      "https://private.example.test",
+    );
+    expect(screen.getByLabelText("account.timeline.displayName")).toHaveValue("Private server");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "account.timeline.errors.TIMELINE_CREDENTIAL_INVALID",
+    );
+    expect(screen.queryByText("private upstream response")).toBeNull();
   });
 
   it.each([
@@ -201,9 +257,31 @@ describe("TimelineConnectionSection", () => {
     expect(screen.getByText("My Dawarich")).toBeInTheDocument();
     expect(screen.getByText("https://dawarich.example.test")).toBeInTheDocument();
     expect(screen.getByText("Europe/Berlin")).toBeInTheDocument();
+    expect(screen.getByText("alice@example.test")).toBeInTheDocument();
+    expect(screen.getByText("account.timeline.upstreamAccount")).toBeInTheDocument();
     expect(screen.getByText("account.timeline.status.connected")).toBeInTheDocument();
     expect(screen.queryByLabelText("account.timeline.apiKey")).toBeNull();
     expect(screen.queryByText(/secret/i)).toBeNull();
+  });
+
+  it("never activates a hidden managed form when an existing managed service is unavailable", async () => {
+    if (!connected.connection) {
+      throw new Error("Connected fixture must include connection metadata");
+    }
+    timelineState.connection.data = {
+      ...connected,
+      connection: { ...connected.connection, mode: "managed" },
+      managed: { available: false, healthy: false, publicOrigin: null, reason: "disabled" },
+    };
+    const user = userEvent.setup();
+    render(<TimelineConnectionSection ownerId="user-a" />);
+
+    await user.click(screen.getByRole("button", { name: "account.timeline.replace" }));
+
+    expect(screen.queryByRole("radio", { name: "account.timeline.modeManaged" })).toBeNull();
+    expect(screen.getByRole("radio", { name: "account.timeline.modeExternal" })).toBeChecked();
+    expect(screen.getByLabelText("account.timeline.instanceUrl")).toBeInTheDocument();
+    expect(screen.queryByText("account.timeline.managedSsoExplanation")).toBeNull();
   });
 
   it("tests, safely opens, replaces and switches a connected source", async () => {
@@ -234,6 +312,8 @@ describe("TimelineConnectionSection", () => {
 
   it("requires focused confirmation before disconnecting and explains data is retained", async () => {
     timelineState.connection.data = connected;
+    usePersonalTimelineStore.getState().setSelectedDate("2026-08-09");
+    usePersonalTimelineStore.getState().selectEntry("private-entry");
     const user = userEvent.setup();
     render(<TimelineConnectionSection ownerId="user-a" />);
 
@@ -244,6 +324,10 @@ describe("TimelineConnectionSection", () => {
 
     await user.click(confirm);
     await waitFor(() => expect(disconnect).toHaveBeenCalledTimes(1));
+    expect(usePersonalTimelineStore.getState()).toMatchObject({
+      selectedDate: null,
+      selectedEntryId: null,
+    });
   });
 
   it("shows loading and testing feedback without duplicate actions", () => {
@@ -256,5 +340,21 @@ describe("TimelineConnectionSection", () => {
     timelineState.test.isPending = true;
     rerender(<TimelineConnectionSection ownerId="user-a" />);
     expect(screen.getByRole("button", { name: "account.timeline.testing" })).toBeDisabled();
+  });
+
+  it("gives the connection-query retry action a 44px touch target", () => {
+    timelineState.connection.data = null;
+    timelineState.connection.error = new ApiError(
+      "private upstream response",
+      503,
+      "TIMELINE_UPSTREAM_UNAVAILABLE",
+      null,
+    );
+    render(<TimelineConnectionSection ownerId="user-a" />);
+
+    expect(screen.getByRole("button", { name: "common.retry" })).toHaveStyle({
+      minHeight: "44px",
+      minWidth: "44px",
+    });
   });
 });

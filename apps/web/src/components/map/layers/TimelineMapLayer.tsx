@@ -11,6 +11,7 @@ import {
 } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useRef } from "react";
+import { calendarDateInTimeZone } from "@/components/panels/timeline/TimelineDayHeader";
 import { useMap } from "@/lib/MapContext";
 import { PRIMARY_BLUE_HEX } from "@/lib/theme";
 import type { MapLayerGroup, SlottedLayer } from "./mapLayerGroup";
@@ -101,13 +102,13 @@ function ActiveTimelineGeometry({ ownerId, date }: { ownerId: string; date: stri
     if (lastFittedKey.current === fitKey) return;
     lastFittedKey.current = fitKey;
     const [west, south, east, north] = day.bounds;
-    fitBounds(
-      [
-        [west, south],
-        [east, north],
-      ],
-      80,
-    );
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    const bounds: [[number, number], [number, number]] = [
+      [west, south],
+      [east, north],
+    ];
+    if (reducedMotion) fitBounds(bounds, 80, { duration: 0 });
+    else fitBounds(bounds, 80);
   }, [date, day, fitBounds, ownerId]);
 
   useEffect(() => {
@@ -150,7 +151,12 @@ function ActiveTimelineGeometry({ ownerId, date }: { ownerId: string; date: stri
 function ActiveTimelineConnection({ ownerId, date }: { ownerId: string; date: string }) {
   const connectionQuery = useTimelineConnection(ownerId);
   const connection = connectionQuery.data?.connection ?? null;
-  const canRead = connectionQuery.data?.connected === true && connection?.status !== "invalid";
+  const today = connection ? calendarDateInTimeZone(new Date(), connection.timeZone) : null;
+  const canRead =
+    connectionQuery.data?.connected === true &&
+    connection?.status !== "invalid" &&
+    today !== null &&
+    date <= today;
 
   if (!canRead) return null;
   return <ActiveTimelineGeometry ownerId={ownerId} date={date} />;

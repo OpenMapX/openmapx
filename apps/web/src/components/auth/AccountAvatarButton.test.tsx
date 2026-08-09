@@ -97,4 +97,23 @@ describe("AccountAvatarButton", () => {
       "timeline",
     );
   });
+
+  it("closes and resets shared settings state on an A-to-B identity replacement", () => {
+    sessionState.current = {
+      data: { user: { id: "user-a", name: "Same Name", email: "same@example.test" } },
+      isPending: false,
+    };
+    const view = render(<AccountAvatarButton />);
+    act(() => useAccountSettingsStore.getState().show("timeline"));
+    expect(screen.getByTestId("account-settings-dialog")).toBeInTheDocument();
+
+    sessionState.current = {
+      data: { user: { id: "user-b", name: "Same Name", email: "same@example.test" } },
+      isPending: false,
+    };
+    view.rerender(<AccountAvatarButton />);
+
+    expect(useAccountSettingsStore.getState()).toMatchObject({ open: false, section: null });
+    expect(screen.queryByTestId("account-settings-dialog")).toBeNull();
+  });
 });

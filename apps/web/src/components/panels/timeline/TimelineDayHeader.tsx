@@ -52,7 +52,8 @@ export function TimelineDayHeader({
     day: "numeric",
     timeZone: "UTC",
   }).format(new Date(`${date}T12:00:00.000Z`));
-  const isToday = date >= today;
+  const isAtOrAfterToday = date >= today;
+  const isExactlyToday = date === today;
 
   return (
     <Box component="header" sx={{ mb: 2 }}>
@@ -63,7 +64,10 @@ export function TimelineDayHeader({
       >
         {title}
       </Typography>
-      <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexWrap: "wrap" }}>
+      <Box
+        data-testid="timeline-day-controls"
+        sx={{ display: "flex", gap: 0.75, alignItems: "center", flexWrap: "wrap" }}
+      >
         <IconButton
           aria-label={t("previousDay")}
           onClick={() => onDateChange(offsetCalendarDate(date, -1))}
@@ -85,7 +89,7 @@ export function TimelineDayHeader({
         />
         <IconButton
           aria-label={t("nextDay")}
-          disabled={isToday}
+          disabled={isAtOrAfterToday}
           onClick={() => onDateChange(offsetCalendarDate(date, 1))}
           sx={{ width: 44, height: 44 }}
         >
@@ -94,7 +98,7 @@ export function TimelineDayHeader({
         <Button
           startIcon={<TodayIcon />}
           onClick={() => onDateChange(today)}
-          disabled={isToday}
+          disabled={isExactlyToday}
           sx={{ minHeight: 44 }}
         >
           {t("today")}

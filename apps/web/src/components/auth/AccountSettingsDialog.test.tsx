@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@/test";
+import { render, screen, userEvent, waitFor } from "@/test";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 vi.mock("@/lib/useFullScreenOnMobile", () => ({
@@ -11,15 +11,32 @@ vi.mock("@/lib/useDateTimeFormat", () => ({
 }));
 vi.mock("./MangroveAccountSection", () => ({ MangroveAccountSection: () => null }));
 vi.mock("./TimelineConnectionSection", async () => {
-  const { forwardRef } = await import("react");
+  const { forwardRef, useState } = await import("react");
   return {
-    TimelineConnectionSection: forwardRef<HTMLHeadingElement>(function TimelineSection(_, ref) {
-      return (
-        <h2 ref={ref} id="account-timeline-heading" tabIndex={-1}>
-          account.timeline.heading
-        </h2>
-      );
-    }),
+    TimelineConnectionSection: forwardRef<HTMLHeadingElement, { ownerId: string }>(
+      function TimelineSection({ ownerId }, ref) {
+        const [apiKey, setApiKey] = useState("");
+        const [instanceUrl, setInstanceUrl] = useState("");
+        return (
+          <section>
+            <h2 ref={ref} id="account-timeline-heading" tabIndex={-1}>
+              account.timeline.heading
+            </h2>
+            <span>{ownerId}</span>
+            <input
+              aria-label="timeline fixture API key"
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+            />
+            <input
+              aria-label="timeline fixture instance URL"
+              value={instanceUrl}
+              onChange={(event) => setInstanceUrl(event.target.value)}
+            />
+          </section>
+        );
+      },
+    ),
   };
 });
 vi.mock("@openmapx/core", async (importOriginal) => {
@@ -83,5 +100,30 @@ describe("AccountSettingsDialog timeline targeting", () => {
     const heading = await screen.findByRole("heading", { name: "account.timeline.heading" });
     await waitFor(() => expect(heading).toHaveFocus());
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "start", behavior: "auto" });
+  });
+
+  it("remounts Timeline settings so an A-to-B identity replacement cannot retain form secrets", async () => {
+    const interaction = userEvent.setup();
+    const view = render(
+      <AccountSettingsDialog open onClose={vi.fn()} user={user} initialSection="timeline" />,
+    );
+    await interaction.type(screen.getByLabelText("timeline fixture API key"), "private-a-key");
+    await interaction.type(
+      screen.getByLabelText("timeline fixture instance URL"),
+      "https://private-a.example.test",
+    );
+
+    view.rerender(
+      <AccountSettingsDialog
+        open
+        onClose={vi.fn()}
+        user={{ ...user, id: "user-b" }}
+        initialSection="timeline"
+      />,
+    );
+
+    expect(screen.getByText("user-b")).toBeInTheDocument();
+    expect(screen.getByLabelText("timeline fixture API key")).toHaveValue("");
+    expect(screen.getByLabelText("timeline fixture instance URL")).toHaveValue("");
   });
 });

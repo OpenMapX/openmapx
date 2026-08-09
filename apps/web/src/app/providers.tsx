@@ -18,6 +18,11 @@ import { useEffect, useState } from "react";
 import "../lib/communityRuntime";
 import { ImpersonationBanner } from "../components/admin/ImpersonationBanner";
 import { SavedPlacesMirror } from "../components/pwa/SavedPlacesMirror";
+import {
+  PERSONAL_TIMELINE_CACHE_BUSTER,
+  removePersonalTimelineMutations,
+  shouldDehydrateOpenMapXMutation,
+} from "../lib/personalTimelineCachePolicy";
 import { createIdbPersister } from "../lib/queryPersister";
 import {
   enforceRecentMapDataCachePreference,
@@ -145,11 +150,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
     return (
       <PersistQueryClientProvider
         client={queryClient}
+        onSuccess={() => removePersonalTimelineMutations(queryClient)}
         persistOptions={{
           persister,
           maxAge: 24 * 60 * 60 * 1000,
-          buster: "v1",
+          buster: PERSONAL_TIMELINE_CACHE_BUSTER,
           dehydrateOptions: {
+            shouldDehydrateMutation: shouldDehydrateOpenMapXMutation,
             shouldDehydrateQuery: (q) =>
               q.state.status === "success" && isRecentMapDataQueryKey(q.queryKey),
           },

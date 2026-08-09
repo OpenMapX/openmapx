@@ -1,6 +1,7 @@
 import { PERSONAL_TIMELINE_QUERY_KEY, usePersonalTimelineStore } from "@openmapx/core";
+import { onlineManager } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createQueryWrapper, createTestQueryClient, render } from "@/test";
+import { createQueryWrapper, createTestQueryClient, render, waitFor } from "@/test";
 
 const session = { current: { data: null as unknown, isPending: false } };
 vi.mock("@openmapx/core", async (importOriginal) => {
@@ -11,6 +12,7 @@ vi.mock("@openmapx/core", async (importOriginal) => {
 import { PersonalTimelineSessionGuard } from "./PersonalTimelineSessionGuard";
 
 afterEach(() => {
+  onlineManager.setOnline(true);
   session.current = { data: null, isPending: false };
   usePersonalTimelineStore.getState().resetForSession();
 });
@@ -103,5 +105,34 @@ describe("PersonalTimelineSessionGuard", () => {
     render(<PersonalTimelineSessionGuard />, { wrapper: createQueryWrapper(client) });
 
     expect(client.getQueriesData({ queryKey: PERSONAL_TIMELINE_QUERY_KEY })).toHaveLength(2);
+  });
+
+  it("purges a paused user-A mutation before user B comes online", async () => {
+    const client = seedPrivateState();
+    const request = vi.fn().mockResolvedValue({ connected: true });
+    onlineManager.setOnline(false);
+    const queued = client.getMutationCache().build(client, {
+      mutationKey: [...PERSONAL_TIMELINE_QUERY_KEY, "user-a", "connect"],
+      mutationFn: async (variables) => {
+        request(variables);
+        return { connected: true };
+      },
+    });
+    void queued.execute({ mode: "managed", apiKey: "private-a-key" });
+    await waitFor(() => expect(queued.state.isPaused).toBe(true));
+    session.current = { data: { user: { id: "user-a" } }, isPending: false };
+    const { rerender } = render(<PersonalTimelineSessionGuard />, {
+      wrapper: createQueryWrapper(client),
+    });
+
+    session.current = { data: { user: { id: "user-b" } }, isPending: false };
+    rerender(<PersonalTimelineSessionGuard />);
+    onlineManager.setOnline(true);
+    await client.resumePausedMutations();
+
+    expect(
+      client.getMutationCache().findAll({ mutationKey: PERSONAL_TIMELINE_QUERY_KEY, exact: false }),
+    ).toEqual([]);
+    expect(request).not.toHaveBeenCalled();
   });
 });

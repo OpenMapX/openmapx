@@ -26,6 +26,7 @@ import {
   type TimelineConnectionView,
   useConnectTimeline,
   useDisconnectTimeline,
+  usePersonalTimelineStore,
   useTestTimelineConnection,
   useTimelineConnection,
 } from "@openmapx/core";
@@ -57,7 +58,22 @@ function errorMessageKey(error: PersonalTimelineApiError | null): string | null 
 
 function managedSettingsUrl(view: TimelineConnectionView): string | null {
   if (!view.managed.available || !view.managed.publicOrigin) return null;
-  return `${view.managed.publicOrigin.replace(/\/$/, "")}/settings`;
+  try {
+    const parsed = new URL(view.managed.publicOrigin);
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== "/" ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      return null;
+    }
+    return `${parsed.origin}/settings`;
+  } catch {
+    return null;
+  }
 }
 
 export const TimelineConnectionSection = forwardRef<
@@ -82,7 +98,9 @@ export const TimelineConnectionSection = forwardRef<
   const [apiKey, setApiKey] = useState("");
   const keyRef = useRef(apiKey);
   const [validationKey, setValidationKey] = useState<string | null>(null);
+  const [connectErrorKey, setConnectErrorKey] = useState<string | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const activeOwnerId = useRef<string | null>(ownerId);
   const initializedFromView = useRef(Boolean(view));
   const previouslyConnected = useRef(Boolean(view?.connected));
 
@@ -114,10 +132,17 @@ export const TimelineConnectionSection = forwardRef<
     [],
   );
 
+  useEffect(() => {
+    activeOwnerId.current = ownerId;
+    return () => {
+      activeOwnerId.current = null;
+    };
+  }, [ownerId]);
+
   const mutationError =
     connectMutation.error ?? testMutation.error ?? disconnectMutation.error ?? null;
   const displayedError = mutationError ?? connectionQuery.error;
-  const displayedErrorKey = errorMessageKey(displayedError);
+  const displayedErrorKey = connectErrorKey ?? errorMessageKey(displayedError);
 
   const clearSecret = () => {
     keyRef.current = "";
@@ -126,6 +151,7 @@ export const TimelineConnectionSection = forwardRef<
 
   const clearErrors = () => {
     setValidationKey(null);
+    setConnectErrorKey(null);
     connectMutation.reset();
     testMutation.reset();
     disconnectMutation.reset();
@@ -194,9 +220,12 @@ export const TimelineConnectionSection = forwardRef<
         });
       }
       clearSecret();
+      connectMutation.reset();
       setEditing(false);
-    } catch {
-      // TanStack mutation state supplies the stable, sanitized error code.
+    } catch (error) {
+      setConnectErrorKey(errorMessageKey(error as PersonalTimelineApiError) ?? "unknown");
+      clearSecret();
+      connectMutation.reset();
     }
   };
 
@@ -212,6 +241,8 @@ export const TimelineConnectionSection = forwardRef<
   const runDisconnect = async () => {
     try {
       await disconnectMutation.mutateAsync();
+      if (activeOwnerId.current !== ownerId) return;
+      usePersonalTimelineStore.getState().resetForSession();
       clearSecret();
       setConfirmDisconnect(false);
       setEditing(true);
@@ -264,7 +295,12 @@ export const TimelineConnectionSection = forwardRef<
           severity="error"
           action={
             connectionQuery.error ? (
-              <Button color="inherit" size="small" onClick={() => void connectionQuery.refetch()}>
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => void connectionQuery.refetch()}
+                sx={{ minHeight: 44, minWidth: 44 }}
+              >
                 {tc("retry")}
               </Button>
             ) : undefined
@@ -302,6 +338,20 @@ export const TimelineConnectionSection = forwardRef<
             <Typography component="dd" variant="caption" sx={{ m: 0 }}>
               {current.timeZone}
             </Typography>
+            {current.upstreamEmail && (
+              <>
+                <Typography component="dt" variant="caption" color="text.secondary">
+                  {t("upstreamAccount")}
+                </Typography>
+                <Typography
+                  component="dd"
+                  variant="caption"
+                  sx={{ m: 0, overflowWrap: "anywhere" }}
+                >
+                  {current.upstreamEmail}
+                </Typography>
+              </>
+            )}
             <Typography component="dt" variant="caption" color="text.secondary">
               {t("validatedAt")}
             </Typography>
@@ -325,7 +375,14 @@ export const TimelineConnectionSection = forwardRef<
             </Button>
             <Button
               size="small"
-              onClick={() => beginEdit(current.mode, true)}
+              onClick={() =>
+                beginEdit(
+                  current.mode === "managed" && !view?.managed.available
+                    ? "external"
+                    : current.mode,
+                  true,
+                )
+              }
               sx={{ minHeight: 44 }}
             >
               {t("replace")}
@@ -434,7 +491,12 @@ export const TimelineConnectionSection = forwardRef<
                 href={safeHref(DAWARICH_API_KEY_HELP)}
                 target="_blank"
                 rel="noopener noreferrer"
-                sx={{ alignSelf: "flex-start" }}
+                sx={{
+                  alignSelf: "flex-start",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  minHeight: 44,
+                }}
               >
                 {t("externalApiKeyHelp")}
               </Link>
@@ -477,13 +539,16 @@ export const TimelineConnectionSection = forwardRef<
           <Typography variant="body2">{t("disconnectKeepsHistory")}</Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setConfirmDisconnect(false)}>{tc("cancel")}</Button>
+          <Button onClick={() => setConfirmDisconnect(false)} sx={{ minHeight: 44, minWidth: 44 }}>
+            {tc("cancel")}
+          </Button>
           <Button
             autoFocus
             color="error"
             variant="contained"
             onClick={() => void runDisconnect()}
             disabled={disconnectMutation.isPending}
+            sx={{ minHeight: 44, minWidth: 44 }}
           >
             {t("confirmDisconnect")}
           </Button>

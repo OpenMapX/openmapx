@@ -16,7 +16,7 @@ interface TimelineEntryCardProps {
   entry: TimelineEntry;
   timeZone: string;
   selected: boolean;
-  elementRef: Ref<HTMLDivElement>;
+  elementRef: Ref<HTMLButtonElement>;
   onSelect: () => void;
 }
 
@@ -71,10 +71,10 @@ export function TimelineEntryCard({
   return (
     <ListItemButton
       ref={elementRef}
-      component="div"
-      role="option"
+      component="button"
+      type="button"
       data-entry-id={entry.id}
-      aria-selected={selected}
+      aria-pressed={selected}
       onClick={onSelect}
       sx={{
         display: "block",
@@ -127,10 +127,16 @@ export function TimelineEntryCard({
             <Chip size="small" label={`${number(entry.averageSpeed, locale)} ${entry.speedUnit}`} />
           )}
           {entry.elevationGain !== undefined && (
-            <Chip size="small" label={meters(entry.elevationGain, locale)} />
+            <Chip
+              size="small"
+              label={`${t("elevationGain")}: ${meters(entry.elevationGain, locale)}`}
+            />
           )}
           {entry.elevationLoss !== undefined && (
-            <Chip size="small" label={meters(entry.elevationLoss, locale)} />
+            <Chip
+              size="small"
+              label={`${t("elevationLoss")}: ${meters(entry.elevationLoss, locale)}`}
+            />
           )}
         </Stack>
       )}

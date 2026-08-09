@@ -81,4 +81,25 @@ describe("TimelineDayHeader", () => {
     });
     expect(onDateChange).not.toHaveBeenCalledWith("2026-03-30");
   });
+
+  it("keeps Today available as the direct recovery action from a future date", async () => {
+    vi.useRealTimers();
+    const user = userEvent.setup();
+    const onDateChange = vi.fn();
+    render(
+      <TimelineDayHeader
+        date="2026-03-30"
+        today="2026-03-29"
+        timeZone="Europe/Berlin"
+        browserTimeZone="UTC"
+        onDateChange={onDateChange}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "timeline.nextDay" })).toBeDisabled();
+    const today = screen.getByRole("button", { name: "timeline.today" });
+    expect(today).not.toBeDisabled();
+    await user.click(today);
+    expect(onDateChange).toHaveBeenCalledWith("2026-03-29");
+  });
 });

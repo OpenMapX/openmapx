@@ -1,5 +1,6 @@
 "use client";
 
+import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import type { PersonalTimelineDayV1 } from "@openmapx/core";
 import { usePersonalTimelineStore } from "@openmapx/core";
@@ -11,7 +12,7 @@ export function TimelineEntryList({ day }: { day: PersonalTimelineDayV1 }) {
   const t = useTranslations("timeline");
   const selectedEntryId = usePersonalTimelineStore((state) => state.selectedEntryId);
   const selectEntry = usePersonalTimelineStore((state) => state.selectEntry);
-  const entryElements = useRef(new Map<string, HTMLDivElement>());
+  const entryElements = useRef(new Map<string, HTMLButtonElement>());
   const selectionFromList = useRef<string | null>(null);
   const entries = [...day.entries].sort((left, right) =>
     left.startedAt.localeCompare(right.startedAt),
@@ -31,22 +32,28 @@ export function TimelineEntryList({ day }: { day: PersonalTimelineDayV1 }) {
   }, [selectedEntryId]);
 
   return (
-    <Stack role="listbox" spacing={1.25} aria-label={t("entriesAriaLabel")}>
+    <Stack
+      component="ul"
+      spacing={1.25}
+      aria-label={t("entriesAriaLabel")}
+      sx={{ listStyle: "none", p: 0, m: 0 }}
+    >
       {entries.map((entry) => (
-        <TimelineEntryCard
-          key={entry.id}
-          entry={entry}
-          timeZone={day.timeZone}
-          selected={entry.id === selectedEntryId}
-          elementRef={(element) => {
-            if (element) entryElements.current.set(entry.id, element);
-            else entryElements.current.delete(entry.id);
-          }}
-          onSelect={() => {
-            selectionFromList.current = entry.id;
-            selectEntry(entry.id);
-          }}
-        />
+        <Box component="li" key={entry.id} sx={{ minWidth: 0 }}>
+          <TimelineEntryCard
+            entry={entry}
+            timeZone={day.timeZone}
+            selected={entry.id === selectedEntryId}
+            elementRef={(element) => {
+              if (element) entryElements.current.set(entry.id, element);
+              else entryElements.current.delete(entry.id);
+            }}
+            onSelect={() => {
+              selectionFromList.current = entry.id;
+              selectEntry(entry.id);
+            }}
+          />
+        </Box>
       ))}
     </Stack>
   );

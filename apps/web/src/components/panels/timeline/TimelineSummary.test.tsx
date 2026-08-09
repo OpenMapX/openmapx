@@ -23,5 +23,15 @@ describe("TimelineSummary", () => {
     expect(screen.getByText("615 min")).toBeInTheDocument();
     expect(screen.getByText("timeline.summary.distance")).toBeInTheDocument();
     expect(screen.getByText("timeline.summary.places")).toBeInTheDocument();
+
+    for (const group of document.querySelectorAll("dl > div")) {
+      const term = group.querySelector("dt");
+      const definition = group.querySelector("dd");
+      expect(term).not.toBeNull();
+      expect(definition).not.toBeNull();
+      expect(term?.compareDocumentPosition(definition as Node)).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    }
   });
 });

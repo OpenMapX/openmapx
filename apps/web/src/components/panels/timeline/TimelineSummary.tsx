@@ -44,11 +44,11 @@ export function TimelineSummary({ summary, distanceUnit }: TimelineSummaryProps)
           key={item.label}
           sx={{ p: 1.25, borderRadius: 2, bgcolor: "action.hover", minWidth: 0 }}
         >
-          <Typography component="dd" variant="subtitle2" sx={{ m: 0, fontWeight: 700 }}>
-            {item.value}
-          </Typography>
           <Typography component="dt" variant="caption" color="text.secondary">
             {item.label}
+          </Typography>
+          <Typography component="dd" variant="subtitle2" sx={{ m: 0, fontWeight: 700 }}>
+            {item.value}
           </Typography>
         </Box>
       ))}

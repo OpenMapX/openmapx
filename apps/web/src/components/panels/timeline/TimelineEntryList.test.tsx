@@ -1,7 +1,7 @@
 import type { PersonalTimelineDayV1 } from "@openmapx/core";
 import { usePersonalTimelineStore } from "@openmapx/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, userEvent } from "@/test";
+import { act, render, screen, userEvent, within } from "@/test";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
@@ -68,40 +68,43 @@ afterEach(() => {
 describe("TimelineEntryList", () => {
   it("sorts chronologically and renders visit and journey values without inventing optionals", () => {
     render(<TimelineEntryList day={day} />);
-    expect(screen.getByRole("listbox", { name: "timeline.entriesAriaLabel" })).toBeInTheDocument();
-    const entries = screen.getAllByRole("option");
+    const list = screen.getByRole("list", { name: "timeline.entriesAriaLabel" });
+    const entries = within(list).getAllByRole("button");
 
     expect(entries.map((entry) => entry.getAttribute("data-entry-id"))).toEqual([
       "visit-1",
       "journey-1",
       "journey-minimal",
     ]);
-    const visit = screen.getByRole("option", { name: /timeline.visitFallback/ });
+    const visit = screen.getByRole("button", { name: /timeline.visitFallback/ });
     expect(visit).toHaveTextContent("90 min");
     expect(visit).toHaveTextContent("5");
     expect(screen.getByText("coffee")).toBeInTheDocument();
     expect(screen.getByText("cycling")).toBeInTheDocument();
     expect(screen.getByText("12.5 km")).toBeInTheDocument();
     expect(screen.getByText("25 km/h")).toBeInTheDocument();
-    expect(screen.getByText("42 m")).toBeInTheDocument();
-    expect(screen.getByText("0 m")).toBeInTheDocument();
+    expect(screen.getByText("timeline.elevationGain: 42 m")).toBeInTheDocument();
+    expect(screen.getByText("timeline.elevationLoss: 0 m")).toBeInTheDocument();
 
-    const minimal = screen.getByRole("option", { name: /timeline.journeyFallback/ });
+    const minimal = screen.getByRole("button", { name: /timeline.journeyFallback/ });
     expect(minimal).not.toHaveTextContent("0 km");
     expect(minimal).not.toHaveTextContent("0 km/h");
   });
 
-  it.each(["{Enter}", " "])("selects a card with %s and exposes aria-selected", async (key) => {
-    const user = userEvent.setup();
-    render(<TimelineEntryList day={day} />);
-    const visit = screen.getByRole("option", { name: /timeline.visitFallback/ });
-    visit.focus();
+  it.each(["{Enter}", " "])(
+    "selects a card button with %s and exposes pressed state",
+    async (key) => {
+      const user = userEvent.setup();
+      render(<TimelineEntryList day={day} />);
+      const visit = screen.getByRole("button", { name: /timeline.visitFallback/ });
+      visit.focus();
 
-    await user.keyboard(key);
+      await user.keyboard(key);
 
-    expect(usePersonalTimelineStore.getState().selectedEntryId).toBe("visit-1");
-    expect(visit).toHaveAttribute("aria-selected", "true");
-  });
+      expect(usePersonalTimelineStore.getState().selectedEntryId).toBe("visit-1");
+      expect(visit).toHaveAttribute("aria-pressed", "true");
+    },
+  );
 
   it("scrolls a map-selected card with reduced-motion-safe behavior", () => {
     const scroll = vi.spyOn(Element.prototype, "scrollIntoView");

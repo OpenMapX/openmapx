@@ -24,7 +24,27 @@ import { TimelineEntryList } from "./TimelineEntryList";
 import { TimelineSummary } from "./TimelineSummary";
 
 function stableErrorKey(error: PersonalTimelineApiError | null): string {
-  return error?.code ?? "unknown";
+  switch (error?.code) {
+    case "TIMELINE_NOT_CONNECTED":
+    case "TIMELINE_MANAGED_DISABLED":
+    case "TIMELINE_CREDENTIAL_INVALID":
+    case "TIMELINE_INSTANCE_UNSUPPORTED":
+    case "TIMELINE_PLAN_RESTRICTED":
+    case "TIMELINE_RATE_LIMITED":
+    case "TIMELINE_UPSTREAM_UNAVAILABLE":
+    case "TIMELINE_RESPONSE_INVALID":
+      return error.code;
+    default:
+      return "unknown";
+  }
+}
+
+function needsConnectionRecovery(error: PersonalTimelineApiError | null): boolean {
+  return (
+    error?.code === "TIMELINE_NOT_CONNECTED" ||
+    error?.code === "TIMELINE_MANAGED_DISABLED" ||
+    error?.code === "TIMELINE_CREDENTIAL_INVALID"
+  );
 }
 
 function TimelineLoading({ label }: { label: string }) {
@@ -109,16 +129,28 @@ function ConnectedTimeline({
       ) : connection.status === "invalid" ? null : dayQuery.isPending && !dayQuery.data ? (
         <TimelineLoading label={t("loadingDay")} />
       ) : dayQuery.error ? (
-        <Alert
-          severity="error"
-          action={
-            <Button color="inherit" size="small" onClick={() => void dayQuery.refetch()}>
-              {tc("retry")}
-            </Button>
-          }
-        >
-          {t(`errors.${stableErrorKey(dayQuery.error)}`)}
-        </Alert>
+        <>
+          <Alert
+            severity="error"
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => void dayQuery.refetch()}
+                sx={{ minHeight: 44, minWidth: 44 }}
+              >
+                {tc("retry")}
+              </Button>
+            }
+          >
+            {t(`errors.${stableErrorKey(dayQuery.error)}`)}
+          </Alert>
+          {needsConnectionRecovery(dayQuery.error) && (
+            <Box sx={{ mt: 1.5 }}>
+              <RecoveryActions ownerId={ownerId} />
+            </Box>
+          )}
+        </>
       ) : dayQuery.data?.entries.length === 0 ? (
         <Box sx={{ py: 5, px: 2, textAlign: "center" }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 650 }}>
@@ -161,7 +193,12 @@ function AuthenticatedTimeline({ ownerId }: { ownerId: string }) {
       <Alert
         severity="error"
         action={
-          <Button color="inherit" size="small" onClick={() => void connectionQuery.refetch()}>
+          <Button
+            color="inherit"
+            size="small"
+            onClick={() => void connectionQuery.refetch()}
+            sx={{ minHeight: 44, minWidth: 44 }}
+          >
             {tc("retry")}
           </Button>
         }
@@ -214,6 +251,7 @@ export function TimelinePanelContent() {
 
   return (
     <Box
+      data-testid="timeline-panel-root"
       sx={{
         p: { xs: 2, sm: 2.25 },
         pb: "max(24px, env(safe-area-inset-bottom))",

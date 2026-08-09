@@ -19,6 +19,13 @@ export function PersonalTimelineSessionGuard() {
 
     const currentUserId = session?.user?.id ?? null;
     if (lastUserId.current && lastUserId.current !== currentUserId) {
+      const mutationCache = queryClient.getMutationCache();
+      for (const mutation of mutationCache.findAll({
+        mutationKey: PERSONAL_TIMELINE_QUERY_KEY,
+        exact: false,
+      })) {
+        mutationCache.remove(mutation);
+      }
       void queryClient.cancelQueries({ queryKey: PERSONAL_TIMELINE_QUERY_KEY });
       queryClient.removeQueries({ queryKey: PERSONAL_TIMELINE_QUERY_KEY });
       usePersonalTimelineStore.getState().resetForSession();

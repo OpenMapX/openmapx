@@ -1361,6 +1361,7 @@
       "disconnectKeepsHistory": "OpenMapX will forget this connection and its cached timeline data. Your location history remains in Dawarich.",
       "confirmDisconnect": "Disconnect",
       "timezone": "Time zone",
+      "upstreamAccount": "Dawarich account",
       "validatedAt": "Last validated",
       "validationUrl": "Enter a valid Dawarich instance URL without credentials or a fragment.",
       "validationHttps": "Use an HTTPS URL for your Dawarich instance.",
@@ -2052,6 +2053,8 @@
     "journeyFallback": "Journey",
     "selected": "Selected",
     "pointCount": "Points",
+    "elevationGain": "Ascent",
+    "elevationLoss": "Descent",
     "entriesAriaLabel": "Timeline entries",
     "summary": {
       "distance": "Distance",
