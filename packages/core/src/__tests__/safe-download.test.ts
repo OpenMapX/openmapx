@@ -7,7 +7,12 @@ vi.mock("node:dns/promises", () => ({
 // Import AFTER vi.mock so the mocked lookup is captured. We re-import the
 // mocked module to drive the mock.
 import { lookup as dnsLookup } from "node:dns/promises";
-import { assertResolvesToPublicIp, safeFetchJson } from "../utils/safe-download";
+import {
+  assertResolvesToPublicIp,
+  SafeFetchHttpError,
+  safeFetchJson,
+  safeFetchJsonResponse,
+} from "../utils/safe-download";
 
 // dnsLookup has overloads that confuse vi.mocked; cast to a simple mock.
 const lookupMock = dnsLookup as unknown as ReturnType<typeof vi.fn>;
@@ -60,12 +65,13 @@ function makeResponse(opts: {
   status?: number;
   headers?: Record<string, string>;
   bodyText?: string;
+  url?: string;
 }): Response {
   const status = opts.status ?? 200;
   return {
     status,
     ok: status >= 200 && status < 300,
-    url: "",
+    url: opts.url ?? "",
     headers: new Headers(opts.headers ?? {}),
     body: new Response(opts.bodyText ?? "").body,
   } as unknown as Response;
@@ -95,6 +101,89 @@ describe("safeFetchJson", () => {
     await expect(safeFetchJson("https://ex.test/x.json")).resolves.toEqual({ version: "1.2.3" });
   });
 
+  it("exposes successful status, headers, and final URL without changing parsed data", async () => {
+    lookupMock.mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(
+      makeResponse({
+        status: 201,
+        url: "https://ex.test/final.json",
+        headers: { "content-type": "application/json; charset=utf-8", "x-request-id": "test-id" },
+        bodyText: JSON.stringify({ ok: true }),
+      }),
+    );
+
+    const response = await safeFetchJsonResponse("https://ex.test/initial.json");
+    expect(response).toMatchObject({
+      data: { ok: true },
+      status: 201,
+      finalUrl: "https://ex.test/final.json",
+    });
+    expect(response.headers.get("x-request-id")).toBe("test-id");
+  });
+
+  it("accepts configured GeoJSON media types after stripping parameters", async () => {
+    lookupMock.mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(
+      makeResponse({
+        headers: { "content-type": "application/geo+json; charset=utf-8" },
+        bodyText: JSON.stringify({ type: "FeatureCollection", features: [] }),
+      }),
+    );
+
+    await expect(
+      safeFetchJsonResponse("https://ex.test/tracks", {
+        acceptedContentTypes: ["application/json", "application/geo+json"],
+      }),
+    ).resolves.toMatchObject({ data: { type: "FeatureCollection" } });
+  });
+
+  it("rejects an unexpected HTML content type before buffering it", async () => {
+    lookupMock.mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(
+      makeResponse({ headers: { "content-type": "text/html" }, bodyText: "<html></html>" }),
+    );
+
+    await expect(
+      safeFetchJsonResponse("https://ex.test/error", {
+        acceptedContentTypes: ["application/json"],
+      }),
+    ).rejects.toThrow(/content type/i);
+  });
+
+  it("reports a 401 without retaining the upstream response body", async () => {
+    lookupMock.mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(
+      makeResponse({ status: 401, bodyText: "upstream diagnostic that must not leak" }),
+    );
+
+    let caught: Error | undefined;
+    try {
+      await safeFetchJsonResponse("https://ex.test/me");
+    } catch (error) {
+      caught = error as Error;
+    }
+    expect(caught).toMatchObject({
+      name: "SafeFetchHttpError",
+      status: 401,
+      retryAfterSeconds: null,
+      finalUrl: "https://ex.test/me",
+    });
+    expect(caught?.message).not.toMatch(/upstream diagnostic/i);
+  });
+
+  it("reports a 429 retry delay as a typed safe HTTP error", async () => {
+    lookupMock.mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(makeResponse({ status: 429, headers: { "retry-after": "17" } }));
+
+    try {
+      await safeFetchJsonResponse("https://ex.test/rate-limited");
+      throw new Error("expected request to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(SafeFetchHttpError);
+      expect(error).toMatchObject({ status: 429, retryAfterSeconds: 17 });
+    }
+  });
+
   it("rejects a private-resolving host before any network request", async () => {
     lookupMock.mockResolvedValueOnce([{ address: "10.0.0.5", family: 4 }]);
     const fetchMock = stubFetchSequence();
@@ -121,6 +210,19 @@ describe("safeFetchJson", () => {
       makeResponse({ status: 302, headers: { location: "http://127.0.0.1/internal" } }),
     );
     await expect(safeFetchJson("https://ex.test/x.json")).rejects.toThrow();
+  });
+
+  it("blocks a credential-bearing redirect to another host", async () => {
+    lookupMock.mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(
+      makeResponse({ status: 302, headers: { location: "https://other.test/collect" } }),
+    );
+    await expect(
+      safeFetchJsonResponse("https://ex.test/me", {
+        headers: { authorization: "Bearer fixture-token" },
+        allowedRedirectHosts: ["ex.test"],
+      }),
+    ).rejects.toThrow(/redirect target not allowed/i);
   });
 
   it("rejects an oversized declared Content-Length", async () => {

@@ -212,6 +212,30 @@ export interface SafeFetchJsonOptions {
    * host hands the credential to whatever host the Location names.
    */
   allowedRedirectHosts?: string[];
+  /** Optional allowlist of response media types, compared without parameters. */
+  acceptedContentTypes?: string[];
+}
+
+export interface SafeJsonResponse<T> {
+  data: T;
+  status: number;
+  headers: Headers;
+  finalUrl: string;
+}
+
+/** Safe metadata for non-success HTTP responses; deliberately excludes their body and request headers. */
+export class SafeFetchHttpError extends Error {
+  readonly status: number;
+  readonly retryAfterSeconds: number | null;
+  readonly finalUrl: string;
+
+  constructor(status: number, finalUrl: string, retryAfterSeconds: number | null) {
+    super(`Request failed: HTTP ${status} for ${finalUrl}`);
+    this.name = "SafeFetchHttpError";
+    this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
+    this.finalUrl = finalUrl;
+  }
 }
 
 /**
@@ -281,10 +305,10 @@ export async function assertFeedUrlAllowed(
  * streaming counter). For fetching third-party-author-influenced JSON
  * (catalogs, manifests) from server-side code.
  */
-export async function safeFetchJson<T = unknown>(
+export async function safeFetchJsonResponse<T = unknown>(
   url: string,
   opts: SafeFetchJsonOptions = {},
-): Promise<T> {
+): Promise<SafeJsonResponse<T>> {
   const maxBytes = opts.maxBytes ?? 5 * 1024 * 1024;
   const timeoutMs = opts.timeoutMs ?? 15_000;
   const maxRedirects = opts.maxRedirects ?? 5;
@@ -309,16 +333,19 @@ export async function safeFetchJson<T = unknown>(
     },
   });
 
+  const finalUrl = response.url || url;
+
   if (!response.ok) {
     try {
       await response.body?.cancel();
     } catch {
       // ignore
     }
-    throw new Error(`Request failed: HTTP ${response.status} for ${url}`);
+    const retryAfter = response.headers.get("retry-after");
+    const retryAfterSeconds = retryAfter && /^\d+$/.test(retryAfter) ? Number(retryAfter) : null;
+    throw new SafeFetchHttpError(response.status, finalUrl, retryAfterSeconds);
   }
 
-  const finalUrl = response.url || url;
   const finalHostname = new URL(finalUrl).hostname;
   if (finalHostname !== hostname) {
     await assertFetchTargetAllowed(finalUrl, allowPrivateHosts);
@@ -334,6 +361,23 @@ export async function safeFetchJson<T = unknown>(
         // ignore
       }
       throw new Error(`Response too large (declared ${declared} > ${maxBytes} bytes)`);
+    }
+  }
+
+  if (opts.acceptedContentTypes) {
+    const contentType = response.headers
+      .get("content-type")
+      ?.split(";", 1)[0]
+      ?.trim()
+      .toLowerCase();
+    const accepted = opts.acceptedContentTypes.map((value) => value.toLowerCase());
+    if (!contentType || !accepted.includes(contentType)) {
+      try {
+        await response.body?.cancel();
+      } catch {
+        // ignore
+      }
+      throw new Error(`Unexpected response content type for ${finalUrl}`);
     }
   }
 
@@ -361,8 +405,21 @@ export async function safeFetchJson<T = unknown>(
 
   const text = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
   try {
-    return JSON.parse(text) as T;
+    return {
+      data: JSON.parse(text) as T,
+      status: response.status,
+      headers: response.headers,
+      finalUrl,
+    };
   } catch {
     throw new Error(`Invalid JSON response from ${finalUrl}`);
   }
+}
+
+/** Compatibility wrapper for callers that need only parsed JSON data. */
+export async function safeFetchJson<T = unknown>(
+  url: string,
+  opts: SafeFetchJsonOptions = {},
+): Promise<T> {
+  return (await safeFetchJsonResponse<T>(url, opts)).data;
 }
