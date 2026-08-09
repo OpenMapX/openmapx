@@ -91,6 +91,7 @@ export type {
 export type {
   ConnectPersonalTimelineRequest,
   PersonalTimelineDayV1,
+  PersonalTimelineErrorCode,
   PersonalTimelineJourneyV1,
   PersonalTimelineSummaryV1,
   PersonalTimelineVisitV1,

@@ -10,6 +10,18 @@ export interface ApiClientConfig {
   headerInterceptor?: () => Record<string, string>;
 }
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: string | null,
+    readonly retryAfterSeconds: number | null,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 let _config: ApiClientConfig | null = null;
 
 export function configureApiClient(config: ApiClientConfig): void {
@@ -31,6 +43,49 @@ function getConfig(): ApiClientConfig {
   return _config;
 }
 
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function truncateMessage(value: string): string {
+  return [...value].slice(0, 200).join("");
+}
+
+async function safeApiError(response: Response): Promise<ApiError> {
+  let body: Record<string, unknown> | null = null;
+  try {
+    const parsed: unknown = await response.json();
+    if (isJsonObject(parsed)) body = parsed;
+  } catch {
+    // Error bodies are deliberately discarded when they are not safe JSON objects.
+  }
+  const suppliedMessage = typeof body?.error === "string" ? body.error.trim() : "";
+  const message = suppliedMessage
+    ? truncateMessage(suppliedMessage)
+    : `Request failed (HTTP ${response.status})`;
+  const code = typeof body?.code === "string" ? body.code : null;
+  const retryAfterSeconds =
+    typeof body?.retryAfterSeconds === "number" &&
+    Number.isFinite(body.retryAfterSeconds) &&
+    body.retryAfterSeconds >= 0
+      ? body.retryAfterSeconds
+      : null;
+  return new ApiError(message, response.status, code, retryAfterSeconds);
+}
+
+async function parseApiResponse<T>(
+  response: Response,
+  successfulEmpty: "json" | "null-on-204" | "undefined-on-empty" = "json",
+): Promise<T> {
+  if (!response.ok) throw await safeApiError(response);
+  if (successfulEmpty === "null-on-204" && response.status === 204) return null as T;
+  if (successfulEmpty === "undefined-on-empty") {
+    const text = await response.text();
+    return text ? (JSON.parse(text) as T) : (undefined as T);
+  }
+  return response.json() as Promise<T>;
+}
+
 export class ApiClient {
   async get<T>(
     path: string,
@@ -49,10 +104,7 @@ export class ApiClient {
       credentials: cfg.credentials ?? "omit",
       signal: options?.signal,
     });
-    if (!res.ok) {
-      throw new Error(`API error ${res.status}: ${await res.text()}`);
-    }
-    return res.json() as Promise<T>;
+    return parseApiResponse<T>(res);
   }
 
   /**
@@ -73,11 +125,7 @@ export class ApiClient {
       headers: { Accept: "application/json", ...cfg.headerInterceptor?.() },
       credentials: cfg.credentials ?? "omit",
     });
-    if (res.status === 204) return null;
-    if (!res.ok) {
-      throw new Error(`API error ${res.status}: ${await res.text()}`);
-    }
-    return res.json() as Promise<T>;
+    return parseApiResponse<T | null>(res, "null-on-204");
   }
 
   async post<T>(path: string, body: unknown): Promise<T> {
@@ -100,11 +148,7 @@ export class ApiClient {
       headers: { Accept: "application/json", ...cfg.headerInterceptor?.() },
       credentials: cfg.credentials ?? "omit",
     });
-    if (!res.ok) {
-      throw new Error(`API error ${res.status}: ${await res.text()}`);
-    }
-    const text = await res.text();
-    return text ? (JSON.parse(text) as T) : (undefined as T);
+    return parseApiResponse<T>(res, "undefined-on-empty");
   }
 
   private async mutate<T>(method: string, path: string, body: unknown): Promise<T> {
@@ -120,10 +164,7 @@ export class ApiClient {
       credentials: cfg.credentials ?? "omit",
       body: JSON.stringify(body),
     });
-    if (!res.ok) {
-      throw new Error(`API error ${res.status}: ${await res.text()}`);
-    }
-    return res.json() as Promise<T>;
+    return parseApiResponse<T>(res);
   }
 }
 

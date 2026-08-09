@@ -86,6 +86,15 @@ export { useOfficialBookingUrl } from "./useOfficialBookingUrl";
 export { useOptimizeRoute } from "./useOptimizeRoute";
 export { useOverlayExclusion } from "./useOverlayExclusion";
 export { useOverlayVisibilitySetter } from "./useOverlayVisibilitySetter";
+export {
+  PERSONAL_TIMELINE_QUERY_KEY,
+  type PersonalTimelineApiError,
+  useConnectTimeline,
+  useDisconnectTimeline,
+  usePersonalTimelineDay,
+  useTestTimelineConnection,
+  useTimelineConnection,
+} from "./usePersonalTimeline";
 export { usePlaceDetails } from "./usePlaceDetails";
 export { usePlacePhotos } from "./usePlacePhotos";
 export { usePresetSuggest } from "./usePresetSuggest";

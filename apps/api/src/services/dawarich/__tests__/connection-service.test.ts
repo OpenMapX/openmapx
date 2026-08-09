@@ -98,6 +98,57 @@ class MemoryConnectionStore implements TimelineConnectionStore {
     return next;
   }
 
+  async updateForSnapshot(
+    userId: string,
+    snapshot: { id: string; credentialGeneration: string },
+    updates: Partial<PersonalTimelineConnectionRow>,
+  ) {
+    const current = this.rows.get(userId);
+    if (
+      !current ||
+      current.id !== snapshot.id ||
+      current.encryptedApiKey !== snapshot.credentialGeneration
+    ) {
+      return null;
+    }
+    const next = { ...current, ...updates, userId: current.userId };
+    this.rows.set(userId, next);
+    return next;
+  }
+
+  async recordFailureForSnapshot(
+    userId: string,
+    snapshot: { id: string; credentialGeneration: string },
+    failureKind: "credential_invalid" | "transient",
+    updatedAt: Date,
+  ) {
+    const current = this.rows.get(userId);
+    if (
+      !current ||
+      current.id !== snapshot.id ||
+      current.encryptedApiKey !== snapshot.credentialGeneration
+    ) {
+      return null;
+    }
+    const consecutiveFailures = current.consecutiveFailures + 1;
+    const status =
+      failureKind === "credential_invalid"
+        ? "invalid"
+        : current.status === "invalid"
+          ? "invalid"
+          : consecutiveFailures >= 3
+            ? "degraded"
+            : "connected";
+    const next: PersonalTimelineConnectionRow = {
+      ...current,
+      consecutiveFailures,
+      status,
+      updatedAt,
+    };
+    this.rows.set(userId, next);
+    return next;
+  }
+
   async deleteForUser(userId: string) {
     this.rows.delete(userId);
   }
@@ -554,6 +605,70 @@ describe("TimelineConnectionService", () => {
     expect(store.rows.get(USER_ID)).toEqual(switched);
   });
 
+  it("does not apply stale read bookkeeping after the user switches connections", async () => {
+    const store = new MemoryConnectionStore();
+    const oldEncrypted = encrypt("old-read-key");
+    const newEncrypted = encrypt("new-read-key");
+    store.rows.set(
+      USER_ID,
+      connectionRow({
+        encryptedApiKey: oldEncrypted.ciphertext,
+        encryptionIv: oldEncrypted.iv,
+        encryptionTag: oldEncrypted.tag,
+      }),
+    );
+    const service = new TimelineConnectionService({ store });
+    const credential = await service.decryptConnectionCredential(USER_ID);
+    const switched = connectionRow({
+      publicOrigin: "https://new.example",
+      displayName: "New timeline",
+      encryptedApiKey: newEncrypted.ciphertext,
+      encryptionIv: newEncrypted.iv,
+      encryptionTag: newEncrypted.tag,
+      status: "degraded",
+      consecutiveFailures: 4,
+      updatedAt: new Date("2026-02-01T00:00:00Z"),
+    });
+    store.rows.set(USER_ID, switched);
+
+    await service.recordReadFailure(USER_ID, credential.connectionSnapshot, "credential_invalid");
+    await service.recordReadSuccess(USER_ID, credential.connectionSnapshot);
+
+    expect(store.rows.get(USER_ID)).toEqual(switched);
+  });
+
+  it("applies read success after same-credential metadata refresh", async () => {
+    const store = new MemoryConnectionStore();
+    const encrypted = encrypt("same-read-key");
+    store.rows.set(
+      USER_ID,
+      connectionRow({
+        encryptedApiKey: encrypted.ciphertext,
+        encryptionIv: encrypted.iv,
+        encryptionTag: encrypted.tag,
+      }),
+    );
+    const service = new TimelineConnectionService({
+      store,
+      now: () => new Date("2026-02-01T00:00:00Z"),
+    });
+    const credential = await service.decryptConnectionCredential(USER_ID);
+
+    await service.updateReadMetadata(USER_ID, credential.connectionSnapshot, {
+      timeZone: "Europe/Berlin",
+      distanceUnit: "mi",
+    });
+    await service.recordReadSuccess(USER_ID, credential.connectionSnapshot);
+
+    expect(store.rows.get(USER_ID)).toMatchObject({
+      upstreamTimeZone: "Europe/Berlin",
+      distanceUnit: "mi",
+      status: "connected",
+      consecutiveFailures: 0,
+      lastReadAt: new Date("2026-02-01T00:00:00Z"),
+    });
+  });
+
   it("scopes view, read-success and idempotent deletion to the supplied user", async () => {
     const store = new MemoryConnectionStore();
     const encrypted = encrypt("stored-key");
@@ -572,7 +687,8 @@ describe("TimelineConnectionService", () => {
     const view = await service.getConnectionView(USER_ID);
     expect(view.connection).toMatchObject({ displayName: "Old timeline" });
     expect(JSON.stringify(view)).not.toMatch(/old-ciphertext|stored-key|encryption|encrypted/i);
-    await service.recordReadSuccess(USER_ID);
+    const credential = await service.decryptConnectionCredential(USER_ID);
+    await service.recordReadSuccess(USER_ID, credential.connectionSnapshot);
     expect(store.rows.get(USER_ID)?.lastReadAt).toBeInstanceOf(Date);
     expect(store.rows.get("user-b")?.lastReadAt).toBeNull();
     await service.deleteConnection(USER_ID);

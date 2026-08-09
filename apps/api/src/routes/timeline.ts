@@ -7,6 +7,7 @@ import {
   type TimelineConnectionErrorCode,
   timelineConnectionService,
 } from "../services/dawarich/connection-service.js";
+import { timelineDayService } from "../services/dawarich/day-service.js";
 import { getUserId, requireAuthHook } from "../utils/require-auth.js";
 
 const MAX_API_KEY_BYTES = 4 * 1024;
@@ -38,6 +39,8 @@ const connectRequestSchema = z.discriminatedUnion("mode", [
     .strict(),
 ]);
 
+const dayDateSchema = z.iso.date();
+
 const errorResponses: Record<TimelineConnectionErrorCode, { status: number; message: string }> = {
   TIMELINE_NOT_CONNECTED: { status: 400, message: "Timeline is not connected" },
   TIMELINE_MANAGED_DISABLED: { status: 503, message: "Managed timeline is unavailable" },
@@ -55,7 +58,18 @@ const errorResponses: Record<TimelineConnectionErrorCode, { status: number; mess
   },
 };
 
-function sendTimelineError(reply: FastifyReply, error: unknown) {
+const dayErrorStatuses: Record<TimelineConnectionErrorCode, number> = {
+  TIMELINE_NOT_CONNECTED: 404,
+  TIMELINE_MANAGED_DISABLED: 409,
+  TIMELINE_CREDENTIAL_INVALID: 422,
+  TIMELINE_INSTANCE_UNSUPPORTED: 422,
+  TIMELINE_PLAN_RESTRICTED: 422,
+  TIMELINE_RATE_LIMITED: 429,
+  TIMELINE_UPSTREAM_UNAVAILABLE: 503,
+  TIMELINE_RESPONSE_INVALID: 502,
+};
+
+function sendTimelineError(reply: FastifyReply, error: unknown, route: "connection" | "day") {
   const safeError =
     error instanceof TimelineConnectionError
       ? error
@@ -70,7 +84,7 @@ function sendTimelineError(reply: FastifyReply, error: unknown) {
       ? safeError.retryAfterSeconds
       : null;
   if (retryAfterSeconds !== null) reply.header("Retry-After", String(retryAfterSeconds));
-  return reply.status(response.status).send({
+  return reply.status(route === "day" ? dayErrorStatuses[safeError.code] : response.status).send({
     error: response.message,
     code: safeError.code,
     ...(retryAfterSeconds === null ? {} : { retryAfterSeconds }),
@@ -125,7 +139,7 @@ export const timelineRoute: FastifyPluginAsync = async (fastify) => {
     try {
       return await timelineConnectionService.getConnectionView(getUserId(request));
     } catch (error) {
-      return sendTimelineError(reply, error);
+      return sendTimelineError(reply, error, "connection");
     }
   });
 
@@ -143,7 +157,7 @@ export const timelineRoute: FastifyPluginAsync = async (fastify) => {
         parsed.data as ConnectPersonalTimelineRequest,
       );
     } catch (error) {
-      return sendTimelineError(reply, error);
+      return sendTimelineError(reply, error, "connection");
     }
   });
 
@@ -151,7 +165,7 @@ export const timelineRoute: FastifyPluginAsync = async (fastify) => {
     try {
       return await timelineConnectionService.testConnection(getUserId(request));
     } catch (error) {
-      return sendTimelineError(reply, error);
+      return sendTimelineError(reply, error, "connection");
     }
   });
 
@@ -160,7 +174,26 @@ export const timelineRoute: FastifyPluginAsync = async (fastify) => {
       await timelineConnectionService.deleteConnection(getUserId(request));
       return { ok: true };
     } catch (error) {
-      return sendTimelineError(reply, error);
+      return sendTimelineError(reply, error, "connection");
     }
   });
+
+  fastify.get<{ Params: { date: string } }>(
+    "/timeline/day/:date",
+    { logLevel: "silent" },
+    async (request, reply) => {
+      const parsed = dayDateSchema.safeParse(request.params.date);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          error: "Invalid timeline date",
+          code: "TIMELINE_RESPONSE_INVALID",
+        });
+      }
+      try {
+        return await timelineDayService.getPersonalTimelineDay(getUserId(request), parsed.data);
+      } catch (error) {
+        return sendTimelineError(reply, error, "day");
+      }
+    },
+  );
 };

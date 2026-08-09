@@ -88,12 +88,13 @@ export function isTimelineApiRequest(request: FastifyRequest): boolean {
   return path?.startsWith("/api/timeline/") ?? false;
 }
 
-function isExpensiveTimelineConnectionRequest(request: FastifyRequest): boolean {
+function isExpensiveTimelineRequest(request: FastifyRequest): boolean {
   const path = request.url.split("?", 1)[0];
   return (
     (request.method === "PUT" && path === "/api/timeline/connection") ||
     (request.method === "POST" && path === "/api/timeline/connection/test") ||
-    (request.method === "DELETE" && path === "/api/timeline/connection")
+    (request.method === "DELETE" && path === "/api/timeline/connection") ||
+    (request.method === "GET" && /^\/api\/timeline\/day\/[^/]+$/.test(path ?? ""))
   );
 }
 
@@ -180,10 +181,7 @@ export function makeRateLimitTierHook(limits: RateLimitTiers) {
       await limits.tile(request, reply);
       return;
     }
-    if (
-      isExpensiveTimelineConnectionRequest(request) ||
-      EXPENSIVE_PUBLIC_PATTERNS.some((p) => p.test(url))
-    ) {
+    if (isExpensiveTimelineRequest(request) || EXPENSIVE_PUBLIC_PATTERNS.some((p) => p.test(url))) {
       await limits.expensive(request, reply);
       return;
     }

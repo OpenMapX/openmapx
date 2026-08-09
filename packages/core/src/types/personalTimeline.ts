@@ -1,5 +1,15 @@
 export type PersonalTimelineWarning = "TRACK_GEOMETRY_UNAVAILABLE" | "PARTIAL_TRACK_PAGE_LIMIT";
 
+export type PersonalTimelineErrorCode =
+  | "TIMELINE_NOT_CONNECTED"
+  | "TIMELINE_MANAGED_DISABLED"
+  | "TIMELINE_CREDENTIAL_INVALID"
+  | "TIMELINE_INSTANCE_UNSUPPORTED"
+  | "TIMELINE_PLAN_RESTRICTED"
+  | "TIMELINE_RATE_LIMITED"
+  | "TIMELINE_UPSTREAM_UNAVAILABLE"
+  | "TIMELINE_RESPONSE_INVALID";
+
 export type TimelineConnectionMode = "external" | "managed";
 export type TimelineConnectionStatus = "connected" | "degraded" | "invalid";
 

@@ -155,6 +155,7 @@ describe("makeRateLimitTierHook", () => {
     { url: "/api/integrations/restaurants/menu?website=https://example.com", tier: "expensive" },
     { url: "/api/integrations/food-delivery/providers?country=de", tier: "public" },
     { method: "GET", url: "/api/timeline/connection", tier: "public" },
+    { method: "GET", url: "/api/timeline/day/2026-08-09", tier: "expensive" },
     { method: "PUT", url: "/api/timeline/connection", tier: "expensive" },
     { method: "POST", url: "/api/timeline/connection/test", tier: "expensive" },
     { method: "DELETE", url: "/api/timeline/connection", tier: "expensive" },
@@ -252,15 +253,15 @@ describe("makeRateLimitTierHook", () => {
     limiter.destroy();
   });
 
-  it("gives future timeline read routes the same public-tier privacy boundary", async () => {
+  it("gives timeline day reads the expensive-tier privacy boundary", async () => {
     const limiter = new RateLimiter({ max: 1, windowMs: 60_000 });
     const { hook } = stubTiers();
-    hook.public = makeTimelineAwareRateLimit(limiter);
+    hook.expensive = makeTimelineAwareRateLimit(limiter);
     const app = Fastify({ logger: false });
     app.addHook("onRequest", makeRateLimitTierHook(hook));
     await app.register(
       async (timeline) => {
-        timeline.get("/timeline/days/:date", async () => ({ ok: true }));
+        timeline.get("/timeline/day/:date", async () => ({ ok: true }));
       },
       { prefix: "/api" },
     );
@@ -268,7 +269,7 @@ describe("makeRateLimitTierHook", () => {
 
     const request = {
       method: "GET" as const,
-      url: "/api/timeline/days/2026-08-09",
+      url: "/api/timeline/day/2026-08-09",
       remoteAddress: "198.51.100.8",
     };
     const first = await app.inject(request);

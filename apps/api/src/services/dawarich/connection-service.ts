@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
   ConnectPersonalTimelineRequest,
+  PersonalTimelineErrorCode,
   TimelineConnectionMode,
   TimelineConnectionStatus,
   TimelineConnectionView,
@@ -17,15 +18,7 @@ import { serviceUrl } from "../service-registry.js";
 import { DawarichClient, DawarichClientError, type DawarichClientOptions } from "./client.js";
 import { timelinePrivateHostAllowlist } from "./private-hosts.js";
 
-export type TimelineConnectionErrorCode =
-  | "TIMELINE_NOT_CONNECTED"
-  | "TIMELINE_MANAGED_DISABLED"
-  | "TIMELINE_CREDENTIAL_INVALID"
-  | "TIMELINE_INSTANCE_UNSUPPORTED"
-  | "TIMELINE_PLAN_RESTRICTED"
-  | "TIMELINE_RATE_LIMITED"
-  | "TIMELINE_UPSTREAM_UNAVAILABLE"
-  | "TIMELINE_RESPONSE_INVALID";
+export type TimelineConnectionErrorCode = PersonalTimelineErrorCode;
 
 export class TimelineConnectionError extends Error {
   constructor(
@@ -75,7 +68,24 @@ export interface TimelineConnectionStore {
     failureKind: "credential_invalid" | "transient",
     updatedAt: Date,
   ): Promise<PersonalTimelineConnectionRow | null>;
+  recordFailureForSnapshot(
+    userId: string,
+    snapshot: TimelineConnectionSnapshot,
+    failureKind: "credential_invalid" | "transient",
+    updatedAt: Date,
+  ): Promise<PersonalTimelineConnectionRow | null>;
+  updateForSnapshot(
+    userId: string,
+    snapshot: TimelineConnectionSnapshot,
+    updates: Partial<PersonalTimelineConnectionRow>,
+  ): Promise<PersonalTimelineConnectionRow | null>;
   deleteForUser(userId: string): Promise<void>;
+}
+
+export interface TimelineConnectionSnapshot {
+  id: string;
+  /** Opaque encrypted credential generation. Never serialize or log this value. */
+  credentialGeneration: string;
 }
 
 export class DrizzleTimelineConnectionStore implements TimelineConnectionStore {
@@ -171,6 +181,54 @@ export class DrizzleTimelineConnectionStore implements TimelineConnectionStore {
     return row ?? null;
   }
 
+  async updateForSnapshot(
+    userId: string,
+    snapshot: TimelineConnectionSnapshot,
+    updates: Partial<PersonalTimelineConnectionRow>,
+  ): Promise<PersonalTimelineConnectionRow | null> {
+    const [row] = await db
+      .update(personalTimelineConnection)
+      .set(updates)
+      .where(
+        and(
+          eq(personalTimelineConnection.userId, userId),
+          eq(personalTimelineConnection.id, snapshot.id),
+          eq(personalTimelineConnection.encryptedApiKey, snapshot.credentialGeneration),
+        ),
+      )
+      .returning();
+    return row ?? null;
+  }
+
+  async recordFailureForSnapshot(
+    userId: string,
+    snapshot: TimelineConnectionSnapshot,
+    failureKind: "credential_invalid" | "transient",
+    updatedAt: Date,
+  ): Promise<PersonalTimelineConnectionRow | null> {
+    const nextFailureCount = sql<number>`${personalTimelineConnection.consecutiveFailures} + 1`;
+    const nextStatus =
+      failureKind === "credential_invalid"
+        ? "invalid"
+        : sql<TimelineConnectionStatus>`CASE
+            WHEN ${personalTimelineConnection.status} = 'invalid' THEN 'invalid'
+            WHEN ${nextFailureCount} >= 3 THEN 'degraded'
+            ELSE 'connected'
+          END`;
+    const [row] = await db
+      .update(personalTimelineConnection)
+      .set({ consecutiveFailures: nextFailureCount, status: nextStatus, updatedAt })
+      .where(
+        and(
+          eq(personalTimelineConnection.userId, userId),
+          eq(personalTimelineConnection.id, snapshot.id),
+          eq(personalTimelineConnection.encryptedApiKey, snapshot.credentialGeneration),
+        ),
+      )
+      .returning();
+    return row ?? null;
+  }
+
   async deleteForUser(userId: string): Promise<void> {
     await db
       .delete(personalTimelineConnection)
@@ -223,6 +281,7 @@ export interface DecryptedTimelineConnection {
   timeZone: string;
   distanceUnit: string | null;
   allowPrivateHosts: string[];
+  connectionSnapshot: TimelineConnectionSnapshot;
 }
 
 function strictOrigin(value: string, protocol: "https:" | "http-or-https"): URL {
@@ -430,17 +489,40 @@ export class TimelineConnectionService {
       timeZone: row.upstreamTimeZone,
       distanceUnit: row.distanceUnit,
       allowPrivateHosts,
+      connectionSnapshot: { id: row.id, credentialGeneration: row.encryptedApiKey },
     };
   }
 
-  async recordReadSuccess(userId: string): Promise<void> {
+  async recordReadSuccess(userId: string, snapshot: TimelineConnectionSnapshot): Promise<void> {
     const now = this.now();
-    await this.store.updateForUser(userId, {
+    await this.store.updateForSnapshot(userId, snapshot, {
       lastReadAt: now,
       status: "connected",
       consecutiveFailures: 0,
       updatedAt: now,
     });
+  }
+
+  async updateReadMetadata(
+    userId: string,
+    snapshot: TimelineConnectionSnapshot,
+    metadata: { timeZone: string; distanceUnit: string | null },
+  ): Promise<TimelineConnectionSnapshot | null> {
+    const now = this.now();
+    const row = await this.store.updateForSnapshot(userId, snapshot, {
+      upstreamTimeZone: metadata.timeZone,
+      distanceUnit: metadata.distanceUnit,
+      updatedAt: now,
+    });
+    return row ? { id: row.id, credentialGeneration: row.encryptedApiKey } : null;
+  }
+
+  async recordReadFailure(
+    userId: string,
+    snapshot: TimelineConnectionSnapshot,
+    failureKind: "credential_invalid" | "transient",
+  ): Promise<void> {
+    await this.store.recordFailureForSnapshot(userId, snapshot, failureKind, this.now());
   }
 
   async deleteConnection(userId: string): Promise<void> {

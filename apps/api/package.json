@@ -26,6 +26,7 @@
     "@fastify/cors": "^11.3.0",
     "@fastify/helmet": "^13.1.0",
     "@hey-api/client-fetch": "workspace:*",
+    "@js-temporal/polyfill": "0.5.1",
     "@motis-project/motis-client": "^2.11.0",
     "@openmapx/core": "workspace:^",
     "@openmapx/db-schema": "workspace:^",

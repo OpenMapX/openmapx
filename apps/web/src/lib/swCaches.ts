@@ -55,6 +55,7 @@ export function isCredentialedApiPath(pathname: string): boolean {
     "/api/auth/",
     "/api/admin/",
     "/api/saved/",
+    "/api/timeline/",
     "/api/me",
     "/api/reviews/keypair",
   ] as const;

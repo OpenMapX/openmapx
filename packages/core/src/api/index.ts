@@ -2,6 +2,7 @@ export { fetchCapabilities, isServiceAvailable } from "./capabilities";
 export {
   ApiClient,
   type ApiClientConfig,
+  ApiError,
   apiClient,
   apiUrl,
   configureApiClient,
@@ -13,6 +14,13 @@ export {
   postEvDirections,
 } from "./directions";
 export { API_ENDPOINTS } from "./endpoints";
+export {
+  connectTimeline,
+  disconnectTimeline,
+  getPersonalTimelineDay,
+  getTimelineConnection,
+  testTimelineConnection,
+} from "./personalTimeline";
 export { type AlertBBox, fetchRoadAlerts, type RawRoadAlert } from "./roadAlerts";
 export {
   type FetchRoadConditionsOptions,
