@@ -1,0 +1,14 @@
+{
+  "name": "Ride Partners",
+  "description": "Holds the credential fields and setup guides for ride-hailing partners whose APIs need a commercial agreement (Yango, Karhoo). No adapter is implemented, so storing a credential here does not yet make the partner appear in ride mode — it is groundwork for a future integration.",
+  "dataSources": {
+    "yango": {
+      "purpose": "Credential storage for a future Yango fare and wait-time integration",
+      "dataSent": "Nothing is sent. No request is made to Yango: this integration only holds the credential fields and their setup guide. Should an adapter be added later, this entry will be updated to describe exactly what it transmits before any request is made."
+    },
+    "karhoo": {
+      "purpose": "Credential storage for a future Karhoo quote, booking and tracking integration",
+      "dataSent": "Nothing is sent. No request is made to Karhoo: this integration only holds the credential fields and their setup guide. Should an adapter be added later, this entry will be updated to describe exactly what it transmits before any request is made."
+    }
+  }
+}

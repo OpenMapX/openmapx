@@ -1,6 +1,6 @@
 ---
 title: Directions & navigation
-description: Traffic-aware road routing, EV charge planning, cycling and walking directions, turn-by-turn navigation, elevation, and flights deep-links.
+description: Traffic-aware road routing, EV charge planning, cycling and walking directions, turn-by-turn navigation, elevation, ride-hailing handoff, and flights deep-links.
 sidebar_position: 3
 ---
 
@@ -11,7 +11,7 @@ OpenMapX computes door-to-door routes for driving, motorcycle, cycling, and walk
 draws them on the map, and — for road travel — walks you through every turn with
 in-browser turn-by-turn navigation. Public-transit journeys are planned by a
 separate engine and have [their own page](./public-transit.md); this page covers
-the ground-routing modes, EV planning, and the flights deep-link.
+the ground-routing modes, EV planning, rides, and the flights deep-link.
 
 Like everything else in OpenMapX, the routing here runs on infrastructure you
 control. The map app talks only to your own API server, which proxies a routing
@@ -37,6 +37,9 @@ unless you point an engine at a third-party host.
   leave the route, and a keep-screen-on option.
 - **Hand off long-distance trips to a flight search** — the flying mode
   deep-links to an external flight engine with your trip pre-filled.
+- **Hand off to a ride** — the ride mode shows the driving route, then the
+  ride-hailing services available for it, with a wait time and price where the
+  provider publishes one.
 - **Plan an EV trip** with a real vehicle or custom battery specification,
   charging stops, state-of-charge targets, network preferences, energy use,
   charge time, and defensible price estimates.
@@ -225,6 +228,42 @@ pre-filled search URL for an external flight engine, then opens it in a new tab.
 
 This keeps long-distance trip planning useful without taking on a commercial
 flight-data feed.
+
+## Rides
+
+The ride mode answers the question the other modes cannot: what if you do not have
+a car here? Pick it, and OpenMapX computes the ordinary driving route — same engine,
+same map — then shows who can drive you along it.
+
+OpenMapX never books the ride. Choosing a provider opens their app or website, and
+the fare, the vehicle and the booking are entirely theirs.
+
+There are two kinds of provider:
+
+- **Apps you hand off to** (Uber, Lyft, Bolt, FREENOW, Yango). No credentials, no
+  data fetched: the link is built on your server when you click it. Some of these
+  can carry your pickup and destination into the app and some publish no way to do
+  so — the panel tells you which, rather than letting the destination vanish
+  silently.
+- **Open on-demand feeds** in [GOFS](https://gofs.org/) format — taxi registries,
+  microtransit and paratransit operators that publish their service areas, hours,
+  wait times and fares openly. These give real numbers: which services actually
+  cover your trip, how long the wait is, and what it costs.
+
+A few things worth knowing:
+
+- **One provider at a time, by default.** Several ride-hailing providers' API terms
+  forbid presenting them in a list beside competitors. An operator can enable
+  comparison, and when they do, only providers whose terms permit it join the list.
+- **"Estimated" means estimated.** A price with that label was computed from an
+  operator's published tariff, not quoted by the service for your trip. A price
+  without it came from the provider.
+- **Quotes go stale.** They expire in about a minute. The panel counts down and
+  refreshes while you are looking at it, and stops once you have left it alone —
+  it will not keep pricing a trip nobody is watching.
+- **Your trip leaves the server, not your browser.** For open feeds, your pickup and
+  destination are sent by your OpenMapX server to the feed, and the answer is never
+  cached or stored. For the app handoffs nothing is sent at all until you click.
 
 ## Configuration
 

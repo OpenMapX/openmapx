@@ -284,10 +284,79 @@ For acting on backend services in bulk (start, stop, or update selected services
 see [Services administration](./services-administration.md) and
 [Managing services](../install/managing-services.md).
 
+## Ride hailing
+
+Four integrations make up the ride mode, and only one of them needs any
+configuration to be useful:
+
+- **Ride Hailing** — the orchestrator. Holds the default provider and the
+  fare-comparison setting.
+- **Ride Apps** — handoffs to Uber, Lyft, Bolt, FREENOW and Yango. Works out of
+  the box; the affiliate ids are optional.
+- **GOFS On-Demand Rides** — open on-demand feeds. Reads a community registry by
+  default, and takes your own feeds on top.
+- **Ride Partners** — credential fields and setup guides only, for vendors that
+  need a commercial agreement. No provider appears from it.
+
+### Where feeds come from
+
+The **Use the MobilityData GOFS registry** setting is on by default. It reads the
+community-maintained list of published on-demand feeds, so a newly published
+system appears without a configuration change on your side. Every entry is
+checked before it is offered: unreachable feeds are hidden, and feeds that need
+an API key are shown with a link to that operator's access page rather than
+failing silently.
+
+### Adding a feed by hand
+
+1. Find the operator's discovery URL — their own site, or the
+   `<link rel="gofs">` autodiscovery tag on it. Many feeds serve it at a bare
+   base URL such as `https://api.example.com/gofs/11` rather than a path ending
+   in `gofs.json`.
+2. Open the GOFS On-Demand Rides integration and add a row with a short stable
+   id, a display name and the https URL.
+3. Save.
+
+The feed's own service areas, brands, fares and booking links are read from it,
+so nothing else needs configuring. An entry here overrides a registry entry with
+the same id, which is how you point at a private or staging deployment.
+
+### Giving a feed an API key
+
+For a feed OpenMapX ships named support for — the Montreal taxi registry today —
+paste the key into its own field and follow the setup guide shown beside it.
+
+For any other keyed feed, set the row's **API key slot** to 1, 2 or 3, choose
+whether the key goes in a header or a query parameter and what it is called, then
+paste the key into the matching **Custom GOFS feed N API key** field. Header is
+the default and the better choice: a key in a query string ends up in access logs.
+
+Keys are stored encrypted in the credential vault and sent only to that feed.
+Saving one reloads the integration, so it takes effect without a restart, and a
+feed that was showing as needing a credential re-checks immediately.
+
+### Enabling fare comparison
+
+**Allow side-by-side fare comparison** is off by default, and turning it on is an
+assertion about the terms you operate under: several ride-hailing providers' API
+terms forbid presenting them in an aggregated view alongside competitors.
+Providers that forbid it are never added to the list whatever this setting says —
+they stay as separate options — so switching it on affects only open feeds that
+have declared comparison permitted.
+
+### Privacy
+
+Quote requests send the rider's pickup and destination to the configured feed,
+from your server rather than the rider's browser. Nothing is cached or stored,
+and which feeds are contacted is entirely your choice. Storing a Yango or Karhoo
+credential does not yet enable a provider; the API log says so on startup.
+
 ## Where to go next
 
 - **[Admin panel](./admin-panel.md)** — the full tour of `/admin` and how access
   is gated.
+- **[Ride integrations](../developer/ride-integrations.md)** — writing a ride
+  provider against the `RideProvider` contract.
 - **[Services administration](./services-administration.md)** — enabling and
   operating the backends that satisfy capability requirements.
 - **[Community extensions](./community-extensions.md)** — installing additional

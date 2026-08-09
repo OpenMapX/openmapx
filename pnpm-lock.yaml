@@ -1286,6 +1286,12 @@ importers:
         specifier: workspace:^
         version: link:../../packages/integration-framework
 
+  integrations/ride-partner:
+    dependencies:
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+
   integrations/road-conditions:
     dependencies:
       '@openmapx/core':

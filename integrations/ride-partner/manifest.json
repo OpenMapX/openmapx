@@ -1,0 +1,115 @@
+{
+  "id": "ride-partner",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["ride-hailing"],
+  "backend": { "routes": false },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true },
+      "yango-client-id": {
+        "type": "string",
+        "title": "Yango Client ID (clid)",
+        "description": "Requires a Yango partner agreement. Storing this does not yet enable a Yango provider — no adapter is implemented.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://yango.com/en_int/partner-program/documentation/",
+          "urlLabel": "Yango partner documentation",
+          "steps": [
+            "Read the Yango partner-program documentation to confirm Yango operates in your service area.",
+            "Email Yango integration support to request partner access, describing your deployment and expected request volume.",
+            "Yango issues a client id (clid) and an API key once the partnership is agreed.",
+            "Paste the client id here and the key in the Yango API Key field."
+          ],
+          "cost": "No public price schedule; set by the partner agreement.",
+          "notes": "Yango's fare and ETA endpoints require both the client id and the API key. The key is sent as a request header, never as a URL parameter."
+        }
+      },
+      "yango-api-key": {
+        "type": "string",
+        "title": "Yango API Key",
+        "description": "Requires a Yango partner agreement. Storing this does not yet enable a Yango provider — no adapter is implemented.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://yango.com/en_int/partner-program/documentation/",
+          "urlLabel": "Yango partner documentation",
+          "steps": [
+            "Request partner access from Yango integration support.",
+            "Yango issues the API key alongside the client id.",
+            "Paste the key here."
+          ],
+          "cost": "No public price schedule; set by the partner agreement.",
+          "notes": "Yango requires a cost disclaimer to be shown beside any fare estimate — fares vary with demand."
+        }
+      },
+      "karhoo-client-id": {
+        "type": "string",
+        "title": "Karhoo Client ID",
+        "description": "Requires a Karhoo demand-partner account. Storing this does not yet enable a Karhoo provider — no adapter is implemented.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://developer.karhoo.com/",
+          "urlLabel": "Karhoo developer portal",
+          "steps": [
+            "Contact Karhoo to open a demand-partner account — credentials are registered by a Karhoo representative, not self-service.",
+            "Karhoo provisions sandbox credentials first, then production ones once integration is reviewed.",
+            "Paste the client id here and the secret in the Karhoo Client Secret field."
+          ],
+          "cost": "Commercial agreement; no self-service tier.",
+          "notes": "Karhoo is a supply exchange rather than a single fleet, so one credential reaches many operators. Its API covers quotes, booking, tracking and cancellation, which is the full RideProvider surface."
+        }
+      },
+      "karhoo-client-secret": {
+        "type": "string",
+        "title": "Karhoo Client Secret",
+        "description": "Requires a Karhoo demand-partner account. Storing this does not yet enable a Karhoo provider — no adapter is implemented.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://developer.karhoo.com/",
+          "urlLabel": "Karhoo developer portal",
+          "steps": [
+            "Open a Karhoo demand-partner account through a Karhoo representative.",
+            "Copy the client secret issued with your client id.",
+            "Paste the secret here."
+          ],
+          "cost": "Commercial agreement; no self-service tier.",
+          "notes": "Use the sandbox credential pair until Karhoo approves production access."
+        }
+      }
+    }
+  },
+  "quality": "built-in",
+  "category": "External",
+  "dataSources": [
+    {
+      "sourceId": "yango",
+      "name": "Yango",
+      "url": "https://yango.com/",
+      "license": "Proprietary (partner agreement)",
+      "licenseUrl": "https://yango.com/en_int/legal/",
+      "commercialUse": "conditional",
+      "providerCountry": "NL",
+      "providerPrivacyUrl": "https://yango.com/en_int/legal/confidential/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "karhoo",
+      "name": "Karhoo",
+      "url": "https://www.karhoo.com/",
+      "license": "Proprietary (partner agreement)",
+      "licenseUrl": "https://www.karhoo.com/terms-and-conditions/",
+      "commercialUse": "conditional",
+      "providerCountry": "GB",
+      "providerPrivacyUrl": "https://www.karhoo.com/privacy-policy/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

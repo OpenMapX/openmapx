@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   assertRealtimeProviderContract,
+  assertRideProviderContract,
   assertTransitProviderContract,
 } from "@openmapx/integration-framework";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
@@ -58,7 +59,7 @@ describe("Provider contract conformance", () => {
   });
 
   for (const dir of dirs) {
-    it(`${dir}: transit/realtime providers satisfy their capability contracts`, async () => {
+    it(`${dir}: transit/realtime/ride providers satisfy their capability contracts`, async () => {
       const ctx = createMockIntegrationContext({ id: dir });
       const mod = await import(pathToFileURL(join(INTEGRATIONS_DIR, dir, "index.ts")).href);
       if (typeof mod.setup !== "function") return;
@@ -77,6 +78,17 @@ describe("Provider contract conformance", () => {
         assertRealtimeProviderContract(
           provider as unknown as Parameters<typeof assertRealtimeProviderContract>[0],
         );
+      }
+      for (const provider of ctx.registered.ride) {
+        assertRideProviderContract(provider);
+        // Booking and tracking are declared on the contract but implemented by
+        // nothing we ship — a partner adapter would be a deliberate, reviewed
+        // addition, not something that appears by accident.
+        expect(provider.capabilities.booking).toBe(false);
+        expect(provider.capabilities.tracking).toBe(false);
+        expect(provider.book).toBeUndefined();
+        expect(provider.getBooking).toBeUndefined();
+        expect(provider.cancelBooking).toBeUndefined();
       }
     });
   }

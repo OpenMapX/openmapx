@@ -1,0 +1,14 @@
+{
+  "name": "Mitfahr-Partner",
+  "description": "Enthält die Zugangsdaten-Felder und Einrichtungsanleitungen für Mitfahranbieter, deren APIs eine kommerzielle Vereinbarung voraussetzen (Yango, Karhoo). Es ist kein Adapter implementiert; das Hinterlegen von Zugangsdaten lässt den Anbieter daher noch nicht im Fahrten-Modus erscheinen — es ist die Vorarbeit für eine spätere Integration.",
+  "dataSources": {
+    "yango": {
+      "purpose": "Speicherung von Zugangsdaten für eine künftige Yango-Integration mit Preisen und Wartezeiten",
+      "dataSent": "Es wird nichts übermittelt. Es erfolgt keine Anfrage an Yango: Diese Integration hält lediglich die Zugangsdaten-Felder und deren Einrichtungsanleitung vor. Sollte später ein Adapter ergänzt werden, wird dieser Eintrag aktualisiert und beschreibt genau, was übertragen wird, bevor eine Anfrage erfolgt."
+    },
+    "karhoo": {
+      "purpose": "Speicherung von Zugangsdaten für eine künftige Karhoo-Integration mit Angeboten, Buchung und Verfolgung",
+      "dataSent": "Es wird nichts übermittelt. Es erfolgt keine Anfrage an Karhoo: Diese Integration hält lediglich die Zugangsdaten-Felder und deren Einrichtungsanleitung vor. Sollte später ein Adapter ergänzt werden, wird dieser Eintrag aktualisiert und beschreibt genau, was übertragen wird, bevor eine Anfrage erfolgt."
+    }
+  }
+}
