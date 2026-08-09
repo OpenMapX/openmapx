@@ -1,0 +1,155 @@
+{
+  "id": "dawarich-sidekiq",
+  "name": "Dawarich Sidekiq",
+  "version": "1.10.3",
+  "description": "Background job worker for the managed multi-user Dawarich timeline.",
+  "license": "AGPL-3.0",
+  "quality": "built-in",
+  "homepage": "https://dawarich.app/",
+  "documentation": "https://dawarich.app/docs/self-hosting/",
+  "container": {
+    "image": "freikin/dawarich",
+    "tag": "1.10.3",
+    "entrypoint": ["/usr/local/bin/openmapx-entrypoint.sh"],
+    "command": ["sidekiq"],
+    "environment": {
+      "RAILS_ENV": "production",
+      "REDIS_URL": "redis://dawarich-redis:6379",
+      "DATABASE_HOST": "dawarich-postgis",
+      "DATABASE_PORT": "5432",
+      "DATABASE_USERNAME": "postgres",
+      "DATABASE_NAME": "dawarich_production",
+      "APPLICATION_HOSTS": "timeline.${DOMAIN:-localhost}",
+      "APPLICATION_URL": "https://timeline.${DOMAIN:-localhost}",
+      "DOMAIN": "timeline.${DOMAIN:-localhost}",
+      "APPLICATION_PROTOCOL": "https",
+      "TIME_ZONE": "UTC",
+      "RAILS_MAX_THREADS": "5",
+      "RAILS_LOG_TO_STDOUT": "true",
+      "SELF_HOSTED": "true",
+      "STORE_GEODATA": "true",
+      "WEB_CONCURRENCY": "1",
+      "PROMETHEUS_EXPORTER_ENABLED": "false",
+      "OIDC_CLIENT_ID": "${SERVICE_DAWARICH_APP_OIDC_CLIENT_ID:-}",
+      "OIDC_ISSUER": "https://${DOMAIN:-localhost}/api/auth",
+      "OIDC_REDIRECT_URI": "https://timeline.${DOMAIN:-localhost}/users/auth/openid_connect/callback",
+      "OIDC_PROVIDER_NAME": "OpenMapX",
+      "OIDC_AUTO_REGISTER": "true",
+      "OIDC_PKCE_ENABLED": "true",
+      "ALLOW_EMAIL_PASSWORD_REGISTRATION": "true",
+      "ALLOW_EMAIL_PASSWORD_LOGIN": "true",
+      "BACKGROUND_PROCESSING_CONCURRENCY": "3"
+    },
+    "memory": "2g",
+    "restart": "unless-stopped",
+    "healthcheck": {
+      "type": "exec",
+      "command": ["pgrep", "-f", "sidekiq"],
+      "interval": "10s",
+      "timeout": "10s",
+      "retries": 30,
+      "startPeriod": "30s"
+    },
+    "dependsOn": [
+      { "service": "dawarich-postgis", "condition": "service_healthy" },
+      { "service": "dawarich-redis", "condition": "service_healthy" },
+      { "service": "dawarich-app", "condition": "service_healthy" }
+    ],
+    "logging": {
+      "driver": "json-file",
+      "options": { "max-size": "100m", "max-file": "5" }
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "APPLICATION_HOSTS": {
+        "type": "string",
+        "title": "Public Dawarich hostname",
+        "default": "timeline.{domain}"
+      },
+      "APPLICATION_URL": {
+        "type": "string",
+        "title": "Public Dawarich URL",
+        "default": "https://timeline.{domain}"
+      },
+      "TIME_ZONE": { "type": "string", "title": "Default time zone", "default": "UTC" },
+      "OIDC_CLIENT_ID": { "type": "string", "title": "OpenMapX OIDC client ID" },
+      "OIDC_ISSUER": {
+        "type": "string",
+        "title": "OpenMapX OIDC issuer",
+        "default": "https://{domain}/api/auth"
+      },
+      "OIDC_REDIRECT_URI": {
+        "type": "string",
+        "title": "Dawarich OIDC callback URL",
+        "default": "https://timeline.{domain}/users/auth/openid_connect/callback"
+      },
+      "WEB_CONCURRENCY": {
+        "type": "string",
+        "title": "Puma worker count",
+        "default": "1"
+      },
+      "RAILS_MAX_THREADS": {
+        "type": "string",
+        "title": "Rails database pool/thread count",
+        "default": "5"
+      },
+      "LOG_MAX_SIZE": {
+        "type": "string",
+        "title": "Maximum JSON log file size",
+        "default": "100m"
+      },
+      "LOG_MAX_FILE": {
+        "type": "string",
+        "title": "Maximum JSON log file count",
+        "default": "5"
+      },
+      "BACKGROUND_PROCESSING_CONCURRENCY": {
+        "type": "string",
+        "title": "Sidekiq concurrency",
+        "default": "3"
+      },
+      "DATABASE_PASSWORD": {
+        "type": "string",
+        "title": "Dawarich database password",
+        "x-openmapx-secret": true
+      },
+      "SECRET_KEY_BASE": {
+        "type": "string",
+        "title": "Dawarich Rails secret key base",
+        "x-openmapx-secret": true
+      },
+      "OIDC_CLIENT_SECRET": {
+        "type": "string",
+        "title": "OpenMapX OIDC client secret",
+        "x-openmapx-secret": true
+      }
+    }
+  },
+  "volumes": [
+    {
+      "name": "openmapx-dawarich-public",
+      "mountAt": "/var/app/public",
+      "backup": false
+    },
+    {
+      "name": "openmapx-dawarich-watched",
+      "mountAt": "/var/app/tmp/imports/watched",
+      "backup": false
+    },
+    {
+      "name": "openmapx-dawarich-storage",
+      "mountAt": "/var/app/storage",
+      "backup": false
+    }
+  ],
+  "bindMounts": [
+    {
+      "source": "scripts/openmapx-entrypoint.sh",
+      "target": "/usr/local/bin/openmapx-entrypoint.sh",
+      "readOnly": true
+    }
+  ],
+  "ui": { "category": "timeline" }
+}

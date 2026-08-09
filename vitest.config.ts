@@ -67,6 +67,8 @@ export default defineConfig({
             "integrations/**/*.test.ts",
             "packages/**/*.test.ts",
             "scripts/**/*.test.ts",
+            "services/dawarich-app/**/*.test.ts",
+            "services/dawarich-sidekiq/**/*.test.ts",
             "services/data-manager/**/*.test.ts",
             "services/motis-feed-proxy/**/*.test.ts",
           ],

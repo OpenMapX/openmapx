@@ -478,6 +478,52 @@ describe("filterManifestServices", () => {
 // ─── Discovery ─────────────────────────────────────────────────────────────
 
 describe("discoverBackupableServices", () => {
+  it("discovers one versioned pg_dump target and three versioned tar targets for Dawarich", async () => {
+    process.env.OPENMAPX_ENABLED_SERVICES = "dawarich-app";
+
+    const targets = await discoverBackupableServices({
+      rootDir: process.cwd(),
+      serviceIds: ["dawarich-postgis", "dawarich-app", "dawarich-sidekiq"],
+    });
+
+    expect(targets).toEqual([
+      {
+        id: "dawarich-app",
+        version: "1.10.3",
+        volumes: [
+          {
+            serviceId: "dawarich-app",
+            volumeName: "openmapx-dawarich-public",
+            mode: "tar",
+          },
+          {
+            serviceId: "dawarich-app",
+            volumeName: "openmapx-dawarich-watched",
+            mode: "tar",
+          },
+          {
+            serviceId: "dawarich-app",
+            volumeName: "openmapx-dawarich-storage",
+            mode: "tar",
+          },
+        ],
+      },
+      {
+        id: "dawarich-postgis",
+        version: "17-3.5",
+        postgresUser: "postgres",
+        postgresDb: "dawarich_production",
+        volumes: [
+          {
+            serviceId: "dawarich-postgis",
+            volumeName: "openmapx-dawarich-db-data",
+            mode: "pg_dump",
+          },
+        ],
+      },
+    ]);
+  });
+
   it("returns only services with backup-true volumes", async () => {
     writeManifest("postgis", {
       ...baseService,

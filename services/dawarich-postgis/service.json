@@ -1,0 +1,49 @@
+{
+  "id": "dawarich-postgis",
+  "name": "Dawarich PostGIS",
+  "version": "17-3.5",
+  "description": "Dedicated PostgreSQL 17 and PostGIS 3.5 database for the managed Dawarich timeline.",
+  "license": "PostgreSQL",
+  "quality": "built-in",
+  "homepage": "https://github.com/baosystems/docker-postgis",
+  "container": {
+    "image": "ghcr.io/baosystems/postgis",
+    "tag": "17-3.5",
+    "expose": [5432],
+    "environment": {
+      "POSTGRES_USER": "postgres",
+      "POSTGRES_DB": "dawarich_production"
+    },
+    "shmSize": "1g",
+    "memory": "2g",
+    "restart": "unless-stopped",
+    "healthcheck": {
+      "type": "exec",
+      "command": ["pg_isready", "-U", "postgres", "-d", "dawarich_production"],
+      "interval": "10s",
+      "timeout": "10s",
+      "retries": 5,
+      "startPeriod": "30s"
+    }
+  },
+  "provides": ["database"],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "POSTGRES_PASSWORD": {
+        "type": "string",
+        "title": "Dawarich database password",
+        "x-openmapx-secret": true
+      }
+    }
+  },
+  "volumes": [
+    {
+      "name": "openmapx-dawarich-db-data",
+      "mountAt": "/var/lib/postgresql/data",
+      "backup": true,
+      "backupMode": "pg_dump"
+    }
+  ],
+  "ui": { "category": "infrastructure" }
+}
