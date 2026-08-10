@@ -15,7 +15,10 @@
     "test": "jest --runInBand",
     "test:native": "tsx scripts/run-native-tests.mts",
     "assert-generated": "tsx scripts/assert-generated-native.mts",
-    "assert-boundary": "tsx scripts/assert-no-community-runtime.mts"
+    "assert-boundary": "tsx scripts/assert-no-community-runtime.mts",
+    "assert-permissions": "tsx scripts/assert-release-permissions.mts --generated",
+    "inventory": "tsx compliance/dependency-inventory.mts --check",
+    "store-answers": "tsx compliance/store-answers.mts"
   },
   "dependencies": {
     "@openmapx/core": "workspace:^",

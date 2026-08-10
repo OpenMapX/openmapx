@@ -69,6 +69,10 @@ const config: ExpoConfig = {
       "android.permission.FOREGROUND_SERVICE",
       "android.permission.FOREGROUND_SERVICE_LOCATION",
       "android.permission.POST_NOTIFICATIONS",
+      // The get-off alert vibrates, which is the part a rider notices with the
+      // phone in a pocket. Declared explicitly rather than arriving silently
+      // through expo-notifications' own manifest.
+      "android.permission.VIBRATE",
     ],
     // Permissions some bundled Expo modules declare by default but this app
     // must not ship: no remote push, no boot receiver, no exact alarms, no
