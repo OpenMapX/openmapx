@@ -84,6 +84,19 @@ export { useNeighborhoods } from "./useNeighborhoods";
 export { type NlpCloudAccess, type NlpParseResponse, useNlpSearch } from "./useNlpSearch";
 export { useOfficialBookingUrl } from "./useOfficialBookingUrl";
 export { useOptimizeRoute } from "./useOptimizeRoute";
+export {
+  OSM_CATEGORY_MIN_QUERY_LENGTH,
+  type OsmCategorySearchInput,
+  OsmContributionRequestError,
+  osmContributionKeys,
+  useCreateOsmNote,
+  useInvalidateAfterContribution,
+  useOsmContributionCapabilities,
+  useOsmContributionCategories,
+  useOsmContributionContext,
+  usePreviewOsmContribution,
+  usePublishOsmContribution,
+} from "./useOsmContributions";
 export { useOverlayExclusion } from "./useOverlayExclusion";
 export { useOverlayVisibilitySetter } from "./useOverlayVisibilitySetter";
 export { usePlaceDetails } from "./usePlaceDetails";

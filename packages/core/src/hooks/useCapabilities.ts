@@ -12,6 +12,8 @@ export interface ServiceCapability {
 
 interface CapabilitiesResponse {
   services: Record<string, ServiceCapability>;
+  /** Bounded public feature bits. Absent on an older API. */
+  features?: { osmContributions?: boolean };
 }
 
 export function useCapabilities() {
@@ -24,6 +26,12 @@ export function useCapabilities() {
   return {
     ...query,
     services: query.data?.services ?? {},
+    /**
+     * Fails closed. Unlike `isAvailable` — which is optimistic so integration
+     * UI keeps working while capabilities load — an unreleased feature must
+     * stay hidden until the server has explicitly said it is on.
+     */
+    osmContributionsEnabled: query.data?.features?.osmContributions === true,
     isAvailable: (serviceId: string | undefined) => {
       if (!serviceId) return true;
       if (!query.data) return true;
