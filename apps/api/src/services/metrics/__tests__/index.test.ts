@@ -5,6 +5,7 @@ import {
   getMetrics,
   initMetrics,
   recordOsmContributionOperation,
+  recordPersonalTimelineRequest,
   recordProviderCall,
   recordRoutingRequest,
   recordTransitDecision,
@@ -121,6 +122,30 @@ describe("metrics service", () => {
     expect(text).toContain('operation="directions"');
     expect(text).toContain('live_traffic="true"');
     expect(text).toContain('status="present"');
+  });
+
+  it("records personal timeline counts and latency with closed aggregate labels", async () => {
+    recordPersonalTimelineRequest({ mode: "managed", operation: "day", outcome: "partial" }, 37);
+    const text = await getMetrics().renderPrometheus();
+    expect(text).toContain("personal_timeline_requests_total");
+    expect(text).toContain("personal_timeline_request_duration_ms");
+    expect(text).toContain('mode="managed"');
+    expect(text).toContain('operation="day"');
+    expect(text).toContain('outcome="partial"');
+  });
+
+  it("never serializes user, credential, host, date or coordinate-shaped input", async () => {
+    const sensitive = "OMX-SENSITIVE-user@example.test-2026-03-29-52.5-13.4";
+    recordPersonalTimelineRequest(
+      { mode: "external", operation: "connect", outcome: "invalid_credential" },
+      4,
+    );
+    const text = await getMetrics().renderPrometheus();
+    expect(text).not.toContain(sensitive);
+    expect(text).not.toContain("user_id");
+    expect(text).not.toContain("hostname");
+    expect(text).not.toContain("date=");
+    expect(text).not.toContain("coordinate");
   });
 });
 

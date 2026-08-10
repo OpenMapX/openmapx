@@ -20,6 +20,162 @@ const validateWithProvenance = (raw: unknown, firstParty: boolean) =>
   validateServiceManifest(raw, { firstParty });
 
 describe("validateServiceManifest", () => {
+  it("validates unique companion selection dependencies and rejects duplicates or self-references", () => {
+    const valid = validateFirstParty({
+      ...validMinimal,
+      selectionDependencies: ["timeline-worker", "timeline-scheduler"],
+    });
+    expect(valid.valid).toBe(true);
+
+    const duplicate = validateFirstParty({
+      ...validMinimal,
+      selectionDependencies: ["timeline-worker", "timeline-worker"],
+    });
+    expect(duplicate.valid).toBe(false);
+
+    const self = validateFirstParty({
+      ...validMinimal,
+      selectionDependencies: ["valhalla"],
+    });
+    expect(self.valid).toBe(false);
+  });
+
+  it("accepts a typed proxy hostname and rejects unsafe hostname syntax", () => {
+    const validTemplate = validateFirstParty({
+      ...validMinimal,
+      configSchema: { properties: { APPLICATION_HOSTS: { type: "string" } } },
+      exposure: {
+        proxy: {
+          enabled: true,
+          host: { default: "timeline.{domain}", configKey: "APPLICATION_HOSTS" },
+        },
+      },
+    });
+    expect(validTemplate.valid).toBe(true);
+
+    const exact = validateFirstParty({
+      ...validMinimal,
+      exposure: { proxy: { enabled: true, host: { default: "timeline.example.net" } } },
+    });
+    expect(exact.valid).toBe(true);
+
+    for (const host of [
+      "timeline example.net",
+      "https://timeline.example.net",
+      "timeline.example.net:443",
+      "timeline.example.net,evil.example",
+      "timeline.`evil`",
+      "timeline.(evil)",
+      "*.example.net",
+      "{domain}.{domain}",
+    ]) {
+      expect(
+        validateFirstParty({
+          ...validMinimal,
+          exposure: { proxy: { enabled: true, host: { default: host } } },
+        }).valid,
+      ).toBe(false);
+    }
+  });
+
+  it("requires proxy host config keys to name declared non-secret string fields", () => {
+    const missing = validateFirstParty({
+      ...validMinimal,
+      exposure: {
+        proxy: { enabled: true, host: { default: "timeline.example.net", configKey: "MISSING" } },
+      },
+    });
+    expect(missing.valid).toBe(false);
+
+    const secret = validateFirstParty({
+      ...validMinimal,
+      configSchema: {
+        properties: { APPLICATION_HOSTS: { type: "string", "x-openmapx-secret": true } },
+      },
+      exposure: {
+        proxy: {
+          enabled: true,
+          host: { default: "timeline.example.net", configKey: "APPLICATION_HOSTS" },
+        },
+      },
+    });
+    expect(secret.valid).toBe(false);
+  });
+
+  it("requires an explicit path before stripping a custom hostname prefix", () => {
+    const result = validateFirstParty({
+      ...validMinimal,
+      exposure: {
+        proxy: { enabled: true, host: { default: "timeline.example.net" }, stripPrefix: true },
+      },
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  it("allows volume backup modes only for backup volumes and requires postgres credentials", () => {
+    const tar = validateFirstParty({
+      ...validMinimal,
+      volumes: [
+        { name: "openmapx-valhalla-data", mountAt: "/data", backup: true, backupMode: "tar" },
+      ],
+    });
+    expect(tar.valid).toBe(true);
+
+    const withoutBackup = validateFirstParty({
+      ...validMinimal,
+      volumes: [{ name: "openmapx-valhalla-data", mountAt: "/data", backupMode: "pg_dump" }],
+    });
+    expect(withoutBackup.valid).toBe(false);
+
+    const unsupportedMode = validateFirstParty({
+      ...validMinimal,
+      volumes: [
+        { name: "openmapx-valhalla-data", mountAt: "/data", backup: true, backupMode: "database" },
+      ],
+    });
+    expect(unsupportedMode.valid).toBe(false);
+
+    const missingPostgresEnv = validateFirstParty({
+      ...validMinimal,
+      volumes: [
+        { name: "openmapx-valhalla-data", mountAt: "/data", backup: true, backupMode: "pg_dump" },
+      ],
+    });
+    expect(missingPostgresEnv.valid).toBe(false);
+
+    const pgDump = validateFirstParty({
+      ...validMinimal,
+      container: {
+        ...validMinimal.container,
+        environment: {
+          POSTGRES_USER: "timeline_2026$archive",
+          POSTGRES_DB: "timeline_2026$archive",
+        },
+      },
+      volumes: [
+        { name: "openmapx-valhalla-data", mountAt: "/data", backup: true, backupMode: "pg_dump" },
+      ],
+    });
+    expect(pgDump.valid).toBe(true);
+
+    const interpolation = validateFirstParty({
+      ...validMinimal,
+      container: {
+        ...validMinimal.container,
+        environment: {
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: test data is literal Compose interpolation syntax
+          POSTGRES_USER: "${POSTGRES_USER:-timeline}",
+          POSTGRES_DB: "timeline",
+        },
+      },
+      volumes: [
+        { name: "openmapx-valhalla-data", mountAt: "/data", backup: true, backupMode: "pg_dump" },
+      ],
+    });
+    expect(interpolation.valid).toBe(false);
+    expect(interpolation.errors.join(" ")).toMatch(/POSTGRES_USER/);
+  });
+
   it("accepts a minimal valid manifest", () => {
     const result = validateFirstParty(validMinimal);
     expect(result.valid).toBe(true);

@@ -641,18 +641,51 @@ function renderHealthcheck(
   return out;
 }
 
+function isValidResolvedHostname(value: string): boolean {
+  if (value.length === 0 || value.length > 253) return false;
+  return value
+    .split(".")
+    .every(
+      (label) =>
+        label.length >= 1 && label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label),
+    );
+}
+
+/** Resolve a typed proxy hostname without accepting raw Traefik rule fragments. */
+export function resolveProxyHost(m: ServiceManifest, ctx: RenderContext): string | undefined {
+  const host = m.exposure?.proxy?.host;
+  if (!host) return undefined;
+
+  const configured = host.configKey
+    ? ctx.resolvedServiceConfigs?.get(m.id)?.[host.configKey]
+    : undefined;
+  const selected =
+    typeof configured === "string" && configured.length > 0 ? configured : host.default;
+  const resolved = selected
+    .replace("{domain}", ctx.domain ?? "localhost")
+    .toLowerCase()
+    .replace(/\.$/, "");
+  if (!isValidResolvedHostname(resolved)) {
+    throw new Error(`Invalid proxy hostname for service "${m.id}"`);
+  }
+  return resolved;
+}
+
 function renderTraefikLabels(m: ServiceManifest, ctx: RenderContext): Record<string, string> {
   const proxy = m.exposure?.proxy;
   if (!proxy?.enabled) return {};
 
   const id = m.id;
-  const domain = ctx.domain ?? "localhost";
-  const pathPrefix = proxy.pathPrefix ?? `/${id}`;
+  const customHost = resolveProxyHost(m, ctx);
+  const domain = customHost ?? ctx.domain ?? "localhost";
+  const pathPrefix = proxy.pathPrefix ?? (customHost ? undefined : `/${id}`);
   const targetPort = m.container.expose?.[0] ?? 80;
 
   const labels: Record<string, string> = {
     "traefik.enable": "true",
-    [`traefik.http.routers.${id}.rule`]: `Host(\`${domain}\`) && PathPrefix(\`${pathPrefix}\`)`,
+    [`traefik.http.routers.${id}.rule`]: pathPrefix
+      ? `Host(\`${domain}\`) && PathPrefix(\`${pathPrefix}\`)`
+      : `Host(\`${domain}\`)`,
     [`traefik.http.routers.${id}.entrypoints`]: "websecure",
     [`traefik.http.routers.${id}.tls.certresolver`]: "letsencrypt",
     [`traefik.http.services.${id}.loadbalancer.server.port`]: String(targetPort),
@@ -660,6 +693,7 @@ function renderTraefikLabels(m: ServiceManifest, ctx: RenderContext): Record<str
 
   const middlewares: string[] = [];
   if (proxy.stripPrefix) {
+    if (!pathPrefix) throw new Error(`stripPrefix requires a pathPrefix for service "${id}"`);
     labels[`traefik.http.middlewares.${id}-strip.stripprefix.prefixes`] = pathPrefix;
     middlewares.push(`${id}-strip`);
   }

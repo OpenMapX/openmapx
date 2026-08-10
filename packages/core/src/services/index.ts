@@ -41,7 +41,9 @@ export {
 } from "./extension-schema";
 export { findServiceManifestDirs } from "./manifest-discovery";
 export {
+  isSafePostgresIdentifier,
   type ManifestValidationResult,
+  POSTGRES_IDENTIFIER_REGEX,
   serviceManifestSchema,
   validateServiceManifest,
 } from "./manifest-schema";

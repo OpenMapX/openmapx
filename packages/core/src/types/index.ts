@@ -123,6 +123,18 @@ export type {
   OsmTagDiff,
 } from "./osmContribution";
 export type {
+  ConnectPersonalTimelineRequest,
+  PersonalTimelineDayV1,
+  PersonalTimelineErrorCode,
+  PersonalTimelineJourneyV1,
+  PersonalTimelineSummaryV1,
+  PersonalTimelineVisitV1,
+  PersonalTimelineWarning,
+  TimelineConnectionMode,
+  TimelineConnectionStatus,
+  TimelineConnectionView,
+} from "./personalTimeline";
+export type {
   AirportFrequencyInfo,
   AirportInfo,
   AirportNavaidInfo,

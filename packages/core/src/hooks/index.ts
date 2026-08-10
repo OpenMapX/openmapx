@@ -99,6 +99,14 @@ export {
 } from "./useOsmContributions";
 export { useOverlayExclusion } from "./useOverlayExclusion";
 export { useOverlayVisibilitySetter } from "./useOverlayVisibilitySetter";
+export {
+  PERSONAL_TIMELINE_QUERY_KEY,
+  useConnectTimeline,
+  useDisconnectTimeline,
+  usePersonalTimelineDay,
+  useTestTimelineConnection,
+  useTimelineConnection,
+} from "./usePersonalTimeline";
 export { usePlaceDetails } from "./usePlaceDetails";
 export { usePlacePhotos } from "./usePlacePhotos";
 export { usePresetSuggest } from "./usePresetSuggest";

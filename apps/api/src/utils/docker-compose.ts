@@ -15,6 +15,11 @@ export interface PsEntry {
   container: string;
 }
 
+export interface DockerComposeContainerEnvDependencies {
+  ps(): Promise<PsEntry[]>;
+  inspectEnvironment(container: string): Promise<readonly string[]>;
+}
+
 export async function dockerComposePs(): Promise<PsEntry[]> {
   try {
     const { stdout } = await execFile(
@@ -29,6 +34,47 @@ export async function dockerComposePs(): Promise<PsEntry[]> {
     });
   } catch {
     return [];
+  }
+}
+
+async function inspectContainerEnvironment(container: string): Promise<readonly string[]> {
+  const { stdout } = await execFile(
+    "docker",
+    ["inspect", "--format", "{{json .Config.Env}}", container],
+    { timeout: 15_000 },
+  );
+  const parsed: unknown = JSON.parse(stdout.trim());
+  if (!Array.isArray(parsed) || !parsed.every((entry) => typeof entry === "string")) return [];
+  return parsed;
+}
+
+const defaultContainerEnvDependencies: DockerComposeContainerEnvDependencies = {
+  ps: dockerComposePs,
+  inspectEnvironment: inspectContainerEnvironment,
+};
+
+/**
+ * Read one non-secret runtime marker from a currently running Compose service.
+ * The full container environment stays in-process and is never returned or
+ * logged because unrelated entries may contain operator-controlled values.
+ */
+export async function dockerComposeContainerEnv(
+  serviceId: string,
+  key: string,
+  dependencies: DockerComposeContainerEnvDependencies = defaultContainerEnvDependencies,
+): Promise<string | null> {
+  try {
+    const container = (await dependencies.ps()).find(
+      (entry) => entry.service === serviceId && entry.state === "running",
+    )?.container;
+    if (!container) return null;
+    const prefix = `${key}=`;
+    const entry = (await dependencies.inspectEnvironment(container)).find((value) =>
+      value.startsWith(prefix),
+    );
+    return entry === undefined ? null : entry.slice(prefix.length);
+  } catch {
+    return null;
   }
 }
 

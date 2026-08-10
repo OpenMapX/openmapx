@@ -6,7 +6,8 @@ import type { SxProps, Theme } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
 import { getInitials, proxyImageUrl, useSession } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useAccountSettingsStore } from "@/stores/accountSettingsStore";
 import { AccountMenu } from "./AccountMenu";
 import { AccountSettingsDialog } from "./AccountSettingsDialog";
 import { AuthDialog } from "./AuthDialog";
@@ -25,8 +26,12 @@ export function AccountAvatarButton({ size = 36, sx }: Props) {
   const { data: session, isPending } = useSession();
   const [authOpen, setAuthOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsOpen = useAccountSettingsStore((state) => state.open);
+  const settingsSection = useAccountSettingsStore((state) => state.section);
+  const showSettings = useAccountSettingsStore((state) => state.show);
+  const closeSettings = useAccountSettingsStore((state) => state.close);
   const avatarRef = useRef<HTMLButtonElement>(null);
+  const lastSettledUserId = useRef<string | null | undefined>(undefined);
 
   // Render the settled signed-out state until mounted, so the first client
   // render matches the server HTML. better-auth resolves the session
@@ -35,6 +40,15 @@ export function AccountAvatarButton({ size = 36, sx }: Props) {
   // trip a hydration mismatch on its emotion-generated class.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  useLayoutEffect(() => {
+    if (!mounted || isPending) return;
+    const currentUserId = session?.user?.id ?? null;
+    if (lastSettledUserId.current !== undefined && lastSettledUserId.current !== currentUserId) {
+      closeSettings();
+    }
+    lastSettledUserId.current = currentUserId;
+  }, [closeSettings, isPending, mounted, session?.user?.id]);
 
   const user = mounted ? (session?.user ?? null) : null;
   const pending = mounted ? isPending : false;
@@ -87,15 +101,17 @@ export function AccountAvatarButton({ size = 36, sx }: Props) {
           anchorEl={menuAnchor}
           onClose={() => setMenuAnchor(null)}
           user={user}
-          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenSettings={() => showSettings()}
         />
       )}
 
       {user && (
         <AccountSettingsDialog
+          key={user.id}
           open={settingsOpen}
-          onClose={() => setSettingsOpen(false)}
+          onClose={closeSettings}
           user={user}
+          initialSection={settingsSection}
         />
       )}
     </>

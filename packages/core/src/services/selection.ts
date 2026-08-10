@@ -221,6 +221,10 @@ export function expandServiceSelection(
     const svc = byId.get(id);
     if (!svc) continue;
 
+    for (const dependency of svc.manifest.selectionDependencies ?? []) {
+      enqueue(dependency, `selectionDependencies of "${id}"`);
+    }
+
     for (const dep of svc.manifest.container.dependsOn ?? []) {
       enqueue(dep.service, `container.dependsOn of "${id}"`);
     }

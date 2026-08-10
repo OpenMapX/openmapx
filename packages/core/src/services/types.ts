@@ -38,8 +38,16 @@ export interface ServiceProxyAdditionalRoute {
   middleware?: string[];
 }
 
+export interface ServiceProxyHost {
+  /** Hostname or hostname template containing at most one `{domain}` token. */
+  default: string;
+  /** Optional configSchema key whose resolved string overrides `default`. */
+  configKey?: string;
+}
+
 export interface ServiceProxyExposure {
   enabled: boolean;
+  host?: ServiceProxyHost;
   pathPrefix?: string;
   stripPrefix?: boolean;
   middleware?: string[];
@@ -68,6 +76,7 @@ export interface ServiceVolume {
   mountAt: string;
   readOnly?: boolean;
   backup?: boolean;
+  backupMode?: "tar" | "pg_dump";
 }
 
 export interface ServiceConsumes {
@@ -275,6 +284,7 @@ export interface ServiceManifest {
   provides?: ServiceProvides[];
   consumes?: ServiceConsumes[];
   produces?: ServiceProduces[];
+  selectionDependencies?: string[];
 
   configSchema?: Record<string, unknown>;
   envVars?: Array<{ name: string; required?: boolean; description?: string; default?: string }>;

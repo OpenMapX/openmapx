@@ -115,6 +115,12 @@ export default function PrivacyContent({
           </li>
           <li>
             <Typography>
+              Optional, read-only display of personal location history from a Dawarich instance that
+              you connect
+            </Typography>
+          </li>
+          <li>
+            <Typography>
               Client-side storage of preferences and saved places on your device
             </Typography>
           </li>
@@ -182,6 +188,12 @@ export default function PrivacyContent({
         <Typography sx={{ mt: 1 }}>
           The legal basis is Art. 6(1)(a) GDPR (your explicit consent via the browser permission
           prompt).
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          If you separately enable Personal Timeline, historical visits, journeys, bounds and route
+          geometry from your Dawarich account are processed to display the day you select. This is
+          independent of the browser&apos;s live-location permission and can reveal past locations
+          and movement patterns.
         </Typography>
       </Section>
       <Section title={T.accounts}>
@@ -283,6 +295,31 @@ export default function PrivacyContent({
           the provider or delete your account. They are never sent to your browser. If you use the
           OpenStreetMap contribution feature, the linked OpenStreetMap account may additionally hold
           write permissions — see Section&nbsp;7.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          <strong>Personal Timeline (optional).</strong> If you opt in, you choose either an
+          external Dawarich instance or the Dawarich service managed by this OpenMapX operator. We
+          store the instance&apos;s public origin, safe connection metadata and your Dawarich API
+          key; the API key is encrypted at rest. For each requested day, our backend temporarily
+          processes the date, timezone, visits, journeys, bounds and route geometry and proxies the
+          request to Dawarich. OpenMapX does not persist this fetched history, put it in a shared or
+          browser-persistent cache, or include it in analytics. Disconnecting or deleting your
+          OpenMapX account deletes the OpenMapX connection and encrypted credential.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          The selected external Dawarich operator remains a separate controller or processor under
+          that operator&apos;s terms and can receive requests from the OpenMapX server. For managed
+          Dawarich, the instance is hosted by this OpenMapX operator. Browser SSO sends your stable
+          account identifier (<code>sub</code>), name and email address to managed Dawarich; the
+          separately supplied API key authorizes read-only history access. Dawarich retains its own
+          account and history data according to the instance operator&apos;s settings and retention
+          rules. You exercise Dawarich access, correction, deletion and API-key controls directly in
+          that instance&apos;s account settings.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          The feature is user-initiated and can be disconnected at any time. The project owner must
+          confirm the applicable legal basis and any consent wording for the deployment before the
+          optional feature is released; this implementation does not make that legal determination.
         </Typography>
         <Typography sx={{ mt: 1 }}>
           The legal basis is Art. 6(1)(b) GDPR (performance of a contract / provision of the service
@@ -515,6 +552,12 @@ export default function PrivacyContent({
           proxy for most of these requests, meaning third-party providers generally see our
           server&apos;s IP address rather than yours. Below is a comprehensive list of all external
           services:
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          A user-selected Dawarich origin is not included in the generated provider tables below
+          because its operator and location are chosen by the user. Managed Dawarich is a
+          first-party optional service of this deployment, not an integration provider. In both
+          modes, Personal Timeline requests are proxied by OpenMapX as described in Section&nbsp;5.
         </Typography>
 
         {generatePrivacySectionsFromManifests(integrations, "en").map((section) => (
@@ -792,6 +835,12 @@ export default function PrivacyContent({
           not store personal data such as IP addresses or account information.
         </Typography>
         <Typography sx={{ mt: 1 }}>
+          Personal Timeline responses are specifically excluded from Redis, Service Worker,
+          persisted query and browser-storage caches. Only a non-user managed-service health result
+          may be held in server memory for up to 15 seconds; it contains no timeline, account,
+          credential, hostname or request-date data.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
           We also operate a PostgreSQL database for user accounts, saved places, and cached place
           knowledge data (e.g., Wikidata facts, Wikipedia summaries). If GTFS transit feeds are
           imported, schedule data (stop names, routes, departure times) is stored in separate
@@ -934,6 +983,15 @@ export default function PrivacyContent({
           </li>
           <li>
             <Typography>
+              <strong>Personal Timeline connection</strong> — the encrypted API key and safe
+              connection metadata are retained until you disconnect or delete your OpenMapX account.
+              Fetched history is not retained by OpenMapX. Disabling managed Dawarich preserves its
+              separate service volumes; retention and deletion of that Dawarich account and history
+              are controlled by the instance operator and the direct Dawarich account settings.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
               <strong>Mangrove keypair</strong> — retained until you regenerate it or delete your
               account. Deleting the keypair on our servers does <strong>not</strong> retract
               previously published reviews from the Mangrove network.
@@ -1008,6 +1066,13 @@ export default function PrivacyContent({
           permission to edit the public map on your behalf, the contribution boundary additionally
           re-checks your permissions against OpenStreetMap itself immediately before every write,
           rather than trusting what we have stored.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          Personal Timeline credentials are encrypted before database storage, omitted from
+          responses, logs, audit details and metrics, and sent only by the backend to the selected
+          Dawarich API over its validated connection. The browser never calls the Dawarich API
+          directly. A managed browser SSO session does not grant OpenMapX history access; the
+          per-user API key remains a separate credential.
         </Typography>
       </Section>
       <Section title={T.children}>

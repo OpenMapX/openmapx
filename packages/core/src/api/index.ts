@@ -15,6 +15,14 @@ export {
   postEvDirections,
 } from "./directions";
 export { API_ENDPOINTS } from "./endpoints";
+export {
+  connectTimeline,
+  disconnectTimeline,
+  getPersonalTimelineDay,
+  getTimelineConnection,
+  PersonalTimelineApiError,
+  testTimelineConnection,
+} from "./personalTimeline";
 export { type AlertBBox, fetchRoadAlerts, type RawRoadAlert } from "./roadAlerts";
 export {
   type FetchRoadConditionsOptions,

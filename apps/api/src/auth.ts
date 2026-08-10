@@ -1,13 +1,15 @@
 import { expo } from "@better-auth/expo";
 import { i18n } from "@better-auth/i18n";
+import { oauthProvider } from "@better-auth/oauth-provider";
 import { passkey } from "@better-auth/passkey";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { admin, customSession, emailOTP, genericOAuth, twoFactor } from "better-auth/plugins";
+import { admin, customSession, emailOTP, genericOAuth, jwt, twoFactor } from "better-auth/plugins";
 import { emailHarmony } from "better-auth-harmony";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { user as userTable } from "./db/schema";
+import { managedOAuthProviderOptions } from "./managed-oauth-provider";
 import { auditAdminActionsHook } from "./utils/auth-audit-hook";
 import { sendMail } from "./utils/email";
 import {
@@ -326,6 +328,8 @@ const authOptions = {
         enabled: true,
       },
     }),
+    jwt(),
+    oauthProvider(managedOAuthProviderOptions),
   ],
 } satisfies BetterAuthOptions;
 

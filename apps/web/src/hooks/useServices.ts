@@ -251,6 +251,7 @@ export interface ServiceCredentialStatus {
   description?: string;
   setup?: import("@openmapx/integration-framework").CredentialSetup;
   source: "vault" | "missing";
+  managedBy?: "dawarich-provisioning";
   updatedAt?: string;
   updatedBy?: string | null;
 }

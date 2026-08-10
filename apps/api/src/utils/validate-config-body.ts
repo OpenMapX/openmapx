@@ -223,6 +223,10 @@ export function validateConfigBody(
       result.errors.push(`"${key}" is a secret field — use the credentials API instead`);
       continue;
     }
+    if (def.readOnly === true) {
+      result.errors.push(`"${key}" is read-only`);
+      continue;
+    }
     if (rejectEnabled && key === "enabled") {
       result.errors.push(`"enabled" must be set via the enable/disable endpoints`);
       continue;

@@ -80,8 +80,11 @@ export {
   assertResolvesToPublicIp,
   type SafeDownloadOptions,
   type SafeDownloadResult,
+  SafeFetchHttpError,
   type SafeFetchJsonOptions,
+  type SafeJsonResponse,
   safeDownload,
   safeFetchJson,
+  safeFetchJsonResponse,
 } from "./utils/safe-download";
 export { sectionSlug } from "./utils/sectionSlug";

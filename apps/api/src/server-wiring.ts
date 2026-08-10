@@ -1,5 +1,6 @@
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import { envString } from "./utils/env";
+import type { RateLimiter } from "./utils/rate-limit.js";
 
 // Trust proxy hops in front of the API. The default deployment terminates TLS
 // at Traefik (one hop) and forwards to this container, so `request.ip` must be
@@ -82,9 +83,67 @@ export const EXPENSIVE_PUBLIC_PATTERNS = [
   /^\/api\/offline\/packages\/prepare(\/|$|\?)/,
 ];
 
+export function isTimelineApiRequest(request: FastifyRequest): boolean {
+  const path = request.url.split("?", 1)[0];
+  return path?.startsWith("/api/timeline/") ?? false;
+}
+
+export function isTimelineDayRequest(request: FastifyRequest): boolean {
+  const path = request.url.split("?", 1)[0];
+  return request.method === "GET" && /^\/api\/timeline\/day\/[^/]+$/.test(path ?? "");
+}
+
+function isExpensiveTimelineRequest(request: FastifyRequest): boolean {
+  const path = request.url.split("?", 1)[0];
+  return (
+    (request.method === "PUT" && path === "/api/timeline/connection") ||
+    (request.method === "POST" && path === "/api/timeline/connection/test") ||
+    (request.method === "DELETE" && path === "/api/timeline/connection")
+  );
+}
+
+function addVaryHeader(reply: FastifyReply, value: string): void {
+  const existing = reply.getHeader("Vary");
+  const values = (Array.isArray(existing) ? existing : [existing])
+    .flatMap((entry) => String(entry ?? "").split(","))
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  if (!values.some((entry) => entry.toLowerCase() === value.toLowerCase())) values.push(value);
+  reply.header("Vary", values.join(", "));
+}
+
+export function applyTimelinePrivacyHeaders(reply: FastifyReply): void {
+  reply.header("Cache-Control", "private, no-store");
+  reply.header("Pragma", "no-cache");
+  addVaryHeader(reply, "Cookie");
+}
+
+export function sendTimelineRateLimitResponse(reply: FastifyReply, retryAfterSeconds: number) {
+  const boundedRetryAfter = Math.min(
+    86_400,
+    Math.max(0, Number.isFinite(retryAfterSeconds) ? Math.ceil(retryAfterSeconds) : 86_400),
+  );
+  applyTimelinePrivacyHeaders(reply);
+  return reply.header("Retry-After", String(boundedRetryAfter)).status(429).send({
+    error: "Timeline source is rate limited",
+    code: "TIMELINE_RATE_LIMITED",
+    retryAfterSeconds: boundedRetryAfter,
+  });
+}
+
 export const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 
 type Limit = (request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
+
+export function makeTimelineAwareRateLimit(limiter: Pick<RateLimiter, "preHandler">): Limit {
+  const defaultLimit = limiter.preHandler();
+  const timelineLimit = limiter.preHandler({
+    onLimit: (_request, reply, retryAfterSeconds) =>
+      sendTimelineRateLimitResponse(reply, retryAfterSeconds),
+  });
+  return async (request, reply) =>
+    isTimelineApiRequest(request) ? timelineLimit(request, reply) : defaultLimit(request, reply);
+}
 
 export interface RateLimitTiers {
   auth: Limit;
@@ -111,7 +170,12 @@ export interface RateLimitTiers {
 export function makeRateLimitTierHook(limits: RateLimitTiers) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const url = request.url;
+    if (isTimelineApiRequest(request)) applyTimelinePrivacyHeaders(reply);
     if (url === "/health" || url.startsWith("/health?")) return;
+    // Day reads are limited after the timeline plugin authenticates the user,
+    // using a separate per-user expensive bucket. Do not stack the pre-auth IP
+    // limiter or broad public floor on this privacy-sensitive route.
+    if (isTimelineDayRequest(request)) return;
 
     // Trust only the actual TCP peer here, never XFF.
     const peer = request.socket?.remoteAddress;
@@ -125,7 +189,7 @@ export function makeRateLimitTierHook(limits: RateLimitTiers) {
       await limits.tile(request, reply);
       return;
     }
-    if (EXPENSIVE_PUBLIC_PATTERNS.some((p) => p.test(url))) {
+    if (isExpensiveTimelineRequest(request) || EXPENSIVE_PUBLIC_PATTERNS.some((p) => p.test(url))) {
       await limits.expensive(request, reply);
       return;
     }

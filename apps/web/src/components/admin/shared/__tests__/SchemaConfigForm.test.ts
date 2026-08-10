@@ -10,6 +10,7 @@ const schema = {
     providers: { type: "array", default: [{ id: "keyword", type: "keyword" }] },
     API_KEY: { type: "string", format: "password", "x-openmapx-secret": true },
     PASSWORD: { type: "string", "x-openmapx-secret": true },
+    INTERNAL_GENERATION: { type: "string", readOnly: true },
   },
 };
 
@@ -22,6 +23,7 @@ describe("extractConfigFields", () => {
     expect(keys).toContain("providers");
     expect(keys).not.toContain("API_KEY");
     expect(keys).not.toContain("PASSWORD");
+    expect(keys).not.toContain("INTERNAL_GENERATION");
   });
 
   it("honors excludeKeys (e.g. integration's dedicated `enabled` toggle)", () => {

@@ -17,7 +17,14 @@
     "restart": "unless-stopped"
   },
   "provides": ["proxy"],
-  "volumes": [{ "name": "openmapx-traefik-acme", "mountAt": "/etc/traefik", "backup": true }],
+  "volumes": [
+    {
+      "name": "openmapx-traefik-acme",
+      "mountAt": "/etc/traefik",
+      "backup": true,
+      "backupMode": "tar"
+    }
+  ],
   "bindMounts": [
     { "source": "@docker-socket", "target": "/var/run/docker.sock", "readOnly": true },
     { "source": "config/traefik.yml", "target": "/etc/traefik/traefik.yml", "readOnly": true },

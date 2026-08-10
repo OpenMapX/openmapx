@@ -92,6 +92,9 @@ export const API_ENDPOINTS = {
   savedLabels: "/api/saved/labels",
   savedCheck: "/api/saved/check",
   capabilities: "/api/capabilities",
+  timelineConnection: "/api/timeline/connection",
+  timelineConnectionTest: "/api/timeline/connection/test",
+  timelineDay: "/api/timeline/day",
   nlpParse: "/api/integrations/search-nlp/parse",
   osmContributionCapabilities: "/api/osm/contributions/capabilities",
   // Base path; the element context is `${base}/${type}/${id}`.

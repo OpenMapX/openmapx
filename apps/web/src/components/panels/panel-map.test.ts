@@ -5,7 +5,7 @@ import { DIRECTIONS_DETENTS, PLACE_DETENTS } from "./sheet/detents";
 describe("panel-map", () => {
   it("SIDEBAR_PANELS has exactly the expected panel ids, each with a truthy component", () => {
     expect(Object.keys(SIDEBAR_PANELS).sort()).toEqual(
-      ["category", "datasource", "directions", "place", "saved"].sort(),
+      ["category", "datasource", "directions", "place", "saved", "timeline"].sort(),
     );
     for (const entry of Object.values(SIDEBAR_PANELS)) {
       expect(entry.component).toBeDefined();
@@ -25,6 +25,7 @@ describe("panel-map", () => {
     expect(SIDEBAR_PANELS.category.detents).toBeUndefined();
     expect(SIDEBAR_PANELS.datasource.detents).toBeUndefined();
     expect(SIDEBAR_PANELS.saved.detents).toBeUndefined();
+    expect(SIDEBAR_PANELS.timeline.detents).toBeUndefined();
   });
 
   it("DETAIL_PANELS has exactly the place-card id with a truthy component", () => {

@@ -80,18 +80,21 @@
     }
   },
   "dependencies": {
-    "@better-auth/passkey": "^1.6.25",
+    "@better-auth/core": "1.6.25",
+    "@better-auth/oauth-provider": "1.6.25",
+    "@better-auth/passkey": "1.6.25",
     "@openstreetmap/id-tagging-schema": "^7.0.1",
     "@tanstack/react-query": "^5.101.4",
     "@turf/helpers": "^7.3.5",
     "@turf/nearest-point-on-line": "^7.3.5",
     "@types/geojson": "^7946.0.16",
     "@types/tz-lookup": "^6.1.2",
-    "better-auth": "^1.6.25",
+    "better-auth": "1.6.25",
     "js-yaml": "^5.2.3",
     "opening_hours": "^3.14.0",
     "react": "19.2.8",
     "tz-lookup": "^6.1.25",
+    "undici": "8.9.0",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   }

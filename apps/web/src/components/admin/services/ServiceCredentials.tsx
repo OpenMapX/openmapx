@@ -116,9 +116,25 @@ export function ServiceCredentials({ serviceId }: { serviceId: string }) {
                   <Typography variant="subtitle2">{cred.title}</Typography>
                   <Chip
                     size="small"
-                    label={cred.source === "vault" ? "Set" : "Not set"}
-                    color={cred.source === "vault" ? "success" : "default"}
-                    variant={cred.source === "vault" ? "filled" : "outlined"}
+                    label={
+                      cred.managedBy === "dawarich-provisioning"
+                        ? "Managed"
+                        : cred.source === "vault"
+                          ? "Set"
+                          : "Not set"
+                    }
+                    color={
+                      cred.managedBy === "dawarich-provisioning"
+                        ? "info"
+                        : cred.source === "vault"
+                          ? "success"
+                          : "default"
+                    }
+                    variant={
+                      cred.managedBy === "dawarich-provisioning" || cred.source === "vault"
+                        ? "filled"
+                        : "outlined"
+                    }
                   />
                 </Stack>
                 {cred.description && (
@@ -132,30 +148,39 @@ export function ServiceCredentials({ serviceId }: { serviceId: string }) {
                     {cred.updatedBy ? ` by ${cred.updatedBy}` : ""}
                   </Typography>
                 )}
+                {cred.managedBy === "dawarich-provisioning" && (
+                  <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.75 }}>
+                    Managed Dawarich setup owns this credential. Use Provision/reconcile or the
+                    dedicated OIDC recovery action; follow the operator guide for database or Rails
+                    credential conflict recovery.
+                  </Typography>
+                )}
               </Box>
-              <Stack direction="row" spacing={1}>
-                <Button
-                  size="small"
-                  variant="contained"
-                  disabled={!secretsConfigured}
-                  onClick={() => {
-                    setEditing(cred);
-                    setValue("");
-                  }}
-                >
-                  {cred.source === "vault" ? "Rotate" : "Set"}
-                </Button>
-                {cred.source === "vault" && (
+              {cred.managedBy !== "dawarich-provisioning" && (
+                <Stack direction="row" spacing={1}>
                   <Button
                     size="small"
-                    color="error"
-                    onClick={() => handleDelete(cred.key)}
-                    disabled={deleteCred.isPending}
+                    variant="contained"
+                    disabled={!secretsConfigured}
+                    onClick={() => {
+                      setEditing(cred);
+                      setValue("");
+                    }}
                   >
-                    Remove
+                    {cred.source === "vault" ? "Rotate" : "Set"}
                   </Button>
-                )}
-              </Stack>
+                  {cred.source === "vault" && (
+                    <Button
+                      size="small"
+                      color="error"
+                      onClick={() => handleDelete(cred.key)}
+                      disabled={deleteCred.isPending}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </Stack>
+              )}
             </Stack>
             {cred.setup && (
               <Box sx={{ mt: 1.5 }}>

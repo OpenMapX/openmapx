@@ -21,6 +21,10 @@ interface RateLimiterOptions {
   errorBody?: (retryAfterSeconds: number) => unknown;
 }
 
+export interface RateLimitHookOptions {
+  onLimit?: (request: FastifyRequest, reply: FastifyReply, retryAfterSeconds: number) => unknown;
+}
+
 /**
  * Default rate-limit key. Combines:
  *  - `request.ip` — the trusted-proxy-derived client IP. Behind a correctly
@@ -64,7 +68,7 @@ export class RateLimiter {
   /**
    * Returns a Fastify preHandler hook that enforces the rate limit.
    */
-  preHandler() {
+  preHandler(options: RateLimitHookOptions = {}) {
     return async (request: FastifyRequest, reply: FastifyReply) => {
       const key = this.keyFn(request);
       const now = Date.now();
@@ -83,6 +87,9 @@ export class RateLimiter {
 
       if (bucket.tokens < 1) {
         const retryAfterSec = Math.ceil((((1 - bucket.tokens) / this.max) * this.windowMs) / 1000);
+        if (options.onLimit) {
+          return options.onLimit(request, reply, retryAfterSec);
+        }
         reply.header("Retry-After", String(retryAfterSec));
         return reply.status(429).send(this.errorBody(retryAfterSec));
       }
@@ -160,6 +167,25 @@ export const publicApiLimit = new RateLimiter({
 export const expensivePublicApiLimit = new RateLimiter({
   max: envInt("RATE_LIMIT_EXPENSIVE_MAX", 60),
   windowMs: envInt("RATE_LIMIT_EXPENSIVE_WINDOW_MS", 60_000),
+});
+
+/**
+ * Separate expensive bucket for personal-timeline day reads. The route runs
+ * this hook only after authentication has populated `request.userId`, keeping
+ * users behind the same address isolated and avoiding Dawarich credentials as
+ * an identity. It intentionally shares the expensive tier's deployment knobs
+ * while retaining independent buckets from unrelated fan-out endpoints.
+ */
+export const timelineDayApiLimit = new RateLimiter({
+  max: envInt("RATE_LIMIT_EXPENSIVE_MAX", 60),
+  windowMs: envInt("RATE_LIMIT_EXPENSIVE_WINDOW_MS", 60_000),
+  keyFn: (request) => {
+    const userId = (request as FastifyRequest & { userId?: unknown }).userId;
+    if (typeof userId !== "string" || !userId) {
+      throw new Error("Timeline day rate limit requires an authenticated user");
+    }
+    return userId;
+  },
 });
 
 /**

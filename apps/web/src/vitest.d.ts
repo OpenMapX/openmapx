@@ -1,5 +1,13 @@
 type VitestTestCallback = () => void | Promise<void>;
 type VitestMockImplementation = (...args: unknown[]) => unknown;
+type VitestEachArguments<T> = T extends readonly [...infer Values] ? Values : [T];
+
+interface VitestTestFunction {
+  (name: string, callback: VitestTestCallback): void;
+  each<T>(
+    cases: readonly T[],
+  ): (name: string, callback: (...args: VitestEachArguments<T>) => void | Promise<void>) => void;
+}
 
 interface VitestExpectation {
   not: VitestExpectation;
@@ -20,6 +28,17 @@ interface VitestExpectation {
   toHaveBeenCalled(): void;
   toHaveBeenCalledTimes(times: number): void;
   toHaveBeenCalledWith(...args: unknown[]): void;
+  toHaveBeenLastCalledWith(...args: unknown[]): void;
+  toHaveAccessibleName(expected: string | RegExp): void;
+  toHaveAttribute(name: string, value?: unknown): void;
+  toHaveFocus(): void;
+  toHaveStyle(expected: Record<string, string> | string): void;
+  toHaveTextContent(expected: string | RegExp): void;
+  toHaveValue(expected?: unknown): void;
+  toBeChecked(): void;
+  toBeDisabled(): void;
+  toBeInTheDocument(): void;
+  toBeVisible(): void;
   toThrow(expected?: unknown): void;
 }
 
@@ -29,6 +48,7 @@ interface VitestMockFunction {
   mockImplementation(implementation: VitestMockImplementation): VitestMockFunction;
   mockResolvedValue(value: unknown): VitestMockFunction;
   mockRejectedValue(value: unknown): VitestMockFunction;
+  mockRejectedValueOnce(value: unknown): VitestMockFunction;
   mockReturnValue(value: unknown): VitestMockFunction;
   mockReset(): VitestMockFunction;
   mockClear(): VitestMockFunction;
@@ -38,13 +58,15 @@ interface VitestMockFunction {
 type VitestMockFactory = (importOriginal: <T = unknown>() => Promise<T>) => unknown;
 
 declare module "vitest" {
-  export const describe: (name: string, callback: VitestTestCallback) => void;
+  export const describe: VitestTestFunction;
   const expectFn: {
     (actual: unknown): VitestExpectation;
+    any(expected: unknown): unknown;
     objectContaining(expected: Record<string, unknown>): unknown;
+    stringContaining(expected: string): unknown;
   };
   export const expect: typeof expectFn;
-  export const it: (name: string, callback: VitestTestCallback) => void;
+  export const it: VitestTestFunction;
   export const beforeEach: (callback: VitestTestCallback) => void;
   export const afterEach: (callback: VitestTestCallback) => void;
   export const vi: {
@@ -58,6 +80,7 @@ declare module "vitest" {
     clearAllMocks(): void;
     restoreAllMocks(): void;
     useFakeTimers(options?: { shouldAdvanceTime?: boolean }): void;
+    setSystemTime(now?: string | number | Date): void;
     useRealTimers(): void;
     advanceTimersByTime(ms: number): void;
     advanceTimersByTimeAsync(ms: number): Promise<void>;

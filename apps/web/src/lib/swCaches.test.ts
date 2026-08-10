@@ -96,6 +96,9 @@ describe("isCredentialedApiPath", () => {
       "/api/reviews/keypair/wraps",
       "/api/admin/audit",
       "/api/saved/lists",
+      "/api/timeline/connection",
+      "/api/timeline/connection/test",
+      "/api/timeline/day/2026-08-09",
     ])
       expect(isCredentialedApiPath(path)).toBe(true);
   });

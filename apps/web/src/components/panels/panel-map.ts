@@ -24,6 +24,9 @@ const DirectionsPanelContent = lazy(() =>
 const SavedPlacesContent = lazy(() =>
   import("./saved/SavedPlacesContent").then((m) => ({ default: m.SavedPlacesContent })),
 );
+const TimelinePanelContent = lazy(() =>
+  import("./timeline/TimelinePanelContent").then((m) => ({ default: m.TimelinePanelContent })),
+);
 const PlaceDetailCard = lazy(() =>
   import("./place/PlaceDetailCard").then((m) => ({ default: m.PlaceDetailCard })),
 );
@@ -41,6 +44,7 @@ export const SIDEBAR_PANELS: Record<string, PanelEntry> = {
   datasource: { component: DataSourceFilterContent },
   directions: { component: DirectionsPanelContent, detents: DIRECTIONS_DETENTS },
   saved: { component: SavedPlacesContent, contentSx: { pt: { xs: 0, sm: "72px" } } },
+  timeline: { component: TimelinePanelContent, contentSx: { pt: { xs: 0, sm: "72px" } } },
 };
 
 export const DETAIL_PANELS: Record<string, ComponentType> = {

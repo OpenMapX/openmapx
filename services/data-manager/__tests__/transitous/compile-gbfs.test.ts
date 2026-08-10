@@ -5,6 +5,14 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
+vi.mock("@openmapx/core/utils/safe-download", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@openmapx/core/utils/safe-download")>();
+  return {
+    ...actual,
+    safeFetchJson: <T>(url: string, options = {}) =>
+      actual.safeFetchJson<T>(url, { ...options, fetchImplementation: globalThis.fetch }),
+  };
+});
 
 import { lookup as dnsLookup } from "node:dns/promises";
 import { run, validateGbfsAddition } from "../../src/jobs/transitous/compile-gbfs.js";

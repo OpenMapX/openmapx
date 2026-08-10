@@ -57,3 +57,16 @@ log:
 
 accessLog:
   bufferingSize: 100
+  format: json
+  # Calendar dates are part of personal-timeline request paths. Keep only
+  # privacy-safe operational dimensions; never retain path, request line,
+  # headers, or query parameters in the default production access log.
+  fields:
+    defaultMode: drop
+    names:
+      RequestMethod: keep
+      RouterName: keep
+      DownstreamStatus: keep
+      Duration: keep
+    queryParameters:
+      defaultMode: drop

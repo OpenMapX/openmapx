@@ -1,12 +1,56 @@
+export interface FetchConnectionAddress {
+  address: string;
+  family: 4 | 6;
+}
+
+export type FetchImplementation = (
+  input: string | URL,
+  init?: RequestInit & { dispatcher?: unknown },
+) => Promise<Response>;
+
+/**
+ * A server-only transport that opens a socket using exactly `addresses`.
+ * Kept structural so this client-facing module never imports a Node transport.
+ */
+export type PinnedFetchImplementation = (
+  input: string | URL,
+  addresses: FetchConnectionAddress[],
+  init: RequestInit,
+) => Promise<Response>;
+
+export interface ReleaseResponseOptions {
+  /** Destroy rather than gracefully close when response-body cancellation failed. */
+  force?: boolean;
+}
+
+/** Releases server-only resources associated with a response after its body is consumed or canceled. */
+export type ReleaseResponse = (
+  response: Response,
+  options?: ReleaseResponseOptions,
+) => Promise<void>;
+
 export interface FetchWithRedirectsOptions extends Omit<RequestInit, "redirect"> {
   /**
    * Optional allowlist for redirect targets. Supports exact hostnames and
    * wildcard suffixes in the form "*.example.com".
    */
   allowedRedirectHosts?: string[];
+  /** Require redirects to retain this exact scheme/host/port origin. */
+  allowedRedirectOrigin?: string;
   maxRedirects?: number;
   timeoutMs?: number;
   validateRedirectUrl?: (nextUrl: URL, previousUrl: URL) => boolean;
+  /** Resolve validated addresses immediately before each socket is opened. */
+  resolveConnectionAddresses?: (url: URL) => Promise<FetchConnectionAddress[]>;
+  /** Server-only socket-pinning transport paired with `resolveConnectionAddresses`. */
+  pinnedFetchImplementation?: PinnedFetchImplementation;
+  /** Server-only lifecycle callback, called after an intermediate redirect body is canceled. */
+  releaseResponse?: ReleaseResponse;
+  /**
+   * Test-only or specialized transport override. Defaults to global fetch.
+   * Pinned requests must instead provide `pinnedFetchImplementation`.
+   */
+  fetchImplementation?: FetchImplementation;
   /**
    * Some third-party APIs misuse HTTP 203 together with a Location header for
    * large-file redirects. When enabled, follow that Location manually.
@@ -60,8 +104,50 @@ function assertRedirectAllowed(
     throw new Error(`Redirect target not allowed: ${nextUrl.hostname}`);
   }
 
+  if (
+    options.allowedRedirectOrigin &&
+    nextUrl.origin !== new URL(options.allowedRedirectOrigin).origin
+  ) {
+    throw new Error(`Redirect target origin not allowed: ${nextUrl.origin}`);
+  }
+
   if (options.validateRedirectUrl && !options.validateRedirectUrl(nextUrl, previousUrl)) {
     throw new Error(`Redirect target rejected: ${nextUrl.toString()}`);
+  }
+}
+
+function toRequestInit(init: FetchWithRedirectsOptions): RequestInit {
+  const {
+    allowedRedirectHosts: _allowedRedirectHosts,
+    allowedRedirectOrigin: _allowedRedirectOrigin,
+    fetchImplementation: _fetchImplementation,
+    follow203Redirect: _follow203Redirect,
+    maxRedirects: _maxRedirects,
+    pinnedFetchImplementation: _pinnedFetchImplementation,
+    releaseResponse: _releaseResponse,
+    resolveConnectionAddresses: _resolveConnectionAddresses,
+    timeoutMs: _timeoutMs,
+    validateRedirectUrl: _validateRedirectUrl,
+    ...fetchInit
+  } = init;
+  return {
+    ...fetchInit,
+    redirect: "manual",
+    signal: withTimeoutSignal(init.signal, init.timeoutMs),
+  };
+}
+
+async function releaseRedirectResponse(
+  response: Response,
+  releaseResponse: ReleaseResponse | undefined,
+): Promise<void> {
+  let force = false;
+  try {
+    await response.body?.cancel();
+  } catch {
+    force = true;
+  } finally {
+    await releaseResponse?.(response, { force });
   }
 }
 
@@ -92,11 +178,20 @@ export async function fetchWithRedirects(
   };
 
   for (let i = 0; i <= maxRedirects; i++) {
-    const response = await fetch(currentUrl, {
-      ...currentInit,
-      redirect: "manual",
-      signal: withTimeoutSignal(currentInit.signal, currentInit.timeoutMs),
-    });
+    const addresses = currentInit.resolveConnectionAddresses
+      ? await currentInit.resolveConnectionAddresses(new URL(currentUrl))
+      : undefined;
+    const requestInit = toRequestInit(currentInit);
+    const response = addresses
+      ? await (currentInit.pinnedFetchImplementation
+          ? currentInit.pinnedFetchImplementation(currentUrl, addresses, requestInit)
+          : (() => {
+              if (!currentInit.fetchImplementation) {
+                throw new Error("Pinned requests require a pinned fetch implementation");
+              }
+              return currentInit.fetchImplementation(currentUrl, requestInit);
+            })())
+      : await (currentInit.fetchImplementation ?? globalThis.fetch)(currentUrl, requestInit);
 
     if (!isRedirectStatus(response.status, response, follow203Redirect)) {
       return response;
@@ -107,9 +202,20 @@ export async function fetchWithRedirects(
       return response;
     }
 
-    const previousUrl = new URL(currentUrl);
-    const nextUrl = new URL(location, currentUrl);
-    assertRedirectAllowed(nextUrl, previousUrl, currentInit);
+    let nextUrl: URL;
+    try {
+      const previousUrl = new URL(currentUrl);
+      nextUrl = new URL(location, currentUrl);
+      assertRedirectAllowed(nextUrl, previousUrl, currentInit);
+      if (i === maxRedirects) {
+        throw new Error(`Too many redirects while fetching ${currentUrl}`);
+      }
+    } catch (error) {
+      await releaseRedirectResponse(response, currentInit.releaseResponse);
+      throw error;
+    }
+
+    await releaseRedirectResponse(response, currentInit.releaseResponse);
 
     currentUrl = nextUrl.toString();
     currentInit = nextRequestInit(currentInit, response);

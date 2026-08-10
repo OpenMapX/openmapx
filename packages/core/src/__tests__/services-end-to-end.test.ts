@@ -1,7 +1,13 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { load as parseYaml } from "js-yaml";
 import { describe, expect, it } from "vitest";
-import { renderCompose, ServiceRegistry, validateServiceManifest } from "../services";
+import {
+  expandServiceSelection,
+  renderCompose,
+  ServiceRegistry,
+  validateServiceManifest,
+} from "../services";
 
 const repoRoot = join(__dirname, "..", "..", "..", "..");
 const manifestsPresent = existsSync(join(repoRoot, "services", "postgis", "service.json"));
@@ -211,6 +217,320 @@ describe.skipIf(!manifestsPresent)(
       expect(result.composeYaml).toContain("pelias-pip:\n        condition: service_started");
     });
 
+    describe("managed Dawarich bundle", () => {
+      it("links the optional timeline highlight to its feature documentation", () => {
+        const readme = readFileSync(join(repoRoot, "README.md"), "utf8");
+        expect(readme).toContain(
+          "[Optional personal timeline](docs/features/personal-timeline.md)",
+        );
+      });
+
+      it("selects the complete isolated topology without an app-to-worker runtime edge", async () => {
+        const registry = new ServiceRegistry({ rootDir: repoRoot });
+        await registry.load();
+
+        const selection = expandServiceSelection(registry.list(), ["dawarich-app"]);
+        expect(selection.missingIds).toEqual([]);
+        expect(selection.warnings).toEqual([]);
+        expect(selection.enabledIds).toEqual(
+          new Set([
+            "traefik",
+            "dawarich-app",
+            "dawarich-sidekiq",
+            "dawarich-postgis",
+            "dawarich-redis",
+          ]),
+        );
+
+        const app = registry.get("dawarich-app")?.manifest;
+        const worker = registry.get("dawarich-sidekiq")?.manifest;
+        expect(registry.get("dawarich-redis")?.manifest.license).toBe("RSALv2 OR SSPL-1.0");
+        expect(app?.version).toBe("1.10.3");
+        expect(app?.container).toMatchObject({
+          image: "freikin/dawarich",
+          tag: "1.10.3",
+          expose: [3000],
+          entrypoint: ["/usr/local/bin/openmapx-entrypoint.sh"],
+          command: ["bin/rails", "server", "-p", "3000", "-b", "::"],
+          memory: "4g",
+          restart: "unless-stopped",
+          healthcheck: {
+            type: "http",
+            path: "/api/v1/health",
+            port: 3000,
+            interval: "10s",
+            timeout: "10s",
+            retries: 30,
+            startPeriod: "30s",
+          },
+          logging: { driver: "json-file", options: { "max-size": "100m", "max-file": "5" } },
+        });
+        expect(app?.container.dependsOn).toEqual([
+          { service: "dawarich-postgis", condition: "service_healthy" },
+          { service: "dawarich-redis", condition: "service_healthy" },
+        ]);
+        expect(app?.selectionDependencies).toEqual(["dawarich-sidekiq"]);
+        expect(app?.container.dependsOn?.map((dependency) => dependency.service)).not.toContain(
+          "dawarich-sidekiq",
+        );
+        expect(worker?.container.dependsOn).toEqual([
+          { service: "dawarich-postgis", condition: "service_healthy" },
+          { service: "dawarich-redis", condition: "service_healthy" },
+          { service: "dawarich-app", condition: "service_healthy" },
+        ]);
+
+        const appEnvironment = app?.container.environment;
+        // biome-ignore-start lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation syntax
+        expect(appEnvironment).toMatchObject({
+          RAILS_ENV: "production",
+          REDIS_URL: "redis://dawarich-redis:6379",
+          DATABASE_HOST: "dawarich-postgis",
+          DATABASE_PORT: "5432",
+          DATABASE_USERNAME: "postgres",
+          DATABASE_NAME: "dawarich_production",
+          APPLICATION_HOSTS: "timeline.${DOMAIN:-localhost}",
+          APPLICATION_PROTOCOL: "https",
+          RAILS_LOG_TO_STDOUT: "true",
+          SELF_HOSTED: "true",
+          STORE_GEODATA: "true",
+          WEB_CONCURRENCY: "1",
+          OIDC_AUTO_REGISTER: "true",
+          OIDC_PROVIDER_NAME: "OpenMapX",
+          OIDC_PKCE_ENABLED: "true",
+          OIDC_ISSUER: "https://${DOMAIN:-localhost}/api/auth",
+          OIDC_REDIRECT_URI:
+            "https://timeline.${DOMAIN:-localhost}/users/auth/openid_connect/callback",
+          ALLOW_EMAIL_PASSWORD_REGISTRATION: "true",
+        });
+        // biome-ignore-end lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation syntax
+        for (const key of ["DATABASE_PASSWORD", "SECRET_KEY_BASE", "OIDC_CLIENT_SECRET"]) {
+          expect(appEnvironment).not.toHaveProperty(key);
+        }
+        const appConfig = (app?.configSchema?.properties ?? {}) as Record<
+          string,
+          Record<string, unknown>
+        >;
+        for (const key of [
+          "APPLICATION_HOSTS",
+          "APPLICATION_URL",
+          "DOMAIN",
+          "APPLICATION_PROTOCOL",
+          "TIME_ZONE",
+          "REDIS_URL",
+          "DATABASE_HOST",
+          "DATABASE_PORT",
+          "DATABASE_USERNAME",
+          "DATABASE_NAME",
+          "OIDC_CLIENT_ID",
+          "OIDC_ISSUER",
+          "OIDC_REDIRECT_URI",
+          "OIDC_PROVIDER_NAME",
+          "OIDC_AUTO_REGISTER",
+          "OIDC_PKCE_ENABLED",
+          "OPENMAPX_PROVISIONING_GENERATION",
+          "WEB_CONCURRENCY",
+          "RAILS_MAX_THREADS",
+          "LOG_MAX_SIZE",
+          "LOG_MAX_FILE",
+        ]) {
+          expect(appConfig[key]?.type, key).toBe("string");
+          expect(appConfig[key]?.["x-openmapx-secret"], key).not.toBe(true);
+        }
+        for (const key of ["DATABASE_PASSWORD", "SECRET_KEY_BASE", "OIDC_CLIENT_SECRET"]) {
+          expect(appConfig[key]?.["x-openmapx-secret"], key).toBe(true);
+        }
+        expect(appConfig.OPENMAPX_PROVISIONING_GENERATION?.readOnly).toBe(true);
+        const workerConfig = (worker?.configSchema?.properties ?? {}) as Record<
+          string,
+          Record<string, unknown>
+        >;
+        expect(workerConfig.OPENMAPX_PROVISIONING_GENERATION?.readOnly).toBe(true);
+        const postgisConfig = (registry.get("dawarich-postgis")?.manifest.configSchema
+          ?.properties ?? {}) as Record<string, Record<string, unknown>>;
+        expect(postgisConfig.POSTGRES_USER?.type).toBe("string");
+        expect(postgisConfig.POSTGRES_DB?.type).toBe("string");
+        expect(app?.bindMounts).toEqual([
+          {
+            source: "scripts/openmapx-entrypoint.sh",
+            target: "/usr/local/bin/openmapx-entrypoint.sh",
+            readOnly: true,
+          },
+        ]);
+        expect(app?.volumes).toEqual([
+          {
+            name: "openmapx-dawarich-public",
+            mountAt: "/var/app/public",
+            backup: true,
+            backupMode: "tar",
+          },
+          {
+            name: "openmapx-dawarich-watched",
+            mountAt: "/var/app/tmp/imports/watched",
+            backup: true,
+            backupMode: "tar",
+          },
+          {
+            name: "openmapx-dawarich-storage",
+            mountAt: "/var/app/storage",
+            backup: true,
+            backupMode: "tar",
+          },
+        ]);
+
+        expect(worker?.version).toBe("1.10.3");
+        expect(worker?.container).toMatchObject({
+          image: "freikin/dawarich",
+          tag: "1.10.3",
+          entrypoint: ["/usr/local/bin/openmapx-entrypoint.sh"],
+          command: ["sidekiq"],
+          memory: "2g",
+          restart: "unless-stopped",
+          healthcheck: {
+            type: "exec",
+            command: ["pgrep", "-f", "sidekiq"],
+            interval: "10s",
+            timeout: "10s",
+            retries: 30,
+            startPeriod: "30s",
+          },
+        });
+        expect(worker?.container.environment).toMatchObject({
+          ...appEnvironment,
+          BACKGROUND_PROCESSING_CONCURRENCY: "3",
+        });
+        expect(worker?.bindMounts).toEqual([
+          {
+            source: "scripts/openmapx-entrypoint.sh",
+            target: "/usr/local/bin/openmapx-entrypoint.sh",
+            readOnly: true,
+          },
+        ]);
+        expect(worker?.volumes).toEqual(
+          app?.volumes?.map((volume) => ({ ...volume, backup: false, backupMode: undefined })),
+        );
+      });
+
+      it("renders the pinned private data services, shared app data, file-only secrets and host-only TLS route", async () => {
+        const registry = new ServiceRegistry({ rootDir: repoRoot });
+        await registry.load();
+        const selection = expandServiceSelection(registry.list(), ["dawarich-app"]);
+        registry.applyEnabledIds(selection.enabledIds);
+
+        const secretKeys = ["DATABASE_PASSWORD", "SECRET_KEY_BASE", "OIDC_CLIENT_SECRET"];
+        const provisioningGeneration = "0123456789abcdef0123456789abcdef";
+        const { composeYaml } = renderCompose(registry.enabled(), {
+          domain: "example.test",
+          allServices: registry.list(),
+          resolvedServiceConfigs: new Map([
+            ["dawarich-app", { OPENMAPX_PROVISIONING_GENERATION: provisioningGeneration }],
+            ["dawarich-sidekiq", { OPENMAPX_PROVISIONING_GENERATION: provisioningGeneration }],
+          ]),
+          serviceSecretKeys: new Map([
+            ["dawarich-postgis", ["POSTGRES_PASSWORD"]],
+            ["dawarich-app", secretKeys],
+            ["dawarich-sidekiq", secretKeys],
+          ]),
+        });
+        const compose = parseYaml(composeYaml) as {
+          services: Record<
+            string,
+            {
+              image: string;
+              ports?: string[];
+              volumes?: string[];
+              environment?: Record<string, string>;
+              secrets?: Array<{ source: string; target: string }>;
+              labels?: Record<string, string>;
+              depends_on?: Record<string, { condition: string }>;
+            }
+          >;
+          volumes: Record<string, null>;
+        };
+
+        expect(Object.keys(compose.services).sort()).toEqual([
+          "dawarich-app",
+          "dawarich-postgis",
+          "dawarich-redis",
+          "dawarich-sidekiq",
+          "traefik",
+        ]);
+        expect(compose.services["dawarich-postgis"]?.image).toBe(
+          "ghcr.io/baosystems/postgis:17-3.5",
+        );
+        expect(compose.services["dawarich-redis"]?.image).toBe("redis:7.4-alpine");
+        expect(compose.services["dawarich-app"]?.image).toBe("freikin/dawarich:1.10.3");
+        expect(compose.services["dawarich-sidekiq"]?.image).toBe("freikin/dawarich:1.10.3");
+        expect(compose.services["dawarich-postgis"]?.ports).toBeUndefined();
+        expect(compose.services["dawarich-redis"]?.ports).toBeUndefined();
+        expect(compose.services["dawarich-app"]?.depends_on).not.toHaveProperty("dawarich-sidekiq");
+
+        const appVolumes = compose.services["dawarich-app"]?.volumes ?? [];
+        const workerVolumes = compose.services["dawarich-sidekiq"]?.volumes ?? [];
+        expect(appVolumes).toEqual(
+          expect.arrayContaining([
+            "openmapx-dawarich-public:/var/app/public",
+            "openmapx-dawarich-watched:/var/app/tmp/imports/watched",
+            "openmapx-dawarich-storage:/var/app/storage",
+          ]),
+        );
+        expect(workerVolumes).toEqual(
+          expect.arrayContaining([
+            "openmapx-dawarich-public:/var/app/public",
+            "openmapx-dawarich-watched:/var/app/tmp/imports/watched",
+            "openmapx-dawarich-storage:/var/app/storage",
+          ]),
+        );
+        expect(appVolumes.join("\n")).not.toContain("openmapx-dawarich-db-data");
+        expect(Object.keys(compose.volumes).sort()).toEqual([
+          "openmapx-dawarich-db-data",
+          "openmapx-dawarich-public",
+          "openmapx-dawarich-redis-data",
+          "openmapx-dawarich-storage",
+          "openmapx-dawarich-watched",
+          "openmapx-traefik-acme",
+        ]);
+        expect(Object.keys(compose.volumes)).not.toContain("openmapx-pgdata");
+        expect(Object.keys(compose.volumes)).not.toContain("openmapx-redisdata");
+
+        for (const serviceId of ["dawarich-app", "dawarich-sidekiq"]) {
+          const service = compose.services[serviceId];
+          expect(service?.environment?.DATABASE_HOST).toBe("dawarich-postgis");
+          expect(service?.environment?.DATABASE_NAME).toBe("dawarich_production");
+          expect(service?.environment?.OIDC_CLIENT_ID).toBeDefined();
+          expect(service?.environment?.OPENMAPX_PROVISIONING_GENERATION).toBe(
+            provisioningGeneration,
+          );
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation syntax
+          expect(service?.environment?.OIDC_ISSUER).toBe("https://${DOMAIN:-localhost}/api/auth");
+          expect(service?.environment?.DATABASE_PASSWORD).toBeUndefined();
+          expect(service?.environment?.SECRET_KEY_BASE).toBeUndefined();
+          expect(service?.environment?.OIDC_CLIENT_SECRET).toBeUndefined();
+          expect(service?.secrets).toEqual(
+            secretKeys.map((target) => ({ source: `${serviceId}__${target}`, target })),
+          );
+        }
+        expect(
+          compose.services["dawarich-postgis"]?.environment?.POSTGRES_PASSWORD,
+        ).toBeUndefined();
+        expect(compose.services["dawarich-postgis"]?.secrets).toEqual([
+          { source: "dawarich-postgis__POSTGRES_PASSWORD", target: "POSTGRES_PASSWORD" },
+        ]);
+        expect(composeYaml).not.toContain("password:-");
+        expect(composeYaml).not.toContain("CHANGE_ME");
+
+        const labels = compose.services["dawarich-app"]?.labels;
+        expect(labels?.["traefik.http.routers.dawarich-app.rule"]).toBe(
+          "Host(`timeline.example.test`)",
+        );
+        expect(labels?.["traefik.http.routers.dawarich-app.entrypoints"]).toBe("websecure");
+        expect(labels?.["traefik.http.routers.dawarich-app.tls.certresolver"]).toBe("letsencrypt");
+        expect(labels?.["traefik.http.services.dawarich-app.loadbalancer.server.port"]).toBe(
+          "3000",
+        );
+        expect(composeYaml).not.toContain("PathPrefix(`/dawarich-app`)");
+      });
+    });
+
     describe("first-party manifest provenance", () => {
       const builtInManifestPaths = readdirSync(join(repoRoot, "services"), {
         withFileTypes: true,
@@ -228,6 +548,19 @@ describe.skipIf(!manifestsPresent)(
           const raw: unknown = JSON.parse(readFileSync(path, "utf-8"));
           const result = validateServiceManifest(raw, { firstParty: true });
           expect(result.valid, `${path}: ${result.errors.join("; ")}`).toBe(true);
+        }
+      });
+
+      it("declares an explicit mode for every first-party backup volume", () => {
+        for (const path of builtInManifestPaths) {
+          const raw = JSON.parse(readFileSync(path, "utf-8")) as {
+            volumes?: Array<{ name: string; backup?: boolean; backupMode?: unknown }>;
+          };
+          for (const volume of raw.volumes ?? []) {
+            if (volume.backup === true) {
+              expect(volume.backupMode, `${path}: ${volume.name}`).toMatch(/^(tar|pg_dump)$/);
+            }
+          }
         }
       });
 

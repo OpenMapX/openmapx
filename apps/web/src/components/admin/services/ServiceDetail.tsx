@@ -31,6 +31,7 @@ import { useAdminToast } from "../shared/AdminToast";
 import { CompactAlert } from "../shared/CompactAlert";
 import { MetaRow } from "../shared/MetaRow";
 import { statusColor, statusLabel } from "../shared/ServiceStatusChip";
+import { ManagedDawarichSetup } from "./ManagedDawarichSetup";
 import { ServiceConfigForm } from "./ServiceConfigForm";
 import { ServiceCredentials } from "./ServiceCredentials";
 import { ServiceLogsDrawer } from "./ServiceLogsDrawer";
@@ -656,6 +657,7 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
           </Typography>
         )}
       </Stack>
+      {manifest.id === "dawarich-app" && <ManagedDawarichSetup />}
       <Divider />
       <Box>
         <Tabs

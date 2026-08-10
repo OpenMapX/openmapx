@@ -18,6 +18,11 @@ import { useEffect, useState } from "react";
 import "../lib/communityRuntime";
 import { ImpersonationBanner } from "../components/admin/ImpersonationBanner";
 import { SavedPlacesMirror } from "../components/pwa/SavedPlacesMirror";
+import {
+  PERSONAL_TIMELINE_CACHE_BUSTER,
+  removePersonalTimelineMutations,
+  shouldDehydrateOpenMapXMutation,
+} from "../lib/personalTimelineCachePolicy";
 import { createIdbPersister } from "../lib/queryPersister";
 import {
   enforceRecentMapDataCachePreference,
@@ -28,6 +33,7 @@ import { localStorageAdapter } from "../lib/storage";
 import { IntegrationProvider } from "../providers/IntegrationProvider";
 import { KeypairSessionGuard } from "../providers/KeypairSessionGuard";
 import { MangroveTransportProvider } from "../providers/MangroveTransportProvider";
+import { PersonalTimelineSessionGuard } from "../providers/PersonalTimelineSessionGuard";
 
 configureStorage(localStorageAdapter);
 registerBuiltinIdSchemeViews();
@@ -134,6 +140,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <SavedPlacesMirror />
       <MangroveTransportProvider>
         <KeypairSessionGuard />
+        <PersonalTimelineSessionGuard />
         <IntegrationProvider>{children}</IntegrationProvider>
       </MangroveTransportProvider>
     </ThemeProvider>
@@ -143,11 +150,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
     return (
       <PersistQueryClientProvider
         client={queryClient}
+        onSuccess={() => removePersonalTimelineMutations(queryClient)}
         persistOptions={{
           persister,
           maxAge: 24 * 60 * 60 * 1000,
-          buster: "v1",
+          buster: PERSONAL_TIMELINE_CACHE_BUSTER,
           dehydrateOptions: {
+            shouldDehydrateMutation: shouldDehydrateOpenMapXMutation,
             shouldDehydrateQuery: (q) =>
               q.state.status === "success" && isRecentMapDataQueryKey(q.queryKey),
           },

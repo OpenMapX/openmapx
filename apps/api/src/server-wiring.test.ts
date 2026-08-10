@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   corsOptions,
   makeRateLimitTierHook,
+  makeTimelineAwareRateLimit,
   type RateLimitTiers,
   trustProxyConfig,
   uniformErrorHandler,
@@ -136,7 +137,11 @@ describe("makeRateLimitTierHook", () => {
     return app;
   }
 
-  const cases: Array<{ url: string; tier: keyof RateLimitTiers | null }> = [
+  const cases: Array<{
+    method?: "GET" | "POST" | "PUT" | "DELETE";
+    url: string;
+    tier: keyof RateLimitTiers | null;
+  }> = [
     { url: "/health", tier: null },
     { url: "/api/auth/sign-in", tier: "auth" },
     { url: "/api/tiles/1/2/3", tier: "tile" },
@@ -149,15 +154,20 @@ describe("makeRateLimitTierHook", () => {
     { url: "/api/integrations/food-delivery/ubereats/open", tier: "expensive" },
     { url: "/api/integrations/restaurants/menu?website=https://example.com", tier: "expensive" },
     { url: "/api/integrations/food-delivery/providers?country=de", tier: "public" },
+    { method: "GET", url: "/api/timeline/connection", tier: "public" },
+    { method: "GET", url: "/api/timeline/day/2026-08-09", tier: null },
+    { method: "PUT", url: "/api/timeline/connection", tier: "expensive" },
+    { method: "POST", url: "/api/timeline/connection/test", tier: "expensive" },
+    { method: "DELETE", url: "/api/timeline/connection", tier: "expensive" },
     { url: "/api/saved", tier: "public" },
     { url: "/whatever", tier: null },
   ];
 
-  for (const { url, tier } of cases) {
-    it(`routes ${url} to the ${tier ?? "no"} tier`, async () => {
+  for (const { method = "GET", url, tier } of cases) {
+    it(`routes ${method} ${url} to the ${tier ?? "no"} tier`, async () => {
       const { hook, stubs } = stubTiers();
       const app = await tierApp(hook);
-      await app.inject({ method: "GET", url, remoteAddress: "198.51.100.7" });
+      await app.inject({ method, url, remoteAddress: "198.51.100.7" });
       for (const key of Object.keys(stubs) as Array<keyof RateLimitTiers>) {
         if (key === tier) {
           expect(stubs[key]).toHaveBeenCalledTimes(1);
@@ -198,6 +208,79 @@ describe("makeRateLimitTierHook", () => {
     expect(second.statusCode).toBe(429);
     expect(second.payload).toContain("Too many requests");
     expect(second.headers["retry-after"]).toBeDefined();
+    await app.close();
+    limiter.destroy();
+  });
+
+  it("protects a registered timeline route before an exhausted parent limiter replies", async () => {
+    const limiter = new RateLimiter({ max: 1, windowMs: 2 * 86_400_000 });
+    const { hook } = stubTiers();
+    hook.expensive = makeTimelineAwareRateLimit(limiter);
+    const app = Fastify({ logger: false });
+    app.addHook("onRequest", makeRateLimitTierHook(hook));
+    await app.register(
+      async (timeline) => {
+        timeline.put("/timeline/connection", async () => ({ ok: true }));
+      },
+      { prefix: "/api" },
+    );
+    await app.ready();
+
+    const first = await app.inject({
+      method: "PUT",
+      url: "/api/timeline/connection",
+      remoteAddress: "198.51.100.7",
+    });
+    const exhausted = await app.inject({
+      method: "PUT",
+      url: "/api/timeline/connection",
+      remoteAddress: "198.51.100.7",
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(first.headers["cache-control"]).toBe("private, no-store");
+    expect(exhausted.statusCode).toBe(429);
+    expect(exhausted.json()).toEqual({
+      error: "Timeline source is rate limited",
+      code: "TIMELINE_RATE_LIMITED",
+      retryAfterSeconds: 86_400,
+    });
+    expect(exhausted.headers["retry-after"]).toBe("86400");
+    expect(exhausted.headers["cache-control"]).toBe("private, no-store");
+    expect(exhausted.headers.pragma).toBe("no-cache");
+    expect(exhausted.headers.vary).toContain("Cookie");
+    await app.close();
+    limiter.destroy();
+  });
+
+  it("skips the global IP limiter for timeline day reads while retaining privacy headers", async () => {
+    const limiter = new RateLimiter({ max: 1, windowMs: 60_000 });
+    const { hook } = stubTiers();
+    hook.expensive = makeTimelineAwareRateLimit(limiter);
+    const app = Fastify({ logger: false });
+    app.addHook("onRequest", makeRateLimitTierHook(hook));
+    await app.register(
+      async (timeline) => {
+        timeline.get("/timeline/day/:date", async () => ({ ok: true }));
+      },
+      { prefix: "/api" },
+    );
+    await app.ready();
+
+    const request = {
+      method: "GET" as const,
+      url: "/api/timeline/day/2026-08-09",
+      remoteAddress: "198.51.100.8",
+    };
+    const first = await app.inject(request);
+    const exhausted = await app.inject(request);
+
+    expect(first.statusCode).toBe(200);
+    expect(exhausted.statusCode).toBe(200);
+    expect(exhausted.json()).toEqual({ ok: true });
+    expect(exhausted.headers["cache-control"]).toBe("private, no-store");
+    expect(exhausted.headers.pragma).toBe("no-cache");
+    expect(exhausted.headers.vary).toContain("Cookie");
     await app.close();
     limiter.destroy();
   });

@@ -18,6 +18,15 @@ export { appLog } from "./app-log-schema";
 export {
   account,
   accountRelations,
+  jwks,
+  oauthAccessToken,
+  oauthAccessTokenRelations,
+  oauthClient,
+  oauthClientRelations,
+  oauthConsent,
+  oauthConsentRelations,
+  oauthRefreshToken,
+  oauthRefreshTokenRelations,
   passkey,
   passkeyRelations,
   session,
@@ -63,3 +72,8 @@ export { type ServiceRepositoryRow, serviceRepository } from "./service-reposito
 export { serviceSecret } from "./service-secret-schema";
 // System settings
 export { systemSettings } from "./system-settings-schema";
+// Encrypted per-user Dawarich timeline connection
+export {
+  type PersonalTimelineConnectionRow,
+  personalTimelineConnection,
+} from "./timeline-connection-schema";

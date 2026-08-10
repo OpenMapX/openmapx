@@ -44,6 +44,26 @@ export async function getServiceSecret(serviceId: string, key: string): Promise<
   }
 }
 
+/**
+ * Strict vault read for security-sensitive reconciliation paths.
+ *
+ * Unlike the best-effort renderer helper above, an unavailable database or an
+ * undecryptable row must not be mistaken for an absent secret: doing so could
+ * rotate a live credential or generate a conflicting database password.
+ */
+export async function getServiceSecretStrict(
+  serviceId: string,
+  key: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select()
+    .from(serviceSecret)
+    .where(and(eq(serviceSecret.serviceId, serviceId), eq(serviceSecret.key, key)))
+    .limit(1);
+  if (!row) return null;
+  return decrypt(row.ciphertext, row.iv, row.tag);
+}
+
 export async function deleteServiceSecret(serviceId: string, key: string): Promise<void> {
   await db
     .delete(serviceSecret)

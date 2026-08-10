@@ -1,0 +1,21 @@
+{
+  "image": "ghcr.io/baosystems/postgis",
+  "tag": "18-3.6",
+  "verifiedAt": "2026-08-09",
+  "indexDigest": "sha256:7de6306fe0718b72eebea405f2ff2ed9a3581a002ee1251978eba7b5e51c16b6",
+  "architectures": {
+    "linux/amd64": "sha256:52edddd0a2cd4451bafc5772b83646c8c2f787a90c21bf1ce98c95113fdbf431",
+    "linux/arm64": "sha256:a6eb9820bd66eea92cb7ccbd9f9e0f36d6768678b65f9f02d2a6353c382caa4c"
+  },
+  "ociCreated": "2026-08-04T06:10:05.427482305Z",
+  "source": "https://github.com/baosystems/docker-postgis",
+  "sourceRevision": "603ccfa15a094bf677524275bdf7e8a7478885ce",
+  "baseImage": "docker.io/postgis/postgis:18-3.6",
+  "postgresVersion": "18.4",
+  "postgisVersion": "3.6.4",
+  "volume": "/var/lib/postgresql",
+  "pgData": "/var/lib/postgresql/18/docker",
+  "rebuildCadence": "weekly",
+  "support": "none",
+  "mutableTagPolicy": "stop-release-and-review-on-digest-drift"
+}

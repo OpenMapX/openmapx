@@ -27,6 +27,7 @@ import { RouteLayer } from "@/components/map/layers/RouteLayer";
 import { RouteTrafficLayer } from "@/components/map/layers/RouteTrafficLayer";
 import { SavedPlacesLayer } from "@/components/map/layers/SavedPlacesLayer";
 import { SelectedStopInfrastructureLayer } from "@/components/map/layers/SelectedStopInfrastructureLayer";
+import { TimelineMapLayer } from "@/components/map/layers/TimelineMapLayer";
 import { TransitItineraryLayer } from "@/components/map/layers/TransitItineraryLayer";
 import { TransitRouteLayer } from "@/components/map/layers/TransitRouteLayer";
 import { TransitVehicleLayer } from "@/components/map/layers/TransitVehicleLayer";
@@ -151,6 +152,7 @@ export default function HomePage() {
             <NavigationView />
             <TransitNavigationView />
             <FlightArcLayer />
+            <TimelineMapLayer />
             <TransitRouteLayer />
             <VehicleLiveLayer />
             <TransitItineraryLayer />

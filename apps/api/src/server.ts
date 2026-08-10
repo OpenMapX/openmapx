@@ -25,11 +25,13 @@ import { adminRoute } from "./routes/admin";
 import { adminCacheRoute } from "./routes/admin-cache";
 import { registerCapabilityBindingRoutes } from "./routes/admin-capability-bindings";
 import { registerAdminComposeRoutes } from "./routes/admin-compose";
+import { adminDawarichRoute } from "./routes/admin-dawarich";
 import { adminExtensionsRoute } from "./routes/admin-extensions";
 import { adminServicesRoute } from "./routes/admin-services";
 import { adminSettingsRoute } from "./routes/admin-settings";
 import { adminSystemRoute } from "./routes/admin-system";
 import { attributionRoute } from "./routes/attribution";
+import { authRoute } from "./routes/auth";
 import { capabilitiesRoute } from "./routes/capabilities";
 import { dataManagerRoute } from "./routes/data-manager";
 import { elevationRoute } from "./routes/elevation";
@@ -49,11 +51,13 @@ import { savedRoute } from "./routes/saved";
 import { statusRoute } from "./routes/status";
 import { streetLevelRoute } from "./routes/street-level-imagery";
 import { tilesRoute } from "./routes/tiles";
+import { timelineRoute } from "./routes/timeline";
 import { trafficRoute } from "./routes/traffic";
 import { winterSportsRoute } from "./routes/winter-sports";
 import {
   corsOptions,
   makeRateLimitTierHook,
+  makeTimelineAwareRateLimit,
   trustProxyConfig,
   uniformErrorHandler,
 } from "./server-wiring";
@@ -83,7 +87,6 @@ import { pruneOldRecords } from "./services/health-history";
 import { jobRunner } from "./services/job-runner";
 import { initServiceRegistry } from "./services/service-registry";
 import { handleSystemDiagnosticsJob, handleSystemUpdateJob } from "./services/system-maintenance";
-import { safeAuthErrorEvent } from "./utils/auth-error-log";
 import { envInt, envString } from "./utils/env";
 import {
   authLimit,
@@ -174,8 +177,8 @@ server.addHook(
   makeRateLimitTierHook({
     auth: authLimit.preHandler(),
     tile: tilePublicApiLimit.preHandler(),
-    expensive: expensivePublicApiLimit.preHandler(),
-    public: publicApiLimit.preHandler(),
+    expensive: makeTimelineAwareRateLimit(expensivePublicApiLimit),
+    public: makeTimelineAwareRateLimit(publicApiLimit),
   }),
 );
 
@@ -226,34 +229,11 @@ setIntegrationsReloadedHook(() => {
 });
 
 // Better Auth handler
-server.route({
-  method: ["GET", "POST"],
-  url: "/api/auth/*",
-  async handler(request, reply) {
-    try {
-      const url = new URL(request.url, `http://${request.headers.host}`);
-      const headers = new Headers();
-      for (const [key, value] of Object.entries(request.headers)) {
-        if (value) headers.append(key, Array.isArray(value) ? value.join(", ") : value);
-      }
-      const req = new Request(url.toString(), {
-        method: request.method,
-        headers,
-        ...(request.body ? { body: JSON.stringify(request.body) } : {}),
-      });
-      const response = await auth.handler(req);
-      reply.status(response.status);
-      response.headers.forEach((value, key) => {
-        reply.header(key, value);
-      });
-      return reply.send(response.status === 204 ? null : await response.text());
-    } catch (error) {
-      // Never log the raw thrown object: an OAuth callback or token-exchange
-      // failure can carry an authorization code, token, state or upstream body.
-      server.log.error(safeAuthErrorEvent(error, request.id, request.method), "Auth error");
-      return reply.status(500).send({ error: "Internal authentication error" });
-    }
-  },
+await server.register(authRoute, {
+  authHandler: auth.handler,
+  authUiOrigin:
+    envString("CORS_ORIGIN", "http://localhost:3000").split(",")[0]?.trim() ||
+    "http://localhost:3000",
 });
 
 // Health check
@@ -283,10 +263,12 @@ await server.register(winterSportsRoute, { prefix: "/api" });
 await server.register(reviewsKeypairRoute, { prefix: "/api" });
 await server.register(savedRoute, { prefix: "/api" });
 await server.register(osmContributionsRoute(), { prefix: "/api" });
+await server.register(timelineRoute, { prefix: "/api" });
 await server.register(meRoute, { prefix: "/api" });
 await server.register(statusRoute, { prefix: "/api" });
 await server.register(adminRoute, { prefix: "/api" });
 await server.register(adminServicesRoute, { prefix: "/api" });
+await server.register(adminDawarichRoute, { prefix: "/api" });
 await server.register(dataManagerRoute, { prefix: "/api" });
 await server.register(adminSettingsRoute, { prefix: "/api" });
 await server.register(adminExtensionsRoute, { prefix: "/api" });

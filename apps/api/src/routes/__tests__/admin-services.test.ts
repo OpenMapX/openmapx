@@ -107,6 +107,11 @@ vi.mock("../../services/service-config-resolver.js", () => ({
     mockResolveServiceConfigWithSources(...args),
 }));
 
+const mockMergeServiceConfig = vi.fn().mockResolvedValue(undefined);
+vi.mock("../../services/service-config-writer.js", () => ({
+  mergeServiceConfig: (...args: unknown[]) => mockMergeServiceConfig(...args),
+}));
+
 // @openmapx/core/server — getProvidedCapabilityNames + serviceConfigEnvPrefix
 vi.mock("@openmapx/core/server", () => ({
   services: {
@@ -117,9 +122,10 @@ vi.mock("@openmapx/core/server", () => ({
 
 // validate-config-body — keep the real `getSecretFields` (pure), mock only the
 // config validator.
+const mockValidateConfigBody = vi.fn().mockReturnValue({ updates: {}, errors: [] });
 vi.mock("../../utils/validate-config-body.js", async (importActual) => ({
   ...(await importActual<typeof import("../../utils/validate-config-body.js")>()),
-  validateConfigBody: vi.fn().mockReturnValue({ updates: {}, errors: [] }),
+  validateConfigBody: (...args: unknown[]) => mockValidateConfigBody(...args),
 }));
 
 // Service secret vault + apply plumbing
@@ -383,6 +389,28 @@ describe("service credentials", () => {
     isBuiltIn: false,
   };
 
+  function managedDawarichService(serviceId: string, key: string) {
+    return {
+      manifest: {
+        id: serviceId,
+        name: serviceId,
+        version: "1.10.3",
+        quality: "built-in",
+        configSchema: {
+          properties: {
+            [key]: {
+              type: "string",
+              title: key,
+              "x-openmapx-secret": true,
+            },
+          },
+        },
+      },
+      enabled: true,
+      isBuiltIn: true,
+    };
+  }
+
   // Reset the shared mocks' queues + implementations so leftover `…Once`
   // values from earlier describes can't leak in (the global afterEach only
   // clears call history, not queued implementations).
@@ -395,6 +423,8 @@ describe("service credentials", () => {
     mockDeleteServiceSecret.mockReset().mockResolvedValue(undefined);
     mockJobRunnerEnqueue.mockReset().mockResolvedValue("job-123");
     mockResolveServiceConfigWithSources.mockReset().mockResolvedValue({});
+    mockValidateConfigBody.mockReset().mockReturnValue({ updates: {}, errors: [] });
+    mockMergeServiceConfig.mockReset().mockResolvedValue(undefined);
   });
 
   describe("GET /admin/services/:id/config", () => {
@@ -416,6 +446,27 @@ describe("service credentials", () => {
       expect(res.payload).not.toContain("placeholder-not-a-real-value");
       expect(body.schema).toEqual(SECRET_SERVICE.manifest.configSchema);
       expect(body.envPrefix).toBe("SERVICE_ID");
+    });
+  });
+
+  describe("POST /admin/services/:id/config", () => {
+    it("persists only the route-validated update through the atomic writer", async () => {
+      mockValidateConfigBody.mockReturnValueOnce({
+        updates: { RATE_LIMIT_MAX: 240 },
+        errors: [],
+      });
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/admin/services/openconditions-ingest/config",
+        payload: { config: { RATE_LIMIT_MAX: 240, UNKNOWN: "discarded" } },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(mockMergeServiceConfig).toHaveBeenCalledWith("openconditions-ingest", {
+        RATE_LIMIT_MAX: 240,
+      });
+      expect(mockDbSelect).not.toHaveBeenCalled();
     });
   });
 
@@ -443,6 +494,81 @@ describe("service credentials", () => {
       },
     ]);
     expect(body.secretsConfigured).toBe(true);
+  });
+
+  it("GET marks provisioning-owned Dawarich credentials as managed", async () => {
+    mockRegistryGet.mockReturnValueOnce(
+      managedDawarichService("dawarich-app", "OIDC_CLIENT_SECRET"),
+    );
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/admin/services/dawarich-app/credentials",
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().credentials).toEqual([
+      expect.objectContaining({
+        key: "OIDC_CLIENT_SECRET",
+        managedBy: "dawarich-provisioning",
+      }),
+    ]);
+  });
+
+  it.each([
+    ["dawarich-app", "DATABASE_PASSWORD"],
+    ["dawarich-app", "SECRET_KEY_BASE"],
+    ["dawarich-app", "OIDC_CLIENT_SECRET"],
+    ["dawarich-sidekiq", "DATABASE_PASSWORD"],
+    ["dawarich-sidekiq", "SECRET_KEY_BASE"],
+    ["dawarich-sidekiq", "OIDC_CLIENT_SECRET"],
+    ["dawarich-postgis", "POSTGRES_PASSWORD"],
+  ])("rejects generic PUT/DELETE for managed %s:%s", async (serviceId, key) => {
+    mockRegistryGet.mockReturnValue(managedDawarichService(serviceId, key));
+
+    const [put, remove] = await Promise.all([
+      app.inject({
+        method: "PUT",
+        url: `/admin/services/${serviceId}/credentials/${key}`,
+        payload: { value: "must-not-be-written" },
+      }),
+      app.inject({
+        method: "DELETE",
+        url: `/admin/services/${serviceId}/credentials/${key}`,
+      }),
+    ]);
+
+    for (const response of [put, remove]) {
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({
+        code: "DAWARICH_CREDENTIAL_MANAGED",
+      });
+      expect(response.json().error).toMatch(/Managed Dawarich setup/i);
+    }
+    expect(mockSetServiceSecret).not.toHaveBeenCalled();
+    expect(mockDeleteServiceSecret).not.toHaveBeenCalled();
+    expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
+    expect(mockWriteAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("rejects concurrent generic writes without bypassing managed ownership", async () => {
+    mockRegistryGet.mockImplementation((serviceId: string) =>
+      managedDawarichService(serviceId, "DATABASE_PASSWORD"),
+    );
+
+    const responses = await Promise.all(
+      ["dawarich-app", "dawarich-sidekiq"].map((serviceId) =>
+        app.inject({
+          method: "PUT",
+          url: `/admin/services/${serviceId}/credentials/DATABASE_PASSWORD`,
+          payload: { value: "same-but-unsafe" },
+        }),
+      ),
+    );
+
+    expect(responses.map((response) => response.statusCode)).toEqual([409, 409]);
+    expect(mockSetServiceSecret).not.toHaveBeenCalled();
+    expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
   });
 
   it("PUT stores the secret and enqueues an apply when Docker is available", async () => {

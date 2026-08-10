@@ -5,6 +5,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("../../db", () => ({ db: {} }));
 vi.mock("../../redis", () => ({ redis: null }));
 vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
+vi.mock("@openmapx/core/server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@openmapx/core/server")>();
+  return {
+    ...actual,
+    safeFetchJson: <T>(url: string, options = {}) =>
+      actual.safeFetchJson<T>(url, { ...options, fetchImplementation: globalThis.fetch }),
+  };
+});
 
 import { lookup as dnsLookup } from "node:dns/promises";
 import {
@@ -38,7 +46,7 @@ function makeResponse(opts: {
 
 function stubFetchSequence(...responses: Response[]): ReturnType<typeof vi.fn> {
   const fn = vi.fn();
-  for (const r of responses) fn.mockResolvedValueOnce(r);
+  for (const response of responses) fn.mockResolvedValueOnce(response);
   vi.stubGlobal("fetch", fn);
   return fn;
 }
@@ -111,7 +119,7 @@ describe("applyLiveVersions", () => {
 
 describe("fetchManifestMeta (real safeFetchJson SSRF path)", () => {
   it("resolves version/platform on the happy path", async () => {
-    lookupMock.mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }]);
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
     stubFetchSequence(
       makeResponse({
         status: 200,
@@ -133,7 +141,7 @@ describe("fetchManifestMeta (real safeFetchJson SSRF path)", () => {
   });
 
   it("returns null when a redirect targets a private/link-local address", async () => {
-    lookupMock.mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }]);
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
     stubFetchSequence(
       makeResponse({
         status: 302,
@@ -166,7 +174,7 @@ describe("resolveExtensionManifest (real safeFetchJson SSRF path)", () => {
   });
 
   it("rejects an oversized manifest response", async () => {
-    lookupMock.mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }]);
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
     stubFetchSequence(
       makeResponse({
         status: 200,

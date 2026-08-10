@@ -122,19 +122,50 @@ function stagedFiles(): string[] | null {
   }
 }
 
-/** Did the staged diff for `file` touch a date line (added or removed)? */
-function dateLineChangedInStaged(file: string): boolean {
+function diffTouchesDateLine(diff: string): boolean {
+  return diff
+    .split("\n")
+    .some((line) => (line.startsWith("+") || line.startsWith("-")) && isDateLine(line));
+}
+
+function mergeHead(): string | null {
   try {
-    const diff = execFileSync("git", ["diff", "--cached", "--", file], {
+    return execFileSync("git", ["rev-parse", "--verify", "MERGE_HEAD"], {
       cwd: REPO_ROOT,
       encoding: "utf8",
-    });
-    return diff
-      .split("\n")
-      .some((line) => (line.startsWith("+") || line.startsWith("-")) && isDateLine(line));
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
   } catch {
-    return false;
+    return null;
   }
+}
+
+/**
+ * Did the staged result touch a date line relative to either merge parent?
+ *
+ * A same-day merge can legitimately retain parent one's already-current date
+ * while advancing parent two's older legal copy. Checking only `HEAD` rejects
+ * that honest resolution, so an active merge also compares the index with
+ * `MERGE_HEAD`. Ordinary commits retain the original single-parent behavior.
+ */
+function dateLineChangedInStaged(file: string): boolean {
+  const references: Array<string | null> = [null];
+  const secondParent = mergeHead();
+  if (secondParent) references.push(secondParent);
+  for (const reference of references) {
+    try {
+      const args = ["diff", "--cached", ...(reference ? [reference] : []), "--", file];
+      const diff = execFileSync("git", args, {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+      });
+      if (diffTouchesDateLine(diff)) return true;
+    } catch {
+      // Try the remaining parent, if any; a failed Git lookup is not evidence
+      // that the legal date changed.
+    }
+  }
+  return false;
 }
 
 function main(): void {

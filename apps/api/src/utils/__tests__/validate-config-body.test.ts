@@ -22,6 +22,7 @@ const schema = {
     mode: { type: "string", enum: ["fast", "slow"] },
     endpoint: { type: "string", format: "url" },
     enabled: { type: "boolean" },
+    internalGeneration: { type: "string", readOnly: true },
   },
 };
 
@@ -387,6 +388,16 @@ describe("validateConfigBody secret handling", () => {
     const result = validateConfigBody({ apiKey: "value" }, schema, { rejectSecrets: false });
     expect(result.errors).toEqual([]);
     expect(result.updates).toEqual({ apiKey: "value" });
+  });
+});
+
+describe("validateConfigBody read-only handling", () => {
+  it("rejects read-only service state even when ordinary config is writable", () => {
+    const result = validateConfigBody({ internalGeneration: "operator-supplied" }, schema, {
+      rejectEnabled: false,
+    });
+    expect(result.errors).toEqual(['"internalGeneration" is read-only']);
+    expect(result.updates).toEqual({});
   });
 });
 

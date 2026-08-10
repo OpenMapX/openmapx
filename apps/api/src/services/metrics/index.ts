@@ -72,6 +72,8 @@ export interface MetricsHandle {
   routingBaselineCounter: Counter;
   osmContributionCounter: Counter;
   osmContributionLatency: Histogram;
+  personalTimelineRequestCounter: Counter;
+  personalTimelineRequestLatency: Histogram;
   /** Render the current metric state as Prometheus text format. */
   renderPrometheus(): Promise<string>;
   /** Shut the meter provider down (idempotent). */
@@ -123,6 +125,16 @@ export function initMetrics(): MetricsHandle {
   const routingBaselineCounter = meter.createCounter("routing_baseline_available_total", {
     description: "Routing requests whose active route had a finite baseline duration",
   });
+  const personalTimelineRequestCounter = meter.createCounter("personal_timeline_requests_total", {
+    description: "Personal timeline requests by bounded mode, operation, and outcome",
+  });
+  const personalTimelineRequestLatency = meter.createHistogram(
+    "personal_timeline_request_duration_ms",
+    {
+      description: "Personal timeline request duration in milliseconds",
+      unit: "ms",
+    },
+  );
 
   const osmContributionCounter = meter.createCounter("osm_contribution_operations_total", {
     description: "OpenStreetMap contribution operations by operation and outcome",
@@ -163,6 +175,8 @@ export function initMetrics(): MetricsHandle {
     routingBaselineCounter,
     osmContributionCounter,
     osmContributionLatency,
+    personalTimelineRequestCounter,
+    personalTimelineRequestLatency,
     renderPrometheus,
     close,
   };
@@ -324,6 +338,34 @@ export function recordOsmContributionOperation(
   const labels = { operation, outcome };
   handle.osmContributionCounter.add(1, labels);
   handle.osmContributionLatency.record(Math.max(0, durationMs), labels);
+}
+
+export interface PersonalTimelineRequestLabels {
+  mode: "external" | "managed";
+  operation: "connect" | "test" | "day";
+  outcome:
+    | "ok"
+    | "partial"
+    | "not_connected"
+    | "invalid_credential"
+    | "rate_limited"
+    | "unavailable"
+    | "invalid_response";
+}
+
+/** Record one personal-timeline operation without accepting any user-shaped labels. */
+export function recordPersonalTimelineRequest(
+  labels: PersonalTimelineRequestLabels,
+  latencyMs: number,
+): void {
+  const handle = getMetrics();
+  const attributes = {
+    mode: labels.mode,
+    operation: labels.operation,
+    outcome: labels.outcome,
+  };
+  handle.personalTimelineRequestCounter.add(1, attributes);
+  handle.personalTimelineRequestLatency.record(Math.max(0, latencyMs), attributes);
 }
 
 /** Test-only reset. Production code never calls this. */

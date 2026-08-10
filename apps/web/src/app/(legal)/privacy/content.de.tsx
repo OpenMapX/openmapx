@@ -117,6 +117,12 @@ export default function PrivacyContentDe({
           </li>
           <li>
             <Typography>
+              Optionale, schreibgesch&uuml;tzte Anzeige pers&ouml;nlicher Standortverl&auml;ufe aus
+              einer von Ihnen verbundenen Dawarich-Instanz
+            </Typography>
+          </li>
+          <li>
+            <Typography>
               Clientseitige Speicherung von Einstellungen und gespeicherten Orten auf Ihrem
               Ger&auml;t
             </Typography>
@@ -190,6 +196,13 @@ export default function PrivacyContentDe({
         <Typography sx={{ mt: 1 }}>
           Rechtsgrundlage ist Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;a DSGVO (Ihre ausdr&uuml;ckliche
           Einwilligung &uuml;ber die Browser-Berechtigungsabfrage).
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          Wenn Sie unabh&auml;ngig davon den pers&ouml;nlichen Zeitstrahl aktivieren, werden
+          historische Besuche, Wege, Begrenzungen und Routengeometrien aus Ihrem Dawarich-Konto
+          verarbeitet, um den von Ihnen gew&auml;hlten Tag anzuzeigen. Dies ist von der
+          Live-Standortberechtigung des Browsers getrennt und kann vergangene Orte und
+          Bewegungsmuster erkennen lassen.
         </Typography>
       </Section>
       <Section title={T.accounts}>
@@ -303,6 +316,37 @@ export default function PrivacyContentDe({
           werden nie an Ihren Browser gesendet. Wenn Sie die OpenStreetMap-Beitragsfunktion nutzen,
           kann das verkn&uuml;pfte OpenStreetMap-Konto zus&auml;tzlich Schreibberechtigungen halten
           &mdash; siehe Abschnitt&nbsp;7.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          <strong>Pers&ouml;nlicher Zeitstrahl (optional).</strong> Bei ausdr&uuml;cklicher
+          Aktivierung w&auml;hlen Sie entweder eine externe Dawarich-Instanz oder den von diesem
+          OpenMapX-Betreiber verwalteten Dawarich-Dienst. Wir speichern den &ouml;ffentlichen
+          Ursprung der Instanz, sichere Verbindungsmetadaten und Ihren Dawarich-API-Schl&uuml;ssel;
+          der API-Schl&uuml;ssel wird im Ruhezustand verschl&uuml;sselt. F&uuml;r jeden
+          angeforderten Tag verarbeitet unser Backend vor&uuml;bergehend Datum, Zeitzone, Besuche,
+          Wege, Begrenzungen und Routengeometrien und leitet die Anfrage an Dawarich weiter.
+          OpenMapX speichert diesen abgerufenen Verlauf nicht dauerhaft, legt ihn weder in gemeinsam
+          genutzten noch browserpersistenten Cache ab und verwendet ihn nicht f&uuml;r Analysen.
+          Beim Trennen der Verbindung oder L&ouml;schen Ihres OpenMapX-Kontos werden die
+          OpenMapX-Verbindung und der verschl&uuml;sselte Zugang gel&ouml;scht.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          Der Betreiber einer von Ihnen gew&auml;hlten externen Dawarich-Instanz bleibt unter dessen
+          Bedingungen ein eigener Verantwortlicher oder Auftragsverarbeiter und kann Anfragen vom
+          OpenMapX-Server erhalten. Bei verwaltetem Dawarich wird die Instanz von diesem
+          OpenMapX-Betreiber gehostet. Browser-SSO &uuml;bermittelt Ihre stabile Kontokennung (
+          <code>sub</code>), Ihren Namen und Ihre E-Mail-Adresse an das verwaltete Dawarich; der
+          getrennt bereitgestellte API-Schl&uuml;ssel autorisiert den schreibgesch&uuml;tzten
+          Verlaufszugriff. Dawarich bewahrt eigene Konto- und Verlaufsdaten nach den Einstellungen
+          und Aufbewahrungsregeln des Instanzbetreibers auf. Zugriffs-, Berichtigungs-, L&ouml;sch-
+          und API-Schl&uuml;ssel-Funktionen von Dawarich &uuml;ben Sie direkt in den
+          Kontoeinstellungen dieser Instanz aus.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          Die Funktion wird von Ihnen initiiert und kann jederzeit getrennt werden. Vor der Freigabe
+          der optionalen Funktion muss die Projektverantwortung die f&uuml;r die konkrete
+          Bereitstellung geltende Rechtsgrundlage und etwaige Einwilligungstexte best&auml;tigen;
+          diese Implementierung trifft diese rechtliche Bewertung nicht.
         </Typography>
         <Typography sx={{ mt: 1 }}>
           Rechtsgrundlage ist Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;b DSGVO (Vertragserf&uuml;llung /
@@ -567,6 +611,13 @@ export default function PrivacyContentDe({
           Anfragen als Proxy, sodass Drittanbieter in der Regel die IP-Adresse unseres Servers und
           nicht Ihre Browser-IP-Adresse sehen. Nachfolgend eine vollst&auml;ndige Liste aller
           externen Dienste:
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          Ein von Benutzern gew&auml;hlter Dawarich-Ursprung ist in den nachfolgend generierten
+          Anbietertabellen nicht enthalten, weil Betreiber und Standort vom Benutzer gew&auml;hlt
+          werden. Verwaltetes Dawarich ist ein optionaler First-Party-Dienst dieser Bereitstellung
+          und kein Integrationsanbieter. In beiden Modi leitet OpenMapX Anfragen zum
+          pers&ouml;nlichen Zeitstrahl wie in Abschnitt&nbsp;5 beschrieben weiter.
         </Typography>
 
         {generatePrivacySectionsFromManifests(integrations, "de").map((section) => (
@@ -866,6 +917,13 @@ export default function PrivacyContentDe({
           speichert keine personenbezogenen Daten wie IP-Adressen oder Kontoinformationen.
         </Typography>
         <Typography sx={{ mt: 1 }}>
+          Antworten des pers&ouml;nlichen Zeitstrahls sind ausdr&uuml;cklich von Redis-,
+          Service-Worker-, persistenten Abfrage- und Browser-Speicher-Caches ausgeschlossen. Nur ein
+          nicht benutzerbezogenes Ergebnis der Zustandspr&uuml;fung des verwalteten Dienstes darf
+          h&ouml;chstens 15&nbsp;Sekunden im Serverspeicher gehalten werden; es enth&auml;lt weder
+          Zeitstrahl-, Konto-, Zugangs-, Hostnamen- noch Anfragedatumsdaten.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
           Wir betreiben au&szlig;erdem eine PostgreSQL-Datenbank f&uuml;r Benutzerkonten,
           gespeicherte Orte und gecachte Ortsanreicherungsdaten (z.&nbsp;B. Wikidata-Fakten,
           Wikipedia-Zusammenfassungen). Wenn GTFS-Nahverkehrs-Feeds importiert werden, werden
@@ -1026,6 +1084,17 @@ export default function PrivacyContentDe({
           </li>
           <li>
             <Typography>
+              <strong>Verbindung zum pers&ouml;nlichen Zeitstrahl</strong> &mdash; der
+              verschl&uuml;sselte API-Schl&uuml;ssel und sichere Verbindungsmetadaten werden bis zur
+              Trennung oder L&ouml;schung Ihres OpenMapX-Kontos aufbewahrt. Abgerufene Verl&auml;ufe
+              werden von OpenMapX nicht aufbewahrt. Das Deaktivieren des verwalteten Dawarich
+              erh&auml;lt dessen getrennte Dienst-Volumes; Aufbewahrung und L&ouml;schung des
+              Dawarich-Kontos und -Verlaufs richten sich nach dem Instanzbetreiber und den direkten
+              Dawarich-Kontoeinstellungen.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
               <strong>Mangrove-Schl&uuml;sselpaar</strong> &mdash; wird aufbewahrt, bis Sie es neu
               generieren oder Ihr Konto l&ouml;schen. Das L&ouml;schen des Schl&uuml;sselpaars auf
               unseren Servern <strong>widerruft nicht</strong> bereits ver&ouml;ffentlichte
@@ -1112,6 +1181,14 @@ export default function PrivacyContentDe({
           &ouml;ffentliche Karte zu bearbeiten, pr&uuml;ft die Beitragsschnittstelle Ihre
           Berechtigungen zus&auml;tzlich unmittelbar vor jedem Schreibvorgang erneut bei
           OpenStreetMap selbst, statt sich auf den gespeicherten Stand zu verlassen.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          Zugangsdaten des pers&ouml;nlichen Zeitstrahls werden vor der Datenbankspeicherung
+          verschl&uuml;sselt, aus Antworten, Protokollen, Auditdetails und Metriken ausgeschlossen
+          und nur vom Backend &uuml;ber die validierte Verbindung an die gew&auml;hlte Dawarich-API
+          gesendet. Der Browser ruft die Dawarich-API niemals direkt auf. Eine verwaltete
+          Browser-SSO-Sitzung gew&auml;hrt OpenMapX keinen Verlaufszugriff; der benutzerspezifische
+          API-Schl&uuml;ssel bleibt ein getrenntes Zugangsmittel.
         </Typography>
       </Section>
       <Section title={T.children}>

@@ -36,7 +36,7 @@ tile stack is enabled) all connect to it over the private Docker network.
 
 | Property | Value |
 | --- | --- |
-| Image | `postgis/postgis:18-3.6` (PostgreSQL 18, PostGIS 3.6) |
+| Image | `ghcr.io/baosystems/postgis:18-3.6` (PostgreSQL 18, PostGIS 3.6) |
 | Database / user | `openmapx` / `postgres` |
 | Memory limit | `2g` |
 | Volume | `openmapx-pgdata` at `/var/lib/postgresql` (backed up) |
@@ -47,6 +47,42 @@ Other containers reach the database by service name — `app-api`, for instance,
 handed `postgresql://postgres:${POSTGRES_PASSWORD}@postgis:5432/openmapx`. The
 host port is published on loopback only, so you can run `psql` from the host but
 nothing outside the machine can connect.
+
+### Image provenance and release gate
+
+The platform deliberately uses the multi-architecture Bao Systems rebuild of
+the upstream Debian PostGIS image. Bao rebuilds upstream weekly for linux/amd64
+and linux/arm64, but explicitly provides **no support** for these images. The
+human-readable `18-3.6` tag is mutable; its reviewed provenance lives beside the
+service manifest in `services/postgis/image-provenance.json`.
+
+On 2026-08-09, the reviewed OCI index was
+`sha256:7de6306fe0718b72eebea405f2ff2ed9a3581a002ee1251978eba7b5e51c16b6`.
+Its platform manifests were:
+
+- linux/amd64:
+  `sha256:52edddd0a2cd4451bafc5772b83646c8c2f787a90c21bf1ce98c95113fdbf431`;
+- linux/arm64:
+  `sha256:a6eb9820bd66eea92cb7ccbd9f9e0f36d6768678b65f9f02d2a6353c382caa4c`.
+
+The image was created on 2026-08-04 from Bao source revision
+`603ccfa15a094bf677524275bdf7e8a7478885ce`. Native Apple-arm64 validation
+reported PostgreSQL 18.4, PostGIS 3.6.4, `PGDATA=/var/lib/postgresql/18/docker`,
+and the declared `/var/lib/postgresql` volume used by OpenMapX.
+
+Before every OpenMapX release, compare the live tag with the reviewed record:
+
+```bash
+docker buildx imagetools inspect ghcr.io/baosystems/postgis:18-3.6
+```
+
+Stop the release for dependency review if the index digest moved or either
+required architecture disappeared. Do not silently select a substitute image
+or force emulation. Because the tag is mutable and the rebuild has no support
+guarantee, repeat the native startup, existing-volume compatibility, and full
+synthetic backup/restore rehearsal before accepting changed image bytes. See
+the [Bao Systems image repository](https://github.com/baosystems/docker-postgis)
+for its build and support policy.
 
 ### The password
 

@@ -58,6 +58,8 @@ export {
   setOverlayLayerVisible,
   toggleOverlay,
 } from "./overlayRegistry";
+export type { PersonalTimelineState } from "./personalTimelineStore";
+export { usePersonalTimelineStore } from "./personalTimelineStore";
 export { usePlaceStore } from "./placeStore";
 export { useRideStore } from "./rideStore";
 export { useSavedPlacesStore } from "./savedPlacesStore";
