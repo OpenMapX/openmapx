@@ -29,7 +29,9 @@ describe("postEvDirections", () => {
     };
     const out = await postEvDirections(req);
 
-    expect(spy).toHaveBeenCalledWith("/api/integrations/routing/directions/ev", req);
+    // Request options are forwarded as a third argument so a native caller can
+    // supply a timeout or abort signal.
+    expect(spy).toHaveBeenCalledWith("/api/integrations/routing/directions/ev", req, {});
     expect(out).toEqual(result);
     expect(out.warnings).toEqual([]);
   });

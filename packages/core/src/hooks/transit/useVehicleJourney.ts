@@ -1,8 +1,7 @@
 import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import type { VehicleJourney } from "@openmapx/mobility-core/transit";
 import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "../../api/client";
-import { API_ENDPOINTS } from "../../api/endpoints";
+import { fetchVehicleJourney } from "../../api/transit";
 import { type MobilityEnvelopeQueryResult, wrapMobilityEnvelope } from "./useMobilityEnvelope";
 
 export function useVehicleJourney(
@@ -11,21 +10,7 @@ export function useVehicleJourney(
 ): MobilityEnvelopeQueryResult<VehicleJourney> {
   const query = useQuery({
     queryKey: ["vehicle-journey", tripId],
-    queryFn: () => {
-      const url = API_ENDPOINTS.transitVehicleJourney.replace(
-        ":id",
-        encodeURIComponent(tripId as string),
-      );
-      const params: Record<string, string> = {};
-      // Don't pre-encode — apiClient.get uses URLSearchParams which encodes automatically
-      if (fallbackIds?.length) {
-        params.fallback_ids = fallbackIds.join(",");
-      }
-      return apiClient.get<MobilityEnvelope<VehicleJourney>>(
-        url,
-        Object.keys(params).length ? params : undefined,
-      );
-    },
+    queryFn: () => fetchVehicleJourney({ tripId: tripId as string, fallbackIds }),
     enabled: !!tripId,
     staleTime: 30_000,
     refetchInterval: 30_000,

@@ -25,6 +25,9 @@ describe("fetchDirections", () => {
         avoidHighways: "true",
         lang: "en",
       }),
+      // Request options are forwarded as a third argument so a native caller
+      // can supply a timeout or abort signal.
+      {},
     );
   });
 });

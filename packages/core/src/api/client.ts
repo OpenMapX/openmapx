@@ -169,24 +169,107 @@ async function assertOk(res: Response): Promise<void> {
   throw await toApiClientError(res);
 }
 
+/** Per-request controls available to every method. */
+export interface ApiRequestOptions {
+  signal?: AbortSignal;
+  /** Abort after this many milliseconds. Omitted means no client-side deadline. */
+  timeoutMs?: number;
+}
+
+/**
+ * Raised when a request is cut short rather than answered. Kept separate from
+ * `ApiClientError` because a timeout is a local decision, not a server reply,
+ * and callers retry the two very differently.
+ */
+export class ApiRequestAbortedError extends Error {
+  readonly code: "timeout" | "aborted";
+
+  constructor(code: "timeout" | "aborted") {
+    super(code === "timeout" ? "API request timed out" : "API request was aborted");
+    this.name = "ApiRequestAbortedError";
+    this.code = code;
+  }
+}
+
+export function isApiRequestAbortedError(value: unknown): value is ApiRequestAbortedError {
+  return value instanceof ApiRequestAbortedError;
+}
+
+/**
+ * The API client.
+ *
+ * A client constructed with an explicit config uses *only* that config. This is
+ * what lets the mobile background task talk to the compiled API origin with
+ * `credentials: "omit"` while the browser singleton keeps sending cookies —
+ * without either being able to reconfigure the other. Calls interleave freely
+ * because nothing is read from module scope at request time.
+ */
 export class ApiClient {
+  constructor(private readonly instanceConfig?: ApiClientConfig) {}
+
+  private config(): ApiClientConfig {
+    return this.instanceConfig ?? getConfig();
+  }
+
+  private buildUrl(path: string, params?: Record<string, string>): string {
+    const url = new URL(path, this.config().baseUrl);
+    if (params) {
+      for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+    }
+    return url.toString();
+  }
+
+  /**
+   * Runs one fetch with a merged abort signal and a guaranteed timer cleanup.
+   * A pending timer would otherwise keep a background task's event loop alive
+   * after the session ended.
+   */
+  private async send(
+    url: string,
+    init: RequestInit,
+    options: ApiRequestOptions,
+  ): Promise<Response> {
+    const cfg = this.config();
+    const controller = new AbortController();
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const abortFromCaller = () => controller.abort();
+    if (options.signal) {
+      if (options.signal.aborted) throw new ApiRequestAbortedError("aborted");
+      options.signal.addEventListener("abort", abortFromCaller, { once: true });
+    }
+    if (options.timeoutMs !== undefined) {
+      timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, options.timeoutMs);
+    }
+
+    try {
+      return await fetch(url, {
+        ...init,
+        headers: { Accept: "application/json", ...init.headers, ...cfg.headerInterceptor?.() },
+        credentials: cfg.credentials ?? "omit",
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new ApiRequestAbortedError(timedOut ? "timeout" : "aborted");
+      }
+      throw error;
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      options.signal?.removeEventListener("abort", abortFromCaller);
+    }
+  }
+
   async get<T>(
     path: string,
     params?: Record<string, string>,
-    options?: { signal?: AbortSignal },
+    options: ApiRequestOptions = {},
   ): Promise<T> {
-    const cfg = getConfig();
-    const url = new URL(path, cfg.baseUrl);
-    if (params) {
-      for (const [key, value] of Object.entries(params)) {
-        url.searchParams.set(key, value);
-      }
-    }
-    const res = await fetch(url.toString(), {
-      headers: { Accept: "application/json", ...cfg.headerInterceptor?.() },
-      credentials: cfg.credentials ?? "omit",
-      signal: options?.signal,
-    });
+    const res = await this.send(this.buildUrl(path, params), {}, options);
     await assertOk(res);
     return res.json() as Promise<T>;
   }
@@ -197,67 +280,66 @@ export class ApiClient {
    * and shouldn't be modeled as an error (e.g. an enrichment endpoint that has
    * no data for inland places).
    */
-  async getOptional<T>(path: string, params?: Record<string, string>): Promise<T | null> {
-    const cfg = getConfig();
-    const url = new URL(path, cfg.baseUrl);
-    if (params) {
-      for (const [key, value] of Object.entries(params)) {
-        url.searchParams.set(key, value);
-      }
-    }
-    const res = await fetch(url.toString(), {
-      headers: { Accept: "application/json", ...cfg.headerInterceptor?.() },
-      credentials: cfg.credentials ?? "omit",
-    });
+  async getOptional<T>(
+    path: string,
+    params?: Record<string, string>,
+    options: ApiRequestOptions = {},
+  ): Promise<T | null> {
+    const res = await this.send(this.buildUrl(path, params), {}, options);
     if (res.status === 204) return null;
     await assertOk(res);
     return res.json() as Promise<T>;
   }
 
-  async post<T>(path: string, body: unknown): Promise<T> {
-    return this.mutate<T>("POST", path, body);
+  async post<T>(path: string, body: unknown, options: ApiRequestOptions = {}): Promise<T> {
+    return this.mutate<T>("POST", path, body, options);
   }
 
-  async patch<T>(path: string, body: unknown): Promise<T> {
-    return this.mutate<T>("PATCH", path, body);
+  async patch<T>(path: string, body: unknown, options: ApiRequestOptions = {}): Promise<T> {
+    return this.mutate<T>("PATCH", path, body, options);
   }
 
-  async put<T>(path: string, body: unknown): Promise<T> {
-    return this.mutate<T>("PUT", path, body);
+  async put<T>(path: string, body: unknown, options: ApiRequestOptions = {}): Promise<T> {
+    return this.mutate<T>("PUT", path, body, options);
   }
 
-  async delete<T = void>(path: string): Promise<T> {
-    const cfg = getConfig();
-    const url = new URL(path, cfg.baseUrl);
-    const res = await fetch(url.toString(), {
-      method: "DELETE",
-      headers: { Accept: "application/json", ...cfg.headerInterceptor?.() },
-      credentials: cfg.credentials ?? "omit",
-    });
+  async delete<T = void>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+    const res = await this.send(this.buildUrl(path), { method: "DELETE" }, options);
     await assertOk(res);
     if (res.status === 204) return undefined as T;
     const text = await res.text();
     return text ? (JSON.parse(text) as T) : (undefined as T);
   }
 
-  private async mutate<T>(method: string, path: string, body: unknown): Promise<T> {
-    const cfg = getConfig();
-    const url = new URL(path, cfg.baseUrl);
-    const res = await fetch(url.toString(), {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        ...cfg.headerInterceptor?.(),
+  private async mutate<T>(
+    method: string,
+    path: string,
+    body: unknown,
+    options: ApiRequestOptions,
+  ): Promise<T> {
+    const res = await this.send(
+      this.buildUrl(path),
+      {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       },
-      credentials: cfg.credentials ?? "omit",
-      body: JSON.stringify(body),
-    });
+      options,
+    );
     await assertOk(res);
     return res.json() as Promise<T>;
   }
 }
 
+/**
+ * An isolated client. Native callers use this with the compiled API origin and
+ * `credentials: "omit"`, so no WebView cookie can ever ride along.
+ */
+export function createApiClient(config: ApiClientConfig): ApiClient {
+  return new ApiClient(Object.freeze({ ...config }));
+}
+
+/** The browser singleton, still driven by `configureApiClient`. */
 export const apiClient = new ApiClient();
 
 /**

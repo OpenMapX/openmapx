@@ -1,8 +1,7 @@
 import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import type { TripPlan } from "@openmapx/mobility-core/transit";
 import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "../../api/client";
-import { API_ENDPOINTS } from "../../api/endpoints";
+import { fetchTransitPlan } from "../../api/transit";
 import type { LngLat } from "../../types/geometry";
 import { type MobilityEnvelopeQueryResult, wrapMobilityEnvelope } from "./useMobilityEnvelope";
 
@@ -113,54 +112,32 @@ export function useTransitPlan({
     ],
     queryFn: () => {
       if (!origin || !destination) throw new Error("Origin and destination required");
-      const params: Record<string, string> = {
-        from_lat: String(origin[1]),
-        from_lng: String(origin[0]),
-        to_lat: String(destination[1]),
-        to_lng: String(destination[0]),
+      // The query string lives in `api/transit.ts` so the browser and the
+      // headless background replan always ask for the same journey.
+      return fetchTransitPlan({
+        origin,
+        destination,
         time: effectiveTime,
-      };
-      if (arriveBy) {
-        params.arrive_by = "true";
-      }
-      if (numItineraries && numItineraries !== 3) {
-        params.num_itineraries = String(numItineraries);
-      }
-      if (lang) {
-        params.lang = lang;
-      }
-      if (modesKey) {
-        params.modes = modesKey;
-      }
-      if (wheelchair || wheelchairRequired) {
-        params.wheelchair = "true";
-      }
-      if (maxTransfers !== undefined) params.max_transfers = String(maxTransfers);
-      if (transferBuffer && transferBuffer !== "standard") {
-        params.transfer_buffer = transferBuffer;
-      }
-      if (requireBikeTransport) params.require_bike_transport = "true";
-      if (bikeHillPreference && bikeHillPreference !== "default") {
-        params.bike_hill_preference = bikeHillPreference;
-      }
-      if (rentalFormFactorsKey) params.rental_form_factors = rentalFormFactorsKey;
-      if (preKey) {
-        params.pre_modes = preKey;
-      }
-      if (postKey) {
-        params.post_modes = postKey;
-      }
-      if (directKey) {
-        params.direct_modes = directKey;
-      }
-      if (deutschlandticketOnly) {
-        params.deutschlandticket = "true";
-      }
-      if (pageToken) params.page_token = pageToken;
-      if (capabilityEpoch) params.capability_epoch = capabilityEpoch;
-      if (rentalSource) params.rental_source = rentalSource;
-      if (rentalInstance) params.rental_instance = rentalInstance;
-      return apiClient.get<MobilityEnvelope<TripPlan>>(API_ENDPOINTS.transitPlan, params);
+        arriveBy: !!arriveBy,
+        numItineraries,
+        lang,
+        modes,
+        wheelchair,
+        wheelchairRequired,
+        maxTransfers,
+        transferBuffer,
+        requireBikeTransport,
+        bikeHillPreference,
+        rentalFormFactors,
+        preTransitModes,
+        postTransitModes,
+        directModes,
+        deutschlandticketOnly,
+        pageToken,
+        capabilityEpoch,
+        rentalSource,
+        rentalInstance,
+      });
     },
     enabled: origin !== null && destination !== null,
     staleTime: 120_000,

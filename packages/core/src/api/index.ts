@@ -34,3 +34,12 @@ export {
 export { fetchRouteMatchWindow, type RouteMatchWindow } from "./routeAttributes";
 export { fetchSpeedLimit } from "./speedLimit";
 export { fetchTrafficSignals } from "./trafficSignals";
+export {
+  buildTransitPlanParams,
+  fetchTransitPlan,
+  fetchVehicleJourney,
+  refreshTransitItinerary,
+  type TransitPlanParams,
+  type TransitRefreshResult,
+  type VehicleJourneyParams,
+} from "./transit";

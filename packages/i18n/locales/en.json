@@ -184,7 +184,15 @@
     "rsClear": "Clear",
     "rsAdd": "Add",
     "rsCancel": "Cancel",
-    "rsDetour": "+{minutes} min detour"
+    "rsDetour": "+{minutes} min detour",
+    "voicePlatformChange": "Platform change: platform {platform}",
+    "voiceScheduleFallback": "No GPS signal — following the timetable",
+    "voicePermissionLost": "Location access was turned off, so guidance has stopped",
+    "voiceOffRoute": "You are off the route",
+    "voiceDistanceMeters": "{meters} metres",
+    "voiceDistanceKilometers": "{kilometers} kilometres",
+    "voiceDistanceFeet": "{feet} feet",
+    "voiceDistanceMiles": "{miles} miles"
   },
   "common": {
     "close": "Close",

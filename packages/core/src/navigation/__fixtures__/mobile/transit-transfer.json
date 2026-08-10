@@ -1,0 +1,452 @@
+{
+  "description": "Ride, interchange on foot, ride again, then walk out.",
+  "coordinateSystem": "synthetic test data; not a real journey",
+  "itineraryFingerprint": "fixture-transfer",
+  "itinerary": {
+    "legs": [
+      {
+        "geometry": {
+          "coordinates": [
+            [
+              8.6,
+              50.1
+            ],
+            [
+              8.601,
+              50.1
+            ],
+            [
+              8.602,
+              50.1
+            ],
+            [
+              8.603,
+              50.1
+            ],
+            [
+              8.604,
+              50.1
+            ],
+            [
+              8.605,
+              50.1
+            ],
+            [
+              8.606,
+              50.1
+            ],
+            [
+              8.607,
+              50.1
+            ],
+            [
+              8.608,
+              50.1
+            ],
+            [
+              8.609,
+              50.1
+            ],
+            [
+              8.61,
+              50.1
+            ]
+          ]
+        },
+        "steps": [
+          {
+            "distanceMeters": 300
+          },
+          {
+            "distanceMeters": 300
+          }
+        ],
+        "startTime": "2023-11-14T22:13:20Z",
+        "endTime": "2023-11-14T22:18:20Z",
+        "from": {
+          "stopId": "home"
+        },
+        "to": {
+          "stopId": "board1"
+        }
+      },
+      {
+        "tripId": "trip-1",
+        "geometry": {
+          "coordinates": [
+            [
+              8.61,
+              50.1
+            ],
+            [
+              8.615,
+              50.1
+            ],
+            [
+              8.62,
+              50.1
+            ],
+            [
+              8.625,
+              50.1
+            ],
+            [
+              8.63,
+              50.1
+            ],
+            [
+              8.635,
+              50.1
+            ],
+            [
+              8.64,
+              50.1
+            ],
+            [
+              8.645,
+              50.1
+            ],
+            [
+              8.65,
+              50.1
+            ],
+            [
+              8.655,
+              50.1
+            ],
+            [
+              8.66,
+              50.1
+            ]
+          ]
+        },
+        "startTime": "2023-11-14T22:19:20Z",
+        "endTime": "2023-11-14T22:29:20Z",
+        "from": {
+          "stopId": "board1"
+        },
+        "to": {
+          "stopId": "change"
+        }
+      },
+      {
+        "geometry": {
+          "coordinates": [
+            [
+              8.66,
+              50.1
+            ],
+            [
+              8.6605,
+              50.1
+            ],
+            [
+              8.661,
+              50.1
+            ],
+            [
+              8.6615,
+              50.1
+            ],
+            [
+              8.662,
+              50.1
+            ],
+            [
+              8.6625,
+              50.1
+            ],
+            [
+              8.663,
+              50.1
+            ],
+            [
+              8.6635,
+              50.1
+            ],
+            [
+              8.664,
+              50.1
+            ],
+            [
+              8.6645,
+              50.1
+            ],
+            [
+              8.665,
+              50.1
+            ]
+          ]
+        },
+        "steps": [
+          {
+            "distanceMeters": 300
+          }
+        ],
+        "startTime": "2023-11-14T22:29:20Z",
+        "endTime": "2023-11-14T22:32:20Z",
+        "from": {
+          "stopId": "change"
+        },
+        "to": {
+          "stopId": "board2"
+        }
+      },
+      {
+        "tripId": "trip-2",
+        "geometry": {
+          "coordinates": [
+            [
+              8.665,
+              50.1
+            ],
+            [
+              8.6705,
+              50.1
+            ],
+            [
+              8.676,
+              50.1
+            ],
+            [
+              8.6815,
+              50.1
+            ],
+            [
+              8.687,
+              50.1
+            ],
+            [
+              8.6925,
+              50.1
+            ],
+            [
+              8.698,
+              50.1
+            ],
+            [
+              8.7035,
+              50.1
+            ],
+            [
+              8.709,
+              50.1
+            ],
+            [
+              8.7145,
+              50.1
+            ],
+            [
+              8.72,
+              50.1
+            ]
+          ]
+        },
+        "startTime": "2023-11-14T22:33:20Z",
+        "endTime": "2023-11-14T22:45:20Z",
+        "from": {
+          "stopId": "board2"
+        },
+        "to": {
+          "stopId": "alight"
+        }
+      }
+    ]
+  },
+  "captures": [
+    {
+      "legIndex": 1,
+      "tripId": "trip-1",
+      "capturedAtMs": 1700000000000,
+      "status": "captured",
+      "stops": [
+        {
+          "stopId": "board1",
+          "name": "Board One",
+          "lat": 50.1,
+          "lng": 8.61
+        },
+        {
+          "stopId": "change",
+          "name": "Change",
+          "lat": 50.1,
+          "lng": 8.66
+        }
+      ]
+    },
+    {
+      "legIndex": 3,
+      "tripId": "trip-2",
+      "capturedAtMs": 1700000000000,
+      "status": "captured",
+      "stops": [
+        {
+          "stopId": "board2",
+          "name": "Board Two",
+          "lat": 50.1,
+          "lng": 8.665
+        },
+        {
+          "stopId": "alight",
+          "name": "Alight",
+          "lat": 50.1,
+          "lng": 8.72
+        }
+      ]
+    }
+  ],
+  "fixes": [
+    {
+      "coords": [
+        8.6,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 1000
+    },
+    {
+      "coords": [
+        8.603,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 61000
+    },
+    {
+      "coords": [
+        8.606,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 121000
+    },
+    {
+      "coords": [
+        8.609,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 181000
+    },
+    {
+      "coords": [
+        8.61,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 241000
+    },
+    {
+      "coords": [
+        8.62,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 301000
+    },
+    {
+      "coords": [
+        8.63,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 361000
+    },
+    {
+      "coords": [
+        8.64,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 421000
+    },
+    {
+      "coords": [
+        8.65,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 481000
+    },
+    {
+      "coords": [
+        8.66,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 541000
+    },
+    {
+      "coords": [
+        8.66,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 601000
+    },
+    {
+      "coords": [
+        8.662,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 661000
+    },
+    {
+      "coords": [
+        8.664,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 721000
+    },
+    {
+      "coords": [
+        8.665,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 781000
+    },
+    {
+      "coords": [
+        8.676,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 841000
+    },
+    {
+      "coords": [
+        8.687,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 901000
+    },
+    {
+      "coords": [
+        8.698,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 961000
+    },
+    {
+      "coords": [
+        8.709,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 1021000
+    },
+    {
+      "coords": [
+        8.72,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 1081000
+    }
+  ]
+}

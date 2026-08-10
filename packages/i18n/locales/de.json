@@ -184,7 +184,15 @@
     "rsClear": "Löschen",
     "rsAdd": "Hinzufügen",
     "rsCancel": "Abbrechen",
-    "rsDetour": "+{minutes} Min. Umweg"
+    "rsDetour": "+{minutes} Min. Umweg",
+    "voicePlatformChange": "Gleiswechsel: Gleis {platform}",
+    "voiceScheduleFallback": "Kein GPS-Signal – Führung nach Fahrplan",
+    "voicePermissionLost": "Der Standortzugriff wurde deaktiviert, die Führung wurde beendet",
+    "voiceOffRoute": "Du bist von der Route abgekommen",
+    "voiceDistanceMeters": "{meters} Meter",
+    "voiceDistanceKilometers": "{kilometers} Kilometer",
+    "voiceDistanceFeet": "{feet} Fuß",
+    "voiceDistanceMiles": "{miles} Meilen"
   },
   "common": {
     "close": "Schließen",

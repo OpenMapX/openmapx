@@ -1,0 +1,371 @@
+{
+  "description": "A ride with a long fix gap in the middle, as in a tunnel.",
+  "coordinateSystem": "synthetic test data; not a real journey",
+  "itineraryFingerprint": "fixture-tunnel",
+  "itinerary": {
+    "legs": [
+      {
+        "geometry": {
+          "coordinates": [
+            [
+              8.6,
+              50.1
+            ],
+            [
+              8.601,
+              50.1
+            ],
+            [
+              8.602,
+              50.1
+            ],
+            [
+              8.603,
+              50.1
+            ],
+            [
+              8.604,
+              50.1
+            ],
+            [
+              8.605,
+              50.1
+            ],
+            [
+              8.606,
+              50.1
+            ],
+            [
+              8.607,
+              50.1
+            ],
+            [
+              8.608,
+              50.1
+            ],
+            [
+              8.609,
+              50.1
+            ],
+            [
+              8.61,
+              50.1
+            ]
+          ]
+        },
+        "steps": [
+          {
+            "distanceMeters": 300
+          },
+          {
+            "distanceMeters": 300
+          }
+        ],
+        "startTime": "2023-11-14T22:13:20Z",
+        "endTime": "2023-11-14T22:18:20Z",
+        "from": {
+          "stopId": "home"
+        },
+        "to": {
+          "stopId": "board"
+        }
+      },
+      {
+        "tripId": "trip-1",
+        "geometry": {
+          "coordinates": [
+            [
+              8.61,
+              50.1
+            ],
+            [
+              8.619,
+              50.1
+            ],
+            [
+              8.628,
+              50.1
+            ],
+            [
+              8.637,
+              50.1
+            ],
+            [
+              8.646,
+              50.1
+            ],
+            [
+              8.655,
+              50.1
+            ],
+            [
+              8.664,
+              50.1
+            ],
+            [
+              8.673,
+              50.1
+            ],
+            [
+              8.682,
+              50.1
+            ],
+            [
+              8.691,
+              50.1
+            ],
+            [
+              8.7,
+              50.1
+            ]
+          ]
+        },
+        "startTime": "2023-11-14T22:19:20Z",
+        "endTime": "2023-11-14T22:33:20Z",
+        "from": {
+          "stopId": "board"
+        },
+        "to": {
+          "stopId": "alight"
+        }
+      },
+      {
+        "geometry": {
+          "coordinates": [
+            [
+              8.7,
+              50.1
+            ],
+            [
+              8.701,
+              50.1
+            ],
+            [
+              8.702,
+              50.1
+            ],
+            [
+              8.703,
+              50.1
+            ],
+            [
+              8.704,
+              50.1
+            ],
+            [
+              8.705,
+              50.1
+            ],
+            [
+              8.706,
+              50.1
+            ],
+            [
+              8.707,
+              50.1
+            ],
+            [
+              8.708,
+              50.1
+            ],
+            [
+              8.709,
+              50.1
+            ],
+            [
+              8.71,
+              50.1
+            ]
+          ]
+        },
+        "steps": [
+          {
+            "distanceMeters": 300
+          }
+        ],
+        "startTime": "2023-11-14T22:34:20Z",
+        "endTime": "2023-11-14T22:38:20Z",
+        "from": {
+          "stopId": "alight"
+        },
+        "to": {
+          "stopId": "work"
+        }
+      }
+    ]
+  },
+  "captures": [
+    {
+      "legIndex": 1,
+      "tripId": "trip-1",
+      "capturedAtMs": 1700000000000,
+      "status": "captured",
+      "stops": [
+        {
+          "stopId": "board",
+          "name": "Board",
+          "lat": 50.1,
+          "lng": 8.61
+        },
+        {
+          "stopId": "mid",
+          "name": "Mid",
+          "lat": 50.1,
+          "lng": 8.65
+        },
+        {
+          "stopId": "alight",
+          "name": "Alight",
+          "lat": 50.1,
+          "lng": 8.7
+        }
+      ]
+    }
+  ],
+  "fixes": [
+    {
+      "coords": [
+        8.6,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 1000
+    },
+    {
+      "coords": [
+        8.602,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 61000
+    },
+    {
+      "coords": [
+        8.604,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 121000
+    },
+    {
+      "coords": [
+        8.606,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 181000
+    },
+    {
+      "coords": [
+        8.608,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 241000
+    },
+    {
+      "coords": [
+        8.61,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 301000
+    },
+    {
+      "coords": [
+        8.61,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 361000
+    },
+    {
+      "coords": [
+        8.619,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 421000
+    },
+    {
+      "coords": [
+        8.628,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 481000
+    },
+    {
+      "coords": [
+        8.682,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 841000
+    },
+    {
+      "coords": [
+        8.691,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 901000
+    },
+    {
+      "coords": [
+        8.7,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 961000
+    },
+    {
+      "coords": [
+        8.7,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 1021000
+    },
+    {
+      "coords": [
+        8.702,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 1081000
+    },
+    {
+      "coords": [
+        8.704,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 1141000
+    },
+    {
+      "coords": [
+        8.706,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 1201000
+    },
+    {
+      "coords": [
+        8.708,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 1261000
+    },
+    {
+      "coords": [
+        8.71,
+        50.1
+      ],
+      "accuracy": 8,
+      "offsetMs": 1321000
+    }
+  ]
+}

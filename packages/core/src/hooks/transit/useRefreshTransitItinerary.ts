@@ -1,19 +1,15 @@
-import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
-import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { useMutation } from "@tanstack/react-query";
-import { apiClient } from "../../api/client";
-import { API_ENDPOINTS } from "../../api/endpoints";
+import { refreshTransitItinerary, type TransitRefreshResult } from "../../api/transit";
 
-export interface TransitRefreshResult {
-  itinerary: TripItinerary;
-  fallbackOccurred: boolean;
-}
+export type { TransitRefreshResult };
 
+/**
+ * Thin wrapper over `refreshTransitItinerary`. The rotating token is one-time,
+ * so the mutation deliberately does not retry: a replayed token may already be
+ * spent, and the caller must decide whether to replan instead.
+ */
 export function useRefreshTransitItinerary() {
   return useMutation({
-    mutationFn: (token: string) =>
-      apiClient.post<MobilityEnvelope<TransitRefreshResult>>(API_ENDPOINTS.transitPlanRefresh, {
-        token,
-      }),
+    mutationFn: (token: string) => refreshTransitItinerary(token),
   });
 }

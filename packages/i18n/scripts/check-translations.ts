@@ -31,11 +31,21 @@ const MESSAGES_DIR = join(PKG_ROOT, "locales");
 const SRC_DIRS = [
   join(REPO_ROOT, "apps", "web", "src"),
   join(REPO_ROOT, "apps", "api", "src"),
-  // The mobile shell reads the same canonical catalogs directly (it has no
-  // next-intl runtime), so its sources must be scanned for key usage too.
+  // The mobile shell and the headless navigation engine read these catalogs
+  // directly — they have no next-intl runtime — so their sources must be
+  // scanned for key usage too, as must this package's own ICU cue formatter.
   join(REPO_ROOT, "apps", "mobile", "src"),
+  join(REPO_ROOT, "packages", "core", "src", "navigation"),
   join(REPO_ROOT, "integrations"),
 ];
+
+/**
+ * Individually scanned files outside the directories above. `navigationCues.ts`
+ * maps semantic intents onto fixed catalog keys for the headless engine, so its
+ * keys are real usage — but this package's own scripts and their fixtures
+ * contain illustrative `t("key")` patterns that must not be mistaken for it.
+ */
+const EXTRA_SRC_FILES = [join(PKG_ROOT, "navigationCues.ts")];
 const FIX_MISSING = process.argv.includes("--fix-missing");
 
 // Helpers
@@ -265,7 +275,18 @@ function main() {
     } catch {
       return false;
     }
-  }).flatMap((d) => collectFiles(d, [".tsx", ".ts"]));
+  })
+    .flatMap((d) => collectFiles(d, [".tsx", ".ts"]))
+    .concat(
+      EXTRA_SRC_FILES.filter((f) => {
+        try {
+          statSync(f);
+          return true;
+        } catch {
+          return false;
+        }
+      }),
+    );
 
   const usedKeys = new Set<string>();
   const namespacesWithDynamicCalls = new Set<string>();
