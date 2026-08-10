@@ -300,7 +300,7 @@ importers:
         version: 5.6.0
       hls.js:
         specifier: ^1.6.16
-        version: 1.6.16
+        version: 1.6.17
       maplibre-gl:
         specifier: ^6.1.0
         version: 6.1.0
@@ -5938,8 +5938,8 @@ packages:
     resolution: {integrity: sha512-Qgpiaws3Sm30Av8Eah6sjMCZZwjlBu+E68rhpCWBshY1lb09HtLwj5GviX0OyQIn+ulUS0iX0AxN5n3tLZzz1w==}
     engines: {node: '>=18.0.0'}
 
-  hls.js@1.6.16:
-    resolution: {integrity: sha512-VSIRpLfRwlAAdGL4wiTucx2ScRipo0ed1FBatWkyt832jC4CReKstga6yIhYVwGu9LOBjuX9wzmRMeQdBJtzEA==}
+  hls.js@1.6.17:
+    resolution: {integrity: sha512-NUplVGVuc1hSPwdB/9/cbRkUmLrYi75/hqiXKdA+l300pJNxDu96R7jRb2imDzWJqIUF4I5ThmAdp9GvOCXsuQ==}
 
   hoist-non-react-statics@3.3.2:
     resolution: {integrity: sha512-/gGivxi8JPKWNm/W0jSmzcMPpfpPLc3dY/6GxhX2hQ9iGj3aDfklV4ET7NjKpSinLpJ5vafa9iiGIEZg10SfBw==}
@@ -11519,7 +11519,7 @@ snapshots:
 
   helmet@8.3.0: {}
 
-  hls.js@1.6.16: {}
+  hls.js@1.6.17: {}
 
   hoist-non-react-statics@3.3.2:
     dependencies:
