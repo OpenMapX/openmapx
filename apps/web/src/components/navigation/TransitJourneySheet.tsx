@@ -11,6 +11,7 @@ import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobil
 import { useTranslations } from "next-intl";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
+import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { TransitBoardingDepartures } from "./TransitBoardingDepartures";
 
@@ -195,7 +196,10 @@ export function TransitJourneySheet({
   const legs = itinerary.legs;
   const currentLeg = legs[currentLegIndex];
   const isTransitLeg = !!currentLeg && currentLeg.mode !== "walking" && !!currentLeg.route;
-  const { data: journey } = useVehicleJourney(isTransitLeg ? (currentLeg?.tripId ?? null) : null);
+  const { browserAuthority } = useMobileRuntime();
+  const { data: journey } = useVehicleJourney(
+    browserAuthority && isTransitLeg ? (currentLeg?.tripId ?? null) : null,
+  );
 
   const legStops = journey?.stops
     ? sliceJourneyToLeg(journey.stops, currentLeg?.from.stopId, currentLeg?.to.stopId)

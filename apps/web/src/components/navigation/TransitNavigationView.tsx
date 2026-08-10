@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import { NavigationSettingsDialog } from "@/components/settings/NavigationSettingsDialog";
 import { NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
 import { useMapOptional } from "@/lib/MapContext";
+import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useTransitLiveRefresh } from "@/lib/navigation/useTransitLiveRefresh";
 import { useTransitNavigationEngine } from "@/lib/navigation/useTransitNavigationEngine";
@@ -29,13 +30,29 @@ import { TransitNavBottomBar } from "./TransitNavBottomBar";
 import { TransitNavMenu } from "./TransitNavMenu";
 import { TransitWalkBanner } from "./TransitWalkBanner";
 
+/**
+ * The engine, live-refresh polling and wake lock a browser transit trip needs.
+ *
+ * A child rather than a set of guarded hooks so the exclusion is structural: in
+ * the installed shell the component is never mounted, so nothing added to it can
+ * quietly start a second refresh-token consumer or a second alight owner beside
+ * the native one.
+ */
+function BrowserTransitRuntime({ active }: { active: boolean }) {
+  const keepScreenOn = useNavigationStore((s) => s.keepScreenOn);
+  useTransitNavigationEngine();
+  useTransitLiveRefresh(active);
+  useWakeLock(active && keepScreenOn);
+  return null;
+}
+
 export function TransitNavigationView() {
   const status = useNavigationStore((s) => s.status);
   const kind = useNavigationStore((s) => s.kind);
   const itinerary = useNavigationStore((s) => s.itinerary);
   const transitProgress = useNavigationStore((s) => s.transitProgress);
-  const keepScreenOn = useNavigationStore((s) => s.keepScreenOn);
   const setCameraMode = useNavigationStore((s) => s.setCameraMode);
+  const { browserAuthority } = useMobileRuntime();
   const { completeArrival } = useNavigationMutations();
   const units = useSettingsStore((s) => s.units);
 
@@ -47,11 +64,6 @@ export function TransitNavigationView() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-
-  // Hooks must run before any early return.
-  useTransitNavigationEngine();
-  useTransitLiveRefresh(active);
-  useWakeLock(active && keepScreenOn);
 
   // Collapse the route-planning sidebar while navigating; restore on exit.
   useEffect(() => {
@@ -118,6 +130,7 @@ export function TransitNavigationView() {
         justifyContent: "space-between",
       }}
     >
+      {browserAuthority && <BrowserTransitRuntime active={active} />}
       {status === "arrived" ? (
         <Box
           sx={{ pointerEvents: "auto", m: "auto", bgcolor: "background.paper", borderRadius: 3 }}

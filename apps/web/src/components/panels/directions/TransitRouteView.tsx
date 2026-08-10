@@ -15,17 +15,20 @@ import type { TransitReplanOptions } from "@openmapx/core";
 import {
   formatDistance,
   formatDuration,
-  useNavigationStore,
   useRefreshTransitItinerary,
+  useSettingsStore,
   useVehicleJourney,
 } from "@openmapx/core";
 import { itineraryTransferRisk } from "@openmapx/core/navigation";
+import { apiClient } from "@openmapx/core/navigation/api";
 import type { OccupancyLevel, TripItinerary, TripLeg } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
+import { useState } from "react";
 import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
 import { RemarkChip } from "@/components/panels/transit/RemarkChip";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
+import { useStartNavigation } from "@/lib/mobile/useStartNavigation";
 import { ensureNotificationPermission } from "@/lib/navigation/navNotify";
 import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
 import { BRAND, BRAND_HEX } from "@/lib/theme";
@@ -246,7 +249,12 @@ export function TransitItineraryCard({
   const tNav = useTranslations("navigation");
   const locale = useLocale();
   const fmt = useDateTimeFormat();
-  const startTransitNavigation = useNavigationStore((s) => s.startTransitNavigation);
+  const { startTransit } = useStartNavigation();
+  const units = useSettingsStore((s) => s.units);
+  // Only meaningful under native authority, where Start captures each ridden
+  // leg's stops before the session exists.
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
   const refreshMutation = useRefreshTransitItinerary();
   const fareSummary = extractFareSummary(itinerary.fare);
   const occupancy = worstOccupancy(itinerary);
@@ -254,6 +262,27 @@ export function TransitItineraryCard({
   const tightTransfer = itineraryTransferRisk(itinerary.legs) !== null;
   const startTime = fmt.time(itinerary.startTime);
   const endTime = fmt.time(itinerary.endTime);
+  /**
+   * Starts the trip and reports why it could not be, if it could not be.
+   *
+   * `finally` rather than a happy-path reset: an exception here would otherwise
+   * leave Start disabled with no way back.
+   */
+  const begin = async (planned: TripItinerary) => {
+    try {
+      const result = await startTransit({
+        itinerary: planned,
+        client: apiClient,
+        replanOptions,
+        locale: locale === "de" ? "de" : "en",
+        units,
+      });
+      setStartError(result.ok ? null : result.code);
+    } finally {
+      setStarting(false);
+    }
+  };
+
   const metaBits: string[] = [];
   if (itinerary.transfers > 0) metaBits.push(t("transfers", { count: itinerary.transfers }));
   if (itinerary.walkDistance > 0) {
@@ -398,14 +427,18 @@ export function TransitItineraryCard({
             size="small"
             variant="contained"
             startIcon={<NavigationIcon />}
-            disabled={refreshMutation.isPending}
+            disabled={refreshMutation.isPending || starting}
             onClick={async (e) => {
               e.stopPropagation();
               // Unlock TTS from this gesture so board/alight cues can speak on iOS.
+              // A no-op inside the shell, where native owns the voice.
               primeSpeechSynthesis();
               // Ask for notification permission so the background get-off alarm
-              // can fire when the screen is locked.
+              // can fire when the screen is locked. Also a no-op in the shell,
+              // which already holds the OS permission.
               void ensureNotificationPermission();
+              if (starting) return;
+              setStarting(true);
               const plannedAt = itinerary.refreshedAt ?? itinerary.plannedAt;
               const oldEnough = !plannedAt || Date.now() - new Date(plannedAt).getTime() >= 60_000;
               if (itinerary.refreshToken && oldEnough) {
@@ -424,14 +457,14 @@ export function TransitItineraryCard({
                         leg.to.platformCode !== itinerary.legs[index]?.to.platformCode,
                     );
                   onRefreshed?.(next, changed, response.data.fallbackOccurred);
-                  startTransitNavigation(next, replanOptions);
+                  await begin(next);
                   return;
                 } catch {
                   // A failed optional refresh must not block navigation; the
                   // existing missed-connection path still performs a full replan.
                 }
               }
-              startTransitNavigation(itinerary, replanOptions);
+              await begin(itinerary);
             }}
             sx={{
               bgcolor: BRAND,
@@ -442,6 +475,11 @@ export function TransitItineraryCard({
           >
             {tNav("start")}
           </Button>
+          {startError && (
+            <Typography role="alert" sx={{ fontSize: 12, color: "error.main", ml: 1 }}>
+              {tNav(startError === "incompatible" ? "startUpdateRequired" : "startFailed")}
+            </Typography>
+          )}
         </Box>
       )}
     </Box>

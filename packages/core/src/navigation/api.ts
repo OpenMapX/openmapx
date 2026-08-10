@@ -11,6 +11,7 @@ export {
   ApiClientError,
   ApiRequestAbortedError,
   type ApiRequestOptions,
+  apiClient,
   createApiClient,
   isApiClientError,
   isApiRequestAbortedError,
@@ -24,3 +25,13 @@ export {
   type TransitRefreshResult,
   type VehicleJourneyParams,
 } from "../api/transit";
+// The capture builder travels with the fetches that feed it: a caller preparing
+// a transit start needs both, and needing them together is the whole reason this
+// module exists.
+export {
+  type BuildTransitPackageInput,
+  type BuildTransitPackageResult,
+  buildTransitNavigationPackage,
+  transitItineraryFingerprint,
+} from "./transitPackage";
+export type { JourneyStopLike } from "./transitStops";

@@ -23,6 +23,7 @@ import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicat
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { haptics } from "@/lib/haptics";
+import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { notifyGetOff, playAlarmTone } from "@/lib/navigation/navNotify";
 import { useNavigationVoice } from "@/lib/navigation/useNavigationVoice";
 import { NavBannerShell } from "./NavBannerShell";
@@ -71,7 +72,13 @@ export function TransitLegBanner({
   const speak = useNavigationVoice(locale);
   const voiceEnabled = useNavigationStore((s) => s.voiceEnabled);
   const isTransitLeg = leg.mode !== "walking" && !!leg.route;
-  const { data: journey } = useVehicleJourney(isTransitLeg ? (leg.tripId ?? null) : null);
+  // The shell captured this leg's stops before the trip started and keeps them
+  // in the session. Querying again would be a second live-data owner, and the
+  // one that stops working underground.
+  const { browserAuthority } = useMobileRuntime();
+  const { data: journey } = useVehicleJourney(
+    browserAuthority && isTransitLeg ? (leg.tripId ?? null) : null,
+  );
   const alertedRef = useRef(false);
   const line = leg.route?.shortName || leg.route?.longName || "";
 

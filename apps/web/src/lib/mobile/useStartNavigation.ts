@@ -6,11 +6,15 @@ import {
   type LngLat,
   type NavigationRouteOptions,
   type Route,
+  type TransitReplanOptions,
   type TravelMode,
   useNavigationStore,
 } from "@openmapx/core";
+import type { ApiClient } from "@openmapx/core/navigation/api";
+import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { useCallback } from "react";
 import { useMobileRuntimeContext } from "./MobileRuntimeProvider";
+import { degradedLegIndices, prepareTransitStart } from "./transitCapture";
 
 /**
  * Starting a trip under whichever authority is actually in charge.
@@ -24,6 +28,7 @@ import { useMobileRuntimeContext } from "./MobileRuntimeProvider";
  */
 
 export type StartFailure =
+  | "aborted"
   | "invalid-route"
   | "route-too-large"
   | "permission-denied"
@@ -42,6 +47,18 @@ export interface StartGroundInput {
   routeOptions: NavigationRouteOptions;
   locale: "en" | "de";
   units: "metric" | "imperial";
+}
+
+export interface StartTransitInput {
+  itinerary: TripItinerary;
+  /** Used to capture each ridden leg's stops before the session starts. */
+  client: ApiClient;
+  replanOptions?: TransitReplanOptions;
+  locale: "en" | "de";
+  units: "metric" | "imperial";
+  signal?: AbortSignal;
+  /** Reports which legs will run on schedule data alone. */
+  onCaptured?: (degradedLegIndices: readonly number[]) => void;
 }
 
 export type StartResult = { ok: true } | { ok: false; code: StartFailure };
@@ -118,5 +135,56 @@ export function useStartNavigation() {
     [runtime],
   );
 
-  return { startGround, browserAuthority: runtime.browserAuthority } as const;
+  const startTransit = useCallback(
+    async (
+      input: StartTransitInput,
+      options: StartNavigationOptions = {},
+    ): Promise<StartResult> => {
+      const store = useNavigationStore.getState();
+
+      if (runtime.browserAuthority) {
+        store.startTransitNavigation(input.itinerary, input.replanOptions);
+        return { ok: true };
+      }
+
+      if (!runtime.commands || runtime.state !== "native-compatible") {
+        return {
+          ok: false,
+          code: runtime.state === "native-incompatible" ? "incompatible" : "unavailable",
+        };
+      }
+
+      // Captured while the connection still works. Underground, the stop count
+      // this produces is the only thing the rider has.
+      const prepared = await prepareTransitStart({
+        itinerary: input.itinerary,
+        client: input.client,
+        locale: input.locale,
+        units: input.units,
+        settings: {
+          voiceEnabled: store.voiceEnabled,
+          keepScreenOn: store.keepScreenOn,
+          alightAlertsEnabled: true,
+        },
+        replanOptions: input.replanOptions as unknown as Record<string, unknown> | undefined,
+        capturedAtMs: Date.now(),
+        signal: input.signal,
+      });
+      if (!prepared.ok) {
+        return { ok: false, code: prepared.code === "aborted" ? "aborted" : "invalid-route" };
+      }
+      input.onCaptured?.(degradedLegIndices(input.itinerary, prepared.outcomes));
+
+      try {
+        await runtime.commands.start(prepared.startPackage, options.onPrepared);
+        return { ok: true };
+      } catch (error) {
+        const code = (error as { code?: StartFailure }).code;
+        return { ok: false, code: code ?? "rejected" };
+      }
+    },
+    [runtime],
+  );
+
+  return { startGround, startTransit, browserAuthority: runtime.browserAuthority } as const;
 }
