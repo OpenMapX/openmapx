@@ -181,6 +181,14 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
         allowFileAccessFromFileURLs={false}
         allowUniversalAccessFromFileURLs={false}
         allowsInlineMediaPlayback={false}
+        // The page never gets camera or microphone. The shell declares neither
+        // permission, and a store build that prompts for a capability it never
+        // declared is a rejection rather than a feature.
+        mediaCapturePermissionGrantType="deny"
+        // Geolocation is native's, exclusively. A page that could ask the
+        // WebView for it would be a second location producer racing the one
+        // that actually keeps working with the screen off.
+        geolocationEnabled={false}
         setSupportMultipleWindows={false}
         javaScriptCanOpenWindowsAutomatically={false}
         sharedCookiesEnabled

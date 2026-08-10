@@ -14,7 +14,8 @@
     "check-types": "tsc --noEmit",
     "test": "jest --runInBand",
     "test:native": "tsx scripts/run-native-tests.mts",
-    "assert-generated": "tsx scripts/assert-generated-native.mts"
+    "assert-generated": "tsx scripts/assert-generated-native.mts",
+    "assert-boundary": "tsx scripts/assert-no-community-runtime.mts"
   },
   "dependencies": {
     "@openmapx/core": "workspace:^",

@@ -66,3 +66,60 @@ describe("IntegrationProvider community bundle boundary", () => {
     expect(bundleScripts()).toEqual([]);
   });
 });
+
+describe("IntegrationProvider across every native descriptor state", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", async () =>
+      Response.json({
+        integrations: [COMMUNITY_INTEGRATION],
+        frameworkStrings: {},
+        disclosures: [],
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    for (const script of bundleScripts()) script.remove();
+    delete (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL];
+  });
+
+  /**
+   * The descriptor is the whole test.
+   *
+   * Negotiation may be in flight, may have failed, or may have concluded that
+   * the shell is too old — none of those is a reason to execute code no
+   * reviewer saw, and the decision must not wait for any of them to resolve.
+   */
+  it.each([
+    { label: "negotiating", nonce: "abc123" },
+    { label: "compatible", nonce: "def456" },
+    { label: "incompatible", nonce: "ghi789" },
+    { label: "errored", nonce: "jkl012" },
+  ])("appends no bundle script while $label", async ({ nonce }) => {
+    (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL] = { nonce };
+
+    const { findByText } = renderProvider();
+    await findByText("child");
+    await waitFor(() => expect(bundleScripts()).toEqual([]));
+
+    expect(bundleScripts()).toEqual([]);
+  });
+
+  it("registers no community module in any of them", async () => {
+    (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL] = { nonce: "abc123" };
+
+    const { findByText } = renderProvider();
+    await findByText("child");
+
+    // Nothing appended means nothing to register: the module only exists once
+    // its script has run.
+    expect(bundleScripts()).toEqual([]);
+  });
+
+  it("still loads the bundle for an ordinary PWA, unchanged", async () => {
+    renderProvider();
+
+    await waitFor(() => expect(bundleScripts()).toHaveLength(1));
+  });
+});

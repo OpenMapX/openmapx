@@ -292,3 +292,28 @@ describe("App fatal configuration", () => {
     expect(view.queryByTestId("shell-action-retry")).toBeNull();
   });
 });
+
+describe("App WebView protected capabilities", () => {
+  it("denies the page camera and microphone outright", async () => {
+    await renderApp();
+
+    // The shell declares neither permission. A store build that prompts for a
+    // capability it never declared is a rejection rather than a feature.
+    expect(mockWebViewProps.mediaCapturePermissionGrantType).toBe("deny");
+  });
+
+  it("gives the page no geolocation of its own", async () => {
+    await renderApp();
+
+    // A second location producer would race the one that actually keeps working
+    // with the screen off.
+    expect(mockWebViewProps.geolocationEnabled).toBe(false);
+  });
+
+  it("opens no second window", async () => {
+    await renderApp();
+
+    expect(mockWebViewProps.setSupportMultipleWindows).toBe(false);
+    expect(mockWebViewProps.javaScriptCanOpenWindowsAutomatically).toBe(false);
+  });
+});

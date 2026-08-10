@@ -26,6 +26,24 @@ may include the Apache-2.0 libraries, but not the other way around. That is why
 the SDK and shared libraries — the parts we want others to reuse — are the
 permissive ones, and the product that ties them together is copyleft.
 
+## The mobile shell
+
+`apps/mobile/` — the native shell around the web UI — is currently
+**AGPL-3.0-or-later**, like the rest of the product.
+
+The intent is for it to become Apache-2.0, so that the shell is as reusable as
+the libraries beneath it. That has not happened yet, and the reason is specific:
+the shell links `@openmapx/i18n`, which is AGPL-3.0-or-later. An Apache-2.0
+`apps/mobile` linking it would be a combined work distributable only under the
+AGPL, so the label would be wrong rather than merely early.
+
+Relicensing `packages/i18n` to Apache-2.0 would clear it — the code is ours and
+the CLA supports it, and the AGPL product could keep consuming it unchanged. But
+that changes the terms third parties receive, so it is a maintainer decision
+rather than a refactor. See
+[the mobile release runbook](docs/docs/developer/mobile-release.md) for the full
+audit.
+
 ## Trademarks
 
 The code licenses above cover the **code**. They do not grant any right to the
