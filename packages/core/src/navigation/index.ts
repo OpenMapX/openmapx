@@ -37,6 +37,13 @@ export {
   projectFlowToRoute,
   routeFingerprint,
 } from "./flowProjection";
+export type {
+  BuildGroundPackageInput,
+  BuildGroundPackageResult,
+  GroundNavigationSettings,
+  GroundPackageError,
+} from "./groundPackage";
+export { buildGroundNavigationPackage, groundRouteFingerprint } from "./groundPackage";
 export { formatIncidentAnnouncement } from "./incidentAnnounce";
 export {
   type IncidentAlert,

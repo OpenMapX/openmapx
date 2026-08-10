@@ -6,8 +6,14 @@
  * tests, and browsers without the APIs.
  */
 
+import { shellFeatureBoundary } from "../mobile/mobileShellEnvironment";
+
 /** Request notification permission (call from a user gesture, e.g. Start). */
 export async function ensureNotificationPermission(): Promise<void> {
+  // In the installed shell notifications are an OS permission the shell already
+  // holds; asking again from the WebView spends a second prompt on the same
+  // thing and shows a browser dialog inside an app.
+  if (!shellFeatureBoundary().browserNotifications) return;
   try {
     if (typeof Notification === "undefined") return;
     if (Notification.permission === "default") await Notification.requestPermission();
@@ -18,6 +24,7 @@ export async function ensureNotificationPermission(): Promise<void> {
 
 /** Show the "get off" notification, preferring the SW so it shows in background. */
 export async function notifyGetOff(title: string, body: string): Promise<void> {
+  if (!shellFeatureBoundary().browserNotifications) return;
   try {
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
     const options: NotificationOptions & { vibrate?: number[]; renotify?: boolean } = {
@@ -41,6 +48,9 @@ export async function notifyGetOff(title: string, body: string): Promise<void> {
 
 /** A short two-tone chime for the get-off moment (foreground salience). */
 export function playAlarmTone(): void {
+  // The native alight alert carries its own sound, scheduled so it fires even
+  // when this WebView is suspended.
+  if (!shellFeatureBoundary().browserNotifications) return;
   try {
     const Ctx =
       window.AudioContext ??

@@ -8,6 +8,7 @@ import Divider from "@mui/material/Divider";
 import List from "@mui/material/List";
 import { useNavigationStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useSatelliteToggle } from "@/lib/navigation/satelliteToggle";
 import { ActionRow, ToggleRow } from "./navMenuRows";
 
@@ -27,7 +28,7 @@ export function TransitNavMenu({
 }) {
   const t = useTranslations("navigation");
   const keepScreenOn = useNavigationStore((s) => s.keepScreenOn);
-  const toggleKeepScreenOn = useNavigationStore((s) => s.toggleKeepScreenOn);
+  const { toggleKeepScreenOn } = useNavigationMutations();
   const satellite = useSatelliteToggle();
 
   return (
@@ -44,7 +45,7 @@ export function TransitNavMenu({
         icon={<ScreenLockPortraitIcon />}
         label={t("keepScreenOn")}
         checked={keepScreenOn}
-        onToggle={toggleKeepScreenOn}
+        onToggle={() => void toggleKeepScreenOn()}
       />
       <Divider component="li" />
       <ActionRow icon={<SettingsIcon />} label={t("menu.settings")} onClick={onOpenSettings} />

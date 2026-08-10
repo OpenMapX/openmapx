@@ -90,7 +90,11 @@ export function useNavIncidents(): NavIncidentResource {
   const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
   const connectivity = useNavigationStore((s) => s.connectivity);
   const setLiveDataUnavailable = useNavigationStore((s) => s.setLiveDataUnavailable);
-  const fetchEnabled = incidentAlerts || avoidIncidents;
+  // Under native authority the shell already fetches road conditions for the
+  // route it is guiding, and acts on them. A second poller here would fetch the
+  // same data to feed a reroute decision this page does not get to make.
+  const browserAuthority = useNavigationStore((s) => s.navigationAuthority) === "browser";
+  const fetchEnabled = browserAuthority && (incidentAlerts || avoidIncidents);
   // Transit and post-arrival sessions keep `route` populated for other UI, but
   // road conditions are a driving/cycling/walking concern — never fetch for them.
   const active = kind === "ground" && isLiveNavigationStatus(navStatus);

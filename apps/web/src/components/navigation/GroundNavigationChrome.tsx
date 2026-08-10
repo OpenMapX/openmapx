@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import { NavigationSettingsDialog } from "@/components/settings/NavigationSettingsDialog";
 import { NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
 import { useMapOptional } from "@/lib/MapContext";
+import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useMobilePanelClearance } from "@/lib/mobilePanelHeight";
 import type { OfflineRouteCoverage } from "@/lib/navigation/offlineRouteCoverage";
 import { ArrivalCard } from "./ArrivalCard";
@@ -50,7 +51,7 @@ export function GroundNavigationChrome({ coverage }: Props) {
   const status = useNavigationStore((s) => s.status);
   const rerouteFailedNonce = useNavigationStore((s) => s.rerouteFailedNonce);
   const setCameraMode = useNavigationStore((s) => s.setCameraMode);
-  const stopNavigation = useNavigationStore((s) => s.stopNavigation);
+  const { completeArrival } = useNavigationMutations();
   const units = useSettingsStore((s) => s.units);
 
   const mapCtx = useMapOptional();
@@ -142,7 +143,7 @@ export function GroundNavigationChrome({ coverage }: Props) {
         <Box
           sx={{ pointerEvents: "auto", m: "auto", bgcolor: "background.paper", borderRadius: 3 }}
         >
-          <ArrivalCard onClose={stopNavigation} />
+          <ArrivalCard onClose={() => void completeArrival()} />
         </Box>
       ) : (
         <>

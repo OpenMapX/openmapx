@@ -1,5 +1,6 @@
 import { useSettingsStore } from "@openmapx/core";
 import { useCallback, useEffect, useState } from "react";
+import { shellFeatureBoundary } from "../mobile/mobileShellEnvironment";
 import { hasCapability } from "../platformCapabilities";
 
 // Available TTS voices, cached at module scope. `getVoices()` is often empty on
@@ -72,6 +73,7 @@ export function useAvailableVoices(): SpeechSynthesisVoice[] {
 
 /** Speak `text` once, interrupting any in-flight prompt. No-op when unsupported. */
 export function speakOnce(text: string, locale: string, preferredName?: string | null): void {
+  if (!shellFeatureBoundary().browserSpeech) return;
   if (!hasCapability("speech")) return;
   ensureVoices();
   const u = new window.SpeechSynthesisUtterance(text);
@@ -91,6 +93,9 @@ export function speakOnce(text: string, locale: string, preferredName?: string |
  * and a no-op when unsupported.
  */
 export function primeSpeechSynthesis(): void {
+  // Native owns the voice inside the shell, where it can also speak with the
+  // screen off. Two speakers would talk over each other.
+  if (!shellFeatureBoundary().browserSpeech) return;
   if (!hasCapability("speech")) return;
   try {
     ensureVoices();

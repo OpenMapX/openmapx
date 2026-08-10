@@ -5,6 +5,7 @@ import { useNavigationStore, useVehicleJourney } from "@openmapx/core";
 import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
+import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { useNow } from "@/lib/useNow";
 import { NavBottomBar } from "./NavBottomBar";
@@ -71,7 +72,7 @@ export function TransitNavBottomBar({
 }) {
   const t = useTranslations("navigation");
   const fmt = useDateTimeFormat();
-  const stopNavigation = useNavigationStore((s) => s.stopNavigation);
+  const { endNavigation } = useNavigationMutations();
   const now = useNow(1000);
   const { data: journey } = useVehicleJourney(currentLeg?.tripId ?? null);
 
@@ -84,7 +85,7 @@ export function TransitNavBottomBar({
     <NavBottomBar
       durationRemaining={durationRemaining}
       etaEpochMs={arrivalMs}
-      onEnd={stopNavigation}
+      onEnd={() => void endNavigation()}
       menuToggle={menuToggle}
       secondary={
         <>

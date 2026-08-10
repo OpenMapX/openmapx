@@ -16,6 +16,7 @@ import {
   type VoiceGuidanceTiming,
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
+import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { speakOnce, useAvailableVoices } from "@/lib/navigation/useNavigationVoice";
 import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
 import { Section, SettingRow, SwitchControl } from "./settingsPrimitives";
@@ -42,9 +43,8 @@ export function NavigationSettingsDialog({
   const voices = useAvailableVoices();
 
   const voiceEnabled = useNavigationStore((s) => s.voiceEnabled);
-  const toggleVoice = useNavigationStore((s) => s.toggleVoice);
+  const { toggleVoice, toggleKeepScreenOn } = useNavigationMutations();
   const keepScreenOn = useNavigationStore((s) => s.keepScreenOn);
-  const toggleKeepScreenOn = useNavigationStore((s) => s.toggleKeepScreenOn);
 
   const voiceGuidanceTiming = useSettingsStore((s) => s.voiceGuidanceTiming);
   const setVoiceGuidanceTiming = useSettingsStore((s) => s.setVoiceGuidanceTiming);
@@ -94,7 +94,7 @@ export function NavigationSettingsDialog({
       <DialogContent dividers>
         <Section title={tn("sectionVoice")}>
           <SettingRow label={tn("voiceGuidance")}>
-            <SwitchControl checked={voiceEnabled} onChange={toggleVoice} />
+            <SwitchControl checked={voiceEnabled} onChange={() => void toggleVoice()} />
           </SettingRow>
           <SettingRow label={ts("voiceGuidanceTiming")}>
             <Select
@@ -174,7 +174,7 @@ export function NavigationSettingsDialog({
             <SwitchControl checked={mapNorthUp} onChange={setMapNorthUp} />
           </SettingRow>
           <SettingRow label={tnav("keepScreenOn")}>
-            <SwitchControl checked={keepScreenOn} onChange={toggleKeepScreenOn} />
+            <SwitchControl checked={keepScreenOn} onChange={() => void toggleKeepScreenOn()} />
           </SettingRow>
         </Section>
       </DialogContent>

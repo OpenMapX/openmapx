@@ -2,6 +2,7 @@
 
 import { useNavigationStore, useSettingsStore } from "@openmapx/core";
 import type { ReactNode } from "react";
+import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
 import { NavBottomBar } from "./NavBottomBar";
 
@@ -19,7 +20,7 @@ export function NavBottomBarSlot({ menuToggle }: Props) {
   const route = useNavigationStore((s) => s.route);
   const progress = useNavigationStore((s) => s.progress);
   const units = useSettingsStore((s) => s.units);
-  const stopNavigation = useNavigationStore((s) => s.stopNavigation);
+  const { endNavigation } = useNavigationMutations();
   const openRouteSearch = useRouteSearchStore((s) => s.openPicker);
   const routeSearchOpen = useRouteSearchStore((s) => s.open);
 
@@ -33,7 +34,7 @@ export function NavBottomBarSlot({ menuToggle }: Props) {
       durationRemaining={durationRemaining}
       etaEpochMs={etaEpochMs}
       onSearch={routeSearchOpen ? undefined : openRouteSearch}
-      onEnd={stopNavigation}
+      onEnd={() => void endNavigation()}
       units={units}
       menuToggle={menuToggle}
     />

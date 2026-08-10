@@ -16,6 +16,7 @@ import { useTranslations } from "next-intl";
 import { Suspense, useEffect, useState } from "react";
 import { useMyLocation } from "@/components/command-palette/useMyLocation";
 import { useMap } from "@/lib/MapContext";
+import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useMobilePanelClearance } from "@/lib/mobilePanelHeight";
 import { CrowdApproachPromptLazy, ReportDialogLazy, ReportFabLazy } from "./crowdReportsLazy";
 import { Pegman } from "./Pegman";
@@ -35,7 +36,7 @@ export function MapControls() {
   // maneuvers and transit board/alight/alert cues); its counterpart,
   // search-along-route, sits in the ground nav bottom bar.
   const voiceEnabled = useNavigationStore((s) => s.voiceEnabled);
-  const toggleVoice = useNavigationStore((s) => s.toggleVoice);
+  const { toggleVoice } = useNavigationMutations();
   const showVoiceButton = navigating && (navKind === "ground" || navKind === "transit");
   const bearing = useMapStore((s) => s.bearing);
   const pitch = useMapStore((s) => s.pitch);
@@ -92,7 +93,7 @@ export function MapControls() {
             <Paper elevation={2} sx={{ borderRadius: "12px", overflow: "hidden" }}>
               <IconButton
                 size="small"
-                onClick={toggleVoice}
+                onClick={() => void toggleVoice()}
                 sx={{ width: 36, height: 36 }}
                 aria-label={tNav(voiceEnabled ? "muteVoice" : "unmuteVoice")}
               >

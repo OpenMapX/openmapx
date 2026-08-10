@@ -192,7 +192,9 @@
     "voiceDistanceMeters": "{meters} Meter",
     "voiceDistanceKilometers": "{kilometers} Kilometer",
     "voiceDistanceFeet": "{feet} Fuß",
-    "voiceDistanceMiles": "{miles} Meilen"
+    "voiceDistanceMiles": "{miles} Meilen",
+    "startFailed": "Die Navigation konnte nicht gestartet werden. Bitte versuche es erneut.",
+    "startUpdateRequired": "Aktualisiere die App, um zu navigieren."
   },
   "common": {
     "close": "Schließen",

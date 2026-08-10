@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import { NavigationSettingsDialog } from "@/components/settings/NavigationSettingsDialog";
 import { NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
 import { useMapOptional } from "@/lib/MapContext";
+import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useTransitLiveRefresh } from "@/lib/navigation/useTransitLiveRefresh";
 import { useTransitNavigationEngine } from "@/lib/navigation/useTransitNavigationEngine";
 import { useWakeLock } from "@/lib/useWakeLock";
@@ -35,7 +36,7 @@ export function TransitNavigationView() {
   const transitProgress = useNavigationStore((s) => s.transitProgress);
   const keepScreenOn = useNavigationStore((s) => s.keepScreenOn);
   const setCameraMode = useNavigationStore((s) => s.setCameraMode);
-  const stopNavigation = useNavigationStore((s) => s.stopNavigation);
+  const { completeArrival } = useNavigationMutations();
   const units = useSettingsStore((s) => s.units);
 
   const mapCtx = useMapOptional();
@@ -121,7 +122,7 @@ export function TransitNavigationView() {
         <Box
           sx={{ pointerEvents: "auto", m: "auto", bgcolor: "background.paper", borderRadius: 3 }}
         >
-          <TransitArrivalCard itinerary={itinerary} onClose={stopNavigation} />
+          <TransitArrivalCard itinerary={itinerary} onClose={() => void completeArrival()} />
         </Box>
       ) : (
         <>

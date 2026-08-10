@@ -15,11 +15,12 @@ import {
   formatDistance,
   formatDuration,
   useDirectionsStore,
-  useNavigationStore,
   useSettingsStore,
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
+import { useState } from "react";
 import { formatCo2Emission } from "@/lib/formatCo2";
+import { useStartNavigation } from "@/lib/mobile/useStartNavigation";
 import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
 import { BRAND, TRAFFIC_TEXT_COLOR } from "@/lib/theme";
 import { requestHeadingPermission } from "@/lib/useHeading";
@@ -54,12 +55,16 @@ export function RouteCard({
   const tc = useTranslations("common");
   const tNav = useTranslations("navigation");
   const locale = useLocale();
-  const startGroundNavigation = useNavigationStore((s) => s.startGroundNavigation);
+  const { startGround } = useStartNavigation();
   const waypoints = useDirectionsStore((s) => s.waypoints);
   const avoidHighways = useDirectionsStore((s) => s.avoidHighways);
   const avoidTolls = useDirectionsStore((s) => s.avoidTolls);
   const avoidFerries = useDirectionsStore((s) => s.avoidFerries);
   const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
+  // Only meaningful under native authority, where Start is a round trip rather
+  // than a synchronous store write.
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
 
   const handleStart = async () => {
     const coords = waypoints.map((w) => w.coords).filter((c): c is [number, number] => c !== null);
@@ -67,16 +72,38 @@ export function RouteCard({
     // Unlock TTS inside the user gesture (iOS Safari requirement) before any
     // await hands control back to the event loop.
     primeSpeechSynthesis();
-    await requestHeadingPermission();
-    startGroundNavigation(route, route.mode, coords, alternatives, provider, {
-      routeIntent: index === 0 ? "automatic" : "userSelected",
-      routeOptions: {
-        avoidHighways: route.mode === "driving" && avoidHighways,
-        avoidTolls: route.mode === "driving" && avoidTolls,
-        avoidFerries,
-        avoidClosures: avoidIncidents,
-      },
-    });
+    if (starting) return;
+    setStarting(true);
+    try {
+      const result = await startGround(
+        {
+          route,
+          alternatives,
+          mode: route.mode,
+          destinationWaypoints: coords,
+          routeProvider: provider,
+          routeSelectionIntent: index === 0 ? "automatic" : "userSelected",
+          routeOptions: {
+            avoidHighways: route.mode === "driving" && avoidHighways,
+            avoidTolls: route.mode === "driving" && avoidTolls,
+            avoidFerries,
+            avoidClosures: avoidIncidents,
+          },
+          locale: locale === "de" ? "de" : "en",
+          units,
+        },
+        // Between prepare and start, so the OS prompt is spent on a trip the
+        // shell has already accepted.
+        {
+          onPrepared: async () => {
+            await requestHeadingPermission();
+          },
+        },
+      );
+      setStartError(result.ok ? null : result.code);
+    } finally {
+      setStarting(false);
+    }
   };
 
   const dist =
@@ -220,6 +247,9 @@ export function RouteCard({
                 size="small"
                 variant="contained"
                 startIcon={<NavigationIcon />}
+                // A second tap while the shell is still preparing would start a
+                // second session nobody is watching.
+                disabled={starting}
                 onClick={(e) => {
                   e.stopPropagation();
                   void handleStart();
@@ -235,6 +265,11 @@ export function RouteCard({
               </Button>
             )}
           </Box>
+        )}
+        {startError && (
+          <Typography role="alert" sx={{ fontSize: 12, color: "error.main", mt: 0.5 }}>
+            {tNav(startError === "incompatible" ? "startUpdateRequired" : "startFailed")}
+          </Typography>
         )}
       </Box>
     </Box>
