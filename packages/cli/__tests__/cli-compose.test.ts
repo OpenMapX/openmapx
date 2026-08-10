@@ -5,6 +5,13 @@ import { services as coreServices } from "@openmapx/core/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { renderComposeForRepo } from "../src/commands/compose";
 
+const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
+
+/** The `NAME: <dollar>{NAME:-fallback}` line Compose rendering produces. */
+function composeDefault(name: string, fallback: string): string {
+  return `${name}: ` + "$" + `{${name}:-${fallback}}`;
+}
+
 const { readServiceSecretKeysFromCompose } = coreServices;
 
 let tmp: string;
@@ -82,6 +89,31 @@ describe("renderComposeForRepo", () => {
     expect(yaml).toContain("traefik:");
     expect(yaml).not.toContain("valhalla:");
     expect(yaml).toContain("OPENMAPX_ENABLED_SERVICES: app-api,postgis,redis,traefik");
+  });
+
+  it("renders the real app-api OSM contribution controls with both flags off", async () => {
+    // Rendered from the checked-in manifest, not a fixture: this is the guard
+    // that a shipped deployment defaults to contributions disabled.
+    const manifest = JSON.parse(
+      readFileSync(join(REPO_ROOT, "services", "app-api", "service.json"), "utf-8"),
+    ) as { container: { environment: Record<string, string> } };
+    writeManifest("app-api", manifest as unknown as Record<string, unknown>);
+
+    await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["app-api"] });
+    const yaml = readFileSync(
+      join(tmp, "infra", "docker", "docker-compose.generated.yml"),
+      "utf-8",
+    );
+
+    expect(yaml).toContain(composeDefault("OSM_CONTRIBUTIONS_ENABLED", "false"));
+    expect(yaml).toContain(composeDefault("OSM_DIRECT_EDITING_ENABLED", "false"));
+    expect(yaml).toContain(composeDefault("OSM_API_URL", "https://api.openstreetmap.org"));
+    expect(yaml).toContain(composeDefault("OSM_WEB_URL", "https://www.openstreetmap.org"));
+    expect(yaml).toContain(composeDefault("OPENMAPX_VERSION", "1.0"));
+    for (const limiter of ["READ", "PREVIEW", "PUBLISH", "NOTE"]) {
+      expect(yaml).toContain(`RATE_LIMIT_OSM_CONTRIBUTION_${limiter}_MAX:`);
+      expect(yaml).toContain(`RATE_LIMIT_OSM_CONTRIBUTION_${limiter}_WINDOW_MS:`);
+    }
   });
 
   it("writes hardlink plan to a sidecar file", async () => {

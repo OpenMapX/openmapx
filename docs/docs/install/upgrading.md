@@ -197,6 +197,37 @@ relevant guides — [routing engines](../guides/routing-engines.md),
 [geocoders](../guides/geocoders.md), [transit engines](../guides/transit-engines.md),
 and [OSM data queries](../guides/osm-data-queries.md).
 
+## OpenStreetMap contributions and OAuth token encryption
+
+The release that adds
+[OpenStreetMap place contributions](../features/osm-contributions.md) also turns
+on **encryption at rest for stored OAuth provider tokens**, because a linked
+OpenStreetMap account can now hold write permissions.
+
+Nothing is required of you to upgrade, and both contribution flags stay off
+until you set them. But be aware of how already-stored tokens behave.
+
+Tokens saved *before* this release are plaintext. Better Auth detects the format
+before decrypting, and the detection is a heuristic: a value is treated as
+encrypted if it starts with `$ba$` **or** if it is an even-length hexadecimal
+string. That has two consequences:
+
+- **Ordinary opaque tokens keep working.** Real OpenStreetMap and Mapillary
+  access tokens contain characters outside `[0-9a-f]`, so they are passed
+  through unchanged and are re-encrypted the next time the account is refreshed
+  or re-linked.
+- **A legacy token that happens to be even-length hex cannot be recovered.** It
+  is misread as ciphertext, decryption fails, and the affected person simply
+  needs to link their provider account again. OpenMapX degrades safely here: the
+  avatar sync skips, and the contribution gate asks them to re-authorize.
+
+Both behaviors are pinned by tests against the locked Better Auth version.
+
+Keep `BETTER_AUTH_SECRET` **stable and protected**. It is now the key material
+for stored provider tokens as well as sessions. Rotating it deliberately is
+supported, but every linked OAuth account will need to be re-linked afterwards —
+Better Auth does not re-encrypt existing tokens under a new secret.
+
 ## Reclaiming disk after an upgrade
 
 Pulling new `latest` images leaves the previous ones on disk as dangling layers.

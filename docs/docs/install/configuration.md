@@ -103,6 +103,96 @@ provider.
 | `MAPILLARY_CLIENT_ID`      | Mapillary OAuth client id (re-uses the same app as `MAPILLARY_TOKEN`). Register at the [Mapillary developer dashboard](https://www.mapillary.com/dashboard/developers). | Optional. Commented       |
 | `MAPILLARY_CLIENT_SECRET`  | Mapillary OAuth client secret.                                                            | Optional. Commented       |
 
+## OpenStreetMap contributions
+
+Lets a signed-in person publish a curated correction to an **existing**
+OpenStreetMap element, or a public OSM note, using their own linked account. See
+the [feature overview](../features/osm-contributions.md) and the
+[developer notes](../developer/osm-contributions.md).
+
+Both flags default to **off**. Nothing is written to OpenStreetMap until an
+operator turns them on deliberately.
+
+| Variable | Description | Required / Default |
+| -------- | ----------- | ------------------ |
+| `OSM_CONTRIBUTIONS_ENABLED` | Master flag. Controls whether the UI is discoverable and the contribution routes answer. | Optional. `false` |
+| `OSM_DIRECT_EDITING_ENABLED` | Independent kill switch for element writes. Turning it off does **not** convert a requested edit into a note. | Optional. `false` |
+| `OSM_API_URL` | OpenStreetMap API origin. | Optional. `https://api.openstreetmap.org` |
+| `OSM_WEB_URL` | OpenStreetMap website origin (element, changeset, note and editor links). | Optional. `https://www.openstreetmap.org` |
+| `OSM_DISCOVERY_URL` | OpenID discovery document used for authorization. | Optional. `https://www.openstreetmap.org/.well-known/openid-configuration` |
+| `OPENMAPX_VERSION` | Value reported in each changeset's `created_by` tag, as `OpenMapX <version>`. 1–64 characters from `[A-Za-z0-9._+-]`. | Optional. `1.0` |
+| `RATE_LIMIT_OSM_CONTRIBUTION_READ_MAX` / `_WINDOW_MS` | Per-user capability/context/category reads. | Optional. `60` / `600000` |
+| `RATE_LIMIT_OSM_CONTRIBUTION_PREVIEW_MAX` / `_WINDOW_MS` | Per-user previews. | Optional. `30` / `600000` |
+| `RATE_LIMIT_OSM_CONTRIBUTION_PUBLISH_MAX` / `_WINDOW_MS` | Per-user direct publishes. | Optional. `10` / `600000` |
+| `RATE_LIMIT_OSM_CONTRIBUTION_NOTE_MAX` / `_WINDOW_MS` | Per-user note creations. | Optional. `5` / `600000` |
+
+### Registering the OAuth application
+
+Contributions reuse the same OAuth app as OpenStreetMap sign-in
+(`OSM_CLIENT_ID` / `OSM_CLIENT_SECRET`). Without **both** credentials the
+feature reports itself disabled even if the flags are on — it fails closed.
+
+Register the redirect URL exactly as Better Auth's generic-OAuth route expects:
+
+```text
+<BETTER_AUTH_URL>/api/auth/oauth2/callback/openstreetmap
+```
+
+For a default local API that is:
+
+```text
+http://127.0.0.1:3001/api/auth/oauth2/callback/openstreetmap
+```
+
+Ordinary sign-in requests only `openid read_prefs`. The write permissions
+(`write_api`, `write_notes`) are requested incrementally, the first time someone
+actually contributes.
+
+### Testing against the OpenStreetMap development API
+
+The development instance is a **separate** OpenStreetMap deployment: it needs
+its own OAuth application and its own test accounts, and those accounts must
+accept that instance's Contributor Terms separately.
+
+Change all three origins together:
+
+```dotenv
+OSM_API_URL=https://master.apis.dev.openstreetmap.org
+OSM_WEB_URL=https://master.apis.dev.openstreetmap.org
+OSM_DISCOVERY_URL=https://master.apis.dev.openstreetmap.org/.well-known/openid-configuration
+```
+
+Setting only `OSM_API_URL` while leaving the production website and discovery
+URLs is **invalid** and rejected at startup — it would mix production identity
+with development data. The API also refuses credentials, query strings,
+fragments and non-HTTP(S) schemes in any of the three.
+
+Never point a deployment that has the flags on at production OpenStreetMap for
+testing.
+
+### Public feature discovery
+
+The public `/api/capabilities` response carries a single bounded bit,
+`features.osmContributions`, which is true only when the master flag **and**
+OAuth configuration are set. It never exposes the direct-write kill switch or
+anyone's linked-account state.
+
+### Token storage and the auth secret
+
+Provider OAuth tokens are **encrypted at rest** using the deployment's
+`BETTER_AUTH_SECRET`. Keep that secret protected and stable: rotating it
+intentionally makes existing stored tokens undecryptable, and affected users
+must re-link their OpenStreetMap (or other OAuth) account. See
+[upgrading](./upgrading.md#openstreetmap-contributions-and-oauth-token-encryption)
+for what happens to tokens stored before encryption was enabled.
+
+### Redis
+
+Redis is recommended but not required. It backs the short submission lock and
+the idempotency record. Without it, a bounded in-memory fallback is used, which
+is correct for a single instance. Contribution safety does not depend on Redis
+in either case — OpenStreetMap's exact element version is the real guard.
+
 ## Map style & tiles
 
 Tile-source selection and keys. The `NEXT_PUBLIC_*` values (except

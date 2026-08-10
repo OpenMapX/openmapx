@@ -182,6 +182,9 @@ plugin model and how integrations resolve against backend services, see
 - **[Public transit](./public-transit.md)** — the transit section of a place with
   linked stops, and stop detail panels.
 - **[Reviews](./reviews.md)** — the Reviews tab, ratings, and writing reviews.
+- **[OpenStreetMap contributions](./osm-contributions.md)** — correcting a name,
+  category, hours or contact detail on the underlying OpenStreetMap element from
+  the place panel.
 - **[Street-level imagery](./street-level-imagery.md)** — the Mapillary and
   Panoramax viewer that the photo providers also feed.
 - **[Mobility data](./mobility-data.md)** — the data-source detail sections for
