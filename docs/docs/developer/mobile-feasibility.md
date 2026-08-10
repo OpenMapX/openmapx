@@ -181,3 +181,60 @@ or teardown failure reproduces **twice** on the same beta build, the narrow
 native `LocationDriver` fallback is activated — and only the driver is replaced.
 An audio, WebView, configuration or navigation-engine failure is fixed in its own
 subsystem and does not justify a replacement location module.
+
+## Local smoke flows
+
+Maestro drives a local simulator or emulator. There is no hosted device farm,
+no account, and nothing uploaded.
+
+```bash
+pnpm mobile:smoke                                  # every flow
+MAESTRO_APP_ID=org.openmapx.app.dev pnpm mobile:smoke
+```
+
+The command reports and exits 0 when Maestro is not installed, because these
+flows qualify a device that may not be attached — a missing local tool is not a
+failure of the code. Any flow that actually runs and fails does fail the command.
+
+| Flow | What it protects |
+| --- | --- |
+| `launch.yaml` | Nothing is requested at launch. A permission dialog on a cold start means some initialisation reached the driver before the user asked for anything. |
+| `webview-reload.yaml` | A reload resets the bridge channel and nothing else, and the reloaded document renegotiates rather than reusing the old nonce. |
+| `foreground-only.yaml` | Choosing the limited mode never requests background permission, and guidance pauses the moment the app stops being visible. |
+
+The two bridge flows need a development build pointed at the local protocol
+fixture. That is only possible in a development build: the release configuration
+refuses a non-public origin, and refuses the official application id against any
+origin but the official one.
+
+## Secure shell verification
+
+```bash
+pnpm mobile:verify          # unit, native, types, doctor
+pnpm mobile:prebuild:check  # two clean generations agree; projects untracked
+pnpm mobile:bundle:check    # background graph is headless-safe
+pnpm mobile:smoke           # local Maestro flows
+pnpm check-translations
+```
+
+`mobile:bundle:check` also asserts that the qualification probe is **absent**
+from a release bundle rather than merely unreachable in it. The probe sits
+behind a `__DEV__` branch, which folds away under release minification; if that
+branch is ever weakened, the check names the modules that reached the bundle.
+
+## Storage cleanup
+
+After a stop, an arrival or an expiry, the repository exposes a developer-only
+dump reporting row counts and column names — never values.
+
+What must remain: one `terminal_ack` row, and one `processed_commands` row for
+the stop itself so a retried stop returns the same answer instead of running
+again. Both hold the same non-sensitive envelope: session id, kind, final
+status, revision, completion time.
+
+What must be gone: the active session, the last accepted fix, the route, any
+refresh token, every scheduled alert, and every queued event.
+
+`apps/mobile/qa/beta/secure-shell-scenarios.md` lists the cases a simulator
+cannot answer honestly. None of them may be marked verified from a simulator
+run, a code review or an emulator screenshot.

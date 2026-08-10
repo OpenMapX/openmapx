@@ -1,0 +1,48 @@
+# The limited mode, and that it genuinely limits something.
+#
+# Choosing "Foreground only" must never request background permission, and
+# guidance must pause the moment the app stops being visible — not on the next
+# callback, and not "soon".
+#
+# Run against a development build pointed at the protocol fixture origin.
+appId: ${MAESTRO_APP_ID}
+---
+- clearState
+- launchApp:
+    permissions:
+      all: unset
+- extendedWaitUntil:
+    notVisible:
+      id: "shell-loading"
+    timeout: 30000
+
+# Starting navigation from the fixture opens the native disclosure first.
+- tapOn:
+    text: "start navigation"
+- assertVisible:
+    id: "permission-disclosure"
+
+# The disclosure states what the limited mode costs before it is chosen.
+- assertVisible:
+    text: ".*only while the app is open.*"
+
+- tapOn:
+    id: "permission-foreground-only"
+
+# Exactly one prompt, for foreground access. A background prompt here is a bug.
+- assertVisible:
+    text: "(Allow|While Using|Erlauben|Beim Verwenden).*"
+- tapOn:
+    text: "(While Using the App|Only this time|Beim Verwenden der App|While using the app)"
+- assertNotVisible:
+    text: ".*(all the time|Immer zulassen).*"
+    optional: true
+
+- assertVisible:
+    text: "session: active"
+
+# Leaving the foreground must stop delivery immediately.
+- pressKey: Home
+- launchApp
+- assertVisible:
+    text: "session: paused"

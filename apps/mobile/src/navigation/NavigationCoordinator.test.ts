@@ -622,6 +622,131 @@ describe("NavigationCoordinator serialization", () => {
   });
 });
 
+describe("NavigationCoordinator storage cleanup", () => {
+  const fix = (timestamp: number) => ({
+    timestamp,
+    coords: { latitude: 50.11, longitude: 8.68, accuracy: 5 },
+  });
+
+  /** The developer-only dump: row counts and column names, never values. */
+  async function dump(context: Harness) {
+    return context.repository.describeContents();
+  }
+
+  it.each(["session.stop", "session.complete"] as const)(
+    "leaves nothing location-bearing after %s",
+    async (command) => {
+      const context = await harness();
+      const { sessionId } = await running(context);
+      await context.coordinator.handleLocationBatch({ locations: [fix(NOW)] });
+      await context.repository.enqueueEvent({
+        eventId: "e1",
+        sessionId,
+        critical: true,
+        createdAtMs: NOW,
+        payload: { coords: [8.68, 50.11] },
+      });
+      await context.repository.replaceScheduledAlerts(
+        sessionId,
+        [{ alertId: "a1", legIndex: 0, triggerAtMs: NOW }],
+        NOW,
+      );
+
+      await context.coordinator.dispatch(cmd(command, {}, { sessionId }));
+
+      const rows = Object.fromEntries((await dump(context)).map((e) => [e.table, e.rows]));
+      expect(rows.active_navigation).toBe(0);
+      expect(rows.navigation_events).toBe(0);
+      expect(rows.scheduled_alerts).toBe(0);
+      // The acknowledgement survives, because a reloaded page needs an outcome.
+      expect(rows.terminal_ack).toBe(1);
+
+      // One command response also survives: the stop's own, written after the
+      // cleanup so a retried stop returns the same answer instead of running
+      // again. It holds the same non-sensitive envelope as the acknowledgement.
+      expect(rows.processed_commands).toBe(1);
+      await context.close();
+    },
+  );
+
+  it("stores nothing location-bearing in the surviving stop response", async () => {
+    const context = await harness();
+    const { sessionId } = await running(context);
+    await context.coordinator.handleLocationBatch({ locations: [fix(NOW)] });
+
+    await context.coordinator.dispatch(
+      cmd("session.stop", {}, { sessionId, messageId: "stop-final" }),
+    );
+
+    const cached = JSON.stringify(await context.repository.lookupCommand("stop-final", NOW));
+    expect(cached).toContain("session.stopped");
+    for (const forbidden of [
+      "50.11",
+      "8.68",
+      "geometry",
+      "refreshToken",
+      "instruction",
+      "coords",
+    ]) {
+      expect(cached).not.toContain(forbidden);
+    }
+    await context.close();
+  });
+
+  it("leaves an acknowledgement that carries no route, fix, stop or token", async () => {
+    const context = await harness();
+    const { sessionId } = await running(context);
+    await context.coordinator.handleLocationBatch({ locations: [fix(NOW)] });
+
+    await context.coordinator.dispatch(cmd("session.stop", {}, { sessionId }));
+
+    const ack = await context.repository.readTerminalAck(sessionId);
+    expect(Object.keys(ack ?? {}).sort()).toEqual([
+      "completedAtMs",
+      "finalRevision",
+      "finalStatus",
+      "kind",
+      "sessionId",
+    ]);
+    await context.close();
+  });
+
+  it("clears location-bearing rows when a session expires unattended", async () => {
+    const context = await harness();
+    const { sessionId } = await running(context);
+    await context.repository.terminate(sessionId, "stopped", NOW);
+    await context.repository.createPreparing(
+      groundSessionFixture({
+        sessionId,
+        status: "active",
+        startedAtMs: NOW - 60_000,
+        updatedAtMs: NOW - 60_000,
+        expiresAtMs: NOW - 1,
+      }) as MobileNavigationSession,
+    );
+
+    await context.coordinator.handleLocationBatch({ locations: [fix(NOW)] });
+
+    const rows = Object.fromEntries((await dump(context)).map((e) => [e.table, e.rows]));
+    expect(rows.active_navigation).toBe(0);
+    expect(rows.navigation_events).toBe(0);
+    await context.close();
+  });
+
+  it("reports column names without any stored value", async () => {
+    const context = await harness();
+    await running(context);
+    await context.coordinator.handleLocationBatch({ locations: [fix(NOW)] });
+
+    const serialised = JSON.stringify(await dump(context));
+
+    expect(serialised).toContain("session_json");
+    expect(serialised).not.toContain("50.11");
+    expect(serialised).not.toContain("8.68");
+    await context.close();
+  });
+});
+
 describe("NavigationCoordinator effects", () => {
   it("continues cleanup when one effect fails", async () => {
     const context = await harness({ failEffect: "audio.stop" });

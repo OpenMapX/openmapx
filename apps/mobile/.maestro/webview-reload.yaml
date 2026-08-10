@@ -1,0 +1,41 @@
+# A page reload resets the bridge channel and nothing else.
+#
+# The native session and the location driver are unaffected by a reload, because
+# the page is not their authority. What must change is the channel: the reloaded
+# document gets a new nonce and has to complete a fresh handshake.
+#
+# Run against a development build pointed at the protocol fixture origin:
+#   OPENMAPX_MOBILE_WEB_ORIGIN=http://127.0.0.1:4173 pnpm mobile:build:android
+appId: ${MAESTRO_APP_ID}
+---
+- launchApp
+- extendedWaitUntil:
+    notVisible:
+      id: "shell-loading"
+    timeout: 30000
+
+# The fixture reports its handshake state in the page, not in native chrome.
+- assertVisible:
+    text: "handshake: ok"
+
+- runFlow:
+    when:
+      visible:
+        text: "reload"
+    commands:
+      - tapOn:
+          text: "reload"
+
+# After the reload the page must have renegotiated, not merely reconnected.
+- extendedWaitUntil:
+    visible:
+      text: "handshake: ok"
+    timeout: 20000
+- assertVisible:
+    text: "nonce: changed"
+
+# Native never showed a recovery state: a reload is not a failure.
+- assertNotVisible:
+    id: "shell-state-load-error"
+- assertNotVisible:
+    id: "shell-state-resume-offer"

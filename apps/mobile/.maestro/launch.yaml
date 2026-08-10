@@ -1,0 +1,38 @@
+# Cold launch: the shell must ask for nothing.
+#
+# Location is never requested at launch — only from an explicit navigation
+# start while the app is visible. This flow exists to catch a regression where
+# some initialisation reaches the driver before the user has asked for anything.
+#
+# Run with: maestro test apps/mobile/.maestro/launch.yaml
+appId: ${MAESTRO_APP_ID}
+---
+- clearState
+- launchApp:
+    permissions:
+      # Explicitly unset, so a prompt would appear rather than being pre-granted.
+      all: unset
+
+# The native loading state appears first; the product renders inside the WebView.
+- assertVisible:
+    id: "shell-loading"
+    optional: true
+
+# No system permission dialog may exist at this point, on either platform.
+- assertNotVisible:
+    text: "Allow .* to use your location.*"
+    optional: true
+- assertNotVisible:
+    text: ".*Standort.*zulassen.*"
+    optional: true
+
+- extendedWaitUntil:
+    notVisible:
+      id: "shell-loading"
+    timeout: 30000
+
+# The product is the WebView. Native chrome must be absent once it has loaded.
+- assertNotVisible:
+    id: "permission-disclosure"
+- assertNotVisible:
+    id: "shell-state-load-error"

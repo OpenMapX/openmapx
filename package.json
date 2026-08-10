@@ -20,6 +20,7 @@
     "mobile:prebuild:check": "pnpm -C apps/mobile exec tsx scripts/clean-prebuild-check.mts",
     "mobile:bundle:check": "pnpm -C apps/mobile exec tsx scripts/check-background-bundle.mts",
     "mobile:qa:validate": "pnpm -C apps/mobile exec tsx qa/validate-report.mts",
+    "mobile:smoke": "pnpm -C apps/mobile exec tsx scripts/run-maestro.mts",
     "mobile:build:android": "pnpm -C apps/mobile exec expo run:android --variant release",
     "mobile:build:ios": "pnpm -C apps/mobile exec expo run:ios --configuration Release",
     "check-translations": "pnpm -C packages/i18n exec tsx scripts/check-translations.ts",
