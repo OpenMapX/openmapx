@@ -2351,5 +2351,20 @@
     "deniedBody": "OpenMapX cannot guide you without location access. You can still plan routes and browse the map.",
     "foregroundOnlyPausedTitle": "Guidance paused",
     "foregroundOnlyPausedBody": "You allowed location only while OpenMapX is open, so guidance paused when the app left the foreground. Open OpenMapX to continue."
+  },
+  "mobileAuth": {
+    "title": "Sign in to OpenMapX",
+    "purposeSignIn": "Continue to sign in to the OpenMapX app.",
+    "purposeLinkProvider": "Continue to link this account to the OpenMapX app.",
+    "purposeAddPasskey": "Continue to add a passkey for the OpenMapX app.",
+    "signInFirst": "Sign in on this page first, then continue to return to the app.",
+    "continueToApp": "Continue to the app",
+    "cancel": "Cancel",
+    "failed": "Sign-in could not be completed. Close this page and try again in the app.",
+    "invalidRequest": "This sign-in link is not valid. Start again from the OpenMapX app.",
+    "openInBrowserTitle": "Sign in using your browser",
+    "openInBrowserBody": "This version of the app cannot carry the sign-in back automatically. You can sign in on the website, but you will need to sign in again in the app after updating.",
+    "systemAuthCancelled": "Sign-in was cancelled.",
+    "systemAuthFailed": "Sign-in could not be completed. Please try again."
   }
 }

@@ -349,12 +349,15 @@ export const webToNativeSchema = z.discriminatedUnion("type", [
     z
       .object({
         requestId: boundedId,
-        /** Which reviewed operation, not which URL. */
-        operation: z.enum(["oauth", "passkey"]),
-        provider: z.string().max(64),
-        /** Bound to this attempt; native holds it in memory only. */
-        state: boundedId,
-        codeChallenge: boundedId,
+        /**
+         * Which reviewed operation, not which URL.
+         *
+         * The PKCE verifier, challenge and state are deliberately absent: the
+         * shell generates all three itself. A page-supplied verifier would be a
+         * verifier that had left the device, which defeats the point of having
+         * one.
+         */
+        purpose: z.enum(["sign-in", "link-provider", "add-passkey"]),
       })
       .strict(),
   ),
@@ -446,6 +449,15 @@ export const nativeToWebSchema = z.discriminatedUnion("type", [
         status: z.enum(["ok", "cancelled", "failed"]),
         /** Opaque, single-use, and exchanged by the page — never a token. */
         handoffCode: boundedId.optional(),
+        state: boundedId.optional(),
+        /**
+         * The verifier the shell generated for this one attempt.
+         *
+         * It crosses only here, only to the compatible top-level document, and
+         * only alongside the code it unlocks — the page needs both to redeem,
+         * and neither is a credential on its own.
+         */
+        codeVerifier: boundedId.optional(),
       })
       .strict(),
   ),

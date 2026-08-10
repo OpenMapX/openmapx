@@ -4,7 +4,15 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 import { passkey } from "@better-auth/passkey";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { admin, customSession, emailOTP, genericOAuth, jwt, twoFactor } from "better-auth/plugins";
+import {
+  admin,
+  customSession,
+  emailOTP,
+  genericOAuth,
+  jwt,
+  oneTimeToken,
+  twoFactor,
+} from "better-auth/plugins";
 import { emailHarmony } from "better-auth-harmony";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
@@ -221,6 +229,14 @@ const authOptions = {
       },
     }),
     admin(),
+    // The one mechanism by which a session established in the system browser
+    // becomes a session in the WebView. Two minutes and single-use because the
+    // token is in flight across a custom-scheme callback the OS routes, and the
+    // only legitimate holder redeems it immediately. Stored hashed so a database
+    // read never yields a usable token.
+    oneTimeToken({ expiresIn: 2, storeToken: "hashed" }),
+    // Kept for server-side compatibility with Expo's redirect handling. No Expo
+    // native auth client is initialised: native never holds a session.
     expo(),
     emailHarmony({ allowNormalizedSignin: true }),
     passkey({

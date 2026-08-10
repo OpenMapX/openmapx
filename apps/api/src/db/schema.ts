@@ -55,6 +55,8 @@ export { integrationConfig } from "./integration-config-schema";
 export { integrationSecret } from "./integration-secret-schema";
 // Mangrove.reviews user keypair
 export { mangroveKeypair, mangroveKeypairWrap } from "./mangrove-keypair-schema";
+// Short-lived system-browser → WebView session handoff
+export { mobileAuthHandoff } from "./mobile-auth-handoff-schema";
 // Saved places tables
 export {
   labeledPlace,

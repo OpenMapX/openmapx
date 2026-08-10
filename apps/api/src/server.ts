@@ -42,6 +42,7 @@ import { isochroneRoute } from "./routes/isochrone";
 import { legalConfigRoute } from "./routes/legal-config";
 import { maptilerRoute } from "./routes/maptiler";
 import { meRoute } from "./routes/me";
+import { mobileAuthRoute } from "./routes/mobile-auth";
 import { neighborhoodsRoute } from "./routes/neighborhoods";
 import { offlinePackagesRoute } from "./routes/offline-packages";
 import { osmContributionsRoute } from "./routes/osm-contributions";
@@ -244,6 +245,7 @@ await server.register(capabilitiesRoute, { prefix: "/api" });
 
 // Public legal facts for the /privacy page (hosting provider, etc.)
 await server.register(legalConfigRoute, { prefix: "/api" });
+await server.register(mobileAuthRoute, { prefix: "/api" });
 
 // Routes
 await server.register(placesRoute, { prefix: "/api" });

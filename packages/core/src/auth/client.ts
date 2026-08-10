@@ -19,6 +19,7 @@ import {
   adminClient,
   emailOTPClient,
   genericOAuthClient,
+  oneTimeTokenClient,
   twoFactorClient,
 } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
@@ -42,6 +43,7 @@ function _buildClient(baseURL: string) {
       twoFactorClient(),
       emailOTPClient(),
       adminClient(),
+      oneTimeTokenClient(),
     ],
   });
 }
@@ -74,6 +76,7 @@ export function initAuth(config: AuthConfig): void {
       twoFactorClient(),
       emailOTPClient(),
       adminClient(),
+      oneTimeTokenClient(),
       ...((config.platformPlugins as []) ?? []),
     ],
   }) as FullAuthClient;

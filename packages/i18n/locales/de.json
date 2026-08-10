@@ -2351,5 +2351,20 @@
     "deniedBody": "Ohne Standortzugriff kann OpenMapX dich nicht führen. Routen planen und die Karte ansehen ist weiterhin möglich.",
     "foregroundOnlyPausedTitle": "Führung pausiert",
     "foregroundOnlyPausedBody": "Du hast den Standort nur zugelassen, während OpenMapX geöffnet ist. Deshalb pausiert die Führung, wenn die App in den Hintergrund wechselt. Öffne OpenMapX, um fortzufahren."
+  },
+  "mobileAuth": {
+    "title": "Bei OpenMapX anmelden",
+    "purposeSignIn": "Fahre fort, um dich in der OpenMapX-App anzumelden.",
+    "purposeLinkProvider": "Fahre fort, um dieses Konto mit der OpenMapX-App zu verknüpfen.",
+    "purposeAddPasskey": "Fahre fort, um einen Passkey für die OpenMapX-App hinzuzufügen.",
+    "signInFirst": "Melde dich zuerst auf dieser Seite an und fahre dann fort, um zur App zurückzukehren.",
+    "continueToApp": "Weiter zur App",
+    "cancel": "Abbrechen",
+    "failed": "Die Anmeldung konnte nicht abgeschlossen werden. Schließe diese Seite und versuche es erneut in der App.",
+    "invalidRequest": "Dieser Anmeldelink ist ungültig. Starte erneut in der OpenMapX-App.",
+    "openInBrowserTitle": "Im Browser anmelden",
+    "openInBrowserBody": "Diese App-Version kann die Anmeldung nicht automatisch übernehmen. Du kannst dich auf der Website anmelden, musst dich nach dem Update aber erneut in der App anmelden.",
+    "systemAuthCancelled": "Die Anmeldung wurde abgebrochen.",
+    "systemAuthFailed": "Die Anmeldung konnte nicht abgeschlossen werden. Bitte versuche es erneut."
   }
 }

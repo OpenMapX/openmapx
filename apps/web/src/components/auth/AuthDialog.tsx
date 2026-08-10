@@ -21,6 +21,7 @@ import Typography from "@mui/material/Typography";
 import { authClient, oauthProviders } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { useSystemAuth } from "@/lib/mobile/useSystemAuth";
 import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
 
 type AuthMode = "sign-in" | "sign-up" | "2fa" | "forgot-password" | "reset-password";
@@ -33,6 +34,11 @@ interface AuthDialogProps {
 
 export function AuthDialog({ open, onClose, dismissible = true }: AuthDialogProps) {
   const t = useTranslations("auth");
+  const tMobile = useTranslations("mobileAuth");
+  const systemAuth = useSystemAuth();
+  // Hidden rather than disabled: a control that cannot lead anywhere is worse
+  // than one that is not there.
+  const visibleOAuthProviders = systemAuth.thirdPartyPrimarySignIn ? oauthProviders : [];
   const tc = useTranslations("common");
   const fullScreen = useFullScreenOnMobile();
   const [mode, setMode] = useState<AuthMode>("sign-in");
@@ -215,6 +221,24 @@ export function AuthDialog({ open, onClose, dismissible = true }: AuthDialogProp
     setLoading(true);
     setError(null);
     try {
+      const route = systemAuth.routeFor("passkey");
+      if (route === "system-browser") {
+        // Platform authenticators are not available inside a WebView at all, so
+        // this is not a degraded path — it is the only one that works.
+        const outcome = await systemAuth.runSystemAuth("sign-in");
+        if (outcome === "ok") {
+          handleClose();
+          return;
+        }
+        setError(
+          outcome === "cancelled" ? tMobile("systemAuthCancelled") : tMobile("systemAuthFailed"),
+        );
+        return;
+      }
+      if (route === "external-browser-only") {
+        setError(tMobile("openInBrowserBody"));
+        return;
+      }
       const { error: passkeyError } = await authClient.signIn.passkey();
       if (passkeyError) {
         setError(String(passkeyError.message ?? t("passkeySignInFailed")));
@@ -236,6 +260,22 @@ export function AuthDialog({ open, onClose, dismissible = true }: AuthDialogProp
     setLoading(true);
     setError(null);
     try {
+      const route = systemAuth.routeFor("oauth");
+      if (route === "system-browser") {
+        const outcome = await systemAuth.runSystemAuth("sign-in");
+        if (outcome === "ok") {
+          handleClose();
+          return;
+        }
+        setError(
+          outcome === "cancelled" ? tMobile("systemAuthCancelled") : tMobile("systemAuthFailed"),
+        );
+        return;
+      }
+      if (route !== "in-page") {
+        setError(tMobile("openInBrowserBody"));
+        return;
+      }
       await authClient.signIn.oauth2({
         providerId,
         callbackURL: window.location.origin,
@@ -597,8 +637,10 @@ export function AuthDialog({ open, onClose, dismissible = true }: AuthDialogProp
               </Button>
             )}
 
-            {/* OAuth provider sign-in buttons */}
-            {oauthProviders.map((provider) => (
+            {/* OAuth provider sign-in buttons. Absent in the installed iOS
+                build, where a third-party provider is a link/unlink operation on
+                an existing account rather than a way into one. */}
+            {visibleOAuthProviders.map((provider) => (
               <Button
                 key={provider.providerId}
                 variant="outlined"
@@ -623,7 +665,7 @@ export function AuthDialog({ open, onClose, dismissible = true }: AuthDialogProp
                 {t("continueWith", { provider: provider.name })}
               </Button>
             ))}
-            {oauthProviders.length > 0 && (
+            {visibleOAuthProviders.length > 0 && (
               <Typography
                 variant="caption"
                 sx={{
