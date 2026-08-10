@@ -66,16 +66,24 @@ export function groundCueEffect(
   const instruction = spokenInstructionFor(cue);
   if (!instruction) return null;
 
-  const text = formatNavigationCue(
-    {
-      kind: "ground-maneuver",
-      tier: cue.tier,
-      instruction,
-      ...(cue.tier === "now" ? {} : { distanceMeters: cue.distance }),
-    },
-    session.locale,
-    { units: session.units },
-  );
+  // The formatter refuses text beyond its own bounds. Losing one cue to a
+  // malformed step is acceptable; losing the batch — and with it the user's
+  // committed progress — is not, so the refusal becomes silence here.
+  let text: string;
+  try {
+    text = formatNavigationCue(
+      {
+        kind: "ground-maneuver",
+        tier: cue.tier,
+        instruction,
+        ...(cue.tier === "now" ? {} : { distanceMeters: cue.distance }),
+      },
+      session.locale,
+      { units: session.units },
+    );
+  } catch {
+    return null;
+  }
   if (text.length === 0 || text.length > MAX_SPEECH_TEXT_LENGTH) return null;
 
   const cueId = groundCueId(session.sessionId, routeFingerprint, cue.key);
@@ -101,7 +109,12 @@ export function statusCueEffect(
   cueId: string,
   kind: "off-route" | "arrival" | "weak-gps",
 ): Extract<SessionEffect, { kind: "speak" }> | null {
-  const text = formatNavigationCue({ kind }, session.locale, { units: session.units });
+  let text: string;
+  try {
+    text = formatNavigationCue({ kind }, session.locale, { units: session.units });
+  } catch {
+    return null;
+  }
   if (text.length === 0 || text.length > MAX_SPEECH_TEXT_LENGTH) return null;
   return { kind: "speak", cueId, text, locale: session.locale };
 }

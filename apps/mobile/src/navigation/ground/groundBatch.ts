@@ -33,28 +33,33 @@ import { announceMultiplierFor } from "./groundSession";
  */
 
 /**
- * A prepared route index, kept in memory and keyed by the route it indexes.
+ * A prepared route index, kept in memory and keyed by the array it indexes.
  *
- * Preparing the matcher is the expensive part of a fix, and the route rarely
- * changes; keying by fingerprint means a replacement transparently invalidates
- * it, and a process restart just rebuilds it.
+ * The key is the geometry array *itself*, not its fingerprint. The engine binds
+ * a prepared matcher to the exact array it was built from and rejects it against
+ * any other — and a session reloaded from storage produces a new array with
+ * identical values every time, so a fingerprint would match while the matcher no
+ * longer belonged to the geometry it was handed.
+ *
+ * What this buys is therefore per-batch reuse: one preparation for a batch of
+ * fixes, which is the case that matters, since the batch shares one loaded
+ * session. A replacement or a restart simply rebuilds.
  */
 export class GroundRouteCache {
-  private fingerprint: string | null = null;
+  private geometry: readonly unknown[] | null = null;
   private matcher: PreparedRouteMatcher | null = null;
 
   matcherFor(session: GroundMobileSession): PreparedRouteMatcher {
     const geometry = session.payload.startPackage.route.geometry;
-    const current = routeFingerprint(geometry);
-    if (this.fingerprint !== current || !this.matcher) {
+    if (this.geometry !== geometry || !this.matcher) {
       this.matcher = prepareRouteMatcher(geometry);
-      this.fingerprint = current;
+      this.geometry = geometry;
     }
     return this.matcher;
   }
 
   invalidate(): void {
-    this.fingerprint = null;
+    this.geometry = null;
     this.matcher = null;
   }
 }

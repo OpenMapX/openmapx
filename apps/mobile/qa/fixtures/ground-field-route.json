@@ -1,0 +1,47 @@
+{
+  "$comment": "Synthetic route metadata for ground field replays. Deliberately describes a route rather than containing one: a real captured trace is somebody's journey, and this file is public.",
+  "schemaVersion": 1,
+  "id": "ground-field-synthetic-1",
+  "description": "A synthetic driving route used to replay ground navigation on a simulator or emulator. Generated, not recorded.",
+  "provenance": "generated",
+  "mode": "driving",
+  "region": "synthetic",
+  "generator": {
+    "kind": "straight-line-with-turns",
+    "originHint": [8.68, 50.11],
+    "pointCount": 300,
+    "spacingMeters": 71,
+    "turns": [
+      { "afterPointIndex": 100, "bearingDeltaDegrees": -90 },
+      { "afterPointIndex": 200, "bearingDeltaDegrees": 90 }
+    ]
+  },
+  "replay": {
+    "fixIntervalMs": 1000,
+    "speedMps": 20,
+    "accuracyMeters": 5,
+    "injectedGaps": [
+      { "afterPointIndex": 60, "durationMs": 20000, "reason": "tunnel" },
+      { "afterPointIndex": 180, "durationMs": 120000, "reason": "long-blackout" }
+    ],
+    "injectedDeviations": [
+      { "afterPointIndex": 140, "offsetMeters": 400, "durationMs": 30000, "reason": "missed-turn" }
+    ],
+    "injectedAccuracyDrops": [
+      {
+        "afterPointIndex": 90,
+        "accuracyMeters": 400,
+        "durationMs": 15000,
+        "reason": "urban-canyon"
+      }
+    ]
+  },
+  "expectations": {
+    "noDuplicateCues": true,
+    "progressNeverRegresses": true,
+    "noSyntheticOffRoute": true,
+    "reroutesDuringDeviation": 1,
+    "routeSurvivesOffline": true,
+    "terminalCleanupComplete": true
+  }
+}

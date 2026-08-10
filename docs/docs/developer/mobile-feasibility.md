@@ -238,3 +238,54 @@ refresh token, every scheduled alert, and every queued event.
 `apps/mobile/qa/beta/secure-shell-scenarios.md` lists the cases a simulator
 cannot answer honestly. None of them may be marked verified from a simulator
 run, a code review or an emulator screenshot.
+
+## Ground navigation qualification
+
+`apps/mobile/src/navigation/ground/ground.e2e.test.ts` drives a whole journey
+through the production boundaries — the real coordinator, the real repository
+over a real SQLite engine, the real processor, effect runner and snapshot
+publisher. Only the outside world is faked: clock, location stream, speech and
+network.
+
+What it settles, so no volunteer has to:
+
+| Property | How |
+| --- | --- |
+| One committed revision per batch | Revisions collected across a 20-fix drive and asserted strictly increasing |
+| Progress never regresses | `alongMeters` collected across 30 fixes |
+| No duplicate cue across a restart | The coordinator, processor and prepared-route cache are rebuilt between *every* fix; only the database survives |
+| No cue replay on a redelivered batch | The same 20 fixes delivered twice |
+| Captured route works offline | A full drive with a client that returns no route |
+| A failed reroute keeps the old route | Deliberate deviation with an empty answer |
+| Stop is final | A batch delivered after the stop does not resurrect the session |
+| Cleanup is complete | Row counts after stop: one acknowledgement, nothing location-bearing |
+
+### The background limitation, stated plainly
+
+Operating-system location callbacks are the **only** reliable background wake
+source. A JavaScript timer does not run while iOS or Android has suspended the
+app, and this shell does not pretend otherwise:
+
+- coasting is foreground-only, and refuses to extrapolate while off route,
+  stationary or rerouting;
+- a delivery gap is filled with bounded synthetic points *after the fact*, when
+  the next real fix arrives — never invented while nothing was running;
+- after a long blackout the coast decelerates to a stop where the estimate ran
+  out. It does not jump to wherever the user turned out to be;
+- a cue older than ten seconds is recorded as reached and not spoken, because
+  announcing a turn already behind the user would send them the wrong way.
+
+A total callback blackout therefore produces no real-time guidance. OpenMapX
+catches up safely when delivery resumes, and no review or store text may claim
+more than that.
+
+### Physical cases
+
+`apps/mobile/qa/beta/ground-scenarios.md` lists what a simulator cannot answer:
+locked-screen audio, background delivery, battery and thermal behaviour,
+Bluetooth routing, OEM battery management. None may be marked verified without a
+named volunteer, a physical device and a recorded build.
+
+`apps/mobile/qa/fixtures/ground-field-route.json` describes the synthetic replay
+route rather than containing a recorded one — a real captured trace is somebody's
+journey, and that file is public.
