@@ -3,28 +3,32 @@
 import { useMapStore } from "@openmapx/core";
 import { useCallback } from "react";
 import { useMapOptional } from "@/lib/MapContext";
+import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
 
 /**
- * Returns a function that asks the browser for the user's current location and
- * flies the map to it. Silently no-ops if geolocation is unavailable, denied,
- * or if the caller is rendered outside `<MapProvider>` (e.g. non-map routes).
+ * Returns a function that asks for the user's current location and flies the map
+ * to it. Silently no-ops if location is unavailable, denied, or if the caller is
+ * rendered outside `<MapProvider>` (e.g. non-map routes).
+ *
+ * Goes through the one-fix adapter rather than `navigator.geolocation` directly:
+ * inside the installed shell native owns the only location subscription, and a
+ * browser fix taken beside it would be a second sensor answering the same
+ * question.
  */
 export function useMyLocation(): () => void {
   const setUserLocation = useMapStore((s) => s.setUserLocation);
   const map = useMapOptional();
+  const requestFix = useForegroundLocation();
   return useCallback(() => {
-    // True no-op outside <MapProvider>: no geolocation prompt and no
+    // True no-op outside <MapProvider>: no location prompt and no
     // user-location store update either, since neither is meaningful
     // without a map to fly to.
     if (!map) return;
-    if (typeof navigator === "undefined" || !navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lngLat: [number, number] = [pos.coords.longitude, pos.coords.latitude];
-        setUserLocation(lngLat);
-        map.flyTo(lngLat, 14);
-      },
-      () => {},
-    );
-  }, [setUserLocation, map]);
+    void requestFix().then((result) => {
+      if (result.status !== "ok") return;
+      const lngLat: [number, number] = [result.fix.lng, result.fix.lat];
+      setUserLocation(lngLat);
+      map.flyTo(lngLat, 14);
+    });
+  }, [setUserLocation, map, requestFix]);
 }

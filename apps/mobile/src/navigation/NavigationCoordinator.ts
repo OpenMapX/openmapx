@@ -61,7 +61,21 @@ export interface CoordinatorDeps {
   diagnostics: DiagnosticSink;
   clock: () => number;
   newSessionId: () => string;
+  /**
+   * Handles the protocol-v2 commands that are not about a navigation session —
+   * a one-off location fix, opening OS settings, a system-browser sign-in.
+   *
+   * Optional so a v1-only build, and every session test, needs no stand-in. When
+   * absent the command is refused rather than dropped: a page waiting on a reply
+   * that never comes cannot tell "unsupported" from "broken".
+   */
+  auxiliary?: AuxiliaryCommandHandler;
 }
+
+/** Answers a v2 command the coordinator does not own, or declines it. */
+export type AuxiliaryCommandHandler = (
+  command: WebToNativeMessage,
+) => Promise<CommandResponse | null>;
 
 /** Commands whose response must survive a replay unchanged. */
 const MUTATING = new Set<WebToNativeMessage["type"]>([
@@ -156,6 +170,12 @@ export class NavigationCoordinator {
       case "event.ack":
         await this.deps.repository.ackEvents(command.payload.eventIds);
         return null;
+      case "location.request":
+      case "settings.open":
+      case "auth.open": {
+        const handled = await this.deps.auxiliary?.(command);
+        return handled ?? errorResponse("unsupported-capability", command.messageId);
+      }
     }
   }
 

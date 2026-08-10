@@ -25,6 +25,7 @@ function harness(options: {
     start: async () => undefined,
     stop: async () => undefined,
     isRunning: async () => false,
+    getCurrentFix: async () => null,
   } satisfies LocationDriver;
 
   const ui: PermissionUi = {

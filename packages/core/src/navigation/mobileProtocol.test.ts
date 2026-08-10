@@ -5,10 +5,13 @@ import {
   MAX_TOTAL_STEPS,
   MOBILE_PROTOCOL_MAX,
   MOBILE_PROTOCOL_MIN,
+  messageAllowedAtVersion,
   NATIVE_TO_WEB_TYPES,
+  nativeToWebSchema,
   negotiateMobileProtocol,
   parseMobileBridgeMessage,
   WEB_TO_NATIVE_TYPES,
+  webToNativeSchema,
 } from "./mobileProtocol";
 
 const NONCE = "channel-nonce-abc";
@@ -291,5 +294,152 @@ describe("native messages", () => {
       payload: { code: "invalid-message", raw: { coords: [8.6, 50.1] } },
     });
     expect(parse(bad).ok).toBe(false);
+  });
+});
+
+describe("protocol v2 is additive", () => {
+  const envelope = (type: string, payload: unknown, protocolVersion = 2) => ({
+    protocolVersion,
+    type,
+    messageId: "w1",
+    channelNonce: "nonce",
+    sentAtMs: 1_700_000_000_000,
+    payload,
+  });
+
+  it("still negotiates v1 with a v1 shell", () => {
+    expect(negotiateMobileProtocol({ min: 1, max: 2 }, { min: 1, max: 1 })).toBe(1);
+  });
+
+  it("negotiates v2 when both sides have it", () => {
+    expect(negotiateMobileProtocol({ min: 1, max: 2 }, { min: 1, max: 2 })).toBe(2);
+  });
+
+  it.each([
+    "web.hello",
+    "session.prepare",
+    "session.start",
+    "session.replace",
+    "settings.update",
+    "snapshot.request",
+    "session.stop",
+    "session.complete",
+    "event.ack",
+  ])("keeps %s available at v1", (type) => {
+    expect(messageAllowedAtVersion(type, 1)).toBe(true);
+  });
+
+  it.each([
+    "location.request",
+    "settings.open",
+    "auth.open",
+    "location.result",
+    "settings.result",
+    "deep-link.open",
+    "auth.result",
+  ])("withholds %s from a v1 shell", (type) => {
+    // A v1 binary has never heard of these. Sending one is asking a shell to
+    // fail in a way the page cannot distinguish from a broken bridge.
+    expect(messageAllowedAtVersion(type, 1)).toBe(false);
+    expect(messageAllowedAtVersion(type, 2)).toBe(true);
+  });
+
+  it("accepts a bounded location request", () => {
+    const parsed = webToNativeSchema.safeParse(
+      envelope("location.request", {
+        requestId: "r1",
+        accuracy: "precise",
+        timeoutMs: 10_000,
+        maxAgeMs: 15_000,
+      }),
+    );
+
+    expect(parsed.success).toBe(true);
+  });
+
+  it("refuses a continuous-watch location request", () => {
+    const parsed = webToNativeSchema.safeParse(
+      envelope("location.request", {
+        requestId: "r1",
+        accuracy: "precise",
+        timeoutMs: 10_000,
+        maxAgeMs: 15_000,
+        watch: true,
+      }),
+    );
+
+    // There is exactly one location producer, and a page that could ask for a
+    // second stream could be talked into asking for one.
+    expect(parsed.success).toBe(false);
+  });
+
+  it.each([500, 45_000])("refuses an out-of-range location timeout of %i ms", (timeoutMs) => {
+    expect(
+      webToNativeSchema.safeParse(
+        envelope("location.request", {
+          requestId: "r1",
+          accuracy: "precise",
+          timeoutMs,
+          maxAgeMs: 0,
+        }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it("accepts only the three settings targets", () => {
+    for (const target of ["location", "notifications", "application"]) {
+      expect(webToNativeSchema.safeParse(envelope("settings.open", { target })).success).toBe(true);
+    }
+  });
+
+  it("refuses a settings URI", () => {
+    // An arbitrary settings URI is an arbitrary intent, and the shell is not a
+    // browser for the page to steer.
+    expect(
+      webToNativeSchema.safeParse(envelope("settings.open", { target: "app-settings://root" }))
+        .success,
+    ).toBe(false);
+    expect(
+      webToNativeSchema.safeParse(
+        envelope("settings.open", { target: "location", uri: "app-settings://root" }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it("accepts a bounded deep link and refuses an oversize one", () => {
+    expect(
+      nativeToWebSchema.safeParse(envelope("deep-link.open", { kind: "map", query: "?q=cafe" }))
+        .success,
+    ).toBe(true);
+    expect(
+      nativeToWebSchema.safeParse(envelope("deep-link.open", { kind: "active-navigation" }))
+        .success,
+    ).toBe(true);
+    expect(
+      nativeToWebSchema.safeParse(
+        envelope("deep-link.open", { kind: "map", query: "?q=".concat("x".repeat(4_000)) }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it("refuses a deep link that carries a whole URL", () => {
+    expect(
+      nativeToWebSchema.safeParse(
+        envelope("deep-link.open", { kind: "map", url: "https://elsewhere.example/" }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it("carries an opaque handoff code and never a token", () => {
+    const parsed = nativeToWebSchema.safeParse(
+      envelope("auth.result", {
+        requestId: "r1",
+        status: "ok",
+        handoffCode: "opaque-code",
+        accessToken: "secret",
+      }),
+    );
+
+    expect(parsed.success).toBe(false);
   });
 });

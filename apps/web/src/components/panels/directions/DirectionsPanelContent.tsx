@@ -74,6 +74,7 @@ import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { attributionsForProviders } from "@/lib/attributionForProviders";
 import { buildEvDirectionsRequest } from "@/lib/buildEvDirectionsRequest";
 import { shareCurrentUrl } from "@/lib/deepLink";
+import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
 import { BRAND } from "@/lib/theme";
 import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
@@ -165,25 +166,25 @@ export function DirectionsPanelContent() {
   const [snackbar, setSnackbar] = useState<string | null>(null);
 
   const myLocationLabel = t("myLocation");
+  const requestFix = useForegroundLocation();
   useEffect(() => {
-    if (!isOpen || typeof navigator === "undefined" || !navigator.geolocation) return;
+    if (!isOpen) return;
 
     let active = true;
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        if (!active || !useDirectionsStore.getState().isOpen) return;
-        const location: LngLat = [position.coords.longitude, position.coords.latitude];
-        useMapStore.getState().setUserLocation(location);
-        setOrigin(location, myLocationLabel);
-      },
-      () => {},
-      { maximumAge: 0 },
-    );
+    // Through the adapter, so the installed shell answers from the one location
+    // producer it already owns rather than opening a second one.
+    void requestFix({ maxAgeMs: 0 }).then((result) => {
+      if (!active || result.status !== "ok") return;
+      if (!useDirectionsStore.getState().isOpen) return;
+      const location: LngLat = [result.fix.lng, result.fix.lat];
+      useMapStore.getState().setUserLocation(location);
+      setOrigin(location, myLocationLabel);
+    });
 
     return () => {
       active = false;
     };
-  }, [isOpen, myLocationLabel, setOrigin]);
+  }, [isOpen, myLocationLabel, setOrigin, requestFix]);
 
   const handleShare = async () => {
     const result = await shareCurrentUrl();

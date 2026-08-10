@@ -2,7 +2,13 @@ import * as Location from "expo-location";
 import { Platform } from "react-native";
 import { ANDROID_FOREGROUND_SERVICE_COPY, type MobileLocale } from "../../config/nativeCopy";
 import { NAVIGATION_LOCATION_TASK } from "../background/taskName";
-import type { LocationDriver, LocationPermissionState, LocationProfile } from "./LocationDriver";
+import type {
+  CurrentFixOptions,
+  LocationDriver,
+  LocationFix,
+  LocationPermissionState,
+  LocationProfile,
+} from "./LocationDriver";
 
 /**
  * The provisionally selected `LocationDriver`.
@@ -125,6 +131,35 @@ export class ExpoLocationDriver implements LocationDriver {
     });
   }
 
+  /**
+   * One position for an ordinary foreground action.
+   *
+   * When a navigation stream is already running, the last known position is
+   * used rather than a second read: registering another source while the
+   * session is live is exactly the duplicate producer the driver boundary exists
+   * to prevent, and the running stream's fix is fresher anyway.
+   */
+  async getCurrentFix(options: CurrentFixOptions): Promise<LocationFix | null> {
+    try {
+      const known = await Location.getLastKnownPositionAsync({ maxAge: options.maxAgeMs });
+      if (known) return toFix(known);
+      if (await Location.hasStartedLocationUpdatesAsync(NAVIGATION_LOCATION_TASK)) {
+        // A stream is running but has produced nothing recent enough. Waiting is
+        // still better than opening a competing one.
+        return null;
+      }
+      const position = await Location.getCurrentPositionAsync({
+        accuracy:
+          options.accuracy === "precise" ? Location.Accuracy.High : Location.Accuracy.Balanced,
+      });
+      return toFix(position);
+    } catch {
+      // A refusal or a sensor that never answers is a null result, not a crash:
+      // the caller has a "we could not find you" state and no use for a stack.
+      return null;
+    }
+  }
+
   async stop(): Promise<void> {
     await this.serialise(async () => {
       const running = await Location.hasStartedLocationUpdatesAsync(NAVIGATION_LOCATION_TASK);
@@ -143,4 +178,16 @@ export class ExpoLocationDriver implements LocationDriver {
       active.activityType === profile.activityType
     );
   }
+}
+
+/** Narrows an Expo position to the neutral shape the shared engines use. */
+function toFix(position: Location.LocationObject): LocationFix {
+  return {
+    coords: [position.coords.longitude, position.coords.latitude],
+    accuracy: position.coords.accuracy ?? Number.POSITIVE_INFINITY,
+    timestampMs: position.timestamp,
+    ...(position.coords.speed === null ? {} : { speedMps: position.coords.speed }),
+    ...(position.coords.heading === null ? {} : { headingDegrees: position.coords.heading }),
+    ...(position.coords.altitude === null ? {} : { altitudeMeters: position.coords.altitude }),
+  };
 }

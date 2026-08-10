@@ -1,6 +1,7 @@
 import {
   MOBILE_PROTOCOL_MAX,
   MOBILE_PROTOCOL_MIN,
+  messageAllowedAtVersion,
   type NativeToWebMessage,
   nativeToWebSchema,
   type WebToNativeMessage,
@@ -42,7 +43,8 @@ export type BridgeFailure =
   | "channel-reset"
   | "too-many-pending"
   | "invalid-command"
-  | "invalid-response";
+  | "invalid-response"
+  | "unsupported-capability";
 
 export class BridgeError extends Error {
   readonly code: BridgeFailure;
@@ -205,6 +207,13 @@ export class BridgeClient {
     }
     if (this.pending.size >= MAX_PENDING) {
       return Promise.reject(new BridgeError("too-many-pending"));
+    }
+    // A v1 shell has never heard of the v2 vocabulary. Sending one anyway makes
+    // an old-but-working binary look like a broken bridge, and the caller needs
+    // to offer its browser fallback instead.
+    const version = this.handshake?.selectedProtocolVersion ?? MOBILE_PROTOCOL_MAX;
+    if (!messageAllowedAtVersion(type, version)) {
+      return Promise.reject(new BridgeError("unsupported-capability"));
     }
 
     this.messageCounter += 1;

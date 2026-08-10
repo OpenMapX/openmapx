@@ -1,6 +1,7 @@
 import {
   MAX_MESSAGE_BYTES,
   MOBILE_PROTOCOL_MAX,
+  MOBILE_PROTOCOL_MIN,
   type WebToNativeMessage,
 } from "@openmapx/core/navigation";
 import { ChannelRegistry } from "./channel";
@@ -82,7 +83,10 @@ function command(nonce: string, overrides: CommandOverrides = {}): string {
   });
 }
 
-function hello(nonce: string, range = { min: 1, max: 1 }): string {
+function hello(
+  nonce: string,
+  range = { min: MOBILE_PROTOCOL_MIN, max: MOBILE_PROTOCOL_MAX },
+): string {
   return command(nonce, {
     type: "web.hello",
     messageId: "hello-1",
@@ -267,7 +271,9 @@ describe("NativeBridge.receive", () => {
 
       const outcome = await bridge.receive({
         url: `${WEB_ORIGIN}/`,
-        data: command(nonce, { messageId: "m-version", protocolVersion: 2 }),
+        // One below whatever was negotiated: still a real version, still not
+        // the one this channel agreed on.
+        data: command(nonce, { messageId: "m-version", protocolVersion: MOBILE_PROTOCOL_MAX - 1 }),
       });
 
       expect(rejection(outcome)).toBe("protocol-mismatch");

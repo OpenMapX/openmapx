@@ -42,6 +42,14 @@ export interface LocationFix {
   altitudeMeters?: number;
 }
 
+/** What a one-shot foreground request is allowed to ask for. */
+export interface CurrentFixOptions {
+  accuracy: "balanced" | "precise";
+  timeoutMs: number;
+  /** A known fix younger than this satisfies the request without a new read. */
+  maxAgeMs: number;
+}
+
 export interface LocationDriver {
   getPermissionState(): Promise<LocationPermissionState>;
   requestForegroundPermission(): Promise<LocationPermissionState>;
@@ -49,4 +57,12 @@ export interface LocationDriver {
   start(profile: LocationProfile): Promise<void>;
   stop(): Promise<void>;
   isRunning(): Promise<boolean>;
+  /**
+   * One position, for an ordinary foreground action like "centre on me".
+   *
+   * Deliberately not a stream and deliberately not a permission escalation:
+   * these are map gestures, not navigation, and asking for background location
+   * to satisfy one would be both wrong and a review finding.
+   */
+  getCurrentFix(options: CurrentFixOptions): Promise<LocationFix | null>;
 }

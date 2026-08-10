@@ -40,7 +40,30 @@ const MAX_TEXT_LENGTH = 512;
 /* ------------------------------------------------------------- versions --- */
 
 export const MOBILE_PROTOCOL_MIN = 1;
-export const MOBILE_PROTOCOL_MAX = 1;
+export const MOBILE_PROTOCOL_MAX = 2;
+
+/**
+ * The version each message type first appeared in.
+ *
+ * V2 is purely additive: every v1 message means exactly what it always did, and
+ * a v1 shell must keep working against a deployed v2 web app. That only holds if
+ * "which version introduced this" is data rather than a comment, so a message
+ * cannot be sent to a shell that has never heard of it.
+ */
+export const MESSAGE_MIN_VERSION: Readonly<Record<string, number>> = {
+  "location.request": 2,
+  "settings.open": 2,
+  "auth.open": 2,
+  "location.result": 2,
+  "settings.result": 2,
+  "deep-link.open": 2,
+  "auth.result": 2,
+};
+
+/** Whether `type` may be sent over a channel that negotiated `version`. */
+export function messageAllowedAtVersion(type: string, version: number): boolean {
+  return version >= (MESSAGE_MIN_VERSION[type] ?? 1);
+}
 
 export interface ProtocolRange {
   min: number;
@@ -70,6 +93,10 @@ export const WEB_TO_NATIVE_TYPES = [
   "session.stop",
   "session.complete",
   "event.ack",
+  // Protocol v2. Additive: a v1 shell never receives these.
+  "location.request",
+  "settings.open",
+  "auth.open",
 ] as const;
 
 export const NATIVE_TO_WEB_TYPES = [
@@ -82,6 +109,11 @@ export const NATIVE_TO_WEB_TYPES = [
   "snapshot.update",
   "navigation.event",
   "native.error",
+  // Protocol v2.
+  "location.result",
+  "settings.result",
+  "deep-link.open",
+  "auth.result",
 ] as const;
 
 export type WebToNativeType = (typeof WEB_TO_NATIVE_TYPES)[number];
@@ -291,6 +323,41 @@ export const webToNativeSchema = z.discriminatedUnion("type", [
   envelope("session.stop", z.object({}).strict()),
   envelope("session.complete", z.object({}).strict()),
   envelope("event.ack", z.object({ eventIds: z.array(boundedId).max(256) }).strict()),
+  envelope(
+    "location.request",
+    z
+      .object({
+        requestId: boundedId,
+        // No continuous-watch option on purpose. A page that could ask for a
+        // stream could be talked into asking for one, and there is already
+        // exactly one location producer.
+        accuracy: z.enum(["balanced", "precise"]),
+        timeoutMs: z.number().int().min(1_000).max(30_000),
+        /** How old an already-known fix may be before a new one is required. */
+        maxAgeMs: z.number().int().min(0).max(120_000),
+      })
+      .strict(),
+  ),
+  envelope(
+    "settings.open",
+    // A closed enum, never a URI: an arbitrary settings URI is an arbitrary
+    // intent, and the shell is not a browser for the page to steer.
+    z.object({ target: z.enum(["location", "notifications", "application"]) }).strict(),
+  ),
+  envelope(
+    "auth.open",
+    z
+      .object({
+        requestId: boundedId,
+        /** Which reviewed operation, not which URL. */
+        operation: z.enum(["oauth", "passkey"]),
+        provider: z.string().max(64),
+        /** Bound to this attempt; native holds it in memory only. */
+        state: boundedId,
+        codeChallenge: boundedId,
+      })
+      .strict(),
+  ),
 ]);
 
 export const nativeToWebSchema = z.discriminatedUnion("type", [
@@ -333,6 +400,55 @@ export const nativeToWebSchema = z.discriminatedUnion("type", [
       .strict(),
   ),
   envelope("snapshot.update", z.object({ snapshot: z.record(z.string(), z.unknown()) }).strict()),
+  envelope(
+    "location.result",
+    z
+      .object({
+        requestId: boundedId,
+        status: z.enum(["ok", "denied", "unavailable", "timeout"]),
+        fix: z
+          .object({
+            lat: z.number().finite().min(-90).max(90),
+            lng: z.number().finite().min(-180).max(180),
+            accuracy: z.number().finite().nonnegative().max(100_000).optional(),
+            heading: z.number().finite().min(0).max(360).optional(),
+            speed: z.number().finite().nonnegative().max(1_000).optional(),
+            timestampMs: safeInteger,
+          })
+          .strict()
+          .optional(),
+      })
+      .strict(),
+  ),
+  envelope(
+    "settings.result",
+    z
+      .object({
+        target: z.enum(["location", "notifications", "application"]),
+        status: z.enum(["opened", "unavailable", "cancelled"]),
+      })
+      .strict(),
+  ),
+  envelope(
+    "deep-link.open",
+    // Either a root-relative query on the compiled origin, or the internal
+    // "show me the running trip" intent. Never a URL the shell was handed.
+    z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("map"), query: z.string().max(2_048) }).strict(),
+      z.object({ kind: z.literal("active-navigation") }).strict(),
+    ]),
+  ),
+  envelope(
+    "auth.result",
+    z
+      .object({
+        requestId: boundedId,
+        status: z.enum(["ok", "cancelled", "failed"]),
+        /** Opaque, single-use, and exchanged by the page — never a token. */
+        handoffCode: boundedId.optional(),
+      })
+      .strict(),
+  ),
   envelope(
     "navigation.event",
     z

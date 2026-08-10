@@ -80,7 +80,7 @@ function seedOriginDestination() {
 const renderPanel = () => render(<DirectionsPanelContent />, { wrapper: createQueryWrapper() });
 
 describe("DirectionsPanelContent", () => {
-  it("requests a fresh location when opened and fills the origin", () => {
+  it("requests a fresh location when opened and fills the origin", async () => {
     let succeed: ((position: GeolocationPosition) => void) | undefined;
     const getCurrentPosition = vi.fn((...args: unknown[]) => {
       succeed = args[0] as (position: GeolocationPosition) => void;
@@ -93,7 +93,9 @@ describe("DirectionsPanelContent", () => {
     expect(getCurrentPosition).toHaveBeenCalled();
     expect(getCurrentPosition.mock.calls.at(-1)?.[2]).toEqual({ maximumAge: 0 });
 
-    act(() => {
+    // The fix now arrives through the one-fix adapter, so it lands a microtask
+    // after the callback rather than inside it.
+    await act(async () => {
       succeed?.({
         coords: { longitude: 13.405, latitude: 52.52 },
         timestamp: Date.now(),

@@ -10,6 +10,8 @@ import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { loadMaptilerStyle, loadOpenMapXStyle, type MapStyleVariant } from "@/lib/map";
 import { loadMapLibreRuntime, type MapLibreRuntime } from "@/lib/maplibreRuntime";
+import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
+import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import {
   ensureOfflinePackageRuntime,
   OFFLINE_PACKAGE_CHANGED_EVENT,
@@ -59,6 +61,9 @@ export function MapCanvas() {
   currentStyleRef.current = { mapStyle, variant };
   const styleRequestRef = useRef(0);
   const { setCenter, setZoom, setBearing, setPitch, setUserLocation } = useMapStore();
+  const requestFix = useForegroundLocation();
+  const { browserAuthority, permission: nativePermission } = useMobileRuntime();
+  const locationAuthority = browserAuthority ? "browser" : "native";
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -211,27 +216,32 @@ export function MapCanvas() {
       return undefined;
     });
 
-    // If geolocation permission is already granted, move to the user's location
-    // (zoom 14) and show the marker when it arrives — without prompting.
-    if (navigator.permissions && navigator.geolocation) {
+    // If location permission is already granted, move to the user's location
+    // (zoom 14) and show the marker when it arrives — without prompting. Opening
+    // the map is not a moment to spend somebody's one permission prompt.
+    const recenter = (lngLat: LngLat) =>
+      void mapInitialization.then((map) => {
+        if (destroyed || !map) return;
+        setUserLocation(lngLat);
+        map.jumpTo({ center: lngLat, zoom: 14 }, { programmatic: true });
+      });
+
+    const takeFix = () =>
+      void requestFix().then((result) => {
+        if (destroyed || result.status !== "ok") return;
+        recenter([result.fix.lng, result.fix.lat]);
+      });
+
+    if (locationAuthority === "native") {
+      // The shell already told us what the OS granted it, so no query is needed
+      // and none would be meaningful inside a WebView anyway.
+      if (nativePermission === "foreground" || nativePermission === "background") takeFix();
+    } else if (navigator.permissions && navigator.geolocation) {
       navigator.permissions
         .query({ name: "geolocation" })
         .then((result) => {
           if (destroyed) return;
-          if (result.state === "granted") {
-            navigator.geolocation.getCurrentPosition(
-              (pos) => {
-                if (destroyed) return;
-                const lngLat: LngLat = [pos.coords.longitude, pos.coords.latitude];
-                void mapInitialization.then((map) => {
-                  if (destroyed || !map) return;
-                  setUserLocation(lngLat);
-                  map.jumpTo({ center: lngLat, zoom: 14 }, { programmatic: true });
-                });
-              },
-              () => undefined,
-            );
-          }
+          if (result.state === "granted") takeFix();
         })
         .catch(() => undefined);
     }
@@ -246,9 +256,12 @@ export function MapCanvas() {
     };
   }, [
     env,
+    locationAuthority,
     mapRef,
+    nativePermission,
     notifyMapReady,
     notifyStyleReload,
+    requestFix,
     setBearing,
     setCenter,
     setPitch,

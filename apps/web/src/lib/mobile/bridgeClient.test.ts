@@ -402,3 +402,49 @@ describe("BridgeError", () => {
     expect(error.name).toBe("BridgeError");
   });
 });
+
+describe("BridgeClient protocol version gate", () => {
+  it("refuses a v2 command on a channel that negotiated v1", async () => {
+    const { client, sent, deliver } = harness();
+    client.attach();
+    const negotiating = client.hello();
+    deliver(helloReply({ selectedProtocolVersion: 1, maxProtocolVersion: 1 }));
+    await negotiating;
+
+    const code = await client
+      .request("location.request", {
+        requestId: "r1",
+        accuracy: "precise",
+        timeoutMs: 10_000,
+        maxAgeMs: 0,
+      })
+      .then(
+        () => "resolved",
+        (error: { code?: string }) => error.code,
+      );
+
+    // An old-but-working binary must not look like a broken bridge; the caller
+    // needs to offer its browser fallback instead.
+    expect(code).toBe("unsupported-capability");
+    expect(sent.some((raw) => JSON.parse(raw).type === "location.request")).toBe(false);
+  });
+
+  it("sends the same command once v2 is negotiated", async () => {
+    const { client, sent, deliver } = harness();
+    client.attach();
+    const negotiating = client.hello();
+    deliver(helloReply({ selectedProtocolVersion: 2, maxProtocolVersion: 2 }));
+    await negotiating;
+
+    void client
+      .request("location.request", {
+        requestId: "r1",
+        accuracy: "precise",
+        timeoutMs: 10_000,
+        maxAgeMs: 0,
+      })
+      .catch(() => undefined);
+
+    expect(sent.some((raw) => JSON.parse(raw).type === "location.request")).toBe(true);
+  });
+});
