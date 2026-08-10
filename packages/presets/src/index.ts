@@ -63,4 +63,47 @@ export function getChipTranslations(lang: string | undefined): Record<string, Ch
 }
 
 export type { ChipTranslation } from "./chip-translations";
+// Curated OSM editor policy. Kept deliberately separate from the search API
+// above: an editor safety rule must never move a place-search result.
+export {
+  EDITOR_FIELD_IDS,
+  EDITOR_LANGS,
+  loadEditorIndex,
+  resolveEditorLang,
+} from "./editor-loader";
+export {
+  ADDRESS_COMPONENT_KEYS,
+  buildEditableFieldModel,
+  CURATED_FIELD_KEYS,
+  getEditablePreset,
+  inferEditableWayGeometry,
+  matchEditablePreset,
+  previewCategoryTransition,
+  suggestEditablePresets,
+} from "./editor-policy";
+export type {
+  CategoryTagChange,
+  CategoryTagReplacement,
+  CategoryTransition,
+  CategoryTransitionRejection,
+  EditableAddressComponent,
+  EditableAddressEntry,
+  EditableAddressField,
+  EditableCategoryField,
+  EditableChoiceField,
+  EditableFieldDescriptor,
+  EditableFieldDisabledReason,
+  EditableFieldModel,
+  EditableFieldName,
+  EditablePresetMatch,
+  EditablePresetSummary,
+  EditablePresetUnsupportedReason,
+  EditableTextField,
+  EditorFieldEntry,
+  EditorIndex,
+  EditorLang,
+  EditorPresetEntry,
+  EditorPresetText,
+  OsmEditorGeometry,
+} from "./editor-types";
 export type { PresetMatch } from "./types";
