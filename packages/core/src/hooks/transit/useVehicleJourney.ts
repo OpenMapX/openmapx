@@ -1,4 +1,3 @@
-import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import type { VehicleJourney } from "@openmapx/mobility-core/transit";
 import { useQuery } from "@tanstack/react-query";
 import { fetchVehicleJourney } from "../../api/transit";

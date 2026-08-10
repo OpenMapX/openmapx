@@ -62,6 +62,7 @@ export {
   type NativeCapabilities,
   type NativeToWebMessage,
   type NavigationStartPackage,
+  nativeToWebSchema,
   navigationStartPackageSchema,
   negotiateMobileProtocol,
   type ParseErrorCode,

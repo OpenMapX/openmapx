@@ -90,6 +90,80 @@ describe("App WebView policy", () => {
   });
 });
 
+describe("App bridge channel", () => {
+  const emitAsync = async (handler: unknown, ...args: unknown[]) => {
+    await act(async () => {
+      await (handler as (...rest: unknown[]) => unknown)(...args);
+    });
+  };
+
+  const bootstrap = () => String(mockWebViewProps.injectedJavaScriptBeforeContentLoaded);
+  const nonceIn = (script: string) => {
+    const match = script.match(/nonce:"([^"]+)"/);
+    if (!match) throw new Error("bootstrap script publishes no nonce");
+    return match[1];
+  };
+
+  it("publishes a channel nonce to the main frame only", async () => {
+    await renderApp();
+
+    expect(mockWebViewProps.injectedJavaScriptBeforeContentLoadedForMainFrameOnly).toBe(true);
+    expect(mockWebViewProps.injectedJavaScriptForMainFrameOnly).toBe(true);
+    expect(nonceIn(bootstrap())).toMatch(/^[A-Za-z0-9_-]{40,}$/);
+  });
+
+  it("publishes the nonce and nothing else", async () => {
+    await renderApp();
+    const script = bootstrap();
+
+    expect(script).toContain("__OPENMAPX_MOBILE_CHANNEL__");
+    for (const forbidden of ["fetch", "eval", "token", "invoke", "sessionId"]) {
+      expect(script).not.toContain(forbidden);
+    }
+  });
+
+  it("keeps the published nonce stable while a document is loading", async () => {
+    await renderApp();
+    const before = nonceIn(bootstrap());
+
+    await emitAsync(mockWebViewProps.onLoadStart);
+
+    expect(nonceIn(bootstrap())).toBe(before);
+  });
+
+  it("prepares a different nonce for the next document", async () => {
+    await renderApp();
+    const first = nonceIn(bootstrap());
+    await emitAsync(mockWebViewProps.onLoadStart);
+
+    await emitAsync(mockWebViewProps.onLoadEnd);
+
+    expect(nonceIn(bootstrap())).not.toBe(first);
+  });
+
+  it("ignores a message from outside the compiled origin", async () => {
+    await renderApp();
+    await emitAsync(mockWebViewProps.onLoadStart);
+
+    await expect(
+      emitAsync(mockWebViewProps.onMessage, {
+        nativeEvent: { url: "https://evil.example/", data: "{}" },
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("survives a message that is not a string", async () => {
+    await renderApp();
+    await emitAsync(mockWebViewProps.onLoadStart);
+
+    await expect(
+      emitAsync(mockWebViewProps.onMessage, {
+        nativeEvent: { url: "https://openmapx.com/", data: undefined },
+      }),
+    ).resolves.toBeUndefined();
+  });
+});
+
 describe("App navigation interception", () => {
   const decide = (url: string) =>
     (mockWebViewProps.onShouldStartLoadWithRequest as (request: { url: string }) => boolean)({
