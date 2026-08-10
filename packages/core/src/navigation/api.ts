@@ -16,3 +16,11 @@ export {
   isApiRequestAbortedError,
 } from "../api/client";
 export { type FetchDirectionsParams, fetchDirections } from "../api/directions";
+export {
+  fetchTransitPlan,
+  fetchVehicleJourney,
+  refreshTransitItinerary,
+  type TransitPlanParams,
+  type TransitRefreshResult,
+  type VehicleJourneyParams,
+} from "../api/transit";
