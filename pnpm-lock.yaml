@@ -291,7 +291,7 @@ importers:
         version: 7.4.0
       '@turf/line-slice-along':
         specifier: ^7.3.5
-        version: 7.3.5
+        version: 7.4.0
       better-auth:
         specifier: ^1.6.25
         version: 1.6.26(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(kysely@0.29.4)(postgres@3.4.9))(next@16.3.0(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(babel-plugin-macros@3.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10)(vue@3.5.40(typescript@6.0.3))
@@ -4547,11 +4547,17 @@ packages:
   '@turf/bearing@7.3.5':
     resolution: {integrity: sha512-/qabIt/IuPsGlE6RukJ0zOirc6afNxoK7fK1WBNVnHuJjeOpSkW+7q1QW5XQGXBMv3odcD0ZgRR+MBiAHduYSA==}
 
+  '@turf/bearing@7.4.0':
+    resolution: {integrity: sha512-utMyjTU5U3QfHWLRIKUAvJerCMmC6NLI7X6cmL6PA5+KYdzul/ymxL6CQrwJugrf9zt4Hnzvipwz0j5H1Yo87w==}
+
   '@turf/boolean-point-in-polygon@7.3.5':
     resolution: {integrity: sha512-ba7+B0wzaS9GtERZOoXUZ6oW8IcIJHNQZf3c+tiD9ESjcsPO1Q/4qIJGTKl92nBLhhracHJxMWBM/U6hAVkaRg==}
 
   '@turf/destination@7.3.5':
     resolution: {integrity: sha512-x6ylChhOlIbucRSw7wF6z2gSEqqQl+dE0nSH5AL/ojZkqqGYahiw+2P4A8ZMuDM6rzH+FIqRYDes0o4nSArZCw==}
+
+  '@turf/destination@7.4.0':
+    resolution: {integrity: sha512-+jFpOUtzCiN8l9ZOvr66rxi/UxizphXaBDldaw9NfxlX/HcMn3ZDzC8IiCHiNXAilVh4WpCH0qqmH9ykOgdBKA==}
 
   '@turf/distance@7.3.5':
     resolution: {integrity: sha512-uQAC63zg/l91KUxzfhqio7Ii3+UXTrPOVJScIdRj6EO6+9XHI4kC+AdyIS4cPAv14sZfJLIBxzMnzcGrss+kEA==}
@@ -4574,8 +4580,8 @@ packages:
   '@turf/length@7.4.0':
     resolution: {integrity: sha512-vQsJLuL7uy8m6HAMuJJKoiOHYY1de1Hd6mY/fM90qfu2RyIrkoF8J4bRUb72XZNCVnvob/eHpUMdhZeoUhSyfQ==}
 
-  '@turf/line-slice-along@7.3.5':
-    resolution: {integrity: sha512-zLOU9mGFXJdbPvA3/zXpDsBmXY2paA7eD6/p0iYiP9OASYO0GDcarwY5K/E0uuEdLrMf8G8YA2cJDcEl9gRgFw==}
+  '@turf/line-slice-along@7.4.0':
+    resolution: {integrity: sha512-N3rBS/E/N2v2udmglBU1XTfWIQlxkSDuzGCjbGnWUMX2ClVgJvptQXI1zQ29aIeOTbcqKNiSbEyqBg8e+fugPw==}
 
   '@turf/meta@7.3.5':
     resolution: {integrity: sha512-r+ohqxoyqeigFB0oFrQx/YEHIkOKqcKpCjvZkvZs7Tkv+IFco5MezAd2zd4rzK+0DfFgDP3KpJc7HqrYjvEjhg==}
@@ -10137,6 +10143,13 @@ snapshots:
       '@types/geojson': 7946.0.16
       tslib: 2.8.1
 
+  '@turf/bearing@7.4.0':
+    dependencies:
+      '@turf/helpers': 7.4.0
+      '@turf/invariant': 7.4.0
+      '@types/geojson': 7946.0.16
+      tslib: 2.8.1
+
   '@turf/boolean-point-in-polygon@7.3.5':
     dependencies:
       '@turf/helpers': 7.3.5
@@ -10149,6 +10162,13 @@ snapshots:
     dependencies:
       '@turf/helpers': 7.3.5
       '@turf/invariant': 7.3.5
+      '@types/geojson': 7946.0.16
+      tslib: 2.8.1
+
+  '@turf/destination@7.4.0':
+    dependencies:
+      '@turf/helpers': 7.4.0
+      '@turf/invariant': 7.4.0
       '@types/geojson': 7946.0.16
       tslib: 2.8.1
 
@@ -10196,12 +10216,12 @@ snapshots:
       '@types/geojson': 7946.0.16
       tslib: 2.8.1
 
-  '@turf/line-slice-along@7.3.5':
+  '@turf/line-slice-along@7.4.0':
     dependencies:
-      '@turf/bearing': 7.3.5
-      '@turf/destination': 7.3.5
-      '@turf/distance': 7.3.5
-      '@turf/helpers': 7.3.5
+      '@turf/bearing': 7.4.0
+      '@turf/destination': 7.4.0
+      '@turf/distance': 7.4.0
+      '@turf/helpers': 7.4.0
       '@types/geojson': 7946.0.16
       tslib: 2.8.1
 
