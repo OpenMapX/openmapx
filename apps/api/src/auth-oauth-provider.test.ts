@@ -37,15 +37,19 @@ afterAll(() => {
 });
 
 describe("managed OAuth provider policy", () => {
-  it("pins the server and shared client Better Auth families to exact 1.6.25 manifests and lock entries", () => {
+  it("pins every runtime Better Auth family to 1.6.26 and the schema CLI to 1.6.25", () => {
     const apiManifest = JSON.parse(
       readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+    ) as { dependencies: Record<string, string>; scripts: Record<string, string> };
+    const webManifest = JSON.parse(
+      readFileSync(new URL("../../web/package.json", import.meta.url), "utf8"),
     ) as { dependencies: Record<string, string> };
     const coreManifest = JSON.parse(
       readFileSync(new URL("../../../packages/core/package.json", import.meta.url), "utf8"),
     ) as { dependencies: Record<string, string> };
     const packageLock = readFileSync(new URL("../../../pnpm-lock.yaml", import.meta.url), "utf8");
     const apiLock = packageLock.split("\n  apps/api:")[1]?.split("\n  apps/web:")[0] ?? "";
+    const webLock = packageLock.split("\n  apps/web:")[1]?.split("\n  integrations/")[0] ?? "";
     const coreLock = packageLock.split("\n  packages/core:")[1]?.split("\n  packages/")[0] ?? "";
     const apiPackages = [
       "@better-auth/core",
@@ -61,21 +65,28 @@ describe("managed OAuth provider policy", () => {
       "@better-auth/passkey",
       "better-auth",
     ];
+    const webPackages = ["@better-auth/core", "@better-auth/passkey", "better-auth"];
 
     for (const packageName of apiPackages) {
-      expect(apiManifest.dependencies[packageName]).toBe("1.6.25");
+      expect(apiManifest.dependencies[packageName]).toBe("1.6.26");
       const lockName = packageName.startsWith("@") ? `'${packageName}'` : packageName;
-      expect(apiLock).toContain(`${lockName}:\n        specifier: 1.6.25`);
+      expect(apiLock).toContain(`${lockName}:\n        specifier: 1.6.26`);
     }
     for (const packageName of corePackages) {
-      expect(coreManifest.dependencies[packageName]).toBe("1.6.25");
+      expect(coreManifest.dependencies[packageName]).toBe("1.6.26");
       const lockName = packageName.startsWith("@") ? `'${packageName}'` : packageName;
-      expect(coreLock).toContain(`${lockName}:\n        specifier: 1.6.25`);
+      expect(coreLock).toContain(`${lockName}:\n        specifier: 1.6.26`);
     }
-    expect(apiLock.match(/version: 1\.6\.25\(@better-auth\/core@1\.6\.25/g)).toHaveLength(4);
-    expect(coreLock.match(/version: 1\.6\.25\(@better-auth\/core@1\.6\.25/g)).toHaveLength(2);
-    expect(apiLock).not.toContain("version: 1.6.25(@better-auth/core@1.6.26");
-    expect(coreLock).not.toContain("version: 1.6.25(@better-auth/core@1.6.26");
+    for (const packageName of webPackages) {
+      expect(webManifest.dependencies[packageName]).toBe("1.6.26");
+      const lockName = packageName.startsWith("@") ? `'${packageName}'` : packageName;
+      expect(webLock).toContain(`${lockName}:\n        specifier: 1.6.26`);
+    }
+    expect(apiManifest.scripts["auth:generate"]).toContain("auth@1.6.25 generate");
+    for (const importer of [apiLock, coreLock, webLock]) {
+      expect(importer).not.toContain("@better-auth/core@1.6.25");
+      expect(importer).not.toContain("specifier: ^1.6.25");
+    }
   });
 
   it("exposes every provider table through the application Drizzle schema", async () => {
@@ -92,7 +103,7 @@ describe("managed OAuth provider policy", () => {
     );
   });
 
-  it("keeps the exact 1.6.25 two-factor lockout columns emitted by the pinned generator", async () => {
+  it("keeps the exact 1.6.26 two-factor lockout columns emitted by the pinned generator", async () => {
     const { twoFactor } = await import("./db/schema");
     const columns = getTableColumns(twoFactor);
 

@@ -335,7 +335,7 @@ function authoritativeIssuer(): string | null {
 }
 
 /**
- * Read-only authority snapshot for user-facing readiness. Better Auth 1.6.25
+ * Read-only authority snapshot for user-facing readiness. Better Auth 1.6.26
  * has no supported system/headerless client inspector and its full API is
  * intentionally admin-session protected. Select only non-secret client
  * metadata from Better Auth's own persistence; all client writes remain

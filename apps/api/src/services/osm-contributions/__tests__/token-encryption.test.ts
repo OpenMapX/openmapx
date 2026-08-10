@@ -1,5 +1,5 @@
 /**
- * Pins the Better Auth 1.6.25 behavior the contribution flow depends on:
+ * Pins the Better Auth 1.6.26 behavior the contribution flow depends on:
  * elevated OSM tokens are encrypted at rest, and the public server API still
  * hands the server a usable plaintext token plus the account's effective
  * scopes. It also pins the library's legacy-token detection, which decides

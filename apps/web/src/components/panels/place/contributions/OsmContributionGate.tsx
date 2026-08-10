@@ -19,7 +19,7 @@ export type OsmContributionIntent = "edit" | "note";
 /**
  * The complete scope set an account-link request must carry.
  *
- * Better Auth 1.6.25's generic-OAuth *link* route uses
+ * Better Auth 1.6.26's generic-OAuth *link* route uses
  * `body.scopes || configuredScopes`, so a supplied array **replaces** the
  * provider defaults rather than adding to them (unlike the sign-in route,
  * which concatenates). Passing only the missing scope would therefore drop

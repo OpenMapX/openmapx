@@ -12,11 +12,11 @@
   },
   "dependencies": {
     "@hey-api/openapi-ts": "^0.99.0",
-    "@scalar/openapi-parser": "^0.28.11",
+    "@scalar/openapi-parser": "^0.28.12",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@types/node": "^26.1.2",
+    "@types/node": "^26.2.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
   }

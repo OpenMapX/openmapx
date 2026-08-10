@@ -35,13 +35,20 @@ describe("matchEditablePreset", () => {
     expect(result.preset.presetId).toBe("amenity/restaurant");
   });
 
-  it("reports ambiguity instead of picking the first tied candidate", () => {
+  it("accepts the unified post-box preset from schema 7.1", () => {
     const result = matchEditablePreset({ amenity: "post_box" }, "point");
+    expect(result.status).toBe("matched");
+    if (result.status !== "matched") return;
+    expect(result.preset.presetId).toBe("amenity/post_box");
+  });
+
+  it("reports ambiguity instead of picking the first tied regional candidate", () => {
+    const result = matchEditablePreset({ traffic_sign: "maxspeed" }, "point");
     expect(result.status).toBe("ambiguous");
     if (result.status !== "ambiguous") return;
     expect(result.candidates.map((c) => c.presetId).sort()).toEqual([
-      "amenity/post_box",
-      "amenity/post_box/post_box-US",
+      "traffic_sign/maxspeed",
+      "traffic_sign/maxspeed-US-CA-LR",
     ]);
   });
 
@@ -211,7 +218,7 @@ describe("buildEditableFieldModel", () => {
   });
 
   it("disables the category when the preset is ambiguous or the geometry is unknown", () => {
-    const ambiguous = field({ amenity: "post_box" }, "category");
+    const ambiguous = field({ traffic_sign: "maxspeed" }, "category");
     expect(ambiguous?.enabled).toBe(false);
     expect(ambiguous?.disabledReason).toBe("CATEGORY_AMBIGUOUS");
     expect(ambiguous?.ownedKeys).toEqual([]);
@@ -385,8 +392,8 @@ describe("previewCategoryTransition", () => {
   it("rejects an ambiguous or unsupported current state", () => {
     expect(
       previewCategoryTransition({
-        tags: { amenity: "post_box" },
-        current: matchEditablePreset({ amenity: "post_box" }, "point"),
+        tags: { traffic_sign: "maxspeed" },
+        current: matchEditablePreset({ traffic_sign: "maxspeed" }, "point"),
         targetPresetId: "amenity/cafe",
         geometry: "point",
       }),

@@ -236,7 +236,7 @@ location history. Retain off-host backups and follow Dawarich's official
 | Component | Reviewed release | Reviewed OCI index / source | Native architectures tested or inspected | Support note |
 | --- | --- | --- | --- | --- |
 | OpenMapX | dependency-complete baseline `1a2d0396fb97b1957a6907ef41877f91cab640eb` plus this release change | repository source | CI targets plus staging host | Record the final release commit with acceptance evidence |
-| Better Auth OAuth Provider | `better-auth` and `@better-auth/oauth-provider` 1.6.25 | exact package lock | server runtime | One persisted confidential client; admin API only, no direct table writes |
+| Better Auth OAuth Provider | `better-auth` and `@better-auth/oauth-provider` | exact package lock | server runtime | One persisted confidential client; admin API only, no direct table writes |
 | Dawarich app + worker | `freikin/dawarich:1.10.3` | `sha256:d7457e7b27a9992f2fdd367fe22a515b1b44fc6e0cfb7a68f3c69c439c465a6b` | linux/amd64, linux/arm64, linux/arm/v7 inspected; arm64 entrypoints exercised | Upstream Dawarich release |
 | Dedicated PostGIS | `ghcr.io/baosystems/postgis:17-3.5` | index `sha256:789ecd05031a4f98b06d6e48e0d9be054fd4c5df2cd8b14ef967bad24f359a07`; Bao revision `603ccfa15a094bf677524275bdf7e8a7478885ce` | linux/amd64 + linux/arm64 inspected; native arm64 PostgreSQL 17.5/PostGIS 3.5.2 exercised | Bao rebuilds weekly and explicitly provides no support |
 | Dedicated Redis | `redis:7.4-alpine` | mutable pinned release tag; re-inspect before release | linux/amd64 + linux/arm64 inspected | Transient queues/cache; not restored |

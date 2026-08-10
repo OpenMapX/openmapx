@@ -60,10 +60,10 @@
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
-    "@types/node": "^26.1.2",
+    "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
-    "esbuild": "^0.28.1",
-    "maplibre-gl": "^6.1.0",
+    "esbuild": "^0.28.2",
+    "maplibre-gl": "^6.2.0",
     "react": "19.2.8",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"

@@ -257,7 +257,7 @@ describe("category transitions", () => {
   });
 
   it("refuses an ambiguous current category", () => {
-    const element = node({ amenity: "post_box" });
+    const element = node({ traffic_sign: "maxspeed" });
     expectRejection(
       [{ field: "category", action: "set", presetId: "amenity/cafe" }],
       "FIELD_NOT_EDITABLE",
