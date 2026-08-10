@@ -9,6 +9,7 @@ import "@photo-sphere-viewer/virtual-tour-plugin/index.css";
 import "maplibre-theme/icons.default.css";
 import "maplibre-theme/classic.css";
 import "./globals.css";
+import { headers } from "next/headers";
 import { OfflineNotice } from "@/components/OfflineNotice";
 import { FileOpenHandler } from "@/components/pwa/FileOpenHandler";
 import { PersistentStorageRequest } from "@/components/pwa/PersistentStorageRequest";
@@ -78,16 +79,24 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const locale = await getLocale();
   const messages = await getMessages();
   const clientEnv = buildClientEnv();
+  // Set per request in `src/proxy.ts`. An import map is executable content as
+  // far as CSP is concerned, so without this the production policy blocks it and
+  // every community bundle's externals fail to resolve.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
 
   return (
     <html lang={locale} className={plusJakartaSans.variable} suppressHydrationWarning>
       <head>
         <link rel="stylesheet" href="/fonts/material-icons.css" />
-        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: importmap content is a build-time JSON literal */}
-        <script type="importmap" dangerouslySetInnerHTML={{ __html: RUNTIME_IMPORTMAP }} />
+        <script
+          type="importmap"
+          nonce={nonce}
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: importmap content is a build-time JSON literal
+          dangerouslySetInnerHTML={{ __html: RUNTIME_IMPORTMAP }}
+        />
       </head>
       <body className="h-dvh overflow-hidden antialiased">
-        <InitColorSchemeScript attribute="class" defaultMode="system" />
+        <InitColorSchemeScript attribute="class" defaultMode="system" nonce={nonce} />
         <AppRouterCacheProvider>
           <NextIntlClientProvider locale={locale} messages={messages}>
             <EnvProvider config={clientEnv}>

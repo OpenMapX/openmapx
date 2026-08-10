@@ -41,6 +41,7 @@ interface VitestExpectation {
   toBeLessThan(expected: number): void;
   toBeLessThanOrEqual(expected: number): void;
   toBeTypeOf(expected: string): void;
+  toMatch(expected: string | RegExp): void;
   toBeDefined(): void;
   toBeTruthy(): void;
   toBeFalsy(): void;

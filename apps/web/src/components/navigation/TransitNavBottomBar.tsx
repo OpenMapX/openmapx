@@ -1,7 +1,7 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import { useNavigationStore, useVehicleJourney } from "@openmapx/core";
+import { useVehicleJourney } from "@openmapx/core";
 import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";

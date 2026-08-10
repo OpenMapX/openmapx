@@ -29,29 +29,13 @@ function resolveBuildId(): string {
   }
   return `build-${Date.now().toString(36)}`;
 }
-const developmentImageSources = process.env.NODE_ENV === "production" ? "" : " http:";
 
-// Enforced now: object/base/frame/form hardening. Resource directives stay
-// permissive because tiles and overlays load from many runtime-configured
-// origins (self-hosted + external). A nonce-based strict `script-src` that
-// would also block `javascript:`-URI XSS is a deferred follow-up — it needs
-// per-request nonces (in proxy.ts) and browser verification of every map layer.
-const contentSecurityPolicy = [
-  "default-src 'self'",
-  "base-uri 'self'",
-  "object-src 'none'",
-  "frame-ancestors 'self'",
-  "form-action 'self'",
-  `img-src 'self' data: blob: https:${developmentImageSources}`,
-  "font-src 'self' data:",
-  "style-src 'self' 'unsafe-inline'",
-  "worker-src 'self' blob:",
-  "connect-src 'self' https: http: ws: wss: data: blob:",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:",
-].join("; ");
-
-// Security headers applied to every route. CSP enforces object/base/frame/form
-// hardening now; resource directives stay permissive (see comment above).
+// Security headers applied to every route.
+//
+// Content-Security-Policy is deliberately absent: it carries a per-request nonce
+// and is set in `src/proxy.ts`. A static copy here would be a second policy, and
+// browsers enforce both — so the two disagreeing produces failures that are very
+// hard to attribute back to either.
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
@@ -61,7 +45,6 @@ const securityHeaders = [
     value: "camera=(), microphone=(self), geolocation=(self), interest-cohort=()",
   },
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
-  { key: "Content-Security-Policy", value: contentSecurityPolicy },
 ];
 
 const nextConfig: NextConfig = {
