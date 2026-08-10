@@ -31,6 +31,144 @@ function getConfig(): ApiClientConfig {
   return _config;
 }
 
+/** Never read more than this from a non-2xx body; the rest is cancelled. */
+const MAX_ERROR_BODY_BYTES = 64 * 1024;
+/** Upper bound for an advertised `Retry-After`, so a hostile value cannot stall the UI for days. */
+const MAX_RETRY_AFTER_SECONDS = 86_400;
+
+/**
+ * Structured transport failure. The message deliberately carries only the
+ * status: upstream bodies may contain account or edit details, so the parsed
+ * body lives in a non-enumerable `payload` that generic logging, spreading and
+ * `JSON.stringify` cannot reach. Feature code that knows the endpoint's error
+ * schema parses `payload` itself.
+ */
+export class ApiClientError extends Error {
+  readonly status: number;
+  readonly retryAfterSeconds: number | null;
+  /** Declared for types only; installed as a non-enumerable own property below. */
+  readonly payload!: unknown;
+
+  constructor(status: number, payload: unknown, retryAfterSeconds: number | null) {
+    super(`API request failed with status ${status}`);
+    this.name = "ApiClientError";
+    this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
+    Object.defineProperty(this, "payload", {
+      value: payload,
+      enumerable: false,
+      writable: false,
+      configurable: false,
+    });
+  }
+
+  toJSON(): {
+    name: string;
+    message: string;
+    status: number;
+    retryAfterSeconds: number | null;
+  } {
+    return {
+      name: this.name,
+      message: this.message,
+      status: this.status,
+      retryAfterSeconds: this.retryAfterSeconds,
+    };
+  }
+}
+
+export function isApiClientError(value: unknown): value is ApiClientError {
+  return value instanceof ApiClientError;
+}
+
+function isJsonMediaType(contentType: string | null): boolean {
+  if (!contentType) return false;
+  const essence = contentType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+  return essence === "application/json" || essence.endsWith("+json");
+}
+
+function parseRetryAfter(header: string | null): number | null {
+  if (!header) return null;
+  const trimmed = header.trim();
+  if (trimmed === "") return null;
+  if (/^\d+$/.test(trimmed)) {
+    return Math.min(Number(trimmed), MAX_RETRY_AFTER_SECONDS);
+  }
+  const at = Date.parse(trimmed);
+  if (Number.isNaN(at)) return null;
+  const seconds = Math.ceil((at - Date.now()) / 1000);
+  if (seconds <= 0) return 0;
+  return Math.min(seconds, MAX_RETRY_AFTER_SECONDS);
+}
+
+function discardBody(res: Response): void {
+  // Free the socket without materializing an unbounded upstream body.
+  void res.body?.cancel().catch(() => undefined);
+}
+
+async function readBoundedBody(res: Response): Promise<string | null> {
+  const body = res.body;
+  if (!body || typeof body.getReader !== "function") {
+    // Mocked/legacy responses without a stream: fall back to a length-capped read.
+    const text = await res.text().catch(() => null);
+    if (text === null) return null;
+    return text.length > MAX_ERROR_BODY_BYTES ? null : text;
+  }
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    let chunk: ReadableStreamReadResult<Uint8Array>;
+    try {
+      chunk = await reader.read();
+    } catch {
+      return null;
+    }
+    if (chunk.done) break;
+    const value = chunk.value;
+    if (!value) continue;
+    total += value.byteLength;
+    if (total > MAX_ERROR_BODY_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(merged);
+}
+
+/**
+ * Single non-2xx path for every verb. A JSON body is parsed within a byte
+ * bound; anything else is discarded so it can never reach a message or log.
+ */
+async function toApiClientError(res: Response): Promise<ApiClientError> {
+  const retryAfterSeconds = parseRetryAfter(res.headers.get("retry-after"));
+  if (!isJsonMediaType(res.headers.get("content-type"))) {
+    discardBody(res);
+    return new ApiClientError(res.status, null, retryAfterSeconds);
+  }
+  const text = await readBoundedBody(res);
+  if (text === null || text.trim() === "") {
+    return new ApiClientError(res.status, null, retryAfterSeconds);
+  }
+  try {
+    return new ApiClientError(res.status, JSON.parse(text) as unknown, retryAfterSeconds);
+  } catch {
+    return new ApiClientError(res.status, null, retryAfterSeconds);
+  }
+}
+
+async function assertOk(res: Response): Promise<void> {
+  if (res.ok) return;
+  throw await toApiClientError(res);
+}
+
 export class ApiClient {
   async get<T>(
     path: string,
@@ -49,9 +187,7 @@ export class ApiClient {
       credentials: cfg.credentials ?? "omit",
       signal: options?.signal,
     });
-    if (!res.ok) {
-      throw new Error(`API error ${res.status}: ${await res.text()}`);
-    }
+    await assertOk(res);
     return res.json() as Promise<T>;
   }
 
@@ -74,9 +210,7 @@ export class ApiClient {
       credentials: cfg.credentials ?? "omit",
     });
     if (res.status === 204) return null;
-    if (!res.ok) {
-      throw new Error(`API error ${res.status}: ${await res.text()}`);
-    }
+    await assertOk(res);
     return res.json() as Promise<T>;
   }
 
@@ -100,9 +234,8 @@ export class ApiClient {
       headers: { Accept: "application/json", ...cfg.headerInterceptor?.() },
       credentials: cfg.credentials ?? "omit",
     });
-    if (!res.ok) {
-      throw new Error(`API error ${res.status}: ${await res.text()}`);
-    }
+    await assertOk(res);
+    if (res.status === 204) return undefined as T;
     const text = await res.text();
     return text ? (JSON.parse(text) as T) : (undefined as T);
   }
@@ -120,9 +253,7 @@ export class ApiClient {
       credentials: cfg.credentials ?? "omit",
       body: JSON.stringify(body),
     });
-    if (!res.ok) {
-      throw new Error(`API error ${res.status}: ${await res.text()}`);
-    }
+    await assertOk(res);
     return res.json() as Promise<T>;
   }
 }

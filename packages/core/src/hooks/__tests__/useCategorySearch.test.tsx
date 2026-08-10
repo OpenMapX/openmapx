@@ -1,6 +1,6 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { apiClient } from "../../api/client";
+import { ApiClientError, apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
 import { createQueryWrapper } from "../../test/queryWrapper";
 import type { BoundingBox } from "../../types/geometry";
@@ -59,6 +59,10 @@ describe("useCategorySearch", () => {
   });
 
   it("isAreaTooLarge detects the area_too_large error", () => {
+    expect(isAreaTooLarge(new ApiClientError(422, { error: "area_too_large" }, null))).toBe(true);
+    expect(isAreaTooLarge(new ApiClientError(422, { error: "other" }, null))).toBe(false);
+    expect(isAreaTooLarge(new ApiClientError(500, null, null))).toBe(false);
+    // Legacy message-shaped errors (non-client throwers) still resolve.
     expect(isAreaTooLarge(new Error("API error 413: area_too_large"))).toBe(true);
     expect(isAreaTooLarge(new Error("network failure"))).toBe(false);
     expect(isAreaTooLarge("not an error")).toBe(false);
