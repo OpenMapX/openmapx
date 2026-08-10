@@ -107,23 +107,38 @@ export function OsmContributionDialog({ open, ref_, onClose }: Props) {
     dispatch({ type: "reset" });
   }, [ref_.type, ref_.id]);
 
-  useEffect(() => {
-    if (open && state.step === "closed") dispatch({ type: "open", intent: "edit" });
-  }, [open, state.step]);
+  const account = capabilities.data;
+  const accountReady =
+    account?.enabled === true &&
+    account.linked &&
+    account.contributorTermsAgreed &&
+    !account.activeBlock;
+  const canEdit = accountReady && account.canWriteApi && account.directEditingEnabled;
+  const canNote = accountReady && account.canWriteNotes;
 
-  const ready =
-    capabilities.data?.enabled === true &&
-    capabilities.data.linked &&
-    capabilities.data.contributorTermsAgreed &&
-    !capabilities.data.activeBlock &&
-    capabilities.data.canWriteApi &&
-    capabilities.data.directEditingEnabled;
+  /**
+   * When direct editing is switched off or unauthorized but notes are still
+   * permitted, the flow opens on the note path rather than dead-ending: the
+   * design keeps the note and advanced-editor handoffs available wherever
+   * their own permissions allow.
+   */
+  const gateIntent = canEdit || !canNote ? "edit" : "note";
 
   useEffect(() => {
-    if (state.step === "gate" && context.data && (ready || state.intent === "note")) {
+    if (!open) return;
+    if (state.step === "closed") {
+      dispatch({ type: "open", intent: gateIntent });
+      return;
+    }
+    if (state.step !== "gate") return;
+    if (state.intent !== gateIntent) {
+      dispatch({ type: "open", intent: gateIntent });
+      return;
+    }
+    if (context.data && (canEdit || canNote)) {
       dispatch({ type: "contextLoaded", context: context.data });
     }
-  }, [state, context.data, ready]);
+  }, [open, state, gateIntent, context.data, canEdit, canNote]);
 
   const close = useCallback(() => {
     invalidate(ref_);
@@ -187,7 +202,11 @@ export function OsmContributionDialog({ open, ref_, onClose }: Props) {
       });
       dispatch({ type: "published", result });
     } catch (error) {
-      if (error instanceof OsmContributionRequestError && error.context) {
+      if (
+        error instanceof OsmContributionRequestError &&
+        error.code === "VERSION_CONFLICT" &&
+        error.context
+      ) {
         dispatch({ type: "conflict", latest: error.context });
         return;
       }

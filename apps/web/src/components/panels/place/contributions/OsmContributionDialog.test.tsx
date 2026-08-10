@@ -384,6 +384,45 @@ describe("notes", () => {
   });
 });
 
+describe("notes-only permission", () => {
+  it("opens the note flow when direct editing is off but notes are allowed", async () => {
+    state.capabilities = {
+      data: { ...CAPABILITIES, directEditingEnabled: false },
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+    };
+    renderDialog();
+    // Not a dead end: the flow lands on the note form rather than an
+    // unavailable panel, because write_notes is still permitted.
+    expect(await screen.findByText("osmContributions.noteDisclosure")).not.toBeNull();
+    expect(screen.queryByText("osmContributions.reviewAction")).toBeNull();
+  });
+
+  it("opens the note flow when only the notes permission was granted", async () => {
+    state.capabilities = {
+      data: { ...CAPABILITIES, canWriteApi: false },
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+    };
+    renderDialog();
+    expect(await screen.findByText("osmContributions.noteDisclosure")).not.toBeNull();
+  });
+
+  it("still gates when neither action is permitted", async () => {
+    state.capabilities = {
+      data: { ...CAPABILITIES, canWriteApi: false, canWriteNotes: false },
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+    };
+    renderDialog();
+    expect(await screen.findByText("osmContributions.gateScopeAction")).not.toBeNull();
+    expect(screen.queryByText("osmContributions.noteDisclosure")).toBeNull();
+  });
+});
+
 describe("errors", () => {
   it("renders a translated code and never the payload text", async () => {
     const { OsmContributionRequestError } = await import("@openmapx/core");
