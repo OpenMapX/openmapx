@@ -132,8 +132,8 @@ async function fetchJourneyStops(
  *
  * The rotating refresh token stays where it already is — inside the itinerary
  * this package carries — and is never lifted out into a field of its own, so
- * there is exactly one place it can leak from and Plan 04's snapshot stripping
- * already covers it.
+ * there is exactly one place it can leak from and the snapshot stripping that
+ * runs on every outbound projection already covers it.
  */
 export async function prepareTransitStart(
   input: PrepareTransitStartInput,

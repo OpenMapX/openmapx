@@ -52,7 +52,7 @@ const PROFILE_CYCLE: LocationProfileKind[] = ["driving", "walking", "transit-cru
 
 /**
  * The prominent explanation shown before any background permission request.
- * The production flow gets a fully localised version in Plan 02; this developer
+ * The production flow has its own fully localised version; this developer
  * build must still never reach an OS prompt without stating the purpose.
  */
 const BACKGROUND_DISCLOSURE =

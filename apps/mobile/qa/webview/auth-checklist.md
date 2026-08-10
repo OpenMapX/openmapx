@@ -112,7 +112,7 @@ is in flight. Each must be ignored, with the app remaining in its waiting state.
 ## Pending volunteer-beta cases
 
 These cannot be established on a simulator or emulator. They are carried into
-the Plan 06 beta matrix and remain open until a volunteer runs them on real
+the release beta matrix and remain open until a volunteer runs them on real
 hardware.
 
 - [ ] **Passkey creation and use on a real authenticator.** Simulators do not
