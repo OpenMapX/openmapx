@@ -15,6 +15,7 @@ import { buildChannelBootstrapScript } from "./bridge/outboundScript";
 import { getRuntimeConfig, type MobileRuntimeConfig } from "./config/runtimeConfig";
 import { useConnectivity } from "./connectivity/useConnectivity";
 import { useAppVisibility } from "./lifecycle/useAppLifecycle";
+import { registeredModes } from "./navigation/createCoordinator";
 import { FeasibilityOverlay } from "./shell/FeasibilityOverlay";
 import { NativeRecoveryOverlay } from "./shell/NativeRecoveryOverlay";
 import { classifyNavigation } from "./shell/originPolicy";
@@ -50,6 +51,12 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
       createShellBridge({
         webOrigin: config.webOrigin,
         inject: (script) => webViewRef.current?.injectJavaScript(script),
+        // Reported from what is genuinely registered. Claiming transit here
+        // would strand a user mid-journey on a session nothing can advance.
+        capabilities: () => ({
+          groundNavigation: registeredModes().includes("ground"),
+          transitNavigation: registeredModes().includes("transit"),
+        }),
       }),
     [config.webOrigin],
   );

@@ -1,6 +1,7 @@
 import { getDatabase } from "../storage/database";
 import { SessionRepository } from "../storage/SessionRepository";
 import { type EffectPorts, EffectRunner } from "./effects";
+import { GroundNavigationProcessor } from "./ground/GroundNavigationProcessor";
 import {
   type BridgePort,
   type CoordinatorDeps,
@@ -8,15 +9,14 @@ import {
   NavigationCoordinator,
   type PermissionPort,
 } from "./NavigationCoordinator";
-import { ProcessorRegistry } from "./processor";
+import { type AnyNavigationProcessor, ProcessorRegistry } from "./processor";
 
 /**
  * Production composition.
  *
- * Deliberately registers no processors: ground and transit arrive with their own
- * plans, and until then the shell must report those capabilities as false rather
- * than accept a session it cannot actually run. The wiring exists now so that
- * adding a processor is a registration, not a restructuring.
+ * Ground navigation is registered here; transit arrives with its own plan, and
+ * until then the shell reports that capability as false rather than accept a
+ * session it cannot actually run.
  *
  * The foreground app and the headless task both come through here, and both get
  * the same repository over the same single connection — that shared connection
@@ -59,6 +59,10 @@ export function createCoordinator(
   composition ??= (async () => {
     const repository = new SessionRepository(await getDatabase());
     const processors = new ProcessorRegistry();
+    for (const mode of registeredModes()) {
+      const factory = PROCESSOR_FACTORIES[mode];
+      if (factory) processors.register(factory());
+    }
 
     const deps: CoordinatorDeps = {
       repository,
@@ -83,4 +87,30 @@ export function createCoordinator(
 /** Test seam: drops the memoised coordinator so a suite can supply its own. */
 export function resetCoordinatorCache(): void {
   composition = null;
+}
+
+/**
+ * The one place a mode becomes available.
+ *
+ * Both the registration and the capability reported in the handshake read this
+ * map, so the shell cannot promise the page a mode it has no processor for.
+ * `null` is an explicit "not yet", not an omission.
+ */
+const PROCESSOR_FACTORIES: Record<"ground" | "transit", (() => AnyNavigationProcessor) | null> = {
+  ground: () => new GroundNavigationProcessor(),
+  transit: null,
+};
+
+/**
+ * The modes this build can actually run.
+ *
+ * A plain function over the map rather than a query against a live registry,
+ * because the handshake can happen before the database has finished opening.
+ */
+export function registeredModes(): ReadonlyArray<"ground" | "transit"> {
+  const modes: Array<"ground" | "transit"> = [];
+  for (const mode of ["ground", "transit"] as const) {
+    if (PROCESSOR_FACTORIES[mode]) modes.push(mode);
+  }
+  return modes;
 }

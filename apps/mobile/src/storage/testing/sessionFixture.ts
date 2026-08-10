@@ -35,7 +35,21 @@ export function groundSessionFixture(
             [8.68, 50.11],
             [8.69, 50.12],
           ],
-          steps: [],
+          // One real step, because a route with none has no maneuver to
+          // announce and no step gate to advance — the engine would report
+          // progress along a line and never speak.
+          steps: [
+            {
+              instruction: "Head north on Beispielstraße",
+              distance: 1_200,
+              duration: 300,
+              name: "Beispielstraße",
+              geometry: [
+                [8.68, 50.11],
+                [8.69, 50.12],
+              ],
+            },
+          ],
           mode: "driving",
         },
         alternatives: [],
