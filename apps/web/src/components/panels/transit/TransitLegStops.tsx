@@ -8,9 +8,9 @@ import Collapse from "@mui/material/Collapse";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useVehicleJourney } from "@openmapx/core";
+import { sliceJourneyToLeg } from "@openmapx/core/navigation";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
-import { sliceJourneyToLeg } from "@/lib/navigation/legJourneyStops";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 
 interface TransitLegStopsProps {

@@ -46,6 +46,53 @@ export {
 export { guidanceApproachMeters, resolveRecommendedLanes, shouldPreviewNextStep } from "./lanes";
 export { isLiveNavigationStatus } from "./liveStatus";
 export {
+  enforceAggregateBounds,
+  type GroundNavigationStartPackage,
+  groundStartPackageSchema,
+  MAX_LEGS,
+  MAX_MESSAGE_BYTES,
+  MAX_TOTAL_COORDINATES,
+  MAX_TOTAL_STEPS,
+  MOBILE_PROTOCOL_MAX,
+  MOBILE_PROTOCOL_MIN,
+  type MobileBridgeEnvelope,
+  type MobileBridgeMessage,
+  mobileBridgeMessageSchema,
+  NATIVE_TO_WEB_TYPES,
+  type NativeCapabilities,
+  type NativeToWebMessage,
+  type NavigationStartPackage,
+  navigationStartPackageSchema,
+  negotiateMobileProtocol,
+  type ParseErrorCode,
+  type ParseResult,
+  parseMobileBridgeMessage,
+  permissionStateSchema,
+  type TransitLegCapture,
+  type TransitNavigationStartPackage,
+  transitStartPackageSchema,
+  WEB_TO_NATIVE_TYPES,
+  type WebToNativeMessage,
+} from "./mobileProtocol";
+export {
+  appendToLedger,
+  type GroundMobileSession,
+  isMobileSessionExpired,
+  MOBILE_NAVIGATION_SESSION_MAX_AGE_MS,
+  MOBILE_NAVIGATION_SESSION_SCHEMA_VERSION,
+  MOBILE_SESSION_LEDGER_LIMIT,
+  type MobileNavigationSession,
+  type MobileTerminalAck,
+  migrateMobileSession,
+  mobileNavigationSessionSchema,
+  mobileTerminalAckSchema,
+  parseMobileSession,
+  type RedactedSession,
+  redactSessionForDiagnostics,
+  type SessionParseResult,
+  type TransitMobileSession,
+} from "./mobileSession";
+export {
   createNavigationSessionSnapshot,
   isNavigationSessionExpired,
   NAVIGATION_SESSION_MAX_AGE_MS,
@@ -56,6 +103,18 @@ export {
 } from "./offlineSession";
 export { navOptionsForMode } from "./options";
 export { processFix } from "./processFix";
+export {
+  DEFAULT_TRANSIT_TICK_OPTIONS,
+  freshTransitTickState,
+  processTransitFix,
+  type TransitConfidence,
+  type TransitNavigationEvent,
+  type TransitPhase,
+  type TransitTickInput,
+  type TransitTickOptions,
+  type TransitTickResult,
+  type TransitTickState,
+} from "./processTransitFix";
 export { computeProgress, upcomingManeuverIndex } from "./progress";
 export {
   extractTimeline,
@@ -118,6 +177,19 @@ export {
   stopsUntilAlight,
   type TransitProgress,
 } from "./transitProgress";
+export {
+  type CapturableLeg,
+  captureTransitLegStops,
+  type JourneyStopLike,
+  sliceJourneyToLeg,
+} from "./transitStops";
+export {
+  composeWalkInstruction,
+  type TransitWalkManeuver,
+  type WalkStepInfo,
+  walkLegStepProgress,
+  walkStepInfo,
+} from "./transitWalk";
 export type {
   CameraMode,
   CueTier,

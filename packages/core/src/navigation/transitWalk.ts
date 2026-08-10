@@ -1,13 +1,33 @@
 import type { TransitStep } from "@openmapx/mobility-core/transit";
-import type { Maneuver } from "./maneuverIcon";
 
 /**
- * Map a MOTIS walking `relativeDirection` code to the shared maneuver shape (so
- * the driving/walking {@link maneuverIconFor} icon vocabulary is reused) plus a
- * short i18n sub-key for the instruction verb. Stairs/elevator are carried as
- * flags the banner renders with dedicated icons.
+ * Walking-leg guidance, shared by the browser engine and the headless mobile
+ * coordinator.
+ *
+ * Moved out of `apps/web` because the background task needs it and must not
+ * import the web app. The maneuver type below is deliberately structural rather
+ * than the web's icon type: the web's `maneuverIconFor` accepts it as-is, so no
+ * MUI or icon module is dragged into a headless bundle.
  */
-const DIRECTION: Record<string, { maneuver: Maneuver; key: string }> = {
+export interface TransitWalkManeuver {
+  type: "depart" | "continue" | "turn" | "roundabout" | "stairs" | "elevator";
+  modifier?:
+    | "straight"
+    | "left"
+    | "right"
+    | "slight left"
+    | "slight right"
+    | "sharp left"
+    | "sharp right"
+    | "uturn";
+}
+
+/**
+ * Maps a MOTIS walking `relativeDirection` code to the shared maneuver shape
+ * plus a short i18n sub-key for the instruction verb. Stairs and elevator are
+ * carried as flags the banner renders with dedicated icons.
+ */
+const DIRECTION: Record<string, { maneuver: TransitWalkManeuver; key: string }> = {
   DEPART: { maneuver: { type: "depart", modifier: "straight" }, key: "depart" },
   CONTINUE: { maneuver: { type: "continue", modifier: "straight" }, key: "continue" },
   LEFT: { maneuver: { type: "turn", modifier: "left" }, key: "left" },
@@ -24,10 +44,13 @@ const DIRECTION: Record<string, { maneuver: Maneuver; key: string }> = {
   ELEVATOR: { maneuver: { type: "elevator" }, key: "elevator" },
 };
 
-const FALLBACK = { maneuver: { type: "continue", modifier: "straight" }, key: "continue" } as const;
+const FALLBACK = {
+  maneuver: { type: "continue", modifier: "straight" },
+  key: "continue",
+} as const;
 
 export interface WalkStepInfo {
-  maneuver: Maneuver;
+  maneuver: TransitWalkManeuver;
   /** i18n sub-key under `navigation.walkDir.*` for the instruction verb. */
   key: string;
   stairs: boolean;
@@ -51,9 +74,9 @@ export function walkStepInfo(step: TransitStep): WalkStepInfo {
 }
 
 /**
- * Compose a human instruction from a walk step's verb + street/level, keeping
- * word order per-locale (the join words "onto"/"to level" are themselves
- * translated). `t` is the `navigation` namespace translator.
+ * Composes a human instruction from a walk step's verb plus street or level,
+ * keeping word order per-locale — the join words ("onto", "to level") are
+ * themselves translated. `t` is the `navigation` namespace translator.
  */
 export function composeWalkInstruction(
   info: WalkStepInfo,
@@ -69,10 +92,11 @@ export function composeWalkInstruction(
 
 /**
  * Given a walk leg's ordered steps and how far along the leg the walker is
- * (0..1), return the step currently being walked and the metres remaining until
- * its end — i.e. the countdown to the next maneuver. Distances come from each
- * step's own length (summed), so this is robust to the leg polyline and step
- * polylines disagreeing slightly. Pure and unit-tested.
+ * (0..1), returns the step currently being walked and the metres remaining
+ * until its end — the countdown to the next maneuver.
+ *
+ * Distances come from each step's own length rather than the leg polyline, so
+ * this stays correct when the leg and step geometries disagree slightly.
  */
 export function walkLegStepProgress(
   steps: Pick<TransitStep, "distanceMeters">[],

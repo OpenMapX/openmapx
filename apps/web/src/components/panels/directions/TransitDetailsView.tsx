@@ -30,6 +30,7 @@ import {
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
+import { composeWalkInstruction, walkStepInfo } from "@openmapx/core/navigation";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type {
   MergedDeparture,
@@ -58,7 +59,6 @@ import { extractFareSummary, formatFare } from "@/lib/fareUtils";
 import { useMap } from "@/lib/MapContext";
 import { changedFromPlatform } from "@/lib/navigation/platformChange";
 import { nextTransferFor } from "@/lib/navigation/transitTransfer";
-import { composeWalkInstruction, walkStepInfo } from "@/lib/navigation/walkStep";
 import { BRAND } from "@/lib/theme";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 

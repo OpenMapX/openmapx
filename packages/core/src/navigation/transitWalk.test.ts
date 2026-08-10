@@ -1,6 +1,6 @@
 import type { TransitStep } from "@openmapx/mobility-core/transit";
 import { describe, expect, it } from "vitest";
-import { composeWalkInstruction, walkLegStepProgress, walkStepInfo } from "./walkStep";
+import { composeWalkInstruction, walkLegStepProgress, walkStepInfo } from "./transitWalk";
 
 // Minimal fake translator mirroring the ICU templates used in the catalog.
 const fakeT = (key: string, values?: Record<string, string | number>): string => {

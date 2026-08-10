@@ -1,15 +1,15 @@
 "use client";
 
 import { type TransitProgress, useNavigationStore } from "@openmapx/core";
-import type { TripLeg } from "@openmapx/mobility-core/transit";
-import { useLocale, useTranslations } from "next-intl";
-import { useEffect } from "react";
-import { useNavigationVoice } from "@/lib/navigation/useNavigationVoice";
 import {
   composeWalkInstruction,
   walkLegStepProgress,
   walkStepInfo,
-} from "@/lib/navigation/walkStep";
+} from "@openmapx/core/navigation";
+import type { TripLeg } from "@openmapx/mobility-core/transit";
+import { useLocale, useTranslations } from "next-intl";
+import { useEffect } from "react";
+import { useNavigationVoice } from "@/lib/navigation/useNavigationVoice";
 import { ManeuverBanner } from "./ManeuverBanner";
 
 /**

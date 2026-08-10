@@ -6,11 +6,11 @@ import Box from "@mui/material/Box";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { type TransitProgress, useVehicleJourney } from "@openmapx/core";
+import { sliceJourneyToLeg } from "@openmapx/core/navigation";
 import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
-import { sliceJourneyToLeg } from "@/lib/navigation/legJourneyStops";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { TransitBoardingDepartures } from "./TransitBoardingDepartures";
 
