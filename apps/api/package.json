@@ -33,6 +33,7 @@
     "@openmapx/mobility-formats": "workspace:^",
     "@openmapx/place-ids": "workspace:^",
     "@openmapx/poi-source-registry": "workspace:^",
+    "@openmapx/presets": "workspace:^",
     "@openmapx/transitous-core": "workspace:^",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/exporter-prometheus": "^0.221.0",
@@ -42,6 +43,7 @@
     "cached-hafas-client": "^5.1.9",
     "db-vendo-client": "^6.11.1",
     "drizzle-orm": "^0.45.2",
+    "fast-xml-parser": "^5.10.1",
     "fastify": "^5.11.2",
     "gtfs-realtime-bindings-transit": "^1.10.0",
     "hafas-client": "^6.3.6",
@@ -53,7 +55,8 @@
     "postgres": "^3.4.9",
     "simple-git": "^3.36.0",
     "tsx": "4.23.5",
-    "undici": "^8.9.0"
+    "undici": "^8.9.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
