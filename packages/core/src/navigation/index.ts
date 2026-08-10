@@ -171,6 +171,25 @@ export {
   windowGeometry,
 } from "./trafficSignals";
 export {
+  type ConnectionRisk,
+  type ConnectionRiskLevel,
+  changedFromPlatform,
+  collectActiveAlerts,
+  connectionRisk,
+  itineraryTransferRisk,
+  nextTransferFor,
+  SEVERITY_PRIORITY,
+  type TransitTransfer,
+} from "./transitConnection";
+export {
+  type BuildTransitPackageInput,
+  type BuildTransitPackageResult,
+  buildTransitNavigationPackage,
+  stripTransitSecretsForSnapshot,
+  type TransitPackageError,
+  transitItineraryFingerprint,
+} from "./transitPackage";
+export {
   computeTransitProgress,
   detectMissedConnection,
   type PreparedTransitProgress,

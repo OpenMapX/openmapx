@@ -1,6 +1,6 @@
 import type { ServiceAlert, TripLeg } from "@openmapx/mobility-core/transit";
 import { describe, expect, it } from "vitest";
-import { collectActiveAlerts } from "./transitAlerts";
+import { collectActiveAlerts } from "./transitConnection";
 
 function alert(id: string, severity: ServiceAlert["severity"]): ServiceAlert {
   return {

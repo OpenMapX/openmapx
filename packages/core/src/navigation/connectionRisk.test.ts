@@ -1,6 +1,6 @@
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { describe, expect, it } from "vitest";
-import { connectionRisk, itineraryTransferRisk } from "./connectionRisk";
+import { connectionRisk, itineraryTransferRisk } from "./transitConnection";
 
 const base = new Date("2026-07-15T10:00:00Z").getTime();
 

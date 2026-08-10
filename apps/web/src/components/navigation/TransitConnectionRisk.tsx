@@ -5,10 +5,10 @@ import ErrorOutlineIcon from "@mui/icons-material/ErrorOutlined";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { useVehicleJourney } from "@openmapx/core";
+import type { TransitTransfer } from "@openmapx/core/navigation";
+import { connectionRisk } from "@openmapx/core/navigation";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
-import { connectionRisk } from "@/lib/navigation/connectionRisk";
-import type { TransitTransfer } from "@/lib/navigation/transitTransfer";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { liveArrivalDelayMs } from "./TransitNavBottomBar";
 

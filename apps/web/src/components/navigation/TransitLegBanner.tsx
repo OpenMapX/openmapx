@@ -14,7 +14,8 @@ import {
   useNavigationStore,
   useVehicleJourney,
 } from "@openmapx/core";
-import { sliceJourneyToLeg } from "@openmapx/core/navigation";
+import type { TransitTransfer } from "@openmapx/core/navigation";
+import { changedFromPlatform, sliceJourneyToLeg } from "@openmapx/core/navigation";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef } from "react";
@@ -23,8 +24,6 @@ import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { haptics } from "@/lib/haptics";
 import { notifyGetOff, playAlarmTone } from "@/lib/navigation/navNotify";
-import { changedFromPlatform } from "@/lib/navigation/platformChange";
-import type { TransitTransfer } from "@/lib/navigation/transitTransfer";
 import { useNavigationVoice } from "@/lib/navigation/useNavigationVoice";
 import { NavBannerShell } from "./NavBannerShell";
 import { TransitTransferCard } from "./TransitTransferCard";

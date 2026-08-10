@@ -2,12 +2,11 @@
 
 import Box from "@mui/material/Box";
 import { type TransitProgress, useNavigationStore } from "@openmapx/core";
+import { changedFromPlatform, collectActiveAlerts } from "@openmapx/core/navigation";
 import type { ServiceAlert, TripItinerary } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect } from "react";
 import { AlertCard } from "@/components/panels/transit/AlertCard";
-import { changedFromPlatform } from "@/lib/navigation/platformChange";
-import { collectActiveAlerts } from "@/lib/navigation/transitAlerts";
 import { useNavigationVoice } from "@/lib/navigation/useNavigationVoice";
 
 /** Cap so a noisy feed can't push the banner over the map. */

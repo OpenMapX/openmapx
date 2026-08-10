@@ -1,6 +1,6 @@
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { describe, expect, it } from "vitest";
-import { nextTransferFor } from "./transitTransfer";
+import { nextTransferFor } from "./transitConnection";
 
 function transitLeg(shortName: string): TripLeg {
   return {

@@ -19,13 +19,13 @@ import {
   useRefreshTransitItinerary,
   useVehicleJourney,
 } from "@openmapx/core";
+import { itineraryTransferRisk } from "@openmapx/core/navigation";
 import type { OccupancyLevel, TripItinerary, TripLeg } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
 import { RemarkChip } from "@/components/panels/transit/RemarkChip";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
-import { itineraryTransferRisk } from "@/lib/navigation/connectionRisk";
 import { ensureNotificationPermission } from "@/lib/navigation/navNotify";
 import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
 import { BRAND, BRAND_HEX } from "@/lib/theme";

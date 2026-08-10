@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changedFromPlatform } from "./platformChange";
+import { changedFromPlatform } from "./transitConnection";
 
 describe("changedFromPlatform", () => {
   it("returns the scheduled platform when it differs from the realtime one", () => {

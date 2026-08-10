@@ -1,8 +1,8 @@
 "use client";
 
 import { useStopTransfers } from "@openmapx/core";
+import { changedFromPlatform } from "@openmapx/core/navigation";
 import type { StopTransfer, TripLeg } from "@openmapx/mobility-core/transit";
-import { changedFromPlatform } from "@/lib/navigation/platformChange";
 
 export interface TransferInfo {
   /** The vehicle's destination sign for the ride being boarded, when informative. */
