@@ -4,6 +4,7 @@ import { internalMetricsRoute } from "../../../routes/internal-metrics.js";
 import {
   getMetrics,
   initMetrics,
+  recordOsmContributionOperation,
   recordProviderCall,
   recordRoutingRequest,
   recordTransitDecision,
@@ -137,6 +138,129 @@ describe("internal-metrics route", () => {
       expect(res.body).toContain('provider_id="test-provider"');
     } finally {
       await app.close();
+    }
+  });
+});
+
+/**
+ * OSM contribution telemetry is deliberately content-free: two instruments,
+ * two closed low-cardinality labels, and nothing else. These cases push
+ * sentinel tokens, names, coordinates, tags, comments, note text and source
+ * detail through the recording boundary and prove none of it can be exposed.
+ */
+describe("OSM contribution metrics", () => {
+  const SENTINELS = [
+    "osm-token-sentinel",
+    "Café Central",
+    "human comment sentinel",
+    "note text sentinel",
+    "amenity=cafe",
+    "52.5162746",
+    "13.3777041",
+    "mapper",
+    "official website",
+  ];
+
+  it("registers both instruments with stable names", async () => {
+    recordOsmContributionOperation("publish", "success", 12);
+    const exposition = await getMetrics().renderPrometheus();
+    expect(exposition).toContain("osm_contribution_operations_total");
+    expect(exposition).toContain("osm_contribution_operation_duration_ms");
+  });
+
+  it("accumulates per operation and outcome", async () => {
+    recordOsmContributionOperation("publish", "success", 10);
+    recordOsmContributionOperation("publish", "success", 20);
+    recordOsmContributionOperation("publish", "conflict", 5);
+    recordOsmContributionOperation("note", "success", 7);
+
+    const exposition = await getMetrics().renderPrometheus();
+    expect(exposition).toMatch(
+      /osm_contribution_operations_total\{[^}]*operation="publish"[^}]*outcome="success"[^}]*\} 2/,
+    );
+    expect(exposition).toMatch(
+      /osm_contribution_operations_total\{[^}]*operation="publish"[^}]*outcome="conflict"[^}]*\} 1/,
+    );
+    expect(exposition).toMatch(
+      /osm_contribution_operations_total\{[^}]*operation="note"[^}]*outcome="success"[^}]*\} 1/,
+    );
+  });
+
+  it("records latency for every completed operation", async () => {
+    recordOsmContributionOperation("context", "success", 42);
+    const exposition = await getMetrics().renderPrometheus();
+    expect(exposition).toMatch(/osm_contribution_operation_duration_ms_sum\{[^}]*\} 42/);
+  });
+
+  it("clamps a negative duration rather than exporting it", async () => {
+    recordOsmContributionOperation("preview", "invalid", -100);
+    const exposition = await getMetrics().renderPrometheus();
+    expect(exposition).toMatch(/osm_contribution_operation_duration_ms_sum\{[^}]*\} 0/);
+  });
+
+  it("covers the closed outcome vocabulary, including disabled and ambiguous", async () => {
+    for (const outcome of [
+      "success",
+      "disabled",
+      "invalid",
+      "unauthorized",
+      "blocked",
+      "conflict",
+      "rate_limited",
+      "not_found",
+      "upstream_error",
+      "ambiguous",
+    ] as const) {
+      recordOsmContributionOperation("publish", outcome, 1);
+    }
+    const exposition = await getMetrics().renderPrometheus();
+    for (const outcome of ["disabled", "ambiguous", "rate_limited", "blocked"]) {
+      expect(exposition).toContain(`outcome="${outcome}"`);
+    }
+  });
+
+  it("exposes only the two closed labels", async () => {
+    recordOsmContributionOperation("publish", "success", 3);
+    const exposition = await getMetrics().renderPrometheus();
+    const line = exposition
+      .split("\n")
+      .find((row) => row.startsWith("osm_contribution_operations_total{"));
+    const labels = (line ?? "").slice(line?.indexOf("{"), line?.indexOf("}"));
+    for (const forbidden of [
+      "user",
+      "account",
+      "element",
+      "field",
+      "preset",
+      "locale",
+      "evidence",
+      "source",
+      "changeset",
+      "note_id",
+      "request_id",
+      "url",
+      "status_code",
+    ]) {
+      expect(labels).not.toContain(forbidden);
+    }
+  });
+
+  it("cannot carry contribution content into the exposition", async () => {
+    for (const operation of [
+      "capabilities",
+      "context",
+      "categories",
+      "preview",
+      "publish",
+      "note",
+      "reconcile",
+      "close_changeset",
+    ] as const) {
+      recordOsmContributionOperation(operation, "success", 1);
+    }
+    const exposition = await getMetrics().renderPrometheus();
+    for (const sentinel of SENTINELS) {
+      expect(exposition).not.toContain(sentinel);
     }
   });
 });

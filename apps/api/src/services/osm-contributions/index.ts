@@ -9,6 +9,7 @@ import { auth } from "../../auth.js";
 import { redis } from "../../redis.js";
 import { envString } from "../../utils/env.js";
 import { getOsmConfig } from "../../utils/osm-config.js";
+import { recordOsmContributionOperation } from "../metrics/index.js";
 import { createOsmAccountService, type OsmTokenResolution } from "./account.js";
 import { createOsmApiClient } from "./osm-client.js";
 import { createOsmContributionService, type OsmContributionService } from "./service.js";
@@ -56,6 +57,9 @@ export function createOsmContributionsService(): OsmContributionService {
       secret: envString("BETTER_AUTH_SECRET", "openmapx-osm-contributions"),
       redis: (redis as SubmissionGuardRedis | null) ?? undefined,
     }),
+    // Two closed enums and a duration. Nothing about the person, the element
+    // or the contribution's content reaches the exposition.
+    recordOperation: recordOsmContributionOperation,
   });
   return singleton;
 }

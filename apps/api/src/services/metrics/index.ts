@@ -70,6 +70,8 @@ export interface MetricsHandle {
   routingAlternateCount: Histogram;
   routingTrafficDelay: Histogram;
   routingBaselineCounter: Counter;
+  osmContributionCounter: Counter;
+  osmContributionLatency: Histogram;
   /** Render the current metric state as Prometheus text format. */
   renderPrometheus(): Promise<string>;
   /** Shut the meter provider down (idempotent). */
@@ -122,6 +124,14 @@ export function initMetrics(): MetricsHandle {
     description: "Routing requests whose active route had a finite baseline duration",
   });
 
+  const osmContributionCounter = meter.createCounter("osm_contribution_operations_total", {
+    description: "OpenStreetMap contribution operations by operation and outcome",
+  });
+  const osmContributionLatency = meter.createHistogram("osm_contribution_operation_duration_ms", {
+    description: "OpenStreetMap contribution operation duration in milliseconds",
+    unit: "ms",
+  });
+
   const serializer = new PrometheusSerializer();
 
   async function renderPrometheus(): Promise<string> {
@@ -151,6 +161,8 @@ export function initMetrics(): MetricsHandle {
     routingAlternateCount,
     routingTrafficDelay,
     routingBaselineCounter,
+    osmContributionCounter,
+    osmContributionLatency,
     renderPrometheus,
     close,
   };
@@ -267,6 +279,51 @@ export function recordRoutingRequest(metrics: RoutingRequestMetrics): void {
   if (metrics.trafficDelaySeconds !== undefined) {
     handle.routingTrafficDelay.record(metrics.trafficDelaySeconds, labels);
   }
+}
+
+/**
+ * The closed vocabulary for OpenStreetMap contribution telemetry.
+ *
+ * Both label sets are deliberately tiny and content-free. Nothing derived from
+ * a person, an element, a field, a comment, a source, a note or a coordinate
+ * may ever become a label: the whole point of this instrument is that the
+ * operational signal is useful without observing what anyone contributed.
+ */
+export type OsmContributionMetricOperation =
+  | "capabilities"
+  | "context"
+  | "categories"
+  | "preview"
+  | "publish"
+  | "note"
+  | "reconcile"
+  | "close_changeset";
+
+export type OsmContributionMetricOutcome =
+  | "success"
+  | "disabled"
+  | "invalid"
+  | "unauthorized"
+  | "blocked"
+  | "conflict"
+  | "rate_limited"
+  | "not_found"
+  | "upstream_error"
+  | "ambiguous";
+
+/**
+ * Record one completed contribution operation. The signature accepts only the
+ * two enums and a duration — there is no arbitrary label map to widen.
+ */
+export function recordOsmContributionOperation(
+  operation: OsmContributionMetricOperation,
+  outcome: OsmContributionMetricOutcome,
+  durationMs: number,
+): void {
+  const handle = getMetrics();
+  const labels = { operation, outcome };
+  handle.osmContributionCounter.add(1, labels);
+  handle.osmContributionLatency.record(Math.max(0, durationMs), labels);
 }
 
 /** Test-only reset. Production code never calls this. */
