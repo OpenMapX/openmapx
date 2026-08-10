@@ -109,6 +109,27 @@ export function OsmContributionGate({
     );
   }
 
+  // Only meaningful once OSM has actually described the account. Without a
+  // usable token the server cannot know the terms/block state, and it reports
+  // the conservative defaults — which would otherwise render a panel whose
+  // action button has no URL to point at.
+  const accountDescribed =
+    capabilities.actions.contributorTermsUrl !== undefined ||
+    capabilities.contributorTermsAgreed ||
+    capabilities.canWriteApi ||
+    capabilities.canWriteNotes;
+
+  if (!accountDescribed) {
+    return (
+      <Panel title={t("gateScopeTitle")} body={t("gateScopeBody")}>
+        {hasUnsentInput && <Alert severity="warning">{t("gateDiscardWarning")}</Alert>}
+        <Button variant="contained" onClick={authorize} sx={{ minHeight: 44 }}>
+          {t("gateScopeAction")}
+        </Button>
+      </Panel>
+    );
+  }
+
   if (capabilities.activeBlock) {
     const messagesHref = safeHref(capabilities.actions.accountMessagesUrl);
     return (

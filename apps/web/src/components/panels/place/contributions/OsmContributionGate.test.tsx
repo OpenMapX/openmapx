@@ -161,6 +161,33 @@ describe("gate states", () => {
     ).toBe("https://www.openstreetmap.org/messages/inbox");
   });
 
+  it("offers re-authorization, not a dead end, when the token is unusable", () => {
+    // `reauthorization_required` reports linked with the conservative defaults
+    // and no action URL; the terms panel would have rendered no button at all.
+    renderGate({
+      ...BASE,
+      canWriteApi: false,
+      canWriteNotes: false,
+      contributorTermsAgreed: false,
+      requiredScopes: ["write_api", "write_notes"],
+      actions: { reauthorize: true },
+    });
+    expect(screen.getByText("osmContributions.gateScopeAction")).not.toBeNull();
+    expect(screen.queryByText("osmContributions.gateTermsTitle")).toBeNull();
+  });
+
+  it("still shows the terms panel when OpenStreetMap actually reported them", () => {
+    renderGate({
+      ...BASE,
+      contributorTermsAgreed: false,
+      actions: {
+        reauthorize: true,
+        contributorTermsUrl: "https://www.openstreetmap.org/user/terms",
+      },
+    });
+    expect(screen.getByText("osmContributions.gateTermsTitle")).not.toBeNull();
+  });
+
   it("explains the direct-editing kill switch without offering an edit", () => {
     renderGate({ ...BASE, directEditingEnabled: false });
     expect(screen.getByText("osmContributions.errorDirectEditingDisabled")).not.toBeNull();

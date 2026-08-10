@@ -297,6 +297,58 @@ describe("review and publish", () => {
   });
 });
 
+describe("retry after a failed publish", () => {
+  async function reachPublish() {
+    renderDialog();
+    await editName();
+    await userEvent.click(screen.getByText("osmContributions.reviewAction"));
+    await userEvent.click(await screen.findByText("osmContributions.evidenceSurvey"));
+    await userEvent.type(
+      screen.getByLabelText("osmContributions.reviewCommentLabel"),
+      "Corrected the name from the sign",
+    );
+    const button = screen.getByText("osmContributions.publish").closest("button");
+    if (!button) throw new Error("publish button missing");
+    return button;
+  }
+
+  it("sends a fresh idempotency key on the retry, never the failed one", async () => {
+    const { OsmContributionRequestError } = await import("@openmapx/core");
+    state.nextPublishError = new OsmContributionRequestError(502, {
+      code: "OSM_UNAVAILABLE",
+      message: "Unavailable.",
+    });
+
+    const button = await reachPublish();
+    await userEvent.click(button);
+    await waitFor(() => expect(state.publishMutate).toHaveBeenCalledTimes(1));
+
+    await userEvent.click(button);
+    await waitFor(() => expect(state.publishMutate).toHaveBeenCalledTimes(2));
+
+    const first = state.publishMutate.mock.calls[0]?.[0] as { idempotencyKey: string };
+    const second = state.publishMutate.mock.calls[1]?.[0] as { idempotencyKey: string };
+    // Reusing the failed id would make the server replay it instead of publishing.
+    expect(second.idempotencyKey).not.toBe(first.idempotencyKey);
+    expect(await screen.findByText("osmContributions.successEditTitle")).not.toBeNull();
+  });
+
+  it("stops showing the failure once the retry succeeds", async () => {
+    const { OsmContributionRequestError } = await import("@openmapx/core");
+    state.nextPublishError = new OsmContributionRequestError(502, {
+      code: "OSM_UNAVAILABLE",
+      message: "Unavailable.",
+    });
+    const button = await reachPublish();
+    await userEvent.click(button);
+    await waitFor(() => expect(state.publishMutate).toHaveBeenCalledTimes(1));
+    await userEvent.click(button);
+    await screen.findByText("osmContributions.successEditTitle");
+    // The mutation object still holds the old error; the success view must not.
+    expect(screen.queryByText("osmContributions.errorOsmUnavailable")).toBeNull();
+  });
+});
+
 describe("conflict", () => {
   it("keeps the draft and requires an explicit review against the latest data", async () => {
     const { OsmContributionRequestError } = await import("@openmapx/core");

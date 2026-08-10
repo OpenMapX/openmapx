@@ -187,7 +187,13 @@ export function OsmContributionDialog({ open, ref_, onClose }: Props) {
 
   const runPublish = async () => {
     if (state.step !== "review" || !isDraftComplete(state.draft)) return;
-    const submissionId = state.submissionId;
+    // A previous attempt failed. Reusing its id would make the server replay
+    // that attempt instead of publishing, so mint a fresh one for this retry;
+    // the reducer applies it before the publish transition it gates.
+    const submissionId = state.needsNewSubmissionId ? crypto.randomUUID() : state.submissionId;
+    if (state.needsNewSubmissionId) {
+      dispatch({ type: "newSubmissionId", submissionId });
+    }
     dispatch({ type: "publish" });
     try {
       const result = await publish.mutateAsync({
@@ -240,7 +246,21 @@ export function OsmContributionDialog({ open, ref_, onClose }: Props) {
     await requestPreview(latest, draft, submissionId);
   };
 
-  const activeError = publish.error ?? preview.error ?? createNote.error ?? context.error ?? null;
+  /**
+   * Only the failure that belongs to the step being shown. TanStack keeps a
+   * mutation's error until the next `mutate`, so chaining all of them would
+   * render a stale publish error on top of a later successful preview.
+   */
+  const activeError =
+    state.step === "review" || state.step === "publishing"
+      ? (publish.error ?? preview.error ?? null)
+      : state.step === "reviewing" || state.step === "edit"
+        ? (preview.error ?? null)
+        : state.step === "note"
+          ? (createNote.error ?? null)
+          : state.step === "gate"
+            ? (context.error ?? null)
+            : null;
 
   const title =
     state.step !== "closed" &&
