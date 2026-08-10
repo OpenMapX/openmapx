@@ -137,5 +137,8 @@ async function main(): Promise<void> {
 }
 
 if (process.argv[1]?.endsWith("check-routing-canaries.ts")) {
-  await main();
+  void main().catch(() => {
+    console.error("✗ Routing canary runner failed unexpectedly");
+    process.exitCode = 1;
+  });
 }
