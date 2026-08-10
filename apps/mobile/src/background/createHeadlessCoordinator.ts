@@ -6,6 +6,7 @@ import { type LocationProfileKind, profileFor } from "../location/profiles";
 import { createCoordinator } from "../navigation/createCoordinator";
 import type { EffectPorts } from "../navigation/effects";
 import type { NavigationCoordinator } from "../navigation/NavigationCoordinator";
+import { createPublishPort } from "../navigation/snapshots/createPublishPort";
 import { getDatabase } from "../storage/database";
 import { SessionRepository } from "../storage/SessionRepository";
 
@@ -55,12 +56,15 @@ function ports(repository: SessionRepository): EffectPorts {
       },
       cancelSession: async () => undefined,
     },
-    publish: {
-      // No document exists to receive a snapshot. The next handshake reads the
-      // authoritative session directly, so nothing is lost by skipping it.
-      snapshot: async () => undefined,
-      event: async () => undefined,
-    },
+    // The same publish port the foreground uses. In a headless run `send`
+    // always reports failure, so a snapshot is discarded rather than queued —
+    // the next handshake reads the authoritative session directly, and a
+    // position from ten minutes ago would only animate the user backwards.
+    publish: createPublishPort({
+      repository,
+      send: () => false,
+      now: () => Date.now(),
+    }).port,
     remote: {
       reroute: async () => undefined,
       transitRefresh: async () => undefined,

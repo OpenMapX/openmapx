@@ -18,6 +18,10 @@
       "types": "./src/navigation/index.ts",
       "default": "./src/navigation/index.ts"
     },
+    "./navigation/api": {
+      "types": "./src/navigation/api.ts",
+      "default": "./src/navigation/api.ts"
+    },
     "./licenses": {
       "types": "./src/licenses.ts",
       "default": "./src/licenses.ts"

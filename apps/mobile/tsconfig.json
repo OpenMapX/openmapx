@@ -27,6 +27,7 @@
     "paths": {
       "@openmapx/core": ["../../packages/core/src/index.ts"],
       "@openmapx/core/navigation": ["../../packages/core/src/navigation/index.ts"],
+      "@openmapx/core/navigation/api": ["../../packages/core/src/navigation/api.ts"],
       "@openmapx/i18n": ["../../packages/i18n/index.ts"],
       "@openmapx/mobility-core/*": [
         "../../packages/mobility-core/src/*.ts",
