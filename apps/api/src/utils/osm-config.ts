@@ -203,3 +203,14 @@ export function getOsmConfig(): OsmConfig {
 export function resetOsmConfigForTests(): void {
   cached = undefined;
 }
+
+/**
+ * The public feature bit for the signed-out capability response.
+ *
+ * Deliberately excludes the direct-write kill switch and any account state: it
+ * exists only so a client can hide unreleased UI.
+ */
+export function osmContributionsPubliclyEnabled(): boolean {
+  const config = getOsmConfig();
+  return config.contributionsEnabled && config.oauthConfigured;
+}

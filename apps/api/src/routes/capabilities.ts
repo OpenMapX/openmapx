@@ -2,6 +2,7 @@ import { toIntegrationMeta } from "@openmapx/integration-framework";
 import type { FastifyPluginAsync } from "fastify";
 import { getAllIntegrations } from "../integration-host.js";
 import { isIntegrationHealthy } from "../services/integration-health.js";
+import { osmContributionsPubliclyEnabled } from "../utils/osm-config.js";
 
 export const capabilitiesRoute: FastifyPluginAsync = async (fastify) => {
   fastify.get("/capabilities", async (_req, reply) => {
@@ -27,6 +28,12 @@ export const capabilitiesRoute: FastifyPluginAsync = async (fastify) => {
     }
 
     reply.header("Cache-Control", "public, max-age=60");
-    return reply.send({ services });
+    // A bounded feature bit so a signed-out client can hide unreleased UI.
+    // It reflects only the master flag and OAuth configuration — never the
+    // direct-write kill switch and never a person's linked-account state.
+    return reply.send({
+      services,
+      features: { osmContributions: osmContributionsPubliclyEnabled() },
+    });
   });
 };

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 interface Bucket {
@@ -13,6 +14,11 @@ interface RateLimiterOptions {
   /** Optional function to derive a key from the request (default: composite
    *  of `request.ip` + socket peer — see `defaultKeyFn`). */
   keyFn?: (request: FastifyRequest) => string;
+  /**
+   * Optional 429 body. Routes with their own closed error taxonomy pass one so
+   * a throttled response is the same shape as every other typed failure.
+   */
+  errorBody?: (retryAfterSeconds: number) => unknown;
 }
 
 /**
@@ -40,12 +46,15 @@ export class RateLimiter {
   private readonly max: number;
   private readonly windowMs: number;
   private readonly keyFn: (request: FastifyRequest) => string;
+  private readonly errorBody: (retryAfterSeconds: number) => unknown;
   private cleanupTimer: ReturnType<typeof setInterval>;
 
   constructor(options: RateLimiterOptions) {
     this.max = options.max;
     this.windowMs = options.windowMs;
     this.keyFn = options.keyFn ?? defaultKeyFn;
+    this.errorBody =
+      options.errorBody ?? ((retryAfter: number) => ({ error: "Too many requests", retryAfter }));
 
     // Periodically clean stale buckets every 5 minutes
     this.cleanupTimer = setInterval(() => this.cleanup(), 5 * 60_000);
@@ -75,10 +84,7 @@ export class RateLimiter {
       if (bucket.tokens < 1) {
         const retryAfterSec = Math.ceil((((1 - bucket.tokens) / this.max) * this.windowMs) / 1000);
         reply.header("Retry-After", String(retryAfterSec));
-        return reply.status(429).send({
-          error: "Too many requests",
-          retryAfter: retryAfterSec,
-        });
+        return reply.status(429).send(this.errorBody(retryAfterSec));
       }
 
       bucket.tokens -= 1;
@@ -92,6 +98,11 @@ export class RateLimiter {
         this.buckets.delete(key);
       }
     }
+  }
+
+  /** Drop every bucket without stopping the cleanup timer. Used by tests. */
+  reset(): void {
+    this.buckets.clear();
   }
 
   destroy(): void {
@@ -178,3 +189,50 @@ export const authLimit = new RateLimiter({
   max: envInt("RATE_LIMIT_AUTH_MAX", 10),
   windowMs: envInt("RATE_LIMIT_AUTH_WINDOW_MS", 60_000),
 });
+
+/**
+ * Bucket key for a signed-in user. The raw id is digested so the in-memory
+ * bucket map holds no account identifier, and the limiter must therefore be
+ * registered *after* the auth hook has set `request.userId`.
+ */
+function userDigestKeyFn(req: FastifyRequest): string {
+  const userId = (req as FastifyRequest & { userId?: string }).userId;
+  if (!userId) return defaultKeyFn(req);
+  return createHash("sha256").update(userId).digest("hex");
+}
+
+/**
+ * Per-user limits for OpenStreetMap contributions. Reads and previews are
+ * generous enough for normal editing; the two limiters that cause an upstream
+ * write are deliberately tight, because abuse here lands in a public database.
+ */
+/** The shared contribution error body, so a 429 matches every other failure. */
+function osmContributionLimitBody(retryAfterSeconds: number) {
+  return {
+    code: "RATE_LIMITED",
+    message: "You have made too many contribution requests. Try again shortly.",
+    retryAfterSeconds,
+  };
+}
+
+function osmContributionLimiter(prefix: string, max: number, windowMs: number): RateLimiter {
+  return new RateLimiter({
+    max: envInt(`RATE_LIMIT_OSM_CONTRIBUTION_${prefix}_MAX`, max),
+    windowMs: envInt(`RATE_LIMIT_OSM_CONTRIBUTION_${prefix}_WINDOW_MS`, windowMs),
+    keyFn: userDigestKeyFn,
+    errorBody: osmContributionLimitBody,
+  });
+}
+
+export const osmContributionReadLimit = osmContributionLimiter("READ", 60, 600_000);
+export const osmContributionPreviewLimit = osmContributionLimiter("PREVIEW", 30, 600_000);
+export const osmContributionPublishLimit = osmContributionLimiter("PUBLISH", 10, 600_000);
+export const osmContributionNoteLimit = osmContributionLimiter("NOTE", 5, 600_000);
+
+/** Every contribution limiter, so tests can isolate cases. */
+export const osmContributionLimiters = [
+  osmContributionReadLimit,
+  osmContributionPreviewLimit,
+  osmContributionPublishLimit,
+  osmContributionNoteLimit,
+] as const;
