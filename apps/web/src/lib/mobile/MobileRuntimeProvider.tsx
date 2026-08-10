@@ -143,10 +143,16 @@ export function MobileRuntimeProvider({ children, webBuildId, scope }: MobileRun
       if (message.type === "navigation.event") {
         const eventId = (message.payload as { eventId?: string }).eventId;
         if (!eventId) return;
+        // A reconnect replays whatever was never acknowledged, so the store
+        // decides whether this one has already been rendered.
+        const outcome = useNavigationStore
+          .getState()
+          .applyNativeEvent({ eventId, type: String(message.type) });
+        if (outcome !== "applied") return;
         setReadModel((current) => (current ? rememberEvent(current, eventId) : current));
         // Acknowledged immediately: the durable copy lives natively, and leaving
         // it unacknowledged would replay it on every reconnect.
-        void client.request("event.ack", { eventIds: [eventId] }).catch(() => undefined);
+        void nativeCommands.acknowledgeEvents([eventId]);
         setReadModel((current) => (current ? forgetEvents(current, [eventId]) : current));
       }
     });

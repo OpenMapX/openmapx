@@ -388,3 +388,35 @@ describe("MobileRuntimeProvider store integration", () => {
     );
   });
 });
+
+describe("MobileRuntimeProvider event deduplication", () => {
+  afterEach(() => {
+    setNavigationAuthority("browser");
+    useNavigationStore.getState().clearNativeReadModel();
+  });
+
+  const event = (eventId: string) => ({
+    protocolVersion: 1,
+    type: "navigation.event",
+    messageId: `n-${eventId}`,
+    channelNonce: NONCE,
+    sentAtMs: 1_700_000_000_000,
+    payload: { eventId, event: { type: "off-route" } },
+  });
+
+  it("acknowledges a replayed event only once", async () => {
+    const shell = shellScope();
+    mount(shell.scope);
+    shell.deliver(helloReply());
+    await waitFor(() => expect(text("state")).toBe("native-compatible"));
+    shell.sent.length = 0;
+
+    shell.deliver(event("e1"));
+    await waitFor(() => expect(shell.sent.length).toBe(1));
+    shell.deliver(event("e1"));
+
+    // Announcing a replayed alert twice is what makes riders stop trusting them.
+    await waitFor(() => expect(useNavigationStore.getState().nativeEventIds).toEqual(["e1"]));
+    expect(shell.sent.filter((raw) => JSON.parse(raw).type === "event.ack")).toHaveLength(1);
+  });
+});
