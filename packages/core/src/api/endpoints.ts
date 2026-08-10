@@ -93,4 +93,11 @@ export const API_ENDPOINTS = {
   savedCheck: "/api/saved/check",
   capabilities: "/api/capabilities",
   nlpParse: "/api/integrations/search-nlp/parse",
+  osmContributionCapabilities: "/api/osm/contributions/capabilities",
+  // Base path; the element context is `${base}/${type}/${id}`.
+  osmContributions: "/api/osm/contributions",
+  osmContributionCategories: "/api/osm/contributions/categories",
+  osmContributionPreview: "/api/osm/contributions/preview",
+  osmContributionPublish: "/api/osm/contributions/publish",
+  osmContributionNotes: "/api/osm/contributions/notes",
 } as const;

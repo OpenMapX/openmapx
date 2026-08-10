@@ -127,6 +127,7 @@ export type {
 export * from "./offline";
 export * from "./panels";
 export * from "./platform";
+export * from "./schemas";
 export * from "./stores";
 export * from "./types";
 export * from "./utils";
