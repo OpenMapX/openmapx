@@ -9,6 +9,8 @@ import type { CommitResult, SessionEffect, SessionRepository } from "../storage/
 import type { DiagnosticSink, EffectRunner } from "./effects";
 import type { AnyNavigationProcessor, ProcessorMutation, ProcessorRegistry } from "./processor";
 import { SerialExecutor } from "./serialExecutor";
+import { groundFullSnapshot } from "./snapshots/groundSnapshot";
+import { transitFullSnapshot } from "./snapshots/transitSnapshot";
 
 /**
  * The single authority over an active navigation session.
@@ -348,15 +350,19 @@ export class NavigationCoordinator {
     };
   }
 
+  /**
+   * The one projection every response uses.
+   *
+   * It delegates to the mode-specific snapshot builders rather than reshaping
+   * the session here. An earlier version blanked `payload.refreshToken` and
+   * looked correct — but the transit token also lives *inside* the itinerary the
+   * server shaped, so the reply still carried it. Anything leaving native goes
+   * through the builders, which strip by key at every depth.
+   */
   private snapshotOf(session: MobileNavigationSession): Record<string, unknown> {
-    // The refresh token is native's alone; it is stripped here rather than at
-    // each call site so no future snapshot field can leak it by omission.
-    const { payload, ...rest } = session;
-    const safePayload =
-      "refreshToken" in payload
-        ? { ...payload, refreshToken: undefined, hasRefreshToken: payload.refreshToken !== null }
-        : payload;
-    return { ...rest, payload: safePayload };
+    return session.kind === "ground"
+      ? (groundFullSnapshot(session) as unknown as Record<string, unknown>)
+      : (transitFullSnapshot(session) as unknown as Record<string, unknown>);
   }
 
   /* ------------------------------------------------------------ terminate --- */
@@ -455,7 +461,12 @@ export class NavigationCoordinator {
       rejected: rejectedCount,
       ...(batch.errorCode ? { errorCode: batch.errorCode.slice(0, 64) } : {}),
     });
-    if (accepted.length === 0) return;
+    // A wake-up that carried no usable position is not always nothing to do. A
+    // transit rider underground produces no fix for twenty minutes, and the
+    // engine still has to advance the leg from the schedule or the banner
+    // freezes on a stop the train left long ago. Ground has no such fallback, so
+    // an empty batch there really is nothing.
+    if (accepted.length === 0 && !processor.needsScheduleTicks) return;
 
     const mutation = (processor as AnyNavigationProcessor).processFixes(
       session as never,

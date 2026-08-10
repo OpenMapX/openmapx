@@ -33,6 +33,16 @@ export type ProcessorPreparation =
 export interface NavigationProcessor<K extends "ground" | "transit"> {
   readonly kind: K;
 
+  /**
+   * Whether a wake-up carrying no usable position still deserves a tick.
+   *
+   * True for transit, where a schedule can advance a leg while the rider is
+   * underground and producing nothing. False for ground, where position is the
+   * only evidence there is — ticking without one would advance nothing and
+   * commit a revision saying so.
+   */
+  readonly needsScheduleTicks: boolean;
+
   /** Validates a start package and builds revision 1 of a `preparing` session. */
   prepare(
     startPackage: Extract<NavigationStartPackage, { kind: K }>,

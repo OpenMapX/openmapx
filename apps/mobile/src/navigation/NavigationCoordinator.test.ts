@@ -22,6 +22,7 @@ const NOW = 1_700_000_100_000;
 function fakeGroundProcessor(): NavigationProcessor<"ground"> {
   return {
     kind: "ground",
+    needsScheduleTicks: false,
     prepare: (_startPackage, context) => ({
       ok: true,
       session: groundSessionFixture({

@@ -21,6 +21,8 @@ import { createGroundPreparingSession, validateGroundStartPackage } from "./grou
  */
 export class GroundNavigationProcessor implements NavigationProcessor<"ground"> {
   readonly kind = "ground" as const;
+  // Position is the only evidence a road journey has.
+  readonly needsScheduleTicks = false;
 
   private readonly cache = new GroundRouteCache();
 

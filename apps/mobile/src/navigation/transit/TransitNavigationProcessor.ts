@@ -22,6 +22,8 @@ import { createTransitPreparingSession, validateTransitStartPackage } from "./tr
  */
 export class TransitNavigationProcessor implements NavigationProcessor<"transit"> {
   readonly kind = "transit" as const;
+  // A timetable keeps the leg honest while the rider is underground.
+  readonly needsScheduleTicks = true;
 
   private readonly cache = new TransitItineraryCache();
 

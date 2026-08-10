@@ -1,0 +1,42 @@
+{
+  "$comment": "Synthetic itinerary metadata for transit field replays. Describes a trip rather than containing one: a real captured itinerary carries trip ids, stop names and times that identify a person's journey, and this file is public.",
+  "schemaVersion": 1,
+  "id": "transit-field-synthetic-1",
+  "description": "A synthetic access-walk / ride / transfer / ride / egress itinerary used to replay transit navigation on a simulator or emulator. Generated, not recorded.",
+  "provenance": "generated",
+  "region": "synthetic",
+  "shape": {
+    "legs": [
+      { "kind": "walk", "durationSeconds": 480 },
+      { "kind": "ride", "mode": "rail", "stopCount": 6, "durationSeconds": 1080 },
+      { "kind": "walk", "durationSeconds": 240, "note": "transfer within station" },
+      { "kind": "ride", "mode": "subway", "stopCount": 4, "durationSeconds": 720 },
+      { "kind": "walk", "durationSeconds": 300 }
+    ]
+  },
+  "replay": {
+    "fixIntervalMs": 5000,
+    "accuracyMeters": 15,
+    "injectedGaps": [
+      { "duringLegIndex": 1, "durationMs": 900000, "reason": "underground" },
+      { "duringLegIndex": 3, "durationMs": 600000, "reason": "tunnel" }
+    ],
+    "injectedLiveChanges": [
+      { "atLegIndex": 1, "kind": "delay", "seconds": 240 },
+      { "atLegIndex": 3, "kind": "platform-change", "toPlatform": "7" },
+      { "atLegIndex": 3, "kind": "cancellation" }
+    ],
+    "injectedRefreshFailures": [{ "afterRefreshCount": 2, "kind": "ambiguous-timeout" }]
+  },
+  "expectations": {
+    "noDuplicateCue": true,
+    "noDuplicateNotification": true,
+    "legNeverRegresses": true,
+    "scheduleFallbackLabelled": true,
+    "tokenNeverPublished": true,
+    "ambiguousRefreshBreaksChain": true,
+    "cancellationTriggersOneReplan": true,
+    "capturedItinerarySurvivesOffline": true,
+    "terminalCleanupComplete": true
+  }
+}

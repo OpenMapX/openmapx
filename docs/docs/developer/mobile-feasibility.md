@@ -289,3 +289,50 @@ named volunteer, a physical device and a recorded build.
 `apps/mobile/qa/fixtures/ground-field-route.json` describes the synthetic replay
 route rather than containing a recorded one — a real captured trace is somebody's
 journey, and that file is public.
+
+## Transit navigation qualification
+
+`apps/mobile/src/navigation/transit/transit.e2e.test.ts` drives a whole journey
+through the production boundaries, with only the outside world faked.
+
+What it settles:
+
+| Property | How |
+| --- | --- |
+| One revision per tick, strictly increasing | Collected across a 40-minute ride |
+| A leg that never moves backwards | Collected minute by minute |
+| Schedule fallback with no position at all | Every tick delivered with an empty batch after one seeding fix |
+| Schedule progress labelled honestly | Confidence asserted as not `gps` |
+| No duplicate cue across a restart | Coordinator, processor and prepared index rebuilt between every tick |
+| The rotating token never published | Every bridge message searched for the fixture token |
+| A replacement adopted whole | New itinerary, new token, reset leg |
+| Complete cleanup after a stop | Row counts, and the terminal row searched for token, stop names and coordinates |
+
+### The token discipline, stated plainly
+
+The refresh token is one-time: each call returns a replacement and invalidates
+what was sent. Native is its only consumer.
+
+- **A rejection breaks the chain.** The token is provably gone.
+- **An ambiguous timeout also breaks it.** The server may or may not have
+  consumed it, and the only safe reading of "we do not know" is that it was.
+  Retrying blindly is a coin flip that silently ends live data when it loses.
+  Recovery is a full replan.
+- **Only an unreachable request may reuse the token**, because it never arrived.
+- **A generation invalidates in-flight work**, so a reply already on the wire
+  after a replan or replacement lands on nothing.
+
+### What is not claimed
+
+Station-level underground precision. Confidence is `gps`, `schedule` or `stale`,
+and a schedule-driven leg advance is never presented as a physical observation.
+
+### Physical cases
+
+`apps/mobile/qa/beta/transit-scenarios.md` lists what a simulator cannot answer,
+with the alighting alert first — missing a stop is the transit failure a rider
+cannot quickly recover from. Reports are sanitised: shape and outcome, never trip
+ids, stop names, precise times or coordinates.
+
+`apps/mobile/qa/fixtures/transit-field-itinerary.json` describes the synthetic
+replay itinerary rather than containing a recorded one, for the same reason.
