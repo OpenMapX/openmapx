@@ -236,29 +236,29 @@ describe("App load states", () => {
   it("shows a retryable error overlay when the load fails", async () => {
     const view = await renderApp();
     await emit(mockWebViewProps.onError);
-    expect(view.getByTestId("shell-load-error")).toBeTruthy();
-    expect(view.getByTestId("shell-load-error-retry")).toBeTruthy();
+    expect(view.getByTestId("shell-state-load-error")).toBeTruthy();
+    expect(view.getByTestId("shell-action-retry")).toBeTruthy();
   });
 
   it("treats an HTTP error as a failed load", async () => {
     const view = await renderApp();
     await emit(mockWebViewProps.onHttpError);
-    expect(view.getByTestId("shell-load-error")).toBeTruthy();
+    expect(view.getByTestId("shell-state-load-error")).toBeTruthy();
   });
 
   it("returns to loading and remounts the WebView when retry is pressed", async () => {
     const view = await renderApp();
     await emit(mockWebViewProps.onError);
-    await fireEvent.press(view.getByTestId("shell-load-error-retry"));
+    await fireEvent.press(view.getByTestId("shell-action-retry"));
     expect(view.getByTestId("shell-loading")).toBeTruthy();
-    expect(view.queryByTestId("shell-load-error")).toBeNull();
+    expect(view.queryByTestId("shell-state-load-error")).toBeNull();
   });
 
   it("does not resurrect the ready state after an error", async () => {
     const view = await renderApp();
     await emit(mockWebViewProps.onError);
     await emit(mockWebViewProps.onLoadEnd);
-    expect(view.getByTestId("shell-load-error")).toBeTruthy();
+    expect(view.getByTestId("shell-state-load-error")).toBeTruthy();
   });
 });
 
@@ -281,7 +281,7 @@ describe("App fatal configuration", () => {
     async (value) => {
       mockManifest = value;
       const view = await renderApp();
-      expect(view.getByTestId("shell-fatal-config")).toBeTruthy();
+      expect(view.getByTestId("shell-state-fatal-config")).toBeTruthy();
       expect(view.queryByTestId("product-webview")).toBeNull();
     },
   );
@@ -289,6 +289,6 @@ describe("App fatal configuration", () => {
   it("offers no action on the fatal state, because none would help", async () => {
     mockManifest = undefined;
     const view = await renderApp();
-    expect(view.queryByTestId("shell-load-error-retry")).toBeNull();
+    expect(view.queryByTestId("shell-action-retry")).toBeNull();
   });
 });

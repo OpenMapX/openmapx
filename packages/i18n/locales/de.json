@@ -2306,7 +2306,21 @@
     "offlineBody": "OpenMapX benötigt eine Verbindung zum Laden. Eine bereits gestartete Navigation läuft weiter.",
     "fatalConfigTitle": "Dieser Build ist fehlerhaft konfiguriert",
     "fatalConfigBody": "OpenMapX kann nicht starten, weil die einkompilierte Serverkonfiguration ungültig ist. Bitte installiere die App neu.",
-    "openNetworkSettings": "Netzwerkeinstellungen öffnen"
+    "openNetworkSettings": "Netzwerkeinstellungen öffnen",
+    "offlineNavigatingTitle": "Die Führung läuft weiter",
+    "offlineNavigatingBody": "OpenMapX konnte die Seite nicht laden, aber die von dir gestartete Navigation führt dich weiter. Stelle die Verbindung wieder her, um die Karte zu sehen, oder beende die Navigation.",
+    "resumeTitle": "Die Navigation wurde unterbrochen",
+    "resumeBody": "OpenMapX wurde während einer laufenden Navigation geschlossen. Die Standorterfassung ist gestoppt. Fortsetzen, um weiterzufahren, oder diese Fahrt beenden.",
+    "resume": "Fortsetzen",
+    "end": "Navigation beenden",
+    "permissionLostTitle": "Der Standortzugriff wurde deaktiviert",
+    "permissionLostBody": "Die Navigation wurde beendet, weil OpenMapX keinen Standortzugriff mehr hat. Du kannst ihn in den Systemeinstellungen wieder erteilen.",
+    "openAppSettings": "App-Einstellungen öffnen",
+    "incompatibleTitle": "Diese App-Version ist zu alt",
+    "incompatibleBody": "OpenMapX auf diesem Gerät kann die Navigation für die aktuelle Version der Seite nicht ausführen. Aktualisiere die App im Store oder plane weiterhin in der Seite.",
+    "corruptSessionTitle": "Die vorherige Fahrt konnte nicht wiederhergestellt werden",
+    "corruptSessionBody": "OpenMapX konnte die gespeicherte Navigationssitzung nicht lesen und hat sie verworfen. Es wurde nichts übertragen. Du kannst eine neue Fahrt starten.",
+    "dismiss": "Weiter"
   },
   "mobilePermissions": {
     "title": "OpenMapX benötigt deinen Standort zur Navigation",

@@ -1,19 +1,33 @@
-import { type ReactElement, useCallback, useMemo, useRef, useState } from "react";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
+import {
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import { Linking, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
 import { createShellBridge } from "./bridge/createShellBridge";
 import { buildChannelBootstrapScript } from "./bridge/outboundScript";
 import { getRuntimeConfig, type MobileRuntimeConfig } from "./config/runtimeConfig";
+import { useConnectivity } from "./connectivity/useConnectivity";
+import { useAppVisibility } from "./lifecycle/useAppLifecycle";
 import { FeasibilityOverlay } from "./shell/FeasibilityOverlay";
+import { NativeRecoveryOverlay } from "./shell/NativeRecoveryOverlay";
 import { classifyNavigation } from "./shell/originPolicy";
-import { LoadingOverlay, ShellMessageOverlay } from "./shell/ShellOverlays";
-import { deviceMobileLocale, shellCopy } from "./shell/shellCopy";
+import { LoadingOverlay } from "./shell/ShellOverlays";
+import type { ShellAction } from "./shell/ShellState";
+import { deviceMobileLocale } from "./shell/shellCopy";
+import { INITIAL_SHELL, shellReducer } from "./shell/shellReducer";
 
 /**
  * The entire visible product is the web UI inside one WebView pointed at the
  * origin compiled into this binary. Native UI exists only for the states the
- * WebView cannot render itself: initial load, a failed load, and a fatally
- * misconfigured build.
+ * WebView cannot render itself: the first load, a failed load, a session that
+ * outlived its process, and a fatally misconfigured build.
  */
 
 const styles = StyleSheet.create({
@@ -21,14 +35,14 @@ const styles = StyleSheet.create({
   webView: { flex: 1 },
 });
 
-type LoadPhase = "loading" | "ready" | "error";
-
 function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement {
   const locale = useMemo(() => deviceMobileLocale(), []);
-  const [phase, setPhase] = useState<LoadPhase>("loading");
+  const [shellState, dispatchShell] = useReducer(shellReducer, INITIAL_SHELL);
   // Remounting the WebView is the only reliable way to retry a load that failed
   // before any document existed; `reload()` on a blank view is a no-op.
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const visibility = useAppVisibility();
+  const connectivity = useConnectivity();
 
   const webViewRef = useRef<WebView>(null);
   const shell = useMemo(
@@ -52,22 +66,25 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   const handleLoadStart = useCallback(() => {
     // A real top-level navigation or reload. In-document history changes do not
     // reach here, so a same-origin `pushState` keeps its negotiated channel.
+    //
+    // A reload resets the bridge and nothing else: the native session and the
+    // location driver are unaffected, because the page is not their authority.
     shell.registry.adoptDocument(publishedNonce, Date.now());
     shell.bridge.discardQueue();
-    setPhase((current) => (current === "error" ? current : "loading"));
+    dispatchShell({ type: "document-load-started" });
   }, [publishedNonce, shell]);
 
   const handleLoadEnd = useCallback(() => {
-    setPhase((current) => (current === "error" ? current : "ready"));
+    dispatchShell({ type: "document-load-succeeded" });
     // Prepare a different nonce for whatever document loads next.
     setPublishedNonce(shell.registry.mintNonce());
   }, [shell]);
 
   const handleLoadFailure = useCallback(() => {
-    setPhase("error");
+    dispatchShell({ type: "document-load-failed", offline: connectivity.displayed === "offline" });
     shell.registry.invalidate();
     shell.bridge.discardQueue();
-  }, [shell]);
+  }, [shell, connectivity.displayed]);
 
   const handleMessage = useCallback(
     (event: { nativeEvent: { url?: string; data?: string } }) => {
@@ -95,9 +112,50 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
     [config, openExternally],
   );
 
-  const retry = useCallback(() => {
-    setPhase("loading");
-    setLoadAttempt((attempt) => attempt + 1);
+  // Connectivity is an input to the shell's explanation, never authority over a
+  // session: losing the network does not end navigation or discard a route.
+  useEffect(() => {
+    dispatchShell({ type: "connectivity-changed", online: connectivity.displayed !== "offline" });
+  }, [connectivity.displayed]);
+
+  /**
+   * Keep-awake, narrowly.
+   *
+   * Only while the app is foregrounded and a session is actually visible. It is
+   * never part of the background task: holding a wake lock from a headless
+   * callback would drain the battery for a screen nobody is looking at.
+   */
+  useEffect(() => {
+    const shouldHold = visibility === "active" && shellState.context.navigating;
+    if (!shouldHold) {
+      deactivateKeepAwake();
+      return;
+    }
+    void activateKeepAwakeAsync().catch(() => undefined);
+    return () => {
+      deactivateKeepAwake();
+    };
+  }, [visibility, shellState.context.navigating]);
+
+  const handleShellAction = useCallback((action: ShellAction) => {
+    switch (action) {
+      case "retry":
+        setLoadAttempt((attempt) => attempt + 1);
+        dispatchShell({ type: "document-load-started" });
+        return;
+      case "open-network-settings":
+      case "open-app-settings":
+        void Linking.openSettings().catch(() => undefined);
+        return;
+      case "resume":
+        dispatchShell({ type: "resume-accepted" });
+        return;
+      case "end":
+        dispatchShell({ type: "session-ended" });
+        return;
+      case "dismiss":
+        dispatchShell({ type: "dismissed" });
+    }
   }, []);
 
   return (
@@ -139,20 +197,12 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
         onHttpError={handleLoadFailure}
         testID="product-webview"
       />
-      {phase === "loading" ? <LoadingOverlay locale={locale} /> : null}
-      {phase === "error" ? (
-        <ShellMessageOverlay
-          locale={locale}
-          testID="shell-load-error"
-          title={shellCopy(locale, "loadErrorTitle")}
-          body={shellCopy(locale, "loadErrorBody")}
-          action={{
-            label: shellCopy(locale, "retry"),
-            onPress: retry,
-            testID: "shell-load-error-retry",
-          }}
-        />
-      ) : null}
+      {shellState.state.kind === "loading" ? <LoadingOverlay locale={locale} /> : null}
+      <NativeRecoveryOverlay
+        locale={locale}
+        state={shellState.state}
+        onAction={handleShellAction}
+      />
       {config.feasibilityMode ? <FeasibilityOverlay /> : null}
     </View>
   );
@@ -173,11 +223,10 @@ export function App(): ReactElement {
   if (!configuration.ok) {
     return (
       <View style={styles.root}>
-        <ShellMessageOverlay
+        <NativeRecoveryOverlay
           locale={locale}
-          testID="shell-fatal-config"
-          title={shellCopy(locale, "fatalConfigTitle")}
-          body={shellCopy(locale, "fatalConfigBody")}
+          state={{ kind: "fatal-config" }}
+          onAction={() => undefined}
         />
       </View>
     );

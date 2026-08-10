@@ -2306,7 +2306,21 @@
     "offlineBody": "OpenMapX needs a connection to load. Any navigation you already started keeps running.",
     "fatalConfigTitle": "This build is misconfigured",
     "fatalConfigBody": "OpenMapX cannot start because its compiled server configuration is invalid. Please reinstall the app.",
-    "openNetworkSettings": "Open network settings"
+    "openNetworkSettings": "Open network settings",
+    "offlineNavigatingTitle": "Guidance is still running",
+    "offlineNavigatingBody": "OpenMapX could not load the page, but the navigation you started keeps guiding you. Reconnect to see the map again, or end navigation.",
+    "resumeTitle": "Navigation was interrupted",
+    "resumeBody": "OpenMapX was closed while navigation was running. Location tracking has stopped. Resume to continue, or end this trip.",
+    "resume": "Resume",
+    "end": "End navigation",
+    "permissionLostTitle": "Location access was turned off",
+    "permissionLostBody": "Navigation stopped because OpenMapX no longer has location access. You can grant it again in system settings.",
+    "openAppSettings": "Open app settings",
+    "incompatibleTitle": "This app version is too old",
+    "incompatibleBody": "OpenMapX on this device cannot run navigation for the current version of the site. Update the app from the store, or keep planning in the page.",
+    "corruptSessionTitle": "The previous trip could not be restored",
+    "corruptSessionBody": "OpenMapX could not read the stored navigation session, so it was discarded. Nothing was sent anywhere. You can start a new trip.",
+    "dismiss": "Continue"
   },
   "mobilePermissions": {
     "title": "OpenMapX needs your location to guide you",

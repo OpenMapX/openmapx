@@ -24,7 +24,21 @@ export type ShellCopyKey =
   | "offlineBody"
   | "fatalConfigTitle"
   | "fatalConfigBody"
-  | "openNetworkSettings";
+  | "openNetworkSettings"
+  | "offlineNavigatingTitle"
+  | "offlineNavigatingBody"
+  | "resumeTitle"
+  | "resumeBody"
+  | "resume"
+  | "end"
+  | "permissionLostTitle"
+  | "permissionLostBody"
+  | "openAppSettings"
+  | "incompatibleTitle"
+  | "incompatibleBody"
+  | "corruptSessionTitle"
+  | "corruptSessionBody"
+  | "dismiss";
 
 export function shellCopy(locale: MobileLocale, key: ShellCopyKey): string {
   const namespace = CATALOGS[locale].mobileShell as Record<string, string> | undefined;
