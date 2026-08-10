@@ -58,6 +58,7 @@ import { BRAND } from "@/lib/theme";
 import { useOpeningHoursText } from "@/lib/useOpeningHoursText";
 import { useMobileSheet } from "../sheet/sheetState";
 import { PlaceTransitSection } from "../transit/PlaceTransitSection";
+import { OsmContributionEntry } from "./contributions/OsmContributionEntry";
 import { DataSourceSections } from "./DataSourceSections";
 import { PlaceActionButtons } from "./PlaceActionButtons";
 import { PlaceAirportInfo } from "./PlaceAirportInfo";
@@ -863,6 +864,10 @@ export function PlaceOverviewTab({
         </DialogActions>
       </Dialog>
       <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} />
+      {/* Contribute a correction back to OpenStreetMap. Only the canonical OSM
+          reference is passed: every editable value comes from a live server
+          read, never from this merged/enriched place record. */}
+      <OsmContributionEntry osmId={place.ids?.osm} />
       {/* Structured OSM tag details (access, indoor, multilingual descriptions, etc.) */}
       {place.osmTags && Object.keys(place.osmTags).length > 0 && (
         <PlaceTagDetails osmTags={place.osmTags} />

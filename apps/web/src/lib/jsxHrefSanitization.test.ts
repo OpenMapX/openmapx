@@ -38,6 +38,9 @@ const ALLOWED: Record<string, string[]> = {
     "LICENSE_URLS[license]",
   ],
   "components/panels/place/PlaceOverviewTab.tsx": ["plusCodeUrl(plusCode)"],
+  // Both bindings are `safeHref(...)` results, held in a const so the button is
+  // rendered only when sanitization actually returned a URL.
+  "components/panels/place/contributions/OsmContributionGate.tsx": ["messagesHref", "termsHref"],
   "components/admin/integrations/CredentialSetupGuide.tsx": ["url", "buildMailto(setup.email)"],
   "components/panels/place/PlaceAirportInfo.tsx": ["airport.homeLink", "ourAirportsUrl"],
   "components/panels/place/DataSourceSections.tsx": ["rentalUri"],
