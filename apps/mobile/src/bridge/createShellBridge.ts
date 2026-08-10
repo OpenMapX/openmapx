@@ -1,3 +1,4 @@
+import type { WebToNativeMessage } from "@openmapx/core/navigation";
 import { nativeApplicationVersion, nativeBuildVersion } from "expo-application";
 import { Platform } from "react-native";
 import { ChannelRegistry } from "./channel";
@@ -15,6 +16,21 @@ import { NativeBridge, type ShellDescription } from "./nativeBridge";
 export interface ShellBridgeOptions {
   webOrigin: string;
   inject: (script: string) => void;
+  /**
+   * Handles a fully validated command.
+   *
+   * Optional so the transport can stand alone; a shell without it accepts and
+   * discards commands, which is the correct behaviour while it also reports
+   * every navigation capability as false.
+   */
+  dispatch?: (message: WebToNativeMessage) => Promise<unknown>;
+  /** Reports what the shell can actually run right now. */
+  capabilities?: () => Pick<
+    ShellDescription["capabilities"],
+    "groundNavigation" | "transitNavigation"
+  >;
+  permission?: () => Promise<ShellDescription["permission"]>;
+  activeSession?: () => Promise<ShellDescription["activeSession"]>;
 }
 
 export interface ShellBridge {
@@ -25,24 +41,25 @@ export interface ShellBridge {
 /**
  * What the shell can actually do right now.
  *
- * Ground and transit stay false until their processors are registered; the page
- * must keep planning in the browser until a capability is genuinely backed.
+ * A capability reported here is a promise the page will act on, so ground and
+ * transit are answered from what is genuinely registered rather than from a
+ * constant. Until a processor exists the page keeps planning in the browser.
  */
-export function describeShell(): ShellDescription {
+export async function describeShell(options: ShellBridgeOptions): Promise<ShellDescription> {
+  const modes = options.capabilities?.() ?? { groundNavigation: false, transitNavigation: false };
   return {
     shellVersion: nativeApplicationVersion ?? "0.0.0",
     shellBuild: nativeBuildVersion ?? "0",
     platform: Platform.OS === "android" ? "android" : "ios",
     capabilities: {
-      groundNavigation: false,
-      transitNavigation: false,
+      ...modes,
       backgroundLocation: true,
       localNotifications: true,
       speech: true,
     },
-    permission: "not-determined",
+    permission: (await options.permission?.()) ?? "not-determined",
     locationDriver: "expo",
-    activeSession: null,
+    activeSession: (await options.activeSession?.()) ?? null,
   };
 }
 
@@ -61,11 +78,10 @@ export function createShellBridge(options: ShellBridgeOptions): ShellBridge {
       return `n${messageCounter}-${Date.now().toString(36)}`;
     },
     inject: options.inject,
-    // No processor is registered yet, so a validated command is accepted by the
-    // transport and then has nowhere to go. Task ordering, not an oversight:
-    // the coordinator replaces this in the next step.
-    dispatch: async () => undefined,
-    describeShell,
+    dispatch: async (message) => {
+      await options.dispatch?.(message);
+    },
+    describeShell: () => describeShell(options),
   });
 
   return { registry, bridge };
