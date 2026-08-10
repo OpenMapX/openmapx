@@ -1,11 +1,15 @@
 import { groundSessionFixture } from "../../storage/testing/sessionFixture";
-import { type GroundSnapshot, groundFullSnapshot, groundProgressSnapshot } from "./groundSnapshot";
-import { PROGRESS_INTERVAL_MS, SnapshotPublisher } from "./SnapshotPublisher";
+import { groundFullSnapshot, groundProgressSnapshot } from "./groundSnapshot";
+import {
+  PROGRESS_INTERVAL_MS,
+  type PublishableSnapshot,
+  SnapshotPublisher,
+} from "./SnapshotPublisher";
 
 const START = 1_700_000_100_000;
 
 function harness(options: { connected?: boolean } = {}) {
-  const delivered: GroundSnapshot[] = [];
+  const delivered: PublishableSnapshot[] = [];
   let connected = options.connected !== false;
   let now = START;
 

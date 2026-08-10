@@ -1,4 +1,8 @@
 import type { GroundSnapshot } from "./groundSnapshot";
+import type { TransitSnapshot } from "./transitSnapshot";
+
+/** Either mode’s projection; the publisher’s policy is identical for both. */
+export type PublishableSnapshot = GroundSnapshot | TransitSnapshot;
 
 /**
  * How often the page hears about progress.
@@ -19,7 +23,7 @@ export const PROGRESS_INTERVAL_MS = 1_000;
 
 export interface PublisherPorts {
   /** Delivers a snapshot; returns false when there is no page to receive it. */
-  deliver(snapshot: GroundSnapshot): boolean;
+  deliver(snapshot: PublishableSnapshot): boolean;
   now(): number;
 }
 
@@ -27,7 +31,7 @@ export type OfferOutcome = "sent" | "throttled" | "dropped";
 
 export class SnapshotPublisher {
   private lastProgressAtMs = Number.NEGATIVE_INFINITY;
-  private pending: GroundSnapshot | null = null;
+  private pending: PublishableSnapshot | null = null;
 
   constructor(private readonly ports: PublisherPorts) {}
 
@@ -37,7 +41,7 @@ export class SnapshotPublisher {
    * A full snapshot always goes: it is either the first thing the page sees or
    * the answer to something that invalidated what it had.
    */
-  offer(snapshot: GroundSnapshot, options: { immediate?: boolean } = {}): OfferOutcome {
+  offer(snapshot: PublishableSnapshot, options: { immediate?: boolean } = {}): OfferOutcome {
     const now = this.ports.now();
 
     if (snapshot.type === "full" || options.immediate) {

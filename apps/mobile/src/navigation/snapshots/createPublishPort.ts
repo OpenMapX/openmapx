@@ -2,6 +2,7 @@ import type { SessionRepository } from "../../storage/SessionRepository";
 import type { PublishPort } from "../effects";
 import { groundFullSnapshot, groundProgressSnapshot } from "./groundSnapshot";
 import { SnapshotPublisher } from "./SnapshotPublisher";
+import { transitFullSnapshot, transitProgressSnapshot } from "./transitSnapshot";
 
 /**
  * The publish side of the effect runner.
@@ -33,11 +34,18 @@ export function createPublishPort(deps: PublishPortDeps): PublishPortHandle {
   const port: PublishPort = {
     snapshot: async (immediate) => {
       const session = await deps.repository.loadActive(deps.now());
-      if (session?.kind !== "ground") return;
+      if (!session) return;
 
       // A full snapshot for anything that changed what the page is rendering
-      // against; a delta for ordinary movement along a route it already has.
-      const snapshot = immediate ? groundFullSnapshot(session) : groundProgressSnapshot(session);
+      // against; a delta for ordinary movement along something it already has.
+      const snapshot =
+        session.kind === "ground"
+          ? immediate
+            ? groundFullSnapshot(session)
+            : groundProgressSnapshot(session)
+          : immediate
+            ? transitFullSnapshot(session)
+            : transitProgressSnapshot(session);
       publisher.offer(snapshot, { immediate });
     },
     event: async (eventId) => {

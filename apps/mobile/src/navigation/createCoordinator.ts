@@ -10,6 +10,7 @@ import {
   type PermissionPort,
 } from "./NavigationCoordinator";
 import { type AnyNavigationProcessor, ProcessorRegistry } from "./processor";
+import { TransitNavigationProcessor } from "./transit/TransitNavigationProcessor";
 
 /**
  * Production composition.
@@ -98,7 +99,7 @@ export function resetCoordinatorCache(): void {
  */
 const PROCESSOR_FACTORIES: Record<"ground" | "transit", (() => AnyNavigationProcessor) | null> = {
   ground: () => new GroundNavigationProcessor(),
-  transit: null,
+  transit: () => new TransitNavigationProcessor(),
 };
 
 /**
