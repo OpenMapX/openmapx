@@ -3,7 +3,8 @@
 import type { NavigationSessionSnapshot, NavProgress, Route } from "@openmapx/core";
 import { createNavigationSessionSnapshot, useNavigationStore } from "@openmapx/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { CHANNEL_GLOBAL } from "../mobile/mobileShellEnvironment";
 import { OFFLINE_PACKAGE_CHANGED_EVENT } from "../offlineAreas/packageDownload";
 import type { OfflinePackageResolver } from "../offlineAreas/packageResolver";
 import type { OfflinePackageRecord } from "../offlineAreas/types";
@@ -502,5 +503,38 @@ describe("navigation store persistence identity", () => {
     expect(useNavigationStore.getState().destinationWaypoints).not.toBe(
       before.destinationWaypoints,
     );
+  });
+});
+
+describe("useNavigationSessionPersistence inside the installed shell", () => {
+  beforeEach(() => {
+    useNavigationStore.getState().stopNavigation();
+    (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL] = { nonce: "abc123" };
+  });
+
+  afterEach(() => {
+    delete (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL];
+  });
+
+  it("offers nothing from a browser-persisted session", async () => {
+    const storage = memoryStorage(makeSnapshot());
+
+    const { result } = renderHook(() => useNavigationSessionPersistence(storage));
+
+    // Native owns the durable session; restoring a second one here would resume
+    // a trip the shell has no idea about.
+    await waitFor(() => expect(result.current.pending).toBeNull());
+    expect(result.current.pending).toBeNull();
+  });
+
+  it("writes nothing when a session becomes active", async () => {
+    const storage = memoryStorage();
+    renderHook(() => useNavigationSessionPersistence(storage));
+
+    act(start);
+
+    await waitFor(() => expect(storage.writes).toEqual([]));
+    expect(storage.writes).toEqual([]);
+    expect(storage.cleared).toBe(0);
   });
 });

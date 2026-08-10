@@ -13,6 +13,8 @@
  * staleness; a wrongly-applied one is a puck on the wrong road.
  */
 
+import type { NativeNavigationProjection } from "@openmapx/core";
+
 export type NativeAuthority = "browser" | "native";
 
 export interface SnapshotEnvelope {
@@ -141,6 +143,103 @@ export function applyNativeSnapshot(
     changed: true,
     model: { ...current, revision: incoming.revision, snapshot: merged },
   };
+}
+
+/**
+ * Turns the merged read model into the shape the navigation store renders.
+ *
+ * The wire snapshot and the store's state are deliberately different vocabularies
+ * — the shell speaks in session terms, the UI in route terms — and this is the
+ * single place the two are reconciled. A delta declares the revision it was
+ * computed from so the store can re-check the step it is being asked to take
+ * against the one it actually rendered.
+ */
+export function projectionOf(
+  model: NativeReadModel,
+  type: SnapshotEnvelope["type"],
+): NativeNavigationProjection {
+  const raw = model.snapshot;
+  const pick = <T>(key: string): T | undefined => (key in raw ? (raw[key] as T) : undefined);
+
+  const projection: NativeNavigationProjection = {
+    sessionId: model.sessionId,
+    revision: model.revision,
+    fingerprint: model.fingerprint,
+    kind: model.kind,
+    status: nativeStatusToNavStatus(raw.status),
+    ...(type === "progress" ? { baseRevision: model.revision - 1 } : {}),
+  };
+
+  const assign = <K extends keyof NativeNavigationProjection>(
+    key: K,
+    value: NativeNavigationProjection[K] | undefined,
+  ) => {
+    if (value !== undefined) projection[key] = value;
+  };
+
+  assign("mode", pick<NativeNavigationProjection["mode"]>("mode"));
+  assign("route", pick<NativeNavigationProjection["route"]>("route"));
+  assign("routeProvider", pick<string>("routeProvider") ?? undefined);
+  assign(
+    "routeSelectionIntent",
+    pick<NativeNavigationProjection["routeSelectionIntent"]>("routeSelectionIntent"),
+  );
+  assign("progress", pick<NativeNavigationProjection["progress"]>("progress"));
+  assign("offRoute", pick<boolean>("offRoute"));
+  assign("weakGps", pick<boolean>("weakGps"));
+  assign("coasting", pick<boolean>("coasting"));
+  assign("currentSpeedLimit", pick<number | null>("currentSpeedLimit"));
+  assign("itinerary", pick<NativeNavigationProjection["itinerary"]>("itinerary"));
+  assign("transitProgress", pick<NativeNavigationProjection["transitProgress"]>("transitProgress"));
+  assign("connectivity", pick<NativeNavigationProjection["connectivity"]>("connectivity"));
+  assign("permissionMode", permissionModeOf(raw.permissionMode));
+  assign("alertAvailability", alertAvailabilityOf(raw.alightAlertAvailability));
+  assign("confidence", confidenceOf(raw.confidence, raw.coasting));
+
+  // The followed route plus the alternatives the shell is still offering. A
+  // ground snapshot carries them separately; the UI reads one list.
+  const route = projection.route;
+  const alternatives = pick<unknown[]>("alternatives");
+  if (route && alternatives) {
+    projection.routes = [route, ...(alternatives as NonNullable<typeof route>[])];
+  } else if (route) {
+    projection.routes = [route];
+  }
+
+  return projection;
+}
+
+/** The shell reports session status; the UI reads navigation status. */
+function nativeStatusToNavStatus(status: unknown): NativeNavigationProjection["status"] {
+  if (status === "arrived") return "arrived";
+  if (status === "stopped" || status === "expired" || status === "error") return "idle";
+  return "navigating";
+}
+
+function permissionModeOf(value: unknown): NativeNavigationProjection["permissionMode"] {
+  return value === "denied" || value === "foreground" || value === "background" ? value : undefined;
+}
+
+function alertAvailabilityOf(value: unknown): NativeNavigationProjection["alertAvailability"] {
+  return value === "scheduled" || value === "unavailable" || value === "disabled"
+    ? value
+    : undefined;
+}
+
+/**
+ * How much the session trusts its position.
+ *
+ * Transit reports it directly. Ground does not, but a coasting ground session is
+ * exactly the same claim — dead reckoning between fixes — so it is derived rather
+ * than left blank.
+ */
+function confidenceOf(
+  reported: unknown,
+  coasting: unknown,
+): NativeNavigationProjection["confidence"] {
+  if (reported === "live" || reported === "coasting" || reported === "stale") return reported;
+  if (typeof coasting === "boolean") return coasting ? "coasting" : "live";
+  return undefined;
 }
 
 /** Records an event the page has seen but not yet acknowledged. */

@@ -9,6 +9,7 @@ import {
   useNavigationStore,
 } from "@openmapx/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { shellFeatureBoundary } from "../mobile/mobileShellEnvironment";
 import { OFFLINE_PACKAGE_CHANGED_EVENT } from "../offlineAreas/packageDownload";
 import type { OfflinePackageResolver } from "../offlineAreas/packageResolver";
 import { getDefaultOfflinePackageResolver } from "../offlineAreas/packageResolver";
@@ -123,6 +124,11 @@ export function useNavigationSessionPersistence(
   now: () => number = Date.now,
 ): NavigationSessionResumeState {
   const storageRef = useMemo(() => storage ?? createNavigationSessionStorage(), [storage]);
+  // Inside the installed shell the durable session lives natively, in SQLite
+  // that survives a process kill. A second durable owner would disagree with it
+  // the first time one of the two crashed, and the browser copy is the one with
+  // no way to keep guiding anybody.
+  const persistenceAllowed = shellFeatureBoundary().browserSessionPersistence;
   const [discoveredResolver, setDiscoveredResolver] = useState<OfflinePackageResolver>();
   const resolveResolver = useCallback(
     () => resolver ?? discoveredResolver ?? getDefaultOfflinePackageResolver(),
@@ -256,6 +262,7 @@ export function useNavigationSessionPersistence(
   }, [adoptResolver, resolver]);
 
   useEffect(() => {
+    if (!persistenceAllowed) return;
     if (readRef.current) return;
     readRef.current = true;
     let cancelled = false;
@@ -279,9 +286,10 @@ export function useNavigationSessionPersistence(
     return () => {
       cancelled = true;
     };
-  }, [now, publishCoverage, resolveResolver, storageRef]);
+  }, [now, persistenceAllowed, publishCoverage, resolveResolver, storageRef]);
 
   useEffect(() => {
+    if (!persistenceAllowed) return;
     let previous = useNavigationStore.getState();
     return useNavigationStore.subscribe((next) => {
       const wasActive = isGroundActive(previous);
@@ -334,7 +342,15 @@ export function useNavigationSessionPersistence(
         publishCoverage(coverageForRoute(next.route, next.progress, activeResolver));
       }
     });
-  }, [coverageForRoute, now, publishCoverage, resolveResolver, scheduleWrite, storageRef]);
+  }, [
+    coverageForRoute,
+    now,
+    persistenceAllowed,
+    publishCoverage,
+    resolveResolver,
+    scheduleWrite,
+    storageRef,
+  ]);
 
   useEffect(() => {
     const activeResolver = resolveResolver();

@@ -31,6 +31,83 @@ export type NavKind = "ground" | "transit";
 /** Whether the active ground route was chosen by the router or by the driver. */
 export type RouteSelectionIntent = "automatic" | "userSelected";
 
+/**
+ * Who is actually running navigation.
+ *
+ * In an ordinary browser or the PWA this is always `"browser"` and every action
+ * below behaves exactly as it always has. Inside the installed shell it becomes
+ * `"native"`, and from that point the store is a read model: it reports what the
+ * native session says and never advances anything itself. Two engines producing
+ * two answers to "where am I" is the failure this exists to prevent.
+ */
+export type NavigationAuthority = "browser" | "native";
+
+/** How much the native session trusts its own current position. */
+export type NativeConfidence = "live" | "coasting" | "stale";
+
+/** How much location the OS is currently granting the shell. */
+export type NativePermissionMode = "denied" | "foreground" | "background";
+
+/** Whether the get-off backup alert could actually be scheduled. */
+export type AlertAvailability = "scheduled" | "unavailable" | "disabled" | "unknown";
+
+/**
+ * One reduced native snapshot, in the shape the existing navigation UI reads.
+ *
+ * Deliberately only the fields the UI renders. Browser-only machinery — the
+ * route matcher, replay/simulation state, the faster-route poller — is absent by
+ * construction, so a native snapshot cannot hydrate any of it.
+ */
+export interface NativeNavigationProjection {
+  sessionId: string;
+  revision: number;
+  /** The revision this delta was computed against; absent on a full snapshot. */
+  baseRevision?: number;
+  /** Identifies the route/itinerary the revisions are counted against. */
+  fingerprint: string;
+  kind: NavKind;
+  status: NavStatus;
+  mode?: TravelMode;
+  route?: Route | null;
+  routes?: Route[];
+  routeProvider?: string | null;
+  routeSelectionIntent?: RouteSelectionIntent;
+  progress?: NavProgress | null;
+  offRoute?: boolean;
+  weakGps?: boolean;
+  coasting?: boolean;
+  currentSpeedLimit?: number | null;
+  itinerary?: TripItinerary | null;
+  transitProgress?: TransitProgress | null;
+  connectivity?: NavigationConnectivity;
+  permissionMode?: NativePermissionMode;
+  confidence?: NativeConfidence;
+  alertAvailability?: AlertAvailability;
+  rerouteUnavailable?: boolean;
+  liveDataUnavailable?: boolean;
+  transitRerouteNeeded?: boolean;
+}
+
+/**
+ * What the store did with a native update.
+ *
+ * `needs-full-snapshot` is the only one the caller must act on: it means the
+ * page is behind by more than one revision, or the route changed underneath it,
+ * and rendering anything before the full snapshot arrives would be an invention.
+ */
+export type NativeApplyOutcome =
+  | "applied"
+  | "duplicate"
+  | "stale"
+  | "needs-full-snapshot"
+  | "rejected";
+
+/** A native navigation event, deduplicated by an ID the shell assigns. */
+export interface NativeNavigationEvent {
+  eventId: string;
+  type: string;
+}
+
 /** Route constraints that must survive every mid-trip directions request. */
 export interface NavigationRouteOptions {
   avoidHighways: boolean;
@@ -167,6 +244,23 @@ interface NavigationState {
   /** Start time for the bounded local route-session snapshot. */
   navigationStartedAtMs: number | null;
 
+  /** Who is running navigation; `"browser"` everywhere but the installed shell. */
+  navigationAuthority: NavigationAuthority;
+  /** The native session this read model describes, or null. */
+  nativeSessionId: string | null;
+  /** The last native revision this store has rendered, or null. */
+  nativeRevision: number | null;
+  /** The route/itinerary those revisions are counted against. */
+  nativeRouteFingerprint: string | null;
+  /** How much the native session trusts its own position. */
+  nativeConfidence: NativeConfidence;
+  /** What the OS is currently granting the shell. */
+  permissionMode: NativePermissionMode | null;
+  /** Whether the native get-off backup alert is in place. */
+  alertAvailability: AlertAvailability;
+  /** Native event IDs already rendered, so a replay after reconnect is a no-op. */
+  nativeEventIds: string[];
+
   startGroundNavigation: (
     route: Route,
     mode: TravelMode,
@@ -232,6 +326,71 @@ interface NavigationState {
    * configuration) applies the saved choices instead of the defaults.
    */
   hydrate: () => void;
+
+  /**
+   * Adopt a complete native session state.
+   *
+   * A full snapshot is what the session *is*, so it is accepted at any revision
+   * — a reload legitimately produces one from wherever the session had got to.
+   */
+  applyNativeFullSnapshot: (projection: NativeNavigationProjection) => NativeApplyOutcome;
+  /**
+   * Advance by exactly one native revision.
+   *
+   * Refused unless it declares the revision currently rendered as its base and
+   * names the same session and route. Anything else means the page is behind,
+   * and the answer to that is a full snapshot rather than a guess.
+   */
+  applyNativeDelta: (projection: NativeNavigationProjection) => NativeApplyOutcome;
+  /** Record a native navigation event, ignoring one already seen. */
+  applyNativeEvent: (event: NativeNavigationEvent) => NativeApplyOutcome;
+  /** Return to browser authority and forget everything native told us. */
+  clearNativeReadModel: () => void;
+}
+
+/**
+ * Projects a native snapshot onto the fields the navigation UI reads.
+ *
+ * Only listed keys carried by the projection are copied, so a delta cannot
+ * quietly rewrite the route (a route change with an unchanged fingerprint is
+ * exactly what the fingerprint check exists to catch) and no snapshot can reach
+ * browser-only replay, simulation, or matcher state.
+ */
+function nativeStatePatch(projection: NativeNavigationProjection): Partial<NavigationState> {
+  const patch: Partial<NavigationState> = {
+    navigationAuthority: "native",
+    status: projection.status,
+    kind: projection.kind,
+    nativeSessionId: projection.sessionId,
+    nativeRevision: projection.revision,
+    nativeRouteFingerprint: projection.fingerprint,
+  };
+  const copy = <K extends keyof NativeNavigationProjection & keyof NavigationState>(key: K) => {
+    const value = projection[key];
+    if (value !== undefined) (patch as Record<string, unknown>)[key] = value;
+  };
+  copy("mode");
+  copy("route");
+  copy("routes");
+  copy("routeProvider");
+  copy("routeSelectionIntent");
+  copy("progress");
+  copy("offRoute");
+  copy("weakGps");
+  copy("coasting");
+  copy("currentSpeedLimit");
+  copy("itinerary");
+  copy("transitProgress");
+  copy("connectivity");
+  copy("permissionMode");
+  copy("rerouteUnavailable");
+  copy("liveDataUnavailable");
+  copy("transitRerouteNeeded");
+  if (projection.confidence !== undefined) patch.nativeConfidence = projection.confidence;
+  if (projection.alertAvailability !== undefined) {
+    patch.alertAvailability = projection.alertAvailability;
+  }
+  return patch;
 }
 
 /**
@@ -282,12 +441,49 @@ const INITIAL = {
   navigationStartedAtMs: null as number | null,
 };
 
-export const useNavigationStore = create<NavigationState>((set) => ({
+/**
+ * The native read model, reset separately from {@link INITIAL}.
+ *
+ * Authority is not part of a navigation session: it is a property of where the
+ * page is running. Folding it into the per-session reset would hand the browser
+ * engine back its authority the moment a native session ended, inside an app
+ * whose whole point is that it never had it.
+ */
+const NATIVE_READ_MODEL_INITIAL = {
+  nativeSessionId: null as string | null,
+  nativeRevision: null as number | null,
+  nativeRouteFingerprint: null as string | null,
+  nativeConfidence: "live" as NativeConfidence,
+  permissionMode: null as NativePermissionMode | null,
+  alertAvailability: "unknown" as AlertAvailability,
+  nativeEventIds: [] as string[],
+};
+
+/**
+ * Guards the browser start actions against a caller that should have used the
+ * native adapter.
+ *
+ * Loud in development so the mistake is found while it is still a mistake;
+ * silent-but-refused in production, because a driver mid-trip is not the person
+ * to debug it. Returns true when the caller must stop.
+ */
+function refuseBrowserStart(authority: NavigationAuthority, action: string): boolean {
+  if (authority !== "native") return false;
+  const message = `${action} was called under native navigation authority; use the native command adapter`;
+  if (process.env.NODE_ENV !== "production") throw new Error(message);
+  console.error(`[navigationStore] ${message}`);
+  return true;
+}
+
+export const useNavigationStore = create<NavigationState>((set, get) => ({
   ...INITIAL,
+  ...NATIVE_READ_MODEL_INITIAL,
+  navigationAuthority: "browser" as NavigationAuthority,
   voiceEnabled: readBoolPref(VOICE_STORAGE_KEY, true),
   keepScreenOn: readBoolPref(KEEP_SCREEN_ON_STORAGE_KEY, true),
 
-  startGroundNavigation: (route, mode, waypoints, alternatives = [], provider, options) =>
+  startGroundNavigation: (route, mode, waypoints, alternatives = [], provider, options) => {
+    if (refuseBrowserStart(get().navigationAuthority, "startGroundNavigation")) return;
     set((current) => ({
       ...INITIAL,
       status: "navigating",
@@ -304,7 +500,8 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       connectivity: current.connectivity,
       rerouteUnavailable: current.connectivity === "offline",
       liveDataUnavailable: current.connectivity === "offline",
-    })),
+    }));
+  },
   // Switch the followed route to a shown alternative. Clears progress (it belongs
   // to the old geometry) like a reroute; the engine/camera reset on route identity.
   selectRoute: (index) =>
@@ -331,7 +528,8 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       routeSelectionIntent: "userSelected",
       fasterRouteSuppressed: false,
     }),
-  startTransitNavigation: (itinerary, replanOptions) =>
+  startTransitNavigation: (itinerary, replanOptions) => {
+    if (refuseBrowserStart(get().navigationAuthority, "startTransitNavigation")) return;
     set({
       ...INITIAL,
       status: "navigating",
@@ -341,7 +539,8 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       progress: null,
       transitProgress: null,
       transitReplanOptions: replanOptions ?? null,
-    }),
+    });
+  },
   applyTransitProgress: (transitProgress) => set({ transitProgress }),
   setTransitRerouteNeeded: (transitRerouteNeeded) => set({ transitRerouteNeeded }),
   replaceItinerary: (itinerary) =>
@@ -471,4 +670,65 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       voiceEnabled: readBoolPref(VOICE_STORAGE_KEY, true),
       keepScreenOn: readBoolPref(KEEP_SCREEN_ON_STORAGE_KEY, true),
     }),
+
+  applyNativeFullSnapshot: (projection) => {
+    const current = get();
+    const sameSession = current.nativeSessionId === projection.sessionId;
+    if (
+      sameSession &&
+      current.nativeRevision === projection.revision &&
+      current.nativeRouteFingerprint === projection.fingerprint
+    ) {
+      return "duplicate";
+    }
+    // A different session invalidates the events pending against the old one,
+    // and the browser read model that a stale session left behind.
+    const carriedEvents = sameSession ? current.nativeEventIds : [];
+    set({ ...INITIAL, ...nativeStatePatch(projection), nativeEventIds: carriedEvents });
+    return "applied";
+  },
+
+  applyNativeDelta: (projection) => {
+    const current = get();
+    if (current.nativeRevision === null || current.nativeSessionId !== projection.sessionId) {
+      return "needs-full-snapshot";
+    }
+    if (current.nativeRouteFingerprint !== projection.fingerprint) return "needs-full-snapshot";
+    if (projection.revision === current.nativeRevision) return "duplicate";
+    if (projection.revision < current.nativeRevision) return "stale";
+    const base = projection.baseRevision ?? projection.revision - 1;
+    // A missed update is a moment of staleness; an invented one is a puck on the
+    // wrong road.
+    if (base !== current.nativeRevision) return "needs-full-snapshot";
+    set(nativeStatePatch(projection));
+    return "applied";
+  },
+
+  applyNativeEvent: (event) => {
+    const current = get();
+    if (current.navigationAuthority !== "native") return "rejected";
+    if (current.nativeEventIds.includes(event.eventId)) return "duplicate";
+    set({ nativeEventIds: [...current.nativeEventIds, event.eventId] });
+    return "applied";
+  },
+
+  clearNativeReadModel: () =>
+    set((current) => ({
+      ...INITIAL,
+      ...NATIVE_READ_MODEL_INITIAL,
+      connectivity: current.connectivity,
+      // Authority describes where the page is running, not what it is doing, so
+      // ending a session does not hand the browser engine the wheel.
+      navigationAuthority: current.navigationAuthority,
+    })),
 }));
+
+/**
+ * Declares that this page is inside the installed shell.
+ *
+ * Called before any handshake completes: the browser engine must be refused
+ * during negotiation too, not merely once negotiation has failed.
+ */
+export function setNavigationAuthority(navigationAuthority: NavigationAuthority): void {
+  useNavigationStore.setState({ navigationAuthority });
+}

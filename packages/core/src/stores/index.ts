@@ -25,6 +25,13 @@ export { useMapClickStore } from "./mapClickStore";
 export { useMapStore } from "./mapStore";
 export { useMenuStore } from "./menuStore";
 export type {
+  AlertAvailability,
+  NativeApplyOutcome,
+  NativeConfidence,
+  NativeNavigationEvent,
+  NativeNavigationProjection,
+  NativePermissionMode,
+  NavigationAuthority,
   NavigationConnectivity,
   NavigationRouteOptions,
   NavigationStartOptions,
@@ -33,7 +40,7 @@ export type {
   RouteSelectionIntent,
   TransitReplanOptions,
 } from "./navigationStore";
-export { useNavigationStore } from "./navigationStore";
+export { setNavigationAuthority, useNavigationStore } from "./navigationStore";
 export { useNlpSearchStore } from "./nlpSearchStore";
 export type { OpeningHoursFilter } from "./openingHoursStore";
 export { useOpeningHoursStore } from "./openingHoursStore";

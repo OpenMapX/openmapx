@@ -1,5 +1,6 @@
 "use client";
 
+import { setNavigationAuthority, useNavigationStore } from "@openmapx/core";
 import {
   createContext,
   type ReactNode,
@@ -16,8 +17,10 @@ import {
   envelopeOf,
   forgetEvents,
   type NativeReadModel,
+  projectionOf,
   rememberEvent,
 } from "./nativeSnapshotReducer";
+import { NativeNavigationCommands } from "./navigationCommands";
 
 /**
  * Which of the two runtimes this page is.
@@ -45,6 +48,8 @@ export interface MobileRuntime {
   /** The native session as this page understands it. */
   readModel: NativeReadModel | null;
   client: BridgeClient | null;
+  /** The only way to mutate the native session; null in an ordinary browser. */
+  commands: NativeNavigationCommands | null;
 }
 
 const BROWSER_RUNTIME: MobileRuntime = {
@@ -55,6 +60,7 @@ const BROWSER_RUNTIME: MobileRuntime = {
   handshake: null,
   readModel: null,
   client: null,
+  commands: null,
 };
 
 const MobileRuntimeContext = createContext<MobileRuntime>(BROWSER_RUNTIME);
@@ -79,12 +85,25 @@ export function MobileRuntimeProvider({ children, webBuildId, scope }: MobileRun
   const [handshake, setHandshake] = useState<HandshakeResult | null>(null);
   const [readModel, setReadModel] = useState<NativeReadModel | null>(null);
   const clientRef = useRef<BridgeClient | null>(null);
+  const [commands, setCommands] = useState<NativeNavigationCommands | null>(null);
+
+  // Set before any effect runs, and before the handshake has said anything: the
+  // browser engine must be refused during negotiation too, not merely once
+  // negotiation has failed.
+  if (inShell && useNavigationStore.getState().navigationAuthority !== "native") {
+    setNavigationAuthority("native");
+  }
 
   useEffect(() => {
     if (!inShell) return;
 
     const client = new BridgeClient({ webBuildId, scope: scope ?? globalThis });
     clientRef.current = client;
+    const nativeCommands = new NativeNavigationCommands(client, () => {
+      const store = useNavigationStore.getState();
+      return { sessionId: store.nativeSessionId, revision: store.nativeRevision };
+    });
+    setCommands(nativeCommands);
 
     if (!client.attach()) {
       // A descriptor with no transport is a broken shell, never a browser.
@@ -98,13 +117,25 @@ export function MobileRuntimeProvider({ children, webBuildId, scope }: MobileRun
         if (!incoming) return;
         setReadModel((current) => {
           const outcome = applyNativeSnapshot(current, incoming);
-          if (outcome.ok) return outcome.model;
-          // A gap or a changed route means the page is behind; ask for the whole
-          // thing rather than render an interpolation.
-          if (outcome.reason === "need-full-snapshot") {
-            void client.request("snapshot.request", {}).catch(() => undefined);
+          if (!outcome.ok) {
+            // A gap or a changed route means the page is behind; ask for the
+            // whole thing rather than render an interpolation.
+            if (outcome.reason === "need-full-snapshot") void nativeCommands.requestSnapshot();
+            return current;
           }
-          return current;
+          // The store re-checks the step against what it actually rendered,
+          // which is what catches a batched render dropping one in between.
+          const projection = projectionOf(outcome.model, incoming.type);
+          const store = useNavigationStore.getState();
+          const applied =
+            incoming.type === "full"
+              ? store.applyNativeFullSnapshot(projection)
+              : store.applyNativeDelta(projection);
+          if (applied === "needs-full-snapshot") {
+            void nativeCommands.requestSnapshot();
+            return current;
+          }
+          return outcome.model;
         });
         return;
       }
@@ -130,9 +161,7 @@ export function MobileRuntimeProvider({ children, webBuildId, scope }: MobileRun
           result.selectedProtocolVersion === null ? "native-incompatible" : "native-compatible",
         );
         // A session that survived a reload is discovered here, not assumed.
-        if (result.activeSession) {
-          void client.request("snapshot.request", {}).catch(() => undefined);
-        }
+        if (result.activeSession) void nativeCommands.requestSnapshot();
       })
       .catch(() => {
         if (!cancelled) setState("native-error");
@@ -143,8 +172,41 @@ export function MobileRuntimeProvider({ children, webBuildId, scope }: MobileRun
       unsubscribe();
       client.close();
       clientRef.current = null;
+      setCommands(null);
     };
   }, [inShell, webBuildId, scope]);
+
+  // Reconcile whenever the page could have missed something: returning to the
+  // foreground, or coming back online. Native state wins in both directions —
+  // the page asks what is true and never uploads its own guess as a recovery.
+  useEffect(() => {
+    if (!commands || state !== "native-compatible") return;
+    const host = (scope ?? globalThis) as {
+      addEventListener?: (type: string, handler: () => void) => void;
+      removeEventListener?: (type: string, handler: () => void) => void;
+      document?: { visibilityState?: string };
+    };
+    if (typeof host.addEventListener !== "function") return;
+
+    let scheduled = false;
+    const reconcile = () => {
+      if (host.document && host.document.visibilityState === "hidden") return;
+      // Foregrounding and reconnecting usually arrive together; one request is
+      // the honest answer to both.
+      if (scheduled) return;
+      scheduled = true;
+      void commands.requestSnapshot().finally(() => {
+        scheduled = false;
+      });
+    };
+
+    host.addEventListener("visibilitychange", reconcile);
+    host.addEventListener("online", reconcile);
+    return () => {
+      host.removeEventListener?.("visibilitychange", reconcile);
+      host.removeEventListener?.("online", reconcile);
+    };
+  }, [commands, state, scope]);
 
   const value = useMemo<MobileRuntime>(
     () => ({
@@ -155,8 +217,9 @@ export function MobileRuntimeProvider({ children, webBuildId, scope }: MobileRun
       handshake,
       readModel,
       client: clientRef.current,
+      commands,
     }),
-    [state, inShell, handshake, readModel, scope],
+    [state, inShell, handshake, readModel, scope, commands],
   );
 
   return <MobileRuntimeContext.Provider value={value}>{children}</MobileRuntimeContext.Provider>;

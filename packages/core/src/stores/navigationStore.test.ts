@@ -4,6 +4,7 @@ import type { TransitProgress } from "../navigation/transitProgress";
 import type { NavProgress } from "../navigation/types";
 import { configureStorage, type StorageAdapter } from "../platform/storage";
 import type { Route } from "../types/routing";
+import type { NativeNavigationProjection } from "./navigationStore";
 import { useNavigationStore } from "./navigationStore";
 
 function makeMemoryStorage(): StorageAdapter {
@@ -562,5 +563,244 @@ describe("navigationStore preference persistence", () => {
       [1, 1],
     ]);
     expect(useNavigationStore.getState().voiceEnabled).toBe(false);
+  });
+});
+
+const projection = (overrides: Partial<NativeNavigationProjection> = {}) =>
+  ({
+    sessionId: "s1",
+    revision: 4,
+    fingerprint: "route-a",
+    kind: "ground",
+    status: "navigating",
+    mode: "driving",
+    route,
+    routes: [route],
+    progress: { alongMeters: 100 } as unknown as NavProgress,
+    offRoute: false,
+    weakGps: false,
+    coasting: false,
+    currentSpeedLimit: 50,
+    connectivity: "online",
+    permissionMode: "background",
+    confidence: "live",
+    ...overrides,
+  }) satisfies NativeNavigationProjection;
+
+const delta = (overrides: Partial<NativeNavigationProjection> = {}) =>
+  projection({
+    revision: 5,
+    baseRevision: 4,
+    progress: { alongMeters: 200 } as unknown as NavProgress,
+    route: undefined,
+    routes: undefined,
+    ...overrides,
+  });
+
+describe("navigationStore native read model", () => {
+  beforeEach(() => {
+    useNavigationStore.setState({ navigationAuthority: "browser" });
+    useNavigationStore.getState().clearNativeReadModel();
+  });
+
+  it("starts under browser authority", () => {
+    expect(useNavigationStore.getState().navigationAuthority).toBe("browser");
+  });
+
+  it("populates the fields the navigation UI reads from a full snapshot", () => {
+    useNavigationStore.getState().applyNativeFullSnapshot(projection());
+
+    const state = useNavigationStore.getState();
+    expect(state.navigationAuthority).toBe("native");
+    expect(state.status).toBe("navigating");
+    expect(state.kind).toBe("ground");
+    expect(state.route).toBe(route);
+    expect(state.progress).toEqual({ alongMeters: 100 });
+    expect(state.currentSpeedLimit).toBe(50);
+    expect(state.permissionMode).toBe("background");
+    expect(state.nativeRevision).toBe(4);
+    expect(state.nativeRouteFingerprint).toBe("route-a");
+  });
+
+  it("replaces a stale browser read model rather than merging into it", () => {
+    useNavigationStore.setState({ fasterRoute: { savedSeconds: 90 } as never, weakGps: true });
+
+    useNavigationStore.getState().applyNativeFullSnapshot(projection());
+
+    // A browser-only offer that outlived its engine would be a button that
+    // reroutes a session this page does not own.
+    expect(useNavigationStore.getState().fasterRoute).toBeNull();
+    expect(useNavigationStore.getState().weakGps).toBe(false);
+  });
+
+  it("cannot hydrate browser-only replay state", () => {
+    useNavigationStore
+      .getState()
+      .applyNativeFullSnapshot(
+        projection({ rerouteRetryNonce: 9, navigationStartedAtMs: 1 } as never),
+      );
+
+    // Not in the projection's copied key list, so an over-broad native payload
+    // cannot reach the browser engine's own controls.
+    expect(useNavigationStore.getState().rerouteRetryNonce).toBe(0);
+    expect(useNavigationStore.getState().navigationStartedAtMs).toBeNull();
+  });
+
+  it("reports an identical full snapshot as a duplicate", () => {
+    useNavigationStore.getState().applyNativeFullSnapshot(projection());
+
+    expect(useNavigationStore.getState().applyNativeFullSnapshot(projection())).toBe("duplicate");
+  });
+
+  it("accepts a full snapshot that moves the revision backwards", () => {
+    useNavigationStore.getState().applyNativeFullSnapshot(projection());
+
+    expect(useNavigationStore.getState().applyNativeFullSnapshot(projection({ revision: 2 }))).toBe(
+      "applied",
+    );
+    expect(useNavigationStore.getState().nativeRevision).toBe(2);
+  });
+
+  it("applies a delta on its declared base", () => {
+    useNavigationStore.getState().applyNativeFullSnapshot(projection());
+
+    expect(useNavigationStore.getState().applyNativeDelta(delta())).toBe("applied");
+    expect(useNavigationStore.getState().progress).toEqual({ alongMeters: 200 });
+    expect(useNavigationStore.getState().nativeRevision).toBe(5);
+  });
+
+  it("keeps the route a delta does not carry", () => {
+    useNavigationStore.getState().applyNativeFullSnapshot(projection());
+    useNavigationStore.getState().applyNativeDelta(delta());
+
+    expect(useNavigationStore.getState().route).toBe(route);
+  });
+
+  it("asks for a full snapshot rather than interpolating a gap", () => {
+    useNavigationStore.getState().applyNativeFullSnapshot(projection());
+
+    expect(
+      useNavigationStore.getState().applyNativeDelta(delta({ revision: 9, baseRevision: 8 })),
+    ).toBe("needs-full-snapshot");
+    expect(useNavigationStore.getState().nativeRevision).toBe(4);
+  });
+
+  it("ignores a duplicate delta", () => {
+    useNavigationStore.getState().applyNativeFullSnapshot(projection());
+
+    expect(useNavigationStore.getState().applyNativeDelta(delta({ revision: 4 }))).toBe(
+      "duplicate",
+    );
+  });
+
+  it("ignores an older delta", () => {
+    useNavigationStore.getState().applyNativeFullSnapshot(projection());
+
+    expect(useNavigationStore.getState().applyNativeDelta(delta({ revision: 2 }))).toBe("stale");
+  });
+
+  it("refuses a delta for another session", () => {
+    useNavigationStore.getState().applyNativeFullSnapshot(projection());
+
+    expect(useNavigationStore.getState().applyNativeDelta(delta({ sessionId: "s2" }))).toBe(
+      "needs-full-snapshot",
+    );
+  });
+
+  it("refuses a delta whose route changed underneath it", () => {
+    useNavigationStore.getState().applyNativeFullSnapshot(projection());
+
+    expect(useNavigationStore.getState().applyNativeDelta(delta({ fingerprint: "route-b" }))).toBe(
+      "needs-full-snapshot",
+    );
+  });
+
+  it("refuses any delta before a full snapshot has arrived", () => {
+    expect(useNavigationStore.getState().applyNativeDelta(delta())).toBe("needs-full-snapshot");
+  });
+
+  it("projects a transit snapshot", () => {
+    useNavigationStore.getState().applyNativeFullSnapshot(
+      projection({
+        kind: "transit",
+        fingerprint: "it-a",
+        route: null,
+        routes: [],
+        itinerary,
+        transitProgress: { legIndex: 1 } as unknown as TransitProgress,
+        alertAvailability: "scheduled",
+      }),
+    );
+
+    const state = useNavigationStore.getState();
+    expect(state.kind).toBe("transit");
+    expect(state.itinerary).toBe(itinerary);
+    expect(state.transitProgress).toEqual({ legIndex: 1 });
+    expect(state.alertAvailability).toBe("scheduled");
+  });
+
+  it("deduplicates navigation events by ID", () => {
+    useNavigationStore.getState().applyNativeFullSnapshot(projection());
+
+    expect(
+      useNavigationStore.getState().applyNativeEvent({ eventId: "e1", type: "off-route" }),
+    ).toBe("applied");
+    // A reconnect replays what was never acknowledged; announcing it twice is
+    // the bug that makes riders distrust the alerts.
+    expect(
+      useNavigationStore.getState().applyNativeEvent({ eventId: "e1", type: "off-route" }),
+    ).toBe("duplicate");
+  });
+
+  it("keeps pending events across a full snapshot for the same session", () => {
+    useNavigationStore.getState().applyNativeFullSnapshot(projection());
+    useNavigationStore.getState().applyNativeEvent({ eventId: "e1", type: "off-route" });
+
+    useNavigationStore.getState().applyNativeFullSnapshot(projection({ revision: 7 }));
+
+    expect(useNavigationStore.getState().nativeEventIds).toEqual(["e1"]);
+  });
+
+  it("drops pending events when the session changes", () => {
+    useNavigationStore.getState().applyNativeFullSnapshot(projection());
+    useNavigationStore.getState().applyNativeEvent({ eventId: "e1", type: "off-route" });
+
+    useNavigationStore.getState().applyNativeFullSnapshot(projection({ sessionId: "s2" }));
+
+    expect(useNavigationStore.getState().nativeEventIds).toEqual([]);
+  });
+
+  it("keeps native authority after the session it described ends", () => {
+    useNavigationStore.getState().applyNativeFullSnapshot(projection());
+
+    useNavigationStore.getState().clearNativeReadModel();
+
+    // Otherwise the browser engine takes the wheel inside an installed app the
+    // moment a trip finishes.
+    expect(useNavigationStore.getState().navigationAuthority).toBe("native");
+    expect(useNavigationStore.getState().nativeRevision).toBeNull();
+    expect(useNavigationStore.getState().status).toBe("idle");
+  });
+});
+
+describe("navigationStore browser starts under native authority", () => {
+  beforeEach(() => {
+    useNavigationStore.setState({ navigationAuthority: "browser" });
+    useNavigationStore.getState().clearNativeReadModel();
+  });
+
+  it("throws in development rather than starting a second engine", () => {
+    useNavigationStore.setState({ navigationAuthority: "native" });
+
+    expect(() =>
+      useNavigationStore.getState().startGroundNavigation(route, "driving", []),
+    ).toThrow();
+    expect(() => useNavigationStore.getState().startTransitNavigation(itinerary)).toThrow();
+  });
+
+  it("still permits browser starts under browser authority", () => {
+    useNavigationStore.getState().startGroundNavigation(route, "driving", []);
+
+    expect(useNavigationStore.getState().status).toBe("navigating");
   });
 });

@@ -1,5 +1,6 @@
+import { setNavigationAuthority, useNavigationStore } from "@openmapx/core";
 import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { MobileRuntimeProvider } from "./MobileRuntimeProvider";
 import { CHANNEL_GLOBAL } from "./mobileShellEnvironment";
 import { useMobileRuntime, useNavigationModeAvailable } from "./useMobileRuntime";
@@ -23,8 +24,9 @@ function shellScope(options: { transport?: boolean } = {}) {
 
   const deliver = (detail: unknown) =>
     handlers.get("openmapx:native")?.({ detail } as unknown as Event);
+  const fire = (type: string) => handlers.get(type)?.({} as Event);
 
-  return { scope, sent, deliver };
+  return { scope, sent, deliver, fire };
 }
 
 function helloReply(overrides: Record<string, unknown> = {}) {
@@ -277,5 +279,112 @@ describe("MobileRuntimeProvider read model", () => {
     await waitFor(() => expect(shell.sent.length).toBeGreaterThan(0));
     const acknowledged = shell.sent.map((raw) => JSON.parse(raw));
     expect(acknowledged.some((message) => message.type === "event.ack")).toBe(true);
+  });
+});
+
+describe("MobileRuntimeProvider store integration", () => {
+  afterEach(() => {
+    setNavigationAuthority("browser");
+    useNavigationStore.getState().clearNativeReadModel();
+  });
+
+  const snapshot = (overrides: Record<string, unknown> = {}) => ({
+    protocolVersion: 1,
+    type: "snapshot.update",
+    messageId: "n-snap",
+    channelNonce: NONCE,
+    sentAtMs: 1_700_000_000_000,
+    payload: {
+      snapshot: {
+        version: 1,
+        type: "full",
+        kind: "ground",
+        sessionId: "s1",
+        revision: 4,
+        routeFingerprint: "route-a",
+        status: "active",
+        route: { geometry: [[8.68, 50.11]] },
+        alternatives: [],
+        progress: { alongMeters: 100 },
+        offRoute: false,
+        coasting: false,
+        currentSpeedLimit: 50,
+        permissionMode: "background",
+        ...overrides,
+      },
+    },
+  });
+
+  it("takes navigation authority on the first render, before any handshake", () => {
+    mount(shellScope().scope);
+
+    // Waiting for the handshake would leave the browser engine free to start a
+    // second session during negotiation.
+    expect(useNavigationStore.getState().navigationAuthority).toBe("native");
+  });
+
+  it("leaves an ordinary browser under browser authority", () => {
+    mount({});
+
+    expect(useNavigationStore.getState().navigationAuthority).toBe("browser");
+  });
+
+  it("projects a native snapshot into the fields the UI reads", async () => {
+    const shell = shellScope();
+    mount(shell.scope);
+    shell.deliver(helloReply());
+    await waitFor(() => expect(text("state")).toBe("native-compatible"));
+
+    shell.deliver(snapshot());
+
+    await waitFor(() => expect(useNavigationStore.getState().nativeRevision).toBe(4));
+    const state = useNavigationStore.getState();
+    expect(state.status).toBe("navigating");
+    expect(state.currentSpeedLimit).toBe(50);
+    expect(state.permissionMode).toBe("background");
+    expect(state.progress).toEqual({ alongMeters: 100 });
+  });
+
+  it("advances the store by one revision on a delta", async () => {
+    const shell = shellScope();
+    mount(shell.scope);
+    shell.deliver(helloReply());
+    await waitFor(() => expect(text("state")).toBe("native-compatible"));
+    shell.deliver(snapshot());
+    await waitFor(() => expect(useNavigationStore.getState().nativeRevision).toBe(4));
+
+    shell.deliver(
+      snapshot({ type: "progress", revision: 5, kind: undefined, progress: { alongMeters: 200 } }),
+    );
+
+    await waitFor(() => expect(useNavigationStore.getState().nativeRevision).toBe(5));
+    expect(useNavigationStore.getState().progress).toEqual({ alongMeters: 200 });
+  });
+
+  it("reconciles once when the app returns to the foreground", async () => {
+    const shell = shellScope();
+    mount(shell.scope);
+    shell.deliver(helloReply());
+    await waitFor(() => expect(text("state")).toBe("native-compatible"));
+    shell.sent.length = 0;
+
+    shell.fire("visibilitychange");
+
+    await waitFor(() => expect(shell.sent.length).toBeGreaterThan(0));
+    expect(JSON.parse(shell.sent[0]).type).toBe("snapshot.request");
+  });
+
+  it("reconciles when connectivity returns", async () => {
+    const shell = shellScope();
+    mount(shell.scope);
+    shell.deliver(helloReply());
+    await waitFor(() => expect(text("state")).toBe("native-compatible"));
+    shell.sent.length = 0;
+
+    shell.fire("online");
+
+    await waitFor(() =>
+      expect(shell.sent.some((raw) => JSON.parse(raw).type === "snapshot.request")).toBe(true),
+    );
   });
 });
