@@ -17,6 +17,8 @@ import {
   verifyEmailEmail,
 } from "./utils/emailTemplates";
 import { envString } from "./utils/env";
+import { getOsmConfig } from "./utils/osm-config";
+import { createProviderAvatarSync } from "./utils/provider-avatar";
 import { projectSessionPayload } from "./utils/session-projection";
 
 const secret = process.env.BETTER_AUTH_SECRET;
@@ -28,7 +30,7 @@ async function fetchProviderImage(
 ): Promise<string | undefined> {
   try {
     if (providerId === "openstreetmap") {
-      const res = await fetch("https://api.openstreetmap.org/api/0.6/user/details.json", {
+      const res = await fetch(getOsmConfig().apiUrl("api/0.6/user/details.json"), {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!res.ok) return undefined;
@@ -43,6 +45,37 @@ async function fetchProviderImage(
   }
   return undefined;
 }
+
+/**
+ * Avatar sync for linked providers. The stored `account.accessToken` is
+ * ciphertext once `account.encryptOAuthTokens` is on, so the usable token is
+ * resolved through Better Auth's public server API instead of the column. That
+ * call can refresh and persist the account, which re-enters the update hook —
+ * the sync's own guard absorbs that.
+ */
+const providerAvatarSync = createProviderAvatarSync({
+  async resolveAccessToken(providerId, userId) {
+    try {
+      const result = await auth.api.getAccessToken({ body: { providerId, userId } });
+      return result.accessToken ?? undefined;
+    } catch {
+      // Revoked, unrefreshable or (for a legacy plaintext token that looks
+      // like ciphertext) undecryptable. The person simply relinks.
+      return undefined;
+    }
+  },
+  fetchProviderImage,
+  async getCurrentImage(userId) {
+    const [currentUser] = await db
+      .select({ image: userTable.image })
+      .from(userTable)
+      .where(eq(userTable.id, userId));
+    return currentUser?.image;
+  },
+  async setUserImage(userId, image) {
+    await db.update(userTable).set({ image }).where(eq(userTable.id, userId));
+  },
+});
 
 const authOptions = {
   database: drizzleAdapter(db, {
@@ -88,53 +121,25 @@ const authOptions = {
       trustedProviders: ["openstreetmap", "mapillary"],
       allowDifferentEmails: true,
     },
+    // Provider access/refresh tokens are encrypted at rest with the deployment
+    // auth secret. Contribution editing stores elevated OSM write scopes on
+    // this same account row, so a database disclosure must not hand out
+    // usable write tokens. Nothing may read the column directly afterwards —
+    // see `providerAvatarSync` and `OsmAccountService`.
+    encryptOAuthTokens: true,
   },
   databaseHooks: {
     account: {
       create: {
         after: async (account) => {
-          if (account.providerId !== "openstreetmap" && account.providerId !== "mapillary") return;
-
-          // Skip if user already has a profile picture (e.g. set by getUserInfo during sign-up)
-          const [currentUser] = await db
-            .select({ image: userTable.image })
-            .from(userTable)
-            .where(eq(userTable.id, account.userId));
-          if (currentUser?.image) return;
-
-          // Try to fetch a profile picture from the newly linked provider
-          if (account.accessToken) {
-            const imageUrl = await fetchProviderImage(account.providerId, account.accessToken);
-            if (imageUrl) {
-              await db
-                .update(userTable)
-                .set({ image: imageUrl })
-                .where(eq(userTable.id, account.userId));
-            }
-          }
+          await providerAvatarSync.onAccountCreated(account.providerId, account.userId);
         },
       },
       update: {
         after: async (account) => {
-          // On each OAuth sign-in, better-auth updates the account (access token refresh).
-          // Re-fetch the profile picture to pick up changes (e.g. user changed OSM avatar).
-          if (account.providerId !== "openstreetmap" && account.providerId !== "mapillary") return;
-
-          if (!account.accessToken) return;
-
-          const imageUrl = await fetchProviderImage(account.providerId, account.accessToken);
-
-          // Update user image: set the new URL, or clear it if the provider no longer has one
-          // (only clear if this provider was the source, i.e. no higher-priority provider has one)
-          if (imageUrl) {
-            await db
-              .update(userTable)
-              .set({ image: imageUrl })
-              .where(eq(userTable.id, account.userId));
-          } else if (account.providerId === "openstreetmap") {
-            // OSM no longer has a picture — clear it
-            await db.update(userTable).set({ image: null }).where(eq(userTable.id, account.userId));
-          }
+          // Better Auth updates the account on each OAuth sign-in and token
+          // refresh; re-read the picture so a changed provider avatar follows.
+          await providerAvatarSync.onAccountUpdated(account.providerId, account.userId);
         },
       },
     },
@@ -227,13 +232,15 @@ const authOptions = {
       config: [
         {
           providerId: "openstreetmap",
-          discoveryUrl: "https://www.openstreetmap.org/.well-known/openid-configuration",
+          discoveryUrl: getOsmConfig().discoveryUrl,
           clientId: envString("OSM_CLIENT_ID", ""),
           clientSecret: envString("OSM_CLIENT_SECRET", ""),
+          // Ordinary sign-in stays minimal. Contribution write scopes are
+          // requested incrementally, only when someone starts contributing.
           scopes: ["openid", "read_prefs"],
           pkce: true,
           async getUserInfo({ accessToken }) {
-            const res = await fetch("https://api.openstreetmap.org/api/0.6/user/details.json", {
+            const res = await fetch(getOsmConfig().apiUrl("api/0.6/user/details.json"), {
               headers: { Authorization: `Bearer ${accessToken}` },
             });
             if (!res.ok) throw new Error(`OSM user info fetch failed: ${res.status}`);

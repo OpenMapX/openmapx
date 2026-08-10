@@ -82,6 +82,7 @@ import { pruneOldRecords } from "./services/health-history";
 import { jobRunner } from "./services/job-runner";
 import { initServiceRegistry } from "./services/service-registry";
 import { handleSystemDiagnosticsJob, handleSystemUpdateJob } from "./services/system-maintenance";
+import { safeAuthErrorEvent } from "./utils/auth-error-log";
 import { envInt, envString } from "./utils/env";
 import {
   authLimit,
@@ -246,7 +247,9 @@ server.route({
       });
       return reply.send(response.status === 204 ? null : await response.text());
     } catch (error) {
-      server.log.error(error, "Auth error");
+      // Never log the raw thrown object: an OAuth callback or token-exchange
+      // failure can carry an authorization code, token, state or upstream body.
+      server.log.error(safeAuthErrorEvent(error, request.id, request.method), "Auth error");
       return reply.status(500).send({ error: "Internal authentication error" });
     }
   },
