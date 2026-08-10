@@ -11,6 +11,12 @@ import type { Disclosure } from "@openmapx/core/server";
 import { legalConfig, sectionSlug } from "@openmapx/core/server";
 import { TransitFeedAttribution } from "@/components/legal/TransitFeedAttribution";
 import { generateAttributionSectionsFromManifests } from "../generateLegalSections";
+import { termsIds, termsTitles } from "./sections";
+
+// Headings and anchors come from the shared section source, so the sidebar
+// in `page.tsx` and this content can never disagree.
+const T = termsTitles("de");
+const IDS = termsIds("de");
 
 export default function TermsContentDe({
   capabilities: _capabilities = {},
@@ -35,9 +41,9 @@ export default function TermsContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 20. Juli 2026
+        Zuletzt aktualisiert: 10. August 2026
       </Typography>
-      <Section title="1. Geltungsbereich und Anbieter">
+      <Section title={T.scope}>
         <Typography>
           Diese Nutzungsbedingungen (&quot;Bedingungen&quot;) regeln Ihre Nutzung von OpenMapX,
           einer Open-Data-Kartenplattform, betrieben von:
@@ -56,7 +62,7 @@ export default function TermsContentDe({
           Wenn Sie nicht einverstanden sind, nutzen Sie den Dienst bitte nicht.
         </Typography>
       </Section>
-      <Section title="2. Beschreibung des Dienstes">
+      <Section title={T.service}>
         <Typography>
           OpenMapX ist ein kostenloser Open-Data-Kartendienst, der Kartenansicht, Adresssuche,
           Routenplanung (einschlie&szlig;lich Isochronen und H&ouml;henprofilen),
@@ -66,10 +72,15 @@ export default function TermsContentDe({
           Outdoor-Informationen, Parkplatzverf&uuml;gbarkeit, E-Ladestation-Standorte,
           Kraftstoffpreise, geteilte Mobilit&auml;tsdaten (Bike-Sharing, E-Scooter, Carsharing) und
           allgemeine Ortsinformationen bietet. Der Dienst aggregiert Daten aus mehreren offenen
-          Datenquellen und Drittanbieter-APIs wie in Abschnitt&nbsp;11 aufgef&uuml;hrt.
+          Datenquellen und Drittanbieter-APIs wie in Abschnitt&nbsp;12 aufgef&uuml;hrt.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          Sofern der Anbieter dies aktiviert hat, bietet der Dienst zus&auml;tzlich einen
+          optionalen, manuell bedienten Editor, um unter Ihrem eigenen Konto Korrekturen und
+          &ouml;ffentliche Hinweise an OpenStreetMap zu &uuml;bermitteln. Siehe Abschnitt&nbsp;11.
         </Typography>
       </Section>
-      <Section title="3. Verf&uuml;gbarkeit und &Auml;nderungen">
+      <Section title={T.availability}>
         <Typography>
           OpenMapX wird auf einer &quot;Ist-Zustand&quot;- und &quot;Wie-verf&uuml;gbar&quot;-Basis
           bereitgestellt. Wir sind bestrebt, den Dienst am Laufen zu halten, garantieren jedoch
@@ -83,7 +94,7 @@ export default function TermsContentDe({
           oder Verf&uuml;gbarkeit &auml;ndern.
         </Typography>
       </Section>
-      <Section title="4. Benutzerkonten">
+      <Section title={T.accounts}>
         <Typography>
           Die Kontoerstellung ist optional. Sie k&ouml;nnen die meisten Funktionen von OpenMapX ohne
           Konto nutzen. Wenn Sie ein Konto erstellen:
@@ -120,7 +131,7 @@ export default function TermsContentDe({
           sperren oder zu l&ouml;schen.
         </Typography>
       </Section>
-      <Section title="5. Zul&auml;ssige Nutzung">
+      <Section title={T.acceptableUse}>
         <Typography>Sie verpflichten sich, Folgendes zu unterlassen:</Typography>
         <ul>
           <li>
@@ -189,9 +200,18 @@ export default function TermsContentDe({
               dessen Nutzung Sie nicht berechtigt sind.
             </Typography>
           </li>
+          <li>
+            <Typography>
+              OpenStreetMap-Beitr&auml;ge einzureichen, die falsch, nicht &uuml;berpr&uuml;fbar oder
+              vandalierend sind; Inhalte aus einer anderen Karte, einem Verzeichnis oder einer
+              gesch&uuml;tzten Datenbank ohne passendes Recht bzw. passende Lizenz nach
+              OpenStreetMap zu &uuml;bernehmen; oder die Beitragsfunktion f&uuml;r Massen-, Skript-
+              oder anderweitig automatisierte Bearbeitungen zu nutzen (siehe Abschnitt&nbsp;11).
+            </Typography>
+          </li>
         </ul>
       </Section>
-      <Section title="6. Genauigkeit und Gew&auml;hrleistungsausschluss">
+      <Section title={T.warranty}>
         <Typography>
           OpenMapX aggregiert Daten aus Drittanbieterquellen. Obwohl wir um Genauigkeit bem&uuml;ht
           sind, &uuml;bernehmen wir keine Gew&auml;hrleistung oder Zusicherung hinsichtlich der
@@ -279,7 +299,7 @@ export default function TermsContentDe({
         </Typography>
       </Section>
       {disclosures.some((d) => d.type === "ai-search" && d.aiActive) && (
-        <Section title="KI-gestützte Suche" id="ai-search">
+        <Section title={T.aiSearch} id={IDS.aiSearch}>
           <Typography>
             OpenMapX verwendet KI-Modelle, um natürlichsprachliche Suchanfragen zu interpretieren —
             etwa „ruhiges Café mit Außenbereich in der Nähe des Parks" in eine strukturierte Suche
@@ -295,7 +315,7 @@ export default function TermsContentDe({
           </Typography>
         </Section>
       )}
-      <Section title="7. Haftungsbeschr&auml;nkung">
+      <Section title={T.liability}>
         <Typography>Die Haftung des Betreibers bestimmt sich wie folgt:</Typography>
         <ul>
           <li>
@@ -335,12 +355,12 @@ export default function TermsContentDe({
           Vollst&auml;ndigkeit oder Aktualit&auml;t der angezeigten Daten.
         </Typography>
       </Section>
-      <Section title="8. Geistiges Eigentum">
+      <Section title={T.intellectualProperty}>
         <Typography>
           Der OpenMapX-Anwendungscode, das Design und die Marke sind Eigentum des Betreibers. Die
           Kartendaten, Nahverkehrsinformationen und sonstigen &uuml;ber den Dienst angezeigten
           Inhalte stammen von Dritten und unterliegen deren jeweiligen Lizenzen (siehe
-          Abschnitt&nbsp;11 unten).
+          Abschnitt&nbsp;12 unten).
         </Typography>
         <Typography sx={{ mt: 1 }}>
           Sie d&uuml;rfen den Namen, das Logo oder die Marke von OpenMapX nicht ohne vorherige
@@ -353,14 +373,21 @@ export default function TermsContentDe({
           Abschnitt&nbsp;10.
         </Typography>
       </Section>
-      <Section title="9. Datenschutz">
+      <Section title={T.privacy}>
         <Typography>
           Ihre Nutzung von OpenMapX unterliegt auch unserer{" "}
           <Link href="/privacy">Datenschutzerkl&auml;rung</Link>, die beschreibt, wie wir Ihre Daten
           erheben, verwenden und sch&uuml;tzen.
         </Typography>
+        <Typography sx={{ mt: 1 }}>
+          Wenn Sie die OpenStreetMap-Beitragsfunktion nutzen, beachten Sie bitte: Was Sie
+          ver&ouml;ffentlichen &mdash; einschlie&szlig;lich Ihres OpenStreetMap-Benutzernamens
+          &mdash; wird in der Datenbank von OpenStreetMap &ouml;ffentlich und dauerhaft. Der
+          Abschnitt &bdquo;OpenStreetMap-Beitr&auml;ge&ldquo; der Datenschutzerkl&auml;rung
+          erl&auml;utert genau, was &uuml;bermittelt wird und auf welcher Rechtsgrundlage.
+        </Typography>
       </Section>
-      <Section title="10. Nutzergenerierte Inhalte (Bewertungen)">
+      <Section title={T.reviews}>
         <Typography>
           OpenMapX bindet den{" "}
           <Link href="https://mangrove.reviews/" target="_blank" rel="noopener noreferrer">
@@ -460,7 +487,120 @@ export default function TermsContentDe({
           </li>
         </ul>
       </Section>
-      <Section title="11. Datenquellen und Quellenangaben" id="data-sources">
+      <Section title={T.osmContributions}>
+        <Typography>
+          Sofern der Anbieter Beitr&auml;ge aktiviert hat, k&ouml;nnen Sie mit OpenMapX einige
+          wenige Angaben zu einem bereits vorhandenen{" "}
+          <Link href="https://www.openstreetmap.org/" target="_blank" rel="noopener noreferrer">
+            OpenStreetMap
+          </Link>
+          -Objekt korrigieren oder einen &ouml;ffentlichen OpenStreetMap-Hinweis einreichen. Die
+          Nutzung dieser Funktion ist vollst&auml;ndig freiwillig. Wenn Sie sie nutzen, gelten die
+          folgenden Bedingungen.
+        </Typography>
+        <ul>
+          <li>
+            <Typography>
+              <strong>Sie handeln unter Ihrem eigenen Konto.</strong> Beitr&auml;ge werden mit Ihrem
+              eigenen verkn&uuml;pften OpenStreetMap-Konto ver&ouml;ffentlicht, nicht mit dem des
+              Anbieters. Sie sind f&uuml;r die von Ihnen eingereichten Inhalte verantwortlich
+              &mdash; die ge&auml;nderten Werte, Ihren Kommentar zum &Auml;nderungssatz, Ihre
+              Quellenangabe und jeden Hinweistext &mdash; und daf&uuml;r, dass diese sachlich
+              richtig, rechtm&auml;&szlig;ig und &uuml;berpr&uuml;fbar sind.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Keine &Uuml;bernahme aus unzul&auml;ssigen Quellen.</strong> Sie d&uuml;rfen
+              keine Inhalte aus einer anderen Karte, einem kommerziellen Verzeichnis, einem
+              Suchmaschinenergebnis oder einer durch Urheber-, Datenbank- oder Vertragsrecht
+              gesch&uuml;tzten Datenbank &uuml;bernehmen, sofern Ihnen kein Recht bzw. keine Lizenz
+              zusteht, diese Inhalte zu OpenStreetMap beizutragen. Auch das Nachschlagen in einer
+              konkurrierenden Karte zur &bdquo;Best&auml;tigung&ldquo; einer Angabe ist
+              unzul&auml;ssig.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Es gelten die Regeln von OpenStreetMap.</strong> Sie m&uuml;ssen die{" "}
+              <Link
+                href="https://osmfoundation.org/wiki/Licence/Contributor_Terms"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Mitwirkendenbedingungen von OpenStreetMap
+              </Link>{" "}
+              annehmen und einhalten sowie die Leitlinien der Community zu{" "}
+              <Link
+                href="https://wiki.openstreetmap.org/wiki/Good_practice"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                guter Praxis
+              </Link>{" "}
+              und{" "}
+              <Link
+                href="https://wiki.openstreetmap.org/wiki/Verifiable"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                &Uuml;berpr&uuml;fbarkeit
+              </Link>{" "}
+              beachten. Ihre Beitr&auml;ge und Ihr Bearbeitungsverlauf sind &ouml;ffentlich.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Keine personenbezogenen, vertraulichen oder rechtswidrigen Inhalte.</strong>{" "}
+              Kommentare zu &Auml;nderungss&auml;tzen und Hinweise werden von OpenStreetMap
+              ver&ouml;ffentlicht und dauerhaft aufbewahrt. Nennen Sie keine personenbezogenen Daten
+              &uuml;ber sich oder andere, keine vertraulichen Informationen, keine Beschwerden
+              &uuml;ber Personen und keine rechtswidrigen, ehrverletzenden oder rechteverletzenden
+              Inhalte. Hinweise dienen der Meldung von Problemen mit den Kartendaten, nicht
+              R&uuml;ckmeldungen zu OpenMapX.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Ma&szlig;geblich ist OpenStreetMap, nicht OpenMapX.</strong> Die
+              &ouml;ffentliche Datenbank und ihre Bearbeitungshistorie werden von der OpenStreetMap
+              Foundation nach deren eigenen Bedingungen betrieben. Der Anbieter kann nicht zusagen,
+              dass ein Beitrag angenommen, beibehalten, sichtbar, an andere Dienste weitergegeben,
+              zur&uuml;ckgenommen oder gel&ouml;scht wird, und kann einen Beitrag nicht in Ihrem
+              Namen aus OpenStreetMap entfernen. Andere Mitwirkende k&ouml;nnen Ihre Bearbeitung
+              &auml;ndern oder zur&uuml;cksetzen. Anliegen zu ver&ouml;ffentlichten Beitr&auml;gen
+              richten Sie bitte an die OpenStreetMap Foundation.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Die &Uuml;bernahme erfolgt nicht sofort.</strong> OpenMapX und andere
+              Datennutzer erstellen ihre Kopien der OpenStreetMap-Daten nach eigenem Zeitplan neu.
+              Eine ver&ouml;ffentlichte Korrektur kann daher einige Zeit lang nicht in OpenMapX
+              erscheinen. Das ist normal und kein Mangel.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Der Anbieter kann die Funktion beschr&auml;nken oder abschalten.</strong> Zum
+              Schutz von OpenStreetMap und der Nutzer kann der Anbieter Beitr&auml;ge
+              mengenm&auml;&szlig;ig begrenzen, eine Einreichung ablehnen oder die Beitrags- bzw.
+              die direkte Bearbeitungsfunktion jederzeit und ohne Vorank&uuml;ndigung
+              vollst&auml;ndig deaktivieren. Missbrauch kann zudem zur Sperrung des Kontos nach
+              Abschnitt&nbsp;4 f&uuml;hren.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Automatisiertes Bearbeiten ist nicht gestattet.</strong> Diese Funktion ist
+              ein manueller Editor f&uuml;r einzelne, von Menschen ausgel&ouml;ste Korrekturen. Sie
+              d&uuml;rfen sie nicht f&uuml;r Massen-, Skript- oder maschinelle Bearbeitungen
+              verwenden oder zu automatisieren versuchen.
+            </Typography>
+          </li>
+        </ul>
+      </Section>
+      <Section title={T.dataSources} id={IDS.dataSources}>
         <Typography>
           OpenMapX basiert auf offenen Daten. Wir danken den folgenden Datenquellen und ihren
           jeweiligen Lizenzen. Sofern eine Lizenz gilt, f&uuml;hrt ein Klick auf den Lizenznamen zum
@@ -498,7 +638,7 @@ export default function TermsContentDe({
           }}
         />
       </Section>
-      <Section title="12. Drittanbieter-Bedingungen">
+      <Section title={T.thirdParty}>
         <Typography>
           Ihre Nutzung der &uuml;ber OpenMapX angezeigten Daten kann den Nutzungsbedingungen der
           jeweiligen oben aufgef&uuml;hrten Drittanbieter-Datenquellen unterliegen. Durch die
@@ -507,13 +647,21 @@ export default function TermsContentDe({
           stammende Daten unter der ODbL verf&uuml;gbar, die Namensnennung und Share-Alike f&uuml;r
           abgeleitete Datenbanken erfordert.
         </Typography>
+        <Typography sx={{ mt: 1 }}>
+          Diese Lizenzen regeln, was Sie mit den von OpenMapX <em>angezeigten</em> Daten tun
+          d&uuml;rfen. Sie erlauben nicht den umgekehrten Weg. Nichts von dem Vorstehenden gestattet
+          es Ihnen, Angaben aus der Datenbank eines Anbieters in die eines anderen zu
+          &uuml;bernehmen &mdash; insbesondere d&uuml;rfen Sie fremde Inhalte nicht &uuml;ber die
+          Beitragsfunktion nach OpenStreetMap &uuml;bernehmen, sofern Ihnen kein entsprechendes
+          Recht bzw. keine entsprechende Lizenz zusteht (siehe Abschnitte&nbsp;5 und&nbsp;11).
+        </Typography>
         {integrations.some((i) => i.id === "photos-flickr" && i.enabled) && (
           <Typography sx={{ mt: 1 }}>
             This product uses the Flickr API but is not endorsed or certified by SmugMug, Inc.
           </Typography>
         )}
       </Section>
-      <Section title="13. Salvatorische Klausel">
+      <Section title={T.severability}>
         <Typography>
           Sollte eine Bestimmung dieser Bedingungen f&uuml;r unwirksam oder undurchsetzbar befunden
           werden, bleiben die &uuml;brigen Bestimmungen in vollem Umfang g&uuml;ltig und wirksam.
@@ -521,7 +669,7 @@ export default function TermsContentDe({
           urspr&uuml;nglichen Absicht am n&auml;chsten kommt.
         </Typography>
       </Section>
-      <Section title="14. Anwendbares Recht und Gerichtsstand">
+      <Section title={T.governingLaw}>
         <Typography>
           Diese Bedingungen unterliegen dem Recht der Bundesrepublik Deutschland unter Ausschluss
           des UN-Kaufrechts (CISG). Sind Sie Verbraucher innerhalb der EU, genie&szlig;en Sie
@@ -530,7 +678,7 @@ export default function TermsContentDe({
           Sie als Verbraucher an Ihrem Wohnsitz Klage erheben und nur dort verklagt werden.
         </Typography>
       </Section>
-      <Section title="15. &Auml;nderungen dieser Bedingungen">
+      <Section title={T.changes}>
         <Typography>
           Wir behalten uns das Recht vor, diese Bedingungen jederzeit zu aktualisieren. Die aktuelle
           Version ist stets unter <Link href="/terms">/terms</Link> verf&uuml;gbar. Wir werden
@@ -541,13 +689,13 @@ export default function TermsContentDe({
           mitgeteilten Inkrafttretungsdatum gilt als Zustimmung zu den ge&auml;nderten Bedingungen.
         </Typography>
       </Section>
-      <Section title="16. Sprache">
+      <Section title={T.language}>
         <Typography>
           Diese Bedingungen sind in deutscher und englischer Sprache verf&uuml;gbar. Bei
           Abweichungen zwischen den beiden Fassungen hat die deutsche Fassung Vorrang.
         </Typography>
       </Section>
-      <Section title="17. Kontakt">
+      <Section title={T.contact}>
         <Typography>
           Wenn Sie Fragen zu diesen Bedingungen haben, kontaktieren Sie uns bitte unter{" "}
           <Link href={`mailto:${email}`}>{email}</Link>.
