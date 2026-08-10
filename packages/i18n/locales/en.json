@@ -2307,5 +2307,26 @@
     "fatalConfigTitle": "This build is misconfigured",
     "fatalConfigBody": "OpenMapX cannot start because its compiled server configuration is invalid. Please reinstall the app.",
     "openNetworkSettings": "Open network settings"
+  },
+  "mobilePermissions": {
+    "title": "OpenMapX needs your location to guide you",
+    "purpose": "While navigation is running, OpenMapX uses your precise location to keep guiding you — including when the screen is locked or you switch to another app.",
+    "processing": "Guidance is calculated on this device. Your position is not stored as a location history.",
+    "transmission": "Coordinates may be sent to the OpenMapX server this app is configured for, to fetch a new route, recalculate after a wrong turn, or refresh transit departures.",
+    "stopping": "Tracking stops as soon as you end navigation. You can also revoke access at any time in system settings.",
+    "precise": "Turn-by-turn guidance needs precise location. Approximate location cannot tell which street you are on.",
+    "foregroundOnlyNote": "You can allow location only while the app is open. Guidance then pauses whenever OpenMapX leaves the foreground.",
+    "continue": "Continue",
+    "foregroundOnly": "Foreground only",
+    "notNow": "Not now",
+    "settingsTitle": "Allow location in settings",
+    "settingsBackground": "To keep guiding you with the screen locked, choose \"Allow all the time\" for OpenMapX in system settings.",
+    "settingsPrecise": "Turn on precise location for OpenMapX in system settings, then come back.",
+    "settingsCannotEscalate": "OpenMapX can no longer ask for this permission. Grant it for OpenMapX in system settings, then come back.",
+    "openSettings": "Open settings",
+    "deniedTitle": "Navigation needs location access",
+    "deniedBody": "OpenMapX cannot guide you without location access. You can still plan routes and browse the map.",
+    "foregroundOnlyPausedTitle": "Guidance paused",
+    "foregroundOnlyPausedBody": "You allowed location only while OpenMapX is open, so guidance paused when the app left the foreground. Open OpenMapX to continue."
   }
 }

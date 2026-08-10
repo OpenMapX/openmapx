@@ -53,6 +53,10 @@ export const FORBIDDEN_BACKGROUND_MODULES: ForbiddenModuleRule[] = [
 /** Workspace-owned paths, where a DOM reference is our bug rather than a vendor's. */
 const WORKSPACE_SOURCE = /(^|\/)(apps|packages)\/[^/]+\/(src|.*\.ts)/;
 
+/** Modules that exist only to qualify the background path on a dev build. */
+const FEASIBILITY_MODULE =
+  /src[/\\](background[/\\]feasibilityProbe|storage[/\\]feasibilityRepository|background[/\\]handleFeasibilityBatch)/;
+
 export interface BundleGraphInput {
   /** `sources` from the bundle's source map. */
   sources: readonly string[];
@@ -109,6 +113,17 @@ export function analyzeBackgroundBundle(input: BundleGraphInput): BundleGraphRep
         `the bundle contains ${versions.length} copies of ${duplicated}: ${versions.join(", ")}`,
       );
     }
+  }
+
+  // The qualification probe sits behind a `__DEV__` branch. In a release bundle
+  // that constant folds to `false`, so the branch and its `require` should be
+  // gone entirely — not merely unreachable at runtime. Asserting on the module
+  // list is what turns "we gated it" into "it is not shipped".
+  const probeModules = input.sources.filter((source) => FEASIBILITY_MODULE.test(source));
+  if (probeModules.length > 0) {
+    failures.push(
+      `the qualification probe reached a release bundle (${probeModules.join(", ")}); its branch must fold away under __DEV__`,
+    );
   }
 
   const workspaceModules = input.sources.filter((source) => WORKSPACE_SOURCE.test(source)).sort();

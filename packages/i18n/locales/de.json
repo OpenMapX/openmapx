@@ -2307,5 +2307,26 @@
     "fatalConfigTitle": "Dieser Build ist fehlerhaft konfiguriert",
     "fatalConfigBody": "OpenMapX kann nicht starten, weil die einkompilierte Serverkonfiguration ungültig ist. Bitte installiere die App neu.",
     "openNetworkSettings": "Netzwerkeinstellungen öffnen"
+  },
+  "mobilePermissions": {
+    "title": "OpenMapX benötigt deinen Standort zur Navigation",
+    "purpose": "Während die Navigation läuft, verwendet OpenMapX deinen genauen Standort, um dich weiter zu führen — auch bei gesperrtem Bildschirm oder wenn du zu einer anderen App wechselst.",
+    "processing": "Die Führung wird auf diesem Gerät berechnet. Deine Position wird nicht als Standortverlauf gespeichert.",
+    "transmission": "Koordinaten können an den für diese App konfigurierten OpenMapX-Server gesendet werden, um eine neue Route zu laden, nach einer falschen Abbiegung neu zu berechnen oder Abfahrten zu aktualisieren.",
+    "stopping": "Die Standorterfassung endet, sobald du die Navigation beendest. Du kannst den Zugriff jederzeit in den Systemeinstellungen widerrufen.",
+    "precise": "Die Abbiegungsnavigation benötigt den genauen Standort. Ein ungefährer Standort verrät nicht, auf welcher Straße du bist.",
+    "foregroundOnlyNote": "Du kannst den Standort auch nur zulassen, während die App geöffnet ist. Die Führung pausiert dann, sobald OpenMapX in den Hintergrund wechselt.",
+    "continue": "Weiter",
+    "foregroundOnly": "Nur im Vordergrund",
+    "notNow": "Jetzt nicht",
+    "settingsTitle": "Standort in den Einstellungen zulassen",
+    "settingsBackground": "Damit die Führung bei gesperrtem Bildschirm weiterläuft, wähle in den Systemeinstellungen für OpenMapX „Immer zulassen“.",
+    "settingsPrecise": "Aktiviere in den Systemeinstellungen den genauen Standort für OpenMapX und komm dann zurück.",
+    "settingsCannotEscalate": "OpenMapX kann diese Berechtigung nicht mehr anfragen. Erteile sie in den Systemeinstellungen für OpenMapX und komm dann zurück.",
+    "openSettings": "Einstellungen öffnen",
+    "deniedTitle": "Die Navigation benötigt Standortzugriff",
+    "deniedBody": "Ohne Standortzugriff kann OpenMapX dich nicht führen. Routen planen und die Karte ansehen ist weiterhin möglich.",
+    "foregroundOnlyPausedTitle": "Führung pausiert",
+    "foregroundOnlyPausedBody": "Du hast den Standort nur zugelassen, während OpenMapX geöffnet ist. Deshalb pausiert die Führung, wenn die App in den Hintergrund wechselt. Öffne OpenMapX, um fortzufahren."
   }
 }

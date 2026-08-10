@@ -1,9 +1,7 @@
 import type { LocationObject } from "expo-location";
 import * as TaskManager from "expo-task-manager";
-import { getNavigationAudio } from "../audio/navigationAudioModule";
-import { getDatabase } from "../storage/database";
-import { FeasibilityRepository } from "../storage/feasibilityRepository";
-import { handleFeasibilityBatch } from "./handleFeasibilityBatch";
+import { getRuntimeConfig } from "../config/runtimeConfig";
+import { getHeadlessCoordinator } from "./createHeadlessCoordinator";
 import { NAVIGATION_LOCATION_TASK } from "./taskName";
 
 /**
@@ -11,12 +9,11 @@ import { NAVIGATION_LOCATION_TASK } from "./taskName";
  *
  * TaskManager requires the definition to exist at module scope before React
  * renders, because the operating system can launch the process straight into
- * this callback with no UI at all. `index.ts` therefore imports this file
- * first.
+ * this callback with no UI at all. `index.ts` therefore imports this file first.
  *
- * Nothing here may reach React, the WebView, a store, or a hook: in the
- * headless case none of them exist. Everything the callback needs is created
- * lazily inside it.
+ * Nothing at module scope may reach React, the WebView, a store or a hook: in
+ * the headless case none of them exist. Everything the callback needs — the
+ * database, the coordinator, the driver — is created lazily inside it.
  */
 
 interface LocationTaskPayload {
@@ -25,33 +22,47 @@ interface LocationTaskPayload {
 
 TaskManager.defineTask<LocationTaskPayload>(NAVIGATION_LOCATION_TASK, async ({ data, error }) => {
   // The whole body is guarded: an unhandled rejection here is retried by the
-  // OS, and a persistent failure would become a wake-up loop.
+  // operating system, and a persistent failure would become a wake-up loop.
   try {
-    const database = await getDatabase();
-    const repository = new FeasibilityRepository(database);
-    const effects = await handleFeasibilityBatch(
-      { locations: data?.locations ?? [], errorCode: error?.code ? String(error.code) : undefined },
-      { repository, nowMs: Date.now() },
-    );
-    // Effects run strictly after the commit, so a crash between the two loses
-    // a prompt rather than repeating one.
-    for (const effect of effects) {
-      if (effect.kind === "speak") {
-        const result = await getNavigationAudio().speak({
-          cueId: effect.cueId,
-          text: effect.text,
-          locale: effect.locale,
-        });
-        // Only the stable result code is recorded — never the spoken text.
-        await repository.commit((current) => ({
-          ...current,
-          audioResultCode: result,
-          updatedAtMs: Date.now(),
-        }));
-      }
+    const batch = {
+      locations: data?.locations ?? [],
+      ...(error?.code ? { errorCode: String(error.code) } : {}),
+    };
+
+    // The qualification probe is not a second navigation path — it is the only
+    // path in a build that has no session to advance.
+    //
+    // `__DEV__` is a compile-time constant, so the whole branch, including the
+    // `require`, is removed from a release bundle rather than merely skipped.
+    // Nothing is lost by that: the configuration refuses to validate a release
+    // build with the feasibility flag set, so the branch could never run there.
+    // `mobile:bundle:check` asserts the probe is genuinely absent.
+    if (__DEV__ && isFeasibilityBuild()) {
+      const { runFeasibilityProbe } =
+        require("./feasibilityProbe") as typeof import("./feasibilityProbe");
+      await runFeasibilityProbe(batch);
+      return;
     }
+
+    const coordinator = await getHeadlessCoordinator();
+    await coordinator.handleLocationBatch(batch);
   } catch {
-    // Deliberately silent: logging here could not be redacted reliably, and
-    // the failure is already observable as a stalled callback counter.
+    // Deliberately silent: logging here could not be redacted reliably, and the
+    // failure is already observable in the local diagnostic ring.
   }
 });
+
+/**
+ * Whether this build carries the qualification probe.
+ *
+ * Read through the compiled configuration rather than a bare environment check,
+ * so the release validation that forbids the flag is the same gate the task
+ * consults.
+ */
+function isFeasibilityBuild(): boolean {
+  try {
+    return getRuntimeConfig().feasibilityMode;
+  } catch {
+    return false;
+  }
+}
