@@ -60,7 +60,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 10. August 2026
+        Zuletzt aktualisiert: 11. August 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -203,6 +203,74 @@ export default function PrivacyContentDe({
           verarbeitet, um den von Ihnen gew&auml;hlten Tag anzuzeigen. Dies ist von der
           Live-Standortberechtigung des Browsers getrennt und kann vergangene Orte und
           Bewegungsmuster erkennen lassen.
+        </Typography>
+        <Typography variant="subtitle1" sx={{ mt: 3, fontWeight: 600 }}>
+          Die installierte mobile App
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          Die OpenMapX-App für iOS und Android verhält sich in einem wesentlichen Punkt anders als
+          die Website: Während einer von <em>dir gestarteten</em> Navigation nutzt sie deinen
+          Standort fortlaufend – auch bei gesperrtem Bildschirm oder wenn die App im Hintergrund
+          ist. Nur so kann sie dich weiter führen, wenn das Telefon in der Tasche steckt.
+        </Typography>
+        <ul>
+          <li>
+            <Typography>
+              <strong>Nur während einer von dir gestarteten Fahrt.</strong> Eine Route zu planen und
+              auf Start zu tippen ist eine bewusste Handlung. Ankunft oder das Beenden der
+              Navigation stoppt sie.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Diese Positionen bleiben auf deinem Gerät.</strong> Fortschritt entlang der
+              Route, der Zeitpunkt der nächsten Ansage und das Erkennen einer Routenabweichung
+              werden auf dem Telefon berechnet.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Koordinaten verlassen das Gerät nur, wenn du eine Route anforderst</strong> –
+              bei der Routenanfrage selbst und jeweils einmal, wenn eine Neuberechnung oder eine
+              Umplanung nötig wird. Sie werden zur Beantwortung genutzt und nicht gespeichert.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Es gibt keinen Standortverlauf.</strong> Die App hält die aktuelle Sitzung und
+              die letzte akzeptierte Position lokal – vom Geräte-Backup ausgenommen –, damit eine
+              Fahrt nach einem Absturz oder Neustart fortgesetzt werden kann. Beides wird beim
+              Beenden gelöscht und läuft spätestens nach 24 Stunden ab.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>
+                Keine Analyse-Tools, keine Werbe-ID, kein Crash-Reporting-SDK und kein Tracking.
+              </strong>{" "}
+              Die App nutzt auch kein Remote-Push: Der Ausstiegsalarm im öffentlichen Verkehr wird
+              lokal von deinem Telefon geplant.
+            </Typography>
+          </li>
+        </ul>
+        <Typography sx={{ mt: 1 }}>
+          Du kannst den Standort auch nur im Vordergrund erlauben. Die App funktioniert weiterhin
+          und sagt dir deutlich, dass die Führung bei gesperrtem Bildschirm pausiert. Du kannst die
+          Berechtigung jederzeit in den Systemeinstellungen entziehen und die Navigation jederzeit
+          in der App beenden. Ein erzwungenes Beenden der App stoppt die Führung ebenfalls – das
+          Betriebssystem startet sie für uns nicht neu.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          Für den öffentlichen Verkehr lädt die App die Haltestellenliste jeder gefahrenen
+          Teilstrecke einmal vor Fahrtbeginn und zählt die Haltestellen danach auf dem Gerät – so
+          weiß sie auch unterirdisch, wann du aussteigen solltest. Ansagen erzeugt die Sprachausgabe
+          deines Telefons; nichts wird zum Vorlesen irgendwohin gesendet.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          Eine Anmeldung über einen Drittanbieter oder mit einem Passkey öffnet deinen normalen
+          Browser statt eines eingebetteten – so siehst du die echte Adressleiste. Die App hält
+          deine Sitzung nie selbst; sie erhält einen einmalig verwendbaren Code mit zwei Minuten
+          Gültigkeit, der in der App gegen eine Sitzung eingetauscht wird.
         </Typography>
       </Section>
       <Section title={T.accounts}>

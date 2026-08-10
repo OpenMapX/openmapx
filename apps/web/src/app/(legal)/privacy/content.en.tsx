@@ -60,7 +60,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: August 10, 2026
+        Last updated: August 11, 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -194,6 +194,74 @@ export default function PrivacyContent({
           geometry from your Dawarich account are processed to display the day you select. This is
           independent of the browser&apos;s live-location permission and can reveal past locations
           and movement patterns.
+        </Typography>
+        <Typography variant="subtitle1" sx={{ mt: 3, fontWeight: 600 }}>
+          The installed mobile app
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          The OpenMapX app for iOS and Android behaves differently from the website in one respect
+          that matters: while a navigation session <em>you started</em> is running, it uses your
+          location continuously, including when the screen is locked or the app is in the
+          background. That is what lets it keep guiding you when the phone is in your pocket.
+        </Typography>
+        <ul>
+          <li>
+            <Typography>
+              <strong>It is only ever active during a trip you started.</strong> Planning a route
+              and pressing Start is a deliberate action. Arriving, or ending navigation, stops it.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Those fixes stay on your device.</strong> Progress along the route, when to
+              speak the next instruction, and whether you have left the route are all computed on
+              the phone, against the route captured when you started.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Coordinates leave the device only when you ask for a route</strong> — when you
+              request directions, and once more each time a reroute or a transit replan is needed
+              because you left the route or missed a connection. They are used to answer that
+              request and are not retained.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>There is no location history.</strong> The app keeps the current session and
+              the latest accepted fix in local storage that is excluded from device backups, so a
+              crash or a restart can resume the trip. Both are deleted when the session ends, and
+              expire after 24 hours in any case.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>
+                There are no analytics, no advertising identifier, no crash-reporting SDK, and no
+                tracking of any kind.
+              </strong>{" "}
+              The app also has no remote push: the get-off alert for public transit is scheduled
+              locally by your phone.
+            </Typography>
+          </li>
+        </ul>
+        <Typography sx={{ mt: 1 }}>
+          You can grant foreground-only location instead. The app keeps working and tells you
+          plainly that guidance pauses when the screen locks. You can revoke the permission at any
+          time in system settings, and you can end navigation from the app at any time. Force-
+          quitting the app also ends guidance — the operating system does not restart it for us.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          For public transit, the app fetches each ridden leg&apos;s stop list once before the
+          journey starts and then counts stops on the device, so it still knows when you should get
+          off underground. Speech is produced by your phone&apos;s own text-to-speech engine;
+          nothing is sent anywhere to be spoken.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          Signing in with a third-party provider or a passkey opens your ordinary browser rather
+          than an in-app one, so you can see the real address bar. The app never holds your session;
+          it receives a single-use code, valid for two minutes, which is exchanged for a session
+          inside the app.
         </Typography>
       </Section>
       <Section title={T.accounts}>

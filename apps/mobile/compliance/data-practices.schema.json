@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openmapx.com/schemas/mobile-data-practices.json",
+  "title": "Mobile data practices",
+  "description": "The authoritative record of what the installed OpenMapX app does with data. Store privacy answers, the privacy policy, and the permission surface are all derived from this file rather than written independently, because three independent descriptions of the same behaviour is three chances to be wrong in different directions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "practices"],
+  "properties": {
+    "version": { "type": "integer", "minimum": 1 },
+    "practices": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/practice" }
+    }
+  },
+  "$defs": {
+    "practice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "dataType",
+        "source",
+        "leavesDevice",
+        "purpose",
+        "linkedToAccount",
+        "retention",
+        "shared",
+        "userControl",
+        "appleLabel",
+        "googleDataSafety",
+        "legalSection"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "dataType": { "type": "string", "minLength": 3 },
+        "source": {
+          "description": "Where the data originates.",
+          "enum": ["device-sensor", "user-entered", "derived", "os", "third-party"]
+        },
+        "leavesDevice": { "type": "boolean" },
+        "recipient": {
+          "description": "Who receives it. Required whenever it leaves the device; a recipient of \"unclassified\" is not an answer.",
+          "type": "string",
+          "minLength": 3
+        },
+        "endpoint": { "type": "string" },
+        "purpose": {
+          "description": "Why, in terms a reader can check against observable behaviour. Vague purposes are rejected by the tests.",
+          "type": "string",
+          "minLength": 20
+        },
+        "linkedToAccount": { "type": "boolean" },
+        "retention": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "description": "`ephemeral` means processed and discarded within the request. `bounded` requires maxHours. `account-lifetime` lasts until the account is deleted. `unknown` is never acceptable and the schema does not offer it.",
+              "enum": ["ephemeral", "bounded", "account-lifetime"]
+            },
+            "maxHours": { "type": "number", "exclusiveMinimum": 0, "maximum": 8760 },
+            "note": { "type": "string" }
+          }
+        },
+        "shared": {
+          "description": "Onward disclosure beyond the recipient named above.",
+          "enum": ["none", "processor", "third-party-controller"]
+        },
+        "encryptedInTransit": { "type": "boolean" },
+        "userControl": { "type": "string", "minLength": 10 },
+        "appleLabel": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["collected", "category"],
+          "properties": {
+            "collected": { "type": "boolean" },
+            "category": { "type": "string" },
+            "purposes": { "type": "array", "items": { "type": "string" } },
+            "linkedToIdentity": { "type": "boolean" },
+            "usedForTracking": { "type": "boolean" },
+            "exemptionReason": {
+              "description": "Only meaningful when collected is false but the data does leave the device.",
+              "type": "string"
+            }
+          }
+        },
+        "googleDataSafety": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["collected", "shared"],
+          "properties": {
+            "collected": { "type": "boolean" },
+            "shared": { "type": "boolean" },
+            "category": { "type": "string" },
+            "ephemeral": { "type": "boolean" },
+            "optional": { "type": "boolean" },
+            "purposes": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "legalSection": {
+          "description": "Which section of the published privacy policy states this.",
+          "type": "string",
+          "minLength": 3
+        },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,472 @@
+{
+  "version": 1,
+  "practices": [
+    {
+      "id": "precise-location-active-navigation",
+      "dataType": "Precise location (GPS), while a navigation session the user started is running",
+      "source": "device-sensor",
+      "leavesDevice": false,
+      "purpose": "Advancing progress along the route the user is already following, deciding when to speak the next instruction, and detecting that they have left the route. Computed entirely on the device against the route captured when navigation started.",
+      "linkedToAccount": false,
+      "retention": {
+        "kind": "bounded",
+        "maxHours": 24,
+        "note": "Only the latest accepted fix and the active session are kept, in local app storage excluded from device backup, so a crash or a phone restart can resume the trip in progress. Deleted when the session ends and expired after 24 hours regardless."
+      },
+      "shared": "none",
+      "userControl": "Revoke location permission, switch to foreground-only, or end navigation. Ending navigation deletes the session immediately.",
+      "appleLabel": {
+        "collected": false,
+        "category": "Precise Location",
+        "usedForTracking": false,
+        "exemptionReason": "The fixes are processed on the device and are not transmitted; nothing leaves for this practice."
+      },
+      "googleDataSafety": {
+        "collected": false,
+        "shared": false,
+        "category": "Location"
+      },
+      "legalSection": "navigation-location",
+      "notes": "This is the row that makes background location legitimate. It is also the row a reviewer will check hardest, so it must stay literally true."
+    },
+    {
+      "id": "background-location-active-navigation",
+      "dataType": "Precise location while the screen is locked or the app is in the background",
+      "source": "device-sensor",
+      "leavesDevice": false,
+      "purpose": "Continuing the same guidance when the user puts the phone in a pocket or the screen turns off, which is the ordinary way people navigate. Only ever active during a navigation session the user explicitly started.",
+      "linkedToAccount": false,
+      "retention": {
+        "kind": "bounded",
+        "maxHours": 24,
+        "note": "Identical to the foreground case; background is a delivery mode, not a different practice."
+      },
+      "shared": "none",
+      "userControl": "End navigation, or grant only foreground location — the app keeps working and says clearly that guidance stops when the screen locks.",
+      "appleLabel": {
+        "collected": false,
+        "category": "Precise Location",
+        "usedForTracking": false,
+        "exemptionReason": "Processed on the device and not transmitted."
+      },
+      "googleDataSafety": {
+        "collected": false,
+        "shared": false,
+        "category": "Location"
+      },
+      "legalSection": "navigation-location"
+    },
+    {
+      "id": "route-request-coordinates",
+      "dataType": "Start, destination and waypoint coordinates",
+      "source": "user-entered",
+      "leavesDevice": true,
+      "recipient": "The OpenMapX API operated by this deployment",
+      "endpoint": "POST /api/directions",
+      "purpose": "Computing the route the user asked for. A router cannot produce a route without the endpoints, so this is the irreducible transmission.",
+      "linkedToAccount": false,
+      "retention": {
+        "kind": "ephemeral",
+        "note": "Answered and discarded. Request bodies are not written to application or proxy logs."
+      },
+      "shared": "processor",
+      "encryptedInTransit": true,
+      "userControl": "Do not request a route. Nothing is sent until the user asks for directions.",
+      "appleLabel": {
+        "collected": true,
+        "category": "Precise Location",
+        "purposes": ["App Functionality"],
+        "linkedToIdentity": false,
+        "usedForTracking": false
+      },
+      "googleDataSafety": {
+        "collected": true,
+        "shared": false,
+        "category": "Location",
+        "ephemeral": true,
+        "purposes": ["App functionality"]
+      },
+      "legalSection": "routing"
+    },
+    {
+      "id": "reroute-coordinates",
+      "dataType": "Current position, sent once when a reroute or replan is needed",
+      "source": "device-sensor",
+      "leavesDevice": true,
+      "recipient": "The OpenMapX API operated by this deployment",
+      "endpoint": "POST /api/directions, POST /api/transit/plan",
+      "purpose": "Producing a new route from where the user actually is, after they have left the previous one or a connection has been missed. Sent once per reroute, never continuously.",
+      "linkedToAccount": false,
+      "retention": {
+        "kind": "ephemeral",
+        "note": "Answered and discarded, exactly like an initial route request."
+      },
+      "shared": "processor",
+      "encryptedInTransit": true,
+      "userControl": "Navigate offline — rerouting is refused rather than attempted, and the app says so.",
+      "appleLabel": {
+        "collected": true,
+        "category": "Precise Location",
+        "purposes": ["App Functionality"],
+        "linkedToIdentity": false,
+        "usedForTracking": false
+      },
+      "googleDataSafety": {
+        "collected": true,
+        "shared": false,
+        "category": "Location",
+        "ephemeral": true,
+        "purposes": ["App functionality"]
+      },
+      "legalSection": "routing",
+      "notes": "The distinction from a continuous stream is the whole point and must survive any future change: one request per reroute decision."
+    },
+    {
+      "id": "transit-plan-and-refresh",
+      "dataType": "Transit origin, destination, departure time, and a rotating refresh token",
+      "source": "user-entered",
+      "leavesDevice": true,
+      "recipient": "The OpenMapX API, which queries the configured schedule service",
+      "endpoint": "POST /api/transit/plan, POST /api/transit/refresh",
+      "purpose": "Planning a public-transit journey and, while it is running, refreshing its live times and platforms. The refresh token identifies the itinerary, not the person.",
+      "linkedToAccount": false,
+      "retention": {
+        "kind": "ephemeral",
+        "note": "The token is short-lived and rotates; it is never written to native storage, diagnostics, or a snapshot."
+      },
+      "shared": "processor",
+      "encryptedInTransit": true,
+      "userControl": "Do not plan a transit journey, or navigate offline, where refresh is refused and the app says times are scheduled rather than live.",
+      "appleLabel": {
+        "collected": true,
+        "category": "Precise Location",
+        "purposes": ["App Functionality"],
+        "linkedToIdentity": false,
+        "usedForTracking": false
+      },
+      "googleDataSafety": {
+        "collected": true,
+        "shared": false,
+        "category": "Location",
+        "ephemeral": true,
+        "purposes": ["App functionality"]
+      },
+      "legalSection": "transit"
+    },
+    {
+      "id": "captured-transit-stops",
+      "dataType": "The board-to-alight stop list of each ridden leg",
+      "source": "third-party",
+      "leavesDevice": false,
+      "purpose": "Counting stops so the rider knows when to get off when there is no signal. Fetched once before the journey starts, while the connection still works, and then used entirely on the device.",
+      "linkedToAccount": false,
+      "retention": {
+        "kind": "bounded",
+        "maxHours": 24,
+        "note": "Held with the active session and deleted when it ends."
+      },
+      "shared": "none",
+      "userControl": "End navigation, which deletes the session and its captures immediately.",
+      "appleLabel": {
+        "collected": false,
+        "category": "Other Data",
+        "usedForTracking": false
+      },
+      "googleDataSafety": {
+        "collected": false,
+        "shared": false
+      },
+      "legalSection": "transit"
+    },
+    {
+      "id": "local-alerts",
+      "dataType": "Scheduled local notifications for the get-off alert",
+      "source": "derived",
+      "leavesDevice": false,
+      "purpose": "Waking the rider before their stop when the screen is locked. Scheduled on the device by the operating system; no server is involved and there is no push service.",
+      "linkedToAccount": false,
+      "retention": {
+        "kind": "bounded",
+        "maxHours": 24,
+        "note": "Cancelled when the leg or the session ends."
+      },
+      "shared": "none",
+      "userControl": "Turn off the alight alert in navigation settings, or revoke notification permission.",
+      "appleLabel": {
+        "collected": false,
+        "category": "Other Data",
+        "usedForTracking": false
+      },
+      "googleDataSafety": {
+        "collected": false,
+        "shared": false
+      },
+      "legalSection": "notifications"
+    },
+    {
+      "id": "account-and-contact",
+      "dataType": "Email address, display name, and authentication credentials",
+      "source": "user-entered",
+      "leavesDevice": true,
+      "recipient": "The OpenMapX API operated by this deployment",
+      "endpoint": "/api/auth/*",
+      "purpose": "Creating and using an account so that saved places and settings follow the user between devices. Passwords are hashed; the app never holds a session itself.",
+      "linkedToAccount": true,
+      "retention": {
+        "kind": "account-lifetime",
+        "note": "Deleted when the account is deleted, except records a security or statutory obligation requires be kept, which the deletion result names explicitly."
+      },
+      "shared": "none",
+      "encryptedInTransit": true,
+      "userControl": "Use the app without an account, or delete the account in Account Settings or at /delete-account.",
+      "appleLabel": {
+        "collected": true,
+        "category": "Contact Info",
+        "purposes": ["App Functionality"],
+        "linkedToIdentity": true,
+        "usedForTracking": false
+      },
+      "googleDataSafety": {
+        "collected": true,
+        "shared": false,
+        "category": "Personal info",
+        "optional": true,
+        "purposes": ["Account management", "App functionality"]
+      },
+      "legalSection": "account"
+    },
+    {
+      "id": "saved-places-and-settings",
+      "dataType": "Saved places, labels, and app preferences",
+      "source": "user-entered",
+      "leavesDevice": true,
+      "recipient": "The OpenMapX API operated by this deployment",
+      "endpoint": "/api/saved/*",
+      "purpose": "Keeping the user's own saved places available across their devices. Stored against their account and visible to nobody else.",
+      "linkedToAccount": true,
+      "retention": {
+        "kind": "account-lifetime",
+        "note": "Deleted with the account."
+      },
+      "shared": "none",
+      "encryptedInTransit": true,
+      "userControl": "Delete individual saved places, or delete the account.",
+      "appleLabel": {
+        "collected": true,
+        "category": "Other Data",
+        "purposes": ["App Functionality"],
+        "linkedToIdentity": true,
+        "usedForTracking": false
+      },
+      "googleDataSafety": {
+        "collected": true,
+        "shared": false,
+        "category": "App activity",
+        "optional": true,
+        "purposes": ["App functionality"]
+      },
+      "legalSection": "account"
+    },
+    {
+      "id": "review-keypair",
+      "dataType": "Review signing key material",
+      "source": "derived",
+      "leavesDevice": true,
+      "recipient": "The OpenMapX API, which stores it encrypted",
+      "endpoint": "/api/reviews/keypair",
+      "purpose": "Letting a user sign reviews they publish to Mangrove from any of their devices. The private key is encrypted with the user's passphrase or passkey before it is sent, so the server cannot use it.",
+      "linkedToAccount": true,
+      "retention": {
+        "kind": "account-lifetime",
+        "note": "Deleted with the account."
+      },
+      "shared": "none",
+      "encryptedInTransit": true,
+      "userControl": "Do not create a review identity; delete it, or delete the account.",
+      "appleLabel": {
+        "collected": true,
+        "category": "Other Data",
+        "purposes": ["App Functionality"],
+        "linkedToIdentity": true,
+        "usedForTracking": false
+      },
+      "googleDataSafety": {
+        "collected": true,
+        "shared": false,
+        "category": "App activity",
+        "optional": true,
+        "purposes": ["App functionality"]
+      },
+      "legalSection": "reviews"
+    },
+    {
+      "id": "published-reviews",
+      "dataType": "Review text and rating the user chooses to publish",
+      "source": "user-entered",
+      "leavesDevice": true,
+      "recipient": "Mangrove.reviews, an independent public review commons",
+      "endpoint": "https://api.mangrove.reviews",
+      "purpose": "Publishing the review the user wrote. Mangrove is a public dataset by design, so a published review is public and permanent — which is stated before publishing, not after.",
+      "linkedToAccount": false,
+      "retention": {
+        "kind": "account-lifetime",
+        "note": "Held by Mangrove, not by OpenMapX. Deleting an OpenMapX account does not retract a published public review, and the deletion result says so."
+      },
+      "shared": "third-party-controller",
+      "encryptedInTransit": true,
+      "userControl": "Do not publish a review.",
+      "appleLabel": {
+        "collected": true,
+        "category": "User Content",
+        "purposes": ["App Functionality"],
+        "linkedToIdentity": false,
+        "usedForTracking": false
+      },
+      "googleDataSafety": {
+        "collected": true,
+        "shared": true,
+        "category": "App activity",
+        "optional": true,
+        "purposes": ["App functionality"]
+      },
+      "legalSection": "reviews"
+    },
+    {
+      "id": "diagnostics-export",
+      "dataType": "Bounded native diagnostic records",
+      "source": "derived",
+      "leavesDevice": false,
+      "purpose": "Letting a user who reports a problem show what happened. Held locally, bounded in size, and containing shapes and reasons rather than payloads. Nothing is uploaded automatically; there is no crash reporter and no analytics.",
+      "linkedToAccount": false,
+      "retention": {
+        "kind": "bounded",
+        "maxHours": 24,
+        "note": "A rolling local buffer."
+      },
+      "shared": "none",
+      "userControl": "Export and share it deliberately, or never — sharing is entirely user-initiated.",
+      "appleLabel": {
+        "collected": false,
+        "category": "Diagnostics",
+        "usedForTracking": false
+      },
+      "googleDataSafety": {
+        "collected": false,
+        "shared": false
+      },
+      "legalSection": "diagnostics"
+    },
+    {
+      "id": "system-auth-handoff",
+      "dataType": "A single-use callback code and a per-attempt PKCE verifier",
+      "source": "derived",
+      "leavesDevice": true,
+      "recipient": "The OpenMapX API operated by this deployment",
+      "endpoint": "POST /api/mobile-auth/issue, POST /api/mobile-auth/exchange",
+      "purpose": "Carrying a sign-in that had to happen in the system browser back into the app. The code is opaque and useless without the verifier, which never leaves the device's memory.",
+      "linkedToAccount": true,
+      "retention": {
+        "kind": "bounded",
+        "maxHours": 0.034,
+        "note": "Two minutes, single use. The stored row holds a hash of the code, never the code, and is deleted the moment it is redeemed."
+      },
+      "shared": "none",
+      "encryptedInTransit": true,
+      "userControl": "Cancel the sign-in; nothing is issued.",
+      "appleLabel": {
+        "collected": false,
+        "category": "Other Data",
+        "usedForTracking": false,
+        "exemptionReason": "The code is opaque, single-use and expires in two minutes; it identifies one sign-in attempt rather than a person, and the verifier it is useless without never leaves the device."
+      },
+      "googleDataSafety": {
+        "collected": false,
+        "shared": false,
+        "ephemeral": true
+      },
+      "legalSection": "account"
+    },
+    {
+      "id": "webview-storage",
+      "dataType": "The web app's own cookies, service-worker cache, and local storage",
+      "source": "derived",
+      "leavesDevice": false,
+      "purpose": "Keeping the user signed in and letting the interface load quickly. This is the same storage the website uses in an ordinary browser, in a WebView limited to the compiled origin.",
+      "linkedToAccount": true,
+      "retention": {
+        "kind": "account-lifetime",
+        "note": "Cleared by signing out, by clearing website data, or by uninstalling."
+      },
+      "shared": "none",
+      "userControl": "Sign out, or clear website data through the operating system.",
+      "appleLabel": {
+        "collected": false,
+        "category": "Other Data",
+        "usedForTracking": false
+      },
+      "googleDataSafety": {
+        "collected": false,
+        "shared": false
+      },
+      "legalSection": "account"
+    },
+    {
+      "id": "map-and-media-providers",
+      "dataType": "Tile and imagery requests, which reveal the area being viewed",
+      "source": "derived",
+      "leavesDevice": true,
+      "recipient": "The map tile and imagery providers this deployment is configured to use",
+      "purpose": "Drawing the map. Which tiles are requested necessarily indicates roughly where the user is looking; a map that fetched no tiles would not be a map.",
+      "linkedToAccount": false,
+      "retention": {
+        "kind": "ephemeral",
+        "note": "Held by the provider under the provider's own terms; OpenMapX retains nothing."
+      },
+      "shared": "third-party-controller",
+      "encryptedInTransit": true,
+      "userControl": "Self-host the tile service, or use a deployment that does.",
+      "appleLabel": {
+        "collected": true,
+        "category": "Coarse Location",
+        "purposes": ["App Functionality"],
+        "linkedToIdentity": false,
+        "usedForTracking": false
+      },
+      "googleDataSafety": {
+        "collected": true,
+        "shared": true,
+        "category": "Location",
+        "ephemeral": true,
+        "purposes": ["App functionality"]
+      },
+      "legalSection": "third-parties"
+    },
+    {
+      "id": "store-operational-data",
+      "dataType": "Install, crash and delivery data collected by Apple and Google",
+      "source": "os",
+      "leavesDevice": true,
+      "recipient": "Apple and Google, as the app's distributors",
+      "purpose": "Distributing and updating the app. This happens because the app is delivered by a store, not because the app asks for it — OpenMapX receives none of it and ships no analytics or crash SDK.",
+      "linkedToAccount": false,
+      "retention": {
+        "kind": "account-lifetime",
+        "note": "Held by the store under the store's own terms and the user's device settings."
+      },
+      "shared": "third-party-controller",
+      "userControl": "The operating system's own diagnostics and analytics settings.",
+      "appleLabel": {
+        "collected": false,
+        "category": "Diagnostics",
+        "usedForTracking": false
+      },
+      "googleDataSafety": {
+        "collected": false,
+        "shared": false
+      },
+      "legalSection": "third-parties",
+      "notes": "Declared here so the registry is complete, and deliberately not declared as app-collected: the app neither requests nor receives it.",
+      "encryptedInTransit": true
+    }
+  ]
+}
