@@ -1,3 +1,10 @@
+// The curated headless navigation surface.
+//
+// Everything exported here must be safe to run inside a background TaskManager
+// callback: no React, no Zustand, no auth client, no browser storage, no DOM.
+// `headlessBoundary.test.ts` bundles this barrel and fails on any of those, and
+// `pnpm mobile:bundle:check` repeats the check against the real Metro graph.
+
 export {
   type ActiveAlert,
   brakingDistanceMeters,
@@ -111,4 +118,19 @@ export {
   stopsUntilAlight,
   type TransitProgress,
 } from "./transitProgress";
+export type {
+  CameraMode,
+  CueTier,
+  FixInput,
+  NavProgress,
+  NavStatus,
+  NavTickOptions,
+  NavTickResult,
+  NavTickState,
+  ProgressResult,
+  RerouteOpts,
+  SnapResult,
+  VoiceCue,
+  VoiceScheduleConfig,
+} from "./types";
 export { nextVoiceCue } from "./voiceCue";

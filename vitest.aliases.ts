@@ -34,6 +34,12 @@ export function createRepoVitestAliases(repoRoot: string) {
       find: /^@openmapx\/core\/services\/secret-key$/,
       replacement: resolve(repoRoot, "packages/core/src/services/secret-key.ts"),
     },
+    // Must precede the root alias: the curated headless navigation subpath is a
+    // different, deliberately smaller module than the root barrel.
+    {
+      find: /^@openmapx\/core\/navigation$/,
+      replacement: resolve(repoRoot, "packages/core/src/navigation/index.ts"),
+    },
     {
       find: /^@openmapx\/core$/,
       replacement: resolve(repoRoot, "packages/core/src/index.ts"),

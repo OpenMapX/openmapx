@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "allowImportingTsExtensions": true,
+    "types": ["jest", "node"],
+    // Workspace source packages are consumed as TypeScript, exactly as the web
+    // app consumes them. React is deliberately absent from this map: the mobile
+    // runtime pins Expo's compatible React and must never resolve the web app's.
+    "paths": {
+      "@openmapx/core": ["../../packages/core/src/index.ts"],
+      "@openmapx/core/navigation": ["../../packages/core/src/navigation/index.ts"],
+      "@openmapx/i18n": ["../../packages/i18n/index.ts"],
+      "@openmapx/mobility-core/*": [
+        "../../packages/mobility-core/src/*.ts",
+        "../../packages/mobility-core/src/types/*.ts"
+      ]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", "**/*.mts"],
+  "exclude": ["node_modules", "ios", "android", ".expo"]
+}

@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["OpenMapXNavigationAudioModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.openmapxnavigationaudio.OpenMapXNavigationAudioModule"]
+  }
+}

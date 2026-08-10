@@ -1,0 +1,72 @@
+{
+  "name": "@openmapx/mobile",
+  "version": "1.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "prebuild": "LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 expo prebuild --clean",
+    "ios": "LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 expo run:ios",
+    "android": "expo run:android",
+    "doctor": "tsx scripts/run-doctor.mts",
+    "check-types": "tsc --noEmit",
+    "test": "jest --runInBand",
+    "test:native": "tsx scripts/run-native-tests.mts",
+    "assert-generated": "tsx scripts/assert-generated-native.mts"
+  },
+  "dependencies": {
+    "@openmapx/core": "workspace:^",
+    "@openmapx/i18n": "workspace:^",
+    "@openmapx/mobility-core": "workspace:^",
+    "@react-native-community/netinfo": "12.0.1",
+    "babel-preset-expo": "~57.0.6",
+    "expo": "~57.0.0",
+    "expo-application": "~57.0.2",
+    "expo-build-properties": "~57.0.9",
+    "expo-constants": "~57.0.9",
+    "expo-file-system": "~57.0.2",
+    "expo-keep-awake": "~57.0.1",
+    "expo-linking": "~57.0.5",
+    "expo-location": "~57.0.8",
+    "expo-notifications": "~57.0.9",
+    "expo-sharing": "~57.0.10",
+    "expo-splash-screen": "~57.0.5",
+    "expo-sqlite": "~57.0.1",
+    "expo-system-ui": "~57.0.2",
+    "expo-task-manager": "~57.0.8",
+    "intl-messageformat": "^11.2.13",
+    "react": "19.2.8",
+    "react-native": "0.86.2",
+    "react-native-webview": "13.16.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@expo/plist": "^0.8.1",
+    "@react-native/jest-preset": "^0.86.2",
+    "@testing-library/react-native": "^14.0.1",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "esbuild": "^0.28.2",
+    "expo-doctor": "^1.20.1",
+    "jest": "^30.4.2",
+    "jest-expo": "^57.0.3",
+    "test-renderer": "^1.2.0",
+    "tsx": "4.23.11",
+    "typescript": "^6.0.3"
+  },
+  "expo": {
+    "install": {
+      "exclude": [
+        "jest",
+        "@types/jest",
+        "react",
+        "@types/react"
+      ]
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "reportId": "plan00-ios-simulator-release-1",
+  "recordedAt": "2026-08-10T17:57:00.000Z",
+  "evidenceSource": "simulator",
+  "runtime": {
+    "platform": "ios",
+    "osVersion": "26.x simulator runtime",
+    "deviceFamily": "iPhone 17 simulator"
+  },
+  "build": {
+    "appVersion": "1.0.0",
+    "buildId": "local-ios-release-1",
+    "configuration": "release"
+  },
+  "driver": "expo",
+  "trace": {
+    "kind": "lifecycle",
+    "durationSeconds": 0,
+    "accelerated": false,
+    "locale": "en"
+  },
+  "callbacks": {
+    "deliveredCount": 0,
+    "acceptedFixCount": 0,
+    "rejectedFixCount": 0
+  },
+  "hardwareObservations": {
+    "lockedScreenDelivery": "not-verified",
+    "backgroundSurvival": "not-verified",
+    "oemBackgroundKilling": "not-verified",
+    "silentModeSpeech": "not-verified",
+    "bluetoothAudioFocus": "not-verified",
+    "batteryDrain": "not-verified",
+    "thermalState": "not-verified",
+    "foregroundServiceNotificationVisible": "not-verified",
+    "realPermissionSettingsTransitions": "not-verified"
+  },
+  "recovery": {
+    "webViewReload": "not-verified",
+    "processRecreation": "not-verified",
+    "networkLoss": "not-verified",
+    "permissionRevocation": "not-verified"
+  },
+  "failures": [],
+  "conclusion": "virtual-pass",
+  "notes": "Release-configuration build via `pnpm mobile:build:ios --device 'iPhone 17'`; xcodebuild reported Build Succeeded and produced Release-iphonesimulator/OpenMapXDev.app. Installed and launched with simctl; the process stayed alive under launchctl. Observed: no location permission prompt at launch, and the fixed-origin WebView rendered the real OpenMapX web UI (search field, map controls, attribution) from a local development instance, because the production origin was unavailable during this run. The probe overlay reported permission=not-determined, stream running=false, callbacks=0, fixes 0/0. Expo CLI's own launch step exits non-zero only because osascript cannot focus the Simulator window in a non-interactive shell; build and install both succeeded. Interactive probe steps (Start, Profile, Arm audio, End) require UI automation and were NOT exercised, so callback delivery, audio invocation, stop latency and every recovery scenario are unmeasured and left not-verified rather than estimated. Plan 02 adds the Maestro flows that drive them."
+}

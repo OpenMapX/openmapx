@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "reportId": "plan00-android-emulator-release-1",
+  "recordedAt": "2026-08-10T18:01:00.000Z",
+  "evidenceSource": "emulator",
+  "runtime": {
+    "platform": "android",
+    "osVersion": "API 36.1 emulator image",
+    "deviceFamily": "Medium Phone API 36.1 emulator"
+  },
+  "build": {
+    "appVersion": "1.0.0",
+    "buildId": "local-android-release-1",
+    "configuration": "release"
+  },
+  "driver": "expo",
+  "trace": {
+    "kind": "lifecycle",
+    "durationSeconds": 0,
+    "accelerated": false,
+    "locale": "en"
+  },
+  "callbacks": {
+    "deliveredCount": 0,
+    "acceptedFixCount": 0,
+    "rejectedFixCount": 0
+  },
+  "hardwareObservations": {
+    "lockedScreenDelivery": "not-verified",
+    "backgroundSurvival": "not-verified",
+    "oemBackgroundKilling": "not-verified",
+    "silentModeSpeech": "not-verified",
+    "bluetoothAudioFocus": "not-verified",
+    "batteryDrain": "not-verified",
+    "thermalState": "not-verified",
+    "foregroundServiceNotificationVisible": "not-verified",
+    "realPermissionSettingsTransitions": "not-verified"
+  },
+  "recovery": {
+    "webViewReload": "not-verified",
+    "processRecreation": "not-verified",
+    "networkLoss": "not-verified",
+    "permissionRevocation": "not-verified"
+  },
+  "failures": [],
+  "conclusion": "virtual-pass",
+  "notes": "Release-configuration build via Gradle `app:assembleRelease`, which includes `lintVitalRelease`; the resulting app-release.apk installed and launched on the API 36.1 emulator. Observed: no location permission prompt at launch, and the fixed-origin WebView rendered the real OpenMapX web UI (search field, map controls, legal footer links) from a local development instance, because the production origin was unavailable during this run. The probe overlay reported permission=not-determined, stream running=false, callbacks=0, fixes 0/0. Interactive probe steps (Start, Profile, Arm audio, End) require UI automation and were NOT exercised, so callback delivery, foreground-service notification visibility, audio invocation, stop latency and every recovery scenario are unmeasured and left not-verified rather than estimated. Plan 02 adds the Maestro flows that drive them."
+}

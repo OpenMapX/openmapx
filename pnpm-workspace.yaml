@@ -25,6 +25,10 @@ allowBuilds:
   protobufjs: false
   sharp: true
   ssh2: false
+  # Dev-time only (an expo-doctor transitive). Its postinstall merely relinks the
+  # prebuilt platform binding that pnpm already installs as an optional
+  # dependency, so nothing needs to run at install time.
+  unrs-resolver: false
 blockExoticSubdeps: true
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
@@ -89,3 +93,16 @@ overrides:
   # tsup@8.5.1 requests chokidar@^4.0.3, but 4.0.3 has no npm provenance
   # attestation. Keep this tsup-only edge on the last attested 4.x release.
   "tsup>chokidar": "4.0.1"
+  # Babel's runtime/target plugins still request the semver 6 line, whose last
+  # release (6.3.1) predates provenance attestation, so `trustPolicy:
+  # no-downgrade` refuses it. semver 7 is API-compatible for the `satisfies`,
+  # `valid` and `intersects` calls these plugins make, and every other package
+  # in this workspace already resolves to 7.x.
+  "semver@6": "^7.8.5"
+  # jest-expo 57 is tested against Jest 29, but this workspace runs the latest
+  # Jest. @react-native/jest-preset still pins jest-environment-node 29, and
+  # mixing them gives every mobile suite
+  # "this._moduleMocker.clearMocksOnScope is not a function", because Jest 30's
+  # runtime drives a Jest 29 module mocker. The preset only subclasses the
+  # environment's exported `TestEnvironment`, which is unchanged in 30.
+  "@react-native/jest-preset>jest-environment-node": "^30.4.1"

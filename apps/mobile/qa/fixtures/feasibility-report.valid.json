@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "reportId": "ios-simulator-lifecycle-001",
+  "recordedAt": "2026-08-10T12:00:00.000Z",
+  "evidenceSource": "simulator",
+  "runtime": {
+    "platform": "ios",
+    "osVersion": "26.0",
+    "deviceFamily": "iPhone 17 simulator"
+  },
+  "build": {
+    "appVersion": "1.0.0",
+    "buildId": "local-ios-release-1",
+    "configuration": "release"
+  },
+  "driver": "expo",
+  "trace": {
+    "kind": "lifecycle",
+    "durationSeconds": 900,
+    "accelerated": false,
+    "locale": "en"
+  },
+  "callbacks": {
+    "deliveredCount": 812,
+    "acceptedFixCount": 806,
+    "rejectedFixCount": 6,
+    "maxGapMs": 4200,
+    "p95GapMs": 1300,
+    "accuracyBuckets": {
+      "excellent": 780,
+      "good": 22,
+      "fair": 4,
+      "poor": 0,
+      "unusable": 0
+    }
+  },
+  "hardwareObservations": {
+    "lockedScreenDelivery": "not-verified",
+    "backgroundSurvival": "not-verified",
+    "oemBackgroundKilling": "not-verified",
+    "silentModeSpeech": "not-verified",
+    "bluetoothAudioFocus": "not-verified",
+    "batteryDrain": "not-verified",
+    "thermalState": "not-verified",
+    "foregroundServiceNotificationVisible": "not-verified",
+    "realPermissionSettingsTransitions": "not-verified"
+  },
+  "recovery": {
+    "webViewReload": "pass",
+    "processRecreation": "pass",
+    "networkLoss": "pass",
+    "permissionRevocation": "pass",
+    "stopLatencyMs": 210
+  },
+  "audio": {
+    "spokenCount": 4,
+    "skippedCount": 1,
+    "failedCount": 0,
+    "duplicateCueCount": 0
+  },
+  "failures": [],
+  "conclusion": "virtual-pass",
+  "notes": "Simulator run. Establishes lifecycle, persistence and teardown behaviour only; every hardware-only observation remains unverified and is deferred to the volunteer store beta."
+}

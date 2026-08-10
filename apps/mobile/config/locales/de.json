@@ -1,0 +1,4 @@
+{
+  "NSLocationWhenInUseUsageDescription": "OpenMapX verwendet deinen Standort, um deine Position auf der Karte anzuzeigen und dich entlang einer von dir gestarteten Route zu führen.",
+  "NSLocationAlwaysAndWhenInUseUsageDescription": "OpenMapX verwendet deinen Standort im Hintergrund, damit eine von dir gestartete Navigation dich weiter führt, während der Bildschirm gesperrt ist oder die App nicht verwendet wird. Die Standorterfassung endet, sobald du die Navigation beendest."
+}

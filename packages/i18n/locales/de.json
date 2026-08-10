@@ -2288,5 +2288,16 @@
     "errorOsmUnavailable": "OpenStreetMap ist gerade nicht erreichbar. Deine Eingaben bleiben erhalten.",
     "errorUpstreamInvalid": "OpenStreetMap hat unerwartet geantwortet.",
     "errorGeneric": "Etwas ist schiefgelaufen. Deine Eingaben bleiben erhalten."
+  },
+  "mobileShell": {
+    "loading": "OpenMapX wird geladen…",
+    "loadErrorTitle": "OpenMapX konnte nicht geladen werden",
+    "loadErrorBody": "Prüfe deine Internetverbindung und versuche es erneut.",
+    "retry": "Erneut versuchen",
+    "offlineTitle": "Du bist offline",
+    "offlineBody": "OpenMapX benötigt eine Verbindung zum Laden. Eine bereits gestartete Navigation läuft weiter.",
+    "fatalConfigTitle": "Dieser Build ist fehlerhaft konfiguriert",
+    "fatalConfigBody": "OpenMapX kann nicht starten, weil die einkompilierte Serverkonfiguration ungültig ist. Bitte installiere die App neu.",
+    "openNetworkSettings": "Netzwerkeinstellungen öffnen"
   }
 }

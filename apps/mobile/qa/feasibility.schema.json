@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openmapx.com/schemas/mobile/feasibility-report.json",
+  "title": "OpenMapX mobile feasibility report",
+  "description": "Sanitized evidence from one feasibility or beta run. The schema is closed: it can hold counts, buckets, result codes and conclusions, and it structurally cannot hold a coordinate, a route, a stop sequence, an account or a stable tester identifier. A report whose evidenceSource is not 'physical' cannot claim a physical pass, and must mark every hardware-only observation 'not-verified'.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "reportId",
+    "evidenceSource",
+    "runtime",
+    "build",
+    "driver",
+    "trace",
+    "callbacks",
+    "hardwareObservations",
+    "recovery",
+    "failures",
+    "conclusion"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "reportId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,63}$",
+      "description": "Random or descriptive run identifier. Never a device serial, account or tester name."
+    },
+    "recordedAt": { "type": "string", "format": "date-time" },
+    "evidenceSource": {
+      "enum": ["simulator", "emulator", "physical"],
+      "description": "Where the run actually happened. Simulators and emulators cannot establish background reliability."
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "osVersion", "deviceFamily"],
+      "properties": {
+        "platform": { "enum": ["ios", "android"] },
+        "osVersion": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "deviceFamily": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Coarse family only, e.g. 'iPhone 17 simulator' or 'Pixel 9'. Never a unique device identifier."
+        }
+      }
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["appVersion", "buildId", "configuration"],
+      "properties": {
+        "appVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "buildId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "configuration": { "enum": ["debug", "release"] },
+        "artifactSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "sourceCommit": { "type": "string", "pattern": "^[a-f0-9]{7,40}$" }
+      }
+    },
+    "driver": { "enum": ["expo", "native"] },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "durationSeconds"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "ground-driving",
+            "ground-walking",
+            "ground-cycling",
+            "ground-motorcycle",
+            "transit",
+            "lifecycle",
+            "permission",
+            "audio",
+            "offline",
+            "soak"
+          ]
+        },
+        "durationSeconds": { "type": "integer", "minimum": 0, "maximum": 86400 },
+        "accelerated": { "type": "boolean" },
+        "locale": { "enum": ["en", "de"] }
+      }
+    },
+    "callbacks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deliveredCount", "acceptedFixCount", "rejectedFixCount"],
+      "properties": {
+        "deliveredCount": { "type": "integer", "minimum": 0 },
+        "acceptedFixCount": { "type": "integer", "minimum": 0 },
+        "rejectedFixCount": { "type": "integer", "minimum": 0 },
+        "maxGapMs": { "type": "integer", "minimum": 0 },
+        "p95GapMs": { "type": "integer", "minimum": 0 },
+        "accuracyBuckets": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "excellent": { "type": "integer", "minimum": 0 },
+            "good": { "type": "integer", "minimum": 0 },
+            "fair": { "type": "integer", "minimum": 0 },
+            "poor": { "type": "integer", "minimum": 0 },
+            "unusable": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "hardwareObservations": {
+      "type": "object",
+      "description": "Every observation only real hardware can establish. A virtual run must record 'not-verified' for all of them.",
+      "additionalProperties": false,
+      "required": [
+        "lockedScreenDelivery",
+        "backgroundSurvival",
+        "oemBackgroundKilling",
+        "silentModeSpeech",
+        "bluetoothAudioFocus",
+        "batteryDrain",
+        "thermalState",
+        "foregroundServiceNotificationVisible",
+        "realPermissionSettingsTransitions"
+      ],
+      "properties": {
+        "lockedScreenDelivery": { "$ref": "#/$defs/observation" },
+        "backgroundSurvival": { "$ref": "#/$defs/observation" },
+        "oemBackgroundKilling": { "$ref": "#/$defs/observation" },
+        "silentModeSpeech": { "$ref": "#/$defs/observation" },
+        "bluetoothAudioFocus": { "$ref": "#/$defs/observation" },
+        "batteryDrain": { "$ref": "#/$defs/observation" },
+        "thermalState": { "$ref": "#/$defs/observation" },
+        "foregroundServiceNotificationVisible": { "$ref": "#/$defs/observation" },
+        "realPermissionSettingsTransitions": { "$ref": "#/$defs/observation" }
+      }
+    },
+    "recovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["webViewReload", "processRecreation", "networkLoss"],
+      "properties": {
+        "webViewReload": { "$ref": "#/$defs/observation" },
+        "processRecreation": { "$ref": "#/$defs/observation" },
+        "networkLoss": { "$ref": "#/$defs/observation" },
+        "permissionRevocation": { "$ref": "#/$defs/observation" },
+        "stopLatencyMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 600000,
+          "description": "Omitted when the run did not measure it. A number here must be a real measurement, never an estimate."
+        }
+      }
+    },
+    "audio": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "spokenCount": { "type": "integer", "minimum": 0 },
+        "skippedCount": { "type": "integer", "minimum": 0 },
+        "failedCount": { "type": "integer", "minimum": 0 },
+        "duplicateCueCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "failures": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "count"],
+        "properties": {
+          "code": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,64}$" },
+          "count": { "type": "integer", "minimum": 1 },
+          "note": { "type": "string", "maxLength": 280 }
+        }
+      }
+    },
+    "conclusion": {
+      "enum": ["automated-pass", "virtual-pass", "physical-pass", "fail", "inconclusive"]
+    },
+    "notes": { "type": "string", "maxLength": 2000 }
+  },
+  "$defs": {
+    "observation": {
+      "enum": ["pass", "fail", "not-verified"],
+      "description": "'not-verified' is the honest answer whenever the runtime cannot establish the behaviour."
+    }
+  },
+  "allOf": [
+    {
+      "description": "Only a run on real hardware may conclude physical-pass.",
+      "if": {
+        "properties": { "conclusion": { "const": "physical-pass" } },
+        "required": ["conclusion"]
+      },
+      "then": { "properties": { "evidenceSource": { "const": "physical" } } }
+    },
+    {
+      "description": "A virtual run cannot claim a physical pass, and must not report any hardware-only observation as pass or fail.",
+      "if": {
+        "properties": { "evidenceSource": { "enum": ["simulator", "emulator"] } },
+        "required": ["evidenceSource"]
+      },
+      "then": {
+        "properties": {
+          "conclusion": { "enum": ["automated-pass", "virtual-pass", "fail", "inconclusive"] },
+          "hardwareObservations": {
+            "type": "object",
+            "additionalProperties": { "const": "not-verified" }
+          }
+        }
+      }
+    }
+  ]
+}

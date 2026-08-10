@@ -1,3 +1,18 @@
+// Type-only, and deliberately unused at runtime. `oauthProviderClient()`
+// contributes these types to the inferred client shape, but they live in an
+// internal chunk file that TypeScript cannot name when it writes a declaration
+// (TS2883). Importing them from the package root — where they are publicly
+// exported — gives the emitter a nameable path. Without this,
+// `@openmapx/extension-sdk`'s declaration rollup fails, because its program
+// pulls this file in through the `@openmapx/core` barrel.
+import type {
+  AuthServerMetadata,
+  OAuthClient,
+  OAuthConsent,
+  OAuthOptions,
+  OIDCMetadata,
+  Scope,
+} from "@better-auth/oauth-provider";
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { passkeyClient } from "@better-auth/passkey/client";
 import {
@@ -30,6 +45,19 @@ function _buildClient(baseURL: string) {
     ],
   });
 }
+
+/**
+ * Keeps the type-only import above from being elided, which is what makes the
+ * imported names reachable from this module's emitted declaration.
+ */
+type _OAuthProviderTypeAnchor = [
+  AuthServerMetadata,
+  OAuthClient,
+  OAuthConsent,
+  OAuthOptions,
+  OIDCMetadata,
+  Scope,
+];
 
 type FullAuthClient = ReturnType<typeof _buildClient>;
 

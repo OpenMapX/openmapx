@@ -31,6 +31,9 @@ const MESSAGES_DIR = join(PKG_ROOT, "locales");
 const SRC_DIRS = [
   join(REPO_ROOT, "apps", "web", "src"),
   join(REPO_ROOT, "apps", "api", "src"),
+  // The mobile shell reads the same canonical catalogs directly (it has no
+  // next-intl runtime), so its sources must be scanned for key usage too.
+  join(REPO_ROOT, "apps", "mobile", "src"),
   join(REPO_ROOT, "integrations"),
 ];
 const FIX_MISSING = process.argv.includes("--fix-missing");

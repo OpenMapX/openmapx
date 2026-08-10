@@ -1,0 +1,28 @@
+{
+  "decision": "expo-location-provisional",
+  "selectedDriver": "expo",
+  "evidenceLevel": "automated-and-simulated",
+  "decidedAt": "2026-08-10T00:00:00.000Z",
+  "decisionSource": "maintainer-approved-assumption",
+  "runbookPath": "docs/docs/developer/mobile-feasibility.md",
+  "automatedCommands": [
+    "pnpm mobile:verify",
+    "pnpm mobile:prebuild:check",
+    "pnpm mobile:bundle:check"
+  ],
+  "virtualBuilds": {
+    "iosSimulatorBuildId": "local-ios-release-1",
+    "androidEmulatorBuildId": "local-android-release-1"
+  },
+  "unverifiedRisks": [
+    "ios-suspension-delivery",
+    "android-oem-background-killing",
+    "real-permission-settings-transitions",
+    "locked-screen-callback-gaps",
+    "silent-mode-speech",
+    "bluetooth-audio-focus",
+    "battery-drain",
+    "thermal-behavior"
+  ],
+  "publicRolloutBlockedUntil": "volunteer-beta-device-matrix"
+}

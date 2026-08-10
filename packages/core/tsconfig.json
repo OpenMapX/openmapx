@@ -14,6 +14,8 @@
     "noEmit": true,
     "types": ["node"],
     "paths": {
+      // The curated headless subpath, resolved the same way Vitest and Metro do.
+      "@openmapx/core/navigation": ["./src/navigation/index.ts"],
       "@integrations/*": ["../../integrations/*"],
       "@openmapx/integration-framework": ["../integration-framework/src/index.ts"],
       "@openmapx/mobility-core/*": ["../mobility-core/src/*.ts", "../mobility-core/src/types/*.ts"]

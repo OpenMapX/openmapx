@@ -1,0 +1,4 @@
+{
+  "NSLocationWhenInUseUsageDescription": "OpenMapX uses your location to show where you are on the map and to guide you along a route you start.",
+  "NSLocationAlwaysAndWhenInUseUsageDescription": "OpenMapX uses your location in the background so navigation you have started keeps guiding you while the screen is locked or the app is not in use. Tracking stops when you end navigation."
+}
