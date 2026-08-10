@@ -60,7 +60,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 04. August 2026
+        Zuletzt aktualisiert: 10. August 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -108,6 +108,12 @@ export default function PrivacyContentDe({
           </li>
           <li>
             <Typography>Verwaltung von Benutzerkonten (sofern Sie ein Konto erstellen)</Typography>
+          </li>
+          <li>
+            <Typography>
+              Ver&ouml;ffentlichung der von Ihnen verfassten Korrekturen bei OpenStreetMap, sofern
+              Sie die Beitragsfunktion nutzen (siehe Abschnitt&nbsp;7)
+            </Typography>
           </li>
           <li>
             <Typography>
@@ -291,6 +297,14 @@ export default function PrivacyContentDe({
           f&uuml;r diese Anbieter nicht.
         </Typography>
         <Typography sx={{ mt: 1 }}>
+          Die von diesen Anbietern ausgestellten Access- und Refresh-Token werden mit dem
+          Authentifizierungsgeheimnis dieser Installation verschl&uuml;sselt gespeichert und bei
+          Bedarf erneuert, bis Sie die Verkn&uuml;pfung aufheben oder Ihr Konto l&ouml;schen. Sie
+          werden nie an Ihren Browser gesendet. Wenn Sie die OpenStreetMap-Beitragsfunktion nutzen,
+          kann das verkn&uuml;pfte OpenStreetMap-Konto zus&auml;tzlich Schreibberechtigungen halten
+          &mdash; siehe Abschnitt&nbsp;7.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
           Rechtsgrundlage ist Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;b DSGVO (Vertragserf&uuml;llung /
           Bereitstellung des von Ihnen angeforderten Dienstes). Sie k&ouml;nnen Ihr Konto jederzeit
           &uuml;ber die Kontoeinstellungen l&ouml;schen.
@@ -395,6 +409,155 @@ export default function PrivacyContentDe({
           DSGVO.
         </Typography>
       </Section>
+      <Section title={T.osmContributions}>
+        <Typography>
+          Wenn Ihre Instanz Beitr&auml;ge aktiviert hat, k&ouml;nnen Sie aus OpenMapX heraus einige
+          wenige Angaben zu einem bereits vorhandenen{" "}
+          <Link href="https://www.openstreetmap.org/" target="_blank" rel="noopener noreferrer">
+            OpenStreetMap
+          </Link>
+          -Ort korrigieren oder einen &ouml;ffentlichen OpenStreetMap-Hinweis hinterlassen. Das ist
+          freiwillig: Sie m&uuml;ssen die Funktion nicht nutzen, und dieser Abschnitt gilt nur, wenn
+          Sie es tun.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          Wie bei Bewertungen wird dabei etwas au&szlig;erhalb unserer Server ver&ouml;ffentlicht,
+          das wir nicht mehr r&uuml;ckg&auml;ngig machen k&ouml;nnen. Bitte lesen Sie diesen
+          Abschnitt daher vor dem Ver&ouml;ffentlichen.
+        </Typography>
+        <ul>
+          <li>
+            <Typography>
+              <strong>Zus&auml;tzliche OpenStreetMap-Berechtigungen.</strong> Die normale Anmeldung
+              fragt nur die minimalen Berechtigungen <code>openid read_prefs</code> ab. Beim ersten
+              Beitrag werden Sie zu OpenStreetMap weitergeleitet, um <code>write_api</code>{" "}
+              (f&uuml;r Bearbeitungen) oder <code>write_notes</code> (f&uuml;r Hinweise) zu
+              erteilen. Sie k&ouml;nnen diese Berechtigungen jederzeit in Ihren
+              OpenStreetMap-Kontoeinstellungen widerrufen.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Anbieter-Token.</strong> Die von OpenStreetMap ausgestellten Access- und
+              Refresh-Token werden auf unserem Server gespeichert, dabei mit dem
+              Authentifizierungsgeheimnis dieser Installation verschl&uuml;sselt und bei Bedarf
+              erneuert, bis Sie die Verkn&uuml;pfung aufheben oder Ihr Konto l&ouml;schen. Token
+              werden nie an Ihren Browser gesendet und erscheinen nicht in unseren Protokollen,
+              Metriken oder Fehlermeldungen. Token, die vor Einf&uuml;hrung der Verschl&uuml;sselung
+              gespeichert wurden, bleiben lesbar und werden bei der n&auml;chsten Aktualisierung neu
+              verschl&uuml;sselt; im seltenen Fall, dass ein solcher Altwert nicht mehr lesbar ist,
+              werden Sie lediglich gebeten, das Konto erneut zu verkn&uuml;pfen.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Anfragen in Ihrem Namen.</strong> Wenn Sie den Editor &ouml;ffnen, ruft unser
+              Server &mdash; nicht Ihr Browser &mdash; OpenStreetMap auf, um das aktuelle Objekt,
+              Ihre Kontodaten und Ihre Berechtigungen zu lesen und beim Ver&ouml;ffentlichen den
+              &Auml;nderungssatz anzulegen und das Objekt zu aktualisieren. OpenStreetMap sieht
+              dabei die IP-Adresse unseres Servers, nicht Ihre. Nur beim Autorisierungsschritt wird
+              Ihr Browser direkt zu OpenStreetMap weitergeleitet; dabei kann OpenStreetMap Ihre
+              IP-Adresse und Browser-Anfragedaten erhalten.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Was an OpenStreetMap &uuml;bermittelt wird.</strong> Bei einer Bearbeitung:
+              die Objektreferenz, die ge&auml;nderten Tags, der von Ihnen verfasste Kommentar zum
+              &Auml;nderungssatz, die von Ihnen gew&auml;hlte Quelle, Ihre Oberfl&auml;chensprache
+              als <code>locale</code>-Tag, ein <code>created_by</code>-Tag mit OpenMapX und dessen
+              Version sowie optional die Bitte um Gegenpr&uuml;fung. Bei einem Hinweis: Ihr Text und
+              die Koordinaten, die unser Server aus dem Objekt selbst berechnet. Werte aus unseren
+              Anreicherungsdiensten werden niemals als Ihre Quelle hochgeladen.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>
+                Der Beitrag ist &ouml;ffentlich und mit Ihrer OpenStreetMap-Identit&auml;t
+                verkn&uuml;pft.
+              </strong>{" "}
+              Ihre Bearbeitung oder Ihr Hinweis wird unter Ihrem verkn&uuml;pften
+              OpenStreetMap-Konto ver&ouml;ffentlicht. Ihr OpenStreetMap-Benutzername, der
+              &Auml;nderungssatz, Ihr Kommentar, Ihre Quellenangabe, die resultierenden Tags, der
+              Hinweistext und Ihr Bearbeitungsverlauf werden Teil der &ouml;ffentlichen Datenbank
+              und Historie von OpenStreetMap. Diese Datenbank wird von der OpenStreetMap Foundation
+              betrieben und unterliegt deren eigener{" "}
+              <Link
+                href="https://osmfoundation.org/wiki/Privacy_Policy"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Datenschutzerkl&auml;rung
+              </Link>{" "}
+              und den{" "}
+              <Link
+                href="https://osmfoundation.org/wiki/Licence/Contributor_Terms"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Mitwirkendenbedingungen
+              </Link>
+              , die Sie vor dem Bearbeiten annehmen m&uuml;ssen &mdash; nicht unseren.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>
+                Das L&ouml;schen Ihres OpenMapX-Kontos l&ouml;scht Ihre OpenStreetMap-Historie
+                nicht.
+              </strong>{" "}
+              Beim L&ouml;schen Ihres Kontos hier werden die gespeicherten Anbieter-Token und die
+              Verkn&uuml;pfung zu Ihrem OpenStreetMap-Konto entfernt. Auf bereits bei OpenStreetMap
+              ver&ouml;ffentlichte Beitr&auml;ge hat das keine Auswirkung; sie sind Teil einer
+              &ouml;ffentlichen, dauerhaft versionierten Datenbank und liegen au&szlig;erhalb
+              unseres Einflussbereichs. Anliegen dazu richten Sie bitte an die OpenStreetMap
+              Foundation.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Kurzlebige Betriebsdaten.</strong> Damit ein Doppelklick nicht zweimal
+              ver&ouml;ffentlicht, speichern wir kurzzeitig eine Sperre und das Ergebnis des
+              Vorgangs. Die Schl&uuml;ssel sind Einweg-HMAC-Digests aus Ihrer Benutzer-ID, der
+              Objektreferenz und einer zuf&auml;lligen Vorgangs-ID; die gespeicherten Werte
+              enthalten nur &ouml;ffentliche Ergebniskennungen (&Auml;nderungssatz- oder
+              Hinweis-ID), die zugeh&ouml;rigen Links und einen Zeitstempel. Sperren verfallen nach
+              zwei Minuten, erfolgreiche Ergebnisse nach 24 Stunden, ein ungekl&auml;rtes Ergebnis
+              nach zwei Minuten. Die Ratenbegrenzung f&uuml;hrt einen &auml;hnlichen kurzlebigen,
+              digest-basierten Z&auml;hler. Eine Datenbank mit Beitragsinhalten f&uuml;hren wir
+              nicht: weder Tags noch Kommentare, Hinweistexte oder Quellen werden hier gespeichert.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Protokolle und Metriken sind inhaltsfrei.</strong> Die Betriebstelemetrie
+              erfasst nur, welche Art von Vorgang ausgef&uuml;hrt wurde, ob er erfolgreich war, wie
+              lange er gedauert hat und eine zuf&auml;llige Anfrage-ID. Objekte, Tags, Namen,
+              Koordinaten, Kommentare, Hinweistexte, Quellen, Kontonamen oder Token werden nicht
+              erfasst. F&uuml;r Server-Protokolle gilt die &uuml;bliche Speicherdauer aus
+              Abschnitt&nbsp;13.
+            </Typography>
+          </li>
+        </ul>
+        <Typography sx={{ mt: 1 }}>
+          Rechtsgrundlage f&uuml;r das Speichern und Erneuern der OpenStreetMap-Token ist
+          Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;b DSGVO (Erf&uuml;llung des von Ihnen angeforderten
+          Beitragsdienstes). Rechtsgrundlage f&uuml;r die Ver&ouml;ffentlichung Ihres Beitrags bei
+          OpenStreetMap ist Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;a DSGVO (Ihre ausdr&uuml;ckliche
+          Einwilligung, erteilt, indem Sie eine Quelle w&auml;hlen, einen eigenen Kommentar
+          verfassen und &bdquo;In OpenStreetMap ver&ouml;ffentlichen&ldquo; ausl&ouml;sen, nachdem
+          Ihnen genau angezeigt wurde, was &uuml;bermittelt wird und dass es &ouml;ffentlich ist).
+          Sie k&ouml;nnen die Einwilligung f&uuml;r die Zukunft jederzeit widerrufen, indem Sie
+          keine weiteren Beitr&auml;ge ver&ouml;ffentlichen und die Berechtigungen in Ihrem
+          OpenStreetMap-Konto entziehen; bereits ver&ouml;ffentlichte Beitr&auml;ge k&ouml;nnen
+          nicht einseitig zur&uuml;ckgenommen werden, da OpenStreetMap eine &ouml;ffentliche
+          Datenbank mit dauerhafter Bearbeitungshistorie ist. Soweit Ihr Beitrag dadurch an
+          Empf&auml;nger au&szlig;erhalb des Europ&auml;ischen Wirtschaftsraums (EWR)
+          &uuml;bermittelt wird, st&uuml;tzt sich diese &Uuml;bermittlung auf Ihre
+          ausdr&uuml;ckliche Einwilligung nach Art.&nbsp;49 Abs.&nbsp;1 lit.&nbsp;a DSGVO.
+        </Typography>
+      </Section>
       <Section title={T.thirdParty}>
         <Typography>
           Um seine Kartenfunktionen bereitzustellen, sendet OpenMapX Anfragen an verschiedene
@@ -440,10 +603,20 @@ export default function PrivacyContentDe({
           rows={[
             {
               service: "OpenStreetMap OAuth 2.0",
-              purpose: "Anmeldung \u00fcber OSM-Konto",
+              purpose: "Anmeldung \u00fcber OSM-Konto; optionale Beitragsberechtigungen",
               dataSent:
                 "Browser-Weiterleitung zur OSM-Autorisierungsseite; OAuth-Autorisierungsablauf (kein Passwort wird an uns weitergegeben)",
               endUserExposure: "Direkt (Browser)",
+              country: "UK",
+              privacy: "https://osmfoundation.org/wiki/Privacy_Policy",
+            },
+            {
+              service: "OpenStreetMap-API (Beitr\u00e4ge)",
+              purpose:
+                "Lesen des aktuellen Objekts und Ver\u00f6ffentlichen Ihrer Bearbeitung oder Ihres Hinweises, sofern Sie die Beitragsfunktion nutzen (Abschnitt 7)",
+              dataSent:
+                "Serverseitig: Objektreferenz, Ihre ge\u00e4nderten Tags, Ihr Kommentar zum \u00c4nderungssatz und Ihre Quellenangabe, Sprache, created_by; oder Ihr Hinweistext und eine serverseitig berechnete Position. Die Ver\u00f6ffentlichung erfolgt \u00f6ffentlich unter Ihrem verkn\u00fcpften OSM-Konto.",
+              endUserExposure: "Serverseitig",
               country: "UK",
               privacy: "https://osmfoundation.org/wiki/Privacy_Policy",
             },
@@ -699,6 +872,13 @@ export default function PrivacyContentDe({
           Fahrplandaten (Haltestellennamen, Linien, Abfahrtszeiten) in separaten Datenbank-Schemas
           gespeichert. Diese Daten stellen keine personenbezogenen Daten von Endnutzern dar.
         </Typography>
+        <Typography sx={{ mt: 1 }}>
+          Wenn Sie die OpenStreetMap-Beitragsfunktion nutzen, werden kurzzeitig eine Sperre und ein
+          Ergebnisdatensatz vorgehalten (in Redis, sofern konfiguriert, sonst im Arbeitsspeicher),
+          ausschlie&szlig;lich um eine doppelte Einreichung zu verhindern. Deren Schl&uuml;ssel sind
+          Einweg-Digests, deren Werte enthalten nur &ouml;ffentliche Ergebniskennungen und
+          Zeitstempel &mdash; niemals Beitragsinhalte. Siehe Abschnitt&nbsp;7.
+        </Typography>
       </Section>
       <Section title={T.email}>
         <Typography>
@@ -862,6 +1042,27 @@ export default function PrivacyContentDe({
           </li>
           <li>
             <Typography>
+              <strong>OpenStreetMap-Anbieter-Token</strong> &mdash; werden (verschl&uuml;sselt)
+              aufbewahrt, bis Sie die Verkn&uuml;pfung aufheben oder Ihr Konto l&ouml;schen.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Ver&ouml;ffentlichte OpenStreetMap-Beitr&auml;ge</strong> &mdash; sind Teil
+              der &ouml;ffentlichen Datenbank und der dauerhaften Bearbeitungshistorie von
+              OpenStreetMap und liegen au&szlig;erhalb unserer Kontrolle. Das L&ouml;schen Ihres
+              OpenMapX-Kontos entfernt sie nicht.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Betriebsdaten zu Beitr&auml;gen</strong> &mdash; Sperren verfallen nach zwei
+              Minuten, erfolgreiche Ergebnisdatens&auml;tze nach 24&nbsp;Stunden; beide enthalten
+              keine Beitragsinhalte.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
               <strong>Server-Protokolle</strong> &mdash; werden nach {serverLogRetentionDays}
               &nbsp;Tagen automatisch gel&ouml;scht.
             </Typography>
@@ -902,6 +1103,15 @@ export default function PrivacyContentDe({
           im Klartext gespeichert; Personen mit Datenbankzugriff k&ouml;nnten daher Bewertungen in
           Ihrem Namen signieren. Wir empfehlen, einen der verschl&uuml;sselten Modi zu w&auml;hlen
           und Ihre Passphrase niemals weiterzugeben.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          <strong>OAuth-Anbieter-Token.</strong> Von OpenStreetMap und Mapillary ausgestellte Token
+          werden mit dem Authentifizierungsgeheimnis dieser Installation verschl&uuml;sselt
+          gespeichert, sodass eine Offenlegung der Datenbank allein keine nutzbaren Token ergibt. Da
+          ein OpenStreetMap-Token die Berechtigung enthalten kann, in Ihrem Namen die
+          &ouml;ffentliche Karte zu bearbeiten, pr&uuml;ft die Beitragsschnittstelle Ihre
+          Berechtigungen zus&auml;tzlich unmittelbar vor jedem Schreibvorgang erneut bei
+          OpenStreetMap selbst, statt sich auf den gespeicherten Stand zu verlassen.
         </Typography>
       </Section>
       <Section title={T.children}>

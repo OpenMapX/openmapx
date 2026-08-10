@@ -60,7 +60,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: August 04, 2026
+        Last updated: August 10, 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -106,6 +106,12 @@ export default function PrivacyContent({
           </li>
           <li>
             <Typography>User account management (if you create an account)</Typography>
+          </li>
+          <li>
+            <Typography>
+              Publishing corrections you write to OpenStreetMap, if you use the contribution feature
+              (see Section&nbsp;7)
+            </Typography>
           </li>
           <li>
             <Typography>
@@ -272,6 +278,13 @@ export default function PrivacyContent({
           We do not receive or store your password for these providers.
         </Typography>
         <Typography sx={{ mt: 1 }}>
+          The access and refresh tokens issued by these providers are stored encrypted at rest with
+          this deployment&apos;s authentication secret and are refreshed as needed until you unlink
+          the provider or delete your account. They are never sent to your browser. If you use the
+          OpenStreetMap contribution feature, the linked OpenStreetMap account may additionally hold
+          write permissions — see Section&nbsp;7.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
           The legal basis is Art. 6(1)(b) GDPR (performance of a contract / provision of the service
           you requested). You can delete your account at any time via the account settings.
         </Typography>
@@ -362,6 +375,138 @@ export default function PrivacyContent({
           on your explicit consent pursuant to Art.&nbsp;49(1)(a) GDPR.
         </Typography>
       </Section>
+      <Section title={T.osmContributions}>
+        <Typography>
+          If your instance has contributions enabled, you can correct a small set of facts on an
+          existing{" "}
+          <Link href="https://www.openstreetmap.org/" target="_blank" rel="noopener noreferrer">
+            OpenStreetMap
+          </Link>{" "}
+          place, or leave a public OpenStreetMap note, from inside OpenMapX. This is optional: you
+          never have to use it, and nothing in this section applies unless you do.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          Like reviews, contributing publishes content outside our servers and cannot be undone by
+          us, so please read this section before you publish.
+        </Typography>
+        <ul>
+          <li>
+            <Typography>
+              <strong>Additional OpenStreetMap permissions.</strong> Ordinary sign-in requests only
+              the minimal <code>openid read_prefs</code> scopes. The first time you contribute, you
+              are redirected to OpenStreetMap to grant <code>write_api</code> (for edits) or{" "}
+              <code>write_notes</code> (for notes). You can revoke these at any time in your
+              OpenStreetMap account settings.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Provider tokens.</strong> The access and refresh tokens issued by
+              OpenStreetMap are stored on our server, encrypted at rest with this deployment&apos;s
+              authentication secret, and refreshed as needed until you unlink the provider or delete
+              your account. Tokens are never sent to your browser and never appear in our logs,
+              metrics or error messages. Tokens stored before at-rest encryption was introduced
+              remain readable and are re-encrypted when the account is next refreshed; in the rare
+              case where such a legacy value cannot be read, you are simply asked to link the
+              account again.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Requests we make on your behalf.</strong> When you open the editor, our server
+              — not your browser — contacts OpenStreetMap to read the current element, your account
+              details, your permissions and, on publication, to create the changeset and update the
+              element. OpenStreetMap therefore sees our server&apos;s IP address for these calls,
+              not yours. Your browser is redirected directly to OpenStreetMap only during the
+              authorization step, so OpenStreetMap may receive your IP address and browser request
+              metadata at that point.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>What is sent to OpenStreetMap.</strong> For an edit: the element reference,
+              the changed tags, the changeset comment you wrote, the source you selected, your
+              interface language as a <code>locale</code> tag, a <code>created_by</code> tag
+              identifying OpenMapX and its version, and an optional &ldquo;review requested&rdquo;
+              marker. For a note: the text you wrote and coordinates our server computes from the
+              element itself. We never upload values that came from our display enrichment providers
+              as if they were your evidence.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>It is public and tied to your OpenStreetMap identity.</strong> Your edit or
+              note is published under your linked OpenStreetMap account. Your OpenStreetMap user
+              name, the changeset, your comment, your stated source, the resulting tags, the note
+              text and your contribution history become part of OpenStreetMap&apos;s public database
+              and history. That database is operated by the OpenStreetMap Foundation and is governed
+              by its own{" "}
+              <Link
+                href="https://osmfoundation.org/wiki/Privacy_Policy"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                privacy policy
+              </Link>{" "}
+              and{" "}
+              <Link
+                href="https://osmfoundation.org/wiki/Licence/Contributor_Terms"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Contributor Terms
+              </Link>
+              , which you must accept before editing — not by us.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>
+                Deleting your OpenMapX account does not delete your OpenStreetMap history.
+              </strong>{" "}
+              Deleting your account here removes the stored provider tokens and the link to your
+              OpenStreetMap account. It has no effect on contributions already published to
+              OpenStreetMap; those are part of a public, permanently versioned database and are
+              outside our control. Requests concerning them go to the OpenStreetMap Foundation.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Short-lived operational state.</strong> To stop a double click from publishing
+              twice, we briefly store a submission lock and a record of the outcome. The keys are
+              one-way HMAC digests of your user id, the element reference and a random submission
+              id; the stored values contain only public result identifiers (changeset or note id),
+              the resulting links and a timestamp. Locks expire after two minutes, successful
+              results after 24 hours, and an unresolved ambiguous outcome after two minutes. Rate
+              limiting keeps a similar short-lived, digest-keyed counter. We keep no database of
+              contribution content: no tags, comments, note text or sources are stored here.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Logs and metrics are content-free.</strong> Operational telemetry records only
+              which kind of operation ran, whether it succeeded, how long it took and a random
+              request id. No element, tag, name, coordinate, comment, note text, source, account
+              name or token is recorded. Server logs follow the normal retention described in
+              Section&nbsp;13.
+            </Typography>
+          </li>
+        </ul>
+        <Typography sx={{ mt: 1 }}>
+          The legal basis for storing and refreshing the OpenStreetMap tokens is
+          Art.&nbsp;6(1)(b)&nbsp;GDPR (performance of the contribution service you requested). The
+          legal basis for publishing your contribution to OpenStreetMap is
+          Art.&nbsp;6(1)(a)&nbsp;GDPR (your explicit consent, given when you choose a source, write
+          your own comment and press &ldquo;Publish to OpenStreetMap&rdquo; after being shown
+          exactly what will be sent and that it will be public). You may withdraw future consent at
+          any time by not publishing further contributions and by revoking the permissions in your
+          OpenStreetMap account; contributions already published cannot be unpublished unilaterally,
+          because OpenStreetMap is a public database with a permanent edit history. Insofar as your
+          contribution is thereby transferred to recipients outside the European Economic Area
+          (EEA), that transfer is based on your explicit consent pursuant to
+          Art.&nbsp;49(1)(a)&nbsp;GDPR.
+        </Typography>
+      </Section>
       <Section title={T.thirdParty}>
         <Typography>
           To provide its mapping features, OpenMapX sends requests to various third-party APIs. When
@@ -406,10 +551,20 @@ export default function PrivacyContent({
           rows={[
             {
               service: "OpenStreetMap OAuth 2.0",
-              purpose: "User sign-in via OSM account",
+              purpose: "User sign-in via OSM account; optional contribution permissions",
               dataSent:
                 "Browser redirect to OSM authorization page; OAuth authorization flow (no password shared with us)",
               endUserExposure: "Direct (browser)",
+              country: "UK",
+              privacy: "https://osmfoundation.org/wiki/Privacy_Policy",
+            },
+            {
+              service: "OpenStreetMap API (contributions)",
+              purpose:
+                "Reading the live element and publishing your edit or note, if you use the contribution feature (Section 7)",
+              dataSent:
+                "Server-side: element reference, your changed tags, your changeset comment and source, locale, created_by; or your note text and a server-computed location. Published publicly under your linked OSM account.",
+              endUserExposure: "Server-side",
               country: "UK",
               privacy: "https://osmfoundation.org/wiki/Privacy_Policy",
             },
@@ -642,6 +797,12 @@ export default function PrivacyContent({
           imported, schedule data (stop names, routes, departure times) is stored in separate
           database schemas. None of this data constitutes personal data of end users.
         </Typography>
+        <Typography sx={{ mt: 1 }}>
+          If you use the OpenStreetMap contribution feature, a short-lived submission lock and
+          outcome record are held (in Redis when configured, otherwise in memory) purely to prevent
+          a double submission. Their keys are one-way digests and their values contain only public
+          result identifiers and timestamps — never contribution content. See Section&nbsp;7.
+        </Typography>
       </Section>
       <Section title={T.email}>
         <Typography>If you register an account, we may send transactional emails for:</Typography>
@@ -788,6 +949,25 @@ export default function PrivacyContent({
           </li>
           <li>
             <Typography>
+              <strong>OpenStreetMap provider tokens</strong> — retained (encrypted) until you unlink
+              the provider or delete your account.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Published OpenStreetMap contributions</strong> — part of OpenStreetMap&apos;s
+              public database and permanent edit history, outside our control. Deleting your
+              OpenMapX account does not remove them.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Contribution submission state</strong> — locks expire after two minutes,
+              successful outcome records after 24 hours; neither contains contribution content.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
               <strong>Server logs</strong> — automatically deleted after {serverLogRetentionDays}{" "}
               days.
             </Typography>
@@ -820,6 +1000,14 @@ export default function PrivacyContent({
           contrast, the &ldquo;unencrypted&rdquo; opt-in mode stores the private key in cleartext;
           anyone with database access could therefore sign reviews in your name. We recommend
           choosing one of the encrypted modes and never sharing your passphrase.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          <strong>OAuth provider tokens.</strong> Tokens issued by OpenStreetMap and Mapillary are
+          encrypted at rest with this deployment&apos;s authentication secret, so a database
+          disclosure alone does not yield usable tokens. Because an OpenStreetMap token may carry
+          permission to edit the public map on your behalf, the contribution boundary additionally
+          re-checks your permissions against OpenStreetMap itself immediately before every write,
+          rather than trusting what we have stored.
         </Typography>
       </Section>
       <Section title={T.children}>
