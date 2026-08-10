@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { FrameworkStringsProvider } from "@/lib/frameworkStringsContext";
 import { IntegrationDisclosuresProvider } from "@/lib/integrationDisclosuresContext";
+import { shellFeatureBoundary } from "@/lib/mobile/mobileShellEnvironment";
 
 export function IntegrationProvider({ children }: { children: React.ReactNode }) {
   const { apiUrl } = useEnv();
@@ -55,8 +56,14 @@ export function IntegrationProvider({ children }: { children: React.ReactNode })
   // layout.tsx) resolves those specifiers to the prebuilt singletons under
   // public/runtime/, so loading a community bundle is just appending a module
   // <script>.
+  // Read straight from the injected descriptor rather than from the runtime
+  // context: this decides whether unreviewed code executes, and it has to be
+  // answerable before the bridge has said anything at all.
+  const communityBundlesAllowed = shellFeatureBoundary().communityFrontendBundles;
+
   useEffect(() => {
     if (!integrations) return;
+    if (!communityBundlesAllowed) return;
     for (const integration of integrations) {
       if (integration.isBuiltIn !== false) continue;
       const fe = integration.frontend;
@@ -79,7 +86,7 @@ export function IntegrationProvider({ children }: { children: React.ReactNode })
       };
       document.head.appendChild(script);
     }
-  }, [integrations, apiBase]);
+  }, [integrations, apiBase, communityBundlesAllowed]);
 
   const registry = useMemo(() => new IntegrationRegistry(integrations ?? []), [integrations]);
 

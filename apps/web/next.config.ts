@@ -1,8 +1,34 @@
+import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
+
+/**
+ * An identifier for exactly this bundle of web code.
+ *
+ * The native shell reports it back in the handshake, so a shell and a page that
+ * disagree about the protocol can be told apart from a shell and a page that
+ * merely disagree about a feature. It is therefore fixed when the bundle is
+ * built and inlined into it — a value read from the server at runtime would
+ * change under a page that had not changed, which is the opposite of useful.
+ */
+function resolveBuildId(): string {
+  if (process.env.NEXT_PUBLIC_BUILD_ID) return process.env.NEXT_PUBLIC_BUILD_ID;
+  try {
+    const commit = execFileSync("git", ["rev-parse", "--short=12", "HEAD"], {
+      cwd: import.meta.dirname,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    if (commit) return commit;
+  } catch {
+    // Not a checkout (a source tarball, a container build context). Fall
+    // through: a per-build timestamp still distinguishes two bundles.
+  }
+  return `build-${Date.now().toString(36)}`;
+}
 const developmentImageSources = process.env.NODE_ENV === "production" ? "" : " http:";
 
 // Enforced now: object/base/frame/form hardening. Resource directives stay
@@ -40,6 +66,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Inlined at build time on purpose; see resolveBuildId.
+  env: { NEXT_PUBLIC_BUILD_ID: resolveBuildId() },
   // Every workspace package whose `main`/`exports` points at raw `.ts`/`.tsx`
   // source must be transpiled by Next. Without this the production build
   // ships TypeScript to the browser and explodes at parse time.

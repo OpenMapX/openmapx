@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import "../lib/communityRuntime";
 import { ImpersonationBanner } from "../components/admin/ImpersonationBanner";
 import { SavedPlacesMirror } from "../components/pwa/SavedPlacesMirror";
+import { MobileRuntimeProvider } from "../lib/mobile/MobileRuntimeProvider";
 import {
   PERSONAL_TIMELINE_CACHE_BUSTER,
   removePersonalTimelineMutations,
@@ -34,6 +35,13 @@ import { IntegrationProvider } from "../providers/IntegrationProvider";
 import { KeypairSessionGuard } from "../providers/KeypairSessionGuard";
 import { MangroveTransportProvider } from "../providers/MangroveTransportProvider";
 import { PersonalTimelineSessionGuard } from "../providers/PersonalTimelineSessionGuard";
+
+/**
+ * Identifies this deployment to the installed shell during the handshake, so a
+ * shell can report which page build it is talking to without the page having to
+ * guess. A missing value is reported as such rather than faked.
+ */
+const WEB_BUILD_ID = process.env.NEXT_PUBLIC_BUILD_ID ?? "dev";
 
 configureStorage(localStorageAdapter);
 registerBuiltinIdSchemeViews();
@@ -141,7 +149,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <MangroveTransportProvider>
         <KeypairSessionGuard />
         <PersonalTimelineSessionGuard />
-        <IntegrationProvider>{children}</IntegrationProvider>
+        {/*
+          Mounted outside `IntegrationProvider` on purpose: the installed shell
+          forbids executing administrator-installed frontend bundles, and that
+          guard has to be answerable before the provider that would append them.
+        */}
+        <MobileRuntimeProvider webBuildId={WEB_BUILD_ID}>
+          <IntegrationProvider>{children}</IntegrationProvider>
+        </MobileRuntimeProvider>
       </MangroveTransportProvider>
     </ThemeProvider>
   );

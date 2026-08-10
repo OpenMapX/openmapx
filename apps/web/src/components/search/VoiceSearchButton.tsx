@@ -6,6 +6,7 @@ import IconButton from "@mui/material/IconButton";
 import Snackbar from "@mui/material/Snackbar";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { shellFeatureBoundary } from "@/lib/mobile/mobileShellEnvironment";
 
 interface SpeechRecognitionAlternativeLike {
   readonly transcript: string;
@@ -107,6 +108,9 @@ export function VoiceSearchButton({ onResult }: VoiceSearchButtonProps) {
 
   const [speechCtor, setSpeechCtor] = useState<SpeechRecognitionCtor | undefined>(undefined);
   useEffect(() => {
+    // The installed shell declares no microphone use, so asking for one there is
+    // a store rejection rather than a feature.
+    if (!shellFeatureBoundary().microphone) return;
     // Updater form: the value we store IS a function (the constructor), which
     // React would otherwise treat as a state updater and invoke (throws — the
     // ctor needs `new`).

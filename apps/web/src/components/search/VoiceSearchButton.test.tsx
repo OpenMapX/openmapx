@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { CHANNEL_GLOBAL } from "@/lib/mobile/mobileShellEnvironment";
 import { act, fireEvent, render, screen, waitFor } from "@/test";
 import { VoiceSearchButton } from "./VoiceSearchButton";
 
@@ -142,6 +143,22 @@ describe("VoiceSearchButton", () => {
       });
       expect(recRef.current).toBeNull();
     } finally {
+      uninstall();
+    }
+  });
+});
+
+describe("VoiceSearchButton inside the installed shell", () => {
+  it("offers no microphone even where the browser would support one", async () => {
+    installFakeRecognition();
+    (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL] = { nonce: "abc123" };
+    try {
+      const { queryByLabelText } = render(<VoiceSearchButton onResult={vi.fn()} />);
+      // A store build that asks for a permission it never declared is a
+      // rejection, so the control cannot exist at all.
+      await waitFor(() => expect(queryByLabelText("search.voiceSearchAriaLabel")).toBeNull());
+    } finally {
+      delete (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL];
       uninstall();
     }
   });

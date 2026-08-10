@@ -2320,7 +2320,14 @@
     "incompatibleBody": "OpenMapX on this device cannot run navigation for the current version of the site. Update the app from the store, or keep planning in the page.",
     "corruptSessionTitle": "The previous trip could not be restored",
     "corruptSessionBody": "OpenMapX could not read the stored navigation session, so it was discarded. Nothing was sent anywhere. You can start a new trip.",
-    "dismiss": "Continue"
+    "dismiss": "Continue",
+    "runtimeUpdateRequiredTitle": "Update OpenMapX to navigate",
+    "runtimeUpdateRequiredBody": "This version of the app is too old for the current map. You can keep searching and planning routes; install the update to start navigation again.",
+    "runtimeErrorTitle": "Navigation is unavailable",
+    "runtimeErrorBody": "OpenMapX could not reach the navigation service inside the app. Close and reopen the app to try again.",
+    "runtimeNegotiatingNavigation": "Preparing navigation…",
+    "runtimeModeUnavailable": "This app version cannot guide you on this kind of trip yet.",
+    "openInBrowser": "Open in browser"
   },
   "mobilePermissions": {
     "title": "OpenMapX needs your location to guide you",

@@ -9,8 +9,31 @@ interface VitestTestFunction {
   ): (name: string, callback: (...args: VitestEachArguments<T>) => void | Promise<void>) => void;
 }
 
+/**
+ * The awaited half of `expect(promise).rejects` / `.resolves`.
+ *
+ * Every matcher becomes thenable, because the assertion only settles once the
+ * promise does — `await expect(p).rejects.toThrow()` is the whole point.
+ */
+interface VitestAsyncExpectation {
+  not: VitestAsyncExpectation;
+  toBe(expected: unknown): Promise<void>;
+  toBeInstanceOf(expected: unknown): Promise<void>;
+  toBeUndefined(): Promise<void>;
+  toBeNull(): Promise<void>;
+  toContain(expected: unknown): Promise<void>;
+  toEqual(expected: unknown): Promise<void>;
+  toMatchObject(expected: unknown): Promise<void>;
+  toThrow(expected?: unknown): Promise<void>;
+}
+
 interface VitestExpectation {
   not: VitestExpectation;
+  /** Asserts against the rejection reason of a promise. */
+  rejects: VitestAsyncExpectation;
+  /** Asserts against the fulfilled value of a promise. */
+  resolves: VitestAsyncExpectation;
+  toBeInstanceOf(expected: unknown): void;
   toBe(expected: unknown): void;
   toBeCloseTo(expected: number, numDigits?: number): void;
   toBeGreaterThan(expected: number): void;
@@ -19,6 +42,8 @@ interface VitestExpectation {
   toBeLessThanOrEqual(expected: number): void;
   toBeTypeOf(expected: string): void;
   toBeDefined(): void;
+  toBeTruthy(): void;
+  toBeFalsy(): void;
   toBeUndefined(): void;
   toBeNull(): void;
   toContain(expected: unknown): void;
