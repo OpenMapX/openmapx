@@ -5,7 +5,12 @@
     "strict": true,
     "noEmit": true,
     "target": "ES2022",
-    "lib": ["ES2023"],
+    // Matches Expo's own base and `packages/core`'s compile settings. The shared
+    // core modules this app imports are written against those libs, so narrowing
+    // here would only produce type errors in code that is fine at runtime. That
+    // the headless graph contains no DOM global is enforced where it is actually
+    // observable: the bundled-boundary test and `pnpm mobile:bundle:check`.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "resolveJsonModule": true,

@@ -44,12 +44,42 @@ function exactOrigin(value: string, release: boolean): URL {
   return url;
 }
 
+/** The official store identity, and the only origins it may ever be built against. */
+export const OFFICIAL_APP_ID = "org.openmapx.app";
+export const OFFICIAL_ORIGIN = "https://openmapx.com";
+
+/**
+ * Hosts that cannot be reached from a user's phone on the open internet.
+ *
+ * A release build pointed at one of these would install and then silently fail
+ * for everyone except the machine that built it.
+ */
+function isNonPublicHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) return true;
+  if (
+    host === "::1" ||
+    host.startsWith("fe80:") ||
+    host.startsWith("fc") ||
+    host.startsWith("fd")
+  ) {
+    return true;
+  }
+  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!ipv4) return false;
+  const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
+  if (a === 127 || a === 0 || a === 10) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  return a === 192 && b === 168;
+}
+
 export function readMobileConfig(env: MobileEnv): Readonly<MobileBuildConfig> {
   const release = env.OPENMAPX_MOBILE_RELEASE === "1";
-  const web = exactOrigin(env.OPENMAPX_MOBILE_WEB_ORIGIN ?? "https://openmapx.com", release);
+  const web = exactOrigin(env.OPENMAPX_MOBILE_WEB_ORIGIN ?? OFFICIAL_ORIGIN, release);
   const api = exactOrigin(env.OPENMAPX_MOBILE_API_ORIGIN ?? web.origin, release);
 
-  const baseId = env.OPENMAPX_MOBILE_APP_ID ?? "org.openmapx.app";
+  const baseId = env.OPENMAPX_MOBILE_APP_ID ?? OFFICIAL_APP_ID;
   const baseScheme = env.OPENMAPX_MOBILE_SCHEME ?? "openmapx";
   if (!APP_ID_PATTERN.test(baseId)) throw new Error(`invalid app id: ${JSON.stringify(baseId)}`);
   if (!URL_SCHEME_PATTERN.test(baseScheme)) {
@@ -61,9 +91,38 @@ export function readMobileConfig(env: MobileEnv): Readonly<MobileBuildConfig> {
     throw new Error("release builds require OPENMAPX_APPLE_TEAM_ID as ten uppercase alphanumerics");
   }
 
+  const feasibilityMode = env.OPENMAPX_MOBILE_FEASIBILITY_MODE === "1";
+
+  if (release) {
+    // The developer probe collects precise background location and shows raw
+    // counters. It has no place in anything a user installs.
+    if (feasibilityMode) {
+      throw new Error("feasibility mode cannot be enabled in a release build");
+    }
+    if (baseId.endsWith(".dev")) {
+      throw new Error("a release build must not use a .dev application identifier");
+    }
+    for (const url of [web, api]) {
+      if (isNonPublicHost(url.hostname)) {
+        throw new Error("release origins must be publicly reachable hosts");
+      }
+    }
+    // The official identity is bound to the official origins. A self-hoster
+    // changes the application id, scheme, associations and signing — they do not
+    // repoint the signed OpenMapX app.
+    if (
+      baseId === OFFICIAL_APP_ID &&
+      (web.origin !== OFFICIAL_ORIGIN || api.origin !== OFFICIAL_ORIGIN)
+    ) {
+      throw new Error(
+        `the official identity ${OFFICIAL_APP_ID} may only be built against ${OFFICIAL_ORIGIN}`,
+      );
+    }
+  }
+
   return Object.freeze({
     release,
-    feasibilityMode: env.OPENMAPX_MOBILE_FEASIBILITY_MODE === "1",
+    feasibilityMode,
     webOrigin: web.origin,
     apiOrigin: api.origin,
     webHost: web.hostname,

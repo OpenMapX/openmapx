@@ -17,6 +17,8 @@ import type { Database } from "../database";
 class NodeSqliteDatabase implements Database {
   constructor(
     private readonly db: DatabaseSync,
+    /** Serialises exclusive transactions, mirroring `expo-sqlite`'s own queue. */
+    private readonly queue: { tail: Promise<unknown> },
     /** Nested transactions are not opened; an inner block joins the outer one. */
     private readonly inTransaction = false,
   ) {}
@@ -49,14 +51,23 @@ class NodeSqliteDatabase implements Database {
       await task(this);
       return;
     }
-    this.db.exec("BEGIN EXCLUSIVE");
-    try {
-      await task(new NodeSqliteDatabase(this.db, true));
-      this.db.exec("COMMIT");
-    } catch (error) {
-      this.db.exec("ROLLBACK");
-      throw error;
-    }
+    // Two concurrent callers must not interleave their `BEGIN EXCLUSIVE`, so
+    // each waits on the previous one. `expo-sqlite` serialises the same way,
+    // which is what lets compare-and-swap tests model genuinely racing writers.
+    const run = this.queue.tail.then(async () => {
+      this.db.exec("BEGIN EXCLUSIVE");
+      try {
+        await task(new NodeSqliteDatabase(this.db, this.queue, true));
+        this.db.exec("COMMIT");
+      } catch (error) {
+        this.db.exec("ROLLBACK");
+        throw error;
+      }
+    });
+    // The tail swallows rejection so one failed transaction cannot poison the
+    // queue for every later caller; the original promise still rejects.
+    this.queue.tail = run.catch(() => undefined);
+    await run;
   }
 
   async closeAsync(): Promise<void> {
@@ -68,5 +79,5 @@ class NodeSqliteDatabase implements Database {
 export function openTestDatabase(): Database {
   const db = new DatabaseSync(":memory:");
   db.exec("PRAGMA foreign_keys = ON");
-  return new NodeSqliteDatabase(db);
+  return new NodeSqliteDatabase(db, { tail: Promise.resolve() });
 }

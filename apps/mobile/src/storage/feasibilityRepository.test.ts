@@ -1,5 +1,5 @@
-import { LATEST_SCHEMA_VERSION, migrate } from "./database";
 import { accuracyBucket, EMPTY_PROBE_STATE, FeasibilityRepository } from "./feasibilityRepository";
+import { migrateSessionSchema } from "./migrations";
 import { openTestDatabase } from "./testing/nodeSqliteDatabase";
 
 /**
@@ -9,29 +9,11 @@ import { openTestDatabase } from "./testing/nodeSqliteDatabase";
  */
 async function freshDatabase() {
   const database = openTestDatabase();
-  await migrate(database);
+  await migrateSessionSchema(database, 1_000);
   return database;
 }
 
-describe("migrations", () => {
-  it("creates the probe table and records the schema version", async () => {
-    const database = await freshDatabase();
-    const version = await database.getFirstAsync<{ user_version: number }>("PRAGMA user_version");
-    expect(version?.user_version).toBe(LATEST_SCHEMA_VERSION);
-    await expect(
-      database.getFirstAsync("SELECT name FROM sqlite_schema WHERE name = 'feasibility_probe'"),
-    ).resolves.toBeTruthy();
-    await database.closeAsync();
-  });
-
-  it("is idempotent when applied twice", async () => {
-    const database = await freshDatabase();
-    await migrate(database);
-    const version = await database.getFirstAsync<{ user_version: number }>("PRAGMA user_version");
-    expect(version?.user_version).toBe(LATEST_SCHEMA_VERSION);
-    await database.closeAsync();
-  });
-
+describe("feasibility probe schema", () => {
   it("stores no column that could hold a coordinate", async () => {
     const database = await freshDatabase();
     const columns = await database.getAllAsync<{ name: string }>(

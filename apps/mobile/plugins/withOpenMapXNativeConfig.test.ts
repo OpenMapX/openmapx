@@ -8,9 +8,11 @@ import {
   applyAppTransportSecurity,
   applyAssociatedDomains,
   applyBackgroundModes,
+  applyDataProtection,
   applyLocationServiceType,
   applyUrlSchemes,
   buildNetworkSecurityConfigXml,
+  FORBIDDEN_IOS_SHARING_KEYS,
   type NativeConfigInput,
   REQUIRED_ANDROID_PERMISSIONS,
   removeUnusedUsageDescriptions,
@@ -315,5 +317,28 @@ describe("withOpenMapXNativeConfig", () => {
   it("is safe to apply twice", () => {
     const once = withOpenMapXNativeConfig({ name: "OpenMapX", slug: "openmapx" });
     expect(() => withOpenMapXNativeConfig(once)).not.toThrow();
+  });
+});
+
+describe("iOS storage protection", () => {
+  it("protects the container until first unlock, so background reads still work", () => {
+    // `Complete` would make the session database unreadable while the device is
+    // locked — precisely when locked-screen navigation needs it.
+    expect(applyDataProtection({}).NSFileProtectionKey).toBe(
+      "NSFileProtectionCompleteUntilFirstUserAuthentication",
+    );
+  });
+
+  it.each(FORBIDDEN_IOS_SHARING_KEYS)(
+    "removes %s, which would expose the session database",
+    (key) => {
+      const result = applyDataProtection({ [key]: true });
+      expect(result).not.toHaveProperty(key);
+    },
+  );
+
+  it("is idempotent", () => {
+    const once = applyDataProtection({ UIFileSharingEnabled: true });
+    expect(JSON.stringify(applyDataProtection(once))).toBe(JSON.stringify(once));
   });
 });

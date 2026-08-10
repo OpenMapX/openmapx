@@ -57,6 +57,7 @@ function surface(): GeneratedNativeSurface {
       NSLocationAlwaysAndWhenInUseUsageDescription:
         "OpenMapX uses your location in the background so navigation you have started keeps guiding you while the screen is locked. Tracking stops when you end navigation.",
       CFBundleURLTypes: [{ CFBundleURLSchemes: ["openmapx"] }],
+      NSFileProtectionKey: "NSFileProtectionCompleteUntilFirstUserAuthentication",
     },
     entitlements: {
       "com.apple.developer.associated-domains": [
@@ -325,5 +326,80 @@ describe("summarizeGeneratedNativeSurface", () => {
     for (const secret of ["ABCDEFGHIJ", "BEGIN ", "keystore", "p12", "provision"]) {
       expect(serialized).not.toContain(secret);
     }
+  });
+});
+
+describe("storage and component exposure", () => {
+  it("rejects a container without data protection", () => {
+    expect(
+      failuresAfter((value) => {
+        delete value.infoPlist.NSFileProtectionKey;
+      }),
+    ).toContainEqual(expect.stringContaining("NSFileProtectionComplete"));
+  });
+
+  it.each(["UIFileSharingEnabled", "LSSupportsOpeningDocumentsInPlace"])(
+    "rejects %s, which would expose the session database",
+    (key) => {
+      expect(
+        failuresAfter((value) => {
+          value.infoPlist[key] = true;
+        }),
+      ).toContainEqual(expect.stringContaining(key));
+    },
+  );
+
+  it("rejects a duplicated service, which would mean two location streams", () => {
+    expect(
+      failuresAfter((value) => {
+        const application = value.androidManifest.manifest.application?.[0] as {
+          service?: Array<{ $: Record<string, string> }>;
+        };
+        application.service = [
+          { $: { "android:name": "expo.modules.location.services.LocationTaskService" } },
+          { $: { "android:name": "expo.modules.location.services.LocationTaskService" } },
+        ];
+      }),
+    ).toContainEqual(expect.stringContaining("declared 2 times"));
+  });
+
+  it("rejects an exported service", () => {
+    expect(
+      failuresAfter((value) => {
+        const application = value.androidManifest.manifest.application?.[0] as {
+          service?: Array<{ $: Record<string, string> }>;
+        };
+        application.service = [
+          { $: { "android:name": "com.example.Leaky", "android:exported": "true" } },
+        ];
+      }),
+    ).toContainEqual(expect.stringContaining("must not be exported"));
+  });
+
+  it("rejects an exported activity with no intent filter", () => {
+    expect(
+      failuresAfter((value) => {
+        const application = value.androidManifest.manifest.application?.[0] as {
+          activity?: Array<{ $: Record<string, string>; "intent-filter"?: unknown[] }>;
+        };
+        application.activity = [{ $: { "android:name": ".Orphan", "android:exported": "true" } }];
+      }),
+    ).toContainEqual(expect.stringContaining("exported without an intent filter"));
+  });
+
+  it("accepts the launcher activity, which is exported on purpose", () => {
+    expect(
+      failuresAfter((value) => {
+        const application = value.androidManifest.manifest.application?.[0] as {
+          activity?: Array<{ $: Record<string, string>; "intent-filter"?: unknown[] }>;
+        };
+        application.activity = [
+          {
+            $: { "android:name": ".MainActivity", "android:exported": "true" },
+            "intent-filter": [{}],
+          },
+        ];
+      }),
+    ).toEqual([]);
   });
 });

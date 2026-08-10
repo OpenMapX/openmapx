@@ -1,4 +1,5 @@
 import * as SQLite from "expo-sqlite";
+import { migrateSessionSchema } from "./migrations";
 
 /**
  * The one on-device database.
@@ -33,52 +34,6 @@ export interface Database {
   closeAsync(): Promise<void>;
 }
 
-/**
- * Migrations are ordered and applied inside one transaction each, keyed off
- * SQLite's own `user_version`. Adding a migration means appending to this array
- * and never editing an earlier entry.
- */
-export const MIGRATIONS: ReadonlyArray<{ version: number; statements: readonly string[] }> = [
-  {
-    version: 1,
-    statements: [
-      // Feasibility probe state. Deliberately has no latitude/longitude column:
-      // proving the background path works must not create a location history.
-      `CREATE TABLE IF NOT EXISTS feasibility_probe (
-        id INTEGER PRIMARY KEY CHECK (id = 1),
-        callback_count INTEGER NOT NULL,
-        accepted_fix_count INTEGER NOT NULL,
-        rejected_fix_count INTEGER NOT NULL,
-        last_timestamp_ms INTEGER,
-        last_accuracy_bucket TEXT,
-        last_callback_gap_ms INTEGER,
-        max_callback_gap_ms INTEGER,
-        last_error_code TEXT,
-        pending_audio_probe INTEGER NOT NULL DEFAULT 0,
-        audio_result_code TEXT,
-        updated_at_ms INTEGER NOT NULL
-      )`,
-    ],
-  },
-];
-
-export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;
-
-/** Applies every migration newer than the database's recorded version. */
-export async function migrate(database: Database): Promise<void> {
-  const row = await database.getFirstAsync<{ user_version: number }>("PRAGMA user_version");
-  const current = row?.user_version ?? 0;
-  for (const migration of MIGRATIONS) {
-    if (migration.version <= current) continue;
-    await database.withExclusiveTransactionAsync(async (tx) => {
-      for (const statement of migration.statements) await tx.execAsync(statement);
-      // `PRAGMA` does not accept bound parameters; the value is a literal from
-      // this module, never user input.
-      await tx.execAsync(`PRAGMA user_version = ${migration.version}`);
-    });
-  }
-}
-
 let opening: Promise<Database> | null = null;
 
 export function getDatabase(): Promise<Database> {
@@ -86,7 +41,7 @@ export function getDatabase(): Promise<Database> {
     const database = (await SQLite.openDatabaseAsync(DATABASE_NAME)) as unknown as Database;
     await database.execAsync("PRAGMA journal_mode = WAL");
     await database.execAsync("PRAGMA foreign_keys = ON");
-    await migrate(database);
+    await migrateSessionSchema(database);
     return database;
   })().catch((error) => {
     // A failed open must not poison every later attempt.

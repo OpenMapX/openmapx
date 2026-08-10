@@ -1,8 +1,27 @@
-// jest-expo already ships a pnpm-aware `transformIgnorePatterns` (its allowlist
-// includes the `.pnpm` directory), so this config deliberately does not override
-// it — doing so would also drop the preset's reanimated/babel-preset exclusions.
 const path = require("node:path");
 const iosPreset = require("jest-expo/ios/jest-preset");
+
+/**
+ * ESM-only dependencies Jest must transform rather than hand to the runtime.
+ *
+ * jest-expo's allowlist covers pnpm's outer `.pnpm` directory, but pnpm stores a
+ * package's real files under a *second* `node_modules` segment — and at that
+ * segment the allowlist no longer matches, so the package is skipped and its
+ * `import` statement reaches Node as-is. Naming the packages here is the only
+ * part that needs saying; the preset's own reanimated and babel-preset
+ * exclusions are preserved by editing its patterns instead of replacing them.
+ */
+const ESM_DEPENDENCIES = ["intl-messageformat", "@formatjs"];
+
+const PNPM_ALLOWLIST_MARKER = "(?!(.pnpm";
+const transformIgnorePatterns = iosPreset.transformIgnorePatterns.map((pattern) =>
+  pattern.replace(PNPM_ALLOWLIST_MARKER, `${PNPM_ALLOWLIST_MARKER}|${ESM_DEPENDENCIES.join("|")}`),
+);
+if (!transformIgnorePatterns.some((pattern) => pattern.includes(ESM_DEPENDENCIES[0]))) {
+  // A jest-expo upgrade that reshapes the allowlist must fail loudly here rather
+  // than silently reintroduce "Cannot use import statement outside a module".
+  throw new Error("jest-expo transformIgnorePatterns no longer match the expected pnpm allowlist");
+}
 
 /**
  * One React and one React Native, always the copies installed in `apps/mobile`.
@@ -29,6 +48,7 @@ module.exports = {
   // `jest.globals.js` forces them to resolve.
   setupFiles: [...(iosPreset.setupFiles ?? []), "<rootDir>/jest.globals.js"],
   setupFilesAfterEnv: [...(iosPreset.setupFilesAfterEnv ?? []), "<rootDir>/jest.setup.ts"],
+  transformIgnorePatterns,
   testMatch: ["<rootDir>/src/**/*.test.ts?(x)", "<rootDir>/modules/**/*.test.ts?(x)"],
   testPathIgnorePatterns: [
     "<rootDir>/node_modules/",

@@ -58,6 +58,33 @@ export const UNUSED_IOS_USAGE_DESCRIPTION_KEYS = [
 /** Push entitlements: this release has no remote notification capability at all. */
 export const FORBIDDEN_IOS_ENTITLEMENTS = ["aps-environment"] as const;
 
+/**
+ * Flags that would expose the app container — and therefore the active session's
+ * SQLite file — through the Files app or iTunes sharing.
+ */
+export const FORBIDDEN_IOS_SHARING_KEYS = [
+  "UIFileSharingEnabled",
+  "LSSupportsOpeningDocumentsInPlace",
+] as const;
+
+/**
+ * Data protection for the app container.
+ *
+ * `CompleteUntilFirstUserAuthentication` is the strongest class compatible with
+ * background execution: `Complete` would make the database unreadable while the
+ * device is locked, which is exactly when locked-screen navigation needs it.
+ */
+export const IOS_DATA_PROTECTION_CLASS = "NSFileProtectionCompleteUntilFirstUserAuthentication";
+
+export function applyDataProtection(plist: InfoPlistLike): InfoPlistLike {
+  const next: InfoPlistLike = {
+    ...plist,
+    NSFileProtectionKey: IOS_DATA_PROTECTION_CLASS,
+  };
+  for (const key of FORBIDDEN_IOS_SHARING_KEYS) delete next[key];
+  return next;
+}
+
 export function removeUnusedUsageDescriptions(plist: InfoPlistLike): InfoPlistLike {
   const next = { ...plist };
   for (const key of UNUSED_IOS_USAGE_DESCRIPTION_KEYS) delete next[key];

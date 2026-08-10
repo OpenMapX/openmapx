@@ -25,6 +25,8 @@ export interface NormalizedNativeSurface {
     associatedDomains: string[];
     allowsArbitraryLoads: unknown;
     exceptionDomains: string[];
+    dataProtection: unknown;
+    sharingKeys: string[];
   };
   android: {
     permissions: string[];
@@ -91,6 +93,13 @@ export function normalizeGeneratedNativeSurface(
       allowsArbitraryLoads: transport.NSAllowsArbitraryLoads ?? null,
       exceptionDomains: sortedUnique(
         Object.keys((transport.NSExceptionDomains ?? {}) as Record<string, unknown>),
+      ),
+      dataProtection: plist.NSFileProtectionKey ?? null,
+      // Present only if something regressed; tracked so it would change the hash.
+      sharingKeys: sortedUnique(
+        Object.keys(plist).filter(
+          (key) => key === "UIFileSharingEnabled" || key === "LSSupportsOpeningDocumentsInPlace",
+        ),
       ),
     },
     android: {

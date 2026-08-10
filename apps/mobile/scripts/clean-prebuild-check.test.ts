@@ -39,6 +39,7 @@ function surface(): GeneratedNativeSurface {
       NSLocationWhenInUseUsageDescription: "why",
       NSLocationAlwaysAndWhenInUseUsageDescription: "why background",
       CFBundleURLTypes: [{ CFBundleURLSchemes: ["openmapx"] }],
+      NSFileProtectionKey: "NSFileProtectionCompleteUntilFirstUserAuthentication",
     },
     entitlements: {
       "com.apple.developer.associated-domains": [
@@ -168,6 +169,18 @@ describe("normalizeGeneratedNativeSurface sensitivity", () => {
       "a changed associated domain",
       (value: GeneratedNativeSurface) => {
         value.entitlements["com.apple.developer.associated-domains"] = ["applinks:evil.example"];
+      },
+    ],
+    [
+      "data protection being dropped",
+      (value: GeneratedNativeSurface) => {
+        delete value.infoPlist.NSFileProtectionKey;
+      },
+    ],
+    [
+      "file sharing being enabled",
+      (value: GeneratedNativeSurface) => {
+        value.infoPlist.UIFileSharingEnabled = true;
       },
     ],
     [

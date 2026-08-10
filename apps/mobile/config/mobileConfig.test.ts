@@ -125,3 +125,92 @@ describe("readMobileConfig immutability", () => {
     );
   });
 });
+
+describe("release policy", () => {
+  it("prevents repointing the official signed identity", () => {
+    expect(() =>
+      readMobileConfig({
+        OPENMAPX_MOBILE_RELEASE: "1",
+        OPENMAPX_MOBILE_APP_ID: "org.openmapx.app",
+        OPENMAPX_MOBILE_WEB_ORIGIN: "https://maps.example.org",
+        OPENMAPX_APPLE_TEAM_ID: "ABCDEFGHIJ",
+      }),
+    ).toThrow(/official identity/);
+  });
+
+  it("prevents pointing the official identity's API elsewhere", () => {
+    expect(() =>
+      readMobileConfig({
+        ...RELEASE_ENV,
+        OPENMAPX_MOBILE_API_ORIGIN: "https://api.example.org",
+      }),
+    ).toThrow(/official identity/);
+  });
+
+  it("lets a self-hosted release use its own identity and origin", () => {
+    const config = readMobileConfig({
+      ...RELEASE_ENV,
+      OPENMAPX_MOBILE_APP_ID: "org.example.maps",
+      OPENMAPX_MOBILE_SCHEME: "examplemaps",
+      OPENMAPX_MOBILE_WEB_ORIGIN: "https://maps.example.org",
+    });
+    expect(config.appId).toBe("org.example.maps");
+    expect(config.webOrigin).toBe("https://maps.example.org");
+  });
+
+  it.each([
+    "https://localhost",
+    "https://127.0.0.1",
+    "https://[::1]",
+    "https://10.0.0.5",
+    "https://192.168.1.20",
+    "https://172.16.4.4",
+    "https://my-laptop.local",
+  ])("rejects the non-public release origin %s", (origin) => {
+    expect(() =>
+      readMobileConfig({
+        ...RELEASE_ENV,
+        OPENMAPX_MOBILE_APP_ID: "org.example.maps",
+        OPENMAPX_MOBILE_WEB_ORIGIN: origin,
+      }),
+    ).toThrow(/publicly reachable/);
+  });
+
+  it("allows those hosts in a development build", () => {
+    expect(
+      readMobileConfig({
+        OPENMAPX_MOBILE_RELEASE: "0",
+        OPENMAPX_MOBILE_WEB_ORIGIN: "http://127.0.0.1:3000",
+        OPENMAPX_MOBILE_APP_ID: "org.example.maps",
+      }).webHost,
+    ).toBe("127.0.0.1");
+  });
+
+  it("refuses to ship the developer feasibility surface in a release build", () => {
+    expect(() =>
+      readMobileConfig({ ...RELEASE_ENV, OPENMAPX_MOBILE_FEASIBILITY_MODE: "1" }),
+    ).toThrow(/feasibility/i);
+  });
+
+  it("refuses a development app id in a release build", () => {
+    expect(() =>
+      readMobileConfig({ ...RELEASE_ENV, OPENMAPX_MOBILE_APP_ID: "org.openmapx.app.dev" }),
+    ).toThrow(/\.dev/);
+  });
+
+  it("rejects a non-default port on the official identity", () => {
+    expect(() =>
+      readMobileConfig({ ...RELEASE_ENV, OPENMAPX_MOBILE_WEB_ORIGIN: "https://openmapx.com:8443" }),
+    ).toThrow(/official identity/);
+  });
+
+  it("allows a self-hosted release to use a non-default port", () => {
+    expect(
+      readMobileConfig({
+        ...RELEASE_ENV,
+        OPENMAPX_MOBILE_APP_ID: "org.example.maps",
+        OPENMAPX_MOBILE_WEB_ORIGIN: "https://maps.example.org:8443",
+      }).webOrigin,
+    ).toBe("https://maps.example.org:8443");
+  });
+});

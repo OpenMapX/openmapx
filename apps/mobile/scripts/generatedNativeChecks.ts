@@ -13,6 +13,8 @@
 import type { AndroidManifestLike } from "../plugins/nativeConfigTransforms.ts";
 import {
   FORBIDDEN_IOS_ENTITLEMENTS,
+  FORBIDDEN_IOS_SHARING_KEYS,
+  IOS_DATA_PROTECTION_CLASS,
   REQUIRED_ANDROID_PERMISSIONS,
   UNUSED_IOS_USAGE_DESCRIPTION_KEYS,
 } from "../plugins/nativeConfigTransforms.ts";
@@ -162,6 +164,13 @@ function checkIos(
     fail(`CFBundleURLSchemes must be exactly [${expected.scheme}], found [${schemes.join(", ")}]`);
   }
 
+  if (infoPlist.NSFileProtectionKey !== IOS_DATA_PROTECTION_CLASS) {
+    fail(`the app container must declare ${IOS_DATA_PROTECTION_CLASS}`);
+  }
+  for (const key of FORBIDDEN_IOS_SHARING_KEYS) {
+    if (key in infoPlist) fail(`${key} would expose the active session database`);
+  }
+
   for (const key of FORBIDDEN_IOS_ENTITLEMENTS) {
     if (key in entitlements) fail(`entitlement ${key} enables a capability this app does not use`);
   }
@@ -233,6 +242,39 @@ function checkAndroid(
     }
     if (application.$["android:debuggable"] === "true") {
       fail("a generated manifest must not force android:debuggable");
+    }
+
+    // A duplicated service would run twice; a duplicated location service would
+    // mean two streams, which is the failure this architecture most guards
+    // against.
+    const services = (application.service ?? []) as Array<{ $: Record<string, string> }>;
+    const serviceCounts = new Map<string, number>();
+    for (const service of services) {
+      const name = service.$["android:name"];
+      serviceCounts.set(name, (serviceCounts.get(name) ?? 0) + 1);
+    }
+    for (const [name, count] of serviceCounts) {
+      if (count > 1) fail(`service ${name} is declared ${count} times`);
+    }
+
+    // An exported component with no intent filter is reachable by any app on
+    // the device for no stated reason.
+    const activities = (application.activity ?? []) as Array<{
+      $: Record<string, string>;
+      "intent-filter"?: unknown[];
+    }>;
+    for (const activity of activities) {
+      if (
+        activity.$["android:exported"] === "true" &&
+        (activity["intent-filter"]?.length ?? 0) === 0
+      ) {
+        fail(`activity ${activity.$["android:name"]} is exported without an intent filter`);
+      }
+    }
+    for (const service of services) {
+      if (service.$["android:exported"] === "true") {
+        fail(`service ${service.$["android:name"]} must not be exported`);
+      }
     }
     const metaData = (application["meta-data"] ?? []) as Array<{ $: Record<string, string> }>;
     const updatesEnabled = metaData.find(

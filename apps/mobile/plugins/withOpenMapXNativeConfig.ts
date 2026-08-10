@@ -20,10 +20,12 @@ import {
   applyAppTransportSecurity,
   applyAssociatedDomains,
   applyBackgroundModes,
+  applyDataProtection,
   applyLocationServiceType,
   applyUrlSchemes,
   buildNetworkSecurityConfigXml,
   FORBIDDEN_IOS_ENTITLEMENTS,
+  FORBIDDEN_IOS_SHARING_KEYS,
   type InfoPlistLike,
   type NativeConfigInput,
   removeUnusedUsageDescriptions,
@@ -62,14 +64,18 @@ export const withOpenMapXNativeConfig: ConfigPlugin = (config) => {
 
   let next: ExpoConfig = withInfoPlist(config, (plistConfig) => {
     const plist = plistConfig.modResults as InfoPlistLike;
-    const updated = applyUrlSchemes(
-      applyAppTransportSecurity(
-        removeUnusedUsageDescriptions(applyBackgroundModes(applyAppBoundDomains(plist, input))),
-        input,
+    const updated = applyDataProtection(
+      applyUrlSchemes(
+        applyAppTransportSecurity(
+          removeUnusedUsageDescriptions(applyBackgroundModes(applyAppBoundDomains(plist, input))),
+          input,
+        ),
+        input.scheme,
       ),
-      input.scheme,
     );
-    for (const key of UNUSED_IOS_USAGE_DESCRIPTION_KEYS) delete plistConfig.modResults[key];
+    for (const key of [...UNUSED_IOS_USAGE_DESCRIPTION_KEYS, ...FORBIDDEN_IOS_SHARING_KEYS]) {
+      delete plistConfig.modResults[key];
+    }
     Object.assign(plistConfig.modResults, updated);
     return plistConfig;
   });
