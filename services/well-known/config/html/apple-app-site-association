@@ -1,7 +1,17 @@
 {
-  "webcredentials": {
-    "apps": [
-      "TEAM_ID.org.openmapx.app"
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["TEAM_ID.org.openmapx.app"],
+        "components": [
+          { "/": "/", "comment": "The map, with an optional query the web app already understands" },
+          { "/": "/navigation/active", "comment": "Return to a navigation session that is already running" },
+          { "/": "/mobile-auth", "comment": "The system-browser sign-in handoff" }
+        ]
+      }
     ]
+  },
+  "webcredentials": {
+    "apps": ["TEAM_ID.org.openmapx.app"]
   }
 }

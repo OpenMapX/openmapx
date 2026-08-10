@@ -1,0 +1,22 @@
+{
+  "$comment": "Public identity material only. Never a private key, a .p12, a provisioning profile, a keystore, or a store API key — see docs/docs/developer/mobile-store-operations.md for where those live. Every value here is published by the app itself or by the stores, so committing it discloses nothing.",
+  "status": "pending-enrollment",
+  "statusNote": "Neither store account exists yet, so no identity has been issued. The values below are placeholders that assert-store-links.mts recognises as such: it reports 'not yet issued' rather than passing, because association files carrying placeholders would silently fail verification in production.",
+  "apple": {
+    "teamId": "TEAM_ID",
+    "applicationIdentifier": "TEAM_ID.org.openmapx.app",
+    "bundleIdentifier": "org.openmapx.app",
+    "source": "Apple Developer → Membership details, once enrollment completes",
+    "recordedOn": null
+  },
+  "google": {
+    "packageName": "org.openmapx.app",
+    "$comment": "App Links verify against the certificate Google signs the delivered app with, not the upload key. Using the upload fingerprint here is the single most common way to ship links that never verify.",
+    "playAppSigningSha256": "REPLACE_WITH_SHA256_FINGERPRINT",
+    "uploadKeySha256": null,
+    "source": "Play Console → Setup → App signing → App signing key certificate",
+    "recordedOn": null
+  },
+  "origin": "https://openmapx.com",
+  "scheme": "openmapx"
+}
