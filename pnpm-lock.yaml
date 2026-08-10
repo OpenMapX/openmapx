@@ -1784,7 +1784,7 @@ importers:
         version: 7.3.5
       '@turf/nearest-point-on-line':
         specifier: ^7.3.5
-        version: 7.3.5
+        version: 7.4.0
       '@types/geojson':
         specifier: ^7946.0.16
         version: 7946.0.16
@@ -4589,8 +4589,8 @@ packages:
   '@turf/meta@7.4.0':
     resolution: {integrity: sha512-3cLUvlEyDuSnMSzrjhaLAEiYR8xhbfWyTVQlrlEw40xL81d4KF4PqUWbjTXKpXZStdYbet2GCurl79KMypNw6g==}
 
-  '@turf/nearest-point-on-line@7.3.5':
-    resolution: {integrity: sha512-MZn6OkEFZpjS6BNUANfqiHMIbQSivu7TNji3a+OAIrnPJ71vp8cbz0N2aVEa5M7I8ipvxoxAPIV3eqg3h280Vg==}
+  '@turf/nearest-point-on-line@7.4.0':
+    resolution: {integrity: sha512-eKTKf/qODIsPankYMZrNfI3LjLaVtQvYV/1hcj9kH/Zr3GfLUszevjhTRDZtMgTFrv8+awW3+MyhmN+PJGuLdQ==}
 
   '@tybys/wasm-util@0.10.3':
     resolution: {integrity: sha512-F3fo1MYrRJYL3zER0OUOmkutjr1Vp23m7OsSgp7nq4SP6OqX6C/56XFIPAl5bt3zaBRjmW7SGz3u/6LwFpYcOg==}
@@ -10237,12 +10237,12 @@ snapshots:
       '@types/geojson': 7946.0.16
       tslib: 2.8.1
 
-  '@turf/nearest-point-on-line@7.3.5':
+  '@turf/nearest-point-on-line@7.4.0':
     dependencies:
-      '@turf/distance': 7.3.5
-      '@turf/helpers': 7.3.5
-      '@turf/invariant': 7.3.5
-      '@turf/meta': 7.3.5
+      '@turf/distance': 7.4.0
+      '@turf/helpers': 7.4.0
+      '@turf/invariant': 7.4.0
+      '@turf/meta': 7.4.0
       '@types/geojson': 7946.0.16
       tslib: 2.8.1
 
