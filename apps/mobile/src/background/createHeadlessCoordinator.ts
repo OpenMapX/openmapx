@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import { getNavigationAudio } from "../audio/navigationAudioModule";
+import { DiagnosticRepository, type DiagnosticType } from "../diagnostics/DiagnosticRepository";
 import { createLocationDriver } from "../location/createLocationDriver";
 import { type LocationProfileKind, profileFor } from "../location/profiles";
 import { createCoordinator } from "../navigation/createCoordinator";
@@ -26,7 +27,7 @@ import { SessionRepository } from "../storage/SessionRepository";
 function ports(repository: SessionRepository): EffectPorts {
   const driver = createLocationDriver();
   const audio = getNavigationAudio();
-  const nowMs = () => Date.now();
+  const diagnostics = new DiagnosticRepository(repository);
 
   return {
     driver: {
@@ -42,19 +43,15 @@ function ports(repository: SessionRepository): EffectPorts {
       speak: async (cueId, text, locale) => {
         const result = await audio.speak({ cueId, text, locale });
         // Only the stable result code is recorded — never the spoken text.
-        await repository.recordDiagnostic("audio.result", { result }, nowMs());
+        await diagnostics.record("audio.result", { result });
       },
       stop: () => audio.stop(),
     },
     alerts: {
       // Notification scheduling is composed in the foreground; a headless run
-      // records the intent durably and reconciles when the app next starts.
-      reconcile: async (sessionId) => {
-        await repository.recordDiagnostic(
-          "notification.operation",
-          { operation: "reconcile-deferred", session: sessionId.length },
-          nowMs(),
-        );
+      // notes that reconciliation is owed and performs it when the app starts.
+      reconcile: async () => {
+        await diagnostics.record("notification.operation", { operation: "reconcile-deferred" });
       },
       cancelSession: async () => undefined,
     },
@@ -70,8 +67,11 @@ function ports(repository: SessionRepository): EffectPorts {
       transitReplan: async () => undefined,
     },
     diagnostics: {
+      // Everything goes through the allowlist, including calls from deep inside
+      // the effect runner: a bypass here would be the one place a coordinate
+      // could reach the local log.
       record: (type, fields) => {
-        void repository.recordDiagnostic(type, fields, nowMs());
+        diagnostics.recordAsync(type as DiagnosticType, fields);
       },
     },
   };
