@@ -17,6 +17,7 @@
     }
   },
   "dependencies": {
+    "@openmapx/brands": "workspace:^",
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/presets": "workspace:^"

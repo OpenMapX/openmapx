@@ -3719,6 +3719,50 @@
         "x-openmapx-source": "integrations/photos/index.ts"
       }
     },
+    "/api/integrations/poi-search/brand-suggest": {
+      "get": {
+        "operationId": "getApiIntegrationsPoiSearchBrandSuggest",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /brand-suggest (poi-search)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "poi-search",
+        "x-openmapx-source": "integrations/poi-search/index.ts"
+      }
+    },
+    "/api/integrations/poi-search/brand/{qid}": {
+      "get": {
+        "operationId": "getApiIntegrationsPoiSearchBrandQid",
+        "parameters": [
+          {
+            "name": "qid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /brand/:qid (poi-search)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "poi-search",
+        "x-openmapx-source": "integrations/poi-search/index.ts"
+      }
+    },
     "/api/integrations/poi-search/chip-translations": {
       "get": {
         "operationId": "getApiIntegrationsPoiSearchChipTranslations",

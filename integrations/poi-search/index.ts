@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { getBrandByQid, suggestBrands, warmBrandIndex } from "@openmapx/brands";
 import {
   bboxCacheKey,
   normalizeFilter,
@@ -11,6 +12,16 @@ import { createPoiSearchOrchestrator } from "./orchestrator.js";
 
 export function setup(ctx: IntegrationContext): void {
   const orchestrator = createPoiSearchOrchestrator(ctx);
+
+  // Build the brand index off the request path so the first search does not pay
+  // the artifact parse. Failure is non-fatal: the routes below surface it.
+  queueMicrotask(() => {
+    try {
+      warmBrandIndex();
+    } catch (err) {
+      ctx.log.warn("Brand index warm-up failed", err);
+    }
+  });
 
   ctx.registerRoute("GET", "/search", async (req, reply) => {
     const { category, south, west, north, east, lang } = req.query;
@@ -189,6 +200,55 @@ export function setup(ctx: IntegrationContext): void {
 
     reply.header("Cache-Control", "public, max-age=300");
     reply.send(result);
+  });
+
+  ctx.registerRoute("GET", "/brand-suggest", async (req, reply) => {
+    const { q, country, limit } = req.query as {
+      q?: string;
+      country?: string;
+      limit?: string;
+    };
+
+    if (!q || q.trim().length < 2) {
+      reply.header("Cache-Control", "public, max-age=60");
+      reply.send({ matches: [] });
+      return;
+    }
+
+    const parsedLimit = limit ? Number.parseInt(limit, 10) : Number.NaN;
+    const limitN = Number.isFinite(parsedLimit) ? Math.max(1, Math.min(20, parsedLimit)) : 8;
+    // Only a two-letter country code participates in ranking; anything else is
+    // ignored rather than rejected, so a stale client cannot break search.
+    const cc =
+      typeof country === "string" && /^[A-Za-z]{2}$/.test(country)
+        ? country.toLowerCase()
+        : undefined;
+
+    const cacheKey = `brand-suggest:${cc ?? "-"}:${limitN}:${q.trim().toLowerCase()}`;
+    const result = await ctx.cache.withCache(cacheKey, 3600, async () => ({
+      matches: suggestBrands(q, cc, limitN),
+    }));
+
+    reply.header("Cache-Control", "public, max-age=3600");
+    reply.send(result);
+  });
+
+  ctx.registerRoute("GET", "/brand/:qid", async (req, reply) => {
+    const { qid } = req.params as { qid?: string };
+
+    if (!qid || !/^Q\d{1,12}$/.test(qid)) {
+      reply.status(400).send({ error: "Invalid Wikidata QID" });
+      return;
+    }
+
+    const entry = getBrandByQid(qid);
+    if (!entry) {
+      reply.status(404).send({ error: `Unknown brand: ${qid}` });
+      return;
+    }
+
+    reply.header("Cache-Control", "public, max-age=86400");
+    reply.send(entry);
   });
 
   ctx.registerRoute("GET", "/chip-translations", async (req, reply) => {

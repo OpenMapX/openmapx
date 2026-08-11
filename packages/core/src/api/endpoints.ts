@@ -42,6 +42,8 @@ export const API_ENDPOINTS = {
   presetSuggest: "/api/integrations/poi-search/preset-suggest",
   chipTranslations: "/api/integrations/poi-search/chip-translations",
   poiFilter: "/api/integrations/poi-search/filter",
+  brandSuggest: "/api/integrations/poi-search/brand-suggest",
+  brandDetail: "/api/integrations/poi-search/brand",
   fuelPricesDetail: "/api/fuel-prices/detail",
   transitStops: "/api/integrations/transit/stops",
   transitStopsNearby: "/api/integrations/transit/stops/nearby",

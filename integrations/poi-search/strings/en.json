@@ -1,4 +1,16 @@
 {
   "name": "POI Search",
-  "description": "Point-of-interest category search"
+  "description": "Point-of-interest category search",
+  "dataSources": {
+    "name-suggestion-index": {
+      "purpose": "Compile the brand/chain catalog used to recognise and suggest known businesses (e.g. Starbucks, Aldi) during POI search",
+      "dataSent": "Nothing per-request — the catalog is compiled from the published dataset at build time and matched in memory",
+      "dataReceived": "Brand names, Wikidata QIDs, matching OSM tags, and per-country name variants"
+    },
+    "wikimedia-commons-logos": {
+      "purpose": "Resolve a brand's logo image for display in search suggestions and place details",
+      "dataSent": "The Wikimedia Commons filename referenced by the brand's catalog entry, requested through the image proxy so the browser never contacts Commons directly",
+      "dataReceived": "The logo image file"
+    }
+  }
 }

@@ -7,5 +7,35 @@
   "backend": { "routes": true },
   "quality": "built-in",
   "category": "Geocoding",
-  "requires": [{ "service": "postgis", "optional": true }]
+  "requires": [{ "service": "postgis", "optional": true }],
+  "dataSources": [
+    {
+      "sourceId": "name-suggestion-index",
+      "name": "Name Suggestion Index",
+      "url": "https://github.com/osmlab/name-suggestion-index",
+      "license": "BSD-3-Clause",
+      "licenseUrl": "https://github.com/osmlab/name-suggestion-index/blob/main/LICENSE.md",
+      "commercialUse": "yes",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "wikimedia-commons-logos",
+      "name": "Wikimedia Commons (brand logos)",
+      "url": "https://commons.wikimedia.org/",
+      "license": "Per-file (CC BY-SA, CC BY, or Public Domain)",
+      "licenseUrl": "https://commons.wikimedia.org/wiki/Commons:Licensing",
+      "commercialUse": "yes",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://foundation.wikimedia.org/wiki/Policy:Privacy_policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
 }

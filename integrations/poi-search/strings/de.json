@@ -1,4 +1,16 @@
 {
   "name": "POI-Suche",
-  "description": "Kategorie-basierte Suche nach Orten und Einrichtungen"
+  "description": "Kategorie-basierte Suche nach Orten und Einrichtungen",
+  "dataSources": {
+    "name-suggestion-index": {
+      "purpose": "Marken-/Filialkatalog zusammenstellen, um bekannte Unternehmen (z. B. Starbucks, Aldi) bei der POI-Suche zu erkennen und vorzuschlagen",
+      "dataSent": "Keine Anfragedaten – der Katalog wird beim Build aus dem veröffentlichten Datensatz zusammengestellt und im Speicher abgeglichen",
+      "dataReceived": "Markennamen, Wikidata-QIDs, zugehörige OSM-Tags und länderspezifische Namensvarianten"
+    },
+    "wikimedia-commons-logos": {
+      "purpose": "Logo-Bild einer Marke für die Anzeige in Suchvorschlägen und Ortsdetails auflösen",
+      "dataSent": "Der Wikimedia-Commons-Dateiname aus dem Katalogeintrag der Marke, angefragt über den Bild-Proxy, sodass der Browser nie direkt mit Commons kommuniziert",
+      "dataReceived": "Die Logo-Bilddatei"
+    }
+  }
 }
