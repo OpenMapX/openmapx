@@ -4,6 +4,14 @@ import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import type { BrandDetail } from "../types/brand";
 
+/** Author + licence for the one Commons logo a brand header card renders at size. */
+export interface BrandLogoAttribution {
+  author?: string;
+  authorUrl?: string;
+  license?: string;
+  licenseUrl?: string;
+}
+
 /**
  * Shared query definition for one brand's detail record, so `useBrandDetail`
  * and `useBrandLogos` cannot drift on the query key or staleness policy —
@@ -42,8 +50,36 @@ export function useBrandLogos(qids: string[]): Map<string, string | undefined> {
     queries: qids.map((qid) => brandDetailQueryOptions(qid)),
   });
 
-  return useMemo(
-    () => new Map(qids.map((qid, i) => [qid, results[i]?.data?.logoFile])),
-    [qids, results],
-  );
+  // `results` is a fresh array identity from `useQueries` on every render
+  // (React Query does not stabilize it), so memoizing on `results` directly
+  // rebuilds the Map every render even when no query's data actually
+  // changed. Memoize on the resolved logo files instead, joined into one
+  // string so the memo body only reads values already listed in its
+  // dependency array, not `results` itself.
+  const logoFilesKey = results.map((r) => r?.data?.logoFile ?? "").join("|");
+  return useMemo(() => {
+    const logoFiles = logoFilesKey.split("|");
+    return new Map(qids.map((qid, i) => [qid, logoFiles[i] || undefined]));
+  }, [qids, logoFilesKey]);
+}
+
+/**
+ * Author + licence for one brand's displayed Commons logo, resolved lazily
+ * and non-blocking: the caller (the brand header card) paints name and
+ * description immediately from the store, and this fills in attribution
+ * once it resolves. Degrades silently — `enabled: false` when there's no
+ * logo to attribute, and the query itself never throws into the UI since
+ * callers only read `data`, never `error`.
+ */
+export function useBrandLogoAttribution(qid: string | null, hasLogo: boolean) {
+  return useQuery<BrandLogoAttribution>({
+    queryKey: ["brand-logo-attribution", qid] as const,
+    queryFn: () =>
+      apiClient.get<BrandLogoAttribution>(
+        `${API_ENDPOINTS.brandLogoAttribution}/${qid}/logo-attribution`,
+      ),
+    enabled: Boolean(qid) && hasLogo,
+    staleTime: 24 * 60 * 60 * 1000,
+    retry: false,
+  });
 }

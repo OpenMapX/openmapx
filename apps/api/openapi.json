@@ -3780,6 +3780,33 @@
         "x-openmapx-source": "integrations/poi-search/index.ts"
       }
     },
+    "/api/integrations/poi-search/brand/{qid}/logo-attribution": {
+      "get": {
+        "operationId": "getApiIntegrationsPoiSearchBrandQidLogoAttribution",
+        "parameters": [
+          {
+            "name": "qid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /brand/:qid/logo-attribution (poi-search)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "poi-search",
+        "x-openmapx-source": "integrations/poi-search/index.ts"
+      }
+    },
     "/api/integrations/poi-search/chip-translations": {
       "get": {
         "operationId": "getApiIntegrationsPoiSearchChipTranslations",

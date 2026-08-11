@@ -39,7 +39,12 @@ export { useActiveSidePanel } from "./useActiveSidePanel";
 export { useAdaptiveDebounce } from "./useAdaptiveDebounce";
 export { type AirportSearchHit, useAirportSearch } from "./useAirportSearch";
 export { useAutocomplete } from "./useAutocomplete";
-export { useBrandDetail, useBrandLogos } from "./useBrandDetail";
+export {
+  type BrandLogoAttribution,
+  useBrandDetail,
+  useBrandLogoAttribution,
+  useBrandLogos,
+} from "./useBrandDetail";
 export { useBrandSuggest } from "./useBrandSuggest";
 export { type ServiceCapability, useCapabilities } from "./useCapabilities";
 export { isAreaTooLarge, useCategorySearch } from "./useCategorySearch";

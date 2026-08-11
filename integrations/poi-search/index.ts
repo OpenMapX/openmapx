@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { getBrandByQid, suggestBrands, warmBrandIndex } from "@openmapx/brands";
 import {
   bboxCacheKey,
+  fetchCommonsMetadata,
   normalizeFilter,
   OverpassTimeoutError,
   validateOverpassFilter,
@@ -249,6 +250,42 @@ export function setup(ctx: IntegrationContext): void {
 
     reply.header("Cache-Control", "public, max-age=86400");
     reply.send(entry);
+  });
+
+  // Per-logo Commons attribution (author + licence) for the brand header
+  // card, which shows the one logo it displays at 36px per design §10 —
+  // tiny map/list icons carry the blanket NSI/Commons registry credit
+  // instead. Separate from `/brand/:qid` (which is a cheap catalog lookup)
+  // because this makes an outbound Commons API call and should stay
+  // opt-in/lazy from the client, not bundled into every brand-detail fetch.
+  ctx.registerRoute("GET", "/brand/:qid/logo-attribution", async (req, reply) => {
+    const { qid } = req.params as { qid?: string };
+
+    if (!qid || !/^Q\d{1,12}$/.test(qid)) {
+      reply.status(400).send({ error: "Invalid Wikidata QID" });
+      return;
+    }
+
+    const entry = getBrandByQid(qid);
+    if (!entry?.logoFile) {
+      reply.status(404).send({ error: `No logo for brand: ${qid}` });
+      return;
+    }
+
+    const cacheKey = `brand-logo-attribution:${qid}`;
+    const result = await ctx.cache.withCache(cacheKey, 86400, async () => {
+      const metadata = await fetchCommonsMetadata([entry.logoFile as string]);
+      const photo = [...metadata.values()][0];
+      return {
+        author: photo?.author,
+        authorUrl: photo?.authorUrl,
+        license: photo?.license,
+        licenseUrl: photo?.licenseUrl,
+      };
+    });
+
+    reply.header("Cache-Control", "public, max-age=86400");
+    reply.send(result);
   });
 
   ctx.registerRoute("GET", "/chip-translations", async (req, reply) => {

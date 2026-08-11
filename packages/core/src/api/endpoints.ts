@@ -44,6 +44,7 @@ export const API_ENDPOINTS = {
   poiFilter: "/api/integrations/poi-search/filter",
   brandSuggest: "/api/integrations/poi-search/brand-suggest",
   brandDetail: "/api/integrations/poi-search/brand",
+  brandLogoAttribution: "/api/integrations/poi-search/brand", // used as `${base}/${qid}/logo-attribution`
   fuelPricesDetail: "/api/fuel-prices/detail",
   transitStops: "/api/integrations/transit/stops",
   transitStopsNearby: "/api/integrations/transit/stops/nearby",
