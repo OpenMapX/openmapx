@@ -17,4 +17,10 @@ else
   pnpm exec turbo run check-types --filter='...[HEAD]' || exit 1
 fi
 
-pnpm check-legal-tables && pnpm check-legal-updated && pnpm check-data-flows && pnpm check-license-metadata && pnpm check-toolchain-pins && pnpm check-feed-ids && pnpm check-credential-keys && pnpm check-dockerfile-sync
+pnpm check-legal-tables && pnpm check-legal-updated && pnpm check-data-flows && pnpm check-license-metadata && pnpm check-toolchain-pins && pnpm check-feed-ids && pnpm check-credential-keys && pnpm check-dockerfile-sync || exit 1
+
+# Only when the API surface could have moved: mounting the route table costs a
+# few seconds, and nothing else in the repo can change it.
+if git diff --cached --name-only | grep -qE '^apps/api/src/routes/|^apps/api/src/(server|integration-routes)\.ts$|^integrations/|^packages/integration-framework/src/'; then
+  pnpm check-openapi || exit 1
+fi

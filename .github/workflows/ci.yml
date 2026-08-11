@@ -51,6 +51,10 @@ jobs:
 
       - run: pnpm lint
 
+      - name: Check the committed OpenAPI document matches the API surface
+        # Mounts the route table in-process — no database, cache or network.
+        run: pnpm check-openapi
+
       - name: Require changeset for publishable-package changes (PR only)
         # Skip for Dependabot: it can't author changesets, and mechanical
         # dependency bumps don't need a release entry. Human PRs still must add
