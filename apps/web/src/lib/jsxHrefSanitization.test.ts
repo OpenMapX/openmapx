@@ -41,6 +41,9 @@ const ALLOWED: Record<string, string[]> = {
   // Both bindings are `safeHref(...)` results, held in a const so the button is
   // rendered only when sanitization actually returned a URL.
   "components/panels/place/contributions/OsmContributionGate.tsx": ["messagesHref", "termsHref"],
+  // `website` is `safeHref(detail?.website)`, held in a const so the link is
+  // rendered only when sanitization actually returned a URL.
+  "components/panels/category/BrandHeaderCard.tsx": ["website"],
   "components/admin/integrations/CredentialSetupGuide.tsx": ["url", "buildMailto(setup.email)"],
   "components/panels/place/PlaceAirportInfo.tsx": ["airport.homeLink", "ourAirportsUrl"],
   "components/panels/place/DataSourceSections.tsx": ["rentalUri"],
