@@ -35,6 +35,23 @@ describe("parking mapper", () => {
     expect(result.branding).toBeUndefined();
   });
 
+  // mapParkingToDetail is a separate entry point from mapParkingToResult, so
+  // it needs the same gap-fill or a facility with only a catalogued operator
+  // identity would show BrandMark's monogram fallback on the detail card
+  // while the pin/row show the real Commons logo.
+  it("gap-fills a Commons logo on the detail card too", () => {
+    const detail = mapParkingToDetail(
+      makeFacility({ osmTags: { "operator:wikidata": "Q1127798" } }),
+    );
+    expect(detail.branding?.name).toBe("Q-Park");
+    expect(detail.branding?.logoUrl).toContain("commons.wikimedia.org");
+  });
+
+  it("leaves the detail card's branding unfilled when the facility has no catalogued identity", () => {
+    const detail = mapParkingToDetail(makeFacility({ osmTags: { amenity: "parking" } }));
+    expect(detail.branding).toBeUndefined();
+  });
+
   it("keeps stale realtime availability out of the available result variant", () => {
     const result = mapParkingToResult(
       makeFacility({

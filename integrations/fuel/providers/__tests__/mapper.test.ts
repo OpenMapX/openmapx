@@ -74,4 +74,22 @@ describe("fuel mapper", () => {
     const result = mapFuelStationToResult(makeStation({ fuelPrices: {} }));
     expect(result.summary).toBeUndefined();
   });
+
+  // FuelStation.osmTags is only ever populated when OSM contributed the
+  // station; mapFuelStationToDetail needs the same gap-fill provider.ts's
+  // Overpass fallback already applies at the result level, so a station
+  // reached only through this mapper wouldn't fall back to BrandMark's
+  // monogram initial instead of the real Commons logo.
+  it("gap-fills a Commons logo on the detail card from osmTags", () => {
+    const detail = mapFuelStationToDetail(
+      makeStation({ osmTags: { "brand:wikidata": "Q110716465" } }),
+    );
+    expect(detail.branding?.name).toBe("Shell");
+    expect(detail.branding?.logoUrl).toContain("commons.wikimedia.org");
+  });
+
+  it("leaves the detail card's branding unfilled when there are no osmTags", () => {
+    const detail = mapFuelStationToDetail(makeStation({ osmTags: undefined }));
+    expect(detail.branding).toBeUndefined();
+  });
 });

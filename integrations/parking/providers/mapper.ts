@@ -1,9 +1,9 @@
 import { resolveBrand } from "@openmapx/brands";
 import {
-  commonsLogoUrl,
   type DataSourceDetail,
   type DataSourceDetailSection,
   type DataSourceResult,
+  gapFillBranding,
   type OsmIdentity,
 } from "@openmapx/core";
 import {
@@ -101,16 +101,7 @@ export function mapParkingToResult(facility: ParkingFacility): DataSourceResult 
   // `facility.osmTags` is only present when OSM contributed to this facility
   // (directly, or via a dedup merge), so this is a no-op for the many
   // structured-feed sources that carry no OSM tags at all.
-  if (!result.branding?.logoUrl) {
-    const catalogued = resolveBrand(facility.osmTags);
-    if (catalogued?.logoFile) {
-      result.branding = {
-        ...result.branding,
-        name: result.branding?.name ?? catalogued.name,
-        logoUrl: commonsLogoUrl(catalogued.logoFile, 96),
-      };
-    }
-  }
+  result.branding = gapFillBranding(result.branding, facility.osmTags, resolveBrand);
 
   return result;
 }
@@ -289,6 +280,11 @@ export function mapParkingToDetail(facility: ParkingFacility): DataSourceDetail 
     sections,
     attributions,
     parkAndRide: facility.parkAndRide ? true : undefined,
+    // Gap-fill only — see mapParkingToResult. Without this, a detail card
+    // reachable only via this mapper (not the list/pin, which already
+    // resolves via mapParkingToResult) would fall back to BrandMark's
+    // monogram initial instead of the real Commons logo.
+    branding: gapFillBranding(undefined, facility.osmTags, resolveBrand),
   };
 }
 

@@ -17,4 +17,11 @@ export interface FuelStation {
   fuelPrices: FuelPrices;
   /** ISO 8601 timestamp of the most recent price update, if available. */
   fuelPricesUpdatedAt?: string;
+  /**
+   * Present only when OSM contributed to this station. Priced national feeds
+   * (Tankerkoenig, ...) never populate this — they carry a plain-string brand
+   * name and no wikidata identity — so it's the brand-catalog gap-fill input,
+   * mirroring EvChargingStation/ParkingFacility.
+   */
+  osmTags?: Record<string, string>;
 }

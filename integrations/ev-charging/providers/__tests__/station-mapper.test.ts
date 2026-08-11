@@ -198,6 +198,23 @@ describe("ev-charging station mapper", () => {
     const result = mapStationToResult(makeStation({ osmTags: undefined }));
     expect(result.branding).toBeUndefined();
   });
+
+  // mapStationToDetail is a separate entry point from mapStationToResult (the
+  // detail card can be reached without the list/pin having resolved first),
+  // so it needs the same gap-fill or a station with only a catalogued
+  // network:/operator: identity would show BrandMark's monogram fallback on
+  // the detail card while the pin/row show the real Commons logo.
+  it("gap-fills a Commons logo on the detail card too", () => {
+    const station = makeStation({ osmTags: { "network:wikidata": "Q42717773" } });
+    const detail = mapStationToDetail(station);
+    expect(detail.branding?.name?.toLowerCase()).toContain("ionity");
+    expect(detail.branding?.logoUrl).toContain("commons.wikimedia.org");
+  });
+
+  it("leaves the detail card's branding unfilled when the station has no catalogued identity", () => {
+    const detail = mapStationToDetail(makeStation({ osmTags: { amenity: "charging_station" } }));
+    expect(detail.branding).toBeUndefined();
+  });
 });
 
 describe("formatTariff", () => {

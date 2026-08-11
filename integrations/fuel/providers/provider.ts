@@ -8,9 +8,9 @@ import type {
 } from "@openmapx/core";
 import {
   CATEGORY_FILTERS,
-  commonsLogoUrl,
   extractSourcePrefix,
   fetchJson,
+  gapFillBranding,
   searchByCategory,
 } from "@openmapx/core";
 import type { MobilityDataSourceProvider } from "@openmapx/integration-framework";
@@ -146,16 +146,7 @@ class FuelDataSourceProvider implements MobilityDataSourceProvider {
         // Gap-fill only. This Overpass fallback carries real OSM tags (unlike
         // the priced national feeds above, which supply only a plain-string
         // brand name with no wikidata identity — never guessed at).
-        if (!result.branding?.logoUrl) {
-          const catalogued = resolveBrand(r.osmTags);
-          if (catalogued?.logoFile) {
-            result.branding = {
-              ...result.branding,
-              name: result.branding?.name ?? catalogued.name,
-              logoUrl: commonsLogoUrl(catalogued.logoFile, 96),
-            };
-          }
-        }
+        result.branding = gapFillBranding(result.branding, r.osmTags, resolveBrand);
         return result;
       });
     }

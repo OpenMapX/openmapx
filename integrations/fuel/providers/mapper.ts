@@ -1,8 +1,10 @@
-import type {
-  DataSourceDetail,
-  DataSourceDetailSection,
-  DataSourceResult,
-  OsmIdentity,
+import { resolveBrand } from "@openmapx/brands";
+import {
+  type DataSourceDetail,
+  type DataSourceDetailSection,
+  type DataSourceResult,
+  gapFillBranding,
+  type OsmIdentity,
 } from "@openmapx/core";
 import { type I18nToken, type Translatable, token } from "@openmapx/integration-framework/strings";
 import type { FuelStation } from "@openmapx/mobility-core/fuel";
@@ -121,6 +123,11 @@ export function mapFuelStationToDetail(station: FuelStation): DataSourceDetail {
     address: station.address ? { line1: station.address } : undefined,
     operator: station.brand ? { name: station.brand } : undefined,
     sections,
+    // Gap-fill only. Priced national feeds carry a plain-string brand name
+    // and no OSM tags, so this is a no-op for them; without it, a station
+    // reachable only via this mapper would fall back to BrandMark's monogram
+    // initial instead of the real Commons logo the list/pin already show.
+    branding: gapFillBranding(undefined, station.osmTags, resolveBrand),
   };
 }
 

@@ -1,9 +1,9 @@
 import { resolveBrand } from "@openmapx/brands";
 import {
-  commonsLogoUrl,
   type DataSourceDetail,
   type DataSourceDetailSection,
   type DataSourceResult,
+  gapFillBranding,
   type OsmIdentity,
 } from "@openmapx/core";
 import {
@@ -119,16 +119,7 @@ export function mapStationToResult(station: EvChargingStation): DataSourceResult
   // `station.osmTags` is only present when OSM contributed to this station
   // (directly, or via a dedup merge), so this is a no-op for feeds with no
   // OSM tags to check.
-  if (!result.branding?.logoUrl) {
-    const catalogued = resolveBrand(station.osmTags);
-    if (catalogued?.logoFile) {
-      result.branding = {
-        ...result.branding,
-        name: result.branding?.name ?? catalogued.name,
-        logoUrl: commonsLogoUrl(catalogued.logoFile, 96),
-      };
-    }
-  }
+  result.branding = gapFillBranding(result.branding, station.osmTags, resolveBrand);
 
   return result;
 }
@@ -537,5 +528,10 @@ export function mapStationToDetail(
     openingHours: station.openingHours,
     sections,
     osmTags: station.osmTags,
+    // Gap-fill only — see mapStationToResult. Without this, a detail card
+    // reachable only via this mapper (not the list/pin, which already
+    // resolves via mapStationToResult) would fall back to BrandMark's
+    // monogram initial instead of the real Commons logo.
+    branding: gapFillBranding(undefined, station.osmTags, resolveBrand),
   };
 }

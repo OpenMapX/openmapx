@@ -1,4 +1,5 @@
 import type { BrandKind, BrandSummary } from "../types/brand";
+import type { DataSourceBranding } from "../types/dataSource";
 import type { OverpassFilter } from "./overpassFilter";
 
 /** Every OSM key that can carry a brand identity, in precedence order. */
@@ -65,4 +66,34 @@ export function brandToFilter(brand: Pick<BrandSummary, "qid" | "kind">): Overpa
 export function commonsLogoUrl(logoFile: string, width = 64): string {
   const encoded = encodeURIComponent(logoFile.replace(/ /g, "_")).replace(/_/g, "%20");
   return `https://commons.wikimedia.org/wiki/Special:FilePath/${encoded}?width=${width}`;
+}
+
+/**
+ * Gap-fills a data-source result/detail's branding from the brand catalog.
+ *
+ * Gap-fill only: an upstream feed's own mark is authoritative, so this never
+ * overwrites an existing `logoUrl` — it only fills in a logo when the feed
+ * published a plain operator/brand name and nothing else. `resolveBrand` is
+ * passed in rather than imported here because `@openmapx/brands` depends on
+ * this package (`@openmapx/core`); importing it back would be circular.
+ *
+ * Shared by the EV charging, fuel, and parking result/detail mappers so the
+ * "look up the catalog, borrow its logo and name" block isn't hand-duplicated
+ * at each of the six call sites.
+ */
+export function gapFillBranding(
+  existing: DataSourceBranding | undefined,
+  osmTags: Record<string, string> | undefined,
+  resolveBrand: (
+    osmTags: Record<string, string> | undefined,
+  ) => { name: string; logoFile?: string } | undefined,
+): DataSourceBranding | undefined {
+  if (existing?.logoUrl) return existing;
+  const catalogued = resolveBrand(osmTags);
+  if (!catalogued?.logoFile) return existing;
+  return {
+    ...existing,
+    name: existing?.name ?? catalogued.name,
+    logoUrl: commonsLogoUrl(catalogued.logoFile, 96),
+  };
 }
