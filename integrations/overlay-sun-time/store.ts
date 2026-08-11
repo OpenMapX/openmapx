@@ -8,6 +8,10 @@ export const useSunTimeStore = createOverlayStore({
     /** null follows the wall clock; a number pins the overlay to that instant. */
     timeMs: null as number | null,
     tzLoading: false,
+    /** The shared "now" tick used whenever timeMs is null. map-layer.tsx owns
+     *  the single interval that advances this — the legend reads it instead of
+     *  keeping a second timer, so the map and the legend can never drift. */
+    nowMs: Date.now(),
   },
   actions: (set) => ({
     setShowTerminator: (showTerminator: boolean) => set({ showTerminator }),
@@ -15,6 +19,7 @@ export const useSunTimeStore = createOverlayStore({
     setTimeMs: (timeMs: number | null) => set({ timeMs }),
     resetToNow: () => set({ timeMs: null }),
     setTzLoading: (tzLoading: boolean) => set({ tzLoading }),
+    setNowMs: (nowMs: number) => set({ nowMs }),
   }),
   onClose: () => ({
     timeMs: null,

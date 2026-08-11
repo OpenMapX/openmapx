@@ -1,7 +1,7 @@
 "use client";
 
 import { subsolarPoint, twilightBands } from "@openmapx/core";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { useMap } from "@/lib/MapContext";
@@ -38,19 +38,28 @@ export default function SunTimeLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const layerVisible = useSunTimeStore((s) => s.layerVisible);
   const showTerminator = useSunTimeStore((s) => s.showTerminator);
+  const panelOpen = useSunTimeStore((s) => s.panelOpen);
   const timeMs = useSunTimeStore((s) => s.timeMs);
+  const nowMs = useSunTimeStore((s) => s.nowMs);
+  const setNowMs = useSunTimeStore((s) => s.setNowMs);
 
   const active = layerVisible && showTerminator;
+  // The legend can be showing a clock (panelOpen) even while the shading
+  // itself is hidden or switched off, so the tick has to keep the store's
+  // `nowMs` current for either surface — not just for this layer's own paint.
+  const clockNeeded = active || panelOpen;
 
-  // While following the wall clock the overlay redraws once a minute; a pinned
-  // instant never ticks, so the interval is not created at all.
-  const [nowMs, setNowMs] = useState(() => Date.now());
+  // This is the ONLY timer for "now" in the sun-time overlay: it writes into
+  // the shared store field instead of local state so the legend (which reads
+  // the same field) can never end up ticking on a second, independently
+  // drifting interval. A pinned instant never ticks, so the interval is not
+  // created at all.
   useEffect(() => {
-    if (!active || timeMs !== null) return;
+    if (!clockNeeded || timeMs !== null) return;
     setNowMs(Date.now());
     const id = setInterval(() => setNowMs(Date.now()), TICK_MS);
     return () => clearInterval(id);
-  }, [active, timeMs]);
+  }, [clockNeeded, timeMs, setNowMs]);
 
   const instant = timeMs ?? nowMs;
   const bands = useMemo(() => twilightBands(new Date(instant), { bands: BAND_COUNT }), [instant]);

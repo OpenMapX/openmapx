@@ -34,12 +34,16 @@ export default function SunTimeLegend() {
   const setShowTimeZones = useSunTimeStore((s) => s.setShowTimeZones);
   const tzLoading = useSunTimeStore((s) => s.tzLoading);
   const timeMs = useSunTimeStore((s) => s.timeMs);
+  const nowMs = useSunTimeStore((s) => s.nowMs);
   const setTimeMs = useSunTimeStore((s) => s.setTimeMs);
   const resetToNow = useSunTimeStore((s) => s.resetToNow);
 
   // Controls always reflect a concrete instant; a null store value simply means
-  // "whatever the clock says right now", which is the instant the layer draws.
-  const shown = new Date(timeMs ?? Date.now());
+  // "whatever the clock says right now". `nowMs` is the shared tick map-layer.tsx
+  // owns (it mounts whenever the overlay is enabled, unlike this legend, which
+  // only mounts while the panel is open) — reading it here instead of calling
+  // Date.now() at render keeps this display and the map terminator from drifting.
+  const shown = new Date(timeMs ?? nowMs);
   const minutesOfDay = shown.getHours() * 60 + shown.getMinutes();
 
   const setMinutes = (minutes: number) => {
@@ -129,7 +133,7 @@ export default function SunTimeLegend() {
         <Slider
           size="small"
           min={0}
-          max={1430}
+          max={1439}
           step={10}
           value={minutesOfDay}
           onChange={(_, value) => setMinutes(value as number)}

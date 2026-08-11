@@ -48,7 +48,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  useSunTimeStore.setState({ layerVisible: false, timeMs: null });
+  useSunTimeStore.setState({ layerVisible: false, panelOpen: false, timeMs: null });
   vi.useRealTimers();
 });
 
@@ -135,6 +135,25 @@ describe("SunTimeLayer", () => {
       vi.advanceTimersByTime(60_000);
     });
     expect(fake.state.counts.setData.get(SOURCE_ID)).toBe(afterTickCount);
+  });
+
+  it("keeps the shared clock ticking for the legend even when the layer itself is hidden", () => {
+    vi.useFakeTimers();
+    useSunTimeStore.setState({
+      layerVisible: false,
+      showTerminator: false,
+      panelOpen: true,
+      timeMs: null,
+    });
+    render(<SunTimeLayer />);
+    const initialNowMs = useSunTimeStore.getState().nowMs;
+
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    // The legend reads this same field; a hidden layer must not freeze it.
+    expect(useSunTimeStore.getState().nowMs).toBeGreaterThan(initialNowMs);
   });
 });
 
