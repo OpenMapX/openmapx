@@ -126,6 +126,8 @@ const FILTERABLE_TAG_KEYS = [
   "brand",
   "operator",
   "brand:wikidata",
+  "operator:wikidata",
+  "network:wikidata",
 ] as const;
 
 function pickFilterableTags(tags: Record<string, string>): Record<string, string> | undefined {

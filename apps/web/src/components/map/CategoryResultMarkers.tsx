@@ -1,11 +1,16 @@
 "use client";
 
-import type { CategoryPlace } from "@openmapx/core";
+import type { BrandDetail, CategoryPlace } from "@openmapx/core";
 import {
+  API_ENDPOINTS,
+  apiClient,
+  BRAND_QID_KEYS,
+  commonsLogoUrl,
   createPlace,
   idsFromPrimaryOrCoords,
   PANEL,
   poiCategoryIconPath,
+  proxyImageUrl,
   resolveStopAsPlace,
   useCategorySearchStore,
   usePlaceStore,
@@ -17,7 +22,7 @@ import type { Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";
 import { useMap } from "@/lib/MapContext";
-import { createMarkerSvg } from "@/lib/markerSvg";
+import { createBrandMarkerSvg, createMarkerSvg } from "@/lib/markerSvg";
 import { useExploreReachResults } from "@/lib/useExploreReachResults";
 import { addLayerInSlot, unregisterLayerSlot } from "./layers/layerStack";
 import { upsertGeoJsonSource } from "./layers/layerStyleUtils";
@@ -47,23 +52,102 @@ function loadMarkerImage(map: MaplibreMap, imageId: string, iconPath: string): P
   });
 }
 
-function buildGeoJson(results: CategoryPlace[], imageId: string) {
+const QID_PATTERN = /^Q\d{1,12}$/;
+
+/** The brand identity of one result, or undefined when it has none. */
+export function placeBrandQid(place: CategoryPlace): string | undefined {
+  for (const key of BRAND_QID_KEYS) {
+    const value = place.osmTags?.[key];
+    if (value && QID_PATTERN.test(value)) return value;
+  }
+  return undefined;
+}
+
+/** Distinct brand QIDs in a result set, in first-seen order. */
+export function distinctBrandQids(results: CategoryPlace[]): string[] {
+  const seen = new Set<string>();
+  for (const place of results) {
+    const qid = placeBrandQid(place);
+    if (qid) seen.add(qid);
+  }
+  return [...seen];
+}
+
+/** Namespaced so a brand image can never collide with a category image. */
+export function brandImageId(qid: string): string {
+  return `brand-marker-${qid}`;
+}
+
+/**
+ * Loads one brand's logo into the map's image registry, fetching its detail
+ * record (for the Commons filename) and the logo bytes together — there is
+ * only one network-touching step per distinct QID, so nothing else needs to
+ * duplicate the brand-detail request `useBrandDetail` already makes at the
+ * hook layer.
+ *
+ * Resolves `false` without registering an image when the brand has no logo or
+ * any step fails; callers fall back to the category marker, so a broken or
+ * missing logo costs a plain pin rather than a missing one.
+ */
+async function loadBrandMarkerImage(map: MaplibreMap, qid: string): Promise<boolean> {
+  const imageId = brandImageId(qid);
+  if (map.hasImage(imageId)) return true;
+
+  try {
+    const detail = await apiClient.get<BrandDetail>(`${API_ENDPOINTS.brandDetail}/${qid}`);
+    if (!detail.logoFile) return false;
+
+    const response = await fetch(proxyImageUrl(commonsLogoUrl(detail.logoFile, 72)));
+    if (!response.ok) return false;
+    const blob = await response.blob();
+    const dataUri = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error("logo read failed"));
+      reader.readAsDataURL(blob);
+    });
+
+    return await new Promise<boolean>((resolve) => {
+      const img = new Image(64, 64);
+      img.onload = () => {
+        if (!map.hasImage(imageId)) map.addImage(imageId, img, { pixelRatio: 2 });
+        resolve(true);
+      };
+      img.onerror = () => resolve(false);
+      img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+        createBrandMarkerSvg(dataUri),
+      )}`;
+    });
+  } catch {
+    return false;
+  }
+}
+
+function buildGeoJson(
+  results: CategoryPlace[],
+  fallbackImageId: string,
+  brandImageIds: ReadonlySet<string>,
+) {
   return {
     type: "FeatureCollection" as const,
-    features: results.map((place) => ({
-      type: "Feature" as const,
-      geometry: { type: "Point" as const, coordinates: place.coordinates },
-      properties: {
-        id: place.id,
-        name: place.name,
-        address: place.address ?? "",
-        category: place.category ?? "",
-        phone: place.phone ?? "",
-        website: place.website ?? "",
-        openingHours: place.openingHours ?? "",
-        imageId,
-      },
-    })),
+    features: results.map((place) => {
+      const qid = placeBrandQid(place);
+      const branded = qid !== undefined && brandImageIds.has(brandImageId(qid));
+      return {
+        type: "Feature" as const,
+        geometry: { type: "Point" as const, coordinates: place.coordinates },
+        properties: {
+          id: place.id,
+          name: place.name,
+          address: place.address ?? "",
+          category: place.category ?? "",
+          phone: place.phone ?? "",
+          website: place.website ?? "",
+          openingHours: place.openingHours ?? "",
+          imageId: branded && qid !== undefined ? brandImageId(qid) : fallbackImageId,
+        },
+      };
+    }),
   };
 }
 
@@ -153,6 +237,14 @@ export function CategoryResultMarkers() {
     void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
+
+    // Guards the brand-logo resolution below: it can still be in flight when
+    // this effect re-runs (style reload, results change) and tears down the
+    // source it was about to update. `sync` itself keeps running past that
+    // point (styledata keeps firing on the same map instance), so this can't
+    // just be a local variable inside `sync` — it has to span every `sync`
+    // call this effect instance made.
+    let cancelled = false;
 
     const removeCategoryLayers = () => {
       if (map.getLayer(LABEL_LAYER_ID)) map.removeLayer(LABEL_LAYER_ID);
@@ -255,14 +347,18 @@ export function CategoryResultMarkers() {
 
       const iconPath =
         mode === "text" ? TEXT_MARKER_ICON_PATH : poiCategoryIconPath(activeCategory ?? "");
-      const imageId =
+      const fallbackImageId =
         mode === "text" ? "category-marker-text" : `category-marker-${activeCategory}`;
-      const geojson = buildGeoJson(results, imageId);
+      // First paint uses only the fallback icon — this is the entire branded
+      // vs. unbranded distinction of the pre-brand code, unchanged. Brand
+      // logos are layered on afterward so a slow or empty logo fetch never
+      // delays markers from appearing at all.
+      const geojson = buildGeoJson(results, fallbackImageId, new Set());
 
       upsertGeoJsonSource(map, SOURCE_ID, geojson);
 
       // Load image then add layers (image may already be cached)
-      void loadMarkerImage(map, imageId, iconPath).then(() => {
+      void loadMarkerImage(map, fallbackImageId, iconPath).then(() => {
         if (!map.getSource(SOURCE_ID)) return;
         if (!map.getLayer(LAYER_ID)) {
           addLayerInSlot(
@@ -306,11 +402,36 @@ export function CategoryResultMarkers() {
           );
         }
       });
+
+      // Brand logos: one image load per distinct QID in this result set
+      // (`loadBrandMarkerImage` short-circuits on `map.hasImage`, so panning
+      // back over the same chain never refetches). Runs independently of the
+      // fallback-icon load above; once resolved, swap the matching pins over
+      // to their logo. `cancelled`/`getSource` re-checked here because this can
+      // resolve after a newer `sync()` call (or teardown) already moved on.
+      const qids = distinctBrandQids(results);
+      if (qids.length > 0) {
+        void Promise.all(
+          qids.map(async (qid) => ((await loadBrandMarkerImage(map, qid)) ? qid : null)),
+        ).then((loaded) => {
+          if (cancelled || !map.getSource(SOURCE_ID)) return;
+          const brandImageIds = new Set(
+            loaded.filter((qid): qid is string => qid !== null).map((qid) => brandImageId(qid)),
+          );
+          if (brandImageIds.size === 0) return;
+          upsertGeoJsonSource(
+            map,
+            SOURCE_ID,
+            buildGeoJson(results, fallbackImageId, brandImageIds),
+          );
+        });
+      }
     };
 
     sync();
     map.on("styledata", sync);
     return () => {
+      cancelled = true;
       map.off("styledata", sync);
     };
   }, [

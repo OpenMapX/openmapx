@@ -10,11 +10,12 @@ import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
-import { isCityOrSmaller, isLodging, usePlaceStore } from "@openmapx/core";
+import { isCityOrSmaller, isLodging, useBrandDetail, usePlaceStore } from "@openmapx/core";
 import { useReviewAggregate } from "@openmapx/mangrove-react";
 import type { MergedRoute, TransportMode } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
+import { BrandLogo } from "@/components/search/BrandLogo";
 import { BRAND } from "@/lib/theme";
 import { useDetailChrome } from "../DetailShell";
 import { useFloatingMobileSheetHandle } from "../sheet/mobileSheetShared";
@@ -166,6 +167,10 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
     [dockedActionsShown, place],
   );
   useDetailChrome(headerNode, footerNode);
+  // Unconditional: `useBrandDetail` disables itself internally when the QID
+  // is null, so this stays a stable hook call across places with and without
+  // a brand identity.
+  const { data: brandDetail } = useBrandDetail(place.brand?.wikidata ?? null);
   const [lng, lat] = place.coordinates;
   const headerAggregateQuery = useReviewAggregate<ReviewAggregate>(lat, lng, place.name, {
     osmId: place.ids?.osm,
@@ -384,18 +389,36 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
 
         <Box sx={{ display: "flex", alignItems: "flex-start" }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography
-              ref={titleRef}
-              variant="h6"
-              gutterBottom
-              noWrap={detent === "peek"}
-              sx={{
-                fontWeight: 600,
-                pr: onClose && !showHeaderWeather ? 4 : 0,
-              }}
-            >
-              {place.name}
-            </Typography>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              {place.brand?.wikidata && (
+                <BrandLogo
+                  brand={{
+                    qid: place.brand.wikidata,
+                    name: place.brand.name,
+                    logoFile: brandDetail?.logoFile,
+                    kind: [],
+                  }}
+                  size={24}
+                />
+              )}
+              <Typography
+                ref={titleRef}
+                variant="h6"
+                gutterBottom
+                noWrap={detent === "peek"}
+                sx={{
+                  fontWeight: 600,
+                  pr: onClose && !showHeaderWeather ? 4 : 0,
+                  // Flex item alongside the brand logo now, not a lone block
+                  // child — needs its own shrink target so `noWrap`'s ellipsis
+                  // still kicks in at peek instead of the row just overflowing.
+                  flex: 1,
+                  minWidth: 0,
+                }}
+              >
+                {place.name}
+              </Typography>
+            </Box>
             {/* data-omx-peek-hidden: these rows are gone at peek, so the sheet
                 must not count them when it works out the collapsed height. */}
             {detent !== "peek" && (

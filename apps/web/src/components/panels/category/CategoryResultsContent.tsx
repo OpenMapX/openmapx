@@ -16,6 +16,7 @@ import {
   isAreaTooLarge,
   PANEL,
   resolveStopAsPlace,
+  useBrandLogos,
   useCategorySearchStore,
   usePlaceStore,
   useSidebarStore,
@@ -25,8 +26,10 @@ import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 import type * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { distinctBrandQids, placeBrandQid } from "@/components/map/CategoryResultMarkers";
 import { useExpandOnBackgroundTap } from "@/components/panels/sheet/sheetState";
+import { BrandLogo } from "@/components/search/BrandLogo";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { ResultItemName, ResultList, ResultListItem } from "@/components/ui/ResultListItem";
 import { attributionsForSources } from "@/lib/attributionForProviders";
@@ -81,12 +84,15 @@ function CategoryPlaceCard({
   onSelect,
   onHover,
   onHoverEnd,
+  brandLogos,
 }: {
   place: CategoryPlace;
   isHovered: boolean;
   onSelect: (place: CategoryPlace) => void;
   onHover: (id: string) => void;
   onHoverEnd: () => void;
+  /** QID -> Commons logo filename, resolved once for the whole result list. */
+  brandLogos: Map<string, string | undefined>;
 }) {
   const tp = useTranslations("place");
   const tc = useTranslations("common");
@@ -94,6 +100,7 @@ function CategoryPlaceCard({
   const tagLabel = place.category
     ? place.category.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
     : undefined;
+  const brandQid = placeBrandQid(place);
 
   return (
     <ResultListItem
@@ -103,7 +110,26 @@ function CategoryPlaceCard({
       selected={isHovered}
       hoverBg="rgba(0,0,0,0.06)"
     >
-      <ResultItemName>{place.name}</ResultItemName>
+      {brandQid ? (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <BrandLogo
+            brand={{
+              qid: brandQid,
+              name: place.brand?.name ?? place.name,
+              logoFile: brandLogos.get(brandQid),
+              kind: [],
+            }}
+            size={20}
+          />
+          {/* minWidth: 0 lets the name shrink/wrap inside the row instead of
+              pushing the fixed-size logo out or overflowing the list item. */}
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <ResultItemName>{place.name}</ResultItemName>
+          </Box>
+        </Box>
+      ) : (
+        <ResultItemName>{place.name}</ResultItemName>
+      )}
       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center", mb: 0.25 }}>
         {tagLabel && (
           <Typography
@@ -219,6 +245,10 @@ export function CategoryResultsContent() {
     registry,
     results?.flatMap((place) => place.provenance?.map((source) => source.sourceId) ?? []) ?? [],
   );
+  // Resolved once here (not per row — see useBrandLogos) so hook count stays
+  // fixed no matter how many rows carry a brand identity.
+  const brandQids = useMemo(() => distinctBrandQids(results ?? []), [results]);
+  const brandLogos = useBrandLogos(brandQids);
 
   // Auto-search when category becomes active or changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional trigger on activeCategory change
@@ -457,6 +487,7 @@ export function CategoryResultsContent() {
                 onSelect={handleSelectPlace}
                 onHover={setHoveredCategoryPlaceId}
                 onHoverEnd={() => setHoveredCategoryPlaceId(null)}
+                brandLogos={brandLogos}
               />
             )}
           />
