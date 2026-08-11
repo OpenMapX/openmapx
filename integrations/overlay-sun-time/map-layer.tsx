@@ -25,6 +25,8 @@ const SUBSOLAR_LAYER_ID = "sun-time-subsolar";
 const SUBSOLAR_IMAGE_ID = "sun-time-sun";
 /** Above this the sun icon is noise; the shading itself keeps explaining local time. */
 const SUBSOLAR_MAX_ZOOM = 4;
+/** Ambient world-zoom decoration, placed below all other markers in the overlay-markers slot. */
+const SUBSOLAR_ORDER = -1;
 
 // Drawn at 2x (56x56) and registered with pixelRatio 2 so it stays crisp on
 // retina while occupying 28x28 logical px on the map.
@@ -191,7 +193,7 @@ export default function SunTimeLayer() {
             },
           },
           "overlay-markers",
-          0,
+          SUBSOLAR_ORDER,
         );
       }
     };
