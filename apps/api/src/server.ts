@@ -5,8 +5,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
-import { registry } from "@integrations/transit-dynamic-registry/registry";
-import { listIdSchemeViews, registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
+import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import Fastify from "fastify";
 import { auth } from "./auth";
@@ -21,40 +20,7 @@ import {
   shutdownIntegrations,
 } from "./integration-host";
 import { redis } from "./redis";
-import { adminRoute } from "./routes/admin";
-import { adminCacheRoute } from "./routes/admin-cache";
-import { registerCapabilityBindingRoutes } from "./routes/admin-capability-bindings";
-import { registerAdminComposeRoutes } from "./routes/admin-compose";
-import { adminDawarichRoute } from "./routes/admin-dawarich";
-import { adminExtensionsRoute } from "./routes/admin-extensions";
-import { adminServicesRoute } from "./routes/admin-services";
-import { adminSettingsRoute } from "./routes/admin-settings";
-import { adminSystemRoute } from "./routes/admin-system";
-import { attributionRoute } from "./routes/attribution";
-import { authRoute } from "./routes/auth";
-import { capabilitiesRoute } from "./routes/capabilities";
-import { dataManagerRoute } from "./routes/data-manager";
-import { elevationRoute } from "./routes/elevation";
-import { imageProxyRoute } from "./routes/image-proxy";
-import { internalMetricsRoute } from "./routes/internal-metrics";
-import { internalPoiSourcesRoute } from "./routes/internal-poi-sources";
-import { isochroneRoute } from "./routes/isochrone";
-import { legalConfigRoute } from "./routes/legal-config";
-import { maptilerRoute } from "./routes/maptiler";
-import { meRoute } from "./routes/me";
-import { mobileAuthRoute } from "./routes/mobile-auth";
-import { neighborhoodsRoute } from "./routes/neighborhoods";
-import { offlinePackagesRoute } from "./routes/offline-packages";
-import { osmContributionsRoute } from "./routes/osm-contributions";
-import { placesRoute } from "./routes/places";
-import { reviewsKeypairRoute } from "./routes/reviews-keypair";
-import { savedRoute } from "./routes/saved";
-import { statusRoute } from "./routes/status";
-import { streetLevelRoute } from "./routes/street-level-imagery";
-import { tilesRoute } from "./routes/tiles";
-import { timelineRoute } from "./routes/timeline";
-import { trafficRoute } from "./routes/traffic";
-import { winterSportsRoute } from "./routes/winter-sports";
+import { registerCoreRoutes } from "./routes/index";
 import {
   corsOptions,
   makeRateLimitTierHook,
@@ -95,7 +61,6 @@ import {
   publicApiLimit,
   tilePublicApiLimit,
 } from "./utils/rate-limit";
-import { requireAuth } from "./utils/require-auth.js";
 
 const { default: pino } = await import("pino");
 const server = Fastify({
@@ -229,56 +194,16 @@ setIntegrationsReloadedHook(() => {
   });
 });
 
-// Better Auth handler
-await server.register(authRoute, {
+// Every route that isn't contributed by an integration, in one place — see
+// `routes/index.ts`. The OpenAPI generator mounts this same function on a bare
+// Fastify instance, so a core route registered anywhere else would be missing
+// from the committed `openapi.json`.
+await registerCoreRoutes(server, {
   authHandler: auth.handler,
   authUiOrigin:
     envString("CORS_ORIGIN", "http://localhost:3000").split(",")[0]?.trim() ||
     "http://localhost:3000",
 });
-
-// Health check
-server.get("/health", async () => ({ status: "ok" }));
-
-// Capabilities (service availability)
-await server.register(capabilitiesRoute, { prefix: "/api" });
-
-// Public legal facts for the /privacy page (hosting provider, etc.)
-await server.register(legalConfigRoute, { prefix: "/api" });
-await server.register(mobileAuthRoute, { prefix: "/api" });
-
-// Routes
-await server.register(placesRoute, { prefix: "/api" });
-await server.register(neighborhoodsRoute, { prefix: "/api" });
-await server.register(offlinePackagesRoute, { prefix: "/api" });
-
-await server.register(elevationRoute, { prefix: "/api" });
-await server.register(trafficRoute, { prefix: "/api" });
-await server.register(tilesRoute, { prefix: "/api" });
-await server.register(streetLevelRoute, { prefix: "/api" });
-await server.register(maptilerRoute, { prefix: "/api" });
-await server.register(isochroneRoute, { prefix: "/api" });
-await server.register(imageProxyRoute, { prefix: "/api" });
-await server.register(internalMetricsRoute, { prefix: "/api" });
-await server.register(internalPoiSourcesRoute, { prefix: "/api" });
-await server.register(winterSportsRoute, { prefix: "/api" });
-await server.register(reviewsKeypairRoute, { prefix: "/api" });
-await server.register(savedRoute, { prefix: "/api" });
-await server.register(osmContributionsRoute(), { prefix: "/api" });
-await server.register(timelineRoute, { prefix: "/api" });
-await server.register(meRoute, { prefix: "/api" });
-await server.register(statusRoute, { prefix: "/api" });
-await server.register(adminRoute, { prefix: "/api" });
-await server.register(adminServicesRoute, { prefix: "/api" });
-await server.register(adminDawarichRoute, { prefix: "/api" });
-await server.register(dataManagerRoute, { prefix: "/api" });
-await server.register(adminSettingsRoute, { prefix: "/api" });
-await server.register(adminExtensionsRoute, { prefix: "/api" });
-await server.register(adminCacheRoute, { prefix: "/api" });
-await server.register(adminSystemRoute, { prefix: "/api" });
-await server.register(attributionRoute, { prefix: "/api" });
-await registerCapabilityBindingRoutes(server);
-await registerAdminComposeRoutes(server);
 
 // Service registry — load service manifests from services/ directory
 // Must run before initIntegrations so requires: blocks can be resolved
@@ -307,16 +232,6 @@ await initIntegrations(server, [
   { directory: integrationsDir, isBuiltIn: true },
   { directory: customIntegrationsDir, isBuiltIn: false },
 ]);
-
-// Debug endpoint — returns every registered id-scheme view. Replaces the
-// value a static `PLACE_ID_SCHEMES` constant used to carry; reflects what
-// integrations actually registered at boot.
-server.get("/api/id-schemes", async () =>
-  listIdSchemeViews().map(({ buildUrl, ...view }) => ({
-    ...view,
-    linkable: typeof buildUrl === "function",
-  })),
-);
 
 // Prune old health history records daily
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -391,12 +306,6 @@ if (loadedCount === 0) {
   }
 }
 server.log.info(`Loaded ${loadedCount} integrations`);
-
-// Debug endpoint: list loaded dynamic transit providers (auth required)
-server.get("/api/transit/registry", async (req) => {
-  await requireAuth(req);
-  return { entries: registry.listEntries(), count: registry.entryCount };
-});
 
 // Warm the data-use-policy cache now that integrations are loaded, so the
 // synchronous preSerialization hook has the gated set ready before the first
