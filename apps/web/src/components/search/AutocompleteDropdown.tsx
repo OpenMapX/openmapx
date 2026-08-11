@@ -64,7 +64,7 @@ function getResultIcon(s: AutocompleteResult): React.ReactNode {
   }
 
   if (s.type === "brand" && s.brand) {
-    return <BrandLogo brand={s.brand} size={20} presetIconKey={s.presetIconKey} />;
+    return <BrandLogo brand={s.brand} size={20} />;
   }
 
   if (s.iconPath) return <CategorySvgIcon path={s.iconPath} />;

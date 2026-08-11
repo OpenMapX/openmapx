@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { BrandLogo } from "../BrandLogo";
 
@@ -22,12 +22,18 @@ describe("BrandLogo", () => {
 
   it("falls back to the preset icon when the brand has no logo", () => {
     const { container } = render(
-      <BrandLogo
-        brand={{ qid: "Q1", name: "Nameless", kind: ["brand"] }}
-        presetIconKey="maki-shop"
-      />,
+      <BrandLogo brand={{ qid: "Q1", name: "Nameless", kind: ["brand"] }} />,
     );
     expect(screen.queryByRole("img", { name: "Nameless" })).toBeNull();
     expect(container.firstChild).not.toBeNull();
+  });
+
+  it("falls back to the preset icon when the logo image fails to load", () => {
+    render(
+      <BrandLogo brand={{ qid: "Q1", name: "Aldi", kind: ["brand"], logoFile: "Aldi logo.svg" }} />,
+    );
+    const img = screen.getByRole("img", { name: "Aldi" });
+    fireEvent.error(img);
+    expect(screen.queryByRole("img", { name: "Aldi" })).toBeNull();
   });
 });

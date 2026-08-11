@@ -467,7 +467,6 @@ export function SearchBar() {
       sublabel: b.description ?? t("searchBrand"),
       type: "brand" as const,
       brand: b,
-      presetIconKey: undefined,
     }));
   }, [brandData, t]);
 
