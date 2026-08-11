@@ -3497,6 +3497,23 @@
         "x-openmapx-source": "integrations/overlay-satellite/index.ts"
       }
     },
+    "/api/integrations/overlay-sun-time/timezones": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlaySunTimeTimezones",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /timezones (overlay-sun-time)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-sun-time",
+        "x-openmapx-source": "integrations/overlay-sun-time/index.ts"
+      }
+    },
     "/api/integrations/overlay-weather-alerts/events": {
       "get": {
         "operationId": "getApiIntegrationsOverlayWeatherAlertsEvents",
