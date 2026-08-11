@@ -15,9 +15,13 @@ const DATA_PATH = join(
 const CACHE_CONTROL = "public, max-age=604800";
 
 export function setup(ctx: IntegrationContext): void {
+  // Serve the raw bytes rather than parsing to an object: Fastify would
+  // otherwise JSON.stringify the ~1.23 MB collection on every cache miss,
+  // and the parsed object holds several times the string's heap for the
+  // life of the process. The ETag is hashed off these same bytes, so it
+  // matches exactly what goes out on the wire.
   const raw = readFileSync(DATA_PATH, "utf8");
   const etag = `"${createHash("sha256").update(raw).digest("hex").slice(0, 16)}"`;
-  const collection = JSON.parse(raw) as unknown;
 
   ctx.registerRoute("GET", "/timezones", (req, reply) => {
     reply.header("ETag", etag);
@@ -28,6 +32,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    reply.send(collection);
+    reply.type("application/json");
+    reply.send(raw);
   });
 }

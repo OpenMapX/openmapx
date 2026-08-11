@@ -322,7 +322,10 @@ context conveniences are doing the work here:
 - **`ctx.registerRoute(method, path, handler, options?)`** mounts the route under
   the integration prefix. Pass `{ requireAuth: true }` to make the host reject
   unauthenticated callers with 401 before your handler runs; the authenticated
-  user id is then available as `req.userId`.
+  user id is then available as `req.userId`. The incoming request's headers are
+  forwarded as `req.headers` (`Record<string, string | string[] | undefined>`);
+  Node lowercases every header name when parsing the request, so read
+  `req.headers["if-none-match"]`, not `req.headers["If-None-Match"]`.
 - **`ctx.cache`** is a key-value store namespaced per integration
   (`int:<id>:<key>`), so you cannot collide with another integration's keys. Its
   `withCache(key, ttl, fn)` helper reads through on a miss and stores the result.

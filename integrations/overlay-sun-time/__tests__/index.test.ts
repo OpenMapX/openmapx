@@ -5,9 +5,11 @@ import { setup } from "../index";
 interface MockReply {
   statusCode: number;
   headers: Record<string, string>;
+  contentType: string | undefined;
   body: unknown;
   status: (code: number) => MockReply;
   header: (key: string, value: string) => MockReply;
+  type: (contentType: string) => MockReply;
   send: (body?: unknown) => MockReply;
 }
 
@@ -15,6 +17,7 @@ function mockReply(): MockReply {
   const reply: MockReply = {
     statusCode: 200,
     headers: {},
+    contentType: undefined,
     body: undefined,
     status(code) {
       reply.statusCode = code;
@@ -22,6 +25,10 @@ function mockReply(): MockReply {
     },
     header(key, value) {
       reply.headers[key] = value;
+      return reply;
+    },
+    type(contentType) {
+      reply.contentType = contentType;
       return reply;
     },
     send(body) {
@@ -32,10 +39,14 @@ function mockReply(): MockReply {
   return reply;
 }
 
-// Typed as RouteHandler (not a hand-rolled shape) so that if the real
-// dispatcher's req contract (apps/api/src/integration-routes.ts) ever drops
-// or renames a field — headers included — the call sites below stop
-// compiling instead of silently testing a shape production no longer sends.
+// Typed as RouteHandler (not a hand-rolled shape) so the object literals
+// below mirror the real dispatcher's req exactly — useful signal while
+// editing. It is not a compile-time guard on its own: integration test
+// files are excluded from apps/api/tsconfig.integrations.json, so this
+// file is never part of the build-time check. The guard that actually
+// enforces the contract is the dispatcher-level test in
+// apps/api/src/integration-host.test.ts, which runs the real,
+// unmocked dispatcher over real HTTP.
 function register(): RouteHandler {
   let handler: RouteHandler | undefined;
   const ctx = {
@@ -65,11 +76,23 @@ describe("overlay-sun-time /timezones", () => {
     expect(reply.statusCode).toBe(200);
     expect(reply.headers.ETag).toMatch(/^"[a-f0-9]{16}"$/);
     expect(reply.headers["Cache-Control"]).toContain("max-age=604800");
+    expect(reply.contentType).toBe("application/json");
+
+    // The body is served as the raw file text, not a parsed object, so
+    // Fastify never re-stringifies it per request. Asserting `typeof` here
+    // pins that contract; parsing it below both proves it's well-formed JSON
+    // (a truncated or corrupted body would throw) and re-derives the feature
+    // count from the actual bytes on the wire, not a value the handler
+    // happens to hold in memory.
+    expect(typeof reply.body).toBe("string");
+    const raw = reply.body as string;
+    expect(raw.length).toBeGreaterThan(1_000_000);
+    const parsed = JSON.parse(raw) as { features: unknown[] };
     // The vendored asset dissolves timezones that share identical current
     // UTC-offset/DST rules into one polygon (see timezones.meta.json), so
     // the real collection has 64 features, not the "hundreds" a naive
     // one-polygon-per-IANA-zone assumption would suggest.
-    expect((reply.body as { features: unknown[] }).features.length).toBeGreaterThan(55);
+    expect(parsed.features.length).toBeGreaterThan(55);
   });
 
   it("answers a matching If-None-Match with 304 and no body", async () => {
