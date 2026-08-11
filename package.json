@@ -35,7 +35,11 @@
     "check-license-metadata": "pnpm -C packages/cli exec tsx ../../scripts/check-license-metadata.ts",
     "check-toolchain-pins": "pnpm -C packages/cli exec tsx ../../scripts/check-toolchain-pins.ts",
     "gen-ev-vehicles": "pnpm -C packages/cli exec tsx ../../scripts/ev-vehicles/generate.ts",
-    "openmapx": "pnpm -C packages/cli exec tsx src/index.ts"
+    "openmapx": "pnpm -C packages/cli exec tsx src/index.ts",
+    "mobile:release:prepare": "pnpm -C apps/mobile exec tsx release/prepare.mts",
+    "mobile:release:ios": "pnpm -C apps/mobile exec tsx release/build-ios.mts",
+    "mobile:release:android": "pnpm -C apps/mobile exec tsx release/build-android.mts",
+    "mobile:release:verify": "pnpm -C apps/mobile exec tsx release/verify-artifact.mts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.7",

@@ -113,7 +113,73 @@ Do not resolve this by omitting notices or by quietly copying strings out of the
 i18n package to dodge the dependency. Both would make the distributed binary's
 licensing less true, not more.
 
-## Local release commands
+## The release pipeline
+
+Four commands, in order. None of them signs a store agreement, uploads a build,
+or submits for review.
+
+```bash
+pnpm mobile:release:prepare    # every gate, fail-closed; builds nothing
+pnpm mobile:release:ios        # xcodebuild archive + exportArchive
+pnpm mobile:release:android    # gradle bundleRelease, signed with the upload key
+pnpm mobile:release:verify     # inspect artifacts, write the provenance manifest
+```
+
+`apps/mobile/release/version.json` is the only source of the marketing version,
+the iOS build number, the Android version code, and the supported protocol
+range. Nothing derives a version from the clock or the branch — that choice is
+what makes the useful check possible: comparing against the last `mobile-v*` tag
+and refusing a rollback, a duplicate Android version code, or a raised protocol
+minimum that would strand deployed web builds. A version derived from the current
+time always looks newer, so it can never catch anything.
+
+### Prerequisites
+
+- **Disk**: roughly 15 GB free. An archive, an AAB, and a full Gradle build
+  directory are each large, and running out mid-archive leaves a corrupt one.
+- **JDK 17 or 21** on `JAVA_HOME` for Android. AGP's `JdkImageTransform` fails
+  on newer JDKs with a message that points nowhere near the real cause;
+  `prepare` checks this first so the failure is legible.
+- **Xcode 26.4+** with the iOS 26 SDK.
+- **Android signing properties** at `~/.openmapx/android-release.properties`,
+  mode 0600:
+
+  ```
+  storeFile=/absolute/path/to/openmapx-upload.jks
+  storePassword=…
+  keyAlias=openmapx-upload
+  keyPassword=…
+  ```
+
+  The build refuses a world-readable file, and never accepts these as
+  command-line arguments — arguments land in shell history and in every process
+  listing on the machine. Use `--unsigned` to rehearse without signing.
+
+### What the manifest promises
+
+`release-manifest.json` records the commit, the version, the dependency locks,
+the normalized generated-native hash, the toolchains, hashes of the permission
+and data-practice surfaces, public signing fingerprints, and a SHA-256 of each
+artifact.
+
+It does **not** promise bit-identical signed archives. Timestamps, signature
+nonces and the certificate all differ between runs, so claiming reproducibility
+would be false. What it promises is that the inputs are recorded — enough to
+answer, six months later, what was in build 47 and whether an equivalent one can
+be built again.
+
+Artifacts, symbols and the manifest go to encrypted offline release storage.
+None of them is committed; `dist/` is ignored.
+
+### Failure recovery
+
+`prepare` failing is the normal case and each message names the fix. The two
+that look alarming and are not: a dirty worktree (commit or stash — a release
+built from uncommitted changes cannot be reproduced), and a JDK version (set
+`JAVA_HOME`). A failed archive is safe to retry after deleting the partial
+`.xcarchive`; a failed Gradle build is safe to retry after `./gradlew clean`.
+
+## Local check commands
 
 ```bash
 # The boundary and configuration gates

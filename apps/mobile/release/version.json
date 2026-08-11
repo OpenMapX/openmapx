@@ -1,0 +1,14 @@
+{
+  "$comment": "The single source of every version number the release uses. Nothing derives a version from the clock or from the current branch: a build number that changes on its own cannot be compared with the last one, and comparing with the last one is the only way to catch a rollback before the store does.",
+  "marketingVersion": "1.0.0",
+  "iosBuildNumber": "1",
+  "androidVersionCode": 1,
+  "androidVersionName": "1.0.0",
+  "protocol": {
+    "$comment": "What this binary can negotiate. The minimum stays at 1 for as long as any deployed web build might still be speaking it.",
+    "min": 1,
+    "max": 2
+  },
+  "minimumWebBuild": null,
+  "channel": "beta"
+}
