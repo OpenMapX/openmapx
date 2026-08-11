@@ -34,6 +34,7 @@ import { useMap } from "@/lib/MapContext";
 import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
 import { useExploreReachResults } from "@/lib/useExploreReachResults";
 import { useOpeningHoursText } from "@/lib/useOpeningHoursText";
+import { BrandHeaderCard } from "./BrandHeaderCard";
 import { ExploreTravelTimeControl } from "./ExploreTravelTimeControl";
 
 const TRANSIT_MODE_ICONS: Partial<Record<TransportMode, typeof TrainIcon>> = {
@@ -183,6 +184,7 @@ export function CategoryResultsContent() {
   } = useCategorySearchStore();
   const anchor = useCategorySearchStore((s) => s.anchor);
   const adHocLabel = useCategorySearchStore((s) => s.adHocLabel);
+  const activeBrand = useCategorySearchStore((s) => s.activeBrand);
   const mode = useCategorySearchStore((s) => s.mode);
   const autoRefresh = useCategorySearchStore((s) => s.autoRefresh);
   const setAutoRefresh = useCategorySearchStore((s) => s.setAutoRefresh);
@@ -293,6 +295,7 @@ export function CategoryResultsContent() {
       onClick={expandOnBackgroundTap}
       sx={{ flex: 1, overflowY: "auto", pt: { xs: 2, sm: "72px" } }}
     >
+      <BrandHeaderCard />
       {(anchor || activeCategory || isViewportText) && (
         <Box
           sx={{
@@ -409,7 +412,9 @@ export function CategoryResultsContent() {
               color: "text.secondary",
             }}
           >
-            {ts("noResultsFound")}
+            {activeBrand
+              ? ts("noBrandLocationsInView", { brand: activeBrand.name })
+              : ts("noResultsFound")}
           </Typography>
         </Box>
       )}

@@ -253,6 +253,7 @@
     "searchBrand": "Kette",
     "searchInArea": "In diesem Bereich suchen",
     "noResultsFound": "Keine Ergebnisse in diesem Bereich gefunden.",
+    "noBrandLocationsInView": "Keine {brand}-Standorte in diesem Ausschnitt. Zoome heraus und suche erneut.",
     "noStopsFound": "Keine Haltestellen in diesem Bereich gefunden.",
     "failedToLoad": "Ergebnisse konnten nicht geladen werden. Erneut versuchen.",
     "zoomInToSearch": "Näher heranzoomen, um Ergebnisse in diesem Bereich zu sehen.",
