@@ -67,7 +67,7 @@
     }
   },
   "backend": {
-    "routes": true
+    "routes": false
   },
   "healthCheck": [
     {

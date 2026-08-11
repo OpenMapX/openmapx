@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -243,5 +251,31 @@ describe("against the real repository", () => {
   it("reads requireAuth off the options argument", () => {
     const authed = collectIntegrationRoutes(REPO_ROOT).filter((route) => route.requireAuth);
     expect(authed.length).toBeGreaterThan(0);
+  });
+
+  it("agrees with what every manifest declares under backend.routes", () => {
+    const registers = new Set(collectIntegrationRoutes(REPO_ROOT).map((r) => r.integrationId));
+
+    const integrationsDir = join(REPO_ROOT, "integrations");
+    const claimsRoutes: string[] = [];
+    const claimsNone: string[] = [];
+
+    for (const dir of readdirSync(integrationsDir).sort()) {
+      if (dir === "_template") continue;
+      const manifestPath = join(integrationsDir, dir, "manifest.json");
+      if (!existsSync(manifestPath)) continue;
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+        id?: string;
+        backend?: { routes?: boolean };
+      };
+      const id = manifest.id ?? dir;
+      if (manifest.backend?.routes === true) claimsRoutes.push(id);
+      else claimsNone.push(id);
+    }
+
+    // A manifest that claims routes it does not register is a lie the admin UI
+    // repeats; one that registers routes without declaring them hides a surface.
+    expect(claimsRoutes.filter((id) => !registers.has(id))).toEqual([]);
+    expect(claimsNone.filter((id) => registers.has(id))).toEqual([]);
   });
 });
