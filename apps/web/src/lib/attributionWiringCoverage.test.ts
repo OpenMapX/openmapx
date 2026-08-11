@@ -136,6 +136,7 @@ const NO_CREDIT_OWED: Record<string, string> = {
   "overlay-cycling":
     "restyles the basemap's own `transportation`/`poi` source-layers; the base style's credits already cover it",
   "overlay-tool-measurement": "draws only the user's own measurement geometry — no external data",
+  "overlay-sun-time": "computes the day/night terminator from local solar math — no external data",
 };
 
 interface Candidate {

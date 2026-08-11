@@ -205,6 +205,7 @@ export { decodePolyline, encodePolyline } from "./polyline";
 export { buildRideOpenUrl, rideQuoteBody } from "./rideLink";
 export { sectionSlug } from "./sectionSlug";
 export {
+  antisolarPoint,
   type ContourBranch,
   type DarkRegionProperties,
   darkRegion,

@@ -34,8 +34,19 @@ vi.stubGlobal("Image", StubImage);
 
 // `t(key)` under the mock returns "sunTime.<key>", so the assertions below
 // read against stable keys rather than copies of the message catalog.
-import SunTimeLegend from "../legend";
+import SunTimeLegend, { BAND_STOPS } from "../legend";
 import SunTimeLayer from "../map-layer";
+
+describe("BAND_STOPS", () => {
+  it("matches the accumulated alpha the map layer actually paints at each boundary", () => {
+    // 1 - (1 - BAND_OPACITY) ** k for k stacked fills, rounded to 2dp — not the
+    // stale hand-picked values (0.18/0.36) the strip used to hardcode.
+    expect(BAND_STOPS.find((s) => s.key === "day")?.color).toBe("rgba(11, 16, 38, 0)");
+    expect(BAND_STOPS.find((s) => s.key === "civil")?.color).toBe("rgba(11, 16, 38, 0.26)");
+    expect(BAND_STOPS.find((s) => s.key === "nautical")?.color).toBe("rgba(11, 16, 38, 0.42)");
+    expect(BAND_STOPS.find((s) => s.key === "night")?.color).toBe("rgba(11, 16, 38, 0.55)");
+  });
+});
 
 describe("SunTimeLegend", () => {
   beforeEach(() => {

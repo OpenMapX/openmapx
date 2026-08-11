@@ -9,14 +9,36 @@ import Typography from "@mui/material/Typography";
 import { useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
+import { BAND_COLOR, BAND_OPACITY } from "./map-layer";
 import { useSunTimeStore } from "./store";
 
-const BAND_STOPS = [
-  { key: "day", color: "rgba(11, 16, 38, 0)" },
-  { key: "civil", color: "rgba(11, 16, 38, 0.18)" },
-  { key: "nautical", color: "rgba(11, 16, 38, 0.36)" },
-  { key: "night", color: "rgba(11, 16, 38, 0.55)" },
-] as const;
+/**
+ * Band count reached at each labeled boundary, at the map layer's current
+ * 16-band/-18deg ramp (band `k` sits at altitude `-18 * k / 16`): civil
+ * twilight (-6deg) is crossed by band 6, nautical (-12deg) by band 11, and
+ * night is the full stack. If that ramp is ever retuned these counts need
+ * updating alongside it, but the accumulated alpha below always matches
+ * whatever BAND_OPACITY the map layer is actually painting with.
+ */
+const BAND_STOP_COUNTS = { day: 0, civil: 6, nautical: 11, night: 16 } as const;
+
+function hexChannel(hex: string, at: number): number {
+  return Number.parseInt(hex.slice(at, at + 2), 16);
+}
+
+/** The same accumulated-alpha formula map-layer.tsx uses for `k` stacked fills. */
+function bandRgba(bands: number): string {
+  const alpha = Number((1 - (1 - BAND_OPACITY) ** bands).toFixed(2));
+  const r = hexChannel(BAND_COLOR, 1);
+  const g = hexChannel(BAND_COLOR, 3);
+  const b = hexChannel(BAND_COLOR, 5);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+export const BAND_STOPS = (["day", "civil", "nautical", "night"] as const).map((key) => ({
+  key,
+  color: bandRgba(BAND_STOP_COUNTS[key]),
+}));
 
 function toDateInput(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");

@@ -12,8 +12,8 @@ const BAND_COUNT = 16;
 const BAND_LAYER_IDS = Array.from({ length: BAND_COUNT }, (_, i) => `sun-time-band-${i}`);
 
 /** Per-layer alpha chosen so sixteen stacked fills accumulate to ~0.55 in deep night. */
-const BAND_OPACITY = 1 - (1 - 0.55) ** (1 / BAND_COUNT);
-const BAND_COLOR = "#0b1026";
+export const BAND_OPACITY = 1 - (1 - 0.55) ** (1 / BAND_COUNT);
+export const BAND_COLOR = "#0b1026";
 const TICK_MS = 60_000;
 
 /** Reserved contiguous block below every other area overlay: the shading is
@@ -26,11 +26,13 @@ const SUBSOLAR_IMAGE_ID = "sun-time-sun";
 /** Above this the sun icon is noise; the shading itself keeps explaining local time. */
 const SUBSOLAR_MAX_ZOOM = 4;
 
+// Drawn at 2x (56x56) and registered with pixelRatio 2 so it stays crisp on
+// retina while occupying 28x28 logical px on the map.
 const SUN_ICON =
   "data:image/svg+xml;charset=utf-8," +
   encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">` +
-      `<circle cx="14" cy="14" r="7" fill="#ffca28" stroke="#f9a825" stroke-width="1.5"/>` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56">` +
+      `<circle cx="28" cy="28" r="14" fill="#ffca28" stroke="#f9a825" stroke-width="3"/>` +
       `</svg>`,
   );
 
@@ -89,28 +91,39 @@ export default function SunTimeLayer() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
+    // Guards a `map.once("idle", syncLayers)` scheduled by this effect run:
+    // if the overlay is hidden (or the component unmounts) mid-style-load,
+    // the cleanup below flips this before the idle event fires, so the stale
+    // closure bails out instead of re-adding layers nobody wants anymore.
+    let disposed = false;
+
+    const teardown = () => {
+      for (const id of BAND_LAYER_IDS) {
+        try {
+          if (map.getLayer(id)) map.removeLayer(id);
+        } catch {
+          // The style may already have dropped it during a base-map swap.
+        }
+        unregisterLayerSlot(id);
+      }
+      try {
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      } catch {
+        // ignore
+      }
+      try {
+        if (map.getLayer(SUBSOLAR_LAYER_ID)) map.removeLayer(SUBSOLAR_LAYER_ID);
+        if (map.getSource(SUBSOLAR_SOURCE_ID)) map.removeSource(SUBSOLAR_SOURCE_ID);
+      } catch {
+        // ignore
+      }
+      unregisterLayerSlot(SUBSOLAR_LAYER_ID);
+    };
+
     const syncLayers = () => {
+      if (disposed) return;
       if (!active) {
-        for (const id of BAND_LAYER_IDS) {
-          try {
-            if (map.getLayer(id)) map.removeLayer(id);
-          } catch {
-            // The style may already have dropped it during a base-map swap.
-          }
-          unregisterLayerSlot(id);
-        }
-        try {
-          if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        } catch {
-          // ignore
-        }
-        try {
-          if (map.getLayer(SUBSOLAR_LAYER_ID)) map.removeLayer(SUBSOLAR_LAYER_ID);
-          if (map.getSource(SUBSOLAR_SOURCE_ID)) map.removeSource(SUBSOLAR_SOURCE_ID);
-        } catch {
-          // ignore
-        }
-        unregisterLayerSlot(SUBSOLAR_LAYER_ID);
+        teardown();
         return;
       }
 
@@ -147,9 +160,11 @@ export default function SunTimeLayer() {
       });
 
       if (!map.hasImage(SUBSOLAR_IMAGE_ID)) {
-        const image = new Image(28, 28);
+        const image = new Image(56, 56);
         image.onload = () => {
-          if (!map.hasImage(SUBSOLAR_IMAGE_ID)) map.addImage(SUBSOLAR_IMAGE_ID, image);
+          if (!map.hasImage(SUBSOLAR_IMAGE_ID)) {
+            map.addImage(SUBSOLAR_IMAGE_ID, image, { pixelRatio: 2 });
+          }
         };
         image.src = SUN_ICON;
       }
@@ -182,11 +197,18 @@ export default function SunTimeLayer() {
     };
 
     syncLayers();
-    if (!active) return;
+    if (active) map.on("styledata", syncLayers);
 
-    map.on("styledata", syncLayers);
+    // Runs on every dep change, not just true unmount: disposing here cancels
+    // any pending idle callback from this run, and tearing down unconditionally
+    // (not just when `active` flips off) is what stops the 16 band layers, the
+    // source, and their layerStack slots from being stranded if the component
+    // unmounts — e.g. the overlay integration is disabled at runtime — while
+    // still active. Both calls are idempotent when there is nothing to do.
     return () => {
-      map.off("styledata", syncLayers);
+      disposed = true;
+      if (active) map.off("styledata", syncLayers);
+      teardown();
     };
   }, [mapRef, mapReady, styleVersion, active]);
 

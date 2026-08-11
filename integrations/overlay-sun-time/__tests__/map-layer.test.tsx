@@ -205,4 +205,52 @@ describe("SunTimeLayer subsolar marker", () => {
       | undefined;
     expect(data?.features).toHaveLength(1);
   });
+
+  it("registers the sun icon at 2x pixel ratio so it stays crisp on retina", () => {
+    const addImageSpy = vi.spyOn(fake.map, "addImage");
+    render(<SunTimeLayer />);
+
+    expect(addImageSpy).toHaveBeenCalledWith(SUBSOLAR_IMAGE_ID, expect.anything(), {
+      pixelRatio: 2,
+    });
+  });
+});
+
+describe("SunTimeLayer lifecycle teardown", () => {
+  it("removes every band layer, the subsolar marker, and both sources on unmount while still active", () => {
+    const { unmount } = render(<SunTimeLayer />);
+    expect(fake.state.layers.has("sun-time-band-0")).toBe(true);
+    expect(fake.state.layers.has(SUBSOLAR_LAYER_ID)).toBe(true);
+
+    unmount();
+
+    for (const id of BAND_LAYER_IDS) {
+      expect(fake.state.layers.has(id)).toBe(false);
+    }
+    expect(fake.state.sources.has(SOURCE_ID)).toBe(false);
+    expect(fake.state.layers.has(SUBSOLAR_LAYER_ID)).toBe(false);
+    expect(fake.state.sources.has(SUBSOLAR_SOURCE_ID)).toBe(false);
+  });
+
+  it("cancels a pending idle sync so hiding the overlay mid-style-load does not resurrect it", () => {
+    fake = createFakeMap({ styleLoaded: false });
+    render(<SunTimeLayer />);
+
+    // The style hasn't finished loading, so the first pass only scheduled
+    // itself on "idle" instead of adding anything.
+    expect(fake.state.layers.has("sun-time-band-0")).toBe(false);
+
+    act(() => {
+      useSunTimeStore.setState({ layerVisible: false });
+    });
+
+    // The style finishes loading only after the overlay was already hidden.
+    fake.state.styleLoaded = true;
+    act(() => {
+      fake.emit("idle");
+    });
+
+    expect(fake.state.layers.has("sun-time-band-0")).toBe(false);
+    expect(fake.state.sources.has(SOURCE_ID)).toBe(false);
+  });
 });

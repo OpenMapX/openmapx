@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  antisolarPoint,
   darkRegion,
   solarAltitudeDeg,
   solarPosition,
@@ -36,9 +37,19 @@ describe("subsolarPoint", () => {
   });
 
   it("puts the antisolar point at an altitude of -90", () => {
-    const { lat, lng } = subsolarPoint(JUN_SOLSTICE);
-    const antiLng = lng > 0 ? lng - 180 : lng + 180;
-    expect(solarAltitudeDeg(JUN_SOLSTICE, -lat, antiLng)).toBeCloseTo(-90, 2);
+    const { lat, lng } = antisolarPoint(JUN_SOLSTICE);
+    expect(solarAltitudeDeg(JUN_SOLSTICE, lat, lng)).toBeCloseTo(-90, 2);
+  });
+});
+
+describe("antisolarPoint", () => {
+  it("is the antipode of the subsolar point, wrapped into [-180, 180)", () => {
+    for (const date of [JUN_SOLSTICE, DEC_SOLSTICE, MAR_EQUINOX]) {
+      const { lat, lng } = antisolarPoint(date);
+      expect(solarAltitudeDeg(date, lat, lng)).toBeCloseTo(-90, 2);
+      expect(lng).toBeGreaterThanOrEqual(-180);
+      expect(lng).toBeLessThan(180);
+    }
   });
 });
 
@@ -96,8 +107,8 @@ describe("darkRegion", () => {
       for (const altitudeDeg of BAND_ALTITUDES) {
         const ring = darkRegion(date, altitudeDeg).geometry.coordinates[0] as [number, number][];
         const sub = subsolarPoint(date);
-        const antiLng = sub.lng > 0 ? sub.lng - 180 : sub.lng + 180;
-        expect(pointInRing(ring, antiLng, -sub.lat)).toBe(true);
+        const anti = antisolarPoint(date);
+        expect(pointInRing(ring, anti.lng, anti.lat)).toBe(true);
         expect(pointInRing(ring, sub.lng, sub.lat)).toBe(false);
       }
     }
@@ -122,6 +133,10 @@ describe("darkRegion", () => {
   it("throws for a positive altitude threshold", () => {
     expect(() => darkRegion(DATES[0], 10)).toThrow(RangeError);
   });
+
+  it("throws when stepDeg does not evenly divide 360", () => {
+    expect(() => darkRegion(DATES[0], -18, 7)).toThrow(RangeError);
+  });
 });
 
 describe("twilightBands", () => {
@@ -136,11 +151,10 @@ describe("twilightBands", () => {
   it("contains the antisolar point in every band", () => {
     for (const date of DATES) {
       const fc = twilightBands(date);
-      const sub = subsolarPoint(date);
-      const antiLng = sub.lng > 0 ? sub.lng - 180 : sub.lng + 180;
+      const anti = antisolarPoint(date);
       for (const feature of fc.features) {
         const ring = feature.geometry.coordinates[0] as [number, number][];
-        expect(pointInRing(ring, antiLng, -sub.lat)).toBe(true);
+        expect(pointInRing(ring, anti.lng, anti.lat)).toBe(true);
       }
     }
   });
@@ -164,5 +178,9 @@ describe("twilightBands", () => {
         }
       }
     }
+  });
+
+  it("throws when stepDeg does not evenly divide 360", () => {
+    expect(() => twilightBands(DATES[0], { stepDeg: 7 })).toThrow(RangeError);
   });
 });

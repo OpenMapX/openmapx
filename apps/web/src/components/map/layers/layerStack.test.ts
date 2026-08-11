@@ -5,6 +5,7 @@ import { createFakeMap } from "@/test";
 import {
   anchorMapLayers,
   type LayerRegistration,
+  layerRank,
   layerRegistrations,
   MAP_LAYER_SLOTS,
   planAnchorMoves,
@@ -186,6 +187,20 @@ describe("slot assignments", () => {
     } finally {
       for (const { id } of declarations) unregisterLayerSlot(id);
     }
+  });
+});
+
+describe("sun-time terminator band order", () => {
+  it("keeps the lowest twilight band above raster-overlays but below an ordinary area-overlays layer", () => {
+    // integrations/overlay-sun-time/map-layer.tsx reserves area-overlays
+    // orders -16..-1 for its 16 stacked band fills, below every other
+    // area-overlays layer. That only holds while no raster-overlays layer
+    // uses an order >= 984 (14 is the current maximum, in overlay-nautical's
+    // seamark layer) -- pin both boundaries so a raster-overlays layer
+    // crowding that ceiling fails loudly instead of silently painting over
+    // the shading.
+    expect(layerRank("area-overlays", -16)).toBeGreaterThan(layerRank("raster-overlays", 14));
+    expect(layerRank("area-overlays", -16)).toBeLessThan(layerRank("area-overlays", 0));
   });
 });
 

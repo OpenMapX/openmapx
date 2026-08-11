@@ -15,7 +15,7 @@ function norm360(deg: number): number {
   return v < 0 ? v + 360 : v;
 }
 
-/** Wrap a longitude into [-180, 180]. */
+/** Wrap a longitude into [-180, 180). */
 export function normalizeLongitude(lng: number): number {
   return ((((lng + 180) % 360) + 360) % 360) - 180;
 }
@@ -56,6 +56,12 @@ export function subsolarPoint(date: Date): { lng: number; lat: number } {
   return { lng: normalizeLongitude(-greenwichHourAngleDeg), lat: declinationDeg };
 }
 
+/** The antipode of `subsolarPoint` — the centre every twilight-band cap is built around. */
+export function antisolarPoint(date: Date): { lng: number; lat: number } {
+  const sub = subsolarPoint(date);
+  return { lng: normalizeLongitude(sub.lng + 180), lat: -sub.lat };
+}
+
 /** Solar altitude above the horizon in degrees, negative below it. */
 export function solarAltitudeDeg(date: Date, lat: number, lng: number): number {
   const { declinationDeg, greenwichHourAngleDeg } = solarPosition(date);
@@ -90,11 +96,6 @@ function destination(
     lngDeg * DEG +
     Math.atan2(Math.sin(brg) * Math.sin(d) * Math.cos(lat), Math.cos(d) - Math.sin(lat) * sinLat);
   return [destLng * RAD, destLat * RAD];
-}
-
-/** Reduce a degree value into (-180, 180], the same wrap `normalizeLongitude` uses. */
-function reduceTo180(deg: number): number {
-  return ((((deg + 180) % 360) + 360) % 360) - 180;
 }
 
 /**
@@ -137,8 +138,10 @@ function poleBranchRing(
 
     const asinTerm = Math.asin(C / R) * RAD;
     const psiTerm = Math.atan2(B, A) * RAD;
-    const near = reduceTo180(asinTerm - psiTerm);
-    const far = reduceTo180(180 - asinTerm - psiTerm);
+    // These candidate values are latitudes, not longitudes, but the wrap into
+    // [-180, 180) is the same modular arithmetic `normalizeLongitude` does.
+    const near = normalizeLongitude(asinTerm - psiTerm);
+    const far = normalizeLongitude(180 - asinTerm - psiTerm);
     const phi = Math.abs(near) <= 90.0000001 ? near : far;
     ring.push([lng, phi]);
   }
@@ -194,6 +197,11 @@ export function darkRegion(
       "darkRegion requires altitudeDeg <= 0: above the horizon, the cap radius exceeds 90 degrees and swallows both poles",
     );
   }
+  if (360 % stepDeg !== 0) {
+    throw new RangeError(
+      "darkRegion requires 360 % stepDeg === 0: otherwise the longitude sweep in poleBranchRing skips the closing vertex and the bearing sweep in capBranchRing leaves a wedge unsampled",
+    );
+  }
 
   const { declinationDeg, greenwichHourAngleDeg } = solarPosition(date);
   const northInside = declinationDeg <= altitudeDeg;
@@ -207,8 +215,8 @@ export function darkRegion(
     ring = poleBranchRing(declinationDeg, greenwichHourAngleDeg, altitudeDeg, stepDeg, northInside);
   } else {
     branch = "cap";
-    const sub = subsolarPoint(date);
-    ring = capBranchRing(-sub.lat, normalizeLongitude(sub.lng + 180), 90 + altitudeDeg, stepDeg);
+    const anti = antisolarPoint(date);
+    ring = capBranchRing(anti.lat, anti.lng, 90 + altitudeDeg, stepDeg);
   }
 
   return {
