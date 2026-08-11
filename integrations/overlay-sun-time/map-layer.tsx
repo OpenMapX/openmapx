@@ -16,6 +16,10 @@ const BAND_OPACITY = 1 - (1 - 0.55) ** (1 / BAND_COUNT);
 const BAND_COLOR = "#0b1026";
 const TICK_MS = 60_000;
 
+/** Reserved contiguous block below every other area overlay: the shading is
+ *  ambient, so place boundaries and imported geometry must read through it. */
+const BAND_ORDER_BASE = -BAND_COUNT;
+
 export default function SunTimeLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const layerVisible = useSunTimeStore((s) => s.layerVisible);
@@ -35,7 +39,7 @@ export default function SunTimeLayer() {
   }, [active, timeMs]);
 
   const instant = timeMs ?? nowMs;
-  const bands = useMemo(() => twilightBands(new Date(instant)), [instant]);
+  const bands = useMemo(() => twilightBands(new Date(instant), { bands: BAND_COUNT }), [instant]);
 
   const { publish, clear } = useGeoJsonSourceDataBridge({
     mapRef,
@@ -95,7 +99,7 @@ export default function SunTimeLayer() {
             },
           },
           "area-overlays",
-          band,
+          BAND_ORDER_BASE + band,
         );
       });
     };
