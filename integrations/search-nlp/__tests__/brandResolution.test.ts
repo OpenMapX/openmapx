@@ -25,6 +25,28 @@ describe("resolveBrandPredicates", () => {
 
   it("leaves filters with no brand predicate untouched", () => {
     const filter = { selectors: [{ tags: [{ key: "amenity", op: "=" as const, value: "cafe" }] }] };
+    // Referential identity, not just deep equality: the early `return filter`
+    // for a require-less filter must hand back the same object, not a copy.
+    expect(resolveBrandPredicates(filter, "de")).toBe(filter);
+  });
+
+  it("leaves an alias-only match untouched", () => {
+    // "Aldi" is an exact alias of both "Aldi Nord" and "Aldi Süd" — the catalog
+    // has no brand literally named "Aldi", so suggestBrands ranks the top hit
+    // matchedOn "alias" (its winning candidate is the alias "Aldi", not the
+    // entry's own display name "Aldi Nord"/"Aldi Süd"). Guard 2 (exact string
+    // equality against `top.name`) already rejects this on its own, since
+    // "Aldi" !== "Aldi Nord". Given @openmapx/brands' matcher scoring — a
+    // name-tier hit always outscores an alias-tier hit on the same entry when
+    // both match the query equally well (see matcher.ts's 0.9x alias
+    // penalty) — `matchedOn === "name"` is implied whenever guard 2 passes,
+    // so this fixture cannot isolate guard 1 as independently load-bearing
+    // from guard 2. It still documents real, correct behavior for a chain
+    // whose brand identity is split by region in the catalog.
+    const filter = {
+      selectors: [{ tags: [{ key: "shop", op: "=" as const, value: "supermarket" }] }],
+      require: [{ key: "brand", op: "=" as const, value: "Aldi" }],
+    };
     expect(resolveBrandPredicates(filter, "de")).toEqual(filter);
   });
 

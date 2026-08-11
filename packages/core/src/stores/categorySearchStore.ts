@@ -4,7 +4,22 @@ import type { CategoryId } from "../types/category";
 import type { BoundingBox } from "../types/geometry";
 import type { Place } from "../types/place";
 import type { OverpassFilter } from "../utils/overpassFilter";
+import { useCategoryFacetStore } from "./categoryFacetStore";
 import { useOpeningHoursStore } from "./openingHoursStore";
+
+/**
+ * The `brand` facet (`packages/core/src/utils/categoryFacets.ts`) is written
+ * by `nlpSearchStore.applyFacets` into the global facet store whenever an NLP
+ * intent resolves a chain name to a `brand:wikidata` predicate. That
+ * selection has no query scope of its own, so it must be cleared at every
+ * point below that already resets ad-hoc search state — otherwise a resolved
+ * chain search silently narrows the next unrelated search (no visible chip,
+ * since the brand row only renders at 2+ brands; no panel badge, since the
+ * facet is `placement: "inline"`).
+ */
+function clearBrandFacet(): void {
+  useCategoryFacetStore.getState().clearFacets(["brand"]);
+}
 
 export const AD_HOC_CATEGORY_ID = "nlp:filter";
 
@@ -50,7 +65,8 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
   adHocFilter: null,
   adHocLabel: null,
   activeBrand: null,
-  setActiveCategory: (activeCategory) =>
+  setActiveCategory: (activeCategory) => {
+    clearBrandFacet();
     set({
       activeCategory,
       mode: "category",
@@ -58,14 +74,16 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
       adHocFilter: null,
       adHocLabel: null,
       activeBrand: null,
-    }),
+    });
+  },
   setSearchBbox: (searchBbox) => set({ searchBbox }),
   setMapMoved: (mapMoved) => set({ mapMoved }),
   setHoveredCategoryPlaceId: (hoveredCategoryPlaceId) => set({ hoveredCategoryPlaceId }),
   setAnchor: (anchor) => set({ anchor }),
   openExploreBox: (anchor) => set({ anchor, exploreBoxOpen: true }),
   closeExploreBox: () => set({ exploreBoxOpen: false }),
-  setExploreText: (textQuery) =>
+  setExploreText: (textQuery) => {
+    clearBrandFacet();
     set({
       mode: "text",
       textQuery,
@@ -73,9 +91,11 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
       adHocFilter: null,
       adHocLabel: null,
       activeBrand: null,
-    }),
+    });
+  },
   setAutoRefresh: (autoRefresh) => set({ autoRefresh }),
-  setAdHocFilter: (adHocFilter, adHocLabel) =>
+  setAdHocFilter: (adHocFilter, adHocLabel) => {
+    clearBrandFacet();
     set({
       adHocFilter,
       adHocLabel,
@@ -83,7 +103,8 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
       mode: "category",
       textQuery: "",
       activeBrand: null,
-    }),
+    });
+  },
   setBrandFilter: (brand, adHocFilter) =>
     set({
       adHocFilter,
@@ -95,6 +116,7 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
     }),
   clearCategory: () => {
     useOpeningHoursStore.getState().reset();
+    clearBrandFacet();
     set({
       activeCategory: null,
       searchBbox: null,
