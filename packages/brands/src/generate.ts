@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BrandKind } from "@openmapx/core";
+import { BRAND_QID_KEYS } from "@openmapx/core/utils/brandFilter";
 import type { BrandArtifact, BrandEntry } from "./types.ts";
 
 const require = createRequire(import.meta.url);
@@ -32,12 +33,15 @@ function resolvePackageRoot(packageName: string): string {
 
 const nsiRoot = resolvePackageRoot("name-suggestion-index");
 
-/** Ordered by precedence: the first key present decides the entry's primary kind. */
-const QID_KEYS: { key: string; kind: BrandKind }[] = [
-  { key: "brand:wikidata", kind: "brand" },
-  { key: "operator:wikidata", kind: "operator" },
-  { key: "network:wikidata", kind: "network" },
-];
+/**
+ * The `*:wikidata` keys, in precedence order — the first one present on an item
+ * decides its primary kind. Derived from core's `BRAND_QID_KEYS` rather than
+ * restated, so there is exactly one definition of the brand-identity keys.
+ */
+const QID_KEYS: { key: string; kind: BrandKind }[] = BRAND_QID_KEYS.map((key) => ({
+  key,
+  kind: key.split(":")[0] as BrandKind,
+}));
 
 /** OSM keys that identify what kind of place this is, used for icon selection. */
 const PRIMARY_TAG_KEYS = [

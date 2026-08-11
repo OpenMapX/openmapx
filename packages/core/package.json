@@ -38,6 +38,10 @@
       "types": "./src/services/secret-key.ts",
       "default": "./src/services/secret-key.ts"
     },
+    "./utils/brandFilter": {
+      "types": "./src/utils/brandFilter.ts",
+      "default": "./src/utils/brandFilter.ts"
+    },
     "./utils/poiConflation": {
       "types": "./src/utils/poiConflation.ts",
       "default": "./src/utils/poiConflation.ts"
