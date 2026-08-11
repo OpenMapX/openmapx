@@ -10,7 +10,13 @@ import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
-import { isCityOrSmaller, isLodging, useBrandDetail, usePlaceStore } from "@openmapx/core";
+import {
+  firstBrandIdentity,
+  isCityOrSmaller,
+  isLodging,
+  useBrandDetail,
+  usePlaceStore,
+} from "@openmapx/core";
 import { useReviewAggregate } from "@openmapx/mangrove-react";
 import type { MergedRoute, TransportMode } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
@@ -167,10 +173,17 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
     [dockedActionsShown, place],
   );
   useDetailChrome(headerNode, footerNode);
+  // Same precedence chain the pin and the list row use (brand: >
+  // network: > operator:) so a pure-OSM place — the default for any
+  // self-hoster without Overture ingested, and the only path for
+  // network:/operator: identities — still shows a header logo, not just
+  // places Overture happened to gap-fill `place.brand` onto.
+  const brandIdentity = firstBrandIdentity(place.osmTags);
+  const brandQid = brandIdentity?.qid ?? place.brand?.wikidata;
   // Unconditional: `useBrandDetail` disables itself internally when the QID
   // is null, so this stays a stable hook call across places with and without
   // a brand identity.
-  const { data: brandDetail } = useBrandDetail(place.brand?.wikidata ?? null);
+  const { data: brandDetail } = useBrandDetail(brandQid ?? null);
   const [lng, lat] = place.coordinates;
   const headerAggregateQuery = useReviewAggregate<ReviewAggregate>(lat, lng, place.name, {
     osmId: place.ids?.osm,
@@ -393,14 +406,14 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
                 place keeps the original bare `Typography` exactly as before —
                 no wrapper, no extra sx — so unbranded results (still the
                 large majority) render unchanged. */}
-            {place.brand?.wikidata ? (
+            {brandQid ? (
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                 <BrandLogo
                   brand={{
-                    qid: place.brand.wikidata,
-                    name: place.brand.name,
+                    qid: brandQid,
+                    name: place.brand?.name ?? place.name,
                     logoFile: brandDetail?.logoFile,
-                    kind: ["brand"],
+                    kind: brandIdentity ? [brandIdentity.kind] : ["brand"],
                   }}
                   size={24}
                 />

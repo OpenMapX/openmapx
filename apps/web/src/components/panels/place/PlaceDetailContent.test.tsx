@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DetailChromeContext } from "../DetailShell";
 import { MobileSheetContext } from "../sheet/sheetState";
 import { PlaceDetailContent } from "./PlaceDetailContent";
@@ -16,6 +16,24 @@ vi.mock("next-intl", () => ({
 vi.mock("@openmapx/mangrove-react", () => ({
   useReviewAggregate: () => ({ data: undefined, isLoading: false }),
 }));
+
+// useBrandDetail is the only hook here that hits the network; stub it so
+// the brand-header tests below control `logoFile` deterministically instead
+// of depending on a real fetch. All other @openmapx/core exports pass through
+// untouched — in particular firstBrandIdentity, which PlaceDetailContent
+// itself now calls to resolve a place's brand identity from its osmTags.
+const mockUseBrandDetail = vi.fn();
+vi.mock("@openmapx/core", async () => {
+  const actual = await vi.importActual<typeof import("@openmapx/core")>("@openmapx/core");
+  return {
+    ...actual,
+    useBrandDetail: (qid: string | null) => mockUseBrandDetail(qid),
+  };
+});
+
+beforeEach(() => {
+  mockUseBrandDetail.mockReturnValue({ data: undefined });
+});
 
 vi.mock("./PlacePhotoGallery", () => ({
   PlacePhotoGallery: () => null,
@@ -216,5 +234,59 @@ describe("PlaceDetailContent mobile-sheet chrome bridge", () => {
     sentinelState.passed = false;
     const { container } = renderChrome("full", true);
     expect(container.querySelector("[inert]")).toBeNull();
+  });
+});
+
+function renderPlace(p: Place) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <MobileSheetContext.Provider
+        value={{ detent: "mid", isExpanded: false, inSheet: true, snapTo: () => {} }}
+      >
+        <PlaceDetailContent place={p} isLoading={false} />
+      </MobileSheetContext.Provider>
+    </QueryClientProvider>,
+  );
+}
+
+describe("PlaceDetailContent brand header", () => {
+  // Regression coverage: the header used to gate on `place.brand?.wikidata`
+  // alone, which Overture populates but a pure-OSM place never carries — the
+  // default for a self-hoster without Overture ingested, and the only path
+  // for network:/operator: identities. It must use the same
+  // brand:>network:>operator: precedence the pin and the list row use.
+  it("shows a logo for a place whose only identity is operator:wikidata (no Overture place.brand)", () => {
+    mockUseBrandDetail.mockReturnValue({ data: { logoFile: "Q-Park logo.svg" } });
+    const osmPlace = {
+      id: "p-op",
+      name: "Q-Park Neumarkt",
+      coordinates: [6.0839, 50.7753],
+      osmTags: { "operator:wikidata": "Q1127798" },
+    } as unknown as Place;
+
+    renderPlace(osmPlace);
+
+    expect(screen.getByAltText("Q-Park Neumarkt")).toBeInTheDocument();
+  });
+
+  it("shows a logo for a place whose only identity is network:wikidata (EV charging)", () => {
+    mockUseBrandDetail.mockReturnValue({ data: { logoFile: "Ionity logo.svg" } });
+    const osmPlace = {
+      id: "p-net",
+      name: "Ionity Charger",
+      coordinates: [6.0839, 50.7753],
+      osmTags: { "network:wikidata": "Q42717773" },
+    } as unknown as Place;
+
+    renderPlace(osmPlace);
+
+    expect(screen.getByAltText("Ionity Charger")).toBeInTheDocument();
+  });
+
+  it("renders the plain title, unchanged, for a place with no brand identity at all", () => {
+    renderPlace(place);
+    expect(screen.getByText("Test Place")).toBeInTheDocument();
+    expect(screen.queryByRole("img")).toBeNull();
   });
 });
