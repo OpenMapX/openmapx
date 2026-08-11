@@ -5,6 +5,7 @@ import type {
   IntegrationContext,
   NlpProvider,
 } from "@openmapx/integration-framework";
+import { resolveBrandPredicates } from "./brand-resolution";
 import { createChain } from "./orchestrator";
 import {
   DEFAULT_OLLAMA_ENDPOINT,
@@ -316,8 +317,20 @@ export function setup(ctx: IntegrationContext): void {
         return chain.parse(query, parseCtx);
       });
 
+      // Re-resolved on every request (cached or not) rather than baked into
+      // the cached intent, so a catalog update takes effect immediately and
+      // this stays a pure, side-effect-free step right before the response.
+      // No country is available on this request; suggestBrands ranks
+      // globally in that case, which only weakens disambiguation, never
+      // correctness (an exact-name match still requires no substitutable
+      // ambiguity).
+      const resolvedIntent = {
+        ...result.intent,
+        filter: resolveBrandPredicates(result.intent.filter, undefined),
+      };
+
       const resolvedBbox = await resolveSpatialConstraint(
-        result.intent.spatial_constraint,
+        resolvedIntent.spatial_constraint,
         mapBbox,
         mapCenter,
         ctx,
@@ -325,7 +338,7 @@ export function setup(ctx: IntegrationContext): void {
       );
 
       reply.send({
-        intent: result.intent,
+        intent: resolvedIntent,
         resolvedBbox,
         provider: result.provider.id,
         providerLabel: result.provider.label,

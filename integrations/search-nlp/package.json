@@ -21,6 +21,7 @@
     "@ai-sdk/google": "^4.0.39",
     "@ai-sdk/openai": "^4.0.36",
     "@ai-sdk/openai-compatible": "^3.0.27",
+    "@openmapx/brands": "workspace:^",
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openrouter/ai-sdk-provider": "^3.0.0",
