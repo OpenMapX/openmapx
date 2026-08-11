@@ -205,6 +205,13 @@ export { decodePolyline, encodePolyline } from "./polyline";
 export { buildRideOpenUrl, rideQuoteBody } from "./rideLink";
 export { sectionSlug } from "./sectionSlug";
 export {
+  normalizeLongitude,
+  type SolarPosition,
+  solarAltitudeDeg,
+  solarPosition,
+  subsolarPoint,
+} from "./solar";
+export {
   bearingDegrees,
   type DirectionSector,
   directionSector,
