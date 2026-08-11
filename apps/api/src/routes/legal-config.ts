@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { declareRouteAuth } from "../utils/route-auth";
 import { resolveSettings } from "./admin-settings";
 
 /**
@@ -20,6 +21,8 @@ function retentionDays(raw: unknown): number {
 const asString = (v: unknown): string => (typeof v === "string" ? v : "");
 
 export const legalConfigRoute: FastifyPluginAsync = async (fastify) => {
+  declareRouteAuth(fastify, "public");
+
   fastify.get("/legal-config", async (_req, reply) => {
     const groups = await resolveSettings();
     const legal = groups.find((g) => g.id === "legal");

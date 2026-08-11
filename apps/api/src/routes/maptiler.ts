@@ -1,6 +1,7 @@
 import { USER_AGENT } from "@openmapx/core";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { envString } from "../utils/env.js";
+import { declareRouteAuth } from "../utils/route-auth.js";
 
 const MAPTILER_ORIGIN = "https://api.maptiler.com";
 
@@ -152,6 +153,8 @@ function getRequestedMaptilerPath(req: FastifyRequest): string | null {
 }
 
 export const maptilerRoute: FastifyPluginAsync = async (fastify) => {
+  declareRouteAuth(fastify, "public");
+
   fastify.get("/maptiler/*", async (req, reply) => {
     const key = maptilerKey();
     if (!key) {

@@ -1,8 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
 import { elevationService } from "../services/elevation.service.js";
 import { hashKey, TTL, withCache } from "../utils/cache.js";
+import { declareRouteAuth } from "../utils/route-auth.js";
 
 export const elevationRoute: FastifyPluginAsync = async (fastify) => {
+  declareRouteAuth(fastify, "public");
+
   fastify.post<{
     Body: {
       coordinates: [number, number][];

@@ -37,6 +37,7 @@ import { dockerComposeLogs, dockerComposePs } from "../utils/docker-compose";
 import { maskSecretConfigValues } from "../utils/mask-config.js";
 import { serviceActionLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
+import { declareRouteAuth } from "../utils/route-auth.js";
 import { getSecretFields, validateConfigBody } from "../utils/validate-config-body";
 
 const { getProvidedCapabilityNames, serviceConfigEnvPrefix } = coreServices;
@@ -66,6 +67,8 @@ function toIdList(input: unknown): string[] {
 }
 
 export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
+  declareRouteAuth(app, "admin");
+
   app.addHook("preHandler", async (request, _reply) => {
     request.adminSession = await requireAdmin(request);
   });

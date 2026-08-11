@@ -2,11 +2,14 @@ import type { FastifyPluginAsync } from "fastify";
 import { getIsochroneProvider } from "../services/isochrone/factory.js";
 import type { IsochroneTravelMode } from "../services/isochrone/provider.js";
 import { hashKey, round, TTL, withCache } from "../utils/cache.js";
+import { declareRouteAuth } from "../utils/route-auth.js";
 
 const MAX_CONTOURS = 4;
 const VALID_MODES = new Set<IsochroneTravelMode>(["driving", "walking", "cycling"]);
 
 export const isochroneRoute: FastifyPluginAsync = async (fastify) => {
+  declareRouteAuth(fastify, "public");
+
   fastify.get<{
     Querystring: { lat: string; lng: string; mode: string; contours: string };
   }>("/isochrone", {

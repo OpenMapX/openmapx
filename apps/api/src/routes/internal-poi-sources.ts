@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { getAllPoiSources } from "@openmapx/poi-source-registry";
 import type { FastifyInstance } from "fastify";
+import { declareRouteAuth } from "../utils/route-auth";
 
 /**
  * data-manager → apps/api discovery cross-check endpoint.
@@ -14,6 +15,8 @@ import type { FastifyInstance } from "fastify";
  * operational topology (which sources exist on apps/api).
  */
 export async function internalPoiSourcesRoute(fastify: FastifyInstance): Promise<void> {
+  declareRouteAuth(fastify, "internal");
+
   fastify.get("/internal/poi-sources/count", async (_request, reply) => {
     const sources = getAllPoiSources();
     const ids = sources.map((s) => s.id).sort();

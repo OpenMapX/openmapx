@@ -7,6 +7,7 @@ import { getCoreImageStatuses } from "../services/system-maintenance";
 import { writeAuditLog } from "../utils/audit-log";
 import { systemMaintenanceLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
+import { declareRouteAuth } from "../utils/route-auth";
 
 export const SYSTEM_UPDATE_CONFIRMATION = "UPDATE OPENMAPX";
 
@@ -60,6 +61,8 @@ async function activeMaintenanceJob() {
 }
 
 export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
+  declareRouteAuth(app, "admin");
+
   app.addHook("preHandler", async (request) => {
     request.adminSession = await requireAdmin(request);
   });

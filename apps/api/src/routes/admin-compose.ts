@@ -6,6 +6,7 @@ import { getServiceRegistry } from "../services/service-registry";
 import { dockerComposeAction } from "../utils/docker-compose";
 import { envString } from "../utils/env";
 import { requireAdmin } from "../utils/require-admin";
+import { declareRouteAuth } from "../utils/route-auth";
 
 const { buildAppApiServiceEnv, renderCompose } = services;
 
@@ -20,6 +21,8 @@ export async function registerAdminComposeRoutes(
   // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
   app: FastifyInstance<any, any, any, any>,
 ): Promise<void> {
+  declareRouteAuth(app, "admin");
+
   // GET /api/admin/compose/preview — render generated compose YAML from registry
   app.get("/api/admin/compose/preview", async (req, reply) => {
     await requireAdmin(req);

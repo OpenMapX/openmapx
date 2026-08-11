@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { sql } from "../db/index.js";
 import { redis } from "../redis.js";
 import { tryAdminSession } from "../utils/require-admin.js";
+import { declareRouteAuth } from "../utils/route-auth.js";
 
 const TIMEOUT = 5_000;
 
@@ -213,6 +214,8 @@ async function checkSmtp(): Promise<ServiceStatus> {
 }
 
 export const statusRoute: FastifyPluginAsync = async (fastify) => {
+  declareRouteAuth(fastify, "public");
+
   fastify.get("/status", async (request) => {
     // Platform checks (always present, not integration-managed)
     const platformResults = await Promise.all([

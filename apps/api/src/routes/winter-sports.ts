@@ -2,10 +2,13 @@ import { OverpassRateLimitError } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
 import { fetchWinterSportsFeatures } from "../services/winter-sports/overpass";
 import { round, TTL, withCacheStatus } from "../utils/cache.js";
+import { declareRouteAuth } from "../utils/route-auth.js";
 
 const MAX_BBOX_SPAN = 0.5;
 
 export const winterSportsRoute: FastifyPluginAsync = async (fastify) => {
+  declareRouteAuth(fastify, "public");
+
   fastify.get<{
     Querystring: { south: string; west: string; north: string; east: string };
   }>("/winter-sports/features", {

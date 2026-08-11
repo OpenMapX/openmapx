@@ -2,6 +2,7 @@ import { OverpassRateLimitError, OverpassTimeoutError } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
 import { fetchNeighborhoods } from "../services/neighborhoods/index.js";
 import { round, TTL, withCacheStatus } from "../utils/cache.js";
+import { declareRouteAuth } from "../utils/route-auth.js";
 
 /**
  * City bboxes can be large; cap the span so we never hand Overpass an
@@ -10,6 +11,8 @@ import { round, TTL, withCacheStatus } from "../utils/cache.js";
 const MAX_BBOX_SPAN = 1.5;
 
 export const neighborhoodsRoute: FastifyPluginAsync = async (fastify) => {
+  declareRouteAuth(fastify, "public");
+
   fastify.get<{
     Querystring: { south: string; west: string; north: string; east: string; lang?: string };
   }>("/neighborhoods", {

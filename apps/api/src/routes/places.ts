@@ -28,6 +28,7 @@ import { getPlaceKnowledge } from "../services/knowledge/index";
 import { buildReviewLinks } from "../services/review-links";
 import { hashKey, TTL, withCache } from "../utils/cache.js";
 import { createLimiter } from "../utils/concurrency.js";
+import { declareRouteAuth } from "../utils/route-auth.js";
 
 // Bound concurrent place enrichments. Each enrichPlace runs a heavy fan-out
 // (knowledge sources, photo + review providers, and sometimes multi-MB OSM
@@ -319,6 +320,8 @@ interface CacheableError {
 }
 
 export const placesRoute: FastifyPluginAsync = async (fastify) => {
+  declareRouteAuth(fastify, "public");
+
   fastify.get<{
     Params: { id: string };
     Querystring: PlaceByIdQuery;

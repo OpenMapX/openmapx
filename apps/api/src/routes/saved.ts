@@ -13,6 +13,7 @@ import {
   placesToKml,
 } from "../utils/geo-export";
 import { getUserId, requireAuthHook } from "../utils/require-auth";
+import { declareRouteAuth } from "../utils/route-auth";
 
 const DEFAULT_LISTS: { name: string; icon: string; sortOrder: number }[] = [
   { name: "$favorites", icon: "heart", sortOrder: 0 },
@@ -21,6 +22,8 @@ const DEFAULT_LISTS: { name: string; icon: string; sortOrder: number }[] = [
 ];
 
 export const savedRoute: FastifyPluginAsync = async (fastify) => {
+  declareRouteAuth(fastify, "session");
+
   // Every /saved route is per-user; authenticate once here so no handler can
   // forget the check (which would silently expose another user's data).
   fastify.addHook("preHandler", requireAuthHook);

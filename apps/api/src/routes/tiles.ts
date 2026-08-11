@@ -1,6 +1,7 @@
 import { USER_AGENT } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
 import { envString } from "../utils/env.js";
+import { declareRouteAuth } from "../utils/route-auth.js";
 
 const CYCLOSM_SUBDOMAINS = ["a", "b", "c"] as const;
 let cyclOSMSubdomainIndex = 0;
@@ -40,6 +41,8 @@ function validateTileCoords(z: string, x: string, y: string): [number, number, n
 }
 
 export const tilesRoute: FastifyPluginAsync = async (fastify) => {
+  declareRouteAuth(fastify, "public");
+
   // Cycling base layer tile proxy (Thunderforest primary, CyclOSM fallback)
   fastify.get<{
     Params: { z: string; x: string; y: string };

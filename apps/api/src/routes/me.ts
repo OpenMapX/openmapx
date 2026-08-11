@@ -2,6 +2,7 @@ import { fromNodeHeaders } from "better-auth/node";
 import type { FastifyPluginAsync } from "fastify";
 import { auth } from "../auth";
 import { toPublicSession } from "../utils/public-session";
+import { declareRouteAuth } from "../utils/route-auth";
 
 /**
  * Current session for the signed-in caller. The response is projected to a
@@ -10,6 +11,8 @@ import { toPublicSession } from "../utils/public-session";
  * user agent and the impersonation marker, none of which a caller needs.
  */
 export const meRoute: FastifyPluginAsync = async (fastify) => {
+  declareRouteAuth(fastify, "session");
+
   fastify.get("/me", async (request, reply) => {
     reply.header("Cache-Control", "no-store");
     const session = await auth.api.getSession({

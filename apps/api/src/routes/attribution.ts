@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { getAttributionIndex } from "../services/attribution";
+import { declareRouteAuth } from "../utils/route-auth";
 
 const CACHE_HEADER = "public, max-age=86400, must-revalidate";
 const DEFAULT_LIMIT = 200;
@@ -27,6 +28,8 @@ function parsePagination(query: Record<string, string | string[] | undefined>): 
  * so a 503 indicates a misconfigured boot, not a transient outage.
  */
 export const attributionRoute: FastifyPluginAsync = async (fastify) => {
+  declareRouteAuth(fastify, "public");
+
   fastify.get("/attribution/health", async (_req, reply) => {
     const idx = getAttributionIndex();
     if (!idx) {

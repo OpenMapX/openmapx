@@ -8,6 +8,7 @@ import { loadEmailConfig, sendViaEmailLabs, sendViaLettermint, sendViaSmtp } fro
 import { envString } from "../utils/env";
 import { emailTestLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
+import { declareRouteAuth } from "../utils/route-auth";
 
 interface SettingDef {
   group: string;
@@ -404,6 +405,8 @@ export async function resolveSettings(): Promise<SettingsGroup[]> {
 }
 
 export async function adminSettingsRoute(app: FastifyInstance) {
+  declareRouteAuth(app, "admin");
+
   app.addHook("preHandler", async (request, _reply) => {
     request.adminSession = await requireAdmin(request);
   });

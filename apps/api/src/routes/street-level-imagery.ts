@@ -3,6 +3,7 @@ import type { StreetLevelProvider } from "@openmapx/integration-framework";
 import type { FastifyInstance } from "fastify";
 import { getAllIntegrations, getIntegrationProviders } from "../integration-host.js";
 import { envString } from "../utils/env.js";
+import { declareRouteAuth } from "../utils/route-auth.js";
 
 /**
  * Order and filter provider capabilities by the configured chain.
@@ -72,6 +73,8 @@ function collectCapabilities(): StreetLevelCapabilities[] {
  * neighbours, so the path here must NOT repeat `/api`.
  */
 export async function streetLevelRoute(app: FastifyInstance): Promise<void> {
+  declareRouteAuth(app, "public");
+
   app.get("/street-level-imagery/providers", async (_req, reply) => {
     const chain = envString("INTEGRATION_STREET_LEVEL_IMAGERY_PROVIDER", "");
     return reply.send(orderProviders(collectCapabilities(), chain));

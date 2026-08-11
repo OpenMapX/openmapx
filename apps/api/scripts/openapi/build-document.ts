@@ -1,14 +1,7 @@
+import { AUTH_LEVELS, type AuthLevel } from "../../src/utils/route-auth.js";
 import type { IntegrationRouteDescriptor } from "./collect-integration-routes.js";
 
-/**
- * How a route authenticates its caller.
- *
- * `unspecified` means nobody has classified the route yet — it is deliberately
- * distinct from `public` so an unannotated route never claims to be open.
- */
-export type AuthLevel = "public" | "session" | "admin" | "unspecified";
-
-export const AUTH_LEVELS: readonly AuthLevel[] = ["public", "session", "admin", "unspecified"];
+export { AUTH_LEVELS, type AuthLevel };
 
 export interface CoreRouteEntry {
   method: string;
@@ -50,8 +43,9 @@ export function toOpenApiPath(path: string): string {
       // `{*}` is what @fastify/swagger emits for a Fastify wildcard; `*` is the
       // raw form the integration registry stores.
       if (segment === "*" || segment === "{*}") return "{wildcard}";
-      if (segment.startsWith(":")) return `{${segment.slice(1)}}`;
-      return segment;
+      // Per-parameter rather than per-segment: a segment can mix a parameter
+      // with literal text, as in `:y.png`.
+      return segment.replace(/:([A-Za-z_$][\w$]*)/g, "{$1}");
     })
     .join("/");
 }
@@ -130,9 +124,11 @@ function authFor(entries: Map<string, AuthLevel>, method: string, path: string):
 export function buildDocument(input: BuildDocumentInput): OpenApiDocument {
   const paths: Record<string, Record<string, unknown>> = {};
 
+  // Keyed on the templated path: the auth entries carry Fastify's `:id` form
+  // while @fastify/swagger has already rewritten its paths to `{id}`.
   const coreAuthIndex = new Map<string, AuthLevel>();
   for (const entry of input.coreAuth) {
-    coreAuthIndex.set(`${entry.method.toUpperCase()} ${entry.url}`, entry.auth);
+    coreAuthIndex.set(`${entry.method.toUpperCase()} ${toOpenApiPath(entry.url)}`, entry.auth);
   }
 
   for (const [rawPath, pathItem] of Object.entries(input.corePaths)) {
@@ -146,7 +142,7 @@ export function buildDocument(input: BuildDocumentInput): OpenApiDocument {
         ...base,
         operationId: toOperationId(method, path),
         tags: [tagForPath(rawPath)],
-        "x-openmapx-auth": authFor(coreAuthIndex, method, rawPath),
+        "x-openmapx-auth": authFor(coreAuthIndex, method, path),
       });
     }
 

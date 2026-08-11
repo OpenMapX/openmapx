@@ -14,6 +14,7 @@ import { getServiceRegistry } from "../services/service-registry.js";
 import { writeAuditLog } from "../utils/audit-log.js";
 import { serviceActionLimit } from "../utils/rate-limit.js";
 import { getAdminSession, requireAdmin } from "../utils/require-admin.js";
+import { declareRouteAuth } from "../utils/route-auth.js";
 
 const ROTATION_CONFIRMATION = "ROTATE DAWARICH OIDC SECRET";
 
@@ -104,6 +105,8 @@ async function auditFailure(request: FastifyRequest, action: string, code: strin
 }
 
 export async function adminDawarichRoute(app: FastifyInstance): Promise<void> {
+  declareRouteAuth(app, "admin");
+
   app.addHook("preHandler", async (request) => {
     request.adminSession = await requireAdmin(request);
   });

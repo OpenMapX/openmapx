@@ -10,6 +10,7 @@ import {
 import { timelineDayService } from "../services/dawarich/day-service.js";
 import { timelineDayApiLimit } from "../utils/rate-limit.js";
 import { getUserId, requireAuthHook } from "../utils/require-auth.js";
+import { declareRouteAuth } from "../utils/route-auth.js";
 
 const MAX_API_KEY_BYTES = 4 * 1024;
 const MAX_INSTANCE_URL_BYTES = 2 * 1024;
@@ -97,6 +98,8 @@ function sendTimelineError(reply: FastifyReply, error: unknown, route: "connecti
 }
 
 export const timelineRoute: FastifyPluginAsync = async (fastify) => {
+  declareRouteAuth(fastify, "session");
+
   fastify.setErrorHandler((error, request, reply) => {
     const errorFields =
       typeof error === "object" && error !== null

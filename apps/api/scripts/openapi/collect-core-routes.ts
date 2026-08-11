@@ -1,22 +1,28 @@
 import fastifySwagger from "@fastify/swagger";
 import Fastify from "fastify";
-import type { AuthLevel, CoreRouteEntry } from "./build-document.js";
-import { AUTH_LEVELS } from "./build-document.js";
+import {
+  AUTH_LEVELS,
+  type AuthLevel,
+  declaredRouteAuth,
+  resetDeclaredRouteAuth,
+} from "../../src/utils/route-auth.js";
+import type { CoreRouteEntry } from "./build-document.js";
 
 export interface CoreRouteCollection {
   paths: Record<string, Record<string, unknown>>;
   auth: CoreRouteEntry[];
 }
 
-function readAuthLevel(config: unknown): AuthLevel {
-  const declared = (config as { auth?: unknown } | undefined)?.auth;
-  if (typeof declared !== "string") return "unspecified";
-  if (!(AUTH_LEVELS as readonly string[]).includes(declared)) {
+function readAuthLevel(method: string, url: string, config: unknown): AuthLevel {
+  const onRoute = (config as { auth?: unknown } | undefined)?.auth;
+  const level = typeof onRoute === "string" ? onRoute : declaredRouteAuth(method, url);
+  if (level === undefined) return "unspecified";
+  if (!(AUTH_LEVELS as readonly string[]).includes(level)) {
     throw new Error(
-      `Route declared config.auth "${declared}", which is not one of ${AUTH_LEVELS.join(", ")}.`,
+      `${method} ${url} declared auth "${level}", which is not one of ${AUTH_LEVELS.join(", ")}.`,
     );
   }
-  return declared as AuthLevel;
+  return level as AuthLevel;
 }
 
 /**
@@ -38,8 +44,10 @@ export async function collectCoreRoutes(): Promise<CoreRouteCollection> {
 
   const { registerCoreRoutes } = await import("../../src/routes/index.js");
 
+  resetDeclaredRouteAuth();
+
   const app = Fastify({ logger: false, routerOptions: { maxParamLength: 500 } });
-  const auth: CoreRouteEntry[] = [];
+  const routes: { method: string; url: string; config: unknown }[] = [];
 
   app.addHook("onRoute", (routeOptions) => {
     const methods = Array.isArray(routeOptions.method)
@@ -48,7 +56,7 @@ export async function collectCoreRoutes(): Promise<CoreRouteCollection> {
     for (const method of methods) {
       // Fastify derives HEAD from GET; documenting both adds noise, not surface.
       if (method === "HEAD") continue;
-      auth.push({ method, url: routeOptions.url, auth: readAuthLevel(routeOptions.config) });
+      routes.push({ method, url: routeOptions.url, config: routeOptions.config });
     }
   });
 
@@ -68,6 +76,15 @@ export async function collectCoreRoutes(): Promise<CoreRouteCollection> {
   const document = app.swagger() as { paths?: Record<string, Record<string, unknown>> };
   const paths = document.paths ?? {};
   await app.close();
+
+  // Resolved after `ready()`: the plugin-scoped declarations are recorded by
+  // hooks that run after this instance's own onRoute hook has already seen the
+  // route.
+  const auth: CoreRouteEntry[] = routes.map((route) => ({
+    method: route.method,
+    url: route.url,
+    auth: readAuthLevel(route.method, route.url, route.config),
+  }));
 
   return { paths, auth };
 }

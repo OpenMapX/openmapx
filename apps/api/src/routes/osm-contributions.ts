@@ -29,6 +29,7 @@ import {
   osmContributionReadLimit,
 } from "../utils/rate-limit.js";
 import { getUserId, requireAuthHook } from "../utils/require-auth.js";
+import { declareRouteAuth } from "../utils/route-auth.js";
 
 /** 32 KiB is far above a legitimate curated edit and far below an upload. */
 const BODY_LIMIT_BYTES = 32 * 1024;
@@ -92,6 +93,7 @@ export function osmContributionsRoute(
     // Every contribution route is per-user. Authenticate once at plugin scope
     // so no handler can forget it, and register the user-keyed limiters after
     // that hook so `request.userId` is already set when they derive a bucket.
+    declareRouteAuth(fastify, "session");
     fastify.addHook("preHandler", requireAuthHook);
 
     fastify.get(

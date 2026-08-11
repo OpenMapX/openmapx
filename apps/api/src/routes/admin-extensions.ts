@@ -18,6 +18,7 @@ import { getServiceRegistry } from "../services/service-registry";
 import { writeAuditLog } from "../utils/audit-log";
 import { storeInstallLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
+import { declareRouteAuth } from "../utils/route-auth";
 
 const { computeServiceSecurityRating } = coreServices;
 
@@ -29,6 +30,8 @@ function componentCounts(entry: ExtensionCatalogEntry): { services: number; inte
 }
 
 export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> {
+  declareRouteAuth(app, "admin");
+
   app.addHook("preHandler", async (request, _reply) => {
     request.adminSession = await requireAdmin(request);
   });

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { getMetrics } from "../services/metrics/index.js";
+import { declareRouteAuth } from "../utils/route-auth.js";
 
 /**
  * Prometheus scrape endpoint mounted on the existing Fastify app.
@@ -11,6 +12,8 @@ import { getMetrics } from "../services/metrics/index.js";
  * expose it on the public reverse proxy.
  */
 export async function internalMetricsRoute(fastify: FastifyInstance): Promise<void> {
+  declareRouteAuth(fastify, "internal");
+
   fastify.get("/internal/metrics", async (_request, reply) => {
     const metrics = getMetrics();
     const text = await metrics.renderPrometheus();

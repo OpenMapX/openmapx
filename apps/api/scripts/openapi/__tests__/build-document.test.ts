@@ -33,7 +33,7 @@ function input(overrides: Partial<BuildDocumentInput> = {}): BuildDocumentInput 
 describe("toOpenApiPath", () => {
   it("rewrites Fastify parameters and wildcards", () => {
     expect(toOpenApiPath("/api/places/:id")).toBe("/api/places/{id}");
-    expect(toOpenApiPath("/api/tiles/:z/:x/:y.png")).toBe("/api/tiles/{z}/{x}/{y.png}");
+    expect(toOpenApiPath("/api/tiles/:z/:x/:y.png")).toBe("/api/tiles/{z}/{x}/{y}.png");
     expect(toOpenApiPath("/api/integrations/:id/*")).toBe("/api/integrations/{id}/{wildcard}");
   });
 
@@ -133,6 +133,17 @@ describe("buildDocument", () => {
     const document = buildDocument(input({ corePaths: { "/api/me": { get: {} } }, coreAuth: [] }));
     const operation = document.paths["/api/me"]?.get as Record<string, unknown>;
     expect(operation["x-openmapx-auth"]).toBe("unspecified");
+  });
+
+  it("matches a core auth entry whose url still uses Fastify parameter syntax", () => {
+    const document = buildDocument(
+      input({
+        corePaths: { "/api/saved/lists/{id}": { patch: {} } },
+        coreAuth: [{ method: "PATCH", url: "/api/saved/lists/:id", auth: "session" }],
+      }),
+    );
+    const operation = document.paths["/api/saved/lists/{id}"]?.patch as Record<string, unknown>;
+    expect(operation["x-openmapx-auth"]).toBe("session");
   });
 
   it("matches core auth entries on method and url together", () => {

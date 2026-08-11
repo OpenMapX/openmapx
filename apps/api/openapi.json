@@ -131,7 +131,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/audit/export": {
@@ -145,7 +145,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/cache": {
@@ -159,7 +159,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/cache/clear": {
@@ -173,7 +173,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/compose/down": {
@@ -187,7 +187,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/compose/preview": {
@@ -201,7 +201,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/compose/up": {
@@ -215,7 +215,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/credentials": {
@@ -229,7 +229,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/credentials/{integrationId}": {
@@ -253,7 +253,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/credentials/{integrationId}/test": {
@@ -277,7 +277,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/credentials/{integrationId}/{key}": {
@@ -309,7 +309,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       },
       "delete": {
         "operationId": "deleteApiAdminCredentialsIntegrationIdKey",
@@ -339,7 +339,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/dawarich": {
@@ -353,7 +353,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/dawarich/provision": {
@@ -367,7 +367,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/dawarich/rotate-oidc-secret": {
@@ -381,7 +381,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/deployment": {
@@ -395,7 +395,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/extensions/catalog": {
@@ -409,7 +409,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/extensions/catalog/{id}": {
@@ -433,7 +433,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/extensions/install": {
@@ -447,7 +447,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/extensions/installed": {
@@ -461,7 +461,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/extensions/refresh-catalog": {
@@ -475,7 +475,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/extensions/sources": {
@@ -489,7 +489,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       },
       "post": {
         "operationId": "postApiAdminExtensionsSources",
@@ -501,7 +501,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       },
       "delete": {
         "operationId": "deleteApiAdminExtensionsSources",
@@ -513,7 +513,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/extensions/update/{id}": {
@@ -537,7 +537,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/extensions/{id}": {
@@ -561,7 +561,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/integrations": {
@@ -575,7 +575,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/integrations/env-vars": {
@@ -589,7 +589,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/integrations/export": {
@@ -603,7 +603,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/integrations/health/run": {
@@ -617,7 +617,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/integrations/import": {
@@ -631,7 +631,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/integrations/reload": {
@@ -645,7 +645,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/integrations/{id}": {
@@ -669,7 +669,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/integrations/{id}/config": {
@@ -693,7 +693,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/integrations/{id}/disable": {
@@ -717,7 +717,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/integrations/{id}/enable": {
@@ -741,7 +741,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/integrations/{id}/health": {
@@ -765,7 +765,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/integrations/{id}/health/history": {
@@ -789,7 +789,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/integrations/{id}/reload": {
@@ -813,7 +813,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/integrations/{integrationId}/bindings": {
@@ -837,7 +837,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/integrations/{integrationId}/bindings/{capability}": {
@@ -888,7 +888,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       },
       "delete": {
         "operationId": "deleteApiAdminIntegrationsIntegrationIdBindingsCapability",
@@ -918,7 +918,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/jobs": {
@@ -932,7 +932,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/jobs/{id}": {
@@ -956,7 +956,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/jobs/{id}/cancel": {
@@ -980,7 +980,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/logs": {
@@ -994,7 +994,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/overview": {
@@ -1008,7 +1008,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/services": {
@@ -1022,7 +1022,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/services/backups": {
@@ -1036,7 +1036,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       },
       "post": {
         "operationId": "postApiAdminServicesBackups",
@@ -1048,7 +1048,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/services/backups/{name}": {
@@ -1072,7 +1072,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/services/backups/{name}/restore": {
@@ -1096,7 +1096,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/services/bulk-action": {
@@ -1110,7 +1110,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/services/check": {
@@ -1124,7 +1124,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/services/data": {
@@ -1138,7 +1138,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/services/data/action": {
@@ -1152,7 +1152,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/services/selection": {
@@ -1166,7 +1166,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       },
       "put": {
         "operationId": "putApiAdminServicesSelection",
@@ -1178,7 +1178,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/services/{id}": {
@@ -1202,7 +1202,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/services/{id}/action": {
@@ -1226,7 +1226,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/services/{id}/config": {
@@ -1250,7 +1250,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       },
       "post": {
         "operationId": "postApiAdminServicesIdConfig",
@@ -1272,7 +1272,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/services/{id}/credentials": {
@@ -1296,7 +1296,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/services/{id}/credentials/{key}": {
@@ -1328,7 +1328,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       },
       "delete": {
         "operationId": "deleteApiAdminServicesIdCredentialsKey",
@@ -1358,7 +1358,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/services/{id}/logs": {
@@ -1382,7 +1382,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/settings": {
@@ -1396,7 +1396,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       },
       "patch": {
         "operationId": "patchApiAdminSettings",
@@ -1408,7 +1408,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/settings/export": {
@@ -1422,7 +1422,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/settings/import": {
@@ -1436,7 +1436,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/settings/test-email": {
@@ -1450,7 +1450,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/shared-mobility": {
@@ -1464,7 +1464,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/shared-mobility/{category}/rollback": {
@@ -1488,7 +1488,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/system": {
@@ -1502,7 +1502,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/system/diagnostics": {
@@ -1516,7 +1516,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/system/updates/apply": {
@@ -1530,7 +1530,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/admin/system/updates/check": {
@@ -1544,7 +1544,7 @@
         "tags": [
           "admin"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/attribution": {
@@ -1558,7 +1558,7 @@
         "tags": [
           "attribution"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/attribution/health": {
@@ -1572,7 +1572,7 @@
         "tags": [
           "attribution"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/attribution/motis-file/{filename}": {
@@ -1596,7 +1596,7 @@
         "tags": [
           "attribution"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/attribution/{sourceId}": {
@@ -1620,7 +1620,7 @@
         "tags": [
           "attribution"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/auth/{wildcard}": {
@@ -1644,7 +1644,7 @@
         "tags": [
           "auth"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       },
       "post": {
         "operationId": "postApiAuthWildcard",
@@ -1666,7 +1666,7 @@
         "tags": [
           "auth"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/capabilities": {
@@ -1680,7 +1680,7 @@
         "tags": [
           "capabilities"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/data-manager/overture/status": {
@@ -1694,7 +1694,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       }
     },
     "/api/data-manager/poi-ingest/sources": {
@@ -1708,7 +1708,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       }
     },
     "/api/data-manager/poi-ingest/sources/{id}": {
@@ -1732,7 +1732,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       }
     },
     "/api/data-manager/poi-ingest/sources/{id}/sync": {
@@ -1756,7 +1756,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       }
     },
     "/api/data-manager/poi-ingest/sources/{id}/sync-live": {
@@ -1780,7 +1780,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       }
     },
     "/api/data-manager/poi-ingest/state": {
@@ -1794,7 +1794,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       }
     },
     "/api/data-manager/providers": {
@@ -1808,7 +1808,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       }
     },
     "/api/data-manager/providers/{id}": {
@@ -1832,7 +1832,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       }
     },
     "/api/data-manager/providers/{id}/reset": {
@@ -1856,7 +1856,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       }
     },
     "/api/data-manager/transit/bump-transitous-ref": {
@@ -1870,7 +1870,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       }
     },
     "/api/data-manager/transit/catalog": {
@@ -1884,7 +1884,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       }
     },
     "/api/data-manager/transit/feeds": {
@@ -1898,7 +1898,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       }
     },
     "/api/data-manager/transit/jobs": {
@@ -1912,7 +1912,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       }
     },
     "/api/data-manager/transit/jobs/{id}": {
@@ -1936,7 +1936,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       }
     },
     "/api/data-manager/transit/restart-motis": {
@@ -1950,7 +1950,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       }
     },
     "/api/data-manager/transit/sources": {
@@ -1964,7 +1964,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       },
       "post": {
         "operationId": "postApiDataManagerTransitSources",
@@ -1976,7 +1976,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       }
     },
     "/api/data-manager/transit/sources/{sourceId}": {
@@ -2000,7 +2000,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       }
     },
     "/api/data-manager/transit/sources/{sourceId}/enable": {
@@ -2024,7 +2024,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       }
     },
     "/api/data-manager/transit/state": {
@@ -2038,7 +2038,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       }
     },
     "/api/data-manager/transit/sync": {
@@ -2052,7 +2052,7 @@
         "tags": [
           "data-manager"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "service"
       }
     },
     "/api/elevation": {
@@ -2097,7 +2097,7 @@
         "tags": [
           "elevation"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/id-schemes": {
@@ -2136,7 +2136,7 @@
         "tags": [
           "image-proxy"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/integrations/crowd-reports/enroll": {
@@ -3024,7 +3024,7 @@
         "x-openmapx-source": "integrations/overlay-hiking/index.ts"
       }
     },
-    "/api/integrations/overlay-hiking/tiles/{z}/{x}/{y.png}": {
+    "/api/integrations/overlay-hiking/tiles/{z}/{x}/{y}.png": {
       "get": {
         "operationId": "getApiIntegrationsOverlayHikingTilesZXYPng",
         "parameters": [
@@ -3045,7 +3045,7 @@
             }
           },
           {
-            "name": "y.png",
+            "name": "y",
             "in": "path",
             "required": true,
             "schema": {
@@ -3591,7 +3591,7 @@
         "x-openmapx-source": "integrations/overlay-weather/index.ts"
       }
     },
-    "/api/integrations/overlay-weather/tiles/{layer}/{z}/{x}/{y.png}": {
+    "/api/integrations/overlay-weather/tiles/{layer}/{z}/{x}/{y}.png": {
       "get": {
         "operationId": "getApiIntegrationsOverlayWeatherTilesLayerZXYPng",
         "parameters": [
@@ -3620,7 +3620,7 @@
             }
           },
           {
-            "name": "y.png",
+            "name": "y",
             "in": "path",
             "required": true,
             "schema": {
@@ -3659,7 +3659,7 @@
         "x-openmapx-source": "integrations/overlay-wildfires/index.ts"
       }
     },
-    "/api/integrations/overlay-winter-sports/tiles/{z}/{x}/{y.png}": {
+    "/api/integrations/overlay-winter-sports/tiles/{z}/{x}/{y}.png": {
       "get": {
         "operationId": "getApiIntegrationsOverlayWinterSportsTilesZXYPng",
         "parameters": [
@@ -3680,7 +3680,7 @@
             }
           },
           {
-            "name": "y.png",
+            "name": "y",
             "in": "path",
             "required": true,
             "schema": {
@@ -5138,7 +5138,7 @@
         "tags": [
           "internal"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "internal"
       }
     },
     "/api/internal/poi-sources/count": {
@@ -5152,7 +5152,7 @@
         "tags": [
           "internal"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "internal"
       }
     },
     "/api/isochrone": {
@@ -5200,7 +5200,7 @@
         "tags": [
           "isochrone"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/legal-config": {
@@ -5214,7 +5214,7 @@
         "tags": [
           "legal-config"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/maptiler/{wildcard}": {
@@ -5238,7 +5238,7 @@
         "tags": [
           "maptiler"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/me": {
@@ -5252,7 +5252,7 @@
         "tags": [
           "me"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/mobile-auth/exchange": {
@@ -5266,7 +5266,7 @@
         "tags": [
           "mobile-auth"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/mobile-auth/issue": {
@@ -5280,7 +5280,7 @@
         "tags": [
           "mobile-auth"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/neighborhoods": {
@@ -5336,7 +5336,7 @@
         "tags": [
           "neighborhoods"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/offline/packages/capability": {
@@ -5350,7 +5350,7 @@
         "tags": [
           "offline"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/offline/packages/glyphs/{version}/catalog.json": {
@@ -5374,7 +5374,7 @@
         "tags": [
           "offline"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/offline/packages/glyphs/{version}/{wildcard}": {
@@ -5406,7 +5406,7 @@
         "tags": [
           "offline"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/offline/packages/jobs/{jobId}": {
@@ -5430,7 +5430,7 @@
         "tags": [
           "offline"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/offline/packages/prepare": {
@@ -5444,7 +5444,7 @@
         "tags": [
           "offline"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/offline/packages/{packageId}/archive": {
@@ -5468,7 +5468,7 @@
         "tags": [
           "offline"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/offline/packages/{packageId}/manifest": {
@@ -5492,7 +5492,7 @@
         "tags": [
           "offline"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/osm/contributions/capabilities": {
@@ -5506,7 +5506,7 @@
         "tags": [
           "osm"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/osm/contributions/categories": {
@@ -5520,7 +5520,7 @@
         "tags": [
           "osm"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/osm/contributions/notes": {
@@ -5534,7 +5534,7 @@
         "tags": [
           "osm"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/osm/contributions/preview": {
@@ -5548,7 +5548,7 @@
         "tags": [
           "osm"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/osm/contributions/publish": {
@@ -5562,7 +5562,7 @@
         "tags": [
           "osm"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/osm/contributions/{type}/{id}": {
@@ -5594,7 +5594,7 @@
         "tags": [
           "osm"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/places/{id}": {
@@ -5658,7 +5658,7 @@
         "tags": [
           "places"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/reviews/keypair": {
@@ -5672,7 +5672,7 @@
         "tags": [
           "reviews"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       },
       "post": {
         "operationId": "postApiReviewsKeypair",
@@ -5684,7 +5684,7 @@
         "tags": [
           "reviews"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       },
       "delete": {
         "operationId": "deleteApiReviewsKeypair",
@@ -5696,7 +5696,7 @@
         "tags": [
           "reviews"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/reviews/keypair/wraps": {
@@ -5710,7 +5710,7 @@
         "tags": [
           "reviews"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/saved/check": {
@@ -5724,7 +5724,7 @@
         "tags": [
           "saved"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/saved/labels": {
@@ -5738,7 +5738,7 @@
         "tags": [
           "saved"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/saved/labels/{label}": {
@@ -5801,7 +5801,7 @@
         "tags": [
           "saved"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       },
       "delete": {
         "operationId": "deleteApiSavedLabelsLabel",
@@ -5823,7 +5823,7 @@
         "tags": [
           "saved"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/saved/lists": {
@@ -5837,7 +5837,7 @@
         "tags": [
           "saved"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       },
       "post": {
         "operationId": "postApiSavedLists",
@@ -5875,7 +5875,7 @@
         "tags": [
           "saved"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/saved/lists/{id}": {
@@ -5899,7 +5899,7 @@
         "tags": [
           "saved"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       },
       "patch": {
         "operationId": "patchApiSavedListsId",
@@ -5947,7 +5947,7 @@
         "tags": [
           "saved"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/saved/lists/{id}/export": {
@@ -5985,7 +5985,7 @@
         "tags": [
           "saved"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/saved/lists/{id}/places": {
@@ -6009,7 +6009,7 @@
         "tags": [
           "saved"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       },
       "post": {
         "operationId": "postApiSavedListsIdPlaces",
@@ -6070,7 +6070,7 @@
         "tags": [
           "saved"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/saved/places/{id}": {
@@ -6094,7 +6094,7 @@
         "tags": [
           "saved"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       },
       "patch": {
         "operationId": "patchApiSavedPlacesId",
@@ -6143,7 +6143,7 @@
         "tags": [
           "saved"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/status": {
@@ -6157,7 +6157,7 @@
         "tags": [
           "status"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/street-level-imagery/providers": {
@@ -6171,7 +6171,7 @@
         "tags": [
           "street-level-imagery"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/tiles/cycling-routes/{z}/{x}/{y}.png": {
@@ -6214,7 +6214,7 @@
         "tags": [
           "tiles"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/tiles/cyclosm/{z}/{x}/{y}.png": {
@@ -6257,7 +6257,7 @@
         "tags": [
           "tiles"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/tiles/terrain/{z}/{x}/{y}.png": {
@@ -6300,7 +6300,7 @@
         "tags": [
           "tiles"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/timeline/connection": {
@@ -6314,7 +6314,7 @@
         "tags": [
           "timeline"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       },
       "put": {
         "operationId": "putApiTimelineConnection",
@@ -6326,7 +6326,7 @@
         "tags": [
           "timeline"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       },
       "delete": {
         "operationId": "deleteApiTimelineConnection",
@@ -6338,7 +6338,7 @@
         "tags": [
           "timeline"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/timeline/connection/test": {
@@ -6352,7 +6352,7 @@
         "tags": [
           "timeline"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/timeline/day/{date}": {
@@ -6376,7 +6376,7 @@
         "tags": [
           "timeline"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/traffic/flow/{z}/{x}/{y}.png": {
@@ -6419,7 +6419,7 @@
         "tags": [
           "traffic"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/api/transit/registry": {
@@ -6481,7 +6481,7 @@
         "tags": [
           "winter-sports"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/auth/oidc/consent": {
@@ -6495,7 +6495,7 @@
         "tags": [
           "auth"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/auth/oidc/sign-in": {
@@ -6509,7 +6509,7 @@
         "tags": [
           "auth"
         ],
-        "x-openmapx-auth": "unspecified"
+        "x-openmapx-auth": "public"
       }
     },
     "/health": {

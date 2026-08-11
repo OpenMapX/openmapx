@@ -1,8 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
 import { getTrafficProvider } from "../services/traffic.factory";
 import { TrafficProviderHttpError } from "../services/traffic.provider";
+import { declareRouteAuth } from "../utils/route-auth";
 
 export const trafficRoute: FastifyPluginAsync = async (fastify) => {
+  declareRouteAuth(fastify, "public");
+
   fastify.get<{
     Params: { z: string; x: string; y: string };
   }>("/traffic/flow/:z/:x/:y.png", {

@@ -8,6 +8,7 @@ import {
   resolveCachePattern,
 } from "../utils/cache-namespaces";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
+import { declareRouteAuth } from "../utils/route-auth";
 
 // Globs covering exactly the app-owned key prefixes. The list + clear-all paths
 // scan these and nothing else, so the endpoint can never touch keys outside the
@@ -41,6 +42,8 @@ async function clearPattern(client: RedisClient, match: string): Promise<number>
 }
 
 export async function adminCacheRoute(app: FastifyInstance): Promise<void> {
+  declareRouteAuth(app, "admin");
+
   app.addHook("preHandler", async (request, _reply) => {
     request.adminSession = await requireAdmin(request);
   });

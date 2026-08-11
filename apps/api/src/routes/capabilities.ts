@@ -3,8 +3,11 @@ import type { FastifyPluginAsync } from "fastify";
 import { getAllIntegrations } from "../integration-host.js";
 import { isIntegrationHealthy } from "../services/integration-health.js";
 import { osmContributionsPubliclyEnabled } from "../utils/osm-config.js";
+import { declareRouteAuth } from "../utils/route-auth.js";
 
 export const capabilitiesRoute: FastifyPluginAsync = async (fastify) => {
+  declareRouteAuth(fastify, "public");
+
   fastify.get("/capabilities", async (_req, reply) => {
     const services: Record<
       string,

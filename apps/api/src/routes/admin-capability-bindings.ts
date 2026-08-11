@@ -7,6 +7,7 @@ import {
 } from "../services/capability-bindings";
 import { getServiceRegistry } from "../services/service-registry";
 import { requireAdmin } from "../utils/require-admin";
+import { declareRouteAuth } from "../utils/route-auth";
 
 const { getProvidedCapabilityNames } = coreServices;
 
@@ -14,6 +15,8 @@ export async function registerCapabilityBindingRoutes(
   // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
   app: FastifyInstance<any, any, any, any>,
 ): Promise<void> {
+  declareRouteAuth(app, "admin");
+
   app.get<{ Params: { integrationId: string } }>(
     "/api/admin/integrations/:integrationId/bindings",
     async (req, _reply) => {

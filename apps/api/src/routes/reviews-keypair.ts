@@ -29,6 +29,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db";
 import { mangroveKeypair, mangroveKeypairWrap } from "../db/schema";
 import { getUserId, requireAuthHook } from "../utils/require-auth";
+import { declareRouteAuth } from "../utils/route-auth";
 
 type EncryptionMode = "unencrypted" | "encrypted";
 type WrapType = "passphrase" | "webauthn";
@@ -184,6 +185,8 @@ export function validateEncryptedState(body: {
 }
 
 export const reviewsKeypairRoute: FastifyPluginAsync = async (fastify) => {
+  declareRouteAuth(fastify, "session");
+
   // Every keypair route is per-user; authenticate once here so no handler can
   // forget the check.
   fastify.addHook("preHandler", requireAuthHook);

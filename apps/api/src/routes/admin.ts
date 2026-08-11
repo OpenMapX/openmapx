@@ -37,6 +37,7 @@ import { maskSecretConfigRecord, maskSecretConfigValues } from "../utils/mask-co
 import { healthCheckSweepLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { resolveActors } from "../utils/resolve-actor";
+import { declareRouteAuth } from "../utils/route-auth.js";
 import { getSecretFields, validateConfigBody } from "../utils/validate-config-body";
 
 function getIntegrationDisplayName(integration: {
@@ -140,6 +141,8 @@ function csvField(value: unknown): string {
 }
 
 export async function adminRoute(app: FastifyInstance): Promise<void> {
+  declareRouteAuth(app, "admin");
+
   app.addHook("preHandler", async (request, _reply) => {
     request.adminSession = await requireAdmin(request);
   });

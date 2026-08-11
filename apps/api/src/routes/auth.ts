@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { safeAuthErrorEvent } from "../utils/auth-error-log";
+import { declareRouteAuth } from "../utils/route-auth";
 
 export interface AuthRouteOptions {
   authHandler: (request: Request) => Promise<Response>;
@@ -46,6 +47,8 @@ function advertiseBasicClientAuthenticationOnly(responseBody: string): string {
  * a route plugin lets protocol tests exercise the exact production boundary.
  */
 export const authRoute: FastifyPluginAsync<AuthRouteOptions> = async (server, options) => {
+  declareRouteAuth(server, "public");
+
   const uiOrigin = trustedUiOrigin(options.authUiOrigin);
 
   server.addContentTypeParser(

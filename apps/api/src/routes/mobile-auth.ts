@@ -3,6 +3,7 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { auth } from "../auth";
 import { MobileAuthHandoffService } from "../services/mobileAuthHandoff";
 import { envString } from "../utils/env";
+import { declareRouteAuth } from "../utils/route-auth";
 
 /**
  * The two endpoints that move a session from the system browser into the
@@ -76,13 +77,15 @@ function tooLarge(request: FastifyRequest): boolean {
 const asString = (value: unknown): string => (typeof value === "string" ? value : "");
 
 export const mobileAuthRoute: FastifyPluginAsync = async (fastify) => {
+  declareRouteAuth(fastify, "public");
+
   /**
    * Called by the fixed-origin system-browser page, after a session exists.
    *
    * The one-time token is minted here rather than in the browser so it never
    * appears in a page the user can be persuaded to read out.
    */
-  fastify.post("/mobile-auth/issue", async (request, reply) => {
+  fastify.post("/mobile-auth/issue", { config: { auth: "session" } }, async (request, reply) => {
     noStore(reply);
     if (tooLarge(request)) return reply.code(413).send({ error: "invalid_request" });
     if (!originAllowed(request)) return reply.code(403).send({ error: "invalid_request" });

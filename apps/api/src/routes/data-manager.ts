@@ -9,6 +9,7 @@ import { writeAuditLog } from "../utils/audit-log.js";
 import { envString } from "../utils/env.js";
 import { systemMaintenanceLimit } from "../utils/rate-limit.js";
 import { tryAdminSession } from "../utils/require-admin.js";
+import { declareRouteAuth } from "../utils/route-auth.js";
 import { safeEqual } from "../utils/safe-equal.js";
 
 /**
@@ -127,6 +128,8 @@ function readLockSummary(): LockSummary {
 }
 
 export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
+  declareRouteAuth(app, "service");
+
   // -------- READ endpoints (direct DB) --------
 
   app.get<{

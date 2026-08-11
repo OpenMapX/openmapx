@@ -2,6 +2,7 @@ import { resolveGooglePhotosLink } from "@integrations/photos/orchestrator";
 import { fetchWithRedirects, USER_AGENT } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
 import { envString } from "../utils/env.js";
+import { declareRouteAuth } from "../utils/route-auth.js";
 
 /**
  * Allowed upstream hostname patterns for the image proxy.
@@ -108,6 +109,8 @@ function getAllowedOrigins(): string[] {
 const MAX_SIZE = 15 * 1024 * 1024; // 15 MB
 
 export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
+  declareRouteAuth(fastify, "public");
+
   fastify.get<{ Querystring: { url: string } }>("/image-proxy", {
     schema: {
       querystring: {

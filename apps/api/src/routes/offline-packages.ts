@@ -7,6 +7,7 @@ import {
 } from "@openmapx/core";
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { envString } from "../utils/env.js";
+import { declareRouteAuth } from "../utils/route-auth.js";
 
 const DATA_MANAGER_URL_DEFAULT = "http://localhost:4000";
 const PACKAGE_ID_PATTERN = /^omp2-[0-9a-f]{64}$/;
@@ -77,6 +78,8 @@ async function proxyJson(
 }
 
 export const offlinePackagesRoute: FastifyPluginAsync = async (fastify) => {
+  declareRouteAuth(fastify, "public");
+
   fastify.get("/offline/packages/capability", async (_request, reply) => {
     try {
       const { response, body } = await proxyJson("/offline/packages/capability");
