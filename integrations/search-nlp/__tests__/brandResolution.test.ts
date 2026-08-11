@@ -40,9 +40,14 @@ describe("resolveBrandPredicates", () => {
     // name-tier hit always outscores an alias-tier hit on the same entry when
     // both match the query equally well (see matcher.ts's 0.9x alias
     // penalty) — `matchedOn === "name"` is implied whenever guard 2 passes,
-    // so this fixture cannot isolate guard 1 as independently load-bearing
-    // from guard 2. It still documents real, correct behavior for a chain
-    // whose brand identity is split by region in the catalog.
+    // so this fixture cannot isolate guard 1's *alias-rejection* role from
+    // guard 2. That role is genuinely redundant here. But guard 1 is not
+    // redundant overall: on a zero-hit query, `top` is `undefined`, and
+    // guard 1 (`top?.matchedOn !== "name"`) is what returns early before
+    // guard 2 would dereference `top.name` and throw. Removing guard 1
+    // believing it only duplicates guard 2 would reintroduce that crash —
+    // see the "leaves an unrecognised brand name untouched" case above,
+    // which is what actually exercises the zero-hit path.
     const filter = {
       selectors: [{ tags: [{ key: "shop", op: "=" as const, value: "supermarket" }] }],
       require: [{ key: "brand", op: "=" as const, value: "Aldi" }],
