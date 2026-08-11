@@ -1,7 +1,6 @@
+import type { RouteHandler } from "@openmapx/integration-framework";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index";
-
-type Handler = (req: unknown, reply: MockReply) => Promise<void> | void;
 
 interface MockReply {
   statusCode: number;
@@ -33,10 +32,14 @@ function mockReply(): MockReply {
   return reply;
 }
 
-function register(): Handler {
-  let handler: Handler | undefined;
+// Typed as RouteHandler (not a hand-rolled shape) so that if the real
+// dispatcher's req contract (apps/api/src/integration-routes.ts) ever drops
+// or renames a field — headers included — the call sites below stop
+// compiling instead of silently testing a shape production no longer sends.
+function register(): RouteHandler {
+  let handler: RouteHandler | undefined;
   const ctx = {
-    registerRoute: (_method: string, _path: string, h: Handler) => {
+    registerRoute: (_method: string, _path: string, h: RouteHandler) => {
       handler = h;
     },
     log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -46,11 +49,18 @@ function register(): Handler {
   return handler;
 }
 
+// The real dispatcher always sends query/params/body/headers, even when
+// empty — mirror that shape rather than passing only the field this handler
+// happens to read.
+function baseReq(headers: Record<string, string | string[] | undefined> = {}) {
+  return { query: {}, params: {}, body: undefined, headers };
+}
+
 describe("overlay-sun-time /timezones", () => {
   it("serves the boundary collection with a strong ETag", async () => {
     const handler = register();
     const reply = mockReply();
-    await handler({ headers: {} }, reply);
+    await handler(baseReq(), reply);
 
     expect(reply.statusCode).toBe(200);
     expect(reply.headers.ETag).toMatch(/^"[a-f0-9]{16}"$/);
@@ -65,10 +75,14 @@ describe("overlay-sun-time /timezones", () => {
   it("answers a matching If-None-Match with 304 and no body", async () => {
     const handler = register();
     const first = mockReply();
-    await handler({ headers: {} }, first);
+    await handler(baseReq(), first);
 
+    // Node lowercases incoming header names, and a real client echoes back
+    // exactly the (already-quoted) ETag value it received — the dispatcher
+    // test in apps/api/src/integration-host.test.ts proves that round-trip
+    // for real over HTTP; this only re-proves the handler's own comparison.
     const second = mockReply();
-    await handler({ headers: { "if-none-match": first.headers.ETag } }, second);
+    await handler(baseReq({ "if-none-match": first.headers.ETag }), second);
 
     expect(second.statusCode).toBe(304);
     expect(second.body).toBeUndefined();

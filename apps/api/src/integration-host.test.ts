@@ -319,6 +319,20 @@ describe("initIntegrations — route dispatch", () => {
       error: "Integration handler produced no response",
     });
   });
+
+  it("forwards request headers to the handler, lowercased, unmodified", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/integrations/alpha/echo-header",
+      headers: { "If-None-Match": '"abc123"' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    // Fastify/Node lowercase incoming header names regardless of how the
+    // client cased them, and pass the value through byte-for-byte —
+    // including the quotes an ETag comparison depends on.
+    expect(res.json()).toMatchObject({ ifNoneMatch: '"abc123"' });
+  });
 });
 
 describe("integration layer previews", () => {

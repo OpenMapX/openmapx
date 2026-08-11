@@ -20,17 +20,10 @@ export function setup(ctx: IntegrationContext): void {
   const collection = JSON.parse(raw) as unknown;
 
   ctx.registerRoute("GET", "/timezones", (req, reply) => {
-    // registerIntegrationRouteDispatcher (apps/api/src/integration-routes.ts)
-    // builds req from only { query, params, body, userId } — it does not
-    // forward request headers, so this cast reads a field that is never
-    // actually populated by the real host today. The 304 branch below is
-    // exercised by this file's own unit test (which supplies headers
-    // directly) but is currently unreachable in the running app.
-    const headers = (req as { headers?: Record<string, string> }).headers ?? {};
     reply.header("ETag", etag);
     reply.header("Cache-Control", CACHE_CONTROL);
 
-    if (headers["if-none-match"] === etag) {
+    if (req.headers["if-none-match"] === etag) {
       reply.status(304).send(undefined);
       return;
     }

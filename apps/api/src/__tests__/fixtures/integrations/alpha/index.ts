@@ -23,4 +23,8 @@ export function setup(ctx: IntegrationContext): void {
     // Intentionally returns without calling reply.send() — exercises the
     // no-send safety net in the dispatcher.
   });
+
+  ctx.registerRoute("GET", "/echo-header", async (req, reply) => {
+    reply.send({ ifNoneMatch: req.headers["if-none-match"] ?? null });
+  });
 }

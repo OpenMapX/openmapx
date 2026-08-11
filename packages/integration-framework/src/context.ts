@@ -86,6 +86,12 @@ export type RouteHandler = (
      * auth-required handlers.
      */
     userId?: string;
+    /**
+     * The incoming request's HTTP headers, forwarded as-is from Fastify.
+     * Node lowercases every header name when parsing the request, so read
+     * `if-none-match`, not `If-None-Match`.
+     */
+    headers: Record<string, string | string[] | undefined>;
   },
   reply: {
     send: (data: unknown) => void;

@@ -151,6 +151,7 @@ export function registerIntegrationRouteDispatcher(
         params: matched.params,
         body: request.body,
         userId,
+        headers: request.headers,
       },
       {
         send: (data) => {
