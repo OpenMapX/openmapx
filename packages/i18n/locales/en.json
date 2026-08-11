@@ -341,6 +341,7 @@
     "cyclingMap": "Cycling",
     "airports": "Airports",
     "nautical": "Nautical",
+    "sunTime": "Daylight & time zones",
     "closeMorePanel": "Close more panel placeholder"
   },
   "cycling": {
@@ -1963,6 +1964,20 @@
     "loading": "Loading stations…",
     "lastUpdated": "Last updated",
     "attribution": "Data from"
+  },
+  "sunTime": {
+    "sunTime": "Daylight & time zones",
+    "toggleOverlay": "Toggle daylight overlay",
+    "dayNight": "Day/night shading",
+    "timeZones": "Time zones",
+    "time": "Time",
+    "date": "Date",
+    "now": "Now",
+    "day": "Day",
+    "civil": "Civil",
+    "nautical": "Nautical",
+    "night": "Night",
+    "timeZonesZoomHint": "Time zones are shown when zoomed out further"
   },
   "naturalEvents": {
     "naturalEvents": "Natural Events",

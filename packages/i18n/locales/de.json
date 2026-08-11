@@ -341,6 +341,7 @@
     "cyclingMap": "Radkarte",
     "airports": "Flughäfen",
     "nautical": "Seekarten",
+    "sunTime": "Tageslicht & Zeitzonen",
     "closeMorePanel": "Erweitertes Menü schließen"
   },
   "cycling": {
@@ -1963,6 +1964,20 @@
     "loading": "Lade Stationen…",
     "lastUpdated": "Zuletzt aktualisiert",
     "attribution": "Daten von"
+  },
+  "sunTime": {
+    "sunTime": "Tageslicht & Zeitzonen",
+    "toggleOverlay": "Tageslicht-Overlay umschalten",
+    "dayNight": "Tag-/Nacht-Schattierung",
+    "timeZones": "Zeitzonen",
+    "time": "Uhrzeit",
+    "date": "Datum",
+    "now": "Jetzt",
+    "day": "Tag",
+    "civil": "Bürgerlich",
+    "nautical": "Nautisch",
+    "night": "Nacht",
+    "timeZonesZoomHint": "Zeitzonen werden in einer weiter herausgezoomten Ansicht angezeigt"
   },
   "naturalEvents": {
     "naturalEvents": "Naturereignisse",
