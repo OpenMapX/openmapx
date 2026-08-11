@@ -49,6 +49,28 @@ describe("applyFacetFilters", () => {
     const ids = applyFacetFilters(results, { cuisine: ["italian", "kebab"] }).map((p) => p.id);
     expect(ids).toEqual(["italian", "pizzaKebab"]);
   });
+
+  it("keeps a place whose brand chip was derived from operator:wikidata, not brand:wikidata", () => {
+    const results = [
+      place("qpark", { "operator:wikidata": "Q1127798", operator: "Q-Park" }),
+      place("other", { "operator:wikidata": "Q9999999", operator: "Someone Else" }),
+    ];
+    // Mirrors what CategoryFilterBar does: derive the chip from brandOptions,
+    // then filter on the qid it reports.
+    const [chip] = brandOptions(results);
+    expect(chip.qid).toBe("Q1127798");
+    const ids = applyFacetFilters(results, { brand: [chip.qid] }).map((p) => p.id);
+    expect(ids).toEqual(["qpark"]);
+  });
+
+  it("keeps a place whose brand chip was derived from network:wikidata (EV charging)", () => {
+    const results = [
+      place("ionity", { "network:wikidata": "Q42717773", operator: "Ionity" }),
+      place("other", { "network:wikidata": "Q1", operator: "Other Network" }),
+    ];
+    const ids = applyFacetFilters(results, { brand: ["Q42717773"] }).map((p) => p.id);
+    expect(ids).toEqual(["ionity"]);
+  });
 });
 
 describe("facetsForCategory", () => {

@@ -1,6 +1,6 @@
 import type { CategoryPlace } from "../types/category";
 import { FOOD_FILTER_CATEGORY_IDS, HOURS_FILTER_CATEGORY_IDS } from "../types/category";
-import { firstBrandIdentity } from "./brandFilter";
+import { BRAND_QID_KEYS, firstBrandIdentity } from "./brandFilter";
 import { CATEGORY_FILTERS } from "./overpass.service";
 
 export type FacetType = "toggle" | "multi";
@@ -14,6 +14,14 @@ export interface CategoryFacet {
   placement: FacetPlacement;
   /** OSM tag (from the result's curated `osmTags`) this facet reads. */
   tag: string;
+  /**
+   * For `multi` facets whose values can live under more than one OSM key
+   * (e.g. brand identity, which may be tagged as `brand:wikidata`,
+   * `network:wikidata`, or `operator:wikidata`): the full set of keys to
+   * union when filtering. Falls back to `[tag]` when absent. Keeps
+   * `applyFacetFilters` generic instead of special-casing a facet id.
+   */
+  tags?: readonly string[];
   /** Category ids this facet is offered for. Ignored when `allCategories` is set. */
   categoryIds: ReadonlySet<string>;
   /**
@@ -133,6 +141,11 @@ export const CATEGORY_FACETS: readonly CategoryFacet[] = [
     type: "multi",
     placement: "inline",
     tag: "brand:wikidata",
+    // A chip can be generated from a network: or operator: identity (see
+    // firstBrandIdentity/brandOptions below), not just brand:wikidata, so
+    // filtering has to union all three keys or selecting that chip would
+    // filter against a tag the place never carried and return nothing.
+    tags: BRAND_QID_KEYS,
     // A chain can appear under any category, so this facet isn't scoped by
     // categoryIds — the chip row only renders when the current result set
     // actually holds more than one brand (see brandOptions/CategoryFilterBar).
@@ -173,9 +186,16 @@ export function applyFacetFilters(
   if (active.length === 0) return results;
   return results.filter((p) =>
     active.every((f) => {
-      const raw = p.osmTags?.[f.tag];
-      if (f.type === "toggle") return !!raw && (f.matchValues ?? []).includes(raw);
+      if (f.type === "toggle") {
+        const raw = p.osmTags?.[f.tag];
+        return !!raw && (f.matchValues ?? []).includes(raw);
+      }
       const selected = selections[f.id];
+      const keys = f.tags ?? [f.tag];
+      const raw = keys
+        .map((k) => p.osmTags?.[k])
+        .filter((v): v is string => !!v)
+        .join(";");
       return tagValues(raw).some((v) => selected.includes(v));
     }),
   );
