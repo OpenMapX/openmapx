@@ -24,6 +24,7 @@ COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/place-ids/package.json packages/place-ids/
 COPY packages/poi-source-registry/package.json packages/poi-source-registry/
 COPY packages/presets/package.json packages/presets/
+COPY packages/brands/package.json packages/brands/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY apps/web/package.json apps/web/
 COPY integrations/ integrations/
@@ -51,6 +52,7 @@ COPY packages/ourairports-data/ packages/ourairports-data/
 COPY packages/place-ids/ packages/place-ids/
 COPY packages/poi-source-registry/ packages/poi-source-registry/
 COPY packages/presets/ packages/presets/
+COPY packages/brands/ packages/brands/
 COPY packages/transitous-core/ packages/transitous-core/
 COPY integrations/ integrations/
 COPY apps/web/ apps/web/

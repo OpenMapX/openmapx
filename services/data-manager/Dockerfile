@@ -54,6 +54,7 @@ COPY packages/openconditions-contrib-client/package.json packages/openconditions
 COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/place-ids/package.json packages/place-ids/
 COPY packages/presets/package.json packages/presets/
+COPY packages/brands/package.json packages/brands/
 COPY integrations/ integrations/
 
 RUN pnpm install --frozen-lockfile
@@ -83,6 +84,7 @@ COPY packages/openconditions-contrib-client/package.json packages/openconditions
 COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/place-ids/package.json packages/place-ids/
 COPY packages/presets/package.json packages/presets/
+COPY packages/brands/package.json packages/brands/
 COPY integrations/ integrations/
 
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts
@@ -220,6 +222,8 @@ COPY packages/ourairports-data/ ./packages/ourairports-data/
 COPY --from=prod-deps /app/packages/ourairports-data/node_modules ./packages/ourairports-data/node_modules
 COPY packages/presets/ ./packages/presets/
 COPY --from=prod-deps /app/packages/presets/node_modules ./packages/presets/node_modules
+COPY packages/brands/ ./packages/brands/
+COPY --from=prod-deps /app/packages/brands/node_modules ./packages/brands/node_modules
 
 # packages/cli source + node_modules — bundled for parity with apps/api's
 # runner (admin-cli.ts spawns the CLI for data jobs when no host bind-mount

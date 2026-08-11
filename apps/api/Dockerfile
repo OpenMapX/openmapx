@@ -27,6 +27,7 @@ COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/place-ids/package.json packages/place-ids/
 COPY packages/poi-source-registry/package.json packages/poi-source-registry/
 COPY packages/presets/package.json packages/presets/
+COPY packages/brands/package.json packages/brands/
 COPY apps/api/package.json apps/api/
 COPY integrations/ integrations/
 RUN pnpm install --frozen-lockfile
@@ -54,6 +55,7 @@ COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/place-ids/package.json packages/place-ids/
 COPY packages/poi-source-registry/package.json packages/poi-source-registry/
 COPY packages/presets/package.json packages/presets/
+COPY packages/brands/package.json packages/brands/
 COPY apps/api/package.json apps/api/
 COPY integrations/ integrations/
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts && \
@@ -86,6 +88,7 @@ COPY packages/ourairports-data/ packages/ourairports-data/
 COPY packages/place-ids/ packages/place-ids/
 COPY packages/poi-source-registry/ packages/poi-source-registry/
 COPY packages/presets/ packages/presets/
+COPY packages/brands/ packages/brands/
 COPY packages/transitous-core/ packages/transitous-core/
 COPY apps/api/ apps/api/
 COPY tsconfig.base.json ./
@@ -148,6 +151,7 @@ COPY packages/ourairports-data/ packages/ourairports-data/
 COPY packages/place-ids/ packages/place-ids/
 COPY packages/poi-source-registry/ packages/poi-source-registry/
 COPY packages/presets/ packages/presets/
+COPY packages/brands/ packages/brands/
 COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
 COPY --from=prod-deps /app/packages/db-schema/node_modules ./packages/db-schema/node_modules
 COPY --from=prod-deps /app/packages/mobility-core/node_modules ./packages/mobility-core/node_modules
@@ -160,6 +164,7 @@ COPY --from=prod-deps /app/packages/noaa-coops-data/node_modules ./packages/noaa
 COPY --from=prod-deps /app/packages/openconditions-contrib-client/node_modules ./packages/openconditions-contrib-client/node_modules
 COPY --from=prod-deps /app/packages/ourairports-data/node_modules ./packages/ourairports-data/node_modules
 COPY --from=prod-deps /app/packages/presets/node_modules ./packages/presets/node_modules
+COPY --from=prod-deps /app/packages/brands/node_modules ./packages/brands/node_modules
 
 # packages/cli source + node_modules are needed by admin-cli.ts, which spawns
 # `node --experimental-strip-types packages/cli/src/index.ts <cmd>` for data
