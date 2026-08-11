@@ -13,8 +13,15 @@ export interface CategoryFacet {
   placement: FacetPlacement;
   /** OSM tag (from the result's curated `osmTags`) this facet reads. */
   tag: string;
-  /** Category ids this facet is offered for. */
+  /** Category ids this facet is offered for. Ignored when `allCategories` is set. */
   categoryIds: ReadonlySet<string>;
+  /**
+   * Offered for every category instead of a fixed set — for facets like
+   * `brand` where the same chain can appear under any category. Preferred
+   * over enumerating every category id, which would silently go stale as
+   * categories are added.
+   */
+  allCategories?: true;
   /** For `toggle` facets: OSM tag values that count as a match. */
   matchValues?: readonly string[];
   /** Optional grouping for panel layout (e.g. "dietary" renders under a subheading). */
@@ -120,12 +127,23 @@ export const CATEGORY_FACETS: readonly CategoryFacet[] = [
     tag: "cuisine",
     categoryIds: FOOD_FILTER_CATEGORY_IDS,
   },
+  {
+    id: "brand",
+    type: "multi",
+    placement: "inline",
+    tag: "brand:wikidata",
+    // A chain can appear under any category, so this facet isn't scoped by
+    // categoryIds — the chip row only renders when the current result set
+    // actually holds more than one brand (see brandOptions/CategoryFilterBar).
+    categoryIds: new Set<string>(),
+    allCategories: true,
+  },
 ];
 
 /** Facets offered for a given category, in registry order. */
 export function facetsForCategory(categoryId: string | null | undefined): CategoryFacet[] {
   if (!categoryId) return [];
-  return CATEGORY_FACETS.filter((f) => f.categoryIds.has(categoryId));
+  return CATEGORY_FACETS.filter((f) => f.allCategories || f.categoryIds.has(categoryId));
 }
 
 /** True when the facet's selection is active. */
@@ -169,6 +187,23 @@ export function cuisineOptions(results: readonly CategoryPlace[]): string[] {
     for (const v of tagValues(p.osmTags?.cuisine)) set.add(v);
   }
   return [...set].sort();
+}
+
+/** Distinct brands in the result set with their counts, most common first. */
+export function brandOptions(
+  results: readonly CategoryPlace[],
+): { qid: string; name: string; count: number }[] {
+  const byQid = new Map<string, { name: string; count: number }>();
+  for (const place of results) {
+    const qid = place.osmTags?.["brand:wikidata"];
+    if (!qid) continue;
+    const existing = byQid.get(qid);
+    if (existing) existing.count += 1;
+    else byQid.set(qid, { name: place.osmTags?.brand ?? qid, count: 1 });
+  }
+  return [...byQid.entries()]
+    .map(([qid, v]) => ({ qid, name: v.name, count: v.count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 }
 
 // Reverse lookup: OSM tag value (e.g. "fast_food") → the first category id whose

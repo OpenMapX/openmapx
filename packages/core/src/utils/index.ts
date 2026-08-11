@@ -15,6 +15,7 @@ export { withCache } from "./cache-helpers";
 export type { CategoryFacet, FacetPlacement, FacetType } from "./categoryFacets";
 export {
   applyFacetFilters,
+  brandOptions,
   CATEGORY_FACETS,
   cuisineOptions,
   facetsForCategory,

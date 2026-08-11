@@ -17,10 +17,12 @@ import Typography from "@mui/material/Typography";
 import type { OpeningHoursFilter } from "@openmapx/core";
 import {
   AD_HOC_CATEGORY_ID,
+  brandOptions,
   facetsForCategory,
   cuisineOptions as getCuisineOptions,
   HOURS_FILTER_CATEGORY_IDS,
   removeFilterPredicate,
+  useBrandLogos,
   useCategoryFacetStore,
   useCategorySearchStore,
   useDataSourceStore,
@@ -31,9 +33,13 @@ import {
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { BRAND } from "@/lib/theme";
+import { BrandLogo } from "./BrandLogo";
 import { CategoryFiltersPanel } from "./CategoryFiltersPanel";
 import { floatingChipSx, floatingToolbarSx } from "./floatingChipSx";
 import { NlpUnmappedNotice } from "./NlpFilterChips";
+
+/** Chip row cap — most common brands first, everything past this stays reachable by narrowing the map/search instead. */
+const MAX_BRAND_CHIPS = 6;
 
 // Recognized OSM attribute keys (base form). A small model sometimes echoes
 // these into `unmapped_attributes` instead of leaving them out — they aren't
@@ -154,6 +160,7 @@ export function CategoryFilterBar() {
     useOpeningHoursStore();
   const facetSelections = useCategoryFacetStore((s) => s.selections);
   const toggleFacet = useCategoryFacetStore((s) => s.toggleFacet);
+  const setMultiFacet = useCategoryFacetStore((s) => s.setMultiFacet);
   const activeSource = useDataSourceStore((s) => s.activeSource);
   // NLP search: surface attributes that couldn't be mapped to a structured
   // filter (e.g. "best", "instagrammable") so the user knows they aren't
@@ -202,6 +209,47 @@ export function CategoryFilterBar() {
   ).length;
   const wheelchairOn = (facetSelections.wheelchairAccessible?.length ?? 0) > 0;
 
+  // Brand facet: a group-by over results already in the client, so it's
+  // offered under every category rather than gated by `facetsForCategory`.
+  // A single brand narrows nothing, so the row only renders at 2+.
+  const brandOpts = useMemo(() => brandOptions(rawResults ?? []), [rawResults]);
+  const topBrandOpts = useMemo(() => brandOpts.slice(0, MAX_BRAND_CHIPS), [brandOpts]);
+  const brandLogos = useBrandLogos(useMemo(() => topBrandOpts.map((b) => b.qid), [topBrandOpts]));
+  const selectedBrandQids = facetSelections.brand ?? [];
+  const showBrandChips = brandOpts.length >= 2;
+  const toggleBrand = (qid: string) =>
+    setMultiFacet(
+      "brand",
+      selectedBrandQids.includes(qid)
+        ? selectedBrandQids.filter((v) => v !== qid)
+        : [...selectedBrandQids, qid],
+    );
+  const brandChips = showBrandChips
+    ? topBrandOpts.map((b) => {
+        const selected = selectedBrandQids.includes(b.qid);
+        return (
+          <Chip
+            key={b.qid}
+            icon={
+              <BrandLogo
+                brand={{
+                  qid: b.qid,
+                  name: b.name,
+                  logoFile: brandLogos.get(b.qid),
+                  kind: ["brand"],
+                }}
+                size={16}
+              />
+            }
+            label={`${b.name} · ${b.count}`}
+            onClick={() => toggleBrand(b.qid)}
+            variant={selected ? "filled" : "outlined"}
+            sx={toggleChipSx(selected)}
+          />
+        );
+      })
+    : null;
+
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [panelAnchorEl, setPanelAnchorEl] = useState<HTMLElement | null>(null);
   // Pending state — committed only on Apply
@@ -219,11 +267,12 @@ export function CategoryFilterBar() {
     }
   }, [anchorEl]);
 
-  // Fuel stations (data source): simple "Open now" toggle chip
+  // Fuel stations (data source): simple "Open now" toggle chip, plus brand
+  // chips when the visible stations span more than one chain (Shell, Aral…).
   if (activeSource === "fuel") {
     const isFiltered = openingHoursFilter === "open_now";
     return (
-      <Box sx={{ ...floatingToolbarSx, pointerEvents: "none" }}>
+      <Box sx={{ ...floatingToolbarSx, gap: 1, flexWrap: "wrap", pointerEvents: "none" }}>
         <Chip
           icon={
             <Box sx={{ display: "flex", alignItems: "center", color: "inherit !important" }}>
@@ -235,6 +284,7 @@ export function CategoryFilterBar() {
           variant={isFiltered ? "filled" : "outlined"}
           sx={toggleChipSx(isFiltered)}
         />
+        {brandChips}
       </Box>
     );
   }
@@ -265,22 +315,28 @@ export function CategoryFilterBar() {
         sx={floatingChipSx(true, "toggle")}
       />
     ));
-    const hasChips = requireChips.length > 0 || excludeChips.length > 0;
+    const hasChips = requireChips.length > 0 || excludeChips.length > 0 || showBrandChips;
     if (!hasChips && !unmappedNotice) return null;
     return (
       <Box sx={{ ...floatingToolbarSx, gap: 1, flexWrap: "wrap", pointerEvents: "none" }}>
         {requireChips}
         {excludeChips}
+        {brandChips}
         {unmappedNotice && <Box sx={{ flexBasis: "100%" }}>{unmappedNotice}</Box>}
       </Box>
     );
   }
 
-  // No opening-times toolbar for this category, but an NLP search may still
-  // have unmapped attributes worth surfacing on its own row.
+  // No opening-times toolbar for this category, but the brand chips (any
+  // category) or an NLP unmapped-attributes notice may still apply.
   if (!effectiveCategory || !HOURS_FILTER_CATEGORY_IDS.has(effectiveCategory)) {
-    if (!unmappedNotice) return null;
-    return <Box sx={{ ...floatingToolbarSx, pointerEvents: "none" }}>{unmappedNotice}</Box>;
+    if (!unmappedNotice && !showBrandChips) return null;
+    return (
+      <Box sx={{ ...floatingToolbarSx, gap: 1, flexWrap: "wrap", pointerEvents: "none" }}>
+        {brandChips}
+        {unmappedNotice && <Box sx={{ flexBasis: "100%" }}>{unmappedNotice}</Box>}
+      </Box>
+    );
   }
 
   const isFiltered = openingHoursFilter !== "any";
@@ -487,6 +543,7 @@ export function CategoryFilterBar() {
         variant={wheelchairOn ? "filled" : "outlined"}
         sx={toggleChipSx(wheelchairOn)}
       />
+      {brandChips}
       {panelFacets.length > 0 && (
         <>
           <Chip
