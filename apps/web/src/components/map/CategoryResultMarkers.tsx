@@ -84,10 +84,13 @@ export function brandImageId(qid: string): string {
 
 /**
  * Loads one brand's logo into the map's image registry, fetching its detail
- * record (for the Commons filename) and the logo bytes together — there is
- * only one network-touching step per distinct QID, so nothing else needs to
- * duplicate the brand-detail request `useBrandDetail` already makes at the
- * hook layer.
+ * record (for the Commons filename) and the logo bytes together. This calls
+ * the brand-detail route directly with `apiClient.get`, outside React Query,
+ * so it does not share a cache entry with `useBrandDetail`/`useBrandLogos` —
+ * `CategoryFilterBar`'s facet chips request the same QIDs concurrently via
+ * `useBrandLogos`. The two calls just land on the same HTTP route, which
+ * carries its own `Cache-Control` header, so the duplication costs a cache
+ * hit rather than a second catalog lookup.
  *
  * Resolves `false` without registering an image when the brand has no logo or
  * any step fails; callers fall back to the category marker, so a broken or
