@@ -1,6 +1,6 @@
 "use client";
 
-import { twilightBands } from "@openmapx/core";
+import { subsolarPoint, twilightBands } from "@openmapx/core";
 import { useEffect, useMemo, useState } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
@@ -19,6 +19,20 @@ const TICK_MS = 60_000;
 /** Reserved contiguous block below every other area overlay: the shading is
  *  ambient, so place boundaries and imported geometry must read through it. */
 const BAND_ORDER_BASE = -BAND_COUNT;
+
+const SUBSOLAR_SOURCE_ID = "sun-time-subsolar-src";
+const SUBSOLAR_LAYER_ID = "sun-time-subsolar";
+const SUBSOLAR_IMAGE_ID = "sun-time-sun";
+/** Above this the sun icon is noise; the shading itself keeps explaining local time. */
+const SUBSOLAR_MAX_ZOOM = 4;
+
+const SUN_ICON =
+  "data:image/svg+xml;charset=utf-8," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">` +
+      `<circle cx="14" cy="14" r="7" fill="#ffca28" stroke="#f9a825" stroke-width="1.5"/>` +
+      `</svg>`,
+  );
 
 export default function SunTimeLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
@@ -40,6 +54,19 @@ export default function SunTimeLayer() {
 
   const instant = timeMs ?? nowMs;
   const bands = useMemo(() => twilightBands(new Date(instant), { bands: BAND_COUNT }), [instant]);
+  const subsolar = useMemo(() => {
+    const { lng, lat } = subsolarPoint(new Date(instant));
+    return {
+      type: "FeatureCollection" as const,
+      features: [
+        {
+          type: "Feature" as const,
+          geometry: { type: "Point" as const, coordinates: [lng, lat] },
+          properties: {},
+        },
+      ],
+    };
+  }, [instant]);
 
   const { publish, clear } = useGeoJsonSourceDataBridge({
     mapRef,
@@ -68,6 +95,13 @@ export default function SunTimeLayer() {
         } catch {
           // ignore
         }
+        try {
+          if (map.getLayer(SUBSOLAR_LAYER_ID)) map.removeLayer(SUBSOLAR_LAYER_ID);
+          if (map.getSource(SUBSOLAR_SOURCE_ID)) map.removeSource(SUBSOLAR_SOURCE_ID);
+        } catch {
+          // ignore
+        }
+        unregisterLayerSlot(SUBSOLAR_LAYER_ID);
         return;
       }
 
@@ -102,6 +136,40 @@ export default function SunTimeLayer() {
           BAND_ORDER_BASE + band,
         );
       });
+
+      if (!map.hasImage(SUBSOLAR_IMAGE_ID)) {
+        const image = new Image(28, 28);
+        image.onload = () => {
+          if (!map.hasImage(SUBSOLAR_IMAGE_ID)) map.addImage(SUBSOLAR_IMAGE_ID, image);
+        };
+        image.src = SUN_ICON;
+      }
+
+      if (!map.getSource(SUBSOLAR_SOURCE_ID)) {
+        map.addSource(SUBSOLAR_SOURCE_ID, {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+      }
+
+      if (!map.getLayer(SUBSOLAR_LAYER_ID)) {
+        addLayerInSlot(
+          map,
+          {
+            id: SUBSOLAR_LAYER_ID,
+            type: "symbol",
+            source: SUBSOLAR_SOURCE_ID,
+            maxzoom: SUBSOLAR_MAX_ZOOM,
+            layout: {
+              "icon-image": SUBSOLAR_IMAGE_ID,
+              "icon-allow-overlap": true,
+              "icon-ignore-placement": true,
+            },
+          },
+          "overlay-markers",
+          0,
+        );
+      }
     };
 
     syncLayers();
@@ -115,11 +183,14 @@ export default function SunTimeLayer() {
 
   useEffect(() => {
     if (!active) {
-      clear([SOURCE_ID]);
+      clear([SOURCE_ID, SUBSOLAR_SOURCE_ID]);
       return;
     }
-    publish([{ sourceId: SOURCE_ID, data: bands }]);
-  }, [active, bands, publish, clear]);
+    publish([
+      { sourceId: SOURCE_ID, data: bands },
+      { sourceId: SUBSOLAR_SOURCE_ID, data: subsolar },
+    ]);
+  }, [active, bands, subsolar, publish, clear]);
 
   return null;
 }
