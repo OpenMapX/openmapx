@@ -1,4 +1,11 @@
 {
   "name": "Daylight & Time Zones",
-  "description": "Day/night terminator with civil, nautical and astronomical twilight shading, plus time zone boundaries"
+  "description": "Day/night terminator with civil, nautical and astronomical twilight shading, plus time zone boundaries",
+  "dataSources": {
+    "timezone-boundary-builder": {
+      "purpose": "Time zone boundary polygons rendered as a map overlay",
+      "dataSent": "Nothing — the boundaries are vendored and served from this instance",
+      "dataReceived": "Time zone polygons with IANA time zone identifiers"
+    }
+  }
 }

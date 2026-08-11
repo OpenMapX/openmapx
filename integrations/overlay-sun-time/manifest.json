@@ -20,8 +20,25 @@
     }
   },
   "backend": {
-    "routes": false
+    "routes": true
   },
   "quality": "built-in",
-  "category": "Data Overlays"
+  "category": "Data Overlays",
+  "dataSources": [
+    {
+      "sourceId": "timezone-boundary-builder",
+      "name": "timezone-boundary-builder (OpenStreetMap)",
+      "url": "https://github.com/evansiroky/timezone-boundary-builder",
+      "license": "ODbL 1.0",
+      "licenseUrl": "https://www.openstreetmap.org/copyright",
+      "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
+      "commercialUse": "yes",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://osmfoundation.org/wiki/Privacy_Policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
 }

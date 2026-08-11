@@ -5,6 +5,7 @@ import { useEffect, useMemo } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { useMap } from "@/lib/MapContext";
+import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { useSunTimeStore } from "./store";
 
 const SOURCE_ID = "sun-time-terminator";
@@ -42,10 +43,17 @@ export default function SunTimeLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const layerVisible = useSunTimeStore((s) => s.layerVisible);
   const showTerminator = useSunTimeStore((s) => s.showTerminator);
+  const showTimeZones = useSunTimeStore((s) => s.showTimeZones);
   const panelOpen = useSunTimeStore((s) => s.panelOpen);
   const timeMs = useSunTimeStore((s) => s.timeMs);
   const nowMs = useSunTimeStore((s) => s.nowMs);
   const setNowMs = useSunTimeStore((s) => s.setNowMs);
+
+  // Credits the vendored boundary source only while the time zone toggle
+  // itself is on, not merely while the overlay is — the terminator shading
+  // owes nobody, so crediting it whenever the layer is visible would credit
+  // a source for pixels it did not draw.
+  useIntegrationAttribution("overlay-sun-time", layerVisible && showTimeZones);
 
   const active = layerVisible && showTerminator;
   // The legend can be showing a clock (panelOpen) even while the shading

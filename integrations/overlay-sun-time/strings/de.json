@@ -1,4 +1,11 @@
 {
   "name": "Tageslicht & Zeitzonen",
-  "description": "Tag-/Nachtgrenze mit bürgerlicher, nautischer und astronomischer Dämmerung sowie Zeitzonengrenzen"
+  "description": "Tag-/Nachtgrenze mit bürgerlicher, nautischer und astronomischer Dämmerung sowie Zeitzonengrenzen",
+  "dataSources": {
+    "timezone-boundary-builder": {
+      "purpose": "Zeitzonengrenzen als Kartenebene",
+      "dataSent": "Nichts — die Grenzen liegen lokal vor und werden von dieser Instanz ausgeliefert",
+      "dataReceived": "Zeitzonen-Polygone mit IANA-Zeitzonenkennungen"
+    }
+  }
 }

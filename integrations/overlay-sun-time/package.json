@@ -4,6 +4,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "refresh-timezones": "node scripts/refresh-timezones.mjs"
+  },
   "dependencies": {
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^"
