@@ -4,7 +4,7 @@ import LaunchIcon from "@mui/icons-material/Launch";
 import Box from "@mui/material/Box";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
-import { useBrandDetail, useCategorySearchStore } from "@openmapx/core";
+import { safeHref, useBrandDetail, useCategorySearchStore } from "@openmapx/core";
 import { BrandLogo } from "@/components/search/BrandLogo";
 
 /**
@@ -21,6 +21,7 @@ export function BrandHeaderCard() {
   if (!activeBrand) return null;
 
   const description = activeBrand.description ?? detail?.description;
+  const website = safeHref(detail?.website);
 
   return (
     <Box
@@ -45,9 +46,9 @@ export function BrandHeaderCard() {
           </Typography>
         )}
       </Box>
-      {detail?.website && (
+      {website && (
         <Link
-          href={detail.website}
+          href={website}
           target="_blank"
           rel="noopener noreferrer"
           sx={{ display: "flex", alignItems: "center", color: "text.secondary" }}
