@@ -1,6 +1,10 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { BAND_COUNT, BAND_ORDER_BASE } from "@integrations/overlay-sun-time/map-layer";
+import {
+  BAND_COUNT,
+  BAND_ORDER_BASE,
+  TZ_FILL_ORDER,
+} from "@integrations/overlay-sun-time/map-layer";
 import { afterEach, describe, expect, it } from "vitest";
 import { createFakeMap } from "@/test";
 import {
@@ -236,8 +240,14 @@ describe("sun-time terminator band order", () => {
   it("keeps the sun-time band block above raster-overlays but below every other area-overlays layer", () => {
     const { found } = declaredSlots();
     const areaOverlays = found.filter((d) => d.slot === "area-overlays");
+    // overlay-sun-time also declares the time zone tint in this slot (see the
+    // "sun-time time zone tint order" describe below), whose invariant is the
+    // opposite of the band block's — it belongs on top, not underneath. Its
+    // order is always positive (TZ_FILL_ORDER), the band block's is always
+    // negative (BAND_ORDER_BASE + band), so filtering to negative orders here
+    // keeps the two from being folded into one check.
     const sunTimeOrders = areaOverlays
-      .filter((d) => d.id.includes("/overlay-sun-time/"))
+      .filter((d) => d.id.includes("/overlay-sun-time/") && d.order < 0)
       .map((d) => d.order);
     const otherOrders = areaOverlays
       .filter((d) => !d.id.includes("/overlay-sun-time/"))
@@ -264,6 +274,19 @@ describe("sun-time terminator band order", () => {
     expect(layerRank("area-overlays", lowestSunTimeOrder)).toBeGreaterThan(
       layerRank("raster-overlays", maxRasterOverlayOrder),
     );
+  });
+});
+
+describe("sun-time time zone tint order", () => {
+  it("keeps the time zone fill above every other area-overlays layer, not just the terminator bands", () => {
+    const { found } = declaredSlots();
+    const otherOrders = found
+      .filter((d) => d.slot === "area-overlays" && !d.id.includes("/overlay-sun-time/"))
+      .map((d) => d.order);
+
+    for (const order of otherOrders) {
+      expect(TZ_FILL_ORDER).toBeGreaterThan(order);
+    }
   });
 });
 

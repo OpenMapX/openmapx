@@ -1,9 +1,11 @@
 "use client";
 
-import { subsolarPoint, twilightBands } from "@openmapx/core";
-import { useEffect, useMemo } from "react";
+import { subsolarPoint, twilightBands, tzOffsetLabel, tzOffsetMinutes } from "@openmapx/core";
+import { useEffect, useMemo, useState } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
+import type { GeoJsonSourceDataEntry } from "@/components/map/layers/layerStyleUtils";
 import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
+import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { useSunTimeStore } from "./store";
@@ -39,6 +41,33 @@ const SUN_ICON =
       `</svg>`,
   );
 
+const TZ_SOURCE_ID = "sun-time-timezones";
+const TZ_FILL_LAYER_ID = "sun-time-tz-fill";
+const TZ_LINE_LAYER_ID = "sun-time-tz-line";
+const TZ_LABEL_LAYER_ID = "sun-time-tz-label";
+/** Boundaries get noisy below whole-zone zoom; the fill also loses its point at city scale. */
+const TZ_MAX_ZOOM = 8;
+
+// The tint identifies "what zone am I in", which only matters once it reads
+// through every other area overlay — not just the ambient terminator shading
+// reserved at BAND_ORDER_BASE. 20/25/16 are each one above the current highest
+// declared order in their slot (area-overlays/overlay-lines/overlay-markers);
+// see layerStack.test.ts for the repo-wide collision guard these have to clear.
+export const TZ_FILL_ORDER = 20;
+const TZ_LINE_ORDER = 25;
+const TZ_LABEL_ORDER = 16;
+
+interface TimeZoneFeature {
+  type: "Feature";
+  properties: { tzid: string };
+  geometry: GeoJSON.Geometry;
+}
+
+interface TimeZoneFeatureCollection {
+  type: "FeatureCollection";
+  features: TimeZoneFeature[];
+}
+
 export default function SunTimeLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const layerVisible = useSunTimeStore((s) => s.layerVisible);
@@ -48,12 +77,40 @@ export default function SunTimeLayer() {
   const timeMs = useSunTimeStore((s) => s.timeMs);
   const nowMs = useSunTimeStore((s) => s.nowMs);
   const setNowMs = useSunTimeStore((s) => s.setNowMs);
+  const env = useEnv();
+  const setTzLoading = useSunTimeStore((s) => s.setTzLoading);
+  const tzActive = layerVisible && showTimeZones;
 
   // Credits the vendored boundary source only while the time zone toggle
   // itself is on, not merely while the overlay is — the terminator shading
   // owes nobody, so crediting it whenever the layer is visible would credit
   // a source for pixels it did not draw.
   useIntegrationAttribution("overlay-sun-time", layerVisible && showTimeZones);
+
+  const [zones, setZones] = useState<TimeZoneFeatureCollection | null>(null);
+
+  // Fetches once: the guard below bails out as soon as `zones` is set, and
+  // ticking `instant` (from the shared 60s clock) is deliberately not a
+  // dependency, so a clock tick can never refire this.
+  useEffect(() => {
+    if (!tzActive || zones) return;
+    let cancelled = false;
+    setTzLoading(true);
+    fetch(`${env.apiUrl}/api/integrations/overlay-sun-time/timezones`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: TimeZoneFeatureCollection | null) => {
+        if (!cancelled && data) setZones(data);
+      })
+      .catch(() => {
+        // The overlay simply stays empty; the legend's loading bar clears below.
+      })
+      .finally(() => {
+        if (!cancelled) setTzLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tzActive, zones, env.apiUrl, setTzLoading]);
 
   const active = layerVisible && showTerminator;
   // The legend can be showing a clock (panelOpen) even while the shading
@@ -89,11 +146,44 @@ export default function SunTimeLayer() {
     };
   }, [instant]);
 
+  const decoratedZones = useMemo(() => {
+    if (!zones) return null;
+    const at = new Date(instant);
+    return {
+      type: "FeatureCollection" as const,
+      // tzOffsetMinutes/tzOffsetLabel return null for a zone id the platform
+      // doesn't recognise. The vendored file is validated at generation time,
+      // so this shouldn't fire — but a stale id must drop that one polygon,
+      // not poison the whole layer with a NaN hue and an invalid hsl() color.
+      features: zones.features.flatMap((feature) => {
+        const offsetMinutes = tzOffsetMinutes(at, feature.properties.tzid);
+        const offsetLabel = tzOffsetLabel(at, feature.properties.tzid);
+        if (offsetMinutes === null || offsetLabel === null) return [];
+        const hue = ((((offsetMinutes / 60) * 15) % 360) + 360) % 360;
+        return [
+          {
+            ...feature,
+            properties: {
+              ...feature.properties,
+              offsetMinutes,
+              offsetLabel,
+              color: `hsl(${Math.round(hue)}, 55%, 55%)`,
+            },
+          },
+        ];
+      }),
+    };
+  }, [zones, instant]);
+
+  // `visible` also has to cover tzActive: with only the terminator's `active`
+  // here, toggling the time zone layer on while the terminator is off would
+  // leave the bridge believing nothing is visible, and `publish()` below
+  // would silently drop the decorated data instead of applying it.
   const { publish, clear } = useGeoJsonSourceDataBridge({
     mapRef,
     mapReady,
     styleVersion,
-    visible: active,
+    visible: active || tzActive,
   });
 
   useEffect(() => {
@@ -107,7 +197,7 @@ export default function SunTimeLayer() {
     // closure bails out instead of re-adding layers nobody wants anymore.
     let disposed = false;
 
-    const teardown = () => {
+    const teardownTerminator = () => {
       for (const id of BAND_LAYER_IDS) {
         try {
           if (map.getLayer(id)) map.removeLayer(id);
@@ -130,10 +220,23 @@ export default function SunTimeLayer() {
       unregisterLayerSlot(SUBSOLAR_LAYER_ID);
     };
 
+    const teardownTimeZones = () => {
+      try {
+        for (const id of [TZ_FILL_LAYER_ID, TZ_LINE_LAYER_ID, TZ_LABEL_LAYER_ID]) {
+          if (map.getLayer(id)) map.removeLayer(id);
+          unregisterLayerSlot(id);
+        }
+        if (map.getSource(TZ_SOURCE_ID)) map.removeSource(TZ_SOURCE_ID);
+      } catch {
+        // The style may already have dropped it during a base-map swap.
+      }
+    };
+
     const syncLayers = () => {
       if (disposed) return;
-      if (!active) {
-        teardown();
+      if (!active && !tzActive) {
+        teardownTerminator();
+        teardownTimeZones();
         return;
       }
 
@@ -142,96 +245,180 @@ export default function SunTimeLayer() {
         return;
       }
 
-      if (!map.getSource(SOURCE_ID)) {
-        map.addSource(SOURCE_ID, {
-          type: "geojson",
-          data: { type: "FeatureCollection", features: [] },
-        });
-      }
+      if (active) {
+        if (!map.getSource(SOURCE_ID)) {
+          map.addSource(SOURCE_ID, {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] },
+          });
+        }
 
-      BAND_LAYER_IDS.forEach((id, band) => {
-        if (map.getLayer(id)) return;
-        addLayerInSlot(
-          map,
-          {
-            id,
-            type: "fill",
-            source: SOURCE_ID,
-            filter: ["==", ["get", "band"], band],
-            paint: {
-              "fill-color": BAND_COLOR,
-              "fill-opacity": BAND_OPACITY,
-              "fill-antialias": false,
+        BAND_LAYER_IDS.forEach((id, band) => {
+          if (map.getLayer(id)) return;
+          addLayerInSlot(
+            map,
+            {
+              id,
+              type: "fill",
+              source: SOURCE_ID,
+              filter: ["==", ["get", "band"], band],
+              paint: {
+                "fill-color": BAND_COLOR,
+                "fill-opacity": BAND_OPACITY,
+                "fill-antialias": false,
+              },
             },
-          },
-          "area-overlays",
-          BAND_ORDER_BASE + band,
-        );
-      });
-
-      if (!map.hasImage(SUBSOLAR_IMAGE_ID)) {
-        const image = new Image(56, 56);
-        image.onload = () => {
-          if (!map.hasImage(SUBSOLAR_IMAGE_ID)) {
-            map.addImage(SUBSOLAR_IMAGE_ID, image, { pixelRatio: 2 });
-          }
-        };
-        image.src = SUN_ICON;
-      }
-
-      if (!map.getSource(SUBSOLAR_SOURCE_ID)) {
-        map.addSource(SUBSOLAR_SOURCE_ID, {
-          type: "geojson",
-          data: { type: "FeatureCollection", features: [] },
+            "area-overlays",
+            BAND_ORDER_BASE + band,
+          );
         });
+
+        if (!map.hasImage(SUBSOLAR_IMAGE_ID)) {
+          const image = new Image(56, 56);
+          image.onload = () => {
+            if (!map.hasImage(SUBSOLAR_IMAGE_ID)) {
+              map.addImage(SUBSOLAR_IMAGE_ID, image, { pixelRatio: 2 });
+            }
+          };
+          image.src = SUN_ICON;
+        }
+
+        if (!map.getSource(SUBSOLAR_SOURCE_ID)) {
+          map.addSource(SUBSOLAR_SOURCE_ID, {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] },
+          });
+        }
+
+        if (!map.getLayer(SUBSOLAR_LAYER_ID)) {
+          addLayerInSlot(
+            map,
+            {
+              id: SUBSOLAR_LAYER_ID,
+              type: "symbol",
+              source: SUBSOLAR_SOURCE_ID,
+              maxzoom: SUBSOLAR_MAX_ZOOM,
+              layout: {
+                "icon-image": SUBSOLAR_IMAGE_ID,
+                "icon-allow-overlap": true,
+                "icon-ignore-placement": true,
+              },
+            },
+            "overlay-markers",
+            SUBSOLAR_ORDER,
+          );
+        }
+      } else {
+        teardownTerminator();
       }
 
-      if (!map.getLayer(SUBSOLAR_LAYER_ID)) {
-        addLayerInSlot(
-          map,
-          {
-            id: SUBSOLAR_LAYER_ID,
-            type: "symbol",
-            source: SUBSOLAR_SOURCE_ID,
-            maxzoom: SUBSOLAR_MAX_ZOOM,
-            layout: {
-              "icon-image": SUBSOLAR_IMAGE_ID,
-              "icon-allow-overlap": true,
-              "icon-ignore-placement": true,
+      if (tzActive) {
+        if (!map.getSource(TZ_SOURCE_ID)) {
+          map.addSource(TZ_SOURCE_ID, {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] },
+          });
+        }
+
+        if (!map.getLayer(TZ_FILL_LAYER_ID)) {
+          addLayerInSlot(
+            map,
+            {
+              id: TZ_FILL_LAYER_ID,
+              type: "fill",
+              source: TZ_SOURCE_ID,
+              maxzoom: TZ_MAX_ZOOM,
+              paint: {
+                "fill-color": ["get", "color"],
+                "fill-opacity": 0.18,
+                "fill-antialias": false,
+              },
             },
-          },
-          "overlay-markers",
-          SUBSOLAR_ORDER,
-        );
+            "area-overlays",
+            TZ_FILL_ORDER,
+          );
+        }
+
+        if (!map.getLayer(TZ_LINE_LAYER_ID)) {
+          addLayerInSlot(
+            map,
+            {
+              id: TZ_LINE_LAYER_ID,
+              type: "line",
+              source: TZ_SOURCE_ID,
+              maxzoom: TZ_MAX_ZOOM,
+              paint: { "line-color": ["get", "color"], "line-width": 1, "line-opacity": 0.4 },
+            },
+            "overlay-lines",
+            TZ_LINE_ORDER,
+          );
+        }
+
+        if (!map.getLayer(TZ_LABEL_LAYER_ID)) {
+          // MapLibre places point symbols for polygon features at a computed
+          // interior point, so the label layer needs no centroid pass and no
+          // turf dependency.
+          addLayerInSlot(
+            map,
+            {
+              id: TZ_LABEL_LAYER_ID,
+              type: "symbol",
+              source: TZ_SOURCE_ID,
+              minzoom: 2,
+              maxzoom: TZ_MAX_ZOOM,
+              layout: {
+                "text-field": ["get", "offsetLabel"],
+                "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+                "text-size": 11,
+              },
+              paint: {
+                "text-color": "#ffffff",
+                "text-halo-color": "rgba(0,0,0,0.5)",
+                "text-halo-width": 1,
+              },
+            },
+            "overlay-markers",
+            TZ_LABEL_ORDER,
+          );
+        }
+      } else {
+        teardownTimeZones();
       }
     };
 
     syncLayers();
-    if (active) map.on("styledata", syncLayers);
+    if (active || tzActive) map.on("styledata", syncLayers);
 
     // Runs on every dep change, not just true unmount: disposing here cancels
     // any pending idle callback from this run, and tearing down unconditionally
-    // (not just when `active` flips off) is what stops the 16 band layers, the
-    // source, and their layerStack slots from being stranded if the component
-    // unmounts — e.g. the overlay integration is disabled at runtime — while
-    // still active. Both calls are idempotent when there is nothing to do.
+    // (not just when `active`/`tzActive` flip off) is what stops the band
+    // layers, the time zone layers, their sources, and their layerStack slots
+    // from being stranded if the component unmounts — e.g. the overlay
+    // integration is disabled at runtime — while still active. Every call is
+    // idempotent when there is nothing to do.
     return () => {
       disposed = true;
-      if (active) map.off("styledata", syncLayers);
-      teardown();
+      if (active || tzActive) map.off("styledata", syncLayers);
+      teardownTerminator();
+      teardownTimeZones();
     };
-  }, [mapRef, mapReady, styleVersion, active]);
+  }, [mapRef, mapReady, styleVersion, active, tzActive]);
 
   useEffect(() => {
-    if (!active) {
-      clear([SOURCE_ID, SUBSOLAR_SOURCE_ID]);
+    const entries: GeoJsonSourceDataEntry[] = [];
+    if (active) {
+      entries.push({ sourceId: SOURCE_ID, data: bands });
+      entries.push({ sourceId: SUBSOLAR_SOURCE_ID, data: subsolar });
+    }
+    if (tzActive && decoratedZones) {
+      entries.push({ sourceId: TZ_SOURCE_ID, data: decoratedZones });
+    }
+    if (entries.length === 0) {
+      clear([SOURCE_ID, SUBSOLAR_SOURCE_ID, TZ_SOURCE_ID]);
       return;
     }
-    publish([
-      { sourceId: SOURCE_ID, data: bands },
-      { sourceId: SUBSOLAR_SOURCE_ID, data: subsolar },
-    ]);
-  }, [active, bands, subsolar, publish, clear]);
+    publish(entries);
+  }, [active, tzActive, bands, subsolar, decoratedZones, publish, clear]);
 
   return null;
 }

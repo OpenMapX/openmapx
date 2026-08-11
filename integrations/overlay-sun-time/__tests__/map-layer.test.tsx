@@ -13,6 +13,8 @@ vi.mock("@/lib/MapContext", () => ({
   }),
 }));
 
+vi.mock("@/lib/EnvProvider", () => ({ useEnv: () => ({ apiUrl: "http://api.test" }) }));
+
 // jsdom never decodes images, so a real `Image.onload` would never fire and
 // the icon-load path in map-layer.tsx would hang forever under test. Stub the
 // global so setting `.src` resolves the load synchronously.
@@ -37,6 +39,31 @@ const BAND_LAYER_IDS = Array.from({ length: 16 }, (_, i) => `sun-time-band-${i}`
 const SUBSOLAR_SOURCE_ID = "sun-time-subsolar-src";
 const SUBSOLAR_LAYER_ID = "sun-time-subsolar";
 const SUBSOLAR_IMAGE_ID = "sun-time-sun";
+const TZ_SOURCE_ID = "sun-time-timezones";
+const TZ_FILL_LAYER_ID = "sun-time-tz-fill";
+const TZ_LINE_LAYER_ID = "sun-time-tz-line";
+const TZ_LABEL_LAYER_ID = "sun-time-tz-label";
+
+const TZ_FIXTURE = {
+  type: "FeatureCollection",
+  features: [
+    {
+      type: "Feature",
+      properties: { tzid: "Europe/Berlin" },
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [13, 52],
+            [14, 52],
+            [14, 53],
+            [13, 52],
+          ],
+        ],
+      },
+    },
+  ],
+};
 
 beforeEach(() => {
   fake = createFakeMap();
@@ -102,7 +129,21 @@ describe("SunTimeLayer", () => {
   });
 
   it("survives a base-map style reload with every band layer and its data intact", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => TZ_FIXTURE })),
+    );
+    useSunTimeStore.setState({ showTimeZones: true });
     render(<SunTimeLayer />);
+    // Let the time zone fetch resolve before the swap, so the reload is
+    // proven to replay decorated (not just empty) data.
+    await vi.waitFor(() => {
+      const tzData = fake.state.sources.get(TZ_SOURCE_ID)?.data as
+        | GeoJSON.FeatureCollection
+        | undefined;
+      expect(tzData?.features).toHaveLength(1);
+    });
+
     // The retained payload replays through a bridge-internal microtask (see
     // useGeoJsonSourceDataBridge.test.tsx), which a synchronous act() does not
     // drain — flush it before asserting nothing was lost.
@@ -116,6 +157,20 @@ describe("SunTimeLayer", () => {
     }
     const data = fake.state.sources.get(SOURCE_ID)?.data as GeoJSON.FeatureCollection | undefined;
     expect(data?.features).toHaveLength(16);
+
+    for (const id of [TZ_FILL_LAYER_ID, TZ_LINE_LAYER_ID, TZ_LABEL_LAYER_ID]) {
+      expect(fake.state.layers.has(id)).toBe(true);
+    }
+    const tzData = fake.state.sources.get(TZ_SOURCE_ID)?.data as
+      | GeoJSON.FeatureCollection
+      | undefined;
+    expect(tzData?.features).toHaveLength(1);
+    // Not vi.unstubAllGlobals(): that would also restore the real `Image`,
+    // undoing the module-level StubImage every later test in this file relies
+    // on. Reset the flag this test turned on instead, so a later test in this
+    // describe doesn't inherit an active time zone fetch against a fetch
+    // stub that no longer exists.
+    useSunTimeStore.setState({ showTimeZones: false });
   });
 
   it("follows the wall clock, republishes on each tick, and stops after unmount", () => {
@@ -217,10 +272,16 @@ describe("SunTimeLayer subsolar marker", () => {
 });
 
 describe("SunTimeLayer lifecycle teardown", () => {
-  it("removes every band layer, the subsolar marker, and both sources on unmount while still active", () => {
+  it("removes every band layer, the subsolar marker, the time zone layers, and every source on unmount while still active", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => TZ_FIXTURE })),
+    );
+    useSunTimeStore.setState({ showTimeZones: true });
     const { unmount } = render(<SunTimeLayer />);
     expect(fake.state.layers.has("sun-time-band-0")).toBe(true);
     expect(fake.state.layers.has(SUBSOLAR_LAYER_ID)).toBe(true);
+    expect(fake.state.layers.has(TZ_FILL_LAYER_ID)).toBe(true);
 
     unmount();
 
@@ -230,6 +291,13 @@ describe("SunTimeLayer lifecycle teardown", () => {
     expect(fake.state.sources.has(SOURCE_ID)).toBe(false);
     expect(fake.state.layers.has(SUBSOLAR_LAYER_ID)).toBe(false);
     expect(fake.state.sources.has(SUBSOLAR_SOURCE_ID)).toBe(false);
+    for (const id of [TZ_FILL_LAYER_ID, TZ_LINE_LAYER_ID, TZ_LABEL_LAYER_ID]) {
+      expect(fake.state.layers.has(id)).toBe(false);
+    }
+    expect(fake.state.sources.has(TZ_SOURCE_ID)).toBe(false);
+    // Not vi.unstubAllGlobals() — see the same note above. Reset the flag
+    // this test turned on for the same reason.
+    useSunTimeStore.setState({ showTimeZones: false });
   });
 
   it("cancels a pending idle sync so hiding the overlay mid-style-load does not resurrect it", () => {
@@ -252,5 +320,110 @@ describe("SunTimeLayer lifecycle teardown", () => {
 
     expect(fake.state.layers.has("sun-time-band-0")).toBe(false);
     expect(fake.state.sources.has(SOURCE_ID)).toBe(false);
+  });
+});
+
+describe("SunTimeLayer time zones", () => {
+  beforeEach(() => {
+    useSunTimeStore.setState({
+      layerVisible: true,
+      showTerminator: false,
+      showTimeZones: true,
+      timeMs: Date.UTC(2026, 6, 15, 12),
+    });
+  });
+
+  afterEach(() => {
+    // Resetting showTimeZones is enough to keep later tests from touching
+    // fetch at all; not vi.unstubAllGlobals(), which would also restore the
+    // real `Image` and undo the module-level StubImage other tests rely on.
+    useSunTimeStore.setState({ showTimeZones: false });
+  });
+
+  it("caps every time zone layer at zoom 8", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => TZ_FIXTURE })),
+    );
+    render(<SunTimeLayer />);
+
+    await vi.waitFor(() => {
+      expect(fake.state.layers.has(TZ_FILL_LAYER_ID)).toBe(true);
+    });
+    for (const id of [TZ_FILL_LAYER_ID, TZ_LINE_LAYER_ID, TZ_LABEL_LAYER_ID]) {
+      expect(fake.state.layers.get(id)?.maxzoom).toBe(8);
+    }
+  });
+
+  it("decorates each zone with its offset at the selected instant", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => TZ_FIXTURE })),
+    );
+    render(<SunTimeLayer />);
+
+    await vi.waitFor(() => {
+      const data = fake.state.sources.get(TZ_SOURCE_ID)?.data as
+        | GeoJSON.FeatureCollection
+        | undefined;
+      expect(data?.features[0]?.properties).toMatchObject({
+        tzid: "Europe/Berlin",
+        offsetMinutes: 120,
+        offsetLabel: "UTC+2",
+      });
+    });
+  });
+
+  it("fetches the boundaries only once across re-renders", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => TZ_FIXTURE }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { rerender } = render(<SunTimeLayer />);
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    rerender(<SunTimeLayer />);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // A clock tick recomputes the decoration but must not be a fetch dependency.
+    act(() => {
+      useSunTimeStore.setState({ timeMs: Date.UTC(2026, 0, 15, 12) });
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops a zone whose id the platform cannot resolve instead of poisoning the layer", async () => {
+    const mixedFixture = {
+      type: "FeatureCollection",
+      features: [
+        ...TZ_FIXTURE.features,
+        {
+          type: "Feature",
+          properties: { tzid: "Mars/Olympus" },
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [0, 0],
+                [1, 0],
+                [1, 1],
+                [0, 0],
+              ],
+            ],
+          },
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => mixedFixture })),
+    );
+    render(<SunTimeLayer />);
+
+    await vi.waitFor(() => {
+      const data = fake.state.sources.get(TZ_SOURCE_ID)?.data as
+        | GeoJSON.FeatureCollection
+        | undefined;
+      expect(data?.features).toHaveLength(1);
+      expect(data?.features[0]?.properties?.tzid).toBe("Europe/Berlin");
+    });
   });
 });

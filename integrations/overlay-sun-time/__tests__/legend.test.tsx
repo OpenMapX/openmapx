@@ -14,6 +14,8 @@ vi.mock("@/lib/MapContext", () => ({
   }),
 }));
 
+vi.mock("@/lib/EnvProvider", () => ({ useEnv: () => ({ apiUrl: "http://api.test" }) }));
+
 // jsdom never decodes images, so a real `Image.onload` would never fire and the
 // map layer's icon-load path would hang forever under test. Stub the global so
 // setting `.src` resolves the load synchronously — copied from map-layer.test.tsx
