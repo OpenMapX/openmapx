@@ -126,11 +126,12 @@ function poleBranchRing(
     const B = Math.cos(dec) * Math.cos(hourAngle);
     const R = Math.hypot(A, B);
 
-    if (R < 1e-12 || Math.abs(C / R) > 1) {
-      // The whole meridian sits on one side of the threshold: the target
-      // altitude is unreachable there, so it's entirely dark when it exceeds
-      // the meridian's achievable range and entirely lit when it falls below it.
-      ring.push([lng, C > 0 ? darkPole : litPole]);
+    if (R < 1e-12) {
+      // R = hypot(A, B) >= |A| = |sin declination|, and the caller only takes
+      // this branch when |declination| >= |altitudeDeg| = |C|, so R >= |C|
+      // always holds except at this equinox degenerate meridian (declination
+      // and cos(hourAngle) both ~0), which sits on the boundary everywhere.
+      ring.push([lng, litPole]);
       continue;
     }
 
@@ -178,12 +179,22 @@ function capBranchRing(
 /**
  * The region where solar altitude is below `altitudeDeg`, as a spherical cap
  * centred on the antisolar point with angular radius `90 + altitudeDeg`.
+ *
+ * `altitudeDeg` must be at or below the horizon (<= 0). Above it the cap
+ * radius (90 + altitudeDeg) would exceed 90 degrees and contain both poles,
+ * which breaks the "at most one pole inside" premise the two branches rely on.
  */
 export function darkRegion(
   date: Date,
   altitudeDeg: number,
   stepDeg = 1,
 ): Feature<Polygon, DarkRegionProperties> {
+  if (altitudeDeg > 0) {
+    throw new RangeError(
+      "darkRegion requires altitudeDeg <= 0: above the horizon, the cap radius exceeds 90 degrees and swallows both poles",
+    );
+  }
+
   const { declinationDeg, greenwichHourAngleDeg } = solarPosition(date);
   const northInside = declinationDeg <= altitudeDeg;
   const southInside = declinationDeg >= -altitudeDeg;

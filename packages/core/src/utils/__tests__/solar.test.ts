@@ -118,6 +118,10 @@ describe("darkRegion", () => {
   it("takes the pole branch when a pole is in the deep-night region", () => {
     expect(darkRegion(new Date("2026-06-21T12:00:00Z"), -18).properties.branch).toBe("pole");
   });
+
+  it("throws for a positive altitude threshold", () => {
+    expect(() => darkRegion(DATES[0], 10)).toThrow(RangeError);
+  });
 });
 
 describe("twilightBands", () => {
@@ -129,7 +133,7 @@ describe("twilightBands", () => {
     expect(fc.features[15].properties.altitudeDeg).toBeCloseTo(-16.875, 3);
   });
 
-  it("nests each band inside the one before it", () => {
+  it("contains the antisolar point in every band", () => {
     for (const date of DATES) {
       const fc = twilightBands(date);
       const sub = subsolarPoint(date);
@@ -137,6 +141,27 @@ describe("twilightBands", () => {
       for (const feature of fc.features) {
         const ring = feature.geometry.coordinates[0] as [number, number][];
         expect(pointInRing(ring, antiLng, -sub.lat)).toBe(true);
+      }
+    }
+  });
+
+  it("nests each band inside the one before it", () => {
+    for (const date of DATES) {
+      const fc = twilightBands(date);
+      for (let i = 1; i < fc.features.length; i += 1) {
+        const inner = fc.features[i].geometry.coordinates[0] as [number, number][];
+        const outer = fc.features[i - 1].geometry.coordinates[0] as [number, number][];
+        for (const [lng, lat] of inner) {
+          if (Math.abs(lat) >= 89.99) continue;
+          // capBranchRing leaves longitudes unwrapped across the antimeridian,
+          // so the same physical point can differ between rings by +-360.
+          const wrapped = ((((lng + 180) % 360) + 360) % 360) - 180;
+          const contained =
+            pointInRing(outer, wrapped, lat) ||
+            pointInRing(outer, wrapped - 360, lat) ||
+            pointInRing(outer, wrapped + 360, lat);
+          expect(contained).toBe(true);
+        }
       }
     }
   });
