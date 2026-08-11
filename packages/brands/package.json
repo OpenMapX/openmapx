@@ -1,0 +1,29 @@
+{
+  "name": "@openmapx/brands",
+  "license": "Apache-2.0",
+  "version": "1.0.0",
+  "description": "Brand and operator catalog for OpenMapX, distilled from the OSM Name Suggestion Index",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "generate": "node --experimental-strip-types src/generate.ts"
+  },
+  "dependencies": {
+    "@openmapx/core": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "name-suggestion-index": "^8.0.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}

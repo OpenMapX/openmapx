@@ -47,6 +47,7 @@ const APACHE_PACKAGES = new Set([
   "extension-sdk", // prebuilt public authoring surface — the plugin SDK itself
   "extension-cli", // standalone Apache-2.0 authoring CLI (scaffold / package / validate)
   "presets", // integration-poi-search depends on it
+  "brands", // brand/chain catalog distilled from NSI, mirrors presets
   "mobility-formats",
   "mobility-formats-tomp",
   "mobility-core",

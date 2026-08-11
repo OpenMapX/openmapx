@@ -19,7 +19,8 @@
       "!**/__fixtures__",
       "!infra/docker/data",
       "!docs",
-      "!apps/api/openapi.json"
+      "!apps/api/openapi.json",
+      "!packages/brands/src/data/brands-index.json"
     ]
   },
   "formatter": {
