@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BrandKind } from "@openmapx/core";
 import { BRAND_QID_KEYS } from "@openmapx/core/utils/brandFilter";
+import { normalize } from "./normalize.ts";
 import type { BrandArtifact, BrandEntry } from "./types.ts";
 
 const require = createRequire(import.meta.url);
@@ -76,11 +77,6 @@ interface WikidataRecord {
 
 function readJson<T>(relativePath: string): T {
   return JSON.parse(readFileSync(join(nsiRoot, relativePath), "utf8")) as T;
-}
-
-/** Lowercase, strip diacritics, collapse whitespace. Mirrors the matcher. */
-function normalize(input: string): string {
-  return input.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
 }
 
 /**

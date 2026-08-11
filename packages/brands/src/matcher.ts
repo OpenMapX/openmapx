@@ -1,4 +1,5 @@
 import type { BrandIndex } from "./loader";
+import { normalize } from "./normalize";
 import type { BrandEntry, BrandMatch } from "./types";
 
 export interface BrandSearchOptions {
@@ -8,22 +9,22 @@ export interface BrandSearchOptions {
   limit: number;
 }
 
-/** Mirrors the normalization the generator applied to `matchNames`. */
-function normalize(input: string): string {
-  return input.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
-}
-
 /**
- * Country relevance, applied as a multiplier rather than an additive bonus so a
- * weak textual match in the right country never outranks a strong one.
+ * Country relevance as a sort key rather than a score multiplier.
  *
- * A brand with no country data is global or simply unscoped in NSI; it sits
- * between "present here" and "present somewhere else" instead of being punished
- * for missing metadata.
+ * A multiplier scheme has to keep its spread strictly below the smallest
+ * adjacent text-tier ratio forever, which is a constraint nobody remembers
+ * the next time a base score changes. Ranking on it instead makes "a
+ * stronger textual match always wins" true by construction: country and
+ * `itemCount` only ever break ties within the same text score.
+ *
+ * A brand with no country data is global or simply unscoped in NSI; it ranks
+ * between "present here" and "present somewhere else" rather than being
+ * punished for missing metadata.
  */
-function countryWeight(entry: BrandEntry, country: string | undefined): number {
+function countryRank(entry: BrandEntry, country: string | undefined): number {
   if (!country || entry.countries.length === 0) return 1;
-  return entry.countries.includes(country) ? 4 : 0.25;
+  return entry.countries.includes(country.toLowerCase()) ? 2 : 0;
 }
 
 interface ScoredHit {
@@ -32,19 +33,31 @@ interface ScoredHit {
   matchedOn: BrandMatch["matchedOn"];
 }
 
+/**
+ * Scores `entry` against the normalized query `qn`.
+ *
+ * `entry.matchNames` is generated in plain alphabetical order (see
+ * `generate.ts`), not canonical-name-first, so `matchNames[0]` cannot be
+ * trusted to identify the display name. Classify against the normalized
+ * display name explicitly instead — and note it is not guaranteed to appear
+ * in `matchNames` at all, so it is scored as its own candidate rather than
+ * filtered for.
+ */
 function scoreEntry(entry: BrandEntry, qn: string): ScoredHit | undefined {
-  const primary = entry.matchNames[0];
-  const isPrimary = (name: string) => name === primary || normalize(entry.name) === name;
+  const canonical = normalize(entry.name);
+  const candidates = entry.matchNames.includes(canonical)
+    ? entry.matchNames
+    : [canonical, ...entry.matchNames];
 
   let best: ScoredHit | undefined;
-  for (const name of entry.matchNames) {
+  for (const name of candidates) {
     let base: number;
     if (name === qn) base = 1000;
     else if (name.startsWith(qn)) base = 500;
     else if (name.includes(qn)) base = 200;
     else continue;
 
-    const matchedOn: BrandMatch["matchedOn"] = isPrimary(name) ? "name" : "alias";
+    const matchedOn: BrandMatch["matchedOn"] = name === canonical ? "name" : "alias";
     // An alias hit is worth slightly less than the same hit on the display name.
     const score = matchedOn === "name" ? base : base * 0.9;
     if (!best || score > best.score) best = { entry, score, matchedOn };
@@ -56,16 +69,19 @@ export function searchBrands(index: BrandIndex, opts: BrandSearchOptions): Brand
   const qn = normalize(opts.q);
   if (qn.length === 0) return [];
 
-  const hits: ScoredHit[] = [];
+  const hits: (ScoredHit & { country: number })[] = [];
   for (const entry of index.entries) {
     const hit = scoreEntry(entry, qn);
     if (!hit) continue;
-    hits.push({ ...hit, score: hit.score * countryWeight(entry, opts.country) });
+    hits.push({ ...hit, country: countryRank(entry, opts.country) });
   }
 
-  // itemCount breaks ties: a chain NSI catalogues across more categories and
-  // regions is the bigger chain, and the one a user is more likely to mean.
-  hits.sort((a, b) => b.score - a.score || b.entry.itemCount - a.entry.itemCount);
+  // Text score decides first; country and itemCount only break ties within
+  // the same score, so a weaker textual match can never outrank a stronger
+  // one just for being in the right country.
+  hits.sort(
+    (a, b) => b.score - a.score || b.country - a.country || b.entry.itemCount - a.entry.itemCount,
+  );
 
   const out: BrandMatch[] = [];
   for (const hit of hits) {

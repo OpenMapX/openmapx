@@ -58,11 +58,11 @@ describe("searchBrands", () => {
     expect(result[0].qid).toBe("Q2");
   });
 
-  it("breaks ties by itemCount when neither entry matches the country", () => {
+  it("breaks ties by itemCount when both entries mismatch the country", () => {
     const result = searchBrands(
       index([
-        entry({ qid: "Q1", name: "Star", itemCount: 2 }),
-        entry({ qid: "Q2", name: "Star", itemCount: 40 }),
+        entry({ qid: "Q1", name: "Star", countries: ["us"], itemCount: 2 }),
+        entry({ qid: "Q2", name: "Star", countries: ["gb"], itemCount: 40 }),
       ]),
       { q: "star", country: "fr", limit: 10 },
     );
@@ -82,9 +82,28 @@ describe("searchBrands", () => {
   });
 
   it("matches on a non-primary matchName and reports matchedOn", () => {
+    // Alphabetical order, matching what the generator actually produces.
     const result = searchBrands(
-      index([entry({ qid: "Q1", name: "McDonald's", matchNames: ["mcdonalds", "mcd"] })]),
+      index([entry({ qid: "Q1", name: "McDonald's", matchNames: ["mcd", "mcdonalds"] })]),
       { q: "mcd", limit: 10 },
+    );
+    expect(result[0].matchedOn).toBe("alias");
+  });
+
+  it("reports matchedOn: name for the display name even when an alias sorts first alphabetically", () => {
+    // "star" sorts before "star market" — the alphabetically-first matchName
+    // here is an alias, not the canonical display name.
+    const result = searchBrands(
+      index([entry({ qid: "Q1", name: "Star Market", matchNames: ["star", "star market"] })]),
+      { q: "star market", limit: 10 },
+    );
+    expect(result[0].matchedOn).toBe("name");
+  });
+
+  it("reports matchedOn: alias for an alias hit even when it sorts before the display name", () => {
+    const result = searchBrands(
+      index([entry({ qid: "Q1", name: "Star Market", matchNames: ["star", "star market"] })]),
+      { q: "star", limit: 10 },
     );
     expect(result[0].matchedOn).toBe("alias");
   });
