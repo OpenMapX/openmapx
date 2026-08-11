@@ -22,7 +22,7 @@ import { z } from "zod";
  * negotiated rather than assumed.
  */
 
-/* --------------------------------------------------------------- limits --- */
+// Limits.
 
 /** Serialized message ceiling. Larger input is refused before it is parsed. */
 export const MAX_MESSAGE_BYTES = 8 * 1024 * 1024;
@@ -37,7 +37,7 @@ export const MAX_CLOCK_SKEW_MS = 5 * 60_000;
 const MAX_ID_LENGTH = 128;
 const MAX_TEXT_LENGTH = 512;
 
-/* ------------------------------------------------------------- versions --- */
+// Versions.
 
 export const MOBILE_PROTOCOL_MIN = 1;
 export const MOBILE_PROTOCOL_MAX = 2;
@@ -81,7 +81,7 @@ export function negotiateMobileProtocol(web: ProtocolRange, native: ProtocolRang
   return min <= max ? max : null;
 }
 
-/* -------------------------------------------------------------- vocabulary */
+// Vocabulary.
 
 export const WEB_TO_NATIVE_TYPES = [
   "web.hello",
@@ -130,7 +130,7 @@ export interface MobileBridgeEnvelope<TType extends string, TPayload> {
   payload: TPayload;
 }
 
-/* --------------------------------------------------------------- schemas --- */
+// Schemas.
 
 const boundedId = z.string().min(1).max(MAX_ID_LENGTH);
 const boundedText = z.string().min(1).max(MAX_TEXT_LENGTH);
@@ -482,7 +482,7 @@ export type WebToNativeMessage = z.infer<typeof webToNativeSchema>;
 export type NativeToWebMessage = z.infer<typeof nativeToWebSchema>;
 export type MobileBridgeMessage = z.infer<typeof mobileBridgeMessageSchema>;
 
-/* ---------------------------------------------------------------- parsing --- */
+// Parsing.
 
 export const PARSE_ERROR_CODES = [
   "payload-too-large",

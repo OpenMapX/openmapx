@@ -2,9 +2,7 @@
 
 Paste into App Store Connect → App Review Information. No credential goes in
 this file; reviewer credentials, if any are ever needed, are entered directly in
-App Store Connect.
-
----
+App Store Connect. The text below is what gets pasted.
 
 **No account is required.** Search, directions and full turn-by-turn navigation
 all work signed out. There is nothing to log into to review this app.

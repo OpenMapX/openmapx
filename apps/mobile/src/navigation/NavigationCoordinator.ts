@@ -99,7 +99,7 @@ export class NavigationCoordinator {
 
   constructor(private readonly deps: CoordinatorDeps) {}
 
-  /* ------------------------------------------------------------ commands --- */
+  // Commands from the page.
 
   async dispatch(command: WebToNativeMessage): Promise<CommandResponse | null> {
     return this.queue.run(() => this.handleCommand(command));
@@ -179,7 +179,7 @@ export class NavigationCoordinator {
     }
   }
 
-  /* -------------------------------------------------------------- prepare --- */
+  // Preparing a session.
 
   private async prepare(
     command: Extract<WebToNativeMessage, { type: "session.prepare" }>,
@@ -214,7 +214,7 @@ export class NavigationCoordinator {
     };
   }
 
-  /* ---------------------------------------------------------------- start --- */
+  // Starting a prepared session.
 
   /**
    * Turns a prepared session into a running one.
@@ -285,7 +285,7 @@ export class NavigationCoordinator {
     };
   }
 
-  /* -------------------------------------------------------------- replace --- */
+  // Swapping the followed route or itinerary.
 
   private async replace(
     command: Extract<WebToNativeMessage, { type: "session.replace" }>,
@@ -319,7 +319,7 @@ export class NavigationCoordinator {
     };
   }
 
-  /* ------------------------------------------------------------- settings --- */
+  // Settings changes.
 
   private async updateSettings(
     command: Extract<WebToNativeMessage, { type: "settings.update" }>,
@@ -357,7 +357,7 @@ export class NavigationCoordinator {
     };
   }
 
-  /* ------------------------------------------------------------- snapshot --- */
+  // Snapshot requests.
 
   private async snapshot(now: number): Promise<CommandResponse> {
     const current = await this.deps.repository.loadActive(now);
@@ -385,7 +385,7 @@ export class NavigationCoordinator {
       : (transitFullSnapshot(session) as unknown as Record<string, unknown>);
   }
 
-  /* ------------------------------------------------------------ terminate --- */
+  // Ending a session.
 
   private async terminate(
     command: WebToNativeMessage,
@@ -426,7 +426,7 @@ export class NavigationCoordinator {
     };
   }
 
-  /* ------------------------------------------------------- location input --- */
+  // Location input from the driver.
 
   /**
    * The one entry point for fixes, used identically by the foreground app and
@@ -503,7 +503,7 @@ export class NavigationCoordinator {
     }
   }
 
-  /* ------------------------------------------------------------ internals --- */
+  // Internals.
 
   private async commit(
     current: MobileNavigationSession,
