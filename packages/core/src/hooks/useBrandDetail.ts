@@ -4,13 +4,24 @@ import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import type { BrandDetail } from "../types/brand";
 
+/**
+ * Shared query definition for one brand's detail record, so `useBrandDetail`
+ * and `useBrandLogos` cannot drift on the query key or staleness policy —
+ * which matters here specifically because they need to share a cache entry.
+ */
+function brandDetailQueryOptions(qid: string | null) {
+  return {
+    queryKey: ["brand-detail", qid] as const,
+    queryFn: () => apiClient.get<BrandDetail>(`${API_ENDPOINTS.brandDetail}/${qid}`),
+    staleTime: 24 * 60 * 60 * 1000,
+  };
+}
+
 /** Full catalog record for the brand header card. */
 export function useBrandDetail(qid: string | null) {
   return useQuery<BrandDetail>({
-    queryKey: ["brand-detail", qid],
-    queryFn: () => apiClient.get<BrandDetail>(`${API_ENDPOINTS.brandDetail}/${qid}`),
+    ...brandDetailQueryOptions(qid),
     enabled: Boolean(qid),
-    staleTime: 24 * 60 * 60 * 1000,
   });
 }
 
@@ -28,11 +39,7 @@ export function useBrandDetail(qid: string | null) {
  */
 export function useBrandLogos(qids: string[]): Map<string, string | undefined> {
   const results = useQueries({
-    queries: qids.map((qid) => ({
-      queryKey: ["brand-detail", qid],
-      queryFn: () => apiClient.get<BrandDetail>(`${API_ENDPOINTS.brandDetail}/${qid}`),
-      staleTime: 24 * 60 * 60 * 1000,
-    })),
+    queries: qids.map((qid) => brandDetailQueryOptions(qid)),
   });
 
   return useMemo(

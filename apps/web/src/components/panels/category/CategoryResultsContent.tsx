@@ -27,7 +27,7 @@ import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit
 import type * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef } from "react";
-import { distinctBrandQids, placeBrandQid } from "@/components/map/CategoryResultMarkers";
+import { distinctBrandQids, placeBrandIdentity } from "@/components/map/CategoryResultMarkers";
 import { useExpandOnBackgroundTap } from "@/components/panels/sheet/sheetState";
 import { BrandLogo } from "@/components/search/BrandLogo";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
@@ -100,7 +100,7 @@ function CategoryPlaceCard({
   const tagLabel = place.category
     ? place.category.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
     : undefined;
-  const brandQid = placeBrandQid(place);
+  const brandIdentity = placeBrandIdentity(place);
 
   return (
     <ResultListItem
@@ -110,14 +110,14 @@ function CategoryPlaceCard({
       selected={isHovered}
       hoverBg="rgba(0,0,0,0.06)"
     >
-      {brandQid ? (
+      {brandIdentity ? (
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <BrandLogo
             brand={{
-              qid: brandQid,
+              qid: brandIdentity.qid,
               name: place.brand?.name ?? place.name,
-              logoFile: brandLogos.get(brandQid),
-              kind: [],
+              logoFile: brandLogos.get(brandIdentity.qid),
+              kind: [brandIdentity.kind],
             }}
             size={20}
           />

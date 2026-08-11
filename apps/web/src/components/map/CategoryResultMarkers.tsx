@@ -1,6 +1,6 @@
 "use client";
 
-import type { BrandDetail, CategoryPlace } from "@openmapx/core";
+import type { BrandDetail, BrandKind, CategoryPlace } from "@openmapx/core";
 import {
   API_ENDPOINTS,
   apiClient,
@@ -54,13 +54,27 @@ function loadMarkerImage(map: MaplibreMap, imageId: string, iconPath: string): P
 
 const QID_PATTERN = /^Q\d{1,12}$/;
 
-/** The brand identity of one result, or undefined when it has none. */
-export function placeBrandQid(place: CategoryPlace): string | undefined {
+// Each entry in BRAND_QID_KEYS is `${kind}:wikidata` — deriving the kind this
+// way keeps it tied to the key without a second hand-maintained mapping.
+function keyToBrandKind(key: string): BrandKind {
+  return key.slice(0, key.indexOf(":")) as BrandKind;
+}
+
+/** The brand identity of one result — its QID and which `*:wikidata` key
+ *  carried it — or undefined when it has none. */
+export function placeBrandIdentity(
+  place: CategoryPlace,
+): { qid: string; kind: BrandKind } | undefined {
   for (const key of BRAND_QID_KEYS) {
     const value = place.osmTags?.[key];
-    if (value && QID_PATTERN.test(value)) return value;
+    if (value && QID_PATTERN.test(value)) return { qid: value, kind: keyToBrandKind(key) };
   }
   return undefined;
+}
+
+/** The brand identity of one result, or undefined when it has none. */
+export function placeBrandQid(place: CategoryPlace): string | undefined {
+  return placeBrandIdentity(place)?.qid;
 }
 
 /** Distinct brand QIDs in a result set, in first-seen order. */
@@ -89,7 +103,7 @@ export function brandImageId(qid: string): string {
  * any step fails; callers fall back to the category marker, so a broken or
  * missing logo costs a plain pin rather than a missing one.
  */
-async function loadBrandMarkerImage(map: MaplibreMap, qid: string): Promise<boolean> {
+export async function loadBrandMarkerImage(map: MaplibreMap, qid: string): Promise<boolean> {
   const imageId = brandImageId(qid);
   if (map.hasImage(imageId)) return true;
 
@@ -123,7 +137,7 @@ async function loadBrandMarkerImage(map: MaplibreMap, qid: string): Promise<bool
   }
 }
 
-function buildGeoJson(
+export function buildGeoJson(
   results: CategoryPlace[],
   fallbackImageId: string,
   brandImageIds: ReadonlySet<string>,

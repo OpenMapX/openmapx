@@ -389,18 +389,40 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
 
         <Box sx={{ display: "flex", alignItems: "flex-start" }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              {place.brand?.wikidata && (
+            {/* The brand logo adds a flex row around the title; every other
+                place keeps the original bare `Typography` exactly as before —
+                no wrapper, no extra sx — so unbranded results (still the
+                large majority) render unchanged. */}
+            {place.brand?.wikidata ? (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                 <BrandLogo
                   brand={{
                     qid: place.brand.wikidata,
                     name: place.brand.name,
                     logoFile: brandDetail?.logoFile,
-                    kind: [],
+                    kind: ["brand"],
                   }}
                   size={24}
                 />
-              )}
+                <Typography
+                  ref={titleRef}
+                  variant="h6"
+                  gutterBottom
+                  noWrap={detent === "peek"}
+                  sx={{
+                    fontWeight: 600,
+                    pr: onClose && !showHeaderWeather ? 4 : 0,
+                    // Flex item alongside the logo, not a lone block child —
+                    // needs its own shrink target so `noWrap`'s ellipsis still
+                    // kicks in at peek instead of the row just overflowing.
+                    flex: 1,
+                    minWidth: 0,
+                  }}
+                >
+                  {place.name}
+                </Typography>
+              </Box>
+            ) : (
               <Typography
                 ref={titleRef}
                 variant="h6"
@@ -409,16 +431,11 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
                 sx={{
                   fontWeight: 600,
                   pr: onClose && !showHeaderWeather ? 4 : 0,
-                  // Flex item alongside the brand logo now, not a lone block
-                  // child — needs its own shrink target so `noWrap`'s ellipsis
-                  // still kicks in at peek instead of the row just overflowing.
-                  flex: 1,
-                  minWidth: 0,
                 }}
               >
                 {place.name}
               </Typography>
-            </Box>
+            )}
             {/* data-omx-peek-hidden: these rows are gone at peek, so the sheet
                 must not count them when it works out the collapsed height. */}
             {detent !== "peek" && (
