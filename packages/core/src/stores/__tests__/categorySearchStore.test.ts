@@ -152,6 +152,17 @@ describe("useCategorySearchStore — brand facet lifecycle", () => {
     expect(useCategoryFacetStore.getState().selections.brand).toBeUndefined();
   });
 
+  it("setBrandFilter clears a stale brand facet selection", () => {
+    // Same latent hole as the other ad-hoc reset points above: picking a
+    // chain from search (setBrandFilter) is itself an ad-hoc search boundary
+    // and must not let a stale facet selection from a previous search survive.
+    useCategoryFacetStore.getState().setMultiFacet("brand", ["Q1"]);
+    useCategorySearchStore
+      .getState()
+      .setBrandFilter({ qid: "Q41171373", name: "Aldi", kind: ["brand"] }, validFilter);
+    expect(useCategoryFacetStore.getState().selections.brand).toBeUndefined();
+  });
+
   it("does not clear unrelated facet selections (e.g. wheelchair) on a new text search", () => {
     useCategoryFacetStore.getState().setMultiFacet("brand", ["Q1"]);
     useCategoryFacetStore.getState().toggleFacet("wheelchairAccessible");

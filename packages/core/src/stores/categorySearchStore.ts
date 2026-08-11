@@ -105,7 +105,8 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
       activeBrand: null,
     });
   },
-  setBrandFilter: (brand, adHocFilter) =>
+  setBrandFilter: (brand, adHocFilter) => {
+    clearBrandFacet();
     set({
       adHocFilter,
       adHocLabel: brand.name,
@@ -113,7 +114,8 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
       mode: "category",
       activeCategory: AD_HOC_CATEGORY_ID,
       textQuery: "",
-    }),
+    });
+  },
   clearCategory: () => {
     useOpeningHoursStore.getState().reset();
     clearBrandFacet();
