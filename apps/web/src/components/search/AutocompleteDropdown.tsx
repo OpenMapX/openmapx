@@ -17,6 +17,7 @@ import type { AutocompleteResult } from "@openmapx/core";
 import { isTransitRawCategory } from "@openmapx/core";
 import { useEffect, useRef } from "react";
 import { BRAND } from "@/lib/theme";
+import { BrandLogo } from "./BrandLogo";
 import { PresetIcon } from "./PresetIcon";
 
 interface AutocompleteDropdownProps {
@@ -39,6 +40,7 @@ const iconByType: Record<AutocompleteResult["type"], React.ReactNode> = {
   transit_stop: <DirectionsTransitIcon sx={{ fontSize: 20, color: BRAND }} />,
   labeled_place: <FlagIcon sx={{ fontSize: 20, color: BRAND }} />,
   nlp_search: <AutoAwesomeIcon sx={{ fontSize: 20, color: BRAND }} />,
+  brand: <CategoryIcon sx={{ fontSize: 20, color: BRAND }} />,
 };
 
 function CategorySvgIcon({ path }: { path: string }) {
@@ -59,6 +61,10 @@ function CategorySvgIcon({ path }: { path: string }) {
 function getResultIcon(s: AutocompleteResult): React.ReactNode {
   if (s.type === "labeled_place" && s.labelKey) {
     return labeledPlaceIcon[s.labelKey] ?? iconByType.labeled_place;
+  }
+
+  if (s.type === "brand" && s.brand) {
+    return <BrandLogo brand={s.brand} size={20} presetIconKey={s.presetIconKey} />;
   }
 
   if (s.iconPath) return <CategorySvgIcon path={s.iconPath} />;

@@ -250,6 +250,7 @@
     "directionsTooltip": "Route",
     "getDirectionsAriaLabel": "Route berechnen",
     "searchCategory": "Suchkategorie",
+    "searchBrand": "Kette",
     "searchInArea": "In diesem Bereich suchen",
     "noResultsFound": "Keine Ergebnisse in diesem Bereich gefunden.",
     "noStopsFound": "Keine Haltestellen in diesem Bereich gefunden.",

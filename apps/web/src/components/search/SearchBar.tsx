@@ -29,6 +29,7 @@ import type {
 import {
   API_ENDPOINTS,
   apiClient,
+  brandToFilter,
   CATEGORY_DEFINITIONS,
   coordinateId,
   createPlace,
@@ -45,9 +46,11 @@ import {
   useAdaptiveDebounce,
   useAirportSearch,
   useAutocomplete,
+  useBrandSuggest,
   useCategorySearchStore,
   useChipTranslations,
   useCommandPaletteStore,
+  useCountryFromCoordinates,
   useDataSourceStore,
   useDebounce,
   useDirectionsStore,
@@ -175,7 +178,8 @@ export function SearchBar() {
   const { setSelectedPlace } = usePlaceStore();
   const { isOpen: hasSidePanel, close: closeSidePanel } = useActiveSidePanel();
   const { isOpen: directionsOpen, open: openDirections } = useDirectionsStore();
-  const { activeCategory, setActiveCategory, clearCategory } = useCategorySearchStore();
+  const { activeCategory, setActiveCategory, clearCategory, setBrandFilter } =
+    useCategorySearchStore();
   const anchor = useCategorySearchStore((s) => s.anchor);
   const exploreBoxOpen = useCategorySearchStore((s) => s.exploreBoxOpen);
   // Nearby/Explore mode: a place is the anchor. Reuses this search bar, adding a
@@ -196,6 +200,22 @@ export function SearchBar() {
   const { data: autocompleteData, isFetching } = useAutocomplete(debouncedQuery, locale);
   const { data: geocodeData } = useGeocoding(debouncedGeoQuery, locale);
   const { data: presetData } = usePresetSuggest(debouncedQuery, locale);
+  // One country lookup per ~1° cell: the value only steers brand ranking, so a
+  // coarse cell is plenty and keeps the query cache from churning while panning.
+  // Named distinctly from the `mapCenter`/`mapCenterRaw` pair below (used for the
+  // NLP parse snapshot) to avoid redeclaring the same identifier.
+  const brandCenterRaw = mapRef.current?.getCenter();
+  const brandCenterLng = brandCenterRaw?.lng;
+  const brandCenterLat = brandCenterRaw?.lat;
+  const countryProbe = useMemo<[number, number] | null>(
+    () =>
+      brandCenterLng !== undefined && brandCenterLat !== undefined
+        ? [Math.round(brandCenterLng * 1) / 1, Math.round(brandCenterLat * 1) / 1]
+        : null,
+    [brandCenterLng, brandCenterLat],
+  );
+  const { data: viewportCountry } = useCountryFromCoordinates(countryProbe);
+  const { data: brandData } = useBrandSuggest(debouncedQuery, viewportCountry ?? undefined);
   const { data: airportSearchData } = useAirportSearch(debouncedQuery, 5);
   const { data: chipTranslations = {} } = useChipTranslations(locale);
 
@@ -440,6 +460,17 @@ export function SearchBar() {
     return [...dsMatches, ...poiMatches];
   }, [q, t, dataSourceCategories, chipTranslations]);
 
+  const brandSuggestions = useMemo<AutocompleteResult[]>(() => {
+    return (brandData?.matches ?? []).map((b) => ({
+      id: `brand:${b.qid}`,
+      label: b.name,
+      sublabel: b.description ?? t("searchBrand"),
+      type: "brand" as const,
+      brand: b,
+      presetIconKey: undefined,
+    }));
+  }, [brandData, t]);
+
   const presetSuggestions = useMemo<AutocompleteResult[]>(() => {
     return (presetData?.matches ?? []).map((p) => ({
       id: `category-preset:${p.id}`,
@@ -542,6 +573,7 @@ export function SearchBar() {
         : [
             ...labeledSuggestions,
             ...categorySuggestions,
+            ...brandSuggestions,
             ...presetSuggestions,
             ...airportSuggestions,
             ...narrowResults(suggestions),
@@ -562,6 +594,7 @@ export function SearchBar() {
     syntheticResult,
     labeledSuggestions,
     categorySuggestions,
+    brandSuggestions,
     presetSuggestions,
     airportSuggestions,
     suggestions,
@@ -823,6 +856,14 @@ export function SearchBar() {
         setSelectedPlace(place);
         useSidebarStore.getState().openSidebar(PANEL.PLACE);
       });
+      return;
+    }
+
+    if (result.type === "brand" && result.brand) {
+      setBrandFilter(result.brand, brandToFilter(result.brand));
+      useSidebarStore.getState().openSidebar(PANEL.CATEGORY);
+      setQuery(result.label);
+      setIsFocused(false);
       return;
     }
 

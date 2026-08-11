@@ -250,6 +250,7 @@
     "directionsTooltip": "Directions",
     "getDirectionsAriaLabel": "Get directions",
     "searchCategory": "Search category",
+    "searchBrand": "Chain",
     "searchInArea": "Search in this area",
     "noResultsFound": "No results found in this area.",
     "noStopsFound": "No stops found in this area.",

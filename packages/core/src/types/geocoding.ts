@@ -1,4 +1,5 @@
 import type { TransitStop } from "@openmapx/mobility-core/transit";
+import type { BrandSummary } from "./brand";
 import type { LngLat } from "./geometry";
 import type { SearchIntent } from "./search";
 
@@ -39,12 +40,15 @@ export interface AutocompleteResult {
     | "category"
     | "transit_stop"
     | "labeled_place"
-    | "nlp_search";
+    | "nlp_search"
+    | "brand";
   /** SVG path `d` attribute for the icon (used for category suggestions). */
   iconPath?: string;
   /** iD preset icon key (e.g. "maki-ice-cream", "temaki-helicopter").
    *  When present, render via PresetIcon instead of iconPath. */
   presetIconKey?: string;
+  /** Catalogued chain behind this suggestion (only when type is "brand"). */
+  brand?: BrandSummary;
   /** Full transit stop data (only when type is "transit_stop"). */
   transitStop?: TransitStop;
   /** Raw category string from the geocoding provider (e.g. "railway/station", "highway/bus_stop"). */
