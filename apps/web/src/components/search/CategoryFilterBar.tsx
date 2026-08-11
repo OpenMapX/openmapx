@@ -267,8 +267,9 @@ export function CategoryFilterBar() {
     }
   }, [anchorEl]);
 
-  // Fuel stations (data source): simple "Open now" toggle chip, plus brand
-  // chips when the visible stations span more than one chain (Shell, Aral…).
+  // Fuel stations (data source): simple "Open now" toggle chip. No brand
+  // chips here — selecting a data source calls clearCategory() first, so
+  // rawResults (and therefore brandOpts) is always empty for this branch.
   if (activeSource === "fuel") {
     const isFiltered = openingHoursFilter === "open_now";
     return (
@@ -284,7 +285,6 @@ export function CategoryFilterBar() {
           variant={isFiltered ? "filled" : "outlined"}
           sx={toggleChipSx(isFiltered)}
         />
-        {brandChips}
       </Box>
     );
   }
@@ -315,13 +315,18 @@ export function CategoryFilterBar() {
         sx={floatingChipSx(true, "toggle")}
       />
     ));
-    const hasChips = requireChips.length > 0 || excludeChips.length > 0 || showBrandChips;
+    // Brand chips are deliberately omitted here: ad-hoc mode's results are
+    // already narrowed server-side by the Overpass QL, but
+    // useFilteredCategoryResults only re-applies the hours filter for ad-hoc
+    // results, not facets (facet narrowing already happened). Rendering the
+    // chip would flip it to "filled" on click without actually filtering
+    // anything, and applying facets here would double-filter.
+    const hasChips = requireChips.length > 0 || excludeChips.length > 0;
     if (!hasChips && !unmappedNotice) return null;
     return (
       <Box sx={{ ...floatingToolbarSx, gap: 1, flexWrap: "wrap", pointerEvents: "none" }}>
         {requireChips}
         {excludeChips}
-        {brandChips}
         {unmappedNotice && <Box sx={{ flexBasis: "100%" }}>{unmappedNotice}</Box>}
       </Box>
     );
