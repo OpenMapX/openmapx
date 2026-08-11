@@ -1,3 +1,4 @@
+export type { BrandDetail, BrandKind, BrandSuggestResponse, BrandSummary } from "./brand";
 export type {
   CategoryDefinition,
   CategoryId,
