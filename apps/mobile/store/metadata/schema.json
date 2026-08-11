@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openmapx.com/schemas/mobile-store-metadata.json",
+  "title": "Store listing metadata",
+  "description": "The canonical listing copy, one file per locale. Character limits are the stores' own; enforcing them here means a rejection happens in a test rather than after a submission.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["locale", "apple", "google", "urls"],
+  "properties": {
+    "locale": { "enum": ["en", "de"] },
+    "apple": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "subtitle", "description", "keywords", "category"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 30 },
+        "subtitle": { "type": "string", "maxLength": 30 },
+        "description": { "type": "string", "minLength": 200, "maxLength": 4000 },
+        "keywords": { "type": "string", "maxLength": 100 },
+        "promotionalText": { "type": "string", "maxLength": 170 },
+        "whatsNew": { "type": "string", "maxLength": 4000 },
+        "category": { "const": "Navigation" },
+        "copyright": { "type": "string" }
+      }
+    },
+    "google": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "shortDescription", "fullDescription", "category"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 30 },
+        "shortDescription": { "type": "string", "maxLength": 80 },
+        "fullDescription": { "type": "string", "minLength": 200, "maxLength": 4000 },
+        "category": { "const": "Maps & Navigation" },
+        "containsAds": { "const": false }
+      }
+    },
+    "urls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["support", "privacy", "terms", "deleteAccount", "marketing", "source"],
+      "properties": {
+        "support": { "type": "string", "format": "uri" },
+        "privacy": { "type": "string", "format": "uri" },
+        "terms": { "type": "string", "format": "uri" },
+        "deleteAccount": { "type": "string", "format": "uri" },
+        "marketing": { "type": "string", "format": "uri" },
+        "source": { "type": "string", "format": "uri" }
+      }
+    }
+  }
+}

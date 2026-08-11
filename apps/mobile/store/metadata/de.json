@@ -1,0 +1,28 @@
+{
+  "locale": "de",
+  "apple": {
+    "name": "OpenMapX",
+    "subtitle": "Karten, ÖPNV und Navigation",
+    "description": "OpenMapX ist eine quelloffene Karte, um ans Ziel zu kommen — mit dem Auto, zu Fuß, mit dem Rad oder mit dem öffentlichen Nahverkehr.\n\nPlane eine Route und starte die Navigation. Die Abbiegehinweise laufen weiter, wenn der Bildschirm gesperrt ist und das Telefon in der Tasche steckt — und sie laufen weiter, wenn du keinen Empfang hast: Die gestartete Route liegt auf deinem Gerät, sodass Fortschritt und Ansagen auch durch einen Tunnel oder ein Funkloch weitergehen.\n\nBeim ÖPNV funktioniert es genauso. Vor der Abfahrt erfasst OpenMapX die Haltestellen, die dein Zug oder Bus tatsächlich anfährt, und zählt sie herunter — auch unterirdisch, ganz ohne Verbindung.\n\nWas OpenMapX nicht tut: dich beobachten. Deine Position während der Navigation wird auf dem Telefon verarbeitet und nirgendwohin gesendet. Koordinaten verlassen dein Gerät nur, wenn du eine Route anforderst oder wenn du die Route verlassen hast und eine neue brauchst. Es gibt keinen Standortverlauf, keine Werbe-ID, keine Analyse-Tools und kein Tracking. Die gesamte App ist Open Source und du kannst sie selbst hosten.\n\nZum Laden der App und zum Planen, Aktualisieren oder Neuberechnen einer Route wird eine Internetverbindung benötigt. Eine gestartete Führung läuft auch ohne weiter.",
+    "keywords": "Karten,Navigation,ÖPNV,Route,GPS,Nahverkehr,offline,Open Source",
+    "promotionalText": "Quelloffene Karten und Navigation. Die Führung läuft weiter — bei gesperrtem Bildschirm und ohne Empfang.",
+    "whatsNew": "Erste Veröffentlichung.",
+    "category": "Navigation",
+    "copyright": "OpenMapX contributors"
+  },
+  "google": {
+    "name": "OpenMapX",
+    "shortDescription": "Quelloffene Karten, ÖPNV und Navigation. Keine Werbung, kein Tracking.",
+    "fullDescription": "OpenMapX ist eine quelloffene Karte, um ans Ziel zu kommen — mit dem Auto, zu Fuß, mit dem Rad oder mit dem öffentlichen Nahverkehr.\n\nPlane eine Route und starte die Navigation. Die Abbiegehinweise laufen weiter, wenn der Bildschirm gesperrt ist und das Telefon in der Tasche steckt — und sie laufen weiter, wenn du keinen Empfang hast: Die gestartete Route liegt auf deinem Gerät, sodass Fortschritt und Ansagen auch durch einen Tunnel oder ein Funkloch weitergehen.\n\nBeim ÖPNV funktioniert es genauso. Vor der Abfahrt erfasst OpenMapX die Haltestellen, die dein Zug oder Bus tatsächlich anfährt, und zählt sie herunter — auch unterirdisch, ganz ohne Verbindung.\n\nOpenMapX nutzt den Standort im Hintergrund, damit eine von dir gestartete Navigation dich weiter führen kann, während der Bildschirm gesperrt oder die App minimiert ist. Das ist zentral für die Funktion der App und geschieht nur während einer von dir gestarteten Fahrt; das Beenden der Navigation stoppt es. Du kannst den Standort auch nur bei geöffneter App erlauben — die Führung pausiert dann bei gesperrtem Bildschirm, und die App sagt dir das.\n\nWas OpenMapX nicht tut: dich beobachten. Deine Position während der Navigation wird auf dem Telefon verarbeitet und nirgendwohin gesendet. Koordinaten verlassen dein Gerät nur, wenn du eine Route anforderst oder wenn du die Route verlassen hast und eine neue brauchst. Es gibt keinen Standortverlauf, keine Werbe-ID, keine Analyse-Tools und kein Tracking. Die gesamte App ist Open Source und du kannst sie selbst hosten.\n\nZum Laden der App und zum Planen, Aktualisieren oder Neuberechnen einer Route wird eine Internetverbindung benötigt. Eine gestartete Führung läuft auch ohne weiter.",
+    "category": "Maps & Navigation",
+    "containsAds": false
+  },
+  "urls": {
+    "support": "https://openmapx.com/support",
+    "privacy": "https://openmapx.com/privacy",
+    "terms": "https://openmapx.com/terms",
+    "deleteAccount": "https://openmapx.com/delete-account",
+    "marketing": "https://openmapx.org",
+    "source": "https://github.com/OpenMapX/openmapx"
+  }
+}

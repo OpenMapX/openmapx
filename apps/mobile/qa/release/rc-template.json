@@ -1,0 +1,34 @@
+{
+  "$comment": "Copy this, fill it in from an actual run, and commit it under qa/results/. Leave a scenario out rather than guessing at it: an empty slot is legible, and an invented 'pass' is not.",
+  "candidate": {
+    "marketingVersion": "1.0.0",
+    "buildNumber": "1",
+    "artifactSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "artifactPath": "dist/mobile/1.0.0/app-release.aab",
+    "sourceCommit": "0000000",
+    "webBuildId": null
+  },
+  "environment": {
+    "platform": "android",
+    "runtime": "API 36 emulator, Pixel 8",
+    "virtual": true,
+    "locationDriver": "expo",
+    "pageSizeKib": 16
+  },
+  "scenarios": [
+    { "id": "fresh-launch-no-prompt", "result": "pending-physical" },
+    { "id": "fixed-origin-load", "result": "pending-physical" },
+    { "id": "ground-start-to-snapshot", "result": "pending-physical" },
+    { "id": "transit-start-with-captures", "result": "pending-physical" },
+    { "id": "disclosure-grant", "result": "pending-physical" },
+    { "id": "disclosure-foreground-only", "result": "pending-physical" },
+    { "id": "offline-captured-continuation", "result": "pending-physical" },
+    { "id": "alight-alert-scheduled", "result": "pending-physical" },
+    { "id": "webview-recreation-reconcile", "result": "pending-physical" },
+    { "id": "end-navigation-cleanup", "result": "pending-physical" }
+  ],
+  "conclusion": {
+    "verdict": "pass-with-pending-physical",
+    "recordedOn": "YYYY-MM-DD"
+  }
+}

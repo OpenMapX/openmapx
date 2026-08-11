@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openmapx.com/schemas/mobile-release-candidate-report.json",
+  "title": "Mobile release-candidate report",
+  "description": "Evidence for one candidate, bound to the exact artifact it was gathered from. The binding is the point: a report that does not name an artifact hash is a report about a build nobody can identify later.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["candidate", "environment", "scenarios", "conclusion"],
+  "properties": {
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["marketingVersion", "buildNumber", "artifactSha256", "sourceCommit"],
+      "properties": {
+        "marketingVersion": { "type": "string" },
+        "buildNumber": { "type": "string" },
+        "artifactSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "artifactPath": { "type": "string" },
+        "sourceCommit": { "type": "string", "minLength": 7 },
+        "webBuildId": { "type": ["string", "null"] }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "runtime", "virtual"],
+      "properties": {
+        "platform": { "enum": ["ios", "android"] },
+        "runtime": { "type": "string", "description": "OS version and device or emulator model" },
+        "virtual": {
+          "type": "boolean",
+          "description": "True for a simulator or emulator. False only when a volunteer ran it on real hardware."
+        },
+        "locationDriver": { "enum": ["expo", "native"] },
+        "pageSizeKib": { "type": "integer", "enum": [4, 16] }
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "result"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+          "result": {
+            "description": "`pending-physical` is the only honest answer for anything a simulator cannot establish. It is never a synonym for 'not run'.",
+            "enum": ["pass", "fail", "pending-physical", "not-applicable"]
+          },
+          "notes": { "type": "string" },
+          "measurements": {
+            "type": "object",
+            "additionalProperties": { "type": ["number", "string", "null"] }
+          }
+        }
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "coldLaunchToUsableMs": { "type": ["number", "null"] },
+        "startAcknowledgementMs": { "type": ["number", "null"] },
+        "snapshotRenderMs": { "type": ["number", "null"] },
+        "stopToZeroMutationMs": { "type": ["number", "null"] },
+        "installSizeBytes": { "type": ["number", "null"] },
+        "crashes": { "type": ["integer", "null"] },
+        "anrs": { "type": ["integer", "null"] },
+        "$comment": {
+          "type": "string",
+          "description": "Battery per hour, thermal state and spoken-cue latency are deliberately absent: a simulator number for any of them would be a fabrication."
+        }
+      }
+    },
+    "conclusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verdict", "recordedOn"],
+      "properties": {
+        "verdict": { "enum": ["pass", "pass-with-pending-physical", "reject"] },
+        "recordedOn": { "type": "string" },
+        "rejectionReason": { "type": "string" }
+      }
+    }
+  }
+}

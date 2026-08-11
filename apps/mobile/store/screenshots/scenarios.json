@@ -1,0 +1,63 @@
+{
+  "$comment": "Five ordinary flows, in two languages. Every one uses a public route between public places — never a real home or work address, never a real account. A screenshot is the most widely distributed artefact the project produces, and it is permanent.",
+  "devices": {
+    "apple": { "size": "6.9-inch", "width": 1320, "height": 2868, "alphaAllowed": false },
+    "google": { "size": "phone", "minWidth": 1080, "minHeight": 1920, "alphaAllowed": false }
+  },
+  "scenarios": [
+    {
+      "id": "map-and-search",
+      "caption": { "en": "Search anywhere", "de": "Überall suchen" },
+      "shows": "The map with a search result panel open. Attribution visible.",
+      "route": "Hauptbahnhof, Frankfurt am Main"
+    },
+    {
+      "id": "multimodal-directions",
+      "caption": { "en": "Compare every way to get there", "de": "Alle Wege vergleichen" },
+      "shows": "The directions panel with driving, transit, cycling and walking options.",
+      "route": "Frankfurt Hauptbahnhof → Städel Museum"
+    },
+    {
+      "id": "ground-maneuver",
+      "caption": { "en": "Guidance that keeps going", "de": "Führung, die weiterläuft" },
+      "shows": "Active ground navigation with a maneuver banner and the route ahead.",
+      "route": "A synthetic driving route inside Frankfurt"
+    },
+    {
+      "id": "transit-alight",
+      "caption": { "en": "Know when to get off", "de": "Wissen, wann du aussteigen musst" },
+      "shows": "A transit leg with the stop countdown and the get-off alert.",
+      "route": "S-Bahn between two public stations"
+    },
+    {
+      "id": "captured-offline",
+      "caption": {
+        "en": "Keeps guiding without a signal",
+        "de": "Führt auch ohne Empfang weiter"
+      },
+      "shows": "An active session with the connection lost, showing the captured route continuing and the honest 'scheduled times' state.",
+      "route": "The same synthetic route, networking disabled"
+    },
+    {
+      "id": "android-ongoing-notification",
+      "platforms": ["android"],
+      "primary": false,
+      "caption": { "en": "You always know it is running", "de": "Du siehst immer, dass sie läuft" },
+      "shows": "The ongoing foreground-service notification during navigation. Evidence for the background-location declaration, not a headline screenshot.",
+      "route": "The same synthetic route"
+    }
+  ],
+  "forbiddenStrings": [
+    "test@",
+    "example.com",
+    "Bearer ",
+    "TEAM_ID",
+    "localhost",
+    "127.0.0.1",
+    "Musterstraße",
+    "Home",
+    "Work",
+    "Zuhause",
+    "Arbeit"
+  ]
+}

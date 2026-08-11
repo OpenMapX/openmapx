@@ -1,0 +1,28 @@
+{
+  "locale": "en",
+  "apple": {
+    "name": "OpenMapX",
+    "subtitle": "Maps, transit and navigation",
+    "description": "OpenMapX is an open-source map for getting places — by car, on foot, by bike, or on public transport.\n\nPlan a route and start navigating. Turn-by-turn guidance keeps running with the screen locked and the phone in your pocket, and it keeps running when you lose signal: the route you started is on your device, so progress and spoken directions carry on through a tunnel or a dead zone.\n\nPublic transport works the same way. Before you set off, OpenMapX captures the stops your train or bus actually makes, so it can count them down and tell you when to get off — underground, with no connection at all.\n\nWhat OpenMapX does not do is watch you. Your position while navigating is processed on your phone and is not sent anywhere. Coordinates leave your device only when you ask for a route, or when you have left the route and need a new one. There is no location history, no advertising identifier, no analytics, and no tracking of any kind. The whole app is open source and you can host it yourself.\n\nAn internet connection is needed to load the app and to plan, refresh or recalculate a route. Once guidance has started, it continues without one.",
+    "keywords": "maps,navigation,transit,directions,gps,route,public transport,offline,open source",
+    "promotionalText": "Open-source maps and navigation. Guidance keeps running with the screen locked — and when you lose signal.",
+    "whatsNew": "First release.",
+    "category": "Navigation",
+    "copyright": "OpenMapX contributors"
+  },
+  "google": {
+    "name": "OpenMapX",
+    "shortDescription": "Open-source maps, transit and turn-by-turn navigation. No ads, no tracking.",
+    "fullDescription": "OpenMapX is an open-source map for getting places — by car, on foot, by bike, or on public transport.\n\nPlan a route and start navigating. Turn-by-turn guidance keeps running with the screen locked and the phone in your pocket, and it keeps running when you lose signal: the route you started is on your device, so progress and spoken directions carry on through a tunnel or a dead zone.\n\nPublic transport works the same way. Before you set off, OpenMapX captures the stops your train or bus actually makes, so it can count them down and tell you when to get off — underground, with no connection at all.\n\nOpenMapX uses location in the background so that navigation you have started can keep guiding you while the screen is locked or the app is minimised. This is core to how the app works and it only happens during a trip you started; ending navigation stops it. You can also allow location only while the app is open — guidance then pauses when the screen locks, and the app tells you so.\n\nWhat OpenMapX does not do is watch you. Your position while navigating is processed on your phone and is not sent anywhere. Coordinates leave your device only when you ask for a route, or when you have left the route and need a new one. There is no location history, no advertising identifier, no analytics, and no tracking of any kind. The whole app is open source and you can host it yourself.\n\nAn internet connection is needed to load the app and to plan, refresh or recalculate a route. Once guidance has started, it continues without one.",
+    "category": "Maps & Navigation",
+    "containsAds": false
+  },
+  "urls": {
+    "support": "https://openmapx.com/support",
+    "privacy": "https://openmapx.com/privacy",
+    "terms": "https://openmapx.com/terms",
+    "deleteAccount": "https://openmapx.com/delete-account",
+    "marketing": "https://openmapx.org",
+    "source": "https://github.com/OpenMapX/openmapx"
+  }
+}
