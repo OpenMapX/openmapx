@@ -146,3 +146,52 @@ export function timeZoneAt(lat: number, lng: number): string | null {
     return null;
   }
 }
+
+/** Minutes east of UTC for `timeZone` at `date`. */
+export function tzOffsetMinutes(date: Date, timeZone: string): number {
+  const formatted = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    timeZoneName: "longOffset",
+  }).format(date);
+
+  const match = /GMT([+-])(\d{1,2})(?::(\d{2}))?/.exec(formatted);
+  if (!match) return 0;
+
+  const sign = match[1] === "-" ? -1 : 1;
+  return sign * (Number(match[2]) * 60 + Number(match[3] ?? 0));
+}
+
+/** Human offset label, e.g. "UTC+2", "UTC+5:45", "UTC-5", or "UTC" at zero. */
+export function tzOffsetLabel(date: Date, timeZone: string): string {
+  const minutes = tzOffsetMinutes(date, timeZone);
+  if (minutes === 0) return "UTC";
+
+  const sign = minutes < 0 ? "-" : "+";
+  const absolute = Math.abs(minutes);
+  const hours = Math.floor(absolute / 60);
+  const remainder = absolute % 60;
+
+  return remainder === 0
+    ? `UTC${sign}${hours}`
+    : `UTC${sign}${hours}:${String(remainder).padStart(2, "0")}`;
+}
+
+/** The viewer's own IANA zone, as the platform resolves it. */
+export function viewerTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
+
+/** Signed minutes `to` is ahead of `from` at `date`. */
+export function tzDiffMinutes(date: Date, from: string, to: string): number {
+  return tzOffsetMinutes(date, to) - tzOffsetMinutes(date, from);
+}
+
+/** The 24-hour wall clock in `timeZone` at `date`. */
+export function formatInTimeZone(date: Date, timeZone: string, locale?: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}

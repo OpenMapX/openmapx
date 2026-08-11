@@ -229,7 +229,16 @@ export {
 export { formatStreetLevelRef, parseStreetLevelRef } from "./streetLevelRef";
 export type { TideExtremaOptions, TideExtreme, TideSample } from "./tideExtrema";
 export { despikeSeries, findTideExtrema } from "./tideExtrema";
-export { localDateInZone, timeZoneAt, zonedWallClockToInstant } from "./timezone";
+export {
+  formatInTimeZone,
+  localDateInZone,
+  timeZoneAt,
+  tzDiffMinutes,
+  tzOffsetLabel,
+  tzOffsetMinutes,
+  viewerTimeZone,
+  zonedWallClockToInstant,
+} from "./timezone";
 export {
   FLOW_FALLBACK_COLOR,
   FLOW_LOS_COLORS,
