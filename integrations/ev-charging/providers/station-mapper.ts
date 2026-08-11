@@ -1,8 +1,10 @@
-import type {
-  DataSourceDetail,
-  DataSourceDetailSection,
-  DataSourceResult,
-  OsmIdentity,
+import { resolveBrand } from "@openmapx/brands";
+import {
+  commonsLogoUrl,
+  type DataSourceDetail,
+  type DataSourceDetailSection,
+  type DataSourceResult,
+  type OsmIdentity,
 } from "@openmapx/core";
 import {
   type I18nToken,
@@ -90,7 +92,7 @@ export function mapStationToResult(station: EvChargingStation): DataSourceResult
   if (maxPowerKw > 0) sortValues.powerKw = maxPowerKw;
   if (station.availability) sortValues.available = station.availability.available;
 
-  return {
+  const result: DataSourceResult = {
     id: station.id,
     name: station.name,
     coordinates: station.coordinates,
@@ -111,6 +113,24 @@ export function mapStationToResult(station: EvChargingStation): DataSourceResult
     operator: station.operator?.name,
     sortValues: Object.keys(sortValues).length > 0 ? sortValues : undefined,
   };
+
+  // Gap-fill only. An upstream feed's own mark is authoritative — the catalog
+  // is a fallback for feeds that publish an operator name and nothing else.
+  // `station.osmTags` is only present when OSM contributed to this station
+  // (directly, or via a dedup merge), so this is a no-op for feeds with no
+  // OSM tags to check.
+  if (!result.branding?.logoUrl) {
+    const catalogued = resolveBrand(station.osmTags);
+    if (catalogued?.logoFile) {
+      result.branding = {
+        ...result.branding,
+        name: result.branding?.name ?? catalogued.name,
+        logoUrl: commonsLogoUrl(catalogued.logoFile, 96),
+      };
+    }
+  }
+
+  return result;
 }
 
 function formatPower(value: number | undefined): string {

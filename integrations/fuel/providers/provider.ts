@@ -1,3 +1,4 @@
+import { resolveBrand } from "@openmapx/brands";
 import type {
   BoundingBox,
   DataSourceDetail,
@@ -5,7 +6,13 @@ import type {
   DataSourceMeta,
   DataSourceResult,
 } from "@openmapx/core";
-import { CATEGORY_FILTERS, extractSourcePrefix, fetchJson, searchByCategory } from "@openmapx/core";
+import {
+  CATEGORY_FILTERS,
+  commonsLogoUrl,
+  extractSourcePrefix,
+  fetchJson,
+  searchByCategory,
+} from "@openmapx/core";
 import type { MobilityDataSourceProvider } from "@openmapx/integration-framework";
 import { createManifestAttribution } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
@@ -127,14 +134,30 @@ class FuelDataSourceProvider implements MobilityDataSourceProvider {
       const osmFilters = CATEGORY_FILTERS.fuel;
       if (!osmFilters) return wrapStatic([], []);
       const { results: osmResults } = await searchByCategory(osmFilters, bbox);
-      results = osmResults.map((r) => ({
-        id: r.id,
-        name: r.name,
-        coordinates: r.coordinates,
-        source: "osm",
-        variant: "unknown",
-        status: "unknown",
-      }));
+      results = osmResults.map((r) => {
+        const result: DataSourceResult = {
+          id: r.id,
+          name: r.name,
+          coordinates: r.coordinates,
+          source: "osm",
+          variant: "unknown",
+          status: "unknown",
+        };
+        // Gap-fill only. This Overpass fallback carries real OSM tags (unlike
+        // the priced national feeds above, which supply only a plain-string
+        // brand name with no wikidata identity — never guessed at).
+        if (!result.branding?.logoUrl) {
+          const catalogued = resolveBrand(r.osmTags);
+          if (catalogued?.logoFile) {
+            result.branding = {
+              ...result.branding,
+              name: result.branding?.name ?? catalogued.name,
+              logoUrl: commonsLogoUrl(catalogued.logoFile, 96),
+            };
+          }
+        }
+        return result;
+      });
     }
 
     // Apply fuelType filter

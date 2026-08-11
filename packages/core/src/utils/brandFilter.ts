@@ -10,6 +10,32 @@ const KIND_TO_KEY: Record<BrandKind, string> = {
   operator: "operator:wikidata",
 };
 
+const BRAND_QID_PATTERN = /^Q\d{1,12}$/;
+
+// Each entry in BRAND_QID_KEYS is `${kind}:wikidata` — deriving the kind this
+// way keeps it tied to the key without a second hand-maintained mapping.
+function keyToBrandKind(key: string): BrandKind {
+  return key.slice(0, key.indexOf(":")) as BrandKind;
+}
+
+/**
+ * Finds a POI's brand identity by walking {@link BRAND_QID_KEYS} in
+ * precedence order and returning the first present, well-formed QID and
+ * which key carried it. The single definition of "which tag wins" — every
+ * consumer that needs to answer "what brand is this place" (map markers,
+ * facet chips, …) goes through this so they never disagree.
+ */
+export function firstBrandIdentity(
+  osmTags: Record<string, string> | undefined,
+): { qid: string; kind: BrandKind } | undefined {
+  if (!osmTags) return undefined;
+  for (const key of BRAND_QID_KEYS) {
+    const value = osmTags[key];
+    if (value && BRAND_QID_PATTERN.test(value)) return { qid: value, kind: keyToBrandKind(key) };
+  }
+  return undefined;
+}
+
 /**
  * Compiles a brand to a POI filter.
  *

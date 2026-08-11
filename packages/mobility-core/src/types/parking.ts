@@ -80,6 +80,8 @@ export interface ParkingFacility {
   chargingDetails?: string;
   paymentMethods?: string;
   url?: string;
+  /** Raw OSM tags, present only when OSM contributed to this facility (directly, or via a dedup merge). */
+  osmTags?: Record<string, string>;
 }
 
 /** Raw response shape from the ParkenDD v2 root endpoint. */

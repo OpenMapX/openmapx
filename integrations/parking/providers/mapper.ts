@@ -1,8 +1,10 @@
-import type {
-  DataSourceDetail,
-  DataSourceDetailSection,
-  DataSourceResult,
-  OsmIdentity,
+import { resolveBrand } from "@openmapx/brands";
+import {
+  commonsLogoUrl,
+  type DataSourceDetail,
+  type DataSourceDetailSection,
+  type DataSourceResult,
+  type OsmIdentity,
 } from "@openmapx/core";
 import {
   type I18nToken,
@@ -82,7 +84,7 @@ function buildSortValues(facility: ParkingFacility): Record<string, number> | un
 }
 
 export function mapParkingToResult(facility: ParkingFacility): DataSourceResult {
-  return {
+  const result: DataSourceResult = {
     id: facility.id,
     name: facility.name,
     coordinates: facility.coordinates,
@@ -93,6 +95,24 @@ export function mapParkingToResult(facility: ParkingFacility): DataSourceResult 
     operator: facility.operator,
     sortValues: buildSortValues(facility),
   };
+
+  // Gap-fill only. An upstream feed's own mark is authoritative — the catalog
+  // is a fallback for feeds that publish an operator name and nothing else.
+  // `facility.osmTags` is only present when OSM contributed to this facility
+  // (directly, or via a dedup merge), so this is a no-op for the many
+  // structured-feed sources that carry no OSM tags at all.
+  if (!result.branding?.logoUrl) {
+    const catalogued = resolveBrand(facility.osmTags);
+    if (catalogued?.logoFile) {
+      result.branding = {
+        ...result.branding,
+        name: result.branding?.name ?? catalogued.name,
+        logoUrl: commonsLogoUrl(catalogued.logoFile, 96),
+      };
+    }
+  }
+
+  return result;
 }
 
 function formatTimestamp(value: string | undefined): string | undefined {

@@ -365,6 +365,7 @@ function mergeCluster(cluster: ParkingFacility[]): ParkingFacility {
     chargingDetails: pickRichestString(members.map((m) => m.chargingDetails)),
     paymentMethods: pickRichestString(members.map((m) => m.paymentMethods)),
     url: pickByPriority(members, (m) => m.url),
+    osmTags: pickByPriority(members, (m) => m.osmTags),
   };
 }
 

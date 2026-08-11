@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { CategoryPlace } from "../types/category";
-import { applyFacetFilters, cuisineOptions, facetsForCategory } from "./categoryFacets";
+import {
+  applyFacetFilters,
+  brandOptions,
+  cuisineOptions,
+  facetsForCategory,
+} from "./categoryFacets";
 
 function place(id: string, osmTags?: Record<string, string>): CategoryPlace {
   return { id, name: id, coordinates: [0, 0], osmTags };
@@ -73,5 +78,53 @@ describe("cuisineOptions", () => {
       place("d"),
     ];
     expect(cuisineOptions(results)).toEqual(["burger", "italian", "pizza"]);
+  });
+});
+
+describe("brandOptions", () => {
+  it("counts a place tagged only with brand:wikidata", () => {
+    const results = [
+      place("a", { "brand:wikidata": "Q37158", brand: "Starbucks" }),
+      place("b", { "brand:wikidata": "Q37158", brand: "Starbucks" }),
+    ];
+    expect(brandOptions(results)).toEqual([{ qid: "Q37158", name: "Starbucks", count: 2 }]);
+  });
+
+  it("counts a place tagged only with network:wikidata (e.g. an EV charging network)", () => {
+    const results = [place("a", { "network:wikidata": "Q42717773", operator: "Ionity" })];
+    expect(brandOptions(results)).toEqual([{ qid: "Q42717773", name: "Ionity", count: 1 }]);
+  });
+
+  it("counts a place tagged only with operator:wikidata", () => {
+    const results = [place("a", { "operator:wikidata": "Q1127798", operator: "Q-Park" })];
+    expect(brandOptions(results)).toEqual([{ qid: "Q1127798", name: "Q-Park", count: 1 }]);
+  });
+
+  it("prefers brand:wikidata over network:wikidata and operator:wikidata", () => {
+    const results = [
+      place("a", {
+        "brand:wikidata": "Q37158",
+        "network:wikidata": "Q42717773",
+        "operator:wikidata": "Q1127798",
+      }),
+    ];
+    expect(brandOptions(results)).toEqual([{ qid: "Q37158", name: "Q37158", count: 1 }]);
+  });
+
+  it("falls back from brand to operator, then the bare QID, for the display name", () => {
+    expect(
+      brandOptions([place("a", { "network:wikidata": "Q42717773", operator: "Ionity" })]),
+    ).toEqual([{ qid: "Q42717773", name: "Ionity", count: 1 }]);
+    expect(brandOptions([place("b", { "network:wikidata": "Q42717773" })])).toEqual([
+      { qid: "Q42717773", name: "Q42717773", count: 1 },
+    ]);
+  });
+
+  it("ignores a malformed QID", () => {
+    expect(brandOptions([place("a", { "brand:wikidata": "not-a-qid" })])).toEqual([]);
+  });
+
+  it("returns nothing when no result carries a brand identity", () => {
+    expect(brandOptions([place("a", { amenity: "fuel" }), place("b")])).toEqual([]);
   });
 });

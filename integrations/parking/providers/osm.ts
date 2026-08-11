@@ -75,6 +75,7 @@ function elementToFacility(el: OsmParkingElement): ParkingFacility | null {
       ? tags.park_ride === "yes" || tags.park_ride === "bus" || tags.park_ride === "train"
       : undefined,
     state: "unknown",
+    osmTags: tags,
   };
 }
 

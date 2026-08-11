@@ -10,7 +10,7 @@ export {
   sanitizeAttributionHtml,
 } from "./attribution";
 export { bboxAroundPoint, bboxCacheKey, geoJsonBBox } from "./bbox";
-export { BRAND_QID_KEYS, brandToFilter, commonsLogoUrl } from "./brandFilter";
+export { BRAND_QID_KEYS, brandToFilter, commonsLogoUrl, firstBrandIdentity } from "./brandFilter";
 export { withCache } from "./cache-helpers";
 export type { CategoryFacet, FacetPlacement, FacetType } from "./categoryFacets";
 export {

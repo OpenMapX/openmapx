@@ -1,5 +1,6 @@
 import type { CategoryPlace } from "../types/category";
 import { FOOD_FILTER_CATEGORY_IDS, HOURS_FILTER_CATEGORY_IDS } from "../types/category";
+import { firstBrandIdentity } from "./brandFilter";
 import { CATEGORY_FILTERS } from "./overpass.service";
 
 export type FacetType = "toggle" | "multi";
@@ -189,17 +190,32 @@ export function cuisineOptions(results: readonly CategoryPlace[]): string[] {
   return [...set].sort();
 }
 
-/** Distinct brands in the result set with their counts, most common first. */
+/**
+ * Distinct brands in the result set with their counts, most common first.
+ *
+ * Walks the same {@link firstBrandIdentity} precedence chain the map markers
+ * use (`brand:wikidata` > `network:wikidata` > `operator:wikidata`), so a
+ * chain that only tags `network:wikidata` or `operator:wikidata` — as EV
+ * charging networks typically do — still gets a chip.
+ *
+ * The display name prefers `osmTags.brand`, then `osmTags.operator`: whichever
+ * matched key produced the QID, the plain-text field closest to what a user
+ * typed is the more recognisable label than a bare "Q…" id.
+ */
 export function brandOptions(
   results: readonly CategoryPlace[],
 ): { qid: string; name: string; count: number }[] {
   const byQid = new Map<string, { name: string; count: number }>();
   for (const place of results) {
-    const qid = place.osmTags?.["brand:wikidata"];
-    if (!qid) continue;
-    const existing = byQid.get(qid);
-    if (existing) existing.count += 1;
-    else byQid.set(qid, { name: place.osmTags?.brand ?? qid, count: 1 });
+    const identity = firstBrandIdentity(place.osmTags);
+    if (!identity) continue;
+    const existing = byQid.get(identity.qid);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      const name = place.osmTags?.brand ?? place.osmTags?.operator ?? identity.qid;
+      byQid.set(identity.qid, { name, count: 1 });
+    }
   }
   return [...byQid.entries()]
     .map(([qid, v]) => ({ qid, name: v.name, count: v.count }))

@@ -16,6 +16,25 @@ function makeFacility(overrides: Partial<ParkingFacility> = {}): ParkingFacility
 }
 
 describe("parking mapper", () => {
+  it("gap-fills a Commons logo from the catalog when the facility carries an operator QID", () => {
+    // Q-Park — verified against packages/brands/src/data/brands-index.json.
+    const result = mapParkingToResult(
+      makeFacility({ osmTags: { "operator:wikidata": "Q1127798" } }),
+    );
+    expect(result.branding?.name).toBe("Q-Park");
+    expect(result.branding?.logoUrl).toContain("commons.wikimedia.org");
+  });
+
+  it("leaves branding unfilled when the facility has no catalogued identity", () => {
+    const result = mapParkingToResult(makeFacility({ osmTags: { amenity: "parking" } }));
+    expect(result.branding).toBeUndefined();
+  });
+
+  it("leaves branding unfilled when the facility has no OSM tags at all", () => {
+    const result = mapParkingToResult(makeFacility({ osmTags: undefined }));
+    expect(result.branding).toBeUndefined();
+  });
+
   it("keeps stale realtime availability out of the available result variant", () => {
     const result = mapParkingToResult(
       makeFacility({

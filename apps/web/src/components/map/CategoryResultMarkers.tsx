@@ -4,9 +4,9 @@ import type { BrandDetail, BrandKind, CategoryPlace } from "@openmapx/core";
 import {
   API_ENDPOINTS,
   apiClient,
-  BRAND_QID_KEYS,
   commonsLogoUrl,
   createPlace,
+  firstBrandIdentity,
   idsFromPrimaryOrCoords,
   PANEL,
   poiCategoryIconPath,
@@ -52,24 +52,14 @@ function loadMarkerImage(map: MaplibreMap, imageId: string, iconPath: string): P
   });
 }
 
-const QID_PATTERN = /^Q\d{1,12}$/;
-
-// Each entry in BRAND_QID_KEYS is `${kind}:wikidata` — deriving the kind this
-// way keeps it tied to the key without a second hand-maintained mapping.
-function keyToBrandKind(key: string): BrandKind {
-  return key.slice(0, key.indexOf(":")) as BrandKind;
-}
-
 /** The brand identity of one result — its QID and which `*:wikidata` key
- *  carried it — or undefined when it has none. */
+ *  carried it — or undefined when it has none. Delegates to the shared
+ *  `firstBrandIdentity` so this never disagrees with facet aggregation
+ *  (`brandOptions`) about which tag wins. */
 export function placeBrandIdentity(
   place: CategoryPlace,
 ): { qid: string; kind: BrandKind } | undefined {
-  for (const key of BRAND_QID_KEYS) {
-    const value = place.osmTags?.[key];
-    if (value && QID_PATTERN.test(value)) return { qid: value, kind: keyToBrandKind(key) };
-  }
-  return undefined;
+  return firstBrandIdentity(place.osmTags);
 }
 
 /** The brand identity of one result, or undefined when it has none. */

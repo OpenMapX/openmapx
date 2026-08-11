@@ -153,6 +153,39 @@ describe("fuelProvider.search", () => {
     expect(results.map((r) => r.id)).toEqual(["fy", "fz"]);
   });
 
+  it("gap-fills a Commons logo on the Overpass fallback from a brand:wikidata tag", async () => {
+    vi.mocked(searchFuelStations).mockResolvedValue(null as never);
+    vi.mocked(searchByCategory).mockResolvedValue({
+      results: [
+        {
+          id: "osm:node/300",
+          name: "Shell",
+          coordinates: [11.5, 48.5],
+          // Q110716465 — verified against packages/brands/src/data/brands-index.json.
+          osmTags: { "brand:wikidata": "Q110716465" },
+        },
+      ],
+      truncated: false,
+    } as never);
+
+    const results = (await fuelProvider.search(makeBbox())).data;
+
+    expect(results[0].branding?.name).toBe("Shell");
+    expect(results[0].branding?.logoUrl).toContain("commons.wikimedia.org");
+  });
+
+  it("leaves branding unfilled on the Overpass fallback when there is no catalogued identity", async () => {
+    vi.mocked(searchFuelStations).mockResolvedValue(null as never);
+    vi.mocked(searchByCategory).mockResolvedValue({
+      results: [{ id: "osm:node/301", name: "Unbranded Fuel", coordinates: [11.5, 48.5] }],
+      truncated: false,
+    } as never);
+
+    const results = (await fuelProvider.search(makeBbox())).data;
+
+    expect(results[0].branding).toBeUndefined();
+  });
+
   it("OSM-only results kept when fuelType filter active (no cache entry)", async () => {
     vi.mocked(searchFuelStations).mockResolvedValue(null as never);
     vi.mocked(searchByCategory).mockResolvedValue({

@@ -614,6 +614,9 @@ importers:
 
   integrations/ev-charging:
     dependencies:
+      '@openmapx/brands':
+        specifier: workspace:^
+        version: link:../../packages/brands
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -669,6 +672,9 @@ importers:
 
   integrations/fuel:
     dependencies:
+      '@openmapx/brands':
+        specifier: workspace:^
+        version: link:../../packages/brands
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -1268,6 +1274,9 @@ importers:
 
   integrations/parking:
     dependencies:
+      '@openmapx/brands':
+        specifier: workspace:^
+        version: link:../../packages/brands
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core

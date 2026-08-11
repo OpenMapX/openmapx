@@ -23,6 +23,10 @@ export function createRepoVitestAliases(repoRoot: string) {
 
   return [
     {
+      find: /^@openmapx\/brands$/,
+      replacement: resolve(repoRoot, "packages/brands/src/index.ts"),
+    },
+    {
       find: /^@openmapx\/core\/server$/,
       replacement: resolve(repoRoot, "packages/core/src/server.ts"),
     },

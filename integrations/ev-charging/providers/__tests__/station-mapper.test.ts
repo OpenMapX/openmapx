@@ -180,6 +180,24 @@ describe("ev-charging station mapper", () => {
     const connectors = detail.sections.find((s) => s.sectionIcon === "bolt");
     expect(connectors?.captionTimestamp).toBeUndefined();
   });
+
+  it("gap-fills a Commons logo from the catalog when the station carries a network QID", () => {
+    // Ionity — verified against packages/brands/src/data/brands-index.json.
+    const station = makeStation({ osmTags: { "network:wikidata": "Q42717773" } });
+    const result = mapStationToResult(station);
+    expect(result.branding?.name?.toLowerCase()).toContain("ionity");
+    expect(result.branding?.logoUrl).toContain("commons.wikimedia.org");
+  });
+
+  it("leaves branding unfilled when the station has no catalogued identity", () => {
+    const result = mapStationToResult(makeStation({ osmTags: { amenity: "charging_station" } }));
+    expect(result.branding).toBeUndefined();
+  });
+
+  it("leaves branding unfilled when the station has no OSM tags at all", () => {
+    const result = mapStationToResult(makeStation({ osmTags: undefined }));
+    expect(result.branding).toBeUndefined();
+  });
 });
 
 describe("formatTariff", () => {
