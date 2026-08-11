@@ -28,6 +28,13 @@ vi.mock("@openmapx/core", async (importOriginal) => {
       isLoading: false,
       isError: false,
     }),
+    // These tests only exercise the category path; the filter path is stubbed
+    // disabled (no data) so it never needs a real QueryClientProvider.
+    useFilterSearch: () => ({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+    }),
   };
 });
 
@@ -82,7 +89,7 @@ describe("useRouteSearch route index ownership", () => {
   });
 
   it("indexes the route once and reuses it for progress-only refreshes", () => {
-    const { result } = renderHook(() => useRouteSearch("fuel"));
+    const { result } = renderHook(() => useRouteSearch({ category: "fuel" }));
     expect(result.current.results.length).toBeGreaterThan(0);
     expect(readRouteMatcherCounters().preparations).toBe(1);
 
@@ -99,7 +106,7 @@ describe("useRouteSearch route index ownership", () => {
   });
 
   it("indexes the replacement route once when the route is swapped", () => {
-    const { rerender } = renderHook(() => useRouteSearch("fuel"));
+    const { rerender } = renderHook(() => useRouteSearch({ category: "fuel" }));
     expect(readRouteMatcherCounters().preparations).toBe(1);
 
     act(() => useNavigationStore.getState().applyReroute(freshRoute()));

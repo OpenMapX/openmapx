@@ -60,6 +60,7 @@ export { useElevation } from "./useElevation";
 export { evDirectionsQueryKey, useEvDirections } from "./useEvDirections";
 export { useExploreResults } from "./useExploreResults";
 export { useFilteredCategoryResults } from "./useFilteredCategoryResults";
+export { useFilterSearch } from "./useFilterSearch";
 export { useFlightProviders } from "./useFlightProviders";
 export { useGeocoding } from "./useGeocoding";
 export {

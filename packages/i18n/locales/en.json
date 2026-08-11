@@ -180,6 +180,8 @@
     "rsSupermarkets": "Supermarkets",
     "rsParking": "Parking",
     "rsHotels": "Hotels",
+    "rsBrandLabel": "Or search a chain",
+    "rsBrandPlaceholder": "e.g. Aral, Aldi, McDonald's",
     "rsCenter": "Center",
     "rsClear": "Clear",
     "rsAdd": "Add",
