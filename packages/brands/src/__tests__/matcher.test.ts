@@ -120,4 +120,30 @@ describe("searchBrands", () => {
     );
     expect(searchBrands(index(entries), { q: "star", limit: 5 })).toHaveLength(5);
   });
+
+  it("never lets a country match outrank a stronger text tier from a different country", () => {
+    // Q1 is only a substring match ("superstar" contains "star") but sits in
+    // the requested country; Q2 is an exact match but in a different
+    // country. Text tier must decide first — country only breaks ties within
+    // the same tier.
+    const result = searchBrands(
+      index([
+        entry({ qid: "Q1", name: "Superstar", countries: ["de"] }),
+        entry({ qid: "Q2", name: "Star", countries: ["us"] }),
+      ]),
+      { q: "star", country: "de", limit: 10 },
+    );
+    expect(result.map((r) => r.qid)).toEqual(["Q2", "Q1"]);
+  });
+
+  it("matches the canonical name even when absent from matchNames, and reports matchedOn: name", () => {
+    // entry.name is the Wikidata label and is not guaranteed to appear in
+    // matchNames; a query hitting only the canonical name must still match.
+    const result = searchBrands(
+      index([entry({ qid: "Q1", name: "Star Market", matchNames: ["stjernemarked"] })]),
+      { q: "star market", limit: 10 },
+    );
+    expect(result.map((r) => r.qid)).toEqual(["Q1"]);
+    expect(result[0].matchedOn).toBe("name");
+  });
 });
