@@ -9,5 +9,5 @@
     "allowArbitraryExtensions": true,
     "outDir": "./dist"
   },
-  "include": ["src", "../../integrations/*/index.ts"]
+  "include": ["src", "scripts", "../../integrations/*/index.ts"]
 }
