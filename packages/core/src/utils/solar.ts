@@ -1,3 +1,5 @@
+import type { Feature, FeatureCollection, Polygon } from "geojson";
+
 const DEG = Math.PI / 180;
 const RAD = 180 / Math.PI;
 
@@ -63,4 +65,180 @@ export function solarAltitudeDeg(date: Date, lat: number, lng: number): number {
   const sinAltitude =
     Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.cos(hourAngle);
   return Math.asin(Math.max(-1, Math.min(1, sinAltitude))) * RAD;
+}
+
+export type ContourBranch = "pole" | "cap";
+
+export interface DarkRegionProperties {
+  altitudeDeg: number;
+  branch: ContourBranch;
+}
+
+/** Great-circle destination from a point, given an angular distance and bearing in degrees. */
+function destination(
+  latDeg: number,
+  lngDeg: number,
+  distanceDeg: number,
+  bearingDeg: number,
+): [number, number] {
+  const lat = latDeg * DEG;
+  const d = distanceDeg * DEG;
+  const brg = bearingDeg * DEG;
+  const sinLat = Math.sin(lat) * Math.cos(d) + Math.cos(lat) * Math.sin(d) * Math.cos(brg);
+  const destLat = Math.asin(Math.max(-1, Math.min(1, sinLat)));
+  const destLng =
+    lngDeg * DEG +
+    Math.atan2(Math.sin(brg) * Math.sin(d) * Math.cos(lat), Math.cos(d) - Math.sin(lat) * sinLat);
+  return [destLng * RAD, destLat * RAD];
+}
+
+/** Reduce a degree value into (-180, 180], the same wrap `normalizeLongitude` uses. */
+function reduceTo180(deg: number): number {
+  return ((((deg + 180) % 360) + 360) % 360) - 180;
+}
+
+/**
+ * Ring for the case where the cap swallows a pole: every meridian crosses the
+ * boundary exactly once, so a longitude sweep is single-valued and the ring
+ * closes along the contained pole.
+ *
+ * sin(altitude) = A*sin(phi) + B*cos(phi) = R*sin(phi + psi), with
+ * R = hypot(A, B) and psi = atan2(B, A). Solving for phi gives two
+ * candidates 360 degrees apart in (phi + psi); of those, exactly one lands
+ * in the valid latitude range [-90, 90] because a pole is inside the cap.
+ */
+function poleBranchRing(
+  declinationDeg: number,
+  greenwichHourAngleDeg: number,
+  altitudeDeg: number,
+  stepDeg: number,
+  northInside: boolean,
+): [number, number][] {
+  const dec = declinationDeg * DEG;
+  const A = Math.sin(dec);
+  const C = Math.sin(altitudeDeg * DEG);
+  const litPole = northInside ? -90 : 90;
+  const darkPole = northInside ? 90 : -90;
+
+  const ring: [number, number][] = [];
+  for (let lng = -180; lng <= 180; lng += stepDeg) {
+    const hourAngle = (greenwichHourAngleDeg + lng) * DEG;
+    const B = Math.cos(dec) * Math.cos(hourAngle);
+    const R = Math.hypot(A, B);
+
+    if (R < 1e-12 || Math.abs(C / R) > 1) {
+      // The whole meridian sits on one side of the threshold: the target
+      // altitude is unreachable there, so it's entirely dark when it exceeds
+      // the meridian's achievable range and entirely lit when it falls below it.
+      ring.push([lng, C > 0 ? darkPole : litPole]);
+      continue;
+    }
+
+    const asinTerm = Math.asin(C / R) * RAD;
+    const psiTerm = Math.atan2(B, A) * RAD;
+    const near = reduceTo180(asinTerm - psiTerm);
+    const far = reduceTo180(180 - asinTerm - psiTerm);
+    const phi = Math.abs(near) <= 90.0000001 ? near : far;
+    ring.push([lng, phi]);
+  }
+
+  ring.push([180, darkPole], [-180, darkPole], ring[0]);
+  return ring;
+}
+
+/**
+ * Ring for the case where the cap touches neither pole: sample bearings around
+ * the antisolar point. Longitudes are left unwrapped so a ring crossing the
+ * antimeridian stays continuous instead of folding back across the world.
+ */
+function capBranchRing(
+  antiLat: number,
+  antiLng: number,
+  radiusDeg: number,
+  stepDeg: number,
+): [number, number][] {
+  const ring: [number, number][] = [];
+  let previousLng: number | null = null;
+
+  for (let bearing = 0; bearing <= 360; bearing += stepDeg) {
+    const [lng, lat] = destination(antiLat, antiLng, radiusDeg, bearing);
+    let unwrapped = lng;
+    if (previousLng !== null) {
+      while (unwrapped - previousLng > 180) unwrapped -= 360;
+      while (previousLng - unwrapped > 180) unwrapped += 360;
+    }
+    previousLng = unwrapped;
+    ring.push([unwrapped, lat]);
+  }
+
+  ring[ring.length - 1] = [...ring[0]] as [number, number];
+  return ring;
+}
+
+/**
+ * The region where solar altitude is below `altitudeDeg`, as a spherical cap
+ * centred on the antisolar point with angular radius `90 + altitudeDeg`.
+ */
+export function darkRegion(
+  date: Date,
+  altitudeDeg: number,
+  stepDeg = 1,
+): Feature<Polygon, DarkRegionProperties> {
+  const { declinationDeg, greenwichHourAngleDeg } = solarPosition(date);
+  const northInside = declinationDeg <= altitudeDeg;
+  const southInside = declinationDeg >= -altitudeDeg;
+
+  let branch: ContourBranch;
+  let ring: [number, number][];
+
+  if (northInside || southInside) {
+    branch = "pole";
+    ring = poleBranchRing(declinationDeg, greenwichHourAngleDeg, altitudeDeg, stepDeg, northInside);
+  } else {
+    branch = "cap";
+    const sub = subsolarPoint(date);
+    ring = capBranchRing(-sub.lat, normalizeLongitude(sub.lng + 180), 90 + altitudeDeg, stepDeg);
+  }
+
+  return {
+    type: "Feature",
+    geometry: { type: "Polygon", coordinates: [ring] },
+    properties: { altitudeDeg, branch },
+  };
+}
+
+export interface TwilightBandOptions {
+  /** Number of nested contours. */
+  bands?: number;
+  /** Altitude of the innermost contour. */
+  minAltitudeDeg?: number;
+  /** Sampling resolution in degrees. */
+  stepDeg?: number;
+}
+
+export interface TwilightBandProperties extends DarkRegionProperties {
+  band: number;
+}
+
+/**
+ * Nested dark-region contours from the horizon down towards astronomical night.
+ * Rendered as stacked low-alpha fills, the accumulated alpha forms a continuous
+ * ramp; nesting is guaranteed because the cap radius shrinks monotonically as
+ * the altitude threshold falls.
+ */
+export function twilightBands(
+  date: Date,
+  options: TwilightBandOptions = {},
+): FeatureCollection<Polygon, TwilightBandProperties> {
+  const { bands = 16, minAltitudeDeg = -18, stepDeg = 1 } = options;
+  const features: Feature<Polygon, TwilightBandProperties>[] = [];
+
+  for (let band = 0; band < bands; band += 1) {
+    // band 0 must be exactly 0, not -0: minAltitudeDeg * 0 is negative zero.
+    const altitudeDeg = band === 0 ? 0 : (minAltitudeDeg * band) / bands;
+    const region = darkRegion(date, altitudeDeg, stepDeg);
+    features.push({ ...region, properties: { ...region.properties, band } });
+  }
+
+  return { type: "FeatureCollection", features };
 }

@@ -205,11 +205,17 @@ export { decodePolyline, encodePolyline } from "./polyline";
 export { buildRideOpenUrl, rideQuoteBody } from "./rideLink";
 export { sectionSlug } from "./sectionSlug";
 export {
+  type ContourBranch,
+  type DarkRegionProperties,
+  darkRegion,
   normalizeLongitude,
   type SolarPosition,
   solarAltitudeDeg,
   solarPosition,
   subsolarPoint,
+  type TwilightBandOptions,
+  type TwilightBandProperties,
+  twilightBands,
 } from "./solar";
 export {
   bearingDegrees,
