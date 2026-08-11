@@ -47,7 +47,9 @@ export function toOpenApiPath(path: string): string {
   return path
     .split("/")
     .map((segment) => {
-      if (segment === "*") return "{wildcard}";
+      // `{*}` is what @fastify/swagger emits for a Fastify wildcard; `*` is the
+      // raw form the integration registry stores.
+      if (segment === "*" || segment === "{*}") return "{wildcard}";
       if (segment.startsWith(":")) return `{${segment.slice(1)}}`;
       return segment;
     })
@@ -56,7 +58,7 @@ export function toOpenApiPath(path: string): string {
 
 /** Groups an operation in the rendered document. Derived from the URL, so no route needs to declare one. */
 export function tagForPath(path: string): string {
-  if (path.startsWith("/api/auth")) return "auth";
+  if (path.startsWith("/api/auth") || path.startsWith("/auth/")) return "auth";
   if (path === "/health") return "meta";
   if (!path.startsWith("/api/")) return "meta";
 

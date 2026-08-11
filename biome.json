@@ -18,7 +18,8 @@
       "!**/db/migrations",
       "!**/__fixtures__",
       "!infra/docker/data",
-      "!docs"
+      "!docs",
+      "!apps/api/openapi.json"
     ]
   },
   "formatter": {

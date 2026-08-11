@@ -36,6 +36,10 @@ describe("toOpenApiPath", () => {
     expect(toOpenApiPath("/api/tiles/:z/:x/:y.png")).toBe("/api/tiles/{z}/{x}/{y.png}");
     expect(toOpenApiPath("/api/integrations/:id/*")).toBe("/api/integrations/{id}/{wildcard}");
   });
+
+  it("normalizes the wildcard form @fastify/swagger emits", () => {
+    expect(toOpenApiPath("/api/auth/{*}")).toBe("/api/auth/{wildcard}");
+  });
 });
 
 describe("tagForPath", () => {
@@ -45,6 +49,7 @@ describe("tagForPath", () => {
     ["/api/admin/overview", "admin"],
     ["/api/data-manager/transit/state", "data-manager"],
     ["/api/auth/*", "auth"],
+    ["/auth/oidc/consent", "auth"],
     ["/api/saved/lists", "saved"],
   ])("maps %s to %s", (path, tag) => {
     expect(tagForPath(path)).toBe(tag);

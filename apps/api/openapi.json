@@ -1,0 +1,6530 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "OpenMapX API",
+    "description": "Generated from the API's own route table and the integration route registry. Do not edit by hand — run `pnpm openapi:generate`.",
+    "version": "1.0.0"
+  },
+  "tags": [
+    {
+      "name": "admin",
+      "description": "Operator-facing administration of integrations, services, settings and jobs."
+    },
+    {
+      "name": "attribution",
+      "description": "Routes under /api/attribution."
+    },
+    {
+      "name": "auth",
+      "description": "Authentication and OAuth endpoints served by Better Auth."
+    },
+    {
+      "name": "capabilities",
+      "description": "Routes under /api/capabilities."
+    },
+    {
+      "name": "data-manager",
+      "description": "Transit, POI and Overture data pipeline control."
+    },
+    {
+      "name": "elevation",
+      "description": "Routes under /api/elevation."
+    },
+    {
+      "name": "image-proxy",
+      "description": "Routes under /api/image-proxy."
+    },
+    {
+      "name": "integrations",
+      "description": "Routes contributed by integrations under /api/integrations/<id>."
+    },
+    {
+      "name": "internal",
+      "description": "Endpoints for other OpenMapX processes, not for clients."
+    },
+    {
+      "name": "isochrone",
+      "description": "Routes under /api/isochrone."
+    },
+    {
+      "name": "legal-config",
+      "description": "Routes under /api/legal-config."
+    },
+    {
+      "name": "maptiler",
+      "description": "Routes under /api/maptiler."
+    },
+    {
+      "name": "me",
+      "description": "Routes under /api/me."
+    },
+    {
+      "name": "meta",
+      "description": "Process-level endpoints: health and registry dumps."
+    },
+    {
+      "name": "mobile-auth",
+      "description": "Routes under /api/mobile-auth."
+    },
+    {
+      "name": "neighborhoods",
+      "description": "Routes under /api/neighborhoods."
+    },
+    {
+      "name": "offline",
+      "description": "Routes under /api/offline."
+    },
+    {
+      "name": "osm",
+      "description": "Routes under /api/osm."
+    },
+    {
+      "name": "places",
+      "description": "Routes under /api/places."
+    },
+    {
+      "name": "reviews",
+      "description": "Routes under /api/reviews."
+    },
+    {
+      "name": "saved",
+      "description": "Routes under /api/saved."
+    },
+    {
+      "name": "status",
+      "description": "Routes under /api/status."
+    },
+    {
+      "name": "street-level-imagery",
+      "description": "Routes under /api/street-level-imagery."
+    },
+    {
+      "name": "tiles",
+      "description": "Routes under /api/tiles."
+    },
+    {
+      "name": "timeline",
+      "description": "Routes under /api/timeline."
+    },
+    {
+      "name": "traffic",
+      "description": "Routes under /api/traffic."
+    },
+    {
+      "name": "transit",
+      "description": "Routes under /api/transit."
+    },
+    {
+      "name": "winter-sports",
+      "description": "Routes under /api/winter-sports."
+    }
+  ],
+  "paths": {
+    "/api/admin/audit": {
+      "get": {
+        "operationId": "getApiAdminAudit",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/audit/export": {
+      "get": {
+        "operationId": "getApiAdminAuditExport",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/cache": {
+      "get": {
+        "operationId": "getApiAdminCache",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/cache/clear": {
+      "post": {
+        "operationId": "postApiAdminCacheClear",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/compose/down": {
+      "post": {
+        "operationId": "postApiAdminComposeDown",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/compose/preview": {
+      "get": {
+        "operationId": "getApiAdminComposePreview",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/compose/up": {
+      "post": {
+        "operationId": "postApiAdminComposeUp",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/credentials": {
+      "get": {
+        "operationId": "getApiAdminCredentials",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/credentials/{integrationId}": {
+      "get": {
+        "operationId": "getApiAdminCredentialsIntegrationId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "integrationId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/credentials/{integrationId}/test": {
+      "post": {
+        "operationId": "postApiAdminCredentialsIntegrationIdTest",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "integrationId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/credentials/{integrationId}/{key}": {
+      "put": {
+        "operationId": "putApiAdminCredentialsIntegrationIdKey",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "integrationId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "key",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      },
+      "delete": {
+        "operationId": "deleteApiAdminCredentialsIntegrationIdKey",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "integrationId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "key",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/dawarich": {
+      "get": {
+        "operationId": "getApiAdminDawarich",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/dawarich/provision": {
+      "post": {
+        "operationId": "postApiAdminDawarichProvision",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/dawarich/rotate-oidc-secret": {
+      "post": {
+        "operationId": "postApiAdminDawarichRotateOidcSecret",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/deployment": {
+      "get": {
+        "operationId": "getApiAdminDeployment",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/extensions/catalog": {
+      "get": {
+        "operationId": "getApiAdminExtensionsCatalog",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/extensions/catalog/{id}": {
+      "get": {
+        "operationId": "getApiAdminExtensionsCatalogId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/extensions/install": {
+      "post": {
+        "operationId": "postApiAdminExtensionsInstall",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/extensions/installed": {
+      "get": {
+        "operationId": "getApiAdminExtensionsInstalled",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/extensions/refresh-catalog": {
+      "post": {
+        "operationId": "postApiAdminExtensionsRefreshCatalog",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/extensions/sources": {
+      "get": {
+        "operationId": "getApiAdminExtensionsSources",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      },
+      "post": {
+        "operationId": "postApiAdminExtensionsSources",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      },
+      "delete": {
+        "operationId": "deleteApiAdminExtensionsSources",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/extensions/update/{id}": {
+      "post": {
+        "operationId": "postApiAdminExtensionsUpdateId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/extensions/{id}": {
+      "delete": {
+        "operationId": "deleteApiAdminExtensionsId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/integrations": {
+      "get": {
+        "operationId": "getApiAdminIntegrations",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/integrations/env-vars": {
+      "get": {
+        "operationId": "getApiAdminIntegrationsEnvVars",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/integrations/export": {
+      "get": {
+        "operationId": "getApiAdminIntegrationsExport",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/integrations/health/run": {
+      "post": {
+        "operationId": "postApiAdminIntegrationsHealthRun",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/integrations/import": {
+      "post": {
+        "operationId": "postApiAdminIntegrationsImport",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/integrations/reload": {
+      "post": {
+        "operationId": "postApiAdminIntegrationsReload",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/integrations/{id}": {
+      "get": {
+        "operationId": "getApiAdminIntegrationsId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/integrations/{id}/config": {
+      "patch": {
+        "operationId": "patchApiAdminIntegrationsIdConfig",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/integrations/{id}/disable": {
+      "post": {
+        "operationId": "postApiAdminIntegrationsIdDisable",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/integrations/{id}/enable": {
+      "post": {
+        "operationId": "postApiAdminIntegrationsIdEnable",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/integrations/{id}/health": {
+      "get": {
+        "operationId": "getApiAdminIntegrationsIdHealth",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/integrations/{id}/health/history": {
+      "get": {
+        "operationId": "getApiAdminIntegrationsIdHealthHistory",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/integrations/{id}/reload": {
+      "post": {
+        "operationId": "postApiAdminIntegrationsIdReload",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/integrations/{integrationId}/bindings": {
+      "get": {
+        "operationId": "getApiAdminIntegrationsIntegrationIdBindings",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "integrationId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/integrations/{integrationId}/bindings/{capability}": {
+      "post": {
+        "operationId": "postApiAdminIntegrationsIntegrationIdBindingsCapability",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "integrationId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "capability",
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "serviceId"
+                ],
+                "properties": {
+                  "serviceId": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      },
+      "delete": {
+        "operationId": "deleteApiAdminIntegrationsIntegrationIdBindingsCapability",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "integrationId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "capability",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/jobs": {
+      "get": {
+        "operationId": "getApiAdminJobs",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/jobs/{id}": {
+      "get": {
+        "operationId": "getApiAdminJobsId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/jobs/{id}/cancel": {
+      "post": {
+        "operationId": "postApiAdminJobsIdCancel",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/logs": {
+      "get": {
+        "operationId": "getApiAdminLogs",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/overview": {
+      "get": {
+        "operationId": "getApiAdminOverview",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/services": {
+      "get": {
+        "operationId": "getApiAdminServices",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/services/backups": {
+      "get": {
+        "operationId": "getApiAdminServicesBackups",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      },
+      "post": {
+        "operationId": "postApiAdminServicesBackups",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/services/backups/{name}": {
+      "delete": {
+        "operationId": "deleteApiAdminServicesBackupsName",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/services/backups/{name}/restore": {
+      "post": {
+        "operationId": "postApiAdminServicesBackupsNameRestore",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/services/bulk-action": {
+      "post": {
+        "operationId": "postApiAdminServicesBulkAction",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/services/check": {
+      "post": {
+        "operationId": "postApiAdminServicesCheck",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/services/data": {
+      "get": {
+        "operationId": "getApiAdminServicesData",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/services/data/action": {
+      "post": {
+        "operationId": "postApiAdminServicesDataAction",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/services/selection": {
+      "get": {
+        "operationId": "getApiAdminServicesSelection",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      },
+      "put": {
+        "operationId": "putApiAdminServicesSelection",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/services/{id}": {
+      "get": {
+        "operationId": "getApiAdminServicesId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/services/{id}/action": {
+      "post": {
+        "operationId": "postApiAdminServicesIdAction",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/services/{id}/config": {
+      "get": {
+        "operationId": "getApiAdminServicesIdConfig",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      },
+      "post": {
+        "operationId": "postApiAdminServicesIdConfig",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/services/{id}/credentials": {
+      "get": {
+        "operationId": "getApiAdminServicesIdCredentials",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/services/{id}/credentials/{key}": {
+      "put": {
+        "operationId": "putApiAdminServicesIdCredentialsKey",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "key",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      },
+      "delete": {
+        "operationId": "deleteApiAdminServicesIdCredentialsKey",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "key",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/services/{id}/logs": {
+      "get": {
+        "operationId": "getApiAdminServicesIdLogs",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/settings": {
+      "get": {
+        "operationId": "getApiAdminSettings",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      },
+      "patch": {
+        "operationId": "patchApiAdminSettings",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/settings/export": {
+      "post": {
+        "operationId": "postApiAdminSettingsExport",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/settings/import": {
+      "post": {
+        "operationId": "postApiAdminSettingsImport",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/settings/test-email": {
+      "post": {
+        "operationId": "postApiAdminSettingsTestEmail",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/shared-mobility": {
+      "get": {
+        "operationId": "getApiAdminSharedMobility",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/shared-mobility/{category}/rollback": {
+      "post": {
+        "operationId": "postApiAdminSharedMobilityCategoryRollback",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "category",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/system": {
+      "get": {
+        "operationId": "getApiAdminSystem",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/system/diagnostics": {
+      "post": {
+        "operationId": "postApiAdminSystemDiagnostics",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/system/updates/apply": {
+      "post": {
+        "operationId": "postApiAdminSystemUpdatesApply",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/admin/system/updates/check": {
+      "post": {
+        "operationId": "postApiAdminSystemUpdatesCheck",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/attribution": {
+      "get": {
+        "operationId": "getApiAttribution",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "attribution"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/attribution/health": {
+      "get": {
+        "operationId": "getApiAttributionHealth",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "attribution"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/attribution/motis-file/{filename}": {
+      "get": {
+        "operationId": "getApiAttributionMotisFileFilename",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "filename",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "attribution"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/attribution/{sourceId}": {
+      "get": {
+        "operationId": "getApiAttributionSourceId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sourceId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "attribution"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/auth/{wildcard}": {
+      "get": {
+        "operationId": "getApiAuthWildcard",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "*",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "auth"
+        ],
+        "x-openmapx-auth": "unspecified"
+      },
+      "post": {
+        "operationId": "postApiAuthWildcard",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "*",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "auth"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/capabilities": {
+      "get": {
+        "operationId": "getApiCapabilities",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "capabilities"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/data-manager/overture/status": {
+      "get": {
+        "operationId": "getApiDataManagerOvertureStatus",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/data-manager/poi-ingest/sources": {
+      "get": {
+        "operationId": "getApiDataManagerPoiIngestSources",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/data-manager/poi-ingest/sources/{id}": {
+      "get": {
+        "operationId": "getApiDataManagerPoiIngestSourcesId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/data-manager/poi-ingest/sources/{id}/sync": {
+      "post": {
+        "operationId": "postApiDataManagerPoiIngestSourcesIdSync",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/data-manager/poi-ingest/sources/{id}/sync-live": {
+      "post": {
+        "operationId": "postApiDataManagerPoiIngestSourcesIdSyncLive",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/data-manager/poi-ingest/state": {
+      "get": {
+        "operationId": "getApiDataManagerPoiIngestState",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/data-manager/providers": {
+      "get": {
+        "operationId": "getApiDataManagerProviders",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/data-manager/providers/{id}": {
+      "get": {
+        "operationId": "getApiDataManagerProvidersId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/data-manager/providers/{id}/reset": {
+      "post": {
+        "operationId": "postApiDataManagerProvidersIdReset",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/data-manager/transit/bump-transitous-ref": {
+      "post": {
+        "operationId": "postApiDataManagerTransitBumpTransitousRef",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/data-manager/transit/catalog": {
+      "get": {
+        "operationId": "getApiDataManagerTransitCatalog",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/data-manager/transit/feeds": {
+      "get": {
+        "operationId": "getApiDataManagerTransitFeeds",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/data-manager/transit/jobs": {
+      "get": {
+        "operationId": "getApiDataManagerTransitJobs",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/data-manager/transit/jobs/{id}": {
+      "get": {
+        "operationId": "getApiDataManagerTransitJobsId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/data-manager/transit/restart-motis": {
+      "post": {
+        "operationId": "postApiDataManagerTransitRestartMotis",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/data-manager/transit/sources": {
+      "get": {
+        "operationId": "getApiDataManagerTransitSources",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      },
+      "post": {
+        "operationId": "postApiDataManagerTransitSources",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/data-manager/transit/sources/{sourceId}": {
+      "delete": {
+        "operationId": "deleteApiDataManagerTransitSourcesSourceId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sourceId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/data-manager/transit/sources/{sourceId}/enable": {
+      "post": {
+        "operationId": "postApiDataManagerTransitSourcesSourceIdEnable",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sourceId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/data-manager/transit/state": {
+      "get": {
+        "operationId": "getApiDataManagerTransitState",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/data-manager/transit/sync": {
+      "post": {
+        "operationId": "postApiDataManagerTransitSync",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/elevation": {
+      "post": {
+        "operationId": "postApiElevation",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "coordinates"
+                ],
+                "properties": {
+                  "coordinates": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      },
+                      "minItems": 2,
+                      "maxItems": 2
+                    },
+                    "minItems": 2,
+                    "maxItems": 5000
+                  },
+                  "routeDistance": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "elevation"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/id-schemes": {
+      "get": {
+        "operationId": "getApiIdSchemes",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "meta"
+        ],
+        "x-openmapx-auth": "public"
+      }
+    },
+    "/api/image-proxy": {
+      "get": {
+        "operationId": "getApiImageProxy",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 10
+            },
+            "in": "query",
+            "name": "url",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "image-proxy"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/integrations/crowd-reports/enroll": {
+      "post": {
+        "operationId": "postApiIntegrationsCrowdReportsEnroll",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /enroll (crowd-reports)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "crowd-reports",
+        "x-openmapx-source": "integrations/crowd-reports/index.ts"
+      }
+    },
+    "/api/integrations/crowd-reports/issuer-keys": {
+      "get": {
+        "operationId": "getApiIntegrationsCrowdReportsIssuerKeys",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /issuer-keys (crowd-reports)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "crowd-reports",
+        "x-openmapx-source": "integrations/crowd-reports/index.ts"
+      }
+    },
+    "/api/integrations/crowd-reports/reports": {
+      "post": {
+        "operationId": "postApiIntegrationsCrowdReportsReports",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /reports (crowd-reports)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "crowd-reports",
+        "x-openmapx-source": "integrations/crowd-reports/index.ts"
+      }
+    },
+    "/api/integrations/crowd-reports/reports/{id}/{action}": {
+      "post": {
+        "operationId": "postApiIntegrationsCrowdReportsReportsIdAction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /reports/:id/:action (crowd-reports)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "crowd-reports",
+        "x-openmapx-source": "integrations/crowd-reports/index.ts"
+      }
+    },
+    "/api/integrations/crowd-reports/tokens": {
+      "post": {
+        "operationId": "postApiIntegrationsCrowdReportsTokens",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /tokens (crowd-reports)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "crowd-reports",
+        "x-openmapx-source": "integrations/crowd-reports/index.ts"
+      }
+    },
+    "/api/integrations/data-source": {
+      "get": {
+        "operationId": "getApiIntegrationsDataSource",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET / (data-source)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "data-source",
+        "x-openmapx-source": "integrations/data-source/index.ts"
+      }
+    },
+    "/api/integrations/data-source/{id}/detail/{wildcard}": {
+      "get": {
+        "operationId": "getApiIntegrationsDataSourceIdDetailWildcard",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Matches the remainder of the path, including slashes."
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /:id/detail/* (data-source)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "data-source",
+        "x-openmapx-source": "integrations/data-source/index.ts"
+      }
+    },
+    "/api/integrations/data-source/{id}/map-context": {
+      "get": {
+        "operationId": "getApiIntegrationsDataSourceIdMapContext",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /:id/map-context (data-source)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "data-source",
+        "x-openmapx-source": "integrations/data-source/index.ts"
+      }
+    },
+    "/api/integrations/data-source/{id}/search": {
+      "get": {
+        "operationId": "getApiIntegrationsDataSourceIdSearch",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /:id/search (data-source)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "data-source",
+        "x-openmapx-source": "integrations/data-source/index.ts"
+      }
+    },
+    "/api/integrations/flights/providers": {
+      "get": {
+        "operationId": "getApiIntegrationsFlightsProviders",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /providers (flights)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "flights",
+        "x-openmapx-source": "integrations/flights/index.ts"
+      }
+    },
+    "/api/integrations/flights/{provider}/open": {
+      "get": {
+        "operationId": "getApiIntegrationsFlightsProviderOpen",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /:provider/open (flights)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "flights",
+        "x-openmapx-source": "integrations/flights/index.ts"
+      }
+    },
+    "/api/integrations/flights/{provider}/url": {
+      "get": {
+        "operationId": "getApiIntegrationsFlightsProviderUrl",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /:provider/url (flights)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "flights",
+        "x-openmapx-source": "integrations/flights/index.ts"
+      }
+    },
+    "/api/integrations/food-delivery/providers": {
+      "get": {
+        "operationId": "getApiIntegrationsFoodDeliveryProviders",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /providers (food-delivery)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "food-delivery",
+        "x-openmapx-source": "integrations/food-delivery/index.ts"
+      }
+    },
+    "/api/integrations/food-delivery/resolve": {
+      "get": {
+        "operationId": "getApiIntegrationsFoodDeliveryResolve",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /resolve (food-delivery)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "food-delivery",
+        "x-openmapx-source": "integrations/food-delivery/index.ts"
+      }
+    },
+    "/api/integrations/food-delivery/{provider}/open": {
+      "get": {
+        "operationId": "getApiIntegrationsFoodDeliveryProviderOpen",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /:provider/open (food-delivery)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "food-delivery",
+        "x-openmapx-source": "integrations/food-delivery/index.ts"
+      }
+    },
+    "/api/integrations/food-delivery/{provider}/url": {
+      "get": {
+        "operationId": "getApiIntegrationsFoodDeliveryProviderUrl",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /:provider/url (food-delivery)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "food-delivery",
+        "x-openmapx-source": "integrations/food-delivery/index.ts"
+      }
+    },
+    "/api/integrations/geocoding/autocomplete": {
+      "get": {
+        "operationId": "getApiIntegrationsGeocodingAutocomplete",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /autocomplete (geocoding)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "geocoding",
+        "x-openmapx-source": "integrations/geocoding/index.ts"
+      }
+    },
+    "/api/integrations/geocoding/geocode": {
+      "get": {
+        "operationId": "getApiIntegrationsGeocodingGeocode",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /geocode (geocoding)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "geocoding",
+        "x-openmapx-source": "integrations/geocoding/index.ts"
+      }
+    },
+    "/api/integrations/geocoding/geocode/country": {
+      "get": {
+        "operationId": "getApiIntegrationsGeocodingGeocodeCountry",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /geocode/country (geocoding)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "geocoding",
+        "x-openmapx-source": "integrations/geocoding/index.ts"
+      }
+    },
+    "/api/integrations/geocoding/geocode/reverse": {
+      "get": {
+        "operationId": "getApiIntegrationsGeocodingGeocodeReverse",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /geocode/reverse (geocoding)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "geocoding",
+        "x-openmapx-source": "integrations/geocoding/index.ts"
+      }
+    },
+    "/api/integrations/hotels/config": {
+      "get": {
+        "operationId": "getApiIntegrationsHotelsConfig",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /config (hotels)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "hotels",
+        "x-openmapx-source": "integrations/hotels/index.ts"
+      }
+    },
+    "/api/integrations/hotels/offers": {
+      "get": {
+        "operationId": "getApiIntegrationsHotelsOffers",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /offers (hotels)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "hotels",
+        "x-openmapx-source": "integrations/hotels/index.ts"
+      }
+    },
+    "/api/integrations/hotels/official": {
+      "get": {
+        "operationId": "getApiIntegrationsHotelsOfficial",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /official (hotels)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "hotels",
+        "x-openmapx-source": "integrations/hotels/index.ts"
+      }
+    },
+    "/api/integrations/hotels/providers": {
+      "get": {
+        "operationId": "getApiIntegrationsHotelsProviders",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /providers (hotels)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "hotels",
+        "x-openmapx-source": "integrations/hotels/index.ts"
+      }
+    },
+    "/api/integrations/hotels/resolve": {
+      "get": {
+        "operationId": "getApiIntegrationsHotelsResolve",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /resolve (hotels)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "hotels",
+        "x-openmapx-source": "integrations/hotels/index.ts"
+      }
+    },
+    "/api/integrations/hotels/{provider}/open": {
+      "get": {
+        "operationId": "getApiIntegrationsHotelsProviderOpen",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /:provider/open (hotels)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "hotels",
+        "x-openmapx-source": "integrations/hotels/index.ts"
+      }
+    },
+    "/api/integrations/hotels/{provider}/url": {
+      "get": {
+        "operationId": "getApiIntegrationsHotelsProviderUrl",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /:provider/url (hotels)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "hotels",
+        "x-openmapx-source": "integrations/hotels/index.ts"
+      }
+    },
+    "/api/integrations/knowledge-marine-weather/marine": {
+      "get": {
+        "operationId": "getApiIntegrationsKnowledgeMarineWeatherMarine",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /marine (knowledge-marine-weather)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "knowledge-marine-weather",
+        "x-openmapx-source": "integrations/knowledge-marine-weather/index.ts"
+      }
+    },
+    "/api/integrations/knowledge-noaa-tides/tides": {
+      "get": {
+        "operationId": "getApiIntegrationsKnowledgeNoaaTidesTides",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /tides (knowledge-noaa-tides)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "knowledge-noaa-tides",
+        "x-openmapx-source": "integrations/knowledge-noaa-tides/index.ts"
+      }
+    },
+    "/api/integrations/knowledge-ourairports/nearest": {
+      "get": {
+        "operationId": "getApiIntegrationsKnowledgeOurairportsNearest",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /nearest (knowledge-ourairports)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "knowledge-ourairports",
+        "x-openmapx-source": "integrations/knowledge-ourairports/index.ts"
+      }
+    },
+    "/api/integrations/knowledge-ourairports/search": {
+      "get": {
+        "operationId": "getApiIntegrationsKnowledgeOurairportsSearch",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /search (knowledge-ourairports)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "knowledge-ourairports",
+        "x-openmapx-source": "integrations/knowledge-ourairports/index.ts"
+      }
+    },
+    "/api/integrations/knowledge-sunrise-sunset/times": {
+      "get": {
+        "operationId": "getApiIntegrationsKnowledgeSunriseSunsetTimes",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /times (knowledge-sunrise-sunset)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "knowledge-sunrise-sunset",
+        "x-openmapx-source": "integrations/knowledge-sunrise-sunset/index.ts"
+      }
+    },
+    "/api/integrations/knowledge-tides-canada/tides": {
+      "get": {
+        "operationId": "getApiIntegrationsKnowledgeTidesCanadaTides",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /tides (knowledge-tides-canada)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "knowledge-tides-canada",
+        "x-openmapx-source": "packages/integration-framework/src/tides-integration-factory.ts"
+      }
+    },
+    "/api/integrations/knowledge-tides-ioc/tides": {
+      "get": {
+        "operationId": "getApiIntegrationsKnowledgeTidesIocTides",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /tides (knowledge-tides-ioc)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "knowledge-tides-ioc",
+        "x-openmapx-source": "packages/integration-framework/src/tides-integration-factory.ts"
+      }
+    },
+    "/api/integrations/knowledge-tides-norway/tides": {
+      "get": {
+        "operationId": "getApiIntegrationsKnowledgeTidesNorwayTides",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /tides (knowledge-tides-norway)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "knowledge-tides-norway",
+        "x-openmapx-source": "packages/integration-framework/src/tides-integration-factory.ts"
+      }
+    },
+    "/api/integrations/knowledge-tides-pegelonline/tides": {
+      "get": {
+        "operationId": "getApiIntegrationsKnowledgeTidesPegelonlineTides",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /tides (knowledge-tides-pegelonline)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "knowledge-tides-pegelonline",
+        "x-openmapx-source": "packages/integration-framework/src/tides-integration-factory.ts"
+      }
+    },
+    "/api/integrations/overlay-air-quality/air-quality/stations": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayAirQualityAirQualityStations",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /air-quality/stations (overlay-air-quality)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-air-quality",
+        "x-openmapx-source": "integrations/overlay-air-quality/index.ts"
+      }
+    },
+    "/api/integrations/overlay-earthquakes/earthquakes": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayEarthquakesEarthquakes",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /earthquakes (overlay-earthquakes)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-earthquakes",
+        "x-openmapx-source": "integrations/overlay-earthquakes/index.ts"
+      }
+    },
+    "/api/integrations/overlay-environment/stations": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayEnvironmentStations",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /stations (overlay-environment)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-environment",
+        "x-openmapx-source": "integrations/overlay-environment/index.ts"
+      }
+    },
+    "/api/integrations/overlay-hiking/hiking/area": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayHikingHikingArea",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /hiking/area (overlay-hiking)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-hiking",
+        "x-openmapx-source": "integrations/overlay-hiking/index.ts"
+      }
+    },
+    "/api/integrations/overlay-hiking/hiking/details/{id}": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayHikingHikingDetailsId",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /hiking/details/:id (overlay-hiking)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-hiking",
+        "x-openmapx-source": "integrations/overlay-hiking/index.ts"
+      }
+    },
+    "/api/integrations/overlay-hiking/hiking/geometry/{id}": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayHikingHikingGeometryId",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /hiking/geometry/:id (overlay-hiking)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-hiking",
+        "x-openmapx-source": "integrations/overlay-hiking/index.ts"
+      }
+    },
+    "/api/integrations/overlay-hiking/hiking/search": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayHikingHikingSearch",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /hiking/search (overlay-hiking)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-hiking",
+        "x-openmapx-source": "integrations/overlay-hiking/index.ts"
+      }
+    },
+    "/api/integrations/overlay-hiking/hiking/shelters": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayHikingHikingShelters",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /hiking/shelters (overlay-hiking)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-hiking",
+        "x-openmapx-source": "integrations/overlay-hiking/index.ts"
+      }
+    },
+    "/api/integrations/overlay-hiking/tiles/{z}/{x}/{y.png}": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayHikingTilesZXYPng",
+        "parameters": [
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "y.png",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /tiles/:z/:x/:y.png (overlay-hiking)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-hiking",
+        "x-openmapx-source": "integrations/overlay-hiking/index.ts"
+      }
+    },
+    "/api/integrations/overlay-live-transit/snapshot": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayLiveTransitSnapshot",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /snapshot (overlay-live-transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-live-transit",
+        "x-openmapx-source": "integrations/overlay-live-transit/index.ts"
+      }
+    },
+    "/api/integrations/overlay-natural-events/events": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayNaturalEventsEvents",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /events (overlay-natural-events)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-natural-events",
+        "x-openmapx-source": "integrations/overlay-natural-events/index.ts"
+      }
+    },
+    "/api/integrations/overlay-nautical/charts/no/{z}/{x}/{y}": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayNauticalChartsNoZXY",
+        "parameters": [
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /charts/no/:z/:x/:y (overlay-nautical)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-nautical",
+        "x-openmapx-source": "integrations/overlay-nautical/index.ts"
+      }
+    },
+    "/api/integrations/overlay-nautical/depth/contour/{z}/{x}/{y}": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayNauticalDepthContourZXY",
+        "parameters": [
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /depth/contour/:z/:x/:y (overlay-nautical)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-nautical",
+        "x-openmapx-source": "integrations/overlay-nautical/index.ts"
+      }
+    },
+    "/api/integrations/overlay-nautical/depth/relief/{z}/{x}/{y}": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayNauticalDepthReliefZXY",
+        "parameters": [
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /depth/relief/:z/:x/:y (overlay-nautical)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-nautical",
+        "x-openmapx-source": "integrations/overlay-nautical/index.ts"
+      }
+    },
+    "/api/integrations/overlay-nautical/harbor/{id}": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayNauticalHarborId",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /harbor/:id (overlay-nautical)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-nautical",
+        "x-openmapx-source": "integrations/overlay-nautical/index.ts"
+      }
+    },
+    "/api/integrations/overlay-nautical/harbors": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayNauticalHarbors",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /harbors (overlay-nautical)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-nautical",
+        "x-openmapx-source": "integrations/overlay-nautical/index.ts"
+      }
+    },
+    "/api/integrations/overlay-nautical/noaa/{z}/{x}/{y}": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayNauticalNoaaZXY",
+        "parameters": [
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /noaa/:z/:x/:y (overlay-nautical)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-nautical",
+        "x-openmapx-source": "integrations/overlay-nautical/index.ts"
+      }
+    },
+    "/api/integrations/overlay-nautical/seamark/{z}/{x}/{y}": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayNauticalSeamarkZXY",
+        "parameters": [
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /seamark/:z/:x/:y (overlay-nautical)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-nautical",
+        "x-openmapx-source": "integrations/overlay-nautical/index.ts"
+      }
+    },
+    "/api/integrations/overlay-nautical/stations": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayNauticalStations",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /stations (overlay-nautical)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-nautical",
+        "x-openmapx-source": "integrations/overlay-nautical/index.ts"
+      }
+    },
+    "/api/integrations/overlay-ourairports/airports": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayOurairportsAirports",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /airports (overlay-ourairports)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-ourairports",
+        "x-openmapx-source": "integrations/overlay-ourairports/index.ts"
+      }
+    },
+    "/api/integrations/overlay-satellite/capabilities": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlaySatelliteCapabilities",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /capabilities (overlay-satellite)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-satellite",
+        "x-openmapx-source": "integrations/overlay-satellite/index.ts"
+      }
+    },
+    "/api/integrations/overlay-satellite/legends/{filename}": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlaySatelliteLegendsFilename",
+        "parameters": [
+          {
+            "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /legends/:filename (overlay-satellite)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-satellite",
+        "x-openmapx-source": "integrations/overlay-satellite/index.ts"
+      }
+    },
+    "/api/integrations/overlay-satellite/tiles/{layerId}/{date}/{z}/{y}/{x}": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlaySatelliteTilesLayerIdDateZYX",
+        "parameters": [
+          {
+            "name": "layerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "date",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /tiles/:layerId/:date/:z/:y/:x (overlay-satellite)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-satellite",
+        "x-openmapx-source": "integrations/overlay-satellite/index.ts"
+      }
+    },
+    "/api/integrations/overlay-weather-alerts/events": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayWeatherAlertsEvents",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /events (overlay-weather-alerts)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-weather-alerts",
+        "x-openmapx-source": "integrations/overlay-weather-alerts/index.ts"
+      }
+    },
+    "/api/integrations/overlay-weather/config": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayWeatherConfig",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /config (overlay-weather)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-weather",
+        "x-openmapx-source": "integrations/overlay-weather/index.ts"
+      }
+    },
+    "/api/integrations/overlay-weather/radar/meta": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayWeatherRadarMeta",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /radar/meta (overlay-weather)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-weather",
+        "x-openmapx-source": "integrations/overlay-weather/index.ts"
+      }
+    },
+    "/api/integrations/overlay-weather/radar/tile/{z}/{x}/{y}": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayWeatherRadarTileZXY",
+        "parameters": [
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /radar/tile/:z/:x/:y (overlay-weather)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-weather",
+        "x-openmapx-source": "integrations/overlay-weather/index.ts"
+      }
+    },
+    "/api/integrations/overlay-weather/tiles/{layer}/{z}/{x}/{y.png}": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayWeatherTilesLayerZXYPng",
+        "parameters": [
+          {
+            "name": "layer",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "y.png",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /tiles/:layer/:z/:x/:y.png (overlay-weather)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-weather",
+        "x-openmapx-source": "integrations/overlay-weather/index.ts"
+      }
+    },
+    "/api/integrations/overlay-wildfires/wildfires": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayWildfiresWildfires",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /wildfires (overlay-wildfires)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-wildfires",
+        "x-openmapx-source": "integrations/overlay-wildfires/index.ts"
+      }
+    },
+    "/api/integrations/overlay-winter-sports/tiles/{z}/{x}/{y.png}": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayWinterSportsTilesZXYPng",
+        "parameters": [
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "y.png",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /tiles/:z/:x/:y.png (overlay-winter-sports)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-winter-sports",
+        "x-openmapx-source": "integrations/overlay-winter-sports/index.ts"
+      }
+    },
+    "/api/integrations/photos/search": {
+      "get": {
+        "operationId": "getApiIntegrationsPhotosSearch",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /search (photos)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "photos",
+        "x-openmapx-source": "integrations/photos/index.ts"
+      }
+    },
+    "/api/integrations/poi-search/chip-translations": {
+      "get": {
+        "operationId": "getApiIntegrationsPoiSearchChipTranslations",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /chip-translations (poi-search)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "poi-search",
+        "x-openmapx-source": "integrations/poi-search/index.ts"
+      }
+    },
+    "/api/integrations/poi-search/filter": {
+      "post": {
+        "operationId": "postApiIntegrationsPoiSearchFilter",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /filter (poi-search)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "poi-search",
+        "x-openmapx-source": "integrations/poi-search/index.ts"
+      }
+    },
+    "/api/integrations/poi-search/filtered": {
+      "get": {
+        "operationId": "getApiIntegrationsPoiSearchFiltered",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /filtered (poi-search)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "poi-search",
+        "x-openmapx-source": "integrations/poi-search/index.ts"
+      }
+    },
+    "/api/integrations/poi-search/preset-suggest": {
+      "get": {
+        "operationId": "getApiIntegrationsPoiSearchPresetSuggest",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /preset-suggest (poi-search)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "poi-search",
+        "x-openmapx-source": "integrations/poi-search/index.ts"
+      }
+    },
+    "/api/integrations/poi-search/search": {
+      "get": {
+        "operationId": "getApiIntegrationsPoiSearchSearch",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /search (poi-search)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "poi-search",
+        "x-openmapx-source": "integrations/poi-search/index.ts"
+      }
+    },
+    "/api/integrations/poi-search/text": {
+      "get": {
+        "operationId": "getApiIntegrationsPoiSearchText",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /text (poi-search)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "poi-search",
+        "x-openmapx-source": "integrations/poi-search/index.ts"
+      }
+    },
+    "/api/integrations/restaurants/menu": {
+      "get": {
+        "operationId": "getApiIntegrationsRestaurantsMenu",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /menu (restaurants)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "restaurants",
+        "x-openmapx-source": "integrations/restaurants/index.ts"
+      }
+    },
+    "/api/integrations/reviews/aggregate": {
+      "get": {
+        "operationId": "getApiIntegrationsReviewsAggregate",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /aggregate (reviews)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "reviews",
+        "x-openmapx-source": "integrations/reviews/index.ts"
+      }
+    },
+    "/api/integrations/reviews/image": {
+      "post": {
+        "operationId": "postApiIntegrationsReviewsImage",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /image (reviews)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "session",
+        "x-openmapx-integration": "reviews",
+        "x-openmapx-source": "integrations/reviews/index.ts"
+      }
+    },
+    "/api/integrations/reviews/reviews": {
+      "get": {
+        "operationId": "getApiIntegrationsReviewsReviews",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /reviews (reviews)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "reviews",
+        "x-openmapx-source": "integrations/reviews/index.ts"
+      }
+    },
+    "/api/integrations/reviews/submit": {
+      "post": {
+        "operationId": "postApiIntegrationsReviewsSubmit",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /submit (reviews)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "session",
+        "x-openmapx-integration": "reviews",
+        "x-openmapx-source": "integrations/reviews/index.ts"
+      }
+    },
+    "/api/integrations/ride-hailing/providers": {
+      "get": {
+        "operationId": "getApiIntegrationsRideHailingProviders",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /providers (ride-hailing)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "ride-hailing",
+        "x-openmapx-source": "integrations/ride-hailing/index.ts"
+      }
+    },
+    "/api/integrations/ride-hailing/quotes": {
+      "post": {
+        "operationId": "postApiIntegrationsRideHailingQuotes",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /quotes (ride-hailing)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "ride-hailing",
+        "x-openmapx-source": "integrations/ride-hailing/index.ts"
+      }
+    },
+    "/api/integrations/ride-hailing/{provider}/handoff": {
+      "get": {
+        "operationId": "getApiIntegrationsRideHailingProviderHandoff",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /:provider/handoff (ride-hailing)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "ride-hailing",
+        "x-openmapx-source": "integrations/ride-hailing/index.ts"
+      }
+    },
+    "/api/integrations/ride-hailing/{provider}/open": {
+      "get": {
+        "operationId": "getApiIntegrationsRideHailingProviderOpen",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /:provider/open (ride-hailing)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "ride-hailing",
+        "x-openmapx-source": "integrations/ride-hailing/index.ts"
+      }
+    },
+    "/api/integrations/road-conditions/events": {
+      "get": {
+        "operationId": "getApiIntegrationsRoadConditionsEvents",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /events (road-conditions)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "road-conditions",
+        "x-openmapx-source": "integrations/road-conditions/index.ts"
+      }
+    },
+    "/api/integrations/road-conditions/flow": {
+      "get": {
+        "operationId": "getApiIntegrationsRoadConditionsFlow",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /flow (road-conditions)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "road-conditions",
+        "x-openmapx-source": "integrations/road-conditions/index.ts"
+      }
+    },
+    "/api/integrations/road-conditions/flow-along-route": {
+      "post": {
+        "operationId": "postApiIntegrationsRoadConditionsFlowAlongRoute",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /flow-along-route (road-conditions)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "road-conditions",
+        "x-openmapx-source": "integrations/road-conditions/index.ts"
+      }
+    },
+    "/api/integrations/routing/directions": {
+      "get": {
+        "operationId": "getApiIntegrationsRoutingDirections",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /directions (routing)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "routing",
+        "x-openmapx-source": "integrations/routing/index.ts"
+      }
+    },
+    "/api/integrations/routing/directions/ev": {
+      "post": {
+        "operationId": "postApiIntegrationsRoutingDirectionsEv",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /directions/ev (routing)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "routing",
+        "x-openmapx-source": "integrations/routing/index.ts"
+      }
+    },
+    "/api/integrations/routing/directions/optimize": {
+      "get": {
+        "operationId": "getApiIntegrationsRoutingDirectionsOptimize",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /directions/optimize (routing)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "routing",
+        "x-openmapx-source": "integrations/routing/index.ts"
+      }
+    },
+    "/api/integrations/routing/match": {
+      "post": {
+        "operationId": "postApiIntegrationsRoutingMatch",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /match (routing)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "routing",
+        "x-openmapx-source": "integrations/routing/index.ts"
+      }
+    },
+    "/api/integrations/routing/navigation/alerts": {
+      "get": {
+        "operationId": "getApiIntegrationsRoutingNavigationAlerts",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /navigation/alerts (routing)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "routing",
+        "x-openmapx-source": "integrations/routing/index.ts"
+      }
+    },
+    "/api/integrations/search-nlp/parse": {
+      "post": {
+        "operationId": "postApiIntegrationsSearchNlpParse",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /parse (search-nlp)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "search-nlp",
+        "x-openmapx-source": "integrations/search-nlp/index.ts"
+      }
+    },
+    "/api/integrations/street-level-imagery-mapillary/capabilities": {
+      "get": {
+        "operationId": "getApiIntegrationsStreetLevelImageryMapillaryCapabilities",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /capabilities (street-level-imagery-mapillary)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "street-level-imagery-mapillary",
+        "x-openmapx-source": "integrations/street-level-imagery-mapillary/index.ts"
+      }
+    },
+    "/api/integrations/street-level-imagery-mapillary/images/{id}": {
+      "get": {
+        "operationId": "getApiIntegrationsStreetLevelImageryMapillaryImagesId",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /images/:id (street-level-imagery-mapillary)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "street-level-imagery-mapillary",
+        "x-openmapx-source": "integrations/street-level-imagery-mapillary/index.ts"
+      }
+    },
+    "/api/integrations/street-level-imagery-mapillary/images/{id}/links": {
+      "get": {
+        "operationId": "getApiIntegrationsStreetLevelImageryMapillaryImagesIdLinks",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /images/:id/links (street-level-imagery-mapillary)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "street-level-imagery-mapillary",
+        "x-openmapx-source": "integrations/street-level-imagery-mapillary/index.ts"
+      }
+    },
+    "/api/integrations/street-level-imagery-mapillary/nearest": {
+      "get": {
+        "operationId": "getApiIntegrationsStreetLevelImageryMapillaryNearest",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /nearest (street-level-imagery-mapillary)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "street-level-imagery-mapillary",
+        "x-openmapx-source": "integrations/street-level-imagery-mapillary/index.ts"
+      }
+    },
+    "/api/integrations/street-level-imagery-mapillary/tiles/{z}/{x}/{y}": {
+      "get": {
+        "operationId": "getApiIntegrationsStreetLevelImageryMapillaryTilesZXY",
+        "parameters": [
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /tiles/:z/:x/:y (street-level-imagery-mapillary)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "street-level-imagery-mapillary",
+        "x-openmapx-source": "integrations/street-level-imagery-mapillary/index.ts"
+      }
+    },
+    "/api/integrations/street-level-imagery-panoramax/capabilities": {
+      "get": {
+        "operationId": "getApiIntegrationsStreetLevelImageryPanoramaxCapabilities",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /capabilities (street-level-imagery-panoramax)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "street-level-imagery-panoramax",
+        "x-openmapx-source": "integrations/street-level-imagery-panoramax/index.ts"
+      }
+    },
+    "/api/integrations/street-level-imagery-panoramax/images/{id}": {
+      "get": {
+        "operationId": "getApiIntegrationsStreetLevelImageryPanoramaxImagesId",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /images/:id (street-level-imagery-panoramax)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "street-level-imagery-panoramax",
+        "x-openmapx-source": "integrations/street-level-imagery-panoramax/index.ts"
+      }
+    },
+    "/api/integrations/street-level-imagery-panoramax/images/{id}/links": {
+      "get": {
+        "operationId": "getApiIntegrationsStreetLevelImageryPanoramaxImagesIdLinks",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /images/:id/links (street-level-imagery-panoramax)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "street-level-imagery-panoramax",
+        "x-openmapx-source": "integrations/street-level-imagery-panoramax/index.ts"
+      }
+    },
+    "/api/integrations/street-level-imagery-panoramax/nearest": {
+      "get": {
+        "operationId": "getApiIntegrationsStreetLevelImageryPanoramaxNearest",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /nearest (street-level-imagery-panoramax)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "street-level-imagery-panoramax",
+        "x-openmapx-source": "integrations/street-level-imagery-panoramax/index.ts"
+      }
+    },
+    "/api/integrations/street-level-imagery-panoramax/tiles/{z}/{x}/{y}": {
+      "get": {
+        "operationId": "getApiIntegrationsStreetLevelImageryPanoramaxTilesZXY",
+        "parameters": [
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /tiles/:z/:x/:y (street-level-imagery-panoramax)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "street-level-imagery-panoramax",
+        "x-openmapx-source": "integrations/street-level-imagery-panoramax/index.ts"
+      }
+    },
+    "/api/integrations/transit/alerts": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitAlerts",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /alerts (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/alerts/for-place": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitAlertsForPlace",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /alerts/for-place (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/arrivals/for-place": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitArrivalsForPlace",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /arrivals/for-place (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/departures/for-place": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitDeparturesForPlace",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /departures/for-place (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/facilities/for-place": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitFacilitiesForPlace",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /facilities/for-place (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/leg-geometry": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitLegGeometry",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /leg-geometry (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/plan": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitPlan",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /plan (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/plan/refresh": {
+      "post": {
+        "operationId": "postApiIntegrationsTransitPlanRefresh",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /plan/refresh (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/planning-capabilities": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitPlanningCapabilities",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /planning-capabilities (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/reachable": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitReachable",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /reachable (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/routes": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitRoutes",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /routes (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/routes/for-place": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitRoutesForPlace",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /routes/for-place (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/routes/{id}": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitRoutesId",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /routes/:id (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/routes/{id}/alerts": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitRoutesIdAlerts",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /routes/:id/alerts (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/routes/{id}/live": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitRoutesIdLive",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /routes/:id/live (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/routes/{id}/stops": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitRoutesIdStops",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /routes/:id/stops (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/stops": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitStops",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /stops (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/stops/near-place": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitStopsNearPlace",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /stops/near-place (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/stops/nearby": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitStopsNearby",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /stops/nearby (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/stops/search": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitStopsSearch",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /stops/search (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/stops/{id}": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitStopsId",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /stops/:id (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/stops/{id}/alerts": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitStopsIdAlerts",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /stops/:id/alerts (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/stops/{id}/arrivals": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitStopsIdArrivals",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /stops/:id/arrivals (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/stops/{id}/departures": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitStopsIdDepartures",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /stops/:id/departures (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/stops/{id}/facilities": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitStopsIdFacilities",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /stops/:id/facilities (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/stops/{id}/infrastructure": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitStopsIdInfrastructure",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /stops/:id/infrastructure (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/stops/{id}/platform-stops": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitStopsIdPlatformStops",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /stops/:id/platform-stops (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/stops/{id}/timetable": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitStopsIdTimetable",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /stops/:id/timetable (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/stops/{id}/transfers": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitStopsIdTransfers",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /stops/:id/transfers (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/vehicles": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitVehicles",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /vehicles (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/vehicles/{id}": {
+      "get": {
+        "operationId": "getApiIntegrationsTransitVehiclesId",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /vehicles/:id (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/weather-open-meteo-air-quality/aqi": {
+      "get": {
+        "operationId": "getApiIntegrationsWeatherOpenMeteoAirQualityAqi",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /aqi (weather-open-meteo-air-quality)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "weather-open-meteo-air-quality",
+        "x-openmapx-source": "integrations/weather-open-meteo-air-quality/index.ts"
+      }
+    },
+    "/api/integrations/weather/current": {
+      "get": {
+        "operationId": "getApiIntegrationsWeatherCurrent",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /current (weather)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "weather",
+        "x-openmapx-source": "integrations/weather/index.ts"
+      }
+    },
+    "/api/integrations/weather/forecast": {
+      "get": {
+        "operationId": "getApiIntegrationsWeatherForecast",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /forecast (weather)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "weather",
+        "x-openmapx-source": "integrations/weather/index.ts"
+      }
+    },
+    "/api/internal/metrics": {
+      "get": {
+        "operationId": "getApiInternalMetrics",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "internal"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/internal/poi-sources/count": {
+      "get": {
+        "operationId": "getApiInternalPoiSourcesCount",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "internal"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/isochrone": {
+      "get": {
+        "operationId": "getApiIsochrone",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "lat",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "lng",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "mode",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "contours",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "isochrone"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/legal-config": {
+      "get": {
+        "operationId": "getApiLegalConfig",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "legal-config"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/maptiler/{wildcard}": {
+      "get": {
+        "operationId": "getApiMaptilerWildcard",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "*",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "maptiler"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/me": {
+      "get": {
+        "operationId": "getApiMe",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "me"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/mobile-auth/exchange": {
+      "post": {
+        "operationId": "postApiMobileAuthExchange",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "mobile-auth"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/mobile-auth/issue": {
+      "post": {
+        "operationId": "postApiMobileAuthIssue",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "mobile-auth"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/neighborhoods": {
+      "get": {
+        "operationId": "getApiNeighborhoods",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "south",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "west",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "north",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "east",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "lang",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "neighborhoods"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/offline/packages/capability": {
+      "get": {
+        "operationId": "getApiOfflinePackagesCapability",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "offline"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/offline/packages/glyphs/{version}/catalog.json": {
+      "get": {
+        "operationId": "getApiOfflinePackagesGlyphsVersionCatalogJson",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "version",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "offline"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/offline/packages/glyphs/{version}/{wildcard}": {
+      "get": {
+        "operationId": "getApiOfflinePackagesGlyphsVersionWildcard",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "version",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "*",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "offline"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/offline/packages/jobs/{jobId}": {
+      "get": {
+        "operationId": "getApiOfflinePackagesJobsJobId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "jobId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "offline"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/offline/packages/prepare": {
+      "post": {
+        "operationId": "postApiOfflinePackagesPrepare",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "offline"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/offline/packages/{packageId}/archive": {
+      "get": {
+        "operationId": "getApiOfflinePackagesPackageIdArchive",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "packageId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "offline"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/offline/packages/{packageId}/manifest": {
+      "get": {
+        "operationId": "getApiOfflinePackagesPackageIdManifest",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "packageId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "offline"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/osm/contributions/capabilities": {
+      "get": {
+        "operationId": "getApiOsmContributionsCapabilities",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "osm"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/osm/contributions/categories": {
+      "get": {
+        "operationId": "getApiOsmContributionsCategories",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "osm"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/osm/contributions/notes": {
+      "post": {
+        "operationId": "postApiOsmContributionsNotes",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "osm"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/osm/contributions/preview": {
+      "post": {
+        "operationId": "postApiOsmContributionsPreview",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "osm"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/osm/contributions/publish": {
+      "post": {
+        "operationId": "postApiOsmContributionsPublish",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "osm"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/osm/contributions/{type}/{id}": {
+      "get": {
+        "operationId": "getApiOsmContributionsTypeId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "type",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "osm"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/places/{id}": {
+      "get": {
+        "operationId": "getApiPlacesId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "lat",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "lng",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "name",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "lang",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "hasAddress",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "places"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/reviews/keypair": {
+      "get": {
+        "operationId": "getApiReviewsKeypair",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "reviews"
+        ],
+        "x-openmapx-auth": "unspecified"
+      },
+      "post": {
+        "operationId": "postApiReviewsKeypair",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "reviews"
+        ],
+        "x-openmapx-auth": "unspecified"
+      },
+      "delete": {
+        "operationId": "deleteApiReviewsKeypair",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "reviews"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/reviews/keypair/wraps": {
+      "put": {
+        "operationId": "putApiReviewsKeypairWraps",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "reviews"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/saved/check": {
+      "get": {
+        "operationId": "getApiSavedCheck",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "saved"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/saved/labels": {
+      "get": {
+        "operationId": "getApiSavedLabels",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "saved"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/saved/labels/{label}": {
+      "put": {
+        "operationId": "putApiSavedLabelsLabel",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "label",
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "lat",
+                  "lng"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "address": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "lat": {
+                    "type": "number"
+                  },
+                  "lng": {
+                    "type": "number"
+                  },
+                  "placeId": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "icon": {
+                    "type": "string",
+                    "maxLength": 50
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "saved"
+        ],
+        "x-openmapx-auth": "unspecified"
+      },
+      "delete": {
+        "operationId": "deleteApiSavedLabelsLabel",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "label",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "saved"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/saved/lists": {
+      "get": {
+        "operationId": "getApiSavedLists",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "saved"
+        ],
+        "x-openmapx-auth": "unspecified"
+      },
+      "post": {
+        "operationId": "postApiSavedLists",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "icon": {
+                    "type": "string",
+                    "maxLength": 50
+                  },
+                  "isPrivate": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "saved"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/saved/lists/{id}": {
+      "delete": {
+        "operationId": "deleteApiSavedListsId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "saved"
+        ],
+        "x-openmapx-auth": "unspecified"
+      },
+      "patch": {
+        "operationId": "patchApiSavedListsId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "icon": {
+                    "type": "string",
+                    "maxLength": 50
+                  },
+                  "isPrivate": {
+                    "type": "boolean"
+                  },
+                  "sortOrder": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "saved"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/saved/lists/{id}/export": {
+      "get": {
+        "operationId": "getApiSavedListsIdExport",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "gpx",
+                "geojson",
+                "kml"
+              ],
+              "default": "geojson"
+            },
+            "in": "query",
+            "name": "format",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "saved"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/saved/lists/{id}/places": {
+      "get": {
+        "operationId": "getApiSavedListsIdPlaces",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "saved"
+        ],
+        "x-openmapx-auth": "unspecified"
+      },
+      "post": {
+        "operationId": "postApiSavedListsIdPlaces",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "lat",
+                  "lng"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "address": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "lat": {
+                    "type": "number"
+                  },
+                  "lng": {
+                    "type": "number"
+                  },
+                  "placeId": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "saved"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/saved/places/{id}": {
+      "delete": {
+        "operationId": "deleteApiSavedPlacesId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "saved"
+        ],
+        "x-openmapx-auth": "unspecified"
+      },
+      "patch": {
+        "operationId": "patchApiSavedPlacesId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "address": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "sortOrder": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "saved"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/status": {
+      "get": {
+        "operationId": "getApiStatus",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "status"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/street-level-imagery/providers": {
+      "get": {
+        "operationId": "getApiStreetLevelImageryProviders",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "street-level-imagery"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/tiles/cycling-routes/{z}/{x}/{y}.png": {
+      "get": {
+        "operationId": "getApiTilesCyclingRoutesZXYPng",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,2}$"
+            },
+            "in": "path",
+            "name": "z",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            },
+            "in": "path",
+            "name": "x",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            },
+            "in": "path",
+            "name": "y",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "tiles"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/tiles/cyclosm/{z}/{x}/{y}.png": {
+      "get": {
+        "operationId": "getApiTilesCyclosmZXYPng",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,2}$"
+            },
+            "in": "path",
+            "name": "z",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            },
+            "in": "path",
+            "name": "x",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            },
+            "in": "path",
+            "name": "y",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "tiles"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/tiles/terrain/{z}/{x}/{y}.png": {
+      "get": {
+        "operationId": "getApiTilesTerrainZXYPng",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,2}$"
+            },
+            "in": "path",
+            "name": "z",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            },
+            "in": "path",
+            "name": "x",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            },
+            "in": "path",
+            "name": "y",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "tiles"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/timeline/connection": {
+      "get": {
+        "operationId": "getApiTimelineConnection",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "timeline"
+        ],
+        "x-openmapx-auth": "unspecified"
+      },
+      "put": {
+        "operationId": "putApiTimelineConnection",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "timeline"
+        ],
+        "x-openmapx-auth": "unspecified"
+      },
+      "delete": {
+        "operationId": "deleteApiTimelineConnection",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "timeline"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/timeline/connection/test": {
+      "post": {
+        "operationId": "postApiTimelineConnectionTest",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "timeline"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/timeline/day/{date}": {
+      "get": {
+        "operationId": "getApiTimelineDayDate",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "date",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "timeline"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/traffic/flow/{z}/{x}/{y}.png": {
+      "get": {
+        "operationId": "getApiTrafficFlowZXYPng",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,2}$"
+            },
+            "in": "path",
+            "name": "z",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            },
+            "in": "path",
+            "name": "x",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            },
+            "in": "path",
+            "name": "y",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "traffic"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/api/transit/registry": {
+      "get": {
+        "operationId": "getApiTransitRegistry",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "transit"
+        ],
+        "x-openmapx-auth": "session"
+      }
+    },
+    "/api/winter-sports/features": {
+      "get": {
+        "operationId": "getApiWinterSportsFeatures",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "south",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "west",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "north",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "east",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "winter-sports"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/auth/oidc/consent": {
+      "get": {
+        "operationId": "getAuthOidcConsent",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "auth"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/auth/oidc/sign-in": {
+      "get": {
+        "operationId": "getAuthOidcSignIn",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "auth"
+        ],
+        "x-openmapx-auth": "unspecified"
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "meta"
+        ],
+        "x-openmapx-auth": "public"
+      }
+    }
+  }
+}

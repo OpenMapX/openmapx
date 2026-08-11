@@ -34,6 +34,8 @@
     "check-routing-canaries": "pnpm -C packages/cli exec tsx ../../scripts/check-routing-canaries.ts",
     "check-license-metadata": "pnpm -C packages/cli exec tsx ../../scripts/check-license-metadata.ts",
     "check-toolchain-pins": "pnpm -C packages/cli exec tsx ../../scripts/check-toolchain-pins.ts",
+    "check-openapi": "pnpm -C apps/api exec tsx scripts/openapi/generate.ts --check",
+    "openapi:generate": "pnpm -C apps/api exec tsx scripts/openapi/generate.ts",
     "gen-ev-vehicles": "pnpm -C packages/cli exec tsx ../../scripts/ev-vehicles/generate.ts",
     "openmapx": "pnpm -C packages/cli exec tsx src/index.ts",
     "mobile:release:prepare": "pnpm -C apps/mobile exec tsx release/prepare.mts",
