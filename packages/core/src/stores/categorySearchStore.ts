@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { BrandSummary } from "../types/brand";
 import type { CategoryId } from "../types/category";
 import type { BoundingBox } from "../types/geometry";
 import type { Place } from "../types/place";
@@ -19,6 +20,9 @@ interface CategorySearchState {
   autoRefresh: boolean;
   adHocFilter: OverpassFilter | null;
   adHocLabel: string | null;
+  /** The catalogued chain behind the current ad-hoc filter, when the filter came
+   *  from a brand pick rather than an NLP parse. Drives the header card. */
+  activeBrand: BrandSummary | null;
   setActiveCategory: (id: CategoryId | null) => void;
   setSearchBbox: (bbox: BoundingBox) => void;
   setMapMoved: (moved: boolean) => void;
@@ -29,6 +33,7 @@ interface CategorySearchState {
   setExploreText: (query: string) => void;
   setAutoRefresh: (autoRefresh: boolean) => void;
   setAdHocFilter: (filter: OverpassFilter, label: string) => void;
+  setBrandFilter: (brand: BrandSummary, filter: OverpassFilter) => void;
   clearCategory: () => void;
 }
 
@@ -44,8 +49,16 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
   autoRefresh: false,
   adHocFilter: null,
   adHocLabel: null,
+  activeBrand: null,
   setActiveCategory: (activeCategory) =>
-    set({ activeCategory, mode: "category", textQuery: "", adHocFilter: null, adHocLabel: null }),
+    set({
+      activeCategory,
+      mode: "category",
+      textQuery: "",
+      adHocFilter: null,
+      adHocLabel: null,
+      activeBrand: null,
+    }),
   setSearchBbox: (searchBbox) => set({ searchBbox }),
   setMapMoved: (mapMoved) => set({ mapMoved }),
   setHoveredCategoryPlaceId: (hoveredCategoryPlaceId) => set({ hoveredCategoryPlaceId }),
@@ -53,7 +66,14 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
   openExploreBox: (anchor) => set({ anchor, exploreBoxOpen: true }),
   closeExploreBox: () => set({ exploreBoxOpen: false }),
   setExploreText: (textQuery) =>
-    set({ mode: "text", textQuery, activeCategory: null, adHocFilter: null, adHocLabel: null }),
+    set({
+      mode: "text",
+      textQuery,
+      activeCategory: null,
+      adHocFilter: null,
+      adHocLabel: null,
+      activeBrand: null,
+    }),
   setAutoRefresh: (autoRefresh) => set({ autoRefresh }),
   setAdHocFilter: (adHocFilter, adHocLabel) =>
     set({
@@ -61,6 +81,16 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
       adHocLabel,
       activeCategory: AD_HOC_CATEGORY_ID,
       mode: "category",
+      textQuery: "",
+      activeBrand: null,
+    }),
+  setBrandFilter: (brand, adHocFilter) =>
+    set({
+      adHocFilter,
+      adHocLabel: brand.name,
+      activeBrand: brand,
+      mode: "category",
+      activeCategory: AD_HOC_CATEGORY_ID,
       textQuery: "",
     }),
   clearCategory: () => {
@@ -77,6 +107,7 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
       autoRefresh: false,
       adHocFilter: null,
       adHocLabel: null,
+      activeBrand: null,
     });
   },
 }));
