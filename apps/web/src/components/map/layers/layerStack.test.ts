@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { BAND_COUNT, BAND_ORDER_BASE } from "@integrations/overlay-sun-time/map-layer";
 import { afterEach, describe, expect, it } from "vitest";
 import { createFakeMap } from "@/test";
 import {
@@ -130,15 +131,46 @@ function repoRootFrom(start: string): string {
 }
 
 /**
+ * Resolve a scanned order argument to a number, or `undefined` if the scan
+ * can't evaluate it. Two shapes are understood: an integer literal (`-16`,
+ * `0`), and a bare identifier that names a module-level `const NAME = <int>;`
+ * in the same file (e.g. `SUBSOLAR_ORDER`). Anything else — including a
+ * computed expression like `BAND_ORDER_BASE + band` — is deliberately left
+ * unresolved rather than guessed at: evaluating arithmetic would make the
+ * scan a second implementation of the code it's checking.
+ */
+function resolveOrder(raw: string, source: string): number | undefined {
+  if (/^-?\d+$/.test(raw)) return Number(raw);
+  if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(raw)) return undefined;
+  const constMatch = source.match(new RegExp(`^const\\s+${raw}\\s*=\\s*(-?\\d+)\\s*;`, "m"));
+  return constMatch ? Number(constMatch[1]) : undefined;
+}
+
+/**
  * Every layer in the app, read out of the source rather than out of the
  * registry: a layer registers itself when its component mounts, so no running
  * snapshot of the registry ever holds the whole stack — the one thing a
  * duplicate check has to see all of.
+ *
+ * `unresolved` lists the `addLayerInSlot`-shaped call sites whose order
+ * argument `resolveOrder` couldn't evaluate, so a change to the scan doesn't
+ * silently drop coverage — a future reader can see exactly what it doesn't
+ * see.
  */
-function declaredSlots(): Array<{ id: string; slot: LayerRegistration["slot"]; order: number }> {
+function declaredSlots(): {
+  found: Array<{ id: string; slot: LayerRegistration["slot"]; order: number }>;
+  unresolved: string[];
+} {
   const repoRoot = repoRootFrom(process.cwd());
-  const pattern = new RegExp(`"(${MAP_LAYER_SLOTS.join("|")})"\\s*,\\s*(\\d+)\\s*,?\\s*\\)`, "g");
+  // The order argument can be an integer literal (optionally negative) or an
+  // arbitrary expression; capture whatever sits between the slot string and
+  // the call's closing paren and let `resolveOrder` decide what it can read.
+  const pattern = new RegExp(
+    `"(${MAP_LAYER_SLOTS.join("|")})"\\s*,\\s*([^,()]+?)\\s*,?\\s*\\)`,
+    "g",
+  );
   const found: Array<{ id: string; slot: LayerRegistration["slot"]; order: number }> = [];
+  const unresolved: string[] = [];
 
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -153,25 +185,35 @@ function declaredSlots(): Array<{ id: string; slot: LayerRegistration["slot"]; o
       const source = readFileSync(path, "utf8");
       for (const match of source.matchAll(pattern)) {
         const line = source.slice(0, match.index).split("\n").length;
-        found.push({
-          id: `${path.slice(repoRoot.length)}:${line}`,
-          slot: match[1] as LayerRegistration["slot"],
-          order: Number(match[2]),
-        });
+        const id = `${path.slice(repoRoot.length)}:${line}`;
+        const order = resolveOrder(match[2], source);
+        if (order === undefined) {
+          unresolved.push(`${id} [${match[1]}] order expression ${JSON.stringify(match[2])}`);
+          continue;
+        }
+        found.push({ id, slot: match[1] as LayerRegistration["slot"], order });
       }
     }
   };
   walk(join(repoRoot, "apps/web/src"));
   walk(join(repoRoot, "integrations"));
-  return found;
+  return { found, unresolved };
 }
 
 describe("slot assignments", () => {
   it("gives every layer its own (slot, order)", () => {
-    const declarations = declaredSlots();
+    const { found: declarations, unresolved } = declaredSlots();
     // Guards the scan itself: a formatting change that stopped the pattern
     // matching would otherwise turn this into a test of nothing.
     expect(declarations.length).toBeGreaterThan(100);
+    // Not an assertion — a computed order expression (e.g. overlay-sun-time's
+    // `BAND_ORDER_BASE + band`) is expected to show up here on every run.
+    // Surfacing it keeps the gap visible instead of it quietly meaning
+    // nothing was ever checked.
+    if (unresolved.length > 0) {
+      console.info(`declaredSlots(): left ${unresolved.length} order expression(s) unresolved:
+${unresolved.join("\n")}`);
+    }
 
     try {
       for (const { id, slot, order } of declarations) registerLayerSlot(id, slot, order);
@@ -191,16 +233,37 @@ describe("slot assignments", () => {
 });
 
 describe("sun-time terminator band order", () => {
-  it("keeps the lowest twilight band above raster-overlays but below an ordinary area-overlays layer", () => {
-    // integrations/overlay-sun-time/map-layer.tsx reserves area-overlays
-    // orders -16..-1 for its 16 stacked band fills, below every other
-    // area-overlays layer. That only holds while no raster-overlays layer
-    // uses an order >= 984 (14 is the current maximum, in overlay-nautical's
-    // seamark layer) -- pin both boundaries so a raster-overlays layer
-    // crowding that ceiling fails loudly instead of silently painting over
-    // the shading.
-    expect(layerRank("area-overlays", -16)).toBeGreaterThan(layerRank("raster-overlays", 14));
-    expect(layerRank("area-overlays", -16)).toBeLessThan(layerRank("area-overlays", 0));
+  it("keeps the sun-time band block above raster-overlays but below every other area-overlays layer", () => {
+    const { found } = declaredSlots();
+    const areaOverlays = found.filter((d) => d.slot === "area-overlays");
+    const sunTimeOrders = areaOverlays
+      .filter((d) => d.id.includes("/overlay-sun-time/"))
+      .map((d) => d.order);
+    const otherOrders = areaOverlays
+      .filter((d) => !d.id.includes("/overlay-sun-time/"))
+      .map((d) => d.order);
+    // Each band's order (`BAND_ORDER_BASE + band`) is a computed expression
+    // the scan can't resolve, so it never contributes to `sunTimeOrders` —
+    // fall back to the same constants the block is reserved from. Both ends
+    // matter: comparing only the lowest order would stay true even if
+    // `BAND_ORDER_BASE` moved to 0, since the block's low end would still
+    // sit below whatever a positive `otherOrders` happens to start at while
+    // its high end quietly collided in the middle of that range.
+    const lowestSunTimeOrder =
+      sunTimeOrders.length > 0 ? Math.min(...sunTimeOrders) : BAND_ORDER_BASE;
+    const highestSunTimeOrder =
+      sunTimeOrders.length > 0 ? Math.max(...sunTimeOrders) : BAND_ORDER_BASE + BAND_COUNT - 1;
+
+    for (const order of otherOrders) {
+      expect(highestSunTimeOrder).toBeLessThan(order);
+    }
+
+    const maxRasterOverlayOrder = Math.max(
+      ...found.filter((d) => d.slot === "raster-overlays").map((d) => d.order),
+    );
+    expect(layerRank("area-overlays", lowestSunTimeOrder)).toBeGreaterThan(
+      layerRank("raster-overlays", maxRasterOverlayOrder),
+    );
   });
 });
 

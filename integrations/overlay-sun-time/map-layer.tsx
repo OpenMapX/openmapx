@@ -8,7 +8,7 @@ import { useMap } from "@/lib/MapContext";
 import { useSunTimeStore } from "./store";
 
 const SOURCE_ID = "sun-time-terminator";
-const BAND_COUNT = 16;
+export const BAND_COUNT = 16;
 const BAND_LAYER_IDS = Array.from({ length: BAND_COUNT }, (_, i) => `sun-time-band-${i}`);
 
 /** Per-layer alpha chosen so sixteen stacked fills accumulate to ~0.55 in deep night. */
@@ -18,7 +18,7 @@ const TICK_MS = 60_000;
 
 /** Reserved contiguous block below every other area overlay: the shading is
  *  ambient, so place boundaries and imported geometry must read through it. */
-const BAND_ORDER_BASE = -BAND_COUNT;
+export const BAND_ORDER_BASE = -BAND_COUNT;
 
 const SUBSOLAR_SOURCE_ID = "sun-time-subsolar-src";
 const SUBSOLAR_LAYER_ID = "sun-time-subsolar";

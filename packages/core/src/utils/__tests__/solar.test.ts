@@ -137,6 +137,14 @@ describe("darkRegion", () => {
   it("throws when stepDeg does not evenly divide 360", () => {
     expect(() => darkRegion(DATES[0], -18, 7)).toThrow(RangeError);
   });
+
+  it("throws for a non-positive stepDeg", () => {
+    // 360 % -1 === 0, so the divisibility check alone would accept this and
+    // poleBranchRing's `for (let lng = -180; lng <= 180; lng += stepDeg)` would
+    // never terminate.
+    expect(() => darkRegion(DATES[0], -18, -1)).toThrow(RangeError);
+    expect(() => darkRegion(DATES[0], -18, 0)).toThrow(RangeError);
+  });
 });
 
 describe("twilightBands", () => {
@@ -182,5 +190,9 @@ describe("twilightBands", () => {
 
   it("throws when stepDeg does not evenly divide 360", () => {
     expect(() => twilightBands(DATES[0], { stepDeg: 7 })).toThrow(RangeError);
+  });
+
+  it("throws for a non-positive stepDeg", () => {
+    expect(() => twilightBands(DATES[0], { stepDeg: -1 })).toThrow(RangeError);
   });
 });

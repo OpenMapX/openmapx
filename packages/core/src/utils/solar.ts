@@ -197,9 +197,9 @@ export function darkRegion(
       "darkRegion requires altitudeDeg <= 0: above the horizon, the cap radius exceeds 90 degrees and swallows both poles",
     );
   }
-  if (360 % stepDeg !== 0) {
+  if (stepDeg <= 0 || 360 % stepDeg !== 0) {
     throw new RangeError(
-      "darkRegion requires 360 % stepDeg === 0: otherwise the longitude sweep in poleBranchRing skips the closing vertex and the bearing sweep in capBranchRing leaves a wedge unsampled",
+      "darkRegion requires stepDeg > 0 and 360 % stepDeg === 0: a non-positive step never terminates the longitude sweep in poleBranchRing, and a step that doesn't evenly divide 360 skips its closing vertex and leaves a wedge unsampled in capBranchRing",
     );
   }
 
