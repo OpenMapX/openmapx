@@ -6,7 +6,7 @@
   "domains": ["map-overlay"],
   "frontend": {
     "mapLayer": true,
-    "legend": true,
+    "legend": false,
     "panel": false,
     "layerSelector": {
       "group": "map-details",
