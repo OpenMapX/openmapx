@@ -22,6 +22,15 @@ describe("tzOffsetMinutes", () => {
   it("handles negative offsets", () => {
     expect(tzOffsetMinutes(WINTER, "America/New_York")).toBe(-300);
   });
+
+  it("handles POSIX-inverted Etc zones", () => {
+    expect(tzOffsetMinutes(WINTER, "Etc/GMT+5")).toBe(-300);
+    expect(tzOffsetMinutes(WINTER, "Etc/GMT-5")).toBe(300);
+  });
+
+  it("returns null for an unrecognized zone id", () => {
+    expect(tzOffsetMinutes(WINTER, "Mars/Olympus")).toBeNull();
+  });
 });
 
 describe("tzOffsetLabel", () => {
@@ -31,6 +40,10 @@ describe("tzOffsetLabel", () => {
     expect(tzOffsetLabel(WINTER, "America/New_York")).toBe("UTC-5");
     expect(tzOffsetLabel(WINTER, "UTC")).toBe("UTC");
   });
+
+  it("returns null for an unrecognized zone id", () => {
+    expect(tzOffsetLabel(WINTER, "Mars/Olympus")).toBeNull();
+  });
 });
 
 describe("tzDiffMinutes", () => {
@@ -38,6 +51,11 @@ describe("tzDiffMinutes", () => {
     expect(tzDiffMinutes(SUMMER, "Europe/Berlin", "Asia/Tokyo")).toBe(420);
     expect(tzDiffMinutes(SUMMER, "Asia/Tokyo", "Europe/Berlin")).toBe(-420);
     expect(tzDiffMinutes(SUMMER, "Europe/Berlin", "Europe/Berlin")).toBe(0);
+  });
+
+  it("returns null when either zone is unrecognized", () => {
+    expect(tzDiffMinutes(SUMMER, "Mars/Olympus", "Europe/Berlin")).toBeNull();
+    expect(tzDiffMinutes(SUMMER, "Europe/Berlin", "Mars/Olympus")).toBeNull();
   });
 });
 
@@ -47,5 +65,9 @@ describe("formatInTimeZone", () => {
       "12:00",
     );
     expect(formatInTimeZone(new Date("2026-07-15T10:00:00Z"), "Asia/Tokyo", "en-GB")).toBe("19:00");
+  });
+
+  it("returns null for an unrecognized zone id", () => {
+    expect(formatInTimeZone(new Date("2026-07-15T10:00:00Z"), "Mars/Olympus", "en-GB")).toBeNull();
   });
 });

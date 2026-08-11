@@ -147,23 +147,39 @@ export function timeZoneAt(lat: number, lng: number): string | null {
   }
 }
 
-/** Minutes east of UTC for `timeZone` at `date`. */
-export function tzOffsetMinutes(date: Date, timeZone: string): number {
-  const formatted = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    timeZoneName: "longOffset",
-  }).format(date);
+/**
+ * Minutes east of UTC for `timeZone` at `date`, or `null` when `timeZone`
+ * isn't a zone id the platform recognizes (an unresolved offset is not the
+ * same fact as an actual UTC offset of 0, so unknown zones don't collapse to
+ * 0 here). Vendored boundary data can carry a stale or malformed tzid, so
+ * this degrades the way `zonedWallClockToInstant`/`timeZoneAt` above do
+ * rather than throwing.
+ */
+export function tzOffsetMinutes(date: Date, timeZone: string): number | null {
+  let formatted: string;
+  try {
+    formatted = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      timeZoneName: "longOffset",
+    }).format(date);
+  } catch {
+    return null;
+  }
 
   const match = /GMT([+-])(\d{1,2})(?::(\d{2}))?/.exec(formatted);
-  if (!match) return 0;
+  if (!match) return null;
 
   const sign = match[1] === "-" ? -1 : 1;
   return sign * (Number(match[2]) * 60 + Number(match[3] ?? 0));
 }
 
-/** Human offset label, e.g. "UTC+2", "UTC+5:45", "UTC-5", or "UTC" at zero. */
-export function tzOffsetLabel(date: Date, timeZone: string): string {
+/**
+ * Human offset label, e.g. "UTC+2", "UTC+5:45", "UTC-5", or "UTC" at zero.
+ * `null` propagates from an unrecognized `timeZone`.
+ */
+export function tzOffsetLabel(date: Date, timeZone: string): string | null {
   const minutes = tzOffsetMinutes(date, timeZone);
+  if (minutes === null) return null;
   if (minutes === 0) return "UTC";
 
   const sign = minutes < 0 ? "-" : "+";
@@ -181,17 +197,30 @@ export function viewerTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }
 
-/** Signed minutes `to` is ahead of `from` at `date`. */
-export function tzDiffMinutes(date: Date, from: string, to: string): number {
-  return tzOffsetMinutes(date, to) - tzOffsetMinutes(date, from);
+/**
+ * Signed minutes `to` is ahead of `from` at `date`, or `null` when either
+ * zone is unrecognized.
+ */
+export function tzDiffMinutes(date: Date, from: string, to: string): number | null {
+  const fromMinutes = tzOffsetMinutes(date, from);
+  const toMinutes = tzOffsetMinutes(date, to);
+  if (fromMinutes === null || toMinutes === null) return null;
+  return toMinutes - fromMinutes;
 }
 
-/** The 24-hour wall clock in `timeZone` at `date`. */
-export function formatInTimeZone(date: Date, timeZone: string, locale?: string): string {
-  return new Intl.DateTimeFormat(locale, {
-    timeZone,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(date);
+/**
+ * The 24-hour wall clock in `timeZone` at `date`, or `null` when `timeZone`
+ * isn't a zone id the platform recognizes.
+ */
+export function formatInTimeZone(date: Date, timeZone: string, locale?: string): string | null {
+  try {
+    return new Intl.DateTimeFormat(locale, {
+      timeZone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(date);
+  } catch {
+    return null;
+  }
 }
