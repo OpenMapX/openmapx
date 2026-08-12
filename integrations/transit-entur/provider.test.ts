@@ -53,6 +53,7 @@ describe("buildStopIdentity", () => {
     expect(buildStopIdentity("NSR:StopPlace:337")).toEqual({
       primaryScheme: "nsr",
       ids: { entur: "NSR:StopPlace:337", nsr: "StopPlace:337" },
+      codes: [{ value: "NSR:StopPlace:337", namespace: "nsr" }],
     });
   });
 
@@ -519,6 +520,7 @@ describe("normalizeStopPlace", () => {
       id: "entur:NSR:StopPlace:337",
       primaryScheme: "nsr",
       ids: { entur: "NSR:StopPlace:337", nsr: "StopPlace:337" },
+      codes: [{ value: "NSR:StopPlace:337", namespace: "nsr" }],
       name: "Oslo S",
       lat: 59.911,
       lng: 10.75,

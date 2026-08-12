@@ -18,6 +18,12 @@ export type TransportMode =
   | "cycling"
   | "driving";
 
+/** A public, source-backed identifier that riders can search for. */
+export interface TransitStopCode {
+  value: string;
+  namespace: "gtfs" | "uic" | "ifopt" | "eva" | "crs" | "naptan" | "nsr";
+}
+
 export interface TransitStop {
   /**
    * Canonical `scheme:value` id, typically `<provider>:<nativeId>`
@@ -40,6 +46,8 @@ export interface TransitStop {
    * any of them.
    */
   ids?: Ids;
+  /** Public codes supplied by the source; excludes OpenMapX's prefixed ids. */
+  codes?: TransitStopCode[];
   name: string;
   lat: number;
   lng: number;

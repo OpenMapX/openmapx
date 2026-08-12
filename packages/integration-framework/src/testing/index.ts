@@ -26,6 +26,7 @@ import type { ReviewProvider } from "../contracts/review-provider.js";
 import type { RideProvider } from "../contracts/ride-provider.js";
 import type { RoadConditionsProvider } from "../contracts/road-conditions-provider.js";
 import type { RoutingProvider } from "../contracts/routing-provider.js";
+import type { SearchSuggestionProvider } from "../contracts/search-suggestion-provider.js";
 import type { StreetLevelProvider } from "../contracts/street-level-imagery-provider.js";
 import type { TransitProvider } from "../contracts/transit-provider.js";
 import type { WeatherProvider } from "../contracts/weather-provider.js";
@@ -122,6 +123,7 @@ export interface CapturedRegistrations {
   streetLevel: StreetLevelProvider[];
   review: ReviewProvider[];
   poiSearch: PoiSearchProvider[];
+  searchSuggestions: SearchSuggestionProvider[];
   knowledge: KnowledgeProvider[];
   gtfsCatalog: GtfsCatalogProvider[];
   poiSources: PoiSource[];
@@ -169,6 +171,7 @@ export function createMockIntegrationContext(
     streetLevel: [],
     review: [],
     poiSearch: [],
+    searchSuggestions: [],
     knowledge: [],
     gtfsCatalog: [],
     poiSources: [],
@@ -232,6 +235,9 @@ export function createMockIntegrationContext(
     },
     registerPoiSearchProvider: (p) => {
       registered.poiSearch.push(p);
+    },
+    registerSearchSuggestionProvider: (p) => {
+      registered.searchSuggestions.push(p);
     },
     registerKnowledgeProvider: (p) => {
       registered.knowledge.push(p);

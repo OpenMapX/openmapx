@@ -142,4 +142,55 @@ describe("argv guards", () => {
       expect(runCliMock).not.toHaveBeenCalled();
     });
   });
+
+  describe("search index operations", () => {
+    it("maps search-index-build to safe CLI argv", async () => {
+      runCliMock.mockClear();
+      await handleDataOperationJob({
+        jobId: "job",
+        payload: { operation: "search-index-build", region: "europe/germany" },
+        signal: new AbortController().signal,
+        log: vi.fn(),
+        setProgress: vi.fn(),
+        checkpoint: vi.fn(),
+      });
+
+      expect(runCliMock).toHaveBeenCalledWith(expect.anything(), [
+        "data",
+        "search-index",
+        "build",
+        "europe/germany",
+      ]);
+    });
+
+    it("requires a search index region", async () => {
+      runCliMock.mockClear();
+      await expect(
+        handleDataOperationJob({
+          jobId: "job",
+          payload: { operation: "search-index-build" },
+          signal: new AbortController().signal,
+          log: vi.fn(),
+          setProgress: vi.fn(),
+          checkpoint: vi.fn(),
+        }),
+      ).rejects.toThrow("search-index-build requires region");
+      expect(runCliMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects traversal in search index region", async () => {
+      runCliMock.mockClear();
+      await expect(
+        handleDataOperationJob({
+          jobId: "job",
+          payload: { operation: "search-index-build", region: "../etc" },
+          signal: new AbortController().signal,
+          log: vi.fn(),
+          setProgress: vi.fn(),
+          checkpoint: vi.fn(),
+        }),
+      ).rejects.toThrow("region must match");
+      expect(runCliMock).not.toHaveBeenCalled();
+    });
+  });
 });

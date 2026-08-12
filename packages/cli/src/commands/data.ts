@@ -413,6 +413,80 @@ export function registerDataCommands(program: Command): void {
       }
     });
 
+  const searchIndex = data
+    .command("search-index")
+    .description("Build and inspect the local OSM alias/acronym search index");
+
+  searchIndex
+    .command("build [region]")
+    .description(`Build the OSM search index (region defaults to $${OPENMAPX_REGION_ENV})`)
+    .action(async (region: string | undefined) => {
+      const resolvedRegion = resolveOsmRegion(region);
+      if (resolvedRegion.sourceEnv) {
+        log.dim(`using region "${resolvedRegion.value}" from $${resolvedRegion.sourceEnv}`);
+      }
+      if (!resolvedRegion.value) {
+        log.err(
+          `search-index build requires a region (for example europe/germany) or $${OPENMAPX_REGION_ENV}`,
+        );
+        process.exit(1);
+        return;
+      }
+      try {
+        const result = await new DataManagerClient({ baseUrl: DEFAULT_DM_URL }).buildSearchIndex(
+          resolvedRegion.value,
+          (message) => log.dim(message),
+        );
+        if (!result.ok) {
+          log.err(`search-index build failed: ${result.message ?? "unknown error"}`);
+          process.exit(1);
+          return;
+        }
+        log.ok(
+          `Search index published for ${resolvedRegion.value}: ${result.placeCount ?? 0} places, ${result.termCount ?? 0} terms` +
+            (result.epoch ? ` (epoch ${result.epoch})` : ""),
+        );
+      } catch (err) {
+        log.err(`search-index build failed: ${(err as Error).message}`);
+        dataManagerHint();
+        process.exit(1);
+      }
+    });
+
+  searchIndex
+    .command("status")
+    .description("Show the active OSM search-index snapshot")
+    .action(async () => {
+      try {
+        const status = await new DataManagerClient({ baseUrl: DEFAULT_DM_URL }).searchIndexStatus();
+        console.log(
+          table(
+            [
+              { key: "field", header: "Field" },
+              { key: "value", header: "Value" },
+            ],
+            [
+              { field: "Region", value: status.region },
+              { field: "Status", value: status.status },
+              { field: "Stale", value: status.stale ? "yes" : "no" },
+              { field: "Building", value: status.building ? "yes" : "no" },
+              { field: "Epoch", value: status.epoch ?? "—" },
+              { field: "Places", value: String(status.placeCount) },
+              { field: "Terms", value: String(status.termCount) },
+              { field: "Source fingerprint", value: status.sourceFingerprint ?? "—" },
+              { field: "Started", value: status.startedAt ?? "—" },
+              { field: "Published", value: status.publishedAt ?? "—" },
+              { field: "Last error", value: status.lastError ?? "—" },
+            ],
+          ),
+        );
+      } catch (err) {
+        log.err(`search-index status failed: ${(err as Error).message}`);
+        dataManagerHint();
+        process.exit(1);
+      }
+    });
+
   const source = data.command("source").description("Manage desired transit source state");
 
   source

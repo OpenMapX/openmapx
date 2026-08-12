@@ -1,6 +1,7 @@
 import type { AirportInfo, AirportType, LngLat } from "@openmapx/core";
 import type { Logger } from "@openmapx/integration-framework";
 import { type DataStore, getStore } from "./loader.js";
+import type { AirportSearchMatch } from "./search.js";
 import type { AirportRecord } from "./types.js";
 
 const EARTH_RADIUS_KM = 6371;
@@ -200,4 +201,15 @@ export async function searchAirports(log: Logger, q: string, limit = 10): Promis
   const data = await getStore(log);
   if (!data) return [];
   return data.search.query(q, limit);
+}
+
+/** Search while retaining the exact catalog evidence used for ranking. */
+export async function searchAirportMatches(
+  log: Logger,
+  q: string,
+  limit = 10,
+): Promise<AirportSearchMatch[]> {
+  const data = await getStore(log);
+  if (!data) return [];
+  return data.search.queryMatches(q, limit);
 }

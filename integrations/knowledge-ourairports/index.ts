@@ -1,10 +1,19 @@
-import { type AirportType, createPlace, type Place } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import {
+  type AirportType,
+  createPlace,
+  normalizeSearchTerm,
+  type Place,
+  type SearchSuggestionProviderResult,
+  type SearchSuggestionQuery,
+} from "@openmapx/core";
+import type { IntegrationContext, SearchSuggestionProvider } from "@openmapx/integration-framework";
 import {
   type AirportRecord,
+  type AirportSearchMatch,
   haversineKm,
   lookupAirportRecord,
   queryAirportsInBbox,
+  searchAirportMatches,
   searchAirports,
 } from "@openmapx/ourairports-data";
 import { registerPlaceResolver } from "@openmapx/place-ids";
@@ -49,6 +58,58 @@ function recordToHit(r: AirportRecord): SearchHit {
     municipality: r.municipality,
     isoCountry: r.isoCountry,
     scheduledService: r.scheduledService,
+  };
+}
+
+type AirportMatchSearch = (
+  log: IntegrationContext["log"],
+  query: string,
+  limit?: number,
+) => Promise<AirportSearchMatch[]>;
+
+export function createOurAirportsSuggestionProvider(
+  ctx: IntegrationContext,
+  search: AirportMatchSearch = searchAirportMatches,
+): SearchSuggestionProvider {
+  return {
+    id: "knowledge-ourairports",
+    async searchSuggestions(query: SearchSuggestionQuery): Promise<SearchSuggestionProviderResult> {
+      const matches = await search(ctx.log, query.query, query.limit);
+      const attribution = ctx.attributionIndex?.getById("ourairports") ?? {
+        sourceId: "ourairports",
+        name: "OurAirports",
+        url: "https://ourairports.com/",
+        attributionText: "OurAirports public-domain airport data",
+      };
+      return {
+        suggestions: matches.map(({ record, kind, matchedValue, namespace }) => ({
+          id: `oa:${record.ident}`,
+          ids: {
+            oa: record.ident,
+            ...(record.iata ? { iata: record.iata } : {}),
+            ...(record.icao ? { icao: record.icao } : {}),
+          },
+          label: record.name,
+          sublabel: [record.municipality, record.isoCountry].filter(Boolean).join(", "),
+          coordinates: [record.lng, record.lat],
+          type: "poi" as const,
+          rawCategory: "aeroway/aerodrome",
+          presetIconKey: "maki-airport",
+          searchMatch: {
+            kind,
+            value: matchedValue,
+            normalized: normalizeSearchTerm(matchedValue),
+            namespace,
+          },
+          importance:
+            record.type === "large_airport" ? 0.9 : record.type === "medium_airport" ? 0.7 : 0.5,
+          provider: "knowledge-ourairports",
+          contributingProviders: ["knowledge-ourairports"],
+        })),
+        attributions: matches.length > 0 ? [attribution] : [],
+        freshnessSeconds: 3_600,
+      };
+    },
   };
 }
 
@@ -97,6 +158,7 @@ async function findNearestAirports(
 export function setup(ctx: IntegrationContext): void {
   startBackgroundLoad(ctx.log);
   ctx.registerKnowledgeProvider(createOurAirportsSource(ctx.log));
+  ctx.registerSearchSuggestionProvider(createOurAirportsSuggestionProvider(ctx));
 
   // Place-resolver for `oa:` scheme. When the SearchBar / overlay clicks
   // an airport, it navigates to `oa:<ident>` (e.g. `oa:EDDL`). The resolver

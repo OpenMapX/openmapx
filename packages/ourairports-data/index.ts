@@ -9,7 +9,7 @@
  */
 export { type CsvRecord, parseCsv, parseOptionalFloat, parseOptionalInt } from "./csv.js";
 export { type DataStore, getStore, startBackgroundLoad, stopBackgroundLoad } from "./loader.js";
-export { buildSearchIndex, type SearchIndex } from "./search.js";
+export { type AirportSearchMatch, buildSearchIndex, type SearchIndex } from "./search.js";
 export {
   type BboxQueryOptions,
   haversineKm,
@@ -17,6 +17,7 @@ export {
   lookupAirportRecord,
   lookupNearestAerodrome,
   queryAirportsInBbox,
+  searchAirportMatches,
   searchAirports,
 } from "./spatial.js";
 export type { AirportRecord } from "./types.js";

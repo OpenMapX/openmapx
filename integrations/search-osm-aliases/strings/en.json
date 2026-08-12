@@ -1,0 +1,11 @@
+{
+  "name": "OSM code and alias search",
+  "description": "Regional OpenStreetMap aliases, public references, and conservative acronyms from a locally built index",
+  "dataSources": {
+    "openstreetmap": {
+      "purpose": "Find a canonical place from an explicit OpenStreetMap alias, public reference, or conservative generated acronym",
+      "dataSent": "Nothing — autocomplete queries stay on the OpenMapX server and use the local PostGIS index",
+      "dataReceived": "Names, aliases, public reference codes, feature categories, identifiers, coordinates, and attribution from the selected OSM extract"
+    }
+  }
+}

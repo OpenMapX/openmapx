@@ -51,6 +51,95 @@ describe("data-manager API", () => {
     await app.close();
   });
 
+  it("GET /search-index/status returns 404 when no snapshot is published", async () => {
+    const app = Fastify();
+    const unsafe = vi.fn().mockResolvedValue([{ exists: false }]);
+    registerApi(app, {
+      dataDir: "/tmp/openmapx-dm-search-index-absent",
+      searchIndexSql: { unsafe, reserve: vi.fn() } as never,
+    });
+    const res = await app.inject({ method: "GET", url: "/search-index/status" });
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toEqual({ ok: false, error: "osm_search index not built" });
+    await app.close();
+  });
+
+  it("POST /search-index/build streams progress and the final snapshot", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-search-index-build-"));
+    const app = Fastify();
+    const buildSearchIndex = vi.fn(async (options: { onProgress?: (event: object) => void }) => {
+      options.onProgress?.({ stage: "extract", message: "streaming" });
+      return {
+        region: "europe/germany",
+        epoch: "new-epoch",
+        sourceFingerprint: "md5:abc",
+        placeCount: 2,
+        termCount: 3,
+      };
+    });
+    registerApi(app, {
+      dataDir,
+      searchIndexSql: { reserve: vi.fn() } as never,
+      buildSearchIndex: buildSearchIndex as never,
+    });
+    const res = await app.inject({
+      method: "POST",
+      url: "/search-index/build",
+      payload: { region: "europe/germany" },
+    });
+    expect(res.statusCode).toBe(200);
+    const events = res.body
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(events).toEqual([
+      expect.objectContaining({ event: "progress", stage: "extract" }),
+      expect.objectContaining({ event: "done", ok: true, epoch: "new-epoch" }),
+    ]);
+    expect(buildSearchIndex).toHaveBeenCalledOnce();
+    await app.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  it("keeps a successful OSM download when search-index fingerprint persistence fails", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-download-fingerprint-"));
+    writeFileSync(
+      join(dataDir, ".data-manager-state.json"),
+      JSON.stringify({
+        datasets: [
+          {
+            type: "osm-pbf",
+            id: "europe/germany",
+            region: "europe/germany",
+            sizeBytes: 1,
+            downloadedAt: "2026-08-13T00:00:00.000Z",
+            path: "/data/osm/europe-germany.osm.pbf",
+            md5: "abc",
+          },
+        ],
+      }),
+    );
+    const unsafe = vi
+      .fn()
+      .mockResolvedValueOnce([{ exists: true }])
+      .mockRejectedValueOnce(new Error("database unavailable"));
+    const app = Fastify();
+    registerApi(app, {
+      dataDir,
+      searchIndexSql: { unsafe, reserve: vi.fn() } as never,
+    });
+    const res = await app.inject({
+      method: "POST",
+      url: "/download/osm",
+      payload: { region: "europe/germany" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('"event":"done"');
+    expect(res.body).not.toContain('"event":"error"');
+    await app.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
   it("POST /datasets/reload reloads state from disk", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-test-reload-"));
     const app = Fastify();

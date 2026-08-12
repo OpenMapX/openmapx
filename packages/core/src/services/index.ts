@@ -29,6 +29,9 @@ export {
 export {
   DataManagerClient,
   type DataManagerClientOptions,
+  DataManagerHttpError,
+  type SearchIndexBuildResult,
+  type SearchIndexStatus,
 } from "./data-manager-client";
 export {
   type ExtensionComponentRef,

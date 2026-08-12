@@ -68,8 +68,10 @@ export function rawId(instance: MotisInstance, stopId: string): string {
 
 /** Convert a MOTIS Place to our TransitStop. */
 export function normalizeStop(instance: MotisInstance, place: Place): TransitStop {
+  const stopCode = place.stopCode?.trim();
   return {
     id: `${instance.prefix}${place.stopId ?? ""}`,
+    ...(stopCode ? { codes: [{ value: stopCode, namespace: "gtfs" as const }] } : {}),
     name: place.name ?? "Unknown",
     lat: place.lat ?? 0,
     lng: place.lon ?? 0,

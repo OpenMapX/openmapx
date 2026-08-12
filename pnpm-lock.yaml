@@ -1592,6 +1592,30 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
 
+  integrations/search-osm-aliases:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
+
+  integrations/search-suggestions:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
+
   integrations/street-level-imagery-mapillary:
     dependencies:
       '@openmapx/core':

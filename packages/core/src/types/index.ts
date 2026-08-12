@@ -228,6 +228,14 @@ export type {
 export type { LabeledPlace, SavedList, SavedPlace } from "./saved";
 export type { SearchIntent, SpatialConstraint, TimeConstraint } from "./search";
 export type {
+  SearchMatchKind,
+  SearchSuggestion,
+  SearchSuggestionMatch,
+  SearchSuggestionProviderResult,
+  SearchSuggestionQuery,
+  SearchSuggestionsResponse,
+} from "./searchSuggestion";
+export type {
   StreetLevelCapabilities,
   StreetLevelCoverage,
   StreetLevelImage,

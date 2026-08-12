@@ -1169,14 +1169,22 @@ export function stripKnownPrefix(id: string): string {
   return id;
 }
 
-export function buildStopIdentity(rawId: string): Pick<TransitStop, "primaryScheme" | "ids"> {
+export function buildStopIdentity(
+  rawId: string,
+): Pick<TransitStop, "primaryScheme" | "ids" | "codes"> {
   const ids: Record<string, string> = { entur: rawId };
   let primaryScheme = "entur";
   if (rawId.startsWith(NSR_PREFIX)) {
     ids.nsr = rawId.slice(NSR_PREFIX.length);
     primaryScheme = "nsr";
   }
-  return { primaryScheme, ids };
+  return {
+    primaryScheme,
+    ids,
+    ...(rawId.startsWith(NSR_PREFIX)
+      ? { codes: [{ value: rawId, namespace: "nsr" as const }] }
+      : {}),
+  };
 }
 
 export function encodeServiceJourneyId(serviceJourneyId: string, date?: string): string {

@@ -1,7 +1,9 @@
 import type { TransitStop } from "@openmapx/mobility-core/transit";
 import type { BrandSummary } from "./brand";
 import type { LngLat } from "./geometry";
+import type { Ids } from "./identified";
 import type { SearchIntent } from "./search";
+import type { SearchSuggestionMatch } from "./searchSuggestion";
 
 export interface SearchResult {
   id: string;
@@ -57,6 +59,14 @@ export interface AutocompleteResult {
   labelKey?: string;
   /** Parsed intent, present only when type is "nlp_search". */
   nlpIntent?: SearchIntent;
+  /** External identities used to conflate the same place across providers. */
+  ids?: Ids;
+  /** Evidence explaining why this suggestion matched the current query. */
+  searchMatch?: SearchSuggestionMatch;
+  /** Provider-normalized prominence in the inclusive range 0–1. */
+  importance?: number;
+  /** All providers retained when equivalent suggestions are conflated. */
+  contributingProviders?: string[];
   /**
    * Integration ID of the geocoder that actually produced this suggestion (e.g.
    * "geocoding-photon"). Tagged by the orchestrator so attribution can credit

@@ -233,6 +233,34 @@ describe("GET /admin/services", () => {
   });
 });
 
+describe("POST /admin/services/data/action", () => {
+  it("enqueues and audits a search-index build", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/admin/services/data/action",
+      payload: { operation: "search-index-build", region: "europe/germany" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true, jobId: "job-123" });
+    expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
+      "data.operation",
+      expect.objectContaining({
+        operation: "search-index-build",
+        region: "europe/germany",
+      }),
+      fakeSession.user.id,
+    );
+    expect(mockWriteAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetType: "data",
+        targetId: "search-index-build",
+        action: "data.search-index-build",
+      }),
+    );
+  });
+});
+
 describe("GET /admin/services/:id", () => {
   it("returns 404 for unknown service id", async () => {
     mockRegistryGet.mockReturnValueOnce(null);

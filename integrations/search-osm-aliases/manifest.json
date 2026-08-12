@@ -1,0 +1,28 @@
+{
+  "id": "search-osm-aliases",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "AGPL-3.0-or-later",
+  "domains": ["search-suggestions"],
+  "backend": { "routes": false },
+  "quality": "built-in",
+  "category": "Geocoding",
+  "requires": [{ "service": "postgis", "optional": true }],
+  "dataSources": [
+    {
+      "sourceId": "openstreetmap",
+      "name": "OpenStreetMap contributors",
+      "url": "https://www.openstreetmap.org/copyright",
+      "license": "ODbL-1.0",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+      "attributionText": "© OpenStreetMap contributors",
+      "commercialUse": "yes",
+      "providerCountry": "GB",
+      "providerPrivacyUrl": "https://osmfoundation.org/wiki/Privacy_Policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

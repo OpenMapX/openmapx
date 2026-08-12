@@ -17,6 +17,7 @@ import type {
   TransitStationIntelligence,
   TransitStop,
   TransitStopAreaSummary,
+  TransitStopCode,
   TransitStopInfrastructure,
   TransitStopParking,
   TransportMode,
@@ -767,6 +768,24 @@ function buildStopIds(
   };
 }
 
+function buildStopCodes(identity: {
+  didok?: string;
+  servicePointSloid?: string;
+  stopPointSloid?: string;
+}): TransitStopCode[] | undefined {
+  const candidates: TransitStopCode[] = [];
+  const didok = identity.didok?.trim();
+  const ifopt = (identity.stopPointSloid ?? identity.servicePointSloid)?.trim();
+  if (didok && /^\d+$/.test(didok)) candidates.push({ value: didok, namespace: "uic" });
+  if (ifopt?.startsWith("ch:1:sloid:")) {
+    candidates.push({ value: ifopt, namespace: "ifopt" });
+  }
+  const unique = [
+    ...new Map(candidates.map((code) => [`${code.namespace}:${code.value}`, code])).values(),
+  ];
+  return unique.length ? unique : undefined;
+}
+
 function mergeTransitRoute(existing: TransitRoute | undefined, next: TransitRoute): TransitRoute {
   return {
     id: next.id,
@@ -890,10 +909,15 @@ function buildTransitStopFromServicePoint(
     didok: servicePoint.didok,
     servicePointSloid: servicePoint.servicePointSloid,
   });
+  const codes = buildStopCodes({
+    didok: servicePoint.didok,
+    servicePointSloid: servicePoint.servicePointSloid,
+  });
   return {
     id: providerId(rawRef),
     ...(ids.primaryScheme ? { primaryScheme: ids.primaryScheme } : {}),
     ...(ids.ids ? { ids: ids.ids } : {}),
+    ...(codes ? { codes } : {}),
     lat: servicePoint.lat,
     lng: servicePoint.lng,
     modes: servicePointModes(servicePoint),
@@ -910,10 +934,16 @@ function buildTransitStopFromTrafficPoint(
     didok: servicePoint.didok,
     servicePointSloid: servicePoint.servicePointSloid,
   });
+  const codes = buildStopCodes({
+    didok: servicePoint.didok,
+    servicePointSloid: servicePoint.servicePointSloid,
+    stopPointSloid: trafficPoint.sloid,
+  });
   return {
     id: providerId(trafficPoint.sloid),
     ...(ids.primaryScheme ? { primaryScheme: ids.primaryScheme } : {}),
     ...(ids.ids ? { ids: ids.ids } : {}),
+    ...(codes ? { codes } : {}),
     lat: trafficPoint.lat,
     lng: trafficPoint.lng,
     modes: servicePointModes(servicePoint),
@@ -930,10 +960,16 @@ function mapOjpPlaceToStop(place: OjpPlace, datasets: SwissStopDatasets): Transi
   const rawRef = place.stopPointRef ?? place.stopPlaceRef ?? place.ref;
   const { didok, servicePoint, servicePointSloid, stopPoint } = findServicePoint(rawRef, datasets);
   const ids = buildStopIds(rawRef, { didok, servicePointSloid });
+  const codes = buildStopCodes({
+    didok,
+    servicePointSloid,
+    stopPointSloid: stopPoint?.sloid,
+  });
   return {
     id: providerId(rawRef),
     ...(ids.primaryScheme ? { primaryScheme: ids.primaryScheme } : {}),
     ...(ids.ids ? { ids: ids.ids } : {}),
+    ...(codes ? { codes } : {}),
     lat: place.lat || stopPoint?.lat || servicePoint?.lat || 0,
     lng: place.lng || stopPoint?.lng || servicePoint?.lng || 0,
     modes: servicePointModes(servicePoint, place.modes),

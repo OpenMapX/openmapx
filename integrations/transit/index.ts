@@ -1,10 +1,23 @@
 import { randomUUID } from "node:crypto";
-import type { BBox } from "@openmapx/core";
-import type { IntegrationContext, TripPlanRequest } from "@openmapx/integration-framework";
+import {
+  type BBox,
+  normalizeSearchTerm,
+  type SearchSuggestionProviderResult,
+  type SearchSuggestionQuery,
+} from "@openmapx/core";
+import type {
+  IntegrationContext,
+  SearchSuggestionProvider,
+  TripPlanRequest,
+} from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { Freshness } from "@openmapx/mobility-core/freshness";
 import type { MobilityEnvelope, MobilityResult } from "@openmapx/mobility-core/result";
-import type { GeoJSONLineString, TripItinerary } from "@openmapx/mobility-core/transit";
+import type {
+  GeoJSONLineString,
+  TransitStop,
+  TripItinerary,
+} from "@openmapx/mobility-core/transit";
 import {
   createTransitOrchestrator,
   UnsupportedTransitPlanningCapabilitiesError,
@@ -36,6 +49,51 @@ function envelope<T>(
   freshness: Freshness,
 ): MobilityEnvelope<T> {
   return { data, attributions, freshness };
+}
+
+interface TransitSearchOrchestrator {
+  searchByName(query: string, limit: number): Promise<MobilityResult<TransitStop[]>>;
+}
+
+export function createTransitSuggestionProvider(
+  orchestrator: TransitSearchOrchestrator,
+): SearchSuggestionProvider {
+  return {
+    id: "transit",
+    async searchSuggestions(query: SearchSuggestionQuery): Promise<SearchSuggestionProviderResult> {
+      const result = await orchestrator.searchByName(query.query, query.limit);
+      const normalizedQuery = normalizeSearchTerm(query.query);
+      return {
+        suggestions: result.data.map((stop) => {
+          const exactCode = stop.codes?.find(
+            ({ value }) => normalizeSearchTerm(value) === normalizedQuery,
+          );
+          const matchedValue = exactCode?.value ?? stop.name;
+          return {
+            id: stop.id,
+            ids: stop.ids,
+            label: stop.name,
+            sublabel: exactCode ? exactCode.namespace.toUpperCase() : undefined,
+            coordinates: [stop.lng, stop.lat],
+            type: "transit_stop" as const,
+            transitStop: stop,
+            rawCategory: "public_transport/station",
+            searchMatch: {
+              kind: exactCode ? ("authoritative_code" as const) : ("name" as const),
+              value: matchedValue,
+              normalized: normalizeSearchTerm(matchedValue),
+              namespace: exactCode?.namespace,
+            },
+            importance: 0.7,
+            provider: "transit",
+            contributingProviders: ["transit"],
+          };
+        }),
+        attributions: result.attributions,
+        freshnessSeconds: 300,
+      };
+    },
+  };
 }
 
 function parseBBox(q: Record<string, string>): BBox | null {
@@ -129,6 +187,7 @@ function utcTime(): string {
 
 export function setup(ctx: IntegrationContext): void {
   const orchestrator = createTransitOrchestrator(ctx);
+  ctx.registerSearchSuggestionProvider(createTransitSuggestionProvider(orchestrator));
   const refreshSecret = process.env.BETTER_AUTH_SECRET ?? "";
   const refreshTtlSeconds = 15 * 60;
 

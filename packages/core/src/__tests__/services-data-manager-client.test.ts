@@ -103,4 +103,96 @@ describe("DataManagerClient", () => {
     );
     expect(result).toEqual({ linked: 7, skipped: 2, pruned: 3 });
   });
+
+  it("posts an authenticated search-index build and parses NDJSON progress", async () => {
+    const ndjson = [
+      { event: "progress", stage: "extract", message: "Extracted 1,000 places" },
+      {
+        event: "done",
+        ok: true,
+        region: "europe/germany",
+        epoch: "epoch-2",
+        placeCount: 1_000,
+        termCount: 2_500,
+      },
+    ]
+      .map((event) => JSON.stringify(event))
+      .join("\n");
+    const fakeFetch = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(ndjson, { status: 200, headers: { "content-type": "application/x-ndjson" } }),
+    );
+
+    const progress: string[] = [];
+    const client = new DataManagerClient({
+      baseUrl: "http://x/",
+      fetch: fakeFetch as unknown as typeof globalThis.fetch,
+      authToken: "search-secret",
+    });
+    const result = await client.buildSearchIndex("europe/germany", (message) =>
+      progress.push(message),
+    );
+
+    expect(progress).toEqual(["Extracted 1,000 places"]);
+    expect(result).toMatchObject({
+      ok: true,
+      region: "europe/germany",
+      epoch: "epoch-2",
+      placeCount: 1_000,
+      termCount: 2_500,
+    });
+    expect(fakeFetch).toHaveBeenCalledWith(
+      "http://x/search-index/build",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.any(Headers),
+        body: JSON.stringify({ region: "europe/germany" }),
+      }),
+    );
+    const init = fakeFetch.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(init.headers).get("Authorization")).toBe("Bearer search-secret");
+  });
+
+  it("gets an authenticated typed search-index status", async () => {
+    const status = {
+      region: "europe/germany",
+      sourcePath: "/data/osm/germany.osm.pbf",
+      sourceFingerprint: "sha256:old",
+      currentFingerprint: "sha256:new",
+      epoch: "epoch-1",
+      status: "ready",
+      placeCount: 123,
+      termCount: 456,
+      startedAt: "2026-08-13T01:00:00.000Z",
+      publishedAt: "2026-08-13T01:05:00.000Z",
+      updatedAt: "2026-08-13T02:00:00.000Z",
+      lastError: null,
+      stale: true,
+      building: false,
+    } as const;
+    const fakeFetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      Response.json(status),
+    );
+    const client = new DataManagerClient({
+      baseUrl: "http://x",
+      fetch: fakeFetch as unknown as typeof globalThis.fetch,
+      authToken: "search-secret",
+    });
+
+    await expect(client.searchIndexStatus()).resolves.toEqual(status);
+    const init = fakeFetch.mock.calls[0]?.[1] as RequestInit;
+    expect(fakeFetch.mock.calls[0]?.[0]).toBe("http://x/search-index/status");
+    expect(new Headers(init.headers).get("Authorization")).toBe("Bearer search-secret");
+  });
+
+  it("preserves an absent search index as an HTTP 404 failure", async () => {
+    const fakeFetch = vi.fn(async () =>
+      Response.json({ ok: false, error: "osm_search index not built" }, { status: 404 }),
+    ) as unknown as typeof globalThis.fetch;
+    const client = new DataManagerClient({ baseUrl: "http://x", fetch: fakeFetch });
+
+    const request = client.searchIndexStatus();
+    await expect(request).rejects.toThrow("search-index/status failed: HTTP 404");
+    await expect(request).rejects.toMatchObject({ status: 404 });
+  });
 });

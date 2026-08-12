@@ -5,7 +5,8 @@ import { feedState } from "@openmapx/db-schema";
 import { parseTransitSource } from "@openmapx/transitous-core";
 import { execa } from "execa";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { db } from "./db/index.js";
+import type postgres from "postgres";
+import { db, sql } from "./db/index.js";
 import { convertPbfToBz2, convertPbfToBz2ForRegion } from "./jobs/convert-overpass.js";
 import { downloadFonts } from "./jobs/download-fonts.js";
 import { downloadOsm } from "./jobs/download-osm.js";
@@ -16,6 +17,18 @@ import { withOvertureOperationLock } from "./jobs/overture/operation-lock.js";
 import { assertValidRegion, pullOverture } from "./jobs/overture/pull.js";
 import { getOvertureConflationState, rebuildOvertureLinks } from "./jobs/overture/rebuild-links.js";
 import { syncOvertureRegion } from "./jobs/overture/sync.js";
+import {
+  type BuildOsmSearchIndexOptions,
+  buildOsmSearchIndex,
+  type SearchIndexBuildResult,
+} from "./jobs/search-index/build.js";
+import { createSearchIndexOperationLock } from "./jobs/search-index/operation-lock.js";
+import {
+  createSearchIndexRuntimeState,
+  fingerprintDataset,
+  getSearchIndexStatus,
+  updateCurrentSearchIndexFingerprint,
+} from "./jobs/search-index/state.js";
 import type { BakePredictedResult } from "./jobs/traffic/bake-predicted.js";
 import {
   CatalogBumpError,
@@ -77,6 +90,10 @@ export interface ApiOptions {
   bakePredicted?: () => Promise<BakePredictedResult>;
   /** Offline package generator initialized by the process entrypoint. */
   offlinePackages?: OfflinePackageGenerator;
+  /** Search-index database/test seam. */
+  searchIndexSql?: postgres.Sql;
+  /** Test seam for the country-scale OSM search-index build. */
+  buildSearchIndex?: (opts: BuildOsmSearchIndexOptions) => Promise<SearchIndexBuildResult>;
 }
 
 const startedAt = Date.now();
@@ -376,6 +393,9 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   const repoRoot = opts.repoRoot ?? process.env.OPENMAPX_ROOT_DIR ?? "";
   const singleFlight = opts.singleFlight ?? getSingleFlightController();
   const store = new StateStore(dataDir);
+  const searchIndexSql = opts.searchIndexSql ?? sql;
+  const searchIndexRuntimeState = createSearchIndexRuntimeState();
+  const searchIndexOperationLock = createSearchIndexOperationLock(searchIndexSql);
   const operationsPolicy =
     opts.operationsPolicy ??
     resolveOperationsProfileFromEnv(process.env, { allowEmptyRegional: true });
@@ -731,9 +751,65 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
             publish();
           }),
       });
+      const dataset = store
+        .getAll()
+        .find((entry) => entry.type === "osm-pbf" && (entry.region ?? entry.id) === region);
+      if (dataset) {
+        try {
+          await updateCurrentSearchIndexFingerprint(
+            searchIndexSql,
+            region,
+            await fingerprintDataset(dataset),
+          );
+        } catch (error) {
+          req.log.warn(
+            { err: error },
+            "download-osm: could not update current search-index fingerprint",
+          );
+        }
+      }
       stream.writeLine({ event: "done", ok: true, ...result });
     } catch (err) {
       stream.writeLine({ event: "error", message: (err as Error).message });
+    } finally {
+      stream.end();
+    }
+  });
+
+  app.get("/search-index/status", async (_req, reply) => {
+    const status = await getSearchIndexStatus({
+      dataDir,
+      store,
+      sql: searchIndexSql,
+      runtimeState: searchIndexRuntimeState,
+    });
+    if (!status) {
+      return reply.code(404).send({ ok: false, error: "osm_search index not built" });
+    }
+    return reply.send({ ok: true, ...status });
+  });
+
+  app.post<{ Body: { region: string } }>("/search-index/build", async (req, reply) => {
+    const { region } = req.body ?? {};
+    if (!region || typeof region !== "string") {
+      return reply.code(400).send({ ok: false, error: "region required" });
+    }
+    assertValidRegion(region);
+    const stream = openNdjsonStream(reply);
+    try {
+      const build = opts.buildSearchIndex ?? buildOsmSearchIndex;
+      const result = await build({
+        region,
+        dataDir,
+        store,
+        sql: searchIndexSql,
+        runtimeState: searchIndexRuntimeState,
+        operationLock: searchIndexOperationLock,
+        onProgress: (progress) => stream.writeLine({ event: "progress", ...progress }),
+      });
+      stream.writeLine({ event: "done", ok: true, ...result });
+    } catch (error) {
+      stream.writeLine({ event: "error", message: (error as Error).message });
     } finally {
       stream.end();
     }

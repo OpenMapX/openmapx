@@ -57,6 +57,17 @@ describe("getStop", () => {
     expect(result?.lng).toBe(8.6639);
     expect(result?.provider).toBe("db");
     expect(result?.modes).toContain("rail");
+    expect(result?.codes).toEqual([{ value: "8000105", namespace: "eva" }]);
+    expect(result?.codes?.map(({ value }) => value)).not.toContain("db:8000105");
+  });
+
+  it("does not expose a non-EVA source id as a public code", async () => {
+    mockClient.stop.mockResolvedValue(fptfStop({ id: "not-an-eva" }));
+
+    const { getStop } = await loadModule();
+    const result = await getStop("db:not-an-eva");
+
+    expect(result).not.toHaveProperty("codes");
   });
 
   it("strips db: prefix before calling client.stop", async () => {

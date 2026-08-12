@@ -1,7 +1,13 @@
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
 import { describe, expect, it } from "vitest";
-import type { RealtimeProvider, TransitCapabilities, TransitProvider } from "../index.js";
+import { createMockIntegrationContext } from "../../testing/index.js";
+import type {
+  RealtimeProvider,
+  SearchSuggestionProvider,
+  TransitCapabilities,
+  TransitProvider,
+} from "../index.js";
 
 // These tests are compile-time assertions: the goal is that `pnpm check-types`
 // catches any breakage in the canonical TransitProvider / RealtimeProvider
@@ -115,5 +121,41 @@ describe("RealtimeProvider contract", () => {
       },
     };
     expect(provider.capabilities.vehiclePositions).toBe(true);
+  });
+});
+
+describe("SearchSuggestionProvider contract", () => {
+  it("accepts and captures a provider under search suggestions", async () => {
+    const provider: SearchSuggestionProvider = {
+      id: "catalog",
+      async searchSuggestions(query) {
+        return {
+          suggestions: [
+            {
+              id: "catalog:FRA",
+              label: "Frankfurt Airport",
+              coordinates: [8.57, 50.03],
+              type: "poi",
+              searchMatch: {
+                kind: "authoritative_code",
+                value: query.query,
+                normalized: query.query.toLowerCase(),
+              },
+              importance: 0.9,
+              provider: "catalog",
+            },
+          ],
+          attributions: [],
+          freshnessSeconds: 3_600,
+        };
+      },
+    };
+    const ctx = createMockIntegrationContext();
+    ctx.registerSearchSuggestionProvider(provider);
+
+    expect(ctx.registered.searchSuggestions).toEqual([provider]);
+    await expect(
+      provider.searchSuggestions({ query: "FRA", lang: "en", limit: 8 }),
+    ).resolves.toMatchObject({ freshnessSeconds: 3_600 });
   });
 });

@@ -1,0 +1,11 @@
+{
+  "name": "OSM-Code- und Alias-Suche",
+  "description": "Regionale OpenStreetMap-Aliasse, öffentliche Referenzen und konservative Akronyme aus einem lokal erstellten Index",
+  "dataSources": {
+    "openstreetmap": {
+      "purpose": "Einen kanonischen Ort anhand eines expliziten OpenStreetMap-Alias, einer öffentlichen Referenz oder eines konservativ erzeugten Akronyms finden",
+      "dataSent": "Nichts – Autovervollständigungsanfragen verbleiben auf dem OpenMapX-Server und verwenden den lokalen PostGIS-Index",
+      "dataReceived": "Namen, Aliasse, öffentliche Referenzcodes, Objektkategorien, Kennungen, Koordinaten und Quellenangaben aus dem ausgewählten OSM-Auszug"
+    }
+  }
+}

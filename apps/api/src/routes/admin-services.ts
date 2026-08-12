@@ -51,6 +51,7 @@ const DATA_JOB_OPERATIONS = new Set([
   "generate-api-keys",
   "overture-sync",
   "overture-conflate",
+  "search-index-build",
 ] as const);
 const BULK_SERVICE_ACTIONS = new Set(["start", "stop", "restart", "update", "build"] as const);
 
@@ -611,7 +612,8 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         | "clean"
         | "generate-api-keys"
         | "overture-sync"
-        | "overture-conflate";
+        | "overture-conflate"
+        | "search-index-build";
       region?: string;
       countries?: string;
       failFast?: boolean;
@@ -629,6 +631,13 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     if (operation === "clean" && (!req.body.target || req.body.target.trim() === "")) {
       reply.status(400);
       return { error: "clean operation requires target" };
+    }
+    if (operation === "search-index-build") {
+      const region = req.body.region?.trim() ?? "";
+      if (!region || region.includes("..") || !/^[A-Za-z0-9][A-Za-z0-9_/.-]*$/.test(region)) {
+        reply.status(400);
+        return { error: "search-index-build requires a valid region" };
+      }
     }
 
     const adminSession = getAdminSession(req);

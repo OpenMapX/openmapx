@@ -712,6 +712,10 @@ describe("transit-opentransportdata-ch provider", () => {
     expect(stops).toEqual([
       expect.objectContaining({
         id: "otdch:8507000",
+        codes: [
+          { namespace: "uic", value: "8507000" },
+          { namespace: "ifopt", value: "ch:1:sloid:7000" },
+        ],
         ids: {
           didok: "8507000",
           otdch: "8507000",

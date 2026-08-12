@@ -46,6 +46,42 @@ export interface TransitSourceMutationResult {
   status: "started";
 }
 
+export interface SearchIndexStatus {
+  region: string;
+  sourcePath: string | null;
+  sourceFingerprint: string | null;
+  currentFingerprint: string | null;
+  epoch: string | null;
+  status: "building" | "ready" | "failed";
+  placeCount: number;
+  termCount: number;
+  startedAt: string | null;
+  publishedAt: string | null;
+  updatedAt: string;
+  lastError: string | null;
+  stale: boolean;
+  building: boolean;
+}
+
+export interface SearchIndexBuildResult {
+  ok: boolean;
+  region?: string;
+  epoch?: string;
+  placeCount?: number;
+  termCount?: number;
+  message?: string;
+}
+
+export class DataManagerHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "DataManagerHttpError";
+  }
+}
+
 export class DataManagerClient {
   private baseUrl: string;
   private fetchImpl: typeof globalThis.fetch;
@@ -301,7 +337,7 @@ export class DataManagerClient {
         body: JSON.stringify({ region }),
       }),
     );
-    return readOvertureStream(res, "overture/pull", opts.onProgress);
+    return readNdjsonOperationStream(res, "overture/pull", opts.onProgress);
   }
 
   async overtureStatus(): Promise<Record<string, unknown>> {
@@ -329,7 +365,7 @@ export class DataManagerClient {
         body: JSON.stringify({ region }),
       }),
     );
-    return readOvertureStream(res, "overture/sync", opts.onProgress) as Promise<{
+    return readNdjsonOperationStream(res, "overture/sync", opts.onProgress) as Promise<{
       ok: boolean;
       message?: string;
       release?: string;
@@ -351,7 +387,7 @@ export class DataManagerClient {
         body: JSON.stringify({ region }),
       }),
     );
-    return readOvertureStream(res, "overture/ingest", opts.onProgress);
+    return readNdjsonOperationStream(res, "overture/ingest", opts.onProgress);
   }
 
   async extractOverture(
@@ -366,7 +402,7 @@ export class DataManagerClient {
         body: JSON.stringify({ region }),
       }),
     );
-    return readOvertureStream(res, "overture/extract", opts.onProgress);
+    return readNdjsonOperationStream(res, "overture/extract", opts.onProgress);
   }
 
   async conflateOverture(
@@ -388,7 +424,7 @@ export class DataManagerClient {
         body: JSON.stringify({ region, restart: opts.restart === true }),
       }),
     );
-    return readOvertureStream(res, "overture/conflate", opts.onProgress) as Promise<{
+    return readNdjsonOperationStream(res, "overture/conflate", opts.onProgress) as Promise<{
       ok: boolean;
       linked?: number;
       extracted?: number;
@@ -464,6 +500,33 @@ export class DataManagerClient {
     if (!res.ok) throw new Error(`poi-ingest sync failed: HTTP ${res.status}`);
     return body;
   }
+
+  async buildSearchIndex(
+    region: string,
+    onProgress?: (message: string) => void,
+  ): Promise<SearchIndexBuildResult> {
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/search-index/build`,
+      this.authed({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ region }),
+      }),
+    );
+    return readNdjsonOperationStream(
+      res,
+      "search-index/build",
+      onProgress,
+    ) as Promise<SearchIndexBuildResult>;
+  }
+
+  async searchIndexStatus(): Promise<SearchIndexStatus> {
+    const res = await this.fetchImpl(`${this.baseUrl}/search-index/status`, this.authed());
+    if (!res.ok) {
+      throw new DataManagerHttpError(`search-index/status failed: HTTP ${res.status}`, res.status);
+    }
+    return (await res.json()) as SearchIndexStatus;
+  }
 }
 
 /**
@@ -473,7 +536,7 @@ export class DataManagerClient {
  *   `{event: "done",     ok, ...result}`
  *   `{event: "error",    message}`
  */
-async function readOvertureStream(
+async function readNdjsonOperationStream(
   res: { ok: boolean; body: ReadableStream<Uint8Array> | null; status?: number },
   label: string,
   onProgress?: (msg: string) => void,

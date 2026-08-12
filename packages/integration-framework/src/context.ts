@@ -11,6 +11,7 @@ import type { RideProvider } from "./contracts/ride-provider.js";
 import type { RoadConditionsProvider } from "./contracts/road-conditions-provider.js";
 import type { RoutingProvider } from "./contracts/routing-provider.js";
 import type { AiCloudProcessor } from "./contracts/search-nlp-provider.js";
+import type { SearchSuggestionProvider } from "./contracts/search-suggestion-provider.js";
 import type { StreetLevelProvider } from "./contracts/street-level-imagery-provider.js";
 import type { TransitProvider } from "./contracts/transit-provider.js";
 import type { WeatherProvider } from "./contracts/weather-provider.js";
@@ -345,6 +346,8 @@ export interface IntegrationContext {
   registerReviewProvider(provider: ReviewProvider): void;
   /** Typed registrar for POI search providers. Stored under the `poi-search` key. */
   registerPoiSearchProvider(provider: PoiSearchProvider): void;
+  /** Typed registrar for unified search suggestion providers. Stored under `search-suggestions`. */
+  registerSearchSuggestionProvider(provider: SearchSuggestionProvider): void;
   /** Typed registrar for knowledge providers. Stored under the `knowledge` key. */
   registerKnowledgeProvider(provider: KnowledgeProvider): void;
   /** Typed registrar for GTFS catalog providers. Stored under the `gtfs-catalog` key. */

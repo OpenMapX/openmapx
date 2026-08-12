@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
-  "domains": ["knowledge"],
+  "domains": ["knowledge", "search-suggestions"],
   "backend": {
     "routes": true
   },

@@ -14,7 +14,8 @@ type DataOperation =
   | "clean"
   | "generate-api-keys"
   | "overture-sync"
-  | "overture-conflate";
+  | "overture-conflate"
+  | "search-index-build";
 
 type BackupOperation = "create" | "restore" | "delete";
 type BulkServiceAction = "start" | "stop" | "restart" | "update" | "build";
@@ -205,6 +206,13 @@ export async function handleDataOperationJob(ctx: JobContext): Promise<Record<st
       assertRegion(region);
       args.push(region);
       if (payload.restart === true) args.push("--restart");
+      break;
+    }
+    case "search-index-build": {
+      const region = nonEmptyString(payload.region);
+      if (!region) throw new Error("search-index-build requires region");
+      assertRegion(region);
+      args.push("search-index", "build", region);
       break;
     }
     default:

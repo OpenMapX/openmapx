@@ -81,8 +81,10 @@ export function setDbVendoUserAgent(userAgent: string | undefined): void {
 
 // biome-ignore lint/suspicious/noExplicitAny: external API response
 function normalizeStop(s: any): TransitStop {
+  const rawId = typeof s.id === "string" ? s.id.trim() : "";
   return {
     id: `${PREFIX}${s.id}`,
+    ...(/^\d{7}$/.test(rawId) ? { codes: [{ value: rawId, namespace: "eva" as const }] } : {}),
     name: s.name ?? "Unknown",
     lat: s.location?.latitude ?? 0,
     lng: s.location?.longitude ?? 0,

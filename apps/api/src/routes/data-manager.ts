@@ -675,4 +675,19 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     reply.code(proxied.status);
     return proxied.body;
   });
+
+  app.get("/data-manager/search-index/status", async (req, reply) => {
+    const auth = await authenticateDataManager(req);
+    if (auth.kind === "denied") {
+      return reply.code(401).send({ error: "Authentication required" });
+    }
+    if (auth.kind === "token") {
+      return reply
+        .code(403)
+        .send({ error: "Search-index operator status requires an admin session" });
+    }
+    const proxied = await proxyToDataManager("GET", "/search-index/status");
+    reply.code(proxied.status);
+    return proxied.body;
+  });
 }

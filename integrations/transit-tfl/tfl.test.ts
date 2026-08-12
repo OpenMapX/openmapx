@@ -52,6 +52,7 @@ describe("TfL transit provider", () => {
 
     expect(stops[0]).toMatchObject({
       id: "tfl:940GZZLUOXC",
+      codes: [{ value: "940GZZLUOXC", namespace: "naptan" }],
       name: "Oxford Circus",
       modes: ["subway", "bus"],
       provider: "tfl",

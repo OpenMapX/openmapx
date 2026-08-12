@@ -470,6 +470,11 @@ function buildIntegrationContext(args: {
       existing.push(provider);
       providers.set("poi-search", existing);
     },
+    registerSearchSuggestionProvider(provider) {
+      const existing = providers.get("search-suggestions") ?? [];
+      existing.push(provider);
+      providers.set("search-suggestions", existing);
+    },
     registerKnowledgeProvider(provider) {
       const existing = providers.get("knowledge") ?? [];
       existing.push(provider);

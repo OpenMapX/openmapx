@@ -1,0 +1,10 @@
+{
+  "id": "search-suggestions",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "AGPL-3.0-or-later",
+  "domains": ["search-suggestions"],
+  "backend": { "routes": true },
+  "quality": "built-in",
+  "category": "Geocoding"
+}

@@ -1859,6 +1859,20 @@
         "x-openmapx-auth": "service"
       }
     },
+    "/api/data-manager/search-index/status": {
+      "get": {
+        "operationId": "getApiDataManagerSearchIndexStatus",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "service"
+      }
+    },
     "/api/data-manager/transit/bump-transitous-ref": {
       "post": {
         "operationId": "postApiDataManagerTransitBumpTransitousRef",
@@ -4301,6 +4315,23 @@
         "x-openmapx-auth": "public",
         "x-openmapx-integration": "search-nlp",
         "x-openmapx-source": "integrations/search-nlp/index.ts"
+      }
+    },
+    "/api/integrations/search-suggestions/search": {
+      "get": {
+        "operationId": "getApiIntegrationsSearchSuggestionsSearch",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /search (search-suggestions)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "search-suggestions",
+        "x-openmapx-source": "integrations/search-suggestions/index.ts"
       }
     },
     "/api/integrations/street-level-imagery-mapillary/capabilities": {

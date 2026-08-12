@@ -68,6 +68,20 @@ describe("MOTIS static route adapter", () => {
     vi.clearAllMocks();
   });
 
+  it("exposes a source-backed GTFS stop code without exposing the prefixed stop id", () => {
+    const normalized = normalizeStop(instance, {
+      stopId: "de:1",
+      name: "Aachen Hbf",
+      stopCode: "AACHN",
+      lon: 6.091,
+      lat: 50.768,
+      modes: ["RAIL"],
+    });
+
+    expect(normalized.codes).toEqual([{ value: "AACHN", namespace: "gtfs" }]);
+    expect(normalized.codes?.map(({ value }) => value)).not.toContain("ms:de:1");
+  });
+
   it("uses response route indexes, not internal routeIdx, and preserves segment order", () => {
     const response = {
       routes: [

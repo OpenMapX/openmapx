@@ -210,6 +210,13 @@ export type { RankedPoiResults } from "./poiRanking";
 export { MAX_POI_SEARCH_RESULTS, rankAndLimitPoiResults, rankPoiResults } from "./poiRanking";
 export { decodePolyline, encodePolyline } from "./polyline";
 export { buildRideOpenUrl, rideQuoteBody } from "./rideLink";
+export {
+  compareSearchSuggestions,
+  isUppercaseAcronymIntent,
+  mergeAutocompleteSuggestions,
+  normalizeSearchTerm,
+  searchMatchTier,
+} from "./searchSuggestion";
 export { sectionSlug } from "./sectionSlug";
 export {
   antisolarPoint,

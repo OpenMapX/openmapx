@@ -134,6 +134,7 @@ export type {
   SpatialConstraint,
   TimeConstraint,
 } from "./search-nlp-provider.js";
+export type { SearchSuggestionProvider } from "./search-suggestion-provider.js";
 export type {
   StreetLevelCapabilities,
   StreetLevelCoverage,

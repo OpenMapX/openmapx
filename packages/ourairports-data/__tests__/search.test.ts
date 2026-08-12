@@ -45,6 +45,20 @@ describe("OurAirports search index", () => {
     expect(results[0]?.iata).toBe("FRA");
   });
 
+  it("preserves authoritative code match evidence", () => {
+    expect(index.queryMatches("FRA")[0]).toMatchObject({
+      record: { iata: "FRA" },
+      kind: "authoritative_code",
+      matchedValue: "FRA",
+      namespace: "iata",
+    });
+    expect(index.queryMatches("EDDF")[0]).toMatchObject({
+      kind: "authoritative_code",
+      matchedValue: "EDDF",
+      namespace: "icao",
+    });
+  });
+
   it("exact ICAO matches", () => {
     expect(index.query("EDDF")[0]?.icao).toBe("EDDF");
   });
@@ -57,6 +71,14 @@ describe("OurAirports search index", () => {
   it("keyword match returns the airport", () => {
     const results = index.query("Söllingen");
     expect(results.some((r) => r.iata === "FKB")).toBe(true);
+  });
+
+  it("classifies keyword-only matches as explicit aliases", () => {
+    expect(index.queryMatches("Söllingen")[0]).toMatchObject({
+      record: { iata: "FKB" },
+      kind: "explicit_alias",
+      matchedValue: "Söllingen",
+    });
   });
 
   it("returns empty for missing query", () => {

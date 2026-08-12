@@ -137,6 +137,7 @@ export type {
   RoutingProviderErrorCode,
   SearchIntent,
   SearchResult,
+  SearchSuggestionProvider,
   SpatialConstraint,
   StreetLevelCapabilities,
   StreetLevelCoverage,

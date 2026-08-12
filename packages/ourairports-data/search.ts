@@ -16,6 +16,15 @@ export interface SearchIndex {
    * Within each tier, large airports rank above medium / small / heliport.
    */
   query(q: string, limit?: number): AirportRecord[];
+  /** Search while retaining the field/value that caused each match. */
+  queryMatches(q: string, limit?: number): AirportSearchMatch[];
+}
+
+export interface AirportSearchMatch {
+  record: AirportRecord;
+  kind: "authoritative_code" | "name" | "explicit_alias";
+  matchedValue: string;
+  namespace?: "iata" | "icao" | "ident" | "gps_code" | "local_code";
 }
 
 const TYPE_RANK: Record<string, number> = {
@@ -57,61 +66,86 @@ export function buildSearchIndex(records: AirportRecord[]): SearchIndex {
     });
   }
 
+  function queryMatches(q: string, limit = 10): AirportSearchMatch[] {
+    const trimmed = q.trim();
+    if (trimmed.length === 0) return [];
+    const queryLower = trimmed.toLowerCase();
+    const queryUpper = trimmed.toUpperCase();
+    const ranked: Array<{
+      rank: number;
+      typeRank: number;
+      match: AirportSearchMatch;
+    }> = [];
+    const seen = new Set<number>();
+
+    const exact = byCodeMap.get(queryUpper);
+    if (exact) {
+      const codeFields = [
+        ["iata", exact.iata],
+        ["icao", exact.icao],
+        ["ident", exact.ident],
+        ["gps_code", exact.gpsCode],
+        ["local_code", exact.localCode],
+      ] as const;
+      const evidence = codeFields.find(([, value]) => value?.toUpperCase() === queryUpper);
+      ranked.push({
+        rank: RANK_EXACT_CODE,
+        typeRank: TYPE_RANK[exact.type] ?? 99,
+        match: {
+          record: exact,
+          kind: "authoritative_code",
+          matchedValue: evidence?.[1] ?? queryUpper,
+          namespace: evidence?.[0],
+        },
+      });
+      seen.add(exact.id);
+    }
+
+    for (const entry of entries) {
+      if (seen.has(entry.record.id)) continue;
+      let rank: number | null = null;
+      let kind: AirportSearchMatch["kind"] = "name";
+      let matchedValue = entry.record.name;
+      if (entry.nameLower.startsWith(queryLower)) {
+        rank = RANK_NAME_PREFIX;
+      } else if (entry.nameLower.includes(queryLower)) {
+        rank = RANK_NAME_CONTAINS;
+      } else if (entry.keywordsLower.includes(queryLower)) {
+        rank = RANK_KEYWORD_MATCH;
+        kind = "explicit_alias";
+        matchedValue =
+          entry.record.keywords
+            ?.split(",")
+            .map((value) => value.trim())
+            .find((value) => value.toLowerCase().includes(queryLower)) ?? trimmed;
+      }
+      if (rank !== null) {
+        ranked.push({
+          rank,
+          typeRank: TYPE_RANK[entry.record.type] ?? 99,
+          match: { record: entry.record, kind, matchedValue },
+        });
+        seen.add(entry.record.id);
+      }
+      if (ranked.length >= limit * 20) break;
+    }
+
+    ranked.sort((a, b) => {
+      if (a.rank !== b.rank) return a.rank - b.rank;
+      if (a.typeRank !== b.typeRank) return a.typeRank - b.typeRank;
+      return a.match.record.name.localeCompare(b.match.record.name);
+    });
+    return ranked.slice(0, limit).map(({ match }) => match);
+  }
+
   return {
     byCode(code) {
       const trimmed = code.trim().toUpperCase();
       return byCodeMap.get(trimmed) ?? null;
     },
     query(q, limit = 10) {
-      const trimmed = q.trim();
-      if (trimmed.length === 0) return [];
-      const queryLower = trimmed.toLowerCase();
-      const queryUpper = trimmed.toUpperCase();
-      const ranked: Array<{ rank: number; typeRank: number; record: AirportRecord }> = [];
-      const seen = new Set<number>();
-
-      // Exact IATA/ICAO/ident hit — always wins.
-      const exact = byCodeMap.get(queryUpper);
-      if (exact) {
-        ranked.push({
-          rank: RANK_EXACT_CODE,
-          typeRank: TYPE_RANK[exact.type] ?? 99,
-          record: exact,
-        });
-        seen.add(exact.id);
-      }
-
-      // Otherwise: walk all entries and bucket by match strength.
-      for (const e of entries) {
-        if (seen.has(e.record.id)) continue;
-        let rank: number | null = null;
-        if (e.nameLower.startsWith(queryLower)) {
-          rank = RANK_NAME_PREFIX;
-        } else if (e.nameLower.includes(queryLower)) {
-          rank = RANK_NAME_CONTAINS;
-        } else if (e.keywordsLower.includes(queryLower)) {
-          rank = RANK_KEYWORD_MATCH;
-        }
-        if (rank !== null) {
-          ranked.push({
-            rank,
-            typeRank: TYPE_RANK[e.record.type] ?? 99,
-            record: e.record,
-          });
-          seen.add(e.record.id);
-        }
-        // Early exit: once we have many candidates ranked, we'll sort + cap;
-        // bail out if we have plenty of name-prefix and name-contains hits.
-        if (ranked.length >= limit * 20) break;
-      }
-
-      ranked.sort((a, b) => {
-        if (a.rank !== b.rank) return a.rank - b.rank;
-        if (a.typeRank !== b.typeRank) return a.typeRank - b.typeRank;
-        return a.record.name.localeCompare(b.record.name);
-      });
-
-      return ranked.slice(0, limit).map((r) => r.record);
+      return queryMatches(q, limit).map(({ record }) => record);
     },
+    queryMatches,
   };
 }

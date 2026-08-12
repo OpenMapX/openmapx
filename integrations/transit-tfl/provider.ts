@@ -52,8 +52,10 @@ function modesFromStopPoint(s: any): TransportMode[] {
 
 // biome-ignore lint/suspicious/noExplicitAny: external API response
 function normalizeStop(s: any): TransitStop {
+  const naptanId = typeof s.naptanId === "string" ? s.naptanId.trim() : "";
   return {
     id: `tfl:${s.naptanId ?? s.id}`,
+    ...(naptanId ? { codes: [{ value: naptanId, namespace: "naptan" as const }] } : {}),
     name: s.commonName ?? s.name ?? "Unknown",
     lat: s.lat ?? s.latitude ?? 0,
     lng: s.lon ?? s.longitude ?? 0,
