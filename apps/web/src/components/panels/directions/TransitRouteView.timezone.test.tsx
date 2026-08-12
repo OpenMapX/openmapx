@@ -78,7 +78,11 @@ vi.mock("@/lib/transitOccupancy", () => ({
   OCCUPANCY_KEY: { low: "low", medium: "medium", high: "high", overcrowded: "overcrowded" },
 }));
 
-const itinerary = { ...SAMPLE_TRANSIT_ITINERARY, endTime: "2026-07-15T09:00:00Z" };
+const itinerary = {
+  ...SAMPLE_TRANSIT_ITINERARY,
+  startTime: "2026-07-15T00:00:00Z",
+  endTime: "2026-07-15T09:00:00Z",
+};
 
 describe("TransitItineraryCard destination time zone", () => {
   it("renders the arrival in the destination zone with an offset chip when the zones differ", () => {
@@ -107,6 +111,55 @@ describe("TransitItineraryCard destination time zone", () => {
       />,
     );
 
-    expect(markup).not.toMatch(/UTC[+-]/);
+    // Also catches a bare "UTC" chip rendering at a zero offset difference —
+    // not just a signed "UTC+"/"UTC-" one.
+    expect(markup).not.toMatch(/\bUTC\b/);
+  });
+});
+
+describe("TransitItineraryCard origin time zone", () => {
+  it("renders the departure in the origin zone, with no offset chip, when it differs from the viewer's", () => {
+    const markup = renderToStaticMarkup(
+      <TransitItineraryCard
+        itinerary={itinerary}
+        active={false}
+        originTimeZone="Asia/Tokyo"
+        destinationTimeZone={null}
+        onSelect={() => {}}
+        onDetails={() => {}}
+      />,
+    );
+
+    // 2026-07-15T00:00:00Z is 09:00 in Asia/Tokyo (UTC+9) — the departure
+    // board reads in the zone you're standing in, so no "UTC+9" chip renders
+    // next to it even though the destination one does when it applies.
+    expect(markup).toContain("09:00");
+    expect(markup).not.toMatch(/\bUTC\b/);
+  });
+
+  it("renders the whole pair self-consistently when a viewer's start and end both differ from their own zone", () => {
+    // The scenario the crash/consistency fix targets: a Berlin viewer
+    // planning Tokyo -> Beijing. Before the fix, startTime rendered in the
+    // viewer's zone while endTime rendered in the destination's, producing a
+    // span that didn't match the itinerary's actual duration.
+    const crossZoneItinerary = {
+      ...SAMPLE_TRANSIT_ITINERARY,
+      startTime: "2026-07-15T00:00:00Z", // 09:00 JST
+      endTime: "2026-07-15T04:30:00Z", // 12:30 CST
+    };
+    const markup = renderToStaticMarkup(
+      <TransitItineraryCard
+        itinerary={crossZoneItinerary}
+        active={false}
+        originTimeZone="Asia/Tokyo"
+        destinationTimeZone="Asia/Shanghai"
+        onSelect={() => {}}
+        onDetails={() => {}}
+      />,
+    );
+
+    expect(markup).toContain("09:00");
+    expect(markup).toContain("12:30");
+    expect(markup).toContain("UTC+8");
   });
 });

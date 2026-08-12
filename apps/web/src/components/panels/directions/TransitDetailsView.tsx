@@ -196,6 +196,7 @@ export function TransitDetailsView({
   destinationLabel,
   provider,
   attributions,
+  originTimeZone = null,
   destinationTimeZone = null,
   onBack,
 }: {
@@ -207,6 +208,13 @@ export function TransitDetailsView({
   provider?: string;
   /** Trip-plan envelope attributions, rendered at the bottom of the details. */
   attributions?: Attribution[];
+  /**
+   * Set only when the origin's zone differs from the viewer's; renders the
+   * departure in that zone instead of the viewer's, keeping the pair
+   * internally consistent. No offset chip — see the identical prop on
+   * `TransitItineraryCard`.
+   */
+  originTimeZone?: string | null;
   /** Set only when the trip crosses a time-zone boundary; renders the arrival in that zone with an offset chip. */
   destinationTimeZone?: string | null;
   onBack: () => void;
@@ -237,16 +245,24 @@ export function TransitDetailsView({
       },
     );
   }
-  const startTime = fmt.time(itinerary.startTime);
-  const endTime = fmt.time(
-    itinerary.endTime,
-    destinationTimeZone ? { timeZone: destinationTimeZone } : undefined,
+  // Resolve each offset label before formatting the time it gates: unlike
+  // these helpers, `fmt.time({ timeZone })` throws (rather than degrading)
+  // for a zone id the platform doesn't recognise, so the label doubles as
+  // the validity check that keeps the call below from taking the panel down.
+  const originOffsetLabel = originTimeZone
+    ? tzOffsetLabel(new Date(itinerary.startTime), originTimeZone)
+    : null;
+  const startTime = fmt.time(
+    itinerary.startTime,
+    originOffsetLabel ? { timeZone: originTimeZone as string } : undefined,
   );
-  // tzOffsetLabel returns null for an unrecognised zone; gate on the label so
-  // an unresolved destinationTimeZone doesn't still open an empty chip.
   const destinationOffsetLabel = destinationTimeZone
     ? tzOffsetLabel(new Date(itinerary.endTime), destinationTimeZone)
     : null;
+  const endTime = fmt.time(
+    itinerary.endTime,
+    destinationOffsetLabel ? { timeZone: destinationTimeZone as string } : undefined,
+  );
   const summaryBits: string[] = [];
   if (itinerary.transfers > 0) summaryBits.push(t("transfers", { count: itinerary.transfers }));
   if (itinerary.walkDistance > 0) {
@@ -327,6 +343,14 @@ export function TransitDetailsView({
         >
           ({formatDuration(itinerary.duration)})
         </Typography>
+        {/* This view is an early return from the itinerary list, so the
+            explanatory line the list renders below its cards never reaches
+            the screen here — without it, the chip above is unexplained. */}
+        {destinationTimeZone && (
+          <Typography sx={{ fontSize: 11, color: "text.secondary", mt: 0.5, display: "block" }}>
+            {t("arrivalInDestinationTime")}
+          </Typography>
+        )}
         {/* Leg badges summary */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 0.75, flexWrap: "wrap" }}>
           {itinerary.legs.map((leg, i) => (

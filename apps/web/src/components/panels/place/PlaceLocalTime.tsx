@@ -2,15 +2,10 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import {
-  formatInTimeZone,
-  timeZoneAt,
-  tzDiffMinutes,
-  tzOffsetLabel,
-  viewerTimeZone,
-} from "@openmapx/core";
+import { timeZoneAt, tzDiffMinutes, tzOffsetLabel, viewerTimeZone } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
+import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 
 interface Props {
   lat: number;
@@ -32,6 +27,7 @@ function formatLead(t: (key: string, values?: Record<string, string>) => string,
  */
 export function PlaceLocalTime({ lat, lng }: Props) {
   const t = useTranslations("localTime");
+  const fmt = useDateTimeFormat();
   // Memoize the lookup the same way PlaceHeaderWeather does, so it isn't
   // recomputed on every render.
   const zone = useMemo(() => timeZoneAt(lat, lng), [lat, lng]);
@@ -41,13 +37,18 @@ export function PlaceLocalTime({ lat, lng }: Props) {
 
   const now = new Date();
   const diff = tzDiffMinutes(now, viewer, zone);
-  const clock = formatInTimeZone(now, zone);
   const label = tzOffsetLabel(now, zone);
-  // A null from any of these means the platform did not recognise the zone.
-  // diff === 0 means two distinct zones share an offset (Europe/Berlin and
-  // Europe/Paris) — nothing to tell the user either way. Bail before rendering
-  // the Box, so neither case leaves an empty styled row behind.
-  if (diff === null || diff === 0 || !clock || !label) return null;
+  // A null from either of these means the platform did not recognise the
+  // zone. diff === 0 means two distinct zones share an offset (Europe/Berlin
+  // and Europe/Paris) — nothing to tell the user either way. Bail before
+  // rendering the Box, so neither case leaves an empty styled row behind.
+  //
+  // Order matters: resolve the label first. `fmt.time` (unlike the helpers
+  // above) throws rather than returning null for a zone id the platform
+  // doesn't recognise, so the label doubles as the validity gate that keeps
+  // the call below safe.
+  if (diff === null || diff === 0 || !label) return null;
+  const clock = fmt.time(now, { timeZone: zone });
 
   return (
     <Box sx={{ py: 0.5 }}>

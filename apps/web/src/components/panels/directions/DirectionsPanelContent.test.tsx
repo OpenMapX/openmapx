@@ -288,6 +288,43 @@ describe("DirectionsPanelContent", () => {
 
     expect((await screen.findAllByTestId("transit-itinerary-card")).length).toBe(2);
     expect(useDirectionsStore.getState().transitItineraries.length).toBe(2);
+    // Berlin -> Munich is same-zone, so the destination-zone caption must not
+    // render. This also pins the (lat, lng) argument order passed to the
+    // real timeZoneAt (mocked here via importOriginal): waypoint coords are
+    // stored as [lng, lat], and swapping that order on this same pair
+    // resolves to Asia/Aden vs Africa/Mogadishu instead — two different
+    // zones — which would make this assertion fail.
+    expect(screen.queryByText("directions.arrivalInDestinationTime")).toBeNull();
+  });
+
+  it("shows the destination-zone caption when the trip actually crosses zones", async () => {
+    act(() => {
+      useDirectionsStore.getState().setWaypoint(0, [13.405, 52.52], "Berlin");
+      useDirectionsStore.getState().setWaypoint(1, [139.69, 35.68], "Tokyo");
+      useDirectionsStore.getState().setMode("transit");
+    });
+    useTransitPlanMock.mockReturnValue({
+      data: {
+        itineraries: [
+          {
+            duration: 3600,
+            startTime: "2026-07-04T09:00:00Z",
+            endTime: "2026-07-04T10:00:00Z",
+            transfers: 0,
+            walkDistance: 0,
+            legs: [],
+          },
+        ],
+        provider: "ms",
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    renderPanel();
+
+    await screen.findAllByTestId("transit-itinerary-card");
+    expect(screen.getByText("directions.arrivalInDestinationTime")).toBeInTheDocument();
   });
 
   it("transit error state renders transitNotAvailable", () => {

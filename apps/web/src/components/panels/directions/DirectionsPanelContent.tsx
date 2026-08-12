@@ -33,6 +33,7 @@ import {
   TRANSIT_ACCESS_MOTIS_MODES,
   TRANSIT_ACCESS_RENTAL_FORM_FACTORS,
   timeZoneAt,
+  tzDiffMinutes,
   useAutocomplete,
   useCapabilities,
   useDebounce,
@@ -47,6 +48,7 @@ import {
   useSidebarStore,
   useTransitPlan,
   useTransitPlanningCapabilities,
+  viewerTimeZone,
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
@@ -132,14 +134,32 @@ export function DirectionsPanelContent() {
     setTransitDepartureTime,
     setTransitArrivalTime,
   } = useDirectionsStore();
-  // Only meaningful when the trip actually crosses zones. Same-zone trips pass
-  // null so every arrival keeps rendering exactly as it does today.
+  // Meaningful only when the origin and destination actually keep a
+  // different wall clock. Two zones can differ by id (Europe/Berlin vs
+  // Europe/Paris) yet share the same UTC offset, in which case the arrival
+  // time is byte-identical to before this feature and there is nothing to
+  // annotate — so this derives from a non-zero offset difference rather than
+  // an id mismatch. Same-offset trips pass null, keeping every same-offset
+  // itinerary a strict no-op.
   const destinationTimeZone = useMemo(() => {
     if (!origin || !destination) return null;
     const from = timeZoneAt(origin[1], origin[0]);
     const to = timeZoneAt(destination[1], destination[0]);
-    return from && to && from !== to ? to : null;
+    if (!from || !to) return null;
+    return tzDiffMinutes(new Date(), from, to) ? to : null;
   }, [origin, destination]);
+  // The start renders in the origin's zone whenever that differs from the
+  // viewer's own — otherwise "startTime" would keep rendering in the
+  // viewer's zone while "endTime" renders in the destination's, producing a
+  // span the two ends disagree about. Same-offset origins pass null, a
+  // strict no-op.
+  const viewerZone = viewerTimeZone();
+  const originTimeZone = useMemo(() => {
+    if (!origin) return null;
+    const zone = timeZoneAt(origin[1], origin[0]);
+    if (!zone) return null;
+    return tzDiffMinutes(new Date(), viewerZone, zone) ? zone : null;
+  }, [origin, viewerZone]);
   const units = useSettingsStore((s) => s.units);
   const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
   const evVehicleId = useSettingsStore((s) => s.evVehicleId);
@@ -639,6 +659,7 @@ export function DirectionsPanelContent() {
         destinationLabel={destinationLabel}
         provider={transitPlanData?.provider}
         attributions={transitPlanAttributions}
+        originTimeZone={originTimeZone}
         destinationTimeZone={destinationTimeZone}
         onBack={() => setTransitDetailsIndex(null)}
       />
@@ -1091,6 +1112,7 @@ export function DirectionsPanelContent() {
                     active={i === activeItineraryIndex}
                     isLowestCo2={lowestCo2Grams !== null && itin.co2Grams === lowestCo2Grams}
                     replanOptions={transitReplanOptions}
+                    originTimeZone={originTimeZone}
                     destinationTimeZone={destinationTimeZone}
                     onSelect={() => {
                       setActiveItineraryIndex(i);

@@ -182,11 +182,22 @@ export function tzOffsetMinutes(date: Date, timeZone: string): number | null {
   }
   if (formatted === null) return null;
 
-  const match = /GMT([+-])(\d{1,2})(?::(\d{2}))?/.exec(formatted);
-  if (!match) return null;
+  const signed = /GMT([+-])(\d{1,2})(?::(\d{2}))?/.exec(formatted);
+  if (signed) {
+    const sign = signed[1] === "-" ? -1 : 1;
+    return sign * (Number(signed[2]) * 60 + Number(signed[3] ?? 0));
+  }
 
-  const sign = match[1] === "-" ? -1 : 1;
-  return sign * (Number(match[2]) * 60 + Number(match[3] ?? 0));
+  // V8 always renders a zero offset as "GMT+00:00"/"GMT+0", but CLDR's
+  // `gmtZeroFormat` for `en` is a bare "GMT" (no sign, no digits), which some
+  // engines use verbatim for the localized-GMT `timeZoneName` variants this
+  // function requests. Accept that — and "UTC", in case an engine emits it
+  // the same way — as zero rather than degrading to null, but only as a
+  // standalone word so an unrelated, genuinely unparseable string can't
+  // collapse to zero.
+  if (/\b(?:GMT|UTC)\b/.test(formatted)) return 0;
+
+  return null;
 }
 
 /**

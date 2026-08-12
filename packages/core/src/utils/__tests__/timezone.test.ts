@@ -30,6 +30,41 @@ function withLongOffsetUnsupported<T>(fn: () => T): T {
   }
 }
 
+/**
+ * Simulates an engine whose CLDR `gmtZeroFormat` renders a zero UTC offset as
+ * a bare "GMT" (no sign, no digits) for the localized-GMT `timeZoneName`
+ * variants, instead of V8's "GMT+00:00"/"GMT+0" — this is the shape
+ * `tzOffsetMinutes`'s regex previously rejected outright, returning `null`
+ * for every zero-offset zone on such an engine.
+ */
+function withBareGmtZeroFormat<T>(fn: () => T): T {
+  const RealDateTimeFormat = Intl.DateTimeFormat;
+  const stub = new Proxy(RealDateTimeFormat, {
+    construct(target, args) {
+      const instance = Reflect.construct(target, args) as Intl.DateTimeFormat;
+      const options = args[1] as Intl.DateTimeFormatOptions | undefined;
+      if (options?.timeZoneName !== "longOffset" && options?.timeZoneName !== "shortOffset") {
+        return instance;
+      }
+      return new Proxy(instance, {
+        get(target2, prop, receiver) {
+          if (prop === "format") {
+            return (date?: Date | number) =>
+              instance.format(date).replace(/GMT[+-]0+(?::00)?\b/, "GMT");
+          }
+          return Reflect.get(target2, prop, receiver);
+        },
+      });
+    },
+  });
+  Intl.DateTimeFormat = stub;
+  try {
+    return fn();
+  } finally {
+    Intl.DateTimeFormat = RealDateTimeFormat;
+  }
+}
+
 describe("tzOffsetMinutes", () => {
   it("follows northern-hemisphere DST", () => {
     expect(tzOffsetMinutes(WINTER, "Europe/Berlin")).toBe(60);
@@ -75,6 +110,20 @@ describe("tzOffsetMinutes", () => {
   it("still returns null for an unrecognized zone id when longOffset is unsupported", () => {
     expect(withLongOffsetUnsupported(() => tzOffsetMinutes(WINTER, "Mars/Olympus"))).toBeNull();
   });
+
+  it("treats a bare GMT (CLDR's zero-offset format on some engines) as zero", () => {
+    expect(withBareGmtZeroFormat(() => tzOffsetMinutes(WINTER, "UTC"))).toBe(0);
+    expect(withBareGmtZeroFormat(() => tzOffsetMinutes(WINTER, "Africa/Abidjan"))).toBe(0);
+  });
+
+  it("leaves non-zero offsets unaffected under the bare-GMT engine", () => {
+    expect(withBareGmtZeroFormat(() => tzOffsetMinutes(WINTER, "Europe/Berlin"))).toBe(60);
+    expect(withBareGmtZeroFormat(() => tzOffsetMinutes(WINTER, "America/New_York"))).toBe(-300);
+  });
+
+  it("still returns null for an unrecognized zone id under the bare-GMT engine", () => {
+    expect(withBareGmtZeroFormat(() => tzOffsetMinutes(WINTER, "Mars/Olympus"))).toBeNull();
+  });
 });
 
 describe("tzOffsetLabel", () => {
@@ -88,6 +137,10 @@ describe("tzOffsetLabel", () => {
   it("returns null for an unrecognized zone id", () => {
     expect(tzOffsetLabel(WINTER, "Mars/Olympus")).toBeNull();
   });
+
+  it("renders UTC for a bare-GMT zero offset under the bare-GMT engine", () => {
+    expect(withBareGmtZeroFormat(() => tzOffsetLabel(WINTER, "UTC"))).toBe("UTC");
+  });
 });
 
 describe("tzDiffMinutes", () => {
@@ -100,6 +153,15 @@ describe("tzDiffMinutes", () => {
   it("returns null when either zone is unrecognized", () => {
     expect(tzDiffMinutes(SUMMER, "Mars/Olympus", "Europe/Berlin")).toBeNull();
     expect(tzDiffMinutes(SUMMER, "Europe/Berlin", "Mars/Olympus")).toBeNull();
+  });
+
+  it("still resolves a diff against a bare-GMT zero-offset zone, rather than going null for every place worldwide", () => {
+    // Regression for the case a UK-based viewer would have hit in winter: a
+    // bare-GMT zero offset for the viewer's own zone must not poison every
+    // diff computed against it.
+    expect(withBareGmtZeroFormat(() => tzDiffMinutes(WINTER, "Europe/London", "Asia/Tokyo"))).toBe(
+      540,
+    );
   });
 });
 

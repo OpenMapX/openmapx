@@ -32,16 +32,24 @@ vi.mock("next-intl", () => ({
   },
 }));
 
-vi.mock("@openmapx/core", () => ({
-  formatDistance: (d: number) => `${d} m`,
-  formatDuration: (d: number) => `${d}s`,
-  geocodeStopAsPlace: vi.fn().mockResolvedValue(null),
-  PANEL: { PLACE_CARD: "PLACE_CARD" },
-  usePlaceStore: () => ({ setSelectedPlace: vi.fn() }),
-  useSidebarStore: Object.assign(() => ({}), {
-    getState: () => ({ openDetail: vi.fn() }),
-  }),
-}));
+// importOriginal so the real tzOffsetLabel runs — a wholesale mock without it
+// silently omits tzOffsetLabel, which passed only because destinationTimeZone
+// defaulted to null in every existing spec here and short-circuited before
+// tzOffsetLabel was ever called.
+vi.mock("@openmapx/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@openmapx/core")>();
+  return {
+    ...actual,
+    formatDistance: (d: number) => `${d} m`,
+    formatDuration: (d: number) => `${d}s`,
+    geocodeStopAsPlace: vi.fn().mockResolvedValue(null),
+    PANEL: { PLACE_CARD: "PLACE_CARD" },
+    usePlaceStore: () => ({ setSelectedPlace: vi.fn() }),
+    useSidebarStore: Object.assign(() => ({}), {
+      getState: () => ({ openDetail: vi.fn() }),
+    }),
+  };
+});
 
 vi.mock("@/components/panels/directions/TransitRouteView", () => ({
   LegBadge: () => <span data-testid="leg-badge" />,
@@ -145,6 +153,41 @@ function makeItinerary(legAttrs: Array<Attribution[] | undefined>): TripItinerar
     })),
   };
 }
+
+describe("TransitDetailsView destination time zone", () => {
+  it("renders the offset chip and the explanatory caption when the destination zone is set", () => {
+    const itinerary = makeItinerary([undefined]);
+    const markup = renderToStaticMarkup(
+      <TransitDetailsView
+        itinerary={itinerary}
+        originLabel="A"
+        destinationLabel="B"
+        destinationTimeZone="Asia/Tokyo"
+        onBack={() => {}}
+      />,
+    );
+
+    // itinerary.endTime is 2026-05-21T09:00:00Z -> UTC+9 in Asia/Tokyo.
+    expect(markup).toContain("UTC+9");
+    expect(markup).toContain("arrivalInDestinationTime");
+  });
+
+  it("renders neither the chip nor the caption when the destination zone is null", () => {
+    const itinerary = makeItinerary([undefined]);
+    const markup = renderToStaticMarkup(
+      <TransitDetailsView
+        itinerary={itinerary}
+        originLabel="A"
+        destinationLabel="B"
+        destinationTimeZone={null}
+        onBack={() => {}}
+      />,
+    );
+
+    expect(markup).not.toMatch(/\bUTC\b/);
+    expect(markup).not.toContain("arrivalInDestinationTime");
+  });
+});
 
 describe("TransitDetailsView per-leg attribution", () => {
   it("renders an inline AttributionStrip when the leg's attribution differs from the trip union", () => {

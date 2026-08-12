@@ -233,6 +233,7 @@ export function TransitItineraryCard({
   active,
   isLowestCo2 = false,
   replanOptions,
+  originTimeZone = null,
   destinationTimeZone = null,
   onSelect,
   onDetails,
@@ -242,6 +243,14 @@ export function TransitItineraryCard({
   active: boolean;
   isLowestCo2?: boolean;
   replanOptions?: TransitReplanOptions;
+  /**
+   * Set only when the origin's zone differs from the viewer's; renders the
+   * departure in that zone instead of the viewer's. No offset chip — a
+   * departure board reads in the zone you're standing in, so this exists to
+   * keep the pair internally consistent (matching `destinationTimeZone`'s
+   * zone, not the viewer's), not to add a second annotation.
+   */
+  originTimeZone?: string | null;
   /** Set only when the trip crosses a time-zone boundary; renders the arrival in that zone with an offset chip. */
   destinationTimeZone?: string | null;
   onSelect: () => void;
@@ -264,16 +273,24 @@ export function TransitItineraryCard({
   const occupancy = worstOccupancy(itinerary);
   // Plan-time robustness cue: a very short scheduled transfer buffer.
   const tightTransfer = itineraryTransferRisk(itinerary.legs) !== null;
-  const startTime = fmt.time(itinerary.startTime);
-  const endTime = fmt.time(
-    itinerary.endTime,
-    destinationTimeZone ? { timeZone: destinationTimeZone } : undefined,
+  // Resolve each offset label before formatting the time it gates: unlike
+  // these helpers, `fmt.time({ timeZone })` throws (rather than degrading)
+  // for a zone id the platform doesn't recognise, so the label doubles as
+  // the validity check that keeps the call below from taking the panel down.
+  const originOffsetLabel = originTimeZone
+    ? tzOffsetLabel(new Date(itinerary.startTime), originTimeZone)
+    : null;
+  const startTime = fmt.time(
+    itinerary.startTime,
+    originOffsetLabel ? { timeZone: originTimeZone as string } : undefined,
   );
-  // tzOffsetLabel returns null for an unrecognised zone; gate on the label so
-  // an unresolved destinationTimeZone doesn't still open an empty chip.
   const destinationOffsetLabel = destinationTimeZone
     ? tzOffsetLabel(new Date(itinerary.endTime), destinationTimeZone)
     : null;
+  const endTime = fmt.time(
+    itinerary.endTime,
+    destinationOffsetLabel ? { timeZone: destinationTimeZone as string } : undefined,
+  );
   /**
    * Starts the trip and reports why it could not be, if it could not be.
    *
