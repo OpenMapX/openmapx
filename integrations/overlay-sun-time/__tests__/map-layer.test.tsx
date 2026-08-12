@@ -5,9 +5,18 @@ import { useSunTimeStore } from "../store";
 
 let fake: FakeMap;
 
+// The real useMap() hands out a `useRef` — one stable object across every
+// render of the caller. A fresh `{ current: fake.map }` literal per call (the
+// obvious mock) breaks that contract: the sync effect's dependency array
+// would see a "new" mapRef on every re-render and tear the whole layer down
+// and rebuild it, independent of whether `active`/`tzActive` actually
+// changed — masking exactly the kind of redundant-rebuild regression the
+// "skips re-publishing" test below exists to catch.
+const mapRefBox: { current: FakeMap["map"] | null } = { current: null };
+
 vi.mock("@/lib/MapContext", () => ({
   useMap: () => ({
-    mapRef: { current: fake.map },
+    mapRef: mapRefBox,
     mapReady: true,
     styleVersion: 0,
   }),
@@ -67,6 +76,7 @@ const TZ_FIXTURE = {
 
 beforeEach(() => {
   fake = createFakeMap();
+  mapRefBox.current = fake.map;
   useSunTimeStore.setState({
     layerVisible: true,
     showTerminator: true,
@@ -75,7 +85,12 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  useSunTimeStore.setState({ layerVisible: false, panelOpen: false, timeMs: null });
+  useSunTimeStore.setState({
+    layerVisible: false,
+    panelOpen: false,
+    timeMs: null,
+    showTimeZones: false,
+  });
   vi.useRealTimers();
 });
 
@@ -167,10 +182,8 @@ describe("SunTimeLayer", () => {
     expect(tzData?.features).toHaveLength(1);
     // Not vi.unstubAllGlobals(): that would also restore the real `Image`,
     // undoing the module-level StubImage every later test in this file relies
-    // on. Reset the flag this test turned on instead, so a later test in this
-    // describe doesn't inherit an active time zone fetch against a fetch
-    // stub that no longer exists.
-    useSunTimeStore.setState({ showTimeZones: false });
+    // on. The top-level afterEach resets showTimeZones (and fetch is only
+    // ever touched behind that flag), so nothing further to clean up here.
   });
 
   it("follows the wall clock, republishes on each tick, and stops after unmount", () => {
@@ -295,13 +308,13 @@ describe("SunTimeLayer lifecycle teardown", () => {
       expect(fake.state.layers.has(id)).toBe(false);
     }
     expect(fake.state.sources.has(TZ_SOURCE_ID)).toBe(false);
-    // Not vi.unstubAllGlobals() — see the same note above. Reset the flag
-    // this test turned on for the same reason.
-    useSunTimeStore.setState({ showTimeZones: false });
+    // Not vi.unstubAllGlobals() — see the same note above. The top-level
+    // afterEach resets showTimeZones.
   });
 
   it("cancels a pending idle sync so hiding the overlay mid-style-load does not resurrect it", () => {
     fake = createFakeMap({ styleLoaded: false });
+    mapRefBox.current = fake.map;
     render(<SunTimeLayer />);
 
     // The style hasn't finished loading, so the first pass only scheduled
@@ -333,12 +346,9 @@ describe("SunTimeLayer time zones", () => {
     });
   });
 
-  afterEach(() => {
-    // Resetting showTimeZones is enough to keep later tests from touching
-    // fetch at all; not vi.unstubAllGlobals(), which would also restore the
-    // real `Image` and undo the module-level StubImage other tests rely on.
-    useSunTimeStore.setState({ showTimeZones: false });
-  });
+  // showTimeZones resets in the top-level afterEach; not vi.unstubAllGlobals()
+  // there either, which would restore the real `Image` and undo the
+  // module-level StubImage other tests in this file rely on.
 
   it("caps every time zone layer at zoom 8", async () => {
     vi.stubGlobal(
@@ -390,6 +400,31 @@ describe("SunTimeLayer time zones", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("skips re-publishing the decorated data across a tick that doesn't cross an offset boundary", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => TZ_FIXTURE })),
+    );
+    render(<SunTimeLayer />);
+
+    await vi.waitFor(() => {
+      const data = fake.state.sources.get(TZ_SOURCE_ID)?.data as
+        | GeoJSON.FeatureCollection
+        | undefined;
+      expect(data?.features).toHaveLength(1);
+    });
+    const setDataCountBefore = fake.state.counts.setData.get(TZ_SOURCE_ID) ?? 0;
+
+    // One minute later, same day — Europe/Berlin stays at UTC+2 throughout, so
+    // rebuilding and re-publishing the ~1.3 MB decorated FeatureCollection for
+    // this tick would be pure waste.
+    act(() => {
+      useSunTimeStore.setState({ timeMs: Date.UTC(2026, 6, 15, 12, 1) });
+    });
+
+    expect(fake.state.counts.setData.get(TZ_SOURCE_ID) ?? 0).toBe(setDataCountBefore);
+  });
+
   it("drops a zone whose id the platform cannot resolve instead of poisoning the layer", async () => {
     const mixedFixture = {
       type: "FeatureCollection",
@@ -425,5 +460,59 @@ describe("SunTimeLayer time zones", () => {
       expect(data?.features).toHaveLength(1);
       expect(data?.features[0]?.properties?.tzid).toBe("Europe/Berlin");
     });
+  });
+});
+
+describe("SunTimeLayer sub-toggle transitions", () => {
+  beforeEach(() => {
+    useSunTimeStore.setState({
+      layerVisible: true,
+      showTerminator: true,
+      showTimeZones: true,
+      timeMs: Date.UTC(2026, 6, 15, 12),
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => TZ_FIXTURE })),
+    );
+  });
+
+  // showTimeZones resets in the top-level afterEach.
+  it("keeps the terminator's published data after the time zone sub-toggle turns off", async () => {
+    render(<SunTimeLayer />);
+    await vi.waitFor(() => {
+      const tzData = fake.state.sources.get(TZ_SOURCE_ID)?.data as
+        | GeoJSON.FeatureCollection
+        | undefined;
+      expect(tzData?.features).toHaveLength(1);
+    });
+
+    act(() => {
+      useSunTimeStore.setState({ showTimeZones: false });
+    });
+    await act(async () => {});
+
+    const data = fake.state.sources.get(SOURCE_ID)?.data as GeoJSON.FeatureCollection | undefined;
+    expect(data?.features).toHaveLength(16);
+  });
+
+  it("keeps the time zone tint's published data after the terminator sub-toggle turns off", async () => {
+    render(<SunTimeLayer />);
+    await vi.waitFor(() => {
+      const tzData = fake.state.sources.get(TZ_SOURCE_ID)?.data as
+        | GeoJSON.FeatureCollection
+        | undefined;
+      expect(tzData?.features).toHaveLength(1);
+    });
+
+    act(() => {
+      useSunTimeStore.setState({ showTerminator: false });
+    });
+    await act(async () => {});
+
+    const tzData = fake.state.sources.get(TZ_SOURCE_ID)?.data as
+      | GeoJSON.FeatureCollection
+      | undefined;
+    expect(tzData?.features).toHaveLength(1);
   });
 });

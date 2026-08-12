@@ -1,7 +1,7 @@
 "use client";
 
 import { subsolarPoint, twilightBands, tzOffsetLabel, tzOffsetMinutes } from "@openmapx/core";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import type { GeoJsonSourceDataEntry } from "@/components/map/layers/layerStyleUtils";
 import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
@@ -68,6 +68,22 @@ interface TimeZoneFeatureCollection {
   features: TimeZoneFeature[];
 }
 
+interface DecoratedTimeZoneFeature {
+  type: "Feature";
+  properties: {
+    tzid: string;
+    offsetMinutes: number;
+    offsetLabel: string;
+    color: string;
+  };
+  geometry: GeoJSON.Geometry;
+}
+
+interface DecoratedTimeZones {
+  type: "FeatureCollection";
+  features: DecoratedTimeZoneFeature[];
+}
+
 export default function SunTimeLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const layerVisible = useSunTimeStore((s) => s.layerVisible);
@@ -85,7 +101,7 @@ export default function SunTimeLayer() {
   // itself is on, not merely while the overlay is — the terminator shading
   // owes nobody, so crediting it whenever the layer is visible would credit
   // a source for pixels it did not draw.
-  useIntegrationAttribution("overlay-sun-time", layerVisible && showTimeZones);
+  useIntegrationAttribution("overlay-sun-time", tzActive);
 
   const [zones, setZones] = useState<TimeZoneFeatureCollection | null>(null);
 
@@ -116,7 +132,10 @@ export default function SunTimeLayer() {
   // The legend can be showing a clock (panelOpen) even while the shading
   // itself is hidden or switched off, so the tick has to keep the store's
   // `nowMs` current for either surface — not just for this layer's own paint.
-  const clockNeeded = active || panelOpen;
+  // `tzActive` also needs it: without a running clock, zone offsets freeze at
+  // whatever `nowMs` held when the store was created instead of rolling over
+  // the next hour or DST boundary.
+  const clockNeeded = active || tzActive || panelOpen;
 
   // This is the ONLY timer for "now" in the sun-time overlay: it writes into
   // the shared store field instead of local state so the legend (which reads
@@ -146,11 +165,41 @@ export default function SunTimeLayer() {
     };
   }, [instant]);
 
+  // Cheap per-tick fingerprint of every zone's resolved offset. This recomputes
+  // on every 60s clock tick (an Intl offset lookup per zone), but it only
+  // changes at an hour or DST boundary — which is what lets `decoratedZones`
+  // below skip rebuilding and re-serializing the whole ~1.3 MB decorated
+  // FeatureCollection (a MapLibre worker reparse on setData) on every tick
+  // that doesn't actually change anything on the map.
+  const zoneOffsetSignature = useMemo(() => {
+    if (!zones) return "";
+    const at = new Date(instant);
+    return zones.features
+      .map(
+        (feature) => `${feature.properties.tzid}:${tzOffsetMinutes(at, feature.properties.tzid)}`,
+      )
+      .join("|");
+  }, [zones, instant]);
+
+  // `instant` has to stay a real dependency below (it's used to build `at`),
+  // but the cache keyed on `zoneOffsetSignature` returns the previous result
+  // object — same identity — whenever a tick didn't change any zone's offset,
+  // so `publish()` sees the same `data` reference and skips the source update.
+  const decoratedZonesCache = useRef<{
+    zones: TimeZoneFeatureCollection | null;
+    signature: string;
+    result: DecoratedTimeZones | null;
+  }>({ zones: null, signature: "", result: null });
+
   const decoratedZones = useMemo(() => {
     if (!zones) return null;
+    const cache = decoratedZonesCache.current;
+    if (cache.zones === zones && cache.signature === zoneOffsetSignature) {
+      return cache.result;
+    }
     const at = new Date(instant);
-    return {
-      type: "FeatureCollection" as const,
+    const result: DecoratedTimeZones = {
+      type: "FeatureCollection",
       // tzOffsetMinutes/tzOffsetLabel return null for a zone id the platform
       // doesn't recognise. The vendored file is validated at generation time,
       // so this shouldn't fire — but a stale id must drop that one polygon,
@@ -173,7 +222,9 @@ export default function SunTimeLayer() {
         ];
       }),
     };
-  }, [zones, instant]);
+    decoratedZonesCache.current = { zones, signature: zoneOffsetSignature, result };
+    return result;
+  }, [zones, instant, zoneOffsetSignature]);
 
   // `visible` also has to cover tzActive: with only the terminator's `active`
   // here, toggling the time zone layer on while the terminator is off would
@@ -221,14 +272,18 @@ export default function SunTimeLayer() {
     };
 
     const teardownTimeZones = () => {
-      try {
-        for (const id of [TZ_FILL_LAYER_ID, TZ_LINE_LAYER_ID, TZ_LABEL_LAYER_ID]) {
+      for (const id of [TZ_FILL_LAYER_ID, TZ_LINE_LAYER_ID, TZ_LABEL_LAYER_ID]) {
+        try {
           if (map.getLayer(id)) map.removeLayer(id);
-          unregisterLayerSlot(id);
+        } catch {
+          // The style may already have dropped it during a base-map swap.
         }
+        unregisterLayerSlot(id);
+      }
+      try {
         if (map.getSource(TZ_SOURCE_ID)) map.removeSource(TZ_SOURCE_ID);
       } catch {
-        // The style may already have dropped it during a base-map swap.
+        // ignore
       }
     };
 
@@ -405,6 +460,14 @@ export default function SunTimeLayer() {
   }, [mapRef, mapReady, styleVersion, active, tzActive]);
 
   useEffect(() => {
+    // The bridge is all-or-nothing: apply() skips every setData call if any
+    // one retained source is missing, and publish() never drops a source from
+    // the retained set on its own. Without these, turning one sub-toggle off
+    // would leave its source retained-but-gone, and the *other* sub-layer's
+    // otherwise-still-valid entry would stop applying right along with it.
+    if (!active) clear([SOURCE_ID, SUBSOLAR_SOURCE_ID]);
+    if (!tzActive || !decoratedZones) clear([TZ_SOURCE_ID]);
+
     const entries: GeoJsonSourceDataEntry[] = [];
     if (active) {
       entries.push({ sourceId: SOURCE_ID, data: bands });
@@ -413,11 +476,7 @@ export default function SunTimeLayer() {
     if (tzActive && decoratedZones) {
       entries.push({ sourceId: TZ_SOURCE_ID, data: decoratedZones });
     }
-    if (entries.length === 0) {
-      clear([SOURCE_ID, SUBSOLAR_SOURCE_ID, TZ_SOURCE_ID]);
-      return;
-    }
-    publish(entries);
+    if (entries.length > 0) publish(entries);
   }, [active, tzActive, bands, subsolar, decoratedZones, publish, clear]);
 
   return null;

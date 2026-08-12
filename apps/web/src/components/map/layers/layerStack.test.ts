@@ -138,15 +138,19 @@ function repoRootFrom(start: string): string {
  * Resolve a scanned order argument to a number, or `undefined` if the scan
  * can't evaluate it. Two shapes are understood: an integer literal (`-16`,
  * `0`), and a bare identifier that names a module-level `const NAME = <int>;`
- * in the same file (e.g. `SUBSOLAR_ORDER`). Anything else — including a
- * computed expression like `BAND_ORDER_BASE + band` — is deliberately left
- * unresolved rather than guessed at: evaluating arithmetic would make the
- * scan a second implementation of the code it's checking.
+ * (optionally `export`ed, since a guard test may need to import the constant
+ * too — e.g. `TZ_FILL_ORDER`) in the same file (e.g. `SUBSOLAR_ORDER`).
+ * Anything else — including a computed expression like `BAND_ORDER_BASE +
+ * band` — is deliberately left unresolved rather than guessed at: evaluating
+ * arithmetic would make the scan a second implementation of the code it's
+ * checking.
  */
 function resolveOrder(raw: string, source: string): number | undefined {
   if (/^-?\d+$/.test(raw)) return Number(raw);
   if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(raw)) return undefined;
-  const constMatch = source.match(new RegExp(`^const\\s+${raw}\\s*=\\s*(-?\\d+)\\s*;`, "m"));
+  const constMatch = source.match(
+    new RegExp(`^(?:export\\s+)?const\\s+${raw}\\s*=\\s*(-?\\d+)\\s*;`, "m"),
+  );
   return constMatch ? Number(constMatch[1]) : undefined;
 }
 
