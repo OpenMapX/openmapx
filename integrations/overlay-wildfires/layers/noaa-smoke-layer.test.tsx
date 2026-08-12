@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { layerRegistrations } from "@/components/map/layers/layerStack";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
+import type { WildfirePopupController } from "../popup-controller";
 import { useWildfireStore } from "../store";
 
 const mapContext = vi.hoisted(() => ({ mapRef: { current: null as FakeMap["map"] | null } }));
@@ -54,7 +55,6 @@ vi.mock("maplibre-gl", () => ({
   },
 }));
 
-import type { WildfirePopupController } from "./hotspot-layer";
 import {
   isNoaaSmokeFeatureCollection,
   NOAA_SMOKE_FILL,
@@ -397,7 +397,7 @@ describe("NoaaSmokeLayer", () => {
       vi.fn(async () => response(smokeCollection())),
     );
     const controller = popupController();
-    render(<NoaaSmokeLayer active popupController={controller} />);
+    const { unmount } = render(<NoaaSmokeLayer active popupController={controller} />);
     await waitFor(() => expect(fake.state.layers.has(NOAA_SMOKE_FILL)).toBe(true));
 
     const feature = smokeCollection().features[0] as unknown as MapGeoJSONFeature;
@@ -409,13 +409,18 @@ describe("NoaaSmokeLayer", () => {
     });
 
     expect(controller.open).toHaveBeenCalledTimes(1);
-    expect(controller.open).toHaveBeenCalledWith("noaa-hms", expect.anything());
+    const lease = controller.open.mock.calls[0]?.[0];
+    expect(lease).toEqual(expect.any(Object));
+    expect(controller.open).toHaveBeenCalledWith(lease, expect.anything());
     const html = popupState.instances[0]?.html ?? "";
     expect(html).toContain("[observedSmoke]");
     expect(html).toContain("[noaaObservedSmokeCaveat]");
     expect(html).toContain("[noaaSmokeDensityCaveat]");
     expect(html).toContain("&lt;GOES &amp; &quot;West&quot;&gt;");
     expect(html).not.toContain('<GOES & "West">');
+
+    unmount();
+    expect(controller.close).toHaveBeenCalledWith(lease);
   });
 
   it("aborts, removes layers and listeners, closes the popup, and resets status when disabled", async () => {
@@ -448,7 +453,7 @@ describe("NoaaSmokeLayer", () => {
       error: null,
       featureCount: null,
     });
-    expect(controller.close).toHaveBeenCalledWith("noaa-hms");
+    expect(controller.close).toHaveBeenCalledWith(expect.any(Object));
     for (const event of ["styledata", "click", "mouseenter", "mouseleave"]) {
       const ons = fake.state.listenerCalls.filter(
         (call) => call.method === "on" && call.event === event,

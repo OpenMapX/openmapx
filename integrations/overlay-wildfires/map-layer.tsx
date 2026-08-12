@@ -1,17 +1,13 @@
 "use client";
 
 import { useOverlayExclusion } from "@openmapx/core";
-import type * as maplibregl from "maplibre-gl";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { useIntegrationSourceAttributions } from "@/lib/useIntegrationAttribution";
 import { EffisBurnedAreaLayer } from "./layers/effis-burned-area-layer";
-import {
-  HotspotLayer,
-  type WildfirePopupController,
-  type WildfirePopupOwner,
-} from "./layers/hotspot-layer";
+import { HotspotLayer } from "./layers/hotspot-layer";
 import { NifcPerimeterLayer } from "./layers/nifc-perimeter-layer";
 import { NoaaSmokeLayer } from "./layers/noaa-smoke-layer";
+import { createWildfirePopupController } from "./popup-controller";
 import { useWildfireStore } from "./store";
 
 export function WildfireLayer() {
@@ -57,21 +53,8 @@ export function WildfireLayer() {
   ]);
   useIntegrationSourceAttributions("overlay-wildfires", attributionSourceIds);
   useOverlayExclusion("wildfires", layerVisible);
-  const popupRef = useRef<{ owner: WildfirePopupOwner; popup: maplibregl.Popup } | null>(null);
-  const popupController = useMemo<WildfirePopupController>(
-    () => ({
-      open: (owner, popup) => {
-        popupRef.current?.popup.remove();
-        popupRef.current = { owner, popup };
-      },
-      close: (owner) => {
-        if (popupRef.current?.owner !== owner) return;
-        popupRef.current.popup.remove();
-        popupRef.current = null;
-      },
-    }),
-    [],
-  );
+  const popupController = useMemo(createWildfirePopupController, []);
+  useEffect(() => () => popupController.closeAll(), [popupController]);
 
   return (
     <>

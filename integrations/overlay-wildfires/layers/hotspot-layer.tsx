@@ -10,6 +10,7 @@ import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSo
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import type { WildfirePopupController, WildfirePopupLease } from "../popup-controller";
 import { useWildfireStore } from "../store";
 
 const SOURCE_ID = "openmapx-wildfires-source";
@@ -69,13 +70,6 @@ const RECENCY_COLOR_EXPR: maplibregl.ExpressionSpecification = [
   "#fde68a",
 ];
 
-export interface WildfirePopupController {
-  open(owner: WildfirePopupOwner, popup: maplibregl.Popup): void;
-  close(owner: WildfirePopupOwner): void;
-}
-
-export type WildfirePopupOwner = "firms" | "nifc" | "effis" | "noaa-hms";
-
 export interface HotspotLayerProps {
   active: boolean;
   popupController: WildfirePopupController;
@@ -100,6 +94,7 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
   const setSourceStatus = useWildfireStore((s) => s.setSourceStatus);
   const resetSourceStatus = useWildfireStore((s) => s.resetSourceStatus);
   const t = useTranslations("wildfires");
+  const popupLease = useRef<WildfirePopupLease>({});
   const fetchedRef = useRef(false);
   const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
     mapRef,
@@ -190,7 +185,7 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
         }
         unregisterLayerSlot(HEATMAP_LAYER_ID);
         unregisterLayerSlot(CIRCLE_LAYER_ID);
-        popupController.close("firms");
+        popupController.close(popupLease.current);
         fetchedRef.current = false;
         return;
       }
@@ -242,6 +237,7 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
     map.on("styledata", syncLayers);
     return () => {
       map.off("styledata", syncLayers);
+      popupController.close(popupLease.current);
     };
   }, [mapReady, mapRef, styleVersion, active, fetchWildfires, popupController]);
 
@@ -380,7 +376,7 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
       </div>`;
 
       popupController.open(
-        "firms",
+        popupLease.current,
         new maplibregl.Popup({
           closeButton: true,
           maxWidth: "280px",

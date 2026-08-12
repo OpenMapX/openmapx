@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { layerRegistrations } from "@/components/map/layers/layerStack";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
+import type { WildfirePopupController } from "../popup-controller";
 import { useWildfireStore } from "../store";
 
 const mapContext = vi.hoisted(() => ({ mapRef: { current: null as FakeMap["map"] | null } }));
@@ -63,7 +64,6 @@ vi.mock("maplibre-gl", () => ({
 }));
 
 import { EffisBurnedAreaLayer } from "./effis-burned-area-layer";
-import type { WildfirePopupController } from "./hotspot-layer";
 import { NifcPerimeterLayer } from "./nifc-perimeter-layer";
 
 const NIFC_SOURCE = "openmapx-wildfires-nifc-source";
@@ -283,7 +283,7 @@ describe("wildfire perimeter layers", () => {
       vi.fn(async (url: string) => successFor(url)),
     );
     const controller = popupController();
-    render(
+    const { unmount } = render(
       <>
         <EffisBurnedAreaLayer active popupController={controller} />
         <NifcPerimeterLayer active popupController={controller} />
@@ -320,8 +320,15 @@ describe("wildfire perimeter layers", () => {
     expect(effisPopup?.html).toContain("[effisBurnedAreaCaveat]");
     expect(effisPopup?.html).toContain("Vila &lt;Nova&gt;");
     expect(controller.open).toHaveBeenCalledTimes(2);
-    expect(controller.open).toHaveBeenNthCalledWith(1, "nifc", expect.anything());
-    expect(controller.open).toHaveBeenNthCalledWith(2, "effis", expect.anything());
+    const nifcLease = controller.open.mock.calls[0]?.[0];
+    const effisLease = controller.open.mock.calls[1]?.[0];
+    expect(nifcLease).toEqual(expect.any(Object));
+    expect(effisLease).toEqual(expect.any(Object));
+    expect(effisLease).not.toBe(nifcLease);
+
+    unmount();
+    expect(controller.close).toHaveBeenCalledWith(nifcLease);
+    expect(controller.close).toHaveBeenCalledWith(effisLease);
   });
 
   it("registers fill and line interactions and removes every listener and registry entry", () => {
@@ -361,8 +368,10 @@ describe("wildfire perimeter layers", () => {
     for (const registration of registrations) {
       expect(fake.state.listenerCalls).toContainEqual({ ...registration, method: "off" });
     }
-    expect(controller.close).toHaveBeenCalledWith("nifc");
-    expect(controller.close).toHaveBeenCalledWith("effis");
+    expect(controller.close).toHaveBeenCalledTimes(2);
+    for (const [lease] of controller.close.mock.calls) {
+      expect(lease).toEqual(expect.any(Object));
+    }
   });
 
   it("removes only the toggled source and aborts only its in-flight request", async () => {

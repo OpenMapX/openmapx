@@ -321,6 +321,28 @@ describe("WildfireLayer source orchestration", () => {
     );
   });
 
+  it("keeps FIRMS attribution after a failed refresh retains last-good data", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(successfulResponse("https://api.test/wildfires?dayRange=1"))
+      .mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+    useWildfireStore.setState({
+      showNifcPerimeters: false,
+      showEffisBurnedAreas: false,
+      showNoaaSmoke: false,
+    });
+    render(<WildfireLayer />);
+
+    await waitFor(() => expect(useWildfireStore.getState().statuses.firms.featureCount).toBe(1));
+    act(() => useWildfireStore.getState().setDayRange(2));
+    await waitFor(() =>
+      expect(useWildfireStore.getState().statuses.firms.error).toBe("unavailable"),
+    );
+
+    expect(attributionState.filtered).toHaveBeenLastCalledWith("overlay-wildfires", ["firms"]);
+  });
+
   it("removes the first popup when a different source opens the next one", async () => {
     vi.stubGlobal(
       "fetch",

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { layerRegistrations } from "@/components/map/layers/layerStack";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
+import type { WildfirePopupController } from "../popup-controller";
 import { useWildfireStore } from "../store";
 
 const translations = vi.hoisted(() => ({ t: (key: string) => key }));
@@ -51,7 +52,7 @@ vi.mock("maplibre-gl", () => ({
   },
 }));
 
-import { HotspotLayer, type WildfirePopupController } from "./hotspot-layer";
+import { HotspotLayer } from "./hotspot-layer";
 
 const SOURCE_ID = "openmapx-wildfires-source";
 const CIRCLE_LAYER_ID = "openmapx-wildfires-circles";
@@ -487,7 +488,7 @@ describe("HotspotLayer", () => {
     await waitFor(() => expect(signal?.aborted).toBe(true));
     await waitFor(() => expect(useWildfireStore.getState().loading).toBe(false));
     expect(fake.state.sources.has(SOURCE_ID)).toBe(false);
-    expect(controller.close).toHaveBeenCalledWith("firms");
+    expect(controller.close).toHaveBeenCalledWith(expect.any(Object));
   });
 
   it("aborts an active request and clears loading when unmounted", async () => {
@@ -624,7 +625,7 @@ describe("HotspotLayer", () => {
       vi.fn(async () => response()),
     );
     const controller = popupController();
-    render(<HotspotLayer active popupController={controller} />);
+    const { unmount } = render(<HotspotLayer active popupController={controller} />);
     const feature = {
       type: "Feature",
       properties: {
@@ -645,11 +646,16 @@ describe("HotspotLayer", () => {
     });
 
     expect(controller.open).toHaveBeenCalledTimes(1);
-    expect(controller.open).toHaveBeenCalledWith("firms", expect.anything());
+    const lease = controller.open.mock.calls[0]?.[0];
+    expect(lease).toEqual(expect.any(Object));
+    expect(controller.open).toHaveBeenCalledWith(lease, expect.anything());
     const popup = controller.open.mock.calls[0]?.[1] as { html?: string } | undefined;
     expect(popup?.html).toContain("&lt;svg onload=&quot;alert(2)&quot;&gt;");
     expect(popup?.html).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
     expect(popup?.html).toContain("&lt;img src=x onerror=&quot;alert(3)&quot;&gt;");
     expect(popup?.html).not.toContain('<svg onload="alert(2)">');
+
+    unmount();
+    expect(controller.close).toHaveBeenCalledWith(lease);
   });
 });

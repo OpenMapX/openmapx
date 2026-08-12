@@ -3,12 +3,13 @@
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import type { WildfirePopupController, WildfirePopupLease } from "../popup-controller";
 import {
   buildNoaaSmokePopupModel,
   NOAA_SMOKE_OPACITY,
@@ -18,7 +19,6 @@ import {
 } from "../presentation";
 import { useWildfireStore } from "../store";
 import type { NoaaSmokeProperties, WildfireFeatureCollection } from "../types";
-import type { WildfirePopupController } from "./hotspot-layer";
 
 export const NOAA_SMOKE_SOURCE = "openmapx-wildfires-noaa-smoke-source";
 export const NOAA_SMOKE_FILL = "openmapx-wildfires-noaa-smoke-fill";
@@ -157,6 +157,7 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
   const env = useEnv();
   const locale = useLocale();
   const translate = useTranslations("wildfires") as WildfirePopupTranslate;
+  const popupLease = useRef<WildfirePopupLease>({});
   const setSourceStatus = useWildfireStore((state) => state.setSourceStatus);
   const resetSourceStatus = useWildfireStore((state) => state.resetSourceStatus);
   const bridge = useGeoJsonSourceDataBridge({
@@ -237,7 +238,7 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
     const sync = () => {
       if (!active) {
         remove();
-        popupController.close("noaa-hms");
+        popupController.close(popupLease.current);
         return;
       }
       try {
@@ -285,7 +286,7 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
     return () => {
       map.off("styledata", sync);
       remove();
-      popupController.close("noaa-hms");
+      popupController.close(popupLease.current);
     };
   }, [active, mapContext.mapReady, mapContext.mapRef, mapContext.styleVersion, popupController]);
 
@@ -301,7 +302,7 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
         translate,
       );
       popupController.open(
-        "noaa-hms",
+        popupLease.current,
         new maplibregl.Popup({ closeButton: true, maxWidth: "320px", className: "omx-popup" })
           .setLngLat(event.lngLat)
           .setHTML(html)

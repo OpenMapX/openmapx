@@ -6,6 +6,7 @@ import { useCallback } from "react";
 import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
+import type { WildfirePopupController } from "../popup-controller";
 import {
   buildEffisPopupModel,
   EFFIS_BURNED_AREA_STYLE,
@@ -13,7 +14,6 @@ import {
   type WildfirePopupTranslate,
 } from "../presentation";
 import type { EffisProperties, WildfireFeatureCollection } from "../types";
-import type { WildfirePopupController } from "./hotspot-layer";
 import { usePolygonLayerLifecycle } from "./nifc-perimeter-layer";
 import { useViewportWildfireSource } from "./use-viewport-wildfire-source";
 
@@ -93,7 +93,6 @@ export function EffisBurnedAreaLayer({ active, popupController }: EffisBurnedAre
     lineOrder: 11,
     fillPaint: EFFIS_FILL_PAINT,
     linePaint: EFFIS_LINE_PAINT,
-    popupOwner: "effis",
     popupController,
     popupHtml,
   });

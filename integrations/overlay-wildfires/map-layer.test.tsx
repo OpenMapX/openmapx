@@ -244,4 +244,23 @@ describe("WildfireLayer hotspot composition", () => {
     expect(popupState.instances[1]?.removeCalls).toBe(1);
     expect(popupState.instances[2]?.removeCalls).toBe(0);
   });
+
+  it("removes the current FIRMS popup exactly once when the whole coordinator unmounts", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ type: "FeatureCollection", features: [] }),
+      })),
+    );
+    useWildfireStore.setState({ showHotspots: true });
+    const { unmount } = render(<WildfireLayer />);
+    await waitFor(() => expect(fake.state.layers.has(CIRCLE_LAYER_ID)).toBe(true));
+
+    act(() => fake.emit("click", { features: [HOTSPOT_FEATURE] }));
+    expect(popupState.instances).toHaveLength(1);
+
+    unmount();
+    expect(popupState.instances[0]?.removeCalls).toBe(1);
+  });
 });
