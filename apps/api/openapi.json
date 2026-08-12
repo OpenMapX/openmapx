@@ -2800,6 +2800,23 @@
         "x-openmapx-source": "integrations/knowledge-sun-time/index.ts"
       }
     },
+    "/api/integrations/knowledge-sun-time/timezone": {
+      "get": {
+        "operationId": "getApiIntegrationsKnowledgeSunTimeTimezone",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /timezone (knowledge-sun-time)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "knowledge-sun-time",
+        "x-openmapx-source": "integrations/knowledge-sun-time/index.ts"
+      }
+    },
     "/api/integrations/knowledge-tides-canada/tides": {
       "get": {
         "operationId": "getApiIntegrationsKnowledgeTidesCanadaTides",

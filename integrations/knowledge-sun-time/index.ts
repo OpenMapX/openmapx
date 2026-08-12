@@ -6,6 +6,10 @@ const API_BASE = "https://api.sunrise-sunset.org/json";
 const FETCH_TIMEOUT_MS = 10_000;
 const CACHE_TTL = 21_600; // 6 hours — sun times change slowly
 
+// Zone boundaries change on the order of once a year; offsets are the client's
+// job via Intl, so nothing in this response can go stale within the window.
+const TZ_CACHE_TTL = 2_592_000; // 30 days
+
 interface SunriseSunsetApiResponse {
   results: {
     sunrise: string;
@@ -98,5 +102,44 @@ export function setup(ctx: IntegrationContext): void {
       ctx.log.error("Sunrise-Sunset fetch failed", err);
       reply.status(502).send({ message: "Sunrise-Sunset data unavailable" });
     }
+  });
+
+  ctx.registerRoute("GET", "/timezone", async (req, reply) => {
+    const { lat, lng } = req.query as { lat?: string; lng?: string };
+
+    const latNum = Number.parseFloat(lat ?? "");
+    const lngNum = Number.parseFloat(lng ?? "");
+
+    // geo-tz's `find` throws on out-of-range input rather than returning an
+    // empty array, so range has to be rejected here — otherwise a value like
+    // lat=200 would crash the handler instead of 400ing.
+    if (
+      Number.isNaN(latNum) ||
+      Number.isNaN(lngNum) ||
+      latNum < -90 ||
+      latNum > 90 ||
+      lngNum < -180 ||
+      lngNum > 180
+    ) {
+      reply.status(400).send({ message: "Invalid coordinates" });
+      return;
+    }
+
+    const cacheKey = `tz:${round4(latNum)},${round4(lngNum)}`;
+    const cached = await ctx.cache.get<{ timezone: string }>(cacheKey);
+    if (cached) {
+      reply.header("Cache-Control", "public, max-age=86400");
+      reply.send(cached);
+      return;
+    }
+
+    // Every in-range coordinate resolves to at least one zone: geo-tz falls
+    // back to a 15-degree Etc/GMT band wherever no land polygon covers the
+    // point, so the array is never empty here — "UTC" is a defensive
+    // fallback only, matching the /times route's use of the same pattern.
+    const result = { timezone: findTimezone(latNum, lngNum)[0] ?? "UTC" };
+    await ctx.cache.set(cacheKey, result, TZ_CACHE_TTL);
+    reply.header("Cache-Control", "public, max-age=86400");
+    reply.send(result);
   });
 }

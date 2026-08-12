@@ -1,5 +1,8 @@
-import type { RouteHandler } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import type { CacheClient, RouteHandler } from "@openmapx/integration-framework";
+import {
+  createMockIntegrationContext,
+  type MockContextOverrides,
+} from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setup } from "./index.js";
 
@@ -43,18 +46,45 @@ function mockOk(data: unknown) {
   return { ok: true, status: 200, json: async () => data } as Response;
 }
 
-function getHandler(): RouteHandler {
-  const ctx = createMockIntegrationContext();
+// Collects handlers by path so both /times and /timezone can be exercised
+// from the same harness.
+function getHandler(path: string, overrides: MockContextOverrides = {}): RouteHandler {
+  const ctx = createMockIntegrationContext(overrides);
   setup(ctx);
-  const route = ctx.registered.routes.find((r) => r.path === "/times");
-  if (!route) throw new Error("/times route was not registered");
+  const route = ctx.registered.routes.find((r) => r.path === path);
+  if (!route) throw new Error(`${path} route was not registered`);
   return route.handler;
 }
 
-async function invoke(query: Record<string, string>): Promise<FakeReply> {
+async function invoke(
+  path: string,
+  query: Record<string, string>,
+  overrides: MockContextOverrides = {},
+): Promise<FakeReply> {
   const reply = makeReply();
-  await getHandler()({ query, params: {}, body: undefined, headers: {} }, reply);
+  // The real dispatcher always passes headers, even when empty — mirror
+  // that shape so this mock cannot drift from what handlers actually receive.
+  await getHandler(path, overrides)({ query, params: {}, body: undefined, headers: {} }, reply);
   return reply;
+}
+
+// In-memory CacheClient double with vi.fn spies, so tests can assert the
+// exact key/value/TTL a handler used, not just that caching "worked".
+function makeCache(initial: Record<string, unknown> = {}): CacheClient & {
+  get: ReturnType<typeof vi.fn>;
+  set: ReturnType<typeof vi.fn>;
+} {
+  const store = new Map<string, unknown>(Object.entries(initial));
+  return {
+    get: vi.fn(async (key: string) => (store.has(key) ? store.get(key) : null)),
+    set: vi.fn(async (key: string, value: unknown) => {
+      store.set(key, value);
+    }),
+    del: vi.fn(async (key: string) => {
+      store.delete(key);
+    }),
+    withCache: vi.fn(async (_key: string, _ttl: number, fn: () => Promise<unknown>) => fn()),
+  } as unknown as CacheClient & { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> };
 }
 
 function apiBody() {
@@ -92,7 +122,7 @@ describe("GET /times sunrise-sunset route", () => {
   it("maps the snake_case API payload to camelCase and attaches attribution", async () => {
     mockFetch.mockResolvedValueOnce(mockOk(apiBody()));
 
-    const reply = await invoke({ lat: "52.52", lng: "13.405" });
+    const reply = await invoke("/times", { lat: "52.52", lng: "13.405" });
 
     expect(reply.statusCode).toBe(200);
     expect(reply.payload).toEqual({
@@ -115,7 +145,7 @@ describe("GET /times sunrise-sunset route", () => {
   it("resolves the IANA zone from the coordinate and requests ISO output", async () => {
     mockFetch.mockResolvedValueOnce(mockOk(apiBody()));
 
-    await invoke({ lat: "52.52", lng: "13.405" });
+    await invoke("/times", { lat: "52.52", lng: "13.405" });
 
     const url = String(mockFetch.mock.calls[0]?.[0]);
     expect(url).toContain("lat=52.52&lng=13.405");
@@ -124,7 +154,7 @@ describe("GET /times sunrise-sunset route", () => {
   });
 
   it("400s on non-numeric coordinates without calling upstream", async () => {
-    const reply = await invoke({ lat: "abc", lng: "13.4" });
+    const reply = await invoke("/times", { lat: "abc", lng: "13.4" });
 
     expect(reply.statusCode).toBe(400);
     expect(reply.payload).toEqual({ message: "Invalid coordinates" });
@@ -134,7 +164,7 @@ describe("GET /times sunrise-sunset route", () => {
   it("502s when the upstream returns a non-OK HTTP status", async () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 503 } as Response);
 
-    const reply = await invoke({ lat: "52.52", lng: "13.405" });
+    const reply = await invoke("/times", { lat: "52.52", lng: "13.405" });
 
     expect(reply.statusCode).toBe(502);
     expect(reply.payload).toEqual({ message: "Sunrise-Sunset data unavailable" });
@@ -145,7 +175,7 @@ describe("GET /times sunrise-sunset route", () => {
       mockOk({ status: "INVALID_REQUEST", tzid: "UTC", results: {} }),
     );
 
-    const reply = await invoke({ lat: "52.52", lng: "13.405" });
+    const reply = await invoke("/times", { lat: "52.52", lng: "13.405" });
 
     expect(reply.statusCode).toBe(502);
     expect(reply.payload).toEqual({ message: "Sunrise-Sunset API error: INVALID_REQUEST" });
@@ -154,9 +184,85 @@ describe("GET /times sunrise-sunset route", () => {
   it("502s when the fetch itself throws", async () => {
     mockFetch.mockRejectedValueOnce(new Error("network down"));
 
-    const reply = await invoke({ lat: "52.52", lng: "13.405" });
+    const reply = await invoke("/times", { lat: "52.52", lng: "13.405" });
 
     expect(reply.statusCode).toBe(502);
     expect(reply.payload).toEqual({ message: "Sunrise-Sunset data unavailable" });
+  });
+});
+
+// /timezone returns only the zone id — no fetch involved, so these tests
+// never stub `fetch` and instead drive a real CacheClient double to pin the
+// cache key shape and TTL.
+describe("GET /timezone route", () => {
+  it("resolves a land coordinate to its IANA zone", async () => {
+    const reply = await invoke(
+      "/timezone",
+      { lat: "52.52", lng: "13.405" },
+      { cache: makeCache() },
+    );
+
+    expect(reply.statusCode).toBe(200);
+    expect(reply.payload).toEqual({ timezone: "Europe/Berlin" });
+    expect(reply.headers["Cache-Control"]).toBe("public, max-age=86400");
+  });
+
+  it("still resolves an ocean coordinate to a truthy zone id", async () => {
+    // geo-tz falls back to a 15-degree-wide Etc/GMT band whenever no land
+    // polygon covers the point, so mid-ocean coordinates always resolve —
+    // they never hit the `findTimezone(...)[0] ?? "UTC"` fallback.
+    const reply = await invoke("/timezone", { lat: "0", lng: "-160" }, { cache: makeCache() });
+
+    expect(reply.statusCode).toBe(200);
+    const { timezone } = reply.payload as { timezone: string };
+    expect(timezone).toBeTruthy();
+    expect(typeof timezone).toBe("string");
+  });
+
+  it("400s on non-numeric coordinates without touching the cache", async () => {
+    const cache = makeCache();
+
+    const reply = await invoke("/timezone", { lat: "abc", lng: "13.4" }, { cache });
+
+    expect(reply.statusCode).toBe(400);
+    expect(reply.payload).toEqual({ message: "Invalid coordinates" });
+    expect(cache.get).not.toHaveBeenCalled();
+  });
+
+  it("400s on out-of-range coordinates instead of throwing", async () => {
+    // geo-tz's `find` throws on out-of-range input (e.g. lat > 90) rather
+    // than returning an empty array, so range must be validated before the
+    // lookup runs or this crashes the handler instead of 400ing.
+    const cache = makeCache();
+
+    const reply = await invoke("/timezone", { lat: "200", lng: "13.4" }, { cache });
+
+    expect(reply.statusCode).toBe(400);
+    expect(reply.payload).toEqual({ message: "Invalid coordinates" });
+    expect(cache.get).not.toHaveBeenCalled();
+  });
+
+  it("stores a fresh lookup under the rounded-coordinate key with a 30-day TTL", async () => {
+    const cache = makeCache();
+
+    await invoke("/timezone", { lat: "52.5243", lng: "13.40567" }, { cache });
+
+    expect(cache.get).toHaveBeenCalledWith("tz:52.5243,13.4057");
+    expect(cache.set).toHaveBeenCalledWith(
+      "tz:52.5243,13.4057",
+      { timezone: "Europe/Berlin" },
+      2_592_000,
+    );
+  });
+
+  it("short-circuits on a cache hit without recomputing or re-storing", async () => {
+    const cache = makeCache({ "tz:52.52,13.405": { timezone: "Fake/Zone" } });
+
+    const reply = await invoke("/timezone", { lat: "52.52", lng: "13.405" }, { cache });
+
+    expect(reply.statusCode).toBe(200);
+    expect(reply.payload).toEqual({ timezone: "Fake/Zone" });
+    expect(reply.headers["Cache-Control"]).toBe("public, max-age=86400");
+    expect(cache.set).not.toHaveBeenCalled();
   });
 });
