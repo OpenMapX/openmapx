@@ -34,6 +34,7 @@ import {
   TRANSIT_ACCESS_RENTAL_FORM_FACTORS,
   timeZoneAt,
   tzDiffMinutes,
+  tzOffsetLabel,
   useAutocomplete,
   useCapabilities,
   useDebounce,
@@ -148,6 +149,15 @@ export function DirectionsPanelContent() {
     if (!from || !to) return null;
     return tzDiffMinutes(new Date(), from, to) ? to : null;
   }, [origin, destination]);
+  // Gate the caption on the resolved label rather than the zone id itself:
+  // tzOffsetLabel can still fail on a stale or unrecognised tzid even after
+  // destinationTimeZone resolved, in which case the arrival already fell
+  // back to the viewer's zone and the caption would otherwise claim a
+  // re-zoning that didn't happen.
+  const destinationOffsetLabel = useMemo(
+    () => (destinationTimeZone ? tzOffsetLabel(new Date(), destinationTimeZone) : null),
+    [destinationTimeZone],
+  );
   // The start renders in the origin's zone whenever that differs from the
   // viewer's own — otherwise "startTime" would keep rendering in the
   // viewer's zone while "endTime" renders in the destination's, producing a
@@ -1134,7 +1144,7 @@ export function DirectionsPanelContent() {
                   {i < transitItineraries.length - 1 && <Divider />}
                 </Box>
               ))}
-              {destinationTimeZone && (
+              {destinationOffsetLabel && (
                 <Typography sx={{ fontSize: 11, color: "text.secondary", px: 2, pb: 1 }}>
                   {t("arrivalInDestinationTime")}
                 </Typography>

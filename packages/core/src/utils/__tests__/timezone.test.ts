@@ -65,6 +65,42 @@ function withBareGmtZeroFormat<T>(fn: () => T): T {
   }
 }
 
+/**
+ * Simulates a hypothetical engine whose localized-GMT `timeZoneName` variants
+ * use "UTC" rather than "GMT" as the offset prefix — i.e. "UTC+02:00" instead
+ * of "GMT+02:00" — to prove the bare-word fallback doesn't also accept a
+ * *signed* "UTC" string as zero. `\bUTC\b` alone would match right before the
+ * "+" in "UTC+02:00", which is exactly the failure mode `\b(?:GMT|UTC)\b`
+ * (an earlier version of the zero-offset fallback) had: it silently returned
+ * 0 for a genuinely non-zero offset.
+ */
+function withUtcSignedFormat<T>(fn: () => T): T {
+  const RealDateTimeFormat = Intl.DateTimeFormat;
+  const stub = new Proxy(RealDateTimeFormat, {
+    construct(target, args) {
+      const instance = Reflect.construct(target, args) as Intl.DateTimeFormat;
+      const options = args[1] as Intl.DateTimeFormatOptions | undefined;
+      if (options?.timeZoneName !== "longOffset" && options?.timeZoneName !== "shortOffset") {
+        return instance;
+      }
+      return new Proxy(instance, {
+        get(target2, prop, receiver) {
+          if (prop === "format") {
+            return (date?: Date | number) => instance.format(date).replace(/GMT/, "UTC");
+          }
+          return Reflect.get(target2, prop, receiver);
+        },
+      });
+    },
+  });
+  Intl.DateTimeFormat = stub;
+  try {
+    return fn();
+  } finally {
+    Intl.DateTimeFormat = RealDateTimeFormat;
+  }
+}
+
 describe("tzOffsetMinutes", () => {
   it("follows northern-hemisphere DST", () => {
     expect(tzOffsetMinutes(WINTER, "Europe/Berlin")).toBe(60);
@@ -123,6 +159,15 @@ describe("tzOffsetMinutes", () => {
 
   it("still returns null for an unrecognized zone id under the bare-GMT engine", () => {
     expect(withBareGmtZeroFormat(() => tzOffsetMinutes(WINTER, "Mars/Olympus"))).toBeNull();
+  });
+
+  it("does not parse a signed UTC-prefixed offset as zero", () => {
+    // Regression: a `\bUTC\b` alternative in the zero-offset fallback would
+    // match right before the "+" in "UTC+02:00" and silently return 0 for
+    // this genuinely non-zero offset — worse than the null it degrades to
+    // now that "UTC" isn't matched at all.
+    expect(withUtcSignedFormat(() => tzOffsetMinutes(WINTER, "Europe/Berlin"))).toBeNull();
+    expect(withUtcSignedFormat(() => tzOffsetMinutes(WINTER, "America/New_York"))).toBeNull();
   });
 });
 

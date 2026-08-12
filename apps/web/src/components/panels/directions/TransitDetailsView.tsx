@@ -345,8 +345,13 @@ export function TransitDetailsView({
         </Typography>
         {/* This view is an early return from the itinerary list, so the
             explanatory line the list renders below its cards never reaches
-            the screen here — without it, the chip above is unexplained. */}
-        {destinationTimeZone && (
+            the screen here — without it, the chip above is unexplained. Gate
+            on the resolved label, matching the chip above: destinationTimeZone
+            alone can be set while tzOffsetLabel fails to resolve it (a stale
+            or unrecognised tzid), in which case endTime already fell back to
+            the viewer's zone and this caption would otherwise claim a
+            re-zoning that didn't happen. */}
+        {destinationOffsetLabel && (
           <Typography sx={{ fontSize: 11, color: "text.secondary", mt: 0.5, display: "block" }}>
             {t("arrivalInDestinationTime")}
           </Typography>

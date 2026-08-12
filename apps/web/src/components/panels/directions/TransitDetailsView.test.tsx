@@ -187,6 +187,26 @@ describe("TransitDetailsView destination time zone", () => {
     expect(markup).not.toMatch(/\bUTC\b/);
     expect(markup).not.toContain("arrivalInDestinationTime");
   });
+
+  it("renders neither the chip nor the caption when the zone id can't be resolved to an offset", () => {
+    // A zone id the platform doesn't recognise (stale/unrecognised tzid):
+    // tzOffsetLabel returns null, endTime already falls back to the viewer's
+    // zone, and the caption must not claim a re-zoning that didn't happen —
+    // it has to be gated on the resolved label, not the raw prop.
+    const itinerary = makeItinerary([undefined]);
+    const markup = renderToStaticMarkup(
+      <TransitDetailsView
+        itinerary={itinerary}
+        originLabel="A"
+        destinationLabel="B"
+        destinationTimeZone="Mars/Olympus"
+        onBack={() => {}}
+      />,
+    );
+
+    expect(markup).not.toMatch(/\bUTC\b/);
+    expect(markup).not.toContain("arrivalInDestinationTime");
+  });
 });
 
 describe("TransitDetailsView per-leg attribution", () => {

@@ -289,11 +289,12 @@ describe("DirectionsPanelContent", () => {
     expect((await screen.findAllByTestId("transit-itinerary-card")).length).toBe(2);
     expect(useDirectionsStore.getState().transitItineraries.length).toBe(2);
     // Berlin -> Munich is same-zone, so the destination-zone caption must not
-    // render. This also pins the (lat, lng) argument order passed to the
-    // real timeZoneAt (mocked here via importOriginal): waypoint coords are
-    // stored as [lng, lat], and swapping that order on this same pair
-    // resolves to Asia/Aden vs Africa/Mogadishu instead — two different
-    // zones — which would make this assertion fail.
+    // render. Note this does *not* pin the (lat, lng) argument order on its
+    // own: swapping it on this exact pair resolves to Asia/Aden vs
+    // Africa/Mogadishu, which happen to share the same GMT+03:00 offset, so
+    // the offset-diff gate would still suppress the caption and this
+    // assertion would still pass either way. The Berlin -> Tokyo spec below
+    // is what actually pins the order.
     expect(screen.queryByText("directions.arrivalInDestinationTime")).toBeNull();
   });
 
@@ -324,6 +325,13 @@ describe("DirectionsPanelContent", () => {
     renderPanel();
 
     await screen.findAllByTestId("transit-itinerary-card");
+    // This is what actually pins the (lat, lng) argument order passed to the
+    // real timeZoneAt (mocked here via importOriginal): waypoint coords are
+    // stored as [lng, lat] and the assertion below requires the destination
+    // zone to have resolved. Swapping the order for Tokyo's [139.69, 35.68]
+    // calls timeZoneAt(139.69, 35.68) — 139.69 isn't a valid latitude, so
+    // tz-lookup throws, timeZoneAt degrades to null, destinationTimeZone
+    // stays null, and this assertion fails.
     expect(screen.getByText("directions.arrivalInDestinationTime")).toBeInTheDocument();
   });
 
