@@ -3676,6 +3676,57 @@
         "x-openmapx-source": "integrations/overlay-weather/index.ts"
       }
     },
+    "/api/integrations/overlay-wildfires/burned-areas/effis": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayWildfiresBurnedAreasEffis",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /burned-areas/effis (overlay-wildfires)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-wildfires",
+        "x-openmapx-source": "integrations/overlay-wildfires/index.ts"
+      }
+    },
+    "/api/integrations/overlay-wildfires/perimeters/nifc": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayWildfiresPerimetersNifc",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /perimeters/nifc (overlay-wildfires)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-wildfires",
+        "x-openmapx-source": "integrations/overlay-wildfires/index.ts"
+      }
+    },
+    "/api/integrations/overlay-wildfires/smoke/noaa": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlayWildfiresSmokeNoaa",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /smoke/noaa (overlay-wildfires)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-wildfires",
+        "x-openmapx-source": "integrations/overlay-wildfires/index.ts"
+      }
+    },
     "/api/integrations/overlay-wildfires/wildfires": {
       "get": {
         "operationId": "getApiIntegrationsOverlayWildfiresWildfires",

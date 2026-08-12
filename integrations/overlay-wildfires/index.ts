@@ -1,10 +1,143 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import type { IntegrationContext, RouteHandler } from "@openmapx/integration-framework";
+import { nifcOffsetForZoom, normalizeViewport } from "./bounds.js";
+import { EffisSourceError, loadEffis } from "./effis.js";
 import { type FirmsDayRange, type FirmsSource, loadFirms } from "./firms.js";
+import { loadNifc } from "./nifc.js";
+import { loadNoaaSmoke } from "./noaa-smoke.js";
+import { loadWithFreshAndStaleCache } from "./source-cache.js";
+import type { NormalizedViewport, WildfireProvider, WildfireProviderData } from "./types.js";
 
 export { csvToGeoJSON, parseAcqDateTime } from "./firms.js";
 
 const DAY_RANGES: FirmsDayRange[] = [1, 2, 3];
 const SOURCES: FirmsSource[] = ["VIIRS_SNPP_NRT", "MODIS_NRT"];
+const SOURCE_CACHE = {
+  nifc: { fresh: 300, stale: 86_400 },
+  effis: { fresh: 1_800, stale: 172_800 },
+  "noaa-hms": { fresh: 600, stale: 86_400 },
+} as const;
+
+type ViewportSource = "nifc" | "effis";
+type RouteReply = Parameters<RouteHandler>[1];
+
+function viewportCacheKey(source: ViewportSource, bounds: NormalizedViewport): string {
+  const normalizedBounds = `${bounds.west}:${bounds.south}:${bounds.east}:${bounds.north}`;
+  return source === "nifc"
+    ? `wildfires:${source}:${normalizedBounds}:offset:${nifcOffsetForZoom(bounds.zoom)}`
+    : `wildfires:${source}:${normalizedBounds}`;
+}
+
+function cacheControl(freshTtlSeconds: number): string {
+  return `public, max-age=${freshTtlSeconds}, s-maxage=${freshTtlSeconds}`;
+}
+
+function unavailableReply(reply: RouteReply, code: string): void {
+  reply.header("Cache-Control", "no-store");
+  reply.status(503).send({ code });
+}
+
+function invalidViewportReply(reply: RouteReply): void {
+  reply.header("Cache-Control", "no-store");
+  reply.status(400).send({ message: "Invalid viewport" });
+}
+
+function sourceFailureDetails(
+  source: WildfireProvider,
+  error: unknown,
+): { kind: string; upstreamStatus?: number } | null {
+  if (error instanceof EffisSourceError) {
+    const upstreamStatus = upstreamStatusFromMessage(error.message);
+    return { kind: "source-error", ...(upstreamStatus === undefined ? {} : { upstreamStatus }) };
+  }
+  if (error instanceof Error && error.name === "AbortError") return { kind: "aborted" };
+  if (!(error instanceof Error)) return null;
+
+  const prefixes = {
+    nifc: ["NIFC API returned", "Invalid NIFC", "NIFC request aborted"],
+    effis: [],
+    "noaa-hms": [
+      "NOAA API returned",
+      "Invalid NOAA",
+      "NOAA request aborted",
+      "NOAA response exceeded",
+    ],
+  } as const;
+  if (prefixes[source].some((prefix) => error.message.startsWith(prefix))) {
+    const upstreamStatus = upstreamStatusFromMessage(error.message);
+    return {
+      kind: upstreamStatus === undefined ? "source-error" : "upstream-status",
+      ...(upstreamStatus === undefined ? {} : { upstreamStatus }),
+    };
+  }
+  if (error instanceof TypeError && /fetch/i.test(error.message)) return { kind: "network" };
+  return null;
+}
+
+function upstreamStatusFromMessage(message: string): number | undefined {
+  const match = /API returned (\d{3})/.exec(message);
+  return match ? Number(match[1]) : undefined;
+}
+
+function sendCachedSource(
+  reply: RouteReply,
+  cache: { fresh: number },
+  result: { value: WildfireProviderData; fetchedAt: string; stale: boolean },
+): void {
+  reply.header("Cache-Control", cacheControl(cache.fresh));
+  reply.send({ ...result.value, fetchedAt: result.fetchedAt, stale: result.stale });
+}
+
+function viewportSourceHandler(
+  ctx: IntegrationContext,
+  source: ViewportSource,
+  code: string,
+  load: (ctx: IntegrationContext, bounds: NormalizedViewport) => Promise<WildfireProviderData>,
+): RouteHandler {
+  return async (req, reply) => {
+    let bounds: NormalizedViewport;
+    try {
+      bounds = normalizeViewport(req.query);
+    } catch {
+      invalidViewportReply(reply);
+      return;
+    }
+
+    try {
+      const result = await loadWithFreshAndStaleCache(ctx, {
+        key: viewportCacheKey(source, bounds),
+        freshTtlSeconds: SOURCE_CACHE[source].fresh,
+        staleTtlSeconds: SOURCE_CACHE[source].stale,
+        load: () => load(ctx, bounds),
+      });
+      sendCachedSource(reply, SOURCE_CACHE[source], result);
+    } catch (error) {
+      const details = sourceFailureDetails(source, error);
+      if (!details) throw error;
+      ctx.log.warn("Wildfire source unavailable", { provider: source, ...details });
+      unavailableReply(reply, code);
+    }
+  };
+}
+
+function noaaSmokeHandler(ctx: IntegrationContext): RouteHandler {
+  const source = "noaa-hms" as const;
+  return async (_req, reply) => {
+    try {
+      const result = await loadWithFreshAndStaleCache(ctx, {
+        key: "wildfires:noaa-hms",
+        freshTtlSeconds: SOURCE_CACHE[source].fresh,
+        staleTtlSeconds: SOURCE_CACHE[source].stale,
+        load: () => loadNoaaSmoke(ctx),
+      });
+      sendCachedSource(reply, SOURCE_CACHE[source], result);
+    } catch (error) {
+      const details = sourceFailureDetails(source, error);
+      if (!details) throw error;
+      ctx.log.warn("Wildfire source unavailable", { provider: source, ...details });
+      unavailableReply(reply, "noaa_hms_unavailable");
+    }
+  };
+}
 
 export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/wildfires", async (req, reply) => {
@@ -37,4 +170,16 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(503).send({ message: "Wildfire data temporarily unavailable" });
     }
   });
+
+  ctx.registerRoute(
+    "GET",
+    "/perimeters/nifc",
+    viewportSourceHandler(ctx, "nifc", "nifc_unavailable", loadNifc),
+  );
+  ctx.registerRoute(
+    "GET",
+    "/burned-areas/effis",
+    viewportSourceHandler(ctx, "effis", "effis_unavailable", loadEffis),
+  );
+  ctx.registerRoute("GET", "/smoke/noaa", noaaSmokeHandler(ctx));
 }

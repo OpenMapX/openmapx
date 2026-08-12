@@ -1,5 +1,7 @@
+import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { csvToGeoJSON, parseAcqDateTime } from "./firms.js";
+import { setup } from "./index.js";
 
 describe("parseAcqDateTime", () => {
   it("pads HHMM time and parses as UTC epoch ms", () => {
@@ -112,5 +114,276 @@ describe("csvToGeoJSON", () => {
 
     expect(fc.features[0].properties.frp).toBe(0);
     expect(fc.features[0].properties.brightness).toBe(0);
+  });
+});
+
+const VALID_VIEWPORT = {
+  west: "-123",
+  south: "37",
+  east: "-122",
+  north: "38",
+  zoom: "10",
+};
+
+function response(status: number, body: unknown, contentType = "application/json"): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: new Headers({ "content-type": contentType }),
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  } as Response;
+}
+
+function validNifcCollection() {
+  return {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        id: 42,
+        properties: {
+          attr_IncidentName: "Test Fire",
+          attr_IncidentTypeCategory: "WF",
+        },
+        geometry: {
+          type: "Polygon",
+          coordinates: [
+            [
+              [-123, 37],
+              [-122, 37],
+              [-122, 38],
+              [-123, 37],
+            ],
+          ],
+        },
+      },
+    ],
+  };
+}
+
+function validEffisCollection() {
+  return {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        id: "42",
+        properties: { AREA_HA: "12.5" },
+        geometry: {
+          type: "Polygon",
+          coordinates: [
+            [
+              [-123, 37],
+              [-122, 37],
+              [-122, 38],
+              [-123, 37],
+            ],
+          ],
+        },
+      },
+    ],
+  };
+}
+
+function replyFake() {
+  let body: unknown;
+  let statusCode = 200;
+  const headers = new Map<string, string>();
+  const send = (data: unknown) => {
+    body = data;
+  };
+
+  return {
+    reply: {
+      send,
+      status: (code: number) => {
+        statusCode = code;
+        return { send };
+      },
+      header: (name: string, value: string) => {
+        headers.set(name, value);
+      },
+      type: () => {},
+    },
+    result: () => ({ body, statusCode, headers }),
+  };
+}
+
+function routeHandler(ctx: ReturnType<typeof createMockIntegrationContext>, path: string) {
+  const registration = ctx.registered.routes.find((route) => route.path === path);
+  if (!registration) throw new Error(`Route ${path} was not registered`);
+  return registration.handler;
+}
+
+describe("wildfire source routes", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-12T12:00:00Z"));
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("registers FIRMS and each independent source route as GET", () => {
+    const ctx = createMockIntegrationContext();
+
+    setup(ctx);
+
+    expect(ctx.registered.routes.map(({ method, path }) => ({ method, path }))).toEqual([
+      { method: "GET", path: "/wildfires" },
+      { method: "GET", path: "/perimeters/nifc" },
+      { method: "GET", path: "/burned-areas/effis" },
+      { method: "GET", path: "/smoke/noaa" },
+    ]);
+  });
+
+  it("rejects an invalid NIFC viewport before fetching upstream", async () => {
+    const ctx = createMockIntegrationContext();
+    setup(ctx);
+    const result = replyFake();
+
+    await routeHandler(ctx, "/perimeters/nifc")(
+      {
+        query: { ...VALID_VIEWPORT, north: "not-a-number" },
+        params: {},
+        body: undefined,
+        headers: {},
+      },
+      result.reply,
+    );
+
+    expect(result.result()).toMatchObject({ statusCode: 400 });
+    expect(result.result().headers.get("Cache-Control")).toBe("no-store");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a fresh NIFC envelope with its cache policy", async () => {
+    fetchMock.mockResolvedValueOnce(response(200, validNifcCollection()));
+    const ctx = createMockIntegrationContext();
+    setup(ctx);
+    const result = replyFake();
+
+    await routeHandler(ctx, "/perimeters/nifc")(
+      { query: VALID_VIEWPORT, params: {}, body: undefined, headers: {} },
+      result.reply,
+    );
+
+    expect(result.result()).toMatchObject({
+      statusCode: 200,
+      body: {
+        source: "nifc",
+        fetchedAt: "2026-08-12T12:00:00.000Z",
+        stale: false,
+        truncated: false,
+      },
+    });
+    expect(result.result().headers.get("Cache-Control")).toBe("public, max-age=300, s-maxage=300");
+  });
+
+  it("returns a fresh EFFIS envelope with its cache policy", async () => {
+    fetchMock.mockResolvedValueOnce(response(200, validEffisCollection()));
+    const ctx = createMockIntegrationContext();
+    setup(ctx);
+    const result = replyFake();
+
+    await routeHandler(ctx, "/burned-areas/effis")(
+      { query: VALID_VIEWPORT, params: {}, body: undefined, headers: {} },
+      result.reply,
+    );
+
+    expect(result.result()).toMatchObject({
+      statusCode: 200,
+      body: {
+        source: "effis",
+        fetchedAt: "2026-08-12T12:00:00.000Z",
+        stale: false,
+        truncated: false,
+      },
+    });
+    expect(result.result().headers.get("Cache-Control")).toBe(
+      "public, max-age=1800, s-maxage=1800",
+    );
+  });
+
+  it("serves stale NIFC data with its original fetched time", async () => {
+    fetchMock.mockRejectedValueOnce(new Error("NIFC API returned 502"));
+    const ctx = createMockIntegrationContext({
+      cache: {
+        get: async (key) =>
+          key.endsWith(":stale")
+            ? {
+                value: {
+                  type: "FeatureCollection",
+                  features: [],
+                  source: "nifc",
+                  truncated: false,
+                },
+                fetchedAt: "2026-08-12T11:00:00.000Z",
+              }
+            : null,
+        set: async () => undefined,
+        del: async () => undefined,
+        withCache: async <_T>(_key, _ttl, load) => load(),
+      },
+    });
+    setup(ctx);
+    const result = replyFake();
+
+    await routeHandler(ctx, "/perimeters/nifc")(
+      { query: VALID_VIEWPORT, params: {}, body: undefined, headers: {} },
+      result.reply,
+    );
+
+    expect(result.result()).toMatchObject({
+      statusCode: 200,
+      body: { fetchedAt: "2026-08-12T11:00:00.000Z", stale: true },
+    });
+    expect(result.result().headers.get("Cache-Control")).toBe("public, max-age=300, s-maxage=300");
+  });
+
+  it.each([
+    ["/perimeters/nifc", "nifc_unavailable"],
+    ["/burned-areas/effis", "effis_unavailable"],
+    ["/smoke/noaa", "noaa_hms_unavailable"],
+  ])("returns a no-store 503 when %s is unavailable", async (path, code) => {
+    fetchMock.mockResolvedValueOnce(response(503, { error: "upstream failure" }));
+    const ctx = createMockIntegrationContext();
+    setup(ctx);
+    const result = replyFake();
+
+    await routeHandler(ctx, path)(
+      {
+        query: path === "/smoke/noaa" ? {} : VALID_VIEWPORT,
+        params: {},
+        body: undefined,
+        headers: {},
+      },
+      result.reply,
+    );
+
+    expect(result.result()).toMatchObject({ statusCode: 503, body: { code } });
+    expect(result.result().headers.get("Cache-Control")).toBe("no-store");
+  });
+
+  it("rethrows an unexpected NIFC error for monitoring", async () => {
+    fetchMock.mockRejectedValueOnce(new Error("programmer failure"));
+    const ctx = createMockIntegrationContext();
+    setup(ctx);
+    const result = replyFake();
+
+    await expect(
+      routeHandler(ctx, "/perimeters/nifc")(
+        { query: VALID_VIEWPORT, params: {}, body: undefined, headers: {} },
+        result.reply,
+      ),
+    ).rejects.toThrow("programmer failure");
   });
 });
