@@ -70,6 +70,42 @@ describe("BrandHeaderCard", () => {
     expect(screen.queryByLabelText("Aldi website")).not.toBeInTheDocument();
   });
 
+  // The attribution URLs are the least trusted input this card renders:
+  // `licenseUrl` is a Commons `extmetadata` value and `authorUrl` is parsed out
+  // of the `Artist` HTML blob. The repo-wide href gate allowlists binding names
+  // rather than tracking sanitization, so once `authorUrl`/`licenseUrl` are
+  // listed there it can no longer tell whether they are still wrapped in
+  // `safeHref` — these assertions are what actually holds that guarantee.
+  it("does not render links for javascript: attribution URLs", () => {
+    useCategorySearchStore.getState().setBrandFilter(
+      {
+        qid: "Q41171",
+        name: "Aldi",
+        kind: ["brand"],
+        description: "German supermarket chain",
+        logoFile: "Aldi Nord Logo.svg",
+      },
+      { selectors: [{ tags: [{ key: "brand:wikidata", op: "=", value: "Q41171" }] }] },
+    );
+    mockUseBrandDetail.mockReturnValue({ data: undefined });
+    mockUseBrandLogoAttribution.mockReturnValue({
+      data: {
+        author: "Some Author",
+        authorUrl: "javascript:alert(1)",
+        license: "CC BY-SA 4.0",
+        licenseUrl: "javascript:alert(2)",
+      },
+    });
+
+    renderCard();
+
+    // The credit text still renders — only the hostile hrefs are dropped, so the
+    // attribution itself is never suppressed by a bad URL.
+    expect(screen.getByText(/Some Author/)).toBeInTheDocument();
+    expect(screen.getByText(/CC BY-SA 4\.0/)).toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
   it("renders name and description immediately, before attribution resolves", () => {
     useCategorySearchStore.getState().setBrandFilter(
       {

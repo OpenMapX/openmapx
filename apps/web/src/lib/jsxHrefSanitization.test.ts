@@ -41,9 +41,13 @@ const ALLOWED: Record<string, string[]> = {
   // Both bindings are `safeHref(...)` results, held in a const so the button is
   // rendered only when sanitization actually returned a URL.
   "components/panels/place/contributions/OsmContributionGate.tsx": ["messagesHref", "termsHref"],
-  // `website` is `safeHref(detail?.website)`, held in a const so the link is
-  // rendered only when sanitization actually returned a URL.
-  "components/panels/category/BrandHeaderCard.tsx": ["website"],
+  // All three are `safeHref(...)` results, each held in a const so its link is
+  // rendered only when sanitization actually returned a URL. Every input is
+  // third-party: `website` comes from the NSI-derived brand catalog, while
+  // `authorUrl` is pulled out of Wikimedia Commons' `Artist` HTML blob by
+  // `extractHref` and `licenseUrl` off a Commons `extmetadata` field — an
+  // href parsed out of remote HTML is exactly the shape `safeHref` exists for.
+  "components/panels/category/BrandHeaderCard.tsx": ["website", "authorUrl", "licenseUrl"],
   "components/admin/integrations/CredentialSetupGuide.tsx": ["url", "buildMailto(setup.email)"],
   "components/panels/place/PlaceAirportInfo.tsx": ["airport.homeLink", "ourAirportsUrl"],
   "components/panels/place/DataSourceSections.tsx": ["rentalUri"],
