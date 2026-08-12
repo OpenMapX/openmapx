@@ -331,6 +331,19 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
   const pricesIndex = showPrices ? 2 : -1;
   const infoIndex = showPrices ? 3 : 2;
 
+  // Shared by the branded and unbranded title below, so a future change to
+  // `pr`, `noWrap`, or any other shared prop can't land on only one branch.
+  // The branded branch alone adds `flex: 1, minWidth: 0` on top of `titleSx`
+  // — it sits in a flex row next to the brand logo and needs its own shrink
+  // target for `noWrap`'s ellipsis to kick in at peek.
+  const titleProps = {
+    ref: titleRef,
+    variant: "h6" as const,
+    gutterBottom: true,
+    noWrap: detent === "peek",
+  };
+  const titleSx = { fontWeight: 600, pr: onClose && !showHeaderWeather ? 4 : 0 };
+
   return (
     <>
       {/* Header photo with "View photos" — hidden at peek so the collapsed
@@ -403,9 +416,11 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
         <Box sx={{ display: "flex", alignItems: "flex-start" }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             {/* The brand logo adds a flex row around the title; every other
-                place keeps the original bare `Typography` exactly as before —
-                no wrapper, no extra sx — so unbranded results (still the
-                large majority) render unchanged. */}
+                place keeps the plain, unwrapped `Typography` — no wrapper, no
+                extra sx — so unbranded results (still the large majority)
+                render unchanged. Both branches share `titleProps`/`titleSx`
+                above so they can't drift apart on the props they have in
+                common. */}
             {brandQid ? (
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                 <BrandLogo
@@ -417,35 +432,12 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
                   }}
                   size={24}
                 />
-                <Typography
-                  ref={titleRef}
-                  variant="h6"
-                  gutterBottom
-                  noWrap={detent === "peek"}
-                  sx={{
-                    fontWeight: 600,
-                    pr: onClose && !showHeaderWeather ? 4 : 0,
-                    // Flex item alongside the logo, not a lone block child —
-                    // needs its own shrink target so `noWrap`'s ellipsis still
-                    // kicks in at peek instead of the row just overflowing.
-                    flex: 1,
-                    minWidth: 0,
-                  }}
-                >
+                <Typography {...titleProps} sx={{ ...titleSx, flex: 1, minWidth: 0 }}>
                   {place.name}
                 </Typography>
               </Box>
             ) : (
-              <Typography
-                ref={titleRef}
-                variant="h6"
-                gutterBottom
-                noWrap={detent === "peek"}
-                sx={{
-                  fontWeight: 600,
-                  pr: onClose && !showHeaderWeather ? 4 : 0,
-                }}
-              >
+              <Typography {...titleProps} sx={titleSx}>
                 {place.name}
               </Typography>
             )}

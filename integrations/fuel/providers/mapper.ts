@@ -127,6 +127,11 @@ export function mapFuelStationToDetail(station: FuelStation): DataSourceDetail {
     // and no OSM tags, so this is a no-op for them; without it, a station
     // reachable only via this mapper would fall back to BrandMark's monogram
     // initial instead of the real Commons logo the list/pin already show.
+    // Currently unreachable regardless: provider.ts's stationCache is only
+    // populated on the priced-feed search branch, never on the Overpass
+    // fallback branch (which is the one that actually carries osmTags), so a
+    // cache miss there 404s before this mapper ever runs. Kept as-is — the
+    // fix is caching OSM-fallback stations, a separate change.
     branding: gapFillBranding(undefined, station.osmTags, resolveBrand),
   };
 }

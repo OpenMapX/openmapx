@@ -13,14 +13,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next-intl", () => ({ useLocale: () => "en" }));
 
-// POIs along the corridor, standing in for the category (and, when swapped in
-// below, filter) search response. Shared by both branches so the "same shape
-// out of either path" test below is comparing against one fixture, not two
-// hand-maintained copies that could quietly drift apart.
+// POIs along the corridor, standing in for the category search response.
 const places = [
   { id: "a", name: "A", coordinates: [0.001, 0.0002] },
   { id: "b", name: "B", coordinates: [0.002, -0.0003] },
   { id: "c", name: "C", coordinates: [0.003, 0.0001] },
+];
+
+// A deliberately different-shaped fixture for the filter search response —
+// different ids, names, coordinates, *and* length (2 vs 3) from `places`. If
+// the filter-path render below ever picked up `places` instead — e.g. because
+// `active` inside useRouteSearch stopped selecting `useFilterSearch` — the
+// results would come back as 3 items with `places`' ids, not 2 with these,
+// and the assertions below would catch it.
+const filterPlaces = [
+  { id: "x", name: "X", coordinates: [0.0015, 0.0004] },
+  { id: "y", name: "Y", coordinates: [0.0035, -0.0002] },
 ];
 
 // Most of these tests only exercise the category path, so this starts (and is
@@ -100,28 +108,37 @@ describe("useRouteSearch route index ownership", () => {
     filterSearchResult = { data: undefined, isLoading: false, isError: false };
   });
 
-  it("produces the same AlongRoutePoi shape through the filter path as the category path", () => {
+  it("selects the filter search over the category search when a filter is given", () => {
     // Same route, same progress (none published — both hooks read the default
-    // alongMeters=0), and the same `places` fixture behind each search hook:
-    // the only difference is which of useCategorySearch/useFilterSearch is
-    // wired to `active` inside useRouteSearch. If the two paths ever produced
-    // different AlongRoutePoi shapes, this equality would catch it — a type
-    // annotation alone would not.
+    // alongMeters=0). The category and filter mocks return deliberately
+    // different fixtures (`places` vs `filterPlaces`, 3 items vs 2, disjoint
+    // ids), so the filter-path render's `results` can only match `filterPlaces`
+    // if `active` inside useRouteSearch actually picked `useFilterSearch`. If
+    // `active` were inverted or hardcoded to the category hook, this render
+    // would come back with `places`' 3 ids instead and the assertions below
+    // would fail.
     const { result: categoryResult } = renderHook(() => useRouteSearch({ category: "fuel" }));
-    expect(categoryResult.current.results.length).toBeGreaterThan(0);
+    expect(categoryResult.current.results.length).toBe(places.length);
+    expect(categoryResult.current.results.map((r) => r.place.id).sort()).toEqual(["a", "b", "c"]);
     expect(categoryResult.current.isLoading).toBe(false);
     expect(categoryResult.current.isError).toBe(false);
 
-    filterSearchResult = { data: { results: places }, isLoading: false, isError: false };
+    filterSearchResult = { data: { results: filterPlaces }, isLoading: false, isError: false };
     const brandFilter: OverpassFilter = {
       selectors: [{ tags: [{ key: "brand:wikidata", op: "=", value: "Q1" }] }],
     };
     const { result: filterResult } = renderHook(() => useRouteSearch({ filter: brandFilter }));
 
-    expect(filterResult.current.results).toEqual(categoryResult.current.results);
-    expect(filterResult.current.results.length).toBe(categoryResult.current.results.length);
+    expect(filterResult.current.results.length).toBe(filterPlaces.length);
+    expect(filterResult.current.results.map((r) => r.place.id).sort()).toEqual(["x", "y"]);
     expect(filterResult.current.isLoading).toBe(false);
     expect(filterResult.current.isError).toBe(false);
+
+    // The two paths still produce the same AlongRoutePoi *shape* — same field
+    // set per result — even though the underlying places differ.
+    expect(Object.keys(filterResult.current.results[0]).sort()).toEqual(
+      Object.keys(categoryResult.current.results[0]).sort(),
+    );
   });
 
   it("indexes the route once and reuses it for progress-only refreshes", () => {
