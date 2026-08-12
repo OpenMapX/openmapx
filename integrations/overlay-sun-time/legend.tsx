@@ -112,6 +112,11 @@ export default function SunTimeLegend() {
           slotProps={{ input: { "aria-label": t("timeZones") } }}
         />
       </Box>
+      {showTimeZones && (
+        <Typography sx={{ fontSize: 11, color: "text.secondary", mt: 0.25 }}>
+          {t("timeZonesZoomHint")}
+        </Typography>
+      )}
 
       <Box sx={{ display: "flex", gap: 0.25, mt: 1.5, mb: 0.5 }}>
         {BAND_STOPS.map((stop) => (

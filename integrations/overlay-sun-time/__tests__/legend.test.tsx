@@ -92,6 +92,14 @@ describe("SunTimeLegend", () => {
     expect(useSunTimeStore.getState().showTimeZones).toBe(true);
   });
 
+  it("shows the zoom hint only while the time zone sub-toggle is on", () => {
+    render(<SunTimeLegend />);
+    expect(screen.queryByText("sunTime.timeZonesZoomHint")).toBeNull();
+
+    fireEvent.click(screen.getByLabelText("sunTime.timeZones"));
+    expect(screen.getByText("sunTime.timeZonesZoomHint")).toBeTruthy();
+  });
+
   it("reflects a pinned instant in the date field and the time slider", () => {
     // 23:57 local — past the old 1430-minute slider max, so a regression back
     // to that ceiling would clamp this value and fail the assertion below.

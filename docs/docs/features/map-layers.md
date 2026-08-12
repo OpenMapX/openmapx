@@ -125,6 +125,20 @@ wind, and pressure tiles need an OpenWeather API key. The weather overlay here i
 the map-wide layer — the per-place forecast lives in the [weather](./weather.md)
 feature.
 
+### Daylight & time zones
+
+| Overlay                   | Shows                                                          | Data                                        |
+| -------------------------- | --------------------------------------------------------------- | -------------------------------------------- |
+| **Daylight & time zones** | Day/night terminator with civil, nautical, and astronomical twilight shading, plus time zone boundaries and their current UTC offset | Terminator computed locally; boundaries from timezone-boundary-builder (OpenStreetMap) |
+
+The terminator is computed locally from the sun's position for the selected
+date and time — it credits no external source. Time zone boundaries are a
+separate sub-toggle: polygons derived from OpenStreetMap under the ODbL,
+tinted and labeled with their current UTC offset, rendered up to zoom 8 (past
+that, city scale, the boundaries get noisy and the fill loses its point).
+Clicking a zone shows a popup with its local time and offset at whatever
+instant the overlay's time scrubber is set to.
+
 ### Hazards & natural events
 
 | Overlay              | Shows                                                  | Data            |

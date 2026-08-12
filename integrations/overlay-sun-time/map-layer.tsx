@@ -1,11 +1,21 @@
 "use client";
 
-import { subsolarPoint, twilightBands, tzOffsetLabel, tzOffsetMinutes } from "@openmapx/core";
+import {
+  escapeHtml,
+  formatInTimeZone,
+  subsolarPoint,
+  twilightBands,
+  tzOffsetLabel,
+  tzOffsetMinutes,
+} from "@openmapx/core";
+import type { MapLayerMouseEvent } from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import type { GeoJsonSourceDataEntry } from "@/components/map/layers/layerStyleUtils";
 import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { useEnv } from "@/lib/EnvProvider";
+import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
 import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { useSunTimeStore } from "./store";
@@ -96,6 +106,7 @@ export default function SunTimeLayer() {
   const env = useEnv();
   const setTzLoading = useSunTimeStore((s) => s.setTzLoading);
   const tzActive = layerVisible && showTimeZones;
+  const popupRef = useRef<maplibregl.Popup | null>(null);
 
   // Credits the vendored boundary source only while the time zone toggle
   // itself is on, not merely while the overlay is — the terminator shading
@@ -478,6 +489,64 @@ export default function SunTimeLayer() {
     }
     if (entries.length > 0) publish(entries);
   }, [active, tzActive, bands, subsolar, decoratedZones, publish, clear]);
+
+  // Zone click popup, registered only while tzActive so it tears down the
+  // same run the sub-toggle turns off, not just on unmount — matching the
+  // teardown discipline `syncLayers` above already applies to the layers
+  // themselves. `instant` is a dependency so a stale closure never answers a
+  // click with the wall-clock time from when the layer mounted instead of
+  // the scrubbed one currently on screen.
+  useEffect(() => {
+    void styleVersion;
+    const map = mapRef.current;
+    if (!map || !mapReady || !tzActive) return;
+
+    const onClick = (e: MapLayerMouseEvent) => {
+      const feature = e.features?.[0];
+      if (!feature) return;
+      const properties = feature.properties as Record<string, string>;
+      const tzid = String(properties.tzid ?? "");
+      if (!tzid) return;
+
+      // The vendored "now" variant dissolves zones that share identical
+      // current rules, so one polygon can carry a representative name for a
+      // whole merged group — Berlin's is tagged Europe/Paris. The offset and
+      // the local time are exact for every point in the polygon; the name is
+      // not, so it stays out of the UI and is used only to derive the clock.
+      const localTime = formatInTimeZone(new Date(instant), tzid);
+      if (localTime === null) return;
+
+      const html =
+        `<div style="font-family:'Plus Jakarta Sans',Arial,sans-serif;min-width:140px">` +
+        `<div style="font-size:20px;font-weight:600">${escapeHtml(localTime)}</div>` +
+        `<div style="font-size:12px;color:#666">${escapeHtml(String(properties.offsetLabel ?? ""))}</div>` +
+        `</div>`;
+
+      popupRef.current?.remove();
+      popupRef.current = new maplibregl.Popup({ closeButton: true, className: "omx-popup" })
+        .setLngLat(e.lngLat)
+        .setHTML(html)
+        .addTo(map);
+    };
+
+    const onMouseMove = (e: maplibregl.MapMouseEvent) => {
+      if (!map.getLayer(TZ_FILL_LAYER_ID)) return;
+      const features = map.queryRenderedFeatures(e.point, { layers: [TZ_FILL_LAYER_ID] });
+      map.getCanvasContainer().style.cursor = features.length > 0 ? "pointer" : "";
+    };
+
+    map.on("click", TZ_FILL_LAYER_ID, onClick);
+    map.on("mousemove", onMouseMove);
+    INTERACTIVE_LAYER_IDS.add(TZ_FILL_LAYER_ID);
+
+    return () => {
+      map.off("click", TZ_FILL_LAYER_ID, onClick);
+      map.off("mousemove", onMouseMove);
+      map.getCanvasContainer().style.cursor = "";
+      popupRef.current?.remove();
+      INTERACTIVE_LAYER_IDS.delete(TZ_FILL_LAYER_ID);
+    };
+  }, [mapRef, mapReady, styleVersion, tzActive, instant]);
 
   return null;
 }
