@@ -256,8 +256,8 @@ describe("NoaaSmokeLayer", () => {
     expect(fake.state.layers.get(NOAA_SMOKE_LINE)?.type).toBe("line");
     expect(layerRegistrations()).toEqual(
       expect.arrayContaining([
-        { id: NOAA_SMOKE_FILL, slot: "area-overlays", order: 0 },
-        { id: NOAA_SMOKE_LINE, slot: "area-overlays", order: 1 },
+        { id: NOAA_SMOKE_FILL, slot: "area-overlays", order: 3 },
+        { id: NOAA_SMOKE_LINE, slot: "area-overlays", order: 4 },
       ]),
     );
     expect([...fake.state.layers.keys()]).toEqual([

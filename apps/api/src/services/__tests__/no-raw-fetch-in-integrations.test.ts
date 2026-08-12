@@ -43,7 +43,13 @@ const RAW_FETCH_ALLOWLIST: Record<string, string> = {
   "integrations/overlay-weather-alerts/index.ts": "MeteoAlarm Atom+CAP feeds are XML, not JSON",
   "integrations/overlay-weather/index.ts":
     "RainViewer + OWM tile proxies: forward binary PNG tiles verbatim",
-  "integrations/overlay-wildfires/index.ts": "FIRMS wildfire feed is CSV, not JSON",
+  "integrations/overlay-wildfires/effis.ts":
+    "EFFIS may return XML exception bodies for its GeoJSON endpoint, so the adapter inspects content type and raw text",
+  "integrations/overlay-wildfires/firms.ts": "FIRMS wildfire feed is CSV, not JSON",
+  "integrations/overlay-wildfires/nifc.ts":
+    "adapter maps timeout, network, HTTP status, and malformed ArcGIS JSON to provider-specific source errors",
+  "integrations/overlay-wildfires/noaa-smoke.ts":
+    "adapter maps timeout, network, HTTP status, malformed JSON, and ArcGIS error envelopes to provider-specific source errors",
   "integrations/overlay-winter-sports/index.ts":
     "tile proxy: forwards the binary PNG tile body and status verbatim",
   "integrations/photos/orchestrator.ts":

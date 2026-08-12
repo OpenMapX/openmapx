@@ -12,9 +12,9 @@ import { useMap } from "@/lib/MapContext";
 import type { WildfirePopupController, WildfirePopupLease } from "../popup-controller";
 import {
   buildNoaaSmokePopupModel,
+  renderWildfirePopupModel as buildPopupCard,
   NOAA_SMOKE_DENSITY_STYLE,
   NOAA_SMOKE_STYLE,
-  renderWildfirePopupModel,
   type WildfirePopupTranslate,
 } from "../presentation";
 import { useWildfireStore } from "../store";
@@ -255,7 +255,7 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
               paint: { "fill-color": FILL_COLOR, "fill-opacity": FILL_OPACITY },
             },
             "area-overlays",
-            0,
+            3,
           );
         }
         if (!map.getLayer(NOAA_SMOKE_LINE)) {
@@ -272,7 +272,7 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
               },
             },
             "area-overlays",
-            1,
+            4,
           );
         }
       } catch {
@@ -297,10 +297,7 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
     const onClick = (event: MapLayerMouseEvent) => {
       const properties = event.features?.[0]?.properties;
       if (!isNoaaSmokeProperties(properties)) return;
-      const html = renderWildfirePopupModel(
-        buildNoaaSmokePopupModel(properties, locale),
-        translate,
-      );
+      const html = buildPopupCard(buildNoaaSmokePopupModel(properties, locale), translate);
       popupController.open(
         popupLease.current,
         new maplibregl.Popup({ closeButton: true, maxWidth: "320px", className: "omx-popup" })

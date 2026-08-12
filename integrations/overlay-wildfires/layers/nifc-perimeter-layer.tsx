@@ -12,8 +12,8 @@ import { useMap } from "@/lib/MapContext";
 import type { WildfirePopupController, WildfirePopupLease } from "../popup-controller";
 import {
   buildNifcPopupModel,
+  renderWildfirePopupModel as buildPopupCard,
   NIFC_PERIMETER_STYLE,
-  renderWildfirePopupModel,
   type WildfirePopupTranslate,
 } from "../presentation";
 import type { NifcProperties, WildfireFeatureCollection } from "../types";
@@ -224,7 +224,7 @@ export function NifcPerimeterLayer({ active, popupController }: NifcPerimeterLay
   const popupHtml = useCallback(
     (properties: Record<string, unknown>) => {
       if (properties.kind !== "reported-perimeter" || properties.provider !== "nifc") return null;
-      return renderWildfirePopupModel(
+      return buildPopupCard(
         buildNifcPopupModel(properties as unknown as NifcProperties, locale),
         translate,
       );
