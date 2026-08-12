@@ -6,6 +6,16 @@
       "purpose": "Aktive Waldbrand-/Feuererkennungen weltweit, nach Feuerstrahlungsleistung skaliert und nach Aktualität eingefärbt",
       "dataSent": "Satellitenquelle (VIIRS oder MODIS), Zeitraum in Tagen (1-3)",
       "dataReceived": "CSV mit Breitengrad, Längengrad, Datum/Uhrzeit, Konfidenz, Satellit, Feuerstrahlungsleistung (MW), Temperatur (K)"
+    },
+    "nifc": {
+      "purpose": "Bestverfügbare aktuelle Perimeter von US-Waldbränden aus WFIGS. Dynamische Daten sind keine Rechtsdokumente; NIFC übernimmt keine Gewähr für Genauigkeit, Zuverlässigkeit oder Vollständigkeit.",
+      "dataSent": "Generalisierte Begrenzungsrahmen-Koordinaten (West, Süd, Ost, Nord) und Kartenzommstufe werden serverseitig übermittelt; keine Browser-IP, Identität oder exakte Gerätestandortdaten werden weitergegeben.",
+      "dataReceived": "GeoJSON mit aktuellen Waldbrand-Perimeterpolygonen, Einsatzname, gemeldeter Fläche, Eindämmung, Entdeckungs-/Aktualisierungszeit, Bundesstaat und Ursache"
+    },
+    "effis": {
+      "purpose": "Satellitenabgeleitete wöchentliche MODIS-Flächen verbrannter Gebiete für Europa, den Nahen Osten und Nordafrika; kein autoritativer Brandperimeter.",
+      "dataSent": "Generalisierte Begrenzungsrahmen-Koordinaten (West, Süd, Ost, Nord) werden serverseitig übermittelt; keine Browser-IP, Identität oder exakte Gerätestandortdaten werden weitergegeben.",
+      "dataReceived": "GeoJSON mit satellitenabgeleiteter Polygon-/MultiPolygon-Geometrie verbrannter Flächen, Hektarfläche, Daten, Land/Region/Ort und Quellenklasse; kein autoritativer Brandperimeter"
     }
   }
 }
