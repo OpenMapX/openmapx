@@ -93,6 +93,7 @@ export function EffisBurnedAreaLayer({ active, popupController }: EffisBurnedAre
     lineOrder: 11,
     fillPaint: EFFIS_FILL_PAINT,
     linePaint: EFFIS_LINE_PAINT,
+    popupOwner: "effis",
     popupController,
     popupHtml,
   });

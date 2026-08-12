@@ -291,6 +291,36 @@ describe("WildfireLayer source orchestration", () => {
     ).toBe(false);
   });
 
+  it("credits FIRMS only while it is loading or has rendered data", async () => {
+    let resolveRequest!: (value: Response) => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveRequest = resolve;
+          }),
+      ),
+    );
+    useWildfireStore.setState({
+      showNifcPerimeters: false,
+      showEffisBurnedAreas: false,
+      showNoaaSmoke: false,
+    });
+    render(<WildfireLayer />);
+
+    await waitFor(() =>
+      expect(attributionState.filtered).toHaveBeenLastCalledWith("overlay-wildfires", ["firms"]),
+    );
+
+    await act(async () => {
+      resolveRequest({ ok: false, status: 503, json: async () => ({}) } as Response);
+    });
+    await waitFor(() =>
+      expect(attributionState.filtered).toHaveBeenLastCalledWith("overlay-wildfires", []),
+    );
+  });
+
   it("removes the first popup when a different source opens the next one", async () => {
     vi.stubGlobal(
       "fetch",
@@ -317,5 +347,80 @@ describe("WildfireLayer source orchestration", () => {
     expect(popupState.instances).toHaveLength(2);
     expect(popupState.instances[0]?.removeCalls).toBe(1);
     expect(popupState.instances[1]?.removeCalls).toBe(0);
+  });
+
+  it("does not close a perimeter popup when inactive smoke cleans up", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => successfulResponse(url)),
+    );
+    useWildfireStore.setState({
+      showHotspots: false,
+      showEffisBurnedAreas: false,
+      showNoaaSmoke: true,
+    });
+    render(<WildfireLayer />);
+    await waitFor(() =>
+      expect(fake.state.layers.has("openmapx-wildfires-noaa-smoke-fill")).toBe(true),
+    );
+
+    act(() => {
+      handler(
+        "click",
+        "openmapx-wildfires-nifc-fill",
+      )({
+        features: [providerCollection("nifc").features[0]],
+        lngLat: { lng: 8, lat: 50 },
+      });
+    });
+    expect(popupState.instances).toHaveLength(1);
+
+    act(() => useWildfireStore.getState().setShowNoaaSmoke(false));
+    await waitFor(() =>
+      expect(fake.state.layers.has("openmapx-wildfires-noaa-smoke-fill")).toBe(false),
+    );
+    expect(popupState.instances[0]?.removeCalls).toBe(0);
+  });
+
+  it("ignores old-owner cleanup after replacement and lets the current owner close", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => successfulResponse(url)),
+    );
+    useWildfireStore.setState({
+      showHotspots: false,
+      showEffisBurnedAreas: false,
+      showNoaaSmoke: true,
+    });
+    render(<WildfireLayer />);
+    await waitFor(() =>
+      expect(fake.state.layers.has("openmapx-wildfires-noaa-smoke-fill")).toBe(true),
+    );
+
+    act(() => {
+      handler(
+        "click",
+        "openmapx-wildfires-nifc-fill",
+      )({
+        features: [providerCollection("nifc").features[0]],
+        lngLat: { lng: 8, lat: 50 },
+      });
+      handler(
+        "click",
+        "openmapx-wildfires-noaa-smoke-fill",
+      )({
+        features: [providerCollection("noaa-hms").features[0]],
+        lngLat: { lng: 8, lat: 50 },
+      });
+    });
+    expect(popupState.instances).toHaveLength(2);
+    expect(popupState.instances[0]?.removeCalls).toBe(1);
+
+    act(() => useWildfireStore.getState().setShowNifcPerimeters(false));
+    await waitFor(() => expect(fake.state.layers.has("openmapx-wildfires-nifc-fill")).toBe(false));
+    expect(popupState.instances[1]?.removeCalls).toBe(0);
+
+    act(() => useWildfireStore.getState().setShowNoaaSmoke(false));
+    await waitFor(() => expect(popupState.instances[1]?.removeCalls).toBe(1));
   });
 });

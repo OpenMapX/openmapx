@@ -9,9 +9,11 @@ const mapContext = vi.hoisted(() => ({ mapRef: { current: null as FakeMap["map"]
 const popupState = vi.hoisted(() => ({
   instances: [] as Array<{ html: string; removeCalls: number }>,
 }));
+let mapReady = true;
+let styleVersion = 0;
 
 vi.mock("@/lib/MapContext", () => ({
-  useMap: () => ({ mapRef: mapContext.mapRef, mapReady: true, styleVersion: 0 }),
+  useMap: () => ({ mapRef: mapContext.mapRef, mapReady, styleVersion }),
 }));
 
 vi.mock("@/lib/EnvProvider", () => ({
@@ -127,6 +129,8 @@ let fake: FakeMap;
 beforeEach(() => {
   fake = createFakeMap({ baseLayers: [{ id: "place-labels", type: "symbol" }] });
   mapContext.mapRef.current = fake.map;
+  mapReady = true;
+  styleVersion = 0;
   popupState.instances.length = 0;
   useWildfireStore.getState().resetSourceStatus("noaa-hms");
 });
@@ -236,6 +240,17 @@ describe("NoaaSmokeLayer", () => {
       0.24,
       0.08,
     ]);
+    expect(fake.state.paint.get(NOAA_SMOKE_FILL)?.["fill-color"]).toEqual([
+      "match",
+      ["get", "density"],
+      "light",
+      "#cbd5e1",
+      "medium",
+      "#94a3b8",
+      "heavy",
+      "#64748b",
+      "#94a3b8",
+    ]);
     expect(fake.state.layers.get(NOAA_SMOKE_FILL)?.type).toBe("fill");
     expect(fake.state.layers.get(NOAA_SMOKE_LINE)?.type).toBe("line");
     expect(layerRegistrations()).toEqual(
@@ -257,6 +272,30 @@ describe("NoaaSmokeLayer", () => {
       error: null,
       featureCount: 1,
     });
+  });
+
+  it("starts exactly one initial fetch when the map becomes ready after mount", async () => {
+    mapReady = false;
+    mapContext.mapRef.current = null;
+    const fetchMock = vi.fn(async () => response(smokeCollection()));
+    vi.stubGlobal("fetch", fetchMock);
+    const controller = popupController();
+    const view = render(<NoaaSmokeLayer active popupController={controller} />);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    mapContext.mapRef.current = fake.map;
+    mapReady = true;
+    view.rerender(<NoaaSmokeLayer active popupController={controller} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(fake.state.sources.get(NOAA_SMOKE_SOURCE)?.data).toEqual(smokeCollection()),
+    );
+
+    styleVersion += 1;
+    view.rerender(<NoaaSmokeLayer active popupController={controller} />);
+    act(() => fake.emit("styledata"));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("refreshes every ten minutes and retains the last good collection on failure", async () => {
@@ -370,6 +409,7 @@ describe("NoaaSmokeLayer", () => {
     });
 
     expect(controller.open).toHaveBeenCalledTimes(1);
+    expect(controller.open).toHaveBeenCalledWith("noaa-hms", expect.anything());
     const html = popupState.instances[0]?.html ?? "";
     expect(html).toContain("[observedSmoke]");
     expect(html).toContain("[noaaObservedSmokeCaveat]");
@@ -408,7 +448,7 @@ describe("NoaaSmokeLayer", () => {
       error: null,
       featureCount: null,
     });
-    expect(controller.close).toHaveBeenCalled();
+    expect(controller.close).toHaveBeenCalledWith("noaa-hms");
     for (const event of ["styledata", "click", "mouseenter", "mouseleave"]) {
       const ons = fake.state.listenerCalls.filter(
         (call) => call.method === "on" && call.event === event,

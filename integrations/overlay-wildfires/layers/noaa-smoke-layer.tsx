@@ -167,7 +167,7 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
   });
 
   const fetchSmoke = useCallback(async () => {
-    if (!active || !mapContext.mapRef.current) return;
+    if (!active || !mapContext.mapReady || !mapContext.mapRef.current) return;
     const request = bridge.beginRequest();
     setSourceStatus("noaa-hms", { loading: true, error: null });
     try {
@@ -194,7 +194,15 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
       if (!request.isCurrent()) return;
       setSourceStatus("noaa-hms", { loading: false, error: "unavailable" });
     }
-  }, [active, bridge.beginRequest, bridge.publish, env.apiUrl, mapContext.mapRef, setSourceStatus]);
+  }, [
+    active,
+    bridge.beginRequest,
+    bridge.publish,
+    env.apiUrl,
+    mapContext.mapReady,
+    mapContext.mapRef,
+    setSourceStatus,
+  ]);
 
   useEffect(() => {
     if (!active) {
@@ -229,7 +237,7 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
     const sync = () => {
       if (!active) {
         remove();
-        popupController.close();
+        popupController.close("noaa-hms");
         return;
       }
       try {
@@ -277,7 +285,7 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
     return () => {
       map.off("styledata", sync);
       remove();
-      popupController.close();
+      popupController.close("noaa-hms");
     };
   }, [active, mapContext.mapReady, mapContext.mapRef, mapContext.styleVersion, popupController]);
 
@@ -293,6 +301,7 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
         translate,
       );
       popupController.open(
+        "noaa-hms",
         new maplibregl.Popup({ closeButton: true, maxWidth: "320px", className: "omx-popup" })
           .setLngLat(event.lngLat)
           .setHTML(html)
@@ -320,7 +329,6 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
         INTERACTIVE_LAYER_IDS.delete(layerId);
       }
       map.getCanvasContainer().style.cursor = "";
-      popupController.close();
     };
   }, [active, locale, mapContext.mapReady, mapContext.mapRef, popupController, translate]);
 

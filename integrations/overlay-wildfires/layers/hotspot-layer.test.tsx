@@ -487,6 +487,7 @@ describe("HotspotLayer", () => {
     await waitFor(() => expect(signal?.aborted).toBe(true));
     await waitFor(() => expect(useWildfireStore.getState().loading).toBe(false));
     expect(fake.state.sources.has(SOURCE_ID)).toBe(false);
+    expect(controller.close).toHaveBeenCalledWith("firms");
   });
 
   it("aborts an active request and clears loading when unmounted", async () => {
@@ -644,7 +645,8 @@ describe("HotspotLayer", () => {
     });
 
     expect(controller.open).toHaveBeenCalledTimes(1);
-    const popup = controller.open.mock.calls[0]?.[0] as { html?: string } | undefined;
+    expect(controller.open).toHaveBeenCalledWith("firms", expect.anything());
+    const popup = controller.open.mock.calls[0]?.[1] as { html?: string } | undefined;
     expect(popup?.html).toContain("&lt;svg onload=&quot;alert(2)&quot;&gt;");
     expect(popup?.html).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
     expect(popup?.html).toContain("&lt;img src=x onerror=&quot;alert(3)&quot;&gt;");

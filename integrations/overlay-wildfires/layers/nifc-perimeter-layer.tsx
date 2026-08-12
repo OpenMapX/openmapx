@@ -16,7 +16,7 @@ import {
   type WildfirePopupTranslate,
 } from "../presentation";
 import type { NifcProperties, WildfireFeatureCollection } from "../types";
-import type { WildfirePopupController } from "./hotspot-layer";
+import type { WildfirePopupController, WildfirePopupOwner } from "./hotspot-layer";
 import { useViewportWildfireSource } from "./use-viewport-wildfire-source";
 
 export const NIFC_SOURCE = "openmapx-wildfires-nifc-source";
@@ -42,6 +42,7 @@ interface PolygonLayerLifecycleOptions {
   lineOrder: number;
   fillPaint: Extract<maplibregl.AddLayerObject, { type: "fill" }>["paint"];
   linePaint: Extract<maplibregl.AddLayerObject, { type: "line" }>["paint"];
+  popupOwner: WildfirePopupOwner;
   popupController: WildfirePopupController;
   popupHtml(properties: Record<string, unknown>): string | null;
 }
@@ -56,6 +57,7 @@ export function usePolygonLayerLifecycle({
   lineOrder,
   fillPaint,
   linePaint,
+  popupOwner,
   popupController,
   popupHtml,
 }: PolygonLayerLifecycleOptions): void {
@@ -81,7 +83,7 @@ export function usePolygonLayerLifecycle({
     const sync = () => {
       if (!active) {
         remove();
-        popupController.close();
+        popupController.close(popupOwner);
         return;
       }
       try {
@@ -127,7 +129,7 @@ export function usePolygonLayerLifecycle({
     return () => {
       map.off("styledata", sync);
       remove();
-      popupController.close();
+      popupController.close(popupOwner);
     };
   }, [
     active,
@@ -140,6 +142,7 @@ export function usePolygonLayerLifecycle({
     mapReady,
     mapRef,
     popupController,
+    popupOwner,
     sourceId,
     styleVersion,
   ]);
@@ -154,6 +157,7 @@ export function usePolygonLayerLifecycle({
       const html = popupHtml(feature.properties as Record<string, unknown>);
       if (!html) return;
       popupController.open(
+        popupOwner,
         new maplibregl.Popup({
           closeButton: true,
           maxWidth: "320px",
@@ -185,9 +189,8 @@ export function usePolygonLayerLifecycle({
         INTERACTIVE_LAYER_IDS.delete(layerId);
       }
       map.getCanvasContainer().style.cursor = "";
-      popupController.close();
     };
-  }, [active, fillId, lineId, mapReady, mapRef, popupController, popupHtml]);
+  }, [active, fillId, lineId, mapReady, mapRef, popupController, popupHtml, popupOwner]);
 }
 
 const NIFC_FILL_PAINT: Extract<maplibregl.AddLayerObject, { type: "fill" }>["paint"] = {
@@ -249,6 +252,7 @@ export function NifcPerimeterLayer({ active, popupController }: NifcPerimeterLay
     lineOrder: 21,
     fillPaint: NIFC_FILL_PAINT,
     linePaint: NIFC_LINE_PAINT,
+    popupOwner: "nifc",
     popupController,
     popupHtml,
   });

@@ -70,9 +70,11 @@ const RECENCY_COLOR_EXPR: maplibregl.ExpressionSpecification = [
 ];
 
 export interface WildfirePopupController {
-  open(popup: maplibregl.Popup): void;
-  close(): void;
+  open(owner: WildfirePopupOwner, popup: maplibregl.Popup): void;
+  close(owner: WildfirePopupOwner): void;
 }
+
+export type WildfirePopupOwner = "firms" | "nifc" | "effis" | "noaa-hms";
 
 export interface HotspotLayerProps {
   active: boolean;
@@ -89,7 +91,7 @@ function confidenceLabel(conf: string): string {
 
 export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
   const { mapRef, mapReady, styleVersion } = useMap();
-  const env = useEnv();
+  const { apiUrl } = useEnv();
   const dayRange = useWildfireStore((s) => s.dayRange);
   const source = useWildfireStore((s) => s.source);
   const showHeatmap = useWildfireStore((s) => s.showHeatmap);
@@ -110,7 +112,6 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
     const map = mapRef.current;
     if (!map) return;
 
-    const { apiUrl } = env;
     const url = `${apiUrl}/api/integrations/overlay-wildfires/wildfires?dayRange=${dayRange}&source=${source}`;
 
     const request = beginRequest();
@@ -152,7 +153,7 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
     }
   }, [
     beginRequest,
-    env,
+    apiUrl,
     mapRef,
     dayRange,
     source,
@@ -189,7 +190,7 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
         }
         unregisterLayerSlot(HEATMAP_LAYER_ID);
         unregisterLayerSlot(CIRCLE_LAYER_ID);
-        popupController.close();
+        popupController.close("firms");
         fetchedRef.current = false;
         return;
       }
@@ -379,6 +380,7 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
       </div>`;
 
       popupController.open(
+        "firms",
         new maplibregl.Popup({
           closeButton: true,
           maxWidth: "280px",
@@ -408,7 +410,6 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
       map.off("mouseenter", CIRCLE_LAYER_ID, onMouseEnter);
       map.off("mouseleave", CIRCLE_LAYER_ID, onMouseLeave);
       map.getCanvasContainer().style.cursor = "";
-      popupController.close();
       INTERACTIVE_LAYER_IDS.delete(CIRCLE_LAYER_ID);
     };
   }, [mapReady, mapRef, styleVersion, active, popupController, t]);

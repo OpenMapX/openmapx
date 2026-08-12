@@ -320,6 +320,8 @@ describe("wildfire perimeter layers", () => {
     expect(effisPopup?.html).toContain("[effisBurnedAreaCaveat]");
     expect(effisPopup?.html).toContain("Vila &lt;Nova&gt;");
     expect(controller.open).toHaveBeenCalledTimes(2);
+    expect(controller.open).toHaveBeenNthCalledWith(1, "nifc", expect.anything());
+    expect(controller.open).toHaveBeenNthCalledWith(2, "effis", expect.anything());
   });
 
   it("registers fill and line interactions and removes every listener and registry entry", () => {
@@ -359,7 +361,8 @@ describe("wildfire perimeter layers", () => {
     for (const registration of registrations) {
       expect(fake.state.listenerCalls).toContainEqual({ ...registration, method: "off" });
     }
-    expect(controller.close).toHaveBeenCalled();
+    expect(controller.close).toHaveBeenCalledWith("nifc");
+    expect(controller.close).toHaveBeenCalledWith("effis");
   });
 
   it("removes only the toggled source and aborts only its in-flight request", async () => {
