@@ -31,9 +31,21 @@ export const NOAA_SMOKE_STYLE = {
   lineWidth: 0.75,
 } as const;
 
+export type WildfireMeasurementUnitKey = "acres" | "hectares";
+
+export interface WildfirePopupMeasurement {
+  formatted: string;
+  unitKey: WildfireMeasurementUnitKey;
+}
+
+export type WildfirePopupValue =
+  | string
+  | { kind: "measurements"; values: WildfirePopupMeasurement[] }
+  | { kind: "density"; value: NoaaSmokeProperties["density"] };
+
 export interface WildfirePopupField {
   key: string;
-  value: string;
+  value: WildfirePopupValue;
 }
 
 export interface WildfirePopupModel {
@@ -59,14 +71,9 @@ export function formatWildfireDate(value: string | undefined, locale: string): s
   }).format(date);
 }
 
-function formatHectares(value: number | undefined, locale: string): string | null {
+function formatAreaNumber(value: number | undefined, locale: string): string | null {
   if (value === undefined || !Number.isFinite(value) || value < 0) return null;
-  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value)} ha`;
-}
-
-function formatAcres(value: number | undefined, locale: string): string | null {
-  if (value === undefined || !Number.isFinite(value) || value < 0) return null;
-  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value)} acres`;
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value);
 }
 
 function escapedField(key: string, value: string | undefined): WildfirePopupField | null {
@@ -93,15 +100,23 @@ export function buildNifcPopupModel(
   properties: NifcProperties,
   locale: string,
 ): WildfirePopupModel {
-  const areaAcres = formatAcres(properties.areaAcres, locale);
+  const areaAcres = formatAreaNumber(properties.areaAcres, locale);
   const areaHectares =
     properties.areaAcres !== undefined &&
     Number.isFinite(properties.areaAcres) &&
     properties.areaAcres >= 0
-      ? formatHectares(acresToHectares(properties.areaAcres), locale)
+      ? formatAreaNumber(acresToHectares(properties.areaAcres), locale)
       : null;
   const reportedArea =
-    areaAcres && areaHectares ? `${areaAcres} (${areaHectares})` : (areaAcres ?? areaHectares);
+    areaAcres && areaHectares
+      ? {
+          kind: "measurements" as const,
+          values: [
+            { formatted: areaAcres, unitKey: "acres" as const },
+            { formatted: areaHectares, unitKey: "hectares" as const },
+          ],
+        }
+      : null;
   const containment =
     properties.containmentPercent !== undefined &&
     Number.isFinite(properties.containmentPercent) &&
@@ -129,12 +144,20 @@ export function buildEffisPopupModel(
   properties: EffisProperties,
   locale: string,
 ): WildfirePopupModel {
-  const area = formatHectares(properties.areaHectares, locale);
+  const area = formatAreaNumber(properties.areaHectares, locale);
 
   return {
     title: { kind: "message", key: "satelliteDerivedBurnedArea" },
     fields: compactFields([
-      area ? { key: "area", value: area } : null,
+      area
+        ? {
+            key: "area",
+            value: {
+              kind: "measurements",
+              values: [{ formatted: area, unitKey: "hectares" }],
+            },
+          }
+        : null,
       dateField("detected", properties.detectedAt, locale),
       dateField("updated", properties.updatedAt, locale),
       escapedField("region", properties.region),
@@ -150,12 +173,10 @@ export function buildNoaaSmokePopupModel(
   properties: NoaaSmokeProperties,
   locale: string,
 ): WildfirePopupModel {
-  const density = `${properties.density[0].toUpperCase()}${properties.density.slice(1)}`;
-
   return {
     title: { kind: "message", key: "observedSmoke" },
     fields: compactFields([
-      { key: "density", value: density },
+      { key: "density", value: { kind: "density", value: properties.density } },
       escapedField("satellite", properties.satellite),
       dateField("started", properties.startedAt, locale),
       dateField("ended", properties.endedAt, locale),

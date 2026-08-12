@@ -8,7 +8,27 @@ import {
   formatWildfireDate,
   NIFC_PERIMETER_STYLE,
   NOAA_SMOKE_OPACITY,
+  type WildfirePopupValue,
 } from "./presentation.js";
+
+const JA_UNITS = {
+  acres: "エーカー",
+  hectares: "ヘクタール",
+} as const;
+
+const JA_DENSITIES = {
+  light: "薄い",
+  medium: "中程度",
+  heavy: "濃い",
+} as const;
+
+function renderJapaneseValue(value: WildfirePopupValue): string {
+  if (typeof value === "string") return value;
+  if (value.kind === "density") return JA_DENSITIES[value.value];
+  return value.values
+    .map((measurement) => `${measurement.formatted} ${JA_UNITS[measurement.unitKey]}`)
+    .join(" / ");
+}
 
 describe("wildfire presentation", () => {
   it("converts acres to hectares", () => {
@@ -43,7 +63,16 @@ describe("wildfire presentation", () => {
         value: "&lt;img src=x onerror=&quot;alert(1)&quot;&gt; Pine Fire",
       },
       fields: [
-        { key: "reportedArea", value: "100 acres (40.5 ha)" },
+        {
+          key: "reportedArea",
+          value: {
+            kind: "measurements",
+            values: [
+              { formatted: "100", unitKey: "acres" },
+              { formatted: "40.5", unitKey: "hectares" },
+            ],
+          },
+        },
         { key: "containment", value: "25%" },
         { key: "updated", value: "2 Jan 2026, 15:04" },
         { key: "region", value: "US-CA &amp; NV" },
@@ -89,7 +118,13 @@ describe("wildfire presentation", () => {
     ).toEqual({
       title: { kind: "message", key: "satelliteDerivedBurnedArea" },
       fields: [
-        { key: "area", value: "1,234.6 ha" },
+        {
+          key: "area",
+          value: {
+            kind: "measurements",
+            values: [{ formatted: "1,234.6", unitKey: "hectares" }],
+          },
+        },
         { key: "detected", value: "2 Jan 2026, 15:04" },
         { key: "region", value: "Norte" },
         { key: "locality", value: "Vila &lt;Nova&gt;" },
@@ -117,13 +152,52 @@ describe("wildfire presentation", () => {
     ).toEqual({
       title: { kind: "message", key: "observedSmoke" },
       fields: [
-        { key: "density", value: "Heavy" },
+        { key: "density", value: { kind: "density", value: "heavy" } },
         { key: "satellite", value: "GOES-18 &lt;West&gt;" },
         { key: "started", value: "2 Jan 2026, 15:04" },
         { key: "ended", value: "2 Jan 2026, 17:04" },
       ],
       caveatKeys: ["noaaObservedSmokeCaveat"],
     });
+  });
+
+  it("lets a non-English renderer localize units and smoke density without parsing values", () => {
+    const nifc = buildNifcPopupModel(
+      {
+        id: "nifc:ja",
+        kind: "reported-perimeter",
+        provider: "nifc",
+        coverage: "United States",
+        name: "Pine Fire",
+        areaAcres: 100,
+      },
+      "ja-JP",
+    );
+    const effis = buildEffisPopupModel(
+      {
+        id: "effis:ja",
+        kind: "satellite-burned-area",
+        provider: "effis",
+        areaHectares: 1234.56,
+      },
+      "ja-JP",
+    );
+    const noaa = buildNoaaSmokePopupModel(
+      {
+        id: "noaa-hms:ja",
+        kind: "observed-smoke",
+        provider: "noaa-hms",
+        density: "heavy",
+      },
+      "ja-JP",
+    );
+
+    expect(renderJapaneseValue(nifc.fields[0].value)).toBe("100 エーカー / 40.5 ヘクタール");
+    expect(renderJapaneseValue(effis.fields[0].value)).toBe("1,234.6 ヘクタール");
+    expect(renderJapaneseValue(noaa.fields[0].value)).toBe("濃い");
+    expect(JSON.stringify([nifc, effis, noaa])).not.toMatch(
+      /100 acres \(40\.5 ha\)|1,234\.6 ha|"Heavy"/,
+    );
   });
 
   it("maps NOAA smoke density to the specified restrained opacity", () => {
