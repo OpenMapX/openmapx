@@ -131,8 +131,30 @@ function createContext(entries: Record<string, unknown> = {}) {
 
 describe("loadFirms", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it("returns a fresh collection with the successful upstream fetch time", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-12T12:00:00.000Z"));
+    const { ctx } = createContext();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(`${VIIRS_HEADER}\n37.5,-122.3,310.4,2026-03-10,1130,N,nominal,12.5,D`),
+      ),
+    );
+
+    const result = await loadFirms(ctx, { dayRange: 1, source: "VIIRS_SNPP_NRT" });
+
+    expect(result).toMatchObject({
+      fetchedAt: "2026-08-12T12:00:00.000Z",
+      stale: false,
+      value: { type: "FeatureCollection", features: [expect.any(Object)] },
+    });
   });
 
   it("returns stale FIRMS data when an aborted fetch fails", async () => {
@@ -151,9 +173,55 @@ describe("loadFirms", () => {
       }),
     );
 
-    await expect(loadFirms(ctx, { dayRange: 1, source: "VIIRS_SNPP_NRT" })).resolves.toEqual(
-      stale.value,
+    await expect(loadFirms(ctx, { dayRange: 1, source: "VIIRS_SNPP_NRT" })).resolves.toEqual({
+      ...stale,
+      stale: true,
+    });
+  });
+
+  it.each([
+    ["an HTML error document", "<html><body>upstream error</body></html>"],
+    ["a blank body", ""],
+    [
+      "a mixed collection with a malformed retained row",
+      [
+        VIIRS_HEADER,
+        "37.5,-122.3,310.4,2026-03-10,1130,N,nominal,12.5,D",
+        "91,-122.3,310.4,2026-03-10,1130,N,nominal,12.5,D",
+      ].join("\n"),
+    ],
+  ])("keeps stale data when a 200 response contains %s", async (_case, body) => {
+    const stale = {
+      value: csvToGeoJSON(
+        `${VIIRS_HEADER}\n37.5,-122.3,310.4,2026-03-10,1130,N,nominal,12.5,D`,
+        "VIIRS_SNPP_NRT",
+      ),
+      fetchedAt: "2026-08-12T10:00:00.000Z",
+    };
+    const { ctx, cache } = createContext({ "fire:VIIRS_SNPP_NRT:1:stale": stale });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(body)),
     );
+
+    await expect(loadFirms(ctx, { dayRange: 1, source: "VIIRS_SNPP_NRT" })).resolves.toEqual({
+      ...stale,
+      stale: true,
+    });
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
+  it("accepts a canonical header-only response as a fresh empty observation", async () => {
+    const { ctx } = createContext();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(VIIRS_HEADER)),
+    );
+
+    await expect(loadFirms(ctx, { dayRange: 1, source: "VIIRS_SNPP_NRT" })).resolves.toMatchObject({
+      stale: false,
+      value: { type: "FeatureCollection", features: [] },
+    });
   });
 
   it.each([

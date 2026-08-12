@@ -362,6 +362,179 @@ describe("loadNifc", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("reports truncation when ArcGIS flags an exact-cap response", async () => {
+    const features = Array.from({ length: 2_000 }, (_, index) =>
+      nifcFeature({
+        OBJECTID: index + 1,
+        attr_IncidentName: `Fire ${index + 1}`,
+        attr_IncidentTypeCategory: "WF",
+      }),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              type: "FeatureCollection",
+              properties: { exceededTransferLimit: true },
+              features,
+            }),
+          ),
+      ),
+    );
+
+    const result = await loadNifc(createContext(), BOUNDS);
+
+    expect(result.features).toHaveLength(2_000);
+    expect(result.truncated).toBe(true);
+  });
+
+  it.each([undefined, false])(
+    "does not infer truncation from an exact-cap response when the ArcGIS flag is %s",
+    async (exceededTransferLimit) => {
+      const features = Array.from({ length: 2_000 }, () =>
+        nifcFeature({
+          OBJECTID: 1,
+          attr_IncidentName: "Duplicate",
+          attr_IncidentTypeCategory: "WF",
+        }),
+      );
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          async () =>
+            new Response(
+              JSON.stringify({
+                type: "FeatureCollection",
+                ...(exceededTransferLimit === undefined
+                  ? {}
+                  : { properties: { exceededTransferLimit } }),
+                features,
+              }),
+            ),
+        ),
+      );
+
+      const result = await loadNifc(createContext(), BOUNDS);
+
+      expect(result.features).toHaveLength(1);
+      expect(result.truncated).toBe(false);
+    },
+  );
+
+  it("reports truncation when either antimeridian segment carries the ArcGIS flag", async () => {
+    const bounds = { ...BOUNDS, west: 170, east: -170 };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            type: "FeatureCollection",
+            properties: { exceededTransferLimit: false },
+            features: [
+              nifcFeature({
+                OBJECTID: 1,
+                attr_IncidentName: "First",
+                attr_IncidentTypeCategory: "WF",
+              }),
+            ],
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            type: "FeatureCollection",
+            properties: { exceededTransferLimit: true },
+            features: [
+              nifcFeature({
+                OBJECTID: 1,
+                attr_IncidentName: "Duplicate",
+                attr_IncidentTypeCategory: "WF",
+              }),
+            ],
+          }),
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await loadNifc(createContext(), bounds);
+
+    expect(result.features).toHaveLength(1);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("rejects an entire response when one wildfire perimeter is malformed", async () => {
+    const features = [
+      nifcFeature({ OBJECTID: 1, attr_IncidentName: "Valid", attr_IncidentTypeCategory: "WF" }),
+      nifcFeature({ OBJECTID: 2, attr_IncidentName: "Invalid", attr_IncidentTypeCategory: "WF" }, {
+        type: "Point",
+        coordinates: [-120, 35],
+      } as never),
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ type: "FeatureCollection", features }))),
+    );
+
+    await expect(loadNifc(createContext(), BOUNDS)).rejects.toMatchObject({
+      provider: "nifc",
+      kind: "upstream-payload",
+    });
+  });
+
+  it("rejects missing categories and invalid supplied dates atomically", async () => {
+    const invalidFeatures = [
+      nifcFeature({ OBJECTID: 1, attr_IncidentName: "Missing category" }),
+      nifcFeature({
+        OBJECTID: 2,
+        attr_IncidentName: "Invalid date",
+        attr_IncidentTypeCategory: "WF",
+        poly_DateCurrent: "not-a-date",
+      }),
+    ];
+
+    for (const invalidFeature of invalidFeatures) {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          async () =>
+            new Response(JSON.stringify({ type: "FeatureCollection", features: [invalidFeature] })),
+        ),
+      );
+      await expect(loadNifc(createContext(), BOUNDS)).rejects.toMatchObject({
+        provider: "nifc",
+        kind: "upstream-payload",
+      });
+    }
+  });
+
+  it.each(["RX", "CX"])(
+    "skips an explicit %s record without rejecting valid WF data",
+    async (category) => {
+      const features = [
+        nifcFeature({
+          OBJECTID: 1,
+          attr_IncidentName: "Wildfire",
+          attr_IncidentTypeCategory: "WF",
+        }),
+        nifcFeature(
+          { OBJECTID: 2, attr_IncidentName: "Prescribed", attr_IncidentTypeCategory: category },
+          { type: "Point", coordinates: [-120, 35] } as never,
+        ),
+      ];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => new Response(JSON.stringify({ type: "FeatureCollection", features }))),
+      );
+
+      const result = await loadNifc(createContext(), BOUNDS);
+
+      expect(result.features.map((feature) => feature.id)).toEqual(["nifc:1"]);
+    },
+  );
+
   it("times out an upstream fetch and clears its timer", async () => {
     vi.useFakeTimers();
     const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
@@ -379,7 +552,9 @@ describe("loadNifc", () => {
 
     const pending = loadNifc(createContext(), BOUNDS);
     const rejection = expect(pending).rejects.toThrow("aborted");
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(19_999);
+    expect(vi.mocked(fetch).mock.results[0]?.type).toBe("return");
+    await vi.advanceTimersByTimeAsync(1);
     await rejection;
     expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
   });
@@ -408,7 +583,7 @@ describe("loadNifc", () => {
       kind: "timeout",
       cause,
     });
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(20_000);
     await rejection;
   });
 

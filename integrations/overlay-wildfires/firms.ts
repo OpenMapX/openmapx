@@ -1,5 +1,6 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { loadWithFreshAndStaleCache } from "./source-cache.js";
+import { isFirmsFeatureCollection } from "./firms-response.js";
+import { type CachedLoadResult, loadWithFreshAndStaleCache } from "./source-cache.js";
 
 const FIRMS_BASE = "https://firms.modaps.eosdis.nasa.gov/api/area/csv";
 const FETCH_TIMEOUT_MS = 30_000;
@@ -11,10 +12,14 @@ const CACHE_TTL: Record<FirmsDayRange, number> = {
   3: 900,
 };
 
+export function firmsFreshTtlSeconds(dayRange: FirmsDayRange): number {
+  return CACHE_TTL[dayRange];
+}
+
 export type FirmsSource = "VIIRS_SNPP_NRT" | "MODIS_NRT";
 export type FirmsDayRange = 1 | 2 | 3;
 
-interface FireFeature {
+export interface FireFeature {
   type: "Feature";
   geometry: { type: "Point"; coordinates: [number, number] };
   properties: {
@@ -41,6 +46,97 @@ export function parseAcqDateTime(date: string, time: string): number {
   const h = time.padStart(4, "0").slice(0, 2);
   const m = time.padStart(4, "0").slice(2, 4);
   return new Date(`${date}T${h}:${m}:00Z`).getTime();
+}
+
+function canonicalAcqTime(time: string): string {
+  return time.padStart(4, "0");
+}
+
+function isCanonicalDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const milliseconds = Date.parse(`${value}T00:00:00.000Z`);
+  return (
+    Number.isFinite(milliseconds) && new Date(milliseconds).toISOString().slice(0, 10) === value
+  );
+}
+
+function isRequiredFiniteCell(
+  value: string | undefined,
+  minimum: number,
+  maximum: number,
+): boolean {
+  if (value === undefined || value.trim() === "") return false;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= minimum && number <= maximum;
+}
+
+function isDeliberatelyFilteredConfidence(confidence: string, source: FirmsSource): boolean {
+  if (source === "VIIRS_SNPP_NRT") return confidence === "low" || confidence === "l";
+  return /^\d{1,2}$/.test(confidence) && Number(confidence) < 50;
+}
+
+function hasValidRetainedConfidence(confidence: string, source: FirmsSource): boolean {
+  if (source === "VIIRS_SNPP_NRT") {
+    return (
+      confidence === "nominal" || confidence === "high" || confidence === "n" || confidence === "h"
+    );
+  }
+  return /^(?:[5-9]\d|100)$/.test(confidence);
+}
+
+function validateFirmsCsvPayload(csv: string, source: FirmsSource): void {
+  const trimmed = csv.trim();
+  if (!trimmed) throw new Error("Invalid FIRMS CSV response");
+
+  const lines = trimmed.split("\n");
+  const headers = lines[0].split(",").map((header) => header.trim());
+  const brightnessHeader = source === "VIIRS_SNPP_NRT" ? "bright_ti4" : "brightness";
+  const requiredHeaders = [
+    "latitude",
+    "longitude",
+    brightnessHeader,
+    "acq_date",
+    "acq_time",
+    "satellite",
+    "confidence",
+    "frp",
+    "daynight",
+  ];
+  if (
+    requiredHeaders.some(
+      (header) =>
+        headers.indexOf(header) === -1 || headers.indexOf(header) !== headers.lastIndexOf(header),
+    )
+  ) {
+    throw new Error("Invalid FIRMS CSV response");
+  }
+
+  const index = Object.fromEntries(
+    requiredHeaders.map((header) => [header, headers.indexOf(header)]),
+  );
+  for (let lineIndex = 1; lineIndex < lines.length; lineIndex++) {
+    const columns = lines[lineIndex].split(",");
+    if (columns.length < headers.length) throw new Error("Invalid FIRMS CSV response");
+    const cell = (header: string) => columns[index[header]]?.trim();
+    const confidence = cell("confidence") ?? "";
+    if (isDeliberatelyFilteredConfidence(confidence, source)) continue;
+
+    const date = cell("acq_date") ?? "";
+    const time = canonicalAcqTime(cell("acq_time") ?? "");
+    if (
+      !isRequiredFiniteCell(cell("latitude"), -90, 90) ||
+      !isRequiredFiniteCell(cell("longitude"), -180, 180) ||
+      !isRequiredFiniteCell(cell(brightnessHeader), 0, Number.POSITIVE_INFINITY) ||
+      !isRequiredFiniteCell(cell("frp"), 0, Number.POSITIVE_INFINITY) ||
+      !hasValidRetainedConfidence(confidence, source) ||
+      !isCanonicalDate(date) ||
+      !/^(?:[01]\d|2[0-3])[0-5]\d$/.test(time) ||
+      !(cell("satellite") ?? "") ||
+      (cell("daynight") !== "D" && cell("daynight") !== "N")
+    ) {
+      throw new Error("Invalid FIRMS CSV response");
+    }
+  }
 }
 
 export function csvToGeoJSON(csv: string, source: FirmsSource): FireFeatureCollection {
@@ -81,7 +177,7 @@ export function csvToGeoJSON(csv: string, source: FirmsSource): FireFeatureColle
     }
 
     const acqDate = cols[dateIdx]?.trim() ?? "";
-    const acqTime = cols[timeIdx]?.trim() ?? "";
+    const acqTime = canonicalAcqTime(cols[timeIdx]?.trim() ?? "");
     const acqMs = parseAcqDateTime(acqDate, acqTime);
     const frp = Number.parseFloat(cols[frpIdx] ?? "0") || 0;
     const brightness = Number.parseFloat(cols[brightIdx] ?? "0") || 0;
@@ -111,7 +207,7 @@ export function csvToGeoJSON(csv: string, source: FirmsSource): FireFeatureColle
 export async function loadFirms(
   ctx: IntegrationContext,
   input: { dayRange: FirmsDayRange; source: FirmsSource },
-): Promise<FireFeatureCollection> {
+): Promise<CachedLoadResult<FireFeatureCollection>> {
   const mapKey = ctx.config.firmsApiKey as string | undefined;
   if (!mapKey) throw new Error("FIRMS map key not configured");
 
@@ -131,12 +227,18 @@ export async function loadFirms(
           throw new Error(`FIRMS API returned ${response.status}`);
         }
 
-        return csvToGeoJSON(await response.text(), input.source);
+        const csv = await response.text();
+        validateFirmsCsvPayload(csv, input.source);
+        const collection = csvToGeoJSON(csv, input.source);
+        if (!isFirmsFeatureCollection(collection, input.source)) {
+          throw new Error("Invalid FIRMS CSV response");
+        }
+        return collection;
       } finally {
         clearTimeout(timer);
       }
     },
   });
 
-  return result.value;
+  return result;
 }

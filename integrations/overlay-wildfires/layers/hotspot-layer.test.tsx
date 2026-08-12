@@ -63,7 +63,19 @@ const HOTSPOT_COLLECTION = {
   features: [
     {
       type: "Feature" as const,
-      properties: { frp: 10, ageMs: 60_000 },
+      properties: {
+        latitude: 50,
+        longitude: 8,
+        brightness: 300,
+        frp: 10,
+        confidence: "nominal",
+        satellite: "N",
+        acqDate: "2026-08-12",
+        acqTime: "1200",
+        dayNight: "D",
+        ageMs: 60_000,
+        source: "VIIRS_SNPP_NRT",
+      },
       geometry: { type: "Point" as const, coordinates: [8, 50] },
     },
   ],
@@ -74,7 +86,19 @@ const REPLACEMENT_COLLECTION = {
   features: [
     {
       type: "Feature" as const,
-      properties: { frp: 100, ageMs: 1_000 },
+      properties: {
+        latitude: 51,
+        longitude: 9,
+        brightness: 320,
+        frp: 100,
+        confidence: "80",
+        satellite: "T",
+        acqDate: "2026-08-12",
+        acqTime: "1230",
+        dayNight: "N",
+        ageMs: 1_000,
+        source: "MODIS_NRT",
+      },
       geometry: { type: "Point" as const, coordinates: [9, 51] },
     },
   ],
@@ -90,8 +114,8 @@ function popupController() {
   };
 }
 
-function response(data = HOTSPOT_COLLECTION) {
-  return { ok: true, json: async () => data };
+function response(data: unknown = HOTSPOT_COLLECTION, headers: Record<string, string> = {}) {
+  return { ok: true, status: 200, headers: new Headers(headers), json: async () => data };
 }
 
 beforeEach(() => {
@@ -110,6 +134,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("HotspotLayer", () => {
@@ -557,6 +582,201 @@ describe("HotspotLayer", () => {
       stale: false,
       truncated: false,
       error: null,
+      featureCount: 1,
+    });
+  });
+
+  it("uses the server's original fetched time and fresh status headers", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        response(HOTSPOT_COLLECTION, {
+          "X-OpenMapX-Fetched-At": "2026-08-12T10:00:00.000Z",
+          "X-OpenMapX-Stale": "false",
+        }),
+      ),
+    );
+
+    render(<HotspotLayer active popupController={popupController()} />);
+
+    await waitFor(() =>
+      expect(useWildfireStore.getState().statuses.firms).toMatchObject({
+        fetchedAt: Date.parse("2026-08-12T10:00:00.000Z"),
+        stale: false,
+      }),
+    );
+    expect(useWildfireStore.getState().lastUpdated).toBe(Date.parse("2026-08-12T10:00:00.000Z"));
+  });
+
+  it("preserves the original fetched time when FIRMS serves stale fallback data", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        response(HOTSPOT_COLLECTION, {
+          "X-OpenMapX-Fetched-At": "2026-08-12T09:00:00.000Z",
+          "X-OpenMapX-Stale": "true",
+        }),
+      ),
+    );
+
+    render(<HotspotLayer active popupController={popupController()} />);
+
+    await waitFor(() =>
+      expect(useWildfireStore.getState().statuses.firms).toMatchObject({
+        fetchedAt: Date.parse("2026-08-12T09:00:00.000Z"),
+        stale: true,
+      }),
+    );
+  });
+
+  it("falls back to receipt time and fresh status for legacy servers without metadata headers", async () => {
+    const receiptTime = Date.parse("2026-08-12T12:34:56.789Z");
+    vi.spyOn(Date, "now").mockReturnValue(receiptTime);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response()),
+    );
+
+    render(<HotspotLayer active popupController={popupController()} />);
+
+    await waitFor(() =>
+      expect(useWildfireStore.getState().statuses.firms).toMatchObject({
+        fetchedAt: receiptTime,
+        stale: false,
+      }),
+    );
+  });
+
+  it("falls back safely when either FIRMS metadata header is malformed", async () => {
+    const receiptTime = Date.parse("2026-08-12T12:34:56.789Z");
+    vi.spyOn(Date, "now").mockReturnValue(receiptTime);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        response(HOTSPOT_COLLECTION, {
+          "X-OpenMapX-Fetched-At": "not-a-date",
+          "X-OpenMapX-Stale": "true",
+        }),
+      ),
+    );
+
+    render(<HotspotLayer active popupController={popupController()} />);
+
+    await waitFor(() =>
+      expect(useWildfireStore.getState().statuses.firms).toMatchObject({
+        fetchedAt: receiptTime,
+        stale: false,
+      }),
+    );
+  });
+
+  it.each([
+    [
+      "out-of-range Point geometry",
+      {
+        ...HOTSPOT_COLLECTION,
+        features: [
+          {
+            ...HOTSPOT_COLLECTION.features[0],
+            geometry: { type: "Point", coordinates: [181, 50] },
+          },
+        ],
+      },
+    ],
+    [
+      "missing required properties",
+      {
+        ...HOTSPOT_COLLECTION,
+        features: [
+          {
+            ...HOTSPOT_COLLECTION.features[0],
+            properties: { frp: 10, ageMs: 60_000 },
+          },
+        ],
+      },
+    ],
+    [
+      "a mixed valid and invalid collection",
+      {
+        ...HOTSPOT_COLLECTION,
+        features: [
+          HOTSPOT_COLLECTION.features[0],
+          {
+            ...HOTSPOT_COLLECTION.features[0],
+            geometry: { type: "Point", coordinates: [8, Number.POSITIVE_INFINITY] },
+          },
+        ],
+      },
+    ],
+  ])("rejects %s before publishing to MapLibre", async (_case, data) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response(data)),
+    );
+
+    render(<HotspotLayer active popupController={popupController()} />);
+
+    await waitFor(() =>
+      expect(useWildfireStore.getState().statuses.firms.error).toBe("unavailable"),
+    );
+    expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual({
+      type: "FeatureCollection",
+      features: [],
+    });
+    expect(useWildfireStore.getState().lastUpdated).toBeNull();
+  });
+
+  it("accepts and publishes a valid empty FIRMS collection", async () => {
+    const empty = { type: "FeatureCollection" as const, features: [] };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response(empty)),
+    );
+
+    render(<HotspotLayer active popupController={popupController()} />);
+
+    await waitFor(() => expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(empty));
+    expect(useWildfireStore.getState().statuses.firms).toMatchObject({
+      error: null,
+      featureCount: 0,
+    });
+  });
+
+  it("retains last-good FIRMS data and status metadata after a malformed refresh", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response(HOTSPOT_COLLECTION, {
+          "X-OpenMapX-Fetched-At": "2026-08-12T10:00:00.000Z",
+          "X-OpenMapX-Stale": "false",
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          ...REPLACEMENT_COLLECTION,
+          features: [
+            {
+              ...REPLACEMENT_COLLECTION.features[0],
+              geometry: { type: "LineString", coordinates: [[9, 51]] },
+            },
+          ],
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<HotspotLayer active popupController={popupController()} />);
+    await waitFor(() =>
+      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION),
+    );
+
+    act(() => useWildfireStore.getState().setSource("MODIS_NRT"));
+
+    await waitFor(() =>
+      expect(useWildfireStore.getState().statuses.firms.error).toBe("unavailable"),
+    );
+    expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION);
+    expect(useWildfireStore.getState().statuses.firms).toMatchObject({
+      fetchedAt: Date.parse("2026-08-12T10:00:00.000Z"),
+      stale: false,
       featureCount: 1,
     });
   });

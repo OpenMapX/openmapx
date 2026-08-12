@@ -52,10 +52,16 @@ export function corsOptions() {
       .split(",")
       .map((o) => o.trim()),
     credentials: true,
-    // Offline archive downloads use these response headers to verify immutable
-    // identities and safely resume byte ranges when the web app and API are on
-    // different origins (the default local-development topology).
-    exposedHeaders: ["X-Tile-Source", "Accept-Ranges", "Content-Range", "ETag"],
+    // Browser clients need these response headers when the web app and API are
+    // on different origins (the default local-development topology).
+    exposedHeaders: [
+      "X-Tile-Source",
+      "Accept-Ranges",
+      "Content-Range",
+      "ETag",
+      "X-OpenMapX-Fetched-At",
+      "X-OpenMapX-Stale",
+    ],
   };
 }
 

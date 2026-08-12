@@ -99,6 +99,8 @@ describe("corsOptions", () => {
     expect(res.headers["access-control-allow-credentials"]).toBe("true");
     expect(res.headers["access-control-expose-headers"]).toContain("ETag");
     expect(res.headers["access-control-expose-headers"]).toContain("Content-Range");
+    expect(res.headers["access-control-expose-headers"]).toContain("X-OpenMapX-Fetched-At");
+    expect(res.headers["access-control-expose-headers"]).toContain("X-OpenMapX-Stale");
     await app.close();
   });
 

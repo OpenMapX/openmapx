@@ -1,7 +1,8 @@
 import type { IntegrationContext, RouteHandler } from "@openmapx/integration-framework";
 import { nifcOffsetForZoom, normalizeViewport } from "./bounds.js";
 import { loadEffis } from "./effis.js";
-import { type FirmsDayRange, type FirmsSource, loadFirms } from "./firms.js";
+import { type FirmsDayRange, type FirmsSource, firmsFreshTtlSeconds, loadFirms } from "./firms.js";
+import { FIRMS_FETCHED_AT_HEADER, FIRMS_STALE_HEADER } from "./firms-response.js";
 import { loadNifc } from "./nifc.js";
 import { loadNoaaSmoke } from "./noaa-smoke.js";
 import { loadWithFreshAndStaleCache } from "./source-cache.js";
@@ -157,11 +158,14 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     try {
-      const data = await loadFirms(ctx, {
+      const result = await loadFirms(ctx, {
         dayRange: dayRange as FirmsDayRange,
         source: source as FirmsSource,
       });
-      reply.send(data);
+      reply.header("Cache-Control", cacheControl(firmsFreshTtlSeconds(dayRange as FirmsDayRange)));
+      reply.header(FIRMS_FETCHED_AT_HEADER, result.fetchedAt);
+      reply.header(FIRMS_STALE_HEADER, String(result.stale));
+      reply.send(result.value);
     } catch (error) {
       ctx.log.error("Failed to fetch FIRMS data", error);
       reply.status(503).send({ message: "Wildfire data temporarily unavailable" });

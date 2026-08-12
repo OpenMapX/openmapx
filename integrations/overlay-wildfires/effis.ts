@@ -140,6 +140,13 @@ export function normalizeEffisFeature(input: unknown): NormalizedEffisFeature | 
 
   const detectedAt = sourceDateToIso(raw.FIREDATE);
   const updatedAt = sourceDateToIso(raw.UPDATED) ?? sourceDateToIso(raw.LASTUPDATE);
+  if (
+    (raw.FIREDATE != null && raw.FIREDATE !== "" && !detectedAt) ||
+    (raw.UPDATED != null && raw.UPDATED !== "" && !sourceDateToIso(raw.UPDATED)) ||
+    (raw.LASTUPDATE != null && raw.LASTUPDATE !== "" && !sourceDateToIso(raw.LASTUPDATE))
+  ) {
+    return null;
+  }
   const countryCode = optionalString(raw.COUNTRY);
   const region = optionalString(raw.PROVINCE) ?? optionalString(raw.REGION);
   const locality = optionalString(raw.COMMUNE) ?? optionalString(raw.LOCALITY);
@@ -244,12 +251,17 @@ export async function loadEffis(
   const upstreamTruncated = collections.some(
     (collection) => collection.features.length >= REQUESTED_FEATURES,
   );
-  const normalized = collections.map((collection) => ({
-    type: "FeatureCollection" as const,
-    features: collection.features
-      .map((feature) => normalizeEffisFeature(feature))
-      .filter((feature): feature is NormalizedEffisFeature => feature !== null),
-  }));
+  const normalized = collections.map((collection) => {
+    const features: NormalizedEffisFeature[] = [];
+    for (const feature of collection.features) {
+      const normalizedFeature = normalizeEffisFeature(feature);
+      if (!normalizedFeature) {
+        throw new EffisSourceError("Invalid EFFIS feature", { kind: "upstream-payload" });
+      }
+      features.push(normalizedFeature);
+    }
+    return { type: "FeatureCollection" as const, features };
+  });
   const merged = dedupeByFeatureId(normalized);
   const truncated = upstreamTruncated || merged.features.length > MAX_FEATURES;
   return {

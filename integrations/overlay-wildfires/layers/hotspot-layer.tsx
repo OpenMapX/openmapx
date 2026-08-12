@@ -10,6 +10,7 @@ import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSo
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import { isFirmsFeatureCollection, readFirmsResponseMetadata } from "../firms-response";
 import type { WildfirePopupController, WildfirePopupLease } from "../popup-controller";
 import { useWildfireStore } from "../store";
 
@@ -116,25 +117,22 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
       const res = await fetch(url, { signal: request.signal });
       if (!request.isCurrent()) return;
       if (!res.ok) throw new Error(`FIRMS source returned ${res.status}`);
-      const data = await res.json();
+      const data: unknown = await res.json();
       if (!request.isCurrent()) return;
+      if (!isFirmsFeatureCollection(data, source)) {
+        throw new Error("Invalid FIRMS FeatureCollection");
+      }
 
       publishGeoJson([{ sourceId: SOURCE_ID, data }]);
-      const fetchedAt = Date.now();
+      const { fetchedAt, stale } = readFirmsResponseMetadata(res.headers, Date.now());
       setLastUpdated(fetchedAt);
       setSourceStatus("firms", {
         loading: false,
         fetchedAt,
-        stale: false,
+        stale,
         truncated: false,
         error: null,
-        featureCount:
-          typeof data === "object" &&
-          data !== null &&
-          "features" in data &&
-          Array.isArray(data.features)
-            ? data.features.length
-            : 0,
+        featureCount: data.features.length,
       });
     } catch {
       if (request.isCurrent()) {

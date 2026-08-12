@@ -230,6 +230,57 @@ describe("loadNoaaSmoke", () => {
     expect(new URL(fetchMock.mock.calls[1][0]).searchParams.get("resultOffset")).toBe("1000");
   });
 
+  it("shares one 20-second timeout budget across all pages", async () => {
+    vi.useFakeTimers();
+    const signals: AbortSignal[] = [];
+    const cause = new DOMException("Aborted", "AbortError");
+    const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
+    const fetchMock = vi.fn((_url: string, init: RequestInit) => {
+      signals.push(init.signal as AbortSignal);
+      if (signals.length === 1) {
+        return new Promise<Response>((resolve) => {
+          setTimeout(
+            () =>
+              resolve(
+                new Response(
+                  JSON.stringify({
+                    type: "FeatureCollection",
+                    properties: { exceededTransferLimit: true },
+                    features: [smokeFeature({ FID: 1 })],
+                  }),
+                ),
+              ),
+            15_000,
+          );
+        });
+      }
+      return new Promise<Response>((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () => reject(cause));
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const pending = loadNoaaSmoke(createContext());
+    const rejection = expect(pending).rejects.toMatchObject({
+      provider: "noaa-hms",
+      kind: "timeout",
+      cause,
+    });
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(signals[1]?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    const abortedAtSharedDeadline = signals[1]?.aborted;
+    const reusedSignal = signals[0] === signals[1];
+    if (!abortedAtSharedDeadline) await vi.advanceTimersByTimeAsync(15_000);
+    await rejection;
+
+    expect(reusedSignal).toBe(true);
+    expect(abortedAtSharedDeadline).toBe(true);
+    expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects incomplete global data rather than returning a truncated collection", async () => {
     const page = {
       type: "FeatureCollection",
@@ -261,7 +312,7 @@ describe("loadNoaaSmoke", () => {
 
     const pending = loadNoaaSmoke(createContext());
     const rejection = expect(pending).rejects.toThrow("aborted");
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(20_000);
     await rejection;
     expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
   });
@@ -290,7 +341,7 @@ describe("loadNoaaSmoke", () => {
       kind: "timeout",
       cause,
     });
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(20_000);
     await rejection;
   });
 

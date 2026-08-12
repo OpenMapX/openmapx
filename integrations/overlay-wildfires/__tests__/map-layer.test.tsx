@@ -110,6 +110,8 @@ function providerCollection(source: "nifc" | "effis" | "noaa-hms") {
 const HOTSPOT_FEATURE = {
   type: "Feature",
   properties: {
+    latitude: 50,
+    longitude: 8,
     frp: 12,
     brightness: 301,
     confidence: "high",
@@ -118,6 +120,7 @@ const HOTSPOT_FEATURE = {
     dayNight: "D",
     acqDate: "2026-08-12",
     acqTime: "1234",
+    source: "VIIRS_SNPP_NRT",
   },
   geometry: { type: "Point", coordinates: [8, 50] },
 } as unknown as MapGeoJSONFeature;

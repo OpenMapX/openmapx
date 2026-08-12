@@ -10,7 +10,7 @@ import {
 
 const NIFC_QUERY_URL =
   "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0/query";
-const FETCH_TIMEOUT_MS = 30_000;
+const FETCH_TIMEOUT_MS = 20_000;
 const MAX_FEATURES = 2_000;
 
 const NIFC_FIELDS = [
@@ -38,6 +38,11 @@ type RawNifcFeature = {
 
 type NifcGeometry = GeoJSON.Polygon | GeoJSON.MultiPolygon;
 type NormalizedNifcFeature = GeoJSON.Feature<NifcGeometry, NifcProperties>;
+
+interface NifcCollection {
+  features: unknown[];
+  exceededTransferLimit: boolean;
+}
 
 function hasObjectProperties(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -140,6 +145,20 @@ export function normalizeNifcFeature(input: unknown): NormalizedNifcFeature | nu
   const observedAt = epochToIso(raw.poly_PolygonDateTime);
   const updatedAt = epochToIso(raw.poly_DateCurrent) ?? epochToIso(raw.attr_ModifiedOnDateTime_dt);
   const discoveredAt = epochToIso(raw.attr_FireDiscoveryDateTime);
+  if (
+    (raw.poly_PolygonDateTime != null && raw.poly_PolygonDateTime !== "" && !observedAt) ||
+    (raw.poly_DateCurrent != null &&
+      raw.poly_DateCurrent !== "" &&
+      !epochToIso(raw.poly_DateCurrent)) ||
+    (raw.attr_ModifiedOnDateTime_dt != null &&
+      raw.attr_ModifiedOnDateTime_dt !== "" &&
+      !epochToIso(raw.attr_ModifiedOnDateTime_dt)) ||
+    (raw.attr_FireDiscoveryDateTime != null &&
+      raw.attr_FireDiscoveryDateTime !== "" &&
+      !discoveredAt)
+  ) {
+    return null;
+  }
   const validContainment =
     containmentPercent !== undefined && containmentPercent >= 0 && containmentPercent <= 100
       ? containmentPercent
@@ -165,7 +184,7 @@ export function normalizeNifcFeature(input: unknown): NormalizedNifcFeature | nu
 async function fetchNifcCollection(
   ctx: IntegrationContext,
   bounds: NormalizedViewport,
-): Promise<GeoJSON.FeatureCollection> {
+): Promise<NifcCollection> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -221,7 +240,12 @@ async function fetchNifcCollection(
         kind: "upstream-payload",
       });
     }
-    return payload as unknown as GeoJSON.FeatureCollection;
+    return {
+      features: payload.features,
+      exceededTransferLimit:
+        hasObjectProperties(payload.properties) &&
+        payload.properties.exceededTransferLimit === true,
+    };
   } finally {
     clearTimeout(timer);
   }
@@ -234,14 +258,27 @@ export async function loadNifc(
   const collections = await Promise.all(
     splitAntimeridian(bounds).map((part) => fetchNifcCollection(ctx, part)),
   );
-  const normalized = collections.map((collection) => ({
-    type: "FeatureCollection" as const,
-    features: collection.features
-      .map((feature) => normalizeNifcFeature(feature))
-      .filter((feature): feature is NormalizedNifcFeature => feature !== null),
-  }));
+  const upstreamTruncated = collections.some((collection) => collection.exceededTransferLimit);
+  const normalized = collections.map((collection) => {
+    const features: NormalizedNifcFeature[] = [];
+    for (const feature of collection.features) {
+      if (hasObjectProperties(feature) && hasObjectProperties(feature.properties)) {
+        const category = feature.properties.attr_IncidentTypeCategory;
+        if (category === "RX" || category === "CX") continue;
+      }
+      const normalizedFeature = normalizeNifcFeature(feature);
+      if (!normalizedFeature) {
+        throw new WildfireSourceError("Invalid NIFC feature", {
+          provider: "nifc",
+          kind: "upstream-payload",
+        });
+      }
+      features.push(normalizedFeature);
+    }
+    return { type: "FeatureCollection" as const, features };
+  });
   const merged = dedupeByFeatureId(normalized);
-  const truncated = merged.features.length > MAX_FEATURES;
+  const truncated = upstreamTruncated || merged.features.length > MAX_FEATURES;
   return {
     type: "FeatureCollection",
     features: merged.features.slice(0, MAX_FEATURES),

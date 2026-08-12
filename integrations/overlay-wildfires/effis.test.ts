@@ -263,28 +263,59 @@ describe("loadEffis", () => {
   });
 
   it("reports truncation when an upstream segment reaches the request cap before normalization", async () => {
-    const invalidAtCap = [
-      effisFeature(
-        { id: "invalid", AREA_HA: "1" },
-        { type: "Point", coordinates: [10, 45] },
-        undefined,
-      ),
+    const duplicatedAtCap = [
       ...Array.from({ length: 2_000 }, () =>
         effisFeature({ id: "duplicate", AREA_HA: "1" }, POLYGON, undefined),
       ),
+      effisFeature({ id: "second", AREA_HA: "1" }, POLYGON, undefined),
     ];
     vi.stubGlobal(
       "fetch",
       vi.fn(
         async () =>
-          new Response(JSON.stringify({ type: "FeatureCollection", features: invalidAtCap })),
+          new Response(JSON.stringify({ type: "FeatureCollection", features: duplicatedAtCap })),
       ),
     );
 
     const result = await loadEffis(createContext(), BOUNDS);
 
-    expect(result.features).toHaveLength(1);
+    expect(result.features).toHaveLength(2);
     expect(result.features[0].id).toBe("effis:duplicate");
     expect(result.truncated).toBe(true);
   });
+
+  it("rejects an entire response when one EFFIS feature is malformed", async () => {
+    const features = [
+      effisFeature({ ID: 1, AREA_HA: "12.5" }),
+      effisFeature({ ID: 2, AREA_HA: "not-a-number" }),
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ type: "FeatureCollection", features }))),
+    );
+
+    await expect(loadEffis(createContext(), BOUNDS)).rejects.toMatchObject({
+      provider: "effis",
+      kind: "upstream-payload",
+    });
+  });
+
+  it.each(["FIREDATE", "UPDATED", "LASTUPDATE"])(
+    "rejects an invalid supplied %s date instead of omitting it",
+    async (field) => {
+      const feature = effisFeature({ ID: 1, AREA_HA: "12.5", [field]: "not-a-date" });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          async () =>
+            new Response(JSON.stringify({ type: "FeatureCollection", features: [feature] })),
+        ),
+      );
+
+      await expect(loadEffis(createContext(), BOUNDS)).rejects.toMatchObject({
+        provider: "effis",
+        kind: "upstream-payload",
+      });
+    },
+  );
 });

@@ -261,6 +261,69 @@ describe("wildfire source routes", () => {
     ]);
   });
 
+  it("keeps the fresh FIRMS body bare and exposes cache metadata in response headers", async () => {
+    const csv = `${VIIRS_HEADER}\n37.5,-122.3,310.4,2026-03-10,1130,N,nominal,12.5,D`;
+    fetchMock.mockResolvedValueOnce(new Response(csv));
+    const ctx = createMockIntegrationContext({ config: { firmsApiKey: "test-key" } });
+    setup(ctx);
+    const result = replyFake();
+
+    await routeHandler(ctx, "/wildfires")(
+      {
+        query: { dayRange: "1", source: "VIIRS_SNPP_NRT" },
+        params: {},
+        body: undefined,
+        headers: {},
+      },
+      result.reply,
+    );
+
+    expect(result.result().body).toEqual(csvToGeoJSON(csv, "VIIRS_SNPP_NRT"));
+    expect(result.result().body).not.toHaveProperty("value");
+    expect(result.result().body).not.toHaveProperty("fetchedAt");
+    expect(result.result().body).not.toHaveProperty("stale");
+    expect(result.result().headers.get("X-OpenMapX-Fetched-At")).toBe("2026-08-12T12:00:00.000Z");
+    expect(result.result().headers.get("X-OpenMapX-Stale")).toBe("false");
+    expect(result.result().headers.get("Cache-Control")).toBe("public, max-age=300, s-maxage=300");
+  });
+
+  it("serves stale FIRMS data with its original timestamp in response headers", async () => {
+    const staleValue = csvToGeoJSON(
+      `${VIIRS_HEADER}\n37.5,-122.3,310.4,2026-03-10,1130,N,nominal,12.5,D`,
+      "VIIRS_SNPP_NRT",
+    );
+    fetchMock.mockRejectedValueOnce(new Error("upstream unavailable"));
+    const ctx = createMockIntegrationContext({
+      config: { firmsApiKey: "test-key" },
+      cache: {
+        get: async (key) =>
+          key === "fire:VIIRS_SNPP_NRT:1:stale"
+            ? { value: staleValue, fetchedAt: "2026-08-12T10:00:00.000Z" }
+            : null,
+        set: async () => undefined,
+        del: async () => undefined,
+        withCache: async <_T>(_key, _ttl, load) => load(),
+      },
+    });
+    setup(ctx);
+    const result = replyFake();
+
+    await routeHandler(ctx, "/wildfires")(
+      {
+        query: { dayRange: "1", source: "VIIRS_SNPP_NRT" },
+        params: {},
+        body: undefined,
+        headers: {},
+      },
+      result.reply,
+    );
+
+    expect(result.result().body).toEqual(staleValue);
+    expect(result.result().headers.get("X-OpenMapX-Fetched-At")).toBe("2026-08-12T10:00:00.000Z");
+    expect(result.result().headers.get("X-OpenMapX-Stale")).toBe("true");
+    expect(result.result().headers.get("Cache-Control")).toBe("public, max-age=300, s-maxage=300");
+  });
+
   it("rejects an invalid NIFC viewport before fetching upstream", async () => {
     const ctx = createMockIntegrationContext();
     setup(ctx);
