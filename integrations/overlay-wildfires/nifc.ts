@@ -57,22 +57,41 @@ function epochToIso(value: unknown): string | undefined {
   return date.toISOString();
 }
 
-function coordinatesAreFinite(value: unknown): boolean {
-  if (!Array.isArray(value) || value.length === 0) return false;
-  if (typeof value[0] === "number") {
-    return (
-      value.length >= 2 &&
-      value.every((coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate))
-    );
+function isPosition(value: unknown): value is number[] {
+  if (!Array.isArray(value) || value.length < 2) return false;
+  if (!value.every((coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate))) {
+    return false;
   }
-  return value.every(coordinatesAreFinite);
+  return value[0] >= -180 && value[0] <= 180 && value[1] >= -90 && value[1] <= 90;
+}
+
+function positionsEqual(first: number[], second: number[]): boolean {
+  return (
+    first.length === second.length &&
+    first.every((coordinate, index) => coordinate === second[index])
+  );
+}
+
+function isLinearRing(value: unknown): value is number[][] {
+  if (!Array.isArray(value) || value.length < 4 || !value.every(isPosition)) return false;
+  return positionsEqual(value[0], value[value.length - 1]);
+}
+
+function isPolygonCoordinates(value: unknown): value is number[][][] {
+  return Array.isArray(value) && value.length > 0 && value.every(isLinearRing);
+}
+
+function isMultiPolygonCoordinates(value: unknown): value is number[][][][] {
+  return Array.isArray(value) && value.length > 0 && value.every(isPolygonCoordinates);
 }
 
 function validGeometry(value: unknown): value is NifcGeometry {
   if (!hasObjectProperties(value) || (value.type !== "Polygon" && value.type !== "MultiPolygon")) {
     return false;
   }
-  return coordinatesAreFinite(value.coordinates);
+  return value.type === "Polygon"
+    ? isPolygonCoordinates(value.coordinates)
+    : isMultiPolygonCoordinates(value.coordinates);
 }
 
 function stableId(

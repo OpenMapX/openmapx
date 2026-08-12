@@ -134,7 +134,7 @@ describe("normalizeNifcFeature", () => {
     const geometry =
       type === "Polygon"
         ? POLYGON
-        : { type: "MultiPolygon" as const, coordinates: [[POLYGON.coordinates]] };
+        : { type: "MultiPolygon" as const, coordinates: [POLYGON.coordinates] };
     expect(
       normalizeNifcFeature(
         nifcFeature(
@@ -143,6 +143,117 @@ describe("normalizeNifcFeature", () => {
         ),
       ),
     ).not.toBeNull();
+  });
+
+  it("retains valid polygon holes and multipolygon members", () => {
+    const polygonWithHole = {
+      type: "Polygon" as const,
+      coordinates: [
+        [
+          [-120, 35],
+          [-119, 35],
+          [-119, 36],
+          [-120, 35],
+        ],
+        [
+          [-119.8, 35.2],
+          [-119.4, 35.2],
+          [-119.4, 35.6],
+          [-119.8, 35.2],
+        ],
+      ],
+    };
+    const multipolygon = {
+      type: "MultiPolygon" as const,
+      coordinates: [
+        POLYGON.coordinates,
+        [
+          [
+            [-118, 34],
+            [-117, 34],
+            [-117, 35],
+            [-118, 34],
+          ],
+        ],
+      ],
+    };
+
+    expect(
+      normalizeNifcFeature(
+        nifcFeature(
+          { OBJECTID: 2, attr_IncidentName: "Hole", attr_IncidentTypeCategory: "WF" },
+          polygonWithHole,
+        ),
+      )?.geometry,
+    ).toEqual(polygonWithHole);
+    expect(
+      normalizeNifcFeature(
+        nifcFeature(
+          { OBJECTID: 3, attr_IncidentName: "Multi", attr_IncidentTypeCategory: "WF" },
+          multipolygon,
+        ),
+      )?.geometry,
+    ).toEqual(multipolygon);
+  });
+
+  it.each([
+    { type: "Polygon", coordinates: [[POLYGON.coordinates]] },
+    { type: "MultiPolygon", coordinates: [POLYGON.coordinates[0]] },
+  ])("rejects finite geometry with invalid type nesting: %j", (geometry) => {
+    expect(
+      normalizeNifcFeature(
+        nifcFeature(
+          { OBJECTID: 4, attr_IncidentName: "Bad nesting", attr_IncidentTypeCategory: "WF" },
+          geometry as never,
+        ),
+      ),
+    ).toBeNull();
+  });
+
+  it.each([
+    [
+      [
+        [-120, 35],
+        [-119, 35],
+        [-120, 35],
+      ],
+    ],
+    [
+      [
+        [-120, 35],
+        [-119, 35],
+        [-119, 36],
+        [-120, 36],
+      ],
+    ],
+  ])("rejects too-short or unclosed linear rings: %j", (ring) => {
+    expect(
+      normalizeNifcFeature(
+        nifcFeature(
+          { OBJECTID: 5, attr_IncidentName: "Bad ring", attr_IncidentTypeCategory: "WF" },
+          { type: "Polygon", coordinates: [ring] } as never,
+        ),
+      ),
+    ).toBeNull();
+  });
+
+  it.each([
+    [-181, 35],
+    [-120, 91],
+    [Number.NaN, 35],
+    [-120, Number.POSITIVE_INFINITY],
+  ])("rejects out-of-range or non-finite positions: %j", (position) => {
+    expect(
+      normalizeNifcFeature(
+        nifcFeature(
+          { OBJECTID: 6, attr_IncidentName: "Bad position", attr_IncidentTypeCategory: "WF" },
+          {
+            type: "Polygon",
+            coordinates: [[position, [-119, 35], [-119, 36], [-120, 35]]],
+          } as never,
+        ),
+      ),
+    ).toBeNull();
   });
 
   it.each([null, { type: "Point", coordinates: [-120, 35] }, { type: "Polygon", coordinates: [] }])(
@@ -224,14 +335,11 @@ describe("loadNifc", () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify(responses[responseIndex++])));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(loadNifc(createContext(), bounds)).resolves.toMatchObject({
-      source: "nifc",
-      truncated: false,
-      features: [
-        expect.objectContaining({ id: "nifc:1" }),
-        expect.objectContaining({ id: "nifc:2" }),
-      ],
-    });
+    const result = await loadNifc(createContext(), bounds);
+    expect(result.source).toBe("nifc");
+    expect(result.truncated).toBe(false);
+    expect(result.features).toHaveLength(2);
+    expect(result.features.map((feature) => feature.id)).toEqual(["nifc:1", "nifc:2"]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
