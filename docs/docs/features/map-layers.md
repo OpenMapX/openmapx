@@ -136,8 +136,11 @@ date and time — it credits no external source. Time zone boundaries are a
 separate sub-toggle: polygons derived from OpenStreetMap under the ODbL,
 tinted and labeled with their current UTC offset, rendered up to zoom 8 (past
 that, city scale, the boundaries get noisy and the fill loses its point).
-Clicking a zone shows a popup with its local time and offset at whatever
-instant the overlay's time scrubber is set to.
+
+The boundary data is vendored rather than fetched live: it comes from
+[timezone-boundary-builder](https://github.com/evansiroky/timezone-boundary-builder)
+release `2026c` (the `timezones-with-oceans-now` variant) and is refreshed
+with `pnpm --filter @openmapx/integration-overlay-sun-time refresh-timezones`.
 
 ### Hazards & natural events
 

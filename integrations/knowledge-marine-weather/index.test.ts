@@ -154,7 +154,7 @@ function getHandler(): RouteHandler {
 
 async function invoke(query: Record<string, string>): Promise<FakeReply> {
   const reply = makeReply();
-  await getHandler()({ query, params: {}, body: undefined }, reply);
+  await getHandler()({ query, params: {}, body: undefined, headers: {} }, reply);
   return reply;
 }
 

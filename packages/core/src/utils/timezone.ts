@@ -156,15 +156,31 @@ export function timeZoneAt(lat: number, lng: number): string | null {
  * rather than throwing.
  */
 export function tzOffsetMinutes(date: Date, timeZone: string): number | null {
-  let formatted: string;
+  // Validated up front, independent of which `timeZoneName` variant works
+  // below: a RangeError from the formatter can mean either "bad zone id" or
+  // "unrecognized option value", and only the latter should fall through to
+  // the shortOffset retry. Checking the zone id in isolation first means a
+  // genuinely invalid id still returns null even with the retry in place.
   try {
-    formatted = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      timeZoneName: "longOffset",
-    }).format(date);
+    new Intl.DateTimeFormat("en-US", { timeZone });
   } catch {
     return null;
   }
+
+  // Safari 16.0-16.3 throws on "longOffset" (added later than "shortOffset").
+  // shortOffset renders the same "GMT+H[:mm]" shape the regex below already
+  // parses, just without longOffset's guaranteed leading zero/":00" minutes,
+  // so no separate parsing path is needed for the fallback.
+  let formatted: string | null = null;
+  for (const timeZoneName of ["longOffset", "shortOffset"] as const) {
+    try {
+      formatted = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName }).format(date);
+      break;
+    } catch {
+      // Try the next variant.
+    }
+  }
+  if (formatted === null) return null;
 
   const match = /GMT([+-])(\d{1,2})(?::(\d{2}))?/.exec(formatted);
   if (!match) return null;

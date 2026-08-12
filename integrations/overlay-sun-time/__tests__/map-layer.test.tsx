@@ -1,41 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { layerRegistrations } from "@/components/map/layers/layerStack";
-import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { act, createFakeMap, type FakeMap, render } from "@/test";
 import { useSunTimeStore } from "../store";
-
-// Stubbed the same way overlay-environment's map-layer test stubs it: a
-// minimal Popup double that records what was actually shown, so a test can
-// assert on the rendered HTML without a real MapLibre popup/DOM anchor.
-interface FakePopupInstance {
-  lngLat: unknown;
-  html: string;
-  removed: boolean;
-}
-let popupInstances: FakePopupInstance[] = [];
-vi.mock("maplibre-gl", () => ({
-  Popup: class FakePopup {
-    private record: FakePopupInstance = { lngLat: undefined, html: "", removed: false };
-    constructor() {
-      popupInstances.push(this.record);
-    }
-    setLngLat(lngLat: unknown) {
-      this.record.lngLat = lngLat;
-      return this;
-    }
-    setHTML(html: string) {
-      this.record.html = html;
-      return this;
-    }
-    addTo() {
-      return this;
-    }
-    remove() {
-      this.record.removed = true;
-      return this;
-    }
-  },
-}));
 
 let fake: FakeMap;
 
@@ -111,7 +77,6 @@ const TZ_FIXTURE = {
 beforeEach(() => {
   fake = createFakeMap();
   mapRefBox.current = fake.map;
-  popupInstances = [];
   useSunTimeStore.setState({
     layerVisible: true,
     showTerminator: true,
@@ -496,6 +461,36 @@ describe("SunTimeLayer time zones", () => {
       expect(data?.features[0]?.properties?.tzid).toBe("Europe/Berlin");
     });
   });
+
+  it("resets tzLoading instead of sticking on when the sub-toggle turns off before the fetch resolves", async () => {
+    let resolveFetch: (value: { ok: boolean; json: () => Promise<unknown> }) => void = () => {};
+    const pending = new Promise<{ ok: boolean; json: () => Promise<unknown> }>((resolve) => {
+      resolveFetch = resolve;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => pending),
+    );
+    render(<SunTimeLayer />);
+
+    await vi.waitFor(() => expect(useSunTimeStore.getState().tzLoading).toBe(true));
+
+    // Turning the sub-toggle off leaves the fetch itself in flight — only the
+    // component's interest in its result is gone. A hand-rolled cancelled
+    // flag would make the `finally` below skip the reset and leave the
+    // legend's progress bar spinning forever.
+    act(() => {
+      useSunTimeStore.setState({ showTimeZones: false });
+    });
+    expect(useSunTimeStore.getState().tzLoading).toBe(true);
+
+    await act(async () => {
+      resolveFetch({ ok: true, json: async () => TZ_FIXTURE });
+      await pending;
+    });
+
+    expect(useSunTimeStore.getState().tzLoading).toBe(false);
+  });
 });
 
 describe("SunTimeLayer sub-toggle transitions", () => {
@@ -549,237 +544,5 @@ describe("SunTimeLayer sub-toggle transitions", () => {
       | GeoJSON.FeatureCollection
       | undefined;
     expect(tzData?.features).toHaveLength(1);
-  });
-});
-
-describe("SunTimeLayer zone popup", () => {
-  beforeEach(() => {
-    useSunTimeStore.setState({
-      layerVisible: true,
-      showTerminator: false,
-      showTimeZones: true,
-      timeMs: Date.UTC(2026, 6, 15, 12),
-    });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({ ok: true, json: async () => TZ_FIXTURE })),
-    );
-  });
-
-  // showTimeZones resets in the top-level afterEach.
-
-  it("registers the zone fill as interactive while time zones are shown", async () => {
-    const onSpy = vi.spyOn(fake.map, "on");
-    render(<SunTimeLayer />);
-
-    await vi.waitFor(() =>
-      expect(onSpy).toHaveBeenCalledWith("click", TZ_FILL_LAYER_ID, expect.any(Function)),
-    );
-    expect(INTERACTIVE_LAYER_IDS.has(TZ_FILL_LAYER_ID)).toBe(true);
-  });
-
-  it("shows the local wall clock and offset label at the scrubbed instant, never the IANA zone id", async () => {
-    render(<SunTimeLayer />);
-    await vi.waitFor(() => expect(INTERACTIVE_LAYER_IDS.has(TZ_FILL_LAYER_ID)).toBe(true));
-
-    act(() => {
-      fake.emit("click", {
-        lngLat: { lng: 13.4, lat: 52.5 },
-        features: [
-          {
-            properties: {
-              tzid: "Europe/Berlin",
-              offsetMinutes: 120,
-              offsetLabel: "UTC+2",
-              color: "hsl(30, 55%, 55%)",
-            },
-          },
-        ],
-      });
-    });
-
-    expect(popupInstances).toHaveLength(1);
-    // 12:00 UTC on 2026-07-15 is 14:00 in Europe/Berlin (UTC+2, DST).
-    expect(popupInstances[0]?.html).toContain("14:00");
-    expect(popupInstances[0]?.html).toContain("UTC+2");
-    expect(popupInstances[0]?.html).not.toContain("Europe/Berlin");
-  });
-
-  it("escapes HTML that reaches the popup", async () => {
-    render(<SunTimeLayer />);
-    await vi.waitFor(() => expect(INTERACTIVE_LAYER_IDS.has(TZ_FILL_LAYER_ID)).toBe(true));
-
-    act(() => {
-      fake.emit("click", {
-        lngLat: { lng: 13.4, lat: 52.5 },
-        features: [
-          {
-            properties: {
-              tzid: "Europe/Berlin",
-              offsetMinutes: 120,
-              offsetLabel: "<script>alert(1)</script>",
-              color: "hsl(30, 55%, 55%)",
-            },
-          },
-        ],
-      });
-    });
-
-    expect(popupInstances[0]?.html).not.toContain("<script>");
-    expect(popupInstances[0]?.html).toContain("&lt;script&gt;");
-  });
-
-  it("shows no popup when the clicked feature carries no tzid", async () => {
-    render(<SunTimeLayer />);
-    await vi.waitFor(() => expect(INTERACTIVE_LAYER_IDS.has(TZ_FILL_LAYER_ID)).toBe(true));
-
-    act(() => {
-      fake.emit("click", {
-        lngLat: { lng: 13.4, lat: 52.5 },
-        features: [{ properties: {} }],
-      });
-    });
-
-    expect(popupInstances).toHaveLength(0);
-  });
-
-  it("shows no popup rather than an empty clock when the zone id can't be resolved", async () => {
-    render(<SunTimeLayer />);
-    await vi.waitFor(() => expect(INTERACTIVE_LAYER_IDS.has(TZ_FILL_LAYER_ID)).toBe(true));
-
-    act(() => {
-      fake.emit("click", {
-        lngLat: { lng: 0, lat: 0 },
-        features: [
-          {
-            properties: {
-              tzid: "Not/AZone",
-              offsetMinutes: 0,
-              offsetLabel: "UTC",
-              color: "hsl(0, 55%, 55%)",
-            },
-          },
-        ],
-      });
-    });
-
-    expect(popupInstances).toHaveLength(0);
-  });
-
-  it("shows a pointer cursor over the zone fill and clears it when the pointer leaves", async () => {
-    render(<SunTimeLayer />);
-    await vi.waitFor(() => expect(INTERACTIVE_LAYER_IDS.has(TZ_FILL_LAYER_ID)).toBe(true));
-
-    fake.setRenderedFeatures(TZ_FILL_LAYER_ID, [{ properties: {} } as never]);
-    act(() => {
-      fake.emit("mousemove", { point: { x: 0, y: 0 } });
-    });
-    expect(fake.map.getCanvasContainer().style.cursor).toBe("pointer");
-
-    fake.setRenderedFeatures(TZ_FILL_LAYER_ID, []);
-    act(() => {
-      fake.emit("mousemove", { point: { x: 0, y: 0 } });
-    });
-    expect(fake.map.getCanvasContainer().style.cursor).toBe("");
-  });
-
-  it("keeps an open popup alive across a live-mode clock tick, and reflects the ticked time on the next click", () => {
-    // Live mode (timeMs: null): `instant` tracks `nowMs`, which the shared
-    // clock effect ticks every TICK_MS. The click-handler effect must not
-    // rebind on that tick — if it did, its cleanup would close whatever
-    // popup is currently open out from under the user reading it.
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(Date.UTC(2026, 6, 15, 12, 0, 0)));
-    useSunTimeStore.setState({
-      layerVisible: true,
-      showTerminator: false,
-      showTimeZones: true,
-      timeMs: null,
-    });
-    render(<SunTimeLayer />);
-
-    const clickEvent = {
-      lngLat: { lng: 13.4, lat: 52.5 },
-      features: [
-        {
-          properties: {
-            tzid: "Europe/Berlin",
-            offsetMinutes: 120,
-            offsetLabel: "UTC+2",
-            color: "hsl(30, 55%, 55%)",
-          },
-        },
-      ],
-    };
-
-    act(() => {
-      fake.emit("click", clickEvent);
-    });
-    expect(popupInstances).toHaveLength(1);
-    expect(popupInstances[0]?.html).toContain("14:00");
-    expect(popupInstances[0]?.removed).toBe(false);
-
-    act(() => {
-      vi.advanceTimersByTime(60_000);
-    });
-
-    // A tick alone must never close the popup.
-    expect(popupInstances[0]?.removed).toBe(false);
-
-    // A fresh click after the tick must not be answered from a frozen
-    // closure either — the ref-based fix can't silently stop updating.
-    act(() => {
-      fake.emit("click", clickEvent);
-    });
-    expect(popupInstances).toHaveLength(2);
-    expect(popupInstances[1]?.html).toContain("14:01");
-  });
-
-  it("tears down the click handler, the interactive registration and the open popup when the sub-toggle turns off, not just on unmount", async () => {
-    render(<SunTimeLayer />);
-    await vi.waitFor(() => expect(INTERACTIVE_LAYER_IDS.has(TZ_FILL_LAYER_ID)).toBe(true));
-
-    act(() => {
-      fake.emit("click", {
-        lngLat: { lng: 13.4, lat: 52.5 },
-        features: [
-          {
-            properties: {
-              tzid: "Europe/Berlin",
-              offsetMinutes: 120,
-              offsetLabel: "UTC+2",
-              color: "hsl(30, 55%, 55%)",
-            },
-          },
-        ],
-      });
-    });
-    expect(popupInstances).toHaveLength(1);
-    expect(popupInstances[0]?.removed).toBe(false);
-
-    act(() => {
-      useSunTimeStore.setState({ showTimeZones: false });
-    });
-
-    expect(INTERACTIVE_LAYER_IDS.has(TZ_FILL_LAYER_ID)).toBe(false);
-    expect(popupInstances[0]?.removed).toBe(true);
-    // No handler survives to react to a click after the toggle turned off.
-    popupInstances.length = 0;
-    act(() => {
-      fake.emit("click", {
-        lngLat: { lng: 13.4, lat: 52.5 },
-        features: [
-          {
-            properties: {
-              tzid: "Europe/Berlin",
-              offsetMinutes: 120,
-              offsetLabel: "UTC+2",
-              color: "hsl(30, 55%, 55%)",
-            },
-          },
-        ],
-      });
-    });
-    expect(popupInstances).toHaveLength(0);
   });
 });

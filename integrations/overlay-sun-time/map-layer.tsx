@@ -1,21 +1,11 @@
 "use client";
 
-import {
-  escapeHtml,
-  formatInTimeZone,
-  subsolarPoint,
-  twilightBands,
-  tzOffsetLabel,
-  tzOffsetMinutes,
-} from "@openmapx/core";
-import type { MapLayerMouseEvent } from "maplibre-gl";
-import * as maplibregl from "maplibre-gl";
+import { subsolarPoint, twilightBands, tzOffsetLabel, tzOffsetMinutes } from "@openmapx/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import type { GeoJsonSourceDataEntry } from "@/components/map/layers/layerStyleUtils";
 import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { useEnv } from "@/lib/EnvProvider";
-import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
 import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { useSunTimeStore } from "./store";
@@ -106,7 +96,6 @@ export default function SunTimeLayer() {
   const env = useEnv();
   const setTzLoading = useSunTimeStore((s) => s.setTzLoading);
   const tzActive = layerVisible && showTimeZones;
-  const popupRef = useRef<maplibregl.Popup | null>(null);
 
   // Credits the vendored boundary source only while the time zone toggle
   // itself is on, not merely while the overlay is — the terminator shading
@@ -116,30 +105,43 @@ export default function SunTimeLayer() {
 
   const [zones, setZones] = useState<TimeZoneFeatureCollection | null>(null);
 
+  const active = layerVisible && showTerminator;
+
+  // `visible` also has to cover tzActive: with only the terminator's `active`
+  // here, toggling the time zone layer on while the terminator is off would
+  // leave the bridge believing nothing is visible, and `publish()` below
+  // would silently drop the decorated data instead of applying it.
+  const { publish, clear, beginRequest } = useGeoJsonSourceDataBridge({
+    mapRef,
+    mapReady,
+    styleVersion,
+    visible: active || tzActive,
+  });
+
   // Fetches once: the guard below bails out as soon as `zones` is set, and
   // ticking `instant` (from the shared 60s clock) is deliberately not a
-  // dependency, so a clock tick can never refire this.
+  // dependency, so a clock tick can never refire this. Uses the bridge's
+  // latest-wins request instead of a hand-rolled cancelled flag: `isLatest()`
+  // stays true after the sub-toggle (or the whole overlay) turns off mid-fetch
+  // — only a newer request or unmount flips it — so `tzLoading` still gets
+  // reset instead of sticking on forever with the legend's progress bar.
   useEffect(() => {
     if (!tzActive || zones) return;
-    let cancelled = false;
+    const request = beginRequest();
     setTzLoading(true);
-    fetch(`${env.apiUrl}/api/integrations/overlay-sun-time/timezones`)
+    fetch(`${env.apiUrl}/api/integrations/overlay-sun-time/timezones`, { signal: request.signal })
       .then((res) => (res.ok ? res.json() : null))
       .then((data: TimeZoneFeatureCollection | null) => {
-        if (!cancelled && data) setZones(data);
+        if (request.isCurrent() && data) setZones(data);
       })
       .catch(() => {
         // The overlay simply stays empty; the legend's loading bar clears below.
       })
       .finally(() => {
-        if (!cancelled) setTzLoading(false);
+        if (request.isLatest()) setTzLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [tzActive, zones, env.apiUrl, setTzLoading]);
+  }, [tzActive, zones, env.apiUrl, setTzLoading, beginRequest]);
 
-  const active = layerVisible && showTerminator;
   // The legend can be showing a clock (panelOpen) even while the shading
   // itself is hidden or switched off, so the tick has to keep the store's
   // `nowMs` current for either surface — not just for this layer's own paint.
@@ -161,13 +163,6 @@ export default function SunTimeLayer() {
   }, [clockNeeded, timeMs, setNowMs]);
 
   const instant = timeMs ?? nowMs;
-  // Read by the zone-click handler below without being a dependency of its
-  // effect: `instant` changes every TICK_MS in live mode, and that effect
-  // must not rebind (tearing down the open popup along with it) on every
-  // tick. Assigned unconditionally on every render, same pattern as
-  // AreaPickerMap's onChangeRef/boundaryRef.
-  const instantRef = useRef(instant);
-  instantRef.current = instant;
   const bands = useMemo(() => twilightBands(new Date(instant), { bands: BAND_COUNT }), [instant]);
   const subsolar = useMemo(() => {
     const { lng, lat } = subsolarPoint(new Date(instant));
@@ -243,17 +238,6 @@ export default function SunTimeLayer() {
     decoratedZonesCache.current = { zones, signature: zoneOffsetSignature, result };
     return result;
   }, [zones, instant, zoneOffsetSignature]);
-
-  // `visible` also has to cover tzActive: with only the terminator's `active`
-  // here, toggling the time zone layer on while the terminator is off would
-  // leave the bridge believing nothing is visible, and `publish()` below
-  // would silently drop the decorated data instead of applying it.
-  const { publish, clear } = useGeoJsonSourceDataBridge({
-    mapRef,
-    mapReady,
-    styleVersion,
-    visible: active || tzActive,
-  });
 
   useEffect(() => {
     void styleVersion;
@@ -496,66 +480,6 @@ export default function SunTimeLayer() {
     }
     if (entries.length > 0) publish(entries);
   }, [active, tzActive, bands, subsolar, decoratedZones, publish, clear]);
-
-  // Zone click popup, registered only while tzActive so it tears down the
-  // same run the sub-toggle turns off, not just on unmount — matching the
-  // teardown discipline `syncLayers` above already applies to the layers
-  // themselves. `instant` is deliberately NOT a dependency: it ticks every
-  // TICK_MS in live mode, and rebinding this effect on every tick would run
-  // the cleanup below and silently close whatever popup the user has open.
-  // `onClick` instead reads `instantRef.current`, so a click still answers
-  // with whatever instant the map is drawing right now.
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady || !tzActive) return;
-
-    const onClick = (e: MapLayerMouseEvent) => {
-      const feature = e.features?.[0];
-      if (!feature) return;
-      const properties = feature.properties as Record<string, string | number>;
-      const tzid = String(properties.tzid ?? "");
-      if (!tzid) return;
-
-      // The vendored "now" variant dissolves zones that share identical
-      // current rules, so one polygon can carry a representative name for a
-      // whole merged group — Berlin's is tagged Europe/Paris. The offset and
-      // the local time are exact for every point in the polygon; the name is
-      // not, so it stays out of the UI and is used only to derive the clock.
-      const localTime = formatInTimeZone(new Date(instantRef.current), tzid);
-      if (localTime === null) return;
-
-      const html =
-        `<div style="font-family:'Plus Jakarta Sans',Arial,sans-serif;min-width:140px">` +
-        `<div style="font-size:20px;font-weight:600">${escapeHtml(localTime)}</div>` +
-        `<div style="font-size:12px;color:#666">${escapeHtml(String(properties.offsetLabel ?? ""))}</div>` +
-        `</div>`;
-
-      popupRef.current?.remove();
-      popupRef.current = new maplibregl.Popup({ closeButton: true, className: "omx-popup" })
-        .setLngLat(e.lngLat)
-        .setHTML(html)
-        .addTo(map);
-    };
-
-    const onMouseMove = (e: maplibregl.MapMouseEvent) => {
-      if (!map.getLayer(TZ_FILL_LAYER_ID)) return;
-      const features = map.queryRenderedFeatures(e.point, { layers: [TZ_FILL_LAYER_ID] });
-      map.getCanvasContainer().style.cursor = features.length > 0 ? "pointer" : "";
-    };
-
-    map.on("click", TZ_FILL_LAYER_ID, onClick);
-    map.on("mousemove", onMouseMove);
-    INTERACTIVE_LAYER_IDS.add(TZ_FILL_LAYER_ID);
-
-    return () => {
-      map.off("click", TZ_FILL_LAYER_ID, onClick);
-      map.off("mousemove", onMouseMove);
-      map.getCanvasContainer().style.cursor = "";
-      popupRef.current?.remove();
-      INTERACTIVE_LAYER_IDS.delete(TZ_FILL_LAYER_ID);
-    };
-  }, [mapRef, mapReady, styleVersion, tzActive]);
 
   return null;
 }
