@@ -1,0 +1,195 @@
+import type { IntegrationContext } from "@openmapx/integration-framework";
+import { dedupeByFeatureId, nifcOffsetForZoom, splitAntimeridian } from "./bounds.js";
+import type { NifcProperties, NormalizedViewport, WildfireProviderData } from "./types.js";
+
+const NIFC_QUERY_URL =
+  "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0/query";
+const FETCH_TIMEOUT_MS = 30_000;
+const MAX_FEATURES = 2_000;
+
+const NIFC_FIELDS = [
+  "OBJECTID",
+  "poly_IncidentName",
+  "poly_GISAcres",
+  "poly_DateCurrent",
+  "poly_PolygonDateTime",
+  "attr_IncidentName",
+  "attr_IncidentSize",
+  "attr_PercentContained",
+  "attr_FireDiscoveryDateTime",
+  "attr_ModifiedOnDateTime_dt",
+  "attr_POOState",
+  "attr_FireCause",
+  "attr_IncidentTypeCategory",
+].join(",");
+
+type RawNifcFeature = {
+  type?: unknown;
+  id?: unknown;
+  properties?: unknown;
+  geometry?: unknown;
+};
+
+type NifcGeometry = GeoJSON.Polygon | GeoJSON.MultiPolygon;
+type NormalizedNifcFeature = GeoJSON.Feature<NifcGeometry, NifcProperties>;
+
+function hasObjectProperties(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === "") return undefined;
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const result = value.trim();
+  return result.length > 0 ? result : undefined;
+}
+
+function epochToIso(value: unknown): string | undefined {
+  const epoch = finiteNumber(value);
+  if (epoch === undefined) return undefined;
+  const date = new Date(epoch);
+  if (!Number.isFinite(date.getTime())) return undefined;
+  return date.toISOString();
+}
+
+function coordinatesAreFinite(value: unknown): boolean {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  if (typeof value[0] === "number") {
+    return (
+      value.length >= 2 &&
+      value.every((coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate))
+    );
+  }
+  return value.every(coordinatesAreFinite);
+}
+
+function validGeometry(value: unknown): value is NifcGeometry {
+  if (!hasObjectProperties(value) || (value.type !== "Polygon" && value.type !== "MultiPolygon")) {
+    return false;
+  }
+  return coordinatesAreFinite(value.coordinates);
+}
+
+function stableId(
+  feature: RawNifcFeature,
+  properties: Record<string, unknown>,
+): string | undefined {
+  const id = feature.id ?? properties.OBJECTID;
+  if (id === null || id === undefined || id === "") return undefined;
+  const value = String(id).replace(/^nifc:/, "");
+  return value ? `nifc:${value}` : undefined;
+}
+
+export function buildNifcUrl(bounds: NormalizedViewport): string {
+  const url = new URL(NIFC_QUERY_URL);
+  url.searchParams.set("where", "attr_IncidentTypeCategory='WF'");
+  url.searchParams.set("geometry", `${bounds.west},${bounds.south},${bounds.east},${bounds.north}`);
+  url.searchParams.set("geometryType", "esriGeometryEnvelope");
+  url.searchParams.set("spatialRel", "esriSpatialRelIntersects");
+  url.searchParams.set("outFields", NIFC_FIELDS);
+  url.searchParams.set("returnGeometry", "true");
+  url.searchParams.set("outSR", "4326");
+  url.searchParams.set("f", "geojson");
+  url.searchParams.set("maxAllowableOffset", String(nifcOffsetForZoom(bounds.zoom)));
+  url.searchParams.set("geometryPrecision", "5");
+  return url.toString();
+}
+
+export function normalizeNifcFeature(input: unknown): NormalizedNifcFeature | null {
+  if (!hasObjectProperties(input) || input.type !== "Feature" || !validGeometry(input.geometry)) {
+    return null;
+  }
+  const feature = input as RawNifcFeature;
+  if (!hasObjectProperties(feature.properties)) return null;
+  const raw = feature.properties;
+  const id = stableId(feature, raw);
+  if (!id || raw.attr_IncidentTypeCategory !== "WF") return null;
+
+  const areaAcres = finiteNumber(raw.poly_GISAcres) ?? finiteNumber(raw.attr_IncidentSize);
+  const containmentPercent = finiteNumber(raw.attr_PercentContained);
+  const observedAt = epochToIso(raw.poly_PolygonDateTime);
+  const updatedAt = epochToIso(raw.poly_DateCurrent) ?? epochToIso(raw.attr_ModifiedOnDateTime_dt);
+  const discoveredAt = epochToIso(raw.attr_FireDiscoveryDateTime);
+  const validContainment =
+    containmentPercent !== undefined && containmentPercent >= 0 && containmentPercent <= 100
+      ? containmentPercent
+      : undefined;
+  const properties: NifcProperties = {
+    id,
+    kind: "reported-perimeter",
+    provider: "nifc",
+    coverage: "United States",
+    name: nonEmptyString(raw.poly_IncidentName) ?? nonEmptyString(raw.attr_IncidentName) ?? id,
+    ...(areaAcres === undefined ? {} : { areaAcres }),
+    ...(observedAt === undefined ? {} : { observedAt }),
+    ...(updatedAt === undefined ? {} : { updatedAt }),
+    ...(discoveredAt === undefined ? {} : { discoveredAt }),
+    ...(validContainment === undefined ? {} : { containmentPercent: validContainment }),
+    ...(nonEmptyString(raw.attr_POOState) ? { region: nonEmptyString(raw.attr_POOState) } : {}),
+    ...(nonEmptyString(raw.attr_FireCause) ? { cause: nonEmptyString(raw.attr_FireCause) } : {}),
+  };
+
+  return { type: "Feature", id, properties, geometry: feature.geometry };
+}
+
+async function fetchNifcCollection(
+  ctx: IntegrationContext,
+  bounds: NormalizedViewport,
+): Promise<GeoJSON.FeatureCollection> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(buildNifcUrl(bounds), { signal: controller.signal });
+    if (!response.ok) {
+      ctx.log.warn(`NIFC API returned ${response.status}`);
+      throw new Error(`NIFC API returned ${response.status}`);
+    }
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new Error("Invalid NIFC JSON response");
+    }
+    if (
+      !hasObjectProperties(payload) ||
+      payload.type !== "FeatureCollection" ||
+      !Array.isArray(payload.features)
+    ) {
+      throw new Error("Invalid NIFC FeatureCollection");
+    }
+    return payload as unknown as GeoJSON.FeatureCollection;
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("NIFC request aborted");
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function loadNifc(
+  ctx: IntegrationContext,
+  bounds: NormalizedViewport,
+): Promise<WildfireProviderData> {
+  const collections = await Promise.all(
+    splitAntimeridian(bounds).map((part) => fetchNifcCollection(ctx, part)),
+  );
+  const normalized = collections.map((collection) => ({
+    type: "FeatureCollection" as const,
+    features: collection.features
+      .map((feature) => normalizeNifcFeature(feature))
+      .filter((feature): feature is NormalizedNifcFeature => feature !== null),
+  }));
+  const merged = dedupeByFeatureId(normalized);
+  const truncated = merged.features.length > MAX_FEATURES;
+  return {
+    type: "FeatureCollection",
+    features: merged.features.slice(0, MAX_FEATURES),
+    source: "nifc",
+    truncated,
+  };
+}
