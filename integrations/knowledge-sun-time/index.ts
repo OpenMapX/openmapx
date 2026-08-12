@@ -38,7 +38,18 @@ export function setup(ctx: IntegrationContext): void {
     const latNum = Number.parseFloat(lat ?? "");
     const lngNum = Number.parseFloat(lng ?? "");
 
-    if (Number.isNaN(latNum) || Number.isNaN(lngNum)) {
+    // geo-tz's `find` throws on out-of-range input rather than returning an
+    // empty array, so range has to be rejected here — otherwise a value like
+    // lat=200 reaches findTimezone below (ahead of the try/catch) and
+    // crashes the handler instead of 400ing.
+    if (
+      Number.isNaN(latNum) ||
+      Number.isNaN(lngNum) ||
+      latNum < -90 ||
+      latNum > 90 ||
+      lngNum < -180 ||
+      lngNum > 180
+    ) {
       reply.status(400).send({ message: "Invalid coordinates" });
       return;
     }
@@ -125,7 +136,17 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const cacheKey = `tz:${round4(latNum)},${round4(lngNum)}`;
+    // Round once and resolve from the rounded pair, not the raw one — the
+    // cache key is built from the rounded coordinate, so looking up from the
+    // raw coordinate could cache a value under a key that doesn't actually
+    // match what was resolved (two points ~2m apart round to the same key
+    // but could otherwise resolve independently near a fine-grained zone
+    // boundary). This cache has no other invalidation for 30 days, so a
+    // mismatch here would persist far longer than /times' 6-hour, date-keyed
+    // entries.
+    const latRounded = round4(latNum);
+    const lngRounded = round4(lngNum);
+    const cacheKey = `tz:${latRounded},${lngRounded}`;
     const cached = await ctx.cache.get<{ timezone: string }>(cacheKey);
     if (cached) {
       reply.header("Cache-Control", "public, max-age=86400");
@@ -137,7 +158,7 @@ export function setup(ctx: IntegrationContext): void {
     // back to a 15-degree Etc/GMT band wherever no land polygon covers the
     // point, so the array is never empty here — "UTC" is a defensive
     // fallback only, matching the /times route's use of the same pattern.
-    const result = { timezone: findTimezone(latNum, lngNum)[0] ?? "UTC" };
+    const result = { timezone: findTimezone(latRounded, lngRounded)[0] ?? "UTC" };
     await ctx.cache.set(cacheKey, result, TZ_CACHE_TTL);
     reply.header("Cache-Control", "public, max-age=86400");
     reply.send(result);
